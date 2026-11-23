@@ -28,7 +28,8 @@ var (
 
 // SourceWriteRequest is one guarded project file save.
 type SourceWriteRequest struct {
-	Path string
+	OutsideParentIdentity string
+	Path                  string
 	// RootID pins the write to one attached root.
 	RootID   string
 	Content  string
@@ -52,8 +53,9 @@ type SourceWriteResult struct {
 }
 
 type sourceWritePlan struct {
-	Result     SourceWriteResult
-	BaseSHA256 string
+	OutsideParentIdentity string
+	Result                SourceWriteResult
+	BaseSHA256            string
 	// RootPath anchors the descriptor-relative commit walk.
 	RootPath string
 }
@@ -116,6 +118,13 @@ func planProjectSourceWrite(p ProjectSource, req SourceWriteRequest) (*sourceWri
 			continue
 		}
 		normalized = true
+		if root.Outside {
+			if a != filepath.Join(root.Path, filepath.FromSlash(pathQuery)) {
+				return nil, ErrSourcePathDenied
+			}
+			abs, rel, rootID, rootPath = a, r, root.ID, root.Path
+			break
+		}
 		info, err := os.Stat(a)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -139,22 +148,9 @@ func planProjectSourceWrite(p ProjectSource, req SourceWriteRequest) (*sourceWri
 		return nil, ErrSourcePathDenied
 	}
 
-	info, err := os.Stat(abs)
+	current, err := readSourceWritePreimage(abs, rel, req.OutsideParentIdentity)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, ErrSourceNotFound
-		}
-		return nil, fmt.Errorf("stat source: %w", err)
-	}
-	if info.Size() > SourceReadMaxBytes {
-		return nil, ErrSourceWriteConflict
-	}
-	current, err := os.ReadFile(abs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, ErrSourceNotFound
-		}
-		return nil, fmt.Errorf("read source: %w", err)
+		return nil, err
 	}
 	currentDoc, _, err := textfile.Open(current, textfile.LimitsForRaw(SourceReadMaxBytes))
 	if err != nil && (req.Encoding == textfile.UTF16LE || req.Encoding == textfile.UTF16BE) {
@@ -170,7 +166,7 @@ func planProjectSourceWrite(p ProjectSource, req SourceWriteRequest) (*sourceWri
 		return &sourceWritePlan{Result: SourceWriteResult{
 			Path: rel, RootID: rootID, AbsPath: abs, SizeBytes: int64(len(next)), SHA256: textfile.SHA256(next),
 			Before: current, After: next,
-		}, BaseSHA256: base, RootPath: rootPath}, nil
+		}, BaseSHA256: base, RootPath: rootPath, OutsideParentIdentity: req.OutsideParentIdentity}, nil
 	}
 	if textfile.SHA256(current) != base {
 		return nil, ErrSourceWriteConflict
@@ -178,7 +174,7 @@ func planProjectSourceWrite(p ProjectSource, req SourceWriteRequest) (*sourceWri
 	return &sourceWritePlan{Result: SourceWriteResult{
 		Path: rel, RootID: rootID, AbsPath: abs, SizeBytes: int64(len(next)), SHA256: textfile.SHA256(next),
 		Before: current, After: next, Changed: true,
-	}, BaseSHA256: base, RootPath: rootPath}, nil
+	}, BaseSHA256: base, RootPath: rootPath, OutsideParentIdentity: req.OutsideParentIdentity}, nil
 }
 
 // applyProjectSourceWrite converges on a prepared after-image.
@@ -189,12 +185,9 @@ func applyProjectSourceWrite(plan *sourceWritePlan) error {
 	if !plan.Result.Changed {
 		return nil
 	}
-	current, err := os.ReadFile(plan.Result.AbsPath)
+	current, err := readSourceWritePreimage(plan.Result.AbsPath, plan.Result.Path, plan.OutsideParentIdentity)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return ErrSourceNotFound
-		}
-		return fmt.Errorf("read source: %w", err)
+		return err
 	}
 	currentSHA := textfile.SHA256(current)
 	if currentSHA == plan.Result.SHA256 {
@@ -204,10 +197,11 @@ func applyProjectSourceWrite(plan *sourceWritePlan) error {
 		return ErrSourceWriteConflict
 	}
 	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
-		Location:     fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Result.Path)},
-		Source:       bytes.NewReader(plan.Result.After),
-		Mode:         0o644,
-		PreserveMode: true,
+		Location:               fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Result.Path)},
+		ExpectedParentIdentity: plan.OutsideParentIdentity,
+		Source:                 bytes.NewReader(plan.Result.After),
+		Mode:                   0o644,
+		PreserveMode:           true,
 		BeforeCommit: func(target fseffect.Target, _ fseffect.Result) error {
 			f, err := target.Open()
 			if err != nil {
@@ -221,10 +215,32 @@ func applyProjectSourceWrite(plan *sourceWritePlan) error {
 			return nil
 		},
 	}); err != nil {
-		if errors.Is(err, ErrSourceWriteConflict) {
+		if errors.Is(err, ErrSourceWriteConflict) || errors.Is(err, fseffect.ErrPredicateChanged) {
 			return ErrSourceWriteConflict
 		}
 		return fmt.Errorf("write source: %w", err)
 	}
 	return nil
+}
+
+func readSourceWritePreimage(abs, rel, outsideIdentity string) ([]byte, error) {
+	var f *os.File
+	var err error
+	if outsideIdentity != "" {
+		f, err = OpenBoundOutsideSourceFile(rel, outsideIdentity)
+	} else {
+		f, err = os.Open(abs)
+	}
+	if err != nil {
+		return nil, outsideOpenError(err)
+	}
+	defer func() { _ = f.Close() }()
+	content, err := io.ReadAll(io.LimitReader(f, SourceReadMaxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(content) > SourceReadMaxBytes {
+		return nil, ErrSourceWriteConflict
+	}
+	return content, nil
 }

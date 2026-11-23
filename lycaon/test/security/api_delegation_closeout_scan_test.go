@@ -35,9 +35,7 @@ func TestDelegationCloseoutWithoutSecurityEvidenceGatePending(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	testdbseed.InsertSession(t, sqlDB, "child-closeout", testdbseed.DefaultProjectID)
-	_, err := sqlDB.ExecContext(ctx, `UPDATE sessions SET parent_session_id = 'sess-closeout' WHERE id = 'child-closeout'`)
-	testutil.FailErr(t, "bind child-closeout parent", err)
+	testdbseed.InsertChildSession(t, sqlDB, "child-closeout", "sess-closeout")
 	records := workerrecords.New(sqlDB)
 	actor := workerrecords.Actor{SessionID: "sess-closeout", Role: workerrecords.RoleCoordinator, PrincipalID: "sess-closeout"}
 	planned, err := records.CreateWorker(ctx, actor, workerrecords.Op{ID: "create-leg-1"}, workerrecords.WorkerSpec{

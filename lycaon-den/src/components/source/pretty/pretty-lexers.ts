@@ -202,11 +202,6 @@ export class DataLexer extends LexerBase {
   }
 }
 
-const REGEX_AFTER_WORDS = new Set([
-  "return", "case", "default", "throw", "delete", "void", "typeof", "instanceof", "in",
-  "of", "yield", "await", "else", "do", "new",
-]);
-
 type ScriptFrame =
   | { readonly kind: "template" }
   | { readonly kind: "expr"; readonly owner: "template" | "jsx"; braceDepth: number }
@@ -250,6 +245,11 @@ function startsWithExtendsConstraint(text: TextWindow, pos: number, lineEnd: num
  * children contexts when `jsx` is enabled.
  */
 export class ScriptLexer extends LexerBase {
+  static readonly regexAfterWords: ReadonlySet<string> = new Set([
+    "return", "case", "default", "throw", "delete", "void", "typeof", "instanceof", "in",
+    "of", "yield", "await", "else", "do", "new",
+  ]);
+
   private frames: ScriptFrame[] = [];
   private regexClass = false;
   private expressionEnd = false;
@@ -566,7 +566,7 @@ export class ScriptLexer extends LexerBase {
         this.inWord = true;
         this.lastWord = ch;
       }
-      this.expressionEnd = this.afterDot || !REGEX_AFTER_WORDS.has(this.lastWord);
+      this.expressionEnd = this.afterDot || !ScriptLexer.regexAfterWords.has(this.lastWord);
       return;
     }
     this.inWord = false;

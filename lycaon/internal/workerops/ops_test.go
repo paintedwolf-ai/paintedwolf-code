@@ -53,8 +53,8 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "ops.db")
 	testdbseed.InsertSession(t, sqlDB, "coord", testdbseed.DefaultProjectID)
-	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now(), now(), now())
+	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?, 'coord', NULL)`, testdbseed.DefaultProjectID, now(), now(), now())
 	testutil.FailErr(t, "insert child", err)
 	records := workerrecords.New(sqlDB)
 	f := &fixture{db: sqlDB, records: records, jobs: jobs{}, dec: decisions{},

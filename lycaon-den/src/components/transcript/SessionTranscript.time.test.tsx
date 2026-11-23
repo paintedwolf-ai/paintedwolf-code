@@ -77,12 +77,10 @@ describe("SessionTranscript time rows", () => {
     // Work under a second is not shown.
     expect(text(second)).toBe("Finished 18m ago");
     expect(second?.querySelector('[data-testid="turn-tail-work"]')).toBeNull();
-    // The tail anchors the turn seam, so it stays with the turn it closes and
-    // the next prompt takes the turn rung below it.
     const seams = [...container.querySelectorAll<HTMLElement>(".transcript-viewport-row")].map(
       (row) => row.dataset.seam,
     );
-    expect(seams).toEqual([undefined, "row", "row", "turn", "row"]);
+    expect(seams).toEqual([undefined, "item", "message", "message", "message"]);
   });
 
   it("moves relative copy with the minute clock", async () => {

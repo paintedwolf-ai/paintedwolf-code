@@ -152,7 +152,8 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if sess.IsWorkerChild() {
+	// Damaged child rows remain eligible for cleanup.
+	if sess.IsWorkerChild() && (sess.Mode == wire.SessionModeAgent || sess.Mode == wire.SessionModeAsk) {
 		return ErrWorkerChildLifecycle
 	}
 	if sess.Status == wire.SessionStatusBusy {
@@ -265,11 +266,17 @@ func (m *Service) publishSessionLifecycle(ctx context.Context, sess *wire.Sessio
 		return
 	}
 	ev := wire.SessionEvent{
-		ID:        sess.ID,
-		ProjectID: sess.ProjectID,
-		Action:    wire.SessionEventActionUpdated,
-		Title:     sess.Title,
-		Status:    sess.Status,
+		ID:               sess.ID,
+		ProjectID:        sess.ProjectID,
+		Action:           wire.SessionEventActionUpdated,
+		Title:            sess.Title,
+		Status:           sess.Status,
+		Mode:             sess.Mode,
+		Started:          &sess.Started,
+		UntrustedContent: sess.UntrustedContent,
+		CurrentTurn:      sess.CurrentTurn,
+		UI:               sess.UI,
+		PromptPending:    sess.PromptPending,
 	}
 	key := events.PublishKey{Project: strings.TrimSpace(sess.ProjectID)}
 	_ = m.events.Hub.Publish(ctx, wire.EventTopicSession, key, ev)

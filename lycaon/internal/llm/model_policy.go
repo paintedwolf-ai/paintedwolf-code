@@ -206,22 +206,13 @@ func mergePolicy(base, overlay ModelPolicy) ModelPolicy {
 	return normalizePolicy(out)
 }
 
-// DefaultLocalModelRef returns the bundled local model reference.
-func DefaultLocalModelRef() ModelRef {
-	return ModelRef{
-		ProviderID: IncludedProviderID,
-		Model:      nativegen.DefaultModelID,
-	}
-}
-
-// CoordinatorRefWithLocalDefault returns the coordinator assignment, falling back to
-// the bundled local model when unset and localAvailable is true.
-func CoordinatorRefWithLocalDefault(p ModelPolicy, localAvailable bool) ModelRef {
+// Unassigned coordinator roles follow the admitted local model.
+func CoordinatorRefWithLocalDefault(p ModelPolicy, model string) ModelRef {
 	if modelRefSet(p.Coordinator) {
-		return p.Coordinator
+		return selectedLocalRef(p.Coordinator, model)
 	}
-	if localAvailable {
-		return DefaultLocalModelRef()
+	if model != "" {
+		return ModelRef{ProviderID: IncludedProviderID, Model: model}
 	}
 	return p.Coordinator
 }
@@ -234,14 +225,13 @@ func SummarizerRef(p ModelPolicy) ModelRef {
 	return p.Coordinator
 }
 
-// SummarizerRefWithLocalDefault returns the lite override when set, falling back to
-// the bundled local model when localAvailable is true, or the coordinator default otherwise.
-func SummarizerRefWithLocalDefault(p ModelPolicy, localAvailable bool) ModelRef {
+// An unassigned summarizer uses the admitted local model before the coordinator.
+func SummarizerRefWithLocalDefault(p ModelPolicy, model string) ModelRef {
 	if ref := p.Lite; ref.ProviderID != "" && ref.Model != "" {
-		return ref
+		return selectedLocalRef(ref, model)
 	}
-	if localAvailable {
-		return DefaultLocalModelRef()
+	if model != "" {
+		return ModelRef{ProviderID: IncludedProviderID, Model: model}
 	}
 	return SummarizerRef(p)
 }
@@ -257,9 +247,9 @@ func SummarizerSharesCoordinator(p ModelPolicy) bool {
 }
 
 // SummarizerSharesCoordinatorWithLocalDefault detects shared provider capacity after local-default resolution.
-func SummarizerSharesCoordinatorWithLocalDefault(p ModelPolicy, localAvailable bool) bool {
-	sum := SummarizerRefWithLocalDefault(p, localAvailable)
-	coord := CoordinatorRefWithLocalDefault(p, localAvailable)
+func SummarizerSharesCoordinatorWithLocalDefault(p ModelPolicy, model string) bool {
+	sum := SummarizerRefWithLocalDefault(p, model)
+	coord := CoordinatorRefWithLocalDefault(p, model)
 	if sum.ProviderID == "" || coord.ProviderID == "" {
 		return true
 	}
@@ -491,3 +481,10 @@ const (
 	SettingsScopeGlobal  SettingsScope = "global"
 	SettingsScopeProject SettingsScope = "project"
 )
+
+func selectedLocalRef(ref ModelRef, model string) ModelRef {
+	if model != "" && ref.ProviderID == IncludedProviderID && nativegen.KnownModel(ref.Model) {
+		ref.Model = model
+	}
+	return ref
+}

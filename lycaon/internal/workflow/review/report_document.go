@@ -112,9 +112,9 @@ func checkReportFinding(f guidance.CoordinatorFinding, brief *workflowdef.Brief,
 		}
 		return guidance.ReportDocumentIssue{}
 	case "":
-		return invalid("finding %s has no disposition (want %s)", name, alternatives(api.AllCompletionReportFindingDispositions()))
+		return invalid("finding %s has no disposition (want %s)", name, alternatives(api.AllCompletionReportFindingDispositionValues()))
 	default:
-		return invalid("finding %s has disposition %q (want %s)", name, f.Disposition, alternatives(api.AllCompletionReportFindingDispositions()))
+		return invalid("finding %s has disposition %q (want %s)", name, f.Disposition, alternatives(api.AllCompletionReportFindingDispositionValues()))
 	}
 	if brief == nil {
 		if len(f.Answers) > 0 {
@@ -182,7 +182,7 @@ func checkReportAsk(report guidance.CoordinatorCompletionReport) guidance.Report
 	if ask.Do == "" {
 		return invalid("ask.do is empty; state the decision the reader is asked to make")
 	}
-	if efforts := api.AllCompletionReportAskEfforts(); !slices.Contains(efforts, api.CompletionReportAskEffort(ask.Effort)) {
+	if efforts := api.AllCompletionReportAskEffortValues(); !slices.Contains(efforts, api.CompletionReportAskEffort(ask.Effort)) {
 		return invalid("ask.effort is %q (want %s)", ask.Effort, alternatives(efforts))
 	}
 	return guidance.ReportDocumentIssue{}

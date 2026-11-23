@@ -88,6 +88,9 @@ func NewManager(store *runstate.Repository, sessions *sessionstore.Repositories,
 	questions := manager.buildReviewDomains(store)
 	entries := &workflowphases.Entries{Obligations: manager.Obligations}
 	manager.Phases = &workflowphases.Service{Runs: store.Runs, Vars: vars, Journal: journal, Resolver: &manager.Resolver, Sessions: sessions.Sessions, Gates: gates, Registry: nil, Publication: manager.Publication, Entries: entries}
+	if sessions.Sessions != nil {
+		manager.Phases.ResolveEffectiveMode = sessions.Sessions.ResolveEffectiveMode
+	}
 	manager.Obligations.Phases = manager.Phases
 	manager.Verdicts.Phases = manager.Phases
 	manager.Starts.Phases = manager.Phases
@@ -132,6 +135,9 @@ func NewManager(store *runstate.Repository, sessions *sessionstore.Repositories,
 	entries.Blueprints = manager.Blueprints
 
 	manager.Policy = &workflowruntime.SessionPolicy{Runs: store.Runs, Resolver: &manager.Resolver, Sessions: sessions.Sessions, Registry: nil, Gates: gates, Approvals: manager.Approvals}
+	if sessions.Sessions != nil {
+		manager.Policy.ResolveEffectiveMode = sessions.Sessions.ResolveEffectiveMode
+	}
 	manager.Snapshots = &workflowruntime.Snapshots{Sessions: sessions.Sessions, Registry: nil, Approvals: manager.Approvals, Coverage: manager.Coverage, Verdicts: manager.Verdicts}
 	manager.Presentation = &workflowpresentation.Runs{Reader: store.Runs, Resolver: &manager.Resolver, Asks: manager.Asks, Scaffold: scaffold, Obligations: manager.Obligations, Choices: manager.Phases}
 	manager.Fanout.Policy = manager.Policy

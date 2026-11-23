@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox/sessionipc"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
@@ -100,5 +101,51 @@ func TestSupervisorSocketReferenceSurvivesRetirementAndDescriptorReuse(t *testin
 				t.Fatalf("retired reference duplicated: %v", err)
 			}
 		})
+	}
+}
+
+func TestPerformerBindsOnlyRegisteredSessionSockets(t *testing.T) {
+	root := t.TempDir()
+	blocked := filepath.Join(root, "protected")
+	client := startTestPerformer(t, Filesystem{ReadOnly: []string{blocked}})
+	var registry sessionipc.Registry
+	channel, err := registry.Channel(root)
+	testutil.FailErr(t, "open session channel", err)
+	defer func() { _ = channel.Close() }()
+	socket, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "create session socket", err)
+	defer func() { _ = unix.Close(socket) }()
+	bind := func(path string) pathResult {
+		t.Helper()
+		result, _, err := client.call(pathCall{Op: callSessionBind, Path: path, NewPath: root, Dirs: 2}, []int{socket, int(channel.Fd())})
+		testutil.FailErr(t, "submit session bind", err)
+		return result
+	}
+	for _, path := range []string{blocked, filepath.Join(t.TempDir(), "other")} {
+		result := bind(path)
+		if result.Errno != int(unix.EACCES) || result.Refusal == nil || result.Refusal.Operation != "network-bind" || result.Refusal.Target != path {
+			t.Fatalf("bind outside session authority %s: %+v", path, result)
+		}
+		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("refused bind created %s: %v", path, err)
+		}
+	}
+	occupied := filepath.Join(root, "occupied")
+	testutil.FailErr(t, "occupy name", os.WriteFile(occupied, []byte("entry"), 0600))
+	if result := bind(occupied); result.Errno != int(unix.EADDRINUSE) || result.Refusal != nil {
+		t.Fatalf("occupied name: %+v", result)
+	}
+	path := filepath.Join(root, "@endpoint")
+	result := bind(path)
+	fd, err := unix.Open(path, unix.O_PATH|unix.O_CLOEXEC, 0)
+	testutil.FailErr(t, "pin bound filesystem socket", err)
+	defer func() { _ = unix.Close(fd) }()
+	// Linux requires CAP_NET_ADMIN in the socket's network namespace to pin the bound inode.
+	pin, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(socket), 0x89e0, 0)
+	if errno == 0 {
+		_ = unix.Close(int(pin))
+	}
+	if result.Errno != int(errno) || sessionipc.Admits(int(channel.Fd()), fd) != (errno == 0) {
+		t.Fatalf("registered bind: result %+v, kernel pin error %v", result, errno)
 	}
 }

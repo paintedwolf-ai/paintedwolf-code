@@ -71,6 +71,7 @@ type Request struct {
 	Roots []string
 	// SessionScratchRoot is the session-owned scratch root for this execution.
 	SessionScratchRoot string
+	ActionWorkspace    ActionWorkspace `json:"-"`
 	// SessionOutputRoot is a host-owned read capability, never a write root.
 	SessionOutputRoot string
 	// GrantedWriteRoots are reviewed write-root leases for this action. They

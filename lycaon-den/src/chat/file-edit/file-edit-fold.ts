@@ -1,5 +1,6 @@
 import { fileEditsFromPart } from "./file-edit-model.ts";
-import type { FileEditPreview } from "../../api/types.ts";
+import { outsideHostPath } from "../../files/source/outside-namespace.ts";
+import type { FileEditPreview, NavigationTarget } from "../../api/types.ts";
 import type { ToolPartView } from "../tool/tool-part-model.ts";
 import type { RawTranscriptItem } from "../transcript/projection/transcript-item-model.ts";
 import { sourceChangeFromPresence, type SourceReaderChange } from "../../components/source/reader/source-reader-change.ts";
@@ -11,6 +12,7 @@ export type FileEditStep = {
   toolCallId?: string;
   messageId?: string;
   snapshot: FileEditPreview;
+  navigationTarget?: NavigationTarget;
   tool: string;
   ts?: string;
 };
@@ -89,13 +91,19 @@ export function fileEditFoldFingerprint(fold: FileEditFold): string {
 
 /** One step per file the call edited; a call that edits several files anchors several folds. */
 export function fileEditStepsFromPart(part: ToolPartView): FileEditStep[] {
-  return fileEditsFromPart(part).map((snapshot, index) => ({
-    key: `${part.id}:${index}`,
-    toolCallId: part.toolCallId,
-    messageId: part.messageId,
-    snapshot,
-    tool: part.tool,
-  }));
+  return fileEditsFromPart(part).map((snapshot, index) => {
+    const targets = snapshot.root_id || snapshot.deleted ? [] : part.sourceLocations?.filter((target) =>
+      target.file_id && target.entry_kind === "file" && outsideHostPath(target.path) === snapshot.path,
+    );
+    return {
+      key: `${part.id}:${index}`,
+      toolCallId: part.toolCallId,
+      messageId: part.messageId,
+      snapshot,
+      navigationTarget: targets?.length === 1 ? targets[0] : undefined,
+      tool: part.tool,
+    };
+  });
 }
 
 /** One turn's writes folded by file. */

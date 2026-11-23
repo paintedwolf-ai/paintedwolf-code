@@ -71,9 +71,12 @@ func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.T
 		return "", err
 	}
 	if !outcome.Finished {
-		return EncodeCommandRunning(tctx, outcome, WaitBudget(args))
+		result, err := EncodeCommandRunning(tctx, outcome, WaitBudget(args))
+		t.Programs.reviewSharedTemp(ctx, tctx, "command", CanonicalCommandKey(tctx, args), true)
+		return result, err
 	}
 	StampBoundaryRefusal(tctx, res)
+	t.Programs.reviewSharedTemp(ctx, tctx, "command", CanonicalCommandKey(tctx, args), outcome.Terminal != nil && outcome.Terminal.TimedOut)
 	StampIndexWatch(tctx, outcome.IndexWatch)
 	commandVerdict, _ := VerdictFor(res)
 	StampSourceRun(tctx, res, commandVerdict, outcome)
@@ -147,6 +150,7 @@ func CommandResultFromOutcome(
 		Cwd:               outcome.Cwd,
 		LeftRunning:       outcome.LeftRunning,
 		SourceWindow:      outcome.SourceWindow,
+		LaunchDrafts:      outcome.Drafts,
 	}
 	res.Tail = enginepaths.RewriteWorkerBranchPaths(res.Tail) // compilers print the absolute cwd
 	if snap := outcome.Snapshot; len(snap.Output) > len(snap.Tail) || snap.OutputEvicted {
@@ -213,6 +217,7 @@ func EncodeCommandRunning(tctx tools.ToolContext, outcome RunOutcome, budget tim
 		Network:      outcome.Network,
 		Report:       report.WithSandboxRefusals(outcome.Refusals),
 		SourceWindow: outcome.SourceWindow,
+		LaunchDrafts: outcome.Drafts,
 	})
 	if err != nil {
 		return "", fmt.Errorf("command running encode: %w", err)

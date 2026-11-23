@@ -17,6 +17,7 @@ import { useTranscriptEntry } from "../../chat/transcript/presentation/transcrip
 import {
   TranscriptDisclosurePanel,
   TranscriptDisclosureShell,
+  TranscriptDisclosureSummary,
   TranscriptDisclosureToggle,
   useTranscriptDisclosure,
 } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
@@ -159,6 +160,7 @@ function RevokeButton(props: {
       type="button"
       class="den-checkpoint-decision-chicklet__revoke"
       data-testid="checkpoint-decision-revoke"
+      data-disclosure-action=""
       disabled={revoking()}
       onClick={(e) => void revoke(e)}
     >
@@ -263,10 +265,12 @@ export function CheckpointDecisionChicklet(props: Props) {
             class="sr-only"
           />
         </Show>
-        <div class="den-transcript-disclosure-header den-checkpoint-decision-chicklet__summary">
+        <TranscriptDisclosureSummary
+          disclosure={disclosure}
+          class="den-transcript-disclosure-header den-checkpoint-decision-chicklet__summary"
+        >
           <TranscriptDisclosureToggle
             disclosure={disclosure}
-            inHeader
             class="den-checkpoint-decision-chicklet__summary-main"
             aria-label={decisionAriaLabel(props.meta)}
           >
@@ -290,7 +294,7 @@ export function CheckpointDecisionChicklet(props: Props) {
             )}
           </Show>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
-        </div>
+        </TranscriptDisclosureSummary>
         <TranscriptDisclosurePanel
           disclosure={disclosure}
           class="den-checkpoint-decision-chicklet__body"

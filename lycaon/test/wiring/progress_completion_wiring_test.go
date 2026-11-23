@@ -9,7 +9,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// Re-armed progress emits a distinct completion marker with an increasing sequence.
+// Each completion edge records its finished steps.
 func TestProgressCompletionAppendsTranscriptMessage(t *testing.T) {
 	h := BuildForTest(t)
 	ctx := context.Background()
@@ -39,31 +39,31 @@ func TestProgressCompletionAppendsTranscriptMessage(t *testing.T) {
 		return out
 	}
 
-	// Pending run: no completion marker yet.
+	// Pending work has no completion.
 	runUpdate("## Progress\n- [ ] a\n- [ ] b\n")
 	if got := completions(); len(got) != 0 {
 		t.Fatalf("pending run: completions = %d want 0", len(got))
 	}
 
-	// All done: one marker, seq 1, carrying the finished steps.
+	// Completing the plan records its finished steps.
 	runUpdate("## Progress\n- [x] a\n- [x] b\n")
 	got := completions()
 	if len(got) != 1 {
 		t.Fatalf("after completion: completions = %d want 1", len(got))
 	}
 	meta := got[0].ProgressComplete
-	if meta == nil || meta.Seq != 1 || len(meta.Steps) != 2 {
-		t.Fatalf("completion meta = %+v want seq 1, 2 steps", meta)
+	if meta == nil || len(meta.Steps) != 2 {
+		t.Fatalf("completion meta = %+v want 2 steps", meta)
 	}
 
-	// Re-arm with a new pending step, then finish again: a second marker, seq 2.
+	// New pending work creates another completion edge.
 	runUpdate("## Progress\n- [x] a\n- [x] b\n- [ ] c\n")
 	runUpdate("## Progress\n- [x] a\n- [x] b\n- [x] c\n")
 	got = completions()
 	if len(got) != 2 {
 		t.Fatalf("after re-armed completion: completions = %d want 2", len(got))
 	}
-	if got[1].ProgressComplete == nil || got[1].ProgressComplete.Seq != 2 {
-		t.Fatalf("second completion seq = %+v want 2", got[1].ProgressComplete)
+	if got[1].ProgressComplete == nil || len(got[1].ProgressComplete.Steps) != 3 {
+		t.Fatalf("second completion = %+v want 3 steps", got[1].ProgressComplete)
 	}
 }

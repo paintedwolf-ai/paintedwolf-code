@@ -922,9 +922,13 @@ components:
         path:
           type: string
           description: Root-relative path after the change (destination for rename).
+        from_root_id:
+          type: string
+          format: uuid
+          description: Source root for a rename across roots.
         from_path:
           type: string
-          description: Root-relative path before a rename; omit for other ops.
+          description: Path before a rename, relative to from_root_id when present and root_id otherwise.
         op:
           $ref: events.yaml#/components/schemas/SourceChangeOp
         origin:

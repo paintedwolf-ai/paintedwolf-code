@@ -49,14 +49,18 @@ func TestLedgerListsExactlyRunningAndUnobservedExits(t *testing.T) {
 		session["s"][handle] = proc
 		expected[handle] = w
 	}
+	reasons := wireTerminationReasons(t)
 	for _, kind := range []string{processKindPipeline, processKindProgram} {
+		add(kind+"-running", &Process{kind: kind, running: true}, want{listed: true})
 		for _, observed := range []bool{false, true} {
-			add(kind+"-running", &Process{kind: kind, running: true, processRuntimeState: processRuntimeState{observed: observed}}, want{listed: true})
-			for _, reason := range wireTerminationReasons(t) {
+			for _, reason := range reasons {
 				exited := reason == TerminationExited && !observed
-				add(kind+string(reason)+map[bool]string{true: "-observed", false: ""}[observed],
-					&Process{kind: kind, processRuntimeState: processRuntimeState{hasExit: true, exitCode: 3, reason: reason, observed: observed}},
+				handle := kind + string(reason) + map[bool]string{true: "-observed", false: ""}[observed]
+				add(handle, &Process{kind: kind, processRuntimeState: processRuntimeState{hasExit: true, exitCode: 3, reason: reason}},
 					want{listed: exited, exited: exited})
+				if observed {
+					r.Observe("s", handle)
+				}
 			}
 		}
 		add(kind+"-silent", &Process{kind: kind, running: true, silent: true}, want{})

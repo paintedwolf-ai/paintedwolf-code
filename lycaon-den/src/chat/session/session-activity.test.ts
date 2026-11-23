@@ -9,6 +9,9 @@ describe("session-activity", () => {
   it("is live when session busy or workers running", () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "s1",
       id: "s1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "p1",
@@ -22,6 +25,9 @@ describe("session-activity", () => {
     expect(isChatActivityLive(appStore, "s1")).toBe(true);
 
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "s1",
       id: "s1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "p1",
@@ -50,6 +56,9 @@ describe("session-activity", () => {
   it("isChatActivityLive ignores ambient workflow run when idle", () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "s1",
       id: "s1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "p1",
@@ -83,6 +92,9 @@ describe("session-activity", () => {
   it("isChatActivityLive is true while an llm call is active", () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "s1",
       id: "s1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -108,6 +120,9 @@ describe("session-activity", () => {
     const appStore = createAppStore();
     // Viewing s1; s2 is running in the background on the same project stream.
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "s1",
       id: "s1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",

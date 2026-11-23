@@ -205,11 +205,10 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create parent session", err)
+	sess, err := sessionStore.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "repo-researcher"})
 	testutil.FailErr(t, "create waiting worker session", err)
-	testutil.FailErr(t, "mark worker session", sessionStore.Sessions.UpdateSession(t.Context(), sess.ID, func(s *api.Session) {
-		s.ParentSessionID = "parent"
-	}))
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	loop.Waits.EnterSleep(t.Context(), sess.ID, time.Time{}, "waiting for command completion",
 		[]loopwake.WaitTrigger{loopwake.WaitTriggerProcessDone}, []string{"command-1"}, loopwake.SleepMoverHost)

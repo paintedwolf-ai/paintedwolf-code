@@ -1,0 +1,70 @@
+package commands
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/testutil"
+	wire "github.com/lycaon/lycaon/pkg/api"
+)
+
+func TestDeclaredSharedTempRedirectIsReviewedBeforeWriting(t *testing.T) {
+	for _, tc := range []struct {
+		name, program, answer, want string
+		posture                     gate.Posture
+	}{
+		{"decline", "mkdir producer-started", "decline", "original", gate.PostureLight},
+		{"allow", "printf changed", "recommended", "changed", gate.PostureBalanced},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			shared := outsideCommandFolder(t)
+			target := filepath.Join(shared, "note.txt")
+			testutil.FailErr(t, "seed redirect target", os.WriteFile(target, []byte("original"), 0600))
+			session := newProgramHost(t, tc.posture).program(t, tc.program+" > '"+target+"'", "")
+			t.Setenv("TMPDIR", shared)
+			cards := runCommandWithApprovals(t, session, tc.answer)
+			plan := cards[0].ToolApproval.Plan
+			if plan.Subject.Kind != wire.ApprovalSubjectKindWriteRootSet || !slices.Contains(plan.Reasons, wire.GateOutsideRootsWrite) {
+				t.Fatalf("shared temp review = %+v", plan)
+			}
+			data, err := os.ReadFile(target)
+			testutil.FailErr(t, "read reviewed target", err)
+			if string(data) != tc.want {
+				t.Fatalf("redirect target = %q, want %q", data, tc.want)
+			}
+			result := session.outcome(t, "program-1")
+			if (result.Status == 0) != (tc.name == "allow") {
+				t.Fatalf("redirect result = %+v", result)
+			}
+			if tc.name == "decline" {
+				if _, err := os.Stat(filepath.Join(session.dir, "producer-started")); !os.IsNotExist(err) {
+					t.Fatalf("declined producer started: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestDeclaredSharedTempRedirectUsesTheRequestedNarrowGrant(t *testing.T) {
+	shared := outsideCommandFolder(t)
+	target := filepath.Join(shared, "output.txt")
+	args := map[string]any{
+		"command":            "printf changed > '" + target + "'",
+		"capability_request": map[string]any{"write_root": target},
+	}
+	session := newProgramHost(t, gate.PostureBalanced).programWithArgs(t, args, wire.CreateSessionRequest{}, "")
+	t.Setenv("TMPDIR", shared)
+	cards := runCommandWithApprovals(t, session, "recommended")
+	plan := cards[0].ToolApproval.Plan
+	if plan.Subject.Kind != wire.ApprovalSubjectKindWriteRootSet || len(plan.Subject.Targets) != 1 || plan.Subject.Targets[0].Label != target {
+		t.Fatalf("exact target review = %+v", plan)
+	}
+	data, err := os.ReadFile(target)
+	testutil.FailErr(t, "read exact redirect target", err)
+	if string(data) != "changed" {
+		t.Fatalf("redirect target = %q", data)
+	}
+}

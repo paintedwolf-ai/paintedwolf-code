@@ -14,7 +14,14 @@ func (p *Project) WorkspaceID() string {
 	if p == nil {
 		return ""
 	}
-	return sourceworkspace.ID(p.ID, p.SourceRoots())
+	roots := p.SourceRoots()
+	attached := roots[:0:0]
+	for _, root := range roots {
+		if !root.Outside {
+			attached = append(attached, root)
+		}
+	}
+	return sourceworkspace.ID(p.ID, attached)
 }
 
 // ResolveWorkspaceRoot selects the requested or primary admitted root for a
@@ -72,8 +79,12 @@ func WithWorktree(p *Project, binding Binding) *Project {
 	return out
 }
 
-// BranchForRoot preserves sharing for roots outside a bound worktree.
+// BranchForRoot preserves sharing for roots outside a bound worktree. The
+// outside namespace has one history, on the trunk.
 func (p *Project) BranchForRoot(rootID string) sourcebranch.ID {
+	if rootID != "" && rootID == p.Outside.ID {
+		return sourcebranch.Trunk
+	}
 	if branch, ok := p.RootBranches[rootID]; ok {
 		return branch
 	}

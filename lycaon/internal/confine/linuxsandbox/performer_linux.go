@@ -38,9 +38,9 @@ type pathCall struct {
 	Op string `json:"op"`
 	// Path is the name the call creates; for link and rename, the existing one.
 	Path string `json:"path"`
-	// NewPath is the name link and rename create.
+	// NewPath is the destination of a link or rename, or the root of a session bind.
 	NewPath string `json:"new_path,omitempty"`
-	// Content is a symlink's target, which names nothing until it is followed.
+	// Content carries a symlink target or a metadata operation.
 	Content string `json:"content,omitempty"`
 	Flags   uint64 `json:"flags,omitempty"`
 	Mode    uint32 `json:"mode,omitempty"`
@@ -306,6 +306,9 @@ func answerKernel(listener int, call pathCall, result pathResult, opened int) {
 		} else {
 			resp.Val = int64(remoteFD)
 		}
+	} else if call.Op == callMetadata && result.Errno == 0 {
+		// The mount enforces metadata writes when observation finds no refusal.
+		resp.Flags = unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
 	} else if result.Errno != 0 {
 		resp.Error = -int32(result.Errno)
 	}

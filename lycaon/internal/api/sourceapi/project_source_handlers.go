@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/filekind"
 	"github.com/lycaon/lycaon/internal/project"
@@ -53,6 +54,11 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 		s.writeSourceReadError(w, r, err)
 		return
 	}
+	p, err = s.resolveSourceReadAddress(r, p, &req)
+	if err != nil {
+		s.writeSourceReadError(w, r, err)
+		return
+	}
 	if !branch.IsWorker() {
 		rootID, rootErr := sourceRootID(p, req.RootID)
 		if rootErr != nil {
@@ -75,7 +81,7 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 	observation, err := projectsource.ObserveProjectSource(p, req)
 	if errors.Is(err, projectsource.ErrSourceNotFound) && includeDeleted && (workerID == "" || branch.IsWorker()) {
 		var deleted *wire.ProjectSourceReadResponse
-		deleted, err = s.readDeletedSource(r.Context(), p, req, scope)
+		deleted, err = s.readDeletedSource(r.Context(), p, req, scope, strings.TrimSpace(r.URL.Query().Get("file_id")))
 		if err == nil {
 			httpio.WriteJSON(w, http.StatusOK, deleted)
 			return
@@ -99,7 +105,7 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 
 func sourceViewerRequest(r *http.Request) (projectsource.SourceReadRequest, bool, error) {
 	req := projectsource.SourceReadRequest{
-		Path:     strings.TrimSpace(r.URL.Query().Get("path")),
+		Path:     r.URL.Query().Get("path"),
 		RootID:   strings.TrimSpace(r.URL.Query().Get("root_id")),
 		DecodeAs: strings.TrimSpace(r.URL.Query().Get("decode_as")),
 	}
@@ -107,8 +113,8 @@ func sourceViewerRequest(r *http.Request) (projectsource.SourceReadRequest, bool
 	if err != nil {
 		return req, false, err
 	}
-	if includeDeleted && req.RootID == "" {
-		return req, false, fmt.Errorf("include_deleted requires root_id")
+	if includeDeleted && req.RootID == "" && r.URL.Query().Get("file_id") == "" {
+		return req, false, fmt.Errorf("include_deleted requires root_id or file_id")
 	}
 	return req, includeDeleted, nil
 }
@@ -169,7 +175,7 @@ func SourceWorkspaceDTO(p *project.Project, sessionScoped bool, inventory wire.S
 			ID:       root.ID, Path: root.Path, Watch: SourceWatchCoverageDTO(repochange.Coverage(root.Path)),
 		})
 	}
-	return wire.SourceWorkspace{WorkspaceID: p.WorkspaceID(), SessionScoped: sessionScoped, Roots: roots, Inventory: inventory}
+	return wire.SourceWorkspace{WorkspaceID: p.WorkspaceID(), SessionScoped: sessionScoped, Roots: roots, OutsideRootID: p.Outside.ID, Inventory: inventory}
 }
 
 func SourceWatchCoverageDTO(coverage repochange.WatchCoverage) wire.SourceWatchCoverage {
@@ -276,10 +282,16 @@ func (s *Workspace) HandleGetProjectSourceRaw(w http.ResponseWriter, r *http.Req
 		s.writeSourceReadError(w, r, err)
 		return
 	}
-	result, err := projectsource.ReadProjectSourceRaw(p, projectsource.SourceReadRequest{
+	req := projectsource.SourceReadRequest{
 		Path:   strings.TrimSpace(q.Get("path")),
 		RootID: strings.TrimSpace(q.Get("root_id")),
-	})
+	}
+	p, err = s.resolveSourceReadAddress(r, p, &req)
+	if err != nil {
+		s.writeSourceReadError(w, r, err)
+		return
+	}
+	result, err := projectsource.ReadProjectSourceRaw(p, req)
 	if err != nil {
 		s.writeSourceReadError(w, r, err)
 		return
@@ -292,6 +304,19 @@ func (s *Workspace) HandleGetProjectSourceRaw(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusOK)
 	// #nosec G705 -- sniffed image bytes; sandbox CSP disables active SVG content.
 	_, _ = w.Write(result.Bytes)
+}
+
+func (s *Workspace) resolveSourceReadAddress(r *http.Request, p *project.Project, req *projectsource.SourceReadRequest) (*project.Project, error) {
+	fileID := strings.TrimSpace(r.URL.Query().Get("file_id"))
+	if fileID != "" && r.URL.Query().Get("worker_id") != "" {
+		return nil, projectsource.ErrSourcePathInvalid
+	}
+	p, target, err := outsideaccess.Resolve(r.Context(), s.SourceLedger, p, outsideaccess.Address{RootID: req.RootID, Path: req.Path, FileID: fileID})
+	if err != nil {
+		return nil, err
+	}
+	req.RootID, req.Path = target.RootID, target.Path
+	return p, nil
 }
 
 // A usable worker overlay stays leased until release; unavailable trees return no root.
@@ -327,6 +352,7 @@ func (s *Workspace) HandleBrowseProjectSource(w http.ResponseWriter, r *http.Req
 	}
 	q := r.URL.Query()
 	workspaceID := p.WorkspaceID()
+
 	listing, err := projectsource.BrowseProjectSource(p, q.Get("root_id"), q.Get("dir"))
 	if err != nil {
 		s.writeSourceReadError(w, r, err)

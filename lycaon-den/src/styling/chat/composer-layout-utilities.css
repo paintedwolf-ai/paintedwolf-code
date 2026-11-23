@@ -24,6 +24,13 @@ position: relative;
     background var(--den-duration) var(--den-ease),
     border-color var(--den-duration) var(--den-ease),
     box-shadow var(--den-duration) var(--den-ease);
+  &:has(.den-composer-action-pad > .den-session-mode) {
+    --den-composer-mode-width: 6.6em;
+    --den-composer-mode-rows: 2;
+    --den-composer-action-pad-width: calc(
+      var(--den-composer-mode-width) + 2 * var(--den-composer-action-col) + 2 * var(--den-composer-action-gap)
+    );
+  }
   &:focus-within {
     border-color: color-mix(in srgb, var(--den-accent-signal) 30%, var(--den-line));
     box-shadow:
@@ -75,6 +82,15 @@ display: grid;
   align-self: flex-end;
   position: relative;
   z-index: 1;
+  &:has(> .den-session-mode) {
+    grid-template-columns: var(--den-composer-mode-width) var(--den-composer-action-col) var(--den-composer-action-col);
+  }
+  & > .den-session-mode {
+    grid-row: 2;
+    grid-column: 1;
+    justify-self: end;
+    align-self: center;
+  }
 }
 
 
@@ -101,7 +117,7 @@ display: block;
   box-sizing: border-box;
   width: 100%;
   resize: none;
-  min-height: var(--den-composer-input-min-height);
+  min-height: calc(var(--den-composer-input-min-height) + var(--den-composer-mode-rows, 0) * 1lh);
   /* Padding reserves the icon lane inside the input host. */
   padding: 0.5em calc(var(--den-composer-action-pad-width) + var(--den-composer-action-gap))
     0.5em 0.25em;

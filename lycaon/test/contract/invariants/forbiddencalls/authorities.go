@@ -185,6 +185,7 @@ func bodyDecidesLoopback(body *ast.BlockStmt) bool {
 // confinementProducers name every file that builds a confinement, with the
 // provenance of its roots.
 var confinementProducers = []invariants.Exemption{
+	{Key: "internal/confine/write_roots.go", Reason: "PrivateServiceBoundary admits the host-selected session scratch under the isolated guest root"},
 	{Key: "internal/tools/native/command/program_external.go", Reason: "programEnvironment: DefaultConfinement from ActionConfineInputsForContext; host-derived roots and grants for the shared launch environment"},
 	{Key: "internal/tools/native/command/command_exec.go", Reason: "commandConfineRoots(tctx, extraWriteRoots): host-selected root, attached roots and the approved chat write-root overlay"},
 	{Key: "internal/tools/native/terminal/session_open.go", Reason: "tools.ConfineRootsForAction(tctx): host provenance only"},

@@ -1,0 +1,8 @@
+name: DraftStatus
+go_const_prefix: DraftStatus
+values:
+  - id: live
+  - id: committed
+  - id: withdrawn
+  - id: rejected
+    comment: "retains rejected coordinator attempts with internal visibility."

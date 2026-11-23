@@ -759,3 +759,17 @@ Every provider request passes the outbound secret screen before it leaves. A per
 - A failure with no HTTP status is still a classified fault, and a delivered request is never reported as one that never arrived.
 - Utility work is bounded, tool-free, and non-critical.
 - Credentials never enter durable transcript, backup, or diagnostics.
+
+### Import a local model from the command line
+
+Run `pw local-model import <path>` with a signed model directory or plain tar `.pwmodel` archive. The CLI asks the local host to import it and reports when the request is accepted. Follow progress in Settings → AI providers. Run `pw local-model opt-out` to remove the installed local generation model.
+
+### Local model downloads
+
+Normal application downloads contain the generation adapter. Setup offers a local model when the host has no saved selection or opt-out and at least one published tier fits the device. Otherwise fresh setup continues to layout and returning users enter the workspace. An offline installer skips the model page and provisions its signed seed locally on first use. Existing selections and opt-outs survive installing it. Settings → AI providers offers manual provider configuration and signed bundle import even when no download is available.
+
+The host reports the exact published download size and checks physical memory and available generation capacity. On discrete Vulkan GPUs, the physical minimum includes the generation working set and the GPU memory reserved for the decision model. The Large tier’s measured 44,800-token plan requires 16,646,471,680 bytes of generation capacity. With the reference decision model, its physical minimum is 19,885,870,182 bytes (18.52 GiB). Runtime admission selects a context that fits the installed model and the host’s current budget.
+
+Choosing another tier replaces the selected revision. External provider assignments survive the switch. The first global coordinator assignment initializes an unset summarizer. Later edits to either role are independent.
+
+After training, use `scripts/generation/publish_bundle.py --print-pin` with the signed bundle, model, device, release authority and verifier. Add its output to `lycaon/internal/llm/providers/nativegen/release-pins.json` after publishing the immutable objects. Supply the matching public authority through `BIALY_GENERATION_AUTHORITY` when staging application resources. Unpublished tiers remain available for hardware assessment and signed offline import. An offline installer build can include one authenticated seed using `--with-local-model=e4b|12b|26b` and `BIALY_GENERATION_BUNDLE`.

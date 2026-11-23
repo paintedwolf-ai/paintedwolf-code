@@ -157,6 +157,15 @@ var baseContractCases = []contractCase{
 	},
 	{
 		Case: commandconformance.Case{
+			ID:          "process-private-service-release",
+			Description: "private-service release succeeds cleanly when no private service runtime is active.",
+			Commands:    []string{"private-service", "printf"},
+			Program:     `private-service release && printf 'released-ok\n'`,
+		},
+		Stdout: "released-ok\n",
+	},
+	{
+		Case: commandconformance.Case{
 			ID:          "git-diff-separated-u-flag",
 			Description: "git diff accepts the context length as a separate argument.",
 			Commands:    []string{"git diff"},

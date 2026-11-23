@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { captureSessionChatFromStore, dropSessionChatCache, getSessionChatCache, putSessionChatCache } from "../chat/session/session-chat-cache.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAppStore } from "../store/app-state.ts";
 import { type AppStore } from "../store/app-state-model.ts";
@@ -9,6 +10,9 @@ import { resetSessionEventRevisions, subscribeEvents, type EventSubscription } f
 import type { LLMCallEvent, SessionEvent, SessionHostError } from "./types.ts";
 import { LycaonApiError } from "./http.ts";
 import { refreshSessionSnapshot } from "./session-snapshot-refresh.ts";
+import { beginSessionModeAdmission, sessionModeView } from "../chat/session/session-mode-state.ts";
+import { upgradeSessionMode } from "../chat/session/session-mode-upgrade.ts";
+import { deferred } from "../chat/session/session-lifecycle-test-fixture.ts";
 import { stopChatActivity } from "../chat/session/session-lifecycle.ts";
 import { isChatActivityLive } from "../chat/session/session-activity.ts";
 import { appliedSessionRevision } from "./session-event-revisions.ts";
@@ -28,9 +32,12 @@ afterEach(() => {
   resetTurnOutcomesForTests();
 });
 
-function setup() {
+function setup(mode: Session["mode"] = "agent", started = true) {
   const store = createAppStore();
   store.actions.setCurrentSession({
+    mode,
+    started,
+    root_session_id: sessionId,
     id: sessionId, owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: projectId, status: "busy", posture: "build",
     workspace_path: "/project", created_at: "t", activity_at: "t", updated_at: "t",
   });
@@ -90,6 +97,58 @@ async function deliver(
 }
 
 describe("session event revision ordering", () => {
+  it("applies delayed authority fields after a newer lifecycle-only event", async () => {
+    const { store } = setup("agent", false);
+    await deliver(store, [
+      { revision: 9, data: { status: "idle", title: "Current" } },
+      { revision: 7, data: { status: "busy", title: "Older", mode: "ask" } },
+      { revision: 8, data: { status: "busy", started: true } },
+      { revision: 6, data: { status: "busy", mode: "agent", started: false } },
+    ]);
+    expect(appliedSessionRevision(store.actions, sessionId)).toBe(9);
+    expect(store.state.currentSession).toMatchObject({ status: "idle", title: "Current", mode: "ask", started: true });
+  });
+
+  it("keeps the confirmed Agent effect when its PATCH response is lost after the mode event", async () => {
+    const { store } = setup("ask");
+    const patch = deferred<Session>();
+    const getSession = vi.fn();
+    const upgrade = upgradeSessionMode(store, stubClient({ updateSession: () => patch.promise, getSession }), sessionId);
+    expect(sessionModeView(store, sessionId).upgrade).toBe("sending");
+    await deliver(store, [
+      { revision: 6, data: { status: "busy", mode: "agent" } },
+      { revision: 7, data: { status: "busy" } },
+    ]);
+    patch.reject(new Error("Response lost"));
+    expect(await upgrade).toBe(true);
+    expect(getSession).not.toHaveBeenCalled();
+    expect(beginSessionModeAdmission(store, sessionId).mode).toBeUndefined();
+    expect(sessionModeView(store, sessionId)).toMatchObject({ mode: "agent", show: false, upgrade: undefined });
+  });
+
+  it("projects ordered root mode updates onto an open and cached descendant", async () => {
+    const { store } = setup();
+    const child = { ...store.state.currentSession!, id: "worker-child", parent_session_id: "worker-parent", mode: "ask" as const };
+    const scope = { projectId, sessionId: child.id };
+    store.actions.setCurrentSession(child);
+    store.actions.installTranscriptBaseline(child.id, [], 0);
+    const cache = captureSessionChatFromStore(store, scope);
+    expect(cache).not.toBeNull();
+    putSessionChatCache(cache!);
+    try {
+      await deliver(store, [
+        { revision: 5, data: { status: "busy", mode: "agent", started: true } },
+        { revision: 4, data: { status: "idle", mode: "ask", started: false } },
+        { revision: 6, data: { status: "busy" } },
+      ]);
+      expect(store.state.currentSession).toMatchObject({ id: child.id, status: child.status, mode: "agent", started: true });
+      expect(getSessionChatCache(scope)?.session).toMatchObject({ mode: "agent", started: true });
+      expect(appliedSessionRevision(store.actions, sessionId)).toBe(6);
+    } finally {
+      dropSessionChatCache(scope);
+    }
+  });
+
   it("holds a sent prompt through stale events and ends the hold at the first event after admission", async () => {
     const { store } = setup();
     store.actions.holdPromptSubmission(sessionId, "sent");

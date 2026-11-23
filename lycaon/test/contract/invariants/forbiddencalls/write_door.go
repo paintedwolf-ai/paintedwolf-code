@@ -57,6 +57,11 @@ func isDoorTestSupport(f *invariants.GoFile) bool {
 // doorExemptions are writes whose lifetime lies outside a replacement transaction,
 // each with the property the door cannot express.
 var doorExemptions = []invariants.Exemption{
+	{Key: "cmd/pw-service-guest/boot_linux.go", Reason: "sets limits through kernel cgroup control files"},
+	{Key: "cmd/pw-service-guest/main_linux.go", Reason: "opens the guest virtio device for duplex controller traffic"},
+	{Key: "cmd/pw-service-guest/namespace_linux.go", Reason: "creates empty bind targets on the private device tmpfs"},
+	{Key: "internal/confine/privateguesthost/linuxruntime/scope_linux.go", Reason: "writes resource limits to the delegated kernel cgroup"},
+	{Key: "internal/configlayout/private_guest_darwin.go", Reason: "exclusively creates a session-private kernel or initramfs snapshot when cloning is unavailable"},
 
 	{Key: "internal/fileclone/probe.go", Reason: "O_EXCL volume-capability probe in a private temporary directory; its fsynced input and clone are removed before return, never published as durable content"},
 	{Key: "internal/scan/installed/verify.go", Reason: "ephemeral installed-scanner fixtures in an owned temporary directory removed before return"},

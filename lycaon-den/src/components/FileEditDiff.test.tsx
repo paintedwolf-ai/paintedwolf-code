@@ -2,10 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { render, screen, waitFor, cleanup } from "@solidjs/testing-library";
 import { stubFilesClient } from "../test/source-client-fixture.ts";
+import { NoticeReporterProvider } from "../notices/notice-reporter.tsx";
 import { FileEditDiff } from "./FileEditDiff.tsx";
 import { assertNamedControl } from "../test/controls.ts";
 import { foldFileEdits } from "../chat/file-edit/file-edit-fold.ts";
 import type { FileEditStep } from "../chat/file-edit/file-edit-fold.ts";
+import {
+  registerOpenSourceProjectLookup,
+  registerOpenSourceSink,
+  resetOpenSourceForTests,
+} from "../platform/navigation/open-source.ts";
 import { resetFindControllerForTests } from "../find/find-controller.ts";
 import { transcriptDisclosureKey } from "../chat/transcript/presentation/transcript-disclosure-key.ts";
 import {
@@ -26,13 +32,32 @@ import { useElapsableClock } from "../test/elapse.ts";
 const elapse = useElapsableClock();
 
 const client = stubFilesClient();
+const { openSourceLocation, restoreOpenSourceLocation } = vi.hoisted(() => {
+  let real: typeof import("../platform/navigation/open-source.ts").openSourceLocation | undefined;
+  const fn = vi.fn();
+  return {
+    openSourceLocation: fn,
+    restoreOpenSourceLocation: (impl?: typeof real) => {
+      if (impl) real = impl;
+      fn.mockReset();
+      if (real) fn.mockImplementation(real);
+    },
+  };
+});
+vi.mock("../platform/navigation/open-source.ts", async original => {
+  const actual = await original<typeof import("../platform/navigation/open-source.ts")>();
+  restoreOpenSourceLocation(actual.openSourceLocation);
+  return { ...actual, openSourceLocation };
+});
 vi.mock("../platform/connection/app-connection.ts", async original => ({
   ...await original<typeof import("../platform/connection/app-connection.ts")>(), getLycaonClient: () => client,
 }));
 
 afterEach(() => {
   cleanup();
+  restoreOpenSourceLocation();
   resetFindControllerForTests();
+  resetOpenSourceForTests();
   resetFindRevealHostsForTests();
   document.body.replaceChildren();
 });
@@ -47,7 +72,7 @@ function step(
   after: string,
   tool = "edit",
 ): FileEditStep {
-  return { key, snapshot: fileEditPreviewFixture({ path: "pipeline.py", before, after }), tool };
+  return { key, snapshot: fileEditPreviewFixture({ root_id: "r1", path: "pipeline.py", before, after }), tool };
 }
 
 function multiWriteFold() {
@@ -73,6 +98,34 @@ describe("FileEditDiff", () => {
     assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button").click();
     expect(controller.following()).toBe(following);
   });
+  it("opens the recorded outside file while keeping its diff disclosure independent", () => {
+    const roots = [{ id: "attached", path: "/repo" }];
+    registerOpenSourceProjectLookup(() => ({ roots, outsideRootId: "outside" }));
+    const open = vi.fn();
+    registerOpenSourceSink(open);
+    const snapshot = fileEditPreviewFixture({ path: "/tmp/notes.txt", before: V1, after: V2 });
+    const recorded = {
+      key: "t1", tool: "write", snapshot,
+      navigationTarget: {
+        project_id: "p1", root_id: "outside", path: "tmp/notes.txt",
+        file_id: "file-1", entry_kind: "file" as const,
+      },
+    };
+    const fold = foldFileEdits([recorded, { key: "t2", tool: "write", snapshot }])[0]!;
+    render(() => <FileEditDiff projectId="p1" sessionId="s1" rootRefs={roots} fold={fold} />);
+
+    const toggle = assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button");
+    expect(screen.queryByTestId("source-path-link")).toBeNull();
+    toggle.click();
+    assertNamedControl(screen.getByTestId("file-edit-diff-step-1"), "button").click();
+    assertNamedControl(screen.getByTestId("source-path-link"), "button").click();
+    expect(open).toHaveBeenCalledWith({
+      projectId: "p1", rootId: "outside", path: "tmp/notes.txt", absolutePath: "/tmp/notes.txt",
+      fileId: "file-1", intent: "permanent",
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("shows the range's stat and the write count for a path written more than once", async () => {
     render(() => <FileEditDiff projectId="p1" sessionId="s1" fold={multiWriteFold()} />);
     // Three writes; the range is one changed line.
@@ -128,11 +181,32 @@ describe("FileEditDiff", () => {
       .getByTestId("file-edit-diff")
       .querySelector(".den-file-edit-diff-header")!;
     const fill = header.querySelector(".den-file-edit-diff-fill")!;
-    const link = header.querySelector('[data-testid="source-path-link"]')!;
+    const path = header.querySelector(".den-source-path-plain")!;
     expect(fill).toBeTruthy();
     expect(
-      link.compareDocumentPosition(fill) & Node.DOCUMENT_POSITION_FOLLOWING,
+      path.compareDocumentPosition(fill) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it.each([
+    { path: "/external/readme.md", rootId: undefined, calls: 0 },
+    { path: "readme.md", rootId: "r1", calls: 1 },
+  ])("opens a source only for an attached edit at $path", ({ path, rootId, calls }) => {
+    const reportError = vi.fn();
+    openSourceLocation.mockResolvedValue({ status: "opened-in-app" });
+    const fold = singleFileEditFold("t1", fileEditPreviewFixture({
+      path, root_id: rootId, before: V1, after: V2,
+    }));
+    render(() => (
+      <NoticeReporterProvider reporter={{ reportError, publish: vi.fn() }}>
+        <FileEditDiff projectId="p1" sessionId="s1" fold={fold} rootRefs={[{ id: "r1", path: "/attached" }]} />
+      </NoticeReporterProvider>
+    ));
+    screen.getByText(path).click();
+    expect(screen.getByTestId("file-edit-diff").getAttribute("data-expanded")).toBe("true");
+    screen.queryByText("Open in Files")?.click();
+    expect(openSourceLocation).toHaveBeenCalledTimes(calls);
+    expect(reportError).not.toHaveBeenCalled();
   });
 
   it("names no writes and offers no strip for a single write", () => {

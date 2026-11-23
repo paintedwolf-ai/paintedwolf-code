@@ -28,7 +28,7 @@ func formatTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339Nano)
 }
 
-// InsertProject inserts a minimal projects row for FK-backed tests.
+// InsertProject seeds a project and its outside namespace.
 func InsertProject(t testing.TB, sqlDB store, projectID string) {
 	t.Helper()
 	now := formatTime(time.Now().UTC())
@@ -37,6 +37,12 @@ func InsertProject(t testing.TB, sqlDB store, projectID string) {
 		VALUES (?, NULL, ?, ?, 0)
 	`, projectID, now, now)
 	testutil.FailErr(t, "insert project", err)
+	_, err = sqlDB.ExecContext(t.Context(), `
+		INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
+		SELECT ?, id, '', 'outside', 0, created_at, 'outside' FROM projects WHERE id = ?
+		ON CONFLICT(project_id, path) DO NOTHING
+	`, uuid.NewString(), projectID)
+	testutil.FailErr(t, "insert outside namespace", err)
 }
 
 // InsertProjectRoot attaches one folder root.
@@ -50,7 +56,7 @@ func InsertProjectRootWithID(t *testing.T, sqlDB store, projectID, rootID, path 
 	t.Helper()
 	InsertProject(t, sqlDB, projectID)
 	var existing int
-	err := sqlDB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM project_roots WHERE project_id = ?`, projectID).Scan(&existing)
+	err := sqlDB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM project_roots WHERE project_id = ? AND kind != 'outside'`, projectID).Scan(&existing)
 	testutil.FailErr(t, "count project roots", err)
 	isPrimary := 0
 	if existing == 0 {
@@ -117,15 +123,33 @@ func InsertSession(t testing.TB, sqlDB store, sessionID, projectID string) {
 	InsertProject(t, sqlDB, projectID)
 	now := formatTime(time.Now().UTC())
 	_, err := sqlDB.ExecContext(t.Context(), `
-		INSERT INTO sessions (
-			id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at
-		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?)
+		INSERT OR IGNORE INTO sessions (
+			id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?, ?1, 'agent')
 	`, sessionID, projectID, now, now, now)
 	testutil.FailErr(t, "insert session", err)
 }
 
+// InsertChildSession creates a worker session with its parent's durable lineage.
+func InsertChildSession(t testing.TB, sqlDB store, sessionID, parentID string) {
+	t.Helper()
+	now := formatTime(time.Now().UTC())
+	result, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (
+		id, project_id, owner_person_id, workspace_root_id, posture, status,
+		parent_session_id, root_session_id, created_at, activity_at, updated_at
+	) SELECT ?, project_id, owner_person_id, workspace_root_id, 'build', 'idle',
+		id, root_session_id, ?, ?, ? FROM sessions WHERE id = ?`,
+		sessionID, now, now, now, parentID)
+	testutil.FailErr(t, "insert child session", err)
+	rows, err := result.RowsAffected()
+	testutil.FailErr(t, "count inserted child sessions", err)
+	if rows != 1 {
+		t.Fatalf("parent session %q missing", parentID)
+	}
+}
+
 // InsertWorkflowRun inserts a minimal running workflow for FK-backed tests.
-func InsertWorkflowRun(t *testing.T, sqlDB store, runID, sessionID, projectID string) {
+func InsertWorkflowRun(t testing.TB, sqlDB store, runID, sessionID, projectID string) {
 	t.Helper()
 	InsertSession(t, sqlDB, sessionID, projectID)
 	now := formatTime(time.Now().UTC())
@@ -145,8 +169,8 @@ func InsertSessionWithRoot(t *testing.T, sqlDB store, sessionID, projectID, dir 
 	now := formatTime(time.Now().UTC())
 	_, err := sqlDB.ExecContext(t.Context(), `
 		INSERT INTO sessions (
-			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at
-		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?)
+			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?, ?1, 'agent')
 	`, sessionID, projectID, rootID, now, now, now)
 	testutil.FailErr(t, "insert session", err)
 }
@@ -186,8 +210,8 @@ func InsertWorkerJob(t testing.TB, sqlDB store, jobID, childSessionID string) {
 	now := formatTime(time.Now().UTC())
 	_, err := sqlDB.ExecContext(t.Context(), `
 		INSERT OR IGNORE INTO sessions (
-			id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at
-		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?)
+			id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?, ?1, 'agent')
 	`, childSessionID, DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert child session", err)
 	_, err = sqlDB.ExecContext(t.Context(), `

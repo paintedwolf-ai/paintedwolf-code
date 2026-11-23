@@ -23,7 +23,7 @@ let
       while read -r module root; do
         substituteInPlace go.mod vendor/modules.txt --replace-fail "=> $root" "=> ./vendor/$module"
       done < <(sed -n 's|^replace \([^ ]*\) => \(\.\./third_party/[^ ]*\)$|\1 \2|p' go.mod)
-      packages=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity)
+      packages=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity ./cmd/pw-service-guest)
       ignored=(--ignore=github.com/lycaon/lycaon --ignore=github.com/deitch/magic
         --ignore=github.com/alecthomas/chroma/v2)
       go-licenses check "''${packages[@]}" "''${ignored[@]}" \

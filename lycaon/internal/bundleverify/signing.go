@@ -84,7 +84,7 @@ func checkSigning(ctx context.Context, runner Runner, opts Options, machOs []Mac
 func checkCodesign(ctx context.Context, runner Runner, opts Options, target string, severity Severity) ([]Finding, string) {
 	rel := bundleRel(opts.AppPath, target)
 
-	_, stderr, err := runner.Run(ctx, "codesign", "--display", "--verbose=2", target)
+	_, stderr, err := runner.Run(ctx, "codesign", "--display", "--verbose=4", target)
 	if isToolMissing(err) {
 		return nil, "codesign"
 	}
@@ -97,6 +97,9 @@ func checkCodesign(ctx context.Context, runner Runner, opts Options, target stri
 		}), ""
 	}
 
+	if rel == serviceGuestHelper {
+		findings = append(findings, checkGuestHelperSignature(opts.AppPath, stderr)...)
+	}
 	flags, haveFlags := parseCodesignFlags(stderr)
 	if isAdhocSignature(stderr, flags, haveFlags) {
 		findings = append(findings, Finding{

@@ -1,10 +1,12 @@
-import type { CommandActivityView } from "./command-activity-model.ts";
+import type { CommandActivityView } from "./command-activity-facts.ts";
 import type {
   ActionDescriptor,
+  ActionFact,
   Message,
   ChatContentReference,
   ToolCall,
   FileEditPreview,
+  NavigationTarget,
   VisualArtifact,
   WorkerSummaryMeta,
   ExternalAccess,
@@ -18,7 +20,6 @@ import type {
   ToolFeedback,
   ToolResultOutcome,
 } from "../../api/types.ts";
-import type { TranscriptLayout } from "../transcript/layout/transcript-layout.ts";
 import {
   REDACTION_FIELD_TOOL_RESULT_ARGS,
   toolCallArgsRedactionField,
@@ -26,11 +27,7 @@ import {
 } from "../transcript/content/redaction-spans.ts";
 import { resolveChickletTitle } from "./tool-chicklet-titles.ts";
 import { skillReadResource, skillResourceTitle } from "../skill/skill-read.ts";
-import {
-  COORDINATOR_INTERNAL_TOOLS,
-  LONG_RUNNING_COORDINATOR_TOOLS,
-  TOOL_CARD_KINDS,
-} from "./tool-presentation.generated.ts";
+import { TOOL_CARD_KINDS } from "./tool-presentation.generated.ts";
 import {
   getBackgroundProcessSnapshot,
   hasHydratedBackgroundProcesses,
@@ -67,6 +64,8 @@ export interface ToolPartView {
   id: string;
   /** Host tool-call identity. */
   toolCallId: string;
+  /** Host progress first placed this row at the assistant call. */
+  shownInFlight?: true;
   /** Assistant row that issued this call. */
   assistantMessageId: string;
   /** Durable workflow scope for grouping; absent for an ordinary chat batch. */
@@ -87,6 +86,7 @@ export interface ToolPartView {
   childSessionId?: string;
   /** Text changes the call made, one per file. */
   fileEdits?: readonly FileEditPreview[];
+  sourceLocations?: readonly NavigationTarget[];
   /** Further text changes the result does not hold. */
   fileEditsOmitted?: number;
   visual?: VisualArtifact | null;
@@ -108,6 +108,7 @@ export interface ToolPartView {
   /** Host program receipt; present only for portable command programs. */
   commandProgram?: CommandProgramReceipt | null;
   commandActivity?: CommandActivityView;
+  sourceObservation?: ActionFact;
   /** Host provenance for redacted result spans. */
   redaction?: HostSecretRedactionMeta | null;
   /** Host provenance for rendered argument spans. */
@@ -141,32 +142,9 @@ export function classifyToolKind(toolName: string): ToolPartKind {
   return kind && TOOL_PART_KINDS.has(kind) ? (kind as ToolPartKind) : "generic";
 }
 
-const LONG_RUNNING_TOOL_SET = new Set<string>(LONG_RUNNING_COORDINATOR_TOOLS);
-const COORDINATOR_INTERNAL_TOOL_SET = new Set<string>(
-  COORDINATOR_INTERNAL_TOOLS,
-);
-
 /** Worker dispatch tools — TaskCard routing, roster binding, worker transcript. */
 export function isTaskToolName(tool: string): boolean {
   return classifyToolKind(tool) === "task";
-}
-
-/** Settled benign results remain visible for lifecycle tools. */
-function isLifecycleVisibleTool(tool: string): boolean {
-  return LONG_RUNNING_TOOL_SET.has(tool.toLowerCase());
-}
-
-/** Membership for parent-chat orientation tools (see shouldHideCoordinatorInternalTool). */
-export function isCoordinatorInternalTool(toolName: string): boolean {
-  return COORDINATOR_INTERNAL_TOOL_SET.has(toolName.toLowerCase());
-}
-
-/** Parent chat hides orientation tools; worker drawer shows full child-session activity. */
-export function shouldHideCoordinatorInternalTool(
-  toolName: string,
-  layout: TranscriptLayout = "chat",
-): boolean {
-  return layout === "chat" && isCoordinatorInternalTool(toolName);
 }
 
 function toolOutputText(msg?: Message): string | null {
@@ -241,54 +219,6 @@ export function toolPartDisplayStatus(
   return live.running ? "running" : "completed";
 }
 
-/** Host-stamped quiet chrome (`tool_result.ui_visibility === "benign"`). */
-export function isBenignToolResult(resultMsg?: Message): boolean {
-  return resultMsg?.tool_result?.ui_visibility === "benign";
-}
-
-type ToolPartTranscriptOmitOptions = {
-  verboseMode: boolean;
-  layout?: TranscriptLayout;
-};
-
-type ToolTranscriptVisibility =
-  | "visible"
-  | "verbose_only"
-  | "hidden";
-
-/** Resolve transcript visibility before a tool surface mounts. */
-function toolTranscriptVisibility(
-  resultMsg: Message | undefined,
-  toolName: string,
-  layout: TranscriptLayout = "chat",
-): ToolTranscriptVisibility {
-  if (shouldHideCoordinatorInternalTool(toolName, layout)) return "hidden";
-  if (layout === "worker") return "visible";
-  if (isLifecycleVisibleTool(toolName)) return "visible";
-  if (!resultMsg) return "verbose_only";
-  const result = resultMsg.tool_result;
-  if (result?.file_edit_previews?.some((edit) => edit.path.trim() !== "") || (result?.file_edits_omitted ?? 0) > 0) return "visible";
-  return isBenignToolResult(resultMsg) ? "verbose_only" : "visible";
-}
-
-/** Quiet chat defers ordinary tools until they settle. */
-export function shouldOmitToolPartFromTranscript(
-  resultMsg: Message | undefined,
-  toolName: string,
-  options: ToolPartTranscriptOmitOptions,
-): boolean {
-  const layout = options.layout ?? "chat";
-  const visibility = toolTranscriptVisibility(resultMsg, toolName, layout);
-  if (visibility === "visible") return false;
-  if (visibility === "hidden") return true;
-  return !options.verboseMode;
-}
-
-/** Whether a tool's row is drawn before its result arrives; fixed per tool and view. */
-export function toolDrawsWhileRunning(toolName: string, options: ToolPartTranscriptOmitOptions): boolean {
-  return !shouldOmitToolPartFromTranscript(undefined, toolName, options);
-}
-
 function toolPartSummaryTitle(part: ToolPartView): string {
   // The host-stamped skill identifies the activation reliably.
   const activated = part.skill?.name?.trim();
@@ -359,6 +289,7 @@ export function toolPartFromCall(
     jobId,
     childSessionId: resultMsg?.tool_result?.dispatch?.child_session_id?.trim(),
     fileEdits: resultMsg?.tool_result?.file_edit_previews ?? [],
+    sourceLocations: resultMsg?.source_context?.locations,
     fileEditsOmitted: resultMsg?.tool_result?.file_edits_omitted ?? 0,
     visual: resultMsg?.tool_result?.visual ?? null,
     externalAccess: resultMsg?.tool_result?.external_access ?? null,
@@ -372,6 +303,7 @@ export function toolPartFromCall(
     process: resultMsg?.tool_result?.process ?? null,
     invocation: resultMsg?.tool_result?.invocation ?? null,
     commandProgram: resultMsg?.tool_result?.command_program ?? null,
+    sourceObservation: resultMsg?.tool_result?.card_facts?.find((fact) => fact.kind === "source_observation"),
     verdict: resultMsg?.tool_result?.verdict ?? null,
     outcome: resultMsg?.tool_result?.outcome,
     codes: resultMsg?.tool_result?.codes,

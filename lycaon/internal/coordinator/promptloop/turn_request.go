@@ -219,6 +219,7 @@ func (l *modelTurn) buildCommandGuidanceDebug(
 		ProjectDir:            projectDir,
 		SessionScratchDir:     frame.Machine.Surface.SessionScratchDir,
 		Posture:               frame.Machine.Surface.Posture,
+		SharedTempLocations:   frame.Machine.Surface.SharedTempLocations,
 		CommandExternalHidden: frame.Machine.Surface.CommandExternalHidden,
 	})
 	if len(templates) == 0 && len(facts) == 0 {

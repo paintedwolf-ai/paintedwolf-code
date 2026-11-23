@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 )
 
 // WhenLeaf is one condition a rule's when map names, carrying the polarity the
@@ -49,7 +49,7 @@ func CanonicalWhenLeaves(when map[string]any) ([]WhenLeaf, error) {
 				leaves = append(leaves, WhenLeaf{Name: key})
 			}
 		default:
-			if conditions.IsHostOnlyCondition(key) {
+			if vocabulary.IsHostOnlyCondition(key) {
 				return nil, fmt.Errorf("host-only when key %q", key)
 			}
 			leaves = append(leaves, WhenLeaf{Name: key, Negated: !truthy(raw)})

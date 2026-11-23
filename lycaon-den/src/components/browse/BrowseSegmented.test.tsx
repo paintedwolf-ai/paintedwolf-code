@@ -82,6 +82,85 @@ describe("BrowseSegmented", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("uses a radio tab stop, skips disabled choices and supports Home and End", () => {
+    const [value, setValue] = createSignal("short");
+    const options = [
+      { id: "short", label: "Short" },
+      { id: "unavailable", label: "Unavailable", disabled: true },
+      { id: "long", label: "Long" },
+    ];
+    render(() => <BrowseSegmented
+      ariaLabel="Length" semantics="radio" value={value()} onChange={setValue} options={options}
+    />);
+    const short = screen.getByRole("radio", { name: "Short" });
+    const unavailable = screen.getByRole("radio", { name: "Unavailable" });
+    const long = screen.getByRole("radio", { name: "Long" });
+    expect(screen.getByRole("radiogroup", { name: "Length" })).toBeTruthy();
+    expect(unavailable.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(unavailable);
+    expect(short.tabIndex).toBe(0);
+
+    short.focus();
+    fireEvent.keyDown(short, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(long);
+    expect(long.tabIndex).toBe(0);
+    expect(short.tabIndex).toBe(-1);
+    fireEvent.keyDown(long, { key: "Home" });
+    expect(short.getAttribute("aria-checked")).toBe("true");
+    fireEvent.keyDown(short, { key: "End" });
+    expect(long.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("snaps the initially selected thumb after a hidden track gets a size", () => {
+    vi.useFakeTimers();
+    let resize: ResizeObserverCallback | undefined;
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) { resize = callback; }
+      observe() {}
+      disconnect() {}
+    });
+
+    const settled = vi.fn();
+    const [value, setValue] = createSignal("ask");
+    render(() => <div style={{ display: "none" }} data-testid="hidden">
+      <BrowseSegmented
+        ariaLabel="Session mode" semantics="radio" value={value()} onChange={setValue}
+        onSelectionSettled={settled}
+        options={[{ id: "agent", label: "Agent" }, { id: "ask", label: "Ask" }]}
+      />
+    </div>);
+    const track = screen.getByRole("radiogroup", { hidden: true });
+    const thumb = track.querySelector(".den-browse-segment-thumb") as HTMLElement;
+    const ask = track.querySelector<HTMLElement>('[data-value="ask"]')!;
+    const agent = track.querySelector<HTMLElement>('[data-value="agent"]')!;
+    const animation = { cancel: vi.fn(), onfinish: null } as unknown as Animation;
+    const animate = vi.fn(() => animation);
+    Object.defineProperty(thumb, "animate", { value: animate });
+    vi.advanceTimersToNextFrame();
+    expect(settled).not.toHaveBeenCalled();
+
+    screen.getByTestId("hidden").style.display = "block";
+    stubRect(track, { left: 100, top: 50, width: 96, height: 24 });
+    stubRect(ask, { left: 151, top: 52, width: 43, height: 20 });
+    stubRect(agent, { left: 102, top: 52, width: 47, height: 20 });
+    resize?.([], {} as ResizeObserver);
+    vi.advanceTimersToNextFrame();
+
+    expect(ask.getAttribute("aria-checked")).toBe("true");
+    expect(thumb.style.transform).toBe("translate(51px, 2px)");
+    expect(thumb.style.width).toBe("43px");
+    expect(thumb.style.height).toBe("20px");
+    expect(animate).not.toHaveBeenCalled();
+    expect(settled).toHaveBeenCalledExactlyOnceWith("ask");
+
+    setValue("agent");
+    vi.advanceTimersToNextFrame();
+    expect(animate).toHaveBeenCalledOnce();
+    expect(settled).toHaveBeenCalledTimes(1);
+    animation.onfinish?.call(animation, new Event("finish") as AnimationPlaybackEvent);
+    expect(settled).toHaveBeenLastCalledWith("agent");
+  });
+
   it("moves the selection thumb to the selected segment", () => {
     vi.useFakeTimers();
     const [value, setValue] = createSignal("all");

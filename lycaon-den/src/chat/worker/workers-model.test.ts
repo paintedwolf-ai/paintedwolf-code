@@ -250,6 +250,9 @@ describe("workers-model", () => {
   it("syncWorkerFromTaskToolMessage upserts roster row from task tool result", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",

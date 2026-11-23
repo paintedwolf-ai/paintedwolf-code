@@ -143,24 +143,34 @@
   min-width: 0;
 }
 
-/* A held box keeps its line count for the opening; a clamped one gives its
-   last line to Show all, so the box height never changes on arrival. */
+/* Each section reserves space independently while its summary arrives. */
 @utility den-activity-summary {
   --den-activity-summary-lines: 3;
-  display: flex;
-  gap: 6px;
-  align-items: flex-start;
   min-width: 0;
   padding: 6px 10px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--den-accent-text) 5%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--den-accent-text) 14%, transparent);
   line-height: 1.5;
-  &[data-held] {
-    min-height: calc(var(--den-activity-summary-lines) * 1lh + 12px);
-  }
+
   & .den-briefing-mark {
     line-height: 1.5;
+  }
+}
+
+@utility den-activity-summary__sections {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+@utility den-activity-summary__section {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  min-width: 0;
+  &[data-held] {
+    min-height: calc(var(--den-activity-summary-lines) * 1lh);
   }
 }
 
@@ -197,7 +207,7 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: var(--den-activity-summary-lines);
   line-clamp: var(--den-activity-summary-lines);
-  .den-activity-summary[data-clamped] & {
+  .den-activity-summary__section[data-clamped] & {
     -webkit-line-clamp: calc(var(--den-activity-summary-lines) - 1);
     line-clamp: calc(var(--den-activity-summary-lines) - 1);
   }
@@ -207,14 +217,6 @@
     -webkit-line-clamp: none;
     line-clamp: none;
   }
-}
-
-@utility den-activity-summary__purpose {
-  color: var(--den-text-muted);
-}
-
-@utility den-activity-summary__waiting {
-  color: var(--den-text-muted);
 }
 
 @utility den-activity-summary__more {

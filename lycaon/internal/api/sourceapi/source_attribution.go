@@ -43,7 +43,8 @@ func mapAttributedText(runs []sourceledger.AttributedText) []wire.SourceAttribut
 
 func (s *Workspace) workspaceSourceHead(ctx context.Context, p *project.Project, fileID string) (sourceledger.BranchHead, sourcebranch.ID, error) {
 	branches := make(map[sourcebranch.ID]bool)
-	for _, root := range p.Roots {
+	roots := p.HistoryRoots()
+	for _, root := range roots {
 		branch := p.BranchForRoot(root.ID)
 		if branches[branch] {
 			continue
@@ -56,7 +57,7 @@ func (s *Workspace) workspaceSourceHead(ctx context.Context, p *project.Project,
 		if err != nil {
 			return sourceledger.BranchHead{}, sourcebranch.Trunk, err
 		}
-		for _, candidate := range p.Roots {
+		for _, candidate := range roots {
 			if candidate.ID == head.RootID && p.BranchForRoot(candidate.ID) == branch {
 				return head, branch, nil
 			}
@@ -66,8 +67,9 @@ func (s *Workspace) workspaceSourceHead(ctx context.Context, p *project.Project,
 }
 
 func workspaceSourceBranches(p *project.Project) map[string]sourcebranch.ID {
-	branches := make(map[string]sourcebranch.ID, len(p.Roots))
-	for _, root := range p.Roots {
+	roots := p.HistoryRoots()
+	branches := make(map[string]sourcebranch.ID, len(roots))
+	for _, root := range roots {
 		branches[root.ID] = p.BranchForRoot(root.ID)
 	}
 	return branches

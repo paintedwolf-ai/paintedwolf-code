@@ -105,6 +105,7 @@ type Service struct {
 	coordinatorFrame    inject.CoordinatorTurnFrameSource
 	workerQueue         workeroutcomes.CycleLedger
 	taskIdentities      workeradmission.TaskIdentityResolver
+	checkAskInstruction func(context.Context, string, map[string]any) error
 	latestResultJob     LatestResultJobs
 	resultJob           ResultJobs
 	jobNames            JobNames

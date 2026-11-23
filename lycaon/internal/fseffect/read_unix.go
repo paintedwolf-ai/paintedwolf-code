@@ -234,7 +234,7 @@ func (r *ReadRoot) openReadContained(relPath string) (*os.File, error) {
 }
 
 func openReadWalk(root *openedRoot, relPath string) (*os.File, error) {
-	return walkReadContained(root, relPath, true, func(dir *os.File, name string, _ *unix.Stat_t) (*os.File, error) {
+	return walkReadContained(root, relPath, followReadLinks, func(dir *os.File, name string, _ *unix.Stat_t) (*os.File, error) {
 		fd, err := unix.Openat(int(dir.Fd()), name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 		if err != nil {
 			return nil, &fs.PathError{Op: "open effect target", Path: name, Err: err}
@@ -244,9 +244,16 @@ func openReadWalk(root *openedRoot, relPath string) (*os.File, error) {
 	})
 }
 
-// walkReadContained shares the same held-directory confinement for content and
-// metadata operations. Only an explicit no-follow query receives link metadata.
-func walkReadContained(root *openedRoot, relPath string, follow bool, visit func(*os.File, string, *unix.Stat_t) (*os.File, error)) (*os.File, error) {
+type readLinkPolicy uint8
+
+const (
+	followReadLinks readLinkPolicy = iota
+	retainFinalReadLink
+	refuseReadLinks
+)
+
+// The read walk keeps each directory held while resolving the next entry.
+func walkReadContained(root *openedRoot, relPath string, links readLinkPolicy, visit func(*os.File, string, *unix.Stat_t) (*os.File, error)) (*os.File, error) {
 	baseFD, err := unix.FcntlInt(uintptr(root.fd), unix.F_DUPFD_CLOEXEC, 0)
 	if err != nil {
 		return nil, fmt.Errorf("duplicate effect root: %w", err)
@@ -276,10 +283,13 @@ func walkReadContained(root *openedRoot, relPath string, follow bool, visit func
 			// PathError so os.IsNotExist recognizes a missing component.
 			return nil, &fs.PathError{Op: "open effect path", Path: name, Err: err}
 		}
-		if len(pending) == 0 && !follow {
+		if len(pending) == 0 && links == retainFinalReadLink {
 			return visit(dir, name, &st)
 		}
 		if st.Mode&unix.S_IFMT == unix.S_IFLNK {
+			if links == refuseReadLinks {
+				return nil, ErrSymlink
+			}
 			hops++
 			if hops > maxReadLinkHops {
 				return nil, fmt.Errorf("%w: %q exceeds %d links", ErrSymlink, relPath, maxReadLinkHops)

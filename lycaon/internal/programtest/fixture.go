@@ -120,7 +120,7 @@ func New(t testing.TB, options Options) *Fixture {
 	if session == "" {
 		session = "session-1"
 	}
-	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
+	testdbseed.InsertWorkflowRun(t, database, "run-"+session, session, testdbseed.DefaultProjectID)
 	recorder := invocation.NewSQLRecorder(database)
 	registry := tools.NewDefaultRegistry()
 	for _, name := range append([]string{"write", "read"}, options.Tools...) {

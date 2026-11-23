@@ -86,9 +86,10 @@ func rulesAvailableInNavigation(ctx context.Context, root string, rules *Rules, 
 func (v *View) coverageDemand(ctx context.Context) ([]directoryDemand, Rules, error) {
 	v.mu.Lock()
 	rules := v.rules.Clone()
+	roots := v.rootOrder
 	v.mu.Unlock()
 	demands := make([]directoryDemand, 0, sourcecatalog.DirectoryBatchLimit)
-	for _, root := range v.rootOrder {
+	for _, root := range roots {
 		nav, err := v.openPreparedNavigation(ctx, root.Root, &rules)
 		if err != nil {
 			return nil, rules, err

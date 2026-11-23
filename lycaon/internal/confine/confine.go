@@ -100,7 +100,7 @@ func BoundaryOf(c *Confinement) Boundary {
 	if c == nil {
 		return Boundary{}
 	}
-	writeRoots, err := WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	writeRoots, err := c.writeRoots()
 	if err != nil {
 		return Boundary{}
 	}
@@ -127,6 +127,7 @@ func (b Boundary) DeniesDirectSockets() bool {
 
 // Confinement describes the box for one command.
 type Confinement struct {
+	privateUserland bool
 	ProcessControl  bool
 	CredentialStore bool
 	HostExecution   bool
@@ -136,8 +137,7 @@ type Confinement struct {
 	Roots []string
 	// GrantedWriteRoots are per-action reviewed write-root leases.
 	GrantedWriteRoots []string
-	// SessionScratchRoot is the session-owned scratch root for this execution.
-	SessionScratchRoot string
+	Workspaces        WorkspaceRoots
 	// ReadRoots are read-only carve-outs.
 	ReadRoots []string
 	// ReadDenyPaths are per-action read exclusions.
@@ -206,7 +206,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		logConfinementPrepareError(err)
 		return nil, false
 	}
-	if !confinementRequired() || !Available() || len(prepared.Roots) == 0 {
+	if !confinementRequired() || !Available() || (len(prepared.Roots) == 0 && req.ActionWorkspace.Path() == "") {
 		return nil, false
 	}
 	c := &Confinement{
@@ -215,7 +215,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		ProjectID:                   req.ProjectID,
 		Roots:                       prepared.Roots,
 		GrantedWriteRoots:           append([]string(nil), prepared.GrantedWriteRoots...),
-		SessionScratchRoot:          prepared.SessionScratchRoot,
+		Workspaces:                  WorkspaceRoots{SessionScratch: prepared.SessionScratchRoot, Action: req.ActionWorkspace},
 		ReadRoots:                   prepared.ReadRoots,
 		ReadDenyPaths:               prepared.ReadDenyPaths,
 		View:                        prepared.View,
@@ -394,8 +394,11 @@ func writeFilesystemRules(b *strings.Builder, c Confinement, deny string) error 
 // filesystemRules builds the ordered filesystem policy for a confinement.
 // Later rules override earlier decisions.
 func filesystemRules(c Confinement) (FilesystemRules, error) {
-	rules := FilesystemRules{roots: append([]string(nil), c.Roots...)}
-	writeRoots, err := WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	rules := FilesystemRules{
+		roots:      slices.Clone(c.Roots),
+		sharedTemp: SharedTempLocations(),
+	}
+	writeRoots, err := c.writeRoots()
 	if err != nil {
 		return rules, err
 	}
@@ -412,9 +415,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		rules.add(fsRule{op: opRead, matches: deny})
 		allow := workspaceReadAllowBacks(c)
 		allow = append(allow, resolveEach(c.ReadRoots)...)
-		if c.SessionScratchRoot != "" {
-			allow = append(allow, fspath.CanonicalPath(c.SessionScratchRoot))
-		}
+		allow = append(allow, c.privateWorkRoots()...)
 		addManagedReadRoots(&rules, deny, allow)
 		// An approved read grant also lifts the denials beneath it.
 		var subtrees, literals []string
@@ -443,7 +444,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		}
 	}
 	addControlPlaneReadFloor(&rules, c)
-	// Writes confined to the project plus temp and the standard device sinks.
+	// Device sinks complement ordinary write roots.
 	sinks := subpathMatches(writeRoots, "")
 	sinks = append(sinks,
 		fsMatch{literal: "/dev/null"},
@@ -455,6 +456,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		fsMatch{regex: "^/dev/ttys"},
 	)
 	rules.add(fsRule{op: opWrite, allow: true, matches: sinks})
+	rules.closeSharedTempInCaches(c, writeRoots)
 
 	specs, err := HardDenyWriteSpecs(c)
 	if err != nil {
@@ -475,6 +477,9 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		{regex: "^/dev/disk", layer: FloorControlPlane},
 		{regex: "^/dev/rdisk", layer: FloorControlPlane},
 	}})
+	if err := addSSHKnownHostsAccess(&rules, c); err != nil {
+		return rules, err
+	}
 	closeViewStorage(&rules, c.View)
 	if err := rules.checkStringLengths(); err != nil {
 		return rules, err
@@ -538,9 +543,7 @@ func workspaceAllowBacks(c Confinement) []string {
 	}
 	var backs []string
 	candidates := append(append([]string(nil), c.Roots...), c.GrantedWriteRoots...)
-	if c.SessionScratchRoot != "" {
-		candidates = append(candidates, c.SessionScratchRoot)
-	}
+	candidates = append(candidates, c.privateWorkRoots()...)
 	for _, r := range candidates {
 		if r = strings.TrimSpace(r); r == "" {
 			continue

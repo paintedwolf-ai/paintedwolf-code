@@ -33,8 +33,8 @@ func newDeliveryFixture(t *testing.T) *deliveryFixture {
 	testdbseed.InsertSession(t, sqlDB, "coord", testdbseed.DefaultProjectID)
 	now := timelayout.Format(time.Now().UTC())
 	for _, id := range []string{"child", "bare-child"} {
-		_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
-			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', ?, ?, ?)`, id, testdbseed.DefaultProjectID, now, now, now)
+		_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode)
+			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', ?, ?, ?, 'coord', NULL)`, id, testdbseed.DefaultProjectID, now, now, now)
 		testutil.FailErr(t, "insert child", err)
 	}
 	records := workerrecords.New(sqlDB)
@@ -135,8 +135,8 @@ func TestMultiWorkerSaturationFairnessByteBoundsAndStreamCursorIndependence(t *t
 	f := newDeliveryFixture(t)
 	now := timelayout.Format(time.Now().UTC())
 	addWorker := func(name, childID, jobID string) (string, workerrecords.Actor) {
-		_, err := f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
-			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', ?, ?, ?)`, childID, testdbseed.DefaultProjectID, now, now, now)
+		_, err := f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode)
+			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', ?, ?, ?, 'coord', NULL)`, childID, testdbseed.DefaultProjectID, now, now, now)
 		testutil.FailErr(t, "insert child "+childID, err)
 		w, err := f.records.CreateWorker(t.Context(), f.coord, workerrecords.Op{ID: "create-" + name}, workerrecords.WorkerSpec{
 			Name: name, AgentType: "implementer", ScopeMode: "write", ChildSessionID: childID,

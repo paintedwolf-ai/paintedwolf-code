@@ -34,6 +34,7 @@ type Sessions interface {
 	MovePinnedSession(ctx context.Context, id string, position int) error
 	PinSession(ctx context.Context, id string) error
 	SessionTreeIDs(ctx context.Context, rootSessionID string) ([]string, error)
+	SetMode(ctx context.Context, id string, mode api.SessionMode) (*api.Session, error)
 	UnpinSession(ctx context.Context, id string) error
 	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error
 }

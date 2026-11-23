@@ -10,6 +10,7 @@ import (
 )
 
 var (
+	ErrAskWorkflowRequiresAgent = errors.New("switch to Agent mode to enter this workflow phase")
 	// ErrActiveRunExists is returned when starting a run while one is already active.
 	ErrActiveRunExists error = noticeerr.NewSentinel("active workflow run already exists", api.NoticeCodeWorkflowActive)
 	// ErrOperationConflict reports an operation identity (HTTP operation_id, or a

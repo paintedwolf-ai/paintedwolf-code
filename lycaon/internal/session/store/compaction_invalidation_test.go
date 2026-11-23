@@ -53,7 +53,7 @@ func TestContinuationCopiesSlices(t *testing.T) {
 	sessionStore := newSQLTestStore(t)
 	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	record := &messageview.Continuation{Summary: messageview.ContinuationSummary{Facts: []string{"accepted"}}, Sources: []messageview.ContinuationSource{{Handles: []string{"read#1"}}}}
+	record := &messageview.Continuation{Format: messageview.ContinuationFormat, Summary: messageview.ContinuationSummary{Facts: []string{"accepted"}}, Sources: []messageview.ContinuationSource{{Handles: []string{"read#1"}}}}
 	testutil.FailErr(t, "publish continuation", sessionStore.Compaction.PutCompactionView(t.Context(), sess.ID, CompactionView{Generation: 1, Continuation: record}))
 	record.Summary.Facts[0] = "changed"
 	view, _, err := sessionStore.Compaction.GetCompactionView(t.Context(), sess.ID)
@@ -116,5 +116,37 @@ func checkCompactionMutationBoundary(t *testing.T, st *Repositories, streaming b
 		if exists && (view.Generation != 1 || view.Messages[0].Content != "summary") {
 			t.Fatalf("suffix mutation changed compaction view: %+v", view)
 		}
+	}
+}
+
+func TestOlderContinuationRebuildsFromCanonicalRows(t *testing.T) {
+	database := testdbfixture.Open(t, "older-continuation.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	st := NewSQL(database)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "write canonical report", st.Transcript.AppendMessages(t.Context(), sess.ID,
+		api.Message{ID: "report", Role: api.MessageRoleAssistant, Kind: api.MessageKindCompletionReport, Content: "Canonical report"}))
+	rows, err := st.Transcript.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read source for older view", err)
+	report := rows[0]
+	view := CompactionView{
+		Generation: 1, CoveredThroughOrd: report.Ord, CoveredThroughID: report.ID, SourceSeq: report.Seq,
+		Continuation: &messageview.Continuation{Format: messageview.ContinuationFormat - 1},
+	}
+	testutil.FailErr(t, "seed older ephemeral view", st.Compaction.PutCompactionView(t.Context(), sess.ID, view))
+	if _, ok, err := st.Compaction.GetCompactionView(t.Context(), sess.ID); err != nil || ok {
+		t.Fatalf("older view was not invalidated: exists %t, error %v", ok, err)
+	}
+	current, err := st.Transcript.GetMessage(t.Context(), sess.ID, report.ID)
+	testutil.FailErr(t, "read canonical report after view invalidation", err)
+	if current.Content != report.Content || current.Seq != report.Seq {
+		t.Fatalf("canonical report changed: %+v", current)
+	}
+	view.Generation++
+	view.Continuation.Format = messageview.ContinuationFormat
+	testutil.FailErr(t, "publish rebuilt view", st.Compaction.PutCompactionView(t.Context(), sess.ID, view))
+	if _, ok, err := st.Compaction.GetCompactionView(t.Context(), sess.ID); err != nil || !ok {
+		t.Fatalf("rebuilt view was not readable: exists %t, error %v", ok, err)
 	}
 }

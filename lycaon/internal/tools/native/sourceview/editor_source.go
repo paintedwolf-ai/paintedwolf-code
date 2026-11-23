@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -35,20 +37,57 @@ func (s Text) SHA256() string {
 	return ""
 }
 
-// DocumentsFor narrows ProjectDocuments to one resolved path:
-// granted paths outside the roots have no document.
-func DocumentsFor(tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocuments, bool) {
-	if resolved.External || strings.TrimSpace(resolved.Root.ID) == "" {
-		return nil, false
+// DocumentAddress is where a resolved path's editor document lives.
+type DocumentAddress struct {
+	RootID, Path string
+	// Outside marks the project's outside namespace, whose paths display as host paths.
+	Outside bool
+}
+
+// DisplayPath is how a document at path in this address reads in results.
+func (a DocumentAddress) DisplayPath(path string) string {
+	if a.Outside {
+		return projectroot.OutsideAbs(path)
 	}
-	return tools.ProjectDocuments(tctx)
+	return path
+}
+
+// DocumentsFor narrows ProjectDocuments to one resolved path. A granted path
+// outside the roots has its document in the outside namespace; scratch, tool
+// output and host data have none.
+func DocumentsFor(tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocuments, DocumentAddress, bool) {
+	address := DocumentAddress{RootID: strings.TrimSpace(resolved.Root.ID), Path: resolved.ScopeRel}
+	if resolved.External {
+		if resolved.ToolOutput || resolved.Compressed {
+			return nil, DocumentAddress{}, false
+		}
+		root, rel, ok := tctx.RecordedLocation(resolved.Abs)
+		if !ok || !root.Outside {
+			return nil, DocumentAddress{}, false
+		}
+		address = DocumentAddress{RootID: root.ID, Path: rel, Outside: true}
+	}
+	if address.RootID == "" {
+		return nil, DocumentAddress{}, false
+	}
+	documents, ok := tools.ProjectDocuments(tctx)
+	return documents, address, ok
 }
 
 // LoadText serves the accepted document when one exists; a failed lookup
 // cannot authorize a filesystem write that would bypass an unknown draft.
 // The document is held to the file's access budget.
 func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolContext, resolved projectpaths.Resolved) (Text, error) {
-	doc, open, err := OpenDocument(ctx, tctx, resolved)
+	return loadText(ctx, tool, access, tctx, resolved, OpenDocument)
+}
+
+// LoadPinnedDestination captures the editor revision before a launch can save it.
+func LoadPinnedDestination(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (Text, error) {
+	return loadText(ctx, "write", AccessMutate, tctx, resolved, OpenPinnedDocument)
+}
+
+func loadText(ctx context.Context, tool string, access Access, tctx tools.ToolContext, resolved projectpaths.Resolved, openDocument func(context.Context, tools.ToolContext, projectpaths.Resolved) (tools.EditorDocumentText, bool, error)) (Text, error) {
+	doc, open, err := openDocument(ctx, tctx, resolved)
 	if err != nil {
 		return Text{}, err
 	}
@@ -59,6 +98,7 @@ func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolCo
 		st := Text{Content: doc.Text, Editor: &doc, Stat: FileStatFacts{Size: int64(len(doc.Text))}}
 		if access == AccessRead {
 			observeWorkerSourceRead(ctx, tctx, resolved, st)
+			RecordOutsideRead(ctx, tctx, resolved, st.SHA256(), st.Stat.Size)
 		}
 		return st, nil
 	}
@@ -69,8 +109,33 @@ func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolCo
 	st := Text{Content: disk.Text(), Disk: &disk, Stat: stat}
 	if access == AccessRead {
 		observeWorkerSourceRead(ctx, tctx, resolved, st)
+		RecordOutsideRead(ctx, tctx, resolved, st.SHA256(), st.Stat.Size)
 	}
 	return st, nil
+}
+
+// RecordOutsideRead places a read file in the chat's locations.
+func RecordOutsideRead(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, sha256 string, size int64) {
+	if !resolved.External || resolved.ToolOutput || resolved.Compressed || tctx.Identity.ProjectID == "" || tctx.Identity.SessionID == "" {
+		return
+	}
+	root, rel, ok := tctx.RecordedLocation(resolved.Abs)
+	if !ok || !root.Outside {
+		return
+	}
+	recorder := tctx.Source.OutsideReads
+	if recorder == nil {
+		return
+	}
+	if _, err := recorder.TrackChatFile(ctx, sourceledger.TrackInput{
+		ProjectID: tctx.Identity.ProjectID, RootID: root.ID, Path: rel, SHA256: sha256, Size: size,
+	}, tctx.Identity.SessionID, sourceledger.ChatFileRead); err != nil {
+		slog.DebugContext(ctx, "Outside read was not recorded", "path", resolved.DisplayPath, "error", err)
+		return
+	}
+	if err := sourcefeed.EmitProjectSignal(ctx, tctx.Identity.ProjectID, tctx.Source.Roots); err != nil {
+		slog.DebugContext(ctx, "Outside read event was not published", "project", tctx.Identity.ProjectID, "error", err)
+	}
 }
 
 func observeWorkerSourceRead(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, st Text) {

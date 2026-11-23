@@ -7,10 +7,12 @@ import { For, Show, type JSX } from "solid-js";
 import type { WorkflowSummary } from "../../api/types.ts";
 import type { LauncherTile } from "../../workflow/session-launcher-model.ts";
 import { chromeProps } from "../../styling/ui-chrome.ts";
+import { NEEDS_AGENT_BADGE, WORKFLOW_NEEDS_AGENT } from "./session-mode-copy.ts";
 
 type Props = {
   tiles: LauncherTile[];
   busy: boolean;
+  askMode?: boolean;
   /** Arms a tile until the composer starts it. */
   onSelect: (workflow: WorkflowSummary) => void;
   /** When set, appends a More tile that opens the full catalog. */
@@ -38,42 +40,52 @@ export function SessionWorkflowLauncher(props: Props) {
       <div class="den-session-launcher__heading" {...chromeProps()}>{heading()}</div>
       <div class="den-session-launcher__grid">
         <For each={props.tiles}>
-          {(tile) => (
-            <button
-              type="button"
-              class="den-session-launcher__tile"
-              classList={{
-                "den-session-launcher__tile--disabled": tile.disabled,
-                "den-session-launcher__tile--armed":
-                  props.armedWorkflowId === tile.workflow.id,
-              }}
-              disabled={tile.disabled || props.busy}
-              aria-label={tile.title}
-              aria-pressed={
-                props.armedWorkflowId === tile.workflow.id ? "true" : undefined
-              }
-              data-testid={`session-launcher-tile-${tile.workflow.id}`}
-              onClick={() => props.onSelect(tile.workflow)}
-            >
-              <span class="den-session-launcher__tile-head">
-                <span class="den-session-launcher__tile-icon" aria-hidden="true">
-                  <Glyph name={tile.icon} />
-                </span>
-                <span class="den-session-launcher__tile-title">{tile.title}</span>
-                <Show when={tile.disabled}>
-                  <span class="den-session-launcher__tile-badge">needs repo</span>
-                </Show>
-              </span>
-              <Show
-                when={tile.disabled ? tile.disabledReason : tile.description}
-                keyed
+          {(tile) => {
+            const needsAgent = () => props.askMode && tile.workflow.requires_agent;
+            const disabled = () => Boolean(tile.disabled || needsAgent());
+            return (
+              <button
+                type="button"
+                class="den-session-launcher__tile"
+                classList={{
+                  "den-session-launcher__tile--disabled": disabled(),
+                  "den-session-launcher__tile--armed":
+                    props.armedWorkflowId === tile.workflow.id,
+                }}
+                disabled={disabled() || props.busy}
+                aria-label={needsAgent() ? `${tile.title} — ${WORKFLOW_NEEDS_AGENT}` : tile.title}
+                data-tip={needsAgent() ? `${tile.title} ${WORKFLOW_NEEDS_AGENT}.` : undefined}
+                data-tip-when-clipped={needsAgent() ? "[data-needs-agent]" : undefined}
+                aria-pressed={
+                  props.armedWorkflowId === tile.workflow.id ? "true" : undefined
+                }
+                data-testid={`session-launcher-tile-${tile.workflow.id}`}
+                onClick={() => props.onSelect(tile.workflow)}
               >
-                {(text) => (
-                  <span class="den-session-launcher__tile-desc">{text}</span>
-                )}
-              </Show>
-            </button>
-          )}
+                <span class="den-session-launcher__tile-head">
+                  <span class="den-session-launcher__tile-icon" aria-hidden="true">
+                    <Glyph name={tile.icon} />
+                  </span>
+                  <span class="den-session-launcher__tile-title">{tile.title}</span>
+                  <Show when={disabled()}>
+                    <span class="den-workflow-needs-badge" data-needs-agent={needsAgent() ? "" : undefined}>
+                      <Show when={needsAgent()} fallback="Needs repo">
+                        {NEEDS_AGENT_BADGE}
+                      </Show>
+                    </span>
+                  </Show>
+                </span>
+                <Show
+                  when={tile.disabled ? tile.disabledReason : tile.description}
+                  keyed
+                >
+                  {(text) => (
+                    <span class="den-session-launcher__tile-desc">{text}</span>
+                  )}
+                </Show>
+              </button>
+            );
+          }}
         </For>
         <Show when={props.onBrowseAll}>
           {(browseAll) => (

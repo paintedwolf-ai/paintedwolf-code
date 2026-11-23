@@ -9,7 +9,7 @@ func (p Plan) BoundedRetainedStorage() bool {
 
 func (p Plan) reviewedRetainedRoute() bool {
 	const sourceID = "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
-	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "da60d7934d068bc62bed4d83242511aadfcc594a65d8cf3d74c143649d543cbe"}) {
+	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "616ca6576c84b4d055b6eb519b1748977b93b8bb4664ab30658141c6d4aa5f14"}) {
 		return false
 	}
 	if p.Source != manifestLayoutSource || p.CopyPlan() == nil || len(p.steps) != 1 {
@@ -19,7 +19,8 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// rebuilds use the measured receipt tree. The evidence, file edit, and
 	// worker record rewrites use their declared write estimates. Briefing
 	// and publication indexes start empty. Dropping live_model_outputs and
-	// replacing the version reclaim trigger do not rewrite rows.
+	// replacing the version reclaim trigger do not rewrite rows. Workflow
+	// manifest storage adds an empty table and a constant-default column.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "3c1367dfa1ba765e99099758135817ceee1550418b6a2d105643a606966da999"
+		p.steps[0].Checksum == "02cc4ded97994fdd6c993f9ec200dc5875b72811f44496dc5d3a5638a635672b"
 }

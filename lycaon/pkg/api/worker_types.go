@@ -7,18 +7,6 @@ import (
 	"time"
 )
 
-type WorkerStatus string
-
-const (
-	WorkerStatusPending  WorkerStatus = "pending"
-	WorkerStatusRunning  WorkerStatus = "running"
-	WorkerStatusWaiting  WorkerStatus = "waiting"
-	WorkerStatusComplete WorkerStatus = "complete"
-	WorkerStatusFailed   WorkerStatus = "failed"
-	WorkerStatusCanceled WorkerStatus = "canceled"
-	WorkerStatusHeld     WorkerStatus = "held"
-)
-
 // IsTerminal reports whether the worker task status has reached a terminal state.
 func (s WorkerStatus) IsTerminal() bool {
 	switch s {

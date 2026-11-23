@@ -1,4 +1,5 @@
 import { Show } from "solid-js";
+import { tipWithShortcut } from "../../shortcuts/display-binding-for.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ProjectRoot } from "../../api/types.ts";
 import { ShowLatest } from "../../components/primitives/ShowLatest.tsx";
@@ -29,7 +30,7 @@ function EmptyFilesEditorToolbar() {
         <button
           type="button"
           class="den-files-editor__tool den-inset-icon-btn"
-          data-tip="Find"
+          data-tip={tipWithShortcut("Find", "find.inView")}
           data-tip-pos="below"
           aria-label="Find in file"
           disabled
@@ -39,7 +40,7 @@ function EmptyFilesEditorToolbar() {
         <button
           type="button"
           class="den-files-editor__tool den-inset-icon-btn"
-          data-tip="Go to line"
+          data-tip={tipWithShortcut("Go to line", "editor.goToLine")}
           data-tip-pos="below"
           aria-label="Go to line"
           disabled
@@ -49,7 +50,6 @@ function EmptyFilesEditorToolbar() {
         <button
           type="button"
           class="den-files-editor__tool den-inset-icon-btn"
-          data-tip="Copy path"
           data-tip-pos="below"
           aria-label="Copy path"
           disabled

@@ -1,5 +1,7 @@
 { lib, stdenvNoCC, callPackage, source, frontend
+, guest ? callPackage ./service-guest.nix { inherit source; }
 , generationRelease ? null
+, generationAuthority ? null
 , inputs ? callPackage ./resource-inputs.nix { inherit source; }
 , scanner ? callPackage ./scanner.nix { inherit source inputs; }
 , notices ? callPackage ./notices.nix { inherit source frontend inputs; }
@@ -21,10 +23,15 @@ in stdenvNoCC.mkDerivation {
     cp -R ${source}/schemas "$out/engine-root/schemas"
     cp -R ${inputs.browser}/browser "$out/engine-root/browser"
     cp -R ${inputs.gitengine}/gitengine "$out/engine-root/gitengine"
+    cp -a ${guest}/service-guest "$out/engine-root/"
     cp -R ${inputs.ocr}/ocr "$out/engine-root/ocr"
     cp -R ${inputs.decision}/decide "$out/engine-root/decide"
     ${lib.optionalString (generationSeed != null) ''
       cp -R ${generationSeed}/engine-root/generation "$out/engine-root/generation"
+    ''}
+    ${lib.optionalString (generationRelease == null && generationAuthority != null) ''
+      mkdir -p "$out/engine-root/generation"
+      install -m644 ${lib.escapeShellArg (toString generationAuthority)} "$out/engine-root/generation/release-keys.json"
     ''}
     cp -R ${scanner}/engine-root/bundled "$out/engine-root/bundled"
     cp ${scanner}/scanner-identity.base64 ${scanner}/scanner-audit.json "$out/"
@@ -33,8 +40,8 @@ in stdenvNoCC.mkDerivation {
     runHook postInstall
   '';
   passthru = {
-    inherit inputs scanner notices generationSeed;
-    noticeRuntimeInputs = [ inputs.browser inputs.gitengine inputs.ocr inputs.decision scanner notices ]
+    inherit inputs scanner notices generationSeed guest;
+    noticeRuntimeInputs = [ inputs.browser inputs.gitengine inputs.ocr inputs.decision scanner notices guest.runtimeQemu ]
       ++ lib.optional (generationSeed != null) generationSeed;
   };
   meta = {

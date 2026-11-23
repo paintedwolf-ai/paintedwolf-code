@@ -39,6 +39,9 @@ describe("createAppStore", () => {
   it("setBoard applies active_workflow_run pending_feedback for AskUserDock", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-a",
       id: "sess-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -107,6 +110,9 @@ describe("createAppStore", () => {
   it("keeps host-enriched workflow UI when a durable core event replays the revision", () => {
     const store = createAppStore();
     const session = {
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-a",
       id: "sess-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -145,6 +151,9 @@ describe("createAppStore", () => {
   it("setBoard ignores board snapshots for a different session", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-a",
       id: "sess-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",

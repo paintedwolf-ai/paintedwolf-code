@@ -45,6 +45,16 @@ func (s *Starts) ActivateStart(ctx context.Context, operationID, inputDigest str
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if mutation.BindSessionMode {
+		if s.transactions.sessions == nil {
+			return nil, fmt.Errorf("workflow session mode transaction participant unavailable")
+		}
+		if err := s.transactions.sessions.AdmitModeInTx(ctx, tx, replacement.SessionID, mutation.ModeIntent, func(mode api.SessionMode) error {
+			return runstate.ValidateWorkflowMode(mode, mutation.RequiresAgent)
+		}); err != nil {
+			return nil, err
+		}
+	}
 	queries := db.New(tx)
 	var replaced []api.WorkflowRun
 	// Rows wait for every run event below; see appendPlannedRowsTx.
@@ -128,6 +138,11 @@ func (s *Starts) ActivateStart(ctx context.Context, operationID, inputDigest str
 	if err := s.transactions.createState(ctx, queries, replacement, mutation.ProjectDir, mutation.Vars); err != nil {
 		return nil, err
 	}
+	if mutation.ManifestYAML != "" {
+		if err := queries.SaveRunManifest(ctx, db.SaveRunManifestParams{RunID: replacement.ID, ManifestYaml: mutation.ManifestYAML}); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.transactions.enqueueRunTx(ctx, tx, replacement, api.WorkflowEventKindRunStarted, ""); err != nil {
 		return nil, err
 	}
@@ -202,6 +217,11 @@ func (s *Starts) StartChild(ctx context.Context, parent, child *api.WorkflowRun,
 	}
 	if err := s.transactions.createState(ctx, queries, child, mutation.ProjectDir, mutation.Vars); err != nil {
 		return err
+	}
+	if mutation.ManifestYAML != "" {
+		if err := queries.SaveRunManifest(ctx, db.SaveRunManifestParams{RunID: child.ID, ManifestYaml: mutation.ManifestYAML}); err != nil {
+			return err
+		}
 	}
 	parentNext := *parent
 	parentNext.Revision++

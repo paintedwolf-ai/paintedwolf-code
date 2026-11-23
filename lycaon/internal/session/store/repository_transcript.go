@@ -14,7 +14,7 @@ type TranscriptRepository interface {
 	AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
 	AppendMessages(ctx context.Context, id string, msgs ...api.Message) error
 	AppendMessagesTx(ctx context.Context, tx *sql.Tx, id string, msgs ...api.Message) error
-	AppendMessagesWith(ctx context.Context, id string, mutate func(*sql.Tx) error, msgs ...api.Message) error
+	AppendMessagesWith(ctx context.Context, id string, mutate func(*sql.Tx) ([]api.Message, error)) error
 	CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error)
 	GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error)
 	GetMessages(ctx context.Context, id string) ([]api.Message, error)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -112,6 +113,7 @@ func (m *Service) promptSurface(ctx context.Context, sess *api.Session, loaded [
 	if m == nil || sess == nil {
 		return out
 	}
+	out.SharedTempLocations = m.WritableSharedTemp(ctx, sess)
 	out.Skills = agentSkillViews(loaded)
 	ambient := hostresources.ProjectAmbient(hostresources.AmbientInput{
 		Snapshot:        snapshot,
@@ -154,6 +156,17 @@ func (m *Service) effectiveApprovalPosture(ctx context.Context, sess *api.Sessio
 		m.postureObserver(ctx, sess.ID, posture)
 	}
 	return posture
+}
+
+func (m *Service) WritableSharedTemp(ctx context.Context, sess *api.Session) []string {
+	if m == nil || sess == nil {
+		return nil
+	}
+	var grants []string
+	if m.SessionWriteRoots != nil {
+		grants = m.SessionWriteRoots(ctx, sess.ID, sess.ParentSessionID)
+	}
+	return confine.WritableSharedTempLocations(sess.ProjectID, grants)
 }
 
 func agentSkillViews(loaded []skills.Skill) []prompts.AgentSkillView {

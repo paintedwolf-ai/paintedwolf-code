@@ -1,0 +1,11 @@
+# How much of one folder a command observation window compared. Partial and
+# not observed never read as no changes.
+name: SourceWindowCoverage
+go_const_prefix: SourceWindowCoverage
+values:
+  - id: complete
+    comment: The whole folder was compared before and after the command.
+  - id: partial
+    comment: The folder was compared except for the listed boundaries.
+  - id: not_observed
+    comment: Nothing can be said about this folder; the reason says why.

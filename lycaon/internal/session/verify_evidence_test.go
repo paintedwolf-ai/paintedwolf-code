@@ -42,10 +42,8 @@ func verifyGateHarness(t *testing.T, declared string) (*Host, *api.Session, []ap
 		mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: declared})
 	}
 	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "verify-proj")
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-
+	testutil.FailErr(t, "create verify session", err)
+	sess.WorkspacePath = testdbseed.OrchestrationWorkspace(t, sessions.DB(), sess.ID)
 	history := []api.Message{{Role: api.MessageRoleUser, Content: "do the work", CreatedAt: time.Now().Add(-time.Minute)}}
 	return mgr, sess, history, sessions
 }

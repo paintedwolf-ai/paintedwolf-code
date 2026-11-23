@@ -15,9 +15,12 @@ import {
 import { wholeFileOpChange } from "../../components/source/reader/source-reader-change.ts";
 import type { ChatAttachmentRef } from "../../chat/composer/add-to-chat.ts";
 import { startChatAttachmentDrag } from "../../chat/composer/chat-attachment-drag.ts";
+import { outsideHostDirectory } from "../source/outside-namespace.ts";
 
 type Props = {
   row: ReviewListRow;
+  /** The file lies outside the project's folders; its folder reads as a host path. */
+  outside?: boolean;
   /** Some visible row has line counts, so every row holds the column. */
   reserveStat: boolean;
   expanded: boolean;
@@ -138,8 +141,8 @@ export function ReviewFileRow(props: Props) {
             <Show when={props.row.tip.state === "absent"}>
               <span class="den-review-row__dir">Deleted</span>
             </Show>
-            <Show when={props.row.dirname}>
-              <span class="den-review-row__dir">{props.row.dirname}</span>
+            <Show when={props.outside ? outsideHostDirectory(props.row.path) : props.row.dirname}>
+              {(dirname) => <span class="den-review-row__dir" data-outside={props.outside ? "" : undefined}>{dirname()}</span>}
             </Show>
           </span>
           <Show when={props.row.contributors.length > 0}>
@@ -201,7 +204,7 @@ export function ReviewFileRow(props: Props) {
             classList={{ "den-review-revert--ready": props.row.op === "delete" }}
             data-testid="changes-row-revert"
             aria-label={props.row.commit ? `Restore working file ${props.row.basename} to last commit` : `Restore ${props.row.basename} to comparison baseline`}
-            data-tip={props.row.commit ? "Restore working file to last commit; staged changes stay in the index" : `Restore ${props.row.basename} to comparison baseline`}
+            data-tip={props.row.commit ? "Restore working file to last commit; staged changes stay in the index" : "Discard changes since the comparison baseline"}
             onClick={(event) => {
               event.stopPropagation();
               props.onRevert?.();
@@ -234,7 +237,7 @@ export function ReviewFileRow(props: Props) {
             <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
               <For each={props.row.contributors}>{(author, index) => <>
                 <Show when={index() > 0}><span>+</span></Show>
-                <span class="min-w-0 truncate" data-tip={contributorLabel(author)}>{contributorLabel(author)}</span>
+                <span class="min-w-0 truncate" data-tip={contributorLabel(author)} data-tip-when-clipped="">{contributorLabel(author)}</span>
               </>}</For>
               <Show when={props.row.lastTs}>
                 <span class="shrink-0 whitespace-nowrap">

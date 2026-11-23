@@ -18,6 +18,7 @@ const (
 	UpdateManifestCheck    ID = "update_manifest_check"
 	MCPRemoteHTTP          ID = "mcp_remote_http"
 	BrowserEngineDownload  ID = "browser_engine_download"
+	LocalModelDownload     ID = "local_model_download"
 	DecideModelDownload    ID = "decide_model_download"
 	ExtensionPackGit       ID = "extension_pack_git"
 	OSVAdvisoryDownload    ID = "osv_advisory_download"
@@ -98,6 +99,11 @@ var classes = []Class{
 	{
 		ID: BrowserEngineDownload, EndpointSource: EndpointBundled, Transport: HTTPDownload,
 		SilentReason: "browser provisioning reports BROWSER_ENGINE_UNAVAILABLE in readiness and tool results", UserInitiated: true,
+	},
+	{
+		ID: LocalModelDownload, EndpointSource: EndpointBundled, Transport: HTTPDownload,
+		FixedEndpoints: []string{"https://downloads.paintedwolf.dev"}, UserInitiated: true,
+		SilentReason: "local model setup reports transfer failures to the initiating user",
 	},
 	{
 		ID: DecideModelDownload, EndpointSource: EndpointBundled, Transport: HTTPDownload,

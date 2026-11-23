@@ -19,7 +19,7 @@ const (
 
 // LedgerLocation resolves a path to its branch, root, and relative path.
 func LedgerLocation(tctx tools.ToolContext, absPath string) (branch sourcebranch.ID, rootID, rel string, ok bool) {
-	root, path, located := tctx.SourceLocation(absPath)
+	root, path, located := tctx.RecordedLocation(absPath)
 	if tctx.Identity.ProjectID == "" || !located {
 		return sourcebranch.Trunk, "", "", false
 	}

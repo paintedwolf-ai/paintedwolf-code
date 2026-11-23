@@ -11,6 +11,9 @@ env -u LYCAON_OPENGREP_CANDIDATE go run ./cmd/opengrep-artifact -mode stage -art
 APP_VERSION="$(tr -d '[:space:]' < "${ROOT}/VERSION")"
 LDFLAGS="-X github.com/lycaon/lycaon/internal/version.Version=${APP_VERSION} -X github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=${IDENTITY}"
 mkdir -p "${PW_BUILD_DIR}"
+case "$(go env GOOS)" in
+  darwin|linux) python3 "${ROOT}/scripts/service-guest/assemble.py" --system "$(go env GOOS)" --arch "$(go env GOARCH)" --output "${PW_BUILD_DIR}/service-guest" ;;
+esac
 go build -ldflags="${LDFLAGS}" -o "${PW_BUILD_DIR}/lycaon-dev" ./cmd/lycaon
 go build -ldflags="${LDFLAGS}" -o "${PW_BUILD_DIR}/pw-logs" ./cmd/pw-logs
 bash "${ROOT}/scripts/sign-dev-binary.sh" "${PW_BUILD_DIR}/lycaon-dev"

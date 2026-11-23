@@ -24,7 +24,7 @@ Accessibility → Display → Text size is read from the Sonoma+ content-size ca
 | Scale formula | `--den-text-scale = TABLE[category] × productTextScale`: the OS category scale (default / Large → `1.0`, the Den baseline) times the device Text size preference (`PRODUCT_TEXT_SCALES`, default `1`), composed in [`accessibility-text-size.ts`](../lycaon-den/src/platform/desktop/accessibility-text-size.ts); either input may move without the other |
 | Root CSS | `html { font-size: calc(14px * var(--den-text-scale)) }` with `:root { --den-text-scale: 1; }` |
 | Type tokens | `@theme --text-den-*` in rem, where `1rem` is the baseline root at scale 1 (14px). Every font size resolves to a rung (`accessibility-macos-invariants.test.ts`) |
-| Transcript seams | The four rungs in [`transcript-spacing.ts`](../lycaon-den/src/chat/transcript/layout/transcript-spacing.ts) are rem for the same reason: a px seam holds 14px while the text around it triples, so a turn boundary vanishes where it is needed most. Virtual geometry resolves them against one published root size (`styling/scalable-layout-invariants.test.ts`) |
+| Transcript seams | Both the message and item gaps scale with the root font size. Virtual geometry resolves the same lengths as CSS. |
 | Delivery | Tauri event and the `accessibility_preferred_text_size()` command return `{ category, textScale, revision }`; the monotonic revision prevents an older launch snapshot from overwriting a live change |
 | Non-macOS | Linux reports the desktop text scaling fact ([Linux desktop preferences](#linux-desktop-preferences)); elsewhere the bridge returns `{ category: "default", textScale: 1, revision: 0 }` and the app runs unscaled |
 
@@ -158,6 +158,15 @@ The chrome mark is `user-select: none`, so a stylesheet is one edit away from si
 ## Hover tips
 
 Use hover tips for information the control does not already communicate: an unfamiliar action, a keyboard shortcut, a consequence, a disabled-state reason, or hidden detail. Ordinary show/hide, close, minimize, overflow-menu, and timeline navigation controls do not need them. Apply the choice to the whole control family, including opposite states and shared wrappers. Repeated visible text appears only when it is actually clipped.
+
+Tips share one voice:
+
+- Sentence case with no closing period, except when the tip has more than one sentence.
+- A shortcut follows the label in parentheses, `Find (⌘F)`, from `tipWithShortcut` in [`display-binding-for.ts`](../lycaon-den/src/shortcuts/display-binding-for.ts). An unbound command shows the label alone, never `(—)`.
+- Say what happens, not how to click: no "Click to…" or "Drag to…". Name only a gesture the pointer does not suggest, such as "Double-click to reset width".
+- Separate independent facts with ` · ` and put a consequence after ` — `.
+- Exact times come from `viewerCalendarTimeFormat().fullDateTime`, so every timestamp tip reads the same.
+- A tip on a disabled control gives the reason it is disabled. When the enabled control explains itself, it has no tip.
 
 A hover tip is Den's own layer, never the OS popup. A control carries `data-tip` (with `data-tip-pos` for placement and `data-tip-when-clipped` to show it only when the label is truncated), and one portaled [`TooltipHost`](../lycaon-den/src/components/primitives/TooltipHost.tsx) mounted at the app root renders it on hover or keyboard focus after a short delay. Because the host is delegated and portaled it also serves disabled controls, which dispatch no pointer events of their own.
 

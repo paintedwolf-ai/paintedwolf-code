@@ -4,9 +4,12 @@ import (
 	"context"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -54,12 +57,15 @@ func TestOverlayResolutionSchemaRejectsUnsupportedNestedFields(t *testing.T) {
 			if !ok || len(issues) != 1 || !reflect.DeepEqual(issues[0].Path, tc.issuePath) || !reflect.DeepEqual(issues[0].Keyword, []string{"additionalProperties"}) {
 				t.Fatalf("missing typed schema issue: %+v", reject.Data)
 			}
-			for _, want := range []string{"TOOL_ARGS_INVALID", tc.want, "resolutions", "Fix:"} {
-				if !strings.Contains(err.Error(), want) {
-					t.Errorf("rendered rejection missing %q: %v", want, err)
-				}
+			pointer := strconv.Quote("/" + strings.Join(tc.issuePath, "/") + "/" + tc.want)
+			paths, _ := reject.Data["unsupported_property_paths"].([]string)
+			if !slices.Equal(paths, []string{pointer}) {
+				t.Fatalf("unsupported property paths = %v, want %s", paths, pointer)
 			}
-			t.Log(err.Error())
+			refusal, ok := guidance.RefusalFromError(err)
+			if !ok || !strings.Contains(refusal.Copy["fix"], pointer) {
+				t.Fatalf("rendered remedy missing property path %s: %v", pointer, err)
+			}
 		})
 	}
 	for _, resolution := range []map[string]any{

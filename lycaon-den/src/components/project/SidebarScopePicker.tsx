@@ -519,7 +519,7 @@ export function SidebarScopePicker(props: Props) {
                 disabled={!offered({ kind: "commit" })}
                 data-tip={
                   commitAvailable()
-                    ? "Compare with Git HEAD"
+                    ? undefined
                     : "Git is unavailable; Review pins still work"
                 }
                 data-testid="sidebar-scope-opt-commit"
@@ -547,7 +547,7 @@ export function SidebarScopePicker(props: Props) {
                 data-testid="sidebar-scope-mark-my-edits"
                 data-tip={
                   markingNeedsAuthors()
-                    ? "Git doesn’t record who made a change, so every change is marked."
+                    ? "Git doesn’t record who made a change, so every change is marked"
                     : undefined
                 }
                 data-tip-pos="end"

@@ -7,7 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
-	"github.com/lycaon/lycaon/internal/secretcap"
 )
 
 func TestHTTPFailureClassificationUsesTypedCauses(t *testing.T) {
@@ -26,7 +25,7 @@ func TestHTTPFailureClassificationUsesTypedCauses(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, cause := range []error{tt.cause, fmt.Errorf("wrapped exchange: %w", tt.cause)} {
-				got := sendReject(t.Context(), Deps{}, secretcap.CookieJarRequest{}, nil, secretcap.TokenJarRequest{}, nil, cause)
+				got := sendReject(t.Context(), cause)
 				if got.Code != tt.code || got.Retryable != tt.retryable || got.Data["reason"] == "" {
 					t.Fatalf("reject=%+v", got)
 				}

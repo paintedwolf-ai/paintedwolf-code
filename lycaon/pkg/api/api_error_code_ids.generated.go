@@ -735,6 +735,13 @@ const (
 	// ApiErrorCodeSessionArchived archived chats cannot be pinned; unarchive the
 	// chat first
 	ApiErrorCodeSessionArchived ApiErrorCode = "session_archived"
+	// ApiErrorCodeSessionModeLocked A started Agent chat cannot switch to Ask.
+	ApiErrorCodeSessionModeLocked ApiErrorCode = "session_mode_locked"
+	// ApiErrorCodeSessionModeUnavailable The root chat mode could not be verified.
+	ApiErrorCodeSessionModeUnavailable ApiErrorCode = "session_mode_unavailable"
+	// ApiErrorCodeSessionAskModeWorkflowRequiresAgent The requested workflow phase
+	// requires Agent mode.
+	ApiErrorCodeSessionAskModeWorkflowRequiresAgent ApiErrorCode = "session_ask_mode_workflow_requires_agent"
 	// ApiErrorCodeSessionNotFound session id not found
 	ApiErrorCodeSessionNotFound ApiErrorCode = "session_not_found"
 	// ApiErrorCodeSessionNotPinned pin_position moves only a pinned chat
@@ -1213,6 +1220,9 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeWorkerOwnerUnsettled,
 	ApiErrorCodeWorkerWorkspaceUnavailable,
 	ApiErrorCodeSessionArchived,
+	ApiErrorCodeSessionModeLocked,
+	ApiErrorCodeSessionModeUnavailable,
+	ApiErrorCodeSessionAskModeWorkflowRequiresAgent,
 	ApiErrorCodeSessionNotFound,
 	ApiErrorCodeSessionNotPinned,
 	ApiErrorCodeSessionPreparationFailed,
@@ -1536,6 +1546,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeGroundingEscalated,
 		ApiErrorCodeSessionSpendCeilingReached,
 		ApiErrorCodeSessionArchived,
+		ApiErrorCodeSessionModeLocked,
+		ApiErrorCodeSessionAskModeWorkflowRequiresAgent,
 		ApiErrorCodeSessionNotPinned,
 		ApiErrorCodeSessionPreparing,
 		ApiErrorCodeSessionStopping,
@@ -1662,6 +1674,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeMcpProviderUnreachable,
 		ApiErrorCodeMcpOauthUnavailable,
 		ApiErrorCodeWorkerWorkspaceUnavailable,
+		ApiErrorCodeSessionModeUnavailable,
 		ApiErrorCodePresenceUnavailable,
 		ApiErrorCodeAuthUnavailable:
 		return 503

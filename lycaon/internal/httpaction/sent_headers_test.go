@@ -46,7 +46,7 @@ func TestSentHeadersStateReferencesAndSchemeNotCredentials(t *testing.T) {
 				"capability_request": loopbackCapability(t, server.URL),
 			}
 			registry := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register HTTP", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
+			testutil.FailErr(t, "register HTTP", registerPerform(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
 				SecretAsk: func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 					return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
 				},
@@ -77,8 +77,8 @@ func TestSentHeadersStateReferencesAndSchemeNotCredentials(t *testing.T) {
 	}
 }
 
-func TestFinalURLStatesSecretReferencesAndKeepsTheRedirectChain(t *testing.T) {
-	const value = "managed-query-credential+/="
+func TestRedirectChainRecordsEachObservedHop(t *testing.T) {
+	const value = "managed-query-credential-7741"
 	service, _ := managedRequestService(t)
 	meta := hostSecret(t, service, "create", "Key", value)
 	var landed string
@@ -93,12 +93,11 @@ func TestFinalURLStatesSecretReferencesAndKeepsTheRedirectChain(t *testing.T) {
 	defer server.Close()
 
 	args := map[string]any{
-		"url": server.URL + "/start", "redirects": "safe",
-		"query":              []any{map[string]any{"name": "key", "value": meta.Reference}},
+		"url": server.URL + "/start?key=" + meta.Reference, "redirects": "safe",
 		"capability_request": loopbackCapability(t, server.URL),
 	}
 	registry := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register HTTP", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
+	testutil.FailErr(t, "register HTTP", registerPerform(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
 		SecretAsk: func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 			return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
 		},
@@ -115,20 +114,19 @@ func TestFinalURLStatesSecretReferencesAndKeepsTheRedirectChain(t *testing.T) {
 	if landed != value {
 		t.Fatalf("server saw %q, want the resolved value to reach it", landed)
 	}
-	if strings.Contains(out, value) || strings.Contains(out, url.QueryEscape(value)) {
-		t.Fatalf("the query credential came back in the result: %s", out)
-	}
 	var got result
 	testutil.FailErr(t, "decode result", json.Unmarshal([]byte(out), &got))
-	if want := server.URL + "/final?echo=" + meta.Reference + "&page=2"; got.FinalURL != want {
+	// The exchange records what was sent; the command output screen keeps the
+	// value from the model when curl prints these URLs.
+	if want := server.URL + "/final?echo=" + value + "&page=2"; got.FinalURL != want {
 		t.Fatalf("final_url = %q, want %q", got.FinalURL, want)
 	}
 	if len(got.Redirects) != 1 {
 		t.Fatalf("redirects = %+v, want one observed hop", got.Redirects)
 	}
 	hop := got.Redirects[0]
-	if hop.Status != http.StatusFound || hop.URL != server.URL+"/start?key="+meta.Reference ||
-		hop.Location != server.URL+"/final?echo="+meta.Reference+"&page=2" {
-		t.Fatalf("redirect hop = %+v, want the observed chain with the reference in place of the value", hop)
+	if hop.Status != http.StatusFound || hop.URL != server.URL+"/start?key="+value ||
+		hop.Location != server.URL+"/final?echo="+value+"&page=2" {
+		t.Fatalf("redirect hop = %+v, want the observed chain", hop)
 	}
 }

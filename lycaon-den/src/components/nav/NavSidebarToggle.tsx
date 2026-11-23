@@ -1,4 +1,4 @@
-import { paneToggleTip } from "./PaneToggle.tsx";
+import { tipWithShortcut } from "../../shortcuts/display-binding-for.ts";
 import { ariaKeyShortcutsForHandler } from "../../shortcuts/display-binding-for.ts";
 import { Show } from "solid-js";
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
@@ -52,7 +52,7 @@ export function NavSidebarCollapseButton(props: ToggleProps) {
       class="den-shell-nav-sidebar-btn-collapse den-inset-icon-btn"
       data-testid="nav-collapse-btn"
       aria-label="Hide sidebar"
-      data-tip={paneToggleTip("Hide sidebar", "nav.toggle")}
+      data-tip={tipWithShortcut("Hide sidebar", "nav.toggle")}
       aria-keyshortcuts={ariaKeyShortcutsForHandler("nav.toggle")}
       onClick={() => props.onClick()}
     >
@@ -70,7 +70,7 @@ export function NavSidebarExpandButton(props: ToggleProps) {
       classList={{ "den-pane-toggle--labelled": props.labelled }}
       data-testid="nav-expand-btn"
       aria-label="Show sidebar"
-      data-tip={paneToggleTip("Show sidebar", "nav.toggle")}
+      data-tip={tipWithShortcut("Show sidebar", "nav.toggle")}
       aria-keyshortcuts={ariaKeyShortcutsForHandler("nav.toggle")}
       onClick={() => props.onClick()}
     >
@@ -90,7 +90,7 @@ export function NavSidebarAutoRestoreButton(props: ToggleProps) {
       classList={{ "den-pane-toggle--labelled": props.labelled }}
       data-testid="nav-auto-restore-btn"
       aria-label={label}
-      data-tip={paneToggleTip(label, "nav.toggle")}
+      data-tip={tipWithShortcut(label, "nav.toggle")}
       aria-keyshortcuts={ariaKeyShortcutsForHandler("nav.toggle")}
       onClick={() => props.onClick()}
     >

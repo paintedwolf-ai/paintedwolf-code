@@ -5,9 +5,9 @@ description: When the user asks to commit, split the working tree into coherent 
 
 # Commit in logical groups
 
-**Entry check:** the user asked for the work to be committed; committing is never implicit.
+{% set can_git_commit = has_git and not on_worker_branch and profile_has_command and profile_command_mutation != false %}{% set can_git_read = has_git and not on_worker_branch and profile_has_command %}**Entry check:** the user asked for the work to be committed; committing is never implicit.
 
-Use native Git commands through `command` for inspection, staging, and commits; on a write worker, prepare the groups as overlay file edits and report the planned grouping to the coordinator. Each operation retains host review and session attribution.
+{% if can_git_commit %}Use native Git commands through `command` for inspection, staging, and commits;{% else %}Prepare or report the planned commit groups for the coordinator to commit;{% endif %} each operation retains host review and session attribution.
 
 ## Mechanics
 
@@ -16,22 +16,21 @@ Use native Git commands through `command` for inspection, staging, and commits; 
 
 ## Workflow
 
-1. **Survey once, before staging anything.**{% if has_git and not on_worker_branch %} The inventory is `git status --short`, `git diff --stat`, and bounded `git log` in `command`.{% else %} The inventory is this worker's own change record — the files it wrote or edited.{% endif %} Write the groups, one line each{% if profile_has_update_progress %} in `update_progress`{% endif %}, before reading any hunk, then read hunks in one batch, only where a group is ambiguous.
+1. **Survey once, before staging anything.**{% if can_git_read %} The inventory is `git status --short`, `git diff --stat`, and bounded `git log` in `command`.{% else %} The inventory is this worker's own change record — the files it wrote or edited.{% endif %} Write the groups, one line each{% if profile_has_update_progress %} in `update_progress`{% endif %}, before reading any hunk, then read hunks in one batch, only where a group is ambiguous.
 2. **Leave what is not yours.** Work you did not write and the user has not claimed is left out of your groups: not reverted, not stashed, not finished for them. A repository-wide stash empties every concurrent worker's tree; never use one for a clean view.
 3. **Leave live work alone even when it is yours.** A file still being changed belongs in a later commit.
 4. **Group by the change, not by the directory.** One commit is one reason: a feature with its tests, a fix with its regression, a rename across every file it touched. Generated output travels with its source. State each group in one line; if you cannot, it is more than one commit. A group that needs a hunk to describe gets that hunk read, not the tree.
 5. **Order them so each stands alone.** Prefer a sequence where every commit leaves the project building — a refactor before its feature.
-6. **Carry each group by explicit path.**{% if has_git and not on_worker_branch %} Never stage by wildcard, "all changes", or directory sweep; a large group is still an explicit list. For each group, run `git add -- PATHS` followed by `git commit -m MESSAGE -- PATHS`. Preserve group order; proceed only after each success.{% else %} Express each group as its overlay file edits, in commit order, and report its paths and message to the coordinator; never sweep by wildcard or directory.{% endif %}
+6. **Carry each group by explicit path.**{% if can_git_commit %} Never stage by wildcard, "all changes", or directory sweep; a large group is still an explicit list. For each group, run `git add -- PATHS` followed by `git commit -m MESSAGE -- PATHS`. Preserve group order; proceed only after each success.{% else %} Express each group by explicit paths, in commit order, and report its paths and message to the coordinator; never sweep by wildcard or directory.{% endif %}
 7. **Write messages in the project's existing style.** State what changed and why; do not narrate the process or add unused trailers.
-8. {% if has_git and not on_worker_branch %}**Verify once and finish.** Commit receipts confirm hashes and paths; omitted `uncommitted_*` fields do not prove a clean tree. Run one final `git status --short` in `command`; if it fails, report cleanliness as unverified. Once the declared groups are committed, report and stop.{% else %}**Report the plan and stop.** Hand the coordinator the planned groups with their paths and messages and anything you could not group confidently; do not report the tree clean — only Git can verify that.{% endif %} List later arrivals as remaining work; do not reopen the survey without a new request.
+8. {% if can_git_commit %}**Verify once and finish.** Commit receipts confirm hashes and paths; omitted `uncommitted_*` fields do not prove a clean tree. Run one final `git status --short` in `command`; if it fails, report cleanliness as unverified. Once the declared groups are committed, report and stop.{% else %}**Report the plan and stop.** Hand the coordinator the planned groups with their paths and messages and anything you could not group confidently; do not report the tree clean — only Git can verify that.{% endif %} List later arrivals as remaining work; do not reopen the survey without a new request.
 
 ## Boundaries
 
-- Do not commit work you cannot describe in one line from its paths and stat.
-- Do not read on to be certain once the groups are declared.
+- Do not commit work you cannot describe in one line from its paths and stat, or read on once groups are declared.
 - Do not amend, rebase, reset, or rewrite history beyond your own commits from this session.
-- Do not bypass hooks, verification, or signing to make a commit succeed; a rejection such as `GIT_SIGNING_UNSUPPORTED` is a finding to report.
-- Do not carry secrets, credentials, local configuration, or scratch files; read a file's content when its path alone leaves doubt.
+- Do not bypass hooks, verification, or signing (`GIT_SIGNING_UNSUPPORTED` is a finding to report).
+- Do not carry secrets, credentials, local config, or scratch files; read content when a path leaves doubt.
 
 ## Report
 

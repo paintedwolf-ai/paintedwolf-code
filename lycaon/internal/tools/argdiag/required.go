@@ -73,6 +73,25 @@ func MissingRequiredSummary(invalid *jsonschema.ValidationError, schema, args ma
 	return ""
 }
 
+// MissingRequiredPaths names bounded, unconditional required properties.
+func MissingRequiredPaths(invalid *jsonschema.ValidationError) []string {
+	var paths []string
+	if invalid == nil {
+		return paths
+	}
+	names := rootMissingRequired(invalid)
+	slices.Sort(names)
+	for _, name := range names {
+		if len(name) <= 128 {
+			paths = append(paths, name)
+			if len(paths) == 8 {
+				break
+			}
+		}
+	}
+	return paths
+}
+
 func rootMissingRequired(root *jsonschema.ValidationError) []string {
 	pending := []*jsonschema.ValidationError{root}
 	for visited := 0; len(pending) > 0 && visited < 32; visited++ {

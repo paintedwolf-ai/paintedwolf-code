@@ -44,7 +44,7 @@ type Service struct {
 	captures         *checkpointcontrol.Capture
 	deliverKicks     func(context.Context, string) error
 	waitEnds         func(string) []string
-	progress         progress.RunScopedStore
+	progress         progress.Store
 	workflows        *WorkflowDomains
 	review           ReviewCheckpointer
 	gateRepeatLedger IntentBoundary
@@ -54,7 +54,7 @@ func New(sessionStore Sessions, transcriptStore Transcript, transcript *transcri
 	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, transcript: transcript, captures: captures, deliverKicks: deliver}
 }
 func (m *Service) SetWorkflow(workflow *WorkflowDomains)           { m.workflows = workflow }
-func (m *Service) SetProgress(progress progress.RunScopedStore)    { m.progress = progress }
+func (m *Service) SetProgress(progress progress.Store)             { m.progress = progress }
 func (m *Service) SetReviewCheckpointer(review ReviewCheckpointer) { m.review = review }
 func (m *Service) resetBatch(ctx context.Context, id string, message api.Message) {
 	if m.workflows != nil && promptinput.VisibleIntent(message) {

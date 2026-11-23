@@ -2,6 +2,7 @@ package phases
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -10,6 +11,12 @@ import (
 )
 
 func (m *Service) ActivateInitial(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, projectDir string, wake bool) (*api.WorkflowRun, error) {
+	if err := m.checkAskPhase(ctx, run, manifest, run.CurrentPhase); err != nil {
+		if runstate.IsAmbientRun(run) && errors.Is(err, runstate.ErrAskWorkflowRequiresAgent) {
+			return run, nil
+		}
+		return nil, err
+	}
 	if run.Status == api.WorkflowRunStatusComplete {
 		return run, m.Settlement.ReconcileTerminalRun(ctx, run)
 	}
@@ -31,14 +38,16 @@ func (m *Service) ActivateInitial(ctx context.Context, run *api.WorkflowRun, man
 	if def, ok := manifest.PhaseByID(run.CurrentPhase); ok && !runstate.IsTerminal(run.Status) {
 		m.Entries.Trigger(ctx, run, projectDir, def)
 		if m.PhaseEnterHook != nil {
-			m.PhaseEnterHook(ctx, &RunContext{
+			if err := m.PhaseEnterHook(ctx, &RunContext{
 				SessionID:       run.SessionID,
 				RunID:           run.ID,
 				WorkflowID:      run.WorkflowID,
 				WorkflowVersion: run.WorkflowVersion,
 				Phase:           run.CurrentPhase,
 				PreviousPhase:   "",
-			}, def)
+			}, def); err != nil {
+				return nil, err
+			}
 		}
 		if err := m.Settlement.InvokeOnPhaseEnter(ctx, run, def); err != nil {
 			return nil, err

@@ -3,6 +3,7 @@
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -146,6 +147,17 @@ class MLXOfflineSource(unittest.TestCase):
                                f'set(PW_MLX_SYS_MANIFEST "{self.crate / "Cargo.toml"}")\n' + script)
         result = self.run_cmake()
         self.assertEqual(result.returncode, 0, result.stderr)
+        (source / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.16)\nproject(mlx.data LANGUAGES C)\n"
+            "# FetchContent_Declare(mlx GIT_TAG v0.32.2)\n")
+        configured = subprocess.run(
+            ["cmake", "-S", str(source), "-B", str(self.root / "project-build"),
+             f"-DCMAKE_TOOLCHAIN_FILE={toolchain}",
+             f"-DPW_MLX_VENDOR_ROOT={self.vendor}",
+             f"-DPW_MLX_SYS_MANIFEST={self.crate / 'Cargo.toml'}"],
+            env={**os.environ, "CMAKE_TOOLCHAIN_FILE": str(original)},
+            text=True, capture_output=True, timeout=60)
+        self.assertEqual(configured.returncode, 0, configured.stderr)
         self.pin['mlx_sys_version'] = '0.7.0'
         rejected = self.run_cmake()
         self.assertNotEqual(rejected.returncode, 0)

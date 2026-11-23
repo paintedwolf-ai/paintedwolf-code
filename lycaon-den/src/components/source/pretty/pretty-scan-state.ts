@@ -104,6 +104,7 @@ export interface PrettyScanOptions {
   readonly tabSize: number;
   readonly indentUnit: number;
   readonly facts: PrettyBlockFacts;
+  readonly factEvent?: (pos: number, kind: number) => void;
   /** Tokens from the editor's syntax tree, for rules that read them. */
   readonly tokens?: PrettyTokenSource | null;
   /** The line width the project declares for the file. */
@@ -130,6 +131,7 @@ export class ScanState {
   markup: MarkupState;
   fence: Fence | null = null;
   inLine = false;
+  protectedRun = false;
   /** The current source line is laid out. */
   laidOut = false;
   leadColumns = 0;

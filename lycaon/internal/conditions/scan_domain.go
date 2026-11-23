@@ -17,11 +17,6 @@ type ScanLedger interface {
 	LatestRequiredScanForSession(ctx context.Context, sessionID string) (*api.CodeScan, error)
 }
 
-var scanCatalogStubIDs = []string{
-	"findings_triaged",
-	"remediation_complete",
-}
-
 // RegisterScanDomain registers scan-workflow vocabulary evaluators.
 func RegisterScanDomain(reg *ConditionRegistry, deps RegistryDeps) error {
 	if reg == nil {

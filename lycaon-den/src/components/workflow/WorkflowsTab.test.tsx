@@ -87,6 +87,24 @@ const completeSurveyRun: WorkflowRun = {
 };
 
 describe("WorkflowsTab", () => {
+  it("only arms read workflows while in Ask", () => {
+    const onArmWorkflow = vi.fn();
+    const [plan, recon] = [
+      { id: "plan", version: "1.0.0", name: "Plan", trigger: "/plan", requires_agent: true },
+      { id: "recon", version: "1.0.0", name: "Recon", trigger: "/recon", requires_agent: false },
+    ];
+    render(() => (
+      <WorkflowsTab {...baseProps()} pickerOpen catalog={[plan, recon]} askMode onArmWorkflow={onArmWorkflow} />
+    ));
+    const blocked = screen.getByRole("button", { name: "Plan — needs Agent" });
+    expect(blocked).toHaveProperty("disabled", true);
+    expect(blocked.textContent).toContain("Needs Agent");
+    fireEvent.click(blocked);
+    expect(onArmWorkflow).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("workflow-picker-row-recon"));
+    expect(onArmWorkflow).toHaveBeenCalledWith(expect.objectContaining({ id: recon.id }));
+  });
+
   it("shows resting launch state when no active run", () => {
     render(() => <WorkflowsTab {...baseProps()} />);
     expect(screen.getByTestId("workflows-tab-empty")).toBeTruthy();

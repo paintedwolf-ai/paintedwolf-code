@@ -31,7 +31,11 @@ func (p Plan) PrepareRetainedStorage(ctx context.Context, database DBTX) (Plan, 
 	if err != nil {
 		return p, err
 	}
-	p.scratchBytes, err = storageSum(p.scratchBytes, scratch)
+	modeScratch, err := sessionModeScratch(trees["sessions"], pageBytes)
+	if err != nil {
+		return p, err
+	}
+	p.scratchBytes, err = storageSum(p.scratchBytes, max(scratch, modeScratch))
 	p.retainedStoragePrepared = err == nil
 	p.retainedEntryRows = trees["source_manifest_entries"].cells
 	p.retainedTrees = trees
@@ -79,7 +83,7 @@ func (p Plan) RetainedCopyScratch(ctx context.Context, database DBTX) (uint64, e
 // receives a later bulk index: its empty indexes are maintained in main pages.
 func retainedRouteSortBytes(trees map[string]retainedTree, pageBytes uint64) (uint64, error) {
 	var indexRows, indexBytes, indexRecord uint64
-	for _, name := range []string{"vault_unlocks", "turn_load_receipts", "evidence_records", "source_files", "source_versions", "source_head_entries", "source_effects"} {
+	for _, name := range []string{"vault_unlocks", "turn_load_receipts", "evidence_records", "source_files", "source_versions", "source_head_entries", "source_effects", "project_roots"} {
 		tree := trees[name]
 		var err error
 		indexRows, err = storageSum(indexRows, tree.cells)

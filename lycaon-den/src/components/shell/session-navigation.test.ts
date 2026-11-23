@@ -77,7 +77,7 @@ describe("shell session navigation", () => {
     const { navigation, shell, appStore, projectSessions } = mountNavigation();
     seams.update.mockResolvedValueOnce({ id: "session", archived: true });
     projectSessions.state.rows = [
-      { id: "session", project_id: "project", title: "Original", pin_rank: null, message_count: 0, activity_at: "t", created_at: "t", posture: "build", status: "idle", owner_person_id: "u1" } as never,
+      { mode: "agent" as const, started: true, id: "session", project_id: "project", title: "Original", pin_rank: null, message_count: 0, activity_at: "t", created_at: "t", posture: "build", status: "idle", owner_person_id: "u1" } as never,
     ];
     (projectSessions as Record<string, unknown>).removeRow = vi.fn((id: string) => {
       projectSessions.state.rows = projectSessions.state.rows.filter((r) => r.id !== id);

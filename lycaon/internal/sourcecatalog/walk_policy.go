@@ -17,8 +17,19 @@ type walkPolicy struct {
 	scope               *sourcescope.Scope
 	includeDependencies bool
 	selectedPaths       []string
+	// onDemand roots descend only into directories a reader requests.
+	onDemand bool
 	// base is root-relative; "." denotes the scope root.
 	base string
+}
+
+// forRoot applies a root's own discovery policy.
+func (p walkPolicy) forRoot(root Root) walkPolicy {
+	p.onDemand = p.onDemand || root.OnDemand
+	if root.Only != "" {
+		p.selectedPaths = []string{root.Only}
+	}
+	return p
 }
 
 // under narrows the policy to a subtree walk that starts at rel.
@@ -142,9 +153,10 @@ func (p walkPolicy) boundaryDir(rel string) string {
 	return reason
 }
 
-// rootOnDemand reports an editor-only root, which no scan descends on its own.
+// rootOnDemand reports a root no scan descends on its own: an editor-only
+// root, or one whose discovery policy says so.
 func (p walkPolicy) rootOnDemand() bool {
-	return p.scope != nil && p.scope.BoundaryDir(".") != ""
+	return p.onDemand || p.scope != nil && p.scope.BoundaryDir(".") != ""
 }
 
 func (p walkPolicy) boundaryPath(rel string, isDir bool) string {

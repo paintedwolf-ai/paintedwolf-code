@@ -382,7 +382,7 @@ describe("WorkerTranscript", () => {
 
   it("renders coordination between activity and evidence with posted and received notes", () => {
     const appStore = createAppStore();
-    appStore.actions.setCurrentSession({ id: "session-1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "project-1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    appStore.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "session-1", id: "session-1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "project-1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     appStore.actions.setFindings("session-1", appStore.state.sessionViewEpoch, {
       findings: [
         { agent: "job-1", summary: "My note", ref: "mine.go" },

@@ -2,13 +2,13 @@ package conditions_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/vocabularytest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -20,7 +20,7 @@ func TestDelegationCloseoutCompleteInCore(t *testing.T) {
 	if !coreReg.Has("delegation_closeout_complete") {
 		t.Fatal("delegation_closeout_complete must be core")
 	}
-	for _, id := range conditionstest.PlanIDs {
+	for _, id := range vocabularytest.DomainIDs("plan", "shipped") {
 		if id == "delegation_closeout_complete" {
 			t.Fatal("delegation_closeout_complete must not remain in plan domain")
 		}

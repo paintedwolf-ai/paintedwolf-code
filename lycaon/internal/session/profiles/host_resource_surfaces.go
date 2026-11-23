@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -48,6 +49,9 @@ func (m *Service) ExecutionSurfaces(
 	sess *api.Session,
 	profileID string,
 ) []hostresources.ExecutionSurface {
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		return nil
+	}
 	profile, ok := m.ToolProfile(ctx, sess, profileID)
 	if !ok {
 		return nil
@@ -57,13 +61,18 @@ func (m *Service) ExecutionSurfaces(
 
 func executionSurfacesForToolProfile(profile sandbox.ToolProfile) []hostresources.ExecutionSurface {
 	surfaces := []hostresources.ExecutionSurface{}
-	if profile.ToolAllowed("command") || profile.ToolAllowed("terminal_open") {
+	extExec, _ := toolcontract.NewCommandEffects(toolcontract.CommandExternalExec)
+	commandExec := profile.ToolAllowed("command") && (profile.CommandEffects == 0 || profile.CommandEffects.Allows(extExec))
+	if commandExec || profile.ToolAllowed("terminal_open") {
 		surfaces = append(surfaces, hostresources.SurfaceProcessExec)
 	}
 	return surfaces
 }
 
 func (m *Service) MutationCapable(ctx context.Context, sess *api.Session, profileID string) bool {
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		return false
+	}
 	profile, ok := m.ToolProfile(ctx, sess, profileID)
 	if !ok {
 		return false

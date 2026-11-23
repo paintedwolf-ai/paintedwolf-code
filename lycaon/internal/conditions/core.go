@@ -157,6 +157,11 @@ func registerCoreUserInteraction(reg *ConditionRegistry) error {
 }
 
 func registerCorePosture(reg *ConditionRegistry) error {
+	if err := reg.Register("session_is_agent_mode", func(ec EvalContext) (bool, error) {
+		return ec.SessionMode != api.SessionModeAsk, nil
+	}); err != nil {
+		return err
+	}
 	return reg.RegisterParameterized("posture_is:", func(ec EvalContext) (bool, error) {
 		want := suffixAfter(ec.ConditionID, "posture_is:")
 		return want != "" && string(ec.SessionPosture) == want, nil

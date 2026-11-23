@@ -37,6 +37,8 @@ The directory-identity migration replaces the flat current-path projection with 
 
 The manifest-layout migration (revision 5) moves every retained source snapshot onto per-root manifests and keeps its id, counts, quality, and boundaries, so scans, inventories, and command windows that name it still resolve. Chunks no snapshot referenced, and in-flight survey staging, are dropped rather than converted; content they alone named is queued for the blob reclaimer to re-check. The reviewed revision-4 route prepares a released-shape working file. When every chunk is referenced, staging is empty, and declared counts match measured primary rows, it clones or copies the sealed whole source, preserving unrelated tables, FTS shadow rows, row identities, counters and indexes directly. Recovery capture verifies the sealed bytes and exact source shape, without an exhaustive audit of historical secondary indexes. Incomplete retention or a structured integrity failure encountered during preparation uses primary-row reconstruction with rebuilt indexes instead; operational failures refuse without an expensive repair retry. The reconstructed path selects retained rows rather than copying discarded rows. The migrated replacement passes a structural `quick_check`, foreign-key checks and each migration’s data invariants before publication.
 
+The outside-namespace transformation in revision 5 rebuilds `project_roots` to admit the `outside` kind, gives every project its outside namespace with an id derived from the project id, so each upgrade route writes the same row, and adds empty per-chat file references. Folder roots, their ids, and every ledger row keep their values.
+
 The first schema change after a published build, preview or stable, records that build's source identity in `internal/db/released-baselines.json`, advances `SchemaVersion` once, and adds an explicit adjacent step under `internal/db/migrations`. While the current revision has no published build, later schema changes join its step and keep its number: no store outside development can hold the intermediate shapes. Publishing a release candidate freezes its revision, so a change after that candidate advances again. A step's `ID`, `Checksum`, source and destination revisions, and exact shapes identify the transformation. Every step embeds its implementation source or executed SQL as `Source`; registration verifies its SHA-256 against `Checksum` before planning. Each step declares its temporary disk requirement in `ScratchBytes`; the reviewed retained route also derives checked phase-specific reservations from source facts. Startup recognizes both revision and shape, validates the entire route and its applied ledger, and refuses unknown or newer stores without opening a writer. Users may skip releases: all registered intermediate steps execute in one immediate transaction, including their ledger records and revision stamp; destination shape, structural validity, migration data invariants, and foreign keys must pass before commit. In-place failures roll back the chain; a failed or canceled discardable replacement is removed while the original remains intact. Fresh installs do not manufacture an applied-migration history. One final structural check runs after transformation, inside the transaction. Retained recovery requires byte-consistent, hash-verified released-shape material; reconstructed source images receive structural and foreign-key checks before capture. Healthy whole-file candidates preserve the sealed source directly. Exhaustive secondary-index correspondence and uniqueness auditing runs after the application starts serving, with a durable pending obligation committed alongside the upgraded schema. Pending work survives cancellation and clean shutdown; confirmed damage still stops writes. Irreversible recovery/pre-image and database-dependent orphan cleanup waits for successful completion. Recorded damage still refuses the upgrade and recovery capture still precedes schema transformation.
 
 The application holds the installation lease before inspecting or upgrading. `db.OpenWithOptions` requires its `Before` hook to durably capture a complete recovery snapshot before any live schema transformation: copies of the database, retained bodies, and backed-up device configuration, which later live-store garbage collection cannot erase. Credentials and code-loading controls keep their separate custody rules. For a retained upgrade, recovery capture uses the verified released-shape working file and the complete installation payload, after SQLite checkpoints committed WAL data into the original and seals it without sidecars. This preserves the logical source while changing its physical representation; the sealed original remains available throughout copying and recovery capture. Both publication candidates are self-contained before their names are exchanged. The `After` hook records the database commit; readiness is marked only after required retained references initialize. Failure retains the recovery point, and restoring one is explicit and explains that history returns to the capture point. A database-only `.bak` is not an installation rollback point, and opening the database does not create one merely because the product version changed.
@@ -45,7 +47,14 @@ The local `store.db.upgrade.json` journal (or the configured database filename p
 
 `db.UpgradeStaged` applies the same registered transformations to an extracted backup before publication; the original archive stays untouched. A cross-file conversion prepares immutable replacement objects before committing their references and retains old material until its recovery point is released. Device-file replacements use the restore transaction's staging, pre-images, exact paths, and resume journal; a SQLite transaction never claims atomicity over filesystem writes.
 
-The reviewed revision-4 retained route inventories only primary trees needed by its frozen transformation; row-reconstruction fallback surveys the remaining source/index trees before its bulk index work and reuses already measured facts. Sort reservations distinguish manifest roots, root lists, metadata, later populated indexes, and bounded checkpoint batches. Blocking structural and foreign-key checks use a 64 MiB cache on one held connection, restoring the prior setting before sorting or commit; the migration's sorter configuration stays unchanged. Private work disables journaling and remains discardable. Capacity reserves bounded single-threaded FILE-sort work on eligible temporary volumes, separately accounts existing-original sharing and canonical recovery cloning or copying, and measures available space again after each allocating phase. One full remaining replacement divergence covers immutable clone readers; earlier divergence is already consumed in the fresh measurement. SQLite's admitted page limit charges actual records, indexes, overflow, free-list, and pointer-map growth. Publication still requires sealing, file/directory sync, and atomic exchange; normal activation opens the published store in WAL mode. The resource proof pins the complete reviewed route and SQLite source identity, including the separately reviewed authority-decoder correction; unreviewed routes retain conservative admission.
+The reviewed revision-4 retained route inventories only primary trees needed by its frozen transformation; row-reconstruction fallback surveys the remaining source/index trees before its bulk index work and reuses already measured facts. Sort reservations distinguish manifest roots, root lists, metadata, later populated indexes, and bounded checkpoint batches. Blocking structural and foreign-key checks use a 64 MiB cache on one held connection, restoring the prior setting before sorting or commit. The upgrade measures the project root table for the outside namespace index rebuild and charges space for one added root per project. Private work disables journaling and remains discardable. Capacity reserves bounded single-threaded FILE-sort work on eligible temporary volumes, separately accounts existing-original sharing and canonical recovery cloning or copying, and measures available space again after each allocating phase. One full remaining replacement divergence covers immutable clone readers; earlier divergence is already consumed in the fresh measurement. SQLite's admitted page limit charges actual records, indexes, overflow, free-list, and pointer-map growth. Publication still requires sealing, file/directory sync, and atomic exchange; normal activation opens the published store in WAL mode. The resource proof pins the complete reviewed route and SQLite source identity, including the separately reviewed authority-decoder correction; unreviewed routes retain conservative admission.
+
+Worker baseline manifests keep their own format. Published v1.0.2 wrote Format 1,
+which keys entries by display path; its reader remains supported. Format 2 is
+unreleased and keys entries by root identity and root-relative path. Its capture
+contract requires the recorded topology; an unavailable topology leaves the
+worker's branch retained for retry. Display labels cannot substitute for a missing
+Format-2 identity or reinterpret a sealed entry after a label changes.
 
 Worker baseline manifests keep their own format. Published v1.0.2 wrote Format 1,
 which keys entries by display path; its reader remains supported. Format 2 is
@@ -94,6 +103,12 @@ operation, repair source, or establish replay eligibility. Execution and effect
 claims remain projections of the invocation recorder. This work changes no
 persisted schema or command language version.
 
+The `unsaved_documents` and `omitted_unsaved_documents` result fields of
+`command`, `verify`, `terminal_open` and `terminal_send`, and their `cause`
+values (`changed_outside`, `not_written`, `agent_edit_held`), are additive
+`agent-public` vocabulary defined in `internal/toolcontract`. A cause keeps its
+meaning; a new reason takes a new value.
+
 Recovery availability and diagnostic-knowledge facts are additive host facts in
 the `paintedwolf` namespace. They distinguish missing observations from the
 standard typed zero values without changing OAR defaults. Structural argument
@@ -123,6 +138,15 @@ bounded feedback allowance before effects. An optional `refusal.delivery_failure
 records capacity, cancellation or unavailable rendering with typed capacity facts
 when present; its feedback and details remain empty. Authority failures propagate
 as errors rather than publishing a result under a changed frame.
+
+Invocation receipt settlement is `bundle` wire and an `agent-public` contract
+where the model sees the status, invocation flag and refusal code. For newly
+settled command programs, a refusal reports the existing `rejected` status and
+its stop code. The `invoked` flag records whether any operation started, so a
+refusal before execution has `invoked: false` and a refusal after execution began
+has `invoked: true`. Review this behavior change from `completed` for refused
+programs at release. The enum and wire shape are unchanged. Stored receipts
+retain their recorded values and remain readable.
 
 | Artifact | Class and retention | Owner |
 |---|---|---|
@@ -450,6 +474,14 @@ project prompt overrides that reference an undeclared name in the reserved
 reader-fact prefixes (`profile_`, `mints`, `receipt_kind`, `tool_check_`,
 `runner_`, `agent_has_skill_`, `visual_show_`, `caps`) emit a load note naming
 the template and variable.
+
+### Writer and reader qualification
+
+For a durable artifact, qualify each supported writer against the reader that will reopen its output. Keep representative bytes emitted by a published writer, the release commit, the triggering operation, and assertions about behavior. Exercise the current writer through publication and a fresh reader. A failed publication must leave recoverable input. When an interpretation changes, document the discriminator and the behavior of existing bytes, including copies and edits. A document-supplied version selects its grammar. The host derives authority from the operation and its current grants.
+
+Session workflow composition stores authored YAML beside its resolved definition. Project publication writes the authored overrides with `workflow_format: 2` and validates predicates in those overrides against the generic gate kit. Inherited predicates come from the referenced parent. Released unmarked project manifests and session rows without authored YAML retain the flattened representation. The [v1.0.2 fixture](../lycaon/internal/workflow/catalog/testdata/v1.0.2/workflow.yaml) came from the released persistence test at commit `b6120abc30359d6ea98b6f32a3d10deed80066be`, using `TestPersistWritesFileAndDeletesSessionRow` and its `/hotfix-custom` trigger. Its build phase retains both the delegation closeout and verify gates.
+
+New runs store their selected workflow definition in the same transaction as run creation. Existing runs without a snapshot resolve their recorded workflow ID and version. Workflow manifests describe execution. Each operation continues through the host's current authorization checks.
 
 ## Agent-public vocabulary
 

@@ -84,7 +84,6 @@ func updateSession(
 		Status:               string(sess.Status),
 		CompactionGeneration: int64(sess.CompactionGeneration),
 		ArchivedAt:           db.NullTimePtr(sess.ArchivedAt),
-		SeenAt:               db.NullTimePtr(sess.SeenAt),
 		UpdatedAt:            timelayout.Format(sess.UpdatedAt),
 		ID:                   id,
 	}); err != nil {
@@ -174,6 +173,9 @@ func sessionFromRow(r db.GetSessionRow) (*api.Session, error) {
 		ProviderID:           db.StringFromNull(r.ProviderID),
 		Model:                db.StringFromNull(r.Model),
 		ParentSessionID:      db.StringFromNull(r.ParentSessionID),
+		RootSessionID:        r.RootSessionID,
+		Mode:                 api.SessionMode(r.EffectiveMode),
+		Started:              r.EffectiveStarted == 1,
 	}
 	var err error
 	sess.CreatedAt, err = db.ParseTime(r.CreatedAt)

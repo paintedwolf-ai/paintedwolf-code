@@ -46,7 +46,9 @@ type Target interface {
 // ReplaceRequest describes one guarded atomic replacement.
 type ReplaceRequest struct {
 	Location
-	Source io.Reader
+	// ExpectedParentIdentity fences publication to an observed directory.
+	ExpectedParentIdentity string
+	Source                 io.Reader
 	// CopyBuffer is caller-admitted stream scratch, retained through Commit.
 	CopyBuffer []byte
 	Mode       os.FileMode

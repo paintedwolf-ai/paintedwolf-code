@@ -1,0 +1,36 @@
+.den-session-mode.den-browse-segmented {
+  flex: none;
+  flex-wrap: nowrap;
+  padding: 2px;
+  --den-segment-thumb-inset: 0px;
+}
+
+.den-session-mode .den-browse-segment {
+  padding: 2px 9px;
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+}
+
+.den-session-mode .den-browse-segment[aria-disabled="true"] {
+  cursor: default;
+}
+
+.den-composer-input::placeholder,
+.home-view__idea-input::placeholder,
+.home-view__idea-hint {
+  transition: opacity 120ms ease;
+}
+
+.den-composer-input[data-hint-out]::placeholder,
+.home-view__idea-input[data-hint-out]::placeholder,
+.home-view__idea-hint[data-hint-out] {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-composer-input::placeholder,
+  .home-view__idea-input::placeholder,
+  .home-view__idea-hint {
+    transition: none;
+  }
+}

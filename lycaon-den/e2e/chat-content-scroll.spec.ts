@@ -157,3 +157,56 @@ modelIndependentWebE2e("plain arrows scroll a focused conversation row normally"
   await page.keyboard.press("ArrowUp");
   await expect.poll(() => stream.evaluate(element => element.scrollTop)).toBeLessThan(5);
 });
+
+type ReaderPosition = { row: number; column: number };
+declare global {
+  interface Window {
+    prettyReader: {
+      positionAtTop(): ReaderPosition;
+      distance(target: ReaderPosition): number | null;
+      readAwayFromCaret(target: ReaderPosition): boolean;
+      caretVisible(): boolean;
+    };
+  }
+}
+
+for (const source of ["retained", "receipts"]) {
+  modelIndependentWebE2e(`Pretty reader swaps keep the visible character in ${source} output`, async ({ page }) => {
+    await page.goto(`/e2e/fixtures/chat-content-scroll.html?pretty=${source}`);
+    const reader = page.getByTestId("chat-content-page");
+    await reader.getByTestId("files-editor-layout-wrap").click();
+    await reader.getByRole("button", { name: "Go to line" }).click();
+    await page.getByTestId("goto-line-input").fill("173:330");
+    await page.getByTestId("goto-line-input").press("Enter");
+    await expect(reader.locator(".cm-content")).toContainText('"row":172');
+    await expect.poll(async () => {
+      return page.evaluate(async () => {
+        if (!window.prettyReader.readAwayFromCaret({ row: 172, column: 330 })) return false;
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return !window.prettyReader.caretVisible() && window.prettyReader.positionAtTop().row === 172;
+      });
+    }).toBe(true);
+    for (const layout of ["pretty", "wrap"]) {
+      await expect.poll(() => page.evaluate(() => window.prettyReader.caretVisible())).toBe(false);
+      await expect.poll(() => page.evaluate(() => window.prettyReader.positionAtTop().row)).toBeGreaterThan(95);
+      const anchor = await page.evaluate(() => window.prettyReader.positionAtTop());
+      const before = await page.evaluate(target => window.prettyReader.distance(target), anchor);
+      expect(before).not.toBeNull();
+      await reader.getByTestId(`files-editor-layout-${layout}`).click();
+      await expect(reader.locator(".cm-den-reader")).toHaveCount(layout === "pretty" ? 0 : 1);
+      await expect.poll(() => page.evaluate(async ({ target, expected }) => {
+        let largest = 0;
+        for (let frame = 0; frame < 5; frame++) {
+          await new Promise(requestAnimationFrame);
+          const distance = window.prettyReader.distance(target);
+          if (distance === null) return Number.POSITIVE_INFINITY;
+          largest = Math.max(largest, Math.abs(distance - expected));
+        }
+        return largest;
+      }, { target: anchor, expected: before! }), {
+        message: `${layout} keeps row ${anchor.row} column ${anchor.column} at the viewport edge`,
+      }).toBeLessThanOrEqual(1);
+      await expect.poll(() => page.evaluate(() => window.prettyReader.caretVisible())).toBe(false);
+    }
+  });
+}

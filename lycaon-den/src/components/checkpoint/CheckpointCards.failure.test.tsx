@@ -13,6 +13,9 @@ import { CheckpointCards } from "./CheckpointCards.tsx";
 function mountCards(cards: PendingCheckpoint[], client: LycaonClient) {
   const appStore = createAppStore();
   appStore.actions.setCurrentSession({
+    mode: "agent" as const,
+    started: true,
+    root_session_id: "session-1",
     id: "session-1", project_id: "project", owner_person_id: "person",
     workspace_path: "/fixture", posture: "build", status: "busy",
     created_at: "t", activity_at: "t", updated_at: "t",
@@ -71,6 +74,9 @@ it("keeps a failed approval pending, shows its recovery on the card, and permits
   const appStore = createAppStore();
   const card = checkpoint();
   appStore.actions.setCurrentSession({
+    mode: "agent" as const,
+    started: true,
+    root_session_id: "session-1",
     id: "session-1", project_id: "project", owner_person_id: "person",
     workspace_path: "/fixture", posture: "build", status: "busy",
     created_at: "t", activity_at: "t", updated_at: "t",

@@ -241,6 +241,7 @@ vi.mock("../../platform/connection/app-connection.ts", async (importOriginal) =>
           inventory: {
             status: "ready",
             complete: true,
+            outside_root_id: "0e5f1c2a-6b7d-4e8f-9a0b-1c2d3e4f5a6b",
             roots_generation: 1,
             indexed_files: 0,
           },
@@ -279,6 +280,9 @@ export function filesViewTestFakes() {
   };
 }
 
+/** The fixture project's outside namespace. */
+export const OUTSIDE_ROOT_ID = "0e5f1c2a-6b7d-4e8f-9a0b-1c2d3e4f5a6b";
+
 export function sourceWorkspace(
   workspaceId = "workspace-1",
   roots: readonly ProjectRoot[] = ROOTS,
@@ -292,6 +296,7 @@ export function sourceWorkspace(
       path: root.path,
       watch: { state: "live", recursive: true, unwatched_directories: 0 },
     })),
+    outside_root_id: OUTSIDE_ROOT_ID,
     inventory: { status: "ready", complete: true, roots_generation: 0, indexed_files: 0 },
   };
 }

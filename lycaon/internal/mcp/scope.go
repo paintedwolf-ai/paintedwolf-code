@@ -14,6 +14,7 @@ const deviceScopeKey = "\x00device"
 // CallScope binds an MCP operation to one project and its confinement roots.
 // A zero value represents device scope.
 type CallScope struct {
+	AskMode bool
 	// ProjectID is the registry id of the project this operation serves.
 	ProjectID string
 	// ProjectDir is the primary root containing the project overlay.
@@ -24,7 +25,7 @@ type CallScope struct {
 
 // ScopeFromToolContext builds the scope for the invoking tool session.
 func ScopeFromToolContext(tctx tools.ToolContext) CallScope {
-	scope := CallScope{ProjectID: strings.TrimSpace(tctx.Identity.ProjectID)}
+	scope := CallScope{ProjectID: strings.TrimSpace(tctx.Identity.ProjectID), AskMode: tctx.Source.AskMode}
 	for _, root := range tctx.Source.Roots {
 		p := strings.TrimSpace(root.Path)
 		if p == "" {

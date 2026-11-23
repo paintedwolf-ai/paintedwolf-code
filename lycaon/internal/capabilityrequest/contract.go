@@ -57,7 +57,7 @@ func ValidateCapabilityContract(tool string, contract toolcontract.Contract, arg
 		if request.WriteRoot != "" && !contract.Supports(toolcontract.CapabilityWriteRoot) {
 			return unsupported("write_root")
 		}
-		if request.ReadPath != "" && !contract.Supports(toolcontract.CapabilityReadPath) {
+		if len(request.ReadPaths) > 0 && !contract.Supports(toolcontract.CapabilityReadPath) {
 			return unsupported("read_path")
 		}
 	}

@@ -139,7 +139,7 @@ func (m *Service) FormatDoomLoopReject(ctx context.Context, sessionID, tool stri
 		return nil, nil
 	}
 	reject, blocked, err := m.Block(ctx, oar.AnchorToolRejected, sess, tool, args, func(gc *oar.GuardContext) error {
-		m.ObserveDeferredUnactivated(gc, sess.ID)
+		m.ObserveDeferredUnactivated(ctx, gc, sess.ID)
 		loopguard.ObserveDoomLoopRepeat(gc, count, tool, repeatedCode, args)
 		return nil
 	})
@@ -212,6 +212,15 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 		oar.ObserveMCPStructuralPost(gc, tool, m.MCP, raised.Succeeded(), raised.ProviderErrorCode, output)
 	}
 	ObserveConfine(gc, raised.Confine)
+	if paths := m.optionalReads.observe(sess.ID, raised); len(paths) > 0 {
+		gc.Refusals.OptionalReadPaths = paths
+		gc.PutRejectData(optionalReadNoticeCode, map[string]any{"paths": paths})
+		defer func() {
+			if !facts.HasCode(optionalReadNoticeCode) {
+				m.optionalReads.release(sess.ID, paths)
+			}
+		}()
+	}
 	m.observeSocketResources(ctx, gc, sess.ProjectID)
 	RegisterWorktreeFacts(ctx, gc, raised.IndexWatch)
 	ObserveEditorConfigMismatch(gc, raised)
@@ -219,7 +228,7 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 	ObserveHTTPRequestWebPage(gc, raised)
 	ObserveHTTPRequestLoopbackOtherSession(gc, raised)
 	ObserveSourceParsingFeedback(gc, raised)
-	m.ObserveDeferredUnactivated(gc, sess.ID)
+	m.ObserveDeferredUnactivated(ctx, gc, sess.ID)
 	loopguard.ObserveDoomLoopWarn(gc, doomCompletionCountAfter, loopguard.DoomLoopMaxAttempts, tool, args)
 	if run, pattern := m.fruitlessSearchRun(sess, tool, args); run > 0 {
 		loopguard.ObserveFruitlessSearch(gc, run, tool, pattern)
@@ -232,7 +241,16 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 		facts.ContentReplaced = true
 		return "", facts.WithOutcome(api.ToolResultOutcomeError)
 	}
-	return m.feedback.DeliverPostToolResult(ctx, oar.AnchorToolPost, output, res)
+	delivered, facts = m.feedback.DeliverPostToolResult(ctx, oar.AnchorToolPost, output, res)
+	if raised.SharedTemp == nil && raised.Confine.Applied && raised.Confine.Running {
+		raised.SharedTemp = &guidance.SharedTempSettlement{Refused: raised.Confine.Refusals.SharedTempRoots(), Running: true}
+	}
+	if !facts.ContentReplaced && raised.SharedTemp != nil && len(raised.SharedTemp.Refused) > 0 && m.Pipeline.AnchorEnforced(oar.AnchorSharedTemp) {
+		var contribution guidance.ToolResultFacts
+		delivered, contribution = m.sharedTempResult(ctx, sess, tool, args, delivered, *raised.SharedTemp)
+		facts = facts.Merge(contribution)
+	}
+	return delivered, facts
 }
 
 // fruitlessSearchRun reads question-specific counts without recording an attempt.

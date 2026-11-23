@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -53,8 +54,8 @@ func TestAgentCommandLaunchInjectsPackageCacheEnv(t *testing.T) {
 				if !confine.PathAtOrUnder(fspath.CanonicalPath(val), fspath.CanonicalPath(cacheBase)) {
 					t.Fatalf("expected %s to point within %s, got %s", key, cacheBase, val)
 				}
-				root, err := confine.FilesystemRootForPath("", nil, nil, "", val)
-				if err != nil || fspath.CanonicalPath(root) != fspath.CanonicalPath(cacheBase) {
+				roots, err := confine.WriteRootsForBoundary("", nil, nil, "")
+				if err != nil || !slices.Contains(roots, fspath.CanonicalPath(cacheBase)) {
 					t.Fatalf("package execution cache %s is outside its actual default boundary: %v", key, err)
 				}
 				break

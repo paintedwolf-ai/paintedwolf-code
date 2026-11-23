@@ -1,3 +1,5 @@
+import { beginSessionModeAdmission, sessionModeView } from "../session/session-mode-state.ts";
+import { upgradeSessionMode } from "../session/session-mode-upgrade.ts";
 import { beginSessionSnapshotRead } from "../../api/session-snapshot-refresh.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type {
@@ -166,6 +168,7 @@ export async function startWorkflowForSession(
   projects: readonly Project[],
   req: Omit<StartWorkflowRunRequest, "operation_id"> & { operation_id?: string },
 ): Promise<WorkflowRun> {
+  const admission = beginSessionModeAdmission(appStore, sessionId, req.mode);
   const backendRead = beginSessionSnapshotRead(appStore, sessionId);
   try {
     const operationId = req.operation_id || crypto.randomUUID();
@@ -173,16 +176,20 @@ export async function startWorkflowForSession(
       appStore.state.activeWorkflowRun,
       appStore.state.workflowRuns,
     ) ?? appStore.state.activeWorkflowRun;
+    const intent = admission.mode ? { ...req, mode: admission.mode } : req;
     const command = reviewed
       ? {
-          ...req,
+          ...intent,
           operation_id: operationId,
           replace_run_id: reviewed.id,
           expected_revision: reviewed.revision,
         }
-      : { ...req, operation_id: operationId };
+      : { ...intent, operation_id: operationId };
     const run = await client.startWorkflowRun(sessionId, command);
-    if (backendRead.isSameBackend()) await refreshWorkflowState(appStore, client, sessionId, projectDir, projects);
+    if (backendRead.isSameBackend()) {
+      admission.confirm();
+      await refreshWorkflowState(appStore, client, sessionId, projectDir, projects);
+    }
     return run;
   } catch (err) {
     if (isApiErrorCode(err, WORKFLOW_CHANGED_CODES)) {
@@ -192,6 +199,7 @@ export async function startWorkflowForSession(
     throw err;
   } finally {
     backendRead.finish();
+    admission.finish();
   }
 }
 
@@ -260,6 +268,7 @@ export async function resumeActiveWorkflow(
 ): Promise<void> {
   const run = appStore.state.activeWorkflowRun;
   if (!run) return;
+  if (sessionModeView(appStore, sessionId).upgrade && !(await upgradeSessionMode(appStore, client, sessionId))) return;
   await mutateWorkflowAndRefresh(appStore, sessionId, projectDir, projects, client, () =>
     client.resumeWorkflowRun(run.id, { expected_revision: run.revision }),
   );
@@ -274,6 +283,7 @@ export async function advanceActiveWorkflow(
 ): Promise<void> {
   const run = appStore.state.activeWorkflowRun;
   if (!run) return;
+  if (sessionModeView(appStore, sessionId).upgrade && !(await upgradeSessionMode(appStore, client, sessionId))) return;
   await mutateWorkflowAndRefresh(appStore, sessionId, projectDir, projects, client, () =>
     client.advanceWorkflowRun(run.id, { expected_revision: run.revision }),
   );

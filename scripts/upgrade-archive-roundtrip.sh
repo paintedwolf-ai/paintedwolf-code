@@ -64,7 +64,7 @@ PROJECT="${SCRATCH}/project"
 cp -a "${FIXTURE}/project-root" "${PROJECT}"
 mv "${PROJECT}/${OVERLAY_FIXTURE_DIR}" "${PROJECT}/$(LYCAON_DEV=1 lycaon_overlay_dir)"
 PROJECT_ID="$(jq -r '.project_id' "${FIXTURE}/MANIFEST.json")"
-sqlite3 "${CONFIG}/store.db" "UPDATE project_roots SET path = '${PROJECT//\'/\'\'}' WHERE project_id = '${PROJECT_ID//\'/\'\'}';"
+sqlite3 "${CONFIG}/store.db" "UPDATE project_roots SET path = '${PROJECT//\'/\'\'}' WHERE project_id = '${PROJECT_ID//\'/\'\'}' AND is_primary = 1;"
 start_engine
 python3 "${ROOT}/scripts/upgrade-corpus-semantics.py" verify --base "${BASE}" \
   --token-file "${CONFIG}/api.token" --fixture "${FIXTURE}" --config-dir "${CONFIG}"

@@ -5,6 +5,7 @@
 Deliver the requested result. {% if execution_mode == "orchestrate" %}Coordinate the workflow: {% if profile_has_task %}dispatch parallel workers with `task`, {% endif %}resolve decisions, review results, and track remaining deliverables.{% elif execution_mode == "wrapup" %}Report the observed results and remaining limits from the available evidence.{% else %}{% if profile_has_write_tools %}Handle diagnosed small changes inline unless the user requests delegation. {% elif profile_can_request.command and profile_mutation_capable %}For implementation requests, load the needed tools, create or edit workspace files, and verify them unless the user requests delegation. {% endif %}{% if can_spawn_workers %}When delegating, prefer parallel execution across 2+ concurrent workers (independent components, tests, or research). Dispatch companion workers together or stage them while prior workers run.{% endif %}{% endif %}
 
 {% include "partials/workspace-roots.md" %}
+{% if profile_has_command or profile_can_request.command %}{% include "partials/temporary-storage.md" %}{% endif %}
 
 {% include "partials/coordinator-turn-recipe.md" %}
 {% include "partials/coordinator-text-and-citations.md" %}
@@ -31,10 +32,10 @@ Deliver the requested result. {% if execution_mode == "orchestrate" %}Coordinate
 
 {% if execution_mode == "orchestrate" %}A worker runs until it delivers, asks a blocking question or is stopped. A round notice tells you when a round runs long or goes quiet{% if profile_has_worker_cancel %}; stop it with **`worker_cancel`** only when it is no longer worth continuing{% endif %}.{% if profile_has_instruct_worker %} A worker that delivered, finished or failed keeps its conversation: send it corrections or the rest of the work with **`instruct_worker`**, and send related follow-up work to the worker that already knows the area.{% endif %}{% endif %}
 
-{% if can_orient or has_file_tools %}
+{% if can_orient %}
 ## Board and scans
 
-{% if can_orient %}A board line reading **`Scan: complete`** at the current head is already done — do not run it again; only `failed` or `stale` needs a fresh scan.{% if profile_has_scan_drilldown %} Read the finished one with `scan_summary`.{% endif %} **Findings are scan evidence — triage noise yourself; never ask the user to triage the scanner.**{% endif %}
+A board line reading **`Scan: complete`** at the current head is already done — do not run it again; only `failed` or `stale` needs a fresh scan.{% if profile_has_scan_drilldown %} Read the finished one with `scan_summary`.{% endif %} **Findings are scan evidence — triage noise yourself; never ask the user to triage the scanner.**
 {% endif %}
 
 {% if execution_mode == "orchestrate" %}{% if has_file_tools %}{% include "partials/coordination-loop.md" %}

@@ -407,6 +407,7 @@ describe("chat content Files pane", () => {
           pane: "raw",
           title: "app.py",
           path: "src/app.py",
+          rootId: "00000000-0000-4000-8000-000000000001",
           content: { kind: "inline", text: py },
         }}
       />

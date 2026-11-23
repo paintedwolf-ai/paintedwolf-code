@@ -27,11 +27,18 @@ func indexContext(context *api.SourceContext) contextIndex {
 func (index contextIndex) bind(ref api.NavigationReference) (api.NavigationReference, bool) {
 	qualified := strings.HasPrefix(ref.Mention, "@") || strings.Contains(ref.Mention, "://") || filepath.IsAbs(ref.Mention) || strings.HasPrefix(ref.Mention, "./")
 	var matches []api.NavigationTarget
+	seenFiles := map[string]bool{}
 	for _, target := range index[path.Base(ref.Path)] {
 		if target.ProjectID != ref.ProjectID || (qualified && (target.RootID != ref.RootID || target.WorkerID != ref.WorkerID)) {
 			continue
 		}
 		if target.Path == ref.Path || (!qualified && strings.HasSuffix(target.Path, "/"+ref.Path)) {
+			if target.FileID != "" {
+				if seenFiles[target.FileID] {
+					continue
+				}
+				seenFiles[target.FileID] = true
+			}
 			matches = append(matches, target)
 		}
 	}
@@ -50,6 +57,6 @@ func (index contextIndex) bind(ref api.NavigationReference) (api.NavigationRefer
 	}
 	target := matches[0]
 	ref.RootID, ref.Path, ref.WorkerID, ref.EntryKind = target.RootID, target.Path, target.WorkerID, target.EntryKind
-	ref.Status = api.NavigationResolved
+	ref.FileID, ref.Status = target.FileID, api.NavigationResolved
 	return ref, true
 }

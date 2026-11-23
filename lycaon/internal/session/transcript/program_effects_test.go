@@ -3,6 +3,7 @@ package transcript
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -48,10 +50,23 @@ func storedEdits(t *testing.T, sessionStore *store.Repositories, sessionID, call
 
 func TestProgramEffectsJoinTheStoredResultOfTheirCall(t *testing.T) {
 	svc, sessionStore, sessionID := programEffectsFixture(t)
-	testutil.FailErr(t, "store result", svc.Append(t.Context(), sessionID, commandRow("c1", textEdit("a.go", "1", "2"))))
-	svc.AppendProgramEffects(t.Context(), sessionID, "c1", []api.FileEditSnapshot{textEdit("a.go", "2", "3"), {RootID: "r1", Path: "b.go", After: "new"}}, 2)
+	row := commandRow("c1", textEdit("a.go", "1", "2"))
+	row.ToolResult.CardFacts = []api.ActionFact{{Kind: api.ActionFactSourceObservation, SourceWindows: []string{"pending"}}}
+	testutil.FailErr(t, "store result", svc.Append(t.Context(), sessionID, row))
+	gap := api.CommandFolderCoverage{Folder: "/outside", Coverage: api.SourceWindowCoverageNotObserved, Reason: api.SourceWindowGapIoError}
+	svc.AppendProgramEffects(t.Context(), sessionID, "c1", tools.ProgramEffects{
+		FileEdits:   []api.FileEditSnapshot{textEdit("a.go", "2", "3"), {RootID: "r1", Path: "b.go", After: "new"}},
+		Omitted:     2,
+		Observation: &api.ActionFact{Kind: api.ActionFactSourceObservation, SourceCoverage: []api.CommandFolderCoverage{gap}},
+	})
 	if got, omitted := storedEdits(t, sessionStore, sessionID, "c1"); got != "a.go:1>3 b.go:->new" || omitted != 2 {
 		t.Fatalf("stored %q with %d omitted, want the composed edit, the new file and 2", got, omitted)
+	}
+	stored, err := sessionStore.Transcript.GetMessage(t.Context(), sessionID, row.ID)
+	testutil.FailErr(t, "read command result", err)
+	if facts := stored.ToolResult.CardFacts; len(facts) != 1 || len(facts[0].SourceWindows) != 0 ||
+		len(facts[0].SourceCoverage) != 1 || facts[0].SourceCoverage[0].Folder != gap.Folder {
+		t.Fatalf("settled result facts = %+v", facts)
 	}
 }
 
@@ -68,7 +83,7 @@ func TestProgramEffectsWaitForTheirResultRow(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			svc, sessionStore, sessionID := programEffectsFixture(t)
-			svc.AppendProgramEffects(t.Context(), sessionID, "c1", []api.FileEditSnapshot{textEdit("late.go", "1", "2")}, 0)
+			svc.AppendProgramEffects(t.Context(), sessionID, "c1", tools.ProgramEffects{FileEdits: []api.FileEditSnapshot{textEdit("late.go", "1", "2")}})
 			testutil.FailErr(t, "store another result", appendRow(svc, t.Context(), sessionID, commandRow("c0")))
 			testutil.FailErr(t, "store result", appendRow(svc, t.Context(), sessionID, commandRow("c1")))
 			if got, _ := storedEdits(t, sessionStore, sessionID, "c1"); got != "late.go:1>2" {
@@ -77,8 +92,48 @@ func TestProgramEffectsWaitForTheirResultRow(t *testing.T) {
 			if got, _ := storedEdits(t, sessionStore, sessionID, "c0"); got != "" {
 				t.Fatalf("another call's result took %q", got)
 			}
-			if len(svc.programEdits.held) != 0 {
-				t.Fatalf("still holding %+v", svc.programEdits.held)
+			if len(svc.programEffects.held) != 0 {
+				t.Fatalf("still holding %+v", svc.programEffects.held)
+			}
+		})
+	}
+}
+
+func TestLateProgramLocationsJoinTheirFileEdit(t *testing.T) {
+	for _, lateFirst := range []bool{true, false} {
+		t.Run(fmt.Sprintf("effects first %t", lateFirst), func(t *testing.T) {
+			svc, sessionStore, sessionID := programEffectsFixture(t)
+			row := commandRow("outside")
+			before := api.NavigationTarget{ProjectID: "project", RootID: "attached", Path: "one.txt", EntryKind: api.NavigationEntryKindFile}
+			outside := api.NavigationTarget{ProjectID: "project", RootID: "outside", Path: "home/two.txt", FileID: "file-two", EntryKind: api.NavigationEntryKindFile}
+			view := &api.ViewContext{}
+			row.SourceContext = &api.SourceContext{Locations: []api.NavigationTarget{before}, View: view}
+			appendEffects := func() {
+				svc.AppendProgramEffects(t.Context(), sessionID, row.ToolResult.ToolCallID, tools.ProgramEffects{
+					FileEdits:     []api.FileEditSnapshot{{Path: "/home/two.txt", After: "two"}},
+					SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{before, outside}, Truncated: true},
+					Observation:   &api.ActionFact{Kind: api.ActionFactSourceObservation, SourceWindows: []string{"settled"}},
+				})
+			}
+			if lateFirst {
+				appendEffects()
+			}
+			testutil.FailErr(t, "store command result", svc.Append(t.Context(), sessionID, row))
+			if !lateFirst {
+				appendEffects()
+			}
+			msg, err := sessionStore.Transcript.GetMessage(t.Context(), sessionID, row.ID)
+			testutil.FailErr(t, "load command result", err)
+			if msg.SourceContext == nil || !slices.Equal(msg.SourceContext.Locations, []api.NavigationTarget{before, outside}) ||
+				!msg.SourceContext.Truncated || msg.SourceContext.View == nil {
+				t.Fatalf("source context = %+v", msg.SourceContext)
+			}
+			if len(msg.ToolResult.FileEdits) != 1 || msg.ToolResult.FileEdits[0].Path != "/home/two.txt" {
+				t.Fatalf("file edits = %+v", msg.ToolResult.FileEdits)
+			}
+			facts := msg.ToolResult.CardFacts
+			if len(facts) != 1 || facts[0].Kind != api.ActionFactSourceObservation || !slices.Equal(facts[0].SourceWindows, []string{"settled"}) {
+				t.Fatalf("observation facts = %+v", facts)
 			}
 		})
 	}
@@ -86,24 +141,24 @@ func TestProgramEffectsWaitForTheirResultRow(t *testing.T) {
 
 func TestProgramEffectsForAResultNeverStoredEndAtThePersonsNextMessage(t *testing.T) {
 	svc, sessionStore, sessionID := programEffectsFixture(t)
-	svc.AppendProgramEffects(t.Context(), sessionID, "c1", []api.FileEditSnapshot{textEdit("late.go", "1", "2")}, 0)
+	svc.AppendProgramEffects(t.Context(), sessionID, "c1", tools.ProgramEffects{FileEdits: []api.FileEditSnapshot{textEdit("late.go", "1", "2")}})
 	// A host prompt is not the person's message.
 	testutil.FailErr(t, "store host prompt", svc.Append(t.Context(), sessionID, api.Message{Role: api.MessageRoleUser, Content: "wake", Visibility: api.MessageVisibilityInternal}))
-	if len(svc.programEdits.held[sessionID]) != 1 {
+	if len(svc.programEffects.held[sessionID]) != 1 {
 		t.Fatal("a host prompt dropped the held edits")
 	}
 	testutil.FailErr(t, "store user message", svc.Append(t.Context(), sessionID, api.Message{Role: api.MessageRoleUser, Content: "next"}))
 	testutil.FailErr(t, "store result", svc.Append(t.Context(), sessionID, commandRow("c1")))
-	if got, _ := storedEdits(t, sessionStore, sessionID, "c1"); got != "" || len(svc.programEdits.held) != 0 {
-		t.Fatalf("stored %q and holding %+v after the person's next message", got, svc.programEdits.held)
+	if got, _ := storedEdits(t, sessionStore, sessionID, "c1"); got != "" || len(svc.programEffects.held) != 0 {
+		t.Fatalf("stored %q and holding %+v after the person's next message", got, svc.programEffects.held)
 	}
 }
 
 func TestProgramEffectsWithNothingToRecordHoldNothing(t *testing.T) {
 	svc, _, sessionID := programEffectsFixture(t)
-	svc.AppendProgramEffects(t.Context(), sessionID, "c1", nil, 0)
-	if len(svc.programEdits.held) != 0 {
-		t.Fatalf("holding %+v for a program that edited nothing", svc.programEdits.held)
+	svc.AppendProgramEffects(t.Context(), sessionID, "c1", tools.ProgramEffects{})
+	if len(svc.programEffects.held) != 0 {
+		t.Fatalf("holding %+v for a program that edited nothing", svc.programEffects.held)
 	}
 }
 
@@ -122,7 +177,7 @@ func TestProgramEffectsAreScreenedLikeTheRowTheyJoin(t *testing.T) {
 		return msg, true
 	})
 	testutil.FailErr(t, "store result", svc.Append(t.Context(), sessionID, commandRow("c1")))
-	svc.AppendProgramEffects(t.Context(), sessionID, "c1", []api.FileEditSnapshot{{RootID: "r1", Path: ".env", After: "TOKEN=hunter2"}}, 0)
+	svc.AppendProgramEffects(t.Context(), sessionID, "c1", tools.ProgramEffects{FileEdits: []api.FileEditSnapshot{{RootID: "r1", Path: ".env", After: "TOKEN=hunter2"}}})
 	if got, _ := storedEdits(t, sessionStore, sessionID, "c1"); got != ".env:->TOKEN=[redacted]" {
 		t.Fatalf("stored %q, want the appended text screened", got)
 	}
@@ -139,7 +194,7 @@ func TestProgramEffectsAreRecordedOnceWhateverTheOrder(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			svc.AppendProgramEffects(context.WithoutCancel(t.Context()), sessionID, callID, []api.FileEditSnapshot{textEdit("late.go", "1", "2")}, 0)
+			svc.AppendProgramEffects(context.WithoutCancel(t.Context()), sessionID, callID, tools.ProgramEffects{FileEdits: []api.FileEditSnapshot{textEdit("late.go", "1", "2")}})
 		}()
 		go func() {
 			defer wg.Done()

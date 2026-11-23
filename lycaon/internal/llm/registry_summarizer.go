@@ -182,19 +182,22 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 	return resp.Content, nil
 }
 
-func (r *RegistrySummarizer) localDefaultAvailable(ctx context.Context) bool {
-	return r != nil && r.Registry != nil && r.Registry.IncludedModelAvailable(ctx)
+func (r *RegistrySummarizer) localModel(ctx context.Context) string {
+	if r == nil || r.Registry == nil {
+		return ""
+	}
+	return r.Registry.IncludedModel(ctx)
 }
 
 func (r *RegistrySummarizer) coordinatorProvider(ctx context.Context) (modelcall.Provider, string, error) {
 	return r.slotProvider(ctx, func(p ModelPolicy) ModelRef {
-		return CoordinatorRefWithLocalDefault(p, r.localDefaultAvailable(ctx))
+		return CoordinatorRefWithLocalDefault(p, r.localModel(ctx))
 	}, "coordinator model not configured")
 }
 
 func (r *RegistrySummarizer) liteProvider(ctx context.Context) (modelcall.Provider, string, error) {
 	return r.slotProvider(ctx, func(p ModelPolicy) ModelRef {
-		return SummarizerRefWithLocalDefault(p, r.localDefaultAvailable(ctx))
+		return SummarizerRefWithLocalDefault(p, r.localModel(ctx))
 	}, "lite model not configured")
 }
 

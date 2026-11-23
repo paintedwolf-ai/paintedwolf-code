@@ -11,11 +11,20 @@ import (
 )
 
 // Activate verifies manifest authority and appends the manifest to the activation journal under lock.
-func (s *Store) Activate(signed SignedManifest) error {
+func (s *Store) Activate(signed SignedManifest) (resultErr error) {
+	lock, err := s.provisioningLock()
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
 	return s.activate(signed, false)
 }
 
-func (s *Store) activate(signed SignedManifest, repair bool) (resultErr error) {
+func (s *Store) activate(signed SignedManifest, repair bool) error {
+	return s.publish(signed, repair, false)
+}
+
+func (s *Store) publish(signed SignedManifest, repair, exclusive bool) error {
 	if s.signer == nil {
 		return errors.New("modelstore: no manifest authority configured")
 	}
@@ -32,22 +41,37 @@ func (s *Store) activate(signed SignedManifest, repair bool) (resultErr error) {
 	}
 	defer lock.Unlock()
 
-	if !s.Verified(m.Artifact.Digest) {
-		return fmt.Errorf("modelstore: artifact %s is not verified", m.Artifact.Digest)
-	}
-	for _, f := range m.Files {
-		if !s.Verified(f.Digest) {
-			return fmt.Errorf("modelstore: supplementary artifact %s is not verified", f.Digest)
+	keep := &m
+	if exclusive {
+		// The installer verified and pinned each payload before publication.
+		repair = true
+		keep = nil
+	} else {
+		for _, a := range manifestFiles(m) {
+			if !s.Verified(a.Digest) {
+				return fmt.Errorf("modelstore: artifact %s is not verified", a.Digest)
+			}
 		}
 	}
 	if err := s.recoverJournal(); err != nil {
 		return err
 	}
-	records, err := s.readRecords()
+	history, err := s.history()
 	if err != nil {
 		return err
 	}
-	for _, previous := range records {
+	if history.selection.State != "unconfigured" && !exclusive {
+		if !repair || history.selection.Model != m.Model || history.selection.Device != m.Device || history.selection.Revision != m.Revision {
+			return errors.New("modelstore: explicit selection required")
+		}
+		exclusive = true
+	}
+	if exclusive {
+		if err := s.checkEvictable(history.all, keep); err != nil {
+			return err
+		}
+	}
+	for _, previous := range history.all {
 		if s.revisionRel(previous) == s.revisionRel(m) && !sameManifest(previous, m) {
 			return fmt.Errorf("modelstore: revision identity collision for %s", s.revisionRel(m))
 		}
@@ -55,7 +79,16 @@ func (s *Store) activate(signed SignedManifest, repair bool) (resultErr error) {
 	if _, err := s.materializeRevision(m, repair); err != nil {
 		return err
 	}
-	line, err := json.Marshal(journalRecord{Version: 1, Signed: signed})
+	record := journalRecord{Version: 1, Signed: signed}
+	if exclusive {
+		record.Version = 2
+		record.Selection = "selected"
+	}
+	return s.appendRecord(record)
+}
+
+func (s *Store) appendRecord(record journalRecord) (resultErr error) {
+	line, err := json.Marshal(record)
 	if err != nil {
 		return err
 	}

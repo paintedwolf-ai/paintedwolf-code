@@ -7,10 +7,10 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/oarcore"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -37,7 +37,7 @@ func TestHintWhenExpressionsValidate(t *testing.T) {
 		t.Fatalf("bundled policy loaded %d rules and none carries a when", rs.Len())
 	}
 	for _, id := range []string{"mode_is", "mode_unresolved", "den_status", "stage_plan_complete", "user_input_clarify"} {
-		if !conditions.IsForbidden(id) {
+		if !vocabulary.IsForbidden(id) {
 			t.Fatalf("%q is not a forbidden condition id", id)
 		}
 		var unknown *oarcore.TypeError

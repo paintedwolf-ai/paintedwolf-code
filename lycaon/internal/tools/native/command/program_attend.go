@@ -59,7 +59,7 @@ type programEvaluation struct {
 	outputs        *invocation.ProgramOutputRetention
 	scope          captureprojection.Scope
 	paths          *projectpaths.ProgramPaths
-	verification   func() commandSourceIdentity
+	verification   *programVerificationSource
 	failureAttempt *commandFailureAttempt
 	release        func()
 	// callTC is the call's own tool context; evaluation writes its effects to
@@ -67,11 +67,43 @@ type programEvaluation struct {
 	callTC tools.ToolContext
 }
 
-// programEnding is a program's result once evaluation and settlement end.
+type programSettlement struct {
+	outcome         ProgramOutcome
+	releaseFeedback func()
+}
+
+// programEnding holds the terminal outcome and timing for its delivery route.
 type programEnding struct {
-	done   chan struct{}
-	result string
-	err    error
+	done       chan struct{}
+	settlement programSettlement
+	err        error
+	finishedAt time.Time
+	personWait time.Duration
+	encodeOnce sync.Once
+	encoded    string
+	encodeErr  error
+}
+
+func (e *programEnding) content() (string, error) {
+	if e.err != nil {
+		return "", e.err
+	}
+	e.encodeOnce.Do(func() {
+		defer e.releaseNotices()
+		out, err := surveyjson.Marshal(e.settlement.outcome)
+		if err != nil {
+			e.encodeErr = fmt.Errorf("command program encode: %w", err)
+			return
+		}
+		e.encoded = string(out)
+	})
+	return e.encoded, e.encodeErr
+}
+
+func (e *programEnding) releaseNotices() {
+	if release := e.settlement.releaseFeedback; release != nil {
+		release()
+	}
 }
 
 // attend returns completion, parks an explicit wait, or exposes a running
@@ -81,14 +113,17 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	lifetime := &programLifetime{release: e.release}
 	e.release = lifetime.settled
 	defer lifetime.callerDone()
-	budget := newForegroundBudget(r.clock(), toolcontract.ProgramInlineWait)
+	startedAt := e.ports.Clock.Now()
+	budget := newForegroundBudget(e.ports.Clock, toolcontract.ProgramInlineWait)
 	defer budget.Close()
 	expired := budget.Expired()
 	e.waits = &programWaits{budget: budget}
 	e.ctx = hitl.WithHumanWaitObserver(e.ctx, e.waits)
 	//nolint:contextcheck // Detached evaluation outlives a parked call.
 	go func() {
-		ending.result, ending.err = r.finish(e)
+		ending.settlement, ending.err = r.finish(e)
+		ending.finishedAt = e.ports.Clock.Now()
+		ending.personWait = e.waits.personWait(ending.finishedAt)
 		close(ending.done)
 	}()
 	for waiting := true; waiting; {
@@ -101,7 +136,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 				waiting = false
 			default:
 				if callCtx.Err() == nil {
-					return r.continueProgram(callCtx, e, ending)
+					return r.continueProgram(callCtx, e, ending, startedAt)
 				}
 				expired = nil
 			}
@@ -116,9 +151,12 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		program := e.run.tc.Effects.Out
 		out.MergeChild(program, tools.MergeProgram)
 		out.CommandProgram, out.SourceRun = program.CommandProgram, program.SourceRun
+		out.ProgramRefusal = program.ProgramRefusal
 	}
+	r.reviewSharedTemp(callCtx, e.callTC, e.run.tool, e.run.source, false)
+	stateObservation(e.callTC, e.run.window.fact())
 	stateGitNoRepository(e)
-	return ending.result, ending.err
+	return ending.content()
 }
 
 // stateGitNoRepository puts the program's write-leg Git miss on the call's
@@ -165,7 +203,8 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		<-ending.done
 		r.recordParkedRun(settleCtx, run)
 		r.recordDetachedEffects(settleCtx, run)
-		parked.Settle(settleCtx, ending.result, ending.err)
+		content, err := ending.content()
+		parked.Settle(settleCtx, content, err)
 	}()
 	if out := e.callTC.Effects.Out; out != nil {
 		out.MergeChild(run.tc.Effects.Out.TakeCommitted(), tools.MergeProgram)
@@ -173,6 +212,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 			out.CommandProgram = &receipt
 		}
 	}
+	e.observeRunningConfinement()
 	stateGitNoRepository(e)
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
 	if run.tool == "verify" {
@@ -198,8 +238,8 @@ func (r *ProgramRuntime) interruptProgram(ctx context.Context, run *programRun, 
 	defer stop()
 	select {
 	case <-ending.done:
-		if ending.err == nil {
-			return ending.result
+		if content, err := ending.content(); err == nil {
+			return content
 		}
 	case <-ctx.Done():
 	case <-expired:
@@ -224,15 +264,16 @@ func (r *ProgramRuntime) recordParkedRun(ctx context.Context, run *programRun) {
 	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, run.tool, *capture)
 }
 
-// recordDetachedEffects hands the file edits a program made after its call
-// returned to that call's stored result. The call took what came before, so
-// each edit is recorded once.
+// Commit effects recorded after the program's tool result was published.
 func (r *ProgramRuntime) recordDetachedEffects(ctx context.Context, run *programRun) {
 	late := run.tc.Effects.Out.TakeCommitted()
 	if r.Effects == nil {
 		return
 	}
-	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, late.FileEdits, late.FileEditsOmitted)
+	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, tools.ProgramEffects{
+		FileEdits: late.FileEdits, Omitted: late.FileEditsOmitted,
+		SourceContext: late.SourceContext, Observation: observationFact(run.window.fact()),
+	})
 }
 
 // ReceiptResult is a program's result as its durable receipts record it, for
@@ -282,9 +323,8 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 	return string(content), err
 }
 
-// finish evaluates the program under supervision, settles it and returns its
-// bounded result, whether the call still holds it or it parked.
-func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
+// finish evaluates, settles and projects the program's terminal facts.
+func (r *ProgramRuntime) finish(e *programEvaluation) (programSettlement, error) {
 	run, ctx := e.run, e.ctx
 	defer e.call.end()
 	var evaluated commandprogram.ProgramOutcome
@@ -318,19 +358,27 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 		feedbackCtx = context.WithoutCancel(ctx)
 	}
 	refusal, releaseFeedback, feedbackErr := r.feedback(feedbackCtx, run, e.dispatcher, e.stderr, evalErr)
-	defer releaseFeedback()
 	if feedbackErr != nil || settleErr != nil {
-		return "", errors.Join(feedbackErr, settleErr)
+		releaseFeedback()
+		return programSettlement{}, errors.Join(feedbackErr, settleErr)
 	}
 	// Settlement and bounded result projection survive cancellation; they cannot
 	// start another program operation.
 	outcome, err := r.outcome(context.WithoutCancel(ctx), run, e.outputs, result, e.stdout, e.stderr, e.scope)
 	if err != nil {
-		return "", err
+		releaseFeedback()
+		return programSettlement{}, err
 	}
 	outcome.Refusal = refusal
+	if refusal != nil && outcome.State == "rejected" {
+		run.tc.Effects.Out.ProgramRefusal = &tools.ProgramRefusalVisibility{
+			Code:            refusal.Code,
+			BeforeAdmission: !outcome.hasAdmittedActivity && outcome.CompletedEffects == 0 && outcome.UncertainEffects == 0,
+		}
+	}
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	outcome.SourceWindow = run.window.fact()
+	outcome.LaunchDrafts = run.drafts.Unsaved()
 	if settledNow {
 		recordProgramAttempt(r.FailureTracker, e.failureAttempt, ctx, outcome)
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
@@ -342,11 +390,13 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	if run.tool == "verify" {
 		outcome.ResultVersion = 2
 	}
-	out, err := surveyjson.Marshal(outcome)
-	if err != nil {
-		return "", fmt.Errorf("command program encode: %w", err)
+	settlement := programSettlement{outcome: outcome}
+	if refusal != nil {
+		settlement.releaseFeedback = sync.OnceFunc(releaseFeedback)
+	} else {
+		releaseFeedback()
 	}
-	return string(out), nil
+	return settlement, nil
 }
 
 // programLifetime releases a program's plan and frame once both the tool call
@@ -380,22 +430,20 @@ func (l *programLifetime) settled() {
 // stampProgramRun states the settled program's run for verification evidence:
 // passed on status 0, failed otherwise, unverifiable when the host stopped it.
 // A program whose jobs still run states nothing.
-func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resolved, outcome ProgramOutcome, verification func() commandSourceIdentity) {
+func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resolved, outcome ProgramOutcome, verification *programVerificationSource) {
 	if tc.Effects.Out == nil {
 		return
 	}
+	identity, mixed := verification.result()
 	verdict := api.SourceVerdictPassed
 	switch {
-	case outcome.Refusal != nil || outcome.State == "interrupted":
+	case mixed || outcome.Refusal != nil || outcome.State == "interrupted":
 		verdict = api.SourceVerdictUnverifiable
 	case outcome.Status != 0:
 		verdict = api.SourceVerdictFailed
 	}
 	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, ProgramID: outcome.ProgramID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
-	if tc.Execution.VerificationCheck && verification != nil {
-		identity := verification()
-		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
-	}
+	run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
 	tc.Effects.Out.SourceRun = run
 	if tc.Execution.VerificationCheck && verdict == api.SourceVerdictUnverifiable {
 		tc.Effects.Out.Facts = guidance.ToolResultFacts{}.WithCode(toolrejection.VerifyUnverifiableCode).Merge(tc.Effects.Out.Facts)

@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -79,7 +80,11 @@ func (m *Service) turnToolSets(ctx context.Context, sess *api.Session, profileID
 	if policy == nil {
 		return nil, nil, nil
 	}
-	metas := policy.ListForPrompt(ctx, sess, profileID)
+	listCtx := ctx
+	if guard.IsCoordinatorProfile(profileID) && surfaceID != "" {
+		listCtx = toolpolicy.WithCoordinatorSurface(ctx, surfaceID)
+	}
+	metas := policy.ListForPrompt(listCtx, sess, profileID)
 	byName := make(map[string]tools.ToolMeta, len(metas))
 	for _, meta := range metas {
 		byName[meta.Name] = meta
@@ -98,7 +103,11 @@ func (m *Service) turnToolSets(ctx context.Context, sess *api.Session, profileID
 		}
 		return floor, loadable, cards
 	}
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, rootCount)
+	profile := surface.TurnProfile{SurfaceID: surfaceID}
+	if sess != nil {
+		profile.SessionMode = sess.Mode
+	}
+	plan, err := surface.CompileToolPlan(profile, rootCount)
 	if err != nil {
 		return nil, nil, nil
 	}

@@ -59,7 +59,14 @@ func (c saveCommitter) recoverMutation(ctx context.Context, p *project.Project, 
 		if rootErr != nil {
 			return s.abandonRecovery(ctx, document, mutation, rootErr)
 		}
-		raw, readErr := readPublicationPreimage(root, mutation.Path)
+		if document.Path != mutation.Path || document.RootID != mutation.RootID {
+			return s.abandonRecovery(ctx, document, mutation, projectsource.ErrSourceWriteConflict)
+		}
+		identity, parentErr := s.publicationParent(ctx, root, document)
+		if parentErr != nil {
+			return s.abandonRecovery(ctx, document, mutation, parentErr)
+		}
+		raw, readErr := readPublicationPreimage(root, mutation.Path, identity)
 		// A publication that expected no file resumes while the path is still free.
 		current := ""
 		switch {
@@ -105,6 +112,14 @@ func (c saveCommitter) mutationMatchesDisk(ctx context.Context, m *Mutation) boo
 	if err != nil {
 		return false
 	}
-	raw, err := readPublicationPreimage(root, m.Path)
+	document, err := c.s.store.Get(ctx, m.DocumentID)
+	if err != nil || document.Path != m.Path || document.RootID != m.RootID {
+		return false
+	}
+	identity, err := c.s.publicationParent(ctx, root, document)
+	if err != nil {
+		return false
+	}
+	raw, err := readPublicationPreimage(root, m.Path, identity)
 	return err == nil && textfile.SHA256(raw) == m.AfterSHA256
 }

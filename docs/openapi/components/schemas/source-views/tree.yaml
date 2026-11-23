@@ -59,6 +59,10 @@ components:
         review:
           $ref: "#/components/schemas/SourceTreeReviewScope"
           x-go-pointer: true
+        chat_id:
+          type: "string"
+          format: "uuid"
+          description: "Chat whose outside locations are shown. Omit for project folders only."
     SourceTreeViewCreate:
       x-go-generate: true
       type: "object"
@@ -107,6 +111,7 @@ components:
         - "workspace_id"
         - "intent"
         - "roots"
+        - "outside_locations"
         - "loading_directories"
       properties:
         kind:
@@ -147,6 +152,14 @@ components:
           type: "array"
           items:
             $ref: "../project/identity.yaml#/components/schemas/ProjectRoot"
+        outside_locations:
+          type: "array"
+          description: >
+            The view's chat's visible locations outside the project, in tree
+            order after the roots. Each is also a tree root whose id is the
+            location id.
+          items:
+            $ref: "../project/source-outside.yaml#/components/schemas/SourceChatLocation"
         loading_directories:
           type: "integer"
           minimum: 0
@@ -227,6 +240,21 @@ components:
         scope:
           $ref: "#/components/schemas/SourceTreeReviewScope"
           x-go-pointer: true
+    SourceTreeSelectChat:
+      x-go-generate: true
+      type: "object"
+      additionalProperties: false
+      required:
+        - "kind"
+      properties:
+        kind:
+          type: "string"
+          enum:
+            - "select_chat"
+        chat_id:
+          type: "string"
+          format: "uuid"
+          description: "Chat whose outside locations are shown. Omit for project folders only."
     SourceTreeCommand:
       oneOf:
         -
@@ -239,9 +267,12 @@ components:
           $ref: "#/components/schemas/SourceTreeFilter"
         -
           $ref: "#/components/schemas/SourceTreeReview"
+        -
+          $ref: "#/components/schemas/SourceTreeSelectChat"
       discriminator:
         propertyName: "kind"
         mapping:
+          select_chat: "#/components/schemas/SourceTreeSelectChat"
           toggle: "#/components/schemas/SourceTreeToggle"
           disclose: "#/components/schemas/SourceTreeDisclose"
           reveal: "#/components/schemas/SourceTreeReveal"

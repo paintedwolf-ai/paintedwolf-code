@@ -183,8 +183,8 @@ func fakeRoutes(store *db.Store) *http.ServeMux {
 	routes.HandleFunc("POST /v1/sessions", func(w http.ResponseWriter, r *http.Request) {
 		var request api.CreateSessionRequest
 		_ = json.NewDecoder(r.Body).Decode(&request)
-		_, err := store.ExecContext(r.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at)
-VALUES ('fake-session', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`, request.ProjectID)
+		_, err := store.ExecContext(r.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode)
+VALUES ('fake-session', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'fake-session', 'agent')`, request.ProjectID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

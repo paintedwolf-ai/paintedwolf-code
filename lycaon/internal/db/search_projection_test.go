@@ -147,9 +147,18 @@ func TestToolResultPathUpgradeRepairsPagedProjectionAndFTS(t *testing.T) {
 	testutil.FailErr(t, "copy released corpus", os.WriteFile(path, raw, 0o600))
 	database, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "open projection fixture", err)
-	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
+	var projectID, rootID string
+	testutil.FailErr(t, "read released project root", database.QueryRowContext(t.Context(), `
+		SELECT project_id, id FROM project_roots WHERE is_primary = 1 ORDER BY project_id LIMIT 1
+	`).Scan(&projectID, &rootID))
 	const session = "path-repair"
-	testdbseed.InsertSessionWithRoot(t, database, session, testdbseed.DefaultProjectID, t.TempDir())
+	_, err = database.ExecContext(t.Context(), `
+		INSERT INTO sessions (
+			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at
+		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle',
+			'2026-10-15T00:00:00Z', '2026-10-15T00:00:00Z', '2026-10-15T00:00:00Z')
+	`, session, projectID, rootID)
+	testutil.FailErr(t, "seed released session", err)
 	tx, err := database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin retained observation fixture", err)
 	const target = "\u00a0observations.txt\t"
@@ -161,7 +170,7 @@ func TestToolResultPathUpgradeRepairsPagedProjectionAndFTS(t *testing.T) {
 		testdbseed.InsertSessionEntry(t, tx, id, session, "model_output", id, int64(i+1))
 		_, err = tx.ExecContext(t.Context(), `INSERT INTO messages(id,entry_id,session_id,role,content,tool_result_json,origin,authority,trust_tier,ord,seq,ts) VALUES(?,?,?,'tool','original observation',?,'tool','none','untrusted',?,?,'2026-10-15T00:00:00Z')`, id, id, session, string(raw), i+1, i+1)
 		testutil.FailErr(t, "insert retained observation", err)
-		testutil.FailErr(t, "index original result", search.SyncMessageWriteThrough(t.Context(), tx, testdbseed.DefaultProjectID, session, api.Message{ID: id, Role: api.MessageRoleTool, Content: "original observation", ToolResult: result}))
+		testutil.FailErr(t, "index original result", search.SyncMessageWriteThrough(t.Context(), tx, projectID, session, api.Message{ID: id, Role: api.MessageRoleTool, Content: "original observation", ToolResult: result}))
 	}
 	_, err = tx.ExecContext(t.Context(), `UPDATE evidence_index SET path=NULL WHERE session_id=?`, session)
 	testutil.FailErr(t, "emulate missing projection paths", err)

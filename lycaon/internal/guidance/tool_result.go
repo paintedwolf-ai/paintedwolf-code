@@ -3,6 +3,7 @@ package guidance
 import (
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,7 +19,7 @@ func ComposeToolResult(content string, facts ToolResultFacts, hints *HintConfig)
 		Outcome:      facts.Resolution(),
 		Codes:        append([]string(nil), facts.Codes...),
 		Feedback:     feedbackForFacts(facts),
-		UiVisibility: uiVisibilityForFacts(hints, facts),
+		UiVisibility: UiVisibilityForCode(hints, facts.PrimaryCode()),
 	}
 }
 
@@ -64,11 +65,10 @@ func ApplyTaskDispatchMetadata(toolName string, tr *api.ToolResult, dispatch *ap
 	tr.UiVisibility = api.ToolResultUiVisibilityNormal
 }
 
-// uiVisibilityForFacts maps the primary raised code to quiet chrome. A result
-// that raised nothing has no banner to quiet, so it stays visible.
-func uiVisibilityForFacts(hints *HintConfig, facts ToolResultFacts) api.ToolResultUiVisibility {
-	code := facts.PrimaryCode()
-	if code == "" {
+// UiVisibilityForCode classifies a raised code for quiet mode.
+func UiVisibilityForCode(hints *HintConfig, code string) api.ToolResultUiVisibility {
+	switch code {
+	case "", approvaloutcome.CodeApprovalDenied, approvaloutcome.CodeApprovalExpired, approvaloutcome.CodeApprovalCanceled:
 		return api.ToolResultUiVisibilityNormal
 	}
 	if hints != nil {

@@ -1,0 +1,8 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: This workflow needs Agent
+message: The requested workflow phase requires Agent mode.
+suggested_action: Switch this chat to Agent to use the workflow phase.
+scenarios:
+  - id: default
+    vars: {}

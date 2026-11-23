@@ -13,8 +13,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/inference"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
+	"github.com/lycaon/lycaon/internal/modelstore"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -163,6 +166,39 @@ var projectRecipes = map[string]successRecipe{
 		}, nil
 	}},
 	"repairLocalGeneration": {prepare: func(_ context.Context, _ *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+		return successInputs{params: map[string]string{"provider_id": llm.IncludedProviderID}}, nil
+	}},
+	"getLocalModelStatus": {prepare: func(_ context.Context, _ *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+		return successInputs{params: map[string]string{"provider_id": llm.IncludedProviderID}}, nil
+	}},
+	"cancelLocalModelTransfer": {prepare: func(_ context.Context, _ *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+		return successInputs{params: map[string]string{"provider_id": llm.IncludedProviderID}}, nil
+	}},
+	"selectLocalModel": {
+		prepare: func(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+			if err := projectRecipeEnsureLocalModelRuntime(s); err != nil {
+				return successInputs{}, err
+			}
+			return successInputs{
+				params: map[string]string{"provider_id": llm.IncludedProviderID},
+				fields: map[string]any{
+					"model":         nativegen.DefaultModelID,
+					"bundle_path":   s.fixture.t.TempDir(),
+					"packaged_seed": false,
+				},
+			}, nil
+		},
+		after: func(s *conformanceSweep) {
+			if s.host != nil {
+				_ = s.host.Server.Admin.Models.Registry().CancelLocalModelTransfer(context.Background())
+				s.host.Server.WaitForBackground(context.Background())
+			}
+		},
+	},
+	"deleteLocalModel": {prepare: func(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+		if err := projectRecipeEnsureLocalModelRuntime(s); err != nil {
+			return successInputs{}, err
+		}
 		return successInputs{params: map[string]string{"provider_id": llm.IncludedProviderID}}, nil
 	}},
 }
@@ -485,4 +521,31 @@ func projectRecipeCancelPromotion(ctx context.Context, s *conformanceSweep, _ *c
 		return successInputs{}, err
 	}
 	return successInputs{params: map[string]string{"id": id}}, nil
+}
+
+type projectLocalModelState struct {
+	runtime *nativegen.Runtime
+}
+
+func projectRecipeEnsureLocalModelRuntime(s *conformanceSweep) error {
+	if s.host == nil {
+		return errors.New("no host to attach a local generation runtime to")
+	}
+	state := s.memo.loadOrStore("local-model-runtime", &projectLocalModelState{}).(*projectLocalModelState)
+	if state.runtime == nil {
+		store := modelstore.New(s.fixture.t.TempDir(), nil)
+		hostBudget, _ := inference.NewMemoryBudget(8 << 30)
+		deviceBudget, _ := inference.NewMemoryBudget(8 << 30)
+		rt := nativegen.NewRuntime(nativegen.RuntimeConfig{
+			ModelStore:    store,
+			PhysicalBytes: 16 << 30,
+			HostMemory:    hostBudget,
+			DeviceMemory:  deviceBudget,
+			UnifiedMemory: true,
+		})
+		s.fixture.t.Cleanup(func() { _ = rt.Close() })
+		s.host.Server.Admin.Models.Registry().SetLocalGeneration(rt, store)
+		state.runtime = rt
+	}
+	return nil
 }

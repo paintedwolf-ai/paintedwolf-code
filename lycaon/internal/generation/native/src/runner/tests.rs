@@ -6,7 +6,14 @@ use std::io::Cursor;
 struct NoDevice;
 impl Backend for NoDevice {
     fn plan(_: &std::path::Path, context: usize, chunk: usize) -> Result<crate::resources::Plan> {
-        crate::resources::Plan::e4b(3 << 30, 2 << 30, context, chunk, false)
+        crate::resources::Plan::for_model(
+            crate::profile::E4B,
+            3 << 30,
+            2 << 30,
+            context,
+            chunk,
+            false,
+        )
     }
     fn forward(&mut self, _: &[u32], _: Option<&mut Sampling>) -> Result<Option<u32>> {
         panic!("unexpected device work")

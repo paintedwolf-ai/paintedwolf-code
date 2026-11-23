@@ -121,13 +121,11 @@ func appendSSEOrdCases() []sseOrdCase {
 		case wire.MessageKindProgressUpdate:
 			msg.ProgressUpdate = &wire.ProgressUpdateMeta{
 				Initial: true,
-				Seq:     1,
 				Steps:   []wire.ProgressStep{{State: "pending", Label: "a"}},
 			}
 			msg.Content = ""
 		case wire.MessageKindProgressComplete:
 			msg.ProgressComplete = &wire.ProgressCompleteMeta{
-				Seq:   1,
 				Steps: []wire.ProgressStep{{State: "done", Label: "a"}},
 			}
 			msg.Content = ""

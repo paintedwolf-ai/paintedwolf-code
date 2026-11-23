@@ -61,6 +61,9 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 	if e == nil || e.deps.ToolLister == nil {
 		return nil
 	}
+	if sess != nil && strings.TrimSpace(sess.ID) != "" {
+		ctx = sandbox.WithSessionID(ctx, sess.ID)
+	}
 	filter := platform.ToolFilter{
 		ProfileID: profileID,
 		SurfaceID: coordinatorSurfaceFromContext(ctx),
@@ -78,6 +81,9 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 	out := make([]tools.ToolMeta, 0, len(base))
 	facts := sync.OnceValues(func() (policyFacts, error) { return capturePolicyFacts(ctx, e.deps, sess) })
 	for _, meta := range base {
+		if sess != nil && sess.Mode == api.SessionModeAsk && !tools.AllowedInAsk(meta) {
+			continue
+		}
 		// A profile grants capability; only the session says which shape is running.
 		if !toolcontract.AdmitsSession(meta.Name, workerChild) {
 			continue

@@ -75,11 +75,26 @@ func OpenWrite(loc Location, appendMode bool, mode os.FileMode) (*os.File, error
 	return os.NewFile(uintptr(fd), filepath.Join(parent.rootPath, parent.rel, parent.name)), nil
 }
 
+func openReplacementParent(req ReplaceRequest) (*openedParent, error) {
+	parent, err := openParent(req.Location, req.ExpectedParentIdentity == "", req.dirMode())
+	if err != nil {
+		return nil, err
+	}
+	if req.ExpectedParentIdentity != "" {
+		actual, err := parentDirectoryIdentity(parent)
+		if err != nil || actual != req.ExpectedParentIdentity {
+			parent.close()
+			return nil, ErrPredicateChanged
+		}
+	}
+	return parent, nil
+}
+
 func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, Result, error) {
 	if req.Source == nil {
 		return nil, Result{}, fmt.Errorf("atomic filesystem effect request is incomplete")
 	}
-	parent, err := openParent(req.Location, true, req.dirMode())
+	parent, err := openReplacementParent(req)
 	if err != nil {
 		return nil, Result{}, err
 	}
@@ -139,8 +154,11 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 	staged.publish = func() (Result, error) {
 		unlock := lockTarget(req.Location)
 		defer unlock()
-		if req.ReviewStaged != nil {
+		if req.ReviewStaged != nil || req.ExpectedParentIdentity != "" {
 			if err := verifyReviewedParent(req.Location, parent); err != nil {
+				if req.ExpectedParentIdentity != "" {
+					err = errors.Join(ErrPredicateChanged, err)
+				}
 				return result, err
 			}
 		}
@@ -398,11 +416,6 @@ func Rename(root, fromRel, toRel string) error {
 	return renameEntry(root, fromRel, toRel, true, "")
 }
 
-// RenameNoReplace publishes an entry without overwriting a concurrent occupant.
-func RenameNoReplace(root, fromRel, toRel string) error {
-	return renameEntry(root, fromRel, toRel, false, "")
-}
-
 // RenameGuarded refuses replacement and checks the source through its held parent.
 func RenameGuarded(root, fromRel, toRel, expected string) error {
 	if expected == "" {
@@ -417,6 +430,14 @@ func RelocateGuarded(from, to Location, expected string) error {
 		return ErrPostcondition
 	}
 	return relocateEntry(from, to, false, expected)
+}
+
+// ReplaceByRelocateGuarded moves an identified entry over a destination.
+func ReplaceByRelocateGuarded(from, to Location, expected string) error {
+	if expected == "" {
+		return ErrPostcondition
+	}
+	return relocateEntry(from, to, true, expected)
 }
 
 func renameEntry(root, fromRel, toRel string, replace bool, expected string) error {

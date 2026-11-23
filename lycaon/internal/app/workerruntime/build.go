@@ -39,7 +39,7 @@ type Dependencies struct {
 	Providers                 providers.Runtime
 	Coordinator               func() *coordinator.Runtime
 	StartOrchestratedTopology func(ctx context.Context, sessionID string, run *wire.WorkflowRun)
-	Progress                  func() progress.RunScopedStore
+	Progress                  func() progress.Store
 }
 
 // BuildWorkers constructs workers, executors, cancellations, and links workflow hooks.

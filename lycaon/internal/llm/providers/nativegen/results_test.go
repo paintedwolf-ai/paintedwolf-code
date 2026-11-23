@@ -3,6 +3,8 @@ package nativegen
 import (
 	"math"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestResourceAdmissionRejectsInvalidPlansBeforeReservation(t *testing.T) {
@@ -19,4 +21,9 @@ func TestResourceAdmissionRejectsInvalidPlansBeforeReservation(t *testing.T) {
 			t.Fatalf("accepted invalid plan: %+v", plan)
 		}
 	}
+}
+
+func TestResourceAdmissionWithoutPerLayerEmbeddings(t *testing.T) {
+	plan := resourcePlan{ResidentWeightsBytes: 4, KVCapacityBytes: 2, WorkspaceBytes: 3, DeviceReservationBytes: 9, HostReservationBytes: 5}
+	testutil.FailErr(t, "validate plan without per-layer embeddings", plan.validate())
 }

@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 // SocketOp is a socket syscall the supervisor decides and performs.
@@ -56,6 +57,7 @@ const (
 	// sockets go there, connected or listening, so none can be pointed at a
 	// new destination afterwards.
 	HostSocket
+	SessionSocket
 )
 
 // Decision is the supervisor's verdict and, when the operation will not reach
@@ -110,6 +112,9 @@ func (n Network) decideUnix(r SocketRequest) Decision {
 		// Abstract names belong to the sandbox's own network namespace.
 		return Decision{Action: Perform}
 	case r.Op == OpBind:
+		if n.sessionSocket(r) {
+			return Decision{Action: SessionSocket}
+		}
 		return refuse("network-bind", r.Unix)
 	case !r.Stream && !r.Seqpacket:
 		return refuse("network-outbound", r.Unix)
@@ -135,7 +140,14 @@ func (n Network) decideUnix(r SocketRequest) Decision {
 			return Decision{Action: Perform, SocketFD: grant.FD}
 		}
 	}
+	if n.sessionSocket(r) {
+		return Decision{Action: SessionSocket}
+	}
 	return refuse("network-outbound", r.Unix)
+}
+
+func (n Network) sessionSocket(r SocketRequest) bool {
+	return n.SessionSocketRoot != "" && !r.HostSocket && (r.Stream || r.Seqpacket) && strings.HasPrefix(filepath.Clean(r.Unix), n.SessionSocketRoot+"/")
 }
 
 func (n Network) decideOutbound(r SocketRequest) Decision {

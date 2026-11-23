@@ -106,6 +106,7 @@ describe("Git walk review", () => {
     const pending = deferred<SourceComparison>();
     const open = vi.fn();
     const first = gitReview();
+    first.commit.authored_at = "2026-11-18T10:00:00Z";
     first.commit.parents.push("e".repeat(40));
     const list = vi.fn<LycaonClient["getProjectSourceGitReview"]>(async (_project, _change, opts) => ({ ...first,
       commit_comparison: !opts?.movement, before_commit: opts?.parent === 2 ? "e".repeat(40) : "a".repeat(40) }));
@@ -113,6 +114,7 @@ describe("Git walk review", () => {
     const host = sourceReaderFixture(compare);
     render(() => <WalkGitReview projectId="p1" step={gitReviewStep()} client={stubClient({ getProjectSourceGitReview: list, ...host.methods })} onOpenGitFile={open} onOpenFile={vi.fn()} />);
     fireEvent.click(await waitFor(() => reviewRow("src/app.ts")));
+    expect(screen.getByText("Authored")).toBeTruthy();
     fireEvent.click(assertNamedControl(screen.getByTestId("git-review-parent-select"), "button"));
     fireEvent.click(await screen.findByTestId("git-review-parent-select-option-2"));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));

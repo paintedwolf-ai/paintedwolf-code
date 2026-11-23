@@ -42,6 +42,8 @@ func TestInvariantWriteRootSSOTSharedByGateAndConfine(t *testing.T) {
 	for path, inside := range map[string]bool{
 		filepath.Join(granted, "out.txt"):      true,
 		filepath.Join(scratch, "out.txt"):      true,
+		"/tmp/scratch":                         false,
+		"/var/tmp/result":                      false,
 		"/etc/lycaon-write-root-probe/out.txt": false,
 	} {
 		if got := confine.PathWithinRoots(path, writeRoots); got != inside {
@@ -52,7 +54,7 @@ func TestInvariantWriteRootSSOTSharedByGateAndConfine(t *testing.T) {
 		}
 		res := evalBundled(t, hitl.ProposedAction{
 			Invocation: hitl.ActionInvocation{Tool: "write", Files: []string{path}},
-			Scope:      hitl.ActionScope{ProjectDir: proj, SessionScratchRoot: scratch},
+			Scope:      hitl.ActionScope{ProjectDir: proj, SessionScratchRoot: scratch, GrantedWriteRoots: []string{granted}},
 			Execution:  hitl.ActionExecution{Contained: contained},
 		})
 		if res.AutoApproved() != inside {

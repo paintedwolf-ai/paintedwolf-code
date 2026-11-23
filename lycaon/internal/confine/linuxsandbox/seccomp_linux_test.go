@@ -6,13 +6,14 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
 )
 
 func TestSeccompProgramAssembles(t *testing.T) {
 	t.Parallel()
-	raw, err := seccompProgram()
+	raw, err := seccompProgram(false)
 	if err != nil {
 		t.Fatalf("seccompProgram: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestHandledAccessesGrowWithTheABI(t *testing.T) {
 // offsets are the kernel's.
 func TestSeccompProgramDecides(t *testing.T) {
 	t.Parallel()
-	raw, err := seccompProgram()
+	raw, err := seccompProgram(false)
 	if err != nil {
 		t.Fatalf("seccompProgram: %v", err)
 	}
@@ -206,5 +207,29 @@ func TestSeccompProgramDecides(t *testing.T) {
 	binary.BigEndian.PutUint32(foreign[seccompDataArch:], nativeAuditArch^1)
 	if got, _ := vm.Run(foreign); got != kill {
 		t.Fatalf("foreign architecture: filter returned %#x, want kill", got)
+	}
+}
+
+func TestPrivateServiceCPUSet(t *testing.T) {
+	for _, fixed := range []bool{false, true} {
+		raw, err := seccompProgram(fixed)
+		testutil.FailErr(t, "build seccomp program", err)
+		code, ok := bpf.Disassemble(raw)
+		if !ok {
+			t.Fatal("invalid program")
+		}
+		vm, err := bpf.NewVM(code)
+		testutil.FailErr(t, "load seccomp program", err)
+		data := make([]byte, 64)
+		binary.BigEndian.PutUint32(data[seccompDataArch:], nativeAuditArch)
+		binary.BigEndian.PutUint32(data[seccompDataNr:], unix.SYS_SCHED_SETAFFINITY)
+		got, err := vm.Run(data)
+		want := int(unix.SECCOMP_RET_ALLOW)
+		if fixed {
+			want = int(unix.SECCOMP_RET_ERRNO) | int(unix.EPERM)
+		}
+		if err != nil || got != want {
+			t.Fatalf("fixed=%v: got %#x, %v, want %#x", fixed, got, err, want)
+		}
 	}
 }

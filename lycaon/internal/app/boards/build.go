@@ -177,8 +177,8 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	}
 
 	if sessions := r.deps.Storage.Sessions; sessions != nil {
-		deps.AddressOrigin = func(sessionID, rawURL string) confine.AddressOrigin {
-			return addressOrigin(sessions.Evidence.SessionURLStanding(sessionID, rawURL))
+		deps.AddressOrigin = func(ctx context.Context, sessionID, rawURL string) confine.AddressOrigin {
+			return addressOrigin(sessions.Evidence.SessionURLStanding(ctx, sessionID, rawURL))
 		}
 	}
 

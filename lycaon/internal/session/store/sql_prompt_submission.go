@@ -28,6 +28,11 @@ func putPromptSubmissionSQL(ctx context.Context, s *sqlCore, in PromptSubmission
 	if err := in.validateAuthorship(); err != nil {
 		return nil, false, err
 	}
+	unlock, err := lockModeAdmission(ctx, s, in.SessionID)
+	if err != nil {
+		return nil, false, err
+	}
+	defer unlock()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, false, fmt.Errorf("begin prompt submission: %w", err)
@@ -54,6 +59,9 @@ func putPromptSubmissionSQL(ctx context.Context, s *sqlCore, in PromptSubmission
 		return nil, false, &PromptSubmissionConflictError{ID: in.ID}
 	}
 	if rows == 1 {
+		if err := admitModeSQL(ctx, s, tx, in.SessionID, in.Mode, nil); err != nil {
+			return nil, false, err
+		}
 		for _, blobID := range normalizedBlobIDs(in.AttachmentBlobIDs) {
 			if err := qtx.InsertPromptAttachmentAdmission(ctx, db.InsertPromptAttachmentAdmissionParams{
 				SubmissionID: in.ID, ProjectID: in.ProjectID, BlobID: blobID,
@@ -65,6 +73,7 @@ func putPromptSubmissionSQL(ctx context.Context, s *sqlCore, in PromptSubmission
 	if err := tx.Commit(); err != nil {
 		return nil, false, fmt.Errorf("commit prompt submission: %w", err)
 	}
+	s.outbox.Notify()
 	return row, rows == 1, nil
 }
 
