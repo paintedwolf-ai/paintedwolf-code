@@ -18,6 +18,8 @@ func TestCredentialEvidenceWaitersCancelWithoutReleasingActiveCapture(t *testing
 	release, err := files.index.access.Acquire(t.Context(), credentialRootKey("proj-1", "r1"))
 	testutil.FailErr(t, "hold root access", err)
 	defer release()
+	_, err = files.index.admit(t.Context(), "proj-1")
+	testutil.FailErr(t, "admit root", err)
 	runtime := &security.Runtime{CredentialFiles: files}
 	for _, operation := range []struct {
 		name string
