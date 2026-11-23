@@ -54,7 +54,8 @@ type Volume struct {
 func Mount(t *testing.T, mode Mode) *Volume {
 	t.Helper()
 	backing := t.TempDir()
-	server, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	server, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen for the NFS server: %v", err)
 	}
@@ -77,12 +78,9 @@ func Mount(t *testing.T, mode Mode) *Volume {
 		_ = server.Close()
 		t.Fatalf("mount_nfs: %v: %s", err, out)
 	}
-	control, err := os.MkdirTemp("", "outage")
-	if err != nil {
-		t.Fatalf("control directory: %v", err)
-	}
+	control := t.TempDir()
 	volume := &Volume{Dir: dir, Control: filepath.Join(control, "c"), relay: r}
-	commands, err := net.Listen("unix", volume.Control)
+	commands, err := lc.Listen(t.Context(), "unix", volume.Control)
 	if err != nil {
 		t.Fatalf("control socket: %v", err)
 	}
@@ -193,7 +191,8 @@ type heldConn struct {
 }
 
 func newRelay(server string) (*relay, error) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	listener, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +221,8 @@ func (r *relay) accept() {
 }
 
 func (r *relay) forward(client net.Conn) {
-	server, err := net.Dial("tcp", r.server)
+	var dialer net.Dialer
+	server, err := dialer.DialContext(context.Background(), "tcp", r.server)
 	if err != nil {
 		_ = client.Close()
 		return
@@ -338,7 +338,8 @@ func (r *relay) restore() {
 	defer r.mu.Unlock()
 	r.stopped = false
 	for _, h := range r.held {
-		server, err := net.Dial("tcp", r.server)
+		var dialer net.Dialer
+		server, err := dialer.DialContext(context.Background(), "tcp", r.server)
 		if err != nil {
 			_ = h.client.Close()
 			continue
