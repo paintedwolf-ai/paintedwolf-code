@@ -23,6 +23,9 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	if err != nil {
 		return RegisterReceipt{}, err
 	}
+	if s.isTreeStopping(normalized.Owner.SessionID) {
+		return RegisterReceipt{}, ErrSessionStopped
+	}
 	initialMatches, err := collectInitialProcessMatches(ctx, s, normalized)
 	if err != nil {
 		return RegisterReceipt{}, err
@@ -32,6 +35,12 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 		return RegisterReceipt{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	if stopped, err := isStoppedTx(ctx, tx, normalized.Owner.SessionID); err != nil {
+		return RegisterReceipt{}, err
+	} else if stopped {
+		return RegisterReceipt{}, ErrSessionStopped
+	}
 
 	receipt, reg, replayed, err := registerWatchTx(ctx, tx, normalized, now, initialMatches)
 	if err != nil {

@@ -43,6 +43,7 @@ type Service struct {
 	Workers              WorkerAbort
 	workflowStop         WorkflowStop
 	checkpointStop       CheckpointStop
+	watchStop            WatchStop
 	progress             progress.Store
 	turnReleaseTimeout   time.Duration
 	workerReleaseTimeout time.Duration

@@ -72,6 +72,11 @@ func (m *Service) Apply(ctx context.Context, id string, in promptinput.Input) (s
 		}
 	}
 	if userPrompt != "" {
+		if m.clearWatchFence != nil && promptinput.VisibleIntent(userMsg) {
+			if err := m.clearWatchFence(ctx, id); err != nil {
+				return "", err
+			}
+		}
 		if err := m.BootstrapProgress(ctx, id, userMsg); err != nil {
 			return "", err
 		}

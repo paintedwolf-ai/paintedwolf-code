@@ -48,6 +48,7 @@ type Service struct {
 	workflows        *WorkflowDomains
 	review           ReviewCheckpointer
 	gateRepeatLedger IntentBoundary
+	clearWatchFence  func(context.Context, string) error
 }
 
 func New(sessionStore Sessions, transcriptStore Transcript, transcript *transcript.Service, captures *checkpointcontrol.Capture, deliver func(context.Context, string) error) *Service {
@@ -56,6 +57,9 @@ func New(sessionStore Sessions, transcriptStore Transcript, transcript *transcri
 func (m *Service) SetWorkflow(workflow *WorkflowDomains)           { m.workflows = workflow }
 func (m *Service) SetProgress(progress progress.Store)             { m.progress = progress }
 func (m *Service) SetReviewCheckpointer(review ReviewCheckpointer) { m.review = review }
+func (m *Service) SetWatchFenceClearer(fn func(context.Context, string) error) {
+	m.clearWatchFence = fn
+}
 func (m *Service) resetBatch(ctx context.Context, id string, message api.Message) {
 	if m.workflows != nil && promptinput.VisibleIntent(message) {
 		_ = m.workflows.Batch.ApplyCoordinatorBatchEvent(ctx, id, batch.EventVisibleUserMessage, 0)

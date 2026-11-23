@@ -95,6 +95,18 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 					}
 				})
 			}
+			if mgr.Submissions != nil && mgr.Submissions.Gate != nil {
+				gate := mgr.Submissions.Gate
+				watchStore.SetTreeStoppingFunc(func(sessionID string) bool {
+					return !gate.SessionTreeRunnable(sessionID)
+				})
+			}
+			if mgr.Stops != nil {
+				mgr.Stops.SetWatchStop(watchTreeStopAdapter{store: watchStore})
+			}
+			if mgr.Runner != nil && mgr.Runner.Instructions != nil {
+				mgr.Runner.Instructions.SetWatchFenceClearer(watchStore.ClearSessionStopFence)
+			}
 		}
 	}
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
@@ -375,4 +387,17 @@ func (b *serveBuilder) wireMCP() error {
 		b.sessions.Manager.ToolPolicy.SetMCPRuntime(b.server.MCP.Catalog)
 	}
 	return nil
+}
+
+type watchTreeStopAdapter struct {
+	store *watch.Store
+}
+
+func (a watchTreeStopAdapter) FenceWatches(ctx context.Context, sessionIDs []string) error {
+	return a.store.FenceSessions(ctx, sessionIDs)
+}
+
+func (a watchTreeStopAdapter) ReconcileStoppedWatches(ctx context.Context, sessionIDs []string) (int, error) {
+	summary, err := a.store.ReconcileStoppedSessions(ctx, sessionIDs...)
+	return summary.CanceledCount, err
 }
