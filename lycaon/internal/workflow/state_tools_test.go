@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -14,6 +13,7 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,13 +27,13 @@ func TestStateQueryReturnsVars(t *testing.T) {
 	mgr := NewManager(wfStore, sessStore, manifestReg, nil)
 
 	toolReg := tools.NewDefaultRegistry()
-	if err := workflowstatetools.RegisterStateTools(toolReg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessStore}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(toolReg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessStore.Sessions}); err != nil {
 		testutil.FailErr(t, "RegisterStateTools failed", err)
 	}
 
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	sess, err := sessStore.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := sessStore.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)

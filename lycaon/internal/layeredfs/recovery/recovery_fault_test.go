@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
@@ -35,7 +36,7 @@ type recoveryFixture struct {
 	cpStore    *checkpoint.Store
 	gitMgr     *privategit.Manager
 	coord      *recovery.Coordinator
-	mountedAdp *adapter.MountedAdapter
+	mountedAdp *adaptertest.Mounted
 }
 
 func newRecoveryFixture(t *testing.T) *recoveryFixture {
@@ -61,7 +62,7 @@ func newRecoveryFixture(t *testing.T) *recoveryFixture {
 	fx := &recoveryFixture{t: t, baseDir: baseDir, trunkDir: trunkDir, cpStore: cpStore, gitMgr: gitMgr}
 	fx.coord = fx.coordinatorOnBoot("boot-1")
 
-	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mountedAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID:     adapter.AdapterFUSELinux,
 		TargetOS:      runtime.GOOS,
 		MountViewFn:   func(_ context.Context, _ string, _ []adapter.PreparedRoot) error { return nil },

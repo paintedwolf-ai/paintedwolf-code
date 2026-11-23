@@ -17,10 +17,9 @@ import (
 
 func TestCommitReviewKeepsIndexOnlyAndUnavailableChanges(t *testing.T) {
 	_, root := contractfixture.NestedRootRepo(t)
-	_, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	_, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, root)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	path := filepath.Join(root, "src", "app.ts")
 	testutil.FailErr(t, "write staged contents", os.WriteFile(path, []byte("index only\n"), 0o644))
 	gittest.Run(t, root, "add", "src/app.ts")
@@ -51,7 +50,6 @@ func TestCommitReviewIncludesUnobservedGitChangesWithoutCreatingHistory(t *testi
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, nested)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	write := func(path string, content []byte) {
 		t.Helper()
@@ -144,10 +142,9 @@ func TestCommitReviewIncludesUnobservedGitChangesWithoutCreatingHistory(t *testi
 func TestCommitReviewBeforeFirstCommitAndChangedHead(t *testing.T) {
 	repo := t.TempDir()
 	gittest.Init(t, repo)
-	_, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	_, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, repo)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	testutil.FailErr(t, "write initial file", os.WriteFile(filepath.Join(repo, "new.txt"), []byte("new\n"), 0o644))
 	page := contractfixture.ReadCommitReview(t, srv, p.ID, "", "100")
 	if len(page.Files) != 1 || page.Files[0].Commit.Head != "" || !page.CommitAvailable {
@@ -172,13 +169,12 @@ func TestCommitReviewBeforeFirstCommitAndChangedHead(t *testing.T) {
 
 func TestCommitReviewHistoryEnrichesLiveContentsAndPreservesPresentation(t *testing.T) {
 	_, root := contractfixture.NestedRootRepo(t)
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	// The successor written below must stay unseen by the ledger: a live inventory would
 	// reconcile it as an external effect before the review reads the file.
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger,
 		contractfixture.WithPassiveSourceInventory)
 	p := contractfixture.CreateProjectForTest(t, srv, root)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "record agent change", ledger.Record(t.Context(), sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/app.ts"},
@@ -211,10 +207,9 @@ func TestCommitReviewHistoryEnrichesLiveContentsAndPreservesPresentation(t *test
 
 func TestCommitReviewRejectsPaginationAcrossMembershipChanges(t *testing.T) {
 	_, root := contractfixture.NestedRootRepo(t)
-	_, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	_, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, root)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	for _, path := range []string{"b.txt", "c.txt"} {
 		testutil.FailErr(t, "write untracked", os.WriteFile(filepath.Join(root, path), []byte("new"), 0o644))
 	}

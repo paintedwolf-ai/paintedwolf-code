@@ -30,9 +30,11 @@ func StopProjectWatch(ctx context.Context, projectID string) error {
 			draining = append(draining, watch)
 		}
 	}
-	var unused []string
+	// Retire streams before another binding can reuse them.
 	for _, watch := range removed {
-		unused = append(unused, unusedWatchRootsLocked(watch)...)
+		for _, root := range unusedWatchRootsLocked(watch) {
+			repochange.CloseRoot(root)
+		}
 	}
 	watchRegMu.Unlock()
 	for _, watch := range removed {
@@ -50,9 +52,6 @@ func StopProjectWatch(ctx context.Context, projectID string) error {
 		watchRegMu.Lock()
 		delete(drainingWatches, watch)
 		watchRegMu.Unlock()
-	}
-	for _, root := range unused {
-		repochange.CloseRoot(root)
 	}
 	return drainErr
 }

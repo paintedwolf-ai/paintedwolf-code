@@ -41,11 +41,11 @@ func TestLoopRuleRejectAppendsToolMessage(t *testing.T) {
 	deps.Context.Policy = denyToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "explore_readonly"})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	if len(msgs) < 2 || msgs[1].Role != api.MessageRoleTool {
 		t.Fatalf("expected tool reject message, got %+v", msgs)
@@ -87,12 +87,12 @@ func TestPromptLoop_SpecDenyToolMessageShape(t *testing.T) {
 	}}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	sess.WorkspacePath = t.TempDir()
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "coordinator"})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var got string
 	for _, msg := range msgs {
@@ -118,7 +118,7 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 	ctx := context.Background()
 	args := map[string]any{"path": "README.md"}
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
 		_ = guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, nil, false)
@@ -160,7 +160,7 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 
 	var paired bool
@@ -197,7 +197,7 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if _, err := loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,
@@ -210,7 +210,7 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "loop.Run failed", err)
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	foundToolResult := false
 	for _, msg := range msgs {
@@ -244,7 +244,7 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 			}
 			sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 			ctx := context.Background()
-			sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			sess.ParentSessionID = "parent-1"
 			sess.AgentType = orchestration.ProfileImplementer

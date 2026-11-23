@@ -12,12 +12,12 @@ func TestGetWorkflowRunReport_AfterDraftFinalizationPatch(t *testing.T) {
 	h := contractfixture.NewReportTestHarness(t)
 	run := h.SeedSecuritySurveyRun(t, "run_report_patch_001")
 	const messageID = "msg_live_report"
-	testutil.FailErr(t, "append live report draft", h.Store.AppendMessages(t.Context(), run.SessionID, wire.Message{
+	testutil.FailErr(t, "append live report draft", h.Store.Transcript.AppendMessages(t.Context(), run.SessionID, wire.Message{
 		ID: messageID, Role: wire.MessageRoleAssistant, WorkflowRunID: run.ID,
 		Visibility: wire.MessageVisibilityInternal, DraftStatus: wire.DraftStatusLive,
 	}))
 
-	existing, err := h.Store.GetMessage(t.Context(), run.SessionID, messageID)
+	existing, err := h.Store.Transcript.GetMessage(t.Context(), run.SessionID, messageID)
 	testutil.FailErr(t, "load live report draft", err)
 	committed := wire.MergeMessagePatch(existing, wire.Message{
 		ID: messageID, Role: wire.MessageRoleAssistant,
@@ -34,10 +34,10 @@ func TestGetWorkflowRunReport_AfterDraftFinalizationPatch(t *testing.T) {
 			}},
 		},
 	})
-	_, err = h.Store.UpdateMessage(t.Context(), run.SessionID, messageID, committed)
+	_, err = h.Store.Transcript.UpdateMessage(t.Context(), run.SessionID, messageID, committed)
 	testutil.FailErr(t, "finalize report draft", err)
 
-	stored, err := h.Store.GetMessage(t.Context(), run.SessionID, messageID)
+	stored, err := h.Store.Transcript.GetMessage(t.Context(), run.SessionID, messageID)
 	testutil.FailErr(t, "reload finalized report", err)
 	if stored.CompletionReport == nil || stored.CompletionReport.Scope != wire.CompletionReportScopeRun {
 		t.Fatalf("completion report metadata = %+v", stored.CompletionReport)

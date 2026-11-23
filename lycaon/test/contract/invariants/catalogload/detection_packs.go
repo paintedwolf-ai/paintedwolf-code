@@ -1,6 +1,7 @@
 package catalogload
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -8,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/detectionpack"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	"github.com/lycaon/lycaon/test/contract/invariants"
@@ -17,10 +19,11 @@ import (
 // configuration.
 func detectionCatalog(r *invariants.Run) *detectionpack.Catalog {
 	return invariants.Part(r.Corpus, "detection catalog", func() (*detectionpack.Catalog, error) {
-		packs, warnings, err := detectionpack.ShippedPacks()
+		stock, err := extpacks.ResolveStockCatalog(context.Background(), nil)
 		if err != nil {
 			return nil, err
 		}
+		packs, warnings := extpacks.LoadEffectiveDetectionPacks(stock)
 		if len(warnings) != 0 {
 			return nil, fmt.Errorf("shipped detection warnings: %v", warnings)
 		}
@@ -80,7 +83,7 @@ func eachRule(r *invariants.Run, visit func(p detectionpack.Pack, rule detection
 var detectionPacks = []invariants.Invariant{{
 	// Every shipped rule is one the matcher supports.
 	Name:    "detection-pack-rules-are-supported",
-	Anchors: []invariants.Anchor{invariants.Func("internal/detectionpack", "ShippedPacks")},
+	Anchors: []invariants.Anchor{invariants.Func("internal/extpacks", "LoadEffectiveDetectionPacks")},
 	Check: func(r *invariants.Run) {
 		eachRule(r, func(p detectionpack.Pack, rule detectionpack.Rule) {
 			if !rule.Supported {

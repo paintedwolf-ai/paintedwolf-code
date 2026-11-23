@@ -29,10 +29,10 @@ func (m *Service) AcceptSynthesis(ctx context.Context, sessionID string) {
 		return
 	}
 	m.turns.Store(sessionID, true)
-	if m.store == nil {
+	if m.sessionStore == nil || m.transcriptStore == nil {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil || sess.IsWorkerChild() {
 		return
 	}

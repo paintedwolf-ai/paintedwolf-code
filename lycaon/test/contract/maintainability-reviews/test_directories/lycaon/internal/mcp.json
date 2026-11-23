@@ -1,0 +1,16 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/mcp",
+  "kind": "test_suite",
+  "workstream": "credential-fixture-boundaries",
+  "disposition": "retain",
+  "reason": "Retain 54 immediate MCP test files organized by protocol behavior. The added OAuth storage suite verifies encrypted reopening, durable deletion and invalid-vault refusal; existing callback, refresh, cancellation and runtime construction tests still use the real store. All short MCP cases passed. Additional membership requires review.",
+  "reviewed_commit": "d771f280c226a3a8412f7aca8a5a2b7d9647b9fb",
+  "ceiling": 54,
+  "boundaries": {
+    "lycaon/internal/mcp/oauth_token_store_test.go": "5e3ef7a5147d94bbabd806584e3cf3b38f02fc32dc9be6b77496f56179ec8762",
+    "lycaon/internal/mcp/oauth_store_failure_test.go": "8ae08639dc9ae29d6b9352e612cfc9176f70c0b37c8a3a718c481f8912b4c03e",
+    "lycaon/internal/mcp/registry_test.go": "0f50842fb21a4a598f368ada389a9609fba3d7c5daf3e66e2039f6f720ed04e8"
+  },
+  "reviewed_shape": "28ba9cc60a7b738b8781869b1b48b378fef16188d6cd31507ae02d1930cc5935"
+}

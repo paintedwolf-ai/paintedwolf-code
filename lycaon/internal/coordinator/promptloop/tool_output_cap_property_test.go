@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -37,7 +37,7 @@ var refusalCodes = []string{tooloutput.ToolResultTooLargeCode, tooloutput.ToolOu
 // whole, or cut to the cap with a receipt and spilled in full, or refused
 // with a typed code; none reaches the model past its cap unannounced.
 func TestEveryCatalogToolResultIsFittedToItsCap(t *testing.T) {
-	ids, err := tools.ParseCatalogToolIDs()
+	ids, err := toolstest.ParseCatalogToolIDs()
 	testutil.FailErr(t, "read the tool catalog", err)
 	if len(ids) == 0 {
 		t.Fatal("the tool catalog names no tools")
@@ -59,7 +59,7 @@ func TestEveryCatalogToolResultIsFittedToItsCap(t *testing.T) {
 	for _, tool := range ids {
 		for name, size := range sizes {
 			content := capPropertyOutput(size)
-			got := loop.Batch.fitToolOutput(t.Context(), sess, tool, "cap-call", map[string]any{}, content, true)
+			got := loop.Batch.fitToolOutput(t.Context(), sess, tool, map[string]any{}, content, true)
 			if problem := capPropertyViolation(tool, content, got, hostDir); problem != "" {
 				t.Errorf("%s, %s its cap (%d bytes): %s", tool, name, size, problem)
 			}

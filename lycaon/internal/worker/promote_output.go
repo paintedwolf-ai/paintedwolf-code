@@ -190,6 +190,9 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 			return api.OverlayRejectOutcome{}, fmt.Errorf("persist rejected overlay tree: %w", err)
 		}
 	}
+	for _, update := range updates {
+		s.reviews.replace(update.JobID, nil)
+	}
 	s.clearReconcilePaths(sessionID)
 	if err := s.teardownBranch(ctx, task); err != nil {
 		slog.WarnContext(ctx, "rejected overlay cleanup deferred", "overlay_id", overlayID, "err", err)
@@ -288,8 +291,8 @@ func (s *MergeService) assessChildRebase(ctx context.Context, sessionID string, 
 		return PromoteAssessment{}, err
 	}
 	defer lease.Release()
-	paths := s.jobPromotePaths(ctx, &child)
-	return s.assessMerge(ctx, sessionID, &child, paths)
+	paths := s.jobPromotePaths(ctx, &child, "")
+	return s.assessMerge(ctx, sessionID, &child, paths, "")
 }
 
 func (s *MergeService) childOverlaysOf(ctx context.Context, sessionID, parentOverlayID string) ([]api.WorkerTask, error) {

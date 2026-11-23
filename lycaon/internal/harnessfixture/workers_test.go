@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/project"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -58,7 +58,7 @@ type scriptedHarness struct {
 	root      string
 	projects  *project.SQLRegistry
 	attached  *project.Project
-	sessions  *store.SQL
+	sessions  *store.Repositories
 	parent    *api.Session
 	queue     *worker.SQLQueue
 	manager   *workspace.Manager
@@ -85,15 +85,15 @@ func newScriptedHarness(t *testing.T, files map[string]string) *scriptedHarness 
 	testutil.FailErr(t, "attach project", err)
 	h.attached = attached
 	h.sessions = store.NewSQL(database)
-	parent, err := h.sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
+	parent, err := h.sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
 	testutil.FailErr(t, "create parent", err)
 	h.parent = parent
-	h.queue = worker.NewSQLQueue(database, 8)
-	h.ledger = sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
-	h.queue.SetBaselineStore(h.ledger.Baselines)
-	h.queue.SetProjectStore(h.projects)
-	h.manager = workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}))
-	h.queue.SetWorkerWorkspaceManager(h.manager)
+	h.queue = worker.NewSQLServices(database, 8).Queue
+	h.ledger = sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"), sourceledger.Timing{})
+	h.queue.Branches.SetBaselineStore(h.ledger.Baselines)
+	h.queue.Branches.SetProjectStore(h.projects)
+	h.manager = workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
+	h.queue.Branches.SetWorkerWorkspaceManager(h.manager)
 	h.decisions = sessiondecisions.NewSQL(database)
 	return h
 }
@@ -111,7 +111,7 @@ func (h *scriptedHarness) workers() *Workers {
 		body, err := os.ReadFile(filepath.Join(h.root, path))
 		return "read#1", string(body), err
 	}
-	controller, err := NewWorkers(h.data, h.sessions, h.queue, verify, read, h.decisions, h.fallback)
+	controller, err := NewWorkers(h.data, h.sessions, h.queue, h.queue.Branches, verify, read, h.decisions, h.fallback)
 	testutil.FailErr(h.t, "create workers", err)
 	return controller
 }
@@ -143,7 +143,7 @@ func (h *scriptedHarness) outcome(jobID string) Outcome {
 
 func (h *scriptedHarness) promote(jobID string) string {
 	h.t.Helper()
-	service := &worker.MergeService{Queue: h.queue, Store: worker.NewSQLStore(h.database), Projects: h.projects, Workspace: h.manager, DataDir: h.t.TempDir(), SourceLedger: h.ledger, SourceHistory: h.ledger.Walk}
+	service := &worker.MergeService{Queue: h.queue, Branches: h.queue.Branches, Store: worker.NewSQLStore(h.database), Projects: h.projects, Workspace: h.manager, DataDir: h.t.TempDir(), SourceLedger: h.ledger, SourceHistory: h.ledger.Walk}
 	promoted, err := service.PromoteOverlay(h.t.Context(), h.parent.ID, jobID, api.PromoteOverlayInput{})
 	testutil.FailErr(h.t, "promote", err)
 	if promoted.Status != api.WorkerMergeStatusMerged {
@@ -158,7 +158,7 @@ func TestScriptedContinuationResumesTheSeededChildAndSurvivesRestart(t *testing.
 	h := newScriptedHarness(t, map[string]string{"app.py": "baseline"})
 	setup := Setup{Overlays: []Overlay{{Label: "Change", ResultStatus: "partial", Files: map[string]string{"app.py": "partial"},
 		Script: &WorkerScript{Stages: []WorkerStage{{Kind: StageComplete, Files: map[string]string{"app.py": "complete"}, Verify: "checks"}}}}}}
-	evidence, err := Prepare(t.Context(), h.queue, h.sessions, h.parent, h.attached.Roots[0], setup, nil)
+	evidence, err := Prepare(t.Context(), h.queue, h.queue.Branches, h.sessions.Sessions, h.parent, h.attached.Roots[0], h.sessions.Transcript, setup, nil)
 	testutil.FailErr(t, "prepare partial return", err)
 	seed := evidence.Overlays[0]
 	testutil.FailErr(t, "install", h.workers().Install(h.parent.ID, setup, evidence))
@@ -216,7 +216,7 @@ func TestScriptedDispatchIsKeyedByDeclaredScopeAndSettlesOffPlanWork(t *testing.
 	if !ok || bound.ChildSessionID == "" {
 		t.Fatal("dispatch did not bind a child session")
 	}
-	child, err := h.sessions.Get(t.Context(), bound.ChildSessionID)
+	child, err := h.sessions.Sessions.Get(t.Context(), bound.ChildSessionID)
 	testutil.FailErr(t, "load child", err)
 	if child.ParentSessionID != h.parent.ID {
 		t.Fatal("child belongs to another parent")
@@ -291,7 +291,7 @@ func TestScriptedDecisionSuspendsThenDeliversTheAnsweredOutcome(t *testing.T) {
 	if result.Status != string(api.WorkerSummaryStatusNeedsDecision) {
 		t.Fatal("replayed execution lost its pending decision")
 	}
-	testutil.FailErr(t, "answer", h.sessions.AppendMessages(t.Context(), bound.ChildSessionID, worker.DecisionAnswerMessage("three", "coordinator")))
+	testutil.FailErr(t, "answer", h.sessions.Transcript.AppendMessages(t.Context(), bound.ChildSessionID, worker.DecisionAnswerMessage("three", "coordinator")))
 	result, err = h.workers().Execute(t.Context(), *claimed, worker.WorkerRunContext{ProjectDir: h.root})
 	testutil.FailErr(t, "deliver answered outcome", err)
 	if result.Status != "complete" {

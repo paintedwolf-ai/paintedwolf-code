@@ -31,17 +31,17 @@ func (m *Service) Project(ctx context.Context, sess *api.Session) ([]api.Message
 }
 
 func (m *Service) project(ctx context.Context, sess *api.Session, refresh bool) ([]api.Message, error) {
-	if m == nil || m.store == nil || sess == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.compactionStore == nil) || sess == nil {
 		return nil, fmt.Errorf("session store and session are required")
 	}
-	view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
+	view, ok, err := m.compactionStore.GetCompactionView(ctx, sess.ID)
 	if err != nil {
 		return nil, err
 	}
 	if !ok || view.Generation < sess.CompactionGeneration {
 		return m.loadBoundedCanonicalPromptHistory(ctx, sess, refresh)
 	}
-	current, err := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
+	current, err := m.compactionStore.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 		oldest = tail[0].Ord
 	}
 	if _, ok := api.LastUserIntentMessage(tail); !ok {
-		if tail, err = withCurrentRequest(ctx, m.store, sess, tail); err != nil {
+		if tail, err = withCurrentRequest(ctx, m.sessionStore, m.transcriptStore, sess, tail); err != nil {
 			return nil, err
 		}
 	}
@@ -89,7 +89,7 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 		if row.Ord <= 0 || row.Role != api.MessageRoleAssistant || row.CompactedChunk != nil || viewBounds.maxOrdFor(row) > splice.replacedThrough {
 			continue
 		}
-		canonical, err := m.store.GetMessage(ctx, sess.ID, row.ID)
+		canonical, err := m.transcriptStore.GetMessage(ctx, sess.ID, row.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -122,7 +122,7 @@ func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *a
 		return history, nil
 	}
 	firstTailOrd := history[0].Ord
-	history, err = withCurrentRequest(ctx, m.store, sess, history)
+	history, err = withCurrentRequest(ctx, m.sessionStore, m.transcriptStore, sess, history)
 	if err != nil {
 		return nil, err
 	}
@@ -154,14 +154,14 @@ func (m *Service) Fit(ctx context.Context, sess *api.Session, history []api.Mess
 
 // ApplyView appends rows beyond the view's ordinal watermark.
 func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []api.Message) []api.Message {
-	if m == nil || m.store == nil || sess == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.compactionStore == nil) || sess == nil {
 		return history
 	}
-	view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
+	view, ok, err := m.compactionStore.GetCompactionView(ctx, sess.ID)
 	if err != nil || !ok || view.Generation < sess.CompactionGeneration {
 		return history
 	}
-	current, currentErr := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
+	current, currentErr := m.compactionStore.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
 	if currentErr != nil || !current {
 		return history
 	}
@@ -253,24 +253,24 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 }
 
 // withCurrentRequest restores the active human opener when it predates the tail.
-func withCurrentRequest(ctx context.Context, store Store, sess *api.Session, tail []api.Message) ([]api.Message, error) {
+func withCurrentRequest(ctx context.Context, sessionStore Sessions, transcriptStore Transcript, sess *api.Session, tail []api.Message) ([]api.Message, error) {
 	currentTurn := sess.CurrentTurn
 	if currentTurn <= 0 {
-		if latest, err := store.Get(ctx, sess.ID); err == nil && latest != nil {
+		if latest, err := sessionStore.Get(ctx, sess.ID); err == nil && latest != nil {
 			currentTurn = latest.CurrentTurn
 		}
 	}
 	if currentTurn <= 0 {
 		return tail, nil
 	}
-	turn, err := store.ReadSourceTurn(ctx, sess.ID, currentTurn)
+	turn, err := transcriptStore.ReadSourceTurn(ctx, sess.ID, currentTurn)
 	if err != nil {
 		return nil, err
 	}
 	if turn.OpeningMessageID == "" {
 		return tail, nil
 	}
-	opener, err := store.GetMessage(ctx, sess.ID, turn.OpeningMessageID)
+	opener, err := transcriptStore.GetMessage(ctx, sess.ID, turn.OpeningMessageID)
 	if err != nil {
 		return nil, err
 	}

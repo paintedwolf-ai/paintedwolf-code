@@ -22,7 +22,7 @@ func TestCadenceEmptyAttachRecordsABaseAndScansNothing(t *testing.T) {
 	testutil.FailErr(t, "BaselineRoot", cadence.BaselineRoot(context.Background(), dir))
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != 0 {
 		t.Fatalf("empty attach enqueued %d scans", len(scans))
@@ -43,7 +43,7 @@ func TestCadenceFirstWriteAfterAttachScansOnlyTheChange(t *testing.T) {
 	cadence.Tick(context.Background())
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != 0 {
 		t.Fatalf("burst fired before the write settled: %d scans", len(scans))
@@ -51,7 +51,7 @@ func TestCadenceFirstWriteAfterAttachScansOnlyTheChange(t *testing.T) {
 
 	clock.Advance(3 * time.Second)
 	cadence.Tick(context.Background())
-	scans, err = store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err = store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath after settle", err)
 	if len(scans) != 3 {
 		t.Fatalf("delta scans = %d want one per scanner", len(scans))
@@ -72,7 +72,7 @@ func TestCadenceNonEmptyAttachScansNothing(t *testing.T) {
 	testutil.FailErr(t, "BaselineRoot", cadence.BaselineRoot(context.Background(), dir))
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != 0 {
 		t.Fatalf("attach scanned %d rows; what the tree holds is asked for, never implied", len(scans))
@@ -100,7 +100,7 @@ func TestCadenceRunsExplicitlySelectedExternalScanner(t *testing.T) {
 	}
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != 1 || scans[0].ScannerID != "device-sast" {
 		t.Fatalf("external cadence scans = %#v", scans)
@@ -118,7 +118,7 @@ func TestCadenceLongRunningGenerationCoalescesOneSuccessor(t *testing.T) {
 	testutil.FailErr(t, "RequestFull", err)
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	initial, err := store.ListByCanonicalPath(context.Background(), canonical)
+	initial, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list initial generation", err)
 	if len(initial) != 3 {
 		t.Fatalf("initial generation = %d scans, want 3", len(initial))
@@ -136,7 +136,7 @@ func TestCadenceLongRunningGenerationCoalescesOneSuccessor(t *testing.T) {
 	testutil.FailErr(t, "write second change", os.WriteFile(filepath.Join(dir, "second.go"), []byte("package second\n"), 0o644))
 	testutil.FailErr(t, "note second change", noteCadenceWrites(context.Background(), cadence, dir, []string{"second.go"}))
 	cadence.Tick(context.Background())
-	stillInitial, err := store.ListByCanonicalPath(context.Background(), canonical)
+	stillInitial, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list while generation active", err)
 	if len(stillInitial) != 3 {
 		t.Fatalf("active generation accumulated queue rows: got %d want 3", len(stillInitial))
@@ -144,7 +144,7 @@ func TestCadenceLongRunningGenerationCoalescesOneSuccessor(t *testing.T) {
 
 	completeCadenceScans(t, cadence, store)
 	for _, scan := range initial {
-		completed, err := store.Get(context.Background(), scan.ID)
+		completed, err := store.Reads.Get(context.Background(), scan.ID)
 		testutil.FailErr(t, "read initial completion", err)
 		if completed.Status != api.CodeScanStatusComplete {
 			t.Fatalf("initial scan %s status = %q want complete", scan.ID, completed.Status)
@@ -153,7 +153,7 @@ func TestCadenceLongRunningGenerationCoalescesOneSuccessor(t *testing.T) {
 
 	clock.Advance(cadenceCfg(cadence).RefreshSettle())
 	cadence.Tick(context.Background())
-	all, err := store.ListByCanonicalPath(context.Background(), canonical)
+	all, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list successor generation", err)
 	if len(all) != 6 {
 		t.Fatalf("coalesced generations = %d scans, want 6", len(all))
@@ -187,18 +187,18 @@ func TestCadenceRetiresDeselectedSeriesWithoutCancelingActiveGeneration(t *testi
 
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	active, err := store.GetSeries(context.Background(), canonical, "lycaon-sca")
+	active, err := store.Series.GetSeries(context.Background(), canonical, "lycaon-sca")
 	testutil.FailErr(t, "GetSeries active deselected scanner", err)
 	if active == nil || active.ActiveScanID == "" {
 		t.Fatalf("deselected active series was removed early: %#v", active)
 	}
 	completeCadenceScans(t, cadence, store)
-	retired, err := store.GetSeries(context.Background(), canonical, "lycaon-sca")
+	retired, err := store.Series.GetSeries(context.Background(), canonical, "lycaon-sca")
 	testutil.FailErr(t, "GetSeries retired scanner", err)
 	if retired != nil {
 		t.Fatalf("deselected terminal series remains: %#v", retired)
 	}
-	completed, err := store.Get(context.Background(), active.ActiveScanID)
+	completed, err := store.Reads.Get(context.Background(), active.ActiveScanID)
 	testutil.FailErr(t, "Get completed deselected scan", err)
 	if completed == nil || completed.Status != api.CodeScanStatusComplete {
 		t.Fatalf("deselected in-flight scan did not complete immutably: %#v", completed)

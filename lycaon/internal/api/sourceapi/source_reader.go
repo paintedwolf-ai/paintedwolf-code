@@ -34,7 +34,7 @@ func readerTextSide(path, text string) wire.SourceComparisonSide {
 }
 
 func (s *Comparisons) readChatFileEdit(ctx context.Context, sessionID string, ref wire.FileEditReference) (wire.FileEditSnapshot, error) {
-	msg, err := s.SessionStore.GetMessage(ctx, sessionID, ref.MessageID)
+	msg, err := s.TranscriptQueries.GetMessage(ctx, sessionID, ref.MessageID)
 	if err != nil {
 		return wire.FileEditSnapshot{}, err
 	}
@@ -83,7 +83,7 @@ func (s *Comparisons) HandleGetProjectSourceComparison(w http.ResponseWriter, r 
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}

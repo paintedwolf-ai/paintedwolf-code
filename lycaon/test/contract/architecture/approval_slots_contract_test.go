@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -14,7 +15,7 @@ import (
 // note — plus the one quiet row, for every reuse ceiling a gate can have.
 func TestEveryGateOffersTheFixedSlots(t *testing.T) {
 	t.Parallel()
-	approvals := settings.NewRuleApprovalGate(mustApprovalStore(t), settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(mustApprovalStore(t), settingstest.EmptySources())
 	for _, g := range api.AllApprovalGateValues() {
 		reuse := gate.ReuseFor(g)
 		if !reuse.Offered() || g == api.GateSecretOutbound {
@@ -97,7 +98,7 @@ func TestEveryGateOffersTheFixedSlots(t *testing.T) {
 
 func TestNoProjectKeepsTheDurableSlotDisabled(t *testing.T) {
 	t.Parallel()
-	approvals := settings.NewRuleApprovalGate(mustApprovalStore(t), settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(mustApprovalStore(t), settingstest.EmptySources())
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "fetch_url",

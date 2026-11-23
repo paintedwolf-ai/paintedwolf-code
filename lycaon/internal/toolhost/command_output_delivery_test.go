@@ -417,7 +417,7 @@ func TestScreenedSecretsAreRedactedOnceAndMatchOutputCopy(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
 	secret := "sk-live-super-secret-value-1234567890"
 	var harvestCalls atomic.Int32
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		harvestCalls.Add(1)
 		return []secretmatch.HarvestedValue{{
@@ -502,7 +502,7 @@ func TestScreeningExpansionKeepsFullCopyBeyondRawByteCount(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
 	f.Context = func(_ string, tc *tools.ToolContext) { tc.Host.ModelContextWindow = 16000 }
 	secret := "tiny-key"
-	matcher := secretmatch.NewInertMatcher()
+	matcher := &secretmatch.Matcher{}
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{Name: "token", Secret: secret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true}}
 	})
@@ -541,7 +541,7 @@ func TestScreeningExpansionKeepsFullCopyBeyondRawByteCount(t *testing.T) {
 
 func TestScreeningLimitKeepsExecutionOutcomeAndIncompleteReceipt(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
-	matcher := secretmatch.NewInertMatcher()
+	matcher := &secretmatch.Matcher{}
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{Name: "token", Secret: "tiny-key", RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true}}
 	})

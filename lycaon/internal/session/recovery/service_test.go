@@ -2,13 +2,14 @@ package recovery
 
 import (
 	"errors"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestMalformedRecoveryIsNotStale(t *testing.T) {
-	service := New(nil)
+	service := New(nil, nil, nil)
 	for _, input := range []promptinput.Input{
 		{},
 		{Recovery: &api.PromptRecovery{Action: "unknown"}},

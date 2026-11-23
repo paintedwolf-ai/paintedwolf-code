@@ -3,7 +3,6 @@ package hostcontracts
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +13,7 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -35,13 +35,13 @@ func TestHarnessPreparesOverlaysThroughAuthenticatedApplicationRoute(t *testing.
 	attached, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: root}}})
 	testutil.FailErr(t, "attach fixture", err)
 	sessions := store.NewSQL(database)
-	parent, err := sessions.Create(t.Context(), wire.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
+	parent, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
 	testutil.FailErr(t, "create session", err)
-	queue := worker.NewSQLQueue(database, 2)
-	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
-	queue.SetBaselineStore(ledger.Baselines)
-	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{})))
+	queue := worker.NewSQLServices(database, 2).Queue
+	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"), sourceledger.Timing{})
+	queue.Branches.SetBaselineStore(ledger.Baselines)
+	queue.Branches.SetProjectStore(projects)
+	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{}))
 	server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessions, Projects: projects}, Workflow: hostapi.WorkflowDependencies{Workers: queue}}), nil, hostapi.TestAPIToken)
 	payload, err := json.Marshal(harnessfixture.Request{SessionID: parent.ID, Setup: harnessfixture.Setup{Overlays: []harnessfixture.Overlay{
 		{Label: "one", Files: map[string]string{"app.py": "value = 1\n"}},

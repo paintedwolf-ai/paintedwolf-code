@@ -34,7 +34,7 @@ func fanOutSpec(subtasks ...string) orchestration.TopologySpec {
 	}
 }
 
-func newFanOutTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.SQL) {
+func newFanOutTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.Repositories) {
 	t.Helper()
 	mem := orchestration.NewMemoryTopologyWorkers()
 	sessStore := storetest.New(t, testdbseed.DefaultProjectID)

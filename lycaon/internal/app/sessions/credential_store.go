@@ -18,7 +18,7 @@ func (r *Runtime) wireCredentialFiles(ctx context.Context, deps CheckpointDepend
 	if err := deps.Security.Harvest.RestoreFiles(values); err != nil {
 		return err
 	}
-	files := newCredentialFiles(deps.Security.Harvest, deps.Security.Fingerprinter, deps.Database, deps.Security.Capabilities, deps.Sessions)
+	files := newCredentialFiles(deps.Security.Harvest, deps.Security.Fingerprinter, deps.Database, deps.Security.Capabilities, deps.Sessions.Evidence)
 	files.startCredentialIndex()
 	deps.Resources.Track("credential-file-index", 23, files.closeCredentialIndex)
 	r.Manager.ToolContext.CredentialFiles = files

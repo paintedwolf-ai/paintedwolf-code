@@ -3,23 +3,25 @@ package detectionpack
 import (
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// The running app receives shipped packs as resolved catalog units. These tests
-// exercise the same merge with the same bytes, gathered straight from the tree:
-// what rehearses here is what ships, and that the catalog reaches identical
-// packs is pinned separately by the extension-side contract test.
-
-// shippedPacks gathers every detection pack in the binary's tree.
 func shippedPacks(t *testing.T) []Pack {
 	t.Helper()
-	packs, warnings, err := ShippedPacks()
-	if err != nil {
-		testutil.FailErr(t, "gather shipped detection packs", err)
-	}
-	if len(warnings) > 0 {
-		t.Fatalf("shipped detection packs loaded with warnings: %v", warnings)
+	entries, err := config.List(config.DetectionPacksDir)
+	testutil.FailErr(t, "list bundled detection pack fixtures", err)
+	var packs []Pack
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		pack, warnings := ParsePack(bundledPackFiles(config.DetectionPacksDir.Join(entry.Name())))
+		if len(warnings) != 0 || pack == nil {
+			t.Fatalf("parse bundled detection pack %s: %v", entry.Name(), warnings)
+		}
+		packs = append(packs, *pack)
 	}
 	return packs
 }

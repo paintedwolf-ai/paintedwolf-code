@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -18,59 +17,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-var (
-	previewBindMu         sync.Mutex
-	boundPreviewsByJob    = map[string]*checkpoint.PromotionPreview{}
-	previewBindIntentJobs = map[string]bool{}
-)
-
-// MarkTaskCheckpointPreviewBindIntent marks jobID so the next checkpoint assessment binds its PromotionPreview.
-func MarkTaskCheckpointPreviewBindIntent(jobID string) {
-	previewBindMu.Lock()
-	previewBindIntentJobs[jobID] = true
-	delete(boundPreviewsByJob, jobID)
-	previewBindMu.Unlock()
-}
-
-// ClearTaskCheckpointPreview clears any bound PromotionPreview for jobID.
-func ClearTaskCheckpointPreview(jobID string) {
-	previewBindMu.Lock()
-	delete(boundPreviewsByJob, jobID)
-	delete(previewBindIntentJobs, jobID)
-	previewBindMu.Unlock()
-}
-
-// MaybeBindTaskCheckpointPreview retains the selected checkpoint until a new preview begins.
-func MaybeBindTaskCheckpointPreview(jobID string, cpPreview *checkpoint.PromotionPreview) {
-	previewBindMu.Lock()
-	if previewBindIntentJobs[jobID] || boundPreviewsByJob[jobID] == nil {
-		delete(previewBindIntentJobs, jobID)
-		boundPreviewsByJob[jobID] = cpPreview
-	}
-	previewBindMu.Unlock()
-}
-
-func boundTaskCheckpointID(jobID string) string {
-	previewBindMu.Lock()
-	defer previewBindMu.Unlock()
-	if preview := boundPreviewsByJob[jobID]; preview != nil {
-		return preview.CheckpointID
-	}
-	return ""
-}
-
 // RevalidateTaskCheckpointPreview checks whether any bound PromotionPreview target observations drifted.
-func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) error {
-	if task == nil {
+func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, bound *checkpoint.PromotionPreview) error {
+	if task == nil || bound == nil {
 		return nil
 	}
-	previewBindMu.Lock()
-	bound := boundPreviewsByJob[task.ID]
-	previewBindMu.Unlock()
-	if bound == nil {
-		return nil
-	}
-	store, _, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
+	store, _, promoter, ok, err := NewTaskCheckpointPromoter(task, roots, bound.CheckpointID)
 	if err != nil || !ok {
 		return err
 	}
@@ -141,8 +93,8 @@ func TargetRootsForTaskCheckpoint(task *api.WorkerTask, roots []projectroot.Root
 }
 
 // NewTaskCheckpointPromoter creates a checkpoint.Promoter bound to task's published checkpoint store and target roots.
-func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef) (*checkpoint.Store, checkpoint.Manifest, *checkpoint.Promoter, bool, error) {
-	store, manifest, ok, err := OpenTaskCheckpointStore(task)
+func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef, checkpointID string) (*checkpoint.Store, checkpoint.Manifest, *checkpoint.Promoter, bool, error) {
+	store, manifest, ok, err := OpenTaskCheckpointStore(task, checkpointID)
 	if err != nil || !ok {
 		return nil, checkpoint.Manifest{}, nil, ok, err
 	}
@@ -165,7 +117,7 @@ func SyncTaskCheckpointToWorkspace(task *api.WorkerTask, roots []projectroot.Roo
 	if task == nil {
 		return nil
 	}
-	store, manifest, hasCP, err := OpenTaskCheckpointStore(task)
+	store, manifest, hasCP, err := OpenTaskCheckpointStore(task, "")
 	if err != nil || !hasCP {
 		return err
 	}
@@ -347,9 +299,9 @@ func CheckpointKeepTargetResolutions(task *api.WorkerTask, manifest checkpoint.M
 	return out
 }
 
-// ApplyTaskCheckpoint joins a task's checkpoint effects and #1671 ref import to the promotion's transaction.
-func ApplyTaskCheckpoint(ctx context.Context, txn *checkpoint.Transaction, task *api.WorkerTask, roots []projectroot.RootRef, resolvedPaths ...string) error {
-	store, manifest, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
+// ApplyTaskCheckpoint joins checkpoint and Git ref effects to the promotion transaction.
+func ApplyTaskCheckpoint(ctx context.Context, txn *checkpoint.Transaction, task *api.WorkerTask, roots []projectroot.RootRef, checkpointID string, resolvedPaths ...string) error {
+	store, manifest, promoter, ok, err := NewTaskCheckpointPromoter(task, roots, checkpointID)
 	if err != nil || !ok {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -68,7 +69,7 @@ func TestAddRecipePagerDutyDeclaresTokenToken(t *testing.T) {
 }
 
 func TestConnectStampsRecipeTokenToken(t *testing.T) {
-	cap := &entryCaptureConnector{inner: &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+	cap := &entryCaptureConnector{inner: &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 		"pagerduty": {{Name: "list", Description: "list"}},
 	}}}
 	reg := newTestRegistry(t, cap, "svca")

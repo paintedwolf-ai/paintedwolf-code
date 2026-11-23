@@ -11,10 +11,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/processfixture"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -32,11 +32,16 @@ func TestBootToolClaimsHonestOnTheServedRegistry(t *testing.T) {
 // A release has no configuration tree on disk: it stages schemas in the engine
 // root and boot installs the anchor catalog from the embedded configuration.
 func TestBootInstallsBundledAnchorCatalogWithoutAConfigRoot(t *testing.T) {
+	if !processfixture.Startup(t, nil) {
+		return
+	}
+	if anchorcatalog.Loaded() {
+		t.Fatal("fresh process already had an installed anchor catalog before boot")
+	}
 	engineRoot := t.TempDir()
 	schemas := filepath.Join(configlayout.FindModuleRoot(), "..", configlayout.SchemasDirName)
 	testutil.FailErr(t, "stage schemas", os.CopyFS(filepath.Join(engineRoot, configlayout.SchemasDirName), os.DirFS(schemas)))
 	t.Setenv(configlayout.EnvEngineRoot, engineRoot)
-	anchorcatalog.Clear()
 	BuildForTest(t, withConfigRoot(t.TempDir()))
 	if !anchorcatalog.Loaded() {
 		t.Fatal("boot without a configuration tree installed no anchor catalog")
@@ -55,7 +60,7 @@ func TestHTTPErrorsCarryCatalogNoticeCopy(t *testing.T) {
 	}
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+uuid.NewString(), nil)
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", "Bearer "+h.APIToken)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	var got wire.ErrorResponse
@@ -94,14 +99,14 @@ func TestRunStopSettlesWorkersThroughTheSessionTranscript(t *testing.T) {
 	}
 	dispatchID := uuid.NewString()
 	enqueue := `{"job_id":"` + jobID + `","status":"enqueued"}`
-	testutil.FailErr(t, "seed dispatch row", h.Store.AppendMessages(ctx, sess.ID, wire.Message{
+	testutil.FailErr(t, "seed dispatch row", h.Store.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
 		ID: dispatchID, Role: wire.MessageRoleTool, Content: enqueue,
 		ToolResult: &wire.ToolResult{Tool: "task", Content: enqueue, Dispatch: &wire.WorkerDispatch{WorkerID: jobID}},
 	}))
 
 	testutil.FailErr(t, "stop run workers", h.Workflows.Manager.Controls.Cleanup.Workers.CancelWorkersByRunID(ctx, run.ID, "workflow stopped"))
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read parent transcript", err)
 	var dispatch *wire.Message
 	for i := range msgs {

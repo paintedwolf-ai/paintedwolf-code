@@ -13,6 +13,7 @@ import (
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -75,7 +76,7 @@ func SymbolSearchProject(t *testing.T, files map[string]string) (*hostapi.Server
 		testutil.FailErr(t, "mkdir "+name, os.MkdirAll(filepath.Dir(abs), 0o750))
 		testutil.FailErr(t, "write "+name, os.WriteFile(abs, []byte(content), 0o600))
 	}
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 	return srv, p
 }

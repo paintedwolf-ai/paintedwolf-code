@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/test/wiring"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/promptresult"
@@ -23,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func approveBlueprintOnDisk(t *testing.T, h *wiring.Harness, ctx context.Context, sess *api.Session, dir, relPath, content string) {

@@ -197,6 +197,7 @@ var confinementProducers = []invariants.Exemption{
 	{Key: "internal/documentcore/process.go", Reason: "native document core: only its own scratch root, network denied, mandatory application"},
 	{Key: "internal/visualscreen/ocr_tesseract.go", Reason: "bundled OCR engine: only its own per-image scratch root, network denied, mandatory application"},
 	{Key: "internal/layeredfs/adapter/viewconfine/viewconfine.go", Reason: "workerBox(view roots): a worker's shape, to prove denial; host-derived roots only, network denied"},
+	{Key: "internal/testsetup/confine/refusals.go", Reason: "test fixture probe verifying sandbox refusal stream readiness in a temporary directory"},
 	{Key: "internal/exec/prepared.go", Reason: "Confinement{HostExecution: true}: no roots; the explicit host disposition when a launch plan carries no agent boundary"},
 }
 

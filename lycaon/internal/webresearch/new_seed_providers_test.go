@@ -9,7 +9,7 @@ import (
 )
 
 func TestProviderMankier(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("q"); got != "systemd" {
 			t.Fatalf("q = %q", got)
 		}
@@ -25,7 +25,7 @@ func TestProviderMankier(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "/api/v2/mans/?q=" + query + "&limit=3", nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"mankier": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "systemd", 5)
@@ -38,7 +38,7 @@ func TestProviderMankier(t *testing.T) {
 }
 
 func TestProviderIETFRFC(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		if q.Get("type") != "rfc" || q.Get("format") != "json" {
 			t.Fatalf("query = %v", q)
@@ -61,7 +61,7 @@ func TestProviderIETFRFC(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"objects": objects})
 	})
-	p := newIETFRFCProvider()
+	p := newIETFRFCProvider(srv.exchange)
 	out := p.Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"ietf_rfc": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
@@ -86,7 +86,7 @@ func TestProviderIETFRFC(t *testing.T) {
 }
 
 func TestProviderNixOSWiki(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"pages": []map[string]any{{
 				"title": "Flakes", "key": "Flakes",
@@ -98,7 +98,7 @@ func TestProviderNixOSWiki(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "/w/rest.php/v1/search/page?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"nixos_wiki": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "flakes", 5)
@@ -111,7 +111,7 @@ func TestProviderNixOSWiki(t *testing.T) {
 }
 
 func TestProviderGentooWiki(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("action"); got != "query" {
 			t.Fatalf("action = %q", got)
 		}
@@ -127,7 +127,7 @@ func TestProviderGentooWiki(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "/api.php?action=query&list=search&srsearch=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"gentoo_wiki": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "systemd", 5)
@@ -137,7 +137,7 @@ func TestProviderGentooWiki(t *testing.T) {
 }
 
 func TestProviderDiscourseRust(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Accept"); got != "application/json" {
 			t.Fatalf("Accept = %q", got)
 		}
@@ -155,7 +155,7 @@ func TestProviderDiscourseRust(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "/search.json?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"discourse_rust": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "asynctrait", 5)

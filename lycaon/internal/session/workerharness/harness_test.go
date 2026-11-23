@@ -82,7 +82,7 @@ func (f *preparationFixture) WorkerRevision(context.Context, *api.WorkerTask) wo
 	return workercompletion.SourceRevision{Revision: "revision", RootDigest: "root"}
 }
 func (f *preparationFixture) service() *Service {
-	return New(f, f, f, f, f, f, f, func(_ context.Context, _ *api.WorkerTask, _ []api.Message, _ string, r workercompletion.SourceRevision) workercompletion.WorkerCompletionProof {
+	return New(f, f, f, f, f, f, f, f, func(_ context.Context, _ *api.WorkerTask, _ []api.Message, _ string, r workercompletion.SourceRevision) workercompletion.WorkerCompletionProof {
 		return workercompletion.WorkerCompletionProof{ChangedPaths: []string{"material.txt"}, SourceRevision: r.Revision, SourceRootDigest: r.RootDigest}
 	})
 }

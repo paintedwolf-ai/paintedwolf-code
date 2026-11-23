@@ -3,16 +3,16 @@ package execution_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/scan"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -46,7 +46,7 @@ func runTerminalRunner(t *testing.T, scanner scan.CodeScanner, runtime ...scanca
 	if len(runtime) > 0 {
 		registry.Runtime = runtime[0]
 	}
-	runner := scanexecution.NewRunner(store, registry, scan.NoopIngester{}, cfg, nil)
+	runner := scanexecution.NewRunner(store, registry, scantest.DiscardIngester{}, cfg, nil)
 	runner.Snapshots = coord.SnapshotStore()
 	rec := &terminalRecorder{}
 	runner.OnTerminal = rec.record
@@ -105,7 +105,7 @@ func (*slowSuccessScanner) Categories() []api.ScanCategory {
 
 func (s *slowSuccessScanner) Run(ctx context.Context, _ scan.ScanRequest) (*scanoutput.Result, error) {
 	for ctx.Err() == nil {
-		if rec, err := s.store.Get(ctx, s.scanID); err == nil && rec != nil && rec.LongRunning {
+		if rec, err := s.store.Reads.Get(ctx, s.scanID); err == nil && rec != nil && rec.LongRunning {
 			return &scanoutput.Result{}, nil
 		}
 		time.Sleep(10 * time.Millisecond)

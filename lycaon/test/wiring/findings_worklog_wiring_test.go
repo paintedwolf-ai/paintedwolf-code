@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -55,7 +54,7 @@ func TestRecordFindingPublishesFindingsSSE(t *testing.T) {
 				t.Fatalf("revision = 0")
 			}
 			req := httptest.NewRequest(http.MethodGet, "/v1/sessions/"+sess1.ID+"/findings", nil)
-			req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+			req.Header.Set("Authorization", "Bearer "+h.APIToken)
 			w := httptest.NewRecorder()
 			h.Server.ServeHTTP(w, req)
 			var digest wire.FindingsDigest

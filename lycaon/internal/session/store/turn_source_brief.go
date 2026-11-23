@@ -12,7 +12,7 @@ import (
 // PutTurnSourceBrief records the source-change brief a visible user turn opened
 // with and the evidence its rows cite, together. The first record wins: a turn's
 // brief never changes, and a lost race or absent turn mints nothing.
-func (t *sqlTurnTelemetry) PutTurnSourceBrief(ctx context.Context, sessionID, openingMessageID string, mint evidence.SourceChangeMint) error {
+func (t *sqlTurns) PutTurnSourceBrief(ctx context.Context, sessionID, openingMessageID string, mint evidence.SourceChangeMint) error {
 	s := t.core
 	sessionID, openingMessageID, ok, err := turnSourceBriefTarget(ctx, sessionID, openingMessageID, mint)
 	if !ok {
@@ -71,7 +71,7 @@ func writeTurnSourceBrief(ctx context.Context, q *db.Queries, dataDir, sessionID
 
 // TurnSourceBriefs returns the session's recorded briefs keyed by the
 // message that opened each turn.
-func (t *sqlTurnTelemetry) TurnSourceBriefs(ctx context.Context, sessionID string) (map[string]string, error) {
+func (t *sqlTurns) TurnSourceBriefs(ctx context.Context, sessionID string) (map[string]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

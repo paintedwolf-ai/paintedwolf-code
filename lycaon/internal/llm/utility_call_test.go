@@ -97,7 +97,7 @@ func TestUtilityFallbackGetsItsOwnBudgetAfterTheLiteAttemptExpires(t *testing.T)
 
 	r := newTestRegistrySummarizer(t, lite)
 	testutil.FailErr(t, "Register coordinator", r.Registry.Register(coordinator))
-	r.Policy = NewInMemoryPolicyStore(ModelPolicy{
+	r.Policy = newPolicyFixture(t, ModelPolicy{
 		Lite:        ModelRef{ProviderID: "lite", Model: "lite"},
 		Coordinator: ModelRef{ProviderID: "coord", Model: "coord"},
 	})

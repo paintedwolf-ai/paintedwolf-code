@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -35,7 +36,7 @@ func TestProjectLivenessAndParkingIntegration(t *testing.T) {
 		t.Fatal("project A should be active while workspace is claimed")
 	}
 
-	sess, err := serveApp.Sessions.Store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.NewSQL(serveApp.DB).Sessions.Create(ctx, api.CreateSessionRequest{
 		ProjectID: projectA,
 		Posture:   api.SessionPostureBuild,
 	}, projectA)

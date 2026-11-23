@@ -10,8 +10,11 @@ import (
 )
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Transcript interface {
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
 }
 type Grounding interface {
 	AfterPrompt(context.Context, string, []string) error
@@ -25,15 +28,16 @@ type Progress interface {
 	Get(context.Context, string) string
 }
 type Service struct {
-	store            Sessions
+	sessionStore     Sessions
+	transcriptStore  Transcript
 	grounding        Grounding
 	guidance         Guidance
 	progress         Progress
 	coordinatorFrame inject.CoordinatorTurnFrameSource
 }
 
-func New(store Sessions, guidance Guidance) *Service {
-	return &Service{store: store, guidance: guidance}
+func New(sessionStore Sessions, transcriptStore Transcript, guidance Guidance) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, guidance: guidance}
 }
 func (m *Service) SetGrounding(grounding Grounding)                 { m.grounding = grounding }
 func (m *Service) SetProgress(progress Progress)                    { m.progress = progress }

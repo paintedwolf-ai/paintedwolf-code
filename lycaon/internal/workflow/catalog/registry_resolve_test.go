@@ -10,11 +10,12 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"github.com/lycaon/lycaon/internal/workflow/drafts/draftstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestResolveSessionOverridesBundled(t *testing.T) {
-	store := workflowdrafts.NewMemory()
+	store := draftstest.NewStore(t, "sess-1")
 	ctx := context.Background()
 
 	sessionYAML := `id: plan
@@ -73,7 +74,7 @@ phases:
 		testutil.FailErr(t, "write file", err)
 	}
 
-	store := workflowdrafts.NewMemory()
+	store := draftstest.NewStore(t, "sess-1")
 	sessionYAML := `id: plan
 version: 1.0.0
 name: session-plan
@@ -115,7 +116,7 @@ phases:
 }
 
 func TestResolveSessionExtendsChain(t *testing.T) {
-	store := workflowdrafts.NewMemory()
+	store := draftstest.NewStore(t, "sess-1")
 	childYAML := `id: hotfix-session
 version: 1.0.0
 extends: plan@1.0.0

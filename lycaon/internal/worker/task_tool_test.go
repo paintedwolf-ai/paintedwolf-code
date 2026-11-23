@@ -77,7 +77,7 @@ func taskStore(t *testing.T, dir string, sessions ...string) *db.Store {
 // wrap observes the queue.
 func taskTool(t *testing.T, sqlDB *db.Store, wrap func(worker.WorkerQueue) worker.WorkerQueue, deps worker.TaskToolDeps) *tools.DefaultRegistry {
 	t.Helper()
-	var queue worker.WorkerQueue = worker.NewSQLQueue(sqlDB, 4)
+	var queue worker.WorkerQueue = worker.NewSQLServices(sqlDB, 4).Queue
 	if wrap != nil {
 		queue = wrap(queue)
 	}

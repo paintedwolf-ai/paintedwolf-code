@@ -29,7 +29,7 @@ func TestRunLoadsOneCoordinatorFramePerModelTurn(t *testing.T) {
 		}
 		return history, nil
 	}
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	_, err = NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
 		SessionID: sess.ID,
@@ -57,7 +57,7 @@ func TestRunBindsCoordinatorPolicySnapshotToPromptToolSchema(t *testing.T) {
 		return []string{"postures/build.yaml"}, nil
 	}
 	deps.Context.Policy = policy
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	_, err = NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
 		SessionID: sess.ID,
@@ -95,7 +95,7 @@ func TestCompleteStreamUsesPolicyList(t *testing.T) {
 		},
 	})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
-	if _, _, err := loop.Model.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
+	if _, _, err := loop.Model.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", 0, 8, false, nil, nil); err != nil {
 		testutil.FailErr(t, "modelTurn{loop}.completeStream failed", err)
 	}
 	if len(policy.listCalls) != 1 || policy.listCalls[0] != "coordinator" {
@@ -158,7 +158,7 @@ func TestCoordinatorToolsForTurnTrimsEveryDiscoveredProfile(t *testing.T) {
 			&api.Session{ID: "child-1", ParentSessionID: "parent-1", AgentType: id},
 			id,
 			nil,
-			"do work",
+
 			0,
 			8,
 			inject.CoordinatorTurnFrame{},
@@ -198,7 +198,7 @@ func TestBuildTurnRequestSendsOnlyTrimmedFunctionRoots(t *testing.T) {
 			if profile != prompts.CoordinatorProfileID {
 				sess.ParentSessionID = "parent"
 			}
-			turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, profile, "inspect", 0, 20, false, &promptLoopTurnState{})
+			turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, profile, 0, 20, false, &promptLoopTurnState{})
 			testutil.FailErr(t, "build provider request", err)
 			if len(turn.Req.Tools) == 0 {
 				t.Fatal("request offered no tools")

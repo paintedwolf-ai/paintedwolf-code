@@ -23,14 +23,14 @@ func (m *Service) Assemble(
 	retryCount int,
 ) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 	root = strings.TrimSpace(root)
-	if m == nil || m.store == nil || root == "" {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.evidenceStore == nil) || root == "" {
 		return guidance.CoordinatorCompletionReport{}, nil
 	}
 	var roots evidence.CitationRoots
-	if sess, err := m.store.Get(ctx, root); err == nil && sess != nil {
+	if sess, err := m.sessionStore.Get(ctx, root); err == nil && sess != nil {
 		roots, _ = m.CitationRoots(ctx, sess)
 	}
-	history, err := m.store.GetMessages(ctx, root)
+	history, err := m.transcriptStore.GetMessages(ctx, root)
 	if err != nil {
 		history = nil
 	}

@@ -32,7 +32,7 @@ func newAgentFixture(t *testing.T, files map[string]string) agentFixture {
 	}
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	store := NewStore(sqlDB)
-	recorder := &captureRecorder{Store: sourceledger.New(sqlDB, "")}
+	recorder := &captureRecorder{Store: sourceledger.New(sqlDB, "", sourceledger.Timing{})}
 	service := New(store, recorder, recorder.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	changes := &[]Change{}
@@ -177,7 +177,7 @@ func newLedgerAgentFixture(t *testing.T, files map[string]string) (agentFixture,
 	}
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	store := NewStore(sqlDB)
-	ledger := sourceledger.New(sqlDB, t.TempDir())
+	ledger := sourceledger.New(sqlDB, t.TempDir(), sourceledger.Timing{})
 	service := New(store, ledger, ledger.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	changes := &[]Change{}

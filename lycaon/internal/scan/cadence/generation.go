@@ -108,7 +108,7 @@ func (b claimBook) finishBaselineDispatches(ctx context.Context, rows []scanbase
 	planner := seriesPlanner(b)
 	now := nowUTC(b.c)
 	for _, frozen := range rows {
-		row, err := b.c.Store.GetSeries(ctx, frozen.CanonicalPath, frozen.ScannerID)
+		row, err := b.c.series.GetSeries(ctx, frozen.CanonicalPath, frozen.ScannerID)
 		if err != nil || row == nil || row.DispatchToken != frozen.DispatchToken {
 			continue
 		}
@@ -120,7 +120,7 @@ func (b claimBook) finishBaselineDispatches(ctx context.Context, rows []scanbase
 		row.LastFileCount = snapshot.FileCount
 		planner.rearmHeldDesireLocked(row)
 		row.UpdatedAt = now
-		if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
+		if err := b.c.series.UpsertSeries(ctx, *row); err != nil {
 			slog.WarnContext(ctx, "record scan series base", "scanner_id", row.ScannerID, "error", err)
 		}
 	}
@@ -163,7 +163,7 @@ func (b claimBook) finishNoopDispatches(ctx context.Context, claimed []scanbase.
 	planner := seriesPlanner(b)
 	now := nowUTC(b.c)
 	for _, frozen := range claimed {
-		row, err := b.c.Store.GetSeries(ctx, frozen.CanonicalPath, frozen.ScannerID)
+		row, err := b.c.series.GetSeries(ctx, frozen.CanonicalPath, frozen.ScannerID)
 		if err != nil || row == nil || row.DispatchToken != frozen.DispatchToken {
 			continue
 		}
@@ -172,7 +172,7 @@ func (b claimBook) finishNoopDispatches(ctx context.Context, claimed []scanbase.
 		row.ClearUnavailable()
 		planner.rearmHeldDesireLocked(row)
 		row.UpdatedAt = now
-		if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
+		if err := b.c.series.UpsertSeries(ctx, *row); err != nil {
 			slog.WarnContext(ctx, "settle unchanged scan generation", "scanner_id", row.ScannerID, "error", err)
 		}
 	}

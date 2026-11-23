@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,17 +22,17 @@ type countingSummarizer struct{ calls atomic.Int32 }
 
 func (s *countingSummarizer) Summarize(ctx context.Context, system, user string, maxTokens int) (string, error) {
 	s.calls.Add(1)
-	return compaction.MockSummarizer{Text: "Continue from compacted context."}.Summarize(ctx, system, user, maxTokens)
+	return llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Continue from compacted context."}.Summarize(ctx, system, user, maxTokens)
 }
 
 // oversizedSession holds history above the hard ceiling, so a request fit
 // schedules compaction, a background pass publishes a view and its synthesis
 // calls the summarizer.
-func oversizedSession(t *testing.T, summarizer compaction.Summarizer) (*Service, *store.SQL, *api.Session) {
+func oversizedSession(t *testing.T, summarizer compaction.Summarizer) (*Service, *store.Repositories, *api.Session) {
 	t.Helper()
 	m, st := newCompactionManager(t, compaction.DefaultCompactionConfig())
 	m.SetCompactor(compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), summarizer))
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	// Many rows each below the chunk threshold: chunk reduction cannot bring the
 	// session under budget, so the background pass needs a provider summary.
@@ -44,8 +45,8 @@ func oversizedSession(t *testing.T, summarizer compaction.Summarizer) (*Service,
 		rows = append(rows, api.Message{ID: fmt.Sprintf("row-%03d", i), Role: role, Content: strings.Repeat(fmt.Sprintf("Observed evidence line %d.\n", i), 60)})
 	}
 	rows = append(rows, api.Message{ID: "recent", Role: api.MessageRoleUser, Content: "Continue"})
-	testutil.FailErr(t, "append history", st.AppendMessages(t.Context(), sess.ID, rows...))
-	sess, err = st.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "append history", st.Transcript.AppendMessages(t.Context(), sess.ID, rows...))
+	sess, err = st.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "reload session", err)
 	return m, st, sess
 }
@@ -76,9 +77,9 @@ func holdCompaction(t *testing.T, m *Service, sessionID string) func() {
 	return release
 }
 
-func requirePublishedView(t *testing.T, st *store.SQL, sessionID string) {
+func requirePublishedView(t *testing.T, st *store.Repositories, sessionID string) {
 	t.Helper()
-	_, ok, err := st.GetCompactionView(t.Context(), sessionID)
+	_, ok, err := st.Compaction.GetCompactionView(t.Context(), sessionID)
 	testutil.FailErr(t, "read compaction view", err)
 	if !ok {
 		t.Fatal("background compaction published no view")
@@ -91,7 +92,7 @@ func TestCompactionSyncPathAvoidsSummarizer(t *testing.T) {
 	summarizer := &countingSummarizer{}
 	m, st, sess := oversizedSession(t, summarizer)
 	release := holdCompaction(t, m, sess.ID)
-	rows, err := st.GetMessages(t.Context(), sess.ID)
+	rows, err := st.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read history", err)
 	_, _, err = m.Fit(t.Context(), sess, rows, "")
 	testutil.FailErr(t, "fit request", err)

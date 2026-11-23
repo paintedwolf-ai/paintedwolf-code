@@ -3,7 +3,16 @@
   "artifact": "lycaon/internal/session/store",
   "kind": "test_suite",
   "workstream": "session-persistence-boundaries",
-  "disposition": "refactor",
-  "reason": "The suite now exercises SQL persistence directly, retains independent pagination expectations, and removes duplicate backend cases. Further consolidation should follow the named SQL repository boundaries while preserving recovery, authorization, and transaction rollback contracts.",
-  "reviewed_commit": "45383e79acce645a71012d18aad3fa3fa6ab2bb4"
+  "disposition": "retain",
+  "reason": "The 65-file SQL suite groups fixtures by lifecycle, transcript, evidence, submissions and rewind contracts. Shared production repositories exercise foreign keys, ordinal allocation, outbox ordering and rollback without a second persistence implementation. Retain the suite alongside the transaction helpers it verifies; moving tests would hide their shared database contract.",
+  "reviewed_commit": "22943c4fadb7d24de06f32a8695e917b0da7ec3d",
+  "ceiling": 65,
+  "boundaries": {
+    "lycaon/internal/session/store/child_creation_test.go": "c28d7c33defd54f7c913835ad61e72aa6b69a0415b2cb1d7bc74ac2da15e377d",
+    "lycaon/internal/session/store/append_ids_test.go": "f65b2aeccb76d8d5ab9e31fe19e4772aa072a7529249b24792fa538c98628ba2",
+    "lycaon/internal/session/store/evidence_ledger_test.go": "16c92b7806675056ecc974f8521a785c54f652e8c5b7a66a44b49e90e2817aa0",
+    "lycaon/internal/session/store/rewind_test.go": "a34c60988764cc67b440b095ca2be589f5ec37e77a608085a0bc4e97ed48dff8",
+    "lycaon/internal/session/store/prompt_submission_test.go": "ace24186ec61bf66857bd8b6e7174b42f6ed8d1cfaf398602bf3d492540cab0d"
+  },
+  "reviewed_shape": "47ee3addcf2d943e6dd388157b3a8ebea46c5ab6f441520633e3d8d3ca6f3a82"
 }

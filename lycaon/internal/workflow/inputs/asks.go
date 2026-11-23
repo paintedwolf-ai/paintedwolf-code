@@ -3,7 +3,6 @@ package inputs
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/visual"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -239,7 +239,7 @@ func (m *Asks) AnnouncePendingAsk(ctx context.Context, sessionID string) {
 		return
 	}
 	// The deterministic ID makes appends idempotent.
-	msgs, err := m.Sessions.GetMessages(ctx, sessionID)
+	msgs, err := m.TranscriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return
 	}
@@ -339,10 +339,10 @@ func (m *Asks) resolveAskArtifact(ctx context.Context, sessionID, root, ref stri
 }
 
 func (m *Asks) sessionProjectID(ctx context.Context, sessionID string) string {
-	if m == nil || m.Sessions == nil {
+	if m == nil || (m.SessionStore == nil || m.TranscriptStore == nil) {
 		return ""
 	}
-	sess, err := m.Sessions.Get(ctx, strings.TrimSpace(sessionID))
+	sess, err := m.SessionStore.Get(ctx, strings.TrimSpace(sessionID))
 	if err != nil || sess == nil {
 		return ""
 	}
@@ -353,7 +353,8 @@ func (m *Asks) sessionProjectID(ctx context.Context, sessionID string) string {
 
 type Asks struct {
 	Runs            runstate.RunsRepository
-	Sessions        Sessions
+	SessionStore    Sessions
+	TranscriptStore Transcript
 	Vars            *runstate.Variables
 	Publication     *publication.Runs
 	Cards           *Cards

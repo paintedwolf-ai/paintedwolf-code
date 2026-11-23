@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -85,7 +86,7 @@ func TestOrdinaryWorkspacePreparationSuppliesEagerCopyFactsWithoutTestInjection(
 	testutil.FailErr(t, "WriteFile other v1", os.WriteFile(filepath.Join(trunkDir, "pkg", "other.go"), []byte("package pkg // other v1\n"), 0o644))
 
 	// Prepare workspace through ordinary workspace.Manager (selects eagercopy fallback when no mounted helper is active).
-	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{}))
+	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	binding, layout, err := wsMgr.CreateWorkerBranch(
 		ctx,
 		[]projectroot.RootRef{{ID: "primary", Label: "primary", Path: trunkDir, IsPrimary: true}},
@@ -163,7 +164,7 @@ func TestOrdinaryWorkspacePreparationSuppliesMountedPartialAttributionFactsWitho
 
 	// Configure workspace.Manager with a mounted adapter declaring partial kernel-cached attribution,
 	// NegativeLookupInvalidation=false, DirCookieInvalidation=true, InvalidationVerified=false.
-	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mountedAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID:                  adapter.AdapterNFSDarwin,
 		InvalidationVerified:       false,
 		NegativeLookupInvalidation: false,
@@ -180,9 +181,9 @@ func TestOrdinaryWorkspacePreparationSuppliesMountedPartialAttributionFactsWitho
 		},
 	})
 	selector := adapter.NewSelector("darwin", nil, mountedAdp, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	selector.Confinement = fixtureConfinement{}
-	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), selector)
+	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), selector, workspace.Filesystem{})
 
 	binding, layout, err := wsMgr.CreateWorkerBranch(
 		ctx,

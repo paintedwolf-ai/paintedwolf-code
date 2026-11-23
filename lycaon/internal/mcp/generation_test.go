@@ -11,7 +11,7 @@ import (
 
 func generationFixtureRegistry(t *testing.T) *Runtime {
 	t.Helper()
-	reg, err := NewRuntime(RuntimeOptions{Connector: &MockConnector{}})
+	reg, err := NewRuntime(RuntimeOptions{Connector: catalogConnector{}})
 	testutil.FailErr(t, "NewRuntime", err)
 	t.Cleanup(func() { _ = reg.Close(t.Context()) })
 	reg.Catalog.deviceCatalog = []MergedMCPProviderEntry{

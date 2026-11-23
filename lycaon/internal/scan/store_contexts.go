@@ -4,16 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // BindContexts records the contexts using reusable evidence.
-func (s *sqlRunStore) BindContexts(ctx context.Context, id, assessmentID, workflowRunID, sessionID string) (*api.CodeScan, error) {
+func (s *RunStore) BindContexts(ctx context.Context, id, assessmentID, workflowRunID, sessionID string) (*api.CodeScan, error) {
 	if s == nil {
 		return nil, fmt.Errorf("scan store not configured")
 	}
@@ -24,7 +24,7 @@ func (s *sqlRunStore) BindContexts(ctx context.Context, id, assessmentID, workfl
 	if id == "" || (assessmentID == "" && workflowRunID == "" && sessionID == "") {
 		return nil, fmt.Errorf("bind scan contexts requires id and an assessment, workflow, or session")
 	}
-	err := s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	err := s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		if _, err := qtx.GetCodeScan(ctx, id); err != nil {
 			if db.IsNoRows(err) {
 				return fmt.Errorf("scan %s not found", id)
@@ -38,12 +38,12 @@ func (s *sqlRunStore) BindContexts(ctx context.Context, id, assessmentID, workfl
 		if !changed {
 			return nil
 		}
-		return s.emitScanTx(ctx, tx, id)
+		return s.tx.emitScanTx(ctx, tx, id)
 	})
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.Get(ctx, id)
+	row, err := s.reads.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -63,14 +63,14 @@ type TerminalWorkflowBinding struct {
 }
 
 // PendingTerminalWorkflowBindings lists unacknowledged terminal deliveries.
-func (s *sqlRunStore) PendingTerminalWorkflowBindings(ctx context.Context, scanID string, limit int) ([]TerminalWorkflowBinding, error) {
-	if s == nil || s.db == nil {
+func (s *RunStore) PendingTerminalWorkflowBindings(ctx context.Context, scanID string, limit int) ([]TerminalWorkflowBinding, error) {
+	if s == nil || s.tx.db == nil {
 		return nil, nil
 	}
 	if limit <= 0 {
 		limit = 256
 	}
-	rows, err := s.queries.ListPendingTerminalWorkflowScanBindings(ctx, db.ListPendingTerminalWorkflowScanBindingsParams{
+	rows, err := s.tx.queries.ListPendingTerminalWorkflowScanBindings(ctx, db.ListPendingTerminalWorkflowScanBindingsParams{
 		ScanID: strings.TrimSpace(scanID), BindingLimit: int64(limit),
 	})
 	if err != nil {
@@ -85,25 +85,25 @@ func (s *sqlRunStore) PendingTerminalWorkflowBindings(ctx context.Context, scanI
 
 // BindWorkflowRun binds an existing scan to a workflow run, so the run's
 // inventory and coverage include it.
-func (s *sqlRunStore) BindWorkflowRun(ctx context.Context, scanID, workflowRunID string) error {
-	if s == nil || s.db == nil {
+func (s *RunStore) BindWorkflowRun(ctx context.Context, scanID, workflowRunID string) error {
+	if s == nil || s.tx.db == nil {
 		return fmt.Errorf("scan store not configured")
 	}
-	return s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	return s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		changed, err := bindScanContextsTx(ctx, qtx, strings.TrimSpace(scanID), "", workflowRunID, "", time.Now().UTC())
 		if err != nil || !changed {
 			return err
 		}
-		return s.emitScanTx(ctx, tx, strings.TrimSpace(scanID))
+		return s.tx.emitScanTx(ctx, tx, strings.TrimSpace(scanID))
 	})
 }
 
 // MarkWorkflowTerminalNotified acknowledges a terminal delivery.
-func (s *sqlRunStore) MarkWorkflowTerminalNotified(ctx context.Context, scanID, workflowRunID string) error {
-	if s == nil || s.db == nil {
+func (s *RunStore) MarkWorkflowTerminalNotified(ctx context.Context, scanID, workflowRunID string) error {
+	if s == nil || s.tx.db == nil {
 		return fmt.Errorf("scan store not configured")
 	}
-	return s.queries.MarkWorkflowScanTerminalNotified(ctx, db.MarkWorkflowScanTerminalNotifiedParams{
+	return s.tx.queries.MarkWorkflowScanTerminalNotified(ctx, db.MarkWorkflowScanTerminalNotifiedParams{
 		TerminalNotifiedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 		WorkflowRunID:      strings.TrimSpace(workflowRunID), ScanID: strings.TrimSpace(scanID),
 	})

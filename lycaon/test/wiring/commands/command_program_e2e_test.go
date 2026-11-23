@@ -12,10 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/test/wiring"
-
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -28,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 // programHost runs provider-emitted command programs for one test on one
@@ -117,7 +115,7 @@ func (p *programHost) withClientAt(t *testing.T, dir string, model modelcall.LLM
 	projectID := uuid.NewString()
 	testdbseed.InsertProjectRoot(t, h.DB, projectID, dir)
 	request.ProjectID = projectID
-	sess, err := h.Store.Create(t.Context(), request, projectID)
+	sess, err := h.Store.Sessions.Create(t.Context(), request, projectID)
 	testutil.FailErr(t, "create session", err)
 	p.models.use(sess.ID, model)
 	wiring.AttachDefaultAmbient(t, h, t.Context(), sess.ID)
@@ -170,7 +168,7 @@ func (s *commandProgramSession) promptUntilApproval(t *testing.T) (wire.Checkpoi
 
 func (s *commandProgramSession) result(t *testing.T) string {
 	t.Helper()
-	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
+	msgs, err := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read transcript", err)
 	// The messages API carries tool output only on the projected tool result.
 	for _, raw := range msgs {
@@ -328,7 +326,7 @@ func TestCommandProgramRefusesUnknownCapabilityRequestKeys(t *testing.T) {
 	testutil.FailErr(t, "set agent type", h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
 	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "run the program")
 	testutil.FailErr(t, "prompt", err)
-	msgs, err := h.Store.GetMessages(t.Context(), sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read transcript", err)
 	for _, raw := range msgs {
 		content, _, err := messageview.RetainedContent(raw, "tool_output", "program-1")
@@ -521,7 +519,7 @@ func TestCommandProgramHTTPMessagesEndpointReturnsContentAndReceipt(t *testing.T
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+s.session+"/messages", nil)
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", "Bearer "+s.h.APIToken)
 	w := httptest.NewRecorder()
 	s.h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

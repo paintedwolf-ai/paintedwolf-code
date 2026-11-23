@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/test/integration/git_parity_test.go",
+  "kind": "test_suite",
+  "workstream": "shim-audit",
+  "disposition": "retain",
+  "reason": "Retain the bundled Git parity matrix with its shared repository fixture construction. LFS installation contracts use real version-checked subprocess installations and verify both quoted tool paths and ordinary operations with no LFS binary. The absent-LFS fixture is independent of the optional external reference-Git comparisons; no assertion or comparison contract was removed.",
+  "reviewed_commit": "32ff23277dd82f116986d07cd1657a2523d557f2",
+  "ceiling": 667,
+  "boundaries": {
+    "lycaon/test/integration/git_parity_test.go": "7104e29706b6af180fdcffc502bf1a81185d8f1c91f944ed137e149a56721041",
+    "lycaon/test/integration/git_installation_fixture_test.go": "44d50c3e913b5e5f349b57c39980c003dd606ee96040dc2c06456f0d57ea35c6"
+  }
+}

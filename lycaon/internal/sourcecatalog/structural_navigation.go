@@ -240,7 +240,7 @@ func (c *Directories) CollapseBoundaries(ctx context.Context, project string, ro
 	}
 	policy := c.trees.policyFor(ctx, root.Path)
 	dir = normalizeDir(dir)
-	navigation, err := openNavigation(ctx, store, headGeneration)
+	navigation, err := openNavigation(ctx, store)
 	if err != nil {
 		return nil, false, err
 	}

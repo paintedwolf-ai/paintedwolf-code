@@ -20,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
 
@@ -37,7 +36,7 @@ var reachInvariants = []invariants.Invariant{
 	{Name: "phase-exits-are-callable-on-their-surface", Anchors: []invariants.Anchor{phaseSurfaceResolver, invariants.Func("internal/workflow/presentation", "ProjectPhaseExit")}, Check: phaseExitsAreCallable},
 }
 
-var phaseSurfaceResolver = invariants.Func("internal/coordinator/surface", "EnrichRunContextForWorkflow")
+var phaseSurfaceResolver = invariants.Func("internal/workflow/definition", "ResolveSurfaceBinding")
 
 // phaseKickPrefixes render only on their workflow phase, whose surface the
 // phase declares; the phase rule covers them.
@@ -349,16 +348,15 @@ func phaseExitsAreCallable(r *invariants.Run) {
 	}
 	grants := s.Profiles[coordinator].Tools
 	engine := s.Engine()
-	moduleRoot := r.Path("lycaon")
 	checked := 0
 	for _, key := range sortedKeys(reg.All()) {
 		m := reg.All()[key]
 		for _, phase := range m.PhaseDefs {
 			id := strings.TrimSpace(phase.CoordinatorSurface)
 			if id == "" {
-				id = strings.TrimSpace(surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{
-					WorkflowID: m.ID, CurrentPhase: phase.ID, SurfaceProfile: m.SurfaceProfile,
-				}, moduleRoot).PhaseCoordinatorSurface)
+				binding, err := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID)
+				r.Must(err)
+				id = strings.TrimSpace(binding.CoordinatorSurface)
 			}
 			plan, ok := plans[id]
 			if !ok {

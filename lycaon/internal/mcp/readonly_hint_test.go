@@ -4,14 +4,16 @@ import (
 	"context"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestRegisterToolPlumbsStructuredMetadata(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"docs": {{
 				Name:        "get",

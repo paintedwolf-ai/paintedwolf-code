@@ -11,7 +11,7 @@ import (
 )
 
 func TestHumanWorkflowStartInvokesPhaseAutoAdvancedHook(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 
 	var hooked bool
@@ -39,7 +39,7 @@ func TestHumanWorkflowStartInvokesPhaseAutoAdvancedHook(t *testing.T) {
 }
 
 func TestRejectedCoordinatorWorkflowStartDoesNotInvokePhaseAutoAdvancedHook(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 
 	hooked := false

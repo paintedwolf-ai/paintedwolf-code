@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,12 +16,14 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -125,7 +126,7 @@ func NewWorktreeTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *se
 	mgr := session.NewHost(mem, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	WireTestBindingRegistry(t)
 	reg := project.NewSQLRegistry(database)
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open", err)
 	mgr.SetProjectRegistry(reg)
 	srv := NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
@@ -140,7 +141,7 @@ func PostWorktreeJSON(t *testing.T, srv *hostapi.Server, path string, body any) 
 }
 
 type PutFailStore struct {
-	session.Store
+	store.SessionRepository
 	FailPut bool
 }
 
@@ -148,7 +149,7 @@ func (s *PutFailStore) PutWorktreeBinding(ctx context.Context, b store.WorktreeB
 	if s.FailPut {
 		return errors.New("injected put failure")
 	}
-	return s.Store.PutWorktreeBinding(ctx, b)
+	return s.SessionRepository.PutWorktreeBinding(ctx, b)
 }
 
 func RemoveWorktree(t *testing.T, srv *hostapi.Server, sessionID string) *httptest.ResponseRecorder {

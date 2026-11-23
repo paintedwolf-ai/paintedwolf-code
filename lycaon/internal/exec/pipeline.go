@@ -60,14 +60,6 @@ type PipelineResult struct {
 	TimedOut bool
 }
 
-// ProcessEnvironment builds the sanitized base environment for a process launch
-// before OS-specific sandbox confinement variables (such as proxy or SSH
-// wrappers) are attached. Both the command program's native env builtin and
-// external child launches build their environment here.
-func ProcessEnvironment(opts ExecOpts) ([]string, error) {
-	return processEnvironment(opts, nil)
-}
-
 // FinalProcessEnvironment is the environment a launched program receives,
 // including its confinement's proxy and Git SSH entries.
 func FinalProcessEnvironment(opts ExecOpts, stageEnv map[string]string) ([]string, error) {

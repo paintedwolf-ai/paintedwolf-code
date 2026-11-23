@@ -3,16 +3,15 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/session"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-	"strings"
-
-	"github.com/lycaon/lycaon/internal/guidance"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,22 +27,30 @@ const (
 // an accepted one satisfies topology_report_delivered and advances committed
 // gates, and one stored with document defects fails the run as not accepted.
 
+type TranscriptReader interface {
+	GetMessages(context.Context, string) ([]api.Message, error)
+}
+type ReportTranscript interface {
+	TranscriptReader
+	GetMessage(context.Context, string, string) (api.Message, error)
+}
+
 type Reports struct {
-	Coverage *workflowreview.Coverage
-	Verdicts *workflowreview.Verdicts
-	Runs     runstate.RunsRepository
-	Sessions session.Store
-	Resolver *catalog.Resolver
-	Vars     *runstate.Variables
-	Controls *lifecycle.Commands
-	Phases   *workflowphases.Service
+	Coverage        *workflowreview.Coverage
+	Verdicts        *workflowreview.Verdicts
+	Runs            runstate.RunsRepository
+	TranscriptStore ReportTranscript
+	Resolver        *catalog.Resolver
+	Vars            *runstate.Variables
+	Controls        *lifecycle.Commands
+	Phases          *workflowphases.Service
 }
 
 func (m *Reports) MaybeDeliverTopologyReport(ctx context.Context, sessionID, messageID string) error {
 	if m == nil || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(messageID) == "" {
 		return nil
 	}
-	message, err := m.Sessions.GetMessage(ctx, sessionID, messageID)
+	message, err := m.TranscriptStore.GetMessage(ctx, sessionID, messageID)
 	if err != nil {
 		return err
 	}
@@ -137,7 +144,7 @@ func (m *Reports) RecoverReportDelivery(ctx context.Context, run *api.WorkflowRu
 	if !ok || !workflowdef.PhaseHasGate(phase, "topology_report_delivered") {
 		return false, nil
 	}
-	messages, err := m.Sessions.GetMessages(ctx, run.SessionID)
+	messages, err := m.TranscriptStore.GetMessages(ctx, run.SessionID)
 	if err != nil {
 		return false, err
 	}

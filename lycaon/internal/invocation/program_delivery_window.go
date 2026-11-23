@@ -13,6 +13,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+const publishedProgramOutput = ` AND (o.stream NOT IN ('stdout','stderr','detail') OR NOT EXISTS (SELECT 1 FROM invocation_program_publications pub WHERE pub.program_id=o.program_id AND pub.state<>'committed'))`
+
 const deliveryWindowKind = "command_output_window"
 const deliveryWindowVersion = 1
 
@@ -67,7 +69,7 @@ func validateDeliveryWindow(program string, w api.CommandProgramOutputWindow) er
 }
 
 func readDeliveryWindows(ctx context.Context, tx *sql.Tx, program string) ([]api.CommandProgramOutputWindow, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT o.reference,o.preview,o.preview_truncated,o.complete,length(CAST(o.preview AS BLOB)),json_extract(o.blob_json,'$.Size'),f.reference,json_extract(f.blob_json,'$.Size'),f.complete FROM invocation_program_outputs o JOIN invocation_program_outputs f ON f.program_id=o.program_id AND f.execution_id IS NULL AND f.stream IN ('stdout','stderr') AND o.reference='output:program:'||f.program_id||':window:'||f.stream WHERE o.program_id=? AND o.execution_id IS NULL AND o.stream='detail' AND o.reference IN (?,?) ORDER BY CASE f.stream WHEN 'stdout' THEN 0 ELSE 1 END`, program, deliveryWindowReference(program, "stdout"), deliveryWindowReference(program, "stderr"))
+	rows, err := tx.QueryContext(ctx, `SELECT o.reference,o.preview,o.preview_truncated,o.complete,length(CAST(o.preview AS BLOB)),json_extract(o.blob_json,'$.Size'),f.reference,json_extract(f.blob_json,'$.Size'),f.complete FROM invocation_program_outputs o JOIN invocation_program_outputs f ON f.program_id=o.program_id AND f.execution_id IS NULL AND f.stream IN ('stdout','stderr') AND o.reference='output:program:'||f.program_id||':window:'||f.stream WHERE o.program_id=? AND o.execution_id IS NULL AND o.stream='detail' AND o.reference IN (?,?)`+publishedProgramOutput+` ORDER BY CASE f.stream WHEN 'stdout' THEN 0 ELSE 1 END`, program, deliveryWindowReference(program, "stdout"), deliveryWindowReference(program, "stderr"))
 	if err != nil {
 		return nil, err
 	}

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -23,7 +22,6 @@ func TestGenerationPublishesNoPartialText(t *testing.T) {
 	hub := events.NewMemoryHub()
 	service.events = hub
 	target := serviceTarget("main.go")
-	target.ProjectID = uuid.NewString()
 	stream, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: target.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
@@ -46,7 +44,7 @@ func TestGenerationPublishesNoPartialText(t *testing.T) {
 func TestFileBriefingPreviewPersistsFallbackText(t *testing.T) {
 	cfg, err := LoadConfig()
 	testutil.FailErr(t, "load file briefing config", err)
-	briefings := NewMemory()
+	briefings, _ := newBriefingStore(t, "project-1", "root-1")
 	server := NewService(t.Context(), Dependencies{Store: briefings, Config: cfg})
 	briefing := Briefing{
 		ProjectID: "project-1", RootID: "root-1", Path: "main.go", TargetKey: "target-1",

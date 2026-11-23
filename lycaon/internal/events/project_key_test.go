@@ -21,7 +21,7 @@ func TestPublishKeyForWithoutLookup(t *testing.T) {
 func TestScopeLookupProjectID(t *testing.T) {
 	ctx := context.Background()
 	reg := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 	lookup := project.ScopeLookup{Registry: reg}
 
@@ -38,7 +38,7 @@ func TestScopeLookupProjectID(t *testing.T) {
 func TestResolveProjectDir(t *testing.T) {
 	ctx := context.Background()
 	reg := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 	lookup := project.ScopeLookup{Registry: reg}
 	rootPath := project.PrimaryRootPath(p)
@@ -71,7 +71,7 @@ func (s *stubBoardSource) BuildView(_ context.Context, projectID, workspacePath,
 func TestPublishBoardUsesResolvedProjectDir(t *testing.T) {
 	ctx := context.Background()
 	reg := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 	hub := events.NewMemoryHub()
 	board := &stubBoardSource{}
@@ -92,7 +92,7 @@ func TestPublishBoardFollowsSessionActiveRoot(t *testing.T) {
 	reg := projecttest.NewRegistry(t)
 	primary := t.TempDir()
 	secondary := t.TempDir()
-	p, err := project.CreateWithRoot(ctx, reg, primary)
+	p, err := projecttest.CreateWithRoot(ctx, reg, primary)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(ctx, p.ID, project.AttachRootParams{Path: secondary, Label: "secondary"})
 	testutil.FailErr(t, "attach", err)
@@ -119,7 +119,7 @@ func TestPublishBoardFollowsSessionActiveRoot(t *testing.T) {
 func TestPublishBoardFallsBackWhenSessionRootsUnresolved(t *testing.T) {
 	ctx := context.Background()
 	reg := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create", err)
 	hub := events.NewMemoryHub()
 	boardSrc := &stubBoardSource{}

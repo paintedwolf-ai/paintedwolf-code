@@ -64,7 +64,7 @@ func (s *Handler) HandleScannerCheck(w http.ResponseWriter, r *http.Request) {
 
 	// Built-in checks do not require a process probe.
 	builtInReports := make(map[string]scancatalog.ScannerCheckReport)
-	for _, report := range scancatalog.CheckCatalog(cfg, s.ModuleRoot, "") {
+	for _, report := range scancatalog.CheckCatalog(cfg, "") {
 		builtInReports[report.ID] = report
 	}
 

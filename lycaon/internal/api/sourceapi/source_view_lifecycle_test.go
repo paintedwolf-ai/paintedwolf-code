@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,7 +34,7 @@ func sourceViewFixtureProject(t *testing.T, server *Handler) *project.Project {
 	t.Helper()
 	root := t.TempDir()
 	testutil.FailErr(t, "create file", os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o600))
-	created, err := project.CreateWithRoot(t.Context(), server.Workspace.ProjectRegistry, root)
+	created, err := projecttest.CreateWithRoot(t.Context(), server.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
 	physical, err := server.Workspace.ProjectRegistry.Get(t.Context(), created.ID)
 	testutil.FailErr(t, "resolve workspace", err)
@@ -65,7 +66,7 @@ func TestSourceViewsEndWithTheirChat(t *testing.T) {
 	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	server := newSourceHandlerFixture(t, func(deps *Deps) { deps.SessionStore = sessions })
 	p := sourceViewFixtureProject(t, server)
-	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
+	chat, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 	addressed := readSourceViewResponse(t, createTreeView(t, server, p, chat.ID), http.StatusCreated).Tree
 	unaddressed := readSourceViewResponse(t, createTreeView(t, server, p, ""), http.StatusCreated).Tree

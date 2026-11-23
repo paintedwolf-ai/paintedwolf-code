@@ -7,12 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
+	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -203,11 +206,11 @@ func TestBoundaryDirectIPSeparationMatrix(t *testing.T) {
 
 func TestBoundaryFailClosedStartupMatrix(t *testing.T) {
 	requireLiveBoundary(t)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
-	t.Cleanup(confine.SetBrokerUnavailableForTest(fmt.Errorf("injected broker failure")))
+	confinetest.FailBrokerStartup(t, fmt.Errorf("injected broker failure"))
 
 	proj := t.TempDir()
 	c, ok := confine.DefaultConfinement(confine.Request{Roots: []string{proj}})
@@ -269,6 +272,40 @@ func TestDirectIPProfileRules(t *testing.T) {
 	}
 	if strings.Contains(narrowed, `(remote ip "*:*")`) {
 		t.Fatalf("narrowed profile must not keep the wide-open allowance: %s", narrowed)
+	}
+
+	dir := shortTempDir(t)
+	sockPath := filepath.Join(dir, "svc.sock")
+	listenUnix(t, sockPath)
+	resolvedSock, err := filepath.EvalSymlinks(sockPath)
+	testutil.FailErr(t, "eval socket", err)
+	grant, err := captureSocketGrant(t, sockPath, resolvedSock)
+	testutil.FailErr(t, "capture reviewed socket", err)
+	c := confine.Confinement{Roots: []string{dir}, Network: confine.NetworkDeny, SocketGrants: []confine.SocketGrant{grant}}
+	want := grant.ResolvedPath
+	if runtime.GOOS == "darwin" {
+		lease, err := confine.BindAction(&c, confine.EgressCommand{ToolCallID: t.Name()})
+		testutil.FailErr(t, "bind socket endpoints", err)
+		t.Cleanup(func() { _ = lease.Close(t.Context()) })
+		args, _, err := confine.ResolveSocketArguments(&c, []string{"{{paintedwolf-socket:" + grant.ApprovedPath + "}}"}, nil)
+		testutil.FailErr(t, "resolve socket endpoint", err)
+		want, err = filepath.EvalSymlinks(args[0])
+		testutil.FailErr(t, "resolve endpoint literal", err)
+	} else {
+		c.SocketGrants[0].Binding = socketref.Binding{Enforcement: socketref.KernelPathname}
+	}
+	profile, err = confine.BuildSeatbeltProfile(c)
+	testutil.FailErr(t, "BuildProfile with socket grant", err)
+	if !strings.Contains(profile, `(allow network-outbound (literal "`+want+`"))`) {
+		t.Fatalf("socket grant missing its exact literal:\n%s", profile)
+	}
+	for _, line := range strings.Split(profile, "\n") {
+		if !strings.HasPrefix(line, "(allow network") {
+			continue
+		}
+		if !strings.HasPrefix(line, "(allow network-outbound (literal ") {
+			t.Errorf("socket-only profile allows network beyond exact literals: %s", line)
+		}
 	}
 }
 
@@ -433,7 +470,7 @@ func TestDirectIPPermitsNarrowOnly(t *testing.T) {
 // Direct-IP declarations flow through profile construction and execution.
 func TestDirectIPNarrowingEndToEnd(t *testing.T) {
 	self := requireLiveBoundary(t)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")

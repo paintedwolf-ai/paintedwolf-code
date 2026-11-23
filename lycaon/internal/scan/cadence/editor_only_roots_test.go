@@ -19,14 +19,14 @@ func TestEditorOnlyRootsAreNeverScheduled(t *testing.T) {
 		testutil.FailErr(t, "baseline", cadence.BaselineRoot(ctx, root.Path))
 		testutil.FailErr(t, "inventory", cadence.NoteTree(ctx, root.Path, 1))
 		testutil.FailErr(t, "write", noteCadenceWrites(ctx, cadence, root.Path, []string{"main.go"}))
-		rows, err := store.ListSeriesForPath(ctx, root.Path)
+		rows, err := store.Series.ListSeriesForPath(ctx, root.Path)
 		testutil.FailErr(t, "series", err)
 		if len(rows) != 0 {
 			t.Fatalf("%s: %d scan series for an editor-only root", root.Name, len(rows))
 		}
 	}
 	testutil.FailErr(t, "admitted baseline", cadence.BaselineRoot(ctx, facts.Work))
-	rows, err := store.ListSeriesForPath(ctx, facts.Work)
+	rows, err := store.Series.ListSeriesForPath(ctx, facts.Work)
 	testutil.FailErr(t, "admitted series", err)
 	if len(rows) == 0 {
 		t.Fatal("an admitted root has no scan series")

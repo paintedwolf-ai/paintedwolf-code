@@ -21,7 +21,7 @@ func TestPendingDecisionControlsDurableWorkerCompletion(t *testing.T) {
 			database := testdbfixture.Open(t, "store.db")
 			testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
 			testdbseed.InsertSession(t, database, "child", testdbseed.DefaultProjectID)
-			queue := NewSQLQueue(database, 1)
+			queue := NewSQLServices(database, 1).Queue
 			jobID, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 				ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,
 				AgentType: "implementer", Prompt: "Implement the backend", Brief: "Implement the backend",
@@ -39,7 +39,7 @@ func TestPendingDecisionControlsDurableWorkerCompletion(t *testing.T) {
 			}))
 			won, err := queue.Complete(t.Context(), claimed, api.WorkerResult{Status: status, Summary: "Waiting for a decision"})
 			testutil.FailErr(t, "settle worker", err)
-			job, ok := NewSQLQueue(database, 1).Get(jobID)
+			job, ok := NewSQLServices(database, 1).Queue.Get(jobID)
 			if !won || !ok || job.Status != api.WorkerStatusHeld || job.Result == nil || job.Result.Status != "needs_decision" || job.MergeStatus != "" || job.WorkspaceRoot != branch {
 				t.Fatalf("decision lifecycle after reopen: won=%v job=%+v", won, job)
 			}
@@ -75,7 +75,7 @@ func TestDecisionResolutionDistinguishesJobStateFromChangedQuestion(t *testing.T
 	testutil.FailErr(t, "store decision", decisions.Put(t.Context(), api.WorkerDecisionRequest{ChildSessionID: "child", WorkerID: "job", Question: "Choose", Options: []string{"A", "B"}}))
 	decision, _, err := decisions.Get(t.Context(), "child")
 	testutil.FailErr(t, "read decision", err)
-	resolver := NewSQLDecisionResolver(sessionstore.NewSQL(database), NewSQLQueue(database, 1))
+	resolver := NewSQLDecisionResolver(sessionstore.NewSQL(database), NewSQLServices(database, 1).Queue)
 	err = resolver.Resolve(t.Context(), decision, api.Message{Role: api.MessageRoleUser, Content: "A"})
 	var stateErr *DecisionStateError
 	if !errors.As(err, &stateErr) || stateErr.Status != "complete" || errors.Is(err, errDecisionChanged) {

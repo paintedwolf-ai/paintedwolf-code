@@ -3,7 +3,6 @@ package briefingstore
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -229,7 +229,7 @@ func TestGenerationFailureCoolsAutomaticRequests(t *testing.T) {
 
 func seedCheckpoint(t *testing.T, f fixture) string {
 	t.Helper()
-	session, err := store.NewSQL(f.database).Create(t.Context(), api.CreateSessionRequest{}, project)
+	session, err := store.NewSQL(f.database).Sessions.Create(t.Context(), api.CreateSessionRequest{}, project)
 	testutil.FailErr(t, "session", err)
 	_, err = f.database.ExecContext(t.Context(), `INSERT INTO checkpoints(id, session_id, project_id, kind, status, created_at) VALUES ('cp1', ?, ?, 'tool_approval', 'approved', ?)`,
 		session.ID, project, timelayout.Format(time.Now().UTC()))
@@ -324,7 +324,7 @@ func TestApprovalIntentLinksWithoutMovingTheTarget(t *testing.T) {
 func TestApprovedRationaleLinksOnlyFromApprovedCards(t *testing.T) {
 	f := newFixture(t)
 	ctx := t.Context()
-	session, err := store.NewSQL(f.database).Create(ctx, api.CreateSessionRequest{}, project)
+	session, err := store.NewSQL(f.database).Sessions.Create(ctx, api.CreateSessionRequest{}, project)
 	testutil.FailErr(t, "session", err)
 	insert := func(id, status string) {
 		_, err := f.database.ExecContext(ctx, `INSERT INTO checkpoints(id, session_id, project_id, kind, status, payload_json, created_at) VALUES (?, ?, ?, 'tool_approval', ?, ?, ?)`,

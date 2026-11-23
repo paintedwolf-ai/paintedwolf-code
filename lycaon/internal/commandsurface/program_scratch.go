@@ -87,10 +87,6 @@ func ParseAdmitted(ctx context.Context, memory *toolcontract.ProgramMemory, sour
 }
 
 func scratchLedger(ctx context.Context, maximum int64, memory ProgramMemoryAdmission, initial int64) (*syntax.AllocationBudget, func(), error) {
-	if memory == nil {
-		pool, err := syntax.NewAllocationBudget(maximum)
-		return pool, func() {}, err
-	}
 	var releases []func()
 	release := func() {
 		for i := len(releases) - 1; i >= 0; i-- {

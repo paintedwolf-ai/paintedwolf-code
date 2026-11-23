@@ -3,9 +3,9 @@ package review_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -40,7 +40,7 @@ func TestPreparedVerdictRecoveryPreservesJudgedRound(t *testing.T) {
 	for _, published := range []bool{false, true} {
 		t.Run(map[bool]string{false: "before publication", true: "after publication"}[published], func(t *testing.T) {
 			mgr, _, blueprints, _ := testManager(t)
-			setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+			setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 			run := startReviewLoopRun(t.Context(), t, mgr)
 			directory := t.TempDir()
 			ledger := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)

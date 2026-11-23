@@ -14,11 +14,14 @@ import (
 )
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	List(context.Context) ([]*api.Session, error)
-	ReassignSessionsWorkspaceRoot(context.Context, string, string, string) error
-	UpdateSession(context.Context, string, func(*api.Session)) error
-	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
+	Get(ctx context.Context, id string) (*api.Session, error)
+	List(ctx context.Context) ([]*api.Session, error)
+	ReassignSessionsWorkspaceRoot(ctx context.Context, projectID, fromRootID, toRootID string) error
+	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error
+}
+
+type TranscriptStore interface {
+	ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error)
 }
 type Projects interface {
 	Get(context.Context, string) (*project.Project, error)
@@ -54,7 +57,8 @@ type OverlayPromoter interface {
 	RejectOverlay(context.Context, string, string, string) (api.OverlayRejectOutcome, error)
 }
 type Service struct {
-	store                     Sessions
+	sessionStore              Sessions
+	transcriptStore           TranscriptStore
 	projects                  Projects
 	workers                   Workers
 	workerAbort               WorkerAbort
@@ -76,8 +80,8 @@ type Service struct {
 	names                     workercompletion.WorkerNames
 }
 
-func New(store Sessions, stops Stops, status Status, admission Admission, batch Batch, instructions Instructions, transcript Transcript) *Service {
-	return &Service{store: store, stops: stops, status: status, admission: admission, batch: batch, instructions: instructions, transcript: transcript}
+func New(sessionStore Sessions, transcriptStore TranscriptStore, stops Stops, status Status, admission Admission, batch Batch, instructions Instructions, transcript Transcript) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, stops: stops, status: status, admission: admission, batch: batch, instructions: instructions, transcript: transcript}
 }
 func (s *Service) SetProjects(projects Projects) {
 	s.projects = projects

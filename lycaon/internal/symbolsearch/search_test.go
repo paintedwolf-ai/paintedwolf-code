@@ -30,7 +30,7 @@ func symbolSearchFixture(t *testing.T, files map[string]string) *project.Project
 	t.Helper()
 	dir := t.TempDir()
 	writeSymbolFixture(t, dir, files)
-	p, err := project.CreateWithRoot(context.Background(), projecttest.NewRegistry(t), dir)
+	p, err := projecttest.CreateWithRoot(context.Background(), projecttest.NewRegistry(t), dir)
 	testutil.FailErr(t, "create project", err)
 	return p
 }

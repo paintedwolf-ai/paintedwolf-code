@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/test/wiring"
 
 	"github.com/google/uuid"
-	internalapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -71,7 +70,7 @@ func TestRetirementsAbsentFromActiveSurfacesAndMapped(t *testing.T) {
 
 	for _, route := range []string{"/v1/delegations", "/v1/delegations/del-1"} {
 		req := httptest.NewRequest(http.MethodGet, route, nil)
-		req.Header.Set("Authorization", "Bearer "+internalapi.TestAPIToken)
+		req.Header.Set("Authorization", "Bearer "+h.APIToken)
 		rec := httptest.NewRecorder()
 		h.Server.ServeHTTP(rec, req)
 		if rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
@@ -279,7 +278,7 @@ func TestRetirementsHistoricalTranscriptReadback(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 
 	now := time.Now().UTC()
-	testutil.FailErr(t, "append historical retired tool calls", h.Store.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append historical retired tool calls", h.Store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{
 			ID:      uuid.NewString(),
 			Role:    api.MessageRoleAssistant,
@@ -303,14 +302,14 @@ func TestRetirementsHistoricalTranscriptReadback(t *testing.T) {
 		},
 	))
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages with retired tool history", err)
 	if len(msgs) < 2 || len(msgs[0].ToolCalls) != 2 || msgs[0].ToolCalls[0].Name != "delegate_dispatch" {
 		t.Fatalf("historical tool calls did not round-trip: %+v", msgs)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
-	req.Header.Set("Authorization", "Bearer "+internalapi.TestAPIToken)
+	req.Header.Set("Authorization", "Bearer "+h.APIToken)
 	rec := httptest.NewRecorder()
 	h.Server.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "delegate_dispatch") || !strings.Contains(rec.Body.String(), "request_budget") {
@@ -327,6 +326,6 @@ func TestRetirementsHistoricalTranscriptReadback(t *testing.T) {
 			t.Fatalf("replacement tool %q failed to build structured evidence record: %+v", repl, replRec)
 		}
 	}
-	_, err = h.Store.LoadLedger(ctx, sess.ID)
+	_, err = h.Store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger with retired tool history", err)
 }

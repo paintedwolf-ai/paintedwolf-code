@@ -66,7 +66,7 @@ func TestEffectiveSkillsGateMatrix(t *testing.T) {
 				testutil.FailErr(t, "PutEnabled", err)
 			}
 			reg := projecttest.NewRegistry(t)
-			p, err := project.CreateWithRoot(ctx, reg, root)
+			p, err := projecttest.CreateWithRoot(ctx, reg, root)
 			testutil.FailErr(t, "CreateWithRoot", err)
 			if !tc.projectOn {
 				if _, err := reg.SetTrustEnabled(ctx, p.ID, map[string]bool{projectcontrib.SurfaceSkills: false}); err != nil {
@@ -124,7 +124,7 @@ func TestEffectiveSkillsGateOffReadsNothing(t *testing.T) {
 		testutil.FailErr(t, "PutEnabled", err)
 	}
 	reg := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(ctx, reg, root)
+	p, err := projecttest.CreateWithRoot(ctx, reg, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)
 	m.SetEffectiveCatalogDeps("", extpacks.Active(), surfaces)
@@ -166,7 +166,7 @@ func TestEffectiveSkillsShadowsStock(t *testing.T) {
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 	testutil.FailErr(t, "surfaces", err)
 	reg := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(ctx, reg, root)
+	p, err := projecttest.CreateWithRoot(ctx, reg, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)
 	moduleRoot := filepath.Join("..", "..")
@@ -216,7 +216,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 	testutil.FailErr(t, "surfaces", err)
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(ctx, reg, root)
+	p, err := projecttest.CreateWithRoot(ctx, reg, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)
 	m.SetEffectiveCatalogDeps("", extpacks.Active(), surfaces)
@@ -226,7 +226,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 		Projects: reg,
 	})
 
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
 
 	loaded, _ := m.Profiles.EffectiveSkills(ctx, p.ID, []string{root})
@@ -239,7 +239,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	if !found {
 		t.Fatal("expected project skill")
 	}
-	if sessionStore.SessionUntrustedContent(sess.ID) {
+	if sessionStore.Evidence.SessionUntrustedContent(sess.ID) {
 		t.Fatal("loading a project skill must not taint the session")
 	}
 }

@@ -239,11 +239,13 @@ func TestTrustReadRefusesEscapingLinkAndOversizedConfiguration(t *testing.T) {
 	}
 }
 
-func TestInventoryDiscoveryUsesOwnerLifetime(t *testing.T) {
+func TestInventoryCloseDrainsDiscovery(t *testing.T) {
 	i := NewInventory()
 	t.Cleanup(i.Close)
 	started := make(chan bool, 1)
+	walkDone := make(chan struct{})
 	i.walk = func(ctx context.Context, _ string) ([]governance.ResolvedAgentsMD, error) {
+		defer close(walkDone)
 		_, deadline := ctx.Deadline()
 		started <- deadline
 		<-ctx.Done()
@@ -256,8 +258,16 @@ func TestInventoryDiscoveryUsesOwnerLifetime(t *testing.T) {
 		t.Error("discovery has a fixed lifetime that excludes slower repositories")
 	}
 	i.Close()
+	select {
+	case <-walkDone:
+	default:
+		t.Error("inventory closed before discovery stopped")
+	}
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("close discovery: %v", err)
+	}
+	if _, err := i.Scan(t.Context(), nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("scan after close: %v", err)
 	}
 }
 

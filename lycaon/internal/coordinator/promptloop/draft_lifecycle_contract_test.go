@@ -79,7 +79,7 @@ func TestProvisionalCommitPreservesIDAndOrd(t *testing.T) {
 		},
 	})
 	committed, err := loop.Projection.commitGuardedAssistantTurn(
-		context.Background(), &api.Session{ID: "s1"}, "s1", store.All(), "go", "", before,
+		context.Background(), &api.Session{ID: "s1"}, "s1", store.All(), "", before,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
 	if committed.ID != "slot-1" {
@@ -131,7 +131,7 @@ func TestMultiStepTurnLeavesZeroLiveRows(t *testing.T) {
 		store.Append(step)
 		live := store.Find(step.ID)
 		_, err := loop.Projection.commitGuardedAssistantTurn(
-			context.Background(), &api.Session{ID: "s1"}, "s1", store.All(), "go", "", live,
+			context.Background(), &api.Session{ID: "s1"}, "s1", store.All(), "", live,
 		)
 		testutil.FailErr(t, "settle "+step.ID, err)
 	}

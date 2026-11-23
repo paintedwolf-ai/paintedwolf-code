@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -26,6 +25,8 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -75,7 +76,7 @@ func NewReportTestHarness(t *testing.T, opts ...TestDeps) *ReportTestHarness {
 	scanStore := scan.NewSQLStore(sqlDB)
 	workDir := t.TempDir()
 	projReg := project.NewSQLRegistry(sqlDB)
-	p, err := project.CreateWithRoot(t.Context(), projReg, workDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projReg, workDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	name := "acme/app"
 	_, err = projReg.Patch(t.Context(), p.ID, project.PatchParams{Name: &name})
@@ -103,7 +104,7 @@ func NewReportTestHarness(t *testing.T, opts ...TestDeps) *ReportTestHarness {
 type ReportTestHarness struct {
 	Srv       *hostapi.Server
 	Deps      hostapi.Dependencies
-	Store     *store.SQL
+	Store     *store.Repositories
 	RunStore  *runstate.Repository
 	WfMgr     *workflow.RunManager
 	ScanStore *scan.SQLStore
@@ -115,7 +116,7 @@ type ReportTestHarness struct {
 
 func (h *ReportTestHarness) SeedSessionReport(t *testing.T, sessionID, msgID string) {
 	t.Helper()
-	testutil.FailErr(t, "append session report", h.Store.AppendMessages(t.Context(), sessionID, wire.Message{
+	testutil.FailErr(t, "append session report", h.Store.Transcript.AppendMessages(t.Context(), sessionID, wire.Message{
 		ID: msgID, Role: wire.MessageRoleAssistant, Kind: wire.MessageKindCompletionReport,
 		Content: "## What changed\n\nThe bucket refills from a monotonic clock (" + msgID + ").",
 		CompletionReport: &wire.CompletionReportMeta{
@@ -145,7 +146,7 @@ func (h *ReportTestHarness) SeedSecuritySurveyRun(t *testing.T, runID string) *w
 
 func (h *ReportTestHarness) CreateCompletedRun(t *testing.T, runID, workflowID, phase string, at time.Time) *wire.WorkflowRun {
 	t.Helper()
-	sess, err := h.Store.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := h.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: h.Project.ID,
 		Posture:   wire.SessionPostureVet,
 	}, h.Project.ID)
@@ -163,7 +164,7 @@ func (h *ReportTestHarness) CreateCompletedRun(t *testing.T, runID, workflowID, 
 func (h *ReportTestHarness) SeedRunReport(t *testing.T, run *wire.WorkflowRun) {
 	t.Helper()
 	h.MarkReportDelivered(t, run)
-	testutil.FailErr(t, "append run report", h.Store.AppendMessages(t.Context(), run.SessionID, wire.Message{
+	testutil.FailErr(t, "append run report", h.Store.Transcript.AppendMessages(t.Context(), run.SessionID, wire.Message{
 		ID: "msg_run_report", Role: wire.MessageRoleAssistant, Kind: wire.MessageKindCompletionReport,
 		CompletionReport: &wire.CompletionReportMeta{
 			Scope: wire.CompletionReportScopeRun, SurfaceID: "implement_synthesis", Phase: "report",
@@ -197,7 +198,7 @@ func (h *ReportTestHarness) SeedToolVisual(t *testing.T, run *wire.WorkflowRun, 
 	vis := art
 	vis.Bytes = nil
 	vis.StoreRef = true
-	testutil.FailErr(t, "append visual tool result", h.Store.AppendMessages(t.Context(), run.SessionID, wire.Message{
+	testutil.FailErr(t, "append visual tool result", h.Store.Transcript.AppendMessages(t.Context(), run.SessionID, wire.Message{
 		ID: id, Role: wire.MessageRoleTool,
 		Content: "visual", Visibility: wire.MessageVisibilityTranscript,
 		WorkflowRunID: run.ID,
@@ -211,7 +212,7 @@ func (h *ReportTestHarness) SeedToolVisual(t *testing.T, run *wire.WorkflowRun, 
 func (h *ReportTestHarness) SeedMinimalRunReport(t *testing.T, run *wire.WorkflowRun) {
 	t.Helper()
 	h.MarkReportDelivered(t, run)
-	testutil.FailErr(t, "append grounded", h.Store.AppendMessages(t.Context(), run.SessionID, wire.Message{
+	testutil.FailErr(t, "append grounded", h.Store.Transcript.AppendMessages(t.Context(), run.SessionID, wire.Message{
 		ID: "msg_impl_" + run.ID, Role: wire.MessageRoleAssistant, Kind: wire.MessageKindCompletionReport, Content: "done",
 		CompletionReport: &wire.CompletionReportMeta{Scope: wire.CompletionReportScopeRun, Phase: "done"},
 		Visibility:       wire.MessageVisibilityTranscript, WorkflowRunID: run.ID,
@@ -262,12 +263,12 @@ func (h *ReportTestHarness) SeedVerdict(t *testing.T, run *wire.WorkflowRun) {
 func (h *ReportTestHarness) SeedFindings(t *testing.T, run *wire.WorkflowRun) {
 	t.Helper()
 	at := time.Date(2026, 7, 8, 15, 4, 5, 0, time.UTC)
-	testutil.FailErr(t, "insert scan", h.ScanStore.Insert(t.Context(), wire.CodeScan{
+	testutil.FailErr(t, "insert scan", h.ScanStore.Runs.Insert(t.Context(), wire.CodeScan{
 		ID: "scan_report_1", CanonicalPath: h.WorkDir, ScannerID: "semgrep",
 		Status: wire.CodeScanStatusComplete, Categories: []wire.ScanCategory{wire.ScanCategorySecurity},
 		WorkflowRunID: run.ID, HeadSHA: "a1b2c3d", CompletedAt: &at,
 	}, nil, ""))
-	testutil.FailErr(t, "save ingest", h.ScanStore.SaveIngest(t.Context(), "scan_report_1", evidence.Record{
+	testutil.FailErr(t, "save ingest", h.ScanStore.Findings.SaveIngest(t.Context(), "scan_report_1", evidence.Record{
 		Artifacts: map[string]any{
 			"findings": []wire.SecurityFinding{{
 				RuleID: "go.sql.injection", Level: wire.FindingLevelHigh,

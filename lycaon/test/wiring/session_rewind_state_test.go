@@ -26,8 +26,7 @@ func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Did the second ask.", "")},
 	}})
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := h.OwnerCtx(t, context.Background())
 	projectDir := t.TempDir()
@@ -44,7 +43,7 @@ func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 		testutil.FailErr(t, "second prompt", err)
 	}
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	anchors := visibleUserMessageIDs(t, msgs)
 	if len(anchors) != 2 {
@@ -77,8 +76,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Did the second ask.", "")},
 	}})
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := h.OwnerCtx(t, context.Background())
 	projectDir := t.TempDir()
@@ -93,14 +91,14 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 			testutil.FailErr(t, "prompt "+prompt, err)
 		}
 	}
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	anchors := visibleUserMessageIDs(t, msgs)
 	if len(anchors) != 2 {
 		t.Fatalf("visible user messages = %d, want 2", len(anchors))
 	}
 	for _, anchorID := range anchors {
-		readCheckpointManifest(t, h.testDir, projectDir, sess.ID, anchorID, h.Store)
+		readCheckpointManifest(t, h.testDir, projectDir, sess.ID, anchorID, h.Store.Rewind)
 	}
 	WaitForSessionIdleGate(t, h, ctx, sess.ID)
 
@@ -108,13 +106,13 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 		testutil.FailErr(t, "rewind to the first ask", err)
 	}
 
-	after, err := h.Store.GetMessages(ctx, sess.ID)
+	after, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages after rewind", err)
 	if len(visibleUserMessageIDs(t, after)) != 0 {
 		t.Fatalf("visible asks remain after rewinding to the first one: %d", len(visibleUserMessageIDs(t, after)))
 	}
 
-	checkpoints := sessioncheckpoint.New(h.testDir, projectDir, h.Store)
+	checkpoints := sessioncheckpoint.New(h.testDir, projectDir, h.Store.Rewind)
 	for _, anchorID := range anchors {
 		if _, err := checkpoints.Load(ctx, sess.ID, anchorID); !errors.Is(err, sessionstore.ErrCheckpointMissing) {
 			t.Fatalf("checkpoint for rewound anchor %s: err = %v, want ErrCheckpointMissing", anchorID, err)
@@ -124,7 +122,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 
 func implementState(t *testing.T, h *Harness, ctx context.Context, sessionID string) surface.ImplementSessionState {
 	t.Helper()
-	sess, err := h.Store.Get(ctx, sessionID)
+	sess, err := h.Store.Sessions.Get(ctx, sessionID)
 	testutil.FailErr(t, "get session", err)
 	return h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 }
@@ -180,13 +178,10 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 	if paths := h.Sessions.Manager.Workers.Workspaces.Touches.Paths(jobID); len(paths) != 0 {
 		t.Fatalf("touch ledger still holds %v for a job whose dispatch was rewound", paths)
 	}
-	// Pending-overlay state is derived from the transcript, so the truncate is
-	// what clears it — assert the derived view, not a private field.
-	msgs := mustMessages(t, h, ctx, sess.ID)
-	if ids := surface.PendingOverlaySummaryIDs(msgs); len(ids) != 0 {
-		t.Fatalf("overlays still pending after rewind: %v", ids)
-	}
 	state := implementState(t, h, ctx, sess.ID)
+	if len(state.PendingOverlayIDs) != 0 {
+		t.Fatalf("overlays still pending after rewind: %v", state.PendingOverlayIDs)
+	}
 	if state.BatchPhase != "pre_dispatch" {
 		t.Fatalf("batch_phase = %q, want pre_dispatch", state.BatchPhase)
 	}
@@ -194,7 +189,7 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 
 func mustMessages(t *testing.T, h *Harness, ctx context.Context, sessionID string) []api.Message {
 	t.Helper()
-	msgs, err := h.Store.GetMessages(ctx, sessionID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get messages", err)
 	return msgs
 }

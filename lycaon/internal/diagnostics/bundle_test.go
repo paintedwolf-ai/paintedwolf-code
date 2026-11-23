@@ -14,7 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 
-	"github.com/lycaon/lycaon/internal/localdata"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 )
 
 const (
@@ -387,8 +387,8 @@ func TestDiagnosticsSecretCanaryExclusion(t *testing.T) {
 	t.Parallel()
 	configDir := t.TempDir()
 	canaries := map[string]string{"unclassified-rogue.yaml": "CANARY-SECRET-unclassified-rogue.yaml"}
-	for _, e := range localdata.AllClassifiedEntries() {
-		if !e.IsDir && !localdata.IsDiagnosticsAllowed(e.Name) {
+	for _, e := range localdatatest.Entries() {
+		if !e.IsDir && !e.Diagnostics {
 			canaries[e.Name] = "CANARY-SECRET-" + e.Name
 		}
 	}

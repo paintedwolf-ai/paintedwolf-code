@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestAskReceiptReplayPreservesPromptAndRejectsChangedInput(t *testing.T) {
@@ -151,7 +152,7 @@ func TestAnswerProjectionUpdatesOnlyTheMatchingAskToolRow(t *testing.T) {
 		{ID: "foreign operation", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "other", Tool: "ask_user"}},
 		{ID: "missing result", Role: api.MessageRoleTool}, {ID: "user", Role: api.MessageRoleUser},
 	}}
-	cards := &Cards{Sessions: rows}
+	cards := &Cards{SessionStore: rows, TranscriptStore: rows}
 	cards.PersistAskUserAnswerForToolCall(t.Context(), "session", "operation", AskUserAnswerBody{Status: "answered", PhaseID: "phase", Response: "retained answer"})
 	if len(rows.updated) != 1 || rows.updated[0].ID != "target" || rows.updated[0].Content != rows.updated[0].ToolResult.Content {
 		t.Fatalf("answer changed unrelated rows=%+v", rows.updated)

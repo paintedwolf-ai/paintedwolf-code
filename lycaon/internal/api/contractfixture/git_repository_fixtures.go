@@ -15,10 +15,12 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -182,7 +184,7 @@ func NewGitBoard() *board.SnapshotBuilder {
 	return &board.SnapshotBuilder{Git: manager, StatusCache: git.NewStatusCache(manager)}
 }
 
-func NewGitServer(t *testing.T, sessions session.Store, reg project.Registry, opts ...TestDeps) *hostapi.Server {
+func NewGitServer(t *testing.T, sessions *store.Repositories, reg project.Registry, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessions, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
@@ -198,11 +200,11 @@ func NewGitTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, string) 
 	dir := InitDirtyRepo(t)
 	sessions := storetest.New(t)
 	reg := project.NewSQLRegistry(sessions.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open", err)
 
 	drafter := func(d *hostapi.Dependencies) {
-		d.Providers.CommitDrafter = compaction.MockSummarizer{Text: "feat: drafted subject"}
+		d.Providers.CommitDrafter = llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "feat: drafted subject"}
 	}
 	srv := NewGitServer(t, sessions, reg, append([]TestDeps{drafter}, opts...)...)
 	return srv, p.ID

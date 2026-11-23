@@ -20,21 +20,22 @@ const (
 	desktopSettingsTTL = 15 * time.Second
 )
 
-// Desktop configuration is consulted in a fixed order: the GNOME schema, then
-// KDE's file. The first source declaring a proxy mode wins.
-var desktopSources = []func(context.Context) (Configuration, bool, error){
-	gsettingsConfiguration,
-	func(context.Context) (Configuration, bool, error) { return readKIOConfiguration(os.LookupEnv) },
-}
+type desktopSource func(context.Context) (Configuration, bool, error)
 
 type desktopCache struct {
-	mu     sync.Mutex
-	at     time.Time
-	config Configuration
-	err    error
+	mu      sync.Mutex
+	at      time.Time
+	config  Configuration
+	err     error
+	sources []desktopSource
 }
 
-var cache desktopCache
+var cache = desktopCache{sources: []desktopSource{
+	func(ctx context.Context) (Configuration, bool, error) {
+		return gsettingsConfiguration(ctx, hostread.DesktopProxySettings)
+	},
+	func(context.Context) (Configuration, bool, error) { return readKIOConfiguration(os.LookupEnv) },
+}}
 
 // Current returns the desktop's proxy configuration.
 func Current() (Configuration, error) {
@@ -67,7 +68,7 @@ func (c *desktopCache) current(ctx context.Context) (Configuration, error) {
 	if !c.at.IsZero() && time.Since(c.at) < desktopSettingsTTL {
 		return c.config, c.err
 	}
-	config, err := resolveDesktopConfiguration(ctx, desktopSources)
+	config, err := resolveDesktopConfiguration(ctx, c.sources)
 	if ctx.Err() != nil {
 		return Configuration{}, ctx.Err()
 	}
@@ -76,7 +77,7 @@ func (c *desktopCache) current(ctx context.Context) (Configuration, error) {
 	return c.config, c.err
 }
 
-func resolveDesktopConfiguration(ctx context.Context, sources []func(context.Context) (Configuration, bool, error)) (Configuration, error) {
+func resolveDesktopConfiguration(ctx context.Context, sources []desktopSource) (Configuration, error) {
 	for _, source := range sources {
 		config, ok, err := source(ctx)
 		if err != nil {
@@ -89,14 +90,12 @@ func resolveDesktopConfiguration(ctx context.Context, sources []func(context.Con
 	return Configuration{Source: SourceNone, Mode: ModeNone}, nil
 }
 
-var runGSettings = hostread.DesktopProxySettings
-
 // gsettingsConfiguration reads the GNOME proxy schema through the desktop's
 // own settings tool; a desktop without it has no GNOME proxy configuration.
-func gsettingsConfiguration(ctx context.Context) (Configuration, bool, error) {
+func gsettingsConfiguration(ctx context.Context, read func(context.Context) ([]byte, int, error)) (Configuration, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, desktopSettingsTimeout)
 	defer cancel()
-	out, code, err := runGSettings(ctx)
+	out, code, err := read(ctx)
 	if err != nil {
 		return Configuration{}, false, fmt.Errorf("read GNOME proxy settings: %w", err)
 	}

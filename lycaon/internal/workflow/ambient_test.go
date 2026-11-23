@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -11,13 +10,14 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestIsSessionAmbientRootMachineState(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	_, file, _, ok := runtime.Caller(0)

@@ -73,14 +73,6 @@ func NewPolicyStoreAt(globalPath string) (*PolicyStore, error) {
 	return s, nil
 }
 
-// NewInMemoryPolicyStore builds a store without disk-backed overlays.
-func NewInMemoryPolicyStore(bundled ModelPolicy) *PolicyStore {
-	return &PolicyStore{
-		bundled:      normalizePolicy(bundled),
-		projectCache: make(map[string]ModelPolicy),
-	}
-}
-
 // NewPolicyStore loads bundled policy and the optional global overlay.
 func NewPolicyStore() (*PolicyStore, error) {
 	globalPath, err := userModelPolicyPath()

@@ -33,7 +33,7 @@ func TestEmptyPromptCheckpointsOnlyAWorkerRound(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			review := &recordingCheckpointer{}
-			svc := New(stubInstructionStore{session: &api.Session{ID: "sess-1", ProjectID: "proj-1"}}, nil, nil,
+			svc := New(stubInstructionStore{session: &api.Session{ID: "sess-1", ProjectID: "proj-1"}}, stubInstructionStore{session: &api.Session{ID: "sess-1", ProjectID: "proj-1"}}, nil, nil,
 				func(context.Context, string) error { return nil })
 			svc.SetReviewCheckpointer(review)
 

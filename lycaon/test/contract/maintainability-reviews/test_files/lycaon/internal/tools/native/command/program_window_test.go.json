@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/tools/native/command/program_window_test.go",
+  "kind": "test_suite",
+  "workstream": "repository-change-lifetime",
+  "disposition": "retain",
+  "reason": "Retain the 637-line program-window matrix: pipelines, jobs, parking, idle holds and result settlement use the same real program and SQL fixture. The fixture retires its observed root stream for uncovered cases; the trusted case retains continuous coverage.",
+  "reviewed_commit": "2be34334b2fa7bfea29ebceecc19fa6478bc8a1d",
+  "ceiling": 637,
+  "boundaries": {
+    "lycaon/internal/tools/native/command/program_window_test.go": "f01e785dc8c62f95c525323b6319cdeeef423932722abd781827bcf48365d0c2"
+  }
+}

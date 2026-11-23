@@ -3,6 +3,7 @@ package curation
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -23,7 +24,7 @@ func TestCurationSharesAliasedRuntime(t *testing.T) {
 		testutil.FailErr(t, "register native provider", registry.Register(nativegen.New(id, nativegen.Options{Runtime: owner})))
 	}
 	service := New(nil, capacityRoots{}, nil, nil, nil)
-	service.SetModelSources(llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	service.SetModelSources(policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "coordinator", Model: "gemma4:e4b"},
 		Lite:        llm.ModelRef{ProviderID: "utility", Model: "gemma4:e4b"},
 	}), registry)

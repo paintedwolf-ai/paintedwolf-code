@@ -25,10 +25,13 @@ import (
 )
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	SetSessionStatus(context.Context, string, api.SessionStatus) error
-	CheckpointTurn(context.Context, string, string, store.TurnPhase, string) error
-	SealTurnCloseout(context.Context, store.TurnCloseoutCommit) error
+	Get(ctx context.Context, id string) (*api.Session, error)
+	SetSessionStatus(ctx context.Context, id string, status api.SessionStatus) error
+}
+
+type Turns interface {
+	CheckpointTurn(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
+	SealTurnCloseout(ctx context.Context, commit store.TurnCloseoutCommit) error
 }
 type Workspace interface {
 	SettingsRoots(context.Context, *api.Session) []string
@@ -70,7 +73,8 @@ type Service struct {
 	Authorization   *authorization.Service
 	History         *history.Service
 	PostTurn        *postturn.Service
-	store           Sessions
+	sessionStore    Sessions
+	turnStore       Turns
 	llmSvc          *llm.Service
 	grounding       Grounding
 	workflow        RunControl
@@ -99,8 +103,8 @@ type Components struct {
 	PostTurn        *postturn.Service
 }
 
-func New(store Sessions, llmSvc *llm.Service, c Components) *Service {
-	return &Service{store: store, llmSvc: llmSvc, Execution: c.Execution, Workspace: c.Workspace, Spend: c.Spend, Transcript: c.Transcript, Turns: c.Turns, Chats: c.Chats, SubmissionState: c.SubmissionState, Settlement: c.Settlement, Clocks: c.Clocks, Closeouts: c.Closeouts, Guidance: c.Guidance, Curation: c.Curation, Status: c.Status, Instructions: c.Instructions, Preparation: c.Preparation, Authorization: c.Authorization, History: c.History, PostTurn: c.PostTurn}
+func New(sessionStore Sessions, turnStore Turns, llmSvc *llm.Service, c Components) *Service {
+	return &Service{sessionStore: sessionStore, turnStore: turnStore, llmSvc: llmSvc, Execution: c.Execution, Workspace: c.Workspace, Spend: c.Spend, Transcript: c.Transcript, Turns: c.Turns, Chats: c.Chats, SubmissionState: c.SubmissionState, Settlement: c.Settlement, Clocks: c.Clocks, Closeouts: c.Closeouts, Guidance: c.Guidance, Curation: c.Curation, Status: c.Status, Instructions: c.Instructions, Preparation: c.Preparation, Authorization: c.Authorization, History: c.History, PostTurn: c.PostTurn}
 }
 func (m *Service) SetRuntime(runtime *coordinator.Runtime) { m.Coordinator = runtime }
 func (m *Service) SetGrounding(grounding Grounding)        { m.grounding = grounding }

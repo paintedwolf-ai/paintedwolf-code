@@ -15,11 +15,11 @@ func (m *Service) WorkerSourceRuns(ctx context.Context, sessionID string) ([]wor
 	if m == nil || m.evidenceStore == nil {
 		return nil, nil
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return nil, err
 	}
-	runID := sessiontree.RootID(ctx, m.store, sessionID)
+	runID := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	records, err := m.evidenceStore.ReadAll(ctx, m.EvidenceRootFor(sess), runID, VerifySlot, evidence.GateTypeVerify)
 	if err != nil {
 		return nil, err

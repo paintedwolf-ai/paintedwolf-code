@@ -2,6 +2,7 @@ package guidance_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -111,7 +112,7 @@ func TestUnionCloseoutEvidence_legsComeFromDispatchRecordsNotHistory(t *testing.
 	reader := ledgertest.CloseoutReader(root, []guidance.EvidenceLeg{{ChildSessionID: "child-pe"}}, lookup)
 	ev, err := guidance.UnionCloseoutEvidence(context.Background(), reader, "parent-1", compacted)
 	testutil.FailErr(t, "union closeout evidence", err)
-	if !evidence.PathObserved(ev.Ledger, "run.sh") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev.Ledger), "run.sh") {
 		t.Fatalf("compacted history dropped the leg's evidence; paths=%v", evidence.ObservedPathsSorted(ev.Ledger))
 	}
 	if _, ok := evidence.ResolveHandle(ev.Ledger, "child-pe:read#1"); !ok {
@@ -168,7 +169,7 @@ func TestUnionLegEvidence_childLedgerObserved(t *testing.T) {
 		}
 		return nil
 	})
-	if !evidence.PathObserved(ev.Ledger, "src/a.go") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev.Ledger), "src/a.go") {
 		t.Fatalf("missing src/a.go; paths=%v", evidence.ObservedPathsSorted(ev.Ledger))
 	}
 }
@@ -186,7 +187,7 @@ func TestUnionLegEvidence_legIDNamespacesHandles(t *testing.T) {
 		}
 		return nil
 	})
-	if !evidence.PathObserved(ev.Ledger, "internal/worker.go") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev.Ledger), "internal/worker.go") {
 		t.Fatalf("leg ledger omitted worker path: %v", evidence.ObservedPathsSorted(ev.Ledger))
 	}
 	if _, ok := evidence.ResolveHandle(ev.Ledger, "leg-1:read#1"); !ok {
@@ -219,7 +220,7 @@ func TestUnionCloseoutEvidence_envelopeInHistoryAddsNoLeg(t *testing.T) {
 	})
 	ev, err := guidance.UnionCloseoutEvidence(context.Background(), reader, "parent-1", history)
 	testutil.FailErr(t, "union closeout evidence", err)
-	if evidence.PathObserved(ev.Ledger, "internal/worker.go") {
+	if slices.Contains(evidence.ObservedPathsSorted(ev.Ledger), "internal/worker.go") {
 		t.Fatal("transcript content supplied a leg the dispatch records do not name")
 	}
 }
@@ -261,10 +262,10 @@ func TestUnionCloseoutEvidence_mergesCoordinatorAndWorkerLedgers(t *testing.T) {
 	})
 	ev, err := guidance.UnionCloseoutEvidence(context.Background(), reader, "parent-1", history)
 	testutil.FailErr(t, "guidance.UnionCloseoutEvidence failed", err)
-	if !evidence.PathObserved(ev.Ledger, "README.md") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev.Ledger), "README.md") {
 		t.Fatal("missing coordinator README.md in closeout union")
 	}
-	if !evidence.PathObserved(ev.Ledger, "internal/a.go") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev.Ledger), "internal/a.go") {
 		t.Fatal("missing worker internal/a.go in closeout union")
 	}
 }

@@ -9,7 +9,7 @@ import (
 )
 
 type titleReadStore struct {
-	Store
+	Sessions
 	session *api.Session
 	err     error
 	reads   int
@@ -32,7 +32,7 @@ func TestExistingTitleSkipsInferenceFromStaleSession(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &titleReadStore{session: tc.session, err: tc.err}
-			service := New(store, nil, nil, nil)
+			service := New(store, nil, nil, nil, nil, nil)
 			service.SessionFromPrompt(t.Context(), &api.Session{ID: "s"}, "A follow-up request")
 			if store.reads != 1 {
 				t.Fatalf("store reads = %d, want one current title lookup", store.reads)

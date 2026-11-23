@@ -14,7 +14,7 @@ func TestObserveTaskWhilePendingUserInput(t *testing.T) {
 
 	gc := oar.NewGuardContext()
 	guard.ObserveTaskWhilePendingUserInput(sess, surface.ImplementSessionState{}, "task", gc)
-	if observeHasCode(gc, guard.PendingUserInputTaskForbiddenCode) {
+	if observeHasCode(t, gc, guard.PendingUserInputTaskForbiddenCode) {
 		t.Fatal("task must be allowed when PendingUserInput is false")
 	}
 
@@ -25,7 +25,7 @@ func TestObserveTaskWhilePendingUserInput(t *testing.T) {
 		"wait",
 		gc,
 	)
-	if observeHasCode(gc, guard.PendingUserInputTaskForbiddenCode) {
+	if observeHasCode(t, gc, guard.PendingUserInputTaskForbiddenCode) {
 		t.Fatal("wait must not trip the pending-user-input task guard")
 	}
 
@@ -36,7 +36,7 @@ func TestObserveTaskWhilePendingUserInput(t *testing.T) {
 		"task",
 		gc,
 	)
-	if observeHasCode(gc, guard.PendingUserInputTaskForbiddenCode) {
+	if observeHasCode(t, gc, guard.PendingUserInputTaskForbiddenCode) {
 		t.Fatal("worker child sessions must not trip coordinator task guards")
 	}
 
@@ -47,7 +47,7 @@ func TestObserveTaskWhilePendingUserInput(t *testing.T) {
 		"task",
 		gc,
 	)
-	if !observeHasCode(gc, guard.PendingUserInputTaskForbiddenCode) {
+	if !observeHasCode(t, gc, guard.PendingUserInputTaskForbiddenCode) {
 		t.Fatalf("want %s in %v", guard.PendingUserInputTaskForbiddenCode, gc.Invocation.ArgValidationErrors)
 	}
 }

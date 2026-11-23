@@ -29,7 +29,7 @@ func TestAnalyzeRootsSingleRootParity(t *testing.T) {
 	ctx := context.Background()
 	provider := repotest.NewProvider(t)
 	defer func() { _ = provider.Close() }()
-	direct, err := repoinfo.AwaitBrief(ctx, provider, dir)
+	direct, err := repotest.AwaitBrief(ctx, provider, dir)
 	testutil.FailErr(t, "await brief", err)
 	single, err := repoinfo.AnalyzeRoots(ctx, []projectroot.RootRef{{
 		ID: "r1", Path: dir, IsPrimary: true, Label: "main",
@@ -63,6 +63,10 @@ func TestAnalyzeRootsTwoRootComposition(t *testing.T) {
 	budget := repoinfo.BriefBudget{TotalBytes: 2048, PrimaryShare: 0.6}
 	provider := repotest.NewProvider(t)
 	defer func() { _ = provider.Close() }()
+	for _, dir := range []string{primary, secondary} {
+		_, err := repotest.AwaitBrief(t.Context(), provider, dir)
+		testutil.FailErr(t, "settle root brief", err)
+	}
 	mrb, err := repoinfo.AnalyzeRoots(context.Background(), []projectroot.RootRef{
 		{ID: "p", Path: primary, IsPrimary: true, Label: "lycaon"},
 		{ID: "s", Path: secondary, IsPrimary: false, Label: "den"},
@@ -77,8 +81,8 @@ func TestAnalyzeRootsTwoRootComposition(t *testing.T) {
 	if mrb.Roots[1].IsPrimary || mrb.Roots[1].Tier != repoinfo.BriefSummary {
 		t.Fatalf("secondary tier = %+v", mrb.Roots[1])
 	}
-	if mrb.RenderedBytes() > budget.TotalBytes+256 {
-		t.Fatalf("rendered bytes %d exceed budget %d", mrb.RenderedBytes(), budget.TotalBytes)
+	if bytes := repotest.BriefTextBytes(mrb.OrientationRoots()); bytes > budget.TotalBytes {
+		t.Fatalf("rendered bytes %d exceed budget %d", bytes, budget.TotalBytes)
 	}
 }
 

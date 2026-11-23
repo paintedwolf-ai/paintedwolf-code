@@ -5,7 +5,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session/coordinatorcontrol"
-	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -15,7 +14,7 @@ func (b *serveBuilder) wireScan() error {
 	}
 	b.sessions.Manager.Coordinator.Scans.Wait = coordinatorcontrol.ScanWaitState{
 		InFlight: func(ctx context.Context, sessionID string) bool {
-			requested, qErr := b.scanning.Store.ListBySessionID(ctx, sessionID)
+			requested, qErr := b.scanning.Store.Reads.ListBySessionID(ctx, sessionID)
 			if qErr != nil {
 				return true
 			}
@@ -24,11 +23,11 @@ func (b *serveBuilder) wireScan() error {
 					return true
 				}
 			}
-			owed, oErr := b.scanning.Store.FullPassOwedForSession(ctx, sessionID)
+			owed, oErr := b.scanning.Store.FullPasses.FullPassOwedForSession(ctx, sessionID)
 			return oErr != nil || owed
 		},
 		Requested: func(ctx context.Context, sessionID, scanID string) bool {
-			requested, qErr := b.scanning.Store.ListBySessionID(ctx, sessionID)
+			requested, qErr := b.scanning.Store.Reads.ListBySessionID(ctx, sessionID)
 			if qErr != nil {
 				return false
 			}
@@ -44,8 +43,8 @@ func (b *serveBuilder) wireScan() error {
 	if b.worker.merge != nil {
 		b.worker.merge.Scans = b.scanning.Cadence
 	}
-	if err := b.scanning.RegisterTools(b.execution.Host.Registry, b.execution.Rejections, b.settings.Service, workflow.InventoryAccounting{RunManager: b.workflows.Manager}); err != nil {
+	if err := b.scanning.RegisterTools(b.execution.Host.Registry, b.execution.Rejections, b.settings.Service, b.workflows.Manager.Inventory); err != nil {
 		return err
 	}
-	return b.workflows.RegisterTools(b.execution.Host.Registry, b.execution.Host.Boundary, b.storage.Sessions, b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects))
+	return b.workflows.RegisterTools(b.execution.Host.Registry, b.execution.Host.Boundary, b.storage.Sessions.Sessions, b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects))
 }

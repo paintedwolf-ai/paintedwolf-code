@@ -68,8 +68,8 @@ func TestRetentionRevokesOrphanBlueprintGrants(t *testing.T) {
 
 	cfg := DefaultRetention()
 	cfg.IncrementalVacuumMinFreelistPages = 9999
-	rep, err := RunRetention(ctx, sqlDB, cfg)
-	testutil.FailErr(t, "RunRetention", err)
+	rep, err := RunMaintenancePass(ctx, sqlDB, cfg, true)
+	testutil.FailErr(t, "maintenance pass", err)
 	if rep.OrphanBlueprintGrants != 1 {
 		t.Fatalf("orphan grants revoked = %d want 1", rep.OrphanBlueprintGrants)
 	}

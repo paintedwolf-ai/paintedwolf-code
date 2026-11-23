@@ -34,26 +34,8 @@ func DefaultSlot() (credentialstore.Slot, error) {
 	}, nil
 }
 
-// NewCredentialStore loads credentials from the platform's store, accepting the
-// slots cat declares.
-func NewCredentialStore(cat *Catalog) (*CredentialStore, error) {
-	slot, err := DefaultSlot()
-	if err != nil {
-		return nil, err
-	}
-	return openCredentialStore(slot, cat)
-}
-
-// NewCredentialStoreAt opens an empty store at path with a development identity file.
-func NewCredentialStoreAt(path string, cat *Catalog) *CredentialStore {
-	wrapper := &CredentialStore{catalog: cat}
-	wrapper.store = credentialstore.NewEmpty(credentialstore.Slot{
-		Path: path, Namespace: credentialstore.NamespaceWebResearch, Context: credentialContext,
-	}, wrapper.ValidID)
-	return wrapper
-}
-
-func openCredentialStore(slot credentialstore.Slot, cat *Catalog) (*CredentialStore, error) {
+// OpenCredentialStore loads the encrypted namespace using catalog-declared slots.
+func OpenCredentialStore(slot credentialstore.Slot, cat *Catalog) (*CredentialStore, error) {
 	wrapper := &CredentialStore{catalog: cat}
 	inner, err := credentialstore.Open(slot, wrapper.ValidID)
 	if err != nil {
@@ -155,9 +137,6 @@ type cachedSearchResult struct {
 	providersSkipped []SkippedProvider
 }
 
-// searchResultCache reuses identical whole-search outcomes.
-var searchResultCache = newTTLCache[cachedSearchResult](searchResultCacheTTL, searchResultCacheMax)
-
 // normalizeSearchResultCacheKey keys the whole-search cache. Period is in the
 // key: the same words under two windows are two different searches.
 func normalizeSearchResultCacheKey(query string, period Period, limit int, settings Settings, explicitProvider string) string {
@@ -248,15 +227,18 @@ func hashSearchFingerprint(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func cachedWholeSearch(query string, period Period, limit int, settings Settings, explicitProvider string) (cachedSearchResult, bool) {
-	return searchResultCache.get(normalizeSearchResultCacheKey(query, period, limit, settings, explicitProvider))
+func (r *Registry) cachedWholeSearch(query string, period Period, limit int, settings Settings, explicitProvider string) (cachedSearchResult, bool) {
+	if r == nil {
+		return cachedSearchResult{}, false
+	}
+	return r.resultCache.get(normalizeSearchResultCacheKey(query, period, limit, settings, explicitProvider))
 }
 
-func storeWholeSearch(query string, period Period, limit int, settings Settings, explicitProvider string, result WebSearchResult) {
-	if !result.OK || len(result.Results) == 0 {
+func (r *Registry) storeWholeSearch(query string, period Period, limit int, settings Settings, explicitProvider string, result WebSearchResult) {
+	if r == nil || !result.OK || len(result.Results) == 0 {
 		return
 	}
-	searchResultCache.put(normalizeSearchResultCacheKey(query, period, limit, settings, explicitProvider), cachedSearchResult{
+	r.resultCache.put(normalizeSearchResultCacheKey(query, period, limit, settings, explicitProvider), cachedSearchResult{
 		hits:             append([]WebHit(nil), result.Results...),
 		partial:          result.Partial,
 		providersSkipped: append([]SkippedProvider(nil), result.ProvidersSkipped...),

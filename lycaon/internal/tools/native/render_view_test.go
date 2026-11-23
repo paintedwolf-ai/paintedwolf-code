@@ -23,7 +23,7 @@ func testRasterizer(t *testing.T) *browser.Rasterizer {
 	testutil.FailErr(t, "LoadRenderBudgets", err)
 	r := browser.NewRasterizer("", budgets)
 	// Rendered pixels are screened before a model sees them; the inert matcher screens nothing.
-	r.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	r.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	return r
 }
 

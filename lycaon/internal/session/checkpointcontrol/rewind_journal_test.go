@@ -1,14 +1,14 @@
 package checkpointcontrol
 
 import (
-	"github.com/lycaon/lycaon/internal/people"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/people"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -16,21 +16,21 @@ import (
 func prepareJournalFixture(t *testing.T) (*Rewinds, *sessioncheckpoint.Journal, string) {
 	t.Helper()
 	mgr, repository, ledger, id, root := newRewindControlFixture(t)
-	owner, err := repository.HostOwner(t.Context())
+	owner, err := repository.People.HostOwner(t.Context())
 	testutil.FailErr(t, "host owner", err)
 	ctx := people.WithCaller(t.Context(), owner)
 	anchor := uuid.NewString()
-	testutil.FailErr(t, "append anchor", repository.AppendMessages(ctx, id, api.Message{ID: anchor, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, TrustTier: api.ContentTrustTierTrusted, Content: "change file"}))
+	testutil.FailErr(t, "append anchor", repository.Transcript.AppendMessages(ctx, id, api.Message{ID: anchor, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, TrustTier: api.ContentTrustTierTrusted, Content: "change file"}))
 	path := filepath.Join(root, "file.txt")
 	testutil.FailErr(t, "write turn result", os.WriteFile(path, []byte("after"), 0o640))
 	p, err := mgr.rewindProject(ctx, id)
 	testutil.FailErr(t, "resolve project", err)
-	turnSource, err := repository.ReadSourceTurn(ctx, id, 0)
+	turnSource, err := repository.Transcript.ReadSourceTurn(ctx, id, 0)
 	turn := turnSource.Number
 	testutil.FailErr(t, "resolve turn", err)
 	testutil.FailErr(t, "record source effect", ledger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "file.txt"}, ProjectID: p.ID, Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: id, Turn: turn, Before: []byte("before"), After: []byte("after")}))
-	cp := sessioncheckpoint.New(mgr.captures.dataDir, root, repository)
+	cp := sessioncheckpoint.New(mgr.captures.dataDir, root, repository.Rewind)
 	man := &sessioncheckpoint.Manifest{SessionID: id, AnchorMessageID: anchor, ProjectDir: root}
 	journal, err := mgr.prepareSourceRewindJournal(ctx, cp, man, uuid.NewString(), id, []string{anchor})
 	testutil.FailErr(t, "prepare source journal", err)

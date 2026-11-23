@@ -164,7 +164,7 @@ func (s *MergeService) overlapJobsForPath(ctx context.Context, sessionID, path s
 		if task.ID == skipJobID {
 			continue
 		}
-		for _, root := range s.jobPromotePaths(ctx, &task) {
+		for _, root := range s.jobPromotePaths(ctx, &task, "") {
 			promote := PromoteRootsForTask(&task, s.taskRootRefs(ctx, &task))
 			files, err := expandOverlayPromoteFiles(promote, []string{root})
 			if err != nil {

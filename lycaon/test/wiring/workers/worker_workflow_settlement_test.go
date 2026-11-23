@@ -47,7 +47,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			for i := 1; i <= 5; i++ {
 				call.Identity.ToolCallID = uuid.NewString()
 				args := map[string]any{"workflow_work_id": fmt.Sprintf("leg-%d", i)}
-				_, blocked, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", args)
+				_, blocked, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "task", args)
 				testutil.FailErr(t, "admit planned identity", err)
 				if blocked {
 					t.Fatal("planned task admission blocked")
@@ -77,7 +77,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 				if task == nil {
 					t.Fatal("worker was not claimable")
 				}
-				child, err := h.Store.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: task.AgentType, Prompt: task.Prompt})
+				child, err := h.Store.Sessions.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: task.AgentType, Prompt: task.Prompt})
 				testutil.FailErr(t, "create worker session", err)
 				testutil.FailErr(t, "bind worker session", h.Workers.Queue.SetChildSessionID(ctx, task.ID, child.ID))
 				won, err := h.Workers.Queue.Complete(ctx, task, api.WorkerResult{Status: "complete", Summary: "Assigned boundary reviewed.", Grounding: &api.CitationGrounding{}, CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete", Brief: "Assigned boundary reviewed."}})
@@ -100,8 +100,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 				}
 				testutil.FailErr(t, "reconcile before coordinator request", h.Sessions.Manager.Coordinator.Control.AssertRunnable(ctx, sess.ID))
 			} else {
-				stop := h.StartBackgroundWorkers(t, ctx)
-				t.Cleanup(stop)
+				h.Start(t)
 			}
 			wiring.WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
 			stale := tasks[0]

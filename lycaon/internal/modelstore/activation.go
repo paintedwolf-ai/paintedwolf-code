@@ -64,7 +64,7 @@ func (s *Store) activate(signed SignedManifest, repair bool) (resultErr error) {
 		return err
 	}
 	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
-	f, err := root.OpenFile("journal.jsonl", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := root.OpenFile(journalFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}

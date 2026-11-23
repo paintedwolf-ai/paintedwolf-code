@@ -46,7 +46,7 @@ func ClampSessionToolOutput(content string, maxBytes int) (SessionClamp, bool) {
 	for {
 		obj[pageKey] = page
 		if len(page) < originalLen {
-			markPaginatedTruncated(obj, pageKey, offset, len(page), originalLen)
+			markPaginatedTruncated(obj, offset, len(page), originalLen)
 		}
 		out := marshalReceiptBytes(obj)
 		if len(out) <= maxBytes {
@@ -76,7 +76,7 @@ func paginatedPage(obj map[string]any) (string, []any, bool) {
 	return "", nil, false
 }
 
-func markPaginatedTruncated(obj map[string]any, pageKey string, offset, kept, originalLen int) {
+func markPaginatedTruncated(obj map[string]any, offset, kept, originalLen int) {
 	if kept >= originalLen {
 		return
 	}

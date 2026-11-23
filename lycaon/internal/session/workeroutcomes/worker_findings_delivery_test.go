@@ -19,7 +19,7 @@ func TestFindingDeliveryRetriesRetainsAndPagesWithoutLoss(t *testing.T) {
 	testdbseed.InsertWorkerJob(t, database, "reader", "reader-child")
 	store := findings.NewSQLStore(database)
 	ctx := workercontext.WithJob(t.Context(), "reader")
-	manager := NewNotes(nil, store, nil, nil)
+	manager := NewNotes(nil, nil, store, nil, nil)
 	for i := 0; i < 23; i++ {
 		_, err := store.Append(ctx, "child", "peer", fmt.Sprintf("contract %d: %s", i, strings.Repeat("界", 250)), "module.go", "full body")
 		testutil.FailErr(t, "append peer finding", err)
@@ -45,7 +45,7 @@ func TestFindingDeliveryRetriesRetainsAndPagesWithoutLoss(t *testing.T) {
 			t.Fatalf("unbounded peer context: %d bytes, %d notes", size, len(page.Notes))
 		}
 		testutil.FailErr(t, "commit successful response", manager.CommitSiblingNotes(ctx, "child", fmt.Sprint(round), page.Cursor, page.Notes))
-		manager = NewNotes(nil, store, nil, nil)
+		manager = NewNotes(nil, nil, store, nil, nil)
 	}
 	if len(seen) != 23 {
 		t.Fatalf("lost findings: saw %d of 23", len(seen))

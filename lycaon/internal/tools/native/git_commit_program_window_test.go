@@ -1,18 +1,21 @@
 package native
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,13 +26,22 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+func retireObservedStreams(t *testing.T, dir string) {
+	t.Helper()
+	repochangetest.Acquire(t)
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, event repochange.Event) {
+		if event.ProjectDir == dir && event.Source == repochange.SourceWatcher {
+			repochange.CloseRoot(dir)
+		}
+	}))
+}
+
 // A generated file stages with the session's work because the session's own
 // program was observed creating it; a peer's dirty file stays out.
 func TestGitCommitStagesWhatTheSessionsProgramGeneratedACCW10(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	retireObservedStreams(t, f.Dir)
+	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	gittest.Init(t, f.Dir)
@@ -80,15 +92,11 @@ func TestGitCommitStagesWhatTheSessionsProgramGeneratedACCW10(t *testing.T) {
 // A person's save while a program sits between external processes is not staged
 // by the session's bulk commit; explicit paths remain the way to commit it.
 func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
 	f := programtest.New(t, programtest.Options{})
+	retireObservedStreams(t, f.Dir)
 	f.Runtime.ParkThreshold = time.Hour
-	ledger := f.AttachLedger(t)
 	gate := make(chan time.Time)
-	ledger.Commands.SetWindowSettleGateForTest(gate)
-	idled := make(chan string, 2)
-	ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
@@ -103,7 +111,7 @@ func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.
 		return err == nil
 	})
 	close(gate)
-	testutil.Receive(t, "the window goes idle", idled)
+	f.AwaitIdleWindow(t, ledger.Commands)
 	testutil.FailErr(t, "outside edit", os.WriteFile(filepath.Join(f.Dir, "notes.md"), []byte("a person's note\n"), 0o644))
 	testutil.FailErr(t, "pass during the gap", ledger.Inventory.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
 		ProjectID: testdbseed.DefaultProjectID, Roots: []sourceledger.RootSpec{{ID: "r1", Path: f.Dir}}, Force: true, Wait: true,
@@ -121,10 +129,9 @@ func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.
 
 // Drift while two sessions' windows are active belongs to neither bulk commit.
 func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	retireObservedStreams(t, f.Dir)
+	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
@@ -164,10 +171,9 @@ func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
 // A person's edit to a file a window claimed earlier is theirs: it stays out of
 // the bulk commit and uncommitted_paths reports it.
 func TestBulkCommitLeavesAPersonsEditToAFileAWindowClaimed(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	retireObservedStreams(t, f.Dir)
+	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
@@ -217,14 +223,13 @@ func runTrustedGenerator(t *testing.T, f *programtest.Fixture, name string) {
 // still settling.
 func TestBulkCommitWaitsForItsSessionsClosingWindow(t *testing.T) {
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	gate := make(chan time.Time)
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
-	repochange.MarkCoverageCompleteForTest(f.Dir)
+	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
-	gate := make(chan time.Time)
-	ledger.Commands.SetWindowSettleGateForTest(gate)
 	runTrustedGenerator(t, f, "gen.txt")
 
 	tc := commitContext(f, ledger, f.Session)
@@ -239,15 +244,20 @@ func TestBulkCommitWaitsForItsSessionsClosingWindow(t *testing.T) {
 // What a window has not settled when the wait runs out is reported, not lost.
 func TestBulkCommitReportsWhatAWindowStillSettlingLeftOut(t *testing.T) {
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	first := make(chan time.Time)
+	held := make(chan time.Time)
+	t.Cleanup(func() { close(held) })
+	var activeGate atomic.Pointer[chan time.Time]
+	activeGate.Store(&first)
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time {
+		return *activeGate.Load()
+	}})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
-	repochange.MarkCoverageCompleteForTest(f.Dir)
+	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 
-	first := make(chan time.Time)
-	ledger.Commands.SetWindowSettleGateForTest(first)
 	runTrustedGenerator(t, f, "first.txt")
 	settling := ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
 	close(first)
@@ -255,9 +265,7 @@ func TestBulkCommitReportsWhatAWindowStillSettlingLeftOut(t *testing.T) {
 		testutil.AwaitClosed(t, "the first window settles", window.Settled)
 	}
 
-	held := make(chan time.Time)
-	t.Cleanup(func() { close(held) })
-	ledger.Commands.SetWindowSettleGateForTest(held)
+	activeGate.Store(&held)
 	runTrustedGenerator(t, f, "gen.txt")
 	_, staging, err := commitSession(t, manager, commitContext(f, ledger, f.Session), GitCommitRequest{Message: "Generate"})
 	testutil.FailErr(t, "commit session work", err)

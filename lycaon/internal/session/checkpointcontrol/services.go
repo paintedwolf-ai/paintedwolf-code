@@ -2,6 +2,8 @@ package checkpointcontrol
 
 import (
 	"context"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/checkpoint"
@@ -10,40 +12,45 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcerewind"
 	"github.com/lycaon/lycaon/pkg/api"
-	"time"
 )
 
-type CaptureRepository interface {
-	store.CheckpointRepository
-	Get(context.Context, string) (*api.Session, error)
-	ExistingSessionIDs(context.Context, []string) (map[string]bool, error)
+type Sessions interface {
+	ExistingSessionIDs(ctx context.Context, ids []string) (map[string]bool, error)
+	Get(ctx context.Context, id string) (*api.Session, error)
 }
 
-type RewindRepository interface {
-	store.CheckpointRepository
-	Get(context.Context, string) (*api.Session, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
-	LastTurnMessageContent(context.Context, string) (string, error)
-	GetRewindOperation(context.Context, string) (*store.RewindOperation, error)
-	PrepareRewind(context.Context, store.RewindOperation) error
-	SetRewindPhase(context.Context, string, string, string) error
-	CommitRewind(context.Context, string, string, string, api.RewindSessionResponse) (int, error)
-	RewindOperationsForRecovery(context.Context) ([]store.RewindOperation, error)
-	RewindOperationsForRecoverySession(context.Context, string) ([]store.RewindOperation, error)
-	CommittedRewindOperationsForSweep(context.Context) ([]store.RewindOperationSweepItem, error)
-	DeleteRewindOperation(context.Context, string, time.Time) error
+type Transcript interface {
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
+	LastTurnMessageContent(ctx context.Context, sessionID string) (string, error)
+}
+
+type Rewind interface {
+	CommitRewind(ctx context.Context, id, sessionID, anchorMessageID string, response api.RewindSessionResponse) (int, error)
+	CommittedRewindOperationsForSweep(ctx context.Context) ([]store.RewindOperationSweepItem, error)
+	DeleteRewindOperation(ctx context.Context, id string, olderThan time.Time) error
+	DropCheckpoint(ctx context.Context, session, anchor string) error
+	DropRootCheckpoints(ctx context.Context, projectID, root string) error
+	GetRewindOperation(ctx context.Context, id string) (*store.RewindOperation, error)
+	PrepareRewind(ctx context.Context, op store.RewindOperation) error
+	PutCheckpoint(ctx context.Context, root, session, anchor, sealed, manifest string, objects []store.CheckpointObject) error
+	ReadCheckpoint(ctx context.Context, root, session, anchor string) (string, error)
+	ReadCheckpointForRewind(ctx context.Context, session, anchor string) (string, error)
+	RewindOperationsForRecovery(ctx context.Context) ([]store.RewindOperation, error)
+	RewindOperationsForRecoverySession(ctx context.Context, sessionID string) ([]store.RewindOperation, error)
+	SetRewindPhase(ctx context.Context, id, status, detail string) error
 }
 
 // Capture binds anchor intervals to each session's active workspace.
 type Capture struct {
-	dataDir   string
-	store     CaptureRepository
-	workspace *sessionscope.Service
-	Capture   checkpoint.Capture
+	dataDir      string
+	sessionStore Sessions
+	rewindStore  Rewind
+	workspace    *sessionscope.Service
+	Capture      checkpoint.Capture
 }
 
-func NewCapture(dataDir string, repository CaptureRepository, workspace *sessionscope.Service) *Capture {
-	return &Capture{dataDir: dataDir, store: repository, workspace: workspace}
+func NewCapture(dataDir string, sessionStore Sessions, rewindStore Rewind, workspace *sessionscope.Service) *Capture {
+	return &Capture{dataDir: dataDir, sessionStore: sessionStore, rewindStore: rewindStore, workspace: workspace}
 }
 
 // Runtime connects rewind settlement to the domains whose volatile state it invalidates.
@@ -58,18 +65,20 @@ type Runtime struct {
 
 // Rewinds owns preview, atomic application, receipt replay, and boot recovery.
 type Rewinds struct {
-	store         RewindRepository
-	captures      *Capture
-	prompt        *promptstate.MutexRegistry
-	workspace     *sessionscope.Service
-	projects      project.Registry
-	sourceRewinds *sourcerewind.Service
-	events        *events.Publisher
-	runtime       Runtime
+	sessionStore    Sessions
+	transcriptStore Transcript
+	rewindStore     Rewind
+	captures        *Capture
+	prompt          *promptstate.MutexRegistry
+	workspace       *sessionscope.Service
+	projects        project.Registry
+	sourceRewinds   *sourcerewind.Service
+	events          *events.Publisher
+	runtime         Runtime
 }
 
-func NewRewinds(repository RewindRepository, captures *Capture, prompt *promptstate.MutexRegistry, workspace *sessionscope.Service, projects project.Registry, sources *sourcerewind.Service, events *events.Publisher, runtime Runtime) *Rewinds {
-	return &Rewinds{store: repository, captures: captures, prompt: prompt, workspace: workspace, projects: projects, sourceRewinds: sources, events: events, runtime: runtime}
+func NewRewinds(sessionStore Sessions, transcriptStore Transcript, rewindStore Rewind, captures *Capture, prompt *promptstate.MutexRegistry, workspace *sessionscope.Service, projects project.Registry, sources *sourcerewind.Service, events *events.Publisher, runtime Runtime) *Rewinds {
+	return &Rewinds{sessionStore: sessionStore, transcriptStore: transcriptStore, rewindStore: rewindStore, captures: captures, prompt: prompt, workspace: workspace, projects: projects, sourceRewinds: sources, events: events, runtime: runtime}
 }
 
 func (m *Capture) SetDataDir(root string) { m.dataDir = root }

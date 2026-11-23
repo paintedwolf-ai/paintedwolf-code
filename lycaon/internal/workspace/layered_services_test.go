@@ -3,7 +3,6 @@ package workspace_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -12,6 +11,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
@@ -21,9 +22,9 @@ import (
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
-func fixtureMountedManager(t *testing.T, unmount func(context.Context, string, string) error) *workspace.Manager {
+func fixtureMountedManager(t *testing.T, unmount func(context.Context, string, string) error) (*workspace.Manager, *adapter.ActiveViewRegistry) {
 	t.Helper()
-	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mounted := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonNone, "", nil
@@ -31,12 +32,12 @@ func fixtureMountedManager(t *testing.T, unmount func(context.Context, string, s
 		UnmountViewFn: unmount,
 	})
 	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	branches := t.TempDir()
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	return workspace.NewManager(branches, selector).WithPrivateGit(privateGit)
+	return workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(privateGit), selector.Registry
 }
 
 func singleRoot(t *testing.T) []projectroot.RootRef {
@@ -49,7 +50,7 @@ func singleRoot(t *testing.T) []projectroot.RootRef {
 // Fixture evidence: settlement fails in the fixture adapter's unmount step, not a kernel unmount.
 func TestFailedSettlementKeepsTheBranchAndItsMetadataInCustody(t *testing.T) {
 	failing := true
-	manager := fixtureMountedManager(t, func(context.Context, string, string) error {
+	manager, views := fixtureMountedManager(t, func(context.Context, string, string) error {
 		if failing {
 			return errors.New("still mounted")
 		}
@@ -72,8 +73,8 @@ func TestFailedSettlementKeepsTheBranchAndItsMetadataInCustody(t *testing.T) {
 	if _, live := consumer.LookupBranchEngine(binding.Root); !live {
 		t.Fatal("a view still in custody lost its engine")
 	}
-	if _, live := workspace.LookupBranchClaimedView(binding.Root); !live {
-		t.Fatal("a view still in custody lost its claim record")
+	if _, _, live := views.AdapterForView(binding.View.ViewID); !live {
+		t.Fatal("a view still in custody lost its registered view")
 	}
 
 	failing = false
@@ -87,7 +88,7 @@ func TestFailedSettlementKeepsTheBranchAndItsMetadataInCustody(t *testing.T) {
 }
 
 func TestRebuildRefusesABranchHoldingALiveView(t *testing.T) {
-	manager := fixtureMountedManager(t, nil)
+	manager, views := fixtureMountedManager(t, nil)
 	roots := singleRoot(t)
 	binding, _, err := manager.CreateWorkerBranch(t.Context(), roots, "primary", "job-live")
 	testutil.FailErr(t, "create workspace", err)
@@ -100,7 +101,7 @@ func TestRebuildRefusesABranchHoldingALiveView(t *testing.T) {
 	if !errors.Is(err, workspace.ErrBranchInUse) {
 		t.Fatalf("rebuild over a live view = %v, want ErrBranchInUse", err)
 	}
-	if _, live := workspace.LookupBranchClaimedView(binding.Root); !live {
+	if _, _, live := views.AdapterForView(binding.View.ViewID); !live {
 		t.Fatal("rebuild disturbed the live view")
 	}
 }
@@ -119,7 +120,7 @@ func TestMaterializedRootsAreManagedGitViewsForThePrimaryWorker(t *testing.T) {
 	branches := t.TempDir()
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	manager := workspace.NewManager(branches, platform.NewSelector(platform.Config{})).WithPrivateGit(privateGit)
+	manager := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), workspace.Filesystem{}).WithPrivateGit(privateGit)
 	binding, _, err := manager.CreateWorkerWorkspaceFromSources(t.Context(), roots, roots, "p", "job-roots")
 	testutil.FailErr(t, "create workspace", err)
 	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(t.Context(), binding) })
@@ -159,7 +160,7 @@ func TestDestroyKeepsTheBranchWhenAViewDoesNotRelease(t *testing.T) {
 			testutil.FailErr(t, "mkdir branch", os.MkdirAll(root, 0o750))
 			keep := filepath.Join(root, "result.txt")
 			testutil.FailErr(t, "write result", os.WriteFile(keep, []byte("result\n"), 0o644))
-			manager := workspace.NewManager(branches, platform.NewSelector(platform.Config{}))
+			manager := workspace.NewManager(branches, platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 			binding := &workspace.Binding{ID: "job-kept", Root: root, Adapter: adp, View: &adapter.PreparedView{ViewID: "view-kept"}}
 
 			if err := manager.DestroyWorkerWorkspace(t.Context(), binding); err == nil {
@@ -179,7 +180,7 @@ func TestDestroyTreatsAViewTheAdapterNoLongerHoldsAsReleased(t *testing.T) {
 	binding := &workspace.Binding{ID: "job-gone", Root: root, Adapter: refusingAdapter{
 		err: &adapter.AdapterError{AdapterID: adapter.AdapterEagerCopy, Op: "release", ReasonCode: adapter.ReasonViewNotFound},
 	}, View: &adapter.PreparedView{ViewID: "view-gone"}}
-	testutil.FailErr(t, "destroy", workspace.NewManager(branches, platform.NewSelector(platform.Config{})).DestroyWorkerWorkspace(t.Context(), binding))
+	testutil.FailErr(t, "destroy", workspace.NewManager(branches, platform.NewSelector(platform.Config{}), workspace.Filesystem{}).DestroyWorkerWorkspace(t.Context(), binding))
 	if _, err := os.Stat(root); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("branch remains: %v", err)
 	}

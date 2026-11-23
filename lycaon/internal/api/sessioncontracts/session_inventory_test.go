@@ -13,6 +13,7 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -26,7 +27,7 @@ func TestCreateSessionReturnsBeforeInventoryAndDetachesCancellation(t *testing.T
 	database := testdbfixture.Open(t, "session-inventory.db")
 	sessions := store.NewSQL(database)
 	registry := project.NewSQLRegistry(database)
-	p, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	fake := &contractfixture.BlockingInventoryService{
 		Started: make(chan struct{}), Release: make(chan struct{}), CtxErr: make(chan error, 1),
@@ -123,7 +124,7 @@ func TestFixtureStoreOverrideKeepsHostAndAPIAligned(t *testing.T) {
 				t.Fatal("fixture replaced the supplied Host")
 			}
 			registry := srv.Sources.Workspace.ProjectRegistry
-			p, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
+			p, err := projecttest.CreateWithRoot(t.Context(), registry, t.TempDir())
 			testutil.FailErr(t, "create fixture project", err)
 			created := contractfixture.CreateSessionForProject(t, srv, p.ID)
 			read, err := host.Chats.Get(t.Context(), created.ID)

@@ -35,37 +35,6 @@ func (e *GitExecutor) Run(ctx context.Context, repoRel string, args ...string) (
 	return executeViewGitCommand(ctx, e, repoRel, args)
 }
 
-// Status runs `git status` in the primary repository.
-func (e *GitExecutor) Status(ctx context.Context, args ...string) (string, error) {
-	return e.Run(ctx, ".", append([]string{"status"}, args...)...)
-}
-
-// Diff runs `git diff` in the primary repository.
-func (e *GitExecutor) Diff(ctx context.Context, args ...string) (string, error) {
-	return e.Run(ctx, ".", append([]string{"diff"}, args...)...)
-}
-
-// Log runs `git log` in the primary repository.
-func (e *GitExecutor) Log(ctx context.Context, args ...string) (string, error) {
-	return e.Run(ctx, ".", append([]string{"log"}, args...)...)
-}
-
-// Commit stages tracked/requested changes if needed and runs `git commit -m message`.
-func (e *GitExecutor) Commit(ctx context.Context, message string, args ...string) (string, error) {
-	cmdArgs := append([]string{"commit", "-m", message}, args...)
-	return e.Run(ctx, ".", cmdArgs...)
-}
-
-// Checkout runs `git checkout` in the primary repository.
-func (e *GitExecutor) Checkout(ctx context.Context, args ...string) (string, error) {
-	return e.Run(ctx, ".", append([]string{"checkout"}, args...)...)
-}
-
-// Stash runs `git stash` in the primary repository.
-func (e *GitExecutor) Stash(ctx context.Context, args ...string) (string, error) {
-	return e.Run(ctx, ".", append([]string{"stash"}, args...)...)
-}
-
 func executeViewGitCommand(
 	ctx context.Context,
 	e *GitExecutor,

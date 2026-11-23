@@ -1,6 +1,7 @@
 package command_test
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -63,7 +64,7 @@ func newDirectIPFixture(t *testing.T) (*programFixture, *directIPPhases) {
 	// The fixture denies all egress; a direct-IP launch needs the request to
 	// decide it and the host's egress broker to bind the action.
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
-	_, err := confine.StartEgressBroker(t.TempDir())
+	_, err := confine.StartEgressBroker(t.TempDir(), net.Listen)
 	testutil.FailErr(t, "start egress broker", err)
 	t.Cleanup(func() { _ = confine.StopEgressBroker() })
 	f.Runtime.Executor.Capabilities.SetDirectIPCapabilityRuntime(grantingDirectIP{})

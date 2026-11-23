@@ -28,12 +28,29 @@ type claimResult struct {
 	context  context.Context
 }
 
+// rebuildPolicy decides whether a claim that would start a build may start one.
+type rebuildPolicy uint8
+
+const (
+	// rebuildAlways starts the build and waits for the ready generation.
+	rebuildAlways rebuildPolicy = iota
+	// rebuildExceptMoving serves a published moving generation instead of
+	// starting another build behind it: the moving generation already joins
+	// the unclassified advance, and a second build would make the observe
+	// path wait through a settlement that hides it. Other stale generations
+	// still rebuild.
+	rebuildExceptMoving
+)
+
 // snapshotRoot joins discovery without owning its lifetime.
-func (c *Catalog) snapshotRoot(ctx context.Context, projectID string, root Root) (Snapshot, error) {
+func (c *Catalog) snapshotRoot(ctx context.Context, projectID string, root Root, policy rebuildPolicy) (Snapshot, error) {
 	key := rootKey(projectID, root)
 	for range maxRootBuildAttempts {
 		claim := c.claim(ctx, key, projectID, []Root{root})
-		if claim.build {
+		if claim.build && policy == rebuildExceptMoving && claim.snapshot.Moving {
+			claim.building = false
+			claim.build = false
+		} else if claim.build {
 			go c.runRootBuild(claim.context, projectID, root, key, 0) //nolint:contextcheck // claim derives and registers this cancelable context from ctx.
 		}
 		if claim.building || claim.build {
@@ -295,10 +312,45 @@ func (c *Catalog) currentGeneration(ctx context.Context, projectID string, roots
 		c.requestReconcile(projectID, request.root, request.full)
 	}
 	if !settled {
-		// Serve the complete generation during reconciliation.
-		current = c.Current(ctx, projectID, roots)
+		// Serve the complete generation during reconciliation. The settlement
+		// read already claimed refresh work, so this read must not claim
+		// again: whenever the build it would join finishes and leaves the
+		// record stale, a second claim starts another build and this read
+		// ends up waiting through that second settlement.
+		current = c.serveGeneration(ctx, projectID, roots)
 	}
 	return current, settled, servable
+}
+
+// serveGeneration reads the published generations without claiming refresh
+// work; the settlement read already claimed whatever builds were needed, and
+// the Refreshing flag still reports their flight.
+func (c *Catalog) serveGeneration(ctx context.Context, projectID string, roots []Root) Snapshot {
+	cleaned, err := cleanRoots(roots)
+	if err != nil {
+		return c.Current(ctx, projectID, roots)
+	}
+	parts := make([]Snapshot, 0, len(cleaned))
+	for _, root := range cleaned {
+		out := c.published(rootKey(projectID, root))
+		if out.State == "" {
+			out.State = StateWarming
+			out.Roots = []Root{root}
+		}
+		out.Refreshing = c.refreshing(rootKey(projectID, root))
+		parts = append(parts, out)
+	}
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return combineSnapshots(cleaned, parts)
+}
+
+func (c *Catalog) refreshing(key string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	rec := c.records[key]
+	return rec != nil && rec.building
 }
 
 // Observe joins cold or invalidated builds and otherwise serves the completed generation.
@@ -307,7 +359,7 @@ func (c *Catalog) Observe(ctx context.Context, projectID string, roots []Root) (
 	if servable && current.State == StateReady {
 		return current, nil
 	}
-	return c.Snapshot(ctx, projectID, roots)
+	return c.snapshot(ctx, projectID, roots, rebuildExceptMoving)
 }
 
 // ObserveWithin serves the last complete generation, waiting at most grace for
@@ -321,7 +373,7 @@ func (c *Catalog) ObserveWithin(ctx context.Context, projectID string, roots []R
 	}
 	joinCtx, cancel := context.WithTimeout(ctx, grace)
 	defer cancel()
-	snapshot, err := c.Snapshot(joinCtx, projectID, roots)
+	snapshot, err := c.snapshot(joinCtx, projectID, roots, rebuildAlways)
 	if err != nil {
 		return Snapshot{}, false, err
 	}

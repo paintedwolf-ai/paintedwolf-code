@@ -18,7 +18,7 @@ type journalRecord struct {
 	Signed  SignedManifest `json:"signed"`
 }
 
-func (s *Store) journalPath() string { return filepath.Join(s.root, "journal.jsonl") }
+const journalFileName = "journal.jsonl"
 
 type journalLock struct{ f *os.File }
 
@@ -44,7 +44,7 @@ func (s *Store) journalBytes() (data []byte, resultErr error) {
 		return nil, err
 	}
 	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
-	f, err := root.Open("journal.jsonl")
+	f, err := root.Open(journalFileName)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -110,7 +110,7 @@ func (s *Store) recoverJournal() (resultErr error) {
 		return err
 	}
 	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
-	f, err := root.OpenFile("journal.jsonl", os.O_WRONLY, 0)
+	f, err := root.OpenFile(journalFileName, os.O_WRONLY, 0)
 	if err != nil {
 		return err
 	}

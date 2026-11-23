@@ -6,12 +6,13 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".", Text: "I'll help with that."},
 	}}))
 	h := BuildForTest(t, WithLLMClient(rec))
@@ -32,7 +33,7 @@ func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {
 	if run == nil || !runstate.IsAmbientRun(run) {
 		t.Fatalf("first prompt must attach the default workflow, got %+v", run)
 	}
-	sess, err = h.Store.Get(ctx, sess.ID)
+	sess, err = h.Store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read session posture after attachment", err)
 	if sess.Posture != wire.SessionPostureBuild {
 		t.Fatalf("default workflow posture = %q, want build", sess.Posture)
@@ -40,7 +41,7 @@ func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {
 }
 
 func TestNoWorkflowStartNudgeOnCasualPrompt(t *testing.T) {
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".", Text: "Sure, I can help implement that."},
 	}}))
 	h := BuildForTest(t, WithLLMClient(rec))

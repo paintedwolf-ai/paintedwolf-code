@@ -50,7 +50,7 @@ func TestThinkingPolicyLayersAndRemoval(t *testing.T) {
 func TestThinkingPolicyOwnsMutableValues(t *testing.T) {
 	on := true
 	p := ModelPolicy{ThinkingOverrides: []modelcall.ThinkingOverride{{ProviderID: "p", Model: "m", Mode: "fixed", Enabled: &on}}}
-	store := NewInMemoryPolicyStore(p)
+	store := newPolicyFixture(t, p)
 	ctx := WithThinkingPolicy(t.Context(), p)
 	on = false
 	p.ThinkingOverrides[0].Mode = "application"

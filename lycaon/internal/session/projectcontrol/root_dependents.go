@@ -293,8 +293,8 @@ func (m *Service) rootDependentsFor(ctx context.Context, projectID string, detac
 		}
 	}
 	projectSessionIDs := map[string]struct{}(nil)
-	if m.store != nil {
-		sessions, err := m.store.List(ctx)
+	if m.sessionStore != nil {
+		sessions, err := m.sessionStore.List(ctx)
 		if err != nil {
 			return RootDependents{}, err
 		}

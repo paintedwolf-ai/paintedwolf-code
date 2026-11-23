@@ -8,19 +8,19 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // newProgressChangeEmitter persists coalesced nonterminal changes.
 // ChangedAt dates the row at the write, not the flush.
 func newProgressChangeEmitter(
-	store *store.SQL,
+	sessions SessionReader,
+	transcript TranscriptWriter,
 	eventPub *events.Publisher,
 	activeRun ActiveRunID,
 	progressStore progress.RunScopedStore,
 ) progress.FlushFunc {
-	if store == nil || eventPub == nil || activeRun == nil {
+	if sessions == nil || transcript == nil || eventPub == nil || activeRun == nil {
 		return func(progress.FlushPayload) {}
 	}
 	return func(p progress.FlushPayload) {
@@ -40,7 +40,7 @@ func newProgressChangeEmitter(
 			ProgressUpdate: meta,
 			CreatedAt:      changedAt.UTC(),
 		}
-		if _, err := appendProgressTranscript(context.Background(), store, eventPub, activeRun, progressStore, p.SessionID, msg); err != nil {
+		if _, err := appendProgressTranscript(context.Background(), sessions, transcript, eventPub, activeRun, progressStore, p.SessionID, msg); err != nil {
 			slog.Error("progress_update transcript append failed",
 				"session_id", p.SessionID, "error", err)
 		}

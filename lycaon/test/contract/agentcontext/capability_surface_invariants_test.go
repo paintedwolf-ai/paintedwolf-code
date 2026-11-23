@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolscope"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -86,16 +87,31 @@ func TestDisclosurePolicyCatalogCompleteness(t *testing.T) {
 			t.Fatalf("agent %q unresolved disclosure policy %q", id, p)
 		}
 	}
-	tools, err := capability.GateableCoordinatorTools()
-	contractcheck.FailErr(t, "GateableCoordinatorTools", err)
-	for _, name := range tools {
+	plans, err := surface.CompileToolPlans(1)
+	contractcheck.FailErr(t, "compile coordinator tool plans", err)
+	addressable := map[string]bool{}
+	for _, plan := range plans {
+		for _, name := range plan.AddressableNames() {
+			addressable[name] = true
+		}
+	}
+	allow, err := toolscope.NoFolderAllowlist()
+	contractcheck.FailErr(t, "load no-folder tools", err)
+	for _, name := range allow {
+		addressable[name] = true
+	}
+	for name := range addressable {
 		if reason, exempt := reg.ToolExempt[name]; exempt {
 			if strings.TrimSpace(reason) == "" {
 				t.Fatalf("tool exempt %q missing reason", name)
 			}
 			continue
 		}
-		if p := capability.ToolDisclosurePolicy(reg, name); p != capability.DisclosureShow && p != capability.DisclosureHide {
+		p, overridden := reg.ToolOverrides[name]
+		if !overridden {
+			p = reg.DefaultTools
+		}
+		if p != capability.DisclosureShow && p != capability.DisclosureHide {
 			t.Fatalf("tool %q unresolved disclosure policy %q", name, p)
 		}
 	}

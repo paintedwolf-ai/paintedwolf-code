@@ -227,10 +227,3 @@ func cloneProject(p *Project) *Project {
 	}
 	return &out
 }
-
-// CreateWithRoot creates a project with one primary root.
-func CreateWithRoot(ctx context.Context, reg Registry, path string) (*Project, error) {
-	return reg.Create(ctx, CreateParams{
-		Roots: []AttachRootParams{{Path: path}},
-	})
-}

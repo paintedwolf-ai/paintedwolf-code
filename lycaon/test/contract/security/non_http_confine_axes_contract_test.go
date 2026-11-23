@@ -4,12 +4,13 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 )
 
 // No LYCAON_SANDBOX_NETWORK spelling opens ambient network: the open-sounding
 // aliases keep the mediated default, while "deny" shows the variable is read.
 func TestContractNoAmbientNetworkAllowAlias(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	requireNonHTTPConfinement(t)

@@ -47,7 +47,7 @@ func (r *Runtime) workerReportInput(ctx context.Context, task *wire.WorkerTask, 
 	if r.deps.Storage.Sessions == nil || r.deps.Sessions == nil || r.deps.Sessions.Manager == nil {
 		return workercompletion.WorkerSummaryEvalInput{}, fmt.Errorf("worker report services unavailable")
 	}
-	child, err := r.deps.Storage.Sessions.Get(ctx, tctx.Identity.SessionID)
+	child, err := r.deps.Storage.Sessions.Sessions.Get(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return workercompletion.WorkerSummaryEvalInput{}, err
 	}

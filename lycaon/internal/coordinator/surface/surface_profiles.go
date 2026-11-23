@@ -58,7 +58,7 @@ func decodeSurfaceProfiles(data []byte) (*surfaceProfilesYAML, error) {
 
 // LoadSurfaceProfiles decodes surface-profiles.yaml from the process config
 // source. There is no Go default.
-func LoadSurfaceProfiles(configRoot string) (map[string]SurfaceProfile, error) {
+func LoadSurfaceProfiles() (map[string]SurfaceProfile, error) {
 	data, err := config.Read(config.SurfaceProfiles)
 	if err != nil {
 		return nil, fmt.Errorf("read surface profiles: %w", err)

@@ -120,7 +120,7 @@ func TestDetectionOverlayNeverAllowsDenyOrSuppress(t *testing.T) {
 	// Exact-action leases cover identical argv; family host leases leave the ask intact.
 	gateGranted := gateWithDetection(t, gate.PostureBalanced, src)
 	action := containedCommand("echo hi")
-	offer := hitl.ExactActionSetOffer(action, []string{hitl.GrantKey(action)})
+	offer := hitl.ExactActionSetOfferAtScope(action, []string{hitl.GrantKey(action)}, hitl.ApprovalGrantScopeChat)
 	_, err = gateGranted.ApplyGrant(offer.Grant)
 	testutil.FailErr(t, "ApplyGrant", err)
 	res, err := gateGranted.Evaluate(context.Background(), action)
@@ -198,12 +198,10 @@ func TestDetectionOverlayNeverSuppressesRequired(t *testing.T) {
 // Empty catalogs report completed scans; absent producers remain unreported.
 func TestDetectionOverlayZeroPackParity(t *testing.T) {
 	emptyCfg := t.TempDir()
-	// An empty bundled directory isolates the zero-pack case.
 	configtest.Only(t, map[config.Rel]string{
-		config.DetectionPacksDir.Join(".keep"): "",
-		config.SecurityApprovals:               "rules: []\n",
+		config.SecurityApprovals: "rules: []\n",
 	})
-	cat, err := detectionpack.LoadCatalog(detectionInput(t, emptyCfg, ""))
+	cat, err := detectionpack.LoadCatalog(detectionpack.Input{ConfigDir: emptyCfg})
 	testutil.FailErr(t, "LoadCatalog empty", err)
 	m := detectionpack.NewMatcher(cat)
 

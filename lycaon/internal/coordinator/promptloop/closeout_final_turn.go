@@ -43,7 +43,7 @@ func (l *turnCloseout) canCloseWithoutAnswer(sess *api.Session) bool {
 func (l *turnCloseout) applyAssembledFinalTurn(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID string,
+	sessionID, surfaceID string,
 	st *promptLoopTurnState,
 	draft guidance.CloseoutDraft,
 	content string,
@@ -54,18 +54,18 @@ func (l *turnCloseout) applyAssembledFinalTurn(
 		draft = guidance.ParseCloseoutDraft(content, citationmd.Options{})
 	}
 	if !draft.HasAnswer() {
-		return l.endWithClosing(ctx, sess, sessionID, userPrompt, surfaceID, st)
+		return l.endWithClosing(ctx, sess, sessionID, surfaceID, st)
 	}
 	forcedBy := st.closeoutRetry.codes
 	if code := refusal.Code(); code != "" {
 		forcedBy = append(append([]string(nil), forcedBy...), code)
 	}
-	emitted, err := l.emitAssembledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, draft, forcedBy, st, st.history)
+	emitted, err := l.emitAssembledCloseout(ctx, sess, sessionID, surfaceID, draft, forcedBy, st, st.history)
 	if err != nil {
 		return promptLoopAssistantTurnResult{}, err
 	}
 	if !emitted.committed {
-		return l.endWithClosing(ctx, sess, sessionID, userPrompt, surfaceID, st)
+		return l.endWithClosing(ctx, sess, sessionID, surfaceID, st)
 	}
 	st.history = emitted.history
 	st.proseFinishDelivered = true
@@ -78,7 +78,7 @@ func (l *turnCloseout) applyAssembledFinalTurn(
 func (l *turnCloseout) endWithClosing(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID string,
+	sessionID, surfaceID string,
 	st *promptLoopTurnState,
 ) (promptLoopAssistantTurnResult, error) {
 	out := promptLoopAssistantTurnResult{breakLoop: true, exit: loopExitCompleted}
@@ -91,7 +91,7 @@ func (l *turnCloseout) endWithClosing(
 	}
 	drafts = append(drafts, l.hostClosingDraft(ctx, sessionID, st))
 	for _, draft := range drafts {
-		emitted, err := l.emitAssembledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, draft, forcedBy, st, st.history)
+		emitted, err := l.emitAssembledCloseout(ctx, sess, sessionID, surfaceID, draft, forcedBy, st, st.history)
 		if err != nil {
 			return out, err
 		}

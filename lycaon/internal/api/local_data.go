@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/branchretention"
 	"github.com/lycaon/lycaon/internal/localdata"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
-	"github.com/lycaon/lycaon/internal/worker"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -47,7 +46,7 @@ func (s *LocalData) branchRetentionDeps() branchretention.Deps {
 	return branchretention.Deps{
 		BranchRoot: s.workerBranchRoot,
 		Jobs: func(ctx context.Context) (map[string]branchretention.JobState, error) {
-			jobs, err := s.workers.ListBranchJobs(ctx)
+			jobs, err := s.branches.ListBranchJobs(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -57,7 +56,7 @@ func (s *LocalData) branchRetentionDeps() branchretention.Deps {
 			}
 			return out, nil
 		},
-		Evict: worker.BranchEvictor(s.workers),
+		Evict: s.branches.EvictBranch,
 	}
 }
 

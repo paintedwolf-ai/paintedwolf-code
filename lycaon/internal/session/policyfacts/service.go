@@ -3,6 +3,7 @@ package policyfacts
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/people"
@@ -20,7 +21,8 @@ type Profiles interface {
 }
 type Service struct {
 	profiles                   Profiles
-	store                      Sessions
+	sessionStore               Sessions
+	evidenceStore              Evidence
 	workspace                  Workspace
 	feedback                   Feedback
 	loading                    ActiveTools
@@ -89,8 +91,11 @@ func (m *Service) FillSessionFacts(ctx context.Context, gc *oar.GuardContext, se
 }
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	touchedpaths.LedgerSource
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Evidence interface {
+	LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error)
 }
 type Workspace interface {
 	SettingsPath(context.Context, *api.Session) string
@@ -107,8 +112,8 @@ type MCPRuntimeView interface {
 	ToolLoadingModes(context.Context, string) map[string]bool
 }
 
-func (m *Service) SetSources(sessions Sessions, workspace Workspace, feedback Feedback, loading ActiveTools) {
-	m.store = sessions
+func (m *Service) SetSources(sessionStore Sessions, evidenceStore Evidence, workspace Workspace, feedback Feedback, loading ActiveTools) {
+	m.sessionStore, m.evidenceStore = sessionStore, evidenceStore
 	m.workspace = workspace
 	m.feedback = feedback
 	m.loading = loading

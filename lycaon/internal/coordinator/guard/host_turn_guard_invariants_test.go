@@ -1,6 +1,7 @@
 package guard_test
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/guardtest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"strings"
@@ -37,21 +38,6 @@ func groundedLegHistory(agentType string) []api.Message {
 	}
 }
 
-func TestHostTurnGuard_allowMatrix(t *testing.T) {
-	t.Parallel()
-	for _, s := range implementHostSurfaceContract {
-		if got := guard.HostTurnMayFinishWithProse(s.surface, true, false); got != s.finishesProse {
-			t.Fatalf("%s: HostTurnMayFinishWithProse(idle, nothing pending) = %v, want %v", s.surface, got, s.finishesProse)
-		}
-		if guard.HostTurnMayFinishWithProse(s.surface, false, false) {
-			t.Fatalf("%s: must block prose finish while workers are in flight", s.surface)
-		}
-		if guard.HostTurnMayFinishWithProse(s.surface, true, true) {
-			t.Fatalf("%s: must block prose finish while an overlay promote is pending", s.surface)
-		}
-	}
-}
-
 func TestHostTurnGuard_fullChainMatrix(t *testing.T) {
 	rejectFmt := coordinatorRejectFmt(t)
 	history := groundedLegHistory(orchestration.ProfileImplementer)
@@ -65,7 +51,7 @@ func TestHostTurnGuard_fullChainMatrix(t *testing.T) {
 	pendingOverlay := surface.ImplementSessionState{PendingOverlayIDs: []string{"job-1"}}
 
 	chain := func(prose, surfaceID string, workersIdle bool, state surface.ImplementSessionState, turnTools []string) (string, bool) {
-		return guard.FormatHostNoToolTurnReject(
+		return guardtest.FormatHostNoToolTurnReject(t,
 			sess, hostLoopHistory(
 				history),
 			prose,
@@ -120,7 +106,7 @@ func TestHostTurnGuard_readScoutSynthesisFinish(t *testing.T) {
 	}})
 
 	chain := func(history []api.Message, surfaceID, prose string) (string, bool) {
-		return guard.FormatHostNoToolTurnReject(
+		return guardtest.FormatHostNoToolTurnReject(t,
 			sess, hostLoopHistory(
 				history),
 			prose,
@@ -148,7 +134,7 @@ func TestHostTurnGuard_hostCycleOpenPlanBlocksProse(t *testing.T) {
 	prose := coordinatorReportMarkdown("Engine leg is done; AI and UI are next.", nil)
 	state := surface.ImplementSessionState{ProgressOpenCount: 1}
 
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 			history),
 		prose,
@@ -158,7 +144,7 @@ func TestHostTurnGuard_hostCycleOpenPlanBlocksProse(t *testing.T) {
 		t.Fatalf("host cycle with open plan must block investigate prose, got reject=%q block=%v", reject, block)
 	}
 
-	reject, block = guard.FormatHostNoToolTurnReject(
+	reject, block = guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 			history),
 		prose,

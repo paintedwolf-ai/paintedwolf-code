@@ -1,19 +1,18 @@
 package phases_test
 
 import (
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-
 	"context"
 	"encoding/json"
 	"errors"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -31,7 +30,7 @@ func TestWorkflowTransitionHappyPath(t *testing.T) {
 	mgr, sessStore, _ := choiceTransitionsTestMgr(t)
 	reg := registerTransitionToolTestRegistry(t, mgr)
 	ctx := context.Background()
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "choice-transitions-fixture", WorkflowVersion: "1.0.0",
@@ -63,7 +62,7 @@ func TestWorkflowTransitionEitherArm(t *testing.T) {
 	mgr, sessStore, _ := choiceTransitionsTestMgr(t)
 	reg := registerTransitionToolTestRegistry(t, mgr)
 	ctx := context.Background()
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "choice-transitions-fixture", WorkflowVersion: "1.0.0",
@@ -84,7 +83,7 @@ func TestWorkflowTransitionActorDenied(t *testing.T) {
 	mgr, sessStore, _ := choiceTransitionsTestMgr(t)
 	reg := registerTransitionToolTestRegistry(t, mgr)
 	ctx := context.Background()
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "choice-transitions-fixture", WorkflowVersion: "1.0.0",
@@ -103,7 +102,7 @@ func TestWorkflowTransitionUnknownID(t *testing.T) {
 	mgr, sessStore, _ := choiceTransitionsTestMgr(t)
 	reg := registerTransitionToolTestRegistry(t, mgr)
 	ctx := context.Background()
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "choice-transitions-fixture", WorkflowVersion: "1.0.0",
@@ -122,7 +121,7 @@ func TestWorkflowTransitionT36ApproveAwaitingDoesNotBlock(t *testing.T) {
 	mgr, sessStore, dir := choiceTransitionsTestMgr(t)
 	reg := registerTransitionToolTestRegistry(t, mgr)
 	ctx := context.Background()
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	run, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "choice-transitions-fixture", WorkflowVersion: "1.0.0",
@@ -155,7 +154,7 @@ func TestWorkflowTransitionPendingFeedbackReusesHint(t *testing.T) {
 	mgr, sessStore, dir := choiceTransitionsTestMgr(t)
 	reg := registerTransitionToolTestRegistry(t, mgr)
 	ctx := context.Background()
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	run, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "choice-transitions-fixture", WorkflowVersion: "1.0.0",
@@ -179,7 +178,7 @@ func TestWorkflowTransitionInactive(t *testing.T) {
 	mgr, sessStore, _ := choiceTransitionsTestMgr(t)
 	reg := registerTransitionToolTestRegistry(t, mgr)
 	ctx := context.Background()
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	_, err = reg.Run(ctx, "workflow_transition", map[string]any{"transition_id": "critique"}, toolContext("coordinator", sess.ID, sess.WorkspacePath))

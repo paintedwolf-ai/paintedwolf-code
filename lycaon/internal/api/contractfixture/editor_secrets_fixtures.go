@@ -17,17 +17,19 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -64,13 +66,6 @@ func AssertProjectSecretScreen(t *testing.T, f SecretSpanFixture, state api.Secr
 
 var FileWithSecret = "export const staging = {\n  relay: \"" + RelayToken + "\",\n};\n"
 
-func FixtureOwner(t *testing.T, f SecretSpanFixture) string {
-	t.Helper()
-	owner, err := f.Srv.Sources.Workspace.SessionStore.HostOwner(t.Context())
-	testutil.FailErr(t, "read host owner", err)
-	return owner.ID
-}
-
 func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	t.Helper()
 	hub := events.NewMemoryHub()
@@ -80,7 +75,7 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))
 	testutil.FailErr(t, "fingerprinter", err)
 	matcher.SetFingerprinter(fp)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "test managed secret",
@@ -89,13 +84,16 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	)
 	approvals, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "approval store", err)
-	srv := NewTestServer(t, WithSessionStore(store.NewSQL(database)), func(d *hostapi.Dependencies) {
+	repositories := store.NewSQL(database)
+	owner, err := repositories.People.HostOwner(t.Context())
+	testutil.FailErr(t, "read fixture person", err)
+	srv := NewTestServer(t, WithSessionStore(repositories), func(d *hostapi.Dependencies) {
 		d.Host.Events = hub
-		sourceHistory16 := sourceledger.New(database, "")
+		sourceHistory16 := sourceledger.New(database, "", sourceledger.Timing{})
 		d.Source.EditorDocuments = editordoc.New(editordoc.NewStore(database), sourceHistory16, sourceHistory16.History, d.Core.Projects)
 		d.Approvals.SecretSpans = secretspan.New(matcher)
 		d.Approvals.ManagedSecrets = secretcap.NewWithStore(database, values, matcher.Remember)
-		d.Approvals.ApprovalGate = settings.NewRuleApprovalGate(approvals, settings.NoSources())
+		d.Approvals.ApprovalGate = settings.NewRuleApprovalGate(approvals, settingstest.EmptySources())
 	})
 	t.Cleanup(func() {
 		testutil.FailErr(t, "close document service", srv.Sources.Editor.EditorDocuments.Close(context.Background()))
@@ -104,9 +102,8 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	dir := t.TempDir()
 	testutil.FailErr(t, "write fixture",
 		os.WriteFile(filepath.Join(dir, "staging.ts"), []byte(FileWithSecret), 0o600))
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
-	testdbseed.InsertProjectRootWithID(t, database, p.ID, p.Roots[0].ID, dir)
 	eventCh, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: p.ID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to editor events", err)
 	t.Cleanup(unsubscribe)
@@ -124,7 +121,7 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	}
 	var document api.EditorDocument
 	testutil.FailErr(t, "decode document", json.Unmarshal(w.Body.Bytes(), &document))
-	return SecretSpanFixture{Srv: srv, Project: p, FixtureDocument: &document, Events: eventCh}
+	return SecretSpanFixture{PersonID: owner.ID, Srv: srv, Project: p, FixtureDocument: &document, Events: eventCh}
 }
 
 // runeRange locates the relay token as the client would: by rune offsets.
@@ -135,6 +132,7 @@ const RelayToken = "pw-relay-7QK4-2ZB9-XM31" //nolint:gosec // G101: synthetic c
 // The marked value matches no catalog rule.
 
 type SecretSpanFixture struct {
+	PersonID        string
 	Srv             *hostapi.Server
 	Project         *project.Project
 	FixtureDocument *api.EditorDocument

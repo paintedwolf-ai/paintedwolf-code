@@ -239,7 +239,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTask(t *testing.T) {
 	dir := t.TempDir()
 	parent := "parent-1"
 	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 
 	if !mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, "") {
 		t.Fatal("expected true when worker cycle is idle")
@@ -268,7 +268,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskWriteDefersUntilIdle(t *testin
 	dir := t.TempDir()
 	parent := "parent-1"
 	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 
 	writeA, err := q.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: parent,
@@ -300,7 +300,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFligh
 	dir := t.TempDir()
 	parent := "parent-1"
 	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 
 	jobA, err := q.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: parent,
@@ -328,7 +328,7 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create parent", err)
 
 	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID, parent.ID)
@@ -346,7 +346,7 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	testutil.FailErr(t, "Enqueue merged worker", err)
 
 	staleEnvelope := `<task job_id="job-stale" agent_type="implementer" state="complete" merge_status="pending"><summary>wrote</summary></task>`
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		Role:    api.MessageRoleAssistant,
 		Content: staleEnvelope,
 	}); err != nil {
@@ -354,7 +354,7 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	}
 
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 0 {
 		t.Fatalf("pending = %v want empty when ledger has no pending merges", state.PendingOverlayIDs)

@@ -36,7 +36,7 @@ func TestCadenceRetirementPreservesAttachedOrUnknownRoots(t *testing.T) {
 			if !errors.Is(err, tc.err) {
 				t.Fatalf("retirement error = %v, want %v", err, tc.err)
 			}
-			rows, err := store.ListSeriesForPath(t.Context(), root)
+			rows, err := store.Series.ListSeriesForPath(t.Context(), root)
 			testutil.FailErr(t, "retained series", err)
 			if len(rows) != 3 || ctx.Err() != nil {
 				t.Fatalf("retained root: series=%d dispatch=%v", len(rows), ctx.Err())
@@ -63,7 +63,7 @@ func TestCadenceRetiredRootIgnoresLateWritesAndCanReattach(t *testing.T) {
 		clock.Advance(time.Minute)
 		cadence.Tick(ctx)
 	}
-	rows, err := store.ListSeriesForPath(ctx, canonical)
+	rows, err := store.Series.ListSeriesForPath(ctx, canonical)
 	testutil.FailErr(t, "retired series", err)
 	if len(rows) != 0 {
 		t.Fatalf("retired root recreated %d series", len(rows))
@@ -75,7 +75,7 @@ func TestCadenceRetiredRootIgnoresLateWritesAndCanReattach(t *testing.T) {
 	testutil.FailErr(t, "queue reattached write", noteCadenceWrites(ctx, cadence, dir, []string{"main.go"}))
 	clock.Advance(time.Minute)
 	cadence.Tick(ctx)
-	scans, err := store.ListByCanonicalPath(ctx, canonical)
+	scans, err := store.Reads.ListByCanonicalPath(ctx, canonical)
 	testutil.FailErr(t, "reattached scans", err)
 	if len(scans) != 3 {
 		t.Fatalf("reattached scans = %d, want 3", len(scans))
@@ -114,7 +114,7 @@ func TestCadenceRetirementKeepsScanHistoryWithoutRearming(t *testing.T) {
 	testutil.FailErr(t, "request scans", err)
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "canonical root", err)
-	before, err := store.ListByCanonicalPath(ctx, canonical)
+	before, err := store.Reads.ListByCanonicalPath(ctx, canonical)
 	testutil.FailErr(t, "scan history before retirement", err)
 	if len(before) == 0 {
 		t.Fatal("no scans were queued")
@@ -123,9 +123,9 @@ func TestCadenceRetirementKeepsScanHistoryWithoutRearming(t *testing.T) {
 	completeCadenceScans(t, cadence, store)
 	clock.Advance(time.Hour)
 	cadence.Tick(ctx)
-	rows, err := store.ListSeriesForPath(ctx, canonical)
+	rows, err := store.Series.ListSeriesForPath(ctx, canonical)
 	testutil.FailErr(t, "series after late completion", err)
-	after, err := store.ListByCanonicalPath(ctx, canonical)
+	after, err := store.Reads.ListByCanonicalPath(ctx, canonical)
 	testutil.FailErr(t, "retained scan history", err)
 	if len(rows) != 0 || len(after) != len(before) {
 		t.Fatalf("after retirement: series=%d scans=%d, prior scans=%d", len(rows), len(after), len(before))

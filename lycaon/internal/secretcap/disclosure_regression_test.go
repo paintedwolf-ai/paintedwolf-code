@@ -238,7 +238,7 @@ func TestChatDeletionLeavesItsSecretsActiveButUnspendable(t *testing.T) {
 		OperationID: "outlives-chat", Name: "database password", Scope: ScopeChat,
 	})
 	testutil.FailErr(t, "generate chat secret", err)
-	_, err = service.handle.ExecContext(t.Context(), `UPDATE sessions SET title = ? WHERE id = ?`, "Provision staging", "root-1")
+	_, err = service.repository.handle.ExecContext(t.Context(), `UPDATE sessions SET title = ? WHERE id = ?`, "Provision staging", "root-1")
 	testutil.FailErr(t, "title the chat", err)
 	live, err := service.ListProject(t.Context(), testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "list while the chat exists", err)
@@ -276,7 +276,7 @@ func TestChatDeletionLeavesItsSecretsActiveButUnspendable(t *testing.T) {
 
 func deleteChat(t *testing.T, service *Service, chatSessionID string) {
 	t.Helper()
-	tx, err := service.handle.BeginTx(t.Context(), nil)
+	tx, err := service.repository.handle.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin chat deletion", err)
 	defer func() { _ = tx.Rollback() }()
 	_, err = db.DeleteSessionTree(t.Context(), tx, chatSessionID)
@@ -308,7 +308,7 @@ func TestMissingValueOutranksALapsedDeadline(t *testing.T) {
 	testutil.FailErr(t, "generate", err)
 	testutil.FailErr(t, "drop stored value", values.Delete(currentValueID(t, service, meta.Reference)))
 
-	service.now = func() time.Time { return time.Date(2026, 8, 31, 12, 5, 0, 0, time.UTC) }
+	service.repository.now = func() time.Time { return time.Date(2026, 8, 31, 12, 5, 0, 0, time.UTC) }
 	listed, err := service.ListProject(t.Context(), testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "list after lapse", err)
 	if len(listed) != 1 || listed[0].State != StateUnavailable {

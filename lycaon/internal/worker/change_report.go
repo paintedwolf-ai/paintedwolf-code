@@ -54,7 +54,7 @@ func BuildChangeReport(ctx context.Context, task api.WorkerTask, deps ChangeRepo
 	revision, rootDigest := invocation.SourceRevisionForRoot(task.WorkspaceRoot)
 	proof := workercompletion.BuildWorkerCompletionProof(
 		childMessages,
-		session.OverlayWorkspaceChangedPaths(ctx, &task, nil),
+		session.OverlayWorkspaceChangedPaths(ctx, &task, nil, ""),
 		workercompletion.SourceRevision{Revision: revision, RootDigest: rootDigest},
 	)
 	return api.WorkerChangeReport{
@@ -188,8 +188,4 @@ type AnswerDecisionToolDeps struct {
 	Answer *AnswerDecisionService
 	// Workers resolves the worker a call names to its asking round.
 	Workers *workerops.Service
-}
-
-type overlayTaskLookup interface {
-	Get(jobID string) (*api.WorkerTask, bool)
 }

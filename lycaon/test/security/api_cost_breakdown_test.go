@@ -77,8 +77,7 @@ func newCostBreakdownHarness(t *testing.T) (*wiring.Harness, *api.Server, *sessi
 	t.Helper()
 	mock := &usageMockLLM{MockProvider: llm.NewMockProvider(loadMockConfig(t))}
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	hub := h.MemoryHub()
 	return h, h.Server, h.Sessions.Manager, hub
 }

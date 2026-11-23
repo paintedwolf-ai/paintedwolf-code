@@ -138,7 +138,7 @@ func deliverTopologyReport(t *testing.T, h *Harness, ctx context.Context, sess *
 		scope = api.CompletionReportScopeRun
 	}
 	messageID := uuid.NewString()
-	testutil.FailErr(t, "persist grounded completion", h.Workflows.Manager.Transcript.Sessions.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "persist grounded completion", h.Workflows.Manager.Transcript.TranscriptStore.AppendMessages(ctx, sess.ID, api.Message{
 		ID: messageID, Role: api.MessageRoleAssistant, Kind: api.MessageKindCompletionReport,
 		Content: "Completed assessment.", CreatedAt: time.Now().UTC(), WorkflowRunID: runID,
 		Visibility: api.MessageVisibilityTranscript, Grounding: &api.CitationGrounding{Traced: true},
@@ -217,7 +217,7 @@ func SettleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 		t.Fatalf("phase = %q want ingest", run.CurrentPhase)
 	}
 	store := scan.NewSQLStore(h.DB)
-	scans, err := store.ListByWorkflowRunID(ctx, run.ID)
+	scans, err := store.Reads.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "ListByWorkflowRunID", err)
 	if len(scans) == 0 {
 		t.Fatal("scan obligation did not enqueue work")
@@ -228,13 +228,13 @@ func SettleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 			api.CodeScanStatusCanceled, api.CodeScanStatusSuperseded:
 			continue
 		case api.CodeScanStatusPending:
-			if _, err := store.FinalizePendingFailure(ctx, scans[i].ID, "SCAN_WIRING_SETTLE", "wiring obligation settle"); err != nil {
+			if _, err := store.Runs.FinalizePendingFailure(ctx, scans[i].ID, "SCAN_WIRING_SETTLE", "wiring obligation settle"); err != nil {
 				testutil.FailErr(t, "FinalizePendingFailure "+scans[i].ID, err)
 			}
 			continue
 		case api.CodeScanStatusRunning:
 		}
-		if _, err := store.FinalizeFailure(ctx, &scans[i], api.CodeScanStatusFailed, "SCAN_WIRING_SETTLE", "wiring obligation settle"); err != nil {
+		if _, err := store.Runs.FinalizeFailure(ctx, &scans[i], api.CodeScanStatusFailed, "SCAN_WIRING_SETTLE", "wiring obligation settle"); err != nil {
 			testutil.FailErr(t, "FinalizeFailure "+scans[i].ID, err)
 		}
 	}
@@ -258,11 +258,11 @@ func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, s
 		project.ProjectScope{ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath}, worker.DefaultWorkersConfig()))
 	workerID, err := h.Workers.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue "+agent, err)
-	child, err := h.Store.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: agent, Prompt: "review " + agent})
+	child, err := h.Store.Sessions.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: agent, Prompt: "review " + agent})
 	testutil.FailErr(t, "CreateChild "+agent, err)
 	testutil.FailErr(t, "link "+agent, h.Workers.Queue.SetChildSessionID(ctx, workerID, child.ID))
 	completeQueuedFixtureWork(t, h, ctx, sess.ProjectID, workerID)
-	testutil.FailErr(t, "AppendMessages "+agent, h.Store.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "AppendMessages "+agent, h.Store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		Role: api.MessageRoleTool,
 		WorkerSummary: &api.WorkerSummaryMeta{
 			WorkerID:       workerID,
@@ -271,7 +271,7 @@ func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, s
 			Status:         api.WorkerSummaryStatusComplete,
 		},
 	}))
-	testutil.FailErr(t, "UpsertEvidenceRecord "+agent, h.Store.UpsertEvidenceRecord(ctx, child.ID, evidence.Record{
+	testutil.FailErr(t, "UpsertEvidenceRecord "+agent, h.Store.Evidence.UpsertEvidenceRecord(ctx, child.ID, evidence.Record{
 		Handle: "read#1",
 		Kind:   "read", Shape: evidence.ShapeFileRegion, SourceTool: "read", Fidelity: evidence.FidelityStructured,
 		Path: "review.txt", LineRanges: []evidence.LineRange{{Start: 1, End: 1}},

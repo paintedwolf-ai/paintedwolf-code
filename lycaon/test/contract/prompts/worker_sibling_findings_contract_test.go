@@ -35,14 +35,14 @@ func TestRootSessionKeyedFindingsAppendRecentParityContract(t *testing.T) {
 	overlay := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-a")
 
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create parent", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "leg"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "leg"})
 	contractcheck.FailErr(t, "create child", err)
 
 	findingsStore := findingstest.New(t, parent.ID)
 	scopeKey := func(c context.Context, sessionID string) string {
-		return sessiontree.RootID(c, store, sessionID)
+		return sessiontree.RootID(c, store.Sessions, sessionID)
 	}
 	reg := tools.NewDefaultRegistry()
 	contractcheck.FailErr(t, "register record_finding", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findingsStore, scopeKey))
@@ -88,7 +88,7 @@ func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "child-delegation.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	sessions := store.NewSQL(sqlDB)
-	parent, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create parent", err)
 	if parent.WorkspacePath != dir {
 		t.Fatalf("parent workspace = %q, want the project root %q", parent.WorkspacePath, dir)
@@ -102,7 +102,7 @@ func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {
 	}
 	projScope := project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir, HasRoots: true}
 	contractcheck.FailErr(t, "enqueue defaults", worker.ApplyEnqueueDefaults(&task, projScope, worker.DefaultWorkersConfig()))
-	_, err = worker.NewSQLQueue(sqlDB, 4).Enqueue(ctx, task)
+	_, err = worker.NewSQLServices(sqlDB, 4).Queue.Enqueue(ctx, task)
 	contractcheck.FailErr(t, "enqueue", err)
 
 	mgr := session.NewHost(sessions, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())

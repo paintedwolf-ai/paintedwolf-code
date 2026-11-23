@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -13,7 +14,7 @@ import (
 // way to mount a view. Any other failure to mount is left for the test to report.
 func skipWithoutMount(t *testing.T, selector *adapter.Selector) {
 	t.Helper()
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	testutil.RequireConfinement(t, confine.Available())
 	_, err := selector.Choose(t.Context(), adapter.ChooseRequest{
 		Probe:  adapter.ProbeConfig{RuntimeDir: t.TempDir()},

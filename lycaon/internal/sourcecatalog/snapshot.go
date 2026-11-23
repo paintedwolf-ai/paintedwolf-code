@@ -168,6 +168,11 @@ func (s Snapshot) Entry(rootID, rel string) (Entry, bool) {
 
 // Snapshot returns a ready generation, joining an in-flight build when needed.
 func (c *Catalog) Snapshot(ctx context.Context, projectID string, roots []Root) (Snapshot, error) {
+	return c.snapshot(ctx, projectID, roots, rebuildAlways)
+}
+
+// snapshot returns a ready generation under the given rebuild policy.
+func (c *Catalog) snapshot(ctx context.Context, projectID string, roots []Root, policy rebuildPolicy) (Snapshot, error) {
 	if c == nil {
 		return Snapshot{}, errors.New("source catalog is nil")
 	}
@@ -185,7 +190,7 @@ func (c *Catalog) Snapshot(ctx context.Context, projectID string, roots []Root) 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i].snapshot, results[i].err = c.snapshotRoot(ctx, projectID, root)
+			results[i].snapshot, results[i].err = c.snapshotRoot(ctx, projectID, root, policy)
 		}()
 	}
 	wg.Wait()

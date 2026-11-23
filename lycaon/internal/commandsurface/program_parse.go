@@ -43,30 +43,13 @@ func (d *SyntaxDiagnostic) Error() string {
 	return fmt.Sprintf("%s at %d:%d: %s", d.Code, d.Span.Line, d.Span.Column, d.Expected)
 }
 
-// ParsedProgram retains a private validated tree; Snapshot returns detached data.
-// Neither parsing nor a snapshot grants permission to dispatch an operation.
+// ParsedProgram retains a memory-accounted validated tree.
 type ParsedProgram struct {
 	plan         ProgramSnapshot
-	source       []byte
 	stateBytes   int64
 	releaseState func()
 	mu           sync.RWMutex
 	closed       bool
-}
-
-// Snapshot is a detached inspection copy. Execution uses SnapshotWithMemory so
-// simultaneous copies remain charged to the enclosing aggregate state.
-func (p *ParsedProgram) Snapshot() ProgramSnapshot {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return cloneProgram(p.plan)
-}
-
-// Source returns the original unit bytes for exact span inspection, not replay.
-func (p *ParsedProgram) Source() []byte {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return bytes.Clone(p.source)
 }
 
 var programLanguage = sync.OnceValues(toolcontract.LanguageV1)
@@ -82,14 +65,6 @@ func SyntaxUnitByteLimit(sourced bool) int64 {
 		id = "source_bytes"
 	}
 	return languageLimit(catalog, id)
-}
-
-// ParseProgram validates the complete syntax unit before exposing any plan.
-// This pure entry applies local bounds; execution uses ParseAdmitted to charge
-// scratch against its enclosing program while parsing.
-// It only uses the upstream syntax package, never its interpreter or executor.
-func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
-	return parseProgram(context.Background(), source, options, nil, nil)
 }
 
 func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory ProgramMemoryAdmission, pool *syntax.AllocationBudget) (program *ParsedProgram, resultErr error) {
@@ -126,16 +101,6 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 
 	if options.CatalogDigest != "" && options.CatalogDigest != toolcontract.LanguageCatalogDigest() {
 		return nil, &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: unitStart(), Expected: "the frozen compiled language/catalog identity"}
-	}
-	if pool == nil {
-		var releaseScratch func()
-		var err error
-		pool, releaseScratch, err = scratchLedger(ctx, languageLimit(catalog, "evaluation_memory_bytes"), memory, 0)
-		if err != nil {
-			releaseScratch()
-			return nil, err
-		}
-		defer releaseScratch()
 	}
 	// A source label is a path operand or an inline label. Reuse the declared
 	// per-argument byte ceiling; never retain a caller's large substring backing.
@@ -175,22 +140,19 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	// union values, old/new slice backing storage, node IDs and cloned strings.
 	// Split brace nodes are lowered alongside the parsed tree.
 	hostBytes := (c.nodeCount+c.braces.nodes)*2048 + int64(len(source))*8 + int64(len(sourceName)) + (c.maximumDepth+1)*4096 + (64 << 10)
-	var releaseState func()
-	retained := false
-	if memory != nil {
-		releaseState, err = memory.ReserveProgramState(ctx, hostBytes)
-		if err != nil {
-			return nil, err
-		}
-		if releaseState == nil {
-			return nil, fmt.Errorf("program state admission returned no release")
-		}
-		defer func() {
-			if !retained {
-				releaseState()
-			}
-		}()
+	releaseState, err := memory.ReserveProgramState(ctx, hostBytes)
+	if err != nil {
+		return nil, err
 	}
+	if releaseState == nil {
+		return nil, fmt.Errorf("program state admission returned no release")
+	}
+	retained := false
+	defer func() {
+		if !retained {
+			releaseState()
+		}
+	}()
 	if !c.reserveHeap(hostBytes, file) {
 		return nil, c.err
 	}
@@ -203,7 +165,7 @@ func parseProgram(ctx context.Context, source []byte, options ParseOptions, memo
 	}
 	digest := toolcontract.LanguageCatalogDigest()
 	retained = true
-	return &ParsedProgram{source: bytes.Clone(source), stateBytes: hostBytes, releaseState: releaseState, plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: sourceName, Statements: statements}}, nil
+	return &ParsedProgram{stateBytes: hostBytes, releaseState: releaseState, plan: ProgramSnapshot{Version: toolcontract.LanguageVersion, CatalogDigest: digest, SourceDigest: hex.EncodeToString(sourceHash[:]), SourceName: sourceName, Statements: statements}}, nil
 }
 
 func languageLimit(c toolcontract.LanguageCatalog, id string) int64 {

@@ -51,7 +51,7 @@ func TestScanOnceSharedAcrossCanonicalPath(t *testing.T) {
 		t.Fatalf("scan-once failed: %s vs %s", first.ID, second.ID)
 	}
 
-	rows, err := store.ListByCanonicalPath(ctx, canonical)
+	rows, err := store.Reads.ListByCanonicalPath(ctx, canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(rows) != 1 {
 		t.Fatalf("want 1 scan row, got %d", len(rows))
@@ -66,24 +66,24 @@ func TestScanListPageKeepsFirstPageWatermark(t *testing.T) {
 	base := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 	insert := func(id string, at time.Time) {
 		t.Helper()
-		testutil.FailErr(t, "insert scan", store.Insert(ctx, api.CodeScan{ID: id, CanonicalPath: root, Categories: []api.ScanCategory{api.ScanCategorySecurity}, Status: api.CodeScanStatusComplete, CreatedAt: at}, nil, ""))
+		testutil.FailErr(t, "insert scan", store.Runs.Insert(ctx, api.CodeScan{ID: id, CanonicalPath: root, Categories: []api.ScanCategory{api.ScanCategorySecurity}, Status: api.CodeScanStatusComplete, CreatedAt: at}, nil, ""))
 	}
 	insert("00000000-0000-4000-8000-000000000001", base)
 	insert("00000000-0000-4000-8000-000000000003", base)
 	insert("00000000-0000-4000-8000-000000000004", base)
 
-	first, err := store.ListPageByCanonicalPaths(ctx, []string{root}, scan.PageQuery{Limit: 2})
+	first, err := store.Findings.ListPageByCanonicalPaths(ctx, []string{root}, scan.PageQuery{Limit: 2})
 	testutil.FailErr(t, "first page", err)
 	if len(first.Scans) != 2 || first.NextCursor == "" {
 		t.Fatalf("first page = %+v", first)
 	}
 	insert("00000000-0000-4000-8000-000000000002", base)
-	second, err := store.ListPageByCanonicalPaths(ctx, []string{root}, scan.PageQuery{Limit: 2, Cursor: first.NextCursor})
+	second, err := store.Findings.ListPageByCanonicalPaths(ctx, []string{root}, scan.PageQuery{Limit: 2, Cursor: first.NextCursor})
 	testutil.FailErr(t, "second page", err)
 	if len(second.Scans) != 1 || second.Scans[0].ID != "00000000-0000-4000-8000-000000000001" {
 		t.Fatalf("second page crossed watermark: %+v", second.Scans)
 	}
-	if _, err := store.ListPageByCanonicalPaths(ctx, []string{t.TempDir()}, scan.PageQuery{Limit: 2, Cursor: first.NextCursor}); !errors.Is(err, scan.ErrInvalidScanPageCursor) {
+	if _, err := store.Findings.ListPageByCanonicalPaths(ctx, []string{t.TempDir()}, scan.PageQuery{Limit: 2, Cursor: first.NextCursor}); !errors.Is(err, scan.ErrInvalidScanPageCursor) {
 		t.Fatalf("cursor reused for another root set: %v", err)
 	}
 }
@@ -101,7 +101,7 @@ func TestDerivedVisibilityFromCurrentRoots(t *testing.T) {
 
 	insertComplete := func(path, id string) {
 		t.Helper()
-		if err := store.Insert(ctx, api.CodeScan{
+		if err := store.Runs.Insert(ctx, api.CodeScan{
 			ID:            id,
 			CanonicalPath: path,
 			Categories:    []api.ScanCategory{api.ScanCategorySecurity},
@@ -136,7 +136,7 @@ func TestDetachAndProjectDeleteRetainScanRows(t *testing.T) {
 	dir := t.TempDir()
 	store := scan.NewSQLStore(sqlDB)
 	ctx := context.Background()
-	if err := store.Insert(ctx, api.CodeScan{
+	if err := store.Runs.Insert(ctx, api.CodeScan{
 		ID:            "retained",
 		CanonicalPath: dir,
 		Categories:    []api.ScanCategory{api.ScanCategorySecurity},
@@ -151,7 +151,7 @@ func TestDetachAndProjectDeleteRetainScanRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("simulate detach: %v", err)
 	}
-	got, err := store.Get(ctx, "retained")
+	got, err := store.Reads.Get(ctx, "retained")
 	testutil.FailErr(t, "Get after detach", err)
 	if got == nil || got.ID != "retained" {
 		t.Fatal("scan row must survive root detach")

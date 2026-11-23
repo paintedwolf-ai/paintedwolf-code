@@ -146,7 +146,6 @@ func TestExamplePackWorkflowValidates(t *testing.T) {
 	if _, err := extpacks.ApplyCatalog(t.Context(), nil, nil); err != nil {
 		t.Fatalf("resolve after install: %v", err)
 	}
-	t.Cleanup(extpacks.ClearActive)
 
 	manifest := filepath.Join(examplePacksRoot(t), "team-flow", "workflows", "example-triage", "workflow.yaml")
 	diags, err := workflowvalidate.ValidateCatalog(t.Context(), workflowvalidate.CatalogValidateOptions{

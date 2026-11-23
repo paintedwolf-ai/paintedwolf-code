@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -13,7 +12,7 @@ import (
 // chatAffiliation names the focused chat and the turn live when the change
 // lands. A chat the host cannot place leaves the change unaffiliated; a
 // person's text is never refused for its affiliation.
-func ChatAffiliation(ctx context.Context, sessions session.Store, projectID, sessionID string) (string, int, error) {
+func ChatAffiliation(ctx context.Context, sessions Sessions, projectID, sessionID string) (string, int, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return "", 0, nil

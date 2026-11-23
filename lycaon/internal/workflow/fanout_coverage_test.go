@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ func TestRegistryWorkflowReadyCheckerAndPlannedWorkFanoutBinding(t *testing.T) {
 	_, err = mgr.Controls.Cancel(t.Context(), planRun.ID, "done")
 	testutil.FailErr(t, "cancel plan run", err)
 
-	condReg, err := conditions.NewDefaultRegistry(registryDepsForTests(mgr, bpMgr, conditions.TestRegistryDeps()))
+	condReg, err := conditions.NewDefaultRegistry(registryDepsForTests(mgr, bpMgr, conditionstest.Dependencies()))
 	testutil.FailErr(t, "new condition registry", err)
 	mgr.SetConditionRegistry(condReg)
 
@@ -66,7 +67,7 @@ func TestRegistryWorkflowReadyCheckerAndPlannedWorkFanoutBinding(t *testing.T) {
 
 	checker := RegistryWorkflowReadyChecker{
 		Registry: condReg,
-		Sessions: sessStore,
+		Sessions: sessStore.Sessions,
 		Runs:     mgr.Store.Runs,
 	}
 	ready, err = checker.ImplementWorkflowReady(t.Context(), "sess-1", bpPath)
@@ -75,7 +76,7 @@ func TestRegistryWorkflowReadyCheckerAndPlannedWorkFanoutBinding(t *testing.T) {
 		t.Fatal("build session without active spec run should be ready")
 	}
 
-	testutil.FailErr(t, "set spec posture", sessStore.UpdateSession(t.Context(), "sess-1", func(s *api.Session) {
+	testutil.FailErr(t, "set spec posture", sessStore.Sessions.UpdateSession(t.Context(), "sess-1", func(s *api.Session) {
 		s.Posture = api.SessionPostureSpec
 	}))
 	ready, err = checker.ImplementWorkflowReady(t.Context(), "sess-1", bpPath)
@@ -84,7 +85,7 @@ func TestRegistryWorkflowReadyCheckerAndPlannedWorkFanoutBinding(t *testing.T) {
 		t.Fatal("unapproved spec blueprint reported ready")
 	}
 
-	testutil.FailErr(t, "restore build posture", sessStore.UpdateSession(t.Context(), "sess-1", func(s *api.Session) {
+	testutil.FailErr(t, "restore build posture", sessStore.Sessions.UpdateSession(t.Context(), "sess-1", func(s *api.Session) {
 		s.Posture = api.SessionPostureBuild
 	}))
 

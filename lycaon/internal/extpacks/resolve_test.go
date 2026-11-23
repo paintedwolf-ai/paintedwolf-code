@@ -23,7 +23,7 @@ func TestResolveAllStockEnabledFullCatalog(t *testing.T) {
 	if err := eff.BootError(); err != nil {
 		testutil.FailErr(t, "eff.BootError failed", err)
 	}
-	if !eff.HasLoaded(WorkflowUnitID("plan")) {
+	if !eff.HasLoaded("workflows/plan") {
 		t.Fatal("expected workflows/plan loaded")
 	}
 	if !eff.HasLoaded(PolicyUnitID("WRITE_SCOPE_DENIED")) {
@@ -44,13 +44,13 @@ func TestResolveAllStockEnabledFullCatalog(t *testing.T) {
 func TestResolvePlanDisabledOmitsPlanVertical(t *testing.T) {
 	eff, err := resolveWithDesired(t.Context(), desiredWithDisabledPack("painted-wolf/plan"), nil)
 	testutil.FailErr(t, "effective catalog resolve failed", err)
-	if eff.HasLoaded(WorkflowUnitID("plan")) {
+	if eff.HasLoaded("workflows/plan") {
 		t.Fatal("workflows/plan must be omitted when plan pack disabled")
 	}
 	if eff.PackContributed("painted-wolf/plan") {
 		t.Fatal("plan pack must not contribute")
 	}
-	if !eff.HasLoaded(WorkflowUnitID("implement")) {
+	if !eff.HasLoaded("workflows/implement") {
 		t.Fatal("implement workflow should still load")
 	}
 }
@@ -320,12 +320,12 @@ func TestResolveOwnPicksWinner(t *testing.T) {
 	testutil.FailErr(t, "InventoryPack failed", err)
 	desired := EmptyDesired()
 	desired.Packs = []DesiredPack{{ID: "acme/plan"}}
-	desired.Own = map[string]string{WorkflowUnitID("plan"): "acme/plan"}
+	desired.Own = map[string]string{"workflows/plan": "acme/plan"}
 	eff := Resolve(t.Context(), ResolveInput{
 		Packs:   []PackContent{a, b},
 		Desired: desired,
 	})
-	u, ok := eff.Loaded[WorkflowUnitID("plan")]
+	u, ok := eff.Loaded["workflows/plan"]
 	if !ok || u.Status != UnitStatusOwned || u.WinnerPackID != "acme/plan" {
 		t.Fatalf("expected own selection for acme, got %+v ok=%v", u, ok)
 	}

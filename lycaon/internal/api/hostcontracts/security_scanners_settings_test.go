@@ -124,12 +124,12 @@ func TestCreateProjectBaselinesSecurityWithoutScanning(t *testing.T) {
 	contractfixture.DecodeCreateProjectForTest(t, srv, dir, &proj)
 	contractfixture.DrainBackground(t, srv)
 	rootPath := contractfixture.PrimaryRootPath(proj)
-	scans, err := store.ListByCanonicalPath(t.Context(), rootPath)
+	scans, err := store.Reads.ListByCanonicalPath(t.Context(), rootPath)
 	testutil.FailErr(t, "store.ListByCanonicalPath failed", err)
 	if len(scans) != 0 {
 		t.Fatalf("attach scanned %d rows; automatic scanning is incremental only", len(scans))
 	}
-	series, err := store.ListSeriesForPath(t.Context(), rootPath)
+	series, err := store.Series.ListSeriesForPath(t.Context(), rootPath)
 	testutil.FailErr(t, "store.ListSeriesForPath", err)
 	if len(series) < 3 {
 		t.Fatalf("series = %d, want one per selected scanner", len(series))
@@ -159,12 +159,12 @@ func TestCreateProjectBaselinesAnEmptyRoot(t *testing.T) {
 	contractfixture.DecodeCreateProjectForTest(t, srv, dir, &proj)
 	contractfixture.DrainBackground(t, srv)
 	rootPath := contractfixture.PrimaryRootPath(proj)
-	scans, err := store.ListByCanonicalPath(t.Context(), rootPath)
+	scans, err := store.Reads.ListByCanonicalPath(t.Context(), rootPath)
 	testutil.FailErr(t, "store.ListByCanonicalPath failed", err)
 	if len(scans) != 0 {
 		t.Fatalf("empty project enqueued %d scans", len(scans))
 	}
-	series, err := store.ListSeriesForPath(t.Context(), rootPath)
+	series, err := store.Series.ListSeriesForPath(t.Context(), rootPath)
 	testutil.FailErr(t, "store.ListSeriesForPath", err)
 	if len(series) == 0 {
 		t.Fatal("empty attach scan series missing")

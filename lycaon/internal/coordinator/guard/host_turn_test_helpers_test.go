@@ -1,8 +1,10 @@
 package guard_test
 
 import (
-	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -15,8 +17,8 @@ func hostLoopHistory(history []api.Message) []api.Message {
 	})
 }
 
-func observeHasCode(gc *oar.GuardContext, code string) bool {
-	return guard.EvaluateObserveHasCode(gc, oar.AnchorCoordinatorPreInvoke, code) ||
-		guard.EvaluateObserveHasCode(gc, oar.AnchorToolPreInvoke, code) ||
-		guard.EvaluateObserveHasCode(gc, oar.AnchorCoordinatorCloseoutCheck, code)
+func observeHasCode(t *testing.T, gc *oar.GuardContext, code string) bool {
+	return oartest.EvaluateHasCode(t, gc, oar.AnchorCoordinatorPreInvoke, code) ||
+		oartest.EvaluateHasCode(t, gc, oar.AnchorToolPreInvoke, code) ||
+		oartest.EvaluateHasCode(t, gc, oar.AnchorCoordinatorCloseoutCheck, code)
 }

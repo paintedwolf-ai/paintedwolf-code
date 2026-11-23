@@ -99,7 +99,7 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 					t.Fatal("tool recovery assembled an old conclusion")
 					return guidance.CoordinatorCompletionReport{}, nil
 				},
-			}, Tools: ToolsDeps{BeforeToolRun: func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+			}, Tools: ToolsDeps{BeforeToolRun: func(context.Context, *api.Session, []api.Message, string, map[string]any) (string, bool, error) {
 				if retained.Active {
 					t.Fatal("admission saw active pin")
 				}
@@ -239,7 +239,7 @@ func TestCloseoutAsyncRetirementClearsLocalOffenderBeforeFreshReport(t *testing.
 			return nil, stopped
 		},
 	}})
-	_, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", st, nil, api.Message{}, markdownRead(fresh, false))
+	_, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "session"}, "session", "implement_investigate", st, nil, api.Message{}, markdownRead(fresh, false))
 	if !errors.Is(err, stopped) {
 		t.Fatalf("fresh report didn't reach observation boundary: %v", err)
 	}

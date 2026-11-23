@@ -39,7 +39,7 @@ func TestInvariantClaimTokenConservationAndDesireSettlement(t *testing.T) {
 	}
 
 	book.requeueDispatches(t.Context(), claimed)
-	rowsAfterRequeue, err := store.ListSeriesForPath(t.Context(), canonical)
+	rowsAfterRequeue, err := store.Series.ListSeriesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "series after requeue", err)
 	for _, row := range rowsAfterRequeue {
 		if row.DispatchToken != "" || !row.ClaimHeartbeatAt.IsZero() {
@@ -69,7 +69,7 @@ func TestInvariantClaimTokenConservationAndDesireSettlement(t *testing.T) {
 	clock.Advance(2*cfg.WriteBurstSettle() + time.Second)
 	cadence.Tick(t.Context())
 	completeCadenceScans(t, cadence, store)
-	settled, err := store.ListSeriesForPath(t.Context(), canonical)
+	settled, err := store.Series.ListSeriesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "series after terminal settlement", err)
 	for _, row := range settled {
 		if row.DispatchToken != "" || !row.ClaimHeartbeatAt.IsZero() || len(row.DesiredPaths) != 0 || row.DesiredTrigger != "" || row.DesiredPassID != "" || !row.DueAt.IsZero() || row.ConsecutiveFailures != 0 {
@@ -91,7 +91,7 @@ func TestInvariantTriggerRankMonotonicityAndDeferralCap(t *testing.T) {
 	cfg := cadenceCfg(cadence)
 	t0 := clock.Now().UTC()
 	testutil.FailErr(t, "initial write", cadence.NoteWrites(t.Context(), dir, []string{"main.go"}))
-	rows, err := store.ListSeriesForPath(t.Context(), canonical)
+	rows, err := store.Series.ListSeriesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "series after first write", err)
 	wantMaxDue := t0.Add(cfg.MaxDefer())
 	for _, row := range rows {
@@ -107,7 +107,7 @@ func TestInvariantTriggerRankMonotonicityAndDeferralCap(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		clock.Advance(cfg.WriteBurstSettle() / 2)
 		testutil.FailErr(t, "repeated write", cadence.NoteWrites(t.Context(), dir, []string{"main.go"}))
-		rows, err = store.ListSeriesForPath(t.Context(), canonical)
+		rows, err = store.Series.ListSeriesForPath(t.Context(), canonical)
 		testutil.FailErr(t, "series after repeated write", err)
 		for _, row := range rows {
 			if !row.MaxDueAt.Equal(wantMaxDue) {
@@ -122,7 +122,7 @@ func TestInvariantTriggerRankMonotonicityAndDeferralCap(t *testing.T) {
 	// Whole-tree drift via NoteTree promotes trigger rank to authority_refresh; subsequent write_burst never demotes it.
 	testutil.FailErr(t, "baseline tree count", cadence.NoteTree(t.Context(), dir, 10))
 	testutil.FailErr(t, " drifted tree count", cadence.NoteTree(t.Context(), dir, 200))
-	rows, err = store.ListSeriesForPath(t.Context(), canonical)
+	rows, err = store.Series.ListSeriesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "series after tree drift", err)
 	for _, row := range rows {
 		if triggerRank(row.DesiredTrigger) < triggerRank(api.ScanTriggerAuthorityRefresh) {
@@ -132,7 +132,7 @@ func TestInvariantTriggerRankMonotonicityAndDeferralCap(t *testing.T) {
 
 	testutil.FailErr(t, "modify file", os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\nfunc main() { println(1) }\n"), 0o644))
 	testutil.FailErr(t, "write after drift", cadence.NoteWrites(t.Context(), dir, []string{"main.go"}))
-	rows, err = store.ListSeriesForPath(t.Context(), canonical)
+	rows, err = store.Series.ListSeriesForPath(t.Context(), canonical)
 	testutil.FailErr(t, "series after write following drift", err)
 	for _, row := range rows {
 		if triggerRank(row.DesiredTrigger) < triggerRank(api.ScanTriggerAuthorityRefresh) {

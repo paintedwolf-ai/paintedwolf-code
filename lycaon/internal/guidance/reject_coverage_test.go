@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oarcopy"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/guidancetest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"gopkg.in/yaml.v3"
@@ -24,7 +25,7 @@ func loadValidatedHints(t *testing.T) *guidance.HintConfig {
 	t.Helper()
 	cfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock", err)
-	if err := guidance.ValidateHintConfig(cfg); err != nil {
+	if err := guidancetest.ValidateHints(cfg); err != nil {
 		testutil.FailErr(t, "ValidateHintConfig", err)
 	}
 	return cfg
@@ -43,7 +44,7 @@ func TestEveryRejectCodeHasScenario(t *testing.T) {
 	for code, entry := range cfg.HintCodes {
 		// Copy-only units and OAR hints are never evaluated, so they carry no
 		// scenarios to rehearse.
-		if guidance.CopyOnlyEmit(entry.Emit) || entry.Kind == "hint" {
+		if guidancetest.CopyOnlyEmit(entry.Emit) || entry.Kind == "hint" {
 			continue
 		}
 		// Warn-severity hints render through the same formatter, so their
@@ -85,7 +86,7 @@ func TestEveryToolHasDocumentedFeedback(t *testing.T) {
 
 	byTool := map[string]map[string]bool{}
 	for code, entry := range cfg.HintCodes {
-		if guidance.CopyOnlyEmit(entry.Emit) {
+		if guidancetest.CopyOnlyEmit(entry.Emit) {
 			continue
 		}
 		for _, tool := range entry.Tools {

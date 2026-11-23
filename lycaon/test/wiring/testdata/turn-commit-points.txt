@@ -58,6 +58,10 @@ invocation_program_executions:update invocation_programs:update #1
 invocation_program_nodes:insert invocation_program_outputs:insert invocation_program_sources:insert invocation_programs:insert invocation_programs:update #1
 invocation_program_outputs:insert invocation_programs:update #1
 invocation_program_outputs:insert invocation_programs:update #2
+invocation_program_publications:insert #1
+invocation_program_publications:update #1
+invocation_program_publications:update #2
+invocation_program_publications:update #3
 invocation_program_revision_pins:insert #1
 invocation_programs:update #1
 invocation_receipts:insert #1

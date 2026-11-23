@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -63,7 +64,7 @@ func TestGateBuilderSealsWithoutDetectionAsIncompleteFacts(t *testing.T) {
 // An empty catalog reports a completed evaluation with no matches.
 func TestWiredDetectionSourceWithNoMatchStaysSilent(t *testing.T) {
 	t.Parallel()
-	g := detectionGate(t, settings.NoSources())
+	g := detectionGate(t, settingstest.EmptySources())
 	res, err := g.Evaluate(context.Background(), containedAction("sess-wired-inert"))
 	testutil.FailErr(t, "Evaluate", err)
 	if res != nil && res.Required() {
@@ -73,7 +74,7 @@ func TestWiredDetectionSourceWithNoMatchStaysSilent(t *testing.T) {
 
 func TestDetectionSourceSnapshotsOncePerAction(t *testing.T) {
 	t.Parallel()
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	source := sources.Detections()
 	reads := 0
 	sources.Detections = func() settings.DetectionSource {

@@ -27,11 +27,11 @@ func (m *Service) turnStartCheckpoint(ctx context.Context, sessionID string) {
 	if checkpointer == nil {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return
 	}
-	turnSource, err := m.store.ReadSourceTurn(ctx, sessionID, 0)
+	turnSource, err := m.transcriptStore.ReadSourceTurn(ctx, sessionID, 0)
 	turn := turnSource.Number
 	if err != nil {
 		return

@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/sizebudget"
 )
 
-// TestMaintainabilityWithinBudget rejects new excess and growth while reporting legacy debt.
+// TestMaintainabilityWithinBudget rejects new excess and growth while reporting existing excess.
 func TestMaintainabilityWithinBudget(t *testing.T) {
 	root := testutil.CheckoutRoot(t)
 	change, err := sizebudget.LoadChangeSet()

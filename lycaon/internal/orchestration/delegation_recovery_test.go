@@ -26,7 +26,7 @@ func TestTopologyRecoveryReusesStoredUnits(t *testing.T) {
 				case "fan_out":
 					id, units, err = o.setupFanOutBatch(ctx, req, wf, "session", "/repo", "task", "agent", FanOutSpec{Subtasks: []string{"first", "second"}}, state)
 				case "pack":
-					id, units, err = o.setupPackBatch(ctx, req, wf, "session", "/repo", "task", "agent", 2, nil, state)
+					id, units, err = o.setupPackBatch(ctx, req, wf, "session", "/repo", "task", "agent", 2, state)
 				default:
 					stages := []PipelineStage{{Name: "first", AgentProfile: "agent"}, {Name: "second", AgentProfile: "agent"}}
 					id, err = o.setupPipelineBatch(ctx, req, "session", "/repo", stages, state)

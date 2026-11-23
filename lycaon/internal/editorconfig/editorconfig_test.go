@@ -56,11 +56,11 @@ func TestMatchPattern(t *testing.T) {
 func TestResolveNearerConfigWinsAndUnsetClears(t *testing.T) {
 	root := Parse("", "[*]\nindent_style = space\nindent_size = 2\ntrim_trailing_whitespace = true\ninsert_final_newline = true\n")
 	nested := Parse("lycaon", "[*.go]\nindent_style = tab\nindent_size = 4\ninsert_final_newline = unset\n")
-	got := Resolve("lycaon/main.go", []File{root, nested})
+	got, _ := resolveContributors("lycaon/main.go", []File{root, nested})
 	if got.IndentStyle != IndentTab || got.IndentSize != 4 || got.TrimTrailingWhitespace == nil || !*got.TrimTrailingWhitespace || got.InsertFinalNewline != nil {
 		t.Fatalf("Resolve = %+v", got)
 	}
-	if other := Resolve("docs/a.md", []File{root, nested}); other.IndentStyle != IndentSpace || other.IndentSize != 2 {
+	if other, _ := resolveContributors("docs/a.md", []File{root, nested}); other.IndentStyle != IndentSpace || other.IndentSize != 2 {
 		t.Fatalf("a file outside the nested section should keep the root pairs, got %+v", other)
 	}
 }
@@ -157,40 +157,40 @@ func TestLoadRefusesOversizedConfig(t *testing.T) {
 
 func TestKotlinLineLengthFallbackAndToggle(t *testing.T) {
 	crossSection := Parse("", "[*]\nmax_line_length = 100\n[*.kts]\nij_kotlin_max_line_length = 140\n")
-	if got := Resolve("build.gradle.kts", []File{crossSection}); got.MaxLineLength != 100 {
+	if got, _ := resolveContributors("build.gradle.kts", []File{crossSection}); got.MaxLineLength != 100 {
 		t.Fatalf("earlier max_line_length should beat later ij_kotlin_max_line_length, got %d", got.MaxLineLength)
 	}
 	maxOff := Parse("", "[*]\nmax_line_length = off\n[*.kt]\nij_kotlin_max_line_length = 120\n")
-	if got := Resolve("src/Main.kt", []File{maxOff}); got.MaxLineLength != 0 {
+	if got, _ := resolveContributors("src/Main.kt", []File{maxOff}); got.MaxLineLength != 0 {
 		t.Fatalf("max_line_length = off should stay 0 over Kotlin fallback, got %d", got.MaxLineLength)
 	}
 	unsetFallback := Parse("", "[*]\nmax_line_length = 100\n[*.kt]\nmax_line_length = unset\nij_kotlin_max_line_length = 120\n")
-	if got := Resolve("src/Main.kt", []File{unsetFallback}); got.MaxLineLength != 120 {
+	if got, _ := resolveContributors("src/Main.kt", []File{unsetFallback}); got.MaxLineLength != 120 {
 		t.Fatalf("max_line_length = unset should expose Kotlin fallback 120, got %d", got.MaxLineLength)
 	}
 	onlyKotlin := Parse("", "[*]\nij_kotlin_max_line_length = 120\n[*.kts]\nij_kotlin_max_line_length = off\n")
-	if got := Resolve("src/Main.kt", []File{onlyKotlin}); got.MaxLineLength != 120 {
+	if got, _ := resolveContributors("src/Main.kt", []File{onlyKotlin}); got.MaxLineLength != 120 {
 		t.Fatalf("expected Kotlin fallback 120, got %d", got.MaxLineLength)
 	}
-	if got := Resolve("build.gradle.kts", []File{onlyKotlin}); got.MaxLineLength != 0 {
+	if got, _ := resolveContributors("build.gradle.kts", []File{onlyKotlin}); got.MaxLineLength != 0 {
 		t.Fatalf("ij_kotlin_max_line_length = off should clear fallback, got %d", got.MaxLineLength)
 	}
-	if got := Resolve("src/Main.java", []File{onlyKotlin}); got.MaxLineLength != 0 {
+	if got, _ := resolveContributors("src/Main.java", []File{onlyKotlin}); got.MaxLineLength != 0 {
 		t.Fatalf("non-Kotlin file should ignore Kotlin fallback, got %d", got.MaxLineLength)
 	}
 	ktlintDisabled := Parse("", "[*]\nmax_line_length = 100\n[*.kts]\nktlint_standard_max-line-length = disabled\n")
-	if got := Resolve("build.gradle.kts", []File{ktlintDisabled}); got.MaxLineLength != 0 {
+	if got, _ := resolveContributors("build.gradle.kts", []File{ktlintDisabled}); got.MaxLineLength != 0 {
 		t.Fatalf("ktlint_standard_max-line-length = disabled should clear width, got %d", got.MaxLineLength)
 	}
-	if got := Resolve("src/Main.kt", []File{ktlintDisabled}); got.MaxLineLength != 100 {
+	if got, _ := resolveContributors("src/Main.kt", []File{ktlintDisabled}); got.MaxLineLength != 100 {
 		t.Fatalf("enabled section should keep 100, got %d", got.MaxLineLength)
 	}
 	ktlintReenabled := Parse("", "[*]\nmax_line_length = 100\nktlint_standard_max-line-length = disabled\n[*.kt]\nktlint_standard_max-line-length = enabled\n")
-	if got := Resolve("src/Main.kt", []File{ktlintReenabled}); got.MaxLineLength != 100 {
+	if got, _ := resolveContributors("src/Main.kt", []File{ktlintReenabled}); got.MaxLineLength != 100 {
 		t.Fatalf("reenabled ktlint rule should restore 100, got %d", got.MaxLineLength)
 	}
 	bogusNumericToggle := Parse("", "[*.kt]\nktlint_standard_max-line-length = 140\n")
-	if got := Resolve("src/Main.kt", []File{bogusNumericToggle}); got.MaxLineLength != 0 {
+	if got, _ := resolveContributors("src/Main.kt", []File{bogusNumericToggle}); got.MaxLineLength != 0 {
 		t.Fatalf("rule toggle should ignore numeric value, got %d", got.MaxLineLength)
 	}
 }

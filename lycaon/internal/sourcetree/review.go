@@ -244,31 +244,31 @@ func (p *Projection) ancillary(ctx context.Context, dir string) (string, string,
 	return sourcecatalog.DirectoryAncillary(state, count), state.Failure, err
 }
 
-func (p *Projection) children(ctx context.Context, dir string) (int64, []replacement, error) {
-	total, replacements, err := p.baseChildren(ctx, dir)
+func (p *Projection) children(ctx context.Context, dir string) (int64, error) {
+	total, _, err := p.baseChildren(ctx, dir)
 	if err != nil || p.Review == nil {
-		return total, replacements, err
+		return total, err
 	}
 	open, err := p.open(ctx, dir)
 	if err != nil || !open {
-		return total, replacements, err
+		return total, err
 	}
 	index, err := p.Review.index(ctx, dir)
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 	added, err := index.Extent(ctx)
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 	node, err := p.reviewNode(ctx, dir)
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 	if node.SuppressEmpty {
 		added--
 	}
-	return total + added, replacements, nil
+	return total + added, nil
 }
 
 func (p *Projection) child(ctx context.Context, dir string, rank int64) (sourcecatalog.Entry, int64, error) {

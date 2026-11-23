@@ -2,13 +2,14 @@ package chats
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/pkg/api"
 	"reflect"
 	"testing"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type orientationStore struct {
-	Store
+	Sessions
 	sessions []*api.Session
 }
 
@@ -18,7 +19,7 @@ type orientationChanges []string
 
 func (c *orientationChanges) InvalidateOrientation(id string) { *c = append(*c, id) }
 func TestReopenOrientationKeepsOtherProjectsUnchanged(t *testing.T) {
-	service := &Service{store: orientationStore{sessions: []*api.Session{nil, {ID: "target", ProjectID: "project"}, {ID: "foreign", ProjectID: "other"}, {ID: "second", ProjectID: "project"}}}}
+	service := &Service{sessionStore: orientationStore{sessions: []*api.Session{nil, {ID: "target", ProjectID: "project"}, {ID: "foreign", ProjectID: "other"}, {ID: "second", ProjectID: "project"}}}}
 	var changes orientationChanges
 	service.ReopenOrientation(t.Context(), "project", &changes)
 	if !reflect.DeepEqual(changes, orientationChanges{"target", "second"}) {
@@ -27,7 +28,7 @@ func TestReopenOrientationKeepsOtherProjectsUnchanged(t *testing.T) {
 }
 
 func TestOrientationRefreshRejectsUnboundProjectAndMissingProjection(t *testing.T) {
-	service := &Service{store: orientationStore{sessions: []*api.Session{{ID: "target", ProjectID: "project"}}}}
+	service := &Service{sessionStore: orientationStore{sessions: []*api.Session{{ID: "target", ProjectID: "project"}}}}
 	var changes orientationChanges
 	service.ReopenOrientation(t.Context(), "", &changes)
 	service.ReopenOrientation(t.Context(), "project", nil)

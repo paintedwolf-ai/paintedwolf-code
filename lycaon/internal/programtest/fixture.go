@@ -6,8 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
-	"github.com/lycaon/lycaon/internal/tooloutput"
 	"sync"
 	"testing"
 	"time"
@@ -16,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -26,12 +24,15 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -77,15 +78,15 @@ type Fixture struct {
 	delivered  []evidence.Record
 }
 
-type sessions struct {
-	fixture *Fixture
-}
+type sessions struct{}
+
+type sourceDeliveries struct{ fixture *Fixture }
 
 func (sessions) Get(_ context.Context, id string) (*api.Session, error) {
 	return &api.Session{ID: id, OwnerPersonID: "fixture-person"}, nil
 }
 
-func (s sessions) CommitDeliveredSource(_ context.Context, _ string, observation evidence.DeliveredSourceObservation) (string, error) {
+func (s sourceDeliveries) CommitDeliveredSource(_ context.Context, _ string, observation evidence.DeliveredSourceObservation) (string, error) {
 	s.fixture.mu.Lock()
 	defer s.fixture.mu.Unlock()
 	rec := observation.Record()
@@ -109,7 +110,7 @@ func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (pro
 // New composes the entry. Structured tools exist only as owner identities.
 func New(t testing.TB, options Options) *Fixture {
 	t.Helper()
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
 	t.Setenv("LYCAON_SANDBOX", "on")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
@@ -138,12 +139,12 @@ func New(t testing.TB, options Options) *Fixture {
 	testutil.FailErr(t, "compile profile effects", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"command": true, "verify": true, "summarize": true, "survey_repo": true, "code_rewrite": true}, CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "fixture")
-	owner := progress.NewMemoryStore()
+	owner := progress.NewSQLStore(database)
 	testutil.FailErr(t, "set actual progress", owner.Set(session, "- [ ] Run the fixture program"))
 	background := options.Background
 	if background == nil {
 		background = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-		background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+		background.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 		t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })
 	}
 	natives := map[string]command.NativeOperation{}
@@ -164,9 +165,10 @@ func New(t testing.TB, options Options) *Fixture {
 	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background, Boundary: boundary, progress: owner}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
-		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
+		Projector: captureprojection.New(&secretmatch.Matcher{}, nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
-		Sessions: sessions{fixture: f}, Ports: ports,
+		Sessions: sessions{}, Ports: ports,
+		Provenance: store.NewSQL(database).Evidence, SourceObserver: sourceDeliveries{fixture: f},
 		Owners: func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 			return command.ProgramOwners{Natives: natives, Input: input, Publication: func(tools.CommandOutputAdmission) commandprogram.OutputPublication { return publication }}, nil
 		},
@@ -180,12 +182,12 @@ func New(t testing.TB, options Options) *Fixture {
 
 // AttachLedger binds the fixture's root to a real source ledger, so programs
 // run against the host's actual observation windows.
-func (f *Fixture) AttachLedger(t testing.TB) *sourceledger.Store {
+func (f *Fixture) AttachLedger(t testing.TB, timing sourceledger.Timing) *sourceledger.Store {
 	t.Helper()
 	_, err := f.Database.ExecContext(context.Background(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
 		VALUES ('r1', ?, ?, 'root', 1, ?, 'attached')`, testdbseed.DefaultProjectID, f.Dir, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert fixture root", err)
-	ledger := sourceledger.New(f.Database, t.TempDir())
+	ledger := sourceledger.New(f.Database, t.TempDir(), timing)
 	configure := f.Configure
 	f.Configure = func(tc *tools.ToolContext) {
 		tc.Source.Commands = ledger.Commands
@@ -266,4 +268,18 @@ func (f *Fixture) Executions(t *testing.T) map[string]string {
 	}
 	testutil.FailErr(t, "finish reading program receipt rows", rows.Err())
 	return out
+}
+
+func (f *Fixture) AwaitIdleWindow(t testing.TB, commands *sourceledger.Commands) string {
+	t.Helper()
+	var id string
+	testutil.WaitFor(t, "command window goes idle", func() bool {
+		windows := commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
+		if len(windows) != 1 || windows[0].Active || windows[0].Closing {
+			return false
+		}
+		id = windows[0].ID
+		return true
+	})
+	return id
 }

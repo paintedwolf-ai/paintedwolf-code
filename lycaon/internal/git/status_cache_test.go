@@ -44,6 +44,15 @@ func initTestRepo(t *testing.T) string {
 	})
 }
 
+func initWatchedTestRepo(t *testing.T) string {
+	t.Helper()
+	dir := initTestRepo(t)
+	repochange.EnsureRoot(t.Context(), dir)
+	t.Cleanup(func() { repochange.CloseRoot(dir) })
+	repochange.WaitQuiet(t.Context(), dir, repochange.DefaultDebounce, 5*time.Second)
+	return dir
+}
+
 func writeFile(path, body string) error {
 	return os.WriteFile(path, []byte(body), 0o644)
 }
@@ -80,7 +89,7 @@ func TestStatusCache_forceAlwaysExecs(t *testing.T) {
 
 func TestStatusCache_NotifyInvalidates(t *testing.T) {
 	t.Parallel()
-	dir := initTestRepo(t)
+	dir := initWatchedTestRepo(t)
 	loader := &countingLoader{inner: git.NewManager()}
 	cache := git.NewStatusCache(loader)
 	t.Cleanup(cache.RegisterRepochangeObserver())
@@ -97,7 +106,7 @@ func TestStatusCache_NotifyInvalidates(t *testing.T) {
 
 func TestStatusCache_WorktreeChangedInvalidates(t *testing.T) {
 	t.Parallel()
-	dir := initTestRepo(t)
+	dir := initWatchedTestRepo(t)
 	loader := &countingLoader{inner: git.NewManager()}
 	cache := git.NewStatusCache(loader)
 	t.Cleanup(cache.RegisterRepochangeObserver())
@@ -266,7 +275,7 @@ func TestManager_CheckoutNotifiesHeadMoved(t *testing.T) {
 	mgr := git.NewManager()
 	// Create a second branch with raw git (Manager.Checkout only switches).
 	cmd := exec.CommandContext(context.Background(), "git", "-C", dir, "branch", "topic")
-	cmd.Env = lyexec.LocalGitEnv()
+	cmd.Env = lyexec.InheritedEnviron()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git branch topic: %v %s", err, out)
 	}
@@ -360,7 +369,10 @@ func (g *coldGatedLoader) Log(ctx context.Context, projectDir string, opts git.G
 
 func (g *gatedLoader) Status(ctx context.Context, projectDir string) (*git.GitStatus, error) {
 	if n := g.statusN.Add(1); n > 1 {
-		g.entered <- struct{}{}
+		select {
+		case g.entered <- struct{}{}:
+		default:
+		}
 		<-g.release
 	}
 	return g.inner.Status(ctx, projectDir)
@@ -372,7 +384,7 @@ func (g *gatedLoader) Log(ctx context.Context, projectDir string, opts git.GitLo
 
 func TestStatusCache_RevalidateServesStaleWhileReloading(t *testing.T) {
 	t.Parallel()
-	dir := initTestRepo(t)
+	dir := initWatchedTestRepo(t)
 	loader := &gatedLoader{
 		inner:   git.NewManager(),
 		entered: make(chan struct{}, 1),

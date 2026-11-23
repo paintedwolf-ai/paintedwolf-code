@@ -70,7 +70,7 @@ func TestCommandApprovalWildcardDenyE2E(t *testing.T) {
 		t.Fatalf("denied command wildcard should not create checkpoint; pending=%+v", pending)
 	}
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	foundBlocked := false
 	for _, m := range msgs {

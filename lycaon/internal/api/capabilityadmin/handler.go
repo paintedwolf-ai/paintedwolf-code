@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/grantedpath"
@@ -14,8 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 )
 
@@ -51,7 +52,7 @@ type Deps struct {
 	LLMService     *llm.Service
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	Settings       *settings.Service
 }
 
@@ -65,14 +66,14 @@ type Handler struct {
 }
 
 type Access struct {
-	Events    events.ReplayHub
-	Gate      hitl.ApprovalGate
-	Grants    *Grants
-	Inventory *Inventory
-	Projects  project.Registry
-	Settings  *settings.Service
-	Store     session.Store
-	responses *httpio.Responder
+	Events       events.ReplayHub
+	Gate         hitl.ApprovalGate
+	Grants       *Grants
+	Inventory    *Inventory
+	Projects     project.Registry
+	Settings     *settings.Service
+	SessionStore requestscope.Sessions
+	responses    *httpio.Responder
 }
 
 type CheckpointActions struct {
@@ -80,7 +81,7 @@ type CheckpointActions struct {
 	Events         events.ReplayHub
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
-	Store          session.Store
+	SessionStore   requestscope.Sessions
 	options        hitl.ApprovalOptionResolver
 	presence       *hitl.VaultPresence
 	responses      *httpio.Responder
@@ -126,7 +127,7 @@ type Inventory struct {
 	Listen            *approvalstate.SandboxPortGrantRuntime
 	Loopback          *approvalstate.SandboxPortGrantRuntime
 	Sockets           *approvalstate.SocketCapabilityRuntime
-	Store             session.Store
+	SessionStore      requestscope.Sessions
 	WriteRoots        *approvalstate.SandboxPathGrantRuntime
 	responses         *httpio.Responder
 }
@@ -149,18 +150,18 @@ func New(responses *httpio.Responder, deps Deps) Handler {
 		httpio.Required{Name: "responses", Present: responses != nil},
 		httpio.Required{Name: "Checkpoints", Present: options != nil},
 		httpio.Required{Name: "Projects", Present: deps.Projects != nil},
-		httpio.Required{Name: "Store", Present: deps.Store != nil},
+		httpio.Required{Name: "Store.Sessions", Present: deps.Store != nil && deps.Store.Sessions != nil},
 		httpio.Required{Name: "ApprovalDecisions", Present: deps.ApprovalDecisions != nil},
 		httpio.Required{Name: "Gate", Present: deps.Gate != nil},
 		httpio.Required{Name: "Settings.Approvals", Present: deps.Settings != nil && deps.Settings.Approvals != nil},
 	)
 	authorityMu := &sync.Mutex{}
 	h := Handler{}
-	h.Access = &Access{Gate: deps.Gate, Events: deps.Events, Projects: deps.Projects, Settings: deps.Settings, Store: deps.Store, responses: responses}
-	h.CheckpointActions = &CheckpointActions{Checkpoints: deps.Checkpoints, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, Store: deps.Store, options: options, presence: presence, responses: responses}
+	h.Access = &Access{Gate: deps.Gate, Events: deps.Events, Projects: deps.Projects, Settings: deps.Settings, SessionStore: deps.Store.Sessions, responses: responses}
+	h.CheckpointActions = &CheckpointActions{Checkpoints: deps.Checkpoints, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, SessionStore: deps.Store.Sessions, options: options, presence: presence, responses: responses}
 	h.Grants = &Grants{Gate: deps.Gate, AuthzRecorder: deps.AuthzRecorder, ChatGrants: deps.ChatGrants, Events: deps.Events, GrantedPaths: deps.GrantedPaths, Listen: deps.Listen, Loopback: deps.Loopback, Projects: deps.Projects, ReadPaths: deps.ReadPaths, Settings: deps.Settings, Sockets: deps.Sockets, WriteRoots: deps.WriteRoots, authorityMu: authorityMu, responses: responses}
 	h.Installation = &Installation{Gate: deps.Gate, DirectIP: deps.DirectIP, GrantedPaths: deps.GrantedPaths, LLMService: deps.LLMService, Listen: deps.Listen, Loopback: deps.Loopback, ReadPaths: deps.ReadPaths, Sockets: deps.Sockets, WriteRoots: deps.WriteRoots, authorityMu: authorityMu}
-	h.Inventory = &Inventory{Gate: deps.Gate, ApprovalDecisions: deps.ApprovalDecisions, AuthzRecorder: deps.AuthzRecorder, DirectIP: deps.DirectIP, HostResources: deps.HostResources, Listen: deps.Listen, Loopback: deps.Loopback, Sockets: deps.Sockets, Store: deps.Store, WriteRoots: deps.WriteRoots, responses: responses}
+	h.Inventory = &Inventory{Gate: deps.Gate, ApprovalDecisions: deps.ApprovalDecisions, AuthzRecorder: deps.AuthzRecorder, DirectIP: deps.DirectIP, HostResources: deps.HostResources, Listen: deps.Listen, Loopback: deps.Loopback, Sockets: deps.Sockets, SessionStore: deps.Store.Sessions, WriteRoots: deps.WriteRoots, responses: responses}
 	h.HeldValues = &HeldValues{Vault: deps.Vault, responses: responses}
 	h.Access.Grants = h.Grants
 	h.Access.Inventory = h.Inventory

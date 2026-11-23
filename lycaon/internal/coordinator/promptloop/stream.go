@@ -34,13 +34,13 @@ func (l *modelTurn) runAssistantStreamTurn(
 	history []api.Message,
 	st *promptLoopTurnState,
 	profileID string,
-	userPrompt string,
+
 	iterIndex, maxIter int,
 	hostTurn bool,
-) (api.Message, *modelcall.Completion, []string, error) {
+) (api.Message, *modelcall.Completion, error) {
 	if st != nil && st.attemptID != "" && l.Projection.Deps.AdmitModelResponse != nil {
 		if err := l.Projection.Deps.AdmitModelResponse(ctx, sessionID, st.attemptID); err != nil {
-			return api.Message{}, nil, nil, err
+			return api.Message{}, nil, err
 		}
 	}
 	modelIteration := nextModelIteration(st)
@@ -59,7 +59,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 		assistantMsg.DraftStatus = api.DraftStatusLive
 	}
 	if l.Projection.Deps.AppendMessages == nil {
-		return api.Message{}, nil, nil, fmt.Errorf("append messages not configured")
+		return api.Message{}, nil, fmt.Errorf("append messages not configured")
 	}
 	var clearActive sync.Once
 	clearStream := func() {
@@ -83,7 +83,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 		}
 		clearStream()
 		withdrawErr := l.Nudges.withdrawCoordinatorDraft(
-			context.WithoutCancel(ctx), sess, sessionID, st, "",
+			context.WithoutCancel(ctx), sessionID, st, "",
 		)
 		return errors.Join(cause, withdrawErr)
 	}
@@ -119,7 +119,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 		}
 		return nil
 	}
-	completion, tokens, err := l.completeStream(ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, func(partial *modelcall.Completion) {
+	completion, tokens, err := l.completeStream(ctx, sess, sessionID, history, profileID, iterIndex, maxIter, hostTurn, st, func(partial *modelcall.Completion) {
 		if partial == nil {
 			return
 		}
@@ -131,23 +131,23 @@ func (l *modelTurn) runAssistantStreamTurn(
 		_ = persistPlaceholder()
 	})
 	if err != nil {
-		return api.Message{}, completion, nil, withdrawFailedDraft(err)
+		return api.Message{}, completion, withdrawFailedDraft(err)
 	}
 	if err := persistPlaceholder(); err != nil {
-		return api.Message{}, nil, nil, err
+		return api.Message{}, nil, err
 	}
 	clearStream()
 	promptAssistant, err := l.Projection.settleAssistantStreamTurn(
 		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, modelIteration, sess != nil && !sess.IsWorkerChild(),
 	)
 	if err != nil {
-		return api.Message{}, completion, nil, withdrawFailedDraft(err)
+		return api.Message{}, completion, withdrawFailedDraft(err)
 	}
 	if st != nil && st.observePrompt != nil {
 		st.observePrompt(st.coordinatorFrame)
 		st.observePrompt = nil
 	}
-	return promptAssistant, completion, tokens, nil
+	return promptAssistant, completion, nil
 }
 
 func (l *turnProjection) settleAssistantStreamTurn(
@@ -264,14 +264,14 @@ func (l *modelTurn) completeStream(
 	sessionID string,
 	history []api.Message,
 	profileID string,
-	userPrompt string,
+
 	iterIndex, maxIter int,
 	hostTurn bool,
 	st *promptLoopTurnState,
 	onProgress func(*modelcall.Completion),
 ) (_ *modelcall.Completion, _ []string, err error) {
 	return l.completeStreamWithOverflowRetry(
-		ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, onProgress, false,
+		ctx, sess, sessionID, history, profileID, iterIndex, maxIter, hostTurn, st, onProgress, false,
 	)
 }
 
@@ -281,7 +281,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	sessionID string,
 	history []api.Message,
 	profileID string,
-	userPrompt string,
+
 	iterIndex, maxIter int,
 	hostTurn bool,
 	st *promptLoopTurnState,
@@ -301,7 +301,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	defer finishPreparing()
 	llmCallID := uuid.NewString()
 	preparationStarted := time.Now()
-	turn, err := l.buildTurnRequest(ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st)
+	turn, err := l.buildTurnRequest(ctx, sess, sessionID, history, profileID, iterIndex, maxIter, hostTurn, st)
 	slog.InfoContext(ctx, "model request preparation", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(preparationStarted).Milliseconds(), "failed", err != nil)
 	if err != nil {
 		if !overflowRecovered {
@@ -309,7 +309,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 				finishPreparing()
 				history = l.recoverFromContextOverflow(ctx, sess, sessionID, history, st, "", tooSmall.ProviderID, tooSmall.Model, 0, tooSmall)
 				return l.completeStreamWithOverflowRetry(
-					ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, onProgress, true,
+					ctx, sess, sessionID, history, profileID, iterIndex, maxIter, hostTurn, st, onProgress, true,
 				)
 			}
 		}
@@ -360,7 +360,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 				suppressCallFailed = true
 				history = l.recoverFromContextOverflow(ctx, sess, sessionID, history, st, surfaceID, callProvider, callModel, transcriptEstimate, tooSmall)
 				return l.completeStreamWithOverflowRetry(
-					ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, onProgress, true,
+					ctx, sess, sessionID, history, profileID, iterIndex, maxIter, hostTurn, st, onProgress, true,
 				)
 			}
 		}

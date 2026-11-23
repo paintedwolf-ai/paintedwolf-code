@@ -28,7 +28,7 @@ func TestTrackedRemovalAndMoveSourceRecovery(t *testing.T) {
 			h := newApplyHarness(t)
 			database := testdbfixture.Open(t, "store.db")
 			rootID := testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, h.root)
-			ledger := sourceledger.New(database, filepath.Join(t.TempDir(), "content"))
+			ledger := sourceledger.New(database, filepath.Join(t.TempDir(), "content"), sourceledger.Timing{})
 			service := projectsource.NewSourceMutationService(database, ledger)
 			t.Cleanup(func() { testutil.FailErr(t, "close source service", service.Close()) })
 			h.tc.Identity.ProjectID = testdbseed.DefaultProjectID

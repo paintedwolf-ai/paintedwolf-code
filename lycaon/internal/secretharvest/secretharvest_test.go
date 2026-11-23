@@ -164,7 +164,7 @@ func TestMatcherFusesHarvestEvidence(t *testing.T) {
 	rt := secretharvest.NewRuntime(fingerprinter(t))
 	harvestFile(rt, "root-1", ".env", "SESSION_SECRET=zebra-purple-42\n")
 
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		out := []secretmatch.HarvestedValue{}
 		for _, v := range rt.ValuesFor("root-1") {

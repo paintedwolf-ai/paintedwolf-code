@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -39,7 +40,7 @@ func newAuthedRequest(method, target string, body io.Reader) *http.Request {
 		req.Header.Set("Content-Type", httpio.MediaTypeJSON)
 	}
 	if strings.HasPrefix(target, "/v1") {
-		WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+TestAPIToken)
 	}
 	return req
 }
@@ -75,6 +76,7 @@ func newTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...tes
 // adjust deps, and stops its background work when the test ends.
 func newServerForTest(t *testing.T, deps Dependencies, opts ...testDeps) *Server {
 	t.Helper()
+	repochangetest.Acquire(t)
 	deps.Core.UserNotices = testUserNotices(t)
 	for _, opt := range opts {
 		opt(&deps)
@@ -104,7 +106,7 @@ func requiredTestDeps(t *testing.T, deps Dependencies) Dependencies {
 		LLM: deps.Providers.LLM, CostTracker: deps.Providers.CostTracker, Events: deps.Host.Events, EventPublisher: deps.Host.EventPublisher,
 		HostIdentity: deps.Host.HostIdentity, Checkpoints: deps.Approvals.Checkpoints, ProgressStore: deps.Source.ProgressStore,
 		VisualStore: deps.Source.VisualStore, HistoryStorage: deps.External.HistoryStorage, HostResources: deps.Host.HostResources,
-		HostPower: deps.Host.HostPower, Pricing: deps.Host.Pricing, AgentPresence: deps.Source.AgentPresence, Workers: deps.Workflow.Workers,
+		HostPower: deps.Host.HostPower, Pricing: deps.Host.Pricing, AgentPresence: deps.Source.AgentPresence, Workers: deps.Workflow.Workers, Branches: deps.Workflow.Branches,
 		WorkerCancel: deps.Workflow.WorkerCancel, Board: deps.Workflow.Board,
 		HarnessWorkers: deps.Harness.HarnessWorkers, WebResearch: deps.External.WebResearch, WebDiscoverer: deps.External.WebDiscoverer,
 	}
@@ -129,6 +131,7 @@ func requiredTestDeps(t *testing.T, deps Dependencies) Dependencies {
 	deps.Source.VisualStore, deps.External.HistoryStorage, deps.Host.HostResources = fill.VisualStore, fill.HistoryStorage, fill.HostResources
 	deps.Host.HostPower, deps.Host.Pricing, deps.Source.AgentPresence = fill.HostPower, fill.Pricing, fill.AgentPresence
 	deps.Workflow.Workers, deps.Workflow.WorkerCancel, deps.Workflow.Board = fill.Workers, fill.WorkerCancel, fill.Board
+	deps.Workflow.Branches = fill.Branches
 	deps.Harness.HarnessWorkers = fill.HarnessWorkers
 	deps.External.WebResearch, deps.External.WebDiscoverer = fill.WebResearch, fill.WebDiscoverer
 	return deps

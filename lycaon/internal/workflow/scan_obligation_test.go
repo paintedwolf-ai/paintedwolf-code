@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 	"time"
 
@@ -54,12 +55,12 @@ func TestScanObligationUsesDeclaredGateInWorkflowStatus(t *testing.T) {
 
 			ledger := &workflowScanLedger{status: api.CodeScanStatusRunning}
 			obligation := &scan.WorkflowObligation{
-				Ledger: ledger, Params: mgr.Obligations.ObligationParams, Runs: mgr.Store.Runs.Get,
+				Reads: ledger, Passes: ledger, Params: mgr.Obligations.ObligationParams, Runs: mgr.Store.Runs.Get,
 				Projects: func(context.Context, string) (string, error) { return projectDir, nil },
 				History:  workflowFindingHistory{},
 			}
 			mgr.Obligations.Register(obligation)
-			deps := conditions.TestRegistryDeps()
+			deps := conditionstest.Dependencies()
 			deps.ObligationResolvers = map[string]conditions.ObligationStatusReader{"scan": obligation}
 			reg, err := conditions.NewDefaultRegistry(deps)
 			testutil.FailErr(t, "conditions registry", err)
@@ -104,7 +105,7 @@ func TestScanObligationStatusNamesThePhaseItWasAskedAbout(t *testing.T) {
 	testutil.FailErr(t, "leave the bound phase", mgr.Store.State.Update(t.Context(), run))
 
 	obligation := &scan.WorkflowObligation{
-		Ledger: &workflowScanLedger{status: api.CodeScanStatusComplete}, Params: mgr.Obligations.ObligationParams, Runs: mgr.Store.Runs.Get,
+		Reads: &workflowScanLedger{status: api.CodeScanStatusComplete}, Passes: &workflowScanLedger{status: api.CodeScanStatusComplete}, Params: mgr.Obligations.ObligationParams, Runs: mgr.Store.Runs.Get,
 		Projects: func(context.Context, string) (string, error) { return projectDir, nil },
 		History:  workflowFindingHistory{},
 	}

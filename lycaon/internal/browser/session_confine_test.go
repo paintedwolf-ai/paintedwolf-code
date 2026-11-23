@@ -22,6 +22,8 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
+
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 )
 
 const browserEngineHelperEnv = "PW_TEST_BROWSER_ENGINE_HELPER"
@@ -50,7 +52,7 @@ func TestLaunchHeadlessUnderBrowserConfinement(t *testing.T) {
 		return
 	}
 	requireBrowserBoundary(t)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 
 	browsertest.SkipIfNoBrowser(t)
 	// No CacheDir: the host default is the shape the shipped app runs, and the
@@ -83,7 +85,7 @@ func TestLaunchHeadlessUnderBrowserConfinement(t *testing.T) {
 }
 
 func runBrowserEngineHelper(t *testing.T, readyFile string) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	cacheDir := filepath.Dir(readyFile)
 	b, _, err := browser.LaunchHeadless(context.Background(), browser.LaunchOptions{
 		CacheDir:  cacheDir,
@@ -214,7 +216,7 @@ func browserPIDsForCache(cacheDir string) []int {
 // Browser confinement permits local traffic and denies public egress.
 func TestConfinedBrowserFloorReachesHostLoopback(t *testing.T) {
 	requireBrowserBoundary(t)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -248,7 +250,7 @@ func TestConfinedBrowserFloorReachesHostLoopback(t *testing.T) {
 
 func TestProbeUsabilityUnderBrowserConfinement(t *testing.T) {
 	requireBrowserBoundary(t)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 
 	browsertest.SkipIfNoBrowser(t)
 	testutil.FailErr(t, "probe confined browser usability", browser.ProbeUsability(
@@ -259,7 +261,7 @@ func TestProbeUsabilityUnderBrowserConfinement(t *testing.T) {
 
 func TestPoolNewPageUnderBrowserConfinement(t *testing.T) {
 	requireBrowserBoundary(t)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 
 	browsertest.SkipIfNoBrowser(t)
 
@@ -277,7 +279,7 @@ func TestPoolNewPageUnderBrowserConfinement(t *testing.T) {
 // A path the read floor denies stays unreadable to the confined browser.
 func TestConfinedBrowserCannotReadDeniedFiles(t *testing.T) {
 	requireBrowserBoundary(t)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	denied := t.TempDir()
 	secret := filepath.Join(denied, "secret.html")
 	testutil.FailErr(t, "write secret", os.WriteFile(secret, []byte(`<!doctype html><title>SECRET-CONTENT</title>`), 0o600))

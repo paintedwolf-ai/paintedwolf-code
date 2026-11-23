@@ -3,6 +3,9 @@ package llm
 import (
 	"context"
 	"errors"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -11,8 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"strings"
-	"testing"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 )
 
 func testCompactionConfig() compaction.CompactionConfig {
@@ -48,7 +50,7 @@ func TestCompactionResultDoesNotDependOnAccounting(t *testing.T) {
 		{ID: "old", Role: "user", Content: strings.Repeat("old evidence ", 2000)},
 		{ID: "recent", Role: "assistant", Content: "Continue"}}
 	var wantSummary string
-	summary, err := (compaction.MockSummarizer{Text: "Continue the same task."}).Summarize(compaction.WithSummaryFormat(t.Context()), "", "", 0)
+	summary, err := (llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Continue the same task."}).Summarize(compaction.WithSummaryFormat(t.Context()), "", "", 0)
 	testutil.FailErr(t, "encode continuation fixture", err)
 	for _, accounting := range []struct {
 		name    string
@@ -118,7 +120,7 @@ func (s *namedStubProvider) Profile() providerprofile.Profile { return providerp
 
 func newFallbackTestSummarizer(t *testing.T, lite, coord modelcall.Provider) *RegistrySummarizer {
 	t.Helper()
-	policy := NewInMemoryPolicyStore(ModelPolicy{
+	policy := newPolicyFixture(t, ModelPolicy{
 		Coordinator: ModelRef{ProviderID: coord.ID(), Model: coord.ID() + "-model"},
 		Lite:        ModelRef{ProviderID: lite.ID(), Model: lite.ID() + "-model"},
 	})

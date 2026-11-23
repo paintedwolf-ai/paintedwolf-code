@@ -22,8 +22,8 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 	if sess != nil {
 		tctx.Identity.SessionID = sess.ID
 		tctx.Identity.ParentSessionID = sess.ParentSessionID
-		if m != nil && m.store != nil {
-			tctx.Identity.RootSessionID = sessiontree.RootID(ctx, m.store, sess.ID)
+		if m != nil && (m.sessionStore != nil && m.transcriptStore != nil) {
+			tctx.Identity.RootSessionID = sessiontree.RootID(ctx, m.sessionStore, sess.ID)
 		}
 		if tctx.Identity.RootSessionID == "" {
 			tctx.Identity.RootSessionID = sess.ID
@@ -31,8 +31,8 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		tctx.Identity.ProjectID = sess.ProjectID
 		tctx.Source.ActiveRootID = sess.WorkspaceRootID
 		// Context rebuilds read the same turn ordinal the ledger records.
-		if m != nil && m.store != nil {
-			if turnSource, err := m.store.ReadSourceTurn(ctx, sess.ID, 0); err == nil {
+		if m != nil && (m.sessionStore != nil && m.transcriptStore != nil) {
+			if turnSource, err := m.transcriptStore.ReadSourceTurn(ctx, sess.ID, 0); err == nil {
 				tctx.Identity.UserTurn = turnSource.Number
 			}
 		}

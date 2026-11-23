@@ -53,5 +53,5 @@ func waitLeaseOpenForTest(l *Waits, sessionID string) bool {
 	return strings.TrimSpace(st.activityID) != ""
 }
 func evaluateForTest(l *Admission, ctx context.Context, sessionID string, wake anchor.ID) (allow bool, busy bool) {
-	return l.evaluate(ctx, sessionID, wake)
+	return l.evaluate(ctx, sessionID)
 }

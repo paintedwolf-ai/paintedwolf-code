@@ -36,8 +36,6 @@ var (
 	reversibleSet   = tierSet(reversibleTools, reversibleOperations)
 	recoverableSet  = tierSet(recoverableTools, recoverableOperations)
 	irreversibleSet = tierSet(irreversibleTools, irreversibleOperations)
-	toolTierSet     = tierSet(reversibleTools, recoverableTools, irreversibleTools)
-	operationSet    = tierSet(reversibleOperations, recoverableOperations, irreversibleOperations)
 )
 
 // ClassifyTier maps a proposed action to a reversibility tier.
@@ -194,21 +192,6 @@ func isWindowsAbsPath(path string) bool {
 // ApprovalRecoverableIDs returns recoverable-tier tool and operation names.
 func ApprovalRecoverableIDs() []string {
 	return append(slices.Clone(recoverableTools), recoverableOperations...)
-}
-
-// ToolTierDeclared reports whether a callable tool has a defined tier.
-func ToolTierDeclared(tool string) bool {
-	tool = strings.TrimSpace(tool)
-	if _, ok := toolTierSet[tool]; ok {
-		return true
-	}
-	return ingestion.IsMCPToolName(tool)
-}
-
-// OperationTierDeclared reports whether a native operation has a defined tier.
-func OperationTierDeclared(operation string) bool {
-	_, ok := operationSet[strings.TrimSpace(operation)]
-	return ok
 }
 
 // ApprovalIrreversibleIDs returns irreversible-tier tool and operation names.

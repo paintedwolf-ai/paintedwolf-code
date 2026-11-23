@@ -78,7 +78,7 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 				run.CurrentPhase = phase.ID
 				run.Status = wire.WorkflowRunStatusRunning
 				vars, err := workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{
-					Sessions: h.Store, SessionID: sess.ID, Manifest: m, PhaseID: phase.ID,
+					Sessions: h.Store.Sessions, SessionID: sess.ID, Manifest: m, PhaseID: phase.ID,
 				})
 				testutil.FailErr(t, "ApplyPhaseOnEnter", err)
 				testutil.FailErr(t, "CommitState", h.Workflows.Manager.Store.State.CommitState(ctx, run, dir, vars))

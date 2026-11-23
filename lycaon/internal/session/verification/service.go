@@ -16,9 +16,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	Get(context.Context, string) (*api.Session, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Transcript interface {
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
 }
 type Workers interface {
 	Get(string) (*api.WorkerTask, bool)
@@ -46,7 +49,8 @@ type ObservationBindings struct {
 type Service struct {
 	ObservationBindings
 	Evidence           *closeoutevidence.Service
-	store              Store
+	sessionStore       Sessions
+	transcriptStore    Transcript
 	workspace          *sessionscope.Service
 	transcript         *transcript.Service
 	workerQueue        Workers
@@ -58,8 +62,8 @@ type Service struct {
 	dataDir            string
 }
 
-func New(store Store, workspace *sessionscope.Service, transcript *transcript.Service) *Service {
-	s := &Service{store: store, workspace: workspace, transcript: transcript}
+func New(sessionStore Sessions, transcriptStore Transcript, workspace *sessionscope.Service, transcript *transcript.Service) *Service {
+	s := &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, workspace: workspace, transcript: transcript}
 	s.svc = s
 	return s
 }
@@ -77,7 +81,7 @@ func (m *Service) ReadSourceRecords(ctx context.Context, sess *api.Session) ([]e
 	if m == nil || m.evidenceStore == nil || sess == nil {
 		return nil, nil
 	}
-	runID := sessiontree.RootID(ctx, m.store, sess.ID)
+	runID := sessiontree.RootID(ctx, m.sessionStore, sess.ID)
 	return m.evidenceStore.ReadAll(ctx, m.EvidenceRootFor(sess), runID, VerifySlot, evidence.GateTypeVerify)
 }
 func (m *Service) RequiresPhaseVerify(ctx context.Context, sessionID string) bool {

@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/db"
@@ -30,7 +31,7 @@ type Runtime struct {
 	publishVault           func(string, *presence.Unlocks)
 	ctx                    context.Context
 	database               *db.Store
-	sessions               *store.SQL
+	sessions               store.SessionRepository
 	projects               *project.SQLRegistry
 	trust                  *settings.TrustSurfacesStore
 	remember               func(secretmatch.RememberFunc)
@@ -45,8 +46,12 @@ type Runtime struct {
 	releaseMessageRedactor func()
 }
 
-func New(ctx context.Context, database *db.Store, sessions *store.SQL, projects *project.SQLRegistry, trust *settings.TrustSurfacesStore) *Runtime {
-	return &Runtime{ctx: ctx, database: database, sessions: sessions, projects: projects, trust: trust, Detections: &Detections{}}
+func New(ctx context.Context, database *db.Store, sessions *store.Repositories, projects *project.SQLRegistry, trust *settings.TrustSurfacesStore) *Runtime {
+	var queries store.SessionRepository
+	if sessions != nil {
+		queries = sessions.Sessions
+	}
+	return &Runtime{ctx: ctx, database: database, sessions: queries, projects: projects, trust: trust, Detections: &Detections{}}
 }
 func (b *Runtime) BindRemember(set func(secretmatch.RememberFunc)) {
 	b.remember = set
@@ -63,7 +68,7 @@ func secretScreenProject(ctx context.Context) string {
 
 func (b *Runtime) BindTrust(trust *settings.TrustSurfacesStore) { b.trust = trust }
 
-// ReleaseRedactors detaches process screening callbacks owned by this runtime.
+// ReleaseRedactors detaches this runtime’s process screening callbacks.
 func (b *Runtime) ReleaseRedactors() {
 	if b.releaseCaptureRedactor != nil {
 		b.releaseCaptureRedactor()

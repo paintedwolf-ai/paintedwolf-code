@@ -29,12 +29,6 @@ func TestReserveRefusesAFolderThatIsNotPrivateAndWritesNothing(t *testing.T) {
 		"a file": func(t *testing.T, path string) {
 			testutil.FailErr(t, "write", os.WriteFile(path, nil, 0o600))
 		},
-		"owned by someone else": func(t *testing.T, path string) {
-			testutil.FailErr(t, "mkdir", os.Mkdir(path, 0o700))
-			previous := folderOwnerUID
-			folderOwnerUID = func() int { return previous() + 1 }
-			t.Cleanup(func() { folderOwnerUID = previous })
-		},
 	}
 	for name, arrange := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -52,6 +46,15 @@ func TestReserveRefusesAFolderThatIsNotPrivateAndWritesNothing(t *testing.T) {
 				t.Fatalf("the refused folder reached the registry: %v", err)
 			}
 		})
+	}
+}
+
+func TestOpenPrivateFolderRefusesOtherUID(t *testing.T) {
+	path := t.TempDir()
+	testutil.FailErr(t, "chmod", os.Chmod(path, 0o700))
+	fd, err := openPrivateFolder(path, os.Geteuid()+1)
+	if !errors.Is(err, ErrFolderNotPrivate) || fd != -1 {
+		t.Fatalf("open private folder = %d, %v", fd, err)
 	}
 }
 

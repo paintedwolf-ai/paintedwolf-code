@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 )
 
 func TestKnownCatalog(t *testing.T) {
@@ -80,7 +81,7 @@ func TestClearBucketsEmptyRejects(t *testing.T) {
 func TestClearDoesNotTouchDurable(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
-	testutil.FailErr(t, "seed durable", SeedDurableMarkers(base))
+	protected := localdatatest.SeedProtected(t, base)
 
 	testutil.FailErr(t, "mkdir fetch", os.MkdirAll(enginepaths.FetchCacheRootUnder(base), 0o700))
 	testutil.FailErr(t, "write fetch", os.WriteFile(filepath.Join(enginepaths.FetchCacheRootUnder(base), "a"), []byte("a"), 0o600))
@@ -130,7 +131,7 @@ func TestClearDoesNotTouchDurable(t *testing.T) {
 		}
 	}
 
-	for _, p := range DurableAbsPaths(base) {
+	for _, p := range protected {
 		data, err := os.ReadFile(p)
 		testutil.FailErr(t, "read durable "+p, err)
 		if string(data) != "keep\n" {

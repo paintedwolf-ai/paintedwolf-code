@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/testutil/surfacetest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +32,7 @@ func TestCoordinatorFlowParity_ResolveTurnProfileMatchesExpectedSurface(t *testi
 	orchestrate := api.CoordinatorRunContext{WorkflowDefaultExecutionMode: surface.ExecutionModeFamilyOrchestrate}
 	investigate := api.CoordinatorRunContext{WorkflowDefaultExecutionMode: surface.ExecutionModeFamilyInvestigate}
 	ineligible := api.CoordinatorRunContext{WorkflowInvestigateEligible: &notEligible}
-	batchReady := surface.WithWrapupGates(surface.ImplementSessionState{}, true, false)
+	batchReady := surfacetest.WithWrapupGates(surface.ImplementSessionState{}, true, false)
 	overlay := surface.ImplementSessionState{PendingOverlayIDs: []string{"overlay-1"}}
 	workersOut := surface.ImplementSessionState{WorkersInFlight: 1}
 	for _, tc := range []struct {

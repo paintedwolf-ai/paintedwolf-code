@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
-	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"github.com/lycaon/lycaon/internal/workflow/drafts/draftstest"
 )
 
 func TestComposeToolOmitsEffectiveYAML(t *testing.T) {
@@ -25,7 +25,7 @@ func TestComposeToolOmitsEffectiveYAML(t *testing.T) {
 	policy, err := workflowcomposition.LoadComposePolicy()
 	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
 	composer := &workflowcomposition.Composer{
-		SessionStore: workflowdrafts.NewMemory(),
+		SessionStore: draftstest.NewStore(t, "sess-1"),
 		Registry:     condReg,
 		Agents:       agents,
 		Policy:       policy,

@@ -3,7 +3,6 @@
 package rules
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -19,25 +18,16 @@ func TestBundledRulesResolveViaRegistry(t *testing.T) {
 	if err := RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "RegisterRuleConditions failed", err)
 	}
-	ctx := context.Background()
+	read := EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "read"}}
+	delegate := EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}}
 	for _, cfg := range configs {
-		engine := NewSimpleEngine(cfg, reg)
 		for _, rule := range cfg.Rules {
-			whenStr, err := CanonicalWhenString(rule.When)
-			if err != nil {
-				t.Fatalf("pack rule %q: %v", rule.ID, err)
+			if _, err := MatchWhen(reg, rule.When, read); err != nil {
+				t.Errorf("pack rule %q: %v", rule.ID, err)
 			}
-			ok, err := MatchWhenExpr(reg, whenStr, EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "read"}})
-			if err != nil {
-				t.Fatalf("pack rule %q when %q: %v", rule.ID, whenStr, err)
-			}
-			_ = ok
-			out, err := engine.Evaluate(ctx, EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
-			if err != nil {
-				t.Fatalf("pack evaluate %q: %v", rule.ID, err)
-			}
-			_ = out
 		}
+		_, err := evaluateOrderedRules(reg, cfg.Rules, delegate)
+		testutil.FailErr(t, "evaluate bundled rule file", err)
 	}
 }
 
@@ -48,8 +38,7 @@ func TestSpecRulesDenyDelegationViaRegistryEngine(t *testing.T) {
 	if err := RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "RegisterRuleConditions failed", err)
 	}
-	engine := NewSimpleEngine(cfg, reg)
-	out, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
+	out, err := evaluateOrderedRules(reg, cfg.Rules, EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed {
 		t.Fatal("expected deny")

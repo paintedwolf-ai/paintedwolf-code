@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -185,7 +184,7 @@ func (w *convergeWorld) on(t *testing.T) *convergeWorld {
 // answers its id.
 func (w *convergeWorld) append(chat string) string {
 	msg := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel, Content: "appended " + uuid.NewString()}
-	testutil.FailErr(w.t, "append message", w.h.Sessions.Store.AppendMessages(w.t.Context(), chat, msg))
+	testutil.FailErr(w.t, "append message", w.h.Store.Transcript.AppendMessages(w.t.Context(), chat, msg))
 	return msg.ID
 }
 
@@ -232,7 +231,7 @@ func (r *convergeRun) step(rt *rapid.T) {
 	case kind == "patch" && len(r.messages[chat]) > 0:
 		id := rapid.SampledFrom(r.messages[chat]).Draw(rt, "patched")
 		msg := wire.Message{ID: id, Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel, Content: "patched " + uuid.NewString()}
-		_, err := r.world.h.Sessions.Store.UpdateMessage(ctx, chat, id, msg)
+		_, err := r.world.h.Store.Transcript.UpdateMessage(ctx, chat, id, msg)
 		testutil.FailErr(t, "patch message", err)
 	case kind == "checkpoint":
 		before := "one\n"
@@ -262,7 +261,7 @@ func (r *convergeRun) step(rt *rapid.T) {
 		testutil.FailErr(t, "cancel worker", r.world.h.Workers.Queue.Cancel(ctx, id, nil))
 	default:
 		msg := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel, Content: "appended " + uuid.NewString()}
-		testutil.FailErr(t, "append message", r.world.h.Sessions.Store.AppendMessages(ctx, chat, msg))
+		testutil.FailErr(t, "append message", r.world.h.Store.Transcript.AppendMessages(ctx, chat, msg))
 		if r.appended[chat] == nil {
 			r.appended[chat] = map[string]bool{}
 		}
@@ -419,7 +418,7 @@ func (w *convergeWorld) openStream(ctx context.Context, after string) *http.Resp
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, w.base+"/v1/events?"+query.Encode(), nil)
 	testutil.FailErr(w.t, "build stream request", err)
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", fixtureAuthorization())
 	resp, err := http.DefaultClient.Do(req)
 	testutil.FailErr(w.t, "open event stream", err)
 	return resp

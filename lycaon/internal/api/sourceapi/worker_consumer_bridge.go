@@ -17,7 +17,7 @@ import (
 )
 
 // readLayeredWorkerProjectSource serves worker branch or checkpoint-scoped source reads
-// through the registered consumer.Engine (#1664), propagating observation provenance,
+// through the registered consumer.Engine, propagating observation provenance,
 // visibility mode, and live vs checkpoint access distinctions.
 func (s *Workspace) readLayeredWorkerProjectSource(
 	ctx context.Context,
@@ -108,7 +108,7 @@ func (s *Workspace) readLayeredWorkerProjectSource(
 }
 
 // appendLayeredWorkerDivergenceChanges augments worker job change listings with O(changed)
-// divergence entries from a registered layered consumer.Engine (#1664).
+// divergence entries from a registered layered consumer.Engine.
 func appendLayeredWorkerDivergenceChanges(
 	ctx context.Context,
 	branchRoot string,

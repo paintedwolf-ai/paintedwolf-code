@@ -4,13 +4,14 @@
   "kind": "algorithm",
   "workstream": "database-integrity",
   "disposition": "retain",
-  "reason": "Retain the measured 488-line maintenance policy under its unchanged 490-line ceiling. RunRetention owns the classification before any purge: pending integrity permits only safe incremental vacuum, while destructive retention and FTS work wait. The existing transaction, batch and table-selection authority stays here; audit wait/signal coordination is in the lifecycle owner. Joined contracts prove no pending purge, available resource reclamation, cancellation custody and resumption after successful verification. Further growth beyond the ceiling renews review.",
-  "reviewed_commit": "562e6df86438543c9bc0bd3920427b21bbb764a2",
+  "reason": "Retain bounded retained-row cleanup and audit admission within the existing 490-line ceiling (467 lines before wrapper removal). RunMaintenancePass is the actual operation called by the production drain loop and fixtures. Pending integrity permits physical reclamation while destructive row and FTS work wait. Scheduling stays in maintenance.go and page reclamation in vacuum.go. Reviewed the prior scheduling, reclamation and worker-receipt changes; current database tests prove cancellation, restart custody, no pending purge, post-audit cleanup, bounded batches and one row round per wake. No transaction or table-selection authority moves.",
+  "reviewed_commit": "ca3505099063e13ec796e10ffbb18f94b6f23bf9",
   "ceiling": 490,
   "boundaries": {
     "lycaon/internal/db/integrity_audit_wal_test.go": "cac14114d7f1746d9a2d8112584371ad58e13beecc2000f94ffb2d8a17febe04",
-    "lycaon/internal/db/integrity_lifecycle_test.go": "9177cc3d12f03cc01407ce594dae743d5ef4a24b93e480962e4c44e8ed465285",
-    "lycaon/internal/db/integrity_retention_test.go": "7d45d4b54139f2409cabee012fdc0c3f785e55c088fd14e9d6bb167c4a1fdfb3",
-    "lycaon/internal/db/integrity_schedule_test.go": "e80a1de9f5ceadca290f48bc286f7d734113db78eb956bc9279e4a223a2828ca"
+    "lycaon/internal/db/integrity_lifecycle_test.go": "17deda245f755b812221e84766552dd253d7623282ff3d99d4cc8858a61fb601",
+    "lycaon/internal/db/integrity_retention_test.go": "b2ad5169ebde942a8c685f7b19dc421493eeb1b3d9f29ddf31b1f2ceaaba0aa4",
+    "lycaon/internal/db/integrity_schedule_test.go": "e07f50372a92afaef4ff33c156b506602d6cd44bbacf0899be481c41e1a5cbfe",
+    "lycaon/internal/db/maintenance_reclaim_test.go": "94b6228308b3140644ad3147a985df735bef7cb2406924f5e5a3f6c8f98570f0"
   }
 }

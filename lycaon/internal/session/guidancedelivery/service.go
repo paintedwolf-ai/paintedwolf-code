@@ -17,9 +17,12 @@ import (
 )
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
-	GetMessage(context.Context, string, string) (api.Message, error)
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type TranscriptStore interface {
+	GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error)
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
 }
 type Transcript interface {
 	Append(context.Context, string, ...api.Message) error
@@ -48,24 +51,25 @@ type Closure interface {
 	Baseline(string) (guard.ProgressClosureBaseline, bool)
 }
 type Service struct {
-	store        Sessions
-	transcript   Transcript
-	state        CycleState
-	rounds       RoundNotices
-	workers      workeroutcomes.CycleLedger
-	workflows    *WorkflowDomains
-	frame        inject.CoordinatorTurnFrameSource
-	progress     Progress
-	closure      Closure
-	gateFeedback *feedback.GateFeedbackCatalog
-	rejectFmt    *guidance.StaticRejectFormatter
-	renderer     *oar.Renderer
-	kicks        *kick.KickEngine
-	anchors      *anchor.Bus
+	sessionStore    Sessions
+	transcriptStore TranscriptStore
+	transcript      Transcript
+	state           CycleState
+	rounds          RoundNotices
+	workers         workeroutcomes.CycleLedger
+	workflows       *WorkflowDomains
+	frame           inject.CoordinatorTurnFrameSource
+	progress        Progress
+	closure         Closure
+	gateFeedback    *feedback.GateFeedbackCatalog
+	rejectFmt       *guidance.StaticRejectFormatter
+	renderer        *oar.Renderer
+	kicks           *kick.KickEngine
+	anchors         *anchor.Bus
 }
 
-func New(sessions Sessions, transcript Transcript, state CycleState, rounds RoundNotices, closure Closure) *Service {
-	return &Service{store: sessions, transcript: transcript, state: state, rounds: rounds, closure: closure}
+func New(sessionStore Sessions, transcriptStore TranscriptStore, transcript Transcript, state CycleState, rounds RoundNotices, closure Closure) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, transcript: transcript, state: state, rounds: rounds, closure: closure}
 }
 func (m *Service) Bind(kicks *kick.KickEngine, anchors *anchor.Bus) {
 	m.kicks = kicks

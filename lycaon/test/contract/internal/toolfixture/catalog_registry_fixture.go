@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/findings/findingstest"
@@ -34,6 +35,7 @@ import (
 	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -43,7 +45,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
-	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/heldtools"
 	"github.com/lycaon/lycaon/internal/tools/native/page"
 	reporttools "github.com/lycaon/lycaon/internal/tools/native/reporting"
@@ -77,7 +78,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	sqlDB := testdbfixture.Open(t, "wf-contract.db")
 	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), storetest.New(t, testdbseed.DefaultProjectID), contractcheck.CatalogRegistry(t), nil)
-	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: storetest.New(t, testdbseed.DefaultProjectID)}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: storetest.New(t, testdbseed.DefaultProjectID).Sessions}); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterStateTools failed", err)
 	}
 	blueprintMgr := blueprint.NewManager(blueprinttest.NewFileStore(t.TempDir()))
@@ -111,7 +112,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterWorkerTools failed", err)
 	}
-	if err := native.RegisterUpdateProgressTool(reg, progress.NewMemoryStore(), func(_ context.Context, id string) string {
+	if err := native.RegisterUpdateProgressTool(reg, progress.NewSQLStore(sqlDB), func(_ context.Context, id string) string {
 		return id
 	}, nil); err != nil {
 		contractcheck.FailErr(t, "native.RegisterUpdateProgressTool failed", err)
@@ -128,16 +129,19 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	if err := native.RegisterRequestDecisionTool(reg, workertools.RequestDecisionDeps{}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRequestDecisionTool failed", err)
 	}
-	webRT, err := webresearch.WireRuntime(t.Context())
+	webRT, err := webresearch.WireRuntime(t.Context(), nil)
 	contractcheck.FailErr(t, "webresearch.WireRuntime", err)
 	if err := webresearch.RegisterToolsWithFactory(reg, webresearch.ToolDeps{
-		Creds: webRT.Creds, Config: webRT.Config, Catalog: webRT.Catalog, Registry: webRT.Registry,
+		Crawler:     webRT.Crawler,
+		Discovery:   webRT.Discovery,
+		FetchBudget: webRT.FetchBudget,
+		Creds:       webRT.Creds, Config: webRT.Config, Catalog: webRT.Catalog, Registry: webRT.Registry,
 	}, nil); err != nil {
 		contractcheck.FailErr(t, "webresearch.RegisterToolsWithFactory failed", err)
 	}
 	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	contractcheck.FailErr(t, "load workflow templates", err)
-	sessionWF := workflowdrafts.NewMemory()
+	sessionWF := workflowdrafts.NewSQL(sqlDB)
 	resolver := workflowcatalog.Resolver{SessionStore: sessionWF}
 	if err := workflow.RegisterCatalogSummariesTool(reg, resolver, sessionWF, templates); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterCatalogSummariesTool failed", err)
@@ -200,11 +204,12 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	registerCatalogToolsOnto(t, rt.Registry)
 
 	sqlDB := testdbfixture.Open(t, "scan-boot.db")
-	coord := scantest.Coordinator(t, scan.NewSQLStore(sqlDB), nil)
-	if err := scantoolapi.RegisterScanTools(rt.Registry, coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, scancadence.New(scan.StoreFromCoordinator(coord), coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
+	scanStore := scan.NewSQLStore(sqlDB)
+	coord := scantest.Coordinator(t, scanStore, nil)
+	if err := scantoolapi.RegisterScanTools(rt.Registry, coord, scantoolapi.ResultViews{Reads: scanStore.Reads, FullPasses: scanStore.FullPasses}, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, scancadence.New(scanStore, coord, &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		contractcheck.FailErr(t, "scan.RegisterScanTools failed", err)
 	}
-	secretValues := credentialstore.NewEmpty(credentialstore.Slot{
+	secretValues := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets,
 		Context:   "contract managed secret",
@@ -277,8 +282,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	if err := heldtools.Register(rt.Registry, heldcall.New(nil, nil)); err != nil {
 		contractcheck.FailErr(t, "heldtools.Register failed", err)
 	}
-	memStore := storetest.New(t, testdbseed.DefaultProjectID)
-	wireContractProgramServices(t, rt, sqlDB, memStore)
+	wireContractProgramServices(t, rt, sqlDB)
 	if err := native.RegisterRecallTool(rt.Registry, recall.NewService(sqlDB, t.TempDir())); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRecallTool failed", err)
 	}
@@ -297,21 +301,15 @@ func RegisterCatalogToolsForContract(t *testing.T) *tools.DefaultRegistry {
 	return reg
 }
 
-func wireContractProgramServices(t *testing.T, rt *toolhost.Runtime, sqlDB db.Handle, sessions command.SessionOwners) {
+func wireContractProgramServices(t *testing.T, rt *toolhost.Runtime, sqlDB db.ReadHandle) {
 	t.Helper()
+	repositories := store.NewSQL(sqlDB)
 	if err := rt.Commands.SetProgramServices(toolhost.ProgramServices{
 		Recorder:  invocation.NewSQLRecorder(sqlDB),
 		Blobs:     blobstore.Store{Root: t.TempDir()},
 		Projector: captureprojection.New(nil, nil),
-		Sessions:  sessions,
+		Sessions:  repositories.Sessions, Provenance: repositories.Evidence, SourceObserver: repositories.Evidence,
 	}); err != nil {
 		contractcheck.FailErr(t, "rt.Commands.SetProgramServices failed", err)
 	}
-}
-
-func BootRegisteredToolSet(t *testing.T, reg *tools.DefaultRegistry) map[string]bool {
-	t.Helper()
-	registered, err := tools.BootRegisteredToolSet(reg)
-	contractcheck.FailErr(t, "tools.BootRegisteredToolSet failed", err)
-	return registered
 }

@@ -211,7 +211,7 @@ func TestBatchProgressConsumesInvocationFactsBeforeTranscriptProjection(t *testi
 				}))
 			}
 			loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{Tools: registry}, Tools: ToolsDeps{
-				BeforeToolRun: func(_ context.Context, _ *api.Session, _ []api.Message, _ string, name string, _ map[string]any) (string, bool, error) {
+				BeforeToolRun: func(_ context.Context, _ *api.Session, _ []api.Message, name string, _ map[string]any) (string, bool, error) {
 					if tc.refused && name == "edit" {
 						return "", false, guidance.NewRefusal("TOOL_ARGS_INVALID", "Rejected fixture")
 					}

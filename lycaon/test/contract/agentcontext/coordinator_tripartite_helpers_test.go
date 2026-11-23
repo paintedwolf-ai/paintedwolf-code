@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -45,7 +44,6 @@ func mergeCoordinatorSurfaceVars(t *testing.T, _ string) map[string]any {
 	vars["can_spawn_implementer"] = true
 	vars["can_spawn_web_research"] = true
 	vars["can_spawn_workers"] = true
-	mergePromptBudgetSkillRoster(t, vars)
 	return vars
 }
 
@@ -54,6 +52,7 @@ func mergeCoordinatorTemplateVars(t *testing.T) map[string]any {
 	vars := mergeCoordinatorSurfaceVars(t, "implement_synthesis")
 	mergeFixtureWorkspaceRoot(t, vars, "")
 	reader := coordinatorTestReader(t, "implement_synthesis", 1)
+	mergeReachableSkillRoster(t, vars, reader)
 	merged, err := prompts.Vars(reader, vars)
 	contractcheck.FailErr(t, "prompts.Vars", err)
 	// Standalone agent templates are measured before mode shell assembly.
@@ -61,8 +60,7 @@ func mergeCoordinatorTemplateVars(t *testing.T) map[string]any {
 	return merged
 }
 
-// mergeFixtureWorkspaceRoot attaches one real folder so the render matches a
-// post-milestone-9 single-root turn: the folder block carries a labeled row.
+// mergeFixtureWorkspaceRoot adds a labeled primary root.
 func mergeFixtureWorkspaceRoot(t *testing.T, vars map[string]any, path string) {
 	t.Helper()
 	if strings.TrimSpace(path) == "" {
@@ -91,7 +89,6 @@ func mergeCoordinatorPromptVarsForTripartite(
 	err := prompts.MergeCoordinatorPromptVars(
 		profile.SurfaceID,
 		prompts.ExecutionModePromptTransition{
-			ExecutionMode:         transition.ExecutionMode,
 			ExecutionModePrevious: transition.ExecutionModePrevious,
 			ExecutionModeEntered:  transition.ExecutionModeEntered,
 			ExecutionModeLeft:     transition.ExecutionModeLeft,
@@ -101,6 +98,7 @@ func mergeCoordinatorPromptVarsForTripartite(
 	)
 	contractcheck.FailErr(t, "merge coordinator prompt vars", err)
 	reader := coordinatorTestReader(t, profile.SurfaceID, 1)
+	mergeReachableSkillRoster(t, vars, reader)
 	if err := capability.MergeForTurn(vars, reader, spawn.AmbientAllowedAgents()); err != nil {
 		t.Fatalf("MergeForTurn: %v", err)
 	}
@@ -111,7 +109,7 @@ func mergeCoordinatorPromptVarsForTripartite(
 
 func renderCoordinatorTripartiteForRunContext(
 	t *testing.T,
-	root string,
+
 	runCtx api.CoordinatorRunContext,
 	sess *api.Session,
 	userPrompt string,
@@ -126,7 +124,7 @@ func renderCoordinatorTripartiteForRunContext(
 		implState = state[0]
 	}
 	var profile surface.TurnProfile
-	runCtx = surface.EnrichRunContextForWorkflow(runCtx, filepath.Join(root, "lycaon"))
+	runCtx = bindFixturePhase(t, runCtx)
 	if strings.TrimSpace(forcedSurfaceID) != "" {
 		profile = surface.ResolveTurnProfileForSurface(forcedSurfaceID, runCtx, sess)
 	} else {
@@ -169,9 +167,7 @@ func modeTemplateRefs(profile surface.TurnProfile) []string {
 	return out
 }
 
-// mergeWidestUnitBlocks renders the unit slots for the widest turn a surface
-// can produce: every loadable tool counts as offered, so caps cover the
-// prompt a fully loaded turn renders, not only the floor.
+// mergeWidestUnitBlocks includes every unit reachable with all loadable tools.
 func mergeWidestUnitBlocks(t *testing.T, engine prompts.PromptTemplateEngine, surfaceID string, vars map[string]any) {
 	t.Helper()
 	catalog, err := prompts.UnitCatalogForEngine(engine)

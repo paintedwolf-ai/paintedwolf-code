@@ -24,17 +24,24 @@ import (
 // errStoreUnreadable is a store failure that is not an absent session.
 var errStoreUnreadable = errors.New("session store unreadable")
 
-// lookupStore answers every read of a session row with err.
-type lookupStore struct {
-	*store.SQL
+// lookupSessions answers every read of a session row with err.
+type lookupSessions struct {
+	store.SessionRepository
 	err error
 }
 
-func (s lookupStore) Get(context.Context, string) (*wire.Session, error) { return nil, s.err }
+func (s lookupSessions) Get(context.Context, string) (*wire.Session, error) { return nil, s.err }
 
-func (s lookupStore) UpdateSession(context.Context, string, func(*wire.Session)) error { return s.err }
+func (s lookupSessions) UpdateSession(context.Context, string, func(*wire.Session)) error {
+	return s.err
+}
 
-func (s lookupStore) GetTranscriptPage(context.Context, string, wire.TranscriptPageQuery) (wire.SessionTranscriptPage, error) {
+type lookupTranscript struct {
+	store.TranscriptRepository
+	err error
+}
+
+func (s lookupTranscript) GetTranscriptPage(context.Context, string, wire.TranscriptPageQuery) (wire.SessionTranscriptPage, error) {
 	return wire.SessionTranscriptPage{}, s.err
 }
 
@@ -71,7 +78,9 @@ type routeAnswer struct {
 // whose store answers lookups with err.
 func sessionRouteCodes(t *testing.T, err error) map[string]routeAnswer {
 	t.Helper()
-	failing := lookupStore{SQL: storetest.New(t), err: err}
+	failing := storetest.New(t)
+	failing.Sessions = lookupSessions{SessionRepository: failing.Sessions, err: err}
+	failing.Transcript = lookupTranscript{TranscriptRepository: failing.Transcript, err: err}
 	reg := toolstest.NewRegistry()
 	host := session.NewHost(failing, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, reg)
 	host.SetDataDir(t.TempDir())

@@ -77,7 +77,7 @@ func (s *History) HandleListProjectSourceSeen(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	p, ok = requestscope.ProjectForRequest(s.SessionStore, s.responses, w, r, p)
+	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
 	if !ok {
 		return
 	}
@@ -177,7 +177,7 @@ func (s *History) HandleGetProjectSourceStorage(w http.ResponseWriter, r *http.R
 	}
 	attachmentLane := storageusage.Usage{Lane: storageusage.LanePromptAttachments, Scope: storageusage.ScopeProject}
 	if _, available := s.AttachmentStore(r.Context(), p.ID); available {
-		attachmentLane.UsedBytes, err = s.SessionStore.PromptAttachmentStorageUsage(r.Context(), p.ID)
+		attachmentLane.UsedBytes, err = s.AttachmentBlobs.PromptAttachmentStorageUsage(r.Context(), p.ID)
 		if err != nil {
 			s.responses.InternalError(w, r, err)
 			return

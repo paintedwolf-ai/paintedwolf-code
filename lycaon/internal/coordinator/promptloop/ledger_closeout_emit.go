@@ -47,7 +47,7 @@ func (l *turnCloseout) storedReportIssues(ctx context.Context, sessionID string,
 func (l *turnCloseout) emitAssembledCloseout(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID string,
+	sessionID, surfaceID string,
 	draft guidance.CloseoutDraft,
 	forcedBy []string,
 	st *promptLoopTurnState,
@@ -147,7 +147,7 @@ func (l *turnCloseout) emitAssembledCloseout(
 	if st != nil && !tools.CallReach(ctx).Known() {
 		ctx = tools.WithCallReach(ctx, st.requestReach())
 	}
-	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, msg)
+	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, surfaceID, msg)
 	if err != nil {
 		return out, err
 	}

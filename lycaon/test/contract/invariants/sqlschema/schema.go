@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 	"github.com/lycaon/lycaon/test/contract/invariants/outbox"
@@ -26,7 +26,7 @@ var schemaRules = []invariants.Invariant{
 	}, Check: noInlineDDLInInternalDB},
 	{Name: "person-columns-are-keyed-constrained-and-indexed", Anchors: []invariants.Anchor{schema}, Check: personColumnsAreKeyedConstrainedAndIndexed},
 	{Name: "person-actor-vocabulary-names-the-person", Anchors: []invariants.Anchor{schema}, Exempt: derivedPersonTables, Check: personActorVocabularyNamesThePerson},
-	{Name: "every-table-declares-its-lifetime", Anchors: []invariants.Anchor{schema, invariants.Func("internal/db", "TableLifetimes")}, Check: everyTableDeclaresItsLifetime},
+	{Name: "every-table-declares-its-lifetime", Anchors: []invariants.Anchor{schema}, Check: everyTableDeclaresItsLifetime},
 	{Name: "enum-columns-match-go", Anchors: []invariants.Anchor{schema}, Check: enumColumnsMatchGo},
 }
 
@@ -173,7 +173,7 @@ var enumColumns = []struct {
 	{"sessions", "posture", wirespec.GoEnumValues(api.SessionPostureSpec, api.SessionPostureVet, api.SessionPostureOrchestrate, api.SessionPostureBuild)},
 	{"sessions", "status", wirespec.GoEnumValues(api.SessionStatusPreparing, api.SessionStatusIdle, api.SessionStatusBusy, api.SessionStatusError)},
 	{"messages", "role", wirespec.GoEnumValues(api.MessageRoleUser, api.MessageRoleAssistant, api.MessageRoleTool, api.MessageRoleSystem)},
-	{"worker_jobs", "status", wirespec.GoEnumValues(api.AllWorkerStatuses()...)},
+	{"worker_jobs", "status", wirespec.GoEnumValues(apitest.AllWorkerStatuses()...)},
 	{"worker_jobs", "spawn_reason", wirespec.GoEnumValues(api.SpawnReasonInitial, api.SpawnReasonRetry, api.SpawnReasonHumanRequest, api.SpawnReasonCloseout)},
 	{"worker_jobs", "execution_target", wirespec.GoEnumValues(api.ExecutionTargetLocal, api.ExecutionTargetRunner)},
 	{"code_scans", "status", wirespec.GoEnumValues(api.CodeScanStatusPending, api.CodeScanStatusRunning, api.CodeScanStatusComplete, api.CodeScanStatusFailed, api.CodeScanStatusTimedOut, api.CodeScanStatusCanceled, api.CodeScanStatusSuperseded)},
@@ -216,19 +216,19 @@ func checkValues(sql, column string) ([]string, bool) {
 // to its owner, or a reasoned class with no owner.
 func everyTableDeclaresItsLifetime(r *invariants.Run) {
 	parents := cascadeParents(r)
-	lifetimes := db.TableLifetimes()
+	lifetimes := tableLifetimes
 	for _, table := range sortedKeys(parents) {
 		lifetime, ok := lifetimes[table]
 		if !ok {
-			r.Report("%s has no entry in db.TableLifetimes", table)
+			r.Report("%s has no entry in tableLifetimes", table)
 			continue
 		}
 		switch lifetime.Class {
-		case db.LifetimeCascadeOwned:
+		case lifetimeCascadeOwned:
 			if !parents[table][lifetime.Owner] {
 				r.Report("%s has no ON DELETE CASCADE foreign key to its owner %s", table, lifetime.Owner)
 			}
-		case db.LifetimeForever, db.LifetimeReceiptWithRetention, db.LifetimeProjection, db.LifetimeCache:
+		case lifetimeForever, lifetimeReceiptWithRetention, lifetimeProjection, lifetimeCache:
 			if lifetime.Reason == "" || lifetime.Owner != "" {
 				r.Report("%s: %s needs a reason and no owner", table, lifetime.Class)
 			}
@@ -238,7 +238,7 @@ func everyTableDeclaresItsLifetime(r *invariants.Run) {
 	}
 	for _, table := range sortedKeys(lifetimes) {
 		if _, ok := parents[table]; !ok {
-			r.Report("%s is in db.TableLifetimes but not in the schema", table)
+			r.Report("%s is in tableLifetimes but not in the schema", table)
 		}
 	}
 }

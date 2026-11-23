@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/hostidentity"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -90,9 +91,9 @@ func TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPr
 		"mcp.Catalog.Load":          res.MCPLoad,
 		"api.WriteAPIToken":         res.WriteToken,
 	} {
-		if !got.Failed || !got.HasKeychainOSStatus || got.KeychainOSStatus != credentialstore.KeychainMissingEntitlementStatus ||
+		if !got.Failed || !got.HasKeychainOSStatus || got.KeychainOSStatus != int32(-34018) ||
 			got.IsIdentityMissing || got.IsNotExist {
-			t.Fatalf("%s classification = %+v, want KeychainOSStatus %d", label, got, credentialstore.KeychainMissingEntitlementStatus)
+			t.Fatalf("%s classification = %+v, want KeychainOSStatus %d", label, got, int32(-34018))
 		}
 	}
 	if !res.ReadToken.Failed || !res.ReadToken.IsNotExist || res.ReadToken.HasKeychainOSStatus || res.ReadToken.IsIdentityMissing {
@@ -251,7 +252,7 @@ func executeMacOSDevelopmentWorkflowPhase(phase, dir string) (string, error) {
 		reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          dir,
 			GlobalOverridePath: globalMCPPath,
-			Connector:          &mcp.MockConnector{},
+			Connector:          &mcptest.Connector{},
 		})
 		if err != nil {
 			return "", fmt.Errorf("mcp.NewRuntime: %w", err)
@@ -297,7 +298,7 @@ func executeMacOSDevelopmentWorkflowPhase(phase, dir string) (string, error) {
 		reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          dir,
 			GlobalOverridePath: globalMCPPath,
-			Connector:          &mcp.MockConnector{},
+			Connector:          &mcptest.Connector{},
 		})
 		if err != nil {
 			return "", fmt.Errorf("reopen mcp.NewRuntime: %w", err)

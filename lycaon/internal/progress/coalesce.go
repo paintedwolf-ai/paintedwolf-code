@@ -116,11 +116,6 @@ func (c *Coalescer) Record(sessionID string, before, after Snapshot) {
 	w.timer = time.AfterFunc(c.window, func() { c.flush(key) })
 }
 
-// FlushNow settles a session's window immediately, bypassing the timer. Used by tests and shutdown.
-func (c *Coalescer) FlushNow(sessionID string) {
-	c.flush(strings.TrimSpace(sessionID))
-}
-
 func (c *Coalescer) flush(key string) {
 	if key == "" || c == nil {
 		return

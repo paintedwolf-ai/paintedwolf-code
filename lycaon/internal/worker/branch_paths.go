@@ -160,15 +160,6 @@ func branchAbsFor(p PromoteRoots, rootID, scopeRel string) (string, error) {
 	return filepath.Join(p.BranchRoot, dir, filepath.FromSlash(scopeRel)), nil
 }
 
-// fileAbs resolves a qualified promote path to its source and branch locations.
-func (p PromoteRoots) fileAbs(task *api.WorkerTask, qualifiedPath string) (primaryAbs, branchAbs string, err error) {
-	id, err := p.locateIdentity(task, qualifiedPath)
-	if err != nil {
-		return "", "", err
-	}
-	return id.Primary, id.Branch, nil
-}
-
 func (p PromoteRoots) writePrimaryBytes(task *api.WorkerTask, qualifiedPath string, content []byte, restoreMode *os.FileMode, verify func(fseffect.Target) error) error {
 	qualifiedPath = filepath.ToSlash(strings.TrimSpace(qualifiedPath))
 	if qualifiedPath == "" || qualifiedPath == "." || sandbox.HasParentTraversal(qualifiedPath) {

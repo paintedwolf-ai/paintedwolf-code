@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func openControlledRoot(dir, anchor string, owner uint32) (*os.Root, error) {
+func openControlledRoot(dir string, owner uint32) (*os.Root, error) {
 	before, err := os.Lstat(dir)
 	if err != nil {
 		return nil, err

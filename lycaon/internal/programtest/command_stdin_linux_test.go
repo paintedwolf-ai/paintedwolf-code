@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/programtest"
@@ -48,7 +49,7 @@ func TestNativeCommandByteInputProcess(t *testing.T) {
 }
 
 func TestNativeCommandFileInputsCarryBytesWithoutSourceMetadata(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	caps, _ := confine.LinuxCapabilities()
 	if !caps.Available() {

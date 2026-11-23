@@ -12,13 +12,13 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func setupWorktreeStore(t *testing.T) (*SQL, string, string) {
+func setupWorktreeStore(t *testing.T) (*Repositories, string, string) {
 	t.Helper()
 	dir := t.TempDir()
-	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.core.db.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	st := NewSQL(sqlDB)
-	sess, err := st.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := st.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
@@ -30,7 +30,7 @@ func TestWorktreeBindingRoundTrip(t *testing.T) {
 	st, sessionID, projectID := setupWorktreeStore(t)
 	ctx := context.Background()
 
-	_, ok, err := st.GetWorktreeBinding(ctx, sessionID)
+	_, ok, err := st.Sessions.GetWorktreeBinding(ctx, sessionID)
 	testutil.FailErr(t, "get unbound", err)
 	if ok {
 		t.Fatal("unbound session must return ok=false")
@@ -47,9 +47,9 @@ func TestWorktreeBindingRoundTrip(t *testing.T) {
 		BaseBranch:   "main",
 		CreatedAt:    created,
 	}
-	testutil.FailErr(t, "put", st.PutWorktreeBinding(ctx, want))
+	testutil.FailErr(t, "put", st.Sessions.PutWorktreeBinding(ctx, want))
 
-	got, ok, err := st.GetWorktreeBinding(ctx, sessionID)
+	got, ok, err := st.Sessions.GetWorktreeBinding(ctx, sessionID)
 	testutil.FailErr(t, "get bound", err)
 	if !ok || got == nil {
 		t.Fatal("expected binding")
@@ -68,8 +68,8 @@ func TestWorktreeBindingRoundTrip(t *testing.T) {
 	if originalID == "" {
 		t.Fatal("worktree has no durable identity")
 	}
-	testutil.FailErr(t, "repeat binding", st.PutWorktreeBinding(ctx, want))
-	repeated, _, err := st.GetWorktreeBinding(ctx, sessionID)
+	testutil.FailErr(t, "repeat binding", st.Sessions.PutWorktreeBinding(ctx, want))
+	repeated, _, err := st.Sessions.GetWorktreeBinding(ctx, sessionID)
 	testutil.FailErr(t, "read repeated binding", err)
 	if repeated.WorktreeID != originalID {
 		t.Fatal("repeat binding forked worktree history")
@@ -79,8 +79,8 @@ func TestWorktreeBindingRoundTrip(t *testing.T) {
 	replaced.Branch = "session/renamed"
 	replaced.WorktreePath = "/wt2"
 	replaced.CreatedAt = time.Time{} // upsert keeps the original created_at
-	testutil.FailErr(t, "upsert", st.PutWorktreeBinding(ctx, replaced))
-	got, ok, err = st.GetWorktreeBinding(ctx, sessionID)
+	testutil.FailErr(t, "upsert", st.Sessions.PutWorktreeBinding(ctx, replaced))
+	got, ok, err = st.Sessions.GetWorktreeBinding(ctx, sessionID)
 	testutil.FailErr(t, "get after upsert", err)
 	if !ok || got.Branch != "session/renamed" || got.WorktreePath != "/wt2" {
 		t.Fatalf("upsert result = %+v", got)
@@ -89,15 +89,15 @@ func TestWorktreeBindingRoundTrip(t *testing.T) {
 		t.Fatalf("upsert must preserve CreatedAt: got %v want %v", got.CreatedAt, created)
 	}
 
-	testutil.FailErr(t, "delete", st.DeleteWorktreeBinding(ctx, sessionID))
-	_, ok, err = st.GetWorktreeBinding(ctx, sessionID)
+	testutil.FailErr(t, "delete", st.Sessions.DeleteWorktreeBinding(ctx, sessionID))
+	_, ok, err = st.Sessions.GetWorktreeBinding(ctx, sessionID)
 	testutil.FailErr(t, "get after delete", err)
 	if ok {
 		t.Fatal("expected unbound after delete")
 	}
-	testutil.FailErr(t, "delete idempotent", st.DeleteWorktreeBinding(ctx, sessionID))
-	testutil.FailErr(t, "rebind original checkout", st.PutWorktreeBinding(ctx, want))
-	rebound, _, err := st.GetWorktreeBinding(ctx, sessionID)
+	testutil.FailErr(t, "delete idempotent", st.Sessions.DeleteWorktreeBinding(ctx, sessionID))
+	testutil.FailErr(t, "rebind original checkout", st.Sessions.PutWorktreeBinding(ctx, want))
+	rebound, _, err := st.Sessions.GetWorktreeBinding(ctx, sessionID)
 	testutil.FailErr(t, "read rebound checkout", err)
 	if rebound.WorktreeID != originalID {
 		t.Fatal("unbind and rebind lost worktree history")
@@ -106,16 +106,16 @@ func TestWorktreeBindingRoundTrip(t *testing.T) {
 
 func TestWorktreeBindingProjectCascade(t *testing.T) {
 	dir := t.TempDir()
-	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.core.db.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	st := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
-	testutil.FailErr(t, "put", st.PutWorktreeBinding(ctx, WorktreeBinding{
+	testutil.FailErr(t, "put", st.Sessions.PutWorktreeBinding(ctx, WorktreeBinding{
 		SessionID:    sess.ID,
 		ProjectID:    testdbseed.DefaultProjectID,
 		RepoID:       "r1",
@@ -127,7 +127,7 @@ func TestWorktreeBindingProjectCascade(t *testing.T) {
 
 	_, err = sqlDB.ExecContext(ctx, `DELETE FROM projects WHERE id = ?`, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "delete project", err)
-	_, ok, err := st.GetWorktreeBinding(ctx, sess.ID)
+	_, ok, err := st.Sessions.GetWorktreeBinding(ctx, sess.ID)
 	testutil.FailErr(t, "get after project delete", err)
 	if ok {
 		t.Fatal("project delete must cascade worktree bindings")

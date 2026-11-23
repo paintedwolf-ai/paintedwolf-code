@@ -74,7 +74,7 @@ func (m *Manager) chooseWorkspaceAdapter(
 		Grants:         withIndexFacts(ctx, projectID, grants),
 		CloneAvailable: clone,
 		Disk: func() (adapter.DiskSpace, error) {
-			available, known, err := queryAvailableStorageBytes(filepath.Dir(metaDir))
+			available, known, err := m.filesystem.AvailableStorage(filepath.Dir(metaDir))
 			return adapter.DiskSpace{Path: filepath.Dir(metaDir), Available: available, Known: known}, err
 		},
 		Overrun:     overrun,

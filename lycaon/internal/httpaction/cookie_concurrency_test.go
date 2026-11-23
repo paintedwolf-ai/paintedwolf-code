@@ -43,7 +43,7 @@ func TestParallelHTTPRequestWorkersShareOneCookieJarWithoutSerializingNetwork(t 
 	releaseAll := sync.OnceFunc(func() { close(release) })
 	defer releaseAll()
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register", Register(reg, Deps{Boundary: testBoundary(), Secrets: secrets}))
+	testutil.FailErr(t, "register", Register(reg, Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}))
 	capability := loopbackCapability(t, server.URL)
 	var outstanding []string
 	for i := range count {
@@ -88,7 +88,7 @@ func TestParallelHTTPRequestWorkersShareOneCookieJarWithoutSerializingNetwork(t 
 		}
 		reference = decoded.Cookies.Reference
 	}
-	jar, err := secrets.OpenCookieJar(t.Context(), secretcap.CookieJarRequest{
+	jar, err := secrets.Jars.OpenCookieJar(t.Context(), secretcap.CookieJarRequest{
 		ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: "read", Name: "shared",
 	})
 	testutil.FailErr(t, "reopen merged jar", err)
@@ -116,7 +116,7 @@ func TestCookieJarSavesCookiesReceivedBeforeBodyCancellation(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register", Register(reg, Deps{Boundary: testBoundary(), Secrets: secrets}))
+	testutil.FailErr(t, "register", Register(reg, Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}))
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	go func() {
@@ -135,7 +135,7 @@ func TestCookieJarSavesCookiesReceivedBeforeBodyCancellation(t *testing.T) {
 	default:
 		t.Fatal("request never reached the stalled body")
 	}
-	jar, err := secrets.OpenCookieJar(t.Context(), secretcap.CookieJarRequest{
+	jar, err := secrets.Jars.OpenCookieJar(t.Context(), secretcap.CookieJarRequest{
 		ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: "read", Name: "session",
 	})
 	testutil.FailErr(t, "open jar after canceled body", err)

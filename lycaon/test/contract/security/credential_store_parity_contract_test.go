@@ -1,13 +1,12 @@
 package contract
 
 import (
-	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
-	appsecurity "github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/detectionpack"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -22,8 +21,10 @@ func TestWriteRootRefusalCoversEveryCredentialStore(t *testing.T) {
 		t.Skip("no home directory; both lists are home-relative")
 	}
 
-	for _, rel := range confine.KeyMaterialHomeRelPaths() {
-		abs := filepath.Join(home, rel)
+	keys, err := detectionpack.BundledKeyMaterialPaths()
+	contractcheck.FailErr(t, "load key material floor", err)
+	for _, rel := range keys {
+		abs := filepath.Join(home, strings.TrimPrefix(rel, "~/"))
 		if refused, _ := confine.AttachedWriteRootRefused(abs); !refused {
 			t.Errorf("key material %q is not refused by AttachedWriteRootRefused", rel)
 		}
@@ -82,32 +83,31 @@ func TestKeyMaterialFloorIsPackDerived(t *testing.T) {
 	if len(catalogued) == 0 {
 		t.Fatal("the shipped key-material pack names no paths; the floor would be empty")
 	}
-	want := map[string]bool{}
 	for _, p := range catalogued {
 		if !strings.HasPrefix(p, "~/") {
 			t.Errorf("key-material path %q is not home-relative; the pack is shared across machines", p)
 		}
-		want[filepath.Clean(strings.TrimSuffix(strings.TrimPrefix(p, "~/"), "/"))] = true
 	}
 
-	// Not parallel: the sources are process-wide and restored on cleanup.
-	previousKeys := confine.SetKeyMaterialPathsSource(nil)
-	previousStores := confine.SetCredentialStorePathsSource(nil)
-	t.Cleanup(func() {
-		confine.SetKeyMaterialPathsSource(previousKeys)
-		confine.SetCredentialStorePathsSource(previousStores)
-	})
-	if residue := confine.KeyMaterialHomeRelPaths(); len(residue) != 0 {
-		t.Fatalf("confine answers %v with no catalogue installed; the list must come from the catalogue", residue)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	previous := confine.SetKeyMaterialPathsSource(nil)
+	t.Cleanup(func() { confine.SetKeyMaterialPathsSource(previous) })
+	if paths := confine.KeyMaterialWritePaths(); len(paths) != 0 {
+		t.Fatalf("write floor with no pack = %v", paths)
 	}
 
-	contractcheck.FailErr(t, "install boot floors", (&appsecurity.Detections{}).LoadFloors())
-	installed := confine.KeyMaterialHomeRelPaths()
-	got := map[string]bool{}
-	for _, rel := range installed {
-		got[rel] = true
+	confine.SetKeyMaterialPathsSource(func() []string { return catalogued })
+	path, err := filepath.EvalSymlinks(home)
+	contractcheck.FailErr(t, "resolve temporary home", err)
+	want := make([]string, 0, len(catalogued))
+	for _, p := range catalogued {
+		want = append(want, filepath.Join(path, strings.TrimPrefix(p, "~/")))
 	}
-	if len(installed) != len(want) || !maps.Equal(got, want) {
-		t.Fatalf("installed floor = %v, want the catalogue %v", installed, catalogued)
+	slices.Sort(want)
+	got := slices.Clone(confine.KeyMaterialWritePaths())
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("write floor = %v, want %v", got, want)
 	}
 }

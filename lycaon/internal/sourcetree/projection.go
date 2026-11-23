@@ -142,7 +142,7 @@ func (p *Projection) computeBaseChildren(ctx context.Context, dir string) (int64
 }
 
 func (p *Projection) Count(ctx context.Context) (int64, error) {
-	children, _, err := p.children(ctx, ".")
+	children, err := p.children(ctx, ".")
 	if !p.Rules.At(Address{Root: p.Root, Path: "."}).Open {
 		return 1, err
 	}

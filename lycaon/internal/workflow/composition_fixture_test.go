@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"github.com/lycaon/lycaon/internal/workflow/drafts/draftstest"
 )
 
 func testComposer(t *testing.T) *workflowcomposition.Composer {
@@ -18,7 +19,7 @@ func testComposer(t *testing.T) *workflowcomposition.Composer {
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	return &workflowcomposition.Composer{
-		SessionStore: workflowdrafts.NewMemory(),
+		SessionStore: draftstest.NewStore(t),
 		Registry:     reg,
 		Agents:       agents,
 		Policy:       testComposePolicy(t),
@@ -32,13 +33,13 @@ func testComposePolicy(t *testing.T) *workflowcomposition.ComposePolicy {
 	return policy
 }
 
-func testPersister(t *testing.T) (*workflowcomposition.Persister, *workflowdrafts.Memory) {
+func testPersister(t *testing.T, sessionID string) (*workflowcomposition.Persister, *workflowdrafts.SQL) {
 	t.Helper()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	store := workflowdrafts.NewMemory()
+	store := draftstest.NewStore(t, sessionID)
 	return &workflowcomposition.Persister{
 		SessionStore: store,
 		Registry:     reg,

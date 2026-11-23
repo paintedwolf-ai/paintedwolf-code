@@ -20,13 +20,13 @@ func TestSchemaAllowsSystemMessageRole(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "boundary-row.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	sessions := store.NewSQL(sqlDB)
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create session", err)
 
 	boundary := runstate.NewBoundaryMessage(&api.WorkflowRun{WorkflowID: "plan", WorkflowVersion: "1.0.1"}, "started", "research", "")
-	contractcheck.FailErr(t, "append boundary row", sessions.AppendMessages(ctx, sess.ID, boundary))
+	contractcheck.FailErr(t, "append boundary row", sessions.Transcript.AppendMessages(ctx, sess.ID, boundary))
 
-	messages, err := sessions.GetMessages(ctx, sess.ID)
+	messages, err := sessions.Transcript.GetMessages(ctx, sess.ID)
 	contractcheck.FailErr(t, "read session messages", err)
 	for _, msg := range messages {
 		if msg.ID != boundary.ID {

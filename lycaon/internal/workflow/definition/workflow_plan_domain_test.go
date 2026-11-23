@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
@@ -34,12 +35,8 @@ func TestPlanManifestVocabularyRegistered(t *testing.T) {
 	testutil.FailErr(t, "load rules config YAML", err)
 	for _, cfg := range []*rules.RulesConfig{specCfg, buildCfg} {
 		for _, rule := range cfg.Rules {
-			whenStr, err := rules.CanonicalWhenString(rule.When)
-			if err != nil {
+			if err := rules.ValidateWhen(reg, rule.When); err != nil {
 				t.Fatalf("rule %q: %v", rule.ID, err)
-			}
-			if _, err := rules.MatchWhenExpr(reg, whenStr, rules.EvalContext{}); err != nil {
-				t.Fatalf("rule %q when %q: %v", rule.ID, whenStr, err)
 			}
 		}
 	}
@@ -63,7 +60,7 @@ func TestPlanDomainDoesNotDuplicateCore(t *testing.T) {
 	if err := conditions.RegisterCoreConditions(coreReg, conditions.CoreDeps{}); err != nil {
 		testutil.FailErr(t, "conditions.RegisterCoreConditions failed", err)
 	}
-	for _, id := range conditions.ShippedPlanDomainIDs() {
+	for _, id := range conditionstest.PlanIDs {
 		if coreReg.Has(id) {
 			t.Fatalf("plan domain id %q is also registered in core", id)
 		}

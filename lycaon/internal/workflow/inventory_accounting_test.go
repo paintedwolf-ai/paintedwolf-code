@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -53,11 +53,11 @@ func TestInventoryPreviewChecksEveryLocation(t *testing.T) {
 
 func TestInventoryAccountingRequiresBoundScansAndPreservesRevision(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	scans := []api.CodeScan{{ID: "scan", ScannerID: "sast", Status: api.CodeScanStatusComplete, Findings: []api.SecurityFinding{scanfindings.BuildSecurityFinding(scanfindings.FindingBuildOpts{DriverID: "sast", RuleID: "rule", Level: api.FindingLevelHigh})}}}
 	mgr.Coverage.Inventory = workflowFakeInventory{run: scans}
-	raw, err := InventoryAccounting{mgr}.QueryWorkflowInventory(t.Context(), run.SessionID, map[string]any{"scan_ids": []string{"scan"}, "view": "accounting"})
+	raw, err := mgr.Inventory.QueryWorkflowInventory(t.Context(), run.SessionID, map[string]any{"scan_ids": []string{"scan"}, "view": "accounting"})
 	testutil.FailErr(t, "query accounting", err)
 	var got struct {
 		Revision    string `json:"inventory_revision"`
@@ -75,7 +75,7 @@ func TestInventoryAccountingRequiresBoundScansAndPreservesRevision(t *testing.T)
 		{"scan_ids": []any{"scan"}, "inventory_revision": "stale"},
 		{"scan_ids": []any{"scan"}, "path": "subset.go"},
 	} {
-		if _, err := (InventoryAccounting{mgr}).QueryWorkflowInventory(t.Context(), run.SessionID, args); err == nil {
+		if _, err := mgr.Inventory.QueryWorkflowInventory(t.Context(), run.SessionID, args); err == nil {
 			t.Fatalf("accepted invalid inventory query: %+v", args)
 		}
 	}
@@ -84,7 +84,7 @@ func TestInventoryAccountingRequiresBoundScansAndPreservesRevision(t *testing.T)
 func startInventoryReview(t *testing.T) (*RunManager, *api.WorkflowRun, string) {
 	t.Helper()
 	mgr, _, blueprints, dir := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	manifest := reviewLoopTestManifest()
 	manifest.PhaseDefs[0].ActivityLabel = "Reviewing inventory"
 	manifest.PhaseDefs[1].ActivityLabel = "Done"
@@ -117,7 +117,7 @@ func TestCandidateAccountLabelsCandidateDefects(t *testing.T) {
 		claim := map[string]any{"id": "c1", "title": "Assessed", "statement": "Observed evidence", "status": "held", "scan_group_ids": []any{groupID}}
 		return map[string]any{"verdict": map[string]any{"verdict": "SELECTED", "claims": []any{claim}, "set_asides": setAsides}}
 	}
-	accounting := InventoryAccounting{mgr}
+	accounting := mgr.Inventory
 	account, err := accounting.candidateAccount(t.Context(), run, *phase.ReviewLoop, candidate("group:a", []any{}), groups)
 	testutil.FailErr(t, "valid candidate", err)
 	if !account.Linked["group:a"] {

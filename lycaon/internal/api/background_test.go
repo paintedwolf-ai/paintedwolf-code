@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -65,11 +64,6 @@ func TestDetachedDrainIncludesNestedWorkAndHonorsCancellation(t *testing.T) {
 }
 
 func TestServerCleanupReliablyReleasesResourcesInvariant(t *testing.T) {
-	// Watchers are process-global by design and outlive any single server;
-	// exclude them from the cleanup invariant's goroutine accounting.
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
-
 	runtime.GC()
 	baselineGoroutines := runtime.NumGoroutine()
 
@@ -82,7 +76,7 @@ func TestServerCleanupReliablyReleasesResourcesInvariant(t *testing.T) {
 
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/projects", nil)
 		testutil.FailErr(t, "build request", err)
-		WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+TestAPIToken)
 
 		resp, err := http.DefaultClient.Do(req)
 		testutil.FailErr(t, "execute request", err)

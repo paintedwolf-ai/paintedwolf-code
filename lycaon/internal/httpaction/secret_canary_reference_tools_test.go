@@ -12,18 +12,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/nativemanifest"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -108,7 +109,7 @@ func registerCanaryMCP(t *testing.T, registry *tools.DefaultRegistry, matcher *s
 		StatePath:          filepath.Join(tempDir, "state"),
 		GlobalOverridePath: filepath.Join(tempDir, "mcp.yaml"),
 		Connector:          canaryEchoConnector{received: &received},
-		OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(tempDir, "oauth.json")),
+		OAuthStore:         mcptest.OpenOAuthStore(t, filepath.Join(tempDir, "oauth.json")),
 	})
 	testutil.FailErr(t, "create canary MCP runtime", err)
 	runtime.Tools.SetToolRegistry(registry)
@@ -153,7 +154,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "open approvals", err)
-	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	review := &canaryReview{t: t, authority: authority}
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
@@ -166,13 +167,13 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	executor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
 
 	testutil.FailErr(t, "register http_request", Register(registry, Deps{
-		Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service,
+		Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service, Jars: service.Jars,
 	}))
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load tool profiles", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, profiles)
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	background.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	runner := hostcmd.NewRunner()
 	capturedCommand := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
 	verify := &native.VerifyTool{Programs: program.Runtime}

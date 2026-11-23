@@ -14,12 +14,12 @@ func (m *Service) WorkflowExit(
 	sessionID, profileID string,
 	turnTools []string,
 ) bool {
-	if m == nil || m.store == nil || m.coordinatorFrame == nil ||
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) || m.coordinatorFrame == nil ||
 		strings.TrimSpace(profileID) != orchestration.ProfileCoordinator ||
 		turnDefersWorkflowPhaseExit(turnTools) {
 		return false
 	}
-	sess, err := m.store.Get(ctx, strings.TrimSpace(sessionID))
+	sess, err := m.sessionStore.Get(ctx, strings.TrimSpace(sessionID))
 	if err != nil || sess == nil {
 		return false
 	}

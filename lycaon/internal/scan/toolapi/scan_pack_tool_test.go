@@ -3,7 +3,8 @@ package toolapi_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/scan/testfixture"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -33,6 +35,7 @@ func TestScanPackToolReturnsEnqueueReceipt(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 
 	projectDir := t.TempDir()
+	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
 	store := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, staticHead{sha: "abc"})
 	toolReg := tools.NewDefaultRegistry()
@@ -53,7 +56,7 @@ func TestScanPackToolReturnsEnqueueReceipt(t *testing.T) {
 			Result:       &scanoutput.Result{FindingsCount: 0},
 		},
 	}}
-	if err := scantoolapi.RegisterScanTools(toolReg, coord, scannerReg, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, scannerReg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
+	if err := scantoolapi.RegisterScanTools(toolReg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, scannerReg, scancadence.New(store, coord, scannerReg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		testutil.FailErr(t, "scan.RegisterScanTools failed", err)
 	}
 
@@ -84,6 +87,24 @@ func TestScanPackToolReturnsEnqueueReceipt(t *testing.T) {
 	if payload.Status != api.CodeScanStatusPending || !payload.WaitTimedOut {
 		t.Fatalf("timed receipt = %#v", payload)
 	}
+
+	out, err = toolReg.Run(context.Background(), "scan_pack", map[string]any{
+		"categories": []any{"all"}, "paths": []any{"main.go"},
+	}, scanToolContext("sess-1", projectDir))
+	testutil.FailErr(t, "path scan_pack", err)
+	testutil.FailErr(t, "decode path scan_pack", json.Unmarshal([]byte(out), &payload))
+	if len(payload.ScanIDs) == 0 {
+		t.Fatalf("path receipt = %#v", payload)
+	}
+
+	out, err = toolReg.Run(context.Background(), "scan_pack", map[string]any{
+		"categories": []any{"all"}, "paths": []any{"main.go"}, "completion": "summary", "timeout_ms": float64(25),
+	}, scanToolContext("sess-1", projectDir))
+	testutil.FailErr(t, "timed path scan_pack", err)
+	testutil.FailErr(t, "decode timed path scan_pack", json.Unmarshal([]byte(out), &payload))
+	if !payload.WaitTimedOut {
+		t.Fatalf("timed path receipt = %#v", payload)
+	}
 }
 
 func TestScanPackToolCanWaitForSummary(t *testing.T) {
@@ -93,6 +114,7 @@ func TestScanPackToolCanWaitForSummary(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 
 	projectDir := t.TempDir()
+	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
 	store := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, staticHead{sha: "abc"})
 	scannerReg := &fanOutMockRegistry{scanners: []scanbase.CodeScanner{
@@ -102,10 +124,10 @@ func TestScanPackToolCanWaitForSummary(t *testing.T) {
 		},
 	}}
 	toolReg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, scannerReg, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, scannerReg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, scannerReg, scancadence.New(store, coord, scannerReg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	runnerConfig := scancfg.DefaultRunnerConfig()
-	runner := scanexecution.NewRunner(store, scannerReg, scanbase.NoopIngester{}, runnerConfig, nil)
+	runner := scanexecution.NewRunner(store, scannerReg, scantest.DiscardIngester{}, runnerConfig, nil)
 	runner.Snapshots = coord.SnapshotStore()
 	runCtx, cancel := context.WithCancel(t.Context())
 	runnerDone := make(chan struct{})
@@ -136,13 +158,14 @@ func TestScanQueryAggregatesPackAcrossEnginesByPackage(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	projectDir := t.TempDir()
+	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
 	store := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, nil)
 	toolReg := tools.NewDefaultRegistry()
 	registry := &fanOutMockRegistry{scanners: []scanbase.CodeScanner{
 		&scantest.MockScanner{IDVal: "scanner-a", CategoryList: []api.ScanCategory{api.ScanCategorySCA}},
 	}}
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, registry, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, registry, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, registry, scancadence.New(store, coord, registry, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	ids := []string{"pack-scan-a", "pack-scan-b"}
 	for index, id := range ids {
@@ -157,8 +180,8 @@ func TestScanQueryAggregatesPackAcrossEnginesByPackage(t *testing.T) {
 			ScannerID: []string{"scanner-a", "scanner-b"}[index], Status: api.CodeScanStatusComplete,
 			SourceSnapshotID: "snapshot-1", Trigger: api.ScanTriggerScanPack,
 		}
-		testutil.FailErr(t, "insert pack member", store.Insert(t.Context(), record, []string{"go.mod"}, ""))
-		testutil.FailErr(t, "save pack ingest", store.SaveIngest(t.Context(), id, evidence.Record{
+		testutil.FailErr(t, "insert pack member", store.Runs.Insert(t.Context(), record, []string{"go.mod"}, ""))
+		testutil.FailErr(t, "save pack ingest", store.Findings.SaveIngest(t.Context(), id, evidence.Record{
 			Artifacts: map[string]any{
 				"findings": []api.SecurityFinding{finding}, "findings_count": 1,
 				"findings_stored": 1, "guidance": []api.ScanGuidanceSummary{},
@@ -188,7 +211,7 @@ func TestWaitForScanIDTimesOutWhilePending(t *testing.T) {
 
 	store := scanbase.NewSQLStore(sqlDB)
 	projectDir := t.TempDir()
-	if err := store.Insert(context.Background(), api.CodeScan{
+	if err := store.Runs.Insert(context.Background(), api.CodeScan{
 		ID:            "pending-1",
 		CanonicalPath: projectDir,
 		Categories:    []api.ScanCategory{api.ScanCategorySCA},
@@ -200,7 +223,7 @@ func TestWaitForScanIDTimesOutWhilePending(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	_, err := scanbase.WaitForScanID(ctx, store, "pending-1", 0)
+	_, err := scanbase.WaitForScanID(ctx, store.Reads, "pending-1", 0)
 	if err == nil {
 		t.Fatal("expected timeout")
 	}
@@ -215,14 +238,14 @@ func TestWaitForScanIDFollowsSnapshotReplacement(t *testing.T) {
 		{ID: "superseded-1", CanonicalPath: projectDir, Categories: []api.ScanCategory{api.ScanCategorySecurity}, Status: api.CodeScanStatusPending, CreatedAt: now},
 		{ID: "replacement-1", CanonicalPath: projectDir, Categories: []api.ScanCategory{api.ScanCategorySecurity}, Status: api.CodeScanStatusComplete, CreatedAt: now},
 	} {
-		testutil.FailErr(t, "insert scan "+rec.ID, store.Insert(t.Context(), rec, nil, ""))
+		testutil.FailErr(t, "insert scan "+rec.ID, store.Runs.Insert(t.Context(), rec, nil, ""))
 	}
-	won, err := store.MarkPendingSuperseded(t.Context(), "superseded-1", "replacement-1")
+	won, err := store.Runs.MarkPendingSuperseded(t.Context(), "superseded-1", "replacement-1")
 	testutil.FailErr(t, "supersede scan", err)
 	if !won {
 		t.Fatal("scan superseded-1 was not pending")
 	}
-	got, err := scanbase.WaitForScanID(t.Context(), store, "superseded-1", time.Millisecond)
+	got, err := scanbase.WaitForScanID(t.Context(), store.Reads, "superseded-1", time.Millisecond)
 	testutil.FailErr(t, "wait for replacement", err)
 	if got == nil || got.ID != "replacement-1" || got.Status != api.CodeScanStatusComplete {
 		t.Fatalf("replacement result = %+v", got)

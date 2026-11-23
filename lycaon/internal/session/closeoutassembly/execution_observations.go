@@ -22,16 +22,16 @@ type SourceVerification interface {
 func (m *Service) SetSourceVerification(source SourceVerification) { m.sourceVerification = source }
 
 func (m *Service) executionObservations(ctx context.Context, sessionID string) string {
-	if m.store == nil {
+	if m.sessionStore == nil || m.transcriptStore == nil || m.evidenceStore == nil {
 		return ""
 	}
-	messages, err := m.store.GetMessages(ctx, sessionID)
+	messages, err := m.transcriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return ""
 	}
 	var checks *verification.SourceCheckObservations
 	if m.sourceVerification != nil {
-		sess, err := m.store.Get(ctx, sessionID)
+		sess, err := m.sessionStore.Get(ctx, sessionID)
 		if err == nil && sess != nil {
 			checks = m.sourceVerification.SourceObservations(ctx, sess, messages)
 		}

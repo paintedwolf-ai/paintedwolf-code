@@ -53,12 +53,12 @@ func TestWorkflowTerminalRestoresSessionPosture(t *testing.T) {
 		for _, mode := range []string{"initial", "transition", "advance", "final advance", "failed", "canceled", "interrupted"} {
 			t.Run(string(baseline)+"/"+mode, func(t *testing.T) {
 				mgr, sessions, _, _ := testManager(t)
-				testutil.FailErr(t, "set baseline", sessions.UpdateSession(t.Context(), "sess-1", func(s *api.Session) { s.Posture = baseline }))
+				testutil.FailErr(t, "set baseline", sessions.Sessions.UpdateSession(t.Context(), "sess-1", func(s *api.Session) { s.Posture = baseline }))
 				manifest := postureJourneyManifest(mode)
 				mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{workflowdef.ManifestKey(manifest.ID, manifest.Version): manifest})
 				assertPosture := func(ctx context.Context, want api.SessionPosture) {
 					t.Helper()
-					sess, err := sessions.Get(ctx, "sess-1")
+					sess, err := sessions.Sessions.Get(ctx, "sess-1")
 					testutil.FailErr(t, "read session posture", err)
 					if sess.Posture != want {
 						t.Fatalf("session posture = %q, want %q", sess.Posture, want)
@@ -86,7 +86,7 @@ func TestChildTerminalRestoresParentPosture(t *testing.T) {
 	for _, mode := range []string{"initial", "transition", "advance", "final advance", "failed", "canceled", "interrupted"} {
 		t.Run(mode, func(t *testing.T) {
 			mgr, sessions, _, _ := testManager(t)
-			testutil.FailErr(t, "set baseline", sessions.UpdateSession(t.Context(), "sess-1", func(s *api.Session) { s.Posture = api.SessionPostureBuild }))
+			testutil.FailErr(t, "set baseline", sessions.Sessions.UpdateSession(t.Context(), "sess-1", func(s *api.Session) { s.Posture = api.SessionPostureBuild }))
 			parentManifest := postureJourneyManifest("transition")
 			parentManifest.ID = "parent-posture"
 			parentManifest.InitialPosture = "spec"
@@ -100,7 +100,7 @@ func TestChildTerminalRestoresParentPosture(t *testing.T) {
 			child, err := mgr.Children.InvokeChild(t.Context(), parent.ID, workflowdef.InvokeWorkflowSpec{WorkflowID: childManifest.ID, Version: childManifest.Version, Blueprint: workflowdef.ChildBlueprintNone})
 			testutil.FailErr(t, "start child", err)
 			finishPostureJourney(t, mgr, child, mode)
-			sess, err := sessions.Get(t.Context(), "sess-1")
+			sess, err := sessions.Sessions.Get(t.Context(), "sess-1")
 			testutil.FailErr(t, "read resumed parent posture", err)
 			if sess.Posture != api.SessionPostureSpec {
 				t.Fatalf("resumed parent posture = %q, want spec", sess.Posture)
@@ -111,7 +111,7 @@ func TestChildTerminalRestoresParentPosture(t *testing.T) {
 				t.Fatalf("parent status = %s", parent.Status)
 			}
 			finishPostureJourney(t, mgr, parent, "transition")
-			sess, err = sessions.Get(t.Context(), "sess-1")
+			sess, err = sessions.Sessions.Get(t.Context(), "sess-1")
 			testutil.FailErr(t, "read restored session", err)
 			if sess.Posture != api.SessionPostureBuild {
 				t.Fatalf("completed parent posture = %q, want build", sess.Posture)

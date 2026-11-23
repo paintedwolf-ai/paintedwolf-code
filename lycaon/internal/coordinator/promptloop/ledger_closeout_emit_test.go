@@ -38,7 +38,7 @@ func TestEmitAssembledCloseoutPreservesHostAssembled(t *testing.T) {
 	prose := "The outage began when the cache warmer looped; root cause is a missing backoff."
 
 	out, err := l.Closeout.emitAssembledCloseout(
-		context.Background(), sess, "s1", "", "implement_investigate", markdownRead(prose, false).Draft,
+		context.Background(), sess, "s1", "implement_investigate", markdownRead(prose, false).Draft,
 		[]string{"INVEST_CITATIONS_REQUIRED"}, st, history,
 	)
 	testutil.FailErr(t, "emitAssembledCloseout", err)
@@ -109,7 +109,7 @@ func TestEmitAssembledRunReportRecordsItsDefects(t *testing.T) {
 	st.coordinatorFrame.RunContext.CurrentPhase = "synthesis"
 	st.coordinatorFrame.Runtime.ReportDocumentEnabled = true
 	out, err := l.Closeout.emitAssembledCloseout(
-		t.Context(), &api.Session{ID: "s1"}, "s1", "", "coordinator_security_synthesis", markdownRead("draft", false).Draft,
+		t.Context(), &api.Session{ID: "s1"}, "s1", "coordinator_security_synthesis", markdownRead("draft", false).Draft,
 		[]string{guidance.ReportClaimUnreportedCode}, st, []api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}},
 	)
 	testutil.FailErr(t, "emitAssembledCloseout", err)
@@ -164,7 +164,7 @@ func TestEmitAssembledRunReportRecordsItsUnreadFence(t *testing.T) {
 		},
 	})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true, coordinatorFrame: testReportFrame()}
-	out, err := l.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "s1"}, "s1", "", "coordinator_security_synthesis", drafted, []string{guidance.ReportFenceUnreadableCode}, st,
+	out, err := l.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "s1"}, "s1", "coordinator_security_synthesis", drafted, []string{guidance.ReportFenceUnreadableCode}, st,
 		[]api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}})
 	testutil.FailErr(t, "emitAssembledCloseout", err)
 	meta := committed.CompletionReport
@@ -182,7 +182,7 @@ func TestEmitAssembledCloseoutRequiresAssembler(t *testing.T) {
 	l := NewPromptLoopForTest(PromptLoopDeps{})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true}
 	_, err := l.Closeout.emitAssembledCloseout(
-		context.Background(), &api.Session{ID: "s1"}, "s1", "", "implement_investigate", markdownRead("prose", false).Draft,
+		context.Background(), &api.Session{ID: "s1"}, "s1", "implement_investigate", markdownRead("prose", false).Draft,
 		nil, st, nil,
 	)
 	if !errors.Is(err, errCloseoutAssemblerUnavailable) {
@@ -209,7 +209,7 @@ func TestEmitAssembledCloseoutWithoutGroundingStaysDraft(t *testing.T) {
 	})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true}
 	out, err := l.Closeout.emitAssembledCloseout(
-		context.Background(), &api.Session{ID: "s1"}, "s1", "", "implement_synthesis", guidance.CloseoutDraft{}, nil,
+		context.Background(), &api.Session{ID: "s1"}, "s1", "implement_synthesis", guidance.CloseoutDraft{}, nil,
 		st, []api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}},
 	)
 	testutil.FailErr(t, "emitAssembledCloseout", err)
@@ -255,7 +255,7 @@ func TestEarlyCloseoutFinishBlockAssembles(t *testing.T) {
 	reject := "Rejected: open progress\n\nCode: PROGRESS_OPEN_BEFORE_CLOSEOUT\n"
 
 	hist, aid, content, err := l.Closeout.emitEarlyCloseoutAfterFinishBlock(
-		context.Background(), sess, "s1", "", "implement_investigate", draft, markdownRead(draft, true).Draft, refusalForTest(reject), st, history,
+		context.Background(), sess, "s1", "implement_investigate", draft, markdownRead(draft, true).Draft, refusalForTest(reject), st, history,
 	)
 	testutil.FailErr(t, "emitEarlyCloseoutAfterFinishBlock", err)
 	if aid == "" {

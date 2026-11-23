@@ -41,7 +41,7 @@ func buildEvidenceFixture(t *testing.T) evidenceBindingFixture {
 	testutil.FailErr(t, "insert workflow run", seedErr)
 	deps := Dependencies{
 		Database: database, DataDir: t.TempDir(), Sessions: store.NewSQL(database),
-		AuthzRecorder: authzcontext.SQLRecorder(database),
+		AuthzRecorder: authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}},
 	}
 	runtime, err := Build(t.Context(), deps, nil)
 	testutil.FailErr(t, "build evidence runtime", err)
@@ -105,9 +105,7 @@ func TestBuildEvidenceResolutionFailsBeforePublishing(t *testing.T) {
 	if _, err := runtime.Manager.Verdicts.EvidenceProjectDir(t.Context(), "session"); err == nil {
 		t.Fatal("verdict evidence ignored the blocked project directory")
 	}
-	f.deps.Sessions = nil
-	runtime, err = Build(t.Context(), f.deps, nil)
-	testutil.FailErr(t, "build runtime without project lookup services", err)
+	runtime.bindEvidence(nil, f.deps.Database, f.deps.DataDir)
 	if dir, err := runtime.Inspector.ProjectDir(t.Context(), f.runID); dir != "" || err != nil {
 		t.Fatalf("absent run lookup = %q, %v", dir, err)
 	}
@@ -119,7 +117,8 @@ func TestBuildEvidenceResolutionFailsBeforePublishing(t *testing.T) {
 func TestWorkflowRuntimeBlueprintsUseRegisteredRootAndReviewRosterRespectsWebPreference(t *testing.T) {
 	f := buildEvidenceFixture(t)
 	f.deps.Projects = project.NewSQLRegistry(f.deps.Database)
-	webPrefs := webresearch.NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research.yaml"))
+	webPrefs, openErr := webresearch.OpenConfigStore(filepath.Join(t.TempDir(), "web-research.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	off := false
 	testutil.FailErr(t, "disable external search", webPrefs.ApplyPrefs(nil, nil, &off, nil))
 	f.deps.WebResearchConfig = webPrefs

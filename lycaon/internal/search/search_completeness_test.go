@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 )
 
 func TestProjectToolMessageIndexesRejectedOutcome(t *testing.T) {
@@ -62,7 +63,7 @@ func TestProjectLifecycleEvidenceCheckpointDecisionSubject(t *testing.T) {
 }
 
 func TestProjectLifecycleEvidenceWorkflowBoundary(t *testing.T) {
-	for _, kind := range api.AllWorkflowBoundaryKinds() {
+	for _, kind := range apitest.AllWorkflowBoundaryKinds() {
 		event := string(kind)
 		t.Run(event, func(t *testing.T) {
 			msg := api.Message{

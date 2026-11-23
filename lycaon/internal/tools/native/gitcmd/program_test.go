@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tooloutput"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,10 +19,12 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/pkg/api"
 
@@ -216,15 +217,16 @@ func newProgramFixture(t *testing.T) *programFixture {
 	testutil.FailErr(t, "compile profile effects", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "fixture")
-	owner := progress.NewMemoryStore()
+	owner := progress.NewSQLStore(database)
 	testutil.FailErr(t, "set actual progress", owner.Set(session, "- [ ] Run the fixture program"))
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })
+	evidenceStore := store.NewSQL(database).Evidence
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},
-		Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), Boundary: boundary,
+		Projector: captureprojection.New(&secretmatch.Matcher{}, nil), Boundary: boundary,
 		Progress: progressFacts{owner}, Supervisor: &command.ProgramSupervisor{Interrupter: recorder, Background: background}, Evaluate: commandprogram.Evaluate,
-		Sessions: fixtureSessions{},
+		Sessions: fixtureSessions{}, Provenance: evidenceStore, SourceObserver: evidenceStore,
 		// The foreground budget never expires, so a program runs to its end inline however slow the host.
 		Clock: programtest.NewManualClock(),
 	}

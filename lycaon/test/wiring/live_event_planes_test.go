@@ -38,9 +38,9 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})
 
 	ctx := context.Background()
-	parent, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	parent, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := st.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := st.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: parent.ProjectID, Viewer: testutil.HostOwner()})
@@ -70,7 +70,7 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 		}
 	}
 	appendInternal := func(id string) {
-		testutil.FailErr(t, "append "+id, st.AppendMessages(ctx, child.ID, api.Message{
+		testutil.FailErr(t, "append "+id, st.Transcript.AppendMessages(ctx, child.ID, api.Message{
 			ID: id, Role: api.MessageRoleAssistant, Visibility: api.MessageVisibilityInternal, CreatedAt: time.Now().UTC(),
 		}))
 	}

@@ -46,17 +46,6 @@ func releaseBranchClaimState(branchRoot string) {
 	branchClaimsMu.Unlock()
 }
 
-// LookupBranchClaimedView returns the active ClaimedView recorded for a mounted worker branch.
-func LookupBranchClaimedView(branchRoot string) (*claim.ClaimedView, bool) {
-	branchClaimsMu.RLock()
-	defer branchClaimsMu.RUnlock()
-	rec, ok := branchClaimStates[filepath.Clean(branchRoot)]
-	if !ok || rec.claimed == nil {
-		return nil, false
-	}
-	return rec.claimed, true
-}
-
 // BranchViewBoundary reads what a process of this branch must not reach, as of each launch: its own
 // view's boundary and every live view's listener, since another view's may start after this worker did.
 func BranchViewBoundary(branchRoot string) func() confine.ViewBoundary {

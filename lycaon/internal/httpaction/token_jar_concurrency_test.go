@@ -15,7 +15,7 @@ import (
 // another request captured meanwhile survives.
 func TestUncapturingRequestKeepsConcurrentCaptures(t *testing.T) {
 	service, _ := managedRequestService(t)
-	deps := Deps{Boundary: testBoundary(), Secrets: service, SecretMatcher: testSecretMatcher(t)}
+	deps := Deps{Boundary: testBoundary(), Secrets: service, Jars: service.Jars, SecretMatcher: testSecretMatcher(t)}
 	issuer := issuerServer(t)
 	root := t.TempDir()
 	captureIssuedToken(t, deps, issuer, root)
@@ -23,10 +23,10 @@ func TestUncapturingRequestKeepsConcurrentCaptures(t *testing.T) {
 
 	// The server answers while another request stores a token in the jar.
 	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		other, err := service.OpenTokenJar(context.Background(), jarReq)
+		other, err := service.Jars.OpenTokenJar(context.Background(), jarReq)
 		testutil.FailErr(t, "open jar concurrently", err)
 		other.Set("late", secretcap.Token{Value: "late-token-7731", Origin: "late-origin", OriginLabel: "late.example"})
-		_, err = service.SaveTokenJar(context.Background(), jarReq, other)
+		_, err = service.Jars.SaveTokenJar(context.Background(), jarReq, other)
 		testutil.FailErr(t, "save concurrent capture", err)
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -36,7 +36,7 @@ func TestUncapturingRequestKeepsConcurrentCaptures(t *testing.T) {
 	}, sessionContext(root, "uncapturing"))
 	testutil.FailErr(t, "uncapturing request", err)
 
-	after, err := service.OpenTokenJar(t.Context(), jarReq)
+	after, err := service.Jars.OpenTokenJar(t.Context(), jarReq)
 	testutil.FailErr(t, "reopen jar", err)
 	if _, ok := after.Tokens["late"]; !ok {
 		t.Fatalf("a request that captured nothing dropped a concurrent capture: %v", after.Tokens)

@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -23,7 +24,7 @@ func TestApprovalPolicyEvaluateForListDelegatesAskTools(t *testing.T) {
 			{Category: settings.ApprovalCategoryTool, Pattern: "delete", Effect: settings.ApprovalEffectAsk},
 		},
 	}))
-	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(approvalStore, settingstest.EmptySources())
 	wrapped := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 
 	ctx := context.Background()
@@ -48,7 +49,7 @@ func TestApprovalPolicyEvaluateForListWriteAutoApprove(t *testing.T) {
 	t.Parallel()
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	approvalStore := isolatedApprovalStore(t)
-	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(approvalStore, settingstest.EmptySources())
 	wrapped := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 
 	ctx := context.Background()
@@ -72,7 +73,7 @@ func TestApprovalPolicyListIncludesDeleteOnExecutor(t *testing.T) {
 	t.Parallel()
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	approvalStore := isolatedApprovalStore(t)
-	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(approvalStore, settingstest.EmptySources())
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	reg := tools.NewDefaultRegistry()
 	for _, name := range []string{"delete", "write"} {

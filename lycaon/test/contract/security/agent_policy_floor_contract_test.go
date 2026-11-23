@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -120,42 +120,24 @@ func TestAgentPolicyResolvesForReview(t *testing.T) {
 	}
 }
 
-func TestHardDenyWriteSpecsConsumedByBuildSeatbeltProfile(t *testing.T) {
-	cfg := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	proj := t.TempDir()
-	specs, err := confine.HardDenyWriteSpecs(confine.Confinement{Roots: []string{proj}})
-	testutil.FailErr(t, "HardDenyWriteSpecs", err)
-	if len(specs) == 0 {
-		t.Fatal("HardDenyWriteSpecs empty")
-	}
-	profile, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{proj}})
-	testutil.FailErr(t, "BuildSeatbeltProfile", err)
-	// Match the sink within the write-deny block.
-	sinkAt := strings.Index(profile, settingsoverlay.BasenameApprovals)
-	if sinkAt < 0 {
-		t.Fatalf("profile missing approvals sink:\n%s", profile)
-	}
-	denyAt := strings.LastIndex(profile[:sinkAt], "(deny file-write*")
-	if denyAt < 0 {
-		t.Fatalf("profile missing deny file-write*:\n%s", profile)
-	}
-	denyWrite := profile[denyAt:]
-	if end := strings.Index(denyWrite, ")\n("); end >= 0 {
-		denyWrite = denyWrite[:end]
-	}
-	foundPerm := false
-	for _, s := range specs {
-		if strings.Contains(s.Literal, settingsoverlay.BasenameApprovals) {
-			foundPerm = true
-			if !strings.Contains(denyWrite, settingsoverlay.BasenameApprovals) {
-				t.Fatalf("write hard-deny missing approvals.yaml:\n%s", denyWrite)
+func TestAgentPolicySinkHasAnEffectiveWriteFloor(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	proj, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve project", err)
+	c := confine.Confinement{Roots: []string{proj}}
+	specs, err := confine.HardDenyWriteSpecs(c)
+	testutil.FailErr(t, "build write floor", err)
+	path := filepath.Join(proj, settingsoverlay.Rel(settingsoverlay.BasenameApprovals))
+	for _, spec := range specs {
+		if spec.Literal == path {
+			boundary := confine.BoundaryOf(&c)
+			if got := boundary.Filesystem.Verdict(confine.AccessWrite, path); !boundary.Applied || got.Allowed || got.Layer != confine.FloorAgentPolicy {
+				t.Fatalf("approvals sink write verdict = %+v, boundary applied = %t", got, boundary.Applied)
 			}
+			return
 		}
 	}
-	if !foundPerm {
-		t.Fatalf("specs missing approvals.yaml: %+v", specs)
-	}
+	t.Fatalf("write floor omitted %q", path)
 }
 
 // Path-mutating tools come from the catalog's declared axis.
@@ -214,7 +196,7 @@ func approvalGateForFloor(t *testing.T) hitl.ApprovalGate {
 	configtest.Overlay(t, map[config.Rel]string{config.SecurityApprovals: string(data)})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	return settings.NewRuleApprovalGate(store, settings.NoSources())
+	return settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 }
 
 func asToolReject(err error, out **toolrejection.ToolReject) bool {

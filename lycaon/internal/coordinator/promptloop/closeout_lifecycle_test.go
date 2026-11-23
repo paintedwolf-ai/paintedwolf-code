@@ -39,7 +39,7 @@ func TestAssembledCloseoutClearsRetryStateOnlyAfterCommit(t *testing.T) {
 			})
 			st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true,
 				turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 3, prevKey: "offender", codes: []string{"citation"}}}}
-			out, err := loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", markdownRead("draft", false).Draft, nil, st, nil)
+			out, err := loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "implement_investigate", markdownRead("draft", false).Draft, nil, st, nil)
 			if result == "failed" {
 				if !errors.Is(err, failure) {
 					t.Fatalf("error = %v, want commit failure", err)

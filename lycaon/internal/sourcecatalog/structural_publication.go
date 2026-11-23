@@ -571,7 +571,7 @@ func (c *Directories) awaitStructure(ctx context.Context, project string, root R
 		store.mu.Lock()
 		changed, done := store.inventory.changed, store.inventory.done
 		store.mu.Unlock()
-		head, err := openNavigation(ctx, store, headGeneration)
+		head, err := openNavigation(ctx, store)
 		if err != nil {
 			return err
 		}

@@ -9,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -29,7 +28,7 @@ func TestSnapshotBuilder_MultiRootOrientation(t *testing.T) {
 	p := repotest.NewProvider(t)
 	t.Cleanup(func() { _ = p.Close() })
 	for _, dir := range []string{primary, secondary} {
-		if _, err := repoinfo.AwaitBrief(t.Context(), p, dir); err != nil {
+		if _, err := repotest.AwaitBrief(t.Context(), p, dir); err != nil {
 			testutil.FailErr(t, "await brief", err)
 		}
 	}

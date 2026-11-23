@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/editordoc"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -23,12 +25,12 @@ func TestExternalWatchRevalidatesDirectoriesAndHeadOnlyBatches(t *testing.T) {
 			database := testdbfixture.Open(t, "editor.db")
 			var documents *editordoc.Service
 			srv := newTestServer(t, func(d *Dependencies) {
-				sourceHistory15 := sourceledger.New(database, "")
+				sourceHistory15 := sourceledger.New(database, "", sourceledger.Timing{})
 				documents = editordoc.New(editordoc.NewStore(database), sourceHistory15, sourceHistory15.History, d.Core.Projects)
 				d.Source.EditorDocuments = documents
 			})
 			root := t.TempDir()
-			p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+			p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 			testutil.FailErr(t, "create project", err)
 			testdbseed.InsertProjectRootWithID(t, database, p.ID, p.Roots[0].ID, root)
 			testutil.FailErr(t, "create directory", os.Mkdir(filepath.Join(root, "src"), 0o755))
@@ -53,9 +55,8 @@ func TestExternalWatchRevalidatesDirectoriesAndHeadOnlyBatches(t *testing.T) {
 	}
 }
 
-// Observation is live before any walk: the watcher binds while the catalog
-// walk that seeds per-directory coverage is still running.
 func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
+	repochangetest.Acquire(t)
 	walkStarted := make(chan struct{})
 	release := make(chan struct{})
 	srv := newTestServer(t, func(d *Dependencies) {
@@ -70,7 +71,7 @@ func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
 		}
 	})
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 	t.Cleanup(func() { sourcefeed.StopProjectWatch(context.Background(), p.ID) })
 
@@ -84,10 +85,8 @@ func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("catalog walk never started")
 	}
-	// The walk is blocked; the root must already be observed.
-	coverage := repochange.Coverage(p.Roots[0].Path)
-	if !coverage.Watching {
-		t.Fatalf("root is not watched while the catalog walk runs: %+v", coverage)
+	if !repochange.DirWatched(p.Roots[0].Path, ".") {
+		t.Fatal("root is not registered while the catalog walk runs")
 	}
 	close(release)
 	select {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/modelfeed/modelfeedtest"
 	"github.com/lycaon/lycaon/internal/pricing"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -27,8 +28,7 @@ func TestModelfeedEligibleModelsPriced(t *testing.T) {
 	fixture := filepath.Join(filepath.Dir(thisFile), "..", "modelfeed", "testdata", "models_dev_fixture.json")
 	raw, err := os.ReadFile(fixture)
 	testutil.FailErr(t, "read models.dev fixture", err)
-	doc, err := modelfeed.ParseDocument(raw)
-	testutil.FailErr(t, "parse models.dev fixture", err)
+	doc := modelfeedtest.Document(t, raw)
 
 	table := pricing.RateTableFromDocument(doc)
 	source := &PricedSource{ID: "models-dev", Table: table}

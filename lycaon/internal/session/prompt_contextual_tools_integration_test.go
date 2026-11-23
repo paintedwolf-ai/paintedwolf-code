@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -22,7 +23,7 @@ import (
 )
 
 func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	specFix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, rec)
 	specManifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
 		ID: "spec-tools", Version: "1.0.0", InitialPosture: "spec",
@@ -35,7 +36,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	if _, err := specFix.Mgr.Submissions.Prompt(context.Background(), specFix.Sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "specFix.Mgr.Prompt failed", err)
 	}
-	specSession, err := specFix.Store.Get(t.Context(), specFix.Sess.ID)
+	specSession, err := specFix.Store.Sessions.Get(t.Context(), specFix.Sess.ID)
 	testutil.FailErr(t, "read spec workflow posture", err)
 	if specSession.Posture != api.SessionPostureSpec || !hasTool(rec.LastRequest().Tools, "command") {
 		t.Fatalf("spec workflow lost its reading posture: posture=%s tools=%v", specSession.Posture, toolNames(rec.LastRequest().Tools))
@@ -46,14 +47,14 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 		}
 	}
 
-	buildRec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	buildRec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	buildFix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, buildRec)
 	buildFix.Mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	buildFix.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	if _, err := buildFix.Mgr.Submissions.Prompt(context.Background(), buildFix.Sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "buildFix.Mgr.Prompt failed", err)
 	}
-	buildSession, err := buildFix.Store.Get(t.Context(), buildFix.Sess.ID)
+	buildSession, err := buildFix.Store.Sessions.Get(t.Context(), buildFix.Sess.ID)
 	testutil.FailErr(t, "read attached workflow posture", err)
 	if buildSession.Posture != api.SessionPostureBuild {
 		t.Fatalf("default workflow posture = %s, want build", buildSession.Posture)
@@ -71,7 +72,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 }
 
 func TestMockLLMInvestigateCoordinatorReceivesEndToEndHostContract(t *testing.T) {
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	fix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureBuild, rec)
 	investigateEligible := true
 	fix.Mgr.SetCoordinatorTurnFrameSource(stubCoordinatorContext{ctx: api.CoordinatorRunContext{
@@ -122,7 +123,7 @@ func TestMockLLMInvestigateCoordinatorReceivesEndToEndHostContract(t *testing.T)
 }
 
 func TestPromptLoopParitySpecPosture(t *testing.T) {
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}},
 	}))
 	fix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, rec)
@@ -216,7 +217,7 @@ func TestWorkerChildPromptUsesToolPolicy(t *testing.T) {
 }
 
 func TestMockLLMRecoversPersistedToolSchemas(t *testing.T) {
-	recorder := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{
+	recorder := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ready"}},
 	}))
 	fixture := setupContextualToolsFixtureWithLLM(t, api.SessionPostureBuild, recorder)
@@ -229,7 +230,7 @@ func TestMockLLMRecoversPersistedToolSchemas(t *testing.T) {
 	}})
 	fixture.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	assistantID, callID := uuid.NewString(), uuid.NewString()
-	testutil.FailErr(t, "persist schema activation", fixture.Store.AppendMessages(t.Context(), fixture.Sess.ID,
+	testutil.FailErr(t, "persist schema activation", fixture.Store.Transcript.AppendMessages(t.Context(), fixture.Sess.ID,
 		api.Message{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: callID, Name: "request_tools"}}},
 		api.Message{ID: uuid.NewString(), Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
 			Tool: "request_tools", ToolCallID: callID, AssistantMessageID: assistantID,
@@ -238,7 +239,7 @@ func TestMockLLMRecoversPersistedToolSchemas(t *testing.T) {
 		}},
 	))
 	// request_tools records the standing set it produced.
-	_, err := fixture.Store.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{
+	_, err := fixture.Store.Turns.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{
 		SessionID: fixture.Sess.ID, Trigger: store.TurnLoadTriggerRequest, ToolCallID: callID,
 		Decisions: "{}", StateJSON: "{}",
 		Standing: `{"tools":[{"tool":"command","source":"requested","need":"run the local service"}]}`,

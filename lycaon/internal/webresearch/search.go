@@ -17,7 +17,8 @@ import (
 
 // SearchOptions configures a web_search invocation.
 type SearchOptions struct {
-	Query string
+	Discovery *Discovery
+	Query     string
 	// Rerank blends the decision engine into verified memory hits.
 	Rerank decide.Reranker
 	// Period is the declared time window. The zero value is the current window;
@@ -42,6 +43,9 @@ type SearchOptions struct {
 // beside catalog providers — and RRF-fuses their results.
 func Search(ctx context.Context, opts SearchOptions) WebSearchResult {
 	q := strings.TrimSpace(opts.Query)
+	if opts.Index != nil && opts.Discovery == nil {
+		return WebSearchResult{Error: "discovery required for index memory"}
+	}
 	if q == "" {
 		return WebSearchResult{
 			OK:     false,
@@ -70,7 +74,7 @@ func Search(ctx context.Context, opts SearchOptions) WebSearchResult {
 
 	start := time.Now()
 	if !opts.SkipResultCache {
-		if cached, ok := cachedWholeSearch(q, opts.Period, maxResults, opts.Settings, explicit); ok {
+		if cached, ok := opts.Registry.cachedWholeSearch(q, opts.Period, maxResults, opts.Settings, explicit); ok {
 			result := WebSearchResult{
 				OK:               true,
 				Query:            q,
@@ -117,7 +121,7 @@ func Search(ctx context.Context, opts SearchOptions) WebSearchResult {
 		result.directParticipated = true
 	}
 	if !opts.SkipResultCache {
-		storeWholeSearch(q, opts.Period, maxResults, opts.Settings, explicit, result)
+		opts.Registry.storeWholeSearch(q, opts.Period, maxResults, opts.Settings, explicit, result)
 	}
 	logSearchSummary(stats, start, explicit, opts.SessionID, q, outcomes, result, false)
 	return result
@@ -360,7 +364,7 @@ func buildFanOut(ctx context.Context, query string, maxResults int, opts SearchO
 		index := opts.Index
 		tasks = append(tasks, fanTask{
 			run: func() providerOutcome {
-				return searchIndexMemory(ctx, index, opts.Rerank, query, opts.Period, maxResults)
+				return opts.Discovery.searchIndexMemory(ctx, index, opts.Rerank, query, opts.Period, maxResults)
 			},
 		})
 	}
@@ -368,10 +372,10 @@ func buildFanOut(ctx context.Context, query string, maxResults int, opts SearchO
 }
 
 // fanOutGraceTimeout bounds the wait for more hits after the first result.
-var fanOutGraceTimeout = 2 * time.Second
+const fanOutGraceTimeout = 2 * time.Second
 
 // fanOutZeroHitTimeout bounds a fan-out that has returned no hits.
-var fanOutZeroHitTimeout = 4 * time.Second
+const fanOutZeroHitTimeout = 4 * time.Second
 
 func runProviderTasks(ctx context.Context, cancel context.CancelFunc, tasks []fanTask, maxResults int) []providerOutcome {
 	if len(tasks) == 0 {

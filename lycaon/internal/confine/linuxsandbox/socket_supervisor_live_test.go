@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -174,7 +175,7 @@ func approveSupervisorSocket(t *testing.T, ctx context.Context, workspace, path 
 	database := testdbfixture.Open(t, "supervisor-approval.db")
 	testdbseed.InsertSessionWithRoot(t, database, "root-1", testdbseed.DefaultProjectID, workspace)
 	human := testdbseed.OwnerCaller(t, t.Context(), database)
-	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	t.Cleanup(func() {
 		testutil.FailErr(t, "stop supervisor checkpoints", checkpoints.StopExpiryTimers(context.Background()))
 	})
@@ -183,7 +184,7 @@ func approveSupervisorSocket(t *testing.T, ctx context.Context, workspace, path 
 	store, err := settings.NewApprovalStoreAt(filepath.Join(filepath.Dir(path), "approvals.yaml"))
 	testutil.FailErr(t, "supervisor approval store", err)
 	t.Cleanup(store.Close)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	deps := apitestdeps.Deps{Database: database, Checkpoints: checkpoints, ApprovalGate: approvalGate, Settings: &settings.Service{Approvals: store}}
 	apitestdeps.Fill(t, &deps)
 	handler := capabilityadmin.New(&httpio.Responder{}, capabilityadmin.Deps{Checkpoints: checkpoints, Gate: approvalGate, Settings: deps.Settings, Store: deps.Store, Projects: deps.Projects, Authority: capabilityadmin.Authority{ApprovalDecisions: deps.ApprovalDecisions, Sockets: runtime}})

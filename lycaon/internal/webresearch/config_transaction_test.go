@@ -8,7 +8,8 @@ import (
 )
 
 func TestApplyPrefsLeavesLiveStateUntouchedWhenSaveFails(t *testing.T) {
-	store := NewConfigStoreAt(filepath.Join(t.TempDir(), "prefs.yaml"))
+	store, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "prefs.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	initialWarming := false
 	testutil.FailErr(t, "save initial prefs", store.ApplyPrefs(&initialWarming, nil, nil, []string{"direct"}))
 	store.path = t.TempDir()
@@ -26,7 +27,8 @@ func TestApplyPrefsLeavesLiveStateUntouchedWhenSaveFails(t *testing.T) {
 }
 
 func TestSetProviderConfigLeavesLiveStateUntouchedWhenSaveFails(t *testing.T) {
-	store := NewConfigStoreAt(filepath.Join(t.TempDir(), "prefs.yaml"))
+	store, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "prefs.yaml"))
+	testutil.FailErr(t, "open web research store", openErr)
 	testutil.FailErr(t, "save initial config", store.SetProviderConfig("searxng", map[string]string{
 		"endpoint": "https://one.example",
 	}))
@@ -42,12 +44,14 @@ func TestSetProviderConfigLeavesLiveStateUntouchedWhenSaveFails(t *testing.T) {
 
 func TestWarmingCapsLoadsScheduledProbeBudget(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "prefs.yaml")
-	store := NewConfigStoreAt(path)
+	store, openErr := OpenConfigStore(path)
+	testutil.FailErr(t, "open web research store", openErr)
 	raw := cloneConfigFile(store.raw)
 	raw.WarmingCaps.ScheduledProbes = 7
 	testutil.FailErr(t, "save warming caps", store.save(raw))
 
-	loaded := NewConfigStoreAt(path)
+	loaded, openErr := OpenConfigStore(path)
+	testutil.FailErr(t, "open web research store", openErr)
 	if got := loaded.WarmingCaps().ScheduledProbes; got != 7 {
 		t.Fatalf("scheduled probes = %d want 7", got)
 	}

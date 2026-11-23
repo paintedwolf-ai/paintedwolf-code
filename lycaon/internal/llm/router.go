@@ -133,16 +133,6 @@ func (r *StaticModelRouter) Lite(ctx context.Context) (*ModelSelection, error) {
 	return selectionFromRef(ref, ModelRoleLite, false), nil
 }
 
-// SelectGroup picks n diverse models from the agent pool.
-func (r *StaticModelRouter) SelectGroup(ctx context.Context, n int) ([]ModelSelection, error) {
-	p, err := r.effectivePolicy(ctx)
-	if err != nil {
-		return nil, err
-	}
-	r.pool.UpdatePolicy(p)
-	return r.pool.SelectGroup(ctx, n)
-}
-
 // Select picks one model from the agent pool for subagent work.
 func (r *StaticModelRouter) Select(ctx context.Context) (*ModelSelection, error) {
 	if err := ctx.Err(); err != nil {

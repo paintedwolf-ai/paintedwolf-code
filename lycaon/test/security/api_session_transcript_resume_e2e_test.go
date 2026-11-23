@@ -47,7 +47,7 @@ func TestSessionTranscriptWorkflowRunIdHTTP(t *testing.T) {
 	runID := run.ID
 	exitAmbientRunHTTP(t, h.Server, sess.ID)
 
-	if err := h.Store.AppendMessages(ctx, sess.ID, api.Message{
+	if err := h.Store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		Role:          api.MessageRoleUser,
 		Content:       "after complete",
 		WorkflowRunID: runID,

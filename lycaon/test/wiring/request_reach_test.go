@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -349,10 +350,10 @@ func loadingTransitions(requests []modelcall.CompletionRequest, span loadSpan) [
 func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reachResult {
 	t.Helper()
 	config := &llm.MockConfig{Responses: reachResponses()}
-	rec := llm.NewRecordingClient(llm.NewMockProvider(config))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(config))
 	h := BuildForTest(t, WithLLMClient(rec), WithDecider(sc.decider), withGlobalApprovalPosture(sc.approval))
 	ctx := context.Background()
-	t.Cleanup(h.StartBackgroundWorkers(t, ctx))
+	h.Start(t)
 	dir := t.TempDir()
 	WriteTestProjectApprovalsAllowWrite(t, dir)
 	_ = WriteImplementFixture(t, dir)
@@ -391,7 +392,7 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 			span.after = len(conversation())
 		}
 	}
-	stored, err := h.Store.Get(ctx, sess.ID)
+	stored, err := h.Store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read the session", err)
 	profiles := h.Sessions.Manager.Profiles.ForSession(ctx, stored)
 	out := reachResult{counts: map[reachCell]int{}}
@@ -427,7 +428,7 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 
 // requestableTool is a tool investigate keeps deferred that the last request
 // does not carry.
-func requestableTool(t *testing.T, rec *llm.RecordingClient) string {
+func requestableTool(t *testing.T, rec *llmtest.RecordingClient) string {
 	t.Helper()
 	carried := map[string]bool{}
 	for _, meta := range rec.LastRequest().Tools {

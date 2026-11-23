@@ -98,45 +98,6 @@ func (r *Resolution) HasUnsafeFileBytes() bool {
 	return false
 }
 
-// TestResolvedValue describes a secret value for testing resolution mechanics.
-type TestResolvedValue struct {
-	ID, Name, Value, Path string
-	Version               int64
-	Custody               Custody
-	Fingerprint           secretmatch.SecretFingerprint
-	ChatGenerated         bool
-}
-
-// NewResolutionForTest constructs a Resolution for testing.
-func NewResolutionForTest(args map[string]any, values []TestResolvedValue) *Resolution {
-	r := &Resolution{
-		Arguments: args,
-		values:    make(map[string]resolvedValue, len(values)),
-		sources:   make(map[string]string),
-	}
-	for _, v := range values {
-		custody := v.Custody
-		if custody == "" {
-			custody = CustodyHost
-		}
-		r.values[v.ID] = resolvedValue{
-			id: v.ID, name: v.Name, value: v.Value, version: v.Version,
-			custody: custody, fingerprint: v.Fingerprint, chatGenerated: v.ChatGenerated,
-		}
-		if v.Path != "" {
-			r.bindings = append(r.bindings, binding{path: v.Path, id: v.ID})
-			r.sources[v.Path] = secretmatch.ReferenceToken(v.ID)
-		}
-	}
-	return r
-}
-
-// InChatForTest binds a test resolution to a chat and its unlock registry.
-func (r *Resolution) InChatForTest(chatSessionID string, unlocks *presence.Unlocks) *Resolution {
-	r.access.ChatSessionID, r.unlocks = chatSessionID, unlocks
-	return r
-}
-
 // Matches derives evidence from resolution, independent of wire encoding.
 func (r *Resolution) Matches(matcher *secretmatch.Matcher, included func(string) bool) ([]secretmatch.Match, error) {
 	if r == nil {

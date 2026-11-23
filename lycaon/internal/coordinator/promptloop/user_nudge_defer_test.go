@@ -19,8 +19,8 @@ func TestAppendUserNudgeDefersStoreWhileDraftSlotOpen(t *testing.T) {
 		},
 	})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true}
-	history, err := loop.Nudges.appendUserNudge(context.Background(), "s1", nil, "Rejected: cite evidence", st)
-	testutil.FailErr(t, "appendUserNudge", err)
+	history, err := loop.Nudges.appendHostNudge(context.Background(), "s1", nil, HostNudge{Content: "Rejected: cite evidence"}, "", st)
+	testutil.FailErr(t, "append host nudge", err)
 	if len(history) != 1 || history[0].Content != "Rejected: cite evidence" {
 		t.Fatalf("history = %+v want one in-memory nudge", history)
 	}
@@ -127,9 +127,9 @@ func TestFlushDeferredUserNudgesOneBatch(t *testing.T) {
 		},
 	})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true}
-	history, err := loop.Nudges.appendUserNudge(context.Background(), "s1", nil, "Rejected: a\nCode: ALPHA\n", st)
+	history, err := loop.Nudges.appendHostNudge(context.Background(), "s1", nil, HostNudge{Content: "Rejected: a\nCode: ALPHA\n"}, "", st)
 	testutil.FailErr(t, "alpha", err)
-	_, err = loop.Nudges.appendUserNudge(context.Background(), "s1", history, "Rejected: b\nCode: BETA\n", st)
+	_, err = loop.Nudges.appendHostNudge(context.Background(), "s1", history, HostNudge{Content: "Rejected: b\nCode: BETA\n"}, "", st)
 	testutil.FailErr(t, "beta", err)
 	if err := loop.Nudges.closeCoordinatorDraftSlot(context.Background(), "s1", st, "slot-1"); err != nil {
 		testutil.FailErr(t, "close slot", err)
@@ -145,9 +145,9 @@ func TestAppendHostNudgeKeepsDifferentCodes(t *testing.T) {
 			AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error { return nil },
 		},
 	})
-	history, err := loop.Nudges.appendUserNudge(context.Background(), "s1", nil, "Rejected: a\nCode: ALPHA\n", nil)
+	history, err := loop.Nudges.appendHostNudge(context.Background(), "s1", nil, HostNudge{Content: "Rejected: a\nCode: ALPHA\n"}, "", nil)
 	testutil.FailErr(t, "alpha", err)
-	history, err = loop.Nudges.appendUserNudge(context.Background(), "s1", history, "Rejected: b\nCode: BETA\n", nil)
+	history, err = loop.Nudges.appendHostNudge(context.Background(), "s1", history, HostNudge{Content: "Rejected: b\nCode: BETA\n"}, "", nil)
 	testutil.FailErr(t, "beta", err)
 	if len(history) != 2 {
 		t.Fatalf("different codes must both stay, history = %d", len(history))
@@ -220,7 +220,7 @@ func TestAppendAndFlushHostNudgesStampCanonicalOrdinals(t *testing.T) {
 	})
 	st := &promptLoopTurnState{}
 	var err error
-	st.history, err = loop.Nudges.appendUserNudge(t.Context(), "s1", st.history, "Immediate nudge\nCode: IMMEDIATE\n", st)
+	st.history, err = loop.Nudges.appendHostNudge(t.Context(), "s1", st.history, HostNudge{Content: "Immediate nudge\nCode: IMMEDIATE\n"}, "", st)
 	testutil.FailErr(t, "append immediate nudge", err)
 	if len(st.history) != 1 || st.history[0].Ord != 1 || st.history[0].Seq != 1 {
 		t.Fatalf("immediate nudge = (ord=%d, seq=%d), want (1, 1)", st.history[0].Ord, st.history[0].Seq)
@@ -228,7 +228,7 @@ func TestAppendAndFlushHostNudgesStampCanonicalOrdinals(t *testing.T) {
 
 	st.draftSlotID = "slot-1"
 	st.draftSlotAppended = true
-	st.history, err = loop.Nudges.appendUserNudge(t.Context(), "s1", st.history, "Deferred nudge\nCode: DEFERRED\n", st)
+	st.history, err = loop.Nudges.appendHostNudge(t.Context(), "s1", st.history, HostNudge{Content: "Deferred nudge\nCode: DEFERRED\n"}, "", st)
 	testutil.FailErr(t, "append deferred nudge", err)
 	if len(st.history) != 2 || st.history[1].Ord != 0 {
 		t.Fatalf("deferred nudge before flush = %+v, want Ord=0", st.history[1])

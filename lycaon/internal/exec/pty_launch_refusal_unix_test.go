@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -25,7 +26,7 @@ func TestPTYAndPipeShareLaunchRefusals(t *testing.T) {
 		{
 			name: "unconfined agent launch while enforcing",
 			setup: func(t *testing.T, _ string) LaunchPlan {
-				confine.TestingSetAutoConfine(t)
+				admissiontest.Enable(t)
 				t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 				t.Setenv("LYCAON_SANDBOX", "")
 				return AgentLaunch(LaunchAgentCommand, "fixture unconfined launch", nil)

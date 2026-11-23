@@ -37,11 +37,11 @@ func TestScanProgressPublishesSummaryAndEventAtomically(t *testing.T) {
 	store.SetEventOutbox(outbox)
 	coordinator := newTestCoordinator(t, store, nil)
 	run := authorityScan("progress", "assessment", root, "snapshot", "sast", api.ScanTargetFull, nil)
-	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), run, nil, ""))
-	claimed, err := store.ClaimNext(t.Context())
+	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), run, nil, ""))
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
 	progress := api.ScanProgress{Chunks: 3, Completed: 1, Files: 20}
-	testutil.FailErr(t, "mark progress", store.MarkProgress(t.Context(), claimed, progress))
+	testutil.FailErr(t, "mark progress", store.Runs.MarkProgress(t.Context(), claimed, progress))
 	summary, err := coordinator.Summary(t.Context(), claimed.ID)
 	testutil.FailErr(t, "read summary", err)
 	if summary.Progress == nil || *summary.Progress != progress {
@@ -55,15 +55,15 @@ func TestScanProgressPublishesSummaryAndEventAtomically(t *testing.T) {
 	stale.ClaimToken = "expired-claim"
 	count := len(outbox.events)
 	newProgress := api.ScanProgress{Chunks: 3, Completed: 2, Files: 20}
-	testutil.FailErr(t, "reject stale progress", store.MarkProgress(t.Context(), &stale, newProgress))
+	testutil.FailErr(t, "reject stale progress", store.Runs.MarkProgress(t.Context(), &stale, newProgress))
 	if len(outbox.events) != count || *stale.Progress != progress {
 		t.Fatal("stale claim published progress")
 	}
 	outbox.err = errors.New("outbox unavailable")
-	if err := store.MarkProgress(t.Context(), claimed, newProgress); err == nil {
+	if err := store.Runs.MarkProgress(t.Context(), claimed, newProgress); err == nil {
 		t.Fatal("progress succeeded without its event")
 	}
-	stored, err := store.Get(t.Context(), claimed.ID)
+	stored, err := store.Reads.Get(t.Context(), claimed.ID)
 	testutil.FailErr(t, "read rolled back scan", err)
 	summary, err = coordinator.Summary(t.Context(), claimed.ID)
 	testutil.FailErr(t, "read rolled back summary", err)

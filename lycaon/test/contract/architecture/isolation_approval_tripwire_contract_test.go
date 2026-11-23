@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/pkg/testcorpus"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -231,7 +232,7 @@ func TestIsolationBypassReachesEffectsButNotControlPlane(t *testing.T) {
 
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	contractcheck.FailErr(t, "load approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	result, err := gate.Evaluate(t.Context(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool:  "write",

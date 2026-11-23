@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -29,14 +28,10 @@ func TestEgressGateRetainsAttribution(t *testing.T) {
 }
 
 func TestDoProviderHTTPHostAskSurvivesShortTimeout(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`ok`))
-	}))
+	})
 	t.Cleanup(srv.Close)
-	allowLoopbackFetch(t)
-	prevRelax := providerEgressTestRelax
-	providerEgressTestRelax = true
-	t.Cleanup(func() { providerEgressTestRelax = prevRelax })
 
 	release := make(chan struct{})
 	resolverEntered := make(chan struct{}, 1)
@@ -77,7 +72,7 @@ func TestDoProviderHTTPHostAskSurvivesShortTimeout(t *testing.T) {
 	var status int
 	go func() {
 		var e error
-		body, status, e = doProviderHTTP(ctx, req, 1, false) // 1s I/O budget — ask must not consume it
+		body, status, e = doProviderHTTP(ctx, req, 1, false, srv.exchange) // 1s I/O budget — ask must not consume it
 		errCh <- e
 	}()
 
@@ -98,9 +93,6 @@ func TestDoProviderHTTPHostAskSurvivesShortTimeout(t *testing.T) {
 }
 
 func TestRunProviderTasksSkipsEarlyCancelDuringHostAsk(t *testing.T) {
-	prevZero := fanOutZeroHitTimeout
-	fanOutZeroHitTimeout = 80 * time.Millisecond
-	t.Cleanup(func() { fanOutZeroHitTimeout = prevZero })
 
 	release := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())

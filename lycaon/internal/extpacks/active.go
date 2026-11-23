@@ -50,14 +50,6 @@ func ReplaceActiveFrom(old, next *EffectiveCatalog) {
 	active = next
 }
 
-// ClearActive removes the process-wide effective catalog.
-func ClearActive() {
-	activeMu.Lock()
-	defer activeMu.Unlock()
-	active = nil
-	activeStamp = ""
-}
-
 // ActiveIsStale reports whether device intent changed after activation.
 func ActiveIsStale() bool {
 	activeMu.RLock()
@@ -122,13 +114,22 @@ func CatalogForConsumers() (*EffectiveCatalog, error) {
 	}
 	// Path and source generation distinguish catalogs with identical file stamps.
 	stampPath, _ := DeviceDesiredPath()
-	stamp := fmt.Sprintf("%s|%s|%d", stampPath, DeviceDesiredStamp(), config.SourceGeneration())
+	desiredStamp := DeviceDesiredStamp()
+	stamp := fmt.Sprintf("%s|%s|%d", stampPath, desiredStamp, config.SourceGeneration())
 	fallbackMu.Lock()
 	defer fallbackMu.Unlock()
 	if fallbackEff != nil && fallbackStamp == stamp {
 		return fallbackEff, nil
 	}
-	eff, err := ResolveCatalog(context.Background(), nil, nil)
+	var (
+		eff *EffectiveCatalog
+		err error
+	)
+	if desiredStamp == "-|-" {
+		eff, err = ResolveStockCatalog(context.Background(), nil)
+	} else {
+		eff, err = ResolveCatalog(context.Background(), nil, nil)
+	}
 	if err != nil {
 		return nil, err
 	}

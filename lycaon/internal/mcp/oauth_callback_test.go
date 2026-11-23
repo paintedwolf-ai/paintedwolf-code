@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -121,11 +122,10 @@ func TestCallbackListenerStopsAfterFirstRedirect(t *testing.T) {
 	})
 }
 
-// A redirect that does not carry the state this authorization issued is not this
-// authorization, and must not redeem a code. The loopback port is reachable by anything
-// on the machine, so this check lives at the handler, not only in Complete.
+// The loopback handler validates state before redeeming a code.
 func TestCallbackListenerRejectsStateMismatch(t *testing.T) {
-	store := NewOAuthTokenStoreAt(t.TempDir() + "/oauth.yaml")
+	store, err := OpenOAuthTokenStore(credentialstore.Slot{Path: t.TempDir() + "/oauth.yaml", Namespace: credentialstore.NamespaceMCPOAuth, Context: oauthRecordContext})
+	testutil.FailErr(t, "open OAuth credentials", err)
 	client := NewOAuthClient(store, "", nil)
 
 	var completed error
@@ -151,10 +151,10 @@ func TestCallbackListenerRejectsStateMismatch(t *testing.T) {
 	}
 }
 
-// A pending authorization's PKCE verifier and state expire, so an abandoned sign-in
-// does not stay redeemable.
+// Expired authorizations cannot redeem their PKCE verifier.
 func TestPendingOAuthExpires(t *testing.T) {
-	store := NewOAuthTokenStoreAt(t.TempDir() + "/oauth.yaml")
+	store, err := OpenOAuthTokenStore(credentialstore.Slot{Path: t.TempDir() + "/oauth.yaml", Namespace: credentialstore.NamespaceMCPOAuth, Context: oauthRecordContext})
+	testutil.FailErr(t, "open OAuth credentials", err)
 	client := NewOAuthClient(store, "http://127.0.0.1:1/callback", nil)
 
 	now := time.Now()
@@ -164,7 +164,7 @@ func TestPendingOAuthExpires(t *testing.T) {
 	client.mu.Unlock()
 
 	now = now.Add(pendingOAuthTTL + time.Minute)
-	err := client.Complete(t.Context(), "srv", "", OAuthCompleteRequest{Code: "c", State: "st"})
+	err = client.Complete(t.Context(), "srv", "", OAuthCompleteRequest{Code: "c", State: "st"})
 	if err == nil || !strings.Contains(err.Error(), "expired") {
 		t.Fatalf("Complete on an expired authorization = %v want expiry", err)
 	}

@@ -13,10 +13,10 @@ const remoteQueryTimeout = 10 * time.Second
 const defaultRemoteName = "origin"
 
 // remoteURLFor derives the credential target from arguments and repository state.
-func remoteURLFor(ctx context.Context, repoDir string, args []string) string {
+func (e execution) remoteURLFor(ctx context.Context, repoDir string, args []string) string {
 	name := remoteNameFromArgs(args)
 	if name == "" {
-		name = upstreamRemoteName(ctx, repoDir)
+		name = e.upstreamRemoteName(ctx, repoDir)
 	}
 	if name == "" {
 		name = defaultRemoteName
@@ -24,7 +24,7 @@ func remoteURLFor(ctx context.Context, repoDir string, args []string) string {
 	if looksLikeURL(name) {
 		return name
 	}
-	out, ok := runRemoteQuery(ctx, repoDir, []string{"remote", "get-url", name})
+	out, ok := e.runRemoteQuery(ctx, repoDir, []string{"remote", "get-url", name})
 	if !ok {
 		return ""
 	}
@@ -64,8 +64,8 @@ func remoteNameFromArgs(args []string) string {
 	return ""
 }
 
-func upstreamRemoteName(ctx context.Context, repoDir string) string {
-	out, ok := runRemoteQuery(ctx, repoDir, []string{"rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"})
+func (e execution) upstreamRemoteName(ctx context.Context, repoDir string) string {
+	out, ok := e.runRemoteQuery(ctx, repoDir, []string{"rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"})
 	if !ok {
 		return ""
 	}
@@ -92,12 +92,12 @@ func looksLikeURL(s string) bool {
 	return false
 }
 
-func runRemoteQuery(ctx context.Context, repoDir string, args []string) ([]byte, bool) {
-	bin, err := binaryPathFn()
+func (e execution) runRemoteQuery(ctx context.Context, repoDir string, args []string) ([]byte, bool) {
+	bin, err := e.binaryPath()
 	if err != nil {
 		return nil, false
 	}
-	prefix, err := neutralizeArgs(resolveSSHCommand(ctx))
+	prefix, err := e.neutralizeArgs(e.resolveSSHCommand(ctx))
 	if err != nil {
 		return nil, false
 	}

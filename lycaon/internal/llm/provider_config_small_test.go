@@ -4,16 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/config/configtest"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
-	"github.com/lycaon/lycaon/internal/llm/failure"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/llm/providerprofile"
-	"github.com/lycaon/lycaon/internal/llm/providerretry"
-	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +12,17 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/config/configtest"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
+	"github.com/lycaon/lycaon/internal/llm/failure"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestDeviceConfigFilesUnchangedByOpen(t *testing.T) {
@@ -61,7 +62,7 @@ agent_pool:
 	testutil.FailErr(t, "open catalog", err)
 	_, err = NewPolicyStore()
 	testutil.FailErr(t, "open policy", err)
-	_, err = NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(configDir, "credential-vault.age")), nil)
+	_, err = NewRegistry(t.Context(), catalog, credentialstest.Open(t, filepath.Join(configDir, "credential-vault.age")), nil)
 	testutil.FailErr(t, "open registry", err)
 
 	afterLocal, err := os.ReadFile(localPath)
@@ -113,18 +114,14 @@ func TestCloudflarePlaceholderWithSavedKeyIsNotAssignable(t *testing.T) {
     models:
       - id: "@cf/meta/llama-3.1-8b-instruct"
 `+MinimalShipHTTPRetryYAML)
-	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
+	creds := credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "save credential", creds.Set("cloudflare-workers-ai-1", "test-token"))
 	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
 	testutil.FailErr(t, "create registry", err)
-	providers := registry.List(t.Context())
-	if len(providers) != 1 {
-		t.Fatalf("provider count = %d, want 1", len(providers))
-	}
-	provider := providers[0]
+	provider := providerMetaByID(t, registry.List(t.Context()), "cloudflare-workers-ai-1")
 	if provider.Configured || provider.ReadyToAssign {
 		t.Fatalf("placeholder provider is ready: configured=%v, assignable=%v",
 			provider.Configured, provider.ReadyToAssign)

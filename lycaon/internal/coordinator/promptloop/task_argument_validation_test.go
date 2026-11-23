@@ -2,7 +2,6 @@ package promptloop_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -89,7 +89,7 @@ func runTaskArgumentCall(t *testing.T, call api.ToolCall) (invocation.Settlement
 	def.Meta.ArgsSchema = meta.ArgsSchema
 	testutil.FailErr(t, "publish task schema", reg.RegisterDefinition(def))
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	rec := newRecordingRecorder()
 	deps := promptloop.StoreDeps(sessionStore)
@@ -97,7 +97,7 @@ func runTaskArgumentCall(t *testing.T, call api.ToolCall) (invocation.Settlement
 	deps.Context.Tools, deps.Tools.Invocations = reg, rec
 	deps.Context.Limits = loopTestLimits(2)
 	deps.Model.LLM = &sequentialLLMClient{completions: []*modelcall.Completion{{ToolCalls: []api.ToolCall{call}}, {Content: "Done"}}}
-	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, args map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, args map[string]any) (string, bool, error) {
 		guarded = true
 		scope, scopeErr := api.TaskScopeFromArgs(args)
 		if scopeErr != nil {

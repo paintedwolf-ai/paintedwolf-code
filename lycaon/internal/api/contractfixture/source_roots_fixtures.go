@@ -79,11 +79,11 @@ func NewSnapshotTestServer(t *testing.T) *hostapi.Server {
 	})
 }
 
-func NewTestSources(t *testing.T, workers worker.WorkerQueue) *sourceapi.Handler {
+func NewTestSources(t *testing.T, workers *worker.SQLQueue) *sourceapi.Handler {
 	t.Helper()
 	var deps apitestdeps.Deps
 	apitestdeps.Fill(t, &deps)
-	sources := sourceapi.New(&httpio.Responder{Logger: slog.Default()}, &taskgroup.Group{}, sourceapi.Operations{}, sourceapi.Deps{
+	sources := sourceapi.New(&httpio.Responder{Logger: slog.Default()}, &taskgroup.Group{}, sourceapi.Operations{}, sourceapi.Deps{Branches: workers.Branches,
 		EditorDocuments: deps.EditorDocuments, Briefings: briefingadmin.Services{Files: deps.FileBriefings}, ManagedSecrets: deps.ManagedSecrets,
 		MutationGate: deps.MutationGate, ProjectRegistry: deps.Projects, SessionStore: deps.Store,
 		SourceLedger: deps.SourceLedger, SourceInventory: deps.SourceLedger.Inventory, SourceMutations: deps.SourceMutations, FileOperations: deps.FileOperations,

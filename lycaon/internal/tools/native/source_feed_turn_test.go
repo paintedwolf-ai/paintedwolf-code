@@ -35,7 +35,7 @@ func bindLedgerForWrites(t *testing.T, dir string) *sourceledger.Store {
 		VALUES ('r1', 'p1', ?, 'root', 1, ?)
 	`, dir, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root failed", err)
-	st := sourceledger.New(sqlDB, t.TempDir())
+	st := sourceledger.New(sqlDB, t.TempDir(), sourceledger.Timing{})
 	return st
 }
 

@@ -13,7 +13,7 @@ import (
 func TestSecretFingerprintGrantsComposeWithinOneProject(t *testing.T) {
 	store, err := NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "open approval store", err)
-	gate := NewRuleApprovalGate(store, NoSources()).(*RuleApprovalGate)
+	gate := NewRuleApprovalGate(store, emptySources()).(*RuleApprovalGate)
 	project := filepath.Join(t.TempDir(), "project")
 	one := secretmatch.SecretFingerprint("sf1_one")
 	two := secretmatch.SecretFingerprint("sf1_two")
@@ -43,7 +43,7 @@ func TestSecretFingerprintGrantsComposeWithinOneProject(t *testing.T) {
 func TestChatSecretGrantCoversOnlyItsChat(t *testing.T) {
 	store, err := NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "open approval store", err)
-	gate := NewRuleApprovalGate(store, NoSources()).(*RuleApprovalGate)
+	gate := NewRuleApprovalGate(store, emptySources()).(*RuleApprovalGate)
 	fingerprints := []secretmatch.SecretFingerprint{"sf1_one"}
 	created, err := gate.ApplyGrant(hitl.ApprovalGrant{
 		ID: "grant-chat", Scope: hitl.ApprovalGrantScopeChat,
@@ -144,7 +144,7 @@ func testSecretRecipients() []secretmatch.Recipient {
 func TestMultiRecipientPermissionRevocationAndIsolation(t *testing.T) {
 	store, err := NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "open store", err)
-	gate := NewRuleApprovalGate(store, NoSources()).(*RuleApprovalGate)
+	gate := NewRuleApprovalGate(store, emptySources()).(*RuleApprovalGate)
 	recipients := []secretmatch.Recipient{
 		{ID: "process", Label: "Processes in this chat", Surface: secretmatch.SurfaceCommand, Kind: secretmatch.DestinationProcess},
 		{ID: "service", Label: "http://localhost:8080", Surface: secretmatch.SurfaceHTTPRequest, Kind: secretmatch.DestinationService},
@@ -188,7 +188,7 @@ func TestMultiRecipientPermissionRevocationAndIsolation(t *testing.T) {
 func TestOneLocalSecretLeaseCoversCommandLoopbackHTTPAndChatProcesses(t *testing.T) {
 	store, err := NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "open approval store", err)
-	gate := NewRuleApprovalGate(store, NoSources()).(*RuleApprovalGate)
+	gate := NewRuleApprovalGate(store, emptySources()).(*RuleApprovalGate)
 
 	localRecipients := []secretmatch.Recipient{secretmatch.LocalRecipient}
 	grant := hitl.ApprovalGrant{

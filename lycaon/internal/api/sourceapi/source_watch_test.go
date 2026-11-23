@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -50,7 +50,7 @@ func (f *countingInventory) count() int {
 func TestObserveWorkspaceChangesRoutesNamedBatchesToPaths(t *testing.T) {
 	inventory := &countingInventory{}
 	server := newSourceHandlerFixture(t, func(d *Deps) { d.SourceInventory = inventory })
-	p, err := project.CreateWithRoot(t.Context(), server.Workspace.ProjectRegistry, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), server.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 
 	server.Watch.observeWorkspaceChanges(t.Context(), p, sourcefeed.ExternalBatch{
@@ -81,7 +81,7 @@ func TestWatchStopDrainsInstallingWatchAndSealsRebind(t *testing.T) {
 		}
 	})
 	root := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), server.Watch.ProjectRegistry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), server.Watch.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
 	done := make(chan struct{})
 	go func() { defer close(done); server.Watch.EnsureSourceWatch(t.Context(), p.ID) }()

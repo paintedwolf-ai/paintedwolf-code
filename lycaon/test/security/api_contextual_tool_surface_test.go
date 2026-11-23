@@ -41,7 +41,7 @@ func TestInvokeStillDeniesWhenToolNotListed(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	sess := createSessionWithPostureHTTP(t, h.Server, t.TempDir(), wire.SessionPostureSpec)
 	ctx := context.Background()
-	sessionRec, err := h.Store.Get(ctx, sess.ID)
+	sessionRec, err := h.Store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
 	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
 

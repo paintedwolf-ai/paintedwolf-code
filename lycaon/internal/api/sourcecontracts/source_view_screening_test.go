@@ -11,7 +11,8 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -34,7 +35,7 @@ func TestComparisonPublishesBeforeScreeningAndRetainsPresentationScreens(t *test
 		return nil
 	})
 	server := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) { d.Approvals.SecretSpans = secretspan.New(matcher) })
-	p, err := project.CreateWithRoot(t.Context(), server.Sources.Workspace.ProjectRegistry, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), server.Sources.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	before, after := "old\n", "awsAccessKeyId: AKIAQYJK5TXV4NZR7SGB\n"
 	view := contractfixture.ComparisonViewForTest(t, server, p.ID, wire.SourceComparisonSelector{Text: &wire.TextComparisonSource{
@@ -98,7 +99,7 @@ func TestReleasedComparisonCancelsPendingScreening(t *testing.T) {
 		return nil
 	})
 	server := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) { d.Approvals.SecretSpans = secretspan.New(matcher) })
-	p, err := project.CreateWithRoot(t.Context(), server.Sources.Workspace.ProjectRegistry, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), server.Sources.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	Text := "source\n"
 	view := contractfixture.ComparisonViewForTest(t, server, p.ID, wire.SourceComparisonSelector{Text: &wire.TextComparisonSource{

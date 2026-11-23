@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
@@ -47,7 +48,7 @@ func TestScanCompletedByRunnerReadsThroughServer(t *testing.T) {
 	testutil.FailErr(t, "create project directory", os.MkdirAll(projectDir, 0o755))
 	testutil.FailErr(t, "seed scan source", os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
 	projReg := project.NewSQLRegistry(sqlDB)
-	proj, err := project.CreateWithRoot(t.Context(), projReg, projectDir)
+	proj, err := projecttest.CreateWithRoot(t.Context(), projReg, projectDir)
 	testutil.FailErr(t, "create project", err)
 	scanEvents, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: proj.ID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to project events", err)
@@ -104,7 +105,7 @@ func TestScanCompletedByRunnerReadsThroughServer(t *testing.T) {
 
 	path := "/v1/projects/" + proj.ID + "/scans/" + created.ID
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -117,7 +118,7 @@ func TestScanCompletedByRunnerReadsThroughServer(t *testing.T) {
 	if got.ID != created.ID || got.Status != wire.CodeScanStatusComplete || got.FindingsCount != 2 {
 		t.Fatalf("scan = id %s status %s findings %d, want %s complete with 2", got.ID, got.Status, got.FindingsCount, created.ID)
 	}
-	running, err := scanStore.CountRunning(t.Context())
+	running, err := scanStore.Runs.CountRunning(t.Context())
 	testutil.FailErr(t, "count running scans", err)
 	if running != 0 {
 		t.Fatalf("running scans after completion = %d", running)

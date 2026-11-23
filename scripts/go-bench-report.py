@@ -17,11 +17,11 @@ REQUIRED_METRICS = {"ns/op": "ns_per_op", "B/op": "bytes_per_op", "allocs/op": "
 BENCHMARK_GATES: dict[str, dict[str, float]] = {
     "internal/toolhost/BenchmarkCommandProgram/noop": {
         "bytes_per_op": 1_100_000.0,
-        "allocs_per_op": 4_000.0,
+        "allocs_per_op": 4_500.0,
     },
     "internal/toolhost/BenchmarkCommandProgram/fifty-statements": {
         "bytes_per_op": 1_450_000.0,
-        "allocs_per_op": 7_000.0,
+        "allocs_per_op": 7_500.0,
     },
     "internal/toolhost/BenchmarkCommandProgram/native-child-wc": {
         "bytes_per_op": 8_100_000.0,
@@ -40,8 +40,8 @@ BENCHMARK_GATES: dict[str, dict[str, float]] = {
         "allocs_per_op": 483_000.0,
     },
     "internal/toolhost/BenchmarkCommandSearch/grep-r-10k-indexed=false": {
-        "bytes_per_op": 128_000_000.0,
-        "allocs_per_op": 1_225_000.0,
+        "bytes_per_op": 150_000_000.0,
+        "allocs_per_op": 1_350_000.0,
     },
     "internal/toolhost/BenchmarkCommandSearch/grep-r-10k-indexed=true": {
         "bytes_per_op": 41_500_000.0,

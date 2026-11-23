@@ -1,7 +1,6 @@
 package oar
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcore"
@@ -65,53 +64,4 @@ func (r *Rule) Tools() []string {
 // that name.
 func (r *Rule) Operations() []string {
 	return oarcore.ConjunctValues(r.When, "paintedwolf.operation")
-}
-
-// PortabilityReport lists the non-portable references in a rule.
-type PortabilityReport struct {
-	RuleID     string
-	HostAnchor string   // non-empty when anchor: is a host-native id
-	HostFacts  []string // host-tier facts and functions referenced
-	Portable   bool
-}
-
-// LintPortability reports non-portable references without rejecting the rule ([OAR-PROF-7]).
-func LintPortability(r *Rule) PortabilityReport {
-	if r == nil {
-		return PortabilityReport{}
-	}
-	rep := PortabilityReport{RuleID: r.ID, Portable: true}
-	if !IsCoreAnchor(r.Anchor) {
-		// A resolved anchor is a local id; a local id implementing a core anchor
-		// still came from a portable rule.
-		if InstalledEngineDeclaration().CoreAnchorFor(r.Anchor) == "" {
-			rep.HostAnchor = r.Anchor
-			rep.Portable = false
-		}
-	}
-	tiers := map[string]FactTier{}
-	eachDeclaredFact(func(d factDecl) {
-		tiers[publishedName(d.name, d.tier)] = d.tier
-	})
-	for _, f := range observationFns {
-		tiers[publishedName(f.name, f.tier)] = f.tier
-	}
-	seen := map[string]bool{}
-	for _, name := range referencedIdentifiers(r) {
-		if tiers[name] != FactTierHost || seen[name] {
-			continue
-		}
-		seen[name] = true
-		rep.HostFacts = append(rep.HostFacts, name)
-		rep.Portable = false
-	}
-	sort.Strings(rep.HostFacts)
-	return rep
-}
-
-// referencedIdentifiers includes conditions, flow, selectors, and copy ([OAR-FACT-9], [OAR-COPY-5]).
-func referencedIdentifiers(r *Rule) []string {
-	names := FactsReferenced(r.When, r.Flow)
-	names = append(names, r.Selector.Clauses()...)
-	return append(names, copyRefs(r.Copy)...)
 }

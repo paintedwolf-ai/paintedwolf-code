@@ -30,7 +30,7 @@ func TestWorkerFinishRequiresCurrentJobAcceptanceWhileToolsRemain(t *testing.T) 
 					WorkerReport: &api.WorkerReportAcceptance{WorkerID: tc.acceptedJob, Report: &api.WorkerCompletionReport{LegStatus: "partial", Brief: "Observed result"}, Grounding: &api.CitationGrounding{}},
 				}})
 			}
-			reject, blocked := mgr.Coordinator.Guards.BeforeFinish(workercontext.WithJob(t.Context(), task.ID), child, history, "", "Worker prose", guidance.CloseoutDraft{}, "", true, nil, tc.invoke)
+			reject, blocked := mgr.Coordinator.Guards.BeforeFinish(workercontext.WithJob(t.Context(), task.ID), child, history, "Worker prose", guidance.CloseoutDraft{}, "", true, nil, tc.invoke)
 			if blocked != tc.blocked || (blocked && (reject == nil || reject.Code() != "WORKER_REPORT_REQUIRED")) {
 				t.Fatalf("finish blocked=%v refusal=%v; want blocked=%v", blocked, reject, tc.blocked)
 			}

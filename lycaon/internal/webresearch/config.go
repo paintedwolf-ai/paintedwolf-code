@@ -56,33 +56,23 @@ func defaultWarmCaps() WarmCaps {
 	return WarmCaps{SeedWarmsPerHour: 8, TurnHosts: 3, TurnProbes: 4, SeedProbes: 8, ScheduledProbes: 24}
 }
 
-// ConfigStore persists web research prefs at ~/.config/paintedwolf/web-research-config.yaml.
+// ConfigStore persists web research preferences.
 type ConfigStore struct {
 	mu   sync.RWMutex
 	path string
 	raw  configFile
 }
 
-// NewConfigStore loads prefs from the default user path.
-func NewConfigStore() (*ConfigStore, error) {
-	path, err := userConfigPath(webResearchConfig)
-	if err != nil {
-		return nil, err
+// OpenConfigStore loads preferences; an absent file uses defaults.
+func OpenConfigStore(path string) (*ConfigStore, error) {
+	if path == "" {
+		return nil, fmt.Errorf("web research config path required")
 	}
 	s := &ConfigStore{path: path}
 	if err := s.load(); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 	return s, nil
-}
-
-// NewConfigStoreAt is for tests.
-func NewConfigStoreAt(path string) *ConfigStore {
-	s := &ConfigStore{path: path}
-	if err := s.load(); err != nil && !os.IsNotExist(err) {
-		s.raw.ProviderOverrides = make(map[string]map[string]string)
-	}
-	return s
 }
 
 func userConfigPath(name string) (string, error) {

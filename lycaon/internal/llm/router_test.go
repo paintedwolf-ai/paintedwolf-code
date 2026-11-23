@@ -23,7 +23,7 @@ var fakeModelPolicy = ModelPolicy{
 
 func testRouter(t *testing.T) *StaticModelRouter {
 	t.Helper()
-	return NewStaticModelRouter(NewInMemoryPolicyStore(fakeModelPolicy))
+	return NewStaticModelRouter(newPolicyFixture(t, fakeModelPolicy))
 }
 
 func TestResolveSessionUsesCoordinatorForParent(t *testing.T) {
@@ -81,7 +81,7 @@ func TestLiteUsesCompactModelPolicy(t *testing.T) {
 }
 
 func TestLiteFallsBackToCoordinatorWhenUnset(t *testing.T) {
-	policy := NewInMemoryPolicyStore(ModelPolicy{
+	policy := newPolicyFixture(t, ModelPolicy{
 		Coordinator: ModelRef{ProviderID: "prov-a", Model: "model-x"},
 		Lite:        ModelRef{},
 		AgentPool: AgentPool{
@@ -105,19 +105,5 @@ func TestSelectUsesPool(t *testing.T) {
 	testutil.FailErr(t, "r.Select failed", err)
 	if sel.Role != ModelRolePool {
 		t.Fatalf("role = %q want pool", sel.Role)
-	}
-}
-
-func TestSelectGroupReturnsPoolModels(t *testing.T) {
-	r := testRouter(t)
-	group, err := r.SelectGroup(context.Background(), 2)
-	testutil.FailErr(t, "r.SelectGroup failed", err)
-	if len(group) != 2 {
-		t.Fatalf("len = %d", len(group))
-	}
-	for i, sel := range group {
-		if sel.Role != ModelRolePool {
-			t.Fatalf("group[%d] role = %q want pool", i, sel.Role)
-		}
 	}
 }

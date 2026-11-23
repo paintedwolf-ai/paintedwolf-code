@@ -30,7 +30,7 @@ func TestPresenceDraftsResolveBaselineSpellingsAgainstTheSessionFolder(t *testin
 	testdbseed.InsertProjectRootWithID(t, sqlDB, projectID, primaryID, primaryDir)
 	testdbseed.InsertProjectRootWithID(t, sqlDB, projectID, secondaryID, secondaryDir)
 
-	ledger := sourceledger.New(sqlDB, t.TempDir())
+	ledger := sourceledger.New(sqlDB, t.TempDir(), sourceledger.Timing{})
 	projects := project.NewSQLRegistry(sqlDB)
 	documents := editordoc.New(editordoc.NewStore(sqlDB), ledger, ledger.History, projects)
 	p, err := projects.Get(t.Context(), projectID)

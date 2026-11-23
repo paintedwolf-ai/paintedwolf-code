@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/session/workerworkspace/workerworkspace.Service",
+  "kind": "runtime_service",
+  "workstream": "worker-invocation-workspace",
+  "disposition": "retain",
+  "reason": "Retain 309 receiver lines for worker invocation enrichment, branch binding and path reservations. Task lookup and branch preparation are explicit separate dependencies, so query-only callers need no branch methods and an unavailable branch provider refuses before mutation. Persisted-root routing, refusal and reservation-visibility contracts support this cohesive invocation boundary.",
+  "reviewed_commit": "86547fa59f1327199afcdd83a2a01ffd2e5018f7",
+  "ceiling": 309,
+  "boundaries": {
+    "lycaon/internal/session/workerworkspace/enrichment_refusal_test.go": "29f79c59b658178b6cd2f021d7aa405cf5486186345edc66c8b5efd7903c177a",
+    "lycaon/internal/session/workerworkspace/reservations_visibility_test.go": "9839e1159a6f83783ed9d68c0b3057616cef4e3ceb6645bb7f2d890fe1bc4427"
+  },
+  "reviewed_shape": "7826003aa49f1b48814c8b71c0d7d800c7d728224670963331a9097032f1a6d7"
+}

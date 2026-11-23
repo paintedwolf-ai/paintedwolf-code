@@ -23,7 +23,7 @@ func TestCadenceFullPassKeepsExplicitScannerSelection(t *testing.T) {
 			}
 			canonical, err := scanbase.CanonicalPath(dir)
 			testutil.FailErr(t, "resolve canonical path", err)
-			scans, err := store.ListByCanonicalPath(t.Context(), canonical)
+			scans, err := store.Reads.ListByCanonicalPath(t.Context(), canonical)
 			testutil.FailErr(t, "list queued scans", err)
 			if len(scans) != 1 || scans[0].ScannerID != scannerID {
 				t.Fatalf("queued scans = %+v, want only %s", scans, scannerID)

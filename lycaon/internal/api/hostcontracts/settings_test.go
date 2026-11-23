@@ -9,6 +9,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -20,7 +21,7 @@ func TestPutPostureAndPutLimits(t *testing.T) {
 	putPosture, _ := http.NewRequestWithContext(t.Context(), http.MethodPatch, base+"/v1/settings/approvals",
 		strings.NewReader(`{"rules":[],"approval_posture":"strict"}`))
 	putPosture.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(putPosture)
+	putPosture.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	postureResp, err := http.DefaultClient.Do(putPosture)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)
 	postureResp.Body.Close()
@@ -49,7 +50,7 @@ func TestPutPostureAndPutLimits(t *testing.T) {
 		"await_parent_workers_timeout_ms": 3600000
 	}`))
 	putLimits.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(putLimits)
+	putLimits.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	limitsResp, err := http.DefaultClient.Do(putLimits)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)
 	defer limitsResp.Body.Close()
@@ -81,7 +82,7 @@ func TestPutPostureAndPutLimits(t *testing.T) {
 		"spend_soft_stop": false
 	}`))
 	putImmediate.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(putImmediate)
+	putImmediate.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	immediateResp, err := http.DefaultClient.Do(putImmediate)
 	testutil.FailErr(t, "put immediate spend closeout", err)
 	defer immediateResp.Body.Close()
@@ -107,7 +108,7 @@ func TestPutApprovalsRejectsInvalidJSONWithoutMutation(t *testing.T) {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, base+"/v1/settings/approvals", strings.NewReader(body))
 		testutil.FailErr(t, "create invalid approvals request", err)
 		req.Header.Set("Content-Type", "application/json")
-		hostapi.WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 		resp, err := http.DefaultClient.Do(req)
 		testutil.FailErr(t, "send invalid approvals request", err)
 		resp.Body.Close()
@@ -144,16 +145,16 @@ func TestProjectScopedApprovalsIsolated(t *testing.T) {
 	_, base, reg := contractfixture.NewSettingsTestServer(t)
 	dirA := t.TempDir()
 	dirB := t.TempDir()
-	projA, err := project.CreateWithRoot(t.Context(), reg, dirA)
+	projA, err := projecttest.CreateWithRoot(t.Context(), reg, dirA)
 	testutil.FailErr(t, "reg.Create failed", err)
-	projB, err := project.CreateWithRoot(t.Context(), reg, dirB)
+	projB, err := projecttest.CreateWithRoot(t.Context(), reg, dirB)
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	const marker = "lycaon_security_isolated_marker"
 	putReq, _ := http.NewRequestWithContext(t.Context(), http.MethodPatch, base+"/v1/settings/approvals?project_id="+projA.ID,
 		strings.NewReader(`{"rules":[{"category":"tool","pattern":"`+marker+`","effect":"deny"}]}`))
 	putReq.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(putReq)
+	putReq.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	putResp, err := http.DefaultClient.Do(putReq)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)
 	putResp.Body.Close()
@@ -262,7 +263,7 @@ func TestVerifyProposalSurfacedThenSuppressed(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // isolate the persisted detect-proposal cache
 	srv, base, reg := contractfixture.NewSettingsTestServer(t)
 	dir := t.TempDir()
-	proj, err := project.CreateWithRoot(t.Context(), reg, dir)
+	proj, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "CreateWithRoot failed", err)
 	primary := project.PrimaryRootPath(proj)
 
@@ -288,7 +289,7 @@ func TestVerifyProposalSurfacedThenSuppressed(t *testing.T) {
 		base+"/v1/settings/verify?project_id="+proj.ID,
 		strings.NewReader(`{"test":"go test ./..."}`))
 	putReq.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(putReq)
+	putReq.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	putResp, err := http.DefaultClient.Do(putReq)
 	testutil.FailErr(t, "PUT verify failed", err)
 	putResp.Body.Close()
@@ -306,7 +307,7 @@ func TestVerifyDismissEndpoint(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	srv, base, reg := contractfixture.NewSettingsTestServer(t)
 	dir := t.TempDir()
-	proj, err := project.CreateWithRoot(t.Context(), reg, dir)
+	proj, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "CreateWithRoot failed", err)
 	primary := project.PrimaryRootPath(proj)
 	srv.Admin.Project.Trust.Settings.Verify.SetProposal(primary, settings.VerifyDetectCandidate{Command: "./task check", Source: "README.md"})
@@ -325,7 +326,7 @@ func TestVerifyDismissEndpoint(t *testing.T) {
 		req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost,
 			base+"/v1/settings/verify/dismiss?project_id="+proj.ID, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		hostapi.WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 		resp, err := http.DefaultClient.Do(req)
 		testutil.FailErr(t, "POST dismiss failed", err)
 		defer resp.Body.Close()
@@ -435,7 +436,7 @@ func TestApprovalGrantsPartialPutOmitsRulesAndRejectsUnknownEffect(t *testing.T)
 	putPosture, _ := http.NewRequestWithContext(t.Context(), http.MethodPatch, base+"/v1/settings/approvals",
 		strings.NewReader(`{"approval_posture":"strict"}`))
 	putPosture.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(putPosture)
+	putPosture.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	postureResp, err := http.DefaultClient.Do(putPosture)
 	testutil.FailErr(t, "put posture omit rules", err)
 	postureResp.Body.Close()
@@ -459,7 +460,7 @@ func TestApprovalGrantsPartialPutOmitsRulesAndRejectsUnknownEffect(t *testing.T)
 	putUnknown, _ := http.NewRequestWithContext(t.Context(), http.MethodPatch, base+"/v1/settings/approvals",
 		strings.NewReader(`{"rules":[{"category":"tool","pattern":"read","effect":"permit"}]}`))
 	putUnknown.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(putUnknown)
+	putUnknown.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	unknownResp, err := http.DefaultClient.Do(putUnknown)
 	testutil.FailErr(t, "put unknown effect", err)
 	unknownBody := contractfixture.ReadSettingsBody(t, unknownResp)
@@ -471,7 +472,7 @@ func TestApprovalGrantsPartialPutOmitsRulesAndRejectsUnknownEffect(t *testing.T)
 	putDeny, _ := http.NewRequestWithContext(t.Context(), http.MethodPatch, base+"/v1/settings/approvals",
 		strings.NewReader(`{"rules":[{"category":"host","pattern":"blocked.test","effect":"deny"}]}`))
 	putDeny.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(putDeny)
+	putDeny.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	denyResp, err := http.DefaultClient.Do(putDeny)
 	testutil.FailErr(t, "put deny rule", err)
 	denyResp.Body.Close()

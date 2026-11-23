@@ -1,0 +1,19 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/webresearch/webresearch.ToolDeps",
+  "kind": "construction",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain the 15 named tool-construction dependencies. Discovery, Crawler and FetchBudget are required resources, while credential/configuration stores, index/reranking and security/warming hooks retain separate contracts. Tests verify incomplete construction is rejected, independent runtime behavior, and fetch admission without adding hidden context or process controls.",
+  "reviewed_commit": "e3b0af1cb41a6ccdbc62251dff9666dcb4341a9c",
+  "ceiling": 15,
+  "boundaries": {
+    "lycaon/internal/webresearch/runtime_resources_test.go": "96e4a128bff2d6172940f6175fd0219f6ceaa62865254eefb6db430752e52e1e",
+    "lycaon/internal/webresearch/ssrf_test.go": "99a98d0edd009a7e2935c824e7d6ce6e719f8452523d2f456896632409dd2f63",
+    "lycaon/internal/webresearch/direct_polite_test.go": "6e025129d0accc918ac363d6598f4405ea45756fa9249f3662709c862c2b2bf3",
+    "lycaon/internal/webresearch/fetch_readonly_test.go": "8bd1913ea9b7efbf443fc4949bae4795618c3382ce86c337f8462e7515432eb2",
+    "lycaon/internal/webresearch/fetch_format_test.go": "5548774ea21fb97b0c01a4c0db2fb7613ac51149918c1d158688d05a220e96e4",
+    "lycaon/internal/webresearch/fetch_visual_test.go": "9ba599a6891960811deedd8fc395a6f7aa1c8eeb78b8632e99a9544e7b0825fc"
+  },
+  "reviewed_shape": "550ca932a0156aa26cb0384ff480bc5fca5b365942c8fbe3d1eb2ea2d9494734"
+}

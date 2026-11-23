@@ -13,10 +13,12 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/webresearch"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 type options struct {
+	webResearchExchange     webresearch.Exchange
 	llmClient               modelcall.LLMClient
 	decider                 decide.Decider
 	recording               bool
@@ -82,7 +84,7 @@ func WithLLMClient(client modelcall.LLMClient) Option {
 	}
 }
 
-// WithSecretMatcher injects a test outbound secret matcher (e.g. NewInertMatcher).
+// WithSecretMatcher injects a test outbound secret matcher.
 func WithSecretMatcher(m *secretmatch.Matcher) Option {
 	return func(o *options) {
 		o.secretMatcher = m
@@ -101,7 +103,7 @@ func WithStoreCommitObserver(observe db.CommitObserver) Option {
 	return func(o *options) { o.storeCommitObserver = observe }
 }
 
-// WithMCPConnector replaces the default MockConnector used by BuildForTest.
+// WithMCPConnector replaces the default mcptest.Connector used by BuildForTest.
 func WithMCPConnector(c mcp.SessionConnector) Option {
 	return func(o *options) {
 		o.mcpConnector = c
@@ -166,4 +168,9 @@ func withGlobalApprovalPosture(posture gate.Posture) Option {
 // withConfigRoot boots with dir as the configuration root in place of the checkout.
 func withConfigRoot(dir string) Option {
 	return func(o *options) { o.configRoot = &dir }
+}
+
+// WithWebResearchExchange supplies the harness's bounded research exchange.
+func WithWebResearchExchange(exchange webresearch.Exchange) Option {
+	return func(o *options) { o.webResearchExchange = exchange }
 }

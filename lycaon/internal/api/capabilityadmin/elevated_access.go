@@ -24,7 +24,7 @@ func (s *Access) elevatedAccessChat(w http.ResponseWriter, r *http.Request) (*wi
 	seen := make(map[string]bool)
 	for len(seen) < 64 && !seen[id] {
 		seen[id] = true
-		chat, ok := requestscope.Session(s.Store, s.responses, w, r, id)
+		chat, ok := requestscope.Session(s.SessionStore, s.responses, w, r, id)
 		if !ok {
 			return nil, false
 		}
@@ -150,7 +150,7 @@ func (s *Access) elevatedApprovalsEnabled(ctx context.Context, chat *wire.Sessio
 		if err != nil {
 			return false, err
 		}
-		scope, err := requestscope.ResolveSessionProject(s.Store, ctx, p, chat.ID)
+		scope, err := requestscope.ResolveSessionProject(s.SessionStore, ctx, p, chat.ID)
 		if err != nil {
 			return false, err
 		}

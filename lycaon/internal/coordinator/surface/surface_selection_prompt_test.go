@@ -26,7 +26,7 @@ func TestResolveTurnProfile_citationNudgeDoesNotRerouteFromSynthesis(t *testing.
 		api.Message{Role: api.MessageRoleAssistant, Content: "closeout attempt"},
 		guidanceTurnMessage("citation grounding retry", "SYNTH_HANDLE_NOT_IN_LEGS"),
 	)
-	state := WithWrapupGates(ImplementSessionState{}, true, false)
+	state := ImplementSessionState{WrapupGatesLoaded: true, BatchReadyForSynthesis: true}
 	runCtx := api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"}
 	profile := ResolveTurnProfile(runCtx, &api.Session{Posture: api.SessionPostureBuild}, history, state)
 	if profile.SurfaceID != "implement_synthesis" {

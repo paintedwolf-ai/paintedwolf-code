@@ -45,8 +45,11 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 		return tctx, nil
 	}
 	// A write worker claims its branch; a reviewer its view of the subject.
-	if strings.TrimSpace(task.WorkspaceRoot) == "" && (task.EffectiveScope().IsWrite() || m.tasks.ReviewsWorker(ctx, task)) {
-		claimed, err := m.tasks.ClaimWorkerBranch(ctx, task.ID)
+	if strings.TrimSpace(task.WorkspaceRoot) == "" && (task.EffectiveScope().IsWrite() || (m.branches != nil && m.branches.ReviewsWorker(ctx, task))) {
+		if m.branches == nil {
+			return tctx, fmt.Errorf("worker branch claim not available")
+		}
+		claimed, err := m.branches.ClaimWorkerBranch(ctx, task.ID)
 		if err != nil {
 			return tctx, fmt.Errorf("claim worker branch: %w", err)
 		}
@@ -181,10 +184,10 @@ func (m *Service) EnsureBranch(ctx context.Context, tctx tools.ToolContext) (too
 	if jobID == "" {
 		return tctx, nil
 	}
-	if m.tasks == nil {
+	if m.branches == nil {
 		return tctx, fmt.Errorf("worker branch claim not available")
 	}
-	task, err := m.tasks.ClaimWorkerBranch(ctx, jobID)
+	task, err := m.branches.ClaimWorkerBranch(ctx, jobID)
 	if err != nil {
 		return tctx, err
 	}

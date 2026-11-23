@@ -140,11 +140,12 @@ func isPolicyStoreWrite(sel *ast.SelectorExpr, name string) bool {
 
 // providerEgressChain is each web research step and the guarded call it makes.
 var providerEgressChain = [][2]string{
-	{"doProviderHTTP", "providerEgressClient"},
-	{"providerEgressClient", "resolveProviderEgressIPs"},
+	{"doProviderHTTP", "validateProviderEndpoint"},
+	{"doProviderHTTP", "providerHTTPThroughDoor"},
+	{"providerHTTPThroughDoor", "ipProviderEgress"},
+	{"providerHTTPThroughDoor", "providerHop"},
 	{"validateProviderEndpoint", "ipProviderEgress"},
 	{"ValidateProviderConfigEndpoint", "resolveProviderEgressIPs"},
-	{"providerEgressClient", "PinnedTransport"},
 }
 
 var egressSeams = []invariants.Invariant{{

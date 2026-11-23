@@ -7,15 +7,15 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestAdvanceCompoundGateUnmetListsLeaves(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
@@ -25,7 +25,7 @@ func TestAdvanceCompoundGateUnmetListsLeaves(t *testing.T) {
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
 	run, err = advancePlanToApprovePhase(ctx, mgr, run)
 	testutil.FailErr(t, "advancePlanToApprovePhase", err)
-	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, repositories), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if run.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute", run.CurrentPhase)

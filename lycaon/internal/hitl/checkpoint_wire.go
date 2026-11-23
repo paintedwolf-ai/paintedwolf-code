@@ -263,10 +263,6 @@ func stringSliceField(m map[string]any, key string) []string {
 	}
 }
 
-func decisionStatusFromResolve(kind api.CheckpointKind, toolResult *DecisionResult, contentResult *ContentApplyResolve) DecisionStatus {
-	return decisionStatusFromResult(derefDecisionResult(toolResult))
-}
-
 func derefDecisionResult(r *DecisionResult) DecisionResult {
 	if r == nil {
 		return DecisionResult{Approved: false}

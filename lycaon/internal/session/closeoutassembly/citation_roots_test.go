@@ -17,7 +17,7 @@ func (s citationRootsStub) Roots(context.Context, *api.Session) ([]projectroot.R
 func TestCitationRootsResolveSessionFolderByRootID(t *testing.T) {
 	primary := projectroot.RootRef{ID: "primary", Label: "app", Path: "/abs/app", IsPrimary: true}
 	draft := projectroot.RootRef{ID: "draft", Label: "Draft", Path: "/abs/draft"}
-	s := New(nil, citationRootsStub{[]projectroot.RootRef{primary, draft}}, nil, nil)
+	s := New(nil, nil, nil, citationRootsStub{[]projectroot.RootRef{primary, draft}}, nil, nil)
 	ctx := context.Background()
 
 	// A worker session's WorkspacePath is a branch directory, not a root path:
@@ -56,7 +56,7 @@ func TestCitationRootsResolveSessionFolderByRootID(t *testing.T) {
 }
 
 func TestCitationRootsKeepsSessionFolderWithoutRoots(t *testing.T) {
-	s := New(nil, citationRootsStub{nil}, nil, nil)
+	s := New(nil, nil, nil, citationRootsStub{nil}, nil, nil)
 	roots, err := s.CitationRoots(context.Background(), &api.Session{
 		WorkspaceRootID: " draft ", WorkspacePath: "/workers/branch-dir",
 	})

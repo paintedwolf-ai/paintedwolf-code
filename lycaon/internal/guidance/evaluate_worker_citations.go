@@ -366,7 +366,7 @@ func resolveWorkerFindingCitation(
 		res = bindLooseCitation(roots.ProjectDir, finding, ev, res)
 	}
 	if finding.EndLine > 0 {
-		res = applyCitationRange(roots, finding, ev, res)
+		res = applyCitationRange(finding, ev, res)
 	}
 	return countedCoordinate(finding, ev, res)
 }

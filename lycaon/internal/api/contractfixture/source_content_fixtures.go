@@ -12,8 +12,8 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -37,9 +37,8 @@ func NewSourceContentFixture(t *testing.T, raw []byte) SourceContentFixture {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "content.txt")
 	testutil.FailErr(t, "write source", os.WriteFile(path, raw, 0o600))
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
-	testdbseed.InsertProjectRootWithID(t, database, p.ID, p.Roots[0].ID, dir)
 	StopBackgroundOnCleanup(t, srv)
 	return SourceContentFixture{Server: srv, Project: p, Path: path, Url: "/v1/projects/" + p.ID}
 }

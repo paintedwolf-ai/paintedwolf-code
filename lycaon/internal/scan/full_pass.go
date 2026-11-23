@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -173,19 +173,19 @@ type FullPassDraft struct {
 	RequestedAt   time.Time
 }
 
-func (s *sqlLedgerStore) InsertFullPass(ctx context.Context, draft FullPassDraft) error {
+func (s *FullPassStore) InsertFullPass(ctx context.Context, draft FullPassDraft) error {
 	scannersJSON, err := surveyjson.Marshal(UniqueSortedStrings(draft.Scanners))
 	if err != nil {
 		return err
 	}
-	return s.queries.InsertFullPass(ctx, db.InsertFullPassParams{
+	return s.tx.queries.InsertFullPass(ctx, db.InsertFullPassParams{
 		ID: draft.ID, CanonicalPath: draft.CanonicalPath, ScannersJson: string(scannersJSON),
 		Trigger: string(draft.Trigger), RequestedAt: timelayout.Format(draft.RequestedAt.UTC()),
 	})
 }
 
-func (s *sqlLedgerStore) ReadFullPassRequest(ctx context.Context, id string) (FullPassDraft, error) {
-	row, err := s.queries.GetFullPass(ctx, id)
+func (s *FullPassStore) ReadFullPassRequest(ctx context.Context, id string) (FullPassDraft, error) {
+	row, err := s.tx.queries.GetFullPass(ctx, id)
 	if err != nil {
 		return FullPassDraft{}, fmt.Errorf("read full pass %s: %w", id, err)
 	}
@@ -200,28 +200,28 @@ func (s *sqlLedgerStore) ReadFullPassRequest(ctx context.Context, id string) (Fu
 }
 
 // WidenFullPass sets a pass's scanners while it has not started; false once it has.
-func (s *sqlLedgerStore) WidenFullPass(ctx context.Context, id string, scanners []string) (bool, error) {
+func (s *FullPassStore) WidenFullPass(ctx context.Context, id string, scanners []string) (bool, error) {
 	scannersJSON, err := surveyjson.Marshal(UniqueSortedStrings(scanners))
 	if err != nil {
 		return false, err
 	}
-	changed, err := s.queries.WidenFullPass(ctx, db.WidenFullPassParams{ScannersJson: string(scannersJSON), ID: id})
+	changed, err := s.tx.queries.WidenFullPass(ctx, db.WidenFullPassParams{ScannersJson: string(scannersJSON), ID: id})
 	return changed > 0, err
 }
 
-func (s *sqlLedgerStore) MarkFullPassStarted(ctx context.Context, id string, at time.Time) error {
-	_, err := s.queries.MarkFullPassStarted(ctx, db.MarkFullPassStartedParams{StartedAt: timelayout.Format(at.UTC()), ID: id})
+func (s *FullPassStore) MarkFullPassStarted(ctx context.Context, id string, at time.Time) error {
+	_, err := s.tx.queries.MarkFullPassStarted(ctx, db.MarkFullPassStartedParams{StartedAt: timelayout.Format(at.UTC()), ID: id})
 	return err
 }
 
 // Requesters joining a running pass inherit its existing evidence bindings.
-func (s *sqlLedgerStore) BindFullPassRequester(ctx context.Context, passID string, bind FullScanContext) error {
+func (s *FullPassStore) BindFullPassRequester(ctx context.Context, passID string, bind FullScanContext) error {
 	sessionID := strings.TrimSpace(bind.SessionID)
 	workflowRunID := strings.TrimSpace(bind.WorkflowRunID)
 	if sessionID == "" && workflowRunID == "" {
 		return nil
 	}
-	return s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	return s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		now := time.Now().UTC()
 		if sessionID != "" {
 			if err := qtx.BindFullPassSession(ctx, db.BindFullPassSessionParams{
@@ -247,7 +247,7 @@ func (s *sqlLedgerStore) BindFullPassRequester(ctx context.Context, passID strin
 				return err
 			}
 			if changed {
-				if err := s.emitScanTx(ctx, tx, scan.ID); err != nil {
+				if err := s.tx.emitScanTx(ctx, tx, scan.ID); err != nil {
 					return err
 				}
 			}
@@ -256,8 +256,8 @@ func (s *sqlLedgerStore) BindFullPassRequester(ctx context.Context, passID strin
 	})
 }
 
-func (s *sqlLedgerStore) BindFullPassScan(ctx context.Context, passID, scanID string) error {
-	return s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+func (s *FullPassStore) BindFullPassScan(ctx context.Context, passID, scanID string) error {
+	return s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		sessions, err := qtx.ListFullPassSessions(ctx, passID)
 		if err != nil {
 			return err
@@ -285,13 +285,13 @@ func (s *sqlLedgerStore) BindFullPassScan(ctx context.Context, passID, scanID st
 		if !changed {
 			return nil
 		}
-		return s.emitScanTx(ctx, tx, scanID)
+		return s.tx.emitScanTx(ctx, tx, scanID)
 	})
 }
 
 // FullPass reads one pass with its members' progress; nil when unknown.
-func (s *sqlLedgerStore) FullPass(ctx context.Context, id string) (*FullPass, error) {
-	row, err := s.queries.GetFullPass(ctx, strings.TrimSpace(id))
+func (s *FullPassStore) FullPass(ctx context.Context, id string) (*FullPass, error) {
+	row, err := s.tx.queries.GetFullPass(ctx, strings.TrimSpace(id))
 	if db.IsNoRows(err) {
 		return nil, nil
 	}
@@ -306,8 +306,8 @@ func (s *sqlLedgerStore) FullPass(ctx context.Context, id string) (*FullPass, er
 }
 
 // FullPassesForPath returns a root's recent passes, newest first.
-func (s *sqlLedgerStore) FullPassesForPath(ctx context.Context, canonicalPath string) ([]FullPass, error) {
-	rows, err := s.queries.ListFullPassesForPath(ctx, db.ListFullPassesForPathParams{
+func (s *FullPassStore) FullPassesForPath(ctx context.Context, canonicalPath string) ([]FullPass, error) {
+	rows, err := s.tx.queries.ListFullPassesForPath(ctx, db.ListFullPassesForPathParams{
 		CanonicalPath: canonicalPath, MaxPasses: recentFullPasses,
 	})
 	if err != nil {
@@ -317,12 +317,12 @@ func (s *sqlLedgerStore) FullPassesForPath(ctx context.Context, canonicalPath st
 }
 
 // FullPassesForWorkflowRun returns the passes a workflow run asked for, newest first.
-func (s *sqlLedgerStore) FullPassesForWorkflowRun(ctx context.Context, workflowRunID string) ([]FullPass, error) {
+func (s *FullPassStore) FullPassesForWorkflowRun(ctx context.Context, workflowRunID string) ([]FullPass, error) {
 	workflowRunID = strings.TrimSpace(workflowRunID)
 	if workflowRunID == "" {
 		return nil, nil
 	}
-	rows, err := s.queries.ListFullPassesForWorkflowRun(ctx, workflowRunID)
+	rows, err := s.tx.queries.ListFullPassesForWorkflowRun(ctx, workflowRunID)
 	if err != nil {
 		return nil, err
 	}
@@ -330,15 +330,15 @@ func (s *sqlLedgerStore) FullPassesForWorkflowRun(ctx context.Context, workflowR
 }
 
 // FullPassOwed reports whether any scanner of the root still owes a pass its scan.
-func (s *sqlLedgerStore) FullPassOwed(ctx context.Context, canonicalPath string) (bool, error) {
-	owed, err := s.queries.FullPassOwedForPath(ctx, canonicalPath)
+func (s *FullPassStore) FullPassOwed(ctx context.Context, canonicalPath string) (bool, error) {
+	owed, err := s.tx.queries.FullPassOwedForPath(ctx, canonicalPath)
 	return owed != 0, err
 }
 
 // FullPassOwedForSession reports whether a full pass the session requested still has
 // scanners waiting to start or finish.
-func (s *sqlLedgerStore) FullPassOwedForSession(ctx context.Context, sessionID string) (bool, error) {
-	owed, err := s.queries.FullPassOwedForSession(ctx, strings.TrimSpace(sessionID))
+func (s *FullPassStore) FullPassOwedForSession(ctx context.Context, sessionID string) (bool, error) {
+	owed, err := s.tx.queries.FullPassOwedForSession(ctx, strings.TrimSpace(sessionID))
 	return owed != 0, err
 }
 
@@ -348,12 +348,12 @@ type fullPassRoot struct {
 	busy   map[string]bool
 }
 
-func (s *sqlLedgerStore) loadFullPassRoot(ctx context.Context, canonicalPath string) (fullPassRoot, error) {
-	series, err := s.ListSeriesForPath(ctx, canonicalPath)
+func (s *FullPassStore) loadFullPassRoot(ctx context.Context, canonicalPath string) (fullPassRoot, error) {
+	series, err := s.series.ListSeriesForPath(ctx, canonicalPath)
 	if err != nil {
 		return fullPassRoot{}, err
 	}
-	open, err := s.queries.OpenScansForPath(ctx, canonicalPath)
+	open, err := s.tx.queries.OpenScansForPath(ctx, canonicalPath)
 	if err != nil {
 		return fullPassRoot{}, err
 	}
@@ -367,7 +367,7 @@ func (s *sqlLedgerStore) loadFullPassRoot(ctx context.Context, canonicalPath str
 	return root, nil
 }
 
-func (s *sqlLedgerStore) fullPasses(ctx context.Context, rows []db.SecurityFullPasses) ([]FullPass, error) {
+func (s *FullPassStore) fullPasses(ctx context.Context, rows []db.SecurityFullPasses) ([]FullPass, error) {
 	roots := make(map[string]fullPassRoot)
 	out := make([]FullPass, 0, len(rows))
 	for _, row := range rows {
@@ -388,12 +388,12 @@ func (s *sqlLedgerStore) fullPasses(ctx context.Context, rows []db.SecurityFullP
 	return out, nil
 }
 
-func (s *sqlLedgerStore) readFullPass(ctx context.Context, row db.SecurityFullPasses, root fullPassRoot) (FullPass, error) {
+func (s *FullPassStore) readFullPass(ctx context.Context, row db.SecurityFullPasses, root fullPassRoot) (FullPass, error) {
 	var scanners []string
 	if err := json.Unmarshal([]byte(row.ScannersJson), &scanners); err != nil {
 		return FullPass{}, fmt.Errorf("full pass %s scanners: %w", row.ID, err)
 	}
-	scanRows, err := s.queries.ListFullPassScans(ctx, row.ID)
+	scanRows, err := s.tx.queries.ListFullPassScans(ctx, row.ID)
 	if err != nil {
 		return FullPass{}, err
 	}
@@ -404,7 +404,7 @@ func (s *sqlLedgerStore) readFullPass(ctx context.Context, row db.SecurityFullPa
 		if _, seen := newest[scan.ScannerID]; seen {
 			continue
 		}
-		if err := hydrateScanFacts(ctx, s.db, scan); err != nil {
+		if err := hydrateScanFacts(ctx, s.tx.db, scan); err != nil {
 			return FullPass{}, err
 		}
 		// A reused execution is projected in the pass that requested this read.

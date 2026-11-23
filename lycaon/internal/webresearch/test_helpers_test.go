@@ -24,7 +24,7 @@ func testHTTPServer(t *testing.T, contentType, body string) string {
 // discovererSeedingURLs builds a user-origin discoverer whose provider seed
 // channel admits the given URLs (site roots or page URLs). Summarizer is
 // failIfCalled — Search must not invoke the model.
-func discovererSeedingURLs(t *testing.T, seedURLs ...string) *directDiscoverer {
+func discovererSeedingURLs(t *testing.T, discovery *Discovery, seedURLs ...string) *directDiscoverer {
 	t.Helper()
 	const id = "hn"
 	hits := make([]WebHit, 0, len(seedURLs))
@@ -43,9 +43,9 @@ func discovererSeedingURLs(t *testing.T, seedURLs ...string) *directDiscoverer {
 			Provider: id,
 		})
 	}
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&stubSeedProvider{id: id, hits: hits})
-	return &directDiscoverer{
+	return &directDiscoverer{discovery: discovery,
 		summarizer: &failIfCalledSummarizer{},
 		registry:   reg,
 		settings:   testSeedSettings(id),
@@ -74,18 +74,18 @@ func seedHitLabel(raw string) string {
 	return seg
 }
 
-func discovererSeedingURLsWithIndex(t *testing.T, index *webindex.Store, seedURLs ...string) *directDiscoverer {
+func discovererSeedingURLsWithIndex(t *testing.T, discovery *Discovery, index *webindex.Store, seedURLs ...string) *directDiscoverer {
 	t.Helper()
-	d := discovererSeedingURLs(t, seedURLs...)
+	d := discovererSeedingURLs(t, discovery, seedURLs...)
 	d.index = index
 	return d
 }
 
 // providerBackedDiscoverer returns a user-origin discoverer that admits one
 // titled hit at liveURL. Summarizer is failIfCalled.
-func providerBackedDiscoverer(t *testing.T, providerID, queryTitle, liveURL string) *directDiscoverer {
+func providerBackedDiscoverer(t *testing.T, discovery *Discovery, providerID, queryTitle, liveURL string) *directDiscoverer {
 	t.Helper()
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&stubSeedProvider{
 		id: providerID,
 		hits: []WebHit{{
@@ -95,7 +95,7 @@ func providerBackedDiscoverer(t *testing.T, providerID, queryTitle, liveURL stri
 			Provider: providerID,
 		}},
 	})
-	return &directDiscoverer{
+	return &directDiscoverer{discovery: discovery,
 		summarizer: &failIfCalledSummarizer{},
 		registry:   reg,
 		settings:   testSeedSettings(providerID),

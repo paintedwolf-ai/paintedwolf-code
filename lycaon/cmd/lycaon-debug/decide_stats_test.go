@@ -35,7 +35,7 @@ func captureStdout(t *testing.T, run func() error) (string, error) {
 // statsReceipt writes one receipt with an explicit trigger and decisions body.
 func (f exportFixture) statsReceipt(t *testing.T, sessionID, opening, trigger, decisions string) {
 	t.Helper()
-	_, err := store.NewSQL(f.handle).PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{
+	_, err := store.NewSQL(f.handle).Turns.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{
 		SessionID: sessionID, OpeningMessageID: opening, Trigger: trigger, SurfaceID: "implement_investigate",
 		StateJSON: "{}", Decisions: decisions, Standing: "{}", CreatedAt: time.Now().UTC(),
 	})

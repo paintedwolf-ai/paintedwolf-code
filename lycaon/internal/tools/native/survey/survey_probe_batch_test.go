@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
 func TestProbeGrepBatchReadsEachCandidateOnce(t *testing.T) {
@@ -45,7 +47,8 @@ type surveyDrafts struct {
 }
 
 func (surveyDrafts) DirtyDocuments(context.Context, string, sourcebranch.ID) ([]tools.EditorDocumentPath, error) {
-	return []tools.EditorDocumentPath{{RootID: "r1", Path: "notes.txt", Text: "draft狼 beyond"}}, nil
+	text := "draft\n" + strings.Repeat("a", readcaps.MaxFileBytes-7) + "狼 beyond"
+	return []tools.EditorDocumentPath{{RootID: "r1", Path: "notes.txt", Text: text}}, nil
 }
 
 func TestProbeGrepBatchReadsTheBoundedDraftInsteadOfDisk(t *testing.T) {
@@ -55,9 +58,6 @@ func TestProbeGrepBatchReadsTheBoundedDraftInsteadOfDisk(t *testing.T) {
 	tc := nativefixture.Context(root)
 	tc.Identity.ProjectID = "draft-project"
 	tc.Source.EditorDocuments = surveyDrafts{}
-	before := hostGrepMaxFileBytes
-	hostGrepMaxFileBytes = 6
-	t.Cleanup(func() { hostGrepMaxFileBytes = before })
 
 	results, stats, err := ProbeGrepBatchRecords(t.Context(), nativefixture.Boundary(t), sourcecatalog.New(), tc,
 		"notes.txt", []SurveyGrepSpec{

@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -32,7 +33,7 @@ func TestSSEEndToEnd(t *testing.T) {
 	hub := events.NewMemoryHub()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	ctx := context.Background()
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	store := sessionFixture
@@ -50,7 +51,7 @@ func TestSSEEndToEnd(t *testing.T) {
 	baseURL := fmt.Sprintf("http://%s", ln.Addr().String())
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/events?project_id="+p.ID, nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)
@@ -106,7 +107,7 @@ func TestSSEDeviceWideSubscription(t *testing.T) {
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("http://%s/v1/events", ln.Addr()), nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)
@@ -161,7 +162,7 @@ func TestSSEStreamEndReleasesTheClientsLeases(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1/events?client_id=window-a", ln.Addr()), nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	resp, err := http.DefaultClient.Do(req)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)
 	defer resp.Body.Close()
@@ -228,18 +229,15 @@ func TestSSEReplayErrorCarriesRecoveryBoundary(t *testing.T) {
 func TestSSEHeartbeat(t *testing.T) {
 	sessionFixture := storetest.New(t)
 
-	restore := events.SetHeartbeatIntervalForTests(50 * time.Millisecond)
-	defer restore()
-
 	hub := events.NewMemoryHub()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	ctx := context.Background()
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	store := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub, EventHeartbeatInterval: 50 * time.Millisecond}}), nil, hostapi.TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "net.Listen failed", err)
@@ -251,7 +249,7 @@ func TestSSEHeartbeat(t *testing.T) {
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, fmt.Sprintf("http://%s/v1/events?project_id=%s", ln.Addr(), p.ID), nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	testutil.FailErr(t, "http.DefaultClient.Do failed", err)

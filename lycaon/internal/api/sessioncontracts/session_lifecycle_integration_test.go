@@ -15,6 +15,7 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -272,7 +273,7 @@ func TestSessionCreateDeletePublishLifecycleActions(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	sessionStore := sessionFixture
 	hub := events.NewMemoryHub()

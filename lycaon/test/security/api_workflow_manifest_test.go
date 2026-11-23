@@ -34,13 +34,13 @@ func TestWorkflowManifestModeTransitionsE2E(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
-	planning, err := store.Get(ctx, sess.ID)
+	planning, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
 	if planning.Posture != wire.SessionPostureSpec {
 		t.Fatalf("session posture after plan start = %q, want spec", planning.Posture)
 	}
 	run = advancePlanRunToExecuteHTTP(t, h, srv, blueprintMgr, sess, run)
-	sessAfter, err := store.Get(ctx, sess.ID)
+	sessAfter, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
 	if sessAfter.Posture != wire.SessionPostureBuild {
 		t.Fatalf("session posture at execute = %q, want build", sessAfter.Posture)

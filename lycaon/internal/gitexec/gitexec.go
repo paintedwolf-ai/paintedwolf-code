@@ -10,12 +10,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitcredential"
-	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 )
 
@@ -52,46 +50,25 @@ type Opts struct {
 	Input []byte
 }
 
-// HostConfig reads user-owned transport configuration.
-type HostConfig interface {
+// hostConfigReader reads user transport configuration.
+type hostConfigReader interface {
 	// HelperFor returns the configured credential helper.
 	HelperFor(ctx context.Context, remoteURL string) string
 	// SSHCommand returns the configured SSH command.
 	SSHCommand(ctx context.Context) string
 }
 
-var (
-	hostConfigMu sync.RWMutex
-	hostConfig   HostConfig
-
-	binaryPathFn    = gitengine.BinaryPath
-	emptyHooksDirFn = gitengine.EmptyHooksDir
-)
-
-// SetHostConfig installs the process-wide resolver.
-func SetHostConfig(h HostConfig) {
-	hostConfigMu.Lock()
-	hostConfig = h
-	hostConfigMu.Unlock()
-}
-
-func getHostConfig() HostConfig {
-	hostConfigMu.RLock()
-	defer hostConfigMu.RUnlock()
-	return hostConfig
-}
-
 // hostSSHCommand is the user's SSH command for host launches; an agent launch
 // uses its confinement's SSH transport instead.
-func hostSSHCommand(ctx context.Context) string {
+func (e execution) hostSSHCommand(ctx context.Context) string {
 	if agentLaunched(ctx) {
 		return ""
 	}
-	return resolveSSHCommand(ctx)
+	return e.resolveSSHCommand(ctx)
 }
 
-func resolveSSHCommand(ctx context.Context) string {
-	h := getHostConfig()
+func (e execution) resolveSSHCommand(ctx context.Context) string {
+	h := e.hostConfig
 	if h == nil {
 		return ""
 	}
@@ -115,7 +92,7 @@ func (e *SigningUnsupportedError) Code() string { return "GIT_SIGNING_UNSUPPORTE
 
 // Run invokes the bundled git with neutralization and hermetic env.
 func Run(ctx context.Context, projectDir string, args []string, opts Opts) ([]byte, int, error) {
-	return run(ctx, projectDir, args, opts, nil)
+	return productionExecution().run(ctx, projectDir, args, opts, nil)
 }
 
 // RunTo streams stdout to a caller-owned sink and returns separate diagnostics.
@@ -123,11 +100,11 @@ func RunTo(ctx context.Context, projectDir string, args []string, opts Opts, std
 	if stdout == nil {
 		return nil, -1, fmt.Errorf("git output sink is required")
 	}
-	return run(ctx, projectDir, args, opts, stdout)
+	return productionExecution().run(ctx, projectDir, args, opts, stdout)
 }
 
-func run(ctx context.Context, projectDir string, args []string, opts Opts, stdout io.Writer) ([]byte, int, error) {
-	bin, err := binaryPathFn()
+func (e execution) run(ctx context.Context, projectDir string, args []string, opts Opts, stdout io.Writer) ([]byte, int, error) {
+	bin, err := e.binaryPath()
 	if err != nil {
 		return nil, -1, err
 	}
@@ -139,20 +116,20 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 	if err != nil {
 		return nil, -1, err
 	}
-	if err := auditRepoConfig(ctx, cwd); err != nil {
+	if err := e.auditRepoConfig(ctx, cwd); err != nil {
 		return nil, -1, err
 	}
-	argv, network, err := buildArgv(ctx, cwd, opts, args)
+	argv, network, err := e.buildArgv(ctx, cwd, opts, args)
 	if err != nil {
 		return nil, -1, err
 	}
-	env, err := buildEnv(ctx, bin, opts)
+	env, err := e.buildEnv(ctx, bin, opts)
 	if err != nil {
 		return nil, -1, err
 	}
 	// An agent launch takes its proxy and SSH transport from its confinement.
 	if opts.Profile == ProfileNetwork && launch.Kind != exec.LaunchAgentCommand {
-		plan, err := NetworkProxyPlan(network.remote)
+		plan, err := planFor(e.proxyConfiguration(), network.remote)
 		if err != nil {
 			return nil, -1, err
 		}
@@ -165,7 +142,7 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 		// service, so its helper requests fail closed.
 		started = func(pid int) { _ = agent.Credentials.service.Bind(pid) }
 	} else if network.helper == hostHelperVault {
-		service, err := credentialServiceFn(ctx, bin)
+		service, err := e.credentialService(ctx, bin)
 		if err != nil {
 			return nil, -1, fmt.Errorf("gitexec: start credential service: %w", err)
 		}
@@ -240,16 +217,16 @@ type networkFacts struct {
 	helper hostHelper
 }
 
-func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]string, networkFacts, error) {
+func (e execution) buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]string, networkFacts, error) {
 	var network networkFacts
-	prefix, err := neutralizeArgs(hostSSHCommand(ctx))
+	prefix, err := e.neutralizeArgs(e.hostSSHCommand(ctx))
 	if err != nil {
 		return nil, network, err
 	}
 	// Override order is security-sensitive.
 	out := append([]string{}, prefix...)
 	out = append(out, transportArgs(ctx)...)
-	out = append(out, lfsFilterArgs()...)
+	out = append(out, e.lfsFilterArgs()...)
 	for _, kv := range opts.ExtraConfig {
 		kv = strings.TrimSpace(kv)
 		if kv == "" {
@@ -260,18 +237,18 @@ func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]str
 	if opts.Profile == ProfileNetwork {
 		network.remote = strings.TrimSpace(opts.RemoteURL)
 		if network.remote == "" {
-			network.remote = remoteURLFor(ctx, cwd, args)
+			network.remote = e.remoteURLFor(ctx, cwd, args)
 		}
 		if agent, ok := AgentLaunchFrom(ctx); ok {
 			if agent.Credentials != nil {
-				helper, err := executablePath()
+				helper, err := e.executablePath()
 				if err != nil {
 					return nil, networkFacts{}, fmt.Errorf("resolve built-in credential helper: %w", err)
 				}
 				out = append(out, "-c", "credential.helper=!"+shellQuote(helper)+" "+string(hostHelperVault))
 			}
-		} else if h := getHostConfig(); h != nil {
-			resolved, selected, err := resolveCredentialHelper(h.HelperFor(ctx, network.remote))
+		} else if h := e.hostConfig; h != nil {
+			resolved, selected, err := e.resolveCredentialHelper(h.HelperFor(ctx, network.remote))
 			if err != nil {
 				return nil, networkFacts{}, err
 			}

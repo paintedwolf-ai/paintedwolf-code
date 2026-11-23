@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -489,6 +490,8 @@ func runTurnChild(t *testing.T, dir, killAt string) {
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
 	testutil.FailErr(t, "record session", os.WriteFile(filepath.Join(dir, crashSession), []byte(sess.ID), 0o600))
+	testutil.FailErr(t, "admit project roots before arming", h.Sessions.Manager.ToolContext.CredentialFiles.EnsureProject(t.Context(), sess.ProjectID))
+	repochange.WaitQuiet(t.Context(), project, repochange.DefaultDebounce, 5*time.Second)
 	tracer.armed.Store(true)
 	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "Read the notes.")
 	testutil.FailErr(t, "prompt", err)
@@ -509,9 +512,8 @@ func runBootChild(t *testing.T, dir string) {
 	boot := func(name, dump string) {
 		t.Run(name, func(t *testing.T) {
 			h := BuildForTestAt(t, dir, WithLLMClient(crashTurnScript()))
-			stop := h.StartBackgroundWorkers(t, t.Context())
+			h.Start(t)
 			waitForOutboxDrained(t, h)
-			stop()
 			if dump == crashBoot2 {
 				writeCrashJSON(t, filepath.Join(dir, crashPrompt), assembledPrompt(t, h, dir))
 			}
@@ -538,9 +540,9 @@ func assembledPrompt(t *testing.T, h *Harness, dir string) []promptLine {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(dir, crashSession))
 	testutil.FailErr(t, "read session id", err)
-	sess, err := h.Store.Get(t.Context(), string(raw))
+	sess, err := h.Store.Sessions.Get(t.Context(), string(raw))
 	testutil.FailErr(t, "read session", err)
-	history, err := h.Store.GetMessages(t.Context(), sess.ID)
+	history, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read history", err)
 	assembled, _ := promptassembly.Assemble(sess, history, promptassembly.Config{})
 	lines := make([]promptLine, len(assembled))

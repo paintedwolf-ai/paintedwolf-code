@@ -9,12 +9,13 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 )
 
 // Every withheld reason reaches the model as exactly one advisory, and none of
 // them can stop a tool.
 func TestMidTurnNotePoliciesWarnOnce(t *testing.T) {
-	pipeline := hostFinishOARPipeline()
+	pipeline := oartest.NewCoordinatorGuardPipeline(t)
 	if pipeline == nil {
 		t.Fatal("stock OAR pipeline unavailable")
 	}

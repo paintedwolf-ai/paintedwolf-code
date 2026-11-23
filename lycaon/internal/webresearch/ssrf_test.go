@@ -15,14 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/egress"
 )
 
-// allowLoopbackFetch permits loopback during a test.
-func allowLoopbackFetch(t *testing.T) {
-	t.Helper()
-	prev := ipAllowed
-	ipAllowed = func(netip.Addr) bool { return true }
-	t.Cleanup(func() { ipAllowed = prev })
-}
-
 func TestIPPublic(t *testing.T) {
 	cases := []struct {
 		ip   string
@@ -113,20 +105,22 @@ func TestResolvePublicIPsBlocksPrivateLiteral(t *testing.T) {
 }
 
 func TestFetchURLBlocksLoopbackBySSRF(t *testing.T) {
-	// Default policy (no allowLoopbackFetch) must refuse a loopback server.
+	crawler := NewCrawler(nil)
+
+	// Production policy rejects loopback outside the harness.
 	srv := testHTTPServer(t, "text/plain", "should not be reachable")
-	_, err := fetchURL(context.Background(), FetchOptions{URL: srv})
+	_, err := crawler.fetchURL(context.Background(), FetchOptions{URL: srv})
 	if err == nil || !strings.Contains(err.Error(), "blocked") {
 		t.Fatalf("expected SSRF block, got err=%v", err)
 	}
 }
 
 func TestGuardedGetRevalidatesRedirectHops(t *testing.T) {
+	crawler := newTestCrawler()
+
 	// Permit loopback only, so the httptest server is reachable but a redirect
 	// escaping to any non-loopback address must be blocked at the hop boundary.
-	prev := ipAllowed
-	ipAllowed = func(a netip.Addr) bool { return a.IsLoopback() }
-	t.Cleanup(func() { ipAllowed = prev })
+	crawler.exchange = loopbackOnlyExchange
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metadata", func(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +140,7 @@ func TestGuardedGetRevalidatesRedirectHops(t *testing.T) {
 		t.Fatalf("normalize metadata url: %v", err)
 	}
 	//nolint:bodyclose // the assertion is that guardedGet errors before any response exists
-	if _, _, err := guardedGet(context.Background(), u, researchAcceptHeader, fetchBodyByteLimit); err == nil || !strings.Contains(err.Error(), "blocked") {
+	if _, _, err := crawler.guardedGet(context.Background(), u, researchAcceptHeader, fetchBodyByteLimit); err == nil || !strings.Contains(err.Error(), "blocked") {
 		t.Fatalf("redirect to metadata address must be blocked, got err=%v", err)
 	}
 
@@ -154,7 +148,7 @@ func TestGuardedGetRevalidatesRedirectHops(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalize hop url: %v", err)
 	}
-	resp, finalURL, err := guardedGet(context.Background(), u, researchAcceptHeader, fetchBodyByteLimit)
+	resp, finalURL, err := crawler.guardedGet(context.Background(), u, researchAcceptHeader, fetchBodyByteLimit)
 	if err != nil {
 		t.Fatalf("same-host redirect should be followed: %v", err)
 	}
@@ -166,9 +160,9 @@ func TestGuardedGetRevalidatesRedirectHops(t *testing.T) {
 
 // A guarded read returns the prefix its caller reads, however large the page.
 func TestGuardedGetReturnsTheCallersPrefix(t *testing.T) {
-	prev := ipAllowed
-	ipAllowed = func(a netip.Addr) bool { return a.IsLoopback() }
-	t.Cleanup(func() { ipAllowed = prev })
+	crawler := newTestCrawler()
+
+	crawler.exchange = loopbackOnlyExchange
 	page := strings.Repeat("p", fetchBodyByteLimit+1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(page))
@@ -178,7 +172,7 @@ func TestGuardedGetReturnsTheCallersPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalize: %v", err)
 	}
-	resp, _, err := guardedGet(context.Background(), u, researchAcceptHeader, verifyBodyByteLimit)
+	resp, _, err := crawler.guardedGet(context.Background(), u, researchAcceptHeader, verifyBodyByteLimit)
 	if err != nil {
 		t.Fatalf("a page past the fetch bound failed: %v", err)
 	}
@@ -213,16 +207,16 @@ func TestFetchTimeoutFollowsTheCallersDeadline(t *testing.T) {
 }
 
 // fetchURL fetches and extracts readable text as the fetch tool does.
-func fetchURL(ctx context.Context, opts FetchOptions) (FetchURLResult, error) {
-	raw, err := fetchBytes(ctx, opts)
+func (crawler *Crawler) fetchURL(ctx context.Context, opts FetchOptions) (FetchURLResult, error) {
+	raw, err := crawler.fetchBytes(ctx, opts)
 	if err != nil {
 		return FetchURLResult{}, err
 	}
 	return fetchTextResult(raw), nil
 }
 
-func guardedGet(ctx context.Context, u *url.URL, accept string, limit int64) (*http.Response, string, error) {
-	return guardedGetWithHopPolicy(ctx, u, accept, limit, nil, nil)
+func (crawler *Crawler) guardedGet(ctx context.Context, u *url.URL, accept string, limit int64) (*http.Response, string, error) {
+	return crawler.guardedGetWithHopPolicy(ctx, u, accept, limit, nil, nil)
 }
 
 func resolvePublicIPs(ctx context.Context, host string) ([]netip.Addr, error) {

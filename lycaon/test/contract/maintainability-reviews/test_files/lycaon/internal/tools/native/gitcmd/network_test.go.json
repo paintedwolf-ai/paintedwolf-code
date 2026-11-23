@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/tools/native/gitcmd/network_test.go",
+  "kind": "test_suite",
+  "workstream": "shim-audit",
+  "disposition": "retain",
+  "reason": "Retain the network-command contract matrix and real SSH/HTTP fixtures together. The user SSH configuration fixture now uses an actual isolated Git config; command recipient admission, confinement-supplied SSH transport and outbound credential review remain the asserted boundaries. Full command-caller integration tests cover the shared fixture behavior.",
+  "reviewed_commit": "32ff23277dd82f116986d07cd1657a2523d557f2",
+  "ceiling": 465,
+  "boundaries": {
+    "lycaon/internal/tools/native/gitcmd/network_test.go": "b84c53864c1942d7284027f4f63611aefb5847277a5e9120f6c0285486c2e74a"
+  }
+}

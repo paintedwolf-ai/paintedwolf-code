@@ -3,7 +3,6 @@ package execution
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -41,8 +41,8 @@ func TestWarmingScansAreListableButNotClaimable(t *testing.T) {
 		Status: api.CodeScanStatusPending, CreatedAt: time.Now().UTC(),
 		SourceSnapshotID: api.SourceSnapshotWarming, Trigger: api.ScanTriggerManual,
 	}
-	testutil.FailErr(t, "insert warming", sqlStore.Insert(t.Context(), rec, nil, ""))
-	if _, err := sqlStore.ClaimNext(t.Context()); !errors.Is(err, scanbase.ErrNoPendingScans) {
+	testutil.FailErr(t, "insert warming", sqlStore.Runs.Insert(t.Context(), rec, nil, ""))
+	if _, err := sqlStore.Runs.ClaimNext(t.Context()); !errors.Is(err, scanbase.ErrNoPendingScans) {
 		t.Fatalf("ClaimNext = %v, want ErrNoPendingScans while warming", err)
 	}
 	listed, err := coord.List(t.Context(), []string{canonical}, 10)
@@ -53,12 +53,12 @@ func TestWarmingScansAreListableButNotClaimable(t *testing.T) {
 
 	snapshot, err := snapshots.EnsurePath(t.Context(), canonical, sourcesnapshot.VerifyStat)
 	testutil.FailErr(t, "publish", err)
-	bound, err := sqlStore.BindPublishedSourceSnapshot(t.Context(), rec.ID, snapshot)
+	bound, err := sqlStore.Runs.BindPublishedSourceSnapshot(t.Context(), rec.ID, snapshot)
 	testutil.FailErr(t, "bind", err)
 	if bound.SourceSnapshotID != snapshot.ID {
 		t.Fatalf("bound = %+v", bound)
 	}
-	claimed, err := sqlStore.ClaimNext(t.Context())
+	claimed, err := sqlStore.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim after bind", err)
 	if claimed.ID != rec.ID {
 		t.Fatalf("claimed = %+v", claimed)
@@ -87,8 +87,8 @@ func TestWarmingPublishFailureHoldsThenFails(t *testing.T) {
 		CreatedAt: time.Now().UTC(), SourceSnapshotID: api.SourceSnapshotWarming,
 		Trigger: api.ScanTriggerManual,
 	}
-	testutil.FailErr(t, "insert warming", store.Insert(t.Context(), rec, nil, ""))
-	runner := NewRunner(store, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	testutil.FailErr(t, "insert warming", store.Runs.Insert(t.Context(), rec, nil, ""))
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Coordinator = coord
 	runner.RetryDelay = time.Nanosecond
 	terminal := make(chan api.CodeScan, 1)
@@ -96,7 +96,7 @@ func TestWarmingPublishFailureHoldsThenFails(t *testing.T) {
 
 	for attempt := 1; attempt < maxPublishAttempts; attempt++ {
 		testutil.FailErr(t, "service scan work", runner.serviceWork(t.Context()))
-		held, err := store.Get(t.Context(), rec.ID)
+		held, err := store.Reads.Get(t.Context(), rec.ID)
 		testutil.FailErr(t, "load held scan", err)
 		if held == nil || held.Status != api.CodeScanStatusPending {
 			t.Fatalf("attempt %d: scan = %+v, want pending hold", attempt, held)
@@ -109,7 +109,7 @@ func TestWarmingPublishFailureHoldsThenFails(t *testing.T) {
 	}
 
 	testutil.FailErr(t, "service scan work", runner.serviceWork(t.Context()))
-	failed, err := store.Get(t.Context(), rec.ID)
+	failed, err := store.Reads.Get(t.Context(), rec.ID)
 	testutil.FailErr(t, "load failed scan", err)
 	if failed == nil || failed.Status != api.CodeScanStatusFailed {
 		t.Fatalf("scan = %+v", failed)

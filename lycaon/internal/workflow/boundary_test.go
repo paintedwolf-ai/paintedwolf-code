@@ -61,7 +61,7 @@ func TestStoreHydratedImplementBoundaryIsInternal(t *testing.T) {
 	// Persisted attach policy keeps ambient boundaries internal.
 	mgr, store, _, _ := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	run := &api.WorkflowRun{
 		ID: "run-ambient", SessionID: sess.ID, WorkflowID: "implement",

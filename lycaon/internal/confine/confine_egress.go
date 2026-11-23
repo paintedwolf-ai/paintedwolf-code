@@ -712,41 +712,8 @@ func egressVerdictKey(cmd EgressCommand, actionID string, ep egressproxy.Endpoin
 		cmd.SessionID, actionID, host, ep.Port, ep.Transport)
 }
 
-var (
-	egressDegradedMu sync.RWMutex
-	egressDegraded   *EgressDegraded
-)
-
-// EgressDegraded is the read-only app/session status fact when mediation cannot start.
 type EgressDegraded struct {
 	Reason string // stable machine reason; never includes tokens or socket paths
-}
-
-// EgressDegradedState reports whether mediation is unavailable and why.
-func EgressDegradedState() (EgressDegraded, bool) {
-	egressDegradedMu.RLock()
-	defer egressDegradedMu.RUnlock()
-	if egressDegraded == nil {
-		return EgressDegraded{}, false
-	}
-	return *egressDegraded, true
-}
-
-func recordEgressDegraded(reason string, err error) {
-	egressDegradedMu.Lock()
-	if egressDegraded == nil {
-		egressDegraded = &EgressDegraded{Reason: reason}
-		slogWarnBrokerFailure(reason, err)
-	}
-	egressDegradedMu.Unlock()
-}
-
-func slogWarnBrokerFailure(reason string, err error) {
-	msg := ""
-	if err != nil {
-		msg = err.Error()
-	}
-	logBrokerStartFailure(reason, msg)
 }
 
 // runtimeProxyOptIn enables proxy variables for runtimes that require it.

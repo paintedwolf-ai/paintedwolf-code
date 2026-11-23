@@ -56,7 +56,7 @@ func newNativeWalkFixture(t *testing.T) nativeWalkFixture {
  VALUES ('r1','p1',?,'Repository',1,?,'attached')`, dir, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "seed source root", err)
 	manager := git.NewManager()
-	ledger := sourceledger.New(sqlDB, t.TempDir())
+	ledger := sourceledger.New(sqlDB, t.TempDir(), sourceledger.Timing{})
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	tc := nativefixture.Context(dir)
 	tc.Identity.ProjectID, tc.Identity.SessionID, tc.Source.ActiveRootID, tc.Identity.UserTurn = "p1", "s1", "r1", 1

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -20,9 +21,9 @@ func TestSummaryCommandFollowupPreservesContinuationAndLiteralArguments(t *testi
 	if wire.Tool != "command" || wire.Kind != "continue" || wire.Args.Path != "" || wire.Args.Cursor != "" || !strings.Contains(wire.Args.Command, "--cursor") {
 		t.Fatalf("follow-up=%s", raw)
 	}
-	program, err := commandsurface.ParseProgram([]byte(wire.Args.Command), commandsurface.ParseOptions{})
+	program, err := commandsurfacetest.Admit(t, []byte(wire.Args.Command), commandsurface.ParseOptions{})
 	testutil.FailErr(t, "parse literal follow-up", err)
-	if len(program.Snapshot().Statements) != 1 {
+	if len(program.View(t).Statements) != 1 {
 		t.Fatal("follow-up arguments injected statements")
 	}
 	var restored NextAction

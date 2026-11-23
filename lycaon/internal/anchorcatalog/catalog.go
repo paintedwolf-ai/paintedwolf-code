@@ -132,13 +132,6 @@ func InstallBundled() error {
 	return nil
 }
 
-// Clear clears process catalog state (tests only).
-func Clear() {
-	mu.Lock()
-	installed = nil
-	mu.Unlock()
-}
-
 // Loaded reports whether Install has run.
 func Loaded() bool {
 	mu.RLock()

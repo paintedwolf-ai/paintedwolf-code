@@ -4,13 +4,12 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -29,6 +28,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -58,7 +59,7 @@ func TestMaybeAdvanceCoordinatorBatchOnTaskEnqueued_writerStillDispatches(t *tes
 	ctx := context.Background()
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
@@ -93,13 +94,13 @@ func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	prog := progress.NewMemoryStore()
+	prog := progress.NewSQLStore(store.DB())
 	mgr.SetProgressStore(prog)
 
 	ctx := context.Background()
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
@@ -142,7 +143,7 @@ func TestReconcileCoordinatorBatch_skipsSynthesisReadyWithoutBatchReady(t *testi
 	ctx := context.Background()
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
@@ -167,7 +168,7 @@ func TestReconcileCoordinatorBatch_skipsSynthesisReadyWithoutBatchReady(t *testi
 			},
 		},
 	}
-	testutil.FailErr(t, "append messages", store.AppendMessages(ctx, sess.ID, inlineEdit...))
+	testutil.FailErr(t, "append messages", store.Transcript.AppendMessages(ctx, sess.ID, inlineEdit...))
 
 	mgr.Coordinator.Batch.Reconcile(ctx, sess.ID)
 
@@ -185,7 +186,7 @@ func TestReconcileCoordinatorBatch_skipsSynthesisReadyWithoutBatchReady(t *testi
 
 type coordinatorPromptFixture struct {
 	mgr   *session.Host
-	rec   *llm.RecordingClient
+	rec   *llmtest.RecordingClient
 	wfMgr *workflow.RunManager
 	sess  *wire.Session
 	brief string
@@ -199,7 +200,7 @@ func setupCoordinatorPromptFixture(t *testing.T) coordinatorPromptFixture {
 
 	store := store.NewSQL(sqlDB)
 	inner := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	rec := llm.NewRecordingClient(inner)
+	rec := llmtest.NewRecordingClient(inner)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "load agent registry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
@@ -234,7 +235,7 @@ func setupCoordinatorPromptFixture(t *testing.T) coordinatorPromptFixture {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	manifest := `id: hotfix-session
 version: 1.0.0

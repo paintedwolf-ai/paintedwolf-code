@@ -3,17 +3,17 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	"github.com/lycaon/lycaon/internal/session"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 type Approvals struct {
@@ -22,7 +22,7 @@ type Approvals struct {
 	Records                 runstate.BlueprintsRepository
 	Vars                    *runstate.Variables
 	Resolver                *catalog.Resolver
-	Sessions                session.Store
+	Sessions                SessionReader
 	Getter                  workflowblueprintfiles.Getter
 	Registry                *conditions.ConditionRegistry
 	Phases                  *workflowphases.Service
@@ -130,7 +130,7 @@ func (m *Approvals) SyncHumanApproval(ctx context.Context, runID, projectDir str
 	if !ok || def.HumanApproval == nil {
 		return run, nil
 	}
-	return m.recordHumanApproval(ctx, runID, projectDir, run.CurrentPhase, manifest, def.HumanApproval)
+	return m.recordHumanApproval(ctx, runID, projectDir, run.CurrentPhase, def.HumanApproval)
 }
 
 func (m *Approvals) validateHumanApprovalReady(ctx context.Context, runID, projectDir string) error {
@@ -162,7 +162,7 @@ func (m *Approvals) validateHumanApprovalReady(ctx context.Context, runID, proje
 	return nil
 }
 
-func (m *Approvals) recordHumanApproval(ctx context.Context, runID, projectDir, phaseID string, manifest workflowdef.Manifest, cfg *workflowdef.HumanApprovalConfig) (*api.WorkflowRun, error) {
+func (m *Approvals) recordHumanApproval(ctx context.Context, runID, projectDir, phaseID string, cfg *workflowdef.HumanApprovalConfig) (*api.WorkflowRun, error) {
 	if cfg == nil {
 		return nil, nil
 	}

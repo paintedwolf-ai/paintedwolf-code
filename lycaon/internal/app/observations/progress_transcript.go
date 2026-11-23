@@ -3,15 +3,24 @@ package observations
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
 )
+
+type SessionReader interface {
+	Get(context.Context, string) (*wire.Session, error)
+}
+
+type TranscriptWriter interface {
+	AppendMessages(context.Context, string, ...wire.Message) error
+	MessageEventsOutboxed() bool
+}
 
 var errProgressStoreRequired = errors.New("progress transcript store not configured")
 
@@ -34,14 +43,15 @@ func activeRunIDFromWorkflow(runs runstate.RunsRepository) ActiveRunID {
 // appendProgressTranscript stamps the active run and persists. written is false when there is no run.
 func appendProgressTranscript(
 	ctx context.Context,
-	store *store.SQL,
+	sessions SessionReader,
+	transcript TranscriptWriter,
 	eventPub *events.Publisher,
 	activeRun ActiveRunID,
 	progressStore progress.RunScopedStore,
 	sessionID string,
 	msg wire.Message,
 ) (written bool, err error) {
-	if store == nil || activeRun == nil {
+	if sessions == nil || transcript == nil || activeRun == nil {
 		return false, nil
 	}
 	runID := strings.TrimSpace(activeRun(ctx, sessionID))
@@ -59,7 +69,7 @@ func appendProgressTranscript(
 	if progressStore != nil && progressStore.BoundRunID(sessionID) == "" {
 		progressStore.BindRun(sessionID, runID)
 	}
-	if err := appendAndPublishMessage(ctx, store, eventPub, sessionID, msg); err != nil {
+	if err := appendAndPublishMessage(ctx, sessions, transcript, eventPub, sessionID, msg); err != nil {
 		return false, err
 	}
 	return true, nil

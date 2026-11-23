@@ -14,7 +14,7 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/project"
+
 	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -23,7 +23,7 @@ import (
 func TestOptionalCommandBodiesHonorTransportFraming(t *testing.T) {
 	dir := t.TempDir()
 	projects := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(t.Context(), projects, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, dir)
 	testutil.FailErr(t, "create project", err)
 	blueprints := blueprint.NewManager(blueprinttest.NewFileStore(dir))
 	bp, err := blueprints.Create(t.Context(), p.ID, "Transport fixture", "", "plan", "# Transport fixture")

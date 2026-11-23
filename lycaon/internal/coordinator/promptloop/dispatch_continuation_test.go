@@ -27,10 +27,10 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			storage := storetest.New(t, testdbseed.DefaultProjectID)
-			sess, err := storage.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := storage.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create coordinator", err)
 			wakes := loopwake.NewLoopEngine()
-			wakes.SetDeps(loopwake.LoopDeps{GetSession: storage.Get, WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) { return false, nil }})
+			wakes.SetDeps(loopwake.LoopDeps{GetSession: storage.Sessions.Get, WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) { return false, nil }})
 			t.Cleanup(func() { wakes.ForgetSession(context.Background(), sess.ID) })
 			reg := tools.NewDefaultRegistry()
 			for _, name := range []string{"command", "write"} {

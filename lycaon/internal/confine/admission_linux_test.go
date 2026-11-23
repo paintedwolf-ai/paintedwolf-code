@@ -6,12 +6,13 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRequireAppliedRejectsUnavailableLinuxBoundary(t *testing.T) {
-	TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	restoreLinuxCapabilities(t)
@@ -37,8 +38,8 @@ func TestRequireAppliedRejectsUnavailableLinuxBoundary(t *testing.T) {
 			if !errors.Is(err, ErrNotConfined) {
 				t.Fatalf("required unavailable boundary = %v, want ErrNotConfined", err)
 			}
-			unavailable, ok := linuxsandbox.AsUnavailable(err)
-			if !ok || unavailable.Code != code {
+			var unavailable *linuxsandbox.Unavailability
+			if !errors.As(err, &unavailable) || unavailable.Code != code {
 				t.Fatalf("required boundary error lost capability reason %s: %v", code, err)
 			}
 			box, applied = DefaultConfinement(Request{HostExecution: true})

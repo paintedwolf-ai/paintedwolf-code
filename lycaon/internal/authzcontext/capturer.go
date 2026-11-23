@@ -13,13 +13,7 @@ type Capturer struct {
 	Recorder LedgerRecorder
 }
 
-// SQLRecorder wires a store-backed recorder alone, for wirings that only
-// append decision rows.
-func SQLRecorder(database db.Handle) LedgerRecorder {
-	return LedgerRecorder{Ledger: &Ledger{Store: NewSQLStore(database)}}
-}
-
-// NewSQLCapturer wires store, sealer, ledger, and recorder for production serve.
+// NewSQLCapturer binds sealing and decision recording to one SQL store.
 func NewSQLCapturer(database db.Handle, audit AuditConfig, profiles map[string]sandbox.ToolProfile) *Capturer {
 	if database == nil {
 		return nil

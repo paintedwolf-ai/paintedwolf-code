@@ -22,8 +22,6 @@ var sharedBranchViews sync.Map // map[string]branchViewState
 // the central application-data volume cannot accept more data.
 var ErrWorkspaceStorageExhausted = errors.New("worker workspace storage exhausted")
 
-var queryAvailableStorageBytes = availableStorageBytes
-
 func classifyProvisionError(err error) error {
 	var capacityErr *adapter.WorkspaceCapacityError
 	if err != nil && (isStorageExhausted(err) || errors.As(err, &capacityErr)) {
@@ -157,14 +155,18 @@ type branchViewState struct {
 	writers *recovery.Coordinator
 }
 
+// Filesystem supplies effects for workspace placement and preparation.
+type Filesystem struct {
+	CloneFile        adapter.FileCloner
+	AvailableStorage func(path string) (bytes uint64, known bool, err error)
+}
+
 // Manager creates and destroys per-job worker sandboxes.
 type Manager struct {
 	branchRoot string
 	// stateRoot holds the placement registry; branchRoot sits directly under it.
-	stateRoot string
-	// cloneProbe replaces the real source-to-volume clone probe in fixtures.
-	cloneProbe func(ctx context.Context, dir string) (bool, error)
-	cloneFile  adapter.FileCloner
+	stateRoot  string
+	filesystem Filesystem
 	selector   *adapter.Selector
 	recovery   *recovery.Coordinator
 	viewsMu    sync.Mutex
@@ -176,11 +178,13 @@ type Manager struct {
 	servicesErr error
 }
 
-// NewManager returns a workspace manager rooted at an out-of-repo branch base that chooses each
-// worker's adapter with selector.
-func NewManager(branchRoot string, selector *adapter.Selector) *Manager {
+// NewManager creates worker sandboxes with the selected adapters.
+func NewManager(branchRoot string, selector *adapter.Selector, filesystem Filesystem) *Manager {
 	if selector == nil {
 		panic("workspace: NewManager requires a selector")
+	}
+	if filesystem.AvailableStorage == nil {
+		filesystem.AvailableStorage = availableStorageBytes
 	}
 	branchRoot = strings.TrimSpace(branchRoot)
 	stateRoot := filepath.Dir(branchRoot)
@@ -191,6 +195,7 @@ func NewManager(branchRoot string, selector *adapter.Selector) *Manager {
 		branchRoot: branchRoot,
 		stateRoot:  stateRoot,
 		selector:   selector,
+		filesystem: filesystem,
 		views:      make(map[string]branchViewState),
 	}
 }

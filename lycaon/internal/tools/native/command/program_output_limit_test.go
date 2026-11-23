@@ -15,7 +15,7 @@ import (
 )
 
 func TestRetentionQuotaKeepsTypedScreenedPrefix(t *testing.T) {
-	runtime := &ProgramRuntime{Recorder: invocation.NewSQLRecorder(testdbfixture.Open(t, "output.db")), Blobs: blobstore.Store{Root: t.TempDir()}, Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil)}
+	runtime := &ProgramRuntime{Recorder: invocation.NewSQLRecorder(testdbfixture.Open(t, "output.db")), Blobs: blobstore.Store{Root: t.TempDir()}, Projector: captureprojection.New(&secretmatch.Matcher{}, nil)}
 	account := runtime.sessionResources("session")
 	account.limit = 4 << 20
 	stream := newProgramStream(t.Context(), 256<<20, account, nil)

@@ -11,7 +11,8 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -25,7 +26,7 @@ func TestComparisonRefreshesWithdrawnSecretException(t *testing.T) {
 	testutil.FailErr(t, "fingerprinter", err)
 	matcher.SetFingerprinter(fp)
 	server := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) { d.Approvals.SecretSpans = secretspan.New(matcher) })
-	p, err := project.CreateWithRoot(t.Context(), server.Sources.Workspace.ProjectRegistry, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), server.Sources.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	const value = "AKIAQYJK5TXV4NZR7SGB"
 	var accepted atomic.Bool

@@ -17,8 +17,7 @@ import (
 
 func TestAPIScanEnqueuePollLedgerAndSSE(t *testing.T) {
 	h := wiring.BuildForTest(t)
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	srv := h.Server
 	hub := h.MemoryHub()
 	projectDir := t.TempDir()

@@ -1,12 +1,13 @@
 package execution
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/repochange"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 
@@ -21,9 +22,9 @@ func TestCurrentScanCacheSurvivesUnavailableBaseBytes(t *testing.T) {
 	store := scanbase.NewSQLStore(testdbfixture.Open(t, "cache.db"))
 	snapshots := testSnapshots(t, store)
 	root := t.TempDir()
-	repochange.ResetWatchersForTest()
-	repochange.MarkCoverageCompleteForTest(root)
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Watch(t, root)
+	repochangetest.Acquire(t)
 	writeScanSource(t, root, "a.go", "package a\n")
 	base, err := snapshots.EnsurePath(t.Context(), root, sourcesnapshot.VerifyContent)
 	testutil.FailErr(t, "capture base", err)
@@ -33,7 +34,7 @@ func TestCurrentScanCacheSurvivesUnavailableBaseBytes(t *testing.T) {
 	entries, err := snapshots.EntriesUnder(t.Context(), base.ID, root, ".")
 	testutil.FailErr(t, "base entries", err)
 	finding := findingstest.Finding("rule", api.FindingLevelHigh, "found", "a.go", 1)
-	runner := &Runner{Store: store, Snapshots: snapshots}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB(), Snapshots: snapshots}
 	result := &scanoutput.Result{ScannedPaths: []string{"a.go"}, Findings: []api.SecurityFinding{finding}}
 	runner.cacheCurrentFindings(t.Context(), &api.CodeScan{CanonicalPath: root, SourceSnapshotID: base.ID, SourceCaptureQuality: string(base.Quality), ExecutionFingerprint: "execution"}, scancatalog.ScannerContract{}, result)
 	testutil.FailErr(t, "remove old source", os.Remove(filepath.Join(root, "a.go")))
@@ -45,14 +46,14 @@ func TestCurrentScanCacheSurvivesUnavailableBaseBytes(t *testing.T) {
 	if result.Findings[0].Locations[0].URI != "a.go" {
 		t.Fatal("cache mutated live findings")
 	}
-	if _, ok, err := store.BlobFindings(t.Context(), "execution", entries[0].ContentID(), "renamed.go"); err != nil || ok {
+	if _, ok, err := store.Findings.BlobFindings(t.Context(), "execution", entries[0].ContentID(), "renamed.go"); err != nil || ok {
 		t.Fatalf("path-dependent rules reused across rename: present=%v error=%v", ok, err)
 	}
 }
 
 func TestFileCacheRequiresCompleteSingleFileCoverage(t *testing.T) {
 	store := scanbase.NewSQLStore(testdbfixture.Open(t, "cache.db"))
-	runner := &Runner{Store: store}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 	entries := []sourcesnapshot.Entry{}
 	for _, rel := range []string{"clean.go", "unscanned.go", "moved.go", "partial.go", "first.go", "second.go"} {
 		entries = append(entries, sourcesnapshot.Entry{Path: rel, SHA256: rel})
@@ -66,7 +67,7 @@ func TestFileCacheRequiresCompleteSingleFileCoverage(t *testing.T) {
 	}
 	runner.cacheFileFindings(t.Context(), "execution", entries, result)
 	for _, entry := range entries {
-		found, ok, err := store.BlobFindings(t.Context(), "execution", entry.ContentID(), entry.Path)
+		found, ok, err := store.Findings.BlobFindings(t.Context(), "execution", entry.ContentID(), entry.Path)
 		testutil.FailErr(t, "read eligible cache", err)
 		if ok != (entry.Path == "clean.go") || len(found) != 0 {
 			t.Fatalf("%s present=%v findings=%v", entry.Path, ok, found)

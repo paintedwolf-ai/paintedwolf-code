@@ -15,7 +15,7 @@ import (
 func TestScopeLookupResolvesRootPath(t *testing.T) {
 	ctx := context.Background()
 	reg := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	lookup := project.ScopeLookup{Registry: reg}
 	rootPath := project.PrimaryRootPath(p)
@@ -39,7 +39,7 @@ func TestScopeLookupResolvesRootPath(t *testing.T) {
 func TestPathKeyedPublishReachesProjectSubscriber(t *testing.T) {
 	ctx := context.Background()
 	reg := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	rootPath := project.PrimaryRootPath(p)
 
@@ -66,9 +66,9 @@ func TestPathKeyedPublishReachesProjectSubscriber(t *testing.T) {
 func TestPathKeyedPublishStaysOutOfOtherProjects(t *testing.T) {
 	ctx := context.Background()
 	reg := projecttest.NewRegistry(t)
-	mine, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	mine, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
-	other, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	other, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create other project", err)
 
 	hub := events.NewMemoryHub()
@@ -91,7 +91,7 @@ func TestPathKeyedPublishStaysOutOfOtherProjects(t *testing.T) {
 func TestResolveProjectDirAcceptsPath(t *testing.T) {
 	ctx := context.Background()
 	reg := projecttest.NewRegistry(t)
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	lookup := project.ScopeLookup{Registry: reg}
 	rootPath := project.PrimaryRootPath(p)

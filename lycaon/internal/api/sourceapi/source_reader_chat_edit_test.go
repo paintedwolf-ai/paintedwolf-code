@@ -12,9 +12,9 @@ import (
 // A reference names its list and a zero-based place in it; anything else finds nothing.
 func TestReadChatFileEditResolvesEachListFromZero(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "store result", sessionStore.AppendMessages(t.Context(), sess.ID, wire.Message{
+	testutil.FailErr(t, "store result", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, wire.Message{
 		ID: "m1", Role: wire.MessageRoleTool,
 		ToolResult: &wire.ToolResult{
 			ToolCallID:       "c1",
@@ -22,7 +22,7 @@ func TestReadChatFileEditResolvesEachListFromZero(t *testing.T) {
 			OverlayPromotion: &wire.OverlayPromotion{Files: []wire.FileEditSnapshot{{Path: "p.go", After: "p"}, {Path: "q.go", After: "q"}}},
 		},
 	}, wire.Message{ID: "m2", Role: wire.MessageRoleTool, ToolResult: &wire.ToolResult{ToolCallID: "c2", FileEdits: []wire.FileEditSnapshot{{Path: "only.go", After: "x"}}}}))
-	comparisons := &Comparisons{SessionStore: sessionStore}
+	comparisons := &Comparisons{SessionQueries: sessionStore.Sessions, TranscriptQueries: sessionStore.Transcript}
 	ref := func(message, call string, source wire.FileEditSource, index int) wire.FileEditReference {
 		return wire.FileEditReference{MessageID: message, ToolCallID: call, Source: source, Index: index}
 	}

@@ -62,19 +62,8 @@ func (r RetentionReport) TotalDeleted() int64 {
 	return total
 }
 
-func (r RetentionReport) JournalDeleted(table string) int64 {
-	return r.OperationJournals[table]
-}
-
-// RunRetention removes one bounded batch of stale store rows and returns one
-// bounded vacuum pass of free pages to the file system.
-func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (RetentionReport, error) {
-	return runMaintenancePass(ctx, sqlDB, cfg, true)
-}
-
-// A pass without row work leaves the journal scans to the next wake: their cost
-// grows with retained rows and frees few of the pages a drain is returning.
-func runMaintenancePass(ctx context.Context, sqlDB Handle, cfg RetentionConfig, rowsDue bool) (RetentionReport, error) {
+// RunMaintenancePass reclaims one bounded batch; rowsDue enables retained-row cleanup.
+func RunMaintenancePass(ctx context.Context, sqlDB Handle, cfg RetentionConfig, rowsDue bool) (RetentionReport, error) {
 	var rep RetentionReport
 	if sqlDB == nil || !cfg.Enabled {
 		return rep, nil
@@ -98,7 +87,7 @@ func runMaintenancePass(ctx context.Context, sqlDB Handle, cfg RetentionConfig, 
 			}
 		}
 	}
-	// Pages freed by any owner, retention or not, are returned to the file system.
+	// Vacuum also returns pages freed outside retention.
 	if cfg.IncrementalVacuumMinFreelistPages > 0 {
 		rep.Vacuum, err = runIncrementalVacuum(ctx, sqlDB, cfg.IncrementalVacuumMinFreelistPages)
 		rep.IncrementalVacuumed = rep.Vacuum.Progressed

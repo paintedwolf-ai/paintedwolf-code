@@ -10,7 +10,7 @@ import (
 )
 
 func TestPreparedAuthorUpdateHasNoEffectUntilApply(t *testing.T) {
-	store := NewMemoryStore()
+	store := newProgressFixture(t, "session")
 	content := "## Progress\n- [ ] Inspect source"
 	prepared, err := PrepareAuthorUpdate(content)
 	testutil.FailErr(t, "prepare progress", err)
@@ -42,7 +42,7 @@ func TestPreparedAuthorUpdateRejectsWithoutWrites(t *testing.T) {
 	}
 	prepared, err := PrepareAuthorUpdate("- [ ] work")
 	testutil.FailErr(t, "prepare valid progress", err)
-	store := NewMemoryStore()
+	store := newProgressFixture(t, "session")
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, err := prepared.Apply(ctx, store, "session", nil); !errors.Is(err, context.Canceled) {
@@ -62,7 +62,7 @@ func TestPreparedAuthorUpdateRejectsWithoutWrites(t *testing.T) {
 func TestPreparedAuthorUpdateUsesTheAppliedSessionHistory(t *testing.T) {
 	prepared, err := PrepareAuthorUpdate("## Progress\n- [x] Inspect source")
 	testutil.FailErr(t, "prepare completed checklist", err)
-	store := NewMemoryStore()
+	store := newProgressFixture(t, "session")
 	var rejected *AuthorUpdateRejection
 	if _, err := prepared.Apply(t.Context(), store, "session", nil); !errors.As(err, &rejected) || rejected.Code != "PROGRESS_NO_OPEN_STEP" {
 		t.Fatalf("initial completion rejection: %v", err)
@@ -81,7 +81,7 @@ func TestPreparedAuthorUpdateUsesTheAppliedSessionHistory(t *testing.T) {
 }
 
 func TestAuthorUpdateRequiresAndPreservesStableItemIDs(t *testing.T) {
-	store := NewMemoryStore()
+	store := newProgressFixture(t, "session")
 	first, err := PrepareAuthorUpdate("- [ ] First\n- [ ] Second")
 	testutil.FailErr(t, "prepare initial checklist", err)
 	created, err := first.Apply(t.Context(), store, "session", nil)
@@ -137,7 +137,7 @@ func TestAuthorUpdateRequiresAndPreservesStableItemIDs(t *testing.T) {
 }
 
 func TestAuthorUpdateTreatsBootstrappedEmptyProgressAsFirstCreation(t *testing.T) {
-	store := NewMemoryStore()
+	store := newProgressFixture(t, "session")
 	store.EnsureRun("session", "run-1", "Build tic-tac-toe")
 	first, err := PrepareAuthorUpdate("# Goal\n\nBuild tic-tac-toe\n\n## Progress\n- [ ] Create board\n- [ ] Add AI")
 	testutil.FailErr(t, "prepare initial checklist after EnsureRun", err)

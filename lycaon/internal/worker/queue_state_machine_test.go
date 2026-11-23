@@ -51,7 +51,7 @@ func newQueueMachine(t *testing.T, path string) *queueMachine {
 	}
 	m.store = testdbfixture.OpenPath(t, path)
 	testdbseed.InsertSession(t, m.store, "parent", testdbseed.DefaultProjectID)
-	m.queue = worker.NewSQLQueue(m.store, queueMachineMaxRunning)
+	m.queue = worker.NewSQLServices(m.store, queueMachineMaxRunning).Queue
 	return m
 }
 
@@ -244,7 +244,7 @@ func (m *queueMachine) restart(rt *rapid.T) {
 		rt.Fatalf("close database: %v", err)
 	}
 	m.store = testdbfixture.OpenPath(m.t, m.path)
-	m.queue = worker.NewSQLQueue(m.store, queueMachineMaxRunning)
+	m.queue = worker.NewSQLServices(m.store, queueMachineMaxRunning).Queue
 }
 
 func (m *queueMachine) check(rt *rapid.T) {

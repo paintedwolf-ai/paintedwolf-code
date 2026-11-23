@@ -49,12 +49,11 @@ func TestWorkerSourceReadGoesThroughTheViewOrItsCheckpoint(t *testing.T) {
 		BackingDir: filepath.Join(tmp, "backing"), Core: core, CheckpointStore: store,
 	})
 	testutil.FailErr(t, "new engine", err)
-	consumer.RegisterBranchEngine(mount, engine)
 	t.Cleanup(func() { consumer.UnregisterEngine(engine) })
 
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, rootID, source)
-	workspace := &Workspace{SourceLedger: sourceledger.New(database, filepath.Join(tmp, "content"))}
+	workspace := &Workspace{SourceLedger: sourceledger.New(database, filepath.Join(tmp, "content"), sourceledger.Timing{})}
 	proj := &project.Project{ID: testdbseed.DefaultProjectID, Roots: []project.Root{{ID: rootID, Path: mount, Label: rootID, IsPrimary: true}}}
 	scope := sourceViewerWorkspace{id: "w", kind: wire.SourceWorkspaceKindWorker, branch: proj.BranchForRoot(rootID)}
 	read := func(path, checkpointID string) (*wire.ProjectSourceReadResponse, *httptest.ResponseRecorder, bool, error) {

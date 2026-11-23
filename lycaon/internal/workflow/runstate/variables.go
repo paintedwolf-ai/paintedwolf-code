@@ -18,18 +18,14 @@ type VarsWriter interface {
 	UpdateVars(context.Context, *api.WorkflowRun, string, map[string]any) error
 }
 
-type SessionReader interface {
-	Get(context.Context, string) (*api.Session, error)
-}
-
 type Variables struct {
 	reads    VarsReader
 	writes   VarsWriter
-	sessions SessionReader
+	sessions Sessions
 	guards   sync.Map
 }
 
-func NewVariables(reads VarsReader, writes VarsWriter, sessions SessionReader) *Variables {
+func NewVariables(reads VarsReader, writes VarsWriter, sessions Sessions) *Variables {
 	return &Variables{reads: reads, writes: writes, sessions: sessions}
 }
 

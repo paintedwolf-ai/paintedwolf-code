@@ -16,7 +16,7 @@ func TestHumanPlanStartLoopWakesCoordinator(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	srv := h.Server
 	sess := createSessionHTTP(t, srv, t.TempDir())
-	before, err := h.Store.GetMessages(t.Context(), sess.ID)
+	before, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "GetMessages before start", err)
 	seen := map[string]bool{}
 	for _, msg := range before {
@@ -34,7 +34,7 @@ func TestHumanPlanStartLoopWakesCoordinator(t *testing.T) {
 	testutil.FailErr(t, "decode started run", json.Unmarshal(w.Body.Bytes(), &run))
 
 	testutil.WaitFor(t, "the coordinator loop wakes for the started run", func() bool {
-		msgs, err := h.Store.GetMessages(t.Context(), sess.ID)
+		msgs, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "GetMessages", err)
 		for _, msg := range msgs {
 			if !seen[msg.ID] && msg.Kind == wire.MessageKindHostLoopWake && msg.WorkflowRunID == run.ID {

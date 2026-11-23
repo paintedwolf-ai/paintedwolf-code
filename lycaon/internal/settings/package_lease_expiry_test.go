@@ -16,7 +16,7 @@ func TestPackageCoordinateChatLeaseExpires(t *testing.T) {
 	store, err := NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
 	testutil.FailErr(t, "PutGlobal balanced", store.PutGlobal(ApprovalConfig{Posture: gate.PostureBalanced}))
-	approvalGate := NewRuleApprovalGate(store, NoSources())
+	approvalGate := NewRuleApprovalGate(store, emptySources())
 
 	execution := &packageexec.Execution{
 		Manager:   "npm",

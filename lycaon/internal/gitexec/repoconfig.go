@@ -70,7 +70,7 @@ var executableSubsectionFamilies = []executableSubsectionFamily{
 }
 
 // auditRepoConfig rejects executable settings from the discovered repository.
-func auditRepoConfig(ctx context.Context, dir string) error {
+func (e execution) auditRepoConfig(ctx context.Context, dir string) error {
 	repo, inRepo := gitrepo.Discover(dir)
 	if !inRepo {
 		return nil
@@ -86,7 +86,7 @@ func auditRepoConfig(ctx context.Context, dir string) error {
 			return nil
 		}
 	}
-	keys, err := unsafeRepoConfigKeys(ctx, dir)
+	keys, err := e.unsafeRepoConfigKeys(ctx, dir)
 	if err != nil {
 		// Failed audits are not cached.
 		return err
@@ -152,8 +152,8 @@ func mayContainUnsafeRepoConfig(raw []byte) bool {
 }
 
 // unsafeRepoConfigKeys reads repository-local key names.
-func unsafeRepoConfigKeys(ctx context.Context, dir string) ([]string, error) {
-	bin, err := binaryPathFn()
+func (e execution) unsafeRepoConfigKeys(ctx context.Context, dir string) ([]string, error) {
+	bin, err := e.binaryPath()
 	if err != nil {
 		return nil, err
 	}

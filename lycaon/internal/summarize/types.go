@@ -108,7 +108,7 @@ type PackWindow struct {
 	EndLine   int
 	Symbol    string
 	Body      string
-	// Structured root identity of Path; empty for legacy callers.
+	// Structured root identity of Path; empty when no root identity is available.
 	RootID   string
 	ScopeRel string
 }
@@ -194,7 +194,7 @@ type DefinitionItem struct {
 	ErrorKind     string
 	LogDigest     string
 	ImportPath    string
-	// Structured root identity of RelPath; empty for legacy callers.
+	// Structured root identity of RelPath; empty when no root identity is available.
 	RootID   string
 	ScopeRel string
 }
@@ -273,7 +273,7 @@ type StructureCandidate struct {
 	Errors        []string
 	ErrorKind     string
 	LogDigest     string
-	// Structured root identity of RelPath; empty for legacy callers.
+	// Structured root identity of RelPath; empty when no root identity is available.
 	RootID     string
 	ScopeRel   string
 	ImportPath string

@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/scan/registry/registry.go",
+  "kind": "runtime_service",
+  "workstream": "scanner-fixture-boundaries",
+  "disposition": "retain",
+  "reason": "Retain the 315-line scanner registry after removing its static mode. Construction, driver selection and project listing use one validated file-backed catalog contract; reload and shutdown remain in the lifecycle component. The device-file, reload, project-trust and adapter-close contracts pass on Linux and macOS.",
+  "reviewed_commit": "d7df5a5cbbb1392a97cb54bd77dd4b9cc05e1bd9",
+  "ceiling": 315,
+  "boundaries": {
+    "lycaon/internal/scan/registry/catalog_files_test.go": "f793a3166c034a75450b289c1339c0dba4484cbfdddd247eac872f528468a2a9",
+    "lycaon/internal/scan/registry/registry_test.go": "020c2fe61e6935a398c090db476d42eb4d23aa9d53c88287abce2d8706e8be3d",
+    "lycaon/internal/scan/registry/registry_close_test.go": "7b786f4a25b0c0740381159b2ad7690aa9cf0c95a610cca44e02ebef5079b94f"
+  }
+}

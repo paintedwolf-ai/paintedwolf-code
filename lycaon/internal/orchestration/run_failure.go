@@ -40,11 +40,11 @@ func (e *RunFailure) Unwrap() error {
 	return e.Err
 }
 
-func newRunFailure(code, stage string, retryable bool, err error) error {
+func newRunFailure(code, stage string, err error) error {
 	if err == nil {
 		err = fmt.Errorf("topology run failed")
 	}
-	return &RunFailure{Code: code, Stage: strings.TrimSpace(stage), Retryable: retryable, Err: err}
+	return &RunFailure{Code: code, Stage: strings.TrimSpace(stage), Err: err}
 }
 
 func workflowFailureFor(err error, phase string) api.WorkflowFailure {

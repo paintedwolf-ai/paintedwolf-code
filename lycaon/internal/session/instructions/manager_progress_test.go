@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -30,9 +31,9 @@ func (r stubWorkflowRuns) ActiveBySession(context.Context, string) (*api.Workflo
 }
 
 func TestBootstrapProgressNotifiesWithBeforeAndAfterSnapshots(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-1")
 	store.EnsureRun("sess-1", "run-0", "Initial run")
-	svc := New(stubInstructionStore{session: &api.Session{ID: "sess-1"}}, nil, nil, nil)
+	svc := New(stubInstructionStore{session: &api.Session{ID: "sess-1"}}, stubInstructionStore{session: &api.Session{ID: "sess-1"}}, nil, nil, nil)
 	svc.SetProgress(store)
 	svc.SetWorkflow(&WorkflowDomains{Runs: stubWorkflowRuns{run: &api.WorkflowRun{ID: "run-1"}}})
 

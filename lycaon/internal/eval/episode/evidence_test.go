@@ -26,7 +26,7 @@ func TestEvidenceUsesApplicationRepositoriesAndSessionIdentity(t *testing.T) {
 	_, err := database.ExecContext(t.Context(), `UPDATE sessions SET parent_session_id='root' WHERE id='child'`)
 	testutil.FailErr(t, "bind child", err)
 	sessions := store.NewSQL(database)
-	testutil.FailErr(t, "append observed progress", sessions.AppendMessages(t.Context(), "root", api.Message{
+	testutil.FailErr(t, "append observed progress", sessions.Transcript.AppendMessages(t.Context(), "root", api.Message{
 		ID: "progress", WorkflowRunID: "flow", Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Kind: api.MessageKindProgressComplete,
 		ProgressComplete: &api.ProgressCompleteMeta{Steps: []api.ProgressStep{{Label: "Apply mapping", State: "done"}}},
 	}))

@@ -84,20 +84,6 @@ func exerciseProbeReadWrite(srcDir, backingDir string, res *ProbeResult) error {
 	return nil
 }
 
-func combineFlushHooks(h1, h2 func(ctx context.Context, viewID string) error) func(ctx context.Context, viewID string) error {
-	return func(ctx context.Context, viewID string) error {
-		if h1 != nil {
-			if err := h1(ctx, viewID); err != nil {
-				return err
-			}
-		}
-		if h2 != nil {
-			return h2(ctx, viewID)
-		}
-		return nil
-	}
-}
-
 func executeCheckpointBarrier(
 	ctx context.Context,
 	adapterID AdapterID,
@@ -162,44 +148,6 @@ func executeCheckpointBarrier(
 		DirtyDataFlushed:        true,
 		WritableMappingsFlushed: true,
 	}, releaseFn, nil
-}
-
-func settleViewRelease(
-	ctx context.Context,
-	adapterID AdapterID,
-	view *PreparedView,
-	unmountFn func(ctx context.Context, viewID, runtimeDir string) error,
-) (ReleaseReceipt, error) {
-	receipt := ReleaseReceipt{ViewID: view.ViewID, AdapterID: adapterID}
-	_ = view.Core.ReleaseView()
-	if err := ctx.Err(); err != nil {
-		receipt.Settled = false
-		receipt.ReasonCode = ReasonCleanupFailed
-		receipt.Diagnostic = fmt.Sprintf("deadline or cancellation is not proof of cleanup: %v", err)
-		return receipt, &AdapterError{AdapterID: adapterID, Op: "release", ReasonCode: ReasonCleanupFailed, Diagnostic: receipt.Diagnostic, Cause: err}
-	}
-	if unmountFn != nil {
-		if uErr := unmountFn(ctx, view.ViewID, view.RuntimeViewDir); uErr != nil {
-			receipt.Settled = false
-			receipt.ReasonCode = ReasonCleanupFailed
-			receipt.Diagnostic = uErr.Error()
-			return receipt, &AdapterError{AdapterID: adapterID, Op: "release", ReasonCode: ReasonCleanupFailed, Diagnostic: uErr.Error(), Cause: uErr}
-		}
-	}
-	for _, r := range view.Roots {
-		if r.WorkspacePath != "" {
-			makeDirsWritable(r.WorkspacePath)
-		}
-	}
-	if err := removeAllForceWritable(view.RuntimeViewDir); err != nil {
-		receipt.Settled = false
-		receipt.ReasonCode = ReasonCleanupFailed
-		receipt.Diagnostic = err.Error()
-		return receipt, &AdapterError{AdapterID: adapterID, Op: "release", ReasonCode: ReasonCleanupFailed, Diagnostic: err.Error(), Cause: err}
-	}
-	receipt.Settled = true
-	receipt.CleanedPaths = []string{view.RuntimeViewDir}
-	return receipt, nil
 }
 
 // ActiveViewRecovery describes the preserved state of an active view after adapter failure.

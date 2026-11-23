@@ -50,7 +50,7 @@ func TestGitManagerChangedPathsPorcelain(t *testing.T) {
 	}
 	git := func(args ...string) {
 		cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}

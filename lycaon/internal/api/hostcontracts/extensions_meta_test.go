@@ -15,7 +15,8 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -108,7 +109,7 @@ func TestDeviceMetaPackMutationKeepsProjectTrustEnabled(t *testing.T) {
 	root := t.TempDir()
 	contractfixture.WriteOverlay(t, root, extpacks.DeviceDesiredName, "format: 1\npacks: []\ndisabled: []\nown: {}\n")
 	owner := srv.Admin.Extensions.Mutations.Owner
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO projects(id, name, last_opened_at, created_at) VALUES(?, 'P', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`, p.ID)
 	testutil.FailErr(t, "seed project row", err)

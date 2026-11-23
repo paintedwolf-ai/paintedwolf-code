@@ -12,7 +12,7 @@ import (
 )
 
 // ListAttentionCandidates selects unarchived root sessions with active, waiting, or unread work.
-func (s *sqlSessionViews) ListAttentionCandidates(ctx context.Context) ([]attention.Candidate, error) {
+func (s *sqlSessions) ListAttentionCandidates(ctx context.Context) ([]attention.Candidate, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (s *sqlSessionViews) ListAttentionCandidates(ctx context.Context) ([]attent
 
 // LatestFinishes returns each session's newest completed turn. Sessions that
 // have never completed one are absent.
-func (s *sqlSessionViews) LatestFinishes(ctx context.Context) (map[string]time.Time, error) {
+func (s *sqlSessions) LatestFinishes(ctx context.Context) (map[string]time.Time, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

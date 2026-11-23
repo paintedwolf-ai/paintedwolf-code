@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/toolhost"
@@ -51,7 +50,6 @@ func (b *serveBuilder) wireWorkflows() error {
 
 func (b *serveBuilder) wireWorkflowScanServices() error {
 	b.git.mgr = git.NewManager()
-	gitexec.SetHostConfig(gitexec.HostConfigResolver())
 	b.git.status = git.NewStatusCache(b.git.mgr)
 	releaseGitStatus := b.git.status.RegisterRepochangeObserver()
 	b.startup.resources.Track("git-status-observer", 22, func(context.Context) error { releaseGitStatus(); return nil })
@@ -130,7 +128,7 @@ func (b *serveBuilder) seedHostPowerWork() error {
 	for i := range openWorkers {
 		b.settings.Power.SetActive("worker:"+openWorkers[i].ID, true)
 	}
-	openScans, err := b.scanning.Store.ListOpen(b.startup.ctx)
+	openScans, err := b.scanning.Store.Reads.ListOpen(b.startup.ctx)
 	if err != nil {
 		return fmt.Errorf("seed host power from scans: %w", err)
 	}
@@ -149,7 +147,7 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 		ModuleRoot:              b.catalog.ModuleRoot,
 		PlanCloseout:            b.workerRuntime.PlanCloseoutComplete,
 		PlanWorkIDs:             b.workerRuntime.PlanWorkIDs,
-		ScanStore:               b.scanning.Store,
+		ScanReads:               b.scanning.Store.Reads,
 		ScanObligation:          b.scanning.Obligation,
 		Snapshots:               b.storage.SourceLedger.Snapshots,
 		GatesCfg:                b.scanning.GatesCfg,
@@ -191,6 +189,6 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 	b.workflows.Manager.Verdicts.Questions.WorkerTasks = workflowTaskQuery1
 	b.workflows.Manager.Verdicts.WorkerTasks = workflowTaskQuery1
 	b.security.BindSpawnAgents(b.workflows.Manager.Policy.AllowedAgents)
-	b.workflows.Manager.Verdicts.Evidence.EvidenceDigests = append(b.workflows.Manager.Verdicts.Evidence.EvidenceDigests, scan.WorkflowEvidenceDigest(b.scanning.Store))
+	b.workflows.Manager.Verdicts.Evidence.EvidenceDigests = append(b.workflows.Manager.Verdicts.Evidence.EvidenceDigests, scan.WorkflowEvidenceDigest(b.scanning.Store.Reads))
 	return nil
 }

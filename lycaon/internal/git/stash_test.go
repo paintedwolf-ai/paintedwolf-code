@@ -38,7 +38,7 @@ func TestGitManagerCheckoutSwitchesBranch(t *testing.T) {
 	initGitRepo(t, dir)
 	run := func(args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
@@ -82,7 +82,7 @@ func gitx(t *testing.T, dir string, args ...string) {
 		full = append([]string{"-C", dir}, args...)
 	}
 	cmd := exec.CommandContext(context.Background(), "git", full...)
-	cmd.Env = lyexec.LocalGitEnv()
+	cmd.Env = lyexec.InheritedEnviron()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v %s", args, err, out)
 	}
@@ -119,7 +119,7 @@ func TestGitManagerPushPullAheadBehind(t *testing.T) {
 	t.Parallel()
 	bare := t.TempDir()
 	initCmd := exec.CommandContext(t.Context(), "git", "init", "--bare", bare)
-	initCmd.Env = lyexec.LocalGitEnv()
+	initCmd.Env = lyexec.InheritedEnviron()
 	if out, err := initCmd.CombinedOutput(); err != nil {
 		t.Skipf("git init --bare: %v %s", err, out)
 	}
@@ -181,7 +181,7 @@ func TestGitManagerStashClearsWorkingTree(t *testing.T) {
 	initGitRepo(t, dir)
 	git := func(args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}

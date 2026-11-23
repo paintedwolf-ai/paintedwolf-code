@@ -32,7 +32,7 @@ func newTestCoordinator(t *testing.T, store *scan.SQLStore, head scan.HeadSHARea
 
 func claimScan(t *testing.T, store *scan.SQLStore, id string) *api.CodeScan {
 	t.Helper()
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
 	if claimed.ID != id {
 		t.Fatalf("claimed scan %q want %q", claimed.ID, id)

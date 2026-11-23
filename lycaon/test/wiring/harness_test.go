@@ -1,7 +1,7 @@
 package wiring
 
 import (
-	"context"
+	"net/http"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -38,11 +38,21 @@ func TestBuildForTestComposition(t *testing.T) {
 	}
 }
 
-func TestBuildForTestBackgroundWorkersCompleteJob(t *testing.T) {
+func TestServedAppCompletesWorkerJob(t *testing.T) {
 	h := BuildForTest(t)
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
-	ctx := context.Background()
+	baseURL := h.Start(t)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/projects", nil)
+	testutil.FailErr(t, "create served request", err)
+	req.Header.Set("Authorization", "Bearer "+h.APIToken)
+	req.Close = true
+	resp, err := http.DefaultClient.Do(req)
+	testutil.FailErr(t, "read projects from listener", err)
+	testutil.FailErr(t, "close projects response", resp.Body.Close())
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("served projects status = %d", resp.StatusCode)
+	}
+
+	ctx := t.Context()
 	dir := h.ProjectDir(t, "worker")
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, dir)
 	testutil.FailErr(t, "CreateHarnessSession failed", err)
@@ -86,7 +96,7 @@ func TestBuildForTestAtReopensTheStoreItLeft(t *testing.T) {
 		sessionID = sess.ID
 	})
 	h := BuildForTestAt(t, dir)
-	sess, err := h.Store.Get(t.Context(), sessionID)
+	sess, err := h.Store.Sessions.Get(t.Context(), sessionID)
 	testutil.FailErr(t, "read the session the first boot created", err)
 	if sess.ID != sessionID {
 		t.Fatalf("second boot read session %q, want %q", sess.ID, sessionID)

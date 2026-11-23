@@ -3,7 +3,6 @@ package workeroutcomes
 import (
 	"context"
 
-	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -12,16 +11,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type SummaryStore interface {
-	Get(context.Context, string) (*api.Session, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
-	GetWorkerJobMessages(context.Context, string, string) ([]api.Message, error)
-	LoadLedger(context.Context, string) (evidence.Ledger, error)
-	SeedUntrustedContent(context.Context, string) error
-	UpsertEvidenceRecord(context.Context, string, evidence.Record) error
-	SessionSecretExposure(context.Context, string) (bool, error)
-	SeedSecretExposure(context.Context, string) error
-}
 type SummaryLimits interface {
 	Compaction(context.Context, *api.Session) compaction.CompactionConfig
 }
@@ -41,45 +30,49 @@ type SummaryDelivery interface {
 }
 
 type Summaries struct {
-	store          SummaryStore
-	tasks          TaskReader
-	limits         SummaryLimits
-	decisions      SummaryDecisions
-	verification   SummaryVerification
-	resources      SummaryResources
-	delivery       SummaryDelivery
-	cards          ParentCards
-	digests        *Digests
-	grounding      GroundingReset
-	workspaceCheck workercompletion.WorkspaceChangeChecker
-	workflowHints  *guidance.HintConfig
-	oarPipeline    *oar.GuardPipeline
-	inspectChanges func(context.Context, *api.WorkerTask, []projectroot.RootRef) ([]string, error)
-	overlayStatus  func(context.Context, api.WorkerSummaryStatus, *api.WorkerTask) api.WorkerSummaryStatus
-	overlayPending func(context.Context, *api.WorkerTask) bool
-	names          workercompletion.WorkerNames
+	sessionStore    Sessions
+	transcriptStore Transcript
+	evidenceStore   Evidence
+	tasks           TaskReader
+	limits          SummaryLimits
+	decisions       SummaryDecisions
+	verification    SummaryVerification
+	resources       SummaryResources
+	delivery        SummaryDelivery
+	cards           ParentCards
+	digests         *Digests
+	grounding       GroundingReset
+	workspaceCheck  workercompletion.WorkspaceChangeChecker
+	workflowHints   *guidance.HintConfig
+	oarPipeline     *oar.GuardPipeline
+	inspectChanges  func(context.Context, *api.WorkerTask, []projectroot.RootRef) ([]string, error)
+	overlayStatus   func(context.Context, api.WorkerSummaryStatus, *api.WorkerTask) api.WorkerSummaryStatus
+	overlayPending  func(context.Context, *api.WorkerTask) bool
+	names           workercompletion.WorkerNames
 }
 
 // SetWorkerNames names the worker a summarized job's round belongs to.
 func (m *Summaries) SetWorkerNames(names workercompletion.WorkerNames) { m.names = names }
 
 type SummaryPorts struct {
-	Sessions       SummaryStore
-	Tasks          TaskReader
-	Limits         SummaryLimits
-	Decisions      SummaryDecisions
-	Verification   SummaryVerification
-	Resources      SummaryResources
-	Delivery       SummaryDelivery
-	Cards          ParentCards
-	Digests        *Digests
-	InspectChanges func(context.Context, *api.WorkerTask, []projectroot.RootRef) ([]string, error)
-	OverlayStatus  func(context.Context, api.WorkerSummaryStatus, *api.WorkerTask) api.WorkerSummaryStatus
-	OverlayPending func(context.Context, *api.WorkerTask) bool
+	SessionStore    Sessions
+	TranscriptStore Transcript
+	EvidenceStore   Evidence
+	Tasks           TaskReader
+	Limits          SummaryLimits
+	Decisions       SummaryDecisions
+	Verification    SummaryVerification
+	Resources       SummaryResources
+	Delivery        SummaryDelivery
+	Cards           ParentCards
+	Digests         *Digests
+	InspectChanges  func(context.Context, *api.WorkerTask, []projectroot.RootRef) ([]string, error)
+	OverlayStatus   func(context.Context, api.WorkerSummaryStatus, *api.WorkerTask) api.WorkerSummaryStatus
+	OverlayPending  func(context.Context, *api.WorkerTask) bool
 }
 
 func NewSummaries(p SummaryPorts) *Summaries {
-	return &Summaries{store: p.Sessions, tasks: p.Tasks, limits: p.Limits, decisions: p.Decisions, verification: p.Verification, resources: p.Resources, delivery: p.Delivery, cards: p.Cards, digests: p.Digests, inspectChanges: p.InspectChanges, overlayStatus: p.OverlayStatus, overlayPending: p.OverlayPending}
+	return &Summaries{sessionStore: p.SessionStore, transcriptStore: p.TranscriptStore, evidenceStore: p.EvidenceStore, tasks: p.Tasks, limits: p.Limits, decisions: p.Decisions, verification: p.Verification, resources: p.Resources, delivery: p.Delivery, cards: p.Cards, digests: p.Digests, inspectChanges: p.InspectChanges, overlayStatus: p.OverlayStatus, overlayPending: p.OverlayPending}
 }
 func (m *Summaries) SetTasks(p TaskReader)           { m.tasks = p }
 func (m *Summaries) SetDecisions(p SummaryDecisions) { m.decisions = p }

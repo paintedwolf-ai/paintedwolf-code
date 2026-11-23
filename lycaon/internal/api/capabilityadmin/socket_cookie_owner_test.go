@@ -5,7 +5,6 @@ package capabilityadmin
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"maps"
 	"net"
@@ -24,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -35,11 +35,13 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestUnixSocketCookieIssuerReplacementNeedsFreshDisclosureAuthority(t *testing.T) {
@@ -60,7 +62,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	database := testdbfixture.Open(t, "cookie-owner.db")
 	testdbseed.InsertSessionWithRoot(t, database, "chat", testdbseed.DefaultProjectID, workspace)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
-	values := credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "cookie owner fixture"}, func(string) bool { return true })
+	values := credentialstoretest.Open(t, credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "cookie owner fixture"}, func(string) bool { return true })
 	service := secretcap.NewWithStore(database, values, nil)
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "cookie matcher", err)
@@ -71,10 +73,10 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	approvals, err := settings.NewApprovalStoreAt(filepath.Join(root, "approvals.yaml"))
 	testutil.FailErr(t, "cookie approvals", err)
 	defer approvals.Close()
-	authority := settings.NewRuleApprovalGate(approvals, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(approvals, settingstest.EmptySources())
 	runtime := approvalstate.NewSocketCapabilityRuntime()
 	defer runtime.Close()
-	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	defer func() {
 		testutil.FailErr(t, "stop cookie checkpoints", checkpoints.StopExpiryTimers(context.Background()))
 	}()
@@ -93,7 +95,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 		t.Fatalf("same issuer: original-cookie-requests=%d, secret-cards=%d, cards=%d", originalCookieRequests.Load(), review.secretCards, review.cards)
 	}
 	jarRequest := secretcap.CookieJarRequest{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "chat", SessionID: "chat", OperationID: "inspect", Name: "service-cookies"}
-	jar, err := service.OpenCookieJar(ctx, jarRequest)
+	jar, err := service.Jars.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "inspect original cookie", err)
 	before := jar.Store.Snapshot()
 	if len(before) != 1 || before[0].NativeIssuer == "" {
@@ -117,7 +119,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	}
 	<-observed
 	assertCookieDecisionLedger(t, ctx, authzcontext.NewSQLStore(database), "new-socket-recipient", authzcontext.EventOutcomeDenied)
-	restored, err := service.OpenCookieJar(ctx, jarRequest)
+	restored, err := service.Jars.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "preserve cookie data", err)
 	if !reflect.DeepEqual(restored.Store.Snapshot(), before) {
 		t.Fatal("recipient refusal changed stored cookies")
@@ -127,7 +129,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	}
 	testCookieReferenceDisclosure(t, value, args, invoke)
 	invoke("approval-was-only-one-invocation", args, true, false)
-	stillOriginal, err := service.OpenCookieJar(ctx, jarRequest)
+	stillOriginal, err := service.Jars.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "inspect invocation-only approval", err)
 	if !reflect.DeepEqual(stillOriginal.Store.Snapshot(), before) {
 		t.Fatal("approval or withholding rewrote issuer or attributes")
@@ -138,7 +140,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	reissue.Store(true)
 	invoke("actual-issuer-reissues", args, true, false)
 	reissue.Store(false)
-	reissued, err := service.OpenCookieJar(ctx, jarRequest)
+	reissued, err := service.Jars.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "inspect actual reissuance", err)
 	after := reissued.Store.Snapshot()
 	if len(after) != 1 || after[0].NativeIssuer == "" || after[0].NativeIssuer == before[0].NativeIssuer {
@@ -164,16 +166,16 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	approvals, err = settings.NewApprovalStoreAt(filepath.Join(root, "approvals.yaml"))
 	testutil.FailErr(t, "reopen approvals", err)
 	defer approvals.Close()
-	authority = settings.NewRuleApprovalGate(approvals, settings.NoSources())
+	authority = settings.NewRuleApprovalGate(approvals, settingstest.EmptySources())
 	runtime = approvalstate.NewSocketCapabilityRuntime()
 	defer runtime.Close()
 	service = secretcap.NewWithStore(database, values, nil)
 	service.SetFingerprinter(fingerprinter)
-	checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+	checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	checkpoints.Authority.SetApprovalAuthorityInstaller(&Installation{Gate: authority, Sockets: runtime, authorityMu: &sync.Mutex{}})
 	review = &socketOwnerReview{Checkpoints: checkpoints, decisionContext: ctx}
 	executor = newCookieOwnerExecutor(t, ctx, database, review, authority, runtime, service, matcher)
-	persisted, err := service.OpenCookieJar(ctx, jarRequest)
+	persisted, err := service.Jars.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "reopen protected cookie after engine restart", err)
 	if !reflect.DeepEqual(persisted.Store.Snapshot(), after) {
 		t.Fatal("restart changed protected cookie receipt or attributes")
@@ -188,7 +190,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	testOrdinaryCookieTransport(t, ctx, executor, review, &tc, args, invoke, decoyServer.Handler, observed, &reissue, value)
 }
 
-// startCookieIssuer owns the original endpoint and counts cookies returned to it.
+// startCookieIssuer counts cookies returned to the original endpoint.
 func startCookieIssuer(t *testing.T, path, value string) (*http.Server, *atomic.Int64) {
 	t.Helper()
 	listener, err := net.Listen("unix", path)
@@ -206,8 +208,7 @@ func startCookieIssuer(t *testing.T, path, value string) (*http.Server, *atomic.
 	return server, requests
 }
 
-// The journal records the authenticated human disclosure, not a socket lease
-// standing in for secret authority.
+// The journal records authenticated human disclosure.
 func assertCookieDecisionLedger(t *testing.T, ctx context.Context, store *authzcontext.SQLStore, call string, outcome authzcontext.EventOutcome) {
 	t.Helper()
 	rows, err := store.ListEvents(ctx, "chat")
@@ -233,13 +234,13 @@ func newCookieOwnerExecutor(t *testing.T, ctx context.Context, database db.Handl
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
 	executor.Approvals.SetCheckpointManager(ctx, review, authority)
-	executor.Approvals.SetAuthzRecorder(authzcontext.SQLRecorder(database))
+	executor.Approvals.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	executor.Network.SetEgressPostureSource(func(string) gate.Posture { return gate.PostureStrict })
 	executor.Capabilities.SetSocketCapabilityRuntime(runtime)
 	executor.Secrets.SetSecretResolver(service)
 	executor.Secrets.SetSecretMatcher(matcher)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"http_request": true}}})
-	testutil.FailErr(t, "register cookie native consumer", httpaction.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen}))
+	testutil.FailErr(t, "register cookie native consumer", httpaction.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, Jars: service.Jars, SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen}))
 	return executor
 }
 
@@ -274,16 +275,16 @@ func testLegacyCookieIssuer(t *testing.T, ctx context.Context, service *secretca
 	t.Helper()
 	legacyRequest := jarRequest
 	legacyRequest.Name, legacyRequest.OperationID = "legacy-cookies", "legacy-seed"
-	legacy, err := service.OpenCookieJar(ctx, legacyRequest)
+	legacy, err := service.Jars.OpenCookieJar(ctx, legacyRequest)
 	testutil.FailErr(t, "open pre-change jar", err)
 	legacyURL, err := url.Parse(args["url"].(string))
 	testutil.FailErr(t, "legacy cookie target", err)
 	legacy.Store.SetCookies(legacyURL, []*http.Cookie{{Name: "session", Value: value, Path: "/private", HttpOnly: true}})
-	_, err = service.SaveCookieJar(ctx, legacyRequest, legacy)
+	_, err = service.Jars.SaveCookieJar(ctx, legacyRequest, legacy)
 	testutil.FailErr(t, "persist pre-change protected value", err)
 	// Compare persisted forms: the seeded store's clock readings carry state
 	// that protected storage does not.
-	seeded, err := service.OpenCookieJar(ctx, legacyRequest)
+	seeded, err := service.Jars.OpenCookieJar(ctx, legacyRequest)
 	testutil.FailErr(t, "reopen pre-change jar", err)
 	legacyBefore := seeded.Store.Snapshot()
 	if len(legacyBefore) != 1 || legacyBefore[0].NativeIssuer != "" {
@@ -292,7 +293,7 @@ func testLegacyCookieIssuer(t *testing.T, ctx context.Context, service *secretca
 	legacyArgs := maps.Clone(args)
 	legacyArgs["cookie_jar"] = legacyRequest.Name
 	invoke("legacy-cookie-unknown-issuer", legacyArgs, true, false)
-	reopenedLegacy, err := service.OpenCookieJar(ctx, legacyRequest)
+	reopenedLegacy, err := service.Jars.OpenCookieJar(ctx, legacyRequest)
 	testutil.FailErr(t, "preserve old entry", err)
 	if !reflect.DeepEqual(reopenedLegacy.Store.Snapshot(), legacyBefore) {
 		t.Fatal("legacy load or denial rewrote saved data")

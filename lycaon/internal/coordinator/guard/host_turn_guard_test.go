@@ -6,28 +6,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/testutil/guardtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-func TestHostTurnMayFinishWithProse(t *testing.T) {
-	t.Parallel()
-	// Always-prose surfaces: idle finish allowed; busy or pending overlay blocks.
-	for _, surfaceID := range []string{"implement_synthesis", "implement_routing", "implement_investigate"} {
-		if !guard.HostTurnMayFinishWithProse(surfaceID, true, false) {
-			t.Fatalf("expected %s + idle to allow prose finish", surfaceID)
-		}
-		if guard.HostTurnMayFinishWithProse(surfaceID, false, false) {
-			t.Fatalf("expected in-flight workers to block prose finish on %s", surfaceID)
-		}
-		if guard.HostTurnMayFinishWithProse(surfaceID, true, true) {
-			t.Fatalf("expected pending overlay promote to block prose finish on %s", surfaceID)
-		}
-	}
-	// Dispatch surface: always tool terminal — a prose-only finish is premature.
-	if guard.HostTurnMayFinishWithProse(surface.SurfaceImplementDispatch, true, false) {
-		t.Fatal("expected dispatch surface to require a tool terminal")
-	}
-}
 
 func TestObserveHostTurnRequiresWaitLedgerOverridesStaleEnvelope(t *testing.T) {
 	t.Parallel()
@@ -38,7 +19,7 @@ func TestObserveHostTurnRequiresWaitLedgerOverridesStaleEnvelope(t *testing.T) {
 		Content: `<task job_id="j1" agent_type="implementer" state="complete" merge_status="pending"><summary>wrote</summary></task>`,
 	}}
 	prose := coordinatorReportMarkdown("All overlays are merged; here is the summary.", nil)
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 
 			history),
@@ -59,7 +40,7 @@ func TestObserveHostTurnRequiresWaitLedgerOverridesStaleEnvelope(t *testing.T) {
 func TestObserveHostTurnRequiresWaitBlocksDispatchProse(t *testing.T) {
 	fmt := coordinatorRejectFmt(t)
 	sess := &api.Session{Posture: api.SessionPostureBuild}
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 
 			nil),
@@ -81,7 +62,7 @@ func TestObserveHostTurnRequiresWaitAllowsSynthesisProseWhenIdle(t *testing.T) {
 	fmt := coordinatorRejectFmt(t)
 	sess := &api.Session{Posture: api.SessionPostureBuild}
 	prose := coordinatorReportMarkdown("Here is the competitive assessment for your repo.", nil)
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 
 			nil),
@@ -107,7 +88,7 @@ func TestObserveHostTurnAfterPromotionRequiresRemainingWork(t *testing.T) {
 		api.Message{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "promote", Name: "promote_overlay"}}},
 		api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "promote", Tool: "promote_overlay"}},
 	)
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess, history, "Both implementation legs have landed. Here is where things stand.", nil,
 		"implement_investigate", true,
 		surface.ImplementSessionState{ProgressOpenCount: 5, OpenRepairSinceUserIntent: true},
@@ -121,7 +102,7 @@ func TestObserveHostTurnAfterPromotionRequiresRemainingWork(t *testing.T) {
 func TestObserveHostTurnRequiresWaitBlocksSynthesisProseWhenWorkersInFlight(t *testing.T) {
 	fmt := coordinatorRejectFmt(t)
 	sess := &api.Session{Posture: api.SessionPostureBuild}
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 
 			nil),

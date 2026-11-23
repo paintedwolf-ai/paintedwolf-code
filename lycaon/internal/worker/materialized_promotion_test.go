@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -35,20 +34,21 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
 	}
 	selector.Confinement = nil
-	manager := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), selector)
-	queue := NewSQLQueue(database, 4)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(manager)
+	manager := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), selector, workspace.Filesystem{})
+	queueServices := NewSQLServices(database, 4)
+	queue := queueServices.Queue
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content"), sourceledger.Timing{}).Baselines)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
 	id, err := queue.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: source, WorkspaceRootID: "root-id",
 		Scope:     &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}},
 		AgentType: "implementer", Prompt: "edit", Brief: "edit",
 	})
 	testutil.FailErr(t, "enqueue", err)
-	t.Cleanup(func() { session.ClearTaskCheckpointPreview(id) })
+
 	next, err := queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "claim next", err)
-	task, err := queue.ClaimWorkerBranch(ctx, id)
+	task, err := queue.Branches.ClaimWorkerBranch(ctx, id)
 	testutil.FailErr(t, "claim branch", err)
 	task.ClaimToken = next.ClaimToken
 
@@ -62,7 +62,7 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 	moved[8] = "NINE"
 	testutil.FailErr(t, "source moves", os.WriteFile(filepath.Join(source, "notes.txt"), []byte(strings.Join(moved, "\n")+"\n"), 0o644))
 
-	service := &MergeService{Queue: queue, Store: queue, DataDir: dataDir}
+	service := &MergeService{Queue: queue, Branches: queue.Branches, Store: queueServices.Promotions, DataDir: dataDir}
 	result, err := service.PromoteOverlay(ctx, "parent", id, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote", err)
 	if result.Status != api.WorkerMergeStatusMerged {

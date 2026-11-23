@@ -8,7 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/grantedpath"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
@@ -123,7 +124,7 @@ func TestPromptAdmissionWithExternalReferencesGrantsAccessAndPerceivesImages(t *
 
 func TestPromptGrantRollbackPreservesAnotherSubmission(t *testing.T) {
 	handler, _, _, sess := newPromptAttachmentRecoveryFixture(t)
-	handler.Submission.Store = handler.Attachments.Store
+	handler.Submission.SessionQueries = handler.Attachments.SessionQueries
 	handler.Submission.GrantedPaths = grantedpath.NewRuntime()
 	path := filepath.Join(canonPath(t, t.TempDir()), "notes.txt")
 	parts := []wire.MessageContentPart{{Path: path, ReferenceKind: wire.MessageReferenceKindExternalFile}}
@@ -156,7 +157,7 @@ func TestReadReferenceImageValidatesProjectRootFile(t *testing.T) {
 	var deps apitestdeps.Deps
 	apitestdeps.Fill(t, &deps)
 	rootDir := canonPath(t, t.TempDir())
-	p, err := project.CreateWithRoot(t.Context(), deps.Projects, rootDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), deps.Projects, rootDir)
 	testutil.FailErr(t, "create project", err)
 	rootID := p.Roots[0].ID
 

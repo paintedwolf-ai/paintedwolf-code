@@ -34,12 +34,13 @@ func TestPreviewForSessionWritesSpillPathOnConflict(t *testing.T) {
 		WorkspaceRoot:         branch,
 		MergeStatus:           api.WorkerMergeStatusPending,
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"d.go"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	dataDir := t.TempDir()
 	svc := &worker.MergeService{
-		Queue:   &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject:  mergeRejectFmt(t),
 		DataDir: dataDir,
 	}
@@ -76,11 +77,12 @@ func TestPreviewForSessionPathFilter(t *testing.T) {
 		WorkspaceRoot:         branch,
 		MergeStatus:           api.WorkerMergeStatusPending,
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"a.go", "b.go"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"a.go": {Content: "original-a\n"}, "b.go": {Content: "same-b\n"}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"a.go": {Content: "original-a\n"}, "b.go": {Content: "same-b\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 	}
 	out, err := svc.PreviewForSession(ctx, "parent-1", "job-path", "hunks", []string{"a.go"})
@@ -106,11 +108,12 @@ func TestPreviewForSessionRejectsUnchangedPath(t *testing.T) {
 		WorkspaceRoot:         branch,
 		MergeStatus:           api.WorkerMergeStatusPending,
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"in.go"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"in.go": {Content: "x\n"}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"in.go": {Content: "x\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 	}
 	_, err := svc.PreviewForSession(ctx, "parent-1", "job-oos", "hunks", []string{"other.go"})

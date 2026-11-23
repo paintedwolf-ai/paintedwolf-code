@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -48,7 +47,7 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 		t.Fatalf("accepted removal = %+v", accepted)
 	}
 	// Deletion runs in the server task group; the operation settles after it drains.
-	settleCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	settleCtx, cancel := context.WithTimeout(t.Context(), BackgroundSettleBudget)
 	defer cancel()
 	srv.WaitForBackground(settleCtx)
 	testutil.FailErr(t, "settle project removal", settleCtx.Err())

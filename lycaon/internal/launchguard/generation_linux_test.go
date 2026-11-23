@@ -9,13 +9,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
-	"github.com/lycaon/lycaon/internal/platformfloor"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
@@ -168,7 +166,7 @@ func TestCaptureGenerationAndPolicyRecheck(t *testing.T) {
 		executables = append(executables, pkgmanifest.Executable{Path: filepath.Join(install, "bin", name), SHA256: digest, Size: size})
 		payload = append(payload, pkgmanifest.PayloadEntry{Path: "bin/" + name, Kind: "file", Mode: 0o755, SHA256: &digest, Size: &size})
 	}
-	arch, _ := platformfloor.ELFArchForGoArch(runtime.GOARCH)
+	arch := fixtureArchitecture(t)
 	manifest := pkgmanifest.Manifest{
 		FormatVersion: pkgmanifest.FormatVersion,
 		Package:       "painted-wolf-code",

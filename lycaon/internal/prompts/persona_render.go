@@ -113,13 +113,6 @@ func (c *pathCache[T]) get(key string, load func(string) (T, error)) (T, error) 
 	return val, err
 }
 
-func (c *pathCache[T]) reset() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	var zero T
-	c.key, c.val, c.err, c.loaded = "", zero, nil, false
-}
-
 var (
 	personaContractCache pathCache[*PersonaContract]
 	toolSchemaCache      pathCache[*toolschema.Config]
@@ -190,15 +183,4 @@ func loadHintCodeRowsCached(revision string, entries []hintregistry.Entry) (map[
 	return hintCodeRowsCache.get(key, func(string) (map[string]hintCodeRow, error) {
 		return LoadHintCodeRowsFromEntries(entries)
 	})
-}
-
-// ResetPersonaContractCache clears persona render caches.
-func ResetPersonaContractCache() {
-	personaContractCache.reset()
-	toolSchemaCache.reset()
-	hintCodeRowsCache.reset()
-	hintPolicyCache.reset()
-	toolProfilesCache.reset()
-	readerFactVocabCache.reset()
-	templateVocabCache.reset()
 }

@@ -5,13 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -40,10 +40,10 @@ func newExportFixture(t *testing.T) exportFixture {
 	_, err := handle.ExecContext(ctx, `UPDATE projects SET name = 'flask' WHERE id = ?`, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "name project", err)
 	st := store.NewSQL(handle)
-	root, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	root, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	f := exportFixture{handle: handle, path: path, root: root, started: time.Now().UTC().Add(-time.Minute)}
-	testutil.FailErr(t, "append coordinator turns", st.AppendMessages(ctx, root.ID,
+	testutil.FailErr(t, "append coordinator turns", st.Transcript.AppendMessages(ctx, root.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "rewrite the version field in package.json"},
 		api.Message{ID: "a1", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
 			{ID: "c1", Name: "read", Args: map[string]any{"path": "package.json"}},
@@ -56,9 +56,9 @@ func newExportFixture(t *testing.T) exportFixture {
 		api.Message{ID: "u2", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "thanks"},
 		api.Message{ID: "a3", Role: api.MessageRoleAssistant, Content: "You're welcome."},
 	))
-	f.worker, err = st.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implement", Prompt: "search the web for the changelog format"})
+	f.worker, err = st.Sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implement", Prompt: "search the web for the changelog format"})
 	testutil.FailErr(t, "create worker", err)
-	testutil.FailErr(t, "append worker leg", st.AppendMessages(ctx, f.worker.ID,
+	testutil.FailErr(t, "append worker leg", st.Transcript.AppendMessages(ctx, f.worker.ID,
 		api.Message{ID: "w1", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c5", Name: "web_search", Args: map[string]any{"query": "keep a changelog"}}}},
 	))
 	f.turn(t, root.ID, "complete")
@@ -85,7 +85,7 @@ func (f exportFixture) llmCall(t *testing.T, sessionID, model string) {
 
 func (f exportFixture) receipt(t *testing.T, sessionID, opening, state, decisions string) {
 	t.Helper()
-	_, err := store.NewSQL(f.handle).PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{
+	_, err := store.NewSQL(f.handle).Turns.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{
 		SessionID: sessionID, OpeningMessageID: opening, Trigger: store.TurnLoadTriggerTurn, SurfaceID: "implement_investigate",
 		StateJSON: state, Decisions: decisions, Standing: "{}", Abstained: true, Reason: "engine disabled", CreatedAt: time.Now().UTC(),
 	})

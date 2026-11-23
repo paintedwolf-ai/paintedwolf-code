@@ -22,7 +22,6 @@ type CatalogResolver func() (*extpacks.EffectiveCatalog, error)
 type OrchestratorDeps struct {
 	Workers    TopologyWorkers
 	Agents     AgentRegistry
-	Models     ModelGroupSelector
 	Workflows  *WorkflowRunLifecycle
 	Catalog    CatalogResolver
 	Workspaces WorkspaceBinder
@@ -32,7 +31,6 @@ type OrchestratorDeps struct {
 type OrchestratorImpl struct {
 	workers    TopologyWorkers
 	agents     AgentRegistry
-	models     ModelGroupSelector
 	workflows  *WorkflowRunLifecycle
 	catalog    CatalogResolver
 	workspaces WorkspaceBinder
@@ -78,7 +76,6 @@ func NewOrchestratorImpl(deps OrchestratorDeps) *OrchestratorImpl {
 	return &OrchestratorImpl{
 		workers:    deps.Workers,
 		agents:     deps.Agents,
-		models:     deps.Models,
 		workflows:  deps.Workflows,
 		catalog:    deps.Catalog,
 		workspaces: deps.Workspaces,
@@ -399,7 +396,7 @@ func (o *OrchestratorImpl) runPipeline(ctx context.Context, req RunRequest, wf *
 	for len(state.completed) < len(stages) {
 		ready := readyPipelineStages(stages, state.completed)
 		if len(ready) == 0 {
-			return nil, newRunFailure(RunFailureCodePipelineStalled, "", false, fmt.Errorf("pipeline stalled with no ready stages"))
+			return nil, newRunFailure(RunFailureCodePipelineStalled, "", fmt.Errorf("pipeline stalled with no ready stages"))
 		}
 		results, err := o.executePipelineWave(ctx, req, batchID, ready, state)
 		if err != nil {
@@ -667,7 +664,7 @@ func (o *OrchestratorImpl) executePipelineStage(
 	}
 	unitID, ok := state.stageUnits[stage.Name]
 	if !ok {
-		return pipelineStageResult{}, newRunFailure(RunFailureCodeStageMissing, stage.Name, false, fmt.Errorf("pipeline stage %q missing unit", stage.Name))
+		return pipelineStageResult{}, newRunFailure(RunFailureCodeStageMissing, stage.Name, fmt.Errorf("pipeline stage %q missing unit", stage.Name))
 	}
 	if len(stage.InputFrom) > 0 {
 		unit, err := o.workers.GetUnit(ctx, batchID, unitID)
@@ -701,7 +698,7 @@ func (o *OrchestratorImpl) executePipelineStage(
 			}
 			return pipelineStageResult{stage: stage.Name, output: output}, nil
 		case api.LegStatusFailed, api.LegStatusCanceled:
-			return pipelineStageResult{}, newRunFailure(RunFailureCodeStageFailed, stage.Name, false, fmt.Errorf("pipeline stage %q %s", stage.Name, unit.Status))
+			return pipelineStageResult{}, newRunFailure(RunFailureCodeStageFailed, stage.Name, fmt.Errorf("pipeline stage %q %s", stage.Name, unit.Status))
 		case api.LegStatusDispatched, api.LegStatusRunning, api.LegStatusHeld, api.LegStatusRetryPending:
 		}
 		if _, err := o.waitForUnit(ctx, batchID, unitID); err != nil {

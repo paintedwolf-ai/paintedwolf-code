@@ -36,7 +36,7 @@ func TestScanCompareToolDiffsFindings(t *testing.T) {
 	})
 
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(store, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	raw, err := reg.Run(context.Background(), "scan_compare", map[string]any{
 		"old_scan_id": oldID,
@@ -71,7 +71,7 @@ func TestScanCompareToolAcceptsShortBoardIDs(t *testing.T) {
 	})
 
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(store, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	raw, err := reg.Run(context.Background(), "scan_compare", map[string]any{
 		"old_scan_id": oldID[:8],
@@ -106,7 +106,7 @@ func TestScanCompareToolAutoBaselineOmitsOldScanID(t *testing.T) {
 	})
 
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(store, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	raw, err := reg.Run(context.Background(), "scan_compare", map[string]any{
 		"new_scan_id": newID,

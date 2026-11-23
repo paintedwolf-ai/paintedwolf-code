@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -79,7 +79,7 @@ func directIPCommandSession(t *testing.T, quieted bool) *commandProgramSession {
 	t.Helper()
 	p := newProgramHost(t)
 	// Direct IP is a confinement mode; an unconfined host applies none.
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "on")
 	s := p.programWithArgs(t, map[string]any{
 		"command":            "go version",

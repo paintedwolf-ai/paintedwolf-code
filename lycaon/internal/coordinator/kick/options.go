@@ -149,60 +149,6 @@ func WithWorkerDecisionRequest(req api.WorkerDecisionRequest, worker string) Kic
 	}
 }
 
-// WorkerDecisionRequestFromOptions extracts structured decision facts stamped on kick options.
-func WorkerDecisionRequestFromOptions(opts []KickOption) (api.WorkerDecisionRequest, bool) {
-	for _, opt := range opts {
-		if opt == nil {
-			continue
-		}
-		meta := kickMeta{}
-		opt(&meta)
-		if len(meta.workerDecisionRequest) == 0 {
-			continue
-		}
-		question, _ := meta.workerDecisionRequest["question"].(string)
-		if strings.TrimSpace(question) == "" {
-			continue
-		}
-		jobID, _ := meta.workerDecisionRequest["job_id"].(string)
-		child, _ := meta.workerDecisionRequest["child_session_id"].(string)
-		class, _ := meta.workerDecisionRequest["blocker_class"].(string)
-		artifactID, _ := meta.workerDecisionRequest["artifact_id"].(string)
-		var artifactIDs []string
-		switch raw := meta.workerDecisionRequest["artifact_ids"].(type) {
-		case []string:
-			artifactIDs = append([]string(nil), raw...)
-		case []any:
-			for _, it := range raw {
-				if s, ok := it.(string); ok && strings.TrimSpace(s) != "" {
-					artifactIDs = append(artifactIDs, strings.TrimSpace(s))
-				}
-			}
-		}
-		var options []string
-		switch raw := meta.workerDecisionRequest["options"].(type) {
-		case []string:
-			options = append([]string(nil), raw...)
-		case []any:
-			for _, it := range raw {
-				if s, ok := it.(string); ok && strings.TrimSpace(s) != "" {
-					options = append(options, strings.TrimSpace(s))
-				}
-			}
-		}
-		return api.WorkerDecisionRequest{
-			WorkerID:       strings.TrimSpace(jobID),
-			ChildSessionID: strings.TrimSpace(child),
-			Question:       strings.TrimSpace(question),
-			Options:        options,
-			BlockerClass:   api.WorkerBlockerClass(strings.TrimSpace(class)),
-			ArtifactID:     strings.TrimSpace(artifactID),
-			ArtifactIDs:    artifactIDs,
-		}, true
-	}
-	return api.WorkerDecisionRequest{}, false
-}
-
 // WithScanFinished passes terminal scan facts into the scan-finished kick template.
 func WithScanFinished(scanID, status, categories string, findingsCount int) KickOption {
 	return func(m *kickMeta) {

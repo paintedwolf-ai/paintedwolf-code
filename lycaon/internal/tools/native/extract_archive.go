@@ -69,7 +69,7 @@ func (t *ExtractArchiveTool) Extract(ctx context.Context, in ExtractInput, tctx 
 			return ExtractResult{}, err
 		}
 	}
-	archive, relArchive, size, err := t.loadArchive(ctx, tctx, in.Archive, prof)
+	archive, relArchive, size, err := t.loadArchive(ctx, tctx, in.Archive)
 	if err != nil {
 		return ExtractResult{}, err
 	}
@@ -169,7 +169,7 @@ func parseExtractArchiveArgs(args map[string]any) (path, dest string, err error)
 	return path, dest, nil
 }
 
-func (t *ExtractArchiveTool) loadArchive(ctx context.Context, tctx tools.ToolContext, relPath, profileID string) (projectpaths.Resolved, string, int64, error) {
+func (t *ExtractArchiveTool) loadArchive(ctx context.Context, tctx tools.ToolContext, relPath string) (projectpaths.Resolved, string, int64, error) {
 	if sandbox.HasParentTraversal(relPath) {
 		return projectpaths.Resolved{}, "", 0, toolkit.PathEscapeReject(relPath)
 	}

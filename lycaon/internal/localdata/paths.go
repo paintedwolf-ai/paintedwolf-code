@@ -11,11 +11,6 @@ import (
 const webIndexFileName = "web-index.db"
 
 var (
-	// durableRelPaths survive local data clears.
-	durableRelPaths = entryNames(func(e ConfigRootEntry) bool {
-		return !e.IsDir && (e.Class == ClassDurableFile || e.Class == ClassArchiveExcluded)
-	})
-	durableRelDirs     = entryNames(func(e ConfigRootEntry) bool { return e.IsDir && e.Class == ClassDurableDir })
 	backupRelPaths     = entryNames(func(e ConfigRootEntry) bool { return !e.IsDir && e.IncludeInBackup })
 	backupRelDirs      = entryNames(func(e ConfigRootEntry) bool { return e.IsDir && e.IncludeInBackup })
 	credentialRelPaths = entryNames(func(e ConfigRootEntry) bool { return !e.IsDir && e.IsSecret })
@@ -36,15 +31,6 @@ func sourceObservationPaths(base string) []string {
 		out = append(out, path+suffix)
 	}
 	return append(out, enginepaths.RepoOrientationRootUnder(base))
-}
-
-// DurableAbsPaths resolves protected files under base.
-func DurableAbsPaths(base string) []string {
-	out := make([]string, 0, len(durableRelPaths))
-	for _, rel := range durableRelPaths {
-		out = append(out, filepath.Join(base, rel))
-	}
-	return out
 }
 
 // BackupRelDirs returns directories archived per file.
@@ -70,9 +56,4 @@ func pathExists(p string) bool {
 func dirNonEmpty(p string) bool {
 	entries, err := os.ReadDir(p)
 	return err == nil && len(entries) > 0
-}
-
-// CredentialRelPaths returns the secret-bearing durable relative paths.
-func CredentialRelPaths() []string {
-	return append([]string(nil), credentialRelPaths...)
 }

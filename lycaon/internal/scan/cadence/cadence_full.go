@@ -35,7 +35,7 @@ func (c *Service) RequestFull(ctx context.Context, projectDir string, scannerIDs
 	passID, err := admission.admitLocked(ctx, canonical, scannerIDs, trigger)
 	if err == nil {
 		// Bound before dispatch can start the pass, so its scans carry the binding.
-		err = c.Store.BindFullPassRequester(ctx, passID, bind)
+		err = c.fullPasses.BindFullPassRequester(ctx, passID, bind)
 	}
 	c.mu.Unlock()
 	if err != nil {
@@ -43,7 +43,7 @@ func (c *Service) RequestFull(ctx context.Context, projectDir string, scannerIDs
 	}
 	admission.preemptPathScans(ctx, canonical, passID)
 	(rootDispatcher{c: c}).dispatchRoot(ctx, canonical)
-	pass, err := c.Store.FullPass(ctx, passID)
+	pass, err := c.fullPasses.FullPass(ctx, passID)
 	if err != nil {
 		return scanbase.FullPass{}, err
 	}
@@ -62,13 +62,13 @@ func (f fullPassAdmission) admitLocked(ctx context.Context, canonical string, sc
 	if err != nil {
 		return "", err
 	}
-	passes, err := f.c.Store.FullPassesForPath(ctx, canonical)
+	passes, err := f.c.fullPasses.FullPassesForPath(ctx, canonical)
 	if err != nil {
 		return "", err
 	}
 	if open := newestUnfinishedPass(passes); open != nil {
 		if !passStarting(*open, series) {
-			widened, err := f.c.Store.WidenFullPass(ctx, open.ID, unionSorted(open.ScannerIDs(), members))
+			widened, err := f.c.fullPasses.WidenFullPass(ctx, open.ID, unionSorted(open.ScannerIDs(), members))
 			if err != nil {
 				return "", err
 			}
@@ -81,7 +81,7 @@ func (f fullPassAdmission) admitLocked(ctx context.Context, canonical string, sc
 		}
 	}
 	id := uuid.NewString()
-	if err := f.c.Store.InsertFullPass(ctx, scanbase.FullPassDraft{
+	if err := f.c.fullPasses.InsertFullPass(ctx, scanbase.FullPassDraft{
 		ID: id, CanonicalPath: canonical, Scanners: members, Trigger: trigger, RequestedAt: nowUTC(f.c),
 	}); err != nil {
 		return "", err
@@ -183,7 +183,7 @@ func (f fullPassAdmission) preemptPathScans(ctx context.Context, canonical, pass
 	if f.c.Preempt == nil {
 		return
 	}
-	pass, err := f.c.Store.FullPass(ctx, passID)
+	pass, err := f.c.fullPasses.FullPass(ctx, passID)
 	if err != nil || pass == nil || !pass.StartedAt.IsZero() {
 		return
 	}
@@ -191,7 +191,7 @@ func (f fullPassAdmission) preemptPathScans(ctx context.Context, canonical, pass
 	for _, m := range pass.Members {
 		members[m.ScannerID] = true
 	}
-	open, err := f.c.Store.OpenScansForPath(ctx, canonical)
+	open, err := f.c.reads.OpenScansForPath(ctx, canonical)
 	if err != nil {
 		slog.WarnContext(ctx, "list open scans for preemption", "path", canonical, "error", err)
 		return

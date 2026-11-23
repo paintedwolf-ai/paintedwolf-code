@@ -4,24 +4,24 @@ package blueprints_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPlanCatalogHappyPathReachesExecutionSubroutine(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.DependenciesWithEvidence())
 	ctx := context.Background()
 
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
@@ -34,7 +34,7 @@ func TestPlanCatalogHappyPathReachesExecutionSubroutine(t *testing.T) {
 	testutil.FailErr(t, "advance expand", err)
 	run, err = completePlanReviewAtDepthNone(ctx, mgr, run)
 	testutil.FailErr(t, "skip review", err)
-	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, repositories), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if run.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute after approval", run.CurrentPhase)
@@ -61,10 +61,10 @@ func TestPlanResearchDepthNoneReachesExecutionSubroutine(t *testing.T) {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	mgr := workflow.NewManager(testRunStore(t, sqlDB), sessStore, reg, nil)
 	workflowtest.WireBlueprintDeps(mgr, dir)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.DependenciesWithEvidence())
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	sess, err := sessStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
 
 	parent, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "test request"})
@@ -81,7 +81,7 @@ func TestPlanResearchDepthNoneReachesExecutionSubroutine(t *testing.T) {
 	if parent.CurrentPhase != "approve" {
 		t.Fatalf("phase = %q want approve before human approval", parent.CurrentPhase)
 	}
-	parent, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), parent.ID, dir)
+	parent, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, sessStore), parent.ID, dir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if parent.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute", parent.CurrentPhase)

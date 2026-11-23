@@ -122,7 +122,7 @@ func (d *childDispatch) Invoke(ctx context.Context, request commandprogram.Opera
 	}
 	d.record(request)
 	if _, owned := d.h.owners.Operation(request.OperationID); owned {
-		return d.h.owners.Invoke(ctx, d.h.tc, mustPaths(d.h.t, d.h), d, request, streams)
+		return invokeSearch(d.h.owners, ctx, d.h.tc, mustPaths(d.h.t, d.h), d, request, streams)
 	}
 	return d.echo(request, streams)
 }
@@ -268,7 +268,7 @@ func (h *harness) exec(stdin string, argv ...string) run {
 		input = io.NopCloser(strings.NewReader(stdin))
 	}
 	streams := commandprogram.Streams{Input: input, Output: &stdout, Error: &stderr}
-	result, err := h.owners.Invoke(h.t.Context(), h.tc, mustPaths(h.t, h), h.dispatch, request, streams)
+	result, err := invokeSearch(h.owners, h.t.Context(), h.tc, mustPaths(h.t, h), h.dispatch, request, streams)
 	if invalid := result.Validate(); invalid != nil {
 		h.t.Fatalf("%v: invalid producer %+v: %v", argv, result, invalid)
 	}
@@ -313,4 +313,16 @@ func (d *childDispatch) InvokeEvaluator(ctx context.Context, request commandprog
 		}
 	}
 	return body(ctx, streams)
+}
+
+func invokeSearch(o *Owners, ctx context.Context, tc tools.ToolContext, paths *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	prepared, err := o.Prepare(paths, dispatch, request)
+	if err != nil {
+		result := toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}
+		if reject := toolrejection.AsToolReject(err); reject != nil {
+			result.Terminal, result.StopCode = toolcontract.ProducerRefused, reject.Code
+		}
+		return result, err
+	}
+	return prepared.InvokeOwner(ctx, tc, streams)
 }

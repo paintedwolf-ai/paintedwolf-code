@@ -14,11 +14,11 @@ import (
 
 func TestCaptureIntervalsRetainTheFirstPreimage(t *testing.T) {
 	rewinds, repository, _, sessionID, dir := newRewindControlFixture(t)
-	owner, err := repository.HostOwner(t.Context())
+	owner, err := repository.People.HostOwner(t.Context())
 	testutil.FailErr(t, "host owner", err)
 	ctx := people.WithCaller(t.Context(), owner)
 	anchor := api.Message{ID: "capture-anchor", Role: api.MessageRoleUser, Content: "edit file", Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, TrustTier: api.ContentTrustTierTrusted}
-	testutil.FailErr(t, "append anchor", repository.AppendMessages(ctx, sessionID, anchor))
+	testutil.FailErr(t, "append anchor", repository.Transcript.AppendMessages(ctx, sessionID, anchor))
 	file := filepath.Join(dir, "item.txt")
 	testutil.FailErr(t, "seed preimage", os.WriteFile(file, []byte("before"), 0o640))
 	testutil.FailErr(t, "open interval", rewinds.captures.SealPromptCheckpoint(ctx, sessionID, anchor.ID))
@@ -53,18 +53,18 @@ func TestCapturedPromotionAndBlueprintRemainInCheckpoint(t *testing.T) {
 	if manifest.BlueprintPath != "plans/original.md" || len(manifest.Paths) != 2 {
 		t.Fatalf("retained checkpoint=%+v", manifest)
 	}
-	orphan, err := repository.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	orphan, err := repository.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create orphan session", err)
 	_, err = checkpoints.Open(ctx, orphan.ID, "orphan")
 	testutil.FailErr(t, "seed orphan", err)
-	testutil.FailErr(t, "delete orphan session", repository.Delete(ctx, orphan.ID))
+	testutil.FailErr(t, "delete orphan session", repository.Sessions.Delete(ctx, orphan.ID))
 	if n := rewinds.captures.RemoveOrphanCheckpoints(ctx, dir); n != 1 {
 		t.Fatalf("removed %d orphan checkpoint trees", n)
 	}
 	if _, err = checkpoints.Load(ctx, sessionID, "promotion"); err != nil {
 		t.Fatalf("live checkpoint removed: %v", err)
 	}
-	ids, err := repository.ExistingSessionIDs(ctx, []string{sessionID})
+	ids, err := repository.Sessions.ExistingSessionIDs(ctx, []string{sessionID})
 	testutil.FailErr(t, "live session", err)
 	if !ids[sessionID] {
 		t.Fatal("checkpoint cleanup removed live session")

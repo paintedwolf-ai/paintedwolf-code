@@ -10,19 +10,22 @@ import (
 )
 
 type Runtime struct {
-	Creds    *CredentialStore
-	Config   *ConfigStore
-	Catalog  *Catalog
-	Registry *Registry
+	Crawler     *Crawler
+	Discovery   *Discovery
+	FetchBudget *FetchBudget
+	Creds       *CredentialStore
+	Config      *ConfigStore
+	Catalog     *Catalog
+	Registry    *Registry
 }
 
 // InvalidateProvider clears transient state for a repaired provider.
 func (rt Runtime) InvalidateProvider(providerID string) {
 	if rt.Registry != nil {
 		rt.Registry.ResetProviderRuntime(providerID)
+		rt.Registry.seedCache.reset()
+		rt.Registry.resultCache.reset()
 	}
-	providerSeedCache.reset()
-	searchResultCache.reset()
 }
 
 // InvalidateCredential clears providers backed by one credential slot.

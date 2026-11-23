@@ -14,7 +14,7 @@ func developmentVault(t *testing.T) vaultBackend {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), credentialstore.VaultBasename)
 	return vaultBackend{open: func() (*credentialstore.Store, error) {
-		return credentialstore.OpenFile(credentialstore.Slot{Path: path, Namespace: credentialstore.NamespaceGitCredentials, Context: vaultContext}, nil)
+		return credentialstore.Open(credentialstore.Slot{Path: path, Namespace: credentialstore.NamespaceGitCredentials, Context: vaultContext}, nil)
 	}}
 }
 

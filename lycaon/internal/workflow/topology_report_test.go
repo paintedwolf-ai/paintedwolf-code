@@ -2,14 +2,14 @@ package workflow
 
 import (
 	"context"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -71,7 +71,7 @@ func seedTopologyCompletion(t *testing.T, mgr *RunManager, run *api.WorkflowRun,
 	if edit != nil {
 		edit(&msg)
 	}
-	testutil.FailErr(t, "persist phase completion", mgr.Verdicts.Sessions.AppendMessages(t.Context(), run.SessionID, msg))
+	testutil.FailErr(t, "persist phase completion", mgr.Transcript.TranscriptStore.AppendMessages(t.Context(), run.SessionID, msg))
 	return msg.ID
 }
 

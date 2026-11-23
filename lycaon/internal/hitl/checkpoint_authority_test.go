@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -80,11 +80,11 @@ func TestApprovalDecisionStampJoinsLaterToolRow(t *testing.T) {
 	testutil.FailErr(t, "resolve checkpoint", err)
 
 	sessions := sessionstore.NewSQL(sqlDB)
-	testutil.FailErr(t, "append tool row", sessions.AppendMessages(ctx, sessionID, api.Message{
+	testutil.FailErr(t, "append tool row", sessions.Transcript.AppendMessages(ctx, sessionID, api.Message{
 		ID: "message-stamp", Role: api.MessageRoleTool,
 		ToolResult: &api.ToolResult{ToolCallID: "call-stamp", Tool: "command", Content: "ok"},
 	}))
-	messages, err := sessions.GetMessages(ctx, sessionID)
+	messages, err := sessions.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get messages", err)
 	if len(messages) != 1 || messages[0].ToolResult == nil || messages[0].ToolResult.CheckpointDecision == nil {
 		t.Fatalf("checkpoint decision missing: %+v", messages)
@@ -106,7 +106,7 @@ func TestResolveCheckpointGrantBlockedWhenAuthzLedgerFails(t *testing.T) {
 	sessionID := "sess-hitl-1"
 	insertSession(t, sqlDB, sessionID)
 	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: events.NewMemoryHub()},
-		authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.FailStore{}}})
+		authztest.RejectEvents(t, sqlDB))
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID,
 		Kind:      api.CheckpointKindToolApproval,

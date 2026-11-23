@@ -16,7 +16,7 @@ func TestProjectRegistryCreateAndGet(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	p, err := CreateWithRoot(ctx, reg, dir)
+	p, err := createWithRoot(ctx, reg, dir)
 	if err != nil {
 		t.Fatalf("CreateWithRoot: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestProjectRegistryAttachDuplicatePath(t *testing.T) {
 	reg := newProjectRegistry(t)
 	ctx := context.Background()
 	dir := t.TempDir()
-	p, err := CreateWithRoot(ctx, reg, dir)
+	p, err := createWithRoot(ctx, reg, dir)
 	if err != nil {
 		t.Fatalf("CreateWithRoot: %v", err)
 	}

@@ -48,7 +48,7 @@ func drainMaintenance(ctx context.Context, sqlDB *Store, cfg RetentionConfig, tu
 			return err
 		}
 		passStart := time.Now()
-		report, err := runMaintenancePass(ctx, sqlDB, cfg, rowsDue)
+		report, err := RunMaintenancePass(ctx, sqlDB, cfg, rowsDue)
 		passDone := time.Now()
 		sqlDB.maintenanceState.notePass(report, rowsDue, passStart.Sub(turnStart), passDone.Sub(passStart))
 		passes++

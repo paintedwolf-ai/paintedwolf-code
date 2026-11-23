@@ -18,7 +18,7 @@ func storedGeneration(generation uint64) int64 {
 
 // SessionTreeIDs returns the root and every descendant session. Secret evidence
 // is keyed to a tree, so tree-scoped work resolves membership here.
-func (sg *sqlScreenGeneration) SessionTreeIDs(ctx context.Context, rootSessionID string) ([]string, error) {
+func (sg *sqlSessions) SessionTreeIDs(ctx context.Context, rootSessionID string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -26,7 +26,7 @@ func (sg *sqlScreenGeneration) SessionTreeIDs(ctx context.Context, rootSessionID
 }
 
 // MessageIDsBelowScreenGeneration returns rows last screened before generation.
-func (sg *sqlScreenGeneration) MessageIDsBelowScreenGeneration(ctx context.Context, sessionID string, generation uint64) ([]string, error) {
+func (sg *sqlTranscript) MessageIDsBelowScreenGeneration(ctx context.Context, sessionID string, generation uint64) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (sg *sqlScreenGeneration) MessageIDsBelowScreenGeneration(ctx context.Conte
 // MaxMessageScreenGenerationInTree returns the highest tree revision stamp. A
 // sweep works above it, so the sequence keeps rising across restarts of the
 // in-memory revision counter.
-func (sg *sqlScreenGeneration) MaxMessageScreenGenerationInTree(ctx context.Context, rootSessionID string) (uint64, error) {
+func (sg *sqlTranscript) MaxMessageScreenGenerationInTree(ctx context.Context, rootSessionID string) (uint64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -54,7 +54,7 @@ func (sg *sqlScreenGeneration) MaxMessageScreenGenerationInTree(ctx context.Cont
 }
 
 // StampMessageScreenGeneration records the revision a row was screened at.
-func (sg *sqlScreenGeneration) StampMessageScreenGeneration(ctx context.Context, sessionID, messageID string, generation uint64) error {
+func (sg *sqlTranscript) StampMessageScreenGeneration(ctx context.Context, sessionID, messageID string, generation uint64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

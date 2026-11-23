@@ -13,7 +13,8 @@ import (
 )
 
 type custodyRepo struct {
-	ToolsRepository
+	Sessions
+	Evidence
 	sessions  map[string]*api.Session
 	committed map[string][]evidence.ProgramHTTPProvenance
 }
@@ -22,8 +23,8 @@ func (r *custodyRepo) Get(_ context.Context, id string) (*api.Session, error) {
 	return r.sessions[id], nil
 }
 
-func (r *custodyRepo) CommitProgramHTTPProvenance(_ context.Context, sessionID, _ string, prov evidence.ProgramHTTPProvenance) (string, error) {
-	r.committed[sessionID] = append(r.committed[sessionID], prov)
+func (r *custodyRepo) CommitProgramHTTPProvenance(_ context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) (string, error) {
+	r.committed[target.SessionID] = append(r.committed[target.SessionID], prov)
 	return "http_response#1", nil
 }
 
@@ -38,7 +39,7 @@ func TestWorkerCustodyIsSharedWithTheChat(t *testing.T) {
 		},
 		committed: map[string][]evidence.ProgramHTTPProvenance{},
 	}
-	m := &Tools{Sessions: repo}
+	m := &Tools{SessionStore: repo, EvidenceStore: repo}
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "out"), 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)

@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -32,12 +32,12 @@ func SortFindingsByIdentity(findings []api.SecurityFinding) {
 }
 
 // History, ledger projection, and notification commit together.
-func (s *sqlFindingStore) RecordFindingEvents(ctx context.Context, scan *api.CodeScan, introduced, fixed []api.SecurityFinding, at time.Time) error {
+func (s *FindingStore) RecordFindingEvents(ctx context.Context, scan *api.CodeScan, introduced, fixed []api.SecurityFinding, at time.Time) error {
 	if s == nil || scan == nil || (len(introduced) == 0 && len(fixed) == 0) {
 		return nil
 	}
 	stamp := timelayout.Format(at.UTC())
-	return s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	return s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		for _, batch := range []struct {
 			event    string
 			findings []api.SecurityFinding
@@ -78,15 +78,15 @@ func (s *sqlFindingStore) RecordFindingEvents(ctx context.Context, scan *api.Cod
 		}); err != nil {
 			return err
 		}
-		return s.emitScanTx(ctx, tx, scan.ID)
+		return s.tx.emitScanTx(ctx, tx, scan.ID)
 	})
 }
 
 // Current presence survives repeated snapshots and includes ignored findings.
-func (s *sqlFindingStore) OpenFindings(ctx context.Context, canonicalPath, scannerID string) (map[string]api.SecurityFinding, error) {
+func (s *FindingStore) OpenFindings(ctx context.Context, canonicalPath, scannerID string) (map[string]api.SecurityFinding, error) {
 	out := make(map[string]api.SecurityFinding)
 	for offset := int64(0); ; offset += MaxLedgerPageSize {
-		rows, err := s.queries.ListPresentScanFindings(ctx, db.ListPresentScanFindingsParams{
+		rows, err := s.tx.queries.ListPresentScanFindings(ctx, db.ListPresentScanFindingsParams{
 			CanonicalPath: canonicalPath, ScannerID: scannerID, PageLimit: MaxLedgerPageSize, PageOffset: offset,
 		})
 		if err != nil {
@@ -106,8 +106,8 @@ func (s *sqlFindingStore) OpenFindings(ctx context.Context, canonicalPath, scann
 }
 
 // Results include the boundary timestamp and run newest first.
-func (s *sqlCore) FixedFindingsSince(ctx context.Context, canonicalPath, scannerID string, since time.Time) ([]api.SecurityFinding, error) {
-	rows, err := s.queries.ListScanFindingEventsSince(ctx, db.ListScanFindingEventsSinceParams{
+func (s *FindingStore) FixedFindingsSince(ctx context.Context, canonicalPath, scannerID string, since time.Time) ([]api.SecurityFinding, error) {
+	rows, err := s.tx.queries.ListScanFindingEventsSince(ctx, db.ListScanFindingEventsSinceParams{
 		CanonicalPath: canonicalPath, ScannerID: scannerID, Event: findingEventFixed, ObservedAt: timelayout.Format(since.UTC()),
 	})
 	if err != nil {
@@ -127,11 +127,11 @@ func (s *sqlCore) FixedFindingsSince(ctx context.Context, canonicalPath, scanner
 	return out, nil
 }
 
-func (s *sqlCore) attachFindingHistory(ctx context.Context, canonicalPath, scannerID string, findings []api.SecurityFinding) error {
+func (s *FindingStore) attachFindingHistory(ctx context.Context, canonicalPath, scannerID string, findings []api.SecurityFinding) error {
 	if len(findings) == 0 || strings.TrimSpace(scannerID) == "" {
 		return nil
 	}
-	rows, err := s.queries.ListScanFindingIntroductions(ctx, db.ListScanFindingIntroductionsParams{
+	rows, err := s.tx.queries.ListScanFindingIntroductions(ctx, db.ListScanFindingIntroductionsParams{
 		CanonicalPath: canonicalPath, ScannerID: scannerID,
 	})
 	if err != nil {
@@ -162,8 +162,8 @@ func (s *sqlCore) attachFindingHistory(ctx context.Context, canonicalPath, scann
 
 // BlobFindings reads the findings cached for one file's bytes, named by the
 // manifest entry's content id, under one execution identity.
-func (s *sqlFindingStore) BlobFindings(ctx context.Context, executionFingerprint, contentID, targetPath string) ([]api.SecurityFinding, bool, error) {
-	raw, err := s.queries.GetScanBlobFindings(ctx, db.GetScanBlobFindingsParams{
+func (s *FindingStore) BlobFindings(ctx context.Context, executionFingerprint, contentID, targetPath string) ([]api.SecurityFinding, bool, error) {
+	raw, err := s.tx.queries.GetScanBlobFindings(ctx, db.GetScanBlobFindingsParams{
 		ExecutionFingerprint: executionFingerprint, ContentID: contentID, TargetPath: targetPath,
 	})
 	if db.IsNoRows(err) {
@@ -187,8 +187,8 @@ type CachedFileResult struct {
 }
 
 // SaveBlobFindings commits a bounded page, including verified clean results.
-func (s *sqlFindingStore) SaveBlobFindings(ctx context.Context, executionFingerprint string, files []CachedFileResult, at time.Time) error {
-	return s.inTx(ctx, func(q *db.Queries, _ *sql.Tx) error {
+func (s *FindingStore) SaveBlobFindings(ctx context.Context, executionFingerprint string, files []CachedFileResult, at time.Time) error {
+	return s.tx.inTx(ctx, func(q *db.Queries, _ *sql.Tx) error {
 		for _, file := range files {
 			findings := file.Findings
 			if findings == nil {
@@ -212,8 +212,8 @@ func (s *sqlFindingStore) SaveBlobFindings(ctx context.Context, executionFingerp
 
 // IntroducedSince counts the findings a project's series introduced at or
 // after since with a level at or above minLevel.
-func (s *sqlFindingStore) IntroducedSince(ctx context.Context, canonicalPath string, since time.Time, minLevel api.FindingLevel) (int, error) {
-	rows, err := s.queries.ListScanFindingIntroductionsSince(ctx, db.ListScanFindingIntroductionsSinceParams{
+func (s *FindingStore) IntroducedSince(ctx context.Context, canonicalPath string, since time.Time, minLevel api.FindingLevel) (int, error) {
+	rows, err := s.tx.queries.ListScanFindingIntroductionsSince(ctx, db.ListScanFindingIntroductionsSinceParams{
 		CanonicalPath: canonicalPath, ObservedAt: timelayout.Format(since.UTC()),
 	})
 	if err != nil {

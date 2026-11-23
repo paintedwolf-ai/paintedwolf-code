@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
@@ -30,7 +30,7 @@ func pendingReconcileNudge(mgr *Host, rootID string) (string, bool) {
 }
 
 func TestChecklistReconcileNudgeFiresOnOpenSteps(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [x] survey repo\n- [ ] wire the handler\n- [ ] add tests")
 	mgr := newClosureGuardManager(t, store)
 
@@ -42,7 +42,7 @@ func TestChecklistReconcileNudgeFiresOnOpenSteps(t *testing.T) {
 }
 
 func TestChecklistReconcileNudgeSilentWhenAllTerminal(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [x] survey repo\n- [~] wire the handler")
 	mgr := newClosureGuardManager(t, store)
 
@@ -54,7 +54,7 @@ func TestChecklistReconcileNudgeSilentWhenAllTerminal(t *testing.T) {
 }
 
 func TestChecklistReconcileNudgeSilentWhenProgressMissing(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	mgr := newClosureGuardManager(t, store)
 
 	mgr.Stops.QueueChecklistReconcileNudge(t.Context(), "root-1")
@@ -65,7 +65,7 @@ func TestChecklistReconcileNudgeSilentWhenProgressMissing(t *testing.T) {
 }
 
 func TestChecklistReconcileNudgeIgnoresOptionalOnlyRemainder(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root-1")
 	store.Set("root-1", "## Progress\n- [x] investigate\n- [>] write up findings")
 	mgr := newClosureGuardManager(t, store)
 
@@ -234,7 +234,7 @@ func TestProjectSkillFixtureGateMatrix(t *testing.T) {
 				testutil.FailErr(t, "PutEnabled", err)
 			}
 			reg := projecttest.NewRegistry(t)
-			p, err := project.CreateWithRoot(ctx, reg, root)
+			p, err := projecttest.CreateWithRoot(ctx, reg, root)
 			testutil.FailErr(t, "CreateWithRoot", err)
 			if !tc.projectOn {
 				if _, err := reg.SetTrustEnabled(ctx, p.ID, map[string]bool{projectcontrib.SurfaceSkills: false}); err != nil {
@@ -357,9 +357,9 @@ func TestDoomLoopPageResolverWiringOrder(t *testing.T) {
 
 func TestFirstChecklistPublicationResolvesMissingProgressWithoutGeneralAdvancement(t *testing.T) {
 	manager, sessions := newTestManager(t)
-	session, err := sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	session, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator", err)
-	store := progress.NewMemoryStore()
+	store := progress.NewSQLStore(sessions.DB())
 	manager.SetProgressStore(store)
 	guard := loopguard.NewMemoryDoomLoopGuard()
 	manager.SetDoomLoopGuard(guard)

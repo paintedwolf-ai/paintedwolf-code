@@ -58,17 +58,3 @@ func CanonicalWhenLeaves(when map[string]any) ([]WhenLeaf, error) {
 	sort.Slice(leaves, func(i, j int) bool { return leaves[i].String() < leaves[j].String() })
 	return leaves, nil
 }
-
-// CanonicalWhenString renders a when map as boolean-expression source for
-// display, keying, and diagnostics. Evaluation uses CanonicalWhenLeaves.
-func CanonicalWhenString(when map[string]any) (string, error) {
-	leaves, err := CanonicalWhenLeaves(when)
-	if err != nil {
-		return "", err
-	}
-	parts := make([]string, 0, len(leaves))
-	for _, leaf := range leaves {
-		parts = append(parts, leaf.String())
-	}
-	return strings.Join(parts, " and "), nil
-}
