@@ -79,6 +79,10 @@ linters:
         - diagnostic
       disabled-checks:
         - ifElseChain
+        # Reports the standard `if err := f(); err != nil` idiom as unchecked;
+        # every reported site checks the error and the messages garble the
+        # line's tokens.
+        - uncheckedInlineErr
         # Fixture path Join shapes.
         - filepathJoin
         - badCall
@@ -179,10 +183,33 @@ linters:
         text: '(->|Function `)(driverCall|PageInfo|closeTarget|stopPageCast)` should pass the context parameter'
         linters:
           - contextcheck
+      # The reaper outlives every request, so supervisors seed it with a
+      # detached context; the chain is by design.
+      - text: '->ensureReaper->startReaperLocked` should pass the context parameter'
+        linters:
+          - contextcheck
+      # NFS prepare teardown (rollback closures, detachUnserved, Probe,
+      # unmount) runs after a failed or canceled prepare, and the server
+      # outlives it; these contexts are detached by design.
+      - path: '^internal/layeredfs/adapter/nfsdarwin/'
+        text: '(should pass the context parameter|Non-inherited new context)'
+        linters:
+          - contextcheck
+      # Datagram endpoint receive is bounded by the endpoint's Close and
+      # cancel, not each caller's request context.
+      - text: '->startDatagramEndpoint->receive->peer` should pass the context parameter'
+        linters:
+          - contextcheck
       # cgo rewrites C calls into generated temporaries that gocritic reports
       # as duplicate subexpressions and unchecked inline errors.
       - path: '^internal/(desktoptrash/trash|hostprocess/process|userpath/account_shell)_darwin\.go$'
         text: '(dupSubExpr|uncheckedInlineErr)'
+        linters:
+          - gocritic
+      # cgo wrapper temporaries in the darwin descriptor custodians read as
+      # duplicate subexpressions and extra dereferences.
+      - path: '^internal/(lineage/(socket|listener)_darwin|socketref/volume_darwin|osprocess/pidpath_darwin)\.go$'
+        text: '(dupSubExpr|underef)'
         linters:
           - gocritic
       - path: '(.+)_test\.go'
@@ -259,6 +286,29 @@ linters:
         text: 'G115'
         linters:
           - gosec
+      # Darwin's stat_t carries narrower device fields than Linux's; widening
+      # non-negative kernel ids to the core's types cannot overflow, and the
+      # conversion is a no-op where the field is already wide.
+      - path: '^internal/(fseffect|fspath|launchverify|layeredfs)/'
+        text: 'G115: integer overflow conversion int32 -> uint64'
+        linters:
+          - gosec
+      # Darwin kernel-structure marshaling: sockaddr family and length bytes
+      # and uid and gid fields are narrower than Go's types, and non-negative
+      # kernel ids cannot overflow; G103 marks the syscall buffers these
+      # structures require.
+      - path: '^internal/(lineage/holder_exclusion_darwin|socketref/(peer|reference|reference_directory|service_directory)_darwin|layeredfs/adapter/nfsdarwin/(connection_recovery|mount|fsstat_darwin)|fseffect/read_directory_path_darwin)\.go$'
+        text: 'G(103|115)'
+        linters:
+          - gosec
+      # The retained-service endpoint passes file descriptors through raw
+      # sendmsg inside RawConn so custody serializes with connection writes;
+      # the darwin-only raw syscalls (sendmsg, F_GETPATH fcntl and getsockopt)
+      # are the only forms the kernel offers and are deprecated only there.
+      - path: '^internal/(socketref/endpoint_messages_unix|fseffect/read_directory_path_darwin|socketref/peer_darwin)\.go$'
+        text: 'SA1019: unix\.SYS_(SENDMSG|FCNTL|GETSOCKOPT)'
+        linters:
+          - staticcheck
       # Worker trees keep the modes their source and Git give them; engine storage sits under
       # owner-only roots.
       - path: '^internal/layeredfs/'
