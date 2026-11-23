@@ -752,10 +752,14 @@ func TestSharedTempExchangeSettlementCombinesReadsAndWritesAndReopensOnExplicitP
 	if !readRes.Authorized || !writeRes.Authorized || len(cards.cards) != 3 {
 		t.Fatalf("explicit preflight did not reopen review: read=%+v write=%+v cards=%d", readRes, writeRes, len(cards.cards))
 	}
-	if !gpRT.Covers("chat-ex", inputFile, false) || gpRT.Covers("chat-ex", inputFile, true) {
+	_, canReadInput := gpRT.Covers("chat-ex", "", inputFile, grantedpath.ModeRead)
+	_, canWriteInput := gpRT.Covers("chat-ex", "", inputFile, grantedpath.ModeWrite)
+	if !canReadInput || canWriteInput {
 		t.Fatal("input file grant was not read-only")
 	}
-	if !gpRT.Covers("chat-ex", exportFile, true) || gpRT.Covers("chat-ex", exportFile, false) {
+	_, canWriteExport := gpRT.Covers("chat-ex", "", exportFile, grantedpath.ModeWrite)
+	_, canReadExport := gpRT.Covers("chat-ex", "", exportFile, grantedpath.ModeRead)
+	if !canWriteExport || canReadExport {
 		t.Fatal("export directory grant did not stay write-only")
 	}
 }
