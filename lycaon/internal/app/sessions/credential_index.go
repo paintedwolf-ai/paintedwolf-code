@@ -127,6 +127,11 @@ func (c *credentialFiles) Await(ctx context.Context, wait tools.CredentialWait) 
 	if !c.indexing() || wait.ProjectID == "" {
 		return nil
 	}
+	ctx, finish, err := c.index.work.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
 	for {
 		roots, err := c.index.admit(ctx, wait.ProjectID)
 		if err != nil {
