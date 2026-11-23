@@ -66,6 +66,22 @@ func ResolveRead(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContex
 	return resolve(ctx, b, tctx, modelPath, sandbox.PathOpRead)
 }
 
+// ResolveCopySource resolves a copy source under read authority while keeping
+// repository metadata non-copyable through mutation tools.
+func ResolveCopySource(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, modelPath string) (Resolved, error) {
+	if class, denied := repositoryMetadataClass(modelPath); denied {
+		return Resolved{}, gitInternalsWriteReject(modelPath, class)
+	}
+	resolved, err := resolve(ctx, b, tctx, modelPath, sandbox.PathOpRead)
+	if err != nil {
+		return Resolved{}, err
+	}
+	if class, denied := repositoryMetadataClass(resolved.ScopeRel); denied {
+		return Resolved{}, gitInternalsWriteReject(resolved.DisplayPath, class)
+	}
+	return resolved, nil
+}
+
 // ResolveWrite enforces the shared mutation boundary.
 func ResolveWrite(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, modelPath string) (Resolved, error) {
 	resolved, err := resolveMutationScope(ctx, b, tctx, modelPath)

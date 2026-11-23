@@ -64,6 +64,7 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 				SessionScratchRoot: tc.Host.SessionScratchDir,
 				SessionOutputRoot:  tc.Host.SessionOutputDir,
 				GrantedWriteRoots:  append([]string(nil), confReq.GrantedWriteRoots...),
+				SessionReadPaths:   protectedReadGrantPaths(confReq.ProtectedReadGrants),
 			},
 			Execution: hitl.ActionExecution{
 				Contained: hitl.ContainedForRequest(confReq),

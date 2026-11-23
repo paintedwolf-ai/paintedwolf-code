@@ -182,7 +182,7 @@ func (e *Executor) applyPreInvokeBoundary(
 	}
 	boundaryApproved := (socketPreflight != nil && socketPreflight.ApprovalSatisfied) ||
 		(directPreflight != nil && directPreflight.ApprovalSatisfied) || tc.HasExecutionApproval()
-	// Socket/direct outer actions reach profile policy.Evaluate with BoundaryApprovalSatisfied via applyPreInvokePolicy.
+	// Socket and direct-IP actions pass BoundaryApprovalSatisfied to applyPreInvokePolicy.
 	args, err = e.applyPreInvokePolicy(ctx, tool, profileID, args, &tc, confReq, boundaryApproved)
 	if err != nil {
 		return nil, tc, boundaryApproved, err
@@ -246,7 +246,7 @@ func (e *Executor) applyPreInvokePolicy(
 		if reviewedApproval == nil {
 			break
 		}
-		tc.Files.ApprovedFileAccess = append([]hitl.GrantedPathDelta(nil), reviewedApproval.FileAccess...)
+		tc.Files.ApprovedFileAccess = append(tc.Files.ApprovedFileAccess, reviewedApproval.FileAccess...)
 		policyEval = e.Boundary.preInvokePolicyContext(tool, profileID, args, *tc, confReq)
 		tc.RecordCurrentActionReview(args, confReq, proposedActionFromPolicy(policyEval), reviewedApproval)
 		policyEval.CurrentActionReview = tc.CurrentActionReview(args, confReq)

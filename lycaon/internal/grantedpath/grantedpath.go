@@ -24,6 +24,16 @@ const (
 	ModeWrite Mode = "write"
 )
 
+// PermitsRead reports whether m admits file reads and directory listing.
+func (m Mode) PermitsRead() bool {
+	return m == ModeRead || m == ModeWrite
+}
+
+// PermitsWrite reports whether m admits mutations.
+func (m Mode) PermitsWrite() bool {
+	return m == ModeWrite || m == ModeWriteOnly
+}
+
 func (m Mode) permits(want Mode) bool {
 	switch m {
 	case ModeWrite:
@@ -229,6 +239,29 @@ func (r *Runtime) List(rootSession string) []Grant {
 		}
 	}
 	r.mu.RUnlock()
+	return out
+}
+
+// ListEffective returns live session-tree and durable project grants.
+func (r *Runtime) ListEffective(rootSession, projectID string) []Grant {
+	if r == nil {
+		return nil
+	}
+	out := r.List(rootSession)
+	r.mu.RLock()
+	durable := r.durable
+	r.mu.RUnlock()
+	if durable == nil {
+		return out
+	}
+	now := time.Now()
+	for _, g := range durable(projectID) {
+		g.Path = Normalize(g.Path)
+		if g.Path == "" || (g.ExpiresAt != nil && !g.ExpiresAt.After(now)) {
+			continue
+		}
+		out = append(out, g)
+	}
 	return out
 }
 

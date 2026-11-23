@@ -49,7 +49,13 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 	if owners.Catalog != nil {
 		owners.Revisions.Literals = owners.Catalog.Literals
 	}
-	inv := &invocation{ctx: ctx, owners: &owners, tc: tc, paths: p.paths, dispatch: p.dispatch, request: p.request, spec: p.spec, argv: p.Argv,
+	paths := p.paths
+	if paths != nil {
+		if rebound, err := paths.Rebind(ctx, tc); err == nil {
+			paths = rebound
+		}
+	}
+	inv := &invocation{ctx: ctx, owners: &owners, tc: tc, paths: paths, dispatch: p.dispatch, request: p.request, spec: p.spec, argv: p.Argv,
 		input: streams.Input, stderr: streams.Error, failure: 2, effects: toolcontract.NoEffect}
 	if inv.input == nil {
 		inv.input = commandprogram.NullInput()

@@ -173,7 +173,7 @@ func NativeFilesystemRootForPath(projectID string, roots, granted []string, sess
 }
 
 // NativeReadRootForPath resolves external read authority, honoring exact and directory read grants.
-func NativeReadRootForPath(projectID string, roots, readRoots, sessionReadPaths, grantedWriteRoots []string, sessionScratch, path string) (string, error) {
+func NativeReadRootForPath(projectID string, roots, readRoots, sessionReadPaths, grantedWriteRoots []string, sessionScratch, sessionOutput, path string) (string, error) {
 	if !filepath.IsAbs(path) {
 		return "", nil
 	}
@@ -181,22 +181,26 @@ func NativeReadRootForPath(projectID string, roots, readRoots, sessionReadPaths,
 	if abs == "" {
 		return "", nil
 	}
-	if ControlPlanePathDenied(abs, false, sessionScratch, "") {
+	if ControlPlanePathDenied(abs, false, sessionScratch, sessionOutput) {
 		return "", nil
+	}
+	effectiveReadRoots := slices.Clone(readRoots)
+	if strings.TrimSpace(sessionOutput) != "" {
+		effectiveReadRoots = append(effectiveReadRoots, sessionOutput)
 	}
 	if SharedTempLocation(abs) == "" {
 		allowed, err := filesystemRoots(projectID, roots, grantedWriteRoots, sessionScratch, osDefaultWriteRoots())
 		if err != nil {
 			return "", err
 		}
-		for _, r := range readRoots {
+		for _, r := range effectiveReadRoots {
 			if cp := fspath.CanonicalPath(r); cp != "" {
 				allowed = append(allowed, cp)
 			}
 		}
 		return deepestCoveringRoot(allowed, abs), nil
 	}
-	allowed, err := explicitSharedTempReadRoots(roots, readRoots, sessionReadPaths, sessionScratch, abs)
+	allowed, err := explicitSharedTempReadRoots(roots, effectiveReadRoots, sessionReadPaths, sessionScratch, abs)
 	if err != nil {
 		return "", err
 	}

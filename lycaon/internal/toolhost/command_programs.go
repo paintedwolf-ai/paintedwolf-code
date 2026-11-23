@@ -38,6 +38,7 @@ type programOwnerTools struct {
 	repo       *reposurvey.RepoTool
 	operations mutation.Operations
 	reviewRoot mutation.RedirectRootReview
+	reviewRead mutation.RedirectReadReview
 	catalog    *sourcecatalog.Catalog
 	// git is the Git owner; nil leaves git to its unsupported refusal.
 	git *git.Manager
@@ -125,13 +126,13 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 			PublishDocument: mutationOwners.Operations.Write.PublishAccepted,
 			Natives:         map[string]command.NativeOperation{},
 			Publication: func(admit tools.CommandOutputAdmission) commandprogram.OutputPublication {
-				return &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc, Admission: admit, ReviewRoot: t.reviewRoot}
+				return &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc, Admission: admit, ReviewRoot: t.reviewRoot, ReviewRead: t.reviewRead}
 			},
-			Input:   &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
-			Sources: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
+			Input:   &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc, ReviewRead: t.reviewRead},
+			Sources: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc, ReviewRead: t.reviewRead},
 			Builtins: func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
 				builtinTC := ports.ToolContext
-				builtinPub := &mutation.Publication{Owners: mutationOwners, Program: program, Tools: builtinTC, Admission: directProgramOutputAdmission(&builtinTC)}
+				builtinPub := &mutation.Publication{Owners: mutationOwners, Program: program, Tools: builtinTC, Admission: directProgramOutputAdmission(&builtinTC), ReviewRoot: t.reviewRoot, ReviewRead: t.reviewRead}
 				text := textutil.Ports{ToolContext: ports.ToolContext, Memory: ports.Memory, Admission: ports.Admission, Nested: ports.Nested, Publication: builtinPub, Spills: spills}
 				release := func() { _ = baseSpills.Close() }
 				builtins := textOwners.Builtins(text)
@@ -147,7 +148,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				return builtins, release, nil
 			},
 			Redirections: func(frame *projectpaths.ProgramPaths, admit tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
-				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: frame.ToolContext(), Admission: admit, ReviewRoot: t.reviewRoot}
+				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: frame.ToolContext(), Admission: admit, ReviewRoot: t.reviewRoot, ReviewRead: t.reviewRead}
 				return publication, publication
 			},
 		}

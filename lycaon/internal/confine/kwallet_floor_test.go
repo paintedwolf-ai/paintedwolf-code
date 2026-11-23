@@ -14,7 +14,7 @@ import (
 
 func TestDefaultConfinementProtectsBundledKWalletStore(t *testing.T) {
 	admissiontest.Enable(t)
-	home := t.TempDir()
+	home := outsideTemporaryWriteRoots(t)
 	t.Setenv("HOME", home)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")

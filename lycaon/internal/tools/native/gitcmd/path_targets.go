@@ -77,6 +77,13 @@ func gitPathTargets(argv commandprogram.BoundArgv, parsed *command, mode, cwd st
 		for _, path := range parsed.afterDash {
 			addOperand(path, false)
 		}
+	case "git apply":
+		for _, path := range operands {
+			addOperand(path, false)
+		}
+		if option, ok := argv.Last("--directory"); ok && len(option.Values) > 0 {
+			addOperand(option.Values[0].Value, !reportOnly(argv) && !has(argv, "--check") && !has(argv, "--cached"))
+		}
 	}
 	return targets
 }

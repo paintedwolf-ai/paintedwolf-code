@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -303,6 +304,9 @@ func (p *ProgramPaths) bindAuthority(ctx context.Context, bound BoundPath, write
 			return &os.PathError{Op: "stat", Path: actual, Err: os.ErrNotExist}
 		}
 		if scope == "." || scope == "" {
+			return bound.admitRead(actual)
+		}
+		if resolved.External && (confine.SharedTempLocation(actual) != "" || confine.ControlPlaneReadDenied(actual) || confine.KeyMaterialPath(actual)) {
 			return bound.admitRead(actual)
 		}
 		if p.boundary == nil {

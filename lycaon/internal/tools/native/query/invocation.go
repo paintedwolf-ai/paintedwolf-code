@@ -35,7 +35,13 @@ type invocation struct {
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: p.program.Paths, request: p.request, spec: p.spec, argv: p.Argv,
+	paths := p.program.Paths
+	if paths != nil {
+		if rebound, err := paths.Rebind(ctx, tc); err == nil {
+			paths = rebound
+		}
+	}
+	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, paths: paths, request: p.request, spec: p.spec, argv: p.Argv,
 		input: streams.Input, stderr: streams.Error}
 	if inv.input == nil {
 		inv.input = commandprogram.NullInput()

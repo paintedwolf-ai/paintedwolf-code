@@ -6,8 +6,10 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/user"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -20,10 +22,21 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
+func outsideSharedTempDir(t *testing.T) string {
+	t.Helper()
+	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
+	testutil.FailErr(t, "look up account home", err)
+	dir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-glob-test-") //nolint:usetesting // Ordinary host path outside shared temp.
+	testutil.FailErr(t, "create outside glob fixture", err)
+	t.Cleanup(func() { testutil.FailErr(t, "remove outside glob fixture", os.RemoveAll(dir)) })
+	return dir
+}
+
 func TestGlobFilesMatchConfinedLogicalPaths(t *testing.T) {
 	tc, root := readSessionContext(t)
-	outside := t.TempDir()
-	for _, file := range []string{filepath.Join(root, ".hidden.go"), filepath.Join(root, "pkg", "deep", "c.go"), filepath.Join(outside, "o.go")} {
+	outside := outsideSharedTempDir(t)
+	ungrantedTemp := t.TempDir()
+	for _, file := range []string{filepath.Join(root, ".hidden.go"), filepath.Join(root, "pkg", "deep", "c.go"), filepath.Join(outside, "o.go"), filepath.Join(ungrantedTemp, "t.go")} {
 		testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Dir(file), 0o755))
 		testutil.FailErr(t, "write", os.WriteFile(file, nil, 0o600))
 	}
@@ -47,9 +60,10 @@ func TestGlobFilesMatchConfinedLogicalPaths(t *testing.T) {
 		{"@ws/*.go", nil},
 		{"./p*/b.go", []string{"./pkg/b.go"}},
 		{filepath.ToSlash(root) + "/*.go", []string{filepath.ToSlash(root) + "/a.go"}},
-		// The walk applies exactly the invocation's read authority, which
-		// admits ordinary host reads when no boundary narrows it.
+		// The walk applies the invocation's read authority: ordinary host reads
+		// remain visible while ungranted shared-temp trees stay closed.
 		{filepath.ToSlash(outside) + "/*.go", []string{filepath.ToSlash(outside) + "/o.go"}},
+		{filepath.ToSlash(ungrantedTemp) + "/*.go", nil},
 		{"@scratch/*", nil},
 		{"missing/*.go", nil},
 	}

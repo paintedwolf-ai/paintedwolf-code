@@ -424,14 +424,22 @@ func IsPathMutatingTool(tool string) bool {
 // controlPlaneDenyResult blocks a declared path inside the host's own state
 // tree. Command tools declare no paths here; confinement answers for them.
 func controlPlaneDenyResult(action hitl.ProposedAction) *hitl.ApprovalResult {
-	if IsCommandToolName(action.Invocation.Tool) && action.Invocation.NativePathTargets == nil {
+	explicitTargets := effectivePathTargets(action)
+	if IsCommandToolName(action.Invocation.Tool) && explicitTargets == nil {
 		return nil
 	}
 	write := IsPathMutatingTool(action.Invocation.Tool)
-	for i, f := range action.Invocation.Files {
+	files := action.Invocation.Files
+	if explicitTargets != nil && len(files) == 0 {
+		files = make([]string, len(explicitTargets))
+		for i, t := range explicitTargets {
+			files[i] = t.Path
+		}
+	}
+	for i, f := range files {
 		pathWrite := write
-		if action.Invocation.NativePathTargets != nil && i < len(action.Invocation.NativePathTargets) {
-			pathWrite = action.Invocation.NativePathTargets[i].Write
+		if explicitTargets != nil && i < len(explicitTargets) {
+			pathWrite = explicitTargets[i].Write
 		}
 		path := strings.TrimSpace(f)
 		if !filepath.IsAbs(path) {

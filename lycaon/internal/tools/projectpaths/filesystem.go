@@ -21,7 +21,7 @@ func resolveFilesystemPath(ctx context.Context, b *sandbox.Boundary, tctx tools.
 		root, err = confine.NativeReadRootForPath(
 			tctx.Identity.ProjectID, workspaceRoots(tctx), tctx.Files.ReadRoots,
 			tctx.Files.SessionReadPaths, tctx.Files.GrantedWriteRoots,
-			tctx.Host.SessionScratchDir, modelPath,
+			tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir, modelPath,
 		)
 	} else {
 		root, err = confine.NativeFilesystemRootForPath(

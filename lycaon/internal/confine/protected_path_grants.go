@@ -11,7 +11,7 @@ import (
 )
 
 // MaxProtectedPathGrants caps protected-path transactions per execution.
-const MaxProtectedPathGrants = 8
+const MaxProtectedPathGrants = 32
 
 // ProtectedPathGrant permits one approved protected path.
 type ProtectedPathGrant struct {
@@ -76,6 +76,13 @@ func NewProtectedPathGrant(approvedPath string) ProtectedPathGrant {
 		ResolvedPath: resolved,
 		Subtree:      subtree,
 	}
+}
+
+// NewProtectedPathGrantForShape canonicalizes an approved path with explicit tree scope.
+func NewProtectedPathGrantForShape(approvedPath string, subtree bool) ProtectedPathGrant {
+	grant := NewProtectedPathGrant(approvedPath)
+	grant.Subtree = subtree
+	return grant
 }
 
 // validateProtectedPathGrants rejects stale or redirected authority.

@@ -30,7 +30,25 @@ func (e *Boundary) preflightReadPath(ctx context.Context, tool string, args map[
 	if tc.Files.PackageExecution != nil {
 		tc.Files.PackageExecution.ApprovedReadPaths = request.ReadPaths
 	}
+	if e.sessionReadOverlay != nil {
+		tc.Files.SessionReadPaths = append([]string(nil), e.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)
+	}
 	return nil
+}
+
+// ReviewRedirectRead reviews a shared-temp input redirect or sourced script before opening it.
+func (e *Boundary) ReviewRedirectRead(ctx context.Context, tc tools.ToolContext, operator, path string) (tools.ToolContext, error) {
+	if e.sessionReadOverlay != nil {
+		tc.Files.SessionReadPaths = append([]string(nil), e.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)
+	}
+	args := map[string]any{"command": operator + " " + path}
+	if err := e.authorizeReadPath(ctx, "command", args, &tc, path); err != nil {
+		return tc, err
+	}
+	if e.sessionReadOverlay != nil {
+		tc.Files.SessionReadPaths = append([]string(nil), e.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)
+	}
+	return tc, nil
 }
 
 func (e *Boundary) authorizeReadPath(ctx context.Context, tool string, args map[string]any, tc *tools.ToolContext, path string) error {

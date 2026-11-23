@@ -61,6 +61,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 			SessionID:         tc.Identity.SessionID,
 			RootSessionID:     tc.ChatSessionID(),
 			GrantedWriteRoots: append([]string(nil), confReq.GrantedWriteRoots...),
+			SessionReadPaths:  protectedReadGrantPaths(confReq.ProtectedReadGrants),
 		},
 		Execution: hitl.ActionExecution{
 			Contained: hitl.ContainedForRequest(confReq),

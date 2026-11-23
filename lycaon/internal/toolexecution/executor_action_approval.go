@@ -34,7 +34,7 @@ func (e *Approvals) awaitApproval(
 			Args:               args,
 			Files:              append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
 			ResolvedFiles:      append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
-			NativePathTargets:  nativePathTargetsFromArgs(args),
+			NativePathTargets:  nativePathTargetsFromArgs(tool, args),
 			ApprovedFileAccess: append([]hitl.GrantedPathDelta(nil), tc.Files.ApprovedFileAccess...),
 			ActionID:           tc.EffectActionID(),
 		},
@@ -50,6 +50,7 @@ func (e *Approvals) awaitApproval(
 			SessionScratchRoot: tc.Host.SessionScratchDir,
 			SessionOutputRoot:  tc.Host.SessionOutputDir,
 			GrantedWriteRoots:  append([]string(nil), confReq.GrantedWriteRoots...),
+			SessionReadPaths:   protectedReadGrantPaths(confReq.ProtectedReadGrants),
 		},
 		Sockets: hitl.ActionSockets{
 			SocketGrants:            append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),

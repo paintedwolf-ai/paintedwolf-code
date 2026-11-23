@@ -198,7 +198,16 @@ type Confinement struct {
 // DefaultConfinement builds the boundary for a valid rooted request.
 func DefaultConfinement(req Request) (*Confinement, bool) {
 	if req.HostExecution {
-		return &Confinement{HostExecution: true, Network: NetworkDirectIP, Roots: append([]string(nil), req.Roots...)}, true
+		scratch := strings.TrimSpace(req.SessionScratchRoot)
+		if scratch != "" {
+			scratch = fspath.CanonicalPath(scratch)
+		}
+		return &Confinement{
+			HostExecution: true,
+			Network:       NetworkDirectIP,
+			Roots:         append([]string(nil), req.Roots...),
+			Workspaces:    WorkspaceRoots{SessionScratch: scratch},
+		}, true
 	}
 	prepared, err := prepareRequest(req)
 	if err != nil {
@@ -418,11 +427,13 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		allow = append(allow, nonExcludedPaths(resolveEach(c.ReadRoots), excluded)...)
 		allow = append(allow, c.privateWorkRoots()...)
 		addManagedReadRoots(&rules, deny, allow)
-		// An approved read grant lifts stronger non-control-plane floors only when it targets them.
+		// Shared-temp grants lift only the shared-temp floor unless they also name
+		// an attached project root or a path inside an editable floor.
 		editableDeny := editableReadDenyPaths(c)
+		attachedTemp := attachedTempProjectRoots(c, rules.sharedTemp)
 		var subtrees, literals []string
 		for _, g := range c.ProtectedReadGrants {
-			if !underAny(g.ResolvedPath, editableDeny) {
+			if underAny(g.ResolvedPath, rules.sharedTemp) && !underAny(g.ResolvedPath, editableDeny) && !underAny(g.ResolvedPath, attachedTemp) {
 				continue
 			}
 			if g.Subtree {

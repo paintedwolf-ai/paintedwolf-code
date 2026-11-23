@@ -253,10 +253,14 @@ func (d *ProgramDispatcher) pathOperation(spec toolcontract.CommandSpecification
 			}
 			review.PathTargets = append(review.PathTargets, commandprogram.PathTarget{Path: path})
 		}
-		return NativePrepared{Review: review, Tool: spec.Name, Invoke: func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-			result, err := frame.Invoke(ctx, request, streams)
+		return NativePrepared{Review: review, Tool: spec.Name, Invoke: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			admitted, err := frame.Rebind(ctx, tc)
+			if err != nil {
+				return refusedResult("COMMAND_OPERAND_INVALID"), err
+			}
+			result, err := admitted.Invoke(ctx, request, streams)
 			if err == nil && spec.Name == "cd" {
-				d.paths.AdoptCwd(frame)
+				d.paths.AdoptCwd(admitted)
 			}
 			return result, err
 		}}, nil

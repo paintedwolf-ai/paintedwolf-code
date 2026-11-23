@@ -259,7 +259,12 @@ func wireGrantedAccess(r *Runtime, deps CheckpointDependencies) error {
 		}
 		return projectpaths.Access{Path: g.Path, Tree: g.Tree}, true
 	})
-	deps.Resources.Track("granted-access-source", 22, func(context.Context) error { releaseGrantedAccess(); return nil })
+	releaseGrantedConfinement := tools.SetGrantedPathSource(grantedRT.ListEffective)
+	deps.Resources.Track("granted-access-source", 22, func(context.Context) error {
+		releaseGrantedConfinement()
+		releaseGrantedAccess()
+		return nil
+	})
 	if err := r.Manager.Resources.RegisterCleanup("approval-run", 50, func(_ context.Context, sessionID string) error {
 		deps.Execution.Host.Authority.ReleaseSessionRun(sessionID)
 		r.SandboxReadPath.ReleaseRun(sessionID)

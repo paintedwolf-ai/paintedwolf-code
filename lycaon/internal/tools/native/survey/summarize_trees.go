@@ -65,6 +65,9 @@ func (g *summaryTrees) openSummaryTree(ctx context.Context, root sourcecatalog.R
 }
 
 func (g *summaryTrees) buildSubtreeDir(ctx context.Context, resolved projectpaths.Resolved, maxDepth int) *summarize.SubtreeNode {
+	if resolved.External {
+		return g.warmingSubtree(ctx, resolved)
+	}
 	scope, err := g.access.boundary.CompileReadScope(ctx, resolved.Root.Path, g.access.profileID)
 	if err != nil {
 		g.treeErr = err

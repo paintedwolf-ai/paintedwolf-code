@@ -43,6 +43,40 @@ func TestCopyToolCopiesFile(t *testing.T) {
 	}
 }
 
+func TestCopyToolRequiresReadAuthorityOnSharedTempSource(t *testing.T) {
+	project := t.TempDir()
+	sharedDir := t.TempDir()
+	src := filepath.Join(sharedDir, "incoming.txt")
+	testutil.FailErr(t, "seed shared-temp source", os.WriteFile(src, []byte("from-temp"), 0o600))
+	dst := filepath.Join(project, "copied.txt")
+
+	tool := &CopyTool{Boundary: nativefixture.Boundary(t)}
+	tctx := nativefixture.Context(project)
+
+	// Write-only temp authority must not admit copying out of shared temp.
+	tctx.Files.GrantedWriteRoots = []string{sharedDir}
+	_, err := tool.Run(t.Context(), map[string]any{
+		"copies": []any{map[string]any{"from": src, "to": dst}},
+	}, tctx)
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "COPY_PATH_DENIED" {
+		t.Fatalf("copy with write-only temp grant err = %v, want COPY_PATH_DENIED", err)
+	}
+
+	// Exact read authority on the source admits copying into the project without write authority on temp.
+	tctx.Files.GrantedWriteRoots = nil
+	tctx.Files.SessionReadPaths = []string{src}
+	_, err = tool.Run(t.Context(), map[string]any{
+		"copies": []any{map[string]any{"from": src, "to": dst}},
+	}, tctx)
+	testutil.FailErr(t, "copy from approved shared-temp input", err)
+	got, err := os.ReadFile(dst)
+	testutil.FailErr(t, "read destination", err)
+	if string(got) != "from-temp" {
+		t.Fatalf("copied bytes = %q, want from-temp", string(got))
+	}
+}
+
 func TestCopyToolRequiresCanonicalPairFields(t *testing.T) {
 	tmpDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmpDir, "src.txt"), []byte("x"), 0o644); err != nil {

@@ -258,7 +258,7 @@ func TestReleasedGrantOwnerDoesNotReplaceCurrentPathAuthority(t *testing.T) {
 // Access prepared for a file-change review alone does not authorise a change
 // that review will not see; access a person granted does.
 func TestReliesOnPreparedAccessOnlyWithoutAGrant(t *testing.T) {
-	abs := t.TempDir()
+	abs := grantedpath.Normalize(t.TempDir())
 	review := func(context.Context, []tools.FileChange) error { return nil }
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session-1"}}
 	if projectpaths.ReliesOnPreparedAccess(tctx, abs) {

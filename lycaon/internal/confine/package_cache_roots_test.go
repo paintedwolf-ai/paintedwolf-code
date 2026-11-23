@@ -103,11 +103,23 @@ func TestSharedTempPolicyLayersNestedRootsAndWriteOnlyLeases(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", stateDir)
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")
 
-	// An incidental parent root above temp conveys no shared-temp authority,
-	// while an attached root inside temp, session scratch, exact read grants,
-	// and write-only leases keep independent directional boundaries beneath stronger floors.
+	// An incidental parent root above temp conveys no shared-temp authority.
+	incidentalState := filepath.Join(privateCacheFixture(t), "state")
+	testutil.FailErr(t, "mkdir incidental state", os.MkdirAll(incidentalState, 0o700))
+	t.Setenv("LYCAON_CONFIG_DIR", incidentalState)
+	parentRules, err := filesystemRules(Confinement{Roots: []string{parent}})
+	testutil.FailErr(t, "compile incidental parent rules", err)
+	for _, access := range []FilesystemAccess{AccessRead, AccessWrite} {
+		if got := parentRules.Verdict(access, siblingInput); got != (FloorVerdict{Layer: FloorSharedTemp}) {
+			t.Fatalf("incidental parent %s %s = %+v, want shared-temp floor", access, siblingInput, got)
+		}
+	}
+
+	// Attached roots inside temp, session scratch, exact read grants, and
+	// write-only leases keep independent directional boundaries beneath stronger floors.
+	t.Setenv("LYCAON_CONFIG_DIR", stateDir)
 	c := Confinement{
-		Roots:               []string{parent, attached},
+		Roots:               []string{attached},
 		GrantedWriteRoots:   []string{writeOnlyDir},
 		Workspaces:          WorkspaceRoots{SessionScratch: scratch},
 		ReadDenyPaths:       []string{excluded},
@@ -186,7 +198,7 @@ func TestSharedTempPolicyLayersNestedRootsAndWriteOnlyLeases(t *testing.T) {
 	if writeRoot != fspath.CanonicalPath(temp) {
 		t.Fatalf("durable write lease did not cover write: got %q, want %q", writeRoot, fspath.CanonicalPath(temp))
 	}
-	readRoot, err := NativeReadRootForPath("proj-old-lease", nil, nil, nil, []string{temp}, "", siblingInput)
+	readRoot, err := NativeReadRootForPath("proj-old-lease", nil, nil, nil, []string{temp}, "", "", siblingInput)
 	testutil.FailErr(t, "native read root with write-only lease", err)
 	if readRoot != "" {
 		t.Fatalf("write-only lease opened native shared-temp read: got %q", readRoot)

@@ -62,7 +62,7 @@ func (op *CopyOperation) copyTree(ctx context.Context, tc tools.ToolContext, sou
 					fastResolve = false
 				}
 			}
-			_, err = assertCopyWritePath(ctx, t.Boundary, tc, filepath.Join(pair.From, rel), tc.ProfileID())
+			_, err = assertCopyReadPath(ctx, t.Boundary, tc, filepath.Join(pair.From, rel), tc.ProfileID())
 			return err
 		}
 		if fastResolve && info.Mode().IsRegular() {
@@ -73,7 +73,6 @@ func (op *CopyOperation) copyTree(ctx context.Context, tc tools.ToolContext, sou
 				bytes += info.Size()
 				if err := copyTreeWithinCaps(files, bytes, caps, filepath.ToSlash(pair.From)); err != nil {
 					projectpaths.RecordResolvedMutation(ctx, tc, toChild)
-					projectpaths.RecordResolvedMutation(ctx, tc, fromChild)
 					return err
 				}
 				return nil
@@ -82,7 +81,7 @@ func (op *CopyOperation) copyTree(ctx context.Context, tc tools.ToolContext, sou
 		if _, err := assertCopyWritePath(ctx, t.Boundary, tc, filepath.Join(pair.To, rel), tc.ProfileID()); err != nil {
 			return err
 		}
-		from, err := assertMutationFileSource(ctx, t.Boundary, tc, filepath.Join(pair.From, rel), tc.ProfileID(), "copy", "COPY_NOT_FOUND", "COPY_IS_DIRECTORY", "COPY_SYMLINK_ESCAPE", assertCopyWritePath)
+		from, err := assertMutationFileSource(ctx, t.Boundary, tc, filepath.Join(pair.From, rel), tc.ProfileID(), "copy", "COPY_NOT_FOUND", "COPY_IS_DIRECTORY", "COPY_SYMLINK_ESCAPE", assertCopyReadPath)
 		if err != nil {
 			return err
 		}
@@ -150,7 +149,6 @@ func (op *CopyOperation) copyTree(ctx context.Context, tc tools.ToolContext, sou
 			fromChild := projectpaths.ChildResolved(tc, source, rel)
 			toChild := projectpaths.ChildResolved(tc, destination, rel)
 			if !projectpaths.IsSpecialMutationRel(fromChild.ScopeRel) && !projectpaths.IsSpecialMutationRel(toChild.ScopeRel) {
-				projectpaths.RecordResolvedMutation(ctx, tc, fromChild)
 				projectpaths.RecordResolvedMutation(ctx, tc, toChild)
 				return page.AddResolved(filePair, fromChild, toChild, remaining, !destExisted)
 			}

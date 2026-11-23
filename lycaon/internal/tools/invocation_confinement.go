@@ -3,11 +3,30 @@ package tools
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
+
+// GrantedPathSource returns live session-tree and durable grants for confinement projection.
+type GrantedPathSource func(rootSessionID, projectID string) []grantedpath.Grant
+
+var grantedPathSource atomic.Pointer[GrantedPathSource]
+
+// SetGrantedPathSource wires grantedpath authority into subprocess confinement inputs.
+func SetGrantedPathSource(fn GrantedPathSource) func() {
+	if fn == nil {
+		grantedPathSource.Store(nil)
+		return func() {}
+	}
+	grantedPathSource.Store(&fn)
+	return func() {
+		grantedPathSource.CompareAndSwap(&fn, nil)
+	}
+}
 
 func UniqueRoots(in []string) []string {
 	seen := map[string]struct{}{}
@@ -36,10 +55,31 @@ func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string)
 		readDenyPaths = append(readDenyPaths, tctx.Source.WorkerSourceRoots...)
 	}
 	overlayReadPaths := tctx.Files.SessionReadPaths
+	var grantedReads []confine.ProtectedPathGrant
+	writeOverlays := append([]string(nil), overlayWriteRoots...)
 	if tctx.Files.PackageExecution != nil {
 		readDenyPaths = append(readDenyPaths, tctx.Files.PackageExecution.SensitiveReads...)
 		// Package actions use only the read access explicitly requested for this invocation.
 		overlayReadPaths = tctx.Files.PackageExecution.ApprovedReadPaths
+	} else {
+		for _, delta := range tctx.Files.ApprovedFileAccess {
+			if delta.Permits(false) {
+				grantedReads = append(grantedReads, confine.NewProtectedPathGrantForShape(delta.Path, delta.Tree))
+			}
+			if delta.Tree && delta.Permits(true) {
+				writeOverlays = append(writeOverlays, delta.Path)
+			}
+		}
+		if src := grantedPathSource.Load(); src != nil {
+			for _, g := range (*src)(tctx.ChatSessionID(), tctx.Identity.ProjectID) {
+				if g.Mode.PermitsRead() {
+					grantedReads = append(grantedReads, confine.NewProtectedPathGrantForShape(g.Path, g.Tree))
+				}
+				if g.Tree && g.Mode.PermitsWrite() {
+					writeOverlays = append(writeOverlays, g.Path)
+				}
+			}
+		}
 	}
 	var view confine.ViewBoundary
 	if tctx.Source.WorkerViewBoundary != nil {
@@ -52,9 +92,10 @@ func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string)
 		Roots:                ConfineRootsForAction(tctx),
 		SessionScratchRoot:   tctx.Host.SessionScratchDir,
 		SessionOutputRoot:    tctx.Host.SessionOutputDir,
-		OverlayWriteRoots:    overlayWriteRoots,
+		OverlayWriteRoots:    UniqueRoots(writeOverlays),
 		PolicyWriteGrants:    tctx.Files.PolicyWriteGrants,
 		OverlayReadPaths:     overlayReadPaths,
+		GrantedReadGrants:    grantedReads,
 		ReadDenyPaths:        readDenyPaths,
 		ReadRoots:            ConfineReadRootsForAction(tctx),
 		SocketGrants:         tctx.Socket.SocketGrants,
