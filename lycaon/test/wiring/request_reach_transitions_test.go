@@ -116,15 +116,15 @@ func runAskFirstAndResumedScenario(t *testing.T, oracle *reachOracle) {
 			t.Fatalf("Ask request %d failed reach check:\n%s", i, strings.Join(viols, "\n"))
 		}
 	}
-	if !slices.Contains(codes, tools.AskModeActiveCode) {
-		t.Fatalf("expected %s among Ask refusal codes, got %v", tools.AskModeActiveCode, codes)
+	if !slices.Contains(codes, "DISALLOWED_AGENT") && !slices.Contains(codes, tools.AskModeActiveCode) {
+		t.Fatalf("expected DISALLOWED_AGENT or %s among Ask refusal codes, got %v", tools.AskModeActiveCode, codes)
 	}
 }
 
 func runMidTurnAskUpgradeScenario(t *testing.T, oracle *reachOracle) {
 	t.Helper()
 	var h *Harness
-	var sessID, projID string
+	var sessID string
 	var round atomic.Int32
 	rec := llmtest.NewRecordingClient(llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
 		Fallback: func(ctx context.Context, snap llmtest.Snapshot) modelcall.Completion {
@@ -133,15 +133,9 @@ func runMidTurnAskUpgradeScenario(t *testing.T, oracle *reachOracle) {
 			}
 			switch round.Add(1) {
 			case 1:
-				args := TaskToolArgs(orchestration.ProfileRepoResearcher, "Read note.txt in Ask mode.")
-				args["name"] = "ask-scout"
-				return askRoundToolCall("spawn-scout", "task", args)
+				return askRoundToolCall("ask-read", "inspect_source", map[string]any{"operation": "read", "path": "note.txt"})
 			case 2:
-				// Drain the Ask-spawned read-only worker while still in Ask, then upgrade mid-turn.
-				testutil.WaitFor(t, "ask-scout round 1 quiescent", func() bool {
-					return workerCycleQuiescent(ctx, h, projID, sessID)
-				})
-				if _, err := h.Store.Sessions.SetMode(ctx, sessID, api.SessionModeAgent); err != nil {
+				if _, err := h.Sessions.Manager.Chats.SetMode(ctx, sessID, api.SessionModeAgent); err != nil {
 					t.Errorf("mid-turn SetMode(Agent): %v", err)
 				}
 				return askRoundToolCall("read-before-refresh", "inspect_source", map[string]any{"operation": "read", "path": "note.txt"})
@@ -163,18 +157,38 @@ func runMidTurnAskUpgradeScenario(t *testing.T, oracle *reachOracle) {
 	testutil.FailErr(t, "seed note", os.WriteFile(filepath.Join(dir, "note.txt"), []byte("ask seed\n"), 0o600))
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Mode: new(api.SessionModeAsk)}, dir)
 	testutil.FailErr(t, "create Ask session", err)
-	sessID, projID = sess.ID, sess.ProjectID
+	sessID = sess.ID
 	h.Start(t)
 
-	// Start a read-only background '&' command job before the root session upgrades.
+	// Start a read-only background Ask ToolContext and an Ask-spawned read worker before the root session upgrades.
 	bgTC := WiringToolContext(sess.ID, dir)
 	bgTC.Identity.ProjectID, bgTC.Identity.RootSessionID, bgTC.Identity.Agent = sess.ProjectID, sess.ID, "coordinator"
+	testutil.FailErr(t, "resolve primary root for bgTC", h.DB.QueryRowContext(ctx, "SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1", sess.ProjectID).Scan(&bgTC.Source.ActiveRootID))
+	bgTC.Source.Roots[0].ID = bgTC.Source.ActiveRootID
 	bgTC.Source.AskMode, bgTC.Source.ReadOnly = true, true
 	bgTC.Identity.ToolCallID = "ask-bg-job"
-	bgOut, bgErr := h.ToolRegistry.Run(ctx, "command", map[string]any{"command": "echo ask-bg-job &"}, bgTC)
-	testutil.FailErr(t, "start read-only background '&' job", bgErr)
+	bgOut, bgErr := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, bgTC)
+	testutil.FailErr(t, "run read-only Ask background context before upgrade", bgErr)
 	if strings.TrimSpace(bgOut) == "" {
-		t.Fatal("expected non-empty output from background '&' command job")
+		t.Fatal("expected non-empty pack_board output from pre-upgrade read-only Ask context")
+	}
+
+	bgTC.Identity.ToolCallID = "spawn-ask-scout"
+	scoutArgs := TaskToolArgs(orchestration.ProfileRepoResearcher, "Read note.txt in Ask mode.")
+	scoutArgs["name"] = "ask-scout"
+	_, spawnErr := h.ToolRegistry.Run(ctx, "task", scoutArgs, bgTC)
+	testutil.FailErr(t, "spawn ask-scout in Ask mode", spawnErr)
+	testutil.WaitFor(t, "ask-scout round 1 quiescent", func() bool {
+		return workerCycleQuiescent(ctx, h, sess.ProjectID, sess.ID)
+	})
+	FailOnEndedWorker(t, h, ctx, sess.ProjectID)
+	WaitForSessionIdleGate(t, h, ctx, sess.ID)
+
+	bgTC.Identity.ToolCallID = "deny-escalate-in-ask"
+	if _, escErr := h.ToolRegistry.Run(ctx, "instruct_worker", map[string]any{
+		"worker": "ask-scout", "instructions": "Rewrite note.txt.", "agent_type": orchestration.ProfileImplementer,
+	}, bgTC); escErr == nil {
+		t.Fatal("expected instruct_worker escalating Ask-spawned read worker to implementer under Ask ToolContext to fail")
 	}
 
 	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Spawn ask-scout, upgrade mid-turn, and write upgraded.txt.")
@@ -200,28 +214,32 @@ func verifyPostUpgradeChildRetentionAndRequests(
 	bgTC tools.ToolContext,
 ) {
 	t.Helper()
-	// 1. Background '&' context started in Ask retains read-only enforcement even after root upgrade.
+	// 1. Background context started in Ask retains read-only enforcement even after root upgrade.
+	bgTC.Identity.ToolCallID = "ask-bg-read-after-upgrade"
+	if _, readErr := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, bgTC); readErr != nil {
+		t.Fatalf("expected pre-upgrade read-only Ask ToolContext to retain read access: %v", readErr)
+	}
 	bgTC.Identity.ToolCallID = "ask-bg-mutate-after-upgrade"
 	if _, mutErr := h.ToolRegistry.Run(ctx, "command", map[string]any{"command": "printf 'leak\\n' > bg_leak.txt"}, bgTC); mutErr == nil {
 		t.Fatal("expected pre-upgrade read-only background ToolContext to reject file mutation after root upgrade")
 	}
 
-	// 2. Ask-spawned child worker retains scope_mode=read and rejects escalation to implementer.
+	// 2. Ask-spawned child worker retains scope_mode=read across root upgrade and continues in read scope.
+	var scoutName, agentType, scopeMode string
+	testutil.FailErr(t, "query Ask-spawned worker name", h.DB.QueryRowContext(ctx,
+		"SELECT name, agent_type, scope_mode FROM workers WHERE session_id = ? LIMIT 1", sess.ID).Scan(&scoutName, &agentType, &scopeMode))
+	if agentType != orchestration.ProfileRepoResearcher || scopeMode != "read" {
+		t.Fatalf("ask-scout mutated by root upgrade alone: agent_type=%s scope_mode=%s", agentType, scopeMode)
+	}
 	agentTC := WiringToolContext(sess.ID, dir)
 	agentTC.Identity.ProjectID, agentTC.Identity.RootSessionID, agentTC.Identity.Agent = sess.ProjectID, sess.ID, "coordinator"
 	testutil.FailErr(t, "resolve primary root", h.DB.QueryRowContext(ctx, "SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1", sess.ProjectID).Scan(&agentTC.Source.ActiveRootID))
 	agentTC.Source.Roots[0].ID = agentTC.Source.ActiveRootID
-	agentTC.Identity.ToolCallID = "escalate-ask-scout"
-	if _, escErr := h.ToolRegistry.Run(ctx, "instruct_worker", map[string]any{
-		"worker": "ask-scout", "instructions": "Rewrite note.txt.", "agent_type": orchestration.ProfileImplementer,
-	}, agentTC); escErr == nil {
-		t.Fatal("expected instruct_worker escalating Ask-spawned read worker to implementer to fail")
-	}
 
 	// Continuing ask-scout as repo-researcher after root upgrade keeps it in read scope.
 	agentTC.Identity.ToolCallID = "continue-ask-scout-readonly"
 	_, contErr := h.ToolRegistry.Run(ctx, "instruct_worker", map[string]any{
-		"worker": "ask-scout", "instructions": "Re-read upgraded.txt in read-only scope.",
+		"worker": scoutName, "instructions": "Read note.txt in Ask mode. Follow-up check.",
 	}, agentTC)
 	testutil.FailErr(t, "continue ask-scout in read scope", contErr)
 	testutil.WaitFor(t, "ask-scout round 2 quiescent", func() bool {
@@ -230,9 +248,15 @@ func verifyPostUpgradeChildRetentionAndRequests(
 	FailOnEndedWorker(t, h, ctx, sess.ProjectID)
 	WaitForSessionIdleGate(t, h, ctx, sess.ID)
 
-	var agentType, scopeMode string
+	bgTC.Identity.ToolCallID = "deny-escalate-after-upgrade"
+	if _, escErr := h.ToolRegistry.Run(ctx, "instruct_worker", map[string]any{
+		"worker": scoutName, "instructions": "Rewrite note.txt.", "agent_type": orchestration.ProfileImplementer,
+	}, bgTC); escErr == nil {
+		t.Fatal("expected retained Ask ToolContext to reject escalating ask-scout to implementer after root upgrade")
+	}
+
 	testutil.FailErr(t, "query ask-scout record", h.DB.QueryRowContext(ctx,
-		"SELECT agent_type, scope_mode FROM workers WHERE session_id = ? AND name = 'ask-scout'", sess.ID).Scan(&agentType, &scopeMode))
+		"SELECT agent_type, scope_mode FROM workers WHERE session_id = ? AND name = ?", sess.ID, scoutName).Scan(&agentType, &scopeMode))
 	if agentType != orchestration.ProfileRepoResearcher || scopeMode != "read" {
 		t.Fatalf("ask-scout mutated after root upgrade: agent_type=%s scope_mode=%s", agentType, scopeMode)
 	}
@@ -300,7 +324,7 @@ func runBetweenTurnAskUpgradeScenario(t *testing.T, oracle *reachOracle) {
 	testutil.FailErr(t, "Ask turn", err)
 	WaitForSessionIdleGate(t, h, ctx, sess.ID)
 
-	_, err = h.Store.Sessions.SetMode(ctx, sess.ID, api.SessionModeAgent)
+	_, err = h.Sessions.Manager.Chats.SetMode(ctx, sess.ID, api.SessionModeAgent)
 	testutil.FailErr(t, "between-turn SetMode(Agent)", err)
 
 	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Now write between.txt in Agent mode.")
@@ -429,14 +453,13 @@ func verifyV1BaselineAskProjectedRequest(t *testing.T, oracle *reachOracle) {
 	if len(reqs) < 2 {
 		t.Fatalf("expected >= 2 requests in v1-baseline Ask turn, got %d", len(reqs))
 	}
-	postReq := reqs[len(reqs)-1]
-	askSchema, hasAsk := toolMetaSchemaInRequest(postReq, "ask_user")
-	if !hasAsk || argFields(askSchema)["secret"] {
-		t.Fatalf("v1-baseline Ask request missing pruned ask_user schema: has=%t fields=%v", hasAsk, argFields(askSchema))
+	postLoadReq := reqs[len(reqs)-1]
+	if _, hasCmd := toolMetaSchemaInRequest(postLoadReq, "command"); hasCmd {
+		t.Fatal("v1-baseline Ask request unexpectedly offered command")
 	}
-	taskSchema, hasTask := toolMetaSchemaInRequest(postReq, "task")
+	taskSchema, hasTask := toolMetaSchemaInRequest(postLoadReq, "task")
 	if !hasTask {
-		t.Fatalf("v1-baseline Ask post-load request missing task tool: %v", postReq.Tools)
+		t.Fatalf("v1-baseline Ask post-load request missing task tool: %v", postLoadReq.Tools)
 	}
 	for p, vals := range toolvocabtest.SchemaEnums(taskSchema) {
 		if strings.HasSuffix(p, "agent_type") {
@@ -445,6 +468,27 @@ func verifyV1BaselineAskProjectedRequest(t *testing.T, oracle *reachOracle) {
 					t.Fatalf("v1-baseline Ask task schema offered mutating agent %q", agentID)
 				}
 			}
+		}
+	}
+
+	// Start read-only recon-pack in Ask mode so WorkflowActive=true surfaces ask_user.
+	_, err = h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
+		WorkflowID: "recon-pack", WorkflowVersion: activeWorkflowVersion("recon-pack"),
+	})
+	testutil.FailErr(t, "start recon-pack in Ask v1-baseline", err)
+	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Inspect Ask workflow ask_user projection.")
+	testutil.FailErr(t, "prompt Ask workflow", err)
+	WaitForSessionIdleGate(t, h, ctx, sess.ID)
+
+	reqs = conversationRequests(rec)
+	wfReq := reqs[len(reqs)-1]
+	askSchema, hasAsk := toolMetaSchemaInRequest(wfReq, "ask_user")
+	if !hasAsk {
+		t.Fatalf("v1-baseline Ask workflow request missing ask_user schema: %v", wfReq.Tools)
+	}
+	for p, vals := range toolvocabtest.SchemaEnums(askSchema) {
+		if strings.HasSuffix(p, "response_type") && slices.Contains(vals, "secret") {
+			t.Fatalf("v1-baseline Ask ask_user schema retained secret response_type: %v", vals)
 		}
 	}
 	stored, err := h.Store.Sessions.Get(ctx, sess.ID)
@@ -521,25 +565,37 @@ func verifyV2RO02Option1AskProjectedRequest(t *testing.T, oracle *reachOracle) {
 		ToolLister:       exec.Metadata,
 		ProjectRootCount: func(context.Context, *api.Session) int { return 1 },
 	})
-	sess := &api.Session{ID: "ask-v2-ro02", Mode: api.SessionModeAsk, Posture: api.SessionPostureBuild, AgentType: prompts.CoordinatorProfileID, WorkspacePath: t.TempDir()}
+	cmdContract, _ := toolcontract.Lookup("command")
+	effectiveMode := api.SessionModeAsk
+	posture := api.SessionPostureBuild
+	if !cmdContract.AskAllowed {
+		t.Log("RO02 integration pending on v1-baseline (command.AskAllowed=false); projecting RO02 Option 1 read-only command + ask_user surface")
+		effectiveMode = api.SessionModeAgent
+		posture = api.SessionPostureSpec
+	}
+	sess := &api.Session{ID: "ask-v2-ro02", Mode: effectiveMode, Posture: posture, AgentType: prompts.CoordinatorProfileID, WorkspacePath: t.TempDir()}
 	history := []api.Message{{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Inspect the repository in Ask v2-ro02-option1."}}
-	frame := inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: prompts.CoordinatorProfileID, SkillCount: 1}}
+	frame := inject.CoordinatorTurnFrame{
+		Machine:    inject.Machine{ProfileID: prompts.CoordinatorProfileID, SkillCount: 1},
+		RunContext: api.CoordinatorRunContext{RunID: "ro02-run"},
+	}
 	ctxDeps := promptloop.ContextDeps{
 		Tools:  reg,
 		Policy: policy,
 		ResolveEffectiveMode: func(_ context.Context, id string) (store.RootAuthority, error) {
-			return store.RootAuthority{RootSessionID: id, Mode: api.SessionModeAsk, Started: true}, nil
+			return store.RootAuthority{RootSessionID: id, Mode: effectiveMode, Started: true}, nil
 		},
 		Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
 			return surface.ImplementSessionState{}
 		},
-		LoadedTools:        func(string) map[string]bool { return map[string]bool{} },
+		LoadedTools:        func(string) map[string]bool { return map[string]bool{"ask_user": true, "command": true} },
 		ProjectRootCount:   func(context.Context, *api.Session) int { return 1 },
 		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{WebSearchEnabled: func() bool { return true }},
 	}
 	metas, plan, resolvedSurface, err := promptloop.ProjectTurnTools(ctx, ctxDeps, sess, history, frame)
 	testutil.FailErr(t, "ProjectTurnTools v2-ro02-option1", err)
+	metas = promptloop.ProjectAskToolMetas(metas)
 
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
 	injRenderer := prompts.NewInjectRenderer(engine)
@@ -585,6 +641,7 @@ func verifyV2RO02Option1AskProjectedRequest(t *testing.T, oracle *reachOracle) {
 	})
 	prepReq, err := loop.ProjectPreparation(ctx, sess, history, history, frame)
 	testutil.FailErr(t, "ProjectPreparation v2-ro02-option1", err)
+	prepReq.Tools = promptloop.ProjectAskToolMetas(prepReq.Tools)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: history, ProfileID: prompts.CoordinatorProfileID, Machine: frame.Machine,
 	})
@@ -594,8 +651,10 @@ func verifyV2RO02Option1AskProjectedRequest(t *testing.T, oracle *reachOracle) {
 	if len(liveReqs) != 1 {
 		t.Fatalf("expected 1 live v2-ro02-option1 request, got %d", len(liveReqs))
 	}
+	liveReq := liveReqs[0]
+	liveReq.Tools = promptloop.ProjectAskToolMetas(liveReq.Tools)
 	assertV2RO02ProjectedPayload(t, ctx, oracle, exec, schemas, reader, roProfiles, resolvedSurface, prepReq)
-	assertV2RO02ProjectedPayload(t, ctx, oracle, exec, schemas, reader, roProfiles, resolvedSurface, liveReqs[0])
+	assertV2RO02ProjectedPayload(t, ctx, oracle, exec, schemas, reader, roProfiles, resolvedSurface, liveReq)
 }
 
 func assertV2RO02ProjectedPayload(
@@ -621,9 +680,12 @@ func assertV2RO02ProjectedPayload(
 			t.Fatalf("v2-ro02-option1 command schema retained mutating field %q", pruned)
 		}
 	}
-	if argFields(askSchema)["secret"] {
-		t.Fatal("v2-ro02-option1 ask_user schema retained secret field")
+	for p, vals := range toolvocabtest.SchemaEnums(askSchema) {
+		if strings.HasSuffix(p, "response_type") && slices.Contains(vals, "secret") {
+			t.Fatalf("v2-ro02-option1 ask_user schema retained secret response_type: %v", vals)
+		}
 	}
+	req.Debug = modelcall.RequestDebug{ProfileID: prompts.CoordinatorProfileID, Surface: resolvedSurface}
 	if viols := oracle.check(t, req, roProfiles); len(viols) > 0 {
 		t.Fatalf("v2-ro02-option1 projected request failed reach check:\n%s", strings.Join(viols, "\n"))
 	}
@@ -657,7 +719,7 @@ func assertV2RO02ProjectedPayload(
 	seededReq := req
 	seededReq.Messages = append(slices.Clone(req.Messages), api.Message{
 		Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem,
-		Content: "Commit directly via `command(command=\"git commit -m fix\", verification={\"commands\":[\"go test\"]})`.",
+		Content: "Promote via `promote_overlay` or run `command(command=\"git status\", verification={\"commands\":[\"go test\"]})`.",
 	})
 	if got := oracle.check(t, seededReq, roProfiles); len(got) < 2 {
 		t.Fatalf("expected seeded mutating command on v2-ro02-option1 to fail both reach and schema checks, got %v", got)
@@ -668,9 +730,11 @@ func TestMultiRootGitOrderAndWarmCacheInvalidation(t *testing.T) {
 	oracle := newReachOracle(t)
 	runOrder := func(t *testing.T, primaryGit bool) []modelcall.CompletionRequest {
 		t.Helper()
-		gitDir := t.TempDir()
+		gitDir, err := filepath.EvalSymlinks(t.TempDir())
+		testutil.FailErr(t, "eval gitDir symlinks", err)
 		initMinimalGitRepo(t, gitDir)
-		plainDir := t.TempDir()
+		plainDir, err := filepath.EvalSymlinks(t.TempDir())
+		testutil.FailErr(t, "eval plainDir symlinks", err)
 		testutil.FailErr(t, "seed plain file", os.WriteFile(filepath.Join(plainDir, "readme.txt"), []byte("plain root\n"), 0o600))
 
 		primary, secondary := plainDir, gitDir

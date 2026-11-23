@@ -144,11 +144,37 @@ func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, profi
 	if offered["command"] {
 		maps.Copy(offered, commandReach(t, profiles, req.Debug.ProfileID, req.Debug.Surface))
 	}
+	callToolByID := map[string]string{}
+	for _, m := range req.Messages {
+		for _, tc := range m.ToolCalls {
+			if tc.ID != "" && tc.Name != "" {
+				callToolByID[tc.ID] = tc.Name
+			}
+		}
+	}
+	isZeroToolUtility := req.Composition != "" && req.Composition != modelcall.CompositionConversation && len(req.Tools) == 0
 	var out []string
 	for i, m := range req.Messages {
 		for _, text := range hostText(m) {
-			for _, name := range toolvocab.UnreachableNames(o.names, text, offered) {
-				out = append(out, fmt.Sprintf("message %d (%s %s) names %s, which the request does not offer: %s", i, m.Role, m.Kind, name, lineWith(text, name)))
+			if isZeroToolUtility {
+				for _, name := range toolvocab.ToolsIn(o.names, text) {
+					out = append(out, fmt.Sprintf("message %d (%s %s) names %s in zero-tool utility request: %s", i, m.Role, m.Kind, name, lineWith(text, name)))
+				}
+				continue
+			}
+			reachText := text
+			if m.Role == api.MessageRoleTool {
+				var rejectedTool string
+				if m.ToolResult != nil {
+					rejectedTool = m.ToolResult.Tool
+					if rejectedTool == "" {
+						rejectedTool = callToolByID[m.ToolResult.ToolCallID]
+					}
+				}
+				reachText = maskRejectedToolEcho(text, rejectedTool)
+			}
+			for _, name := range toolvocab.UnreachableNames(o.names, reachText, offered) {
+				out = append(out, fmt.Sprintf("message %d (%s %s) names %s, which the request does not offer: %s", i, m.Role, m.Kind, name, lineWith(reachText, name)))
 			}
 			for _, claim := range toolvocabtest.UnacceptedArgs(o.names, text, schemaSent) {
 				out = append(out, fmt.Sprintf("message %d (%s %s) gives %s argument `%s`, which its schema as sent lacks: %s", i, m.Role, m.Kind, claim.Tool, claim.Arg, lineWith(text, claim.Arg)))
@@ -180,6 +206,37 @@ func (o *reachOracle) unschemaed(text string, named []string, schemas map[string
 		}
 	}
 	return bad
+}
+
+var rejectedHeaderToolRE = regexp.MustCompile("(?m)^(\\s*Rejected:\\s+)`([A-Za-z0-9_]+)`(\\s+(?:is unavailable|no longer exists|is available but its schema is not loaded|is blocked in Ask mode|cannot run in Ask mode))")
+
+// maskRejectedToolEcho removes only echoed/prohibitive mentions of the rejected
+// tool itself (`Rejected: <tool> ...`, `Do not call/repeat <tool>`,
+// `unavailable name <tool>`) so positive recovery calls (`Fix: call <tool>`)
+// still fail if unoffered.
+func maskRejectedToolEcho(text, rejectedTool string) string {
+	if rejectedTool == "" {
+		if sub := rejectedHeaderToolRE.FindStringSubmatch(text); len(sub) >= 3 {
+			rejectedTool = sub[2]
+		}
+	}
+	out := rejectedHeaderToolRE.ReplaceAllString(text, "${1}the rejected tool${3}")
+	if rejectedTool == "" {
+		return out
+	}
+	qt := "`" + rejectedTool + "`"
+	for _, phrase := range []string{
+		"Rejected: " + qt,
+		"Do not call " + qt,
+		"Do not repeat " + qt,
+		"unavailable name " + qt,
+		qt + " no longer exists",
+		qt + " is unavailable",
+		qt + " cannot be loaded",
+	} {
+		out = strings.ReplaceAll(out, phrase, strings.ReplaceAll(phrase, qt, "the rejected tool"))
+	}
+	return out
 }
 
 // lineWith quotes the line that names name, preferring a backticked mention.
@@ -562,9 +619,18 @@ func TestRequestReachFailsOnSeededRequests(t *testing.T) {
 			},
 		},
 	}
+	askUserMeta := tools.ToolMeta{
+		Name: "ask_user",
+		ArgsSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"questions": map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+			},
+		},
+	}
 	offered := []tools.ToolMeta{
 		tool("update_progress", "content", "expected_revision"),
-		tool("ask_user", "questions"),
+		askUserMeta,
 		tool("command", "command"),
 		waitNarrowed,
 	}

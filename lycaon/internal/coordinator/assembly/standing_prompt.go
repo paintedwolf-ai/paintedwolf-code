@@ -11,8 +11,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/scopedstore"
+	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolvocab"
 )
 
 type standingProfileInputs struct {
@@ -83,6 +87,7 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 		}
 	}
 
+	filterOccurrenceSkillsForReader(pe, in.reader, occ)
 	surfaceVars, err := prompts.Vars(in.reader, occ)
 	if err != nil {
 		return "", fmt.Errorf("standing prompt vars: %w", err)
@@ -128,4 +133,86 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 		}
 	}
 	return strings.Join(parts, "\n\n"), nil
+}
+
+var engineSkillsByNameCache = scopedstore.New[map[string]skills.Skill](16)
+
+func skillsByNameForEngine(pe prompts.PromptTemplateEngine) map[string]skills.Skill {
+	var eff *extpacks.EffectiveCatalog
+	key := "active"
+	if fe, ok := pe.(*prompts.FileTemplateEngine); ok && fe != nil {
+		eff = fe.Layers().Catalog
+		if eff != nil {
+			key = fmt.Sprintf("cat:%p:%s", eff, fe.Revision())
+		}
+	}
+	if cached, ok := engineSkillsByNameCache.Load(key); ok {
+		return cached
+	}
+	if eff == nil {
+		eff = extpacks.Active()
+	}
+	loaded, _ := extpacks.LoadEffectiveSkills(eff)
+	byName := make(map[string]skills.Skill, len(loaded))
+	for _, sk := range loaded {
+		byName[sk.Name] = sk
+	}
+	if key != "active" || len(byName) > 0 {
+		engineSkillsByNameCache.Store(key, byName)
+	}
+	return byName
+}
+
+// filterOccurrenceSkillsForReader narrows agent_skills to procedures whose
+// required tools and operations the turn reader actually offers.
+func filterOccurrenceSkillsForReader(pe prompts.PromptTemplateEngine, reader prompts.Reader, occ map[string]any) {
+	if !reader.Valid() || occ == nil {
+		return
+	}
+	raw, exists := occ["agent_skills"]
+	if !exists || raw == nil {
+		return
+	}
+	known := skillsByNameForEngine(pe)
+	keepSkill := func(name, desc string) bool {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return false
+		}
+		sk, ok := known[name]
+		if !ok {
+			sk = skills.Skill{Name: name, Description: strings.TrimSpace(desc)}
+		} else if trimmed := strings.TrimSpace(desc); trimmed != "" {
+			sk.Description = trimmed
+		}
+		return toolvocab.SkillToolsOfferedForReader(sk, reader)
+	}
+	switch rows := raw.(type) {
+	case []map[string]any:
+		kept := make([]map[string]any, 0, len(rows))
+		for _, row := range rows {
+			name, _ := row["name"].(string)
+			desc, _ := row["description"].(string)
+			if keepSkill(name, desc) {
+				kept = append(kept, row)
+			}
+		}
+		if len(kept) == 0 {
+			delete(occ, "agent_skills")
+			return
+		}
+		occ["agent_skills"] = kept
+	case []prompts.AgentSkillView:
+		kept := make([]prompts.AgentSkillView, 0, len(rows))
+		for _, row := range rows {
+			if keepSkill(row.Name, row.Description) {
+				kept = append(kept, row)
+			}
+		}
+		if len(kept) == 0 {
+			delete(occ, "agent_skills")
+			return
+		}
+		occ["agent_skills"] = kept
+	}
 }

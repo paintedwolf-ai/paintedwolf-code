@@ -569,7 +569,7 @@ func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
 	fp := reader.Fingerprint()
 	var memoKey string
 	if fp != "" {
-		memoKey = fp + "\x00" + sk.Name + "\x00" + sk.Metadata["host_resources"] + "\x00" + sk.Metadata["any_of_tools"] + "\x00" + sk.Body
+		memoKey = fp + "\x00" + sk.Name + "\x00" + sk.Description + "\x00" + sk.Metadata["host_resources"] + "\x00" + sk.Metadata["any_of_tools"] + "\x00" + sk.Body
 		if cached, ok := skillOfferedForReaderCache.Load(memoKey); ok {
 			return cached
 		}
@@ -630,6 +630,9 @@ func evalSkillRenderedReach(
 		}
 	}
 	checkText := rendered
+	if desc := strings.TrimSpace(sk.Description); desc != "" {
+		checkText = desc + "\n" + rendered
+	}
 	if offered["request_tools"] && len(requestable) > 0 {
 		checkText = maskLoaderSequencedMentions(checkText, requestable)
 	}
@@ -679,7 +682,11 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 		return true
 	}
 	anyOf := sk.AnyOfTools()
-	for _, name := range UnreachableNames(c, renderSkillBody(sk, offered), offered) {
+	checkText := renderSkillBody(sk, offered)
+	if desc := strings.TrimSpace(sk.Description); desc != "" {
+		checkText = desc + "\n" + checkText
+	}
+	for _, name := range UnreachableNames(c, checkText, offered) {
 		if !slices.Contains(anyOf, name) {
 			return false
 		}

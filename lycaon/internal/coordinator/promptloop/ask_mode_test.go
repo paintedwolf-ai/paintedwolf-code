@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -74,5 +75,40 @@ func TestRoundAuthorityKeepsWorkerScopeAcrossUpgradeAndFailsClosed(t *testing.T)
 	root.Mode = api.SessionMode("corrupt")
 	if _, err := prompt.roundAuthority(t.Context(), worker, true); !errors.Is(err, store.ErrSessionModeUnavailable) {
 		t.Fatalf("corrupt authority was accepted: %v", err)
+	}
+}
+
+func TestObserveModeUpgradeCoversMidTurnBetweenTurnAndRestart(t *testing.T) {
+	pc := &promptContext{}
+	coord := &api.Session{ID: "coord", AgentType: "coordinator"}
+	worker := &api.Session{ID: "worker", ParentSessionID: "coord", AgentType: "repo-researcher"}
+
+	if pc.observeModeUpgrade(worker, worker.ID, api.SessionModeAsk, api.SessionModeAgent, nil) {
+		t.Fatal("worker child must never emit coordinator mode-upgrade notice")
+	}
+	if pc.observeModeUpgrade(coord, "direct-agent", api.SessionModeAgent, api.SessionModeAgent, nil) {
+		t.Fatal("session starting directly in Agent mode must not emit upgrade notice")
+	}
+	if pc.observeModeUpgrade(coord, "between-turn", api.SessionModeAsk, api.SessionModeAsk, nil) {
+		t.Fatal("Ask round must not emit upgrade notice")
+	}
+	if !pc.observeModeUpgrade(coord, "between-turn", api.SessionModeAgent, api.SessionModeAgent, nil) {
+		t.Fatal("first Agent round after observed Ask turn must emit upgrade notice")
+	}
+	stamped := []api.Message{{HostSignalID: anchor.SessionAgentEnabled.String()}}
+	if pc.observeModeUpgrade(coord, "between-turn", api.SessionModeAgent, api.SessionModeAgent, stamped) {
+		t.Fatal("subsequent Agent round must not duplicate upgrade notice")
+	}
+	if !pc.observeModeUpgrade(coord, "mid-turn", api.SessionModeAsk, api.SessionModeAgent, nil) {
+		t.Fatal("mid-turn Ask->Agent switch must emit upgrade notice")
+	}
+
+	restarted := &promptContext{}
+	priorAskHistory := []api.Message{{
+		Role:       api.MessageRoleTool,
+		ToolResult: &api.ToolResult{Tool: "command", Outcome: api.ToolResultOutcomeRejected, Codes: []string{tools.AskModeActiveCode}},
+	}}
+	if !restarted.observeModeUpgrade(coord, "restarted-session", api.SessionModeAgent, api.SessionModeAgent, priorAskHistory) {
+		t.Fatal("restarted process with prior Ask rejection must emit upgrade notice once")
 	}
 }

@@ -120,7 +120,12 @@ func (e *promptSurface) renderSystemPromptWithEngine(
 	if fe, ok := pe.(*prompts.FileTemplateEngine); ok && agentType != "" {
 		reader, err := e.workerReader(ctx, sess, frame, turn, fe, agentType, vars)
 		if err == nil {
-			out, renderErr := prompts.RenderPersona(ctx, fe, agentType, reader, vars)
+			workerVars := vars
+			if vars != nil && vars["agent_skills"] != nil {
+				workerVars = maps.Clone(vars)
+				filterOccurrenceSkillsForReader(fe, reader, workerVars)
+			}
+			out, renderErr := prompts.RenderPersona(ctx, fe, agentType, reader, workerVars)
 			if renderErr == nil {
 				return out, nil
 			}

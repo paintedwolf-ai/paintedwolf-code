@@ -2,6 +2,7 @@ package assembly
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
@@ -165,3 +166,59 @@ type selectionFixture struct {
 
 func (s *selectionFixture) LoadedTools(string) map[string]bool { return s.loaded }
 func (s *selectionFixture) FullCatalog(string) bool            { return s.full }
+
+func TestStandingPromptFiltersSkillsByTurnSurfaceReader(t *testing.T) {
+	const promoteSurface = "implement_overlay_promote"
+	root := kickTestRoot(t)
+	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
+	promoteReader, err := prompts.DeclaredReader(nil, promoteSurface)
+	if err != nil {
+		t.Fatalf("DeclaredReader(%s): %v", promoteSurface, err)
+	}
+	vars := map[string]any{
+		"full_skill_catalog": true,
+		"agent_skills": []map[string]any{
+			{
+				"name":        "apply-a-structural-codemod",
+				"description": "Rewrite one repeated code shape across many files with a structural pattern and `code_rewrite`, previewed before it is applied.",
+			},
+			{
+				"name":        "custom-safe-skill",
+				"description": "Inspect the board and coordinate remaining scope.",
+			},
+		},
+	}
+	rendered, err := renderStandingPrompt(t.Context(), pe, standingPromptInputs{
+		Profile: standingProfileInputs{SurfaceID: promoteSurface},
+		Vars:    vars,
+	}.withReader(promoteReader))
+	if err != nil {
+		t.Fatalf("renderStandingPrompt: %v", err)
+	}
+	if strings.Contains(rendered, "apply-a-structural-codemod") || strings.Contains(rendered, "code_rewrite") {
+		t.Fatalf("standing prompt on %s leaked unoffered skill/tool:\n%s", promoteSurface, rendered)
+	}
+	if !strings.Contains(rendered, "custom-safe-skill") {
+		t.Fatalf("standing prompt on %s dropped offered skill:\n%s", promoteSurface, rendered)
+	}
+
+	viewOcc := map[string]any{
+		"agent_skills": []prompts.AgentSkillView{
+			{Name: "apply-a-structural-codemod", Description: "Rewrite with `code_rewrite`."},
+			{Name: "", Description: "Blank."},
+		},
+	}
+	filterOccurrenceSkillsForReader(pe, promoteReader, viewOcc)
+	if _, stillPresent := viewOcc["agent_skills"]; stillPresent {
+		t.Fatalf("expected agent_skills cleared when all AgentSkillView entries require unoffered tools: %v", viewOcc)
+	}
+
+	mapOcc := map[string]any{
+		"agent_skills": []map[string]any{{"name": "apply-a-structural-codemod", "description": "Rewrite with `code_rewrite`."}},
+	}
+	filterOccurrenceSkillsForReader(pe, promoteReader, mapOcc)
+	if _, stillPresent := mapOcc["agent_skills"]; stillPresent {
+		t.Fatalf("expected agent_skills cleared when all map entries require unoffered tools: %v", mapOcc)
+	}
+	filterOccurrenceSkillsForReader(pe, prompts.Reader{}, mapOcc)
+}

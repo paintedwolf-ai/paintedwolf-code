@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -67,6 +68,7 @@ type ContextSurfaceDeps struct {
 	SetPromptTurnSurface            func(sessionID, surfaceID string)
 	PromptTurnSurface               func(sessionID string) string
 	ToolObserved                    func(ctx context.Context, sess *api.Session, toolCtx tools.ToolContext, tool string)
+	SwapObservedSessionMode         func(sessionID string, mode api.SessionMode) (api.SessionMode, bool)
 }
 
 type ModelDeps struct {
@@ -185,8 +187,9 @@ type InboxDeps struct {
 }
 
 type promptContext struct {
-	Deps     ContextDeps
-	Closeout *turnCloseout
+	Deps          ContextDeps
+	Closeout      *turnCloseout
+	observedModes sync.Map
 }
 
 type modelTurn struct {
