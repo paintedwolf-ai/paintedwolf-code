@@ -29,9 +29,12 @@ const (
 )
 
 type buildJob struct {
-	done     chan struct{}
-	snapshot Snapshot
-	err      error
+	done        chan struct{}
+	reading     bool
+	snapshot    Snapshot
+	coveredUpTo uint64
+	exact       bool
+	err         error
 }
 
 // Store publishes and reads immutable manifests. It copies no source bytes:
@@ -197,30 +200,37 @@ func (s *Store) Ensure(ctx context.Context, req Request) (Snapshot, error) {
 		return Snapshot{}, errors.New("source snapshot request is incomplete")
 	}
 	req.Verify = req.Verify.Normalized()
-	key := rootsKey(req.Roots) + "\x00" + string(req.Verify)
-	if req.Scope != nil {
-		key += "\x00scope:" + req.Scope.Identity()
-	}
-	if req.Unwatched {
-		key += "\x00unwatched"
-	}
 
 admit:
 	if err := ctx.Err(); err != nil {
 		return Snapshot{}, err
 	}
+	scopeKey := s.requestScopeKey(ctx, req)
+	key := rootsKey(req.Roots) + "\x00" + string(req.Verify) + "\x00" + scopeKey
+	if req.Unwatched {
+		key += "\x00unwatched"
+	}
 	s.mu.Lock()
 	if existing := s.jobs[key]; existing != nil {
+		alreadyReading := existing.reading
 		s.mu.Unlock()
 		select {
 		case <-ctx.Done():
 			return Snapshot{}, ctx.Err()
 		case <-existing.done:
-			// Another consumer's canceled capture does not cancel this request.
 			if errors.Is(existing.err, context.Canceled) || errors.Is(existing.err, context.DeadlineExceeded) {
 				goto admit
 			}
-			return existing.snapshot, existing.err
+			if existing.err != nil {
+				return existing.snapshot, existing.err
+			}
+			if req.Verify == VerifyContent && alreadyReading {
+				goto admit
+			}
+			if !s.jobResultFresh(ctx, req, scopeKey, existing) {
+				goto admit
+			}
+			return existing.snapshot, nil
 		}
 	}
 	job := &buildJob{done: make(chan struct{})}
@@ -232,8 +242,39 @@ admit:
 		close(job.done)
 		s.mu.Unlock()
 	}()
-	job.snapshot, job.err = s.converge(ctx, req)
+	job.snapshot, job.coveredUpTo, job.exact, job.err = s.converge(ctx, req, func() {
+		s.mu.Lock()
+		job.reading = true
+		s.mu.Unlock()
+	})
 	return job.snapshot, job.err
+}
+
+func (s *Store) requestScopeKey(ctx context.Context, req Request) string {
+	parts := make([]string, 0, len(req.Roots))
+	for _, root := range req.Roots {
+		parts = append(parts, root.Path+"\x00"+s.scopeFor(ctx, req, root).Identity())
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:16])
+}
+
+func (s *Store) jobResultFresh(ctx context.Context, req Request, expectedScopeKey string, finished *buildJob) bool {
+	if s.requestScopeKey(ctx, req) != expectedScopeKey {
+		return false
+	}
+	if req.Unwatched {
+		return true
+	}
+	for _, root := range req.Roots {
+		if finished.exact && !repochange.Coverage(root.Path).Complete {
+			return false
+		}
+		if s.deltas.moved(root.Path, deltaPlan{upTo: finished.coveredUpTo}) {
+			return false
+		}
+	}
+	return true
 }
 
 // EnsurePath publishes one path-scoped snapshot for security scanning.

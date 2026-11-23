@@ -66,6 +66,7 @@ func (*structuralGeneration) Delete(context.Context, uint64) error {
 
 type structuralBuilder struct {
 	policy         walkPolicy
+	metrics        *structuralMetrics
 	base           *structuralGeneration
 	comparison     *structuralGeneration
 	directories    *structuralDirectoryWorkspace
@@ -85,7 +86,7 @@ func newStructuralBuilder(store *indexStore, base *structuralGeneration) (*struc
 	if err != nil {
 		return nil, err
 	}
-	b := &structuralBuilder{policy: store.policy, base: base, comparison: base, writer: writer,
+	b := &structuralBuilder{policy: store.policy, metrics: store.structuralMetrics(), base: base, comparison: base, writer: writer,
 		cache: pagedview.NewCache[uint64, pagedview.RangePage[TreeItem]](256, 4<<20)}
 	var previous structuralDirectoryIndex
 	if base != nil {
@@ -136,7 +137,11 @@ func (b *structuralBuilder) readRecord(ctx context.Context, id uint64) ([]byte, 
 }
 
 func (b *structuralBuilder) writeRecord(ctx context.Context, body []byte) (uint64, error) {
-	return b.writer.Append(ctx, body)
+	id, err := b.writer.Append(ctx, body)
+	if err == nil && b.metrics != nil {
+		b.metrics.encodedBytes.Add(int64(len(body)))
+	}
+	return id, err
 }
 
 func (b *structuralBuilder) Read(ctx context.Context, id uint64) (pagedview.RangePage[TreeItem], error) {
@@ -218,6 +223,9 @@ func (b *structuralBuilder) seal(ctx context.Context, id int64) (*structuralGene
 		g.encodedBytes += segment.bytes.Bytes()
 	}
 	g.directories.store = newStructuralDirectoryPages(g, nil)
+	if b.metrics != nil {
+		b.metrics.boundaryEncodes.Add(1)
+	}
 	return g, nil
 }
 

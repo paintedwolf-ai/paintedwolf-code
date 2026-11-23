@@ -29,16 +29,17 @@ var (
 )
 
 type structuralScanOptions struct {
-	explicitRoot   string
-	store          *indexStore
-	broker         *backgroundwork.Broker
-	spoolDir       string
-	epoch          repochange.Epoch
-	mark           func(string) uint64
-	request        func(string) backgroundwork.Request
-	descend        func(string) (bool, error)
-	directoryCache *structuralScanDirectoryCache
-	workers        int
+	explicitRoot       string
+	store              *indexStore
+	broker             *backgroundwork.Broker
+	spoolDir           string
+	epoch              repochange.Epoch
+	mark               func(string) uint64
+	request            func(string) backgroundwork.Request
+	descend            func(string) (bool, error)
+	directoryCache     *structuralScanDirectoryCache
+	workers            int
+	onDirectoryScanned func(string)
 	// laneBoundary runs once every directory an expansion opens is listed,
 	// before the first collapsed one is read. It never runs when nothing is
 	// collapsed.
@@ -191,6 +192,12 @@ func scanStructureDirectory(ctx context.Context, root *os.Root, dir string, opti
 		return observation, err
 	}
 	defer directory.close()
+	if options.store != nil {
+		options.store.recordPhysicalDirectoryRead(dir)
+	}
+	if options.onDirectoryScanned != nil {
+		options.onDirectoryScanned(dir)
+	}
 	observation.Stamp = directory.stamp
 	reader := directoryBatch{file: directory.entries}
 	cachedDirectory := false

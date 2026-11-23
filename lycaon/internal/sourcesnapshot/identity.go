@@ -155,12 +155,14 @@ func (s *Store) identify(ctx context.Context, base *observed, ids *identifier, r
 		}
 		return Entry{}, err
 	}
+	s.deltas.diag.statChecks.Add(1)
 	if !info.Mode().IsRegular() {
 		return Entry{}, errSkipped
 	}
 	if verify != VerifyContent {
 		if oid, ok := ids.lookup(ctx, ref.Path); ok {
 			base.hits++
+			s.deltas.diag.statReuses.Add(1)
 			return Entry{
 				RootPath: base.rootPath, Path: ref.Path, GitOID: oid, Identity: IdentityIndex,
 				Size: info.Size(), Mode: uint32(info.Mode()), ModifiedNS: info.ModTime().UnixNano(),
@@ -168,6 +170,7 @@ func (s *Store) identify(ctx context.Context, base *observed, ids *identifier, r
 		}
 		if prior, ok := base.prior(ctx, ref.Path); ok && prior.matches(info) {
 			base.hits++
+			s.deltas.diag.statReuses.Add(1)
 			return prior.entry(base.rootPath, ref.Path), nil
 		}
 	}
@@ -202,6 +205,7 @@ func (s *Store) identify(ctx context.Context, base *observed, ids *identifier, r
 			return Entry{}, err
 		}
 		base.reads++
+		s.deltas.diag.contentRead.Add(1)
 		base.record(ref.Path, obs)
 		return obs.entry(base.rootPath, ref.Path), nil
 	}

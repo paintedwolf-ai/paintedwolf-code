@@ -235,6 +235,8 @@ type Directories struct {
 	structurePages      structurePageCache
 	presentations       presentationStore
 	navigationObservers navigationObservers
+	metrics             structuralMetrics
+	onScanDirectory     func(rootPath, dir string)
 }
 
 type navigationObservers struct {

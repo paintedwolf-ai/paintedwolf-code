@@ -15,9 +15,16 @@ var errObservationChanged = errors.New("directory changed during discovery")
 // Bounded invalidations persist with observations; overflow coarsens onto
 // shallower subtrees, and only an exhausted set marks the whole root.
 type observationInvalidation struct {
-	next, full uint64
-	paths      map[string]uint64
-	parents    map[string]uint64
+	next, full, initial uint64
+	paths               map[string]uint64
+	parents             map[string]uint64
+}
+
+func (s *indexStore) alignInitialInvalidationLocked(baseline uint64) {
+	if s.invalidation.full == s.invalidation.initial && baseline < s.invalidation.full {
+		s.invalidation.full = baseline
+		s.invalidation.initial = baseline
+	}
 }
 
 func (s *indexStore) invalidateObservationsLocked(paths []string) {

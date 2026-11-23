@@ -2,6 +2,7 @@ package sourcesnapshot
 
 import (
 	"context"
+	"math"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -10,10 +11,16 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 )
 
-// deltaPathLimit bounds the paths retained per root. A wider burst folds
-// into the directories that hold it; only one that folds to the root
-// overflows into a full survey.
-const deltaPathLimit = 65536
+const (
+	deltaPathLimit            = 65536
+	maxScopedManifestsPerRoot = 8
+)
+
+type scopedManifest struct {
+	covered    string
+	boundaries []Boundary
+	upTo       uint64
+}
 
 // deltaTracker accumulates observed changes between source publications.
 type deltaTracker struct {
@@ -21,23 +28,15 @@ type deltaTracker struct {
 	roots     map[string]*rootDelta
 	seq       uint64
 	pathLimit int
-	// admit excludes changes outside the capture scope.
-	admit func(ctx context.Context, root string) func(rel string) bool
+	admit     func(ctx context.Context, root string) func(rel string) bool
+	diag      snapshotDiagnostics
 }
 
 type rootDelta struct {
-	// covered names the manifest incremental publication builds on, and
-	// coveredBoundaries the directories that observation did not enter.
-	covered           string
-	coveredBoundaries []Boundary
-	scopeID           string
-	// paths holds each changed path with the sequence it arrived at.
-	paths map[string]uint64
-	// overflow requires a full survey after path loss or scope changes.
+	scopes     map[string]scopedManifest
+	paths      map[string]uint64
 	overflow   bool
 	overflowAt uint64
-	// rescopedAt is the last change to an ignore file, whose rules the next
-	// capture must read afresh.
 	rescopedAt uint64
 }
 
@@ -50,7 +49,6 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 		return
 	}
 	root := filepath.Clean(ev.ProjectDir)
-	// Scope decisions read ignore files; they run before the lock.
 	overflow, rescoped := false, false
 	var admit func(string) bool
 	rels := make([]string, 0, len(ev.Paths))
@@ -65,7 +63,6 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 			continue
 		}
 		if governed, ok := ignoreFileDomain(rel); ok {
-			// The directory the file governs is re-read under its new rules.
 			rescoped = true
 			if governed == "." {
 				overflow = true
@@ -86,7 +83,6 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	d := t.root(root)
-	// Cancellation may narrow admission after the mutation already committed.
 	if overflow || ctx.Err() != nil {
 		t.seq++
 		d.overflow = true
@@ -113,13 +109,12 @@ func (t *deltaTracker) observe(ctx context.Context, ev repochange.Event) {
 	}
 }
 
-// laterSequence keeps the newest change a folded directory stands for.
 func laterSequence(a, b uint64) uint64 { return max(a, b) }
 
 func (t *deltaTracker) root(root string) *rootDelta {
 	d := t.roots[root]
 	if d == nil {
-		d = &rootDelta{paths: make(map[string]uint64)}
+		d = &rootDelta{scopes: make(map[string]scopedManifest), paths: make(map[string]uint64)}
 		t.roots[root] = d
 	}
 	return d
@@ -127,63 +122,111 @@ func (t *deltaTracker) root(root string) *rootDelta {
 
 // A publication consumes changes through the plan's sequence.
 type deltaPlan struct {
-	// covered is the manifest the changes apply to; empty means survey the root.
 	covered    string
 	boundaries []Boundary
 	scopeID    string
 	paths      []string
-	// upTo leaves later changes pending for the next publication.
-	upTo uint64
-	// overflow requires a full survey of the candidate.
-	overflow bool
-	// rescope requires the candidate to read ignore files afresh.
-	rescope bool
+	upTo       uint64
+	overflow   bool
+	rescope    bool
+	reason     SurveyReason
 }
 
-// Full surveys also record a sequence boundary.
 func (t *deltaTracker) sequence() uint64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.seq
 }
 
-// An empty covered head selects a full survey.
+// An empty covered head selects a full survey and records why.
 func (t *deltaTracker) begin(root, scopeID string) deltaPlan {
 	root = filepath.Clean(root)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	d := t.root(root)
 	plan := deltaPlan{upTo: t.seq, scopeID: scopeID}
-	if d.covered == "" || d.scopeID != scopeID || d.overflow || !repochange.Coverage(root).Complete {
-		// The survey covers existing changes; later events remain pending.
-		d.resetLocked()
+	complete := repochange.Coverage(root).Complete
+	cov, hasScope := d.scopes[scopeID]
+	if !hasScope || cov.covered == "" {
+		switch {
+		case !complete && len(d.scopes) > 0:
+			plan.reason = SurveyIncompleteWatcher
+		case len(d.scopes) > 0:
+			plan.reason = SurveyScopeMismatch
+		case d.overflow:
+			plan.reason = SurveyOverflow
+		case !complete:
+			plan.reason = SurveyNoCoveredHead
+		default:
+			plan.reason = SurveyNoCoveredHead
+		}
+		if len(d.scopes) == 0 {
+			d.resetLocked()
+		}
 		return plan
 	}
-	plan.covered = d.covered
-	plan.boundaries = append([]Boundary(nil), d.coveredBoundaries...)
-	plan.rescope = d.rescopedAt > 0
-	plan.paths = make([]string, 0, len(d.paths))
-	for rel := range d.paths {
-		plan.paths = append(plan.paths, rel)
+	if !complete {
+		plan.reason = SurveyIncompleteWatcher
+		delete(d.scopes, scopeID)
+		if len(d.scopes) == 0 {
+			d.resetLocked()
+		}
+		return plan
+	}
+	if d.overflow && d.overflowAt > cov.upTo {
+		plan.reason = SurveyOverflow
+		delete(d.scopes, scopeID)
+		if len(d.scopes) == 0 {
+			d.resetLocked()
+		}
+		return plan
+	}
+	plan.covered = cov.covered
+	plan.boundaries = append([]Boundary(nil), cov.boundaries...)
+	plan.rescope = d.rescopedAt > cov.upTo
+	for rel, seq := range d.paths {
+		if seq > cov.upTo {
+			plan.paths = append(plan.paths, rel)
+		}
 	}
 	return plan
 }
 
 func (d *rootDelta) resetLocked() {
-	d.covered = ""
-	d.coveredBoundaries = nil
+	clear(d.scopes)
 	d.overflow = false
 	d.rescopedAt = 0
 	clear(d.paths)
 }
 
-// moved reports whether changes arrived after the plan was taken.
+func (d *rootDelta) manifestPendingLocked(scopeID, manifestID string) bool {
+	if d == nil {
+		return true
+	}
+	cov, ok := d.scopes[scopeID]
+	if !ok || cov.covered != manifestID {
+		return true
+	}
+	if d.overflow && d.overflowAt > cov.upTo {
+		return true
+	}
+	if d.rescopedAt > cov.upTo {
+		return true
+	}
+	for _, seq := range d.paths {
+		if seq > cov.upTo {
+			return true
+		}
+	}
+	return false
+}
+
 func (t *deltaTracker) moved(root string, plan deltaPlan) bool {
 	root = filepath.Clean(root)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	d := t.root(root)
-	if d.overflow {
+	if d.overflow && d.overflowAt > plan.upTo {
 		return true
 	}
 	for _, seq := range d.paths {
@@ -194,17 +237,20 @@ func (t *deltaTracker) moved(root string, plan deltaPlan) bool {
 	return false
 }
 
-// Later changes extend the current candidate's capture.
 func (t *deltaTracker) pending(root string, plan deltaPlan) deltaPlan {
 	root = filepath.Clean(root)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	d := t.root(root)
-	next := deltaPlan{covered: plan.covered, boundaries: plan.boundaries, upTo: t.seq, rescope: d.rescopedAt > plan.upTo}
-	if d.overflow {
+	next := deltaPlan{covered: plan.covered, boundaries: plan.boundaries, scopeID: plan.scopeID, upTo: t.seq, rescope: d.rescopedAt > plan.upTo}
+	if d.overflow && d.overflowAt > plan.upTo {
 		next.covered = ""
 		next.overflow = true
-		d.resetLocked()
+		next.reason = SurveyOverflow
+		delete(d.scopes, plan.scopeID)
+		if len(d.scopes) == 0 {
+			d.resetLocked()
+		}
 		return next
 	}
 	for rel, seq := range d.paths {
@@ -215,34 +261,54 @@ func (t *deltaTracker) pending(root string, plan deltaPlan) deltaPlan {
 	return next
 }
 
-// Publication consumes observed changes through upTo.
 func (t *deltaTracker) coveredBy(root, manifest string, boundaries []Boundary, scopeID string, upTo uint64, exact bool) {
 	root = filepath.Clean(root)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	d := t.root(root)
 	if !exact {
-		// An unsettled generation requires a fresh survey.
-		d.resetLocked()
+		delete(d.scopes, scopeID)
+		if len(d.scopes) == 0 {
+			d.resetLocked()
+		}
 		return
 	}
+	if _, exists := d.scopes[scopeID]; !exists && len(d.scopes) >= maxScopedManifestsPerRoot {
+		var oldestKey string
+		oldestUpTo := uint64(math.MaxUint64)
+		for k, v := range d.scopes {
+			if v.upTo < oldestUpTo {
+				oldestKey, oldestUpTo = k, v.upTo
+			}
+		}
+		if oldestKey != "" {
+			delete(d.scopes, oldestKey)
+		}
+	}
+	d.scopes[scopeID] = scopedManifest{
+		covered:    manifest,
+		boundaries: append([]Boundary(nil), boundaries...),
+		upTo:       upTo,
+	}
+	minUpTo := uint64(math.MaxUint64)
+	for _, v := range d.scopes {
+		if v.upTo < minUpTo {
+			minUpTo = v.upTo
+		}
+	}
 	for rel, seq := range d.paths {
-		if seq <= upTo {
+		if seq <= minUpTo {
 			delete(d.paths, rel)
 		}
 	}
-	d.covered = manifest
-	d.coveredBoundaries = append([]Boundary(nil), boundaries...)
-	d.scopeID = scopeID
-	if d.overflowAt <= upTo {
+	if d.overflowAt <= minUpTo {
 		d.overflow = false
 	}
-	if d.rescopedAt <= upTo {
+	if d.rescopedAt <= minUpTo {
 		d.rescopedAt = 0
 	}
 }
 
-// forget drops a root's tracking; a released root starts over.
 func (t *deltaTracker) forget(root string) {
 	if t == nil {
 		return
@@ -252,7 +318,6 @@ func (t *deltaTracker) forget(root string) {
 	t.mu.Unlock()
 }
 
-// deltaRel bounds an event path under its root as a slash-relative path.
 func deltaRel(root, raw string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -276,8 +341,6 @@ func deltaRel(root, raw string) (string, bool) {
 	return rel, true
 }
 
-// ignoreFileDomain names the directory whose admission an ignore file
-// decides: its own directory, or the root for the repository's exclude file.
 func ignoreFileDomain(rel string) (string, bool) {
 	if rel == ".git/info/exclude" {
 		return ".", true

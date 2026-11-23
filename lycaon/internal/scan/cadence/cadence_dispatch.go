@@ -55,7 +55,8 @@ func (d rootDispatcher) dispatchRoot(ctx context.Context, canonical string) ([]*
 		return nil, nil
 	}
 	defer release()
-	d.logDispatch(ctx, "claimed", canonical, claimed, nil)
+	d.logDispatch(ctx, "claimed", canonical, claimed, nil,
+		"claim_token", claimed[0].DispatchToken, "series_count", len(claimed))
 
 	stopHeartbeat := claims.heartbeatClaims(ctx, claimed)
 	owned := claimed
@@ -76,7 +77,8 @@ func (d rootDispatcher) dispatchRoot(ctx context.Context, canonical string) ([]*
 	}
 	unchanged, baselined, claimed := splitSelections(claimed, selections)
 	if len(unchanged) > 0 {
-		d.logDispatch(ctx, "unchanged", canonical, unchanged, nil)
+		d.logDispatch(ctx, "unchanged", canonical, unchanged, nil,
+			"snapshot_id", snapshot.ID, "active_scanners", scannerIDs(claimed))
 		claims.finishNoopDispatches(ctx, unchanged)
 	}
 	if len(baselined) > 0 {

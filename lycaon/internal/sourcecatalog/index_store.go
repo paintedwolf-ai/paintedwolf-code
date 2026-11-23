@@ -195,6 +195,7 @@ func (c *TreeStores) indexStore(ctx context.Context, projectID string, root Root
 		full: true, lastUsed: time.Now(), policy: policy,
 	}}
 	s.invalidateObservationsLocked(nil)
+	s.invalidation.initial = s.invalidation.full
 	c.trees[key] = s
 	c.evictTreeStores(key)
 	return s, nil
