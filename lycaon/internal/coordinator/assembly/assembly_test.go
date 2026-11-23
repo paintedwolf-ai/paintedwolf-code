@@ -8,8 +8,10 @@ import (
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -171,9 +173,24 @@ func TestStandingPromptFiltersSkillsByTurnSurfaceReader(t *testing.T) {
 	const promoteSurface = "implement_overlay_promote"
 	root := kickTestRoot(t)
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
-	promoteReader, err := prompts.DeclaredReader(nil, promoteSurface)
+	profiles, err := sandbox.LoadToolProfiles()
 	if err != nil {
-		t.Fatalf("DeclaredReader(%s): %v", promoteSurface, err)
+		t.Fatalf("LoadToolProfiles: %v", err)
+	}
+	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: promoteSurface}, 1)
+	if err != nil {
+		t.Fatalf("CompileToolPlan(%s): %v", promoteSurface, err)
+	}
+	promoteReader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: promoteSurface,
+		Profiles:  profiles,
+		Plan:      plan,
+		RootCount: 1,
+		WebSearch: true,
+	})
+	if err != nil {
+		t.Fatalf("NewReader(%s): %v", promoteSurface, err)
 	}
 	vars := map[string]any{
 		"full_skill_catalog": true,

@@ -150,7 +150,7 @@ func skillsByNameForEngine(pe prompts.PromptTemplateEngine) map[string]skills.Sk
 		return cached
 	}
 	if eff == nil {
-		eff = extpacks.Active()
+		eff, _ = extpacks.CatalogForConsumers()
 	}
 	loaded, _ := extpacks.LoadEffectiveSkills(eff)
 	byName := make(map[string]skills.Skill, len(loaded))
