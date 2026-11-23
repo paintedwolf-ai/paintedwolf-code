@@ -21,7 +21,10 @@ type Props = {
 export function WebResearchCredentialField(props: Props) {
   const required = () =>
     props.meta.kind === "keyed" || props.meta.kind === "keyed_extra";
+  const rejected = () => props.meta.credential_rejected != null;
+  const missing = () => required() && props.meta.credential_source === "none";
   const credentialStatus = () => {
+    if (rejected()) return WEB_RESEARCH_SETTINGS_COPY.statusKeyRejected;
     if (props.meta.credential_present) {
       return WEB_RESEARCH_SETTINGS_COPY.apiKeyStoredStatus;
     }
@@ -43,13 +46,8 @@ export function WebResearchCredentialField(props: Props) {
             <span>API key</span>
             <span
               class="den-settings-provider-status"
-              classList={{
-                "den-settings-warn":
-                  required() && props.meta.credential_source === "none",
-              }}
-              data-configured={
-                !required() || props.meta.credential_source !== "none"
-              }
+              classList={{ "den-settings-warn": rejected() || missing() }}
+              data-configured={!rejected() && !missing()}
               data-testid={`web-research-key-status-${props.meta.id}`}
             >
               {credentialStatus()}

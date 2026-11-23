@@ -120,3 +120,155 @@ describe("WebResearchProvidersPanel identity-replace remount", () => {
     });
   });
 });
+
+const REJECTION = {
+  code: "SUBSCRIPTION_TOKEN_INVALID",
+  observed_at: "2026-11-23T00:00:00Z",
+};
+
+function stackexchangeMeta(
+  overrides: Partial<WebResearchProviderMeta> = {},
+): WebResearchProviderMeta {
+  return {
+    id: "stackexchange",
+    kind: "keyless",
+    label: "Stack Overflow",
+    roles: ["results"],
+    default_enabled: true,
+    configured: true,
+    credential_present: true,
+    credential_source: "stored",
+    credential_slot: "stackexchange",
+    ...overrides,
+  };
+}
+
+function renderPanel(
+  initial: WebResearchProvidersResponse,
+  client: Record<string, unknown>,
+  enabled: string[],
+) {
+  function Harness() {
+    const [status, setStatus] = createSignal(initial);
+    return (
+      <WebResearchProvidersPanel
+        client={client as never}
+        status={status()}
+        enabledIds={new Set(enabled)}
+        domainGuess={false}
+        onDomainGuessChange={() => undefined}
+        onStatus={setStatus}
+        onAddProvider={() => undefined}
+        onRemoveProvider={() => undefined}
+      />
+    );
+  }
+  return render(() => <Harness />);
+}
+
+describe("WebResearchProvidersPanel rejected credentials", () => {
+  it("marks a standalone provider row, card and key field as rejected", async () => {
+    const meta = braveMeta({
+      configured: true,
+      credential_present: true,
+      credential_source: "stored",
+      credential_rejected: REJECTION,
+    });
+    const { getByTestId } = renderPanel(statusWith(meta), {}, ["brave"]);
+
+    const row = await waitFor(() => getByTestId("web-research-row-brave"));
+    const rowStatus = row.querySelector(".den-settings-provider-status");
+    expect(rowStatus?.getAttribute("data-configured")).toBe("false");
+    expect(rowStatus?.textContent).toBe("Key rejected");
+
+    fireEvent.click(row);
+    const card = await waitFor(() => getByTestId("web-research-card-brave"));
+    const cardStatus = card.querySelector("header .den-settings-provider-status")
+      ?? card.querySelector(".den-settings-provider-status");
+    expect(cardStatus?.getAttribute("data-configured")).toBe("false");
+
+    const keyStatus = getByTestId("web-research-key-status-brave");
+    expect(keyStatus.textContent).toBe("Key rejected");
+    expect(keyStatus.getAttribute("data-configured")).toBe("false");
+    expect(keyStatus.classList.contains("den-settings-warn")).toBe(true);
+    expect(getByTestId("web-research-clear-key-brave")).toBeTruthy();
+  });
+
+  it("marks a Direct optional key as rejected", async () => {
+    const status: WebResearchProvidersResponse = {
+      direct: {
+        configured: true,
+        card: { provider_id: "direct", kind: "direct", label: "Direct search" },
+      },
+      providers: [stackexchangeMeta({ credential_rejected: REJECTION })],
+    };
+    const { getByTestId } = renderPanel(status, {}, ["direct"]);
+
+    fireEvent.click(await waitFor(() => getByTestId("web-research-row-direct")));
+    await waitFor(() => getByTestId("web-research-direct-credential-stackexchange"));
+    const keyStatus = getByTestId("web-research-key-status-stackexchange");
+    expect(keyStatus.textContent).toBe("Key rejected");
+    expect(keyStatus.getAttribute("data-configured")).toBe("false");
+    expect(keyStatus.classList.contains("den-settings-warn")).toBe(true);
+  });
+
+  it("reloads provider state after a provider test", async () => {
+    const rejected = braveMeta({
+      configured: true,
+      credential_present: true,
+      credential_source: "stored",
+      credential_rejected: REJECTION,
+    });
+    const accepted = braveMeta({
+      configured: true,
+      credential_present: true,
+      credential_source: "stored",
+    });
+    const testWebResearchProvider = vi.fn().mockResolvedValue({ ok: true, latency_ms: 12 });
+    const getWebResearchProviders = vi.fn().mockResolvedValue(statusWith(accepted));
+    const { getByTestId } = renderPanel(
+      statusWith(rejected),
+      { testWebResearchProvider, getWebResearchProviders },
+      ["brave"],
+    );
+
+    fireEvent.click(await waitFor(() => getByTestId("web-research-row-brave")));
+    await waitFor(() => getByTestId("web-research-card-brave"));
+    expect(getByTestId("web-research-key-status-brave").textContent).toBe("Key rejected");
+
+    fireEvent.click(getByTestId("web-research-test-brave"));
+    await waitFor(() => {
+      expect(getByTestId("web-research-key-status-brave").textContent).toBe("Key saved");
+    });
+    expect(testWebResearchProvider).toHaveBeenCalledWith("brave");
+    expect(getWebResearchProviders).toHaveBeenCalledTimes(1);
+    expect(getByTestId("web-research-key-status-brave").getAttribute("data-configured")).toBe("true");
+  });
+
+  it("reloads provider state after a Direct test", async () => {
+    const withRejection: WebResearchProvidersResponse = {
+      direct: {
+        configured: true,
+        card: { provider_id: "direct", kind: "direct", label: "Direct search" },
+      },
+      providers: [stackexchangeMeta({ credential_rejected: REJECTION })],
+    };
+    const cleared = { ...withRejection, providers: [stackexchangeMeta()] };
+    const testWebResearchProvider = vi.fn().mockResolvedValue({ ok: false, message: "no results" });
+    const getWebResearchProviders = vi.fn().mockResolvedValue(cleared);
+    const { getByTestId } = renderPanel(
+      withRejection,
+      { testWebResearchProvider, getWebResearchProviders },
+      ["direct"],
+    );
+
+    fireEvent.click(await waitFor(() => getByTestId("web-research-row-direct")));
+    await waitFor(() => getByTestId("web-research-direct-credential-stackexchange"));
+    fireEvent.click(getByTestId("web-research-direct-test"));
+    await waitFor(() => {
+      expect(getByTestId("web-research-key-status-stackexchange").textContent).toBe("Key saved");
+    });
+    expect(testWebResearchProvider).toHaveBeenCalledWith("direct");
+    expect(getByTestId("web-research-direct-test-result").textContent).toContain("no results");
+  });
+});
