@@ -183,6 +183,7 @@ func TestAllValidWaitTriggersEnumerated(t *testing.T) {
 		WaitTriggerOverlayPromote: {},
 		WaitTriggerScanDone:       {},
 		WaitTriggerProcessDone:    {},
+		WaitTriggerWatchMatch:     {},
 		WaitTriggerHTTPReady:      {},
 		WaitTriggerPortReady:      {},
 	}

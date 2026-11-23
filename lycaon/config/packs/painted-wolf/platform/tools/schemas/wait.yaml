@@ -8,10 +8,10 @@ schema:
       minimum: 1000
       maximum: 1800000
       default: 60000
-      description: Deadline backstop in milliseconds.
+      description: Deadline backstop in milliseconds. When omitted, takes the mode default (60000, or 1800000 with until_complete) whatever the conditions. Reaching it ends only this call and leaves selected watches live.
     until_complete:
       type: boolean
-      description: Wait for selected processes to finish, become unavailable, or meet a sandbox refusal (outcome refused; the job keeps running). Requires process_done conditions with exact handles. Defaults timeout_ms to 1800000 when omitted. User input or cancellation can interrupt.
+      description: Wait for selected processes or watches to settle (outcome refused on sandbox refusal; the job keeps running). Requires process_done or watch_match conditions with exact handles. Defaults timeout_ms to 1800000 when omitted. User input or cancellation can interrupt.
     resume:
       type: boolean
       description: Resume prior conditions and deadline mode; explicit conditions or timeout_ms/until_complete replace the corresponding prior values.
@@ -29,14 +29,14 @@ schema:
         properties:
           kind:
             type: string
-            enum: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready]
-            description: Role-allowed event or readiness probe.
+            enum: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, watch_match, http_ready, port_ready]
+            description: Role-allowed event, watch_match selection, or readiness probe.
           handles:
             type: array
             maxItems: 8
             uniqueItems: true
             items: {type: string, minLength: 1}
-            description: process_done command handles or next_worker_done worker names; omit to wake on any.
+            description: process_done command handles, watch_match watch handles (1-8), or next_worker_done worker names; omit to wake on any where supported.
           url: {type: string, description: http_ready only; required absolute HTTP(S) health URL.}
           method: {type: string, enum: [GET, HEAD], default: GET, description: http_ready only; probe method.}
           status_min: {type: integer, minimum: 100, maximum: 599, default: 200, description: http_ready only; lowest satisfying status.}

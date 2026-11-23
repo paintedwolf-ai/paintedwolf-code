@@ -30,6 +30,12 @@ func (m *Service) PolicyDependencies() toolpolicy.EngineDeps {
 		}
 		return reg, nil
 	}
+	var projectChat func(context.Context, *api.Session) bool
+	if pc, ok := m.Workspace.(interface {
+		BelongsToProject(context.Context, *api.Session) bool
+	}); ok {
+		projectChat = pc.BelongsToProject
+	}
 	return toolpolicy.EngineDeps{
 		ToolLister:       m.toolLister,
 		Rules:            m.rules,
@@ -40,6 +46,7 @@ func (m *Service) PolicyDependencies() toolpolicy.EngineDeps {
 		BlockPlane:       &toolfeedback.BlockPlane{Pipeline: m.ToolPolicy.Pipeline, Renderer: m.Feedback.Renderer()},
 		PreInvoke:        m.BeforeInvoke,
 		ProjectRootCount: m.Workspace.RootCount,
+		ProjectChat:      projectChat,
 		OverlayRootPaths: m.Workspace.SettingsRoots,
 	}
 }

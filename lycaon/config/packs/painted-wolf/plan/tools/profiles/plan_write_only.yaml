@@ -17,6 +17,8 @@ tools:
   restore_version: sticky
   render_view: sticky
   wait: sticky
+  watch: sticky
+  watch_control: true
   skills_read: sticky
   secret_generate: true
   secret_list: true
@@ -26,4 +28,5 @@ deny_tools:
   - state_*
   - handoff_*
 write_scope: plan_write
-wait_conditions: [process_done, http_ready, port_ready]
+wait_conditions: [process_done, watch_match, http_ready, port_ready]
+watch_conditions: [process_done, process_output, http_ready, port_ready, file_change, git_ref, timer]

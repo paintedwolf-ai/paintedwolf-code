@@ -1,0 +1,26 @@
+spec_version: "1.0"
+id: WATCH_CONDITION_INVALID
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - watch
+    - watch_control
+requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.watch_invalid_fields]
+when: paintedwolf.rejection_code == "WATCH_CONDITION_INVALID"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:watch
+message: Watch arguments failed validation
+what: '{{ tool }} rejected invalid field values: {{ paintedwolf.watch_invalid_fields }}.'
+cause: '{{ paintedwolf.rejection_reason }}'
+why: Watches persist typed observation targets that must match the caller's authorized scope and condition schema.
+fix: Correct the named fields using exact handles, authorized root labels, full refs/ names, or valid timer shapes, then retry.
+instead: Do not guess field names or pass watch_match into watch
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      reason: git_ref requires a full ref beginning with refs/
+      tool: watch
+      watch_invalid_fields: [conditions.0.ref]

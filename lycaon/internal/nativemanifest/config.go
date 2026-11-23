@@ -48,6 +48,7 @@ const (
 	ResourceFactTerminals   = "terminals"
 	ResourceFactPages       = "pages"
 	ResourceFactHeldCalls   = "held_calls"
+	ResourceFactWatches     = "watches"
 )
 
 // Config holds native tools, the operations command reaches, and their contracts.
@@ -279,7 +280,7 @@ func (c Config) ValidateApprovalReversibility() error {
 
 func validResourceFact(value string) bool {
 	switch value {
-	case ResourceFactCommandJobs, ResourceFactTerminals, ResourceFactPages, ResourceFactHeldCalls:
+	case ResourceFactCommandJobs, ResourceFactTerminals, ResourceFactPages, ResourceFactHeldCalls, ResourceFactWatches:
 		return true
 	default:
 		return false

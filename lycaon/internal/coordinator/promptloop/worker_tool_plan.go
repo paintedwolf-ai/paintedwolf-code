@@ -153,7 +153,7 @@ func (l *promptContext) coordinatorToolsForTurn(
 	}
 	all = l.askEnabledMCPMetas(ctx, sess, all)
 	mcpPlan := l.mcpToolPlan(ctx, sess, all, activated)
-	plan = l.compileRuntimeToolPlan(plan, frame.RunContext, all, activated, mcpPlan, openWorld, sess)
+	plan = l.compileRuntimeToolPlan(plan, surfaceID, frame.RunContext, all, activated, mcpPlan, openWorld, sess)
 	plan = filterToolPlanForRootCount(plan, rootCount)
 	if ask {
 		plan = clampAskMode(plan, all)
@@ -214,6 +214,7 @@ func trimCoordinatorToolMetasForPlan(plan toolsurface.Plan, all []tools.ToolMeta
 
 func (l *promptContext) compileRuntimeToolPlan(
 	plan toolsurface.Plan,
+	surfaceID string,
 	runCtx api.CoordinatorRunContext,
 	metas []tools.ToolMeta,
 	activated map[string]bool,
@@ -227,7 +228,16 @@ func (l *promptContext) compileRuntimeToolPlan(
 	if !l.webSearchEnabled() {
 		plan = plan.Without(webresearch.SearchToolName, webresearch.FetchURLToolName)
 	}
-	plan = plan.Promote(toolcontract.Implied(l.liveResources(sess))...)
+	resources := l.liveResources(sess)
+	nonWatchResources := resources
+	nonWatchResources.Watches = false
+	plan = plan.Promote(toolcontract.Implied(nonWatchResources)...)
+	if resources.Watches && surface.AllowsWatchManagement(surfaceID) {
+		plan = plan.Promote("watch_control")
+		if plan.Addressable("wait") {
+			plan = plan.Promote("wait")
+		}
+	}
 	for name := range activated {
 		if plan.Addressable(name) || !toolcontract.IsCatalog(name) {
 			plan = plan.Promote(name)

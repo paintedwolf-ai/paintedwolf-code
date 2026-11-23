@@ -1,0 +1,9 @@
+steps:
+  - tool: "watch_control"
+    args:
+      operation: "cancel"
+    pick:
+      handle: "paintedwolf.watch_reclaimable_handles"
+    say: "Cancel an unneeded watch with {{ call }}."
+  - tool: "wait"
+    say: "Or settle pending matches with {{ call }}."

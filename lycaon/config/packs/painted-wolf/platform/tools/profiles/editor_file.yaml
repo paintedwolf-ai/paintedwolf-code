@@ -25,7 +25,10 @@ tools:
   secret_revoke: sticky
   held_result: true
   held_stop: true
-wait_conditions: [process_done, http_ready, port_ready]
+  watch: sticky
+  watch_control: true
+wait_conditions: [process_done, watch_match, http_ready, port_ready]
+watch_conditions: [process_done, process_output, http_ready, port_ready, file_change, git_ref, timer]
 deny_tools:
   - web_search
   - fetch_url

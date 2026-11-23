@@ -1,0 +1,24 @@
+spec_version: "1.0"
+id: WATCH_CAPACITY_REACHED
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - watch
+requires_facts: [paintedwolf.rejection_code, paintedwolf.watch_reclaimable_handles]
+when: paintedwolf.rejection_code == "WATCH_CAPACITY_REACHED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:watch
+message: Watch capacity reached for this owner
+what: Cannot register another watch because the active or retained handle cap is full.
+cause: Each session or worker job holds at most 8 live watches and 32 live or pending handles.
+why: Bounded watch tables keep background observation and delivery predictable.
+fix: 'Free a watch slot before registering another. Reclaimable handles: {{ paintedwolf.watch_reclaimable_handles }}.'
+instead: Do not open duplicate watches for the same dependency
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: watch
+      watch_reclaimable_handles: [watch-1, watch-2]

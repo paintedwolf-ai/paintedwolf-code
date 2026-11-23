@@ -1,0 +1,23 @@
+spec_version: "1.0"
+id: WATCH_REPEAT_UNSUPPORTED
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - watch
+requires_facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "WATCH_REPEAT_UNSUPPORTED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:watch
+message: Repeat watch requires a recurring condition
+what: Cannot set repeat=true when every condition alternative is terminal and cannot recur.
+cause: Terminal one-shot conditions such as process_done, scan_done, or timer.at fire at most once.
+why: A repeating watch must have at least one state or recurring event source that can produce subsequent occurrences.
+fix: Omit repeat (or set repeat=false) for one-shot completion conditions, or include a recurring source such as file_change, git_ref, process_output, timer.delay_ms, or timer.calendar.
+instead: Do not mark one-shot completion conditions as repeating
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: watch

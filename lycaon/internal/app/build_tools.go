@@ -37,12 +37,18 @@ import (
 func (b *serveBuilder) wireCoordinatorRuntime() error {
 	b.server.Coordinator = b.sessions.Manager.Coordinator.Runtime
 	waitConditions := make(map[string]map[string]bool, len(b.agents.ToolProfiles))
+	watchConditions := make(map[string]map[string]bool, len(b.agents.ToolProfiles))
 	for _, profile := range b.agents.ToolProfiles {
 		allowed := make(map[string]bool, len(profile.WaitConditions))
 		for _, condition := range profile.WaitConditions {
 			allowed[condition] = true
 		}
 		waitConditions[profile.ID] = allowed
+		allowedWatch := make(map[string]bool, len(profile.WatchConditions))
+		for _, condition := range profile.WatchConditions {
+			allowedWatch[condition] = true
+		}
+		watchConditions[profile.ID] = allowedWatch
 	}
 	waitStore := &awaitstore.Store{DB: b.storage.Database}
 	subscriptions := b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions
@@ -109,12 +115,30 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 			}
 		}
 	}
+	workerKnownFn := waitWorkerKnown(b.boards.WorkerRecords, b.workerRuntime.Queue)
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
 		Store: waitStore, Watches: watchStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
-		WorkerKnown: waitWorkerKnown(b.boards.WorkerRecords, b.workerRuntime.Queue),
+		WorkerKnown: workerKnownFn,
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
+	}
+	if err := watch.RegisterWatchTools(b.execution.Host.Registry, watch.ToolDeps{
+		Store:             watchStore,
+		ProfileConditions: watchConditions,
+		SecretMatcher:     b.security.Matcher,
+		WorkerKnown: func(sessionID, handle string) bool {
+			return workerKnownFn == nil || workerKnownFn(b.startup.ctx, sessionID, handle)
+		},
+		ProjectChat: func(ctx context.Context, projectID string) bool {
+			if b.storage.Projects == nil || projectID == "" {
+				return false
+			}
+			p, err := b.storage.Projects.Get(ctx, projectID)
+			return err == nil && p != nil && !p.IsDraft
+		},
+	}); err != nil {
+		return fmt.Errorf("watch tools: %w", err)
 	}
 	if err := b.wireWaitRecovery(subscriptions, waitStore); err != nil {
 		return err

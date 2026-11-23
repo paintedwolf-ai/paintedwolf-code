@@ -108,6 +108,8 @@ var compiledContracts = map[string]Contract{
 	"view_image":                     {Owner: "visual", Reversibility: ReversibilityReversible, Batch: BatchShared, Order: TurnOrderNormal, Lifecycle: LifecycleReadOnly, Capabilities: 0},
 	"view_video":                     {Owner: "visual", Reversibility: ReversibilityReversible, Batch: BatchShared, Order: TurnOrderNormal, Lifecycle: LifecycleReadOnly, Capabilities: 0},
 	"wait":                           {Owner: "loop_wake", Reversibility: ReversibilityReversible, Batch: BatchSerial, Order: TurnOrderTerminal, Lifecycle: LifecycleDBTransaction, Capabilities: CapabilityLoopbackConnect, AskAllowed: true},
+	"watch":                          {Owner: "watches", Reversibility: ReversibilityReversible, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleDBTransaction, Capabilities: CapabilityLoopbackConnect, AskAllowed: true},
+	"watch_control":                  {Owner: "watches", Reversibility: ReversibilityReversible, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleDBTransaction, Capabilities: 0, AskAllowed: true},
 	"wc":                             {Owner: "filesystem", Reversibility: ReversibilityReversible, Batch: BatchShared, Order: TurnOrderNormal, Lifecycle: LifecycleReadOnly, Capabilities: 0, DetachAfterBudget: true, BoundedInProcess: true},
 	"web_search":                     {Owner: "web_research", Reversibility: ReversibilityRecoverable, Batch: BatchSameTool, BatchOptInArg: "parallel", BatchConcurrencyLimit: 4, Order: TurnOrderNormal, Lifecycle: LifecycleEffectAttempt, Capabilities: 0, AskAllowed: true},
 	"worker_cancel":                  {Owner: "workers", Reversibility: ReversibilityReversible, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleEffectAttempt, Capabilities: 0, AskAllowed: true},
@@ -145,6 +147,9 @@ var compiledFamilies = map[string][]string{
 		"terminal_read",
 		"terminal_snapshot",
 		"terminal_close",
+	},
+	"watch": {
+		"watch_control",
 	},
 	"web_research": {
 		"web_search",
@@ -217,6 +222,10 @@ var compiledResourceImplied = map[string][]string{
 		"terminal_read",
 		"terminal_snapshot",
 		"terminal_close",
+	},
+	"watches": {
+		"watch_control",
+		"wait",
 	},
 }
 
@@ -337,6 +346,8 @@ var compiledMultiRoot = map[string]MultiRootCapability{
 	"view_image":                     MultiRootPathConsume,
 	"view_video":                     MultiRootPathConsume,
 	"wait":                           MultiRootNone,
+	"watch":                          MultiRootNone,
+	"watch_control":                  MultiRootNone,
 	"wc":                             MultiRootPathConsume,
 	"web_search":                     MultiRootNone,
 	"worker_cancel":                  MultiRootNone,

@@ -18,6 +18,7 @@ const (
 	WaitTriggerOverlayPromote WaitTrigger = "overlay_promote_pending"
 	WaitTriggerScanDone       WaitTrigger = "scan_done"
 	WaitTriggerProcessDone    WaitTrigger = "process_done"
+	WaitTriggerWatchMatch     WaitTrigger = "watch_match"
 	WaitTriggerHTTPReady      WaitTrigger = "http_ready"
 	WaitTriggerPortReady      WaitTrigger = "port_ready"
 	// WaitTriggerProgramDone ends a parked command call's wait. Only the host
@@ -70,6 +71,7 @@ var validWaitTriggers = map[WaitTrigger]struct{}{
 	WaitTriggerOverlayPromote: {},
 	WaitTriggerScanDone:       {},
 	WaitTriggerProcessDone:    {},
+	WaitTriggerWatchMatch:     {},
 	WaitTriggerHTTPReady:      {},
 	WaitTriggerPortReady:      {},
 }

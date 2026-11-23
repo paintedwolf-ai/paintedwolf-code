@@ -66,6 +66,8 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"period_max_year", oarcore.TypeInt, FactTierHost, ""},
 	{"period_min_year", oarcore.TypeInt, FactTierHost, ""},
 	{"wait_allowed_conditions", oarcore.TypeListString, FactTierHost, ""},
+	{"watch_invalid_fields", oarcore.TypeListString, FactTierHost, ""},
+	{"watch_reclaimable_handles", oarcore.TypeListString, FactTierHost, ""},
 	{"condition", oarcore.TypeString, FactTierHost, ""},
 	{"read_empty_file", oarcore.TypeBool, FactTierHost, ""},
 	{"artifact_id", oarcore.TypeString, FactTierHost, ""},

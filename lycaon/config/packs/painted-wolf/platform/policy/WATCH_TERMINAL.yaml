@@ -1,0 +1,24 @@
+spec_version: "1.0"
+id: WATCH_TERMINAL
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - watch_control
+requires_facts: [paintedwolf.handle, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "WATCH_TERMINAL"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:watch
+message: Watch {{ paintedwolf.handle }} has already ended
+what: Cannot change delivery on {{ paintedwolf.handle }} because the watch is already in a terminal state.
+cause: Completed one-shot, canceled, expired, kept, or dismissed watches cannot accept new delivery settings.
+why: Terminal watches emit no further matches, so changing delivery would have no effect.
+fix: Call watch_control(handle="{{ paintedwolf.handle }}", operation="inspect") to read its final state, or register a new watch if observation is still needed.
+instead: Do not call set_delivery on an ended watch
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      handle: watch-1
+      profile: coordinator
+      tool: watch_control

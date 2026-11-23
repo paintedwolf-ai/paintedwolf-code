@@ -145,6 +145,18 @@ func (s *Store) SetDelivery(ctx context.Context, owner Owner, handle string, mod
 	if reg.Lifecycle.State == StateTerminal {
 		return "", &TerminalError{Handle: reg.Handle, Outcome: reg.Lifecycle.Outcome}
 	}
+	if mode == DeliveryWake {
+		if reg.Cursors[standingDraftCursorKey] != "" {
+			return "", &ValidationError{Code: "WATCH_WAKE_NOT_ALLOWED", Field: "delivery", Message: "standing watch drafts cannot use ambient wake"}
+		}
+		if reg.Lifecycle.Repeat {
+			for _, cond := range reg.Conditions {
+				if cond.Kind == "timer" {
+					return "", &ValidationError{Code: "WATCH_WAKE_NOT_ALLOWED", Field: "delivery", Message: "repeating timer watches cannot request ambient wake"}
+				}
+			}
+		}
+	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE watch_registrations SET delivery = ?, revision = revision + 1, updated_at = ? WHERE watch_id = ?`,
 		string(mode), nowStr, reg.WatchID); err != nil {

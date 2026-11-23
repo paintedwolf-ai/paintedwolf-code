@@ -55,6 +55,8 @@ const (
 	OutcomeExpired    TerminalOutcome = "expired"
 	OutcomeCanceled   TerminalOutcome = "canceled"
 	OutcomeSourceLost TerminalOutcome = "source_lost"
+	OutcomeKept       TerminalOutcome = "kept"
+	OutcomeDismissed  TerminalOutcome = "dismissed"
 )
 
 type DestinationKind string
@@ -100,6 +102,20 @@ type Authority struct {
 	LoopbackPorts []uint16 `json:"loopback_ports,omitempty"`
 }
 
+// StandingDraft captures an agent-proposed standing watch attached to a session watch.
+type StandingDraft struct {
+	Name     string `json:"name"`
+	Prompt   string `json:"prompt"`
+	Replaces string `json:"replaces,omitempty"`
+}
+
+// OverlappingStandingWatch summarizes an existing project standing watch with overlapping sources.
+type OverlappingStandingWatch struct {
+	WatchID string `json:"watch_id"`
+	Name    string `json:"name"`
+	State   string `json:"state"`
+}
+
 // RegisterRequest creates or idempotently replays a watch registration.
 type RegisterRequest struct {
 	Owner                Owner
@@ -111,18 +127,22 @@ type RegisterRequest struct {
 	Delivery             DeliveryMode
 	Repeat               bool
 	ExpiresAt            time.Time
+	Standing             *StandingDraft
 }
 
 // RegisterReceipt is the durable result returned when a watch is registered.
 type RegisterReceipt struct {
-	WatchID        string               `json:"watch_id"`
-	Handle         string               `json:"handle"`
-	State          string               `json:"state"`
-	Delivery       DeliveryMode         `json:"delivery"`
-	Destination    string               `json:"destination"`
-	ExpiresAt      string               `json:"expires_at"`
-	WaitCondition  awaitstore.Condition `json:"wait_condition"`
-	PendingMatches int                  `json:"pending_matches"`
+	WatchID             string                     `json:"watch_id"`
+	Handle              string                     `json:"handle"`
+	State               string                     `json:"state"`
+	Delivery            DeliveryMode               `json:"delivery"`
+	Destination         string                     `json:"destination"`
+	ExpiresAt           string                     `json:"expires_at"`
+	WaitCondition       awaitstore.Condition       `json:"wait_condition"`
+	PendingMatches      int                        `json:"pending_matches"`
+	Hint                string                     `json:"hint,omitempty"`
+	StandingDraft       bool                       `json:"standing_draft,omitempty"`
+	OverlappingStanding []OverlappingStandingWatch `json:"overlapping_standing,omitempty"`
 }
 
 // OverflowSummary preserves aggregate match counts and state transitions across compaction.
@@ -180,7 +200,18 @@ func (e *CapacityError) Error() string {
 type ValidationError struct {
 	Code    string
 	Field   string
+	Fields  []string
 	Message string
+}
+
+func (e *ValidationError) InvalidFields() []string {
+	if len(e.Fields) > 0 {
+		return append([]string(nil), e.Fields...)
+	}
+	if e.Field != "" {
+		return []string{e.Field}
+	}
+	return nil
 }
 
 func (e *ValidationError) Error() string {

@@ -71,14 +71,24 @@ func normalizeRegisterRequest(req RegisterRequest, now time.Time) (RegisterReque
 	if req.Owner.Kind == OwnerJob && req.Delivery == DeliveryWake {
 		return RegisterRequest{}, &ValidationError{Code: "WATCH_WAKE_NOT_ALLOWED", Field: "delivery", Message: "worker watches cannot request ambient wake"}
 	}
+	if req.Standing != nil {
+		if req.Delivery == DeliveryWake {
+			return RegisterRequest{}, &ValidationError{Code: "WATCH_DRAFT_INVALID", Field: "delivery", Fields: []string{"standing", "delivery"}, Message: "standing watch drafts force delivery=collect and cannot use wake"}
+		}
+		req.Delivery = DeliveryCollect
+	}
 	if len(req.Conditions) == 0 || len(req.Conditions) > MaxAlternatives {
 		return RegisterRequest{}, &ValidationError{Code: "WATCH_CONDITION_INVALID", Field: "conditions", Message: "conditions must contain 1 to 8 items"}
 	}
 	allTerminal := true
+	hasTimer := false
 	for i, cond := range req.Conditions {
 		kind := strings.TrimSpace(cond.Kind)
 		if kind == "" || kind == ConditionWatchMatch || kind == "program_done" {
-			return RegisterRequest{}, &ValidationError{Code: "WATCH_CONDITION_INVALID", Field: fmt.Sprintf("conditions[%d].kind", i), Message: fmt.Sprintf("condition kind %q is not allowed on watch", kind)}
+			return RegisterRequest{}, &ValidationError{Code: "WATCH_CONDITION_INVALID", Field: fmt.Sprintf("conditions.%d.kind", i), Message: fmt.Sprintf("condition kind %q is not allowed on watch", kind)}
+		}
+		if kind == "timer" {
+			hasTimer = true
 		}
 		if !isTerminalCondition(cond) {
 			allTerminal = false
@@ -86,6 +96,9 @@ func normalizeRegisterRequest(req RegisterRequest, now time.Time) (RegisterReque
 	}
 	if req.Repeat && allTerminal {
 		return RegisterRequest{}, &ValidationError{Code: "WATCH_REPEAT_UNSUPPORTED", Field: "repeat", Message: "all conditions are terminal one-shots and cannot repeat"}
+	}
+	if req.Repeat && hasTimer && req.Delivery == DeliveryWake {
+		return RegisterRequest{}, &ValidationError{Code: "WATCH_WAKE_NOT_ALLOWED", Field: "delivery", Message: "repeating timer watches cannot request ambient wake"}
 	}
 	if req.ExpiresAt.IsZero() {
 		req.ExpiresAt = now.Add(DefaultLifetime)
@@ -99,11 +112,27 @@ func normalizeRegisterRequest(req RegisterRequest, now time.Time) (RegisterReque
 	if req.Cursors == nil {
 		req.Cursors = map[string]string{}
 	}
+	if req.Standing != nil {
+		if raw, err := json.Marshal(req.Standing); err == nil {
+			req.Cursors[standingDraftCursorKey] = string(raw)
+		}
+	}
 	return req, nil
 }
 
+const standingDraftCursorKey = "_standing_draft"
+
 func isTerminalCondition(cond awaitstore.Condition) bool {
-	return cond.Kind == ConditionProcessDone && len(cond.Handles) > 0
+	switch cond.Kind {
+	case ConditionProcessDone:
+		return len(cond.Handles) > 0
+	case "scan_done":
+		return true
+	case "timer":
+		return strings.TrimSpace(cond.At) != ""
+	default:
+		return false
+	}
 }
 
 func collectInitialProcessMatches(ctx context.Context, s *Store, req RegisterRequest) ([]MatchInput, error) {
@@ -244,7 +273,7 @@ func buildRegisterReceipt(reg Registration, pending int) RegisterReceipt {
 	if pending > 0 || reg.Lifecycle.Outcome == OutcomeCompleted {
 		state = "matched"
 	}
-	return RegisterReceipt{
+	out := RegisterReceipt{
 		WatchID:     reg.WatchID,
 		Handle:      reg.Handle,
 		State:       state,
@@ -256,7 +285,13 @@ func buildRegisterReceipt(reg Registration, pending int) RegisterReceipt {
 			Handles: []string{reg.Handle},
 		},
 		PendingMatches: pending,
+		Hint:           "When you need this result, pass this condition to wait.",
 	}
+	if reg.Cursors[standingDraftCursorKey] != "" {
+		out.StandingDraft = true
+		out.OverlappingStanding = []OverlappingStandingWatch{}
+	}
+	return out
 }
 
 func findByInvocationTx(ctx context.Context, tx *sql.Tx, sessionID, invocationID string) (Registration, bool, error) {
