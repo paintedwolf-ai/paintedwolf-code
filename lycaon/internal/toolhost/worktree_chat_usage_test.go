@@ -59,7 +59,7 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 		}
 		tc.Files.GrantedWriteRoots = []string{allowedParent}
 		tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{
-			{Path: allowedParent, Write: true},
+			{Path: allowedParent, Write: true, Tree: true},
 		}
 	}
 
