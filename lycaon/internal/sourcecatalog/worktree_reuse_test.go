@@ -18,8 +18,8 @@ type denyCollectionAdmission struct {
 	file *os.File
 }
 
-func (a denyCollectionAdmission) DirectoryFile() *os.File      { return a.file }
-func (a denyCollectionAdmission) AdmitDirectoryRead() error    { return nil }
+func (a denyCollectionAdmission) DirectoryFile() *os.File        { return a.file }
+func (a denyCollectionAdmission) AdmitDirectoryRead() error      { return nil }
 func (a denyCollectionAdmission) AllowDirectoryCollection() bool { return false }
 
 func TestSubrootInvalidationMappingAndCollectionRefusal(t *testing.T) {
