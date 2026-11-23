@@ -21,11 +21,11 @@ const (
 
 // PresentationDecision describes how one producer occurrence may be presented to a destination.
 type PresentationDecision struct {
-	Granted            bool
-	TransferredKick    bool
-	AlreadyAdmitted    bool
-	ExistingClaimKind  PresentationKind
-	ExistingReceiptID  string
+	Granted           bool
+	TransferredKick   bool
+	AlreadyAdmitted   bool
+	ExistingClaimKind PresentationKind
+	ExistingReceiptID string
 }
 
 // ClaimPresentation records or transfers a single presentation claim per destination and producer occurrence.
