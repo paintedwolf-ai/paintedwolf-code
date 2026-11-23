@@ -224,5 +224,87 @@ describe("regrouped activity span anchors", () => {
       dispose();
     });
   });
+
+  it("transfers multi-section activity_group disclosures and diff-file keys across prepend, eviction, and merge", () => {
+    const groupItem = (lead: string, entries: string[], paths: string[] = []): TranscriptItem => ({
+      kind: "activity_group",
+      key: `activity-group:${lead}`,
+      sectionOrder: ["activities", "approvals", "files"],
+      headline: "editing files",
+      anchorMessageId: lead,
+      approvals: [{ kind: "checkpoint", key: "checkpoint:cp-1", parentMessageId: lead, meta: { checkpoint_id: "cp-1", kind: "tool_approval", status: "approved" } }],
+      folds: paths.map((path) => ({
+        path,
+        key: `activity-group:${lead}\0${path}`,
+        net: { path, before_sha256: "a", after_sha256: "b", created: false, added: 1, removed: 0 },
+        steps: [{ key: `${lead}:0`, messageId: lead, toolCallId: lead, tool: "write", snapshot: { path, before_sha256: "a", after_sha256: "b", created: false, added: 1, removed: 0 } }],
+      })),
+      entries: entries.map((entry) => ({ kind: "index_warming", key: entry, meta: {} as never })),
+    });
+
+    const openKeys = new Set<string>([
+      "activity-group-approvals:activity-group:call-b",
+      "activity-group-files:activity-group:call-b",
+      "activity-group-activities:activity-group:call-b",
+      "diff-file:activity-group:call-b\0src/a.go",
+    ]);
+    let items: TranscriptItem[] = [groupItem("call-b", ["call-b", "call-c"], ["src/a.go"])];
+    const [tick, setTick] = createSignal(0);
+    createRoot((dispose) => {
+      const resolve = bindTranscriptSpanAnchors({
+        items: () => {
+          tick();
+          return items;
+        },
+        isOpen: (key) => openKeys.has(key),
+        rename: (from, to) => {
+          if (openKeys.delete(from)) openKeys.add(to);
+        },
+      });
+      setTick(1);
+
+      items = [groupItem("call-a", ["call-a", "call-b", "call-c"], ["src/a.go"])];
+      expect(resolve("activity-group:call-b")).toMatchObject({
+        rowKey: "activity-group:call-a",
+        offsetPx: 42,
+      });
+      expect([...openKeys].sort()).toEqual([
+        "activity-group-activities:activity-group:call-a",
+        "activity-group-approvals:activity-group:call-a",
+        "activity-group-files:activity-group:call-a",
+        "diff-file:activity-group:call-a\0src/a.go",
+      ]);
+
+      items = [groupItem("call-b", ["call-b", "call-c"], ["src/a.go"])];
+      expect(resolve("activity-group:call-a")).toEqual({
+        rowKey: "activity-group:call-b",
+        offsetPx: -42,
+      });
+      expect(openKeys.has("diff-file:activity-group:call-b\0src/a.go")).toBe(true);
+      dispose();
+    });
+  });
+
+  it("prefers the path-matching command card and Activities disclosure shell in transcriptToolTarget", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <div data-msg-id="activity-group:c1" data-tool-call-ids="c1">
+        <div data-activity-group-section="approvals">
+          <div class="den-transcript-disclosure-card" data-transcript-disclosure="">Approvals</div>
+        </div>
+        <div data-activity-group-section="activities">
+          <div id="act-shell" class="den-activity-span den-transcript-disclosure-card" data-transcript-disclosure="">Activities</div>
+        </div>
+      </div>
+    `;
+    expect(transcriptToolTarget(root, "c1")?.id).toBe("act-shell");
+
+    const openRoot = document.createElement("div");
+    openRoot.innerHTML = `
+      <div class="den-tool-part" data-tool-call-id="cmd-348" data-activity-mutate-path="a.go">Write a.go</div>
+      <div id="target-b" class="den-tool-part" data-tool-call-id="cmd-348" data-activity-mutate-path="pkg/b_test.go">Write b_test.go</div>
+    `;
+    expect(transcriptToolTarget(openRoot, "cmd-348", "pkg/b_test.go")?.id).toBe("target-b");
+  });
 });
 

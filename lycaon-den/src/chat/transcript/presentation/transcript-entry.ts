@@ -95,6 +95,22 @@ function collectTranscriptEntryKeys(item: TranscriptItem, keys: Set<string>): vo
     case "tool":
       collectToolPartEntryKeys(item.part, keys);
       break;
+    case "activity_group": {
+      keys.add(activitySpanEnterFadeKey(key));
+      for (const part of activitySpanToolParts(item.entries)) {
+        collectToolPartEntryKeys(part, keys);
+      }
+      for (const entry of item.entries) {
+        if (entry.kind === "turn_load") keys.add(entry.key);
+      }
+      for (const approval of item.approvals) {
+        keys.add(approval.key);
+      }
+      for (const fold of item.folds) {
+        keys.add(fold.key);
+      }
+      break;
+    }
     case "activity_span": {
       keys.add(activitySpanEnterFadeKey(key));
       // Fold identity comes from the first write, so diffs keep their part keys.
@@ -142,7 +158,7 @@ export function transcriptEntryKeysFromMessages(
 ): string[] {
   const items = finalizeTranscriptItems(
     messagesToTranscriptItems(messages, { layout: "chat", turnLoads }),
-    { layout: "chat" },
+    { layout: "chat", messages },
   );
   const keys = new Set<string>();
   for (const item of items) collectTranscriptEntryKeys(item, keys);

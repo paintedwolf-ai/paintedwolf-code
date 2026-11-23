@@ -13,8 +13,27 @@ const fixtureMessages: readonly Message[] = fixture.messages;
 const verbose: TranscriptBuildOptions = { verboseMode: true };
 
 /** The placed rows a display row draws; a diff card trails its group and has no place of its own. */
-function placedRows(items: readonly (RawTranscriptItem | DisplayTranscriptItem)[]): RawTranscriptItem[] {
+function placedRows(
+  items: readonly (RawTranscriptItem | DisplayTranscriptItem)[],
+  messages: readonly Message[],
+): RawTranscriptItem[] {
   return items.flatMap((item): RawTranscriptItem[] => {
+    if (item.kind === "activity_group") {
+      const members: RawTranscriptItem[] = [
+        ...item.entries.map((entry): RawTranscriptItem =>
+          entry.kind === "tool" ? { ...entry, key: entry.part.id } : entry,
+        ),
+        ...item.approvals.map((approval): RawTranscriptItem => ({
+          kind: "checkpoint",
+          key: approval.key,
+          parentMessageId: approval.parentMessageId,
+          call: approval.call,
+          toolCallId: approval.toolCallId,
+          meta: approval.meta,
+        })),
+      ];
+      return sortTranscriptItemsByOrd(members, messages, verbose);
+    }
     if (item.kind === "activity_span") {
       return item.entries.map((entry) =>
         entry.kind === "tool" ? { ...entry, key: entry.part.id } : entry,
@@ -41,7 +60,7 @@ function expectOrderedByOrd(
   items: readonly (RawTranscriptItem | DisplayTranscriptItem)[],
   messages: readonly Message[],
 ): void {
-  const rows = placedRows(items);
+  const rows = placedRows(items, messages);
   expect(rows.length).toBeGreaterThan(0);
   const keys: TranscriptOrdSortKey[] = rows.map((item) =>
     transcriptItemOrdSortKey(item, messages, verbose),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createTranscriptRunwayBudget,
   DEFAULT_TRANSCRIPT_ORD_DENSITY_PX,
+  transcriptRowOrdSpan,
   transcriptRunwayDensity,
   transcriptRunwayOrd,
 } from "./transcript-runway.ts";
@@ -156,5 +157,23 @@ describe("transcriptRunwayBudget", () => {
         unloaded,
       }),
     ).toBe(601);
+  });
+
+  it("counts unique host message ordinals across a multi-section activity_group", () => {
+    const entries = Array.from({ length: 40 }, (_, i) => ({
+      kind: "tool",
+      part: {
+        assistantMessageId: `a-${i}`,
+        messageId: `r-${i}`,
+      },
+    }));
+    const span = transcriptRowOrdSpan({
+      key: "activity-group:a-0:c-0",
+      kind: "activity_group",
+      entries,
+      approvals: [{ parentMessageId: "a-0", call: { resultMessageId: "r-approval" } }],
+      folds: [{ steps: [{ messageId: "r-late-file" }] }],
+    });
+    expect(span).toBe(82);
   });
 });

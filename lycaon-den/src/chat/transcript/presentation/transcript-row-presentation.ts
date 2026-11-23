@@ -48,6 +48,44 @@ export function transcriptRowPresentation(
         keys.push(...toolPresentationKeys(isOpen, part.id));
       }
       break;
+    case "activity_group": {
+      if (item.approvals.length === 1) {
+        const cpKey = transcriptDisclosureKey.checkpoint(item.approvals[0]!.key);
+        if (isOpen(cpKey)) keys.push(cpKey);
+      } else if (item.approvals.length > 1) {
+        const approvalsKey = transcriptDisclosureKey.activityGroupApprovals(item.key);
+        if (isOpen(approvalsKey)) {
+          keys.push(approvalsKey);
+          for (const approval of item.approvals) {
+            const cpKey = transcriptDisclosureKey.checkpoint(approval.key);
+            if (isOpen(cpKey)) keys.push(cpKey);
+          }
+        }
+      }
+      if (item.folds.length > 0 || (item.filesOmitted ?? 0) > 0) {
+        const filesKey = transcriptDisclosureKey.activityGroupFiles(item.key);
+        if (isOpen(filesKey)) {
+          keys.push(filesKey, ...item.folds.map((fold) => transcriptDisclosureKey.diffFile(fold.key)).filter(isOpen));
+        }
+      }
+      if (item.entries.length > 0) {
+        const actKey = transcriptDisclosureKey.activityGroupActivities(item.key);
+        if (isOpen(actKey)) {
+          keys.push(actKey);
+          for (const entry of item.entries) {
+            if (entry.kind === "tool") {
+              keys.push(...toolPresentationKeys(isOpen, entry.part.id));
+            } else if (entry.kind === "turn_load") {
+              keys.push(...toolPresentationKeys(isOpen, entry.key));
+            } else {
+              const warmingKey = transcriptDisclosureKey.indexWarming(entry.key);
+              if (isOpen(warmingKey)) keys.push(warmingKey);
+            }
+          }
+        }
+      }
+      break;
+    }
     case "activity_span": {
       const spanKey = transcriptDisclosureKey.activitySpan(item.key);
       if (!isOpen(spanKey)) break;
@@ -107,6 +145,8 @@ export function transcriptRowPresentation(
 const ACTIVITY_SPAN_BASE_ESTIMATE_PX = 64;
 export const ACTIVITY_SPAN_ENTRY_ESTIMATE_PX = 42;
 const COLLAPSED_DIFF_ESTIMATE_PX = 38;
+export const ACTIVITY_GROUP_SECTION_HEADER_ESTIMATE_PX = 38;
+const ACTIVITY_GROUP_BORDER_PX = 2;
 
 function diffRowEstimate(foldCount: number): number {
   if (foldCount <= 0) return 0;
@@ -119,6 +159,38 @@ export function transcriptRowPresentationEstimate(
   isOpen: TranscriptDisclosureReader,
 ): number | undefined {
   const presentation = transcriptRowPresentation(item, isOpen);
+
+  if (item.kind === "activity_group") {
+    const sections = Math.max(1, item.sectionOrder.length);
+    let total = ACTIVITY_GROUP_BORDER_PX + sections * ACTIVITY_GROUP_SECTION_HEADER_ESTIMATE_PX;
+    if (presentation === TRANSCRIPT_ROW_COLLAPSED_PRESENTATION) return total;
+    if (item.approvals.length === 1) {
+      if (isOpen(transcriptDisclosureKey.checkpoint(item.approvals[0]!.key))) total += 140;
+    } else if (item.approvals.length > 1 && isOpen(transcriptDisclosureKey.activityGroupApprovals(item.key))) {
+      total += item.approvals.length * 38;
+      for (const approval of item.approvals) {
+        if (isOpen(transcriptDisclosureKey.checkpoint(approval.key))) total += 140;
+      }
+    }
+    if (
+      (item.folds.length > 0 || (item.filesOmitted ?? 0) > 0) &&
+      isOpen(transcriptDisclosureKey.activityGroupFiles(item.key))
+    ) {
+      const hasOpenDiff =
+        item.folds.length === 1 ||
+        item.folds.some((fold) => isOpen(transcriptDisclosureKey.diffFile(fold.key)));
+      total += Math.min(item.folds.length, 30) * 38 + (hasOpenDiff ? 360 : 0);
+    }
+    if (item.entries.length > 0 && isOpen(transcriptDisclosureKey.activityGroupActivities(item.key))) {
+      const openChild = item.entries.some((entry) =>
+        entry.kind === "tool"
+          ? isOpen(transcriptDisclosureKey.tool(entry.part.id))
+          : entry.kind === "turn_load" && isOpen(transcriptDisclosureKey.tool(entry.key)),
+      );
+      total += Math.min(item.entries.length, 100) * ACTIVITY_SPAN_ENTRY_ESTIMATE_PX + (openChild ? 360 : 0);
+    }
+    return total;
+  }
 
   if (item.kind === "activity_span") {
     if (presentation === TRANSCRIPT_ROW_COLLAPSED_PRESENTATION) {

@@ -102,7 +102,11 @@ export function createTranscriptDisplayProjector() {
     options: TranscriptBuildOptions = {},
   ): DisplayTranscriptItem[][] => {
     const buildOpts = { verboseMode: options.verboseMode ?? false, layout: options.layout ?? "chat" } as const;
-    const freshItems = messagesToTranscriptItems(messages, { ...buildOpts, sessionId: options.sessionId });
+    const freshItems = messagesToTranscriptItems(messages, {
+      ...buildOpts,
+      sessionId: options.sessionId,
+      turnLoads: options.turnLoads,
+    });
     const fresh = new Map(freshItems.map((item) => [item.key, item]));
     const order = buildTranscriptOrder(messages, buildOpts);
     const next = (spans ?? [freshItems]).map((span, index): SpanProjection => {
@@ -119,7 +123,10 @@ export function createTranscriptDisplayProjector() {
       const prior = previous[index];
       if (prior && prior.verboseMode === buildOpts.verboseMode && prior.layout === buildOpts.layout &&
         sameWireValue(prior.raw, raw)) return prior;
-      const items = retainTranscriptItemIdentity(previousByKey, finalizeTranscriptItems(raw, buildOpts));
+      const items = retainTranscriptItemIdentity(
+        previousByKey,
+        finalizeTranscriptItems(raw, { ...buildOpts, messages, order }),
+      );
       return { ...buildOpts, raw, items };
     });
     previous = next;

@@ -24,6 +24,24 @@ export function visibleRowContinuity(
 ): Map<string, string> {
   const rows = new Map<string, string>();
   for (const item of items) {
+    if (item.kind === "activity_group") {
+      for (const entry of item.entries) {
+        rows.set(continuityKeyOfItem(entry), entry.kind);
+      }
+      for (const approval of item.approvals) {
+        rows.set(approval.key, "checkpoint");
+        if (approval.parentMessageId && !rows.has(approval.parentMessageId)) {
+          rows.set(approval.parentMessageId, "checkpoint");
+        }
+      }
+      for (const fold of item.folds) {
+        for (const step of fold.steps) {
+          const stepKey = toolRowContinuityKey(step.key);
+          if (!rows.has(stepKey)) rows.set(stepKey, "file_edit");
+        }
+      }
+      continue;
+    }
     if (item.kind === "activity_span") {
       for (const entry of item.entries) {
         rows.set(continuityKeyOfItem(entry), entry.kind);

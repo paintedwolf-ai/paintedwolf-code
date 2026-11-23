@@ -74,7 +74,7 @@ function activityScope(
   return fallback;
 }
 
-function activityCandidate(
+export function activityCandidate(
   item: Extract<RawTranscriptItem, { kind: "tool" | "index_warming" | "turn_load" }>,
   opts?: ActivitySpanProjectionOptions,
 ): ActivityCandidate {
@@ -245,11 +245,11 @@ function emitActivitySpan(run: readonly ActivityCandidate[]): ActivitySpanItem {
 }
 
 /** A decision only shows beside the work it decided for; on its own it would be one more card. */
-function runHasWork(run: readonly ActivityCandidate[]): boolean {
+export function runHasWork(run: readonly ActivityCandidate[]): boolean {
   return run.some((candidate) => candidate.entry.kind !== "turn_load");
 }
 
-function emitWorkerRun(
+export function emitWorkerRun(
   run: readonly Extract<RawTranscriptItem, { kind: "tool" }>[],
 ): WorkerGroupItem[] {
   if (run.length === 0) return [];

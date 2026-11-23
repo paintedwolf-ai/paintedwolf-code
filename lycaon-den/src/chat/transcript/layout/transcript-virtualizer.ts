@@ -106,6 +106,8 @@ export function transcriptRowEstimatedHeight(
     case "worker_file_edit":
     case "file_edit":
       return 120;
+    case "activity_group":
+      return 40;
     case "activity_span":
       return 64;
     case "worker_group":
