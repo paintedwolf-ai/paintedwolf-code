@@ -85,25 +85,47 @@ func verifyOccurrenceVsRecoveryAuthority(t *testing.T, h *hookProducerHarness, c
 
 	workerStates, wErr := hoststate.WorkerStates(t.Context())
 	contractcheck.FailErr(t, "WorkerStates", wErr)
-	checkedAskChild := false
+	checkedRealizableAskChild := false
+	checkedMutatingChildClamp := false
 	for _, ws := range workerStates {
-		if ws.Excluded || ws.RootCount == 0 || ws.Posture != api.SessionPostureBuild || ws.ParentSessionMode != api.SessionModeAsk || !ws.ParentUpgradedAskToAgent || ws.ToolProfile != "implement" {
+		if ws.RootCount == 0 || ws.Posture != api.SessionPostureBuild || ws.ParentSessionMode != api.SessionModeAsk || !ws.ParentUpgradedAskToAgent {
 			continue
 		}
-		childAuth, fErr := hoststate.FreezeWorkerAuthority(t.Context(), ws)
-		contractcheck.FailErr(t, "FreezeWorkerAuthority Ask child", fErr)
-		if childAuth.Reach.Program("edit") || childAuth.ProgramReach("edit") || !childAuth.ProgramReach("cat") {
-			t.Fatalf("Ask-spawned child worker lost read-only program clamp: reachEdit=%v progEdit=%v progCat=%v",
-				childAuth.Reach.Program("edit"), childAuth.ProgramReach("edit"), childAuth.ProgramReach("cat"))
+		if !ws.Excluded && !checkedRealizableAskChild {
+			childAuth, fErr := hoststate.FreezeWorkerAuthority(t.Context(), ws)
+			contractcheck.FailErr(t, "FreezeWorkerAuthority Ask child", fErr)
+			if childAuth.Reach.Program("edit") || childAuth.ProgramReach("edit") || !childAuth.ProgramReach("cat") {
+				t.Fatalf("Ask-spawned child worker lost read-only program clamp: reachEdit=%v progEdit=%v progCat=%v",
+					childAuth.Reach.Program("edit"), childAuth.ProgramReach("edit"), childAuth.ProgramReach("cat"))
+			}
+			if slices.Contains(childAuth.Offered, "code_rewrite") || childAuth.Reader.Held()[toolcontract.ReachCommandMutation] {
+				t.Fatalf("Ask-spawned child worker offered mutating tools after parent upgrade: %v", childAuth.Offered)
+			}
+			checkedRealizableAskChild = true
 		}
-		if slices.Contains(childAuth.Offered, "code_rewrite") || childAuth.Reader.Held()[toolcontract.ReachCommandMutation] {
-			t.Fatalf("Ask-spawned child worker offered mutating tools after parent upgrade: %v", childAuth.Offered)
+		if ws.ToolProfile == "implement" && !checkedMutatingChildClamp {
+			if !ws.Excluded || ws.ExcludedReason != "ask_mode_forbids_mutating_worker" {
+				t.Fatalf("expected implement worker under Ask parent to be excluded with ask_mode_forbids_mutating_worker, got excluded=%v reason=%q",
+					ws.Excluded, ws.ExcludedReason)
+			}
+			clampAuth, fErr := hoststate.FreezeWorkerAuthority(t.Context(), ws)
+			contractcheck.FailErr(t, "FreezeWorkerAuthority Ask mutating clamp", fErr)
+			if clampAuth.Reach.Program("edit") || clampAuth.ProgramReach("edit") || !clampAuth.ProgramReach("cat") {
+				t.Fatalf("FreezeWorkerAuthority Ask clamp lost read-only program restriction: reachEdit=%v progEdit=%v progCat=%v",
+					clampAuth.Reach.Program("edit"), clampAuth.ProgramReach("edit"), clampAuth.ProgramReach("cat"))
+			}
+			if slices.Contains(clampAuth.Offered, "code_rewrite") || clampAuth.Reader.Held()[toolcontract.ReachCommandMutation] {
+				t.Fatalf("FreezeWorkerAuthority Ask clamp offered mutating tools after parent upgrade: %v", clampAuth.Offered)
+			}
+			checkedMutatingChildClamp = true
 		}
-		checkedAskChild = true
-		break
+		if checkedRealizableAskChild && checkedMutatingChildClamp {
+			break
+		}
 	}
-	if !checkedAskChild {
-		t.Fatal("expected realizable implement worker state under Ask->Agent upgraded parent")
+	if !checkedRealizableAskChild || !checkedMutatingChildClamp {
+		t.Fatalf("missing Ask->Agent child worker witnesses: realizable=%v mutatingClamp=%v",
+			checkedRealizableAskChild, checkedMutatingChildClamp)
 	}
 
 	bgJobToolCtx := tools.ToolContext{

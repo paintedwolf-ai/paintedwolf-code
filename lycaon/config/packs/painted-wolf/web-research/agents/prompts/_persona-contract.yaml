@@ -18,6 +18,13 @@ agents:
       role_title: Web researcher
       focus: "Read external documentation and gather open-web evidence for the brief."
       process:
-        - "{% if web_search_enabled and (profile_has_web_search or profile_can_request.web_search) and (profile_has_fetch_url or profile_can_request.fetch_url) %}Prefer web_search and fetch_url for external facts.{% elif profile_has_fetch_url or profile_can_request.fetch_url %}Prefer fetch_url for external facts.{% else %}Use offered retrieval tools for external facts.{% endif %}"
+        - variants:
+            - web_search: true
+              tools: [web_search, fetch_url]
+              text: "Prefer web_search and fetch_url for external facts."
+            - web_search: true
+              tools: [fetch_url]
+              text: "Prefer fetch_url for external facts."
+            - text: "Use offered retrieval tools for external facts."
         - "Local file reads are not offered on this profile; route comparison needs to the coordinator."
         - "Return cited facts and URLs for coordinator synthesis."

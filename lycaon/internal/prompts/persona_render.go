@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hintregistry"
-	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
@@ -69,7 +68,7 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 	if err != nil {
 		return nil, "", "", nil, err
 	}
-	occ := PersonaDataMap(def)
+	occ := PersonaDataMapForReader(def, reader)
 	for k, v := range occurrence {
 		occ[k] = v
 	}
@@ -89,17 +88,6 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 		return nil, "", "", nil, fmt.Errorf("units for %q: %w", id, err)
 	}
 	MergeUnitVars(data, blocks)
-	if proc, _ := data["process"].(string); strings.Contains(proc, "{%") || strings.Contains(proc, "{{") {
-		tpl, cErr := pongoplain.Compile(proc)
-		if cErr != nil {
-			return nil, "", "", nil, fmt.Errorf("compile persona process for %q: %w", id, cErr)
-		}
-		renderedProc, rErr := pongoplain.Execute(ctx, tpl, data)
-		if rErr != nil {
-			return nil, "", "", nil, fmt.Errorf("render persona process for %q: %w", id, rErr)
-		}
-		data["process"] = renderedProc
-	}
 	return engine, id, ref, data, nil
 }
 

@@ -2,11 +2,13 @@ package prompts
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"gopkg.in/yaml.v3"
 )
 
 type PersonaContract struct {
@@ -31,11 +33,40 @@ type AgentPersonaDef struct {
 	Delta                  PersonaDelta `yaml:"delta"`
 }
 
+// PersonaProcessVariant selects step copy when all declared capability guards hold.
+type PersonaProcessVariant struct {
+	Tools     []string `yaml:"tools,omitempty"`
+	WebSearch *bool    `yaml:"web_search,omitempty"`
+	Text      string   `yaml:"text"`
+}
+
+// PersonaProcessStep is a plain process bullet or a declarative capability-guarded variant list.
+type PersonaProcessStep struct {
+	Text     string                  `yaml:"text,omitempty"`
+	Variants []PersonaProcessVariant `yaml:"variants,omitempty"`
+}
+
+// UnmarshalYAML decodes either a plain string bullet or a mapping with variants.
+func (s *PersonaProcessStep) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		s.Text = value.Value
+		s.Variants = nil
+		return nil
+	}
+	type rawStep PersonaProcessStep
+	var decoded rawStep
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*s = PersonaProcessStep(decoded)
+	return nil
+}
+
 // PersonaDelta supplies an agent's persona template variables.
 type PersonaDelta struct {
-	RoleTitle string   `yaml:"role_title"`
-	Focus     string   `yaml:"focus"`
-	Process   []string `yaml:"process"`
+	RoleTitle string               `yaml:"role_title"`
+	Focus     string               `yaml:"focus"`
+	Process   []PersonaProcessStep `yaml:"process"`
 }
 
 // LoadPersonaContract merges the persona contract across contributing packs.
@@ -227,14 +258,57 @@ func ValidatePersonaContractCoverage(cfg *PersonaContract, agentIDs []string) er
 	return fmt.Errorf("persona contract: no row for agent(s) %s", strings.Join(missing, ", "))
 }
 
-// PersonaDataMap builds render variables from an agent contract row.
+// PersonaDataMap builds default render variables from an agent contract row.
 func PersonaDataMap(def AgentPersonaDef) map[string]any {
-	process := formatProcessList(def.Delta.Process)
+	return PersonaDataMapForReader(def, Reader{})
+}
+
+// PersonaDataMapForReader builds render variables from an agent contract row,
+// resolving declarative process variants against reader when reader.Valid().
+func PersonaDataMapForReader(def AgentPersonaDef, reader Reader) map[string]any {
+	resolved := make([]string, 0, len(def.Delta.Process))
+	for _, step := range def.Delta.Process {
+		if text := resolveProcessStep(step, reader); text != "" {
+			resolved = append(resolved, text)
+		}
+	}
 	return map[string]any{
 		"role_title": strings.TrimSpace(def.Delta.RoleTitle),
 		"focus":      strings.TrimSpace(def.Delta.Focus),
-		"process":    process,
+		"process":    formatProcessList(resolved),
 	}
+}
+
+func resolveProcessStep(step PersonaProcessStep, reader Reader) string {
+	if len(step.Variants) == 0 {
+		return strings.TrimSpace(step.Text)
+	}
+	if !reader.Valid() {
+		return strings.TrimSpace(step.Variants[0].Text)
+	}
+	held := reader.Held()
+	reqTools := reader.Requestable()
+	webEnabled := reader.WebSearch()
+	for _, v := range step.Variants {
+		if v.WebSearch != nil && *v.WebSearch != webEnabled {
+			continue
+		}
+		allReachable := true
+		for _, tool := range v.Tools {
+			tool = strings.TrimSpace(tool)
+			if tool == "" {
+				continue
+			}
+			if !(held[tool] || (held["request_tools"] && slices.Contains(reqTools, tool))) {
+				allReachable = false
+				break
+			}
+		}
+		if allReachable {
+			return strings.TrimSpace(v.Text)
+		}
+	}
+	return ""
 }
 
 func formatProcessList(steps []string) string {
