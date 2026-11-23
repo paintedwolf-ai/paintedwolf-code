@@ -245,6 +245,15 @@ func ObserveGitNoRepositoryOnWriteLeg(gc *oar.GuardContext, raised guidance.Tool
 	gc.PutRejectData(toolrejection.GitNoRepositoryOnWriteLegCode, raised.FeedbackFor(toolrejection.GitNoRepositoryOnWriteLegCode).Details)
 }
 
+// ObserveGrepStoppedFiles publishes a program's stopped grep inputs to
+// post-tool policy.
+func ObserveGrepStoppedFiles(gc *oar.GuardContext, raised guidance.ToolResultFacts) {
+	if gc == nil || !raised.HasCode(toolrejection.GrepStoppedFilesCode) {
+		return
+	}
+	gc.PutRejectData(toolrejection.GrepStoppedFilesCode, raised.FeedbackFor(toolrejection.GrepStoppedFilesCode).Details)
+}
+
 // ObserveHTTPRequestWebPage publishes a web page http_request delivered and
 // its details to post-tool policy.
 func ObserveHTTPRequestWebPage(gc *oar.GuardContext, raised guidance.ToolResultFacts) {

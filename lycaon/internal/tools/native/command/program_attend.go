@@ -118,6 +118,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		out.CommandProgram, out.SourceRun = program.CommandProgram, program.SourceRun
 	}
 	stateGitNoRepository(e)
+	stateGrepStops(e)
 	return ending.result, ending.err
 }
 
@@ -174,6 +175,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 		}
 	}
 	stateGitNoRepository(e)
+	stateGrepStops(e)
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
 	if run.tool == "verify" {
 		result.ResultVersion = 2

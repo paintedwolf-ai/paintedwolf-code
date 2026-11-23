@@ -1142,10 +1142,10 @@
       "summary": "Search exceeded its {{ paintedwolf.timeout_ms }}ms execution budget after {{ paintedwolf.files_searched }} files; coverage is incomplete."
     },
     "GREP_MATCH_BUDGET": {
-      "branch_instruction": "Use a fixed string search when regular expressions are unnecessary.",
+      "branch_instruction": "{% if paintedwolf.grep_pattern_literal %}Search a narrower range of the input.{% else %}Use a fixed-string search (-F) when regular expressions are unnecessary.{% endif %}",
       "category": "recoverable",
       "emit": "guard:grep",
-      "summary": "{% if paintedwolf.limit_id %}grep: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} \u003e {{ paintedwolf.maximum }}).{% else %}{% if paintedwolf.grep_nested_repeat %}grep: nested repetition exceeds the pattern budget.{% else %}{% if paintedwolf.max_len %}grep: pattern exceeds the {{ paintedwolf.max_len }}-byte limit.{% else %}grep: pattern budget exceeded.{% endif %}{% endif %}{% endif %}"
+      "summary": "{% if paintedwolf.grep_input_path %}grep stopped at {{ paintedwolf.grep_input_path }} line {{ paintedwolf.grep_stop_line }}, a {{ paintedwolf.grep_record_bytes }}-byte record.{% else %}{% if paintedwolf.limit_id %}grep: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} \u003e {{ paintedwolf.maximum }}).{% else %}{% if paintedwolf.grep_nested_repeat %}grep: nested repetition exceeds the pattern budget.{% else %}{% if paintedwolf.max_len %}grep: pattern exceeds the {{ paintedwolf.max_len }}-byte limit.{% else %}grep: pattern budget exceeded.{% endif %}{% endif %}{% endif %}{% endif %}"
     },
     "GREP_PATH_NOT_FOUND": {
       "branch_instruction": "Branch on Code; pick an existing path before retrying grep",
@@ -1164,6 +1164,12 @@
       "category": "recoverable",
       "emit": "guard:grep",
       "summary": "The search pattern uses a construct outside its declared regex dialect."
+    },
+    "GREP_STOPPED_FILES": {
+      "branch_instruction": "A fixed-string search (-F) bounds work by record length when regular expressions are unnecessary.",
+      "category": "informational",
+      "emit": "guard:grep_stopped_files",
+      "summary": "grep stopped searching {{ paintedwolf.grep_stopped_inputs }} at that line; the first stopped file printed {{ paintedwolf.grep_lines_emitted_before_stop }} lines before it stopped."
     },
     "HELD_CALL_CAP_REACHED": {
       "branch_instruction": "Free a held call before starting another",

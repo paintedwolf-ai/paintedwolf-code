@@ -60,6 +60,7 @@ func (r *grepRun) searchContent(label string, content []byte, pin *toolcontract.
 
 // searchNoMatch emits the zero-match file outcome when the index prunes a file.
 func (r *grepRun) searchNoMatch(label string, names bool) error {
+	r.searched++
 	switch r.mode {
 	case modeCount:
 		if r.rg {
@@ -116,7 +117,7 @@ func (r *grepRun) selectRecords(label string, reader io.Reader, maxBytes int64, 
 	listing := r.mode != modeLines
 	separator := false
 	emitted := false
-	selectedHere := 0
+	selectedHere, linesEmitted := 0, 0
 	scan := r.scan
 	if r.mode == modeFilesWith || r.mode == modeFilesWithout || r.mode == modeQuiet {
 		scan.MaxSelected, scan.Before, scan.After = 1, 0, 0
@@ -165,6 +166,9 @@ func (r *grepRun) selectRecords(label string, reader io.Reader, maxBytes int64, 
 		separator = false
 		written, err := r.printLine(label, names, line, record, pin)
 		emitted = emitted || written
+		if written {
+			linesEmitted++
+		}
 		return err
 	})
 	if errors.Is(err, errBinaryStop) {
@@ -172,10 +176,21 @@ func (r *grepRun) selectRecords(label string, reader io.Reader, maxBytes int64, 
 	}
 	if err != nil {
 		var budget *textsearch.BudgetError
-		if errors.As(err, &budget) {
-			inv.warn(false, "%s: search limit %s exceeded (maximum %d, observed %d)", label, budget.Resource, budget.Maximum, budget.Observed)
+		if !errors.As(err, &budget) {
+			return err
+		}
+		if r.multiFile && recordStop(budget.Resource) {
+			return r.stopInput(label, budget, selectedHere, linesEmitted)
+		}
+		inv.warn(false, "%s: search limit %s exceeded (maximum %d, observed %d)", label, budget.Resource, budget.Maximum, budget.Observed)
+		if recordStop(budget.Resource) {
+			return &grepRecordStop{budget: budget, path: label, literal: r.matcher.Literal()}
 		}
 		return err
+	}
+	r.searched++
+	if selectedHere > 0 {
+		r.matched++
 	}
 	switch r.mode {
 	case modeLines, modeQuiet, modeFileList:
