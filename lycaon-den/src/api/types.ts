@@ -6120,6 +6120,8 @@ export interface components {
             wait_triggers?: string[];
             /** @description What asked the local decision engine. Present only on deciding, which the host opens only while an available engine is answering; the answer arrives as a turn_load event. */
             decision_trigger?: components["schemas"]["TurnLoadTrigger"];
+            /** @description Present only on indexing_credentials. */
+            indexing?: components["schemas"]["CredentialIndexingProgress"];
         };
         /**
          * @description Why a background process ended: natural exit, timeout, explicit stop by the agent or user, or host teardown of the owning chat, project, detached root, app process, or worker runtime.
@@ -11023,7 +11025,7 @@ export interface components {
          * @description Closed host work phase; presentation copy is client-supplied.
          * @enum {string}
          */
-        ActivityKind: "preparing_context" | "running_tool" | "starting_workflow" | "awaiting_wake" | "deciding";
+        ActivityKind: "preparing_context" | "running_tool" | "starting_workflow" | "awaiting_wake" | "deciding" | "indexing_credentials";
         /**
          * @description Lifecycle edge for one host-observed activity lease.
          * @enum {string}
@@ -11224,6 +11226,13 @@ export interface components {
             files_searched: number;
             files_skipped: number;
             matches: number;
+        };
+        /** @description One attached root's credential-file pass that a session waits on. Counts cover the current pass and are observations, not a completion estimate. */
+        CredentialIndexingProgress: {
+            root_id: string;
+            root_label: string;
+            directories_visited: number;
+            credential_files_read: number;
         };
         /**
          * @description Structured source of model-visible content; independent of provider role.
@@ -31928,6 +31937,7 @@ export type CommandProgramOutputLimit = components["schemas"]["CommandProgramOut
 export type CommandProgramOutputWindow = components["schemas"]["CommandProgramOutputWindow"];
 export type CommandProgramReceipt = components["schemas"]["CommandProgramReceipt"];
 export type ToolProgress = components["schemas"]["ToolProgress"];
+export type CredentialIndexingProgress = components["schemas"]["CredentialIndexingProgress"];
 export type MessageOrigin = components["schemas"]["MessageOrigin"];
 export type ContentAuthority = components["schemas"]["ContentAuthority"];
 export type ContentTrustTier = components["schemas"]["ContentTrustTier"];
