@@ -177,13 +177,13 @@ GROUP BY session_id;
 
 -- name: LastAssistantMessageContent :one
 SELECT content FROM messages
-WHERE session_id = ? AND role = 'assistant'
+WHERE session_id = ? AND role = 'assistant' AND visibility = 'transcript'
 ORDER BY ord DESC
 LIMIT 1;
 
 -- name: LastTurnMessageContent :one
 SELECT content FROM messages
-WHERE session_id = ? AND role IN ('user', 'assistant')
+WHERE session_id = ? AND role IN ('user', 'assistant') AND visibility = 'transcript'
 ORDER BY ord DESC
 LIMIT 1;
 

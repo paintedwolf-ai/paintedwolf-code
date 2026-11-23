@@ -6,9 +6,8 @@ import (
 	"errors"
 )
 
-// LastAssistantMessageContent returns the newest assistant message body, or
-// "" when the session has none. It reads one row from the transcript tail
-// rather than the whole history.
+// LastAssistantMessageContent returns the newest transcript-visible assistant
+// message body, or "" when there is none.
 func (s *sqlTranscript) LastAssistantMessageContent(ctx context.Context, sessionID string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -20,8 +19,8 @@ func (s *sqlTranscript) LastAssistantMessageContent(ctx context.Context, session
 	return content, err
 }
 
-// LastTurnMessageContent returns the newest user or assistant message body,
-// or "" when the session has neither.
+// LastTurnMessageContent returns the newest transcript-visible user or
+// assistant message body, or "" when there is none.
 func (s *sqlTranscript) LastTurnMessageContent(ctx context.Context, sessionID string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
