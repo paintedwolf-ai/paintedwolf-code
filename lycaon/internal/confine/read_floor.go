@@ -25,7 +25,8 @@ func addControlPlaneReadFloor(rules *FilesystemRules, c Confinement) {
 		return
 	}
 	rules.add(fsRule{op: opRead, matches: subpathMatches(denied, FloorReadControlPlane)})
-	allowed := append(workspaceReadAllowBacks(c), resolveEach(c.ReadRoots)...)
+	excluded := resolveEach(c.ReadDenyPaths)
+	allowed := append(workspaceReadAllowBacks(c), nonExcludedPaths(resolveEach(c.ReadRoots), excluded)...)
 	allowed = append(allowed, c.privateWorkRoots()...)
 	addManagedReadRoots(rules, append(subpathMatches(denied, FloorReadControlPlane), readDenyMatches(c)...), allowed)
 	var matches []fsMatch

@@ -91,7 +91,7 @@ func approvedAccess(tctx tools.ToolContext, rootSession, abs string, write bool)
 	}
 	for _, access := range accesses {
 		// The frozen canonical path prevents symlink retargeting from redirecting approval.
-		if access.Path == abs && (!write || access.Write) {
+		if access.Path == abs && access.Permits(write) {
 			return Access{Path: abs}, true
 		}
 	}

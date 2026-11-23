@@ -55,7 +55,7 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 	}
 
 	promptsDisabled := confine.BypassEnabled() || (cfg.NeverAsk != nil && *cfg.NeverAsk)
-	if promptsDisabled && !g.sharedTempWriteNeedsReview(action, cfg.Grants) {
+	if promptsDisabled && !g.sharedTempNeedsReview(action, cfg.Grants) {
 		return &hitl.ApprovalResult{}, nil
 	}
 	facts, citation, matchedRules := g.factsForAction(action, cfg, layers)

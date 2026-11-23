@@ -18,11 +18,22 @@ type Mode string
 const (
 	// ModeRead permits reads only.
 	ModeRead Mode = "read"
+	// ModeWriteOnly permits writes without admitting reads or directory listing.
+	ModeWriteOnly Mode = "write_only"
 	// ModeWrite permits writes and reads of the same path.
 	ModeWrite Mode = "write"
 )
 
-func (m Mode) permits(want Mode) bool { return m == ModeWrite || m == want }
+func (m Mode) permits(want Mode) bool {
+	switch m {
+	case ModeWrite:
+		return true
+	case ModeWriteOnly:
+		return want == ModeWrite || want == ModeWriteOnly
+	default:
+		return m == want
+	}
+}
 
 // Grant is filesystem access a person allowed.
 type Grant struct {
@@ -102,7 +113,7 @@ func (r *Runtime) Grant(rootSession string, g Grant) (bool, error) {
 	if r == nil || rootSession == "" || g.ID == "" || g.Path == "" || !filepath.IsAbs(g.Path) {
 		return false, fmt.Errorf("granted path authority is incomplete")
 	}
-	if g.Mode != ModeRead && g.Mode != ModeWrite {
+	if g.Mode != ModeRead && g.Mode != ModeWrite && g.Mode != ModeWriteOnly {
 		return false, fmt.Errorf("granted path authority has invalid mode %q", g.Mode)
 	}
 	r.mu.Lock()

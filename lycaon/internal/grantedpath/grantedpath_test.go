@@ -68,6 +68,13 @@ func TestReadGrantDoesNotPermitWrite(t *testing.T) {
 	if _, ok := rt.Covers("chat", "", "/mnt/out/report", grantedpath.ModeRead); !ok {
 		t.Fatal("a write grant should cover reading the same path")
 	}
+	mustGrant(t, rt, "chat", fileGrant("g3", "/tmp/out/report", grantedpath.ModeWriteOnly))
+	if _, ok := rt.Covers("chat", "", "/tmp/out/report", grantedpath.ModeWrite); !ok {
+		t.Fatal("a write-only grant must cover writing")
+	}
+	if _, ok := rt.Covers("chat", "", "/tmp/out/report", grantedpath.ModeRead); ok {
+		t.Fatal("a write-only grant must not permit reading")
+	}
 }
 
 func TestExpiredGrantStopsCovering(t *testing.T) {

@@ -3,6 +3,7 @@ package settings
 import (
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -15,8 +16,12 @@ func (g *RuleApprovalGate) currentActionFileAccess(action hitl.ProposedAction) [
 		if !target.OutsideRoots || !filepath.IsAbs(target.Path) {
 			continue
 		}
+		norm := grantedpath.Normalize(target.Path)
+		write := target.Mode == gate.ModeWrite
 		access = append(access, hitl.GrantedPathDelta{
-			Path: grantedpath.Normalize(target.Path), Write: target.Mode == gate.ModeWrite,
+			Path:      norm,
+			Write:     write,
+			WriteOnly: write && confine.SharedTempLocation(norm) != "",
 		})
 	}
 	return access
@@ -27,7 +32,7 @@ func (g *RuleApprovalGate) currentActionFileAccess(action hitl.ProposedAction) [
 func currentActionCoversTarget(action hitl.ProposedAction, target *gate.FileTarget) bool {
 	path := grantedpath.Normalize(target.Path)
 	for _, access := range action.Invocation.ApprovedFileAccess {
-		if access.Path == path && (!access.Tree) && (target.Mode != gate.ModeWrite || access.Write) {
+		if access.Path == path && (!access.Tree) && access.Permits(target.Mode == gate.ModeWrite) {
 			return true
 		}
 	}

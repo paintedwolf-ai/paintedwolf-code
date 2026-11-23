@@ -116,7 +116,9 @@ func (s *Installation) installApprovalDelta(ctx context.Context, checkpointID st
 			return nil, fmt.Errorf("granted-path approval authority is not configured")
 		}
 		mode := grantedpath.ModeRead
-		if delta.GrantedPath.Write {
+		if delta.GrantedPath.Write && delta.GrantedPath.WriteOnly {
+			mode = grantedpath.ModeWriteOnly
+		} else if delta.GrantedPath.Write {
 			mode = grantedpath.ModeWrite
 		}
 		created, err := s.GrantedPaths.Grant(delta.ChatSession(), grantedpath.Grant{

@@ -15,7 +15,21 @@ import (
 
 // External filesystem authority carries no project identity.
 func resolveFilesystemPath(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, modelPath string, op sandbox.PathOp) (Resolved, bool, error) {
-	root, err := confine.NativeFilesystemRootForPath(tctx.Identity.ProjectID, workspaceRoots(tctx), tctx.Files.GrantedWriteRoots, tctx.Host.SessionScratchDir, modelPath, op != sandbox.PathOpRead)
+	var root string
+	var err error
+	if op == sandbox.PathOpRead {
+		root, err = confine.NativeReadRootForPath(
+			tctx.Identity.ProjectID, workspaceRoots(tctx), tctx.Files.ReadRoots,
+			tctx.Files.SessionReadPaths, tctx.Files.GrantedWriteRoots,
+			tctx.Host.SessionScratchDir, modelPath,
+		)
+	} else {
+		root, err = confine.NativeFilesystemRootForPath(
+			tctx.Identity.ProjectID, workspaceRoots(tctx),
+			tctx.Files.GrantedWriteRoots, tctx.Host.SessionScratchDir,
+			modelPath, true,
+		)
+	}
 	if err != nil || root == "" {
 		return Resolved{}, false, err
 	}
@@ -27,8 +41,9 @@ func resolveFilesystemPath(ctx context.Context, b *sandbox.Boundary, tctx tools.
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return Resolved{}, false, nil
 	}
-	// An existing ancestor anchors creation within an approved missing root.
-	anchor := existingEffectAnchor(root)
+	// An existing ancestor anchors creation within an approved missing root,
+	// while an exact-file read grant anchors on its existing parent directory.
+	anchor := existingDirectoryAnchor(root)
 	rel, err = filepath.Rel(anchor, abs)
 	if err != nil {
 		return Resolved{}, false, err
@@ -50,6 +65,13 @@ func resolveFilesystemPath(ctx context.Context, b *sandbox.Boundary, tctx tools.
 		Abs: abs, DisplayPath: abs, ScopeRel: filepath.ToSlash(rel),
 		Root: projectroot.RootRef{Path: anchor, External: true}, External: true,
 	}, true, nil
+}
+
+func existingDirectoryAnchor(path string) string {
+	if info, err := os.Stat(path); err == nil && !info.IsDir() {
+		return existingEffectAnchor(filepath.Dir(path))
+	}
+	return existingEffectAnchor(path)
 }
 
 func existingEffectAnchor(path string) string {

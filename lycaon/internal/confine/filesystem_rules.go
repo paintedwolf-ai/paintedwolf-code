@@ -51,7 +51,8 @@ type FloorGrant string
 const (
 	// GrantContainingDirectory asks for the directory that holds the path.
 	GrantContainingDirectory FloorGrant = "containing_directory"
-	GrantTempLocation        FloorGrant = "temp_location"
+	// GrantSharedTempWrite asks for the containing directory inside shared temp.
+	GrantSharedTempWrite FloorGrant = "shared_temp_write"
 	// GrantExactPath asks for the path itself.
 	GrantExactPath FloorGrant = "exact_path"
 	// GrantRepositoryTree asks for the nearest enclosing repository work tree,
@@ -76,11 +77,17 @@ type FloorRecovery struct {
 // Terminal reports a layer that no approval can open.
 func (r FloorRecovery) Terminal() bool { return r.Capability == "" }
 
-// Recovery returns the route from this layer's deny to an ask.
-func (l FloorLayer) Recovery() FloorRecovery {
+// Recovery returns the default route from this layer's deny to an ask.
+func (l FloorLayer) Recovery() FloorRecovery { return l.RecoveryFor(AccessWrite) }
+
+// RecoveryFor returns the route from this layer's deny to an ask for access.
+func (l FloorLayer) RecoveryFor(access FilesystemAccess) FloorRecovery {
 	switch l {
 	case FloorSharedTemp:
-		return FloorRecovery{Capability: "write_root", Grant: GrantTempLocation}
+		if access == AccessRead {
+			return FloorRecovery{Capability: "read_path", Grant: GrantExactPath}
+		}
+		return FloorRecovery{Capability: "write_root", Grant: GrantSharedTempWrite}
 	case FloorOutsideWriteRoots:
 		return FloorRecovery{Capability: "write_root", Grant: GrantRepositoryTree}
 	case FloorBaseline:
@@ -101,8 +108,8 @@ func (l FloorLayer) Recovery() FloorRecovery {
 // GrantPath is the path a recovery names for a denied path below roots.
 func (r FloorRecovery) GrantPath(path string, roots ...string) string {
 	switch r.Grant {
-	case GrantTempLocation:
-		return SharedTempLocation(path)
+	case GrantSharedTempWrite:
+		return sharedTempWriteGrant(path)
 	case GrantContainingDirectory:
 		return filepath.Dir(path)
 	case GrantRepositoryTree:

@@ -163,22 +163,27 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 }
 
 func pathWithinFileAuthority(action hitl.ProposedAction, roots []string, path string, write bool) bool {
-	c := action.Execution.Contained
-	if !write && confine.PathWithinRoots(path, c.ReadRoots) {
-		return true
+	if !write {
+		c := action.Execution.Contained
+		root, err := confine.NativeReadRootForPath(
+			action.Scope.ProjectID, roots, c.ReadRoots,
+			action.Scope.SessionReadPaths, action.Scope.GrantedWriteRoots,
+			action.Scope.SessionScratchRoot, path,
+		)
+		return err == nil && root != ""
 	}
-	root, err := confine.NativeFilesystemRootForPath(action.Scope.ProjectID, roots, action.Scope.GrantedWriteRoots, action.Scope.SessionScratchRoot, path, write)
+	root, err := confine.NativeFilesystemRootForPath(action.Scope.ProjectID, roots, action.Scope.GrantedWriteRoots, action.Scope.SessionScratchRoot, path, true)
 	return err == nil && root != ""
 }
 
 // Shared machine temp keeps its approval floor when discretionary prompts are disabled.
-func (g *RuleApprovalGate) sharedTempWriteNeedsReview(action hitl.ProposedAction, grants []ApprovalGrant) bool {
+func (g *RuleApprovalGate) sharedTempNeedsReview(action hitl.ProposedAction, grants []ApprovalGrant) bool {
 	for _, target := range g.declaredFileTargets(action) {
 		path := target.ResolvedPath
 		if path == "" {
 			path = target.Path
 		}
-		if target.Mode == gate.ModeWrite && target.OutsideRoots && !target.WithinConfinement &&
+		if target.OutsideRoots && !target.WithinConfinement &&
 			confine.SharedTempLocation(path) != "" && !currentActionCoversTarget(action, target) &&
 			!grantedPathCoversTarget(g, grants, action, target) {
 			return true

@@ -299,7 +299,9 @@ func durableGrantedPaths(leases []hitl.ApprovalGrant, projectID string) []grante
 			continue
 		}
 		mode := grantedpath.ModeRead
-		if lease.GrantedPath.Write {
+		if lease.GrantedPath.Write && lease.GrantedPath.WriteOnly {
+			mode = grantedpath.ModeWriteOnly
+		} else if lease.GrantedPath.Write {
 			mode = grantedpath.ModeWrite
 		}
 		out = append(out, grantedpath.Grant{

@@ -272,7 +272,7 @@ func routeFilesystemRefusal(rules FilesystemRules, r SandboxRefusal, access File
 		return r
 	}
 	r.Layer = verdict.Layer
-	recovery := verdict.Layer.Recovery()
+	recovery := verdict.Layer.RecoveryFor(access)
 	if recovery.Terminal() {
 		return r
 	}
@@ -323,12 +323,25 @@ func operationAccess(operation string) FilesystemAccess {
 	}
 }
 
-// SharedTempRoots lists the shared directories identified by observed write refusals.
+// SharedTempPaths returns refused shared-temp paths for access.
+func (s SandboxRefusals) SharedTempPaths(access FilesystemAccess) []BoundaryPath {
+	var out []BoundaryPath
+	for _, path := range s.Paths(access) {
+		if path.Layer == FloorSharedTemp && path.Grant != "" {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+// SharedTempRoots lists the shared-temp targets identified by observed refusals.
 func (s SandboxRefusals) SharedTempRoots() []string {
 	var roots []string
-	for _, path := range s.Paths(AccessWrite) {
-		if path.Layer == FloorSharedTemp && path.Grant != "" && !slices.Contains(roots, path.Grant) {
-			roots = append(roots, path.Grant)
+	for _, access := range []FilesystemAccess{AccessRead, AccessWrite} {
+		for _, path := range s.SharedTempPaths(access) {
+			if !slices.Contains(roots, path.Grant) {
+				roots = append(roots, path.Grant)
+			}
 		}
 	}
 	slices.Sort(roots)

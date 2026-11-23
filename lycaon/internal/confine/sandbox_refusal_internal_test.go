@@ -139,20 +139,23 @@ func TestFilesystemRefusalsFollowTheRenderedRules(t *testing.T) {
 		{"file-write-unlink", filepath.Join(configDir, "store.db")},
 		{"file-read-data", filepath.Join(configDir, "api.token")},
 		{"file-write-data", filepath.Join(project, "main.go")},
+		{"file-read-data", "/tmp/incoming.csv"},
+		{"file-write-create", "/tmp/export/result.csv"},
 	} {
 		got := routeRefusal(rules, tc.operation, tc.target, false)
-		verdict := rules.Verdict(operationAccess(tc.operation), tc.target)
+		access := operationAccess(tc.operation)
+		verdict := rules.Verdict(access, tc.target)
 		switch {
 		case verdict.Allowed:
 			if got.Recovery != RecoverNone || got.Layer != "" {
 				t.Fatalf("%s %s: admitted path routed to %+v", tc.operation, tc.target, got)
 			}
-		case verdict.Layer.Recovery().Terminal():
+		case verdict.Layer.RecoveryFor(access).Terminal():
 			if got.Recovery != RecoverNone || got.Grant != "" || got.Layer != verdict.Layer {
 				t.Fatalf("%s %s: terminal layer %s routed to %+v", tc.operation, tc.target, verdict.Layer, got)
 			}
 		default:
-			want := verdict.Layer.Recovery()
+			want := verdict.Layer.RecoveryFor(access)
 			if string(got.Recovery) != want.Capability || got.Grant != want.GrantPath(tc.target, rules.roots...) {
 				t.Fatalf("%s %s: routed to %+v, want %s %s", tc.operation, tc.target, got, want.Capability, want.GrantPath(tc.target, rules.roots...))
 			}

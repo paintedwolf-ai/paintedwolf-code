@@ -27,12 +27,17 @@ func TestNativeWriteTargetsRequireMutationAuthority(t *testing.T) {
 	action.Invocation.NativePathTargets = []hitl.NativePathTarget{{Path: path, Write: true}, {Path: path}}
 	action.Invocation.Tool = "command"
 	targets := g.declaredFileTargets(action)
-	if len(targets) != 2 || targets[0].WithinConfinement || !targets[1].WithinConfinement {
+	if len(targets) != 2 || targets[0].WithinConfinement || targets[1].WithinConfinement {
 		t.Fatalf("mixed native targets = %+v", targets)
 	}
 	action.Scope.GrantedWriteRoots = []string{shared}
 	targets = g.declaredFileTargets(action)
-	if len(targets) != 2 || !targets[0].WithinConfinement {
-		t.Fatalf("reviewed write = %+v", targets)
+	if len(targets) != 2 || !targets[0].WithinConfinement || targets[1].WithinConfinement {
+		t.Fatalf("write-only grant = %+v", targets)
+	}
+	action.Execution.Contained.ReadRoots = []string{shared}
+	targets = g.declaredFileTargets(action)
+	if len(targets) != 2 || !targets[0].WithinConfinement || !targets[1].WithinConfinement {
+		t.Fatalf("reviewed read and write = %+v", targets)
 	}
 }

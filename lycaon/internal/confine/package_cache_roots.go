@@ -3,6 +3,7 @@ package confine
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -98,10 +99,175 @@ func WritableSharedTempLocations(projectID string, grants []string) []string {
 	return allowed
 }
 
+// ReadableSharedTempLocations lists shared locations covered by live read directory grants.
+func ReadableSharedTempLocations(grants []string) []string {
+	var allowed []string
+	for _, path := range grants {
+		g := NewProtectedPathGrant(path)
+		if !g.Subtree {
+			continue
+		}
+		for _, location := range SharedTempLocations() {
+			if PathAtOrUnder(location, g.ResolvedPath) && !slices.Contains(allowed, location) {
+				allowed = append(allowed, location)
+			}
+		}
+	}
+	return allowed
+}
+
+func sharedTempWriteGrant(path string) string {
+	clean := fspath.CanonicalPath(path)
+	if clean == "" {
+		clean = filepath.Clean(path)
+	}
+	loc := SharedTempLocation(clean)
+	if loc == "" {
+		return filepath.Dir(clean)
+	}
+	if PathEqual(clean, loc) {
+		return loc
+	}
+	dir := filepath.Dir(clean)
+	if !PathAtOrUnder(dir, loc) {
+		return loc
+	}
+	return dir
+}
+
+// addSharedTempReadFloor denies ambient reads in shared temp, restores explicit
+// read scopes, and keeps metadata traversal on write-only temp directories.
+func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
+	if len(r.sharedTemp) == 0 {
+		return nil
+	}
+	r.add(fsRule{op: opRead, matches: subpathMatches(r.sharedTemp, FloorSharedTemp)})
+	excluded := resolveEach(c.ReadDenyPaths)
+	var readSubpaths, readLiterals, reachable []string
+	for _, root := range append(nonExcludedPaths(resolveEach(c.Roots), excluded), nonExcludedPaths(resolveEach(c.ReadRoots), excluded)...) {
+		if underAny(root, r.sharedTemp) {
+			readSubpaths = append(readSubpaths, root)
+			reachable = append(reachable, root)
+		}
+	}
+	for _, root := range append(c.privateWorkRoots(), workspaceReadAllowBacks(c)...) {
+		if underAny(root, r.sharedTemp) {
+			readSubpaths = append(readSubpaths, root)
+			reachable = append(reachable, root)
+		}
+		for _, loc := range r.sharedTemp {
+			if PathStrictlyUnder(loc, root) {
+				readSubpaths = append(readSubpaths, loc)
+				reachable = append(reachable, loc)
+			}
+		}
+	}
+	for _, g := range c.ProtectedReadGrants {
+		if !underAny(g.ResolvedPath, r.sharedTemp) && !coversAnyTempLocation(g, r.sharedTemp) {
+			continue
+		}
+		reachable = append(reachable, g.ResolvedPath)
+		if g.Subtree {
+			readSubpaths = append(readSubpaths, g.ResolvedPath)
+		} else {
+			readLiterals = append(readLiterals, g.ResolvedPath)
+		}
+	}
+	r.add(fsRule{
+		op: opRead, allow: true,
+		matches: append(subpathMatches(withDarwinAliases(readSubpaths), ""), literalMatches(withDarwinAliases(readLiterals), "")...),
+	})
+	writeOnly := r.writeOnlySharedTempRoots(c, readSubpaths)
+	r.add(fsRule{op: opReadMetadata, allow: true, matches: subpathMatches(withDarwinAliases(writeOnly), "")})
+	reachable = append(reachable, writeOnly...)
+	for _, g := range append(slices.Clone(c.ProtectedWriteGrants), c.PolicyWriteGrants...) {
+		if underAny(g.ResolvedPath, r.sharedTemp) {
+			reachable = append(reachable, g.ResolvedPath)
+		}
+	}
+	return reachable
+}
+
+func (r *FilesystemRules) writeOnlySharedTempRoots(c Confinement, readSubpaths []string) []string {
+	candidates := resolveEach(slices.Concat(c.GrantedWriteRoots, grantedWriteRoots(c.ProjectID), environmentWriteRoots()))
+	var out []string
+	for _, candidate := range candidates {
+		if underAny(candidate, readSubpaths) {
+			continue
+		}
+		if underAny(candidate, r.sharedTemp) {
+			out = append(out, candidate)
+			continue
+		}
+		for _, loc := range r.sharedTemp {
+			if PathAtOrUnder(loc, candidate) && !underAny(loc, readSubpaths) {
+				out = append(out, loc)
+			}
+		}
+	}
+	return out
+}
+
+func coversAnyTempLocation(g ProtectedPathGrant, sharedTemp []string) bool {
+	if !g.Subtree {
+		return false
+	}
+	for _, loc := range sharedTemp {
+		if PathAtOrUnder(loc, g.ResolvedPath) {
+			return true
+		}
+	}
+	return false
+}
+
+func nonExcludedPaths(paths, excluded []string) []string {
+	var out []string
+	for _, path := range paths {
+		if !underAny(path, excluded) {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+func withDarwinAliases(paths []string) []string {
+	if runtime.GOOS != "darwin" || len(paths) == 0 {
+		return paths
+	}
+	seen := make(map[string]bool, len(paths)*2)
+	out := make([]string, 0, len(paths)*2)
+	add := func(p string) {
+		p = filepath.Clean(p)
+		if p != "" && p != "." && !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	for _, p := range paths {
+		add(p)
+		for _, alias := range []string{"/var", "/tmp"} {
+			if rest, ok := pathUnder(p, "/private"+alias); ok {
+				add(alias + rest)
+			}
+		}
+	}
+	return out
+}
+
 // A cache grant can overlap shared temp in either direction.
 func (r *FilesystemRules) closeSharedTempInCaches(c Confinement, roots []string) {
-	explicit := resolveEach(slices.Concat(c.Roots, c.GrantedWriteRoots, grantedWriteRoots(c.ProjectID), environmentWriteRoots(), c.privateWorkRoots()))
+	explicitGrants := resolveEach(slices.Concat(c.GrantedWriteRoots, grantedWriteRoots(c.ProjectID), environmentWriteRoots(), c.privateWorkRoots()))
+	attachedRoots := resolveEach(c.Roots)
 	for _, location := range r.sharedTemp {
+		if underAny(location, explicitGrants) {
+			continue
+		}
+		var explicit []string
+		for _, root := range slices.Concat(attachedRoots, explicitGrants) {
+			if PathAtOrUnder(root, location) {
+				explicit = append(explicit, root)
+			}
+		}
 		if underAny(location, explicit) {
 			continue
 		}
