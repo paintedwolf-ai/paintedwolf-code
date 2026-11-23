@@ -6,16 +6,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitrepo"
-	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func runFixtureGit(t *testing.T, dir string, args ...string) {
@@ -43,6 +44,13 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 	externalWT := filepath.Join(allowedParent, "wt-external")
 	deniedWT := filepath.Join(deniedParent, "wt-denied")
 
+	t.Cleanup(projectpaths.SetGrantedAccessSource(func(_, _, abs string, _ bool) (projectpaths.Access, bool) {
+		if abs == allowedParent || strings.HasPrefix(abs, allowedParent+string(filepath.Separator)) {
+			return projectpaths.Access{Path: allowedParent, Tree: true}, true
+		}
+		return projectpaths.Access{}, false
+	}))
+
 	rootSession := fixture.Session
 	testdbseed.InsertChildSession(t, fixture.Database, "worker-sess-a", rootSession)
 	testdbseed.InsertChildSession(t, fixture.Database, "worker-sess-b", rootSession)
@@ -59,11 +67,6 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 			tc.Identity.HandoffAgentID = activeHandoffAgent
 		}
 		tc.Files.GrantedWriteRoots = []string{allowedParent}
-		tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{
-			{Path: allowedParent, Write: true, Tree: true},
-			{Path: externalWT, Write: true},
-			{Path: filepath.Join(externalWT, "readme.txt"), Write: true},
-		}
 	}
 
 	// 1. Unauthorized sibling path fails before creating a registration or chat association.
