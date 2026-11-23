@@ -555,7 +555,10 @@
       "paintedwolf.git_conflict_paths": {
         "content_contract": "paintedwolf.git_conflict_paths",
         "version": 1
-      }
+      },
+      "paintedwolf.profile_fetches_urls": [
+        "paintedwolf.can_fetch_url"
+      ]
     },
     "rejection_codes": {
       "COMMAND_PROGRAMS_DISABLED": [
