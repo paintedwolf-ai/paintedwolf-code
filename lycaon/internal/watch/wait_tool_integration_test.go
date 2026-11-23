@@ -24,8 +24,8 @@ func TestWaitWithWatchMatchModeTimeoutsUntilCompleteAndResume(t *testing.T) {
 
 	loop := loopwake.NewLoopEngine()
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), "session-1") })
-	loop.SetDeps(loopwake.Deps{
-		Subscriptions: loopwake.WaitSubscriptionsDeps{
+	loop.SetDeps(loopwake.LoopDeps{
+		LoopProcessDeps: loopwake.LoopProcessDeps{
 			ProcessState: func(sessionID, handle string) (bool, bool) {
 				return sessionID == "session-1" && handle == "cmd-known", true
 			},
@@ -36,7 +36,7 @@ func TestWaitWithWatchMatchModeTimeoutsUntilCompleteAndResume(t *testing.T) {
 		Store:   waitStore,
 		Watches: watchStore,
 		ProfileConditions: map[string]map[string]bool{
-			"implement": {"process_done": true},
+			"implement": {"process_done": true, "watch_match": true},
 		},
 		RuntimeContext: t.Context(),
 		WorkerKnown:    func(context.Context, string, string) bool { return true },
@@ -50,7 +50,7 @@ func TestWaitWithWatchMatchModeTimeoutsUntilCompleteAndResume(t *testing.T) {
 	})
 	testutil.FailErr(t, "register watch", err)
 
-	invoker, ok := reg.Get("wait")
+	invoker, ok := reg.Definition("wait")
 	if !ok {
 		t.Fatal("wait tool missing")
 	}

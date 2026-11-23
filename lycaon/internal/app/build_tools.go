@@ -104,7 +104,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 			if mgr.Submissions != nil && mgr.Submissions.Gate != nil {
 				gate := mgr.Submissions.Gate
 				watchStore.SetTreeStoppingFunc(func(sessionID string) bool {
-					return !gate.SessionTreeRunnable(sessionID)
+					return gate.InProgress(context.Background(), sessionID)
 				})
 			}
 			if mgr.Stops != nil {
