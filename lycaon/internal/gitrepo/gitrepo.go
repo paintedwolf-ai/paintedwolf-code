@@ -81,8 +81,7 @@ func (r Repo) LocalConfigFiles() []string {
 // CanonicalDir returns dir absolute, symlink-resolved and cleaned, or "" when it cannot be
 // made absolute. A path that does not exist yet keeps its absolute form.
 func CanonicalDir(dir string) string {
-	dir = strings.TrimSpace(dir)
-	if dir == "" {
+	if strings.TrimSpace(dir) == "" {
 		return ""
 	}
 	abs, err := filepath.Abs(dir)
