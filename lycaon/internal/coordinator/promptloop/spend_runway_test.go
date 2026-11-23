@@ -29,6 +29,7 @@ type softStopSequenceLLM struct {
 	completions  []*modelcall.Completion
 	index        int
 	requestTools [][]string
+	requests     []modelcall.CompletionRequest
 }
 
 func (s *softStopSequenceLLM) Complete(ctx context.Context, _ modelcall.CompletionRequest) (*modelcall.Completion, error) {
@@ -49,6 +50,7 @@ func (s *softStopSequenceLLM) Stream(ctx context.Context, req modelcall.Completi
 		names = append(names, meta.Name)
 	}
 	s.requestTools = append(s.requestTools, names)
+	s.requests = append(s.requests, req)
 	ch := make(chan modelcall.StreamChunk, 1)
 	completion, err := s.Complete(ctx, req)
 	if err != nil {
@@ -216,7 +218,13 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 			if checks != tc.wantCalls || client.index != tc.wantCalls {
 				t.Fatalf("checks=%d model turns=%d want %d each", checks, client.index, tc.wantCalls)
 			}
-			if len(client.requestTools) != tc.wantCalls || len(client.requestTools[tc.wantCalls-1]) != 0 || slices.Contains(client.requestTools[1], "task") {
+			if client.requests[tc.wantCalls-1].ToolUse != modelcall.ToolUseForbidden {
+				t.Fatal("final closeout permitted tool calls")
+			}
+			if tc.guidance != "" && !slices.ContainsFunc(client.requests[1].Messages, func(msg api.Message) bool { return strings.Contains(msg.Content, tc.guidance) }) {
+				t.Fatal("wind-down request missing spend guidance")
+			}
+			if tc.guidance != "" && (client.requests[1].ToolUse != modelcall.ToolUseAllowed || slices.Contains(client.requestTools[1], "task")) {
 				t.Fatalf("wind-down advertised tools = %v", client.requestTools)
 			}
 			if result.LastAssistantContent != "Landed with the best usable result." {
