@@ -314,7 +314,7 @@ func (a *Adapter) mountSingleRoot(
 func listenerPorts(mounts map[string]*rootMount) []uint16 {
 	ports := make([]uint16, 0, len(mounts))
 	for _, m := range mounts {
-		ports = append(ports, uint16(m.facts.ServerPort)) //nolint:gosec // a port this server bound.
+		ports = append(ports, uint16(m.facts.ServerPort)) // a port this server bound.
 	}
 	return ports
 }

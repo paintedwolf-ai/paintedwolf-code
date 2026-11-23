@@ -91,7 +91,7 @@ func sharedVolume(t *testing.T, kind Kind) (*Volume, bool) {
 }
 
 func attachSharedVolume(kind Kind) (*Volume, error) {
-	base, err := os.MkdirTemp("", "pwplacement-") //nolint:usetesting // the mount must outlive every test in the binary
+	base, err := os.MkdirTemp("", "pwplacement-") // the mount must outlive every test in the binary
 	if err != nil {
 		return nil, err
 	}
@@ -106,10 +106,10 @@ func attachSharedVolume(kind Kind) (*Volume, error) {
 		return nil, err
 	}
 	if out, err := runHdiutil("create", "-size", "32m", "-fs", filesystemName(kind), "-volname", filepath.Base(mount), "-quiet", image); err != nil {
-		return nil, fmt.Errorf("create: %v: %s", err, out)
+		return nil, fmt.Errorf("create: %w: %s", err, out)
 	}
 	if out, err := runHdiutil("attach", image, "-nobrowse", "-owners", "on", "-mountpoint", mount, "-quiet"); err != nil {
-		return nil, fmt.Errorf("attach: %v: %s", err, out)
+		return nil, fmt.Errorf("attach: %w: %s", err, out)
 	}
 	attached = true
 	return &Volume{Root: mount, image: image, shared: true, eject: sharedLifecycleFatal, remount: sharedLifecycleFatal}, nil
