@@ -225,6 +225,7 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 	RegisterWorktreeFacts(ctx, gc, raised.IndexWatch)
 	ObserveEditorConfigMismatch(gc, raised)
 	ObserveGitNoRepositoryOnWriteLeg(gc, raised)
+	ObserveGrepStoppedFiles(gc, raised)
 	ObserveHTTPRequestWebPage(gc, raised)
 	ObserveHTTPRequestLoopbackOtherSession(gc, raised)
 	ObserveSourceParsingFeedback(gc, raised)

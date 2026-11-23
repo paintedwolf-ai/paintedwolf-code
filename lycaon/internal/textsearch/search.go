@@ -88,10 +88,13 @@ func (e *PatternError) Error() string {
 }
 
 // BudgetError reports a record search that exceeded a regex ceiling.
-// Resource is the catalog limit identifier.
+// Resource is the catalog limit identifier. A line scan sets Line and
+// RecordBytes for the record whose search stopped.
 type BudgetError struct {
 	Resource          string
 	Maximum, Observed int64
+	Line              int
+	RecordBytes       int64
 }
 
 func (e *BudgetError) Error() string {
@@ -148,6 +151,18 @@ func Compile(ctx context.Context, spec Spec, limits Limits) (*Matcher, error) {
 	}
 	m.require = requirement(m.engine, patterns)
 	return m, nil
+}
+
+// Literal reports whether every record is searched by byte comparison, whose
+// work bound does not depend on decoding the record.
+func (m *Matcher) Literal() bool {
+	switch e := m.engine.(type) {
+	case literalEngine:
+		return true
+	case vmEngine:
+		return e.literal != nil
+	}
+	return false
 }
 
 // Requirement is what a record must contain to hold any match, for index

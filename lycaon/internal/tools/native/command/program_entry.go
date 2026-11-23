@@ -279,6 +279,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	callTC := tc
 	run.tc.Effects.Out = &tools.ToolInvocationOut{}
 	run.tc.Effects.GitNoRepository = &atomic.Bool{}
+	run.tc.Effects.GrepStops = &tools.GrepStops{}
 	park := call.park
 	ports.Waits = park
 	handedOff = true
