@@ -93,7 +93,7 @@ func (inv *Inventory) NotifyChange(projectID, repoID string) uint64 {
 
 // ScheduleRefresh marks the repository dirty and starts a background reconciliation
 // pass when none is running, returning immediately without blocking command delivery.
-func (inv *Inventory) ScheduleRefresh(ctx context.Context, spec RepoSpec) {
+func (inv *Inventory) ScheduleRefresh(_ context.Context, spec RepoSpec) {
 	key, slot, err := inv.slot(spec)
 	if err != nil {
 		return
@@ -106,7 +106,7 @@ func (inv *Inventory) ScheduleRefresh(ctx context.Context, spec RepoSpec) {
 	}
 	slot.mu.Unlock()
 	if startWorker {
-		go inv.runRefreshLoop(context.WithoutCancel(ctx), key, slot)
+		go inv.runRefreshLoop(context.Background(), key, slot)
 	}
 }
 
@@ -157,7 +157,8 @@ func (inv *Inventory) awaitGenerationLocked(ctx context.Context, key repoKey, sl
 	slot.mu.Unlock()
 
 	if startWorker {
-		go inv.runRefreshLoop(context.WithoutCancel(ctx), key, slot)
+		// Host inventory reconciliation must not inherit caller launch leases.
+		go inv.runRefreshLoop(context.Background(), key, slot)
 	}
 
 	select {
