@@ -9,22 +9,17 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/osprocess"
-	"github.com/lycaon/lycaon/internal/socketref"
+	"github.com/lycaon/lycaon/internal/githelper"
 )
 
 // SocketEnv carries the per-invocation service socket to the helper Git runs.
 const SocketEnv = "LYCAON_GIT_CREDENTIAL_SOCKET"
 
-const (
-	requestDeadline = 10 * time.Second
-	maxOperation    = 16
-)
+const maxOperation = 16
 
 // ServeOptions bind one service to the Git invocation it serves.
 type ServeOptions struct {
@@ -37,30 +32,18 @@ type ServeOptions struct {
 }
 
 // Service answers the credential-helper protocol for one Git invocation over
-// a private socket. Identity is the calling process: the peer must run this
-// executable, share this uid and descend from the served git process that
-// Bind names.
+// a private socket.
 type Service struct {
+	ctx       context.Context
+	cancel    context.CancelFunc
 	listener  *net.UnixListener
 	directory string
 	store     Backend
-	gitBinary string
-	helper    string
+	binding   *githelper.Binding
 	deadline  time.Duration
-	served    servedProcess
-	bound     chan struct{}
-	// accepted observes each connection before it waits for the bind.
-	accepted func()
-	bindOnce sync.Once
-	wg       sync.WaitGroup
-	once     sync.Once
-}
-
-// servedProcess is the started invocation, by process id and start time so a
-// reused id cannot stand in for it.
-type servedProcess struct {
-	pid   int
-	start int64
+	accepted  func()
+	wg        sync.WaitGroup
+	once      sync.Once
 }
 
 // Serve starts a service bound to ctx; Close releases its socket.
@@ -68,26 +51,13 @@ func Serve(ctx context.Context, options ServeOptions) (*Service, error) {
 	return serve(ctx, options, nil)
 }
 
-// serve applies configure, when set, before the service accepts a connection.
 func serve(ctx context.Context, options ServeOptions, configure func(*Service)) (*Service, error) {
-	if strings.TrimSpace(options.GitBinary) == "" {
-		return nil, errors.New("git credential service requires the served git binary")
-	}
-	helper, err := os.Executable()
+	binding, err := githelper.NewBinding(options.GitBinary)
 	if err != nil {
 		return nil, fmt.Errorf("git credential service: %w", err)
 	}
-	gitBinary, err := filepath.EvalSymlinks(options.GitBinary)
+	listener, directory, err := githelper.Listen("credential")
 	if err != nil {
-		return nil, fmt.Errorf("git credential service: %w", err)
-	}
-	directory, err := socketref.ServiceDirectory()
-	if err != nil {
-		return nil, fmt.Errorf("git credential service: %w", err)
-	}
-	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: filepath.Join(directory, "credential"), Net: "unix"})
-	if err != nil {
-		_ = os.RemoveAll(directory)
 		return nil, fmt.Errorf("git credential service: %w", err)
 	}
 	store := options.Store
@@ -97,9 +67,15 @@ func serve(ctx context.Context, options ServeOptions, configure func(*Service)) 
 	if options.Scope != nil {
 		store = scopedBackend{inner: store, scope: options.Scope}
 	}
+	serviceCtx, cancel := context.WithCancel(ctx)
 	service := &Service{
-		listener: listener, directory: directory, store: store, gitBinary: gitBinary, helper: helper,
-		deadline: requestDeadline, bound: make(chan struct{}),
+		ctx:       serviceCtx,
+		cancel:    cancel,
+		listener:  listener,
+		directory: directory,
+		store:     store,
+		binding:   binding,
+		deadline:  githelper.SetupDeadline,
 	}
 	if configure != nil {
 		configure(service)
@@ -110,24 +86,9 @@ func serve(ctx context.Context, options ServeOptions, configure func(*Service)) 
 	return service, nil
 }
 
-// Bind names the started process of the served invocation: the git process
-// itself or the supervisor that runs it. Peers are answered only beneath it; a
-// peer that connects first waits for it within its request deadline.
+// Bind names the started process of the served invocation.
 func (s *Service) Bind(pid int) error {
-	start, ok := osprocess.StartTime(pid)
-	if !ok {
-		return fmt.Errorf("git credential service: served process %d is not running", pid)
-	}
-	bound := false
-	s.bindOnce.Do(func() {
-		s.served = servedProcess{pid: pid, start: start}
-		close(s.bound)
-		bound = true
-	})
-	if !bound {
-		return errors.New("git credential service is already bound to its invocation")
-	}
-	return nil
+	return s.binding.Bind(pid)
 }
 
 // Path is the socket the helper connects to.
@@ -137,6 +98,8 @@ func (s *Service) Path() string { return s.listener.Addr().String() }
 func (s *Service) Close() error {
 	var err error
 	s.once.Do(func() {
+		s.cancel()
+		s.binding.Close()
 		err = s.listener.Close()
 		s.wg.Wait()
 		_ = os.RemoveAll(s.directory)
@@ -164,16 +127,7 @@ func (s *Service) accept() {
 }
 
 func (s *Service) handle(conn *net.UnixConn) error {
-	deadline := time.Now().Add(s.deadline)
-	if err := conn.SetDeadline(deadline); err != nil {
-		return err
-	}
-	select {
-	case <-s.bound:
-	case <-time.After(time.Until(deadline)):
-		return errors.New("git credential service was never bound to its invocation")
-	}
-	first, err := verifyPeer(conn, s.helper, s.gitBinary, s.served)
+	first, err := s.binding.Verify(s.ctx, conn, time.Now().Add(s.deadline))
 	if err != nil {
 		return err
 	}
@@ -191,23 +145,17 @@ func (s *Service) handle(conn *net.UnixConn) error {
 
 // Forward runs one helper operation against the service Git's environment names.
 func Forward(operation, socketPath string, in io.Reader, out io.Writer) error {
-	if socketPath == "" {
-		return errors.New("git credential service socket is not set")
-	}
 	switch operation {
 	case "get", "store", "erase":
 	default:
 		return fmt.Errorf("unsupported credential operation %q", operation)
 	}
-	if !filepath.IsAbs(socketPath) {
-		return fmt.Errorf("git credential service socket %q is not an absolute path", socketPath)
-	}
-	conn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: filepath.Clean(socketPath), Net: "unix"})
+	conn, err := githelper.Dial(socketPath)
 	if err != nil {
 		return fmt.Errorf("connect to git credential service: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
-	if err := conn.SetDeadline(time.Now().Add(requestDeadline)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(githelper.SetupDeadline)); err != nil {
 		return err
 	}
 	request, err := io.ReadAll(io.LimitReader(in, maxCredentialInputBytes+1))
@@ -217,7 +165,7 @@ func Forward(operation, socketPath string, in io.Reader, out io.Writer) error {
 	if len(request) > maxCredentialInputBytes {
 		return errors.New("credential request exceeds its limit")
 	}
-	if err := writeIdentified(conn, []byte(operation+"\n")); err != nil {
+	if err := githelper.WriteIdentified(conn, []byte(operation+"\n")); err != nil {
 		return err
 	}
 	if _, err := conn.Write(request); err != nil {

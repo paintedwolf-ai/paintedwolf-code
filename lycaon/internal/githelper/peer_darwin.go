@@ -1,31 +1,29 @@
 //go:build darwin
 
-package gitcredential
+package githelper
 
 import (
 	"errors"
 	"fmt"
 	"net"
 	"os"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
-// writeIdentified sends the helper's first bytes; the kernel records the
-// connecting process, which the confinement leaves as the helper itself.
-func writeIdentified(conn *net.UnixConn, data []byte) error {
+func enableListenerCredentials(string, string, syscall.RawConn) error { return nil }
+
+// WriteIdentified writes the helper's initial request bytes.
+func WriteIdentified(conn *net.UnixConn, data []byte) error {
 	_, err := conn.Write(data)
 	return err
 }
 
-// verifyPeer admits a connection only from this executable, running as this
-// user, underneath the served invocation. The kernel supplies every fact: the
-// socket's peer credentials and pid, and each process's executable, parent
-// and start time. The peer's start time is read before and after the checks,
-// so a pid reused meanwhile refuses.
-func verifyPeer(conn *net.UnixConn, helper, gitBinary string, served servedProcess) ([]byte, error) {
+// verifyPeer checks kernel peer credentials, UID, executable, Git ancestry and stable start time.
+func verifyPeer(conn *net.UnixConn, helper, gitBinary string, served ServedProcess) ([]byte, error) {
 	raw, err := conn.SyscallConn()
 	if err != nil {
 		return nil, err
@@ -46,20 +44,20 @@ func verifyPeer(conn *net.UnixConn, helper, gitBinary string, served servedProce
 		return nil, fmt.Errorf("read peer pid: %w", pidErr)
 	}
 	if int(credentials.Uid) != os.Getuid() {
-		return nil, errors.New("credential helper peer runs as another user")
+		return nil, errors.New("git helper peer runs as another user")
 	}
 	started, ok := osprocess.StartTime(peer)
 	if !ok {
-		return nil, errors.New("credential helper peer is not running")
+		return nil, errors.New("git helper peer is not running")
 	}
 	if exe, err := processExecutable(peer); err != nil || !sameFile(exe, helper) {
-		return nil, errors.New("credential helper peer is not this executable")
+		return nil, errors.New("git helper peer is not this executable")
 	}
 	if err := descendsFromServedGit(peer, gitBinary, served); err != nil {
 		return nil, err
 	}
 	if current, ok := osprocess.StartTime(peer); !ok || current != started {
-		return nil, errors.New("credential helper peer exited during verification")
+		return nil, errors.New("git helper peer exited during verification")
 	}
 	return nil, nil
 }

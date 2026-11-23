@@ -176,21 +176,6 @@ func TestServiceCancellationClosesTheSocket(t *testing.T) {
 }
 
 func TestServicePeerVerificationReadsKernelFacts(t *testing.T) {
-	parent, err := parentProcess(os.Getpid())
-	testutil.FailErr(t, "parent process", err)
-	if parent != os.Getppid() {
-		t.Fatalf("parent process = %d, want %d", parent, os.Getppid())
-	}
-	exe, err := processExecutable(os.Getpid())
-	testutil.FailErr(t, "process executable", err)
-	self, err := os.Executable()
-	testutil.FailErr(t, "resolve test binary", err)
-	if !sameFile(exe, self) {
-		t.Fatalf("executable = %q, want %q", exe, self)
-	}
-	if _, err := parentProcess(1 << 22); err == nil {
-		t.Fatal("absent process had a parent")
-	}
 	// A child shell connecting through this executable's helper verb is the production shape.
 	store := developmentVault(t)
 	testutil.FailErr(t, "seed", store.Store(Credential{Protocol: "https", Host: "child.example", Username: "alice", Password: "secret"}))
