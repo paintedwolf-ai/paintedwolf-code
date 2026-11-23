@@ -64,7 +64,8 @@ export function ActivityGroupCard(props: Props) {
       const readingOffsetInCard = lineY - cardRect.top;
       if (readingOffsetInCard > 0 && cardRect.bottom > lineY) {
         for (let idx = 1; idx < order.length; idx++) {
-          const section = order[idx]!;
+          const section = order[idx];
+          if (!section) continue;
           const before = prevOffsets.get(section);
           const after = nextOffsets.get(section);
           if (before === undefined || after === undefined) continue;
@@ -124,7 +125,7 @@ export function ActivityGroupCard(props: Props) {
         bindTranscriptEntry(el);
       }}
       class="den-activity-group den-transcript-card"
-      data-testid="activity-group"
+      data-testid="activity-group-card"
       data-sections={props.item.sectionOrder.join(",")}
     >
       <For each={props.item.sectionOrder}>

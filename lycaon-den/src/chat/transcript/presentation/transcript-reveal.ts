@@ -15,7 +15,7 @@ import type {
 } from "./transcript-reveal-target.ts";
 import { transcriptToolTarget } from "../projection/transcript-item-anchors.ts";
 
-export type PinnedRevealTool = {
+type PinnedRevealTool = {
   sessionId: string;
   toolCallId: string;
   path?: string;

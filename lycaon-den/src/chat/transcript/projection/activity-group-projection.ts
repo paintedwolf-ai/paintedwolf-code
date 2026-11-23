@@ -13,7 +13,7 @@ import type {
   ActivityGroupApproval, ActivityGroupItem, ActivityGroupSection, DisplayTranscriptItem, RawTranscriptItem,
 } from "./transcript-item-model.ts";
 
-export type ActivityGroupProjectionOptions = {
+type ActivityGroupProjectionOptions = {
   verboseMode?: boolean;
   messages?: readonly Message[];
   order?: TranscriptOrder;

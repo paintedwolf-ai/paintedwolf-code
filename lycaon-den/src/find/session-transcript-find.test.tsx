@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import type { Message } from "../api/types.ts";
 import { ChatSpanBlocks } from "../components/transcript/transcript-viewport-test-harness.tsx";
-import { toolApprovalFixture } from "../chat/checkpoint/approval-test-fixtures.ts";
 import { messagesToTranscriptItems } from "../chat/transcript/projection/transcript-items.ts";
 import { fileEditPreviewFixture } from "../test/file-edit-fixture.ts";
 import {
@@ -90,58 +89,15 @@ describe("session transcript findable adapter", () => {
         authority: "none",
         trust_tier: "trusted",
         content: "",
-        tool_calls: [{ id: "call-1", name: "command", args: { command: "write needle" } }],
+        tool_calls: [
+          { id: "call-1", name: "command", args: { command: "run STACK_FIND_OMEGA" } },
+          { id: "call-2", name: "command", args: { command: "check secondary" } },
+        ],
         created_at: "2026-01-01T00:00:00Z",
       },
       {
-        id: "cp-find-1",
-        ord: 2,
-        role: "system",
-        kind: "checkpoint",
-        origin: "host",
-        authority: "system",
-        trust_tier: "trusted",
-        content: "",
-        checkpoint_meta: {
-          id: "cp-find-1",
-          kind: "tool_approval",
-          state: "approved",
-          title: "Allow STACK_FIND_OMEGA primary gate",
-          parent_message_id: "a-find",
-          call_index: 0,
-          tool_approval: toolApprovalFixture({
-            command: "run STACK_FIND_OMEGA",
-            title: "Allow STACK_FIND_OMEGA primary gate",
-          }),
-        },
-        created_at: "2026-01-01T00:00:01Z",
-      },
-      {
-        id: "cp-find-2",
-        ord: 3,
-        role: "system",
-        kind: "checkpoint",
-        origin: "host",
-        authority: "system",
-        trust_tier: "trusted",
-        content: "",
-        checkpoint_meta: {
-          id: "cp-find-2",
-          kind: "tool_approval",
-          state: "denied",
-          title: "Allow secondary check",
-          parent_message_id: "a-find",
-          call_index: 0,
-          tool_approval: toolApprovalFixture({
-            command: "check secondary",
-            title: "Allow secondary check",
-          }),
-        },
-        created_at: "2026-01-01T00:00:02Z",
-      },
-      {
         id: "r-find-1",
-        ord: 4,
+        ord: 2,
         role: "tool",
         origin: "tool",
         authority: "none",
@@ -153,15 +109,47 @@ describe("session transcript findable adapter", () => {
           tool: "command",
           content: "{}",
           outcome: "completed",
+          checkpoint_decision: {
+            checkpoint_id: "cp-find-1",
+            kind: "tool_approval",
+            status: "approved",
+            tool: "command",
+            subject: "STACK_FIND_OMEGA",
+            grant_title: "Allow once",
+          },
           file_edit_previews: [
             fileEditPreviewFixture({
-              path: "src/needle_target_file.ts",
+              path: "src/STACK_FIND_OMEGA.ts",
               before: "const oldVal = 1;\n",
               after: "const STACK_FIND_OMEGA = 2;\n",
             }),
           ],
         },
-        created_at: "2026-01-01T00:00:03Z",
+        created_at: "2026-01-01T00:00:01Z",
+      },
+      {
+        id: "r-find-2",
+        ord: 3,
+        role: "tool",
+        origin: "tool",
+        authority: "none",
+        trust_tier: "untrusted",
+        content: "denied",
+        tool_result: {
+          assistant_message_id: "a-find",
+          tool_call_id: "call-2",
+          tool: "command",
+          content: "denied",
+          outcome: "rejected",
+          checkpoint_decision: {
+            checkpoint_id: "cp-find-2",
+            kind: "tool_approval",
+            status: "rejected",
+            tool: "command",
+            subject: "secondary",
+          },
+        },
+        created_at: "2026-01-01T00:00:02Z",
       },
     ];
     const blocks = [

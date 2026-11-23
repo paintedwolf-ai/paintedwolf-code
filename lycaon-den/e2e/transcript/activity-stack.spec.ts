@@ -1,6 +1,5 @@
 import { expect } from "@playwright/test";
 import type { CommandActivity, CommandProgramReceipt } from "../../src/api/types.ts";
-import { toolApprovalFixture } from "../../src/chat/checkpoint/approval-test-fixtures.ts";
 import {
   apiSeedSessionTranscript,
   bootstrapChatSession,
@@ -22,11 +21,11 @@ modelIndependentWebE2e(
     const userId = crypto.randomUUID();
     const assistantId = crypto.randomUUID();
     const callRun = "call-stack-run";
+    const callAllow = "call-stack-allow";
     const callWrite = "call-stack-write";
     const resultRunId = crypto.randomUUID();
+    const resultAllowId = crypto.randomUUID();
     const resultWriteId = crypto.randomUUID();
-    const cpAllowId = crypto.randomUUID();
-    const cpDenyId = crypto.randomUUID();
 
     const activities: CommandActivity[] = [
       {
@@ -83,6 +82,7 @@ modelIndependentWebE2e(
           created_at: created,
           tool_calls: [
             { id: callRun, name: "command", args: { command: "make build" } },
+            { id: callAllow, name: "command", args: { command: "inspect-env" } },
             { id: callWrite, name: "command", args: { command: "write-report" } },
           ],
         },
@@ -97,7 +97,6 @@ modelIndependentWebE2e(
             tool: "command",
             tool_call_id: callRun,
             assistant_message_id: assistantId,
-            shown_in_flight: true,
             content: "",
             outcome: "completed",
             command_program: { ...program, activities: activities.slice(0, 1) },
@@ -120,21 +119,26 @@ modelIndependentWebE2e(
       session,
       transcriptMessages([
         {
-          id: cpAllowId,
-          role: "system",
-          kind: "checkpoint",
-          content: "",
+          id: resultAllowId,
+          role: "tool",
+          content: "ok",
           ord: 4,
           seq: 4,
           created_at: created,
-          checkpoint_meta: {
-            id: cpAllowId,
-            kind: "tool_approval",
-            state: "approved",
-            title: "Allow write-report",
-            parent_message_id: assistantId,
-            call_index: 1,
-            tool_approval: toolApprovalFixture({ command: "write-report", title: "Allow write-report" }),
+          tool_result: {
+            tool: "command",
+            tool_call_id: callAllow,
+            assistant_message_id: assistantId,
+            content: "ok",
+            outcome: "completed",
+            checkpoint_decision: {
+              checkpoint_id: "cp-allow-1",
+              kind: "tool_approval",
+              status: "approved",
+              tool: "command",
+              subject: "inspect-env",
+              grant_title: "Allow once",
+            },
           },
         },
       ]),
@@ -152,29 +156,11 @@ modelIndependentWebE2e(
       session,
       transcriptMessages([
         {
-          id: cpDenyId,
-          role: "system",
-          kind: "checkpoint",
-          content: "",
-          ord: 5,
-          seq: 5,
-          created_at: created,
-          checkpoint_meta: {
-            id: cpDenyId,
-            kind: "tool_approval",
-            state: "denied",
-            title: "Allow auxiliary cleanup",
-            parent_message_id: assistantId,
-            call_index: 0,
-            tool_approval: toolApprovalFixture({ command: "rm -rf /tmp/old", title: "Allow auxiliary cleanup" }),
-          },
-        },
-        {
           id: resultWriteId,
           role: "tool",
           content: "updated report",
-          ord: 6,
-          seq: 6,
+          ord: 5,
+          seq: 5,
           created_at: created,
           tool_result: {
             tool: "command",
@@ -183,6 +169,14 @@ modelIndependentWebE2e(
             content: "updated report",
             outcome: "completed",
             command_program: program,
+            checkpoint_decision: {
+              checkpoint_id: "cp-allow-2",
+              kind: "tool_approval",
+              status: "approved",
+              tool: "command",
+              subject: "/external/report.txt",
+              grant_title: "Allow once",
+            },
             file_edits: [
               { path: "/external/report.txt", before: "old report\n", after: "new report\n" },
               { path: "/external/notes.txt", before: "old notes\n", after: "new notes\n" },
@@ -211,7 +205,7 @@ modelIndependentWebE2e(
     await page.keyboard.press("Space");
     await expect(approvalsToggle).toHaveAttribute("aria-expanded", "false");
 
-    // Files edited -> diff -> "Show activity" opens Activities and focuses the originating tool row.
+    // Files edited -> diff -> Show activity opens Activities and mounts the originating tool row.
     await filesToggle.click();
     const reportDiff = card.getByTestId("file-edit-diff").filter({ hasText: "/external/report.txt" });
     await reportDiff.getByText("/external/report.txt", { exact: true }).click();
@@ -235,7 +229,9 @@ modelIndependentWebE2e(
     const divider = page.getByTestId("split-divider");
     await expect(divider).toBeVisible();
     await divider.press("End");
-    await expect.poll(async () => (await page.getByTestId("split-col-chat").boundingBox())?.width ?? 0).toBeLessThanOrEqual(341);
+    await expect
+      .poll(async () => (await page.getByTestId("split-col-chat").boundingBox())?.width ?? 0)
+      .toBeLessThanOrEqual(341);
 
     const narrowFit = await card.evaluate((el) => ({ client: el.clientWidth, scroll: el.scrollWidth }));
     expect(narrowFit.scroll).toBe(narrowFit.client);

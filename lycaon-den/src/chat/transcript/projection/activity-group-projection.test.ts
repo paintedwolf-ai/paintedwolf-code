@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Message } from "../../../api/types.ts";
 import { fileEditPreviewFixture } from "../../../test/file-edit-fixture.ts";
 import { toolApprovalFixture } from "../../checkpoint/approval-test-fixtures.ts";
+import { noteToolCallShownInFlight } from "../../tool/tool-transcript-visibility.ts";
 import { buildChatTranscriptBlocks } from "../../workflow/workflow-spans.ts";
 import { createTranscriptDisplayProjector, retainTranscriptItemIdentity, transcriptItemsByKey } from "./transcript-display-projection.ts";
 import type { ActivityGroupItem, DisplayTranscriptItem } from "./transcript-item-model.ts";
@@ -117,12 +118,13 @@ function projectChat(
 
 describe("projectActivityGroups", () => {
   it("anchors running-drawn calls before a crossed progress_update and result-drawn calls after it", () => {
+    noteToolCallShownInFlight("s-ord", "a310:call-cmd");
     const messages: Message[] = [
       userMsg("u1", 300),
       assistantCallsMsg("a310", 310, [
         { id: "call-prog", name: "update_progress", args: {} },
         { id: "call-cmd", name: "command", args: { command: "git status" } },
-        { id: "call-read", name: "read", args: { path: "main.go" } },
+        { id: "call-write", name: "write", args: { path: "main.go" } },
       ]),
       toolResultMsg("r311", 311, "a310", "call-prog", "update_progress", { ui_visibility: "benign" }),
       {
@@ -142,24 +144,26 @@ describe("projectActivityGroups", () => {
         created_at: "2026-11-23T00:00:02Z",
       },
       toolResultMsg("r313", 313, "a310", "call-cmd", "command"),
-      toolResultMsg("r314", 314, "a310", "call-read", "read"),
+      toolResultMsg("r314", 314, "a310", "call-write", "write", {
+        file_edit_previews: [fileEditPreviewFixture({ path: "main.go", before: "a\n", after: "b\n" })],
+      }),
     ];
 
-    const verboseItems = projectChat(messages, { verboseMode: true });
-    expect(verboseItems.map((i) => i.kind)).toEqual([
+    const quietItems = projectChat(messages, { verboseMode: false, sessionId: "s-ord" });
+    expect(quietItems.map((i) => i.kind)).toEqual([
       "user",
       "activity_group",
       "progress_update",
       "activity_group",
     ]);
-    const beforePlan = verboseItems[1] as ActivityGroupItem;
-    const afterPlan = verboseItems[3] as ActivityGroupItem;
+    const beforePlan = quietItems[1] as ActivityGroupItem;
+    const afterPlan = quietItems[3] as ActivityGroupItem;
     expect(beforePlan.entries.map((e) => (e.kind === "tool" ? e.part.toolCallId : e.key))).toEqual([
       "call-prog",
       "call-cmd",
     ]);
     expect(afterPlan.entries.map((e) => (e.kind === "tool" ? e.part.toolCallId : e.key))).toEqual([
-      "call-read",
+      "call-write",
     ]);
   });
 
@@ -262,10 +266,20 @@ describe("projectActivityGroups", () => {
   });
 
   it("routes late file effects across closing boundaries while preserving toolCallId and replay parity", () => {
+    noteToolCallShownInFlight("s1", "a11:cmd-bg");
     const messages: Message[] = [
       userMsg("u1", 10),
       assistantCallsMsg("a11", 11, [{ id: "cmd-bg", name: "command", args: { command: "gen.sh" } }]),
-      noteMsg("n12", 12, "Started generator; inspecting results next."),
+      {
+        id: "n12",
+        ord: 12,
+        role: "assistant",
+        origin: "model",
+        authority: "none",
+        trust_tier: "trusted",
+        content: "Started generator; inspecting results next.",
+        created_at: "2026-11-23T00:00:02Z",
+      },
       toolResultMsg("r13", 13, "a11", "cmd-bg", "command", {
         file_edit_previews: [fileEditPreviewFixture({ path: "gen.go", before: "v1", after: "v2" })],
         file_edits_omitted: 2,
@@ -288,7 +302,7 @@ describe("projectActivityGroups", () => {
       );
     }
     const finalStreamed = streamed[streamed.length - 1]!;
-    const cold = projectChat(messages, { verboseMode: true });
+    const cold = projectChat(messages, { sessionId: "s1", verboseMode: true });
     expect(sameWireValue(finalStreamed, cold)).toBe(true);
 
     expect(cold.map((i) => i.kind)).toEqual([
@@ -358,7 +372,7 @@ describe("projectActivityGroups", () => {
     const messages: Message[] = [
       userMsg("u1", 1),
       assistantCallsMsg("a2", 2, [{ id: "c-int", name: "request_tools", args: {} }]),
-      toolResultMsg("r3", 3, "a2", "c-int", "request_tools"),
+      toolResultMsg("r3", 3, "a2", "c-int", "request_tools", { ui_visibility: "benign" }),
     ];
     const items = projectChat(messages, {
       turnLoads: {

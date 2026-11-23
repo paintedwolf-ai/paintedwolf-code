@@ -329,9 +329,9 @@ describe("transcript-items", () => {
     expect(raw.filter((i) => i.kind === "tool")).toHaveLength(2);
     const display = createTranscriptDisplayProjector()(messages, undefined)[0]!;
     expect(display).toHaveLength(1);
-    expect(display[0]?.kind).toBe("activity_span");
-    if (display[0]?.kind === "activity_span") {
-      expect(display[0].label).toBe("reading files");
+    expect(display[0]?.kind).toBe("activity_group");
+    if (display[0]?.kind === "activity_group") {
+      expect(display[0].headline).toBe("reading files");
     }
   });
 });

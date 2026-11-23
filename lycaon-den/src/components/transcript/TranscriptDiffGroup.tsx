@@ -54,7 +54,7 @@ export function diffGroupFileLabel(
   return omitted > 0 ? `${shown}, ${more}` : shown;
 }
 
-export function diffGroupFilenameHint(
+function diffGroupFilenameHint(
   folds: readonly FileEditFold[],
   rootRefs?: readonly ResolveProjectRoot[],
 ): { display: string; full: string } | null {
@@ -69,7 +69,7 @@ export function diffGroupFilenameHint(
     if (id && label) rootNameById.set(id, label);
   }
   const names = folds.map((fold, index) => {
-    const base = basenames[index]!;
+    const base = basenames[index] ?? fold.path;
     if ((counts.get(base) ?? 0) <= 1) return base;
     const rootId = fold.net.root_id?.trim();
     const rootLabel = (rootId && (rootNameById.get(rootId) ?? rootId)) || fold.path.split("/").slice(-2, -1)[0];

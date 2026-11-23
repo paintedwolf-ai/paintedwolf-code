@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
-import type { LycaonClient } from "../../../api/client.ts";
+import { createMemo, createSignal } from "solid-js";
 import type { Message } from "../../../api/types.ts";
+import { stubClient } from "../../../test/client-fixture.ts";
 import { approvalReviewTarget, consumeApprovalReview } from "../../../chat/checkpoint/approval-review.ts";
 import { revealApprovalOrigin } from "../../../chat/checkpoint/approval-reveal.ts";
 import { toolApprovalFixture } from "../../../chat/checkpoint/approval-test-fixtures.ts";
@@ -28,13 +28,13 @@ describe("ActivityGroupCard approvals section", () => {
     const revokeApprovalGrants = vi.fn(async () => ({
       results: [{ id: "grant-122", revoked: true }],
     }));
-    const client = {
+    const client = stubClient({
       listApprovalGrants: vi.fn(async () => ({
         grants: [{ id: "grant-122", scope: "chat", tool: "command", title: "Allow for this chat", created_at: "t" }],
         quiet: [],
       })),
       revokeApprovalGrants,
-    } as unknown as LycaonClient;
+    });
     await loadApprovalGrantsCache(client);
 
     const messages: Message[] = [
@@ -63,7 +63,6 @@ describe("ActivityGroupCard approvals section", () => {
           tool: "command",
           content: "Refused: path outside worktree boundary",
           outcome: "rejected",
-          invocation: { owner: "coordinator", lifecycle: "effect_attempt", status: "rejected" },
           checkpoint_decision: {
             checkpoint_id: "cp-122",
             kind: "tool_approval",
@@ -168,18 +167,20 @@ describe("ActivityGroupCard approvals section", () => {
     const [extraMessages, setExtraMessages] = createSignal<Message[]>([]);
 
     const { container, getByTestId } = render(() => {
-      const msgs = [...baseMessages, ...extraMessages()];
-      const spans = buildChatTranscriptBlocks(msgs, [], undefined, {
-        sessionId: "s-multi-cp",
-        pendingCheckpoints: pending(),
-      });
+      const msgs = createMemo(() => [...baseMessages, ...extraMessages()]);
+      const spans = createMemo(() =>
+        buildChatTranscriptBlocks(msgs(), [], undefined, {
+          sessionId: "s-multi-cp",
+          pendingCheckpoints: pending(),
+        }),
+      );
       return (
         <SessionTranscript
           layout="chat"
           sessionId="s-multi-cp"
           projectId="p1"
-          messages={msgs}
-          transcriptSpans={spans}
+          messages={msgs()}
+          transcriptSpans={spans()}
         />
       );
     });
@@ -201,7 +202,7 @@ describe("ActivityGroupCard approvals section", () => {
     revealApprovalOrigin({ sessionId: "s-multi-cp", toolCallId: "c-pend" });
 
     // Resolving transitions the collapsed summary in place without remounting the group.
-    const groupBefore = getByTestId("activity-group");
+    const groupBefore = getByTestId("activity-group-card");
     setPending([]);
     setExtraMessages([
       {
@@ -229,7 +230,7 @@ describe("ActivityGroupCard approvals section", () => {
       },
     ]);
     await waitFor(() => {
-      expect(getByTestId("activity-group")).toBe(groupBefore);
+      expect(getByTestId("activity-group-card")).toBe(groupBefore);
       expect(approvalsShell.getAttribute("data-status")).toBe("settled");
       expect(getByTestId("approvals-count").textContent).toBe("2 approvals");
     });

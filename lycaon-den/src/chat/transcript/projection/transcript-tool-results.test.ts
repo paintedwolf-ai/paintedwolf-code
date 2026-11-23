@@ -44,7 +44,7 @@ describe("transcript-items", () => {
     const withProvisional = messagesToTranscriptItems(messages);
     expect(withProvisional.some((item) => item.kind === "tool")).toBe(true);
     const items = createTranscriptDisplayProjector()(messages, [withProvisional])[0]!;
-    const spans = items.filter((item) => item.kind === "activity_span");
+    const spans = items.filter((item) => item.kind === "activity_group");
     expect(spans).toHaveLength(1);
     expect(spans[0]?.entries).toHaveLength(1);
   });
@@ -236,7 +236,7 @@ describe("transcript-items", () => {
     ];
     const items = createTranscriptDisplayProjector()(messages, undefined)[0]!;
     const tools = items.flatMap((item) =>
-      item.kind === "activity_span"
+      item.kind === "activity_group"
         ? item.entries.flatMap((entry) =>
             entry.kind === "tool" ? [entry.part.tool] : [],
           )

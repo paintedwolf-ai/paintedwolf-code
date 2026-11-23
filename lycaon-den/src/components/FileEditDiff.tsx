@@ -51,7 +51,7 @@ export function FileEditDiff(props: Props) {
     activityTarget: (revision) => {
       const step = revision === null ? steps().at(-1) : steps()[revision];
       const toolCallId = step?.toolCallId?.trim();
-      return toolCallId ? { toolCallId, path: step!.snapshot.path } : undefined;
+      return step && toolCallId ? { toolCallId, path: step.snapshot.path } : undefined;
     },
     get revisions() {
       const held = steps();

@@ -336,7 +336,7 @@ describe("transcript-items", () => {
     const quiet = createTranscriptDisplayProjector()(messages, undefined, { verboseMode: false })[0]!;
     const verbose = createTranscriptDisplayProjector()(messages, undefined, { verboseMode: true })[0]!;
     expect(quiet.some((item) => item.kind === "assistant" && item.key === "note-1")).toBe(true);
-    expect(verbose.some((item) => item.kind === "activity_span")).toBe(true);
+    expect(verbose.some((item) => item.kind === "activity_group")).toBe(true);
   });
 
   describe("a note committed before its batch's tools settle", () => {
@@ -375,7 +375,7 @@ describe("transcript-items", () => {
     ])("stays above the tool card %s", (_when, messages) => {
       const items = createTranscriptDisplayProjector()(messages, undefined, { verboseMode: true })[0]!;
       const noteAt = items.findIndex((item) => item.kind === "assistant" && item.key === "note-1");
-      const spanAt = items.findIndex((item) => item.kind === "activity_span");
+      const spanAt = items.findIndex((item) => item.kind === "activity_group");
       expect(items.filter((item) => item.kind === "assistant").map((item) => item.key)).toEqual(["note-1"]);
       expect(noteAt).toBeGreaterThanOrEqual(0);
       expect(spanAt).toBeGreaterThan(noteAt);
@@ -385,7 +385,7 @@ describe("transcript-items", () => {
       const stored: Message = { ...note, ord: 4 };
       const items = createTranscriptDisplayProjector()([carrier, result, stored], undefined, { verboseMode: true })[0]!;
       const noteAt = items.findIndex((item) => item.kind === "assistant" && item.key === "note-1");
-      const spanAt = items.findIndex((item) => item.kind === "activity_span");
+      const spanAt = items.findIndex((item) => item.kind === "activity_group");
       expect(spanAt).toBeGreaterThanOrEqual(0);
       expect(spanAt).toBeLessThan(noteAt);
     });

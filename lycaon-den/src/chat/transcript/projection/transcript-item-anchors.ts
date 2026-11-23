@@ -79,7 +79,7 @@ export function transcriptItemContainsMessage(item: TranscriptItem, messageId: s
   return false;
 }
 
-export type ReconcileGroupRename = (
+type ReconcileGroupRename = (
   fromGroupKey: string,
   toGroupKey: string,
   foldPaths: readonly string[],

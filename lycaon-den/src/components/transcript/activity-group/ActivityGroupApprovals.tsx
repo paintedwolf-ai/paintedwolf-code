@@ -121,15 +121,17 @@ export function ActivityGroupApprovals(props: Props) {
           <TranscriptDisclosureToggle
             disclosure={disclosure}
             class="den-checkpoint-decision-chicklet__summary-main"
-            aria-label={
-              firstPending()
-                ? decisionRowLabel(checkpointDecisionLabel(firstPending()!.meta), [
-                    firstPending()!.meta.tool,
-                    firstPending()!.meta.subject,
+            data-testid="activity-group-approvals-toggle"
+            aria-label={(() => {
+              const pending = firstPending();
+              return pending
+                ? decisionRowLabel(checkpointDecisionLabel(pending.meta), [
+                    pending.meta.tool,
+                    pending.meta.subject,
                     `${props.approvals.length - 1} more`,
                   ])
-                : `${props.approvals.length} approvals, ${resolvedHint().full}`
-            }
+                : `${props.approvals.length} approvals, ${resolvedHint().full}`;
+            })()}
           >
             <Show
               when={firstPending()}

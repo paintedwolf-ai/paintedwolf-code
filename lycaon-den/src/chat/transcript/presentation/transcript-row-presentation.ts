@@ -145,7 +145,7 @@ export function transcriptRowPresentation(
 const ACTIVITY_SPAN_BASE_ESTIMATE_PX = 64;
 export const ACTIVITY_SPAN_ENTRY_ESTIMATE_PX = 42;
 const COLLAPSED_DIFF_ESTIMATE_PX = 38;
-export const ACTIVITY_GROUP_SECTION_HEADER_ESTIMATE_PX = 36;
+const ACTIVITY_GROUP_SECTION_HEADER_ESTIMATE_PX = 36;
 const ACTIVITY_GROUP_BORDER_PX = 2;
 
 function diffRowEstimate(foldCount: number): number {
@@ -167,8 +167,9 @@ export function transcriptRowPresentationEstimate(
       sections * ACTIVITY_GROUP_SECTION_HEADER_ESTIMATE_PX +
       Math.max(0, sections - 1);
     if (presentation === TRANSCRIPT_ROW_COLLAPSED_PRESENTATION) return total;
-    if (item.approvals.length === 1) {
-      if (isOpen(transcriptDisclosureKey.checkpoint(item.approvals[0]!.key))) total += 140;
+    const soloApproval = item.approvals[0];
+    if (item.approvals.length === 1 && soloApproval) {
+      if (isOpen(transcriptDisclosureKey.checkpoint(soloApproval.key))) total += 140;
     } else if (item.approvals.length > 1 && isOpen(transcriptDisclosureKey.activityGroupApprovals(item.key))) {
       total += item.approvals.length * 38;
       for (const approval of item.approvals) {

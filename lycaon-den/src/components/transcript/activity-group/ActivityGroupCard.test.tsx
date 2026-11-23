@@ -70,7 +70,7 @@ describe("ActivityGroupCard", () => {
       <SessionTranscript layout="chat" sessionId="s-uniform" projectId="p1" messages={messages()} />
     ));
 
-    const group = container.querySelector<HTMLElement>('[data-testid="activity-group"]')!;
+    const group = container.querySelector<HTMLElement>('[data-testid="activity-group-card"]')!;
     expect(group).toBeTruthy();
     expect(group.getAttribute("data-sections")).toBe("activities");
     const firstSectionBefore = group.querySelector<HTMLElement>('[data-activity-group-section="activities"]')!;
@@ -152,7 +152,6 @@ describe("ActivityGroupCard", () => {
           tool: "command",
           content: "Error: previous run failed, exit code 1",
           outcome: "completed",
-          invocation: { owner: "coordinator", lifecycle: "effect_attempt", status: "completed" },
         },
         created_at: "2026-11-23T00:00:01Z",
       },
@@ -170,7 +169,6 @@ describe("ActivityGroupCard", () => {
           tool: "command",
           content: "patch failed",
           outcome: "error",
-          invocation: { owner: "coordinator", lifecycle: "effect_attempt", status: "error" },
         },
         created_at: "2026-11-23T00:00:02Z",
       },
@@ -188,7 +186,6 @@ describe("ActivityGroupCard", () => {
           tool: "command",
           content: "patched cleanly",
           outcome: "completed",
-          invocation: { owner: "coordinator", lifecycle: "effect_attempt", status: "completed" },
         },
         created_at: "2026-11-23T00:00:03Z",
       },
@@ -393,8 +390,17 @@ describe("ActivityGroupCard", () => {
     fireEvent.click(filesShell.querySelector<HTMLElement>("button.den-transcript-disclosure-toggle")!);
     expect(filesShell.getAttribute("data-expanded")).toBe("true");
 
+    const diffCard = await waitFor(() => {
+      const card = filesShell.querySelector<HTMLElement>('[data-testid="file-edit-diff"]');
+      expect(card).toBeTruthy();
+      return card!;
+    });
+    if (diffCard.getAttribute("data-expanded") !== "true") {
+      fireEvent.click(diffCard.querySelector<HTMLButtonElement>("button.den-file-edit-header")!);
+    }
+
     const showActivityBtn = await waitFor(() => {
-      const btn = container.querySelector<HTMLButtonElement>('[data-testid="file-edit-show-activity"]');
+      const btn = container.querySelector<HTMLButtonElement>('[data-testid="source-diff-show-activity"]');
       expect(btn).toBeTruthy();
       return btn!;
     });

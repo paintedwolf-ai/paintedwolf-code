@@ -4,7 +4,11 @@ import {
   onMount,
   type ComponentProps,
 } from "solid-js";
-import { TranscriptViewportProvider, createTranscriptViewportController } from "../../chat/stream/transcript-viewport.tsx";
+import {
+  TranscriptViewportProvider,
+  createTranscriptViewportController,
+  registerTranscriptViewport,
+} from "../../chat/stream/transcript-viewport.tsx";
 import { type TranscriptViewportController } from "../../chat/stream/transcript-viewport-types.ts";
 import {
   bindScrollportMotion,
@@ -24,8 +28,10 @@ function TranscriptViewportTestBoundary(
   onMount(() => {
     bindScrollportMotion(host, host, host);
     props.viewport.attachStream(host);
+    const unregister = registerTranscriptViewport(props.viewport);
     setReady(true);
     onCleanup(() => {
+      unregister();
       props.viewport.attachStream(null);
       unbindScrollportMotion(host);
     });

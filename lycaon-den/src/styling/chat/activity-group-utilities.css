@@ -269,9 +269,3 @@
     text-decoration: underline;
   }
 }
-
-@container den-activity-group (max-width: 22rem) {
-  .den-diff-group--section > .den-transcript-link-summary .den-diff-group-writes {
-    display: none;
-  }
-}
