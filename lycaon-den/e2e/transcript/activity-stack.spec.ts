@@ -51,7 +51,7 @@ modelIndependentWebE2e(
         outcome: "Completed",
         execution_ids: ["e-2"],
         spans: [],
-        steps: [{ kind: "write", label: "Write report", target: "/external/report.txt", outcome: "Completed" }],
+        steps: [],
       },
     ];
     const program: CommandProgramReceipt = {

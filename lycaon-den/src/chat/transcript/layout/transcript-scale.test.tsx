@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, render } from "@solidjs/testing-library";
 import { SessionTranscript } from "../../../components/transcript/transcript-viewport-test-harness.tsx";
 import { transcriptRowOrdSpan } from "../history/transcript-runway.ts";
-import { messagesToDisplayTranscriptItems } from "../projection/transcript-items.ts";
+import { createTranscriptDisplayProjector } from "../projection/transcript-display-projection.ts";
 import {
   DEFAULT_TRANSCRIPT_PAGE_LIMIT,
   TRANSCRIPT_RESIDENT_ORD_BUDGET,
@@ -66,7 +66,7 @@ describe("transcript scale bounds", () => {
 
   it("bounds expanded 300-command 45-file activity groups, preserves proportional ord span, and avoids collapsed estimate misses", () => {
     const heavy = heavyActivityGroupMessages(300, 45);
-    const items = messagesToDisplayTranscriptItems(heavy, { layout: "chat" });
+    const items = createTranscriptDisplayProjector()(heavy, undefined, { layout: "chat" })[0] ?? [];
     const group = items.find((item) => item.kind === "activity_group");
     expect(group?.kind).toBe("activity_group");
     expect(transcriptRowOrdSpan(group!)).toBeGreaterThanOrEqual(300);

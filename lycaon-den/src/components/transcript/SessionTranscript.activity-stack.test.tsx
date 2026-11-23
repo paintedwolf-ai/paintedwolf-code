@@ -16,7 +16,7 @@ import {
   materializeTranscriptWindow,
   mergeIntoTail,
 } from "../../chat/transcript/layout/transcript-window.ts";
-import { messagesToDisplayTranscriptItems } from "../../chat/transcript/projection/transcript-items.ts";
+import { createTranscriptDisplayProjector } from "../../chat/transcript/projection/transcript-display-projection.ts";
 
 function stamp(ord: number, seq = ord) {
   return {
@@ -66,7 +66,7 @@ function buildMultiIntervalTurnFixture(): Message[] {
       outcome: "Completed",
       execution_ids: ["e-348-1"],
       spans: [],
-      steps: [{ kind: "write", label: "Write patch", target: "/private/tmp/st03-gen.patch", outcome: "Completed" }],
+      steps: [],
     },
     {
       id: "act-348-alpha",
@@ -78,7 +78,7 @@ function buildMultiIntervalTurnFixture(): Message[] {
       outcome: "Completed",
       execution_ids: ["e-348-2"],
       spans: [],
-      steps: [{ kind: "write", label: "Apply alpha", target: "pkg/alpha.go", outcome: "Completed" }],
+      steps: [],
     },
   ];
 
@@ -180,6 +180,7 @@ function buildMultiIntervalTurnFixture(): Message[] {
         tool_call_id: "call-120",
         tool: "read_file",
         assistant_message_id: "a-320",
+        shown_in_flight: true,
         content: "package alpha\n",
         outcome: "completed",
       },
@@ -405,9 +406,11 @@ describe("SessionTranscript stacked activity groups", () => {
 
   it("streams multi-interval work without moving earlier section headers and matches cold, paged, and evicted windows", async () => {
     const turn = buildMultiIntervalTurnFixture();
+    const projectChat = (rows: readonly Message[]) =>
+      createTranscriptDisplayProjector()(rows, undefined, { layout: "chat" })[0] ?? [];
     const [messages, setMessages] = createSignal<Message[]>(turn.slice(0, 1));
     const { container } = render(() => (
-      <SessionTranscript layout="chat" sessionId="s-replay-stack" messages={messages()} verboseMode={true} />
+      <SessionTranscript layout="chat" sessionId="s-replay-stack" messages={messages()} />
     ));
 
     let interval2ActivitiesBtn: HTMLElement | null = null;
@@ -438,13 +441,13 @@ describe("SessionTranscript stacked activity groups", () => {
       }
     }
 
-    const streamedItems = messagesToDisplayTranscriptItems(messages(), { layout: "chat", verboseMode: true });
+    const streamedItems = projectChat(messages());
     const coldWindow = installTailWindow(emptyTranscriptWindow(), {
       messages: turn,
       hasMoreBefore: false,
       hasMoreAfter: false,
     }, { resetPages: true });
-    const coldItems = messagesToDisplayTranscriptItems(materializeTranscriptWindow(coldWindow), { layout: "chat", verboseMode: true });
+    const coldItems = projectChat(materializeTranscriptWindow(coldWindow));
     expect(streamedItems.map((i) => ({ kind: i.kind, key: i.key }))).toEqual(
       coldItems.map((i) => ({ kind: i.kind, key: i.key })),
     );
@@ -465,8 +468,7 @@ describe("SessionTranscript stacked activity groups", () => {
     }
     const evictedRows = materializeTranscriptWindow(paged);
     expect(evictedRows.length).toBeLessThan(history.length + turn.length);
-    const evictedTailGroups = messagesToDisplayTranscriptItems(evictedRows, { layout: "chat", verboseMode: true })
-      .filter((item) => item.kind === "activity_group");
+    const evictedTailGroups = projectChat(evictedRows).filter((item) => item.kind === "activity_group");
     const coldGroups = coldItems.filter((item) => item.kind === "activity_group");
     expect(evictedTailGroups.map((g) => ({ key: g.key, sectionOrder: g.sectionOrder }))).toEqual(
       coldGroups.map((g) => ({ key: g.key, sectionOrder: g.sectionOrder })),

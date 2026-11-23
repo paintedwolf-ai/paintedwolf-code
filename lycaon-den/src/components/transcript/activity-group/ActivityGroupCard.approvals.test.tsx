@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { Message } from "../../../api/types.ts";
-import { approvalReviewTarget, clearApprovalReview } from "../../../chat/checkpoint/approval-review.ts";
+import { approvalReviewTarget, consumeApprovalReview } from "../../../chat/checkpoint/approval-review.ts";
 import { revealApprovalOrigin } from "../../../chat/checkpoint/approval-reveal.ts";
 import { toolApprovalFixture } from "../../../chat/checkpoint/approval-test-fixtures.ts";
 import { buildChatTranscriptBlocks } from "../../../chat/workflow/workflow-spans.ts";
@@ -18,7 +18,8 @@ import { resetSessionTranscriptChatTest } from "../session-transcript-chat-test-
 describe("ActivityGroupCard approvals section", () => {
   afterEach(() => {
     cleanup();
-    clearApprovalReview();
+    const pending = approvalReviewTarget();
+    if (pending) consumeApprovalReview(pending);
     invalidateApprovalGrantsCache();
     return resetSessionTranscriptChatTest();
   });
@@ -62,7 +63,7 @@ describe("ActivityGroupCard approvals section", () => {
           tool: "command",
           content: "Refused: path outside worktree boundary",
           outcome: "rejected",
-          invocation: { owner: "coordinator", lifecycle: "foreground", status: "rejected" },
+          invocation: { owner: "coordinator", lifecycle: "effect_attempt", status: "rejected" },
           checkpoint_decision: {
             checkpoint_id: "cp-122",
             kind: "tool_approval",
