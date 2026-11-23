@@ -12,11 +12,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/documentcore"
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
-	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -96,7 +95,7 @@ func (d *draftTestDocuments) VisitUnsavedDocuments(_ context.Context, _ string, 
 		if descendants && path != "" && rel != path && !strings.HasPrefix(rel, path+"/") {
 			continue
 		}
-		if err := visit(tools.EditorDocumentState{ID: doc.ID, RootID: rootID, Path: rel, Dirty: true}); err != nil {
+		if err := visit(tools.EditorDocumentState{ID: doc.ID, RootID: rootID, Path: rel, Revision: doc.Revision}); err != nil {
 			return err
 		}
 	}
@@ -250,7 +249,9 @@ func TestWorktreeLiteralRevisionCorrectnessAndEditorDrafts(t *testing.T) {
 
 	// 2. Atomic replacement.
 	atomicPath := filepath.Join(wt, "src/atomic.go")
-	testutil.FailErr(t, "atomic replace", fseffect.WriteFile(atomicPath, []byte(editText), 0o644))
+	atomicTmp := atomicPath + ".tmp"
+	testutil.FailErr(t, "write atomic tmp", os.WriteFile(atomicTmp, []byte(editText), 0o644))
+	testutil.FailErr(t, "atomic replace", os.Rename(atomicTmp, atomicPath))
 	h.exec("", "grep", "-rl", "AlphaMatchTokenInsertedHere", "src").expect(t, "atomic replace", "src/atomic.go\nsrc/inplace.go\n", "", 0)
 
 	// 3. Hard-link then modify (Links changes from 1 to 2, invalidating FileObservation).

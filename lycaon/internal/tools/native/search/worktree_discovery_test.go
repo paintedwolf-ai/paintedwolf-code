@@ -96,7 +96,7 @@ func TestWorktreeDirectoryLiveParityAndRevocation(t *testing.T) {
 	symlink(t, "missing-target", filepath.Join(wt, "dangling"))
 
 	runtime := grantedpath.NewRuntime()
-	grant, err := runtime.Grant(h.tc.Identity.SessionID, grantedpath.Grant{ID: "g1", Path: wt, Mode: grantedpath.ModeRead, Tree: true})
+	_, err := runtime.Grant(h.tc.Identity.SessionID, grantedpath.Grant{ID: "g1", Path: wt, Mode: grantedpath.ModeRead, Tree: true})
 	testutil.FailErr(t, "grant wt", err)
 	t.Cleanup(projectpaths.SetGrantedAccessSource(func(session, project, path string, write bool) (projectpaths.Access, bool) {
 		if write {
@@ -146,7 +146,7 @@ func TestWorktreeDirectoryLiveParityAndRevocation(t *testing.T) {
 	h.owners.Revisions.Boundary = origBoundary
 
 	// Revoking the grant must immediately deny access despite warm catalog entries.
-	if !runtime.RevokeByID(grant.ID) {
+	if !runtime.RevokeByID("g1") {
 		t.Fatal("expected grant revocation")
 	}
 	h.cwd = "."
