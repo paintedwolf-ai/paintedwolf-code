@@ -81,9 +81,11 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		close(ch)
 		return ch
 	}})
-	_, err = f.Database.ExecContext(t.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
-		VALUES ('outside-r1', ?, '', 'outside', 0, '2026-01-01T00:00:00Z', 'outside')`, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "insert outside root row", err)
+	var outsideRootID string
+	err = f.Database.QueryRowContext(t.Context(),
+		`SELECT id FROM project_roots WHERE project_id = ? AND kind = 'outside'`, testdbseed.DefaultProjectID,
+	).Scan(&outsideRootID)
+	testutil.FailErr(t, "lookup outside root row", err)
 
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x3c}, 32))
 	testutil.FailErr(t, "fingerprinter", err)
@@ -96,7 +98,9 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 	}
 	files.index = newCredentialIndex(files)
 	files.startCredentialIndex()
-	t.Cleanup(func() { testutil.FailErr(t, "close credential index", files.closeCredentialIndex(context.Background())) })
+	t.Cleanup(func() {
+		testutil.FailErr(t, "close credential index", files.closeCredentialIndex(context.Background()))
+	})
 	testutil.FailErr(t, "admit primary credentials", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
 
 	// Escaping paths remain rejected by credential scanning.
@@ -126,7 +130,7 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 			prevConfigure(tc)
 		}
 		tc.Effects.CredentialFiles = files
-		tc.Source.OutsideRoot = projectroot.OutsideRef("outside-r1")
+		tc.Source.OutsideRoot = projectroot.OutsideRef(outsideRootID)
 		tc.Files.GrantedWriteRoots = []string{siblingWT, unrelatedDir}
 	}
 
