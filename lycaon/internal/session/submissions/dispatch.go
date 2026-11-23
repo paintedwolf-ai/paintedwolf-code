@@ -100,13 +100,13 @@ func (m *Service) AmbientWakeEligible(ctx context.Context, id string) (eligible 
 	if m.hostBlocked != nil && m.hostBlocked(ctx, id) {
 		return false, false
 	}
-	if m.Gate != nil && !m.Gate.SessionTreeRunnable(id) {
+	if m.Gate != nil && m.Gate.InProgress(ctx, id) {
 		return false, false
 	}
 	if queued, err := m.submissionStore.ListQueuedUserPromptSubmissions(ctx, id); err != nil || len(queued) > 0 {
 		return false, true
 	}
-	if m.queue != nil && len(m.queue.Snapshot(id).Items) > 0 {
+	if m.queue != nil && len(m.queue.Snapshot(id).QueueItems) > 0 {
 		return false, true
 	}
 	if m.Spend != nil {

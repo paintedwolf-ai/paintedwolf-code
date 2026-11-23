@@ -19,6 +19,16 @@ const (
 	ClaimFallbackKick   PresentationKind = "fallback_kick"
 )
 
+// SessionOwner returns the session-level watch owner for sessionID.
+func SessionOwner(sessionID string) Owner {
+	return Owner{SessionID: sessionID}.Normalized()
+}
+
+// JobOwner returns the worker-job watch owner for sessionID and workerJobID.
+func JobOwner(sessionID, workerJobID string) Owner {
+	return Owner{SessionID: sessionID, WorkerJobID: workerJobID}.Normalized()
+}
+
 // PresentationDecision describes how one producer occurrence may be presented to a destination.
 type PresentationDecision struct {
 	Granted           bool

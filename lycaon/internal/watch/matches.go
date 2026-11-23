@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/runeclamp"
 )
 
