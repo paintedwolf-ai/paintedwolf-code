@@ -597,7 +597,7 @@
     },
     {
       "id": "regex_work_steps",
-      "maximum": 1000000,
+      "maximum": 268435456,
       "unit": "steps",
       "scope": "operation",
       "exceeded": "COMMAND_LIMIT_EXCEEDED",
