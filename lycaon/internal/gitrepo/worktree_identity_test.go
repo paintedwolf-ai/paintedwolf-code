@@ -94,6 +94,9 @@ func TestCheckoutResolverVerifiesReciprocalLinkedWorktrees(t *testing.T) {
 		t.Fatal("ordinary clone matched linked worktree check")
 	}
 
+	adminDir := filepath.Join(mainRepo, ".git", "worktrees", filepath.Base(detached))
+	testutil.FailErr(t, "restore abs .git", os.WriteFile(filepath.Join(detached, ".git"), []byte("gitdir: "+adminDir+"\n"), 0o644))
+	testutil.FailErr(t, "restore abs gitdir", os.WriteFile(filepath.Join(adminDir, "gitdir"), []byte(filepath.Join(detached, ".git")+"\n"), 0o644))
 	runGit(t, mainRepo, "worktree", "remove", "--force", detached)
 	testutil.FailErr(t, "recreate removed worktree dir", os.MkdirAll(detached, 0o755))
 	if _, ok := resolver.Resolve(detached, detached); ok {

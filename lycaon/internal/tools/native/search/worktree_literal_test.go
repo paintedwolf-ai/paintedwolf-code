@@ -271,11 +271,13 @@ func TestWorktreeLiteralRevisionCorrectnessAndEditorDrafts(t *testing.T) {
 	docs := &draftTestDocuments{
 		docs: map[string]tools.EditorDocumentText{
 			outsideID + "/" + outsideRel: {
-				ID:       "doc-draft",
-				Revision: 2,
-				Text:     editText,
-				SHA256:   textfile.StringSHA256(editText),
-				Dirty:    true,
+				ID:         "doc-draft",
+				Revision:   2,
+				Text:       editText,
+				SHA256:     textfile.StringSHA256(editText),
+				Encoding:   textfile.EncodingUTF8,
+				LineEnding: textfile.LineEndingLF,
+				Dirty:      true,
 			},
 		},
 	}

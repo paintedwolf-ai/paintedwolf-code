@@ -47,7 +47,9 @@ func (c *commandLogCapture) Handle(_ context.Context, record slog.Record) error 
 	})
 	c.mu.Lock()
 	if record.Message == "command discovery completed" {
-		c.discovery = append(c.discovery, values)
+		if values["entries"] > 0 {
+			c.discovery = append(c.discovery, values)
+		}
 	} else {
 		c.content = append(c.content, values)
 	}
@@ -56,6 +58,7 @@ func (c *commandLogCapture) Handle(_ context.Context, record slog.Record) error 
 }
 
 func TestAgentCommandSearchesLinkedWorktreeColdAndWarm(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	logs := &commandLogCapture{}
 	prev := slog.Default()
 	slog.SetDefault(slog.New(logs))
