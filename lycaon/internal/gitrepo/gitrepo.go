@@ -79,7 +79,7 @@ func (r Repo) LocalConfigFiles() []string {
 }
 
 // CanonicalDir returns dir absolute, symlink-resolved and cleaned, or "" when it cannot be
-// made absolute. A path that does not exist yet keeps its absolute form.
+// made absolute. Absent trailing components resolve symlinks through their nearest ancestor.
 func CanonicalDir(dir string) string {
 	if strings.TrimSpace(dir) == "" {
 		return ""
@@ -92,7 +92,22 @@ func CanonicalDir(dir string) string {
 	if resolved, resolveErr := filepath.EvalSymlinks(abs); resolveErr == nil {
 		return filepath.Clean(resolved)
 	}
-	return abs
+	cur := abs
+	var tail []string
+	for {
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return abs
+		}
+		tail = append(tail, filepath.Base(cur))
+		cur = parent
+		if resolved, resolveErr := filepath.EvalSymlinks(cur); resolveErr == nil {
+			for i := len(tail) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, tail[i])
+			}
+			return filepath.Clean(resolved)
+		}
+	}
 }
 
 // repoAt fills in the layout for a directory already known to hold a .git entry.

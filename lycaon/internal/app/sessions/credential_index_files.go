@@ -43,6 +43,9 @@ func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path s
 	if filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") {
 		return errors.New("credential index path leaves root")
 	}
+	if i.onScan != nil {
+		i.onScan(root.path, path)
+	}
 	seen := map[string]bool{}
 	var seeds []repochange.WatchDirectory
 	flush := func() {

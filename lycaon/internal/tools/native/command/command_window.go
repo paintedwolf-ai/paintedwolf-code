@@ -3,11 +3,14 @@ package command
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -23,23 +26,30 @@ type commandWindow struct {
 	open *sourceledger.OpenCommandWindow
 	// unobserved lists the folders a window was due to cover when it could not
 	// open; empty when one opened or none was due.
-	unobserved []api.CommandFolderCoverage
+	unobserved       []api.CommandFolderCoverage
+	fallbackGitRoots []gitrepo.AttachedRoot
+	fallbackOutside  []string
 }
 
 // openCommandWindow opens the window for a primary-tree command. Worker
 // branch commands write an overlay the promote records, so they open none.
 // A failure never blocks the command; it runs unobserved.
 func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, commandLine string) commandWindow {
+	outside := outsideRootSpecs(tctx)
+	fallback := commandWindow{
+		fallbackGitRoots: attachedGitRoots(tctx),
+		fallbackOutside:  outsidePaths(outside),
+	}
 	if !commandWindowDue(tctx) {
-		return commandWindow{}
+		return fallback
 	}
 	opener := tctx.Source.Commands
-	outside := outsideRootSpecs(tctx)
 	roots := make([]sourceledger.RootSpec, 0, len(tctx.Source.Roots))
 	for _, root := range tctx.Source.Roots {
 		branch, err := tctx.SourceBranch(root.ID)
 		if err != nil {
-			return commandWindow{unobserved: unobservedFolders(tctx, outside)}
+			fallback.unobserved = unobservedFolders(tctx, outside)
+			return fallback
 		}
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, BranchID: branch, Path: root.Path})
 	}
@@ -50,9 +60,11 @@ func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, co
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "command window open", "tool", toolName, "session_id", tctx.Identity.SessionID, "err", err)
-		return commandWindow{unobserved: unobservedFolders(tctx, outside)}
+		fallback.unobserved = unobservedFolders(tctx, outside)
+		return fallback
 	}
-	return commandWindow{open: open}
+	fallback.open = open
+	return fallback
 }
 
 // outsideRootSpecs are the write roots beyond the project the window compares.
@@ -106,12 +118,14 @@ func commandWindowDue(tctx tools.ToolContext) bool {
 // tool's cancellation so an interrupted call still lands its changes.
 func (w commandWindow) closeNow(ctx context.Context) {
 	if w.open == nil {
+		invalidateUnobservedLinkedWriteRoots(w.fallbackGitRoots, w.fallbackOutside)
 		return
 	}
 	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), commandWindowCloseBudget)
 	defer cancel()
 	if err := w.open.Close(closeCtx); err != nil {
 		slog.WarnContext(ctx, "command window close", "window_id", w.open.ID, "err", err)
+		invalidateUnobservedLinkedWriteRoots(w.fallbackGitRoots, w.fallbackOutside)
 	}
 }
 
@@ -128,7 +142,7 @@ func (w commandWindow) fact() *hostcmd.SourceWindow {
 
 // closeOnExit ends the window when a promoted or background process exits.
 func (w commandWindow) closeOnExit(ctx context.Context, registry *bgprocess.Registry, sessionID, handle string) {
-	if w.open == nil {
+	if w.open == nil && len(w.fallbackOutside) == 0 {
 		return
 	}
 	if registry == nil {
@@ -137,6 +151,46 @@ func (w commandWindow) closeOnExit(ctx context.Context, registry *bgprocess.Regi
 	}
 	background := context.WithoutCancel(ctx)
 	registry.Lifecycle.OnExit(sessionID, handle, func() { w.closeNow(background) })
+}
+
+func attachedGitRoots(tctx tools.ToolContext) []gitrepo.AttachedRoot {
+	var out []gitrepo.AttachedRoot
+	for _, root := range tctx.Source.Roots {
+		if root.External || strings.TrimSpace(root.ID) == "" || strings.TrimSpace(root.Path) == "" {
+			continue
+		}
+		out = append(out, gitrepo.AttachedRoot{ID: root.ID, Path: root.Path})
+	}
+	return out
+}
+
+func outsidePaths(specs []sourceledger.OutsideRootSpec) []string {
+	out := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		if p := strings.TrimSpace(spec.Path); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func invalidateUnobservedLinkedWriteRoots(roots []gitrepo.AttachedRoot, outside []string) {
+	if len(roots) == 0 || len(outside) == 0 {
+		return
+	}
+	resolver := gitrepo.NewCheckoutResolver(roots)
+	if !resolver.HasRepositories() {
+		return
+	}
+	for _, path := range outside {
+		if addr, ok := resolver.ResolvePath(path); ok {
+			if addr.Rel == "" || addr.Rel == "." {
+				sourcecatalog.Process().InvalidateRoot(addr.RootPath)
+				continue
+			}
+			sourcecatalog.Process().InvalidateRoot(addr.RootPath, addr.Rel)
+		}
+	}
 }
 
 func stateObservation(tctx tools.ToolContext, window *hostcmd.SourceWindow) {

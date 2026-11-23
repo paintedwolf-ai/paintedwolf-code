@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/keylock"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -29,6 +30,7 @@ type credentialIndex struct {
 	roots  map[string]*credentialRoot
 	work   workscope.Group
 	stop   func()
+	onScan func(rootPath, path string)
 }
 
 func newCredentialIndex(files *credentialFiles) *credentialIndex {
@@ -129,7 +131,7 @@ func (i *credentialIndex) changed(ctx context.Context, event repochange.Event) e
 	}
 	defer finish()
 	for _, root := range i.roots {
-		if filepath.Clean(root.path) != filepath.Clean(event.ProjectDir) {
+		if !sameCredentialRootDir(root.path, event.ProjectDir) {
 			continue
 		}
 		epoch := repochange.Epoch{BootID: event.EpochBootID, Value: event.WorktreeEpoch}
@@ -153,4 +155,12 @@ func (i *credentialIndex) changed(ctx context.Context, event repochange.Event) e
 
 func (r *credentialRoot) coverageExpired(coverage repochange.WatchCoverage, now time.Time) bool {
 	return !coverage.Complete && now.Sub(r.validated) >= repochange.CoverageRevalidationInterval
+}
+
+func sameCredentialRootDir(left, right string) bool {
+	if filepath.Clean(left) == filepath.Clean(right) {
+		return true
+	}
+	lCanon, rCanon := gitrepo.CanonicalDir(left), gitrepo.CanonicalDir(right)
+	return lCanon != "" && lCanon == rCanon
 }

@@ -482,7 +482,31 @@ func (c *TreeStores) observeTreeEpoch(rootPath string) {
 // their workers. Existing generation pins remain readable until released.
 
 func treeChangesForRoot(eventRoot, indexRoot string, paths []string) ([]string, bool) {
-	eventRoot, indexRoot = cleanAbs(eventRoot), cleanAbs(indexRoot)
+	if out, ok := treeChangesBetweenCleaned(cleanAbs(eventRoot), cleanAbs(indexRoot), paths); ok {
+		return out, true
+	}
+	evCanon, idxCanon := canonicalCatalogDir(eventRoot), canonicalCatalogDir(indexRoot)
+	if evCanon == "" || idxCanon == "" {
+		return nil, false
+	}
+	return treeChangesBetweenCleaned(evCanon, idxCanon, paths)
+}
+
+func canonicalCatalogDir(value string) string {
+	cleaned := cleanAbs(value)
+	if cleaned == "" {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(cleaned); err == nil {
+		return filepath.Clean(resolved)
+	}
+	return cleaned
+}
+
+func treeChangesBetweenCleaned(eventRoot, indexRoot string, paths []string) ([]string, bool) {
+	if eventRoot == "" || indexRoot == "" {
+		return nil, false
+	}
 	if eventRoot == indexRoot {
 		return paths, true
 	}
