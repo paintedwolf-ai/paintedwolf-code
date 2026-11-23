@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/toolscope"
 )
 
 // Orientation tools in project roots.
@@ -20,6 +19,7 @@ const (
 // CoordinatorCapabilities are derived each turn from root_count and the resolved tool/spawn surfaces.
 type CoordinatorCapabilities struct {
 	RootCount           int
+	HasWorkspaceRoots   bool
 	HasFileTools        bool
 	CanOrient           bool
 	CanSpawnImplementer bool
@@ -31,11 +31,16 @@ type CoordinatorCapabilities struct {
 func Derive(rootCount int, surfaceTools, spawnAllowlist []string) CoordinatorCapabilities {
 	surfaceSet := toolNameSet(surfaceTools)
 	spawnSet := toolNameSet(spawnAllowlist)
-	caps := CoordinatorCapabilities{RootCount: rootCount}
-	for name := range surfaceSet {
-		if toolscope.RequiresProjectRoots(name) {
-			caps.HasFileTools = true
-			break
+	caps := CoordinatorCapabilities{
+		RootCount:         rootCount,
+		HasWorkspaceRoots: rootCount > 0,
+	}
+	if rootCount > 0 {
+		for name := range surfaceSet {
+			if prompts.IsProjectFileTool(name) {
+				caps.HasFileTools = true
+				break
+			}
 		}
 	}
 	if surfaceSet[orientToolBoard] || surfaceSet[orientToolListDir] {
@@ -54,19 +59,7 @@ func Derive(rootCount int, surfaceTools, spawnAllowlist []string) CoordinatorCap
 	return caps
 }
 
-// MergeVars adds capability pongo vars for coordinator partials.
-func MergeVars(into map[string]any, caps CoordinatorCapabilities) {
-	if into == nil {
-		return
-	}
-	into["has_file_tools"] = caps.HasFileTools
-	into["can_orient"] = caps.CanOrient
-	into["can_spawn_implementer"] = caps.CanSpawnImplementer
-	into["can_spawn_web_research"] = caps.CanSpawnWebResearch
-	into["can_spawn_workers"] = caps.CanSpawnWorkers
-}
-
-// MergeForTurn derives capability flags from the resolved per-turn capability surface.
+// MergeForTurn derives roster role vars and skill visibility from the resolved per-turn capability surface.
 func MergeForTurn(
 	into map[string]any,
 	reader prompts.Reader,
@@ -91,11 +84,6 @@ func MergeForTurn(
 	if err != nil {
 		return err
 	}
-	flags := surf.Flags
-	if reader.Valid() {
-		flags = Derive(reader.RootCount(), reader.Offered(), spawnAllowlist)
-	}
-	MergeVars(into, flags)
 	for k, v := range prompts.SpawnRosterRoleVars(surf.Roster) {
 		into[k] = v
 	}

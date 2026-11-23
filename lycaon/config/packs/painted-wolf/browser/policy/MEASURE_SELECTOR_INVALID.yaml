@@ -5,7 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - measure_page
-requires_facts: [paintedwolf.measure_selector, paintedwolf.rejection_code, paintedwolf.rejection_reason]
+requires_facts: [paintedwolf.can_measure_page, paintedwolf.measure_selector, paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "MEASURE_SELECTOR_INVALID"
 effect: block
 x-paintedwolf-category: recoverable
@@ -14,7 +14,7 @@ message: measure_page selector is not a valid CSS selector
 what: querySelectorAll rejected selector {{ paintedwolf.measure_selector }}.
 cause: 'The browser reported a selector syntax error: {{ paintedwolf.rejection_reason }}.'
 why: Invalid selectors cannot probe the render tree.
-fix: Correct the selector syntax and retry measure_page.
+fix: '{% if paintedwolf.can_measure_page %}Correct the selector syntax and retry measure_page.{% else %}Correct the selector syntax before measuring again.{% endif %}'
 instead: Branch on Code MEASURE_SELECTOR_INVALID; fix selector syntax
 x-paintedwolf-scenarios:
   - id: default

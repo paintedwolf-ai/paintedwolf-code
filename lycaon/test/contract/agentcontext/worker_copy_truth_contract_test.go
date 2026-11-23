@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -76,7 +75,7 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 				"latest_message_seq": 4,
 			}
 			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			out, err := engine.RenderKick(context.Background(), "coordinator-worker-round-notice", data)
+			out, err := engine.RenderKick(context.Background(), reader, "coordinator-worker-round-notice", data)
 			contractcheck.FailErr(t, "render round notice", err)
 			if names := unreachableNames(t, catalog, out, reader); len(names) > 0 {
 				t.Errorf("round notice on %s names unreachable %v", id, names)
@@ -108,7 +107,7 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 				})
 				contractcheck.FailErr(t, "new worker reader", err)
 				out, err := inject.RenderWorkerTaskAssignment(context.Background(), renderer, inject.WorkerTaskAssignmentInput{
-					SessionID: "child-matrix", ProjectDir: root, WorkerName: "alpha-worker",
+					Reader: workerReader, SessionID: "child-matrix", ProjectDir: root, WorkerName: "alpha-worker",
 					RoundInstructions: "Check edge cases.", ViewKind: viewKind, HasGit: hasGit,
 					AgentType: "implementer", WorkerJobID: "job-matrix",
 					Scope:   api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"lycaon/internal/workerstate"}},
@@ -116,10 +115,7 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 				})
 				contractcheck.FailErr(t, "render worker assignment", err)
 				if names := unreachableNames(t, catalog, out, workerReader); len(names) > 0 {
-					if !(slices.Equal(names, []string{"scan_query"}) && !profile.Tools["scan_query"]) &&
-						!(slices.Contains(names, "read_findings") && !profile.Tools["read_findings"]) {
-						t.Errorf("assignment on %s names unreachable %v", profile.ID, names)
-					}
+					t.Errorf("assignment on %s names unreachable %v", profile.ID, names)
 				}
 				checkBannedMention(t, retired, "assignment/"+profile.ID, out)
 			}
@@ -266,11 +262,15 @@ func TestWorkerCopyInterpolationSensitivity(t *testing.T) {
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	renderer := prompts.NewInjectRenderer(engine)
 
+	coordReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	contractcheck.FailErr(t, "DeclaredReader coordinator", err)
 	b1, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s1", inject.TurnStateInjectInput{
+		Reader:  coordReader,
 		Workers: []map[string]any{{"name": "worker-one", "agent": "implementer", "state": "delivered", "parked_reason": "process_done", "result_handle": "res-one", "result_disposition": "shelved", "shelve_reason": "defer-alpha"}},
 	})
 	contractcheck.FailErr(t, "turn state 1", err)
 	b2, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s2", inject.TurnStateInjectInput{
+		Reader:  coordReader,
 		Workers: []map[string]any{{"name": "worker-two", "agent": "implementer", "state": "delivered", "parked_reason": "timer_elapsed", "result_handle": "res-two", "result_disposition": "shelved", "shelve_reason": "defer-beta"}},
 	})
 	contractcheck.FailErr(t, "turn state 2", err)

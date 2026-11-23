@@ -31,17 +31,18 @@ type completionAssembler interface {
 
 // Runtime composes PromptLoop, assembly, kicks, board inject, and the coordinator loop.
 type Runtime struct {
-	depsMu             sync.Mutex
-	loop               *promptloop.PromptLoop
-	loopDeps           func() promptloop.PromptLoopDeps
-	assembler          completionAssembler
-	assemblyDepsFn     func() assembly.AssemblyDeps
-	kicks              *kick.KickEngine
-	anchors            *anchor.Bus
-	board              *assembly.BoardEngine
-	coordLoop          *loopwake.LoopEngine
-	loopWakeDeps       func() loopwake.LoopDeps
-	executionModeStore *surface.ExecutionModeStateStore
+	depsMu               sync.Mutex
+	loop                 *promptloop.PromptLoop
+	loopDeps             func() promptloop.PromptLoopDeps
+	assembler            completionAssembler
+	assemblyDepsFn       func() assembly.AssemblyDeps
+	kicks                *kick.KickEngine
+	anchors              *anchor.Bus
+	board                *assembly.BoardEngine
+	coordLoop            *loopwake.LoopEngine
+	loopWakeDeps         func() loopwake.LoopDeps
+	executionModeStore   *surface.ExecutionModeStateStore
+	observedSessionModes sync.Map
 }
 
 // NewRuntime constructs a Runtime. deps refresh on each RunPrompt call.
@@ -72,6 +73,7 @@ func (r *Runtime) refreshDepsLocked() {
 		deps := r.loopDeps()
 		deps.Context.ObservePrompt = r.coordLoop.Observations.ObservePrompt
 		deps.Context.CommitTurnContext = r.assemblyEngineLocked().CommitTurnContext
+		deps.Context.SwapObservedSessionMode = r.swapObservedSessionMode
 		r.loop = promptloop.NewPromptLoop(deps)
 	}
 	if r.assemblyDepsFn != nil {
@@ -223,7 +225,20 @@ func (r *Runtime) ForgetSession(ctx context.Context, sessionID string) {
 	if loop != nil {
 		loop.ForgetSession(ctx, sessionID)
 	}
+	r.observedSessionModes.Delete(sessionID)
 	r.Kicks().ForgetSession(sessionID)
+}
+
+func (r *Runtime) swapObservedSessionMode(sessionID string, mode api.SessionMode) (api.SessionMode, bool) {
+	if r == nil || sessionID == "" {
+		return "", false
+	}
+	prev, ok := r.observedSessionModes.Swap(sessionID, mode)
+	if !ok {
+		return "", false
+	}
+	m, _ := prev.(api.SessionMode)
+	return m, m != ""
 }
 
 // StopSleepTimers disarms the loop engine's wait timers at host shutdown.

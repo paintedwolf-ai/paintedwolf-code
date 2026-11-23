@@ -96,8 +96,8 @@ func newCloseoutContract(t *testing.T) *closeoutContract {
 					c.noted = append(c.noted, code)
 					return 1, ""
 				},
-				RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
-					return engine.RenderKick(ctx, id, data)
+				RenderHostKick: func(ctx context.Context, reader prompts.Reader, id string, data map[string]any) (string, error) {
+					return engine.RenderKick(ctx, reader, id, data)
 				}},
 		},
 		Projection: ProjectionDeps{
@@ -273,11 +273,15 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 			c := newCloseoutContract(t)
 			var sent map[string]any
 			engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-			c.loop.Closeout.Deps.RenderHostKick = func(ctx context.Context, id string, data map[string]any) (string, error) {
+			c.loop.Closeout.Deps.RenderHostKick = func(ctx context.Context, reader prompts.Reader, id string, data map[string]any) (string, error) {
 				if id == tc.kick {
-					sent = data
+					if merged, err := prompts.Vars(reader, data); err == nil {
+						sent = merged
+					} else {
+						sent = data
+					}
 				}
-				return engine.RenderKick(ctx, id, data)
+				return engine.RenderKick(ctx, reader, id, data)
 			}
 			c.drive(t, "implement_synthesis", tc.content, tc.reportPhase, contractHistory(tc.content))
 			if sent == nil {

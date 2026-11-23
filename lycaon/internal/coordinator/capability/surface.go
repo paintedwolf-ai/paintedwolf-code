@@ -117,7 +117,6 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 func (s CapabilitySurface) MergeSpawnInjectVars() map[string]any {
 	vars := prompts.SpawnRosterTemplateVars(s.Roster, s.ExcludedDisclosures)
 	vars["repo_known_empty"] = s.RepoKnownEmpty
-	MergeVars(vars, s.Flags)
 	allowed := append([]string(nil), s.SpawnAllowlist...)
 	sort.Strings(allowed)
 	vars["allowed_agents"] = allowed

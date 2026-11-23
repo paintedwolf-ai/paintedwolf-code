@@ -3,18 +3,30 @@ id: TOOL_COMMAND_OPERATION
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.need, paintedwolf.next_steps, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.admitted_command_forms, paintedwolf.command_operation_reachable, paintedwolf.need, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "TOOL_COMMAND_OPERATION"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_operation
 message: 'Command operation {{ paintedwolf.need }} is not a callable tool'
 what: '"{{ paintedwolf.need }}" is a command operation, not a callable tool.'
-cause: Routine operations use the command interface.
+cause: '{% if paintedwolf.command_operation_reachable %}Routine operations use the command interface.{% else %}Routine operations are not separate tools, and this request cannot run a replacement form for "{{ paintedwolf.need }}".{% endif %}'
 why: Operation names retain their meaning in receipts and history.
-fix: '{{ paintedwolf.next_steps }} Existing permission and scope restrictions still apply.'
+fix: '{% if paintedwolf.next_steps %}{{ paintedwolf.next_steps }}{% else %}Use an available capability or report the missing operation.{% endif %} Existing permission and scope restrictions still apply.'
 instead: Do not request or invoke this operation as a separate tool.
 x-paintedwolf-scenarios:
   - id: retired_operation
     vars:
       need: edit
+      command_operation_reachable: true
+      admitted_command_forms: [edit]
+  - id: forbidden_or_unreachable_operation
+    vars:
+      need: edit
+      command_operation_reachable: false
+      admitted_command_forms: []
+  - id: partial_multi_form_operation
+    vars:
+      need: extract_archive
+      command_operation_reachable: true
+      admitted_command_forms: [tar, zcat]

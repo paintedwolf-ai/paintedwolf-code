@@ -147,10 +147,19 @@ func evalRuleWhen(holder *evalHolder, r *Rule, gc *GuardContext) (bool, error) {
 		return true, nil
 	}
 	holder.set(gc)
+	var (
+		ok  bool
+		err error
+	)
 	if r.document != nil {
-		return r.document.EvaluateCondition(activation(gc), specObservationFuncs(holder))
+		ok, err = r.document.EvaluateCondition(activation(gc), specObservationFuncs(holder))
+	} else {
+		ok, err = evalCondition(holder, r.When, gc)
 	}
-	return evalCondition(holder, r.When, gc)
+	if err == nil && strings.TrimSpace(r.When) != "" {
+		recordRuleBranch(r.Qualified(), "when", -1, gc, ok)
+	}
+	return ok, err
 }
 
 // EvalPathOutsideScope is the path_outside_scope observation for a tool.

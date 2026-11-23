@@ -28,7 +28,8 @@ var Family = invariants.Family{Name: "prompt-render", Invariants: append([]invar
 	{Name: "templates-render-no-host-paths", Anchors: []invariants.Anchor{invariants.Dir("lycaon/config/packs/painted-wolf/platform/guidance")}, Exempt: []invariants.Exemption{
 		{Key: "config/packs/painted-wolf/platform/guidance/curator/user.md: c.path", Reason: "the curator's evidence path is a display path, not a host root"},
 	}, Check: templatesRenderNoHostPaths},
-}, reachInvariants...)}
+	{Name: "stock-config-union-reconciled", Anchors: []invariants.Anchor{invariants.Func("config", "ConsumesPackYAML")}, Check: stockConfigUnionReconciled},
+}, append(reachInvariants, append(capabilityConditionInvariants, append(structuralFragmentInvariants, cartesianInvariants...)...)...)...)}
 
 var (
 	personaRenderer = invariants.Func("internal/prompts", "RenderPersona")
@@ -158,7 +159,7 @@ func coordinatorKicksRenderNonEmpty(r *invariants.Run) {
 		}
 		checked++
 		for label, data := range map[string]map[string]any{"every field": full, "no event fields": minimal} {
-			out, err := engine.RenderKick(context.Background(), id, data)
+			out, err := engine.RenderKick(context.Background(), reader, id, data)
 			switch {
 			case err != nil:
 				r.Report("%s with %s: %v", id, label, err)
@@ -224,9 +225,7 @@ func readOnlyProfilesNeverNameMutations(r *invariants.Run) {
 				Profiles: []sandbox.ToolProfile{profile}, RootCount: 1, WebSearch: true,
 			})
 			r.Must(err)
-			data, err := prompts.Vars(reader, KickFixture())
-			r.Must(err)
-			text, err := kicks.RenderKick(context.Background(), id, data)
+			text, err := kicks.RenderKick(context.Background(), reader, id, KickFixture())
 			r.Must(err)
 			reportMention(r, fmt.Sprintf("kick %s on read-only profile %s", id, pid), text)
 		}

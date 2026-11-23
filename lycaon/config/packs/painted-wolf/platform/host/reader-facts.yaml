@@ -2,6 +2,51 @@ facts:
   - name: agent_tools
     type: "[]map[string]any"
     states: Offered worker tools with required argument summaries.
+  - name: can_any_git_read
+    type: bool
+    states: At least one workspace root has Git, is not a worker branch, and offers Git inspection forms through command.
+  - name: can_ask_user_secret
+    type: bool
+    states: Ask-user is offered and its projected schema accepts response_type secret and the secret object.
+  - name: can_command_external_selector
+    type: bool
+    states: Command is offered with external execution and the explicit external selector is visible.
+  - name: can_command_verify
+    type: bool
+    states: Command is offered and admits external execution for verification checks.
+  - name: can_git_bisect
+    type: bool
+    states: Primary workspace root has Git, is not a worker branch, and reaches Git bisect/worktree and external check execution through command.
+  - name: can_git_commit
+    type: bool
+    states: Primary workspace root has Git, is not a worker branch, and reaches Git inspection, staging, and commit forms through command.
+  - name: can_git_read
+    type: bool
+    states: Primary workspace root has Git, is not a worker branch, and reaches Git inspection forms through command.
+  - name: can_orient
+    type: bool
+    states: An inline workspace orientation tool is offered on this turn.
+  - name: can_request_command_verify
+    type: bool
+    states: Command is loadable via request_tools and will admit external verification checks.
+  - name: can_request_git_bisect
+    type: bool
+    states: Primary workspace root has Git, is not a worker branch, and Git bisect/worktree plus external check execution are loadable via request_tools.
+  - name: can_request_git_commit
+    type: bool
+    states: Primary workspace root has Git, is not a worker branch, and Git staging and commit forms are loadable via request_tools.
+  - name: can_request_git_read
+    type: bool
+    states: Primary workspace root has Git, is not a worker branch, and Git inspection forms are loadable via request_tools.
+  - name: can_spawn_implementer
+    type: bool
+    states: The active spawn roster includes at least one mutation-capable worker.
+  - name: can_spawn_web_research
+    type: bool
+    states: The active spawn roster includes at least one external web-research worker.
+  - name: can_spawn_workers
+    type: bool
+    states: At least one worker agent is spawnable in the active roster.
   - name: caps.vision
     type: bool
     states: The active model accepts image inputs.
@@ -20,6 +65,12 @@ facts:
   - name: card_only_tools
     type: "[]string"
     states: Surface card tool list when the surface offers a fixed read-only floor.
+  - name: command_external_hidden
+    type: bool
+    states: The explicit external selector on command is hidden for this session.
+  - name: command_external_shown
+    type: bool
+    states: The explicit external selector on command is visible for this session.
   - name: command_on_floor
     type: bool
     states: Command is immediately offered on the floor without request_tools.
@@ -29,9 +80,18 @@ facts:
   - name: execution_mode
     type: string
     states: Active coordinator execution mode family.
+  - name: has_any_git_root
+    type: bool
+    states: At least one attached workspace root is a Git repository.
+  - name: has_file_tools
+    type: bool
+    states: Workspace roots are attached and at least one project-file tool or command is offered.
   - name: has_git
     type: bool
     states: The primary workspace root is a Git repository.
+  - name: has_workspace_roots
+    type: bool
+    states: At least one workspace root is attached to the session.
   - name: is_coordinator
     type: bool
     states: The reader is a coordinator surface rather than a worker.
@@ -41,6 +101,9 @@ facts:
   - name: more_tools_loadable
     type: bool
     states: Deferred tools remain loadable via request_tools on this turn.
+  - name: multi_root
+    type: bool
+    states: More than one workspace root is attached to the session.
   - name: native_edit_limit_mib
     type: int
     states: Maximum file size in MiB accepted by native file edit tools.
@@ -104,30 +167,57 @@ facts:
   - name: requestable_capabilities
     type: "[]string"
     states: Capability group labels for tools loadable via request_tools.
+  - name: reviews_confined_writes
+    type: bool
+    states: Declared writes outside attached workspace roots and session scratch require review.
   - name: root_count
     type: int
     states: Workspace roots attached to the session.
-  - name: runner_inline_wait_seconds
-    type: int
-    states: Seconds a command call waits for running work before returning its handle.
-  - name: runner_park_seconds
-    type: int
-    states: Seconds a command call holds a waiting program before parking it in the background.
+  - name: runner_capability_request_tools
+    type: "[]string"
+    states: Offered host-runner tools whose projected schema accepts capability_request.
   - name: runner_direct_ip_tools
     type: "[]string"
     states: Offered host-runner tools that can dial direct IP literals.
+  - name: runner_host_resources_tools
+    type: "[]string"
+    states: Offered tools whose projected schema accepts capability_request.host_resources.
+  - name: runner_inline_wait_seconds
+    type: int
+    states: Seconds a command call waits for running work before returning its handle.
   - name: runner_local_listen_tools
     type: "[]string"
     states: Offered host-runner tools that can bind a local listener.
   - name: runner_loopback_connect_tools
     type: "[]string"
     states: Offered host-runner tools that can connect to loopback ports.
+  - name: runner_park_seconds
+    type: int
+    states: Seconds a command call holds a waiting program before parking it in the background.
+  - name: runner_secret_use_tools
+    type: "[]string"
+    states: Offered tools whose projected schema accepts secret_use.
   - name: runner_socket_tools
     type: "[]string"
     states: Offered host-runner tools that can connect to Unix sockets.
+  - name: runner_socks_proxy_tools
+    type: "[]string"
+    states: Offered tools whose projected schema accepts socks_proxy.
   - name: runner_write_root_tools
     type: "[]string"
     states: Offered host-runner tools that can write inside workspace roots.
+  - name: session_mode
+    type: string
+    states: Active session mode (agent or ask).
+  - name: session_scratch_dir
+    type: string
+    states: Session-private scratch directory path when allocated.
+  - name: shared_temp_locations
+    type: "[]string"
+    states: Shared temporary directory paths writable without review.
+  - name: shared_temp_writable
+    type: bool
+    states: At least one shared temporary directory is writable without review.
   - name: surface_card_label
     type: string
     states: Human-readable label for the active coordinator surface card.
@@ -211,3 +301,5 @@ reserved_prefixes:
   - agent_has_skill_
   - visual_show_
   - caps
+  - can_git_
+  - can_spawn_

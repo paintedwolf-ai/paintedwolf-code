@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -145,13 +148,92 @@ func (l *modelTurn) buildTurnRequest(
 	} else if policyBinding != nil {
 		return coordinatorTurnRequest{}, fmt.Errorf("model request policy requires turn state")
 	}
-	st.stampOfferedToolNames(callable)
+	l.Context.stampTurnToolSchemas(ctx, st, callable, sess, profileID, surfaceID, frameValue, toolPlan)
 	return coordinatorTurnRequest{
 		Req:                req,
 		SurfaceID:          surfaceID,
 		TranscriptEstimate: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(req.Messages)),
 		ToolPlan:           toolPlan,
 	}, nil
+}
+
+func (l *promptContext) stampTurnToolSchemas(
+	ctx context.Context,
+	st *promptLoopTurnState,
+	callable []tools.ToolMeta,
+	sess *api.Session,
+	profileID, surfaceID string,
+	frame inject.CoordinatorTurnFrame,
+	plan toolsurface.Plan,
+) {
+	st.stampOfferedToolNames(callable)
+	if st == nil {
+		return
+	}
+	for name, schema := range l.projectedDeferredSchemas(ctx, sess, profileID, surfaceID, frame, plan) {
+		if _, already := st.offeredToolSchemas[name]; !already {
+			st.offeredToolSchemas[name] = schema
+		}
+	}
+}
+
+func (l *promptContext) projectedDeferredSchemas(
+	ctx context.Context,
+	sess *api.Session,
+	profileID, surfaceID string,
+	frame inject.CoordinatorTurnFrame,
+	plan toolsurface.Plan,
+) map[string]map[string]any {
+	deferred := plan.DeferredNames()
+	if l == nil || l.Deps.Policy == nil || len(deferred) == 0 {
+		return nil
+	}
+	listCtx := ctx
+	if surfaceID != "" {
+		listCtx = toolpolicy.WithCoordinatorSurface(ctx, surfaceID)
+	}
+	all := l.Deps.Policy.ListForPrompt(listCtx, sess, profileID)
+	if frame.Machine.Compiled() {
+		all = tools.HideSkillsReadWhenEmpty(all, frame.Machine.SkillCount)
+	}
+	ask := sess != nil && sess.Mode == api.SessionModeAsk
+	if ask && profileID == prompts.CoordinatorProfileID {
+		all = ProjectAskToolMetas(all)
+	}
+	var taskAllowlist []string
+	var verdict map[string]any
+	if profileID == prompts.CoordinatorProfileID {
+		taskAllowlist = taskSpawnAllowlistForTurn(frame)
+		if ask {
+			taskAllowlist = readOnlySpawnAllowlist(taskAllowlist)
+		}
+		verdict = phaseVerdictSchema(frame)
+	}
+	out := make(map[string]map[string]any, len(deferred))
+	for _, meta := range all {
+		if !plan.Deferred(meta.Name) {
+			continue
+		}
+		if meta.Name == "submit_verdict" && verdict != nil {
+			meta.ArgsSchema = verdict
+		}
+		proj := tools.ProjectProviderToolMeta(meta)
+		switch meta.Name {
+		case "task":
+			if taskAllowlist != nil && len(taskAllowlist) == 0 {
+				continue
+			}
+			proj = guard.ApplySpawnAllowlistSchema(proj, taskAllowlist)
+		case "instruct_worker":
+			if profileID == prompts.CoordinatorProfileID {
+				proj = guard.ApplySpawnAllowlistSchema(proj, taskAllowlist)
+			}
+		}
+		if proj.ArgsSchema != nil {
+			out[meta.Name] = jsonvalue.CloneMap(proj.ArgsSchema)
+		}
+	}
+	return out
 }
 
 func validateTurnToolFunctionRoots(metas []tools.ToolMeta) error {

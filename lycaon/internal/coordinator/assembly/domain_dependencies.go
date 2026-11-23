@@ -19,6 +19,7 @@ import (
 type promptSurfaceDeps struct {
 	Agents                  AgentProfileResolver
 	EffectivePromptSurface  func(ctx context.Context, sess *api.Session) prompts.AgentPromptSurface
+	OnWorkerBranch          func(ctx context.Context, sess *api.Session) (string, bool)
 	ImplementSessionState   func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
 	ModelVision             func(context.Context, *api.Session) bool
@@ -59,14 +60,16 @@ type turnContextDeps struct {
 }
 
 type promptProjection interface {
+	commandJobsReader(context.Context, *api.Session, bool, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, []bgprocess.JobSnapshot, []heldcall.Running) (prompts.Reader, map[string]any, error)
 	loadExecutionModeState(string) surface.ExecutionModeState
 	loadedTools(*api.Session) map[string]bool
 	resolveCoordinatorProfile(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) (surface.TurnProfile, surface.ImplementSessionState)
 	resolveTurnRoster(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) *inject.AgentRoster
 	sessionCatalogView(context.Context, *api.Session) *catalogview.View
-	toolAddressable(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, string) bool
 	taskOffered(*api.Session, string, int) bool
+	toolAddressable(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, string) bool
 	turnReader(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, int) (prompts.Reader, error)
+	workerTurnReader(context.Context, *api.Session, inject.CoordinatorTurnFrame, *TurnAssemblyScratch) (prompts.Reader, error)
 	workspaceRootsForTurn(context.Context, *api.Session, *TurnAssemblyScratch) ([]map[string]any, int, string, int, bool)
 }
 
@@ -74,6 +77,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 	surfaceDeps := promptSurfaceDeps{
 		Agents:                  snapshot.Agents,
 		EffectivePromptSurface:  snapshot.EffectivePromptSurface,
+		OnWorkerBranch:          snapshot.Workers.Branch,
 		ImplementSessionState:   snapshot.ImplementSessionState,
 		Limits:                  snapshot.Limits,
 		ModelVision:             snapshot.ModelVision,

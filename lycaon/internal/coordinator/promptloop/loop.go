@@ -140,13 +140,14 @@ loop:
 		if err := l.Inbox.takePhaseGuidance(ctx, id, st); err != nil {
 			return nil, err
 		}
-		if sentBeforeCall || !firstModelTurn || previous != authority.Mode {
+		modeUpgraded := l.Context.observeModeUpgrade(sess, id, previous, authority.Mode, st.history)
+		if sentBeforeCall || !firstModelTurn || previous != authority.Mode || modeUpgraded {
 			surfaceID, err = l.Context.refreshCoordinatorSurface(ctx, sess, id, profileID, st, surfaceID)
 			if err != nil {
 				return nil, err
 			}
 		}
-		if previous == api.SessionModeAsk && authority.Mode == api.SessionModeAgent {
+		if modeUpgraded {
 			st.history, err = l.appendAgentEnabledNudge(ctx, id, st)
 			if err != nil {
 				return nil, err

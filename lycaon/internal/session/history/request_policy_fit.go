@@ -16,7 +16,7 @@ type RequestPolicies interface {
 	PolicyContextNotice(context.Context, *api.Session) (api.Message, error)
 }
 
-func (m *Service) fitPolicyFrame(ctx context.Context, sess *api.Session, req modelcall.CompletionRequest, rows []api.Message, omission requestOmission, record *messageview.Continuation, cfg compaction.CompactionConfig, budgets RequestBudgets, policies RequestPolicies, authenticated [][]api.Message, measure func(modelcall.CompletionRequest) modelcall.RequestBudget, reserve int) (modelcall.CompletionRequest, bool, error) {
+func (m *Service) fitPolicyFrame(ctx context.Context, sess *api.Session, recall bool, req modelcall.CompletionRequest, rows []api.Message, omission requestOmission, record *messageview.Continuation, cfg compaction.CompactionConfig, budgets RequestBudgets, policies RequestPolicies, authenticated [][]api.Message, measure func(modelcall.CompletionRequest) modelcall.RequestBudget, reserve int) (modelcall.CompletionRequest, bool, error) {
 	var groups [][]int
 	for _, chain := range authenticated {
 		var group []int
@@ -39,7 +39,7 @@ func (m *Service) fitPolicyFrame(ctx context.Context, sess *api.Session, req mod
 	if err != nil {
 		return req, false, err
 	}
-	minimal, err := m.fitRequestHistory(ctx, sess, rows, omission, record, cfg, 1, true)
+	minimal, err := m.fitRequestHistory(ctx, sess, recall, rows, omission, record, cfg, 1, true)
 	if err != nil {
 		return req, false, err
 	}

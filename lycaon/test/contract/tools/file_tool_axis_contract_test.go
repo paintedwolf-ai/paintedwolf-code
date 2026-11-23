@@ -9,14 +9,11 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolscope"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// "Can this turn reach project files" is one catalog fact read three ways: the
-// coordinator surface hides folder-requiring tools at zero roots, the no_folder
-// posture rule denies them, and prompt copy gates on has_file_tools. The
-// expectation comes from the catalog's no-folder allowlist itself.
 func TestFileToolFactHasOneSource(t *testing.T) {
 	t.Parallel()
 	allowlist, err := toolscope.NoFolderAllowlist()
@@ -25,30 +22,43 @@ func TestFileToolFactHasOneSource(t *testing.T) {
 		t.Fatal("no_folder_allowlist is empty")
 	}
 
-	// Every allowlisted tool works without a folder, so a surface built only from
-	// them must not claim file tools.
-	caps := capability.Derive(0, allowlist, nil)
-	if caps.HasFileTools {
-		t.Errorf("has_file_tools is true for a surface that is exactly the "+
-			"no-folder allowlist (%s)", strings.Join(allowlist, ", "))
+	for _, rootCount := range []int{0, 1} {
+		caps := capability.Derive(rootCount, allowlist, nil)
+		if caps.HasFileTools {
+			t.Errorf("has_file_tools is true at root_count=%d for no-folder allowlist (%s)",
+				rootCount, strings.Join(allowlist, ", "))
+		}
+		if caps.HasWorkspaceRoots != (rootCount > 0) {
+			t.Errorf("has_workspace_roots=%v at root_count=%d", caps.HasWorkspaceRoots, rootCount)
+		}
 	}
 
-	// A tool the allowlist omits flips it at any root count: a profile can
-	// withhold file tools with a folder attached.
 	cfg, loadErr := nativemanifest.Load()
 	contractcheck.FailErr(t, "load native manifest", loadErr)
 	folderRequiring := folderRequiringCatalogTools(cfg, allowlist)
 	if len(folderRequiring) == 0 {
 		t.Fatal("no catalog tool requires an attached folder — the axis is inert")
 	}
-	for _, tool := range folderRequiring {
-		for _, rootCount := range []int{0, 1} {
-			got := capability.Derive(rootCount, []string{tool}, nil)
-			if !got.HasFileTools {
-				t.Errorf("has_file_tools is false for %q at root_count=%d, but the "+
-					"catalog keeps it off the no-folder allowlist", tool, rootCount)
-			}
+	fileTools := 0
+	for _, tool := range cfg.AllTools() {
+		wantFileTool := prompts.IsProjectFileTool(tool)
+		if wantFileTool {
+			fileTools++
 		}
+		zero := capability.Derive(0, []string{tool}, nil)
+		if zero.HasWorkspaceRoots || zero.HasFileTools {
+			t.Errorf("root_count=0 set workspace/file flags for %q: %+v", tool, zero)
+		}
+		one := capability.Derive(1, []string{tool}, nil)
+		if !one.HasWorkspaceRoots {
+			t.Errorf("has_workspace_roots is false at root_count=1 for %q", tool)
+		}
+		if one.HasFileTools != wantFileTool {
+			t.Errorf("has_file_tools=%v want %v for %q at root_count=1", one.HasFileTools, wantFileTool, tool)
+		}
+	}
+	if fileTools == 0 {
+		t.Fatal("no catalog tool matched IsProjectFileTool — has_file_tools is inert")
 	}
 }
 

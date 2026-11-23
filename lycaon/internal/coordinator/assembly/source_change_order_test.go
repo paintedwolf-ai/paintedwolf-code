@@ -29,7 +29,14 @@ func TestTurnSourceBriefsSitBeforeTheirOpeningPrompt(t *testing.T) {
 	eng.SetDeps(deps)
 	sess := &api.Session{ID: "source-window", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	ctx := context.Background()
-	block := inject.RenderSourceChangesBlock(ctx, deps.Injects, sess.ID, brief, false)
+	history := []api.Message{
+		{ID: "u1", Role: api.MessageRoleUser, Content: "Count the apples."},
+		{ID: "a1", Role: api.MessageRoleAssistant, Content: "There are 3."},
+		{ID: "u2", Role: api.MessageRoleUser, Content: "Update the inventory and summarize the result."},
+	}
+	reader, err := testTurnContext(eng).surface.turnReader(ctx, sess, inject.CoordinatorTurnFrame{}, history, &TurnAssemblyScratch{}, 1)
+	testutil.FailErr(t, "turnReader", err)
+	block := inject.RenderSourceChangesBlock(ctx, deps.Injects, reader, sess.ID, brief)
 	if block == "" {
 		t.Fatal("source change fixture did not render")
 	}
@@ -39,11 +46,6 @@ func TestTurnSourceBriefsSitBeforeTheirOpeningPrompt(t *testing.T) {
 	}})
 	block = projected[len(projected)-1].Content
 	eng.BeginPromptTurn(sess.ID, "")
-	history := []api.Message{
-		{ID: "u1", Role: api.MessageRoleUser, Content: "Count the apples."},
-		{ID: "a1", Role: api.MessageRoleAssistant, Content: "There are 3."},
-		{ID: "u2", Role: api.MessageRoleUser, Content: "Update the inventory and summarize the result."},
-	}
 	var previous []api.Message
 	for _, observation := range []string{
 		"Read notes.txt at the current revision, including the human note.",

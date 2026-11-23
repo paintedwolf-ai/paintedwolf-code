@@ -105,17 +105,19 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 		})
 	}
 	reader, err := NewReader(ReaderInput{
-		ProfileID: profileID,
-		SurfaceID: strings.TrimSpace(in.SurfaceID),
-		Profiles:  profiles,
-		Plan:      toolsurface.Compile(offered, deferred),
-		Loaded:    toolNameSet(offered),
-		Visible:   append(slices.Clone(offered), deferred...),
-		RootCount: in.RootCount,
-		WebSearch: true,
+		ProfileID:             profileID,
+		SurfaceID:             strings.TrimSpace(in.SurfaceID),
+		Profiles:              profiles,
+		Plan:                  toolsurface.Compile(offered, deferred),
+		Loaded:                toolNameSet(offered),
+		Visible:               append(slices.Clone(offered), deferred...),
+		RootCount:             in.RootCount,
+		WebSearch:             true,
+		ReviewsConfinedWrites: in.Posture.ReviewsConfinedWrites(),
+		CommandExternalHidden: in.CommandExternalHidden,
+		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
+		SharedTempLocations:   in.SharedTempLocations,
 	})
-	// The snapshot holds the variables a render would receive; without a
-	// reader it records the surface variables alone.
 	vars := AgentPromptSurfaceTemplateVars(AgentPromptSurface{
 		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
 		Posture:               in.Posture,

@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -75,7 +74,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	if l.Deps.EvaluateCloseoutBlock == nil {
 		return out, fmt.Errorf("closeout OAR not configured")
 	}
-	decision, err := l.Deps.EvaluateCloseoutBlock(tools.WithCallReach(ctx, st.requestReach()), sess, observation.facts)
+	decision, err := l.Deps.EvaluateCloseoutBlock(toolreach.WithRequest(ctx, st.requestReach()), sess, observation.facts)
 	if err != nil {
 		return out, err
 	}
@@ -123,8 +122,8 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 			break
 		}
 	}
-	if st != nil && !tools.CallReach(ctx).Known() {
-		ctx = tools.WithCallReach(ctx, st.requestReach())
+	if st != nil && !toolreach.FromContext(ctx).Known() {
+		ctx = toolreach.WithRequest(ctx, st.requestReach())
 	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, surfaceID, assistantMsg)
 	if err != nil {
@@ -238,12 +237,10 @@ func (l *turnCloseout) hostKickRenderer(ctx context.Context, st *promptLoopTurnS
 	render := l.Deps.RenderHostKick
 	reader := closeoutTurnReader(st)
 	return func(kickID string, data map[string]any) string {
-		if reader.Valid() {
-			if merged, err := prompts.Vars(reader, data); err == nil {
-				data = merged
-			}
+		if !reader.Valid() {
+			return guard.HostKickMarker(kickID)
 		}
-		kick, err := render(ctx, kickID, data)
+		kick, err := render(ctx, reader, kickID, data)
 		if err != nil || strings.TrimSpace(kick) == "" {
 			return guard.HostKickMarker(kickID)
 		}

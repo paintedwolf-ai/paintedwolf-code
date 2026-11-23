@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -30,23 +31,33 @@ func largeRecordedCommand() []api.Message {
 func TestCompletedCommandProjectionPreservesFactsAndRecovery(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	rows := largeRecordedCommand()
-	got := projectCompletedCommands(t.Context(), rows)
+	got := projectCompletedCommands(recallReachCtx(t), true, rows)
 	if len(got) != 2 || len(got[1].ToolCalls) != 0 || got[1].ToolResult != nil {
 		t.Fatalf("exchange was not replaced atomically: %+v", got)
+	}
+	if !strings.Contains(got[1].Content, "recall(history=") {
+		t.Fatalf("positive witness missing recall(history=...) when recallAvailable=true: %s", got[1].Content)
 	}
 	for _, text := range []string{`"exit_code":1`, `"source_revision":"source-revision"`, `"message_id":"call-row"`, `"message_id":"result-row"`, `command#1`, `output:program-source:program`} {
 		if !strings.Contains(got[1].Content, text) {
 			t.Fatalf("missing %s: %s", text, got[1].Content)
 		}
 	}
+	withoutRecall := projectCompletedCommands(t.Context(), false, rows)
+	if len(withoutRecall) != 2 || strings.Contains(withoutRecall[1].Content, "recall(history=") {
+		t.Fatalf("negative witness leaked recall(history=...) when recallAvailable=false: %s", withoutRecall[1].Content)
+	}
+	if !strings.Contains(withoutRecall[1].Content, "Original arguments and full output are omitted on this turn") {
+		t.Fatalf("negative witness missing specific non-recall omission notice: %s", withoutRecall[1].Content)
+	}
 	if len(rows[1].ToolCalls[0].Args["command"].(string)) < 60000 || rows[2].ToolResult.CommandProgram == nil {
 		t.Fatal("canonical exchange changed")
 	}
-	if got := projectCompletedCommands(t.Context(), rows, 100000); len(got) != 3 {
+	if got := projectCompletedCommands(t.Context(), true, rows, 100000); len(got) != 3 {
 		t.Fatal("fitting exchange projected needlessly")
 	}
 	rows[2].ToolResult.CommandProgram.SettledAt = nil
-	if got := projectCompletedCommands(t.Context(), rows); len(got) != 3 {
+	if got := projectCompletedCommands(t.Context(), true, rows); len(got) != 3 {
 		t.Fatal("live program was projected as settled")
 	}
 }
@@ -64,7 +75,7 @@ func TestCommandProjectionRequiresCompleteMatchingReceipts(t *testing.T) {
 	} {
 		rows := largeRecordedCommand()
 		mutate(rows)
-		if got := projectCompletedCommands(t.Context(), rows); len(got) != 3 {
+		if got := projectCompletedCommands(t.Context(), true, rows); len(got) != 3 {
 			t.Fatal("unmatched exchange was projected")
 		}
 	}
@@ -79,7 +90,10 @@ func TestFittingLargeCompletedSourceLeavesRoomForContinuation(t *testing.T) {
 	cfg.ModelContextWindow = 8192
 	cfg.HardCeilingTokens = 6000
 	svc.Compactor = compaction.NewSimpleCompactor(cfg, nil)
-	req := modelcall.CompletionRequest{Messages: append([]api.Message{{ID: "standing", Role: api.MessageRoleSystem, Content: strings.Repeat("standing ", 100)}}, rows...)}
+	req := modelcall.CompletionRequest{
+		Messages: append([]api.Message{{ID: "standing", Role: api.MessageRoleSystem, Content: strings.Repeat("standing ", 100)}}, rows...),
+		Tools:    []tools.ToolMeta{recallToolMeta(t)},
+	}
 	fitted, err := svc.FitRequest(t.Context(), &api.Session{ID: "s"}, rows, req, nil, nil)
 	testutil.FailErr(t, "fit settled source", err)
 	if modelcall.EstimateRequestInput(fitted) >= 6000 || !strings.Contains(fitted.Messages[len(fitted.Messages)-1].Content, `"exit_code":1`) {

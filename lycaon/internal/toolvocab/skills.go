@@ -205,11 +205,12 @@ func offeredReader(offered map[string]bool) (prompts.Reader, error) {
 			Tools:          tools,
 			CommandEffects: effects,
 		}},
-		Visible:   visible,
-		Loaded:    tools,
-		RootCount: 1,
-		HasGit:    true,
-		WebSearch: true,
+		Visible:               visible,
+		Loaded:                tools,
+		RootCount:             1,
+		HasGit:                true,
+		WebSearch:             true,
+		CommandExternalHidden: offered[toolcontract.ReachCommandExternalExec] && !offered[toolcontract.ReachCommandExternalExecSelector],
 	})
 }
 
@@ -218,7 +219,11 @@ type skillRenderMemo struct {
 	err error
 }
 
-var skillRenderCache = scopedstore.New[skillRenderMemo](2048)
+var (
+	skillRenderCache           = scopedstore.New[skillRenderMemo](32768)
+	readerSkillVarsCache       = scopedstore.New[map[string]any](2048)
+	skillOfferedForReaderCache = scopedstore.New[bool](65536)
+)
 
 func varsDigestKey(vars map[string]any) string {
 	h := sha256.New()
@@ -428,13 +433,12 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 				continue
 			}
 			// Runtime and the contract matrix only offer a skill to readers
-			// whose tools cover its rendered body (SkillToolsOffered), so
-			// validation checks the same eligibility set rather than demanding
-			// every skill render clean for every profile.
-			offerKey := agent.ProfileID + "\x00" + skill.Name + "\x00" + skill.Body
+			// whose tools and projected schemas cover its rendered body, so
+			// validation checks the same eligibility set.
+			offerKey := reader.Fingerprint() + "\x00" + skill.Name + "\x00" + skill.Body
 			isOffered, cachedOffer := offeredByProfile[offerKey]
 			if !cachedOffer {
-				isOffered = SkillToolsOffered(skill, held)
+				isOffered = SkillToolsOfferedForReader(skill, reader)
 				offeredByProfile[offerKey] = isOffered
 			}
 			if !isOffered {
@@ -553,8 +557,119 @@ var fallbackStockCatalog = sync.OnceValue(func() *Catalog {
 	return c
 })
 
+// SkillToolsOfferedForReader reports whether reader's offered tools and
+// projected schemas cover sk's rendered body, host_resources, and any_of_tools.
+func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
+	if sk.UserProvided {
+		return true
+	}
+	if !reader.Valid() {
+		return SkillToolsOffered(sk, nil)
+	}
+	fp := reader.Fingerprint()
+	var memoKey string
+	if fp != "" {
+		memoKey = fp + "\x00" + sk.Name + "\x00" + sk.Description + "\x00" + sk.Metadata["host_resources"] + "\x00" + sk.Metadata["any_of_tools"] + "\x00" + sk.Body
+		if cached, ok := skillOfferedForReaderCache.Load(memoKey); ok {
+			return cached
+		}
+	}
+	var (
+		vars map[string]any
+		err  error
+	)
+	if fp != "" {
+		if cachedVars, ok := readerSkillVarsCache.Load(fp); ok {
+			vars = cachedVars
+		} else {
+			vars, err = prompts.SkillVars(reader)
+			if err == nil {
+				readerSkillVarsCache.Store(fp, vars)
+			}
+		}
+	} else {
+		vars, err = prompts.SkillVars(reader)
+	}
+	if err != nil {
+		return SkillToolsOffered(sk, reader.Held())
+	}
+	c := StockCatalog()
+	if c == nil {
+		return true
+	}
+	offered := reader.Held()
+	anyOf := sk.AnyOfTools()
+	cacheKey := "reader:" + fp
+	if fp == "" {
+		cacheKey = "reader-nofp:" + varsDigestKey(vars)
+	}
+	rendered, renderErr := renderSkillTextCached(cacheKey, sk.Body, vars)
+	if renderErr != nil {
+		rendered = sk.Body
+	}
+	res := evalSkillRenderedReach(c, sk, vars, offered, reader.Requestable(), anyOf, rendered)
+	if memoKey != "" {
+		skillOfferedForReaderCache.Store(memoKey, res)
+	}
+	return res
+}
+
+func evalSkillRenderedReach(
+	c *Catalog,
+	sk skills.Skill,
+	vars map[string]any,
+	offered map[string]bool,
+	requestable []string,
+	anyOf []string,
+	rendered string,
+) bool {
+	if strings.TrimSpace(sk.Metadata["host_resources"]) != "" {
+		hostResTools, _ := vars["runner_host_resources_tools"].([]string)
+		if len(hostResTools) == 0 {
+			return false
+		}
+	}
+	checkText := rendered
+	if desc := strings.TrimSpace(sk.Description); desc != "" {
+		checkText = desc + "\n" + rendered
+	}
+	if offered["request_tools"] && len(requestable) > 0 {
+		checkText = maskLoaderSequencedMentions(checkText, requestable)
+	}
+	for _, name := range UnreachableNames(c, checkText, offered) {
+		if !slices.Contains(anyOf, name) {
+			return false
+		}
+	}
+	if len(anyOf) == 0 {
+		return true
+	}
+	for _, tool := range anyOf {
+		if offered[tool] {
+			return true
+		}
+	}
+	return false
+}
+
+var loaderSequencedMentionRE = regexp.MustCompile("(?i)\\bload\\s+`([a-z0-9_]+)`\\s+via\\s+`request_tools\\(|`([a-z0-9_]+)`\\s+after\\s+(?:loading\\s+it\\s+with\\s+)?`request_tools\\(")
+
+func maskLoaderSequencedMentions(text string, requestable []string) string {
+	return loaderSequencedMentionRE.ReplaceAllStringFunc(text, func(m string) string {
+		sub := loaderSequencedMentionRE.FindStringSubmatch(m)
+		target := sub[1]
+		if target == "" {
+			target = sub[2]
+		}
+		if slices.Contains(requestable, target) {
+			return "Load via `request_tools("
+		}
+		return m
+	})
+}
+
 // SkillToolsOffered reports whether offered covers every tool, operation, and
-// command form sk's rendered body requires, and satisfies any_of_tools.
+// command form sk's rendered body requires for names-only callers without a Reader.
 func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 	if sk.UserProvided {
 		return true
@@ -567,7 +682,11 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 		return true
 	}
 	anyOf := sk.AnyOfTools()
-	for _, name := range UnreachableNames(c, renderSkillBody(sk, offered), offered) {
+	checkText := renderSkillBody(sk, offered)
+	if desc := strings.TrimSpace(sk.Description); desc != "" {
+		checkText = desc + "\n" + checkText
+	}
+	for _, name := range UnreachableNames(c, checkText, offered) {
 		if !slices.Contains(anyOf, name) {
 			return false
 		}

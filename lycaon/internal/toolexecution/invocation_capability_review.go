@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
@@ -99,7 +100,16 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	ctx = hitl.WithPreparedApprovalAnswer(ctx, reviews, final)
 	if !hitl.CheckpointAuthorizes(final) {
 		denialCode, denialPath := capabilityReviewDenialCodeAndPath(plan)
-		reject := isolationCheckpointReject(denialCode, final)
+		var reject *toolrejection.ToolReject
+		if (denialCode == isolation.CodeWriteRootDenied || denialCode == isolation.CodeReadPathDenied) &&
+			final != nil && final.Status == hitl.DecisionStatusRejected && final.ResolvedBy != authzledger.ResolvedByHuman {
+			reject = &toolrejection.ToolReject{
+				Code: isolation.CodeApprovalUnavailable,
+				Data: map[string]any{"reason": "The approval request was rejected without a confirmed user decision."},
+			}
+		} else {
+			reject = isolationCheckpointReject(denialCode, final)
+		}
 		if denialPath != "" {
 			if reject.Data == nil {
 				reject.Data = map[string]any{}

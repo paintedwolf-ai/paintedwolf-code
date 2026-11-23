@@ -5,13 +5,16 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/prompts"
 )
 
 // stubEngine captures kick renders without reading template files.
 type stubEngine struct {
-	render   func(name string, data map[string]any) (string, error)
-	lastName string
-	lastData map[string]any
+	render     func(name string, data map[string]any) (string, error)
+	lastReader prompts.Reader
+	lastName   string
+	lastData   map[string]any
 }
 
 func TestRenderPendingNudgeRetainsKickAcrossRenderFailure(t *testing.T) {
@@ -76,7 +79,8 @@ func (s *stubEngine) RenderGuidance(context.Context, string, map[string]any) (st
 	return "", nil
 }
 
-func (s *stubEngine) RenderKick(_ context.Context, name string, data map[string]any) (string, error) {
+func (s *stubEngine) RenderKick(_ context.Context, reader prompts.Reader, name string, data map[string]any) (string, error) {
+	s.lastReader = reader
 	s.lastName = name
 	s.lastData = data
 	if s.render != nil {

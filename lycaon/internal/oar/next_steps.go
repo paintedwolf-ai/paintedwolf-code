@@ -2,6 +2,7 @@ package oar
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -258,9 +259,7 @@ func nextStepRefs(step NextStep) ([]string, error) {
 	}
 	templates := append([]string{step.Say, step.Otherwise}, step.Program...)
 	for _, value := range step.Args {
-		if source, ok := value.(string); ok {
-			templates = append(templates, source)
-		}
+		templates = collectArgTemplates(templates, value)
 	}
 	for _, source := range templates {
 		bindings, err := oarcore.ParseCopy(source)
@@ -296,10 +295,47 @@ func ruleFactRefs(r *Rule) map[string]bool {
 	return out
 }
 
+// StepResolutionOutcome describes how ResolveNextSteps resolved one step path.
+type StepResolutionOutcome string
+
+const (
+	StepOutcomeEmittedCall      StepResolutionOutcome = "emitted_call"
+	StepOutcomeEmittedOtherwise StepResolutionOutcome = "emitted_otherwise"
+	StepOutcomeOmitted          StepResolutionOutcome = "omitted"
+	StepOutcomeDisabled         StepResolutionOutcome = "disabled"
+	StepOutcomeUnselected       StepResolutionOutcome = "unselected"
+)
+
+// StepResolution records pre-concatenation provenance for one step or alternative.
+type StepResolution struct {
+	QualifiedRule string
+	Anchor        string
+	RuleID        string
+	BranchPrefix  string
+	HasGuard      bool
+	GuardApplies  bool
+	Reachable     bool
+	Outcome       StepResolutionOutcome
+	SelectedCalls []toolreach.Call
+	RenderedText  string
+}
+
 // ResolvedSteps is one occurrence's reachable steps.
 type ResolvedSteps struct {
-	Text  string
-	Calls []toolreach.Call
+	Text        string
+	Calls       []toolreach.Call
+	Resolutions []StepResolution
+}
+
+func assembleNextStepFacts(steps []NextStep, gc *GuardContext) {
+	for _, step := range steps {
+		if refs, err := nextStepRefs(step); err == nil && len(refs) > 0 {
+			_ = AssembleFacts(gc, refs)
+		}
+		if len(step.Or) > 0 {
+			assembleNextStepFacts(step.Or, gc)
+		}
+	}
 }
 
 // ResolveNextSteps checks a rule's steps against the occurrence's frozen request.
@@ -309,40 +345,112 @@ func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
 	if r == nil || r.NextSteps == nil || gc == nil {
 		return out
 	}
+	assembleNextStepFacts(r.NextSteps.Steps, gc)
 	facts := activation(gc)
 	var sentences []string
-	for _, step := range r.NextSteps.Steps {
-		text, calls := resolveStep(step, gc, facts)
+	for i, step := range r.NextSteps.Steps {
+		text, calls := resolveStep(r, fmt.Sprintf("steps[%d]", i), i, step, gc, facts, &out.Resolutions)
 		if strings.TrimSpace(text) != "" {
 			sentences = append(sentences, text)
 		}
 		out.Calls = append(out.Calls, calls...)
 	}
 	out.Text = strings.Join(sentences, " ")
+	recordResolvedNextSteps(r, gc, out)
 	return out
 }
 
-func resolveStep(step NextStep, gc *GuardContext, facts map[string]any) (string, []toolreach.Call) {
+func appendUnselectedAlternatives(r *Rule, parentPrefix string, startIdx int, alts []NextStep, resolutions *[]StepResolution) {
+	ruleID := r.Qualified()
+	for offset, alt := range alts {
+		prefix := fmt.Sprintf("%s.or[%d]", parentPrefix, startIdx+offset)
+		*resolutions = append(*resolutions, StepResolution{
+			QualifiedRule: ruleID,
+			Anchor:        r.Anchor,
+			RuleID:        r.ID,
+			BranchPrefix:  prefix,
+			HasGuard:      strings.TrimSpace(alt.When) != "",
+			Outcome:       StepOutcomeUnselected,
+		})
+		appendUnselectedAlternatives(r, prefix, 0, alt.Or, resolutions)
+	}
+}
+
+func resolveStep(r *Rule, branchPrefix string, stepIndex int, step NextStep, gc *GuardContext, facts map[string]any, resolutions *[]StepResolution) (string, []toolreach.Call) {
+	ruleID := r.Qualified()
+	hasGuard := strings.TrimSpace(step.When) != ""
 	applies, err := EvaluateCondition(step.When, gc)
+	if hasGuard && err == nil {
+		recordRuleBranch(ruleID, branchPrefix+".when", stepIndex, gc, applies)
+	}
 	if err != nil || !applies {
+		*resolutions = append(*resolutions, StepResolution{
+			QualifiedRule: ruleID,
+			Anchor:        r.Anchor,
+			RuleID:        r.ID,
+			BranchPrefix:  branchPrefix,
+			HasGuard:      hasGuard,
+			Outcome:       StepOutcomeDisabled,
+		})
+		appendUnselectedAlternatives(r, branchPrefix, 0, step.Or, resolutions)
 		return "", nil
 	}
 	if call, built := stepCall(step, gc, facts); built {
 		if sequence, reachable := gc.Reach.Sequence(call); reachable {
+			recordRuleBranch(ruleID, branchPrefix+".reach", stepIndex, gc, true)
 			bound := make(map[string]any, len(facts)+1)
 			for name, value := range facts {
 				bound[name] = value
 			}
 			bound[stepCallBinding] = sequenceText(sequence)
-			return oarcore.RenderCopy(step.Say, bound), sequence
+			say := oarcore.RenderCopy(step.Say, bound)
+			outcome := StepOutcomeOmitted
+			var selected []toolreach.Call
+			rendered := ""
+			if strings.TrimSpace(say) != "" {
+				outcome = StepOutcomeEmittedCall
+				selected = slices.Clone(sequence)
+				rendered = say
+			}
+			*resolutions = append(*resolutions, StepResolution{
+				QualifiedRule: ruleID,
+				Anchor:        r.Anchor,
+				RuleID:        r.ID,
+				BranchPrefix:  branchPrefix,
+				HasGuard:      hasGuard,
+				GuardApplies:  true,
+				Reachable:     true,
+				Outcome:       outcome,
+				SelectedCalls: selected,
+				RenderedText:  rendered,
+			})
+			appendUnselectedAlternatives(r, branchPrefix, 0, step.Or, resolutions)
+			return say, sequence
 		}
 	}
-	for _, alternative := range step.Or {
-		if text, calls := resolveStep(alternative, gc, facts); strings.TrimSpace(text) != "" {
+	recordRuleBranch(ruleID, branchPrefix+".reach", stepIndex, gc, false)
+	parentIdx := len(*resolutions)
+	*resolutions = append(*resolutions, StepResolution{
+		QualifiedRule: ruleID,
+		Anchor:        r.Anchor,
+		RuleID:        r.ID,
+		BranchPrefix:  branchPrefix,
+		HasGuard:      hasGuard,
+		GuardApplies:  true,
+		Outcome:       StepOutcomeOmitted,
+	})
+	for j, alternative := range step.Or {
+		if text, calls := resolveStep(r, fmt.Sprintf("%s.or[%d]", branchPrefix, j), stepIndex, alternative, gc, facts, resolutions); strings.TrimSpace(text) != "" {
+			appendUnselectedAlternatives(r, branchPrefix, j+1, step.Or[j+1:], resolutions)
 			return text, calls
 		}
 	}
-	return oarcore.RenderCopy(step.Otherwise, facts), nil
+	otherwise := oarcore.RenderCopy(step.Otherwise, facts)
+	if strings.TrimSpace(otherwise) != "" {
+		(*resolutions)[parentIdx].Outcome = StepOutcomeEmittedOtherwise
+		(*resolutions)[parentIdx].RenderedText = otherwise
+	}
+	return otherwise, nil
 }
 
 func sequenceText(sequence []toolreach.Call) string {
@@ -374,7 +482,7 @@ func stepCall(step NextStep, gc *GuardContext, facts map[string]any) (toolreach.
 	}
 	missing := false
 	for _, path := range sortedStepPaths(step.Args) {
-		if value := resolveStepArg(step.Args[path], facts); value != "" {
+		if value, ok := resolveStepArg(step.Args[path], facts); ok {
 			setStepArg(&call, path, value)
 		} else {
 			missing = true
@@ -396,20 +504,60 @@ func stepCall(step NextStep, gc *GuardContext, facts map[string]any) (toolreach.
 	return call, true
 }
 
-// resolveStepArg keeps a whole-value binding's type, so a list fact stays a list.
-func resolveStepArg(value any, facts map[string]any) any {
-	source, ok := value.(string)
-	if !ok {
-		return value
-	}
-	if bindings, err := oarcore.ParseCopy(source); err == nil && len(bindings) == 1 {
-		if strings.TrimSpace(source) == "{{ "+bindings[0].Name+" }}" {
-			if raw, present := facts[bindings[0].Name]; present {
-				return raw
+// resolveStepArg keeps a whole-value binding's type and interpolates nested maps and slices.
+func resolveStepArg(value any, facts map[string]any) (any, bool) {
+	switch typed := value.(type) {
+	case string:
+		if bindings, err := oarcore.ParseCopy(typed); err == nil && len(bindings) == 1 {
+			if strings.TrimSpace(typed) == "{{ "+bindings[0].Name+" }}" {
+				raw, present := facts[bindings[0].Name]
+				if !present || raw == "" {
+					return nil, false
+				}
+				return raw, true
 			}
 		}
+		rendered := oarcore.RenderCopy(typed, facts)
+		return rendered, rendered != ""
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			resolved, ok := resolveStepArg(item, facts)
+			if !ok {
+				return nil, false
+			}
+			out[i] = resolved
+		}
+		return out, true
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for k, item := range typed {
+			resolved, ok := resolveStepArg(item, facts)
+			if !ok {
+				return nil, false
+			}
+			out[k] = resolved
+		}
+		return out, true
+	default:
+		return value, value != nil
 	}
-	return oarcore.RenderCopy(source, facts)
+}
+
+func collectArgTemplates(dst []string, value any) []string {
+	switch typed := value.(type) {
+	case string:
+		return append(dst, typed)
+	case []any:
+		for _, item := range typed {
+			dst = collectArgTemplates(dst, item)
+		}
+	case map[string]any:
+		for _, item := range typed {
+			dst = collectArgTemplates(dst, item)
+		}
+	}
+	return dst
 }
 
 func sortedStepPaths[V any](m map[string]V) []string {

@@ -5,9 +5,9 @@ description: When the user asks to commit, split the working tree into coherent 
 
 # Commit in logical groups
 
-{% set can_git_commit = has_git and not on_worker_branch and profile_has_command and profile_command_mutation != false %}{% set can_git_read = has_git and not on_worker_branch and profile_has_command %}**Entry check:** the user asked for the work to be committed; committing is never implicit.
+**Entry check:** the user asked for the work to be committed; committing is never implicit.
 
-{% if can_git_commit %}Use native Git commands through `command` for inspection, staging, and commits;{% else %}Prepare or report the planned commit groups for the coordinator to commit;{% endif %} each operation retains host review and session attribution.
+{% if can_git_commit %}Use native Git commands in `command` for inspection, staging, and commits;{% elif can_request_git_commit %}Load `command` via `request_tools(need: "stage and commit git changes")`, then use native Git commands for inspection, staging, and commits;{% else %}Prepare and report the planned commit groups for the coordinator to commit;{% endif %} each operation retains host review and attribution.
 
 ## Mechanics
 
@@ -21,9 +21,9 @@ description: When the user asks to commit, split the working tree into coherent 
 3. **Leave live work alone even when it is yours.** A file still being changed belongs in a later commit.
 4. **Group by the change, not by the directory.** One commit is one reason: a feature with its tests, a fix with its regression, a rename across every file it touched. Generated output travels with its source. State each group in one line; if you cannot, it is more than one commit. A group that needs a hunk to describe gets that hunk read, not the tree.
 5. **Order them so each stands alone.** Prefer a sequence where every commit leaves the project building — a refactor before its feature.
-6. **Carry each group by explicit path.**{% if can_git_commit %} Never stage by wildcard, "all changes", or directory sweep; a large group is still an explicit list. For each group, run `git add -- PATHS` followed by `git commit -m MESSAGE -- PATHS`. Preserve group order; proceed only after each success.{% else %} Express each group by explicit paths, in commit order, and report its paths and message to the coordinator; never sweep by wildcard or directory.{% endif %}
+6. **Carry each group by explicit path.**{% if can_git_commit %} Never stage by wildcard, "all changes", or directory sweep; a large group is still an explicit list. For each group, run `git add -- PATHS` followed by `git commit -m MESSAGE -- PATHS` in order, proceeding only after each success.{% else %} Express each group by explicit paths in commit order (never wildcard or directory sweeps) and report its paths and message to the coordinator.{% endif %}
 7. **Write messages in the project's existing style.** State what changed and why; do not narrate the process or add unused trailers.
-8. {% if can_git_commit %}**Verify once and finish.** Commit receipts confirm hashes and paths; omitted `uncommitted_*` fields do not prove a clean tree. Run one final `git status --short` in `command`; if it fails, report cleanliness as unverified. Once the declared groups are committed, report and stop.{% else %}**Report the plan and stop.** Hand the coordinator the planned groups with their paths and messages and anything you could not group confidently; do not report the tree clean — only Git can verify that.{% endif %} List later arrivals as remaining work; do not reopen the survey without a new request.
+8. {% if can_git_commit %}**Verify once and finish.** Commit receipts confirm hashes and paths; omitted `uncommitted_*` fields do not prove a clean tree. Run one final `git status --short` in `command`; if it fails, report cleanliness as unverified. Once the declared groups are committed, report and stop.{% else %}**Report the plan and stop.** {% if can_git_read %}Inspect `git status --short` in `command` for current tree state, and hand{% else %}Hand{% endif %} the coordinator the planned groups, paths, messages, and anything ambiguous{% if not can_git_read %} (do not claim a clean tree without Git){% endif %}.{% endif %} List later arrivals as remaining work; do not reopen the survey without a new request.
 
 ## Boundaries
 
@@ -34,4 +34,4 @@ description: When the user asks to commit, split the working tree into coherent 
 
 ## Report
 
-The commits made — or, without Git, the groups planned — in order, with each one's paths; the paths you left out and whose they are; anything you could not group confidently; and the tree state you hand back.
+{% if can_git_commit %}The commits made{% else %}The groups planned{% endif %} in order, with each one's paths; the paths you left out and whose they are; anything you could not group confidently; and the tree state you hand back.

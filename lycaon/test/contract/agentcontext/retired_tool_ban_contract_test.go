@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 	"gopkg.in/yaml.v3"
 )
@@ -58,12 +59,14 @@ func checkBannedMention(t *testing.T, mention *regexp.Regexp, label, corpus stri
 // rendered copy presents a fully retired tool name as a call.
 func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 	retired := retiredToolMention(t)
+	folderless, err := hoststate.FolderlessSurfaces()
+	contractcheck.FailErr(t, "folderless surfaces", err)
 
 	for _, rootCount := range []int{0, 1, 2} {
 		plans, err := surface.CompileToolPlans(rootCount)
 		contractcheck.FailErr(t, "compile tool plans", err)
 		for id := range plans {
-			if rootCount == 0 && !slices.Contains(noFolderSurfaces, id) {
+			if rootCount == 0 && !slices.Contains(folderless, id) {
 				continue
 			}
 			t.Run(fmt.Sprintf("coordinator/%s/%d-roots", id, rootCount), func(t *testing.T) {
@@ -120,9 +123,7 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 						WebSearch: true,
 					})
 					contractcheck.FailErr(t, "new reader", err)
-					data, err := prompts.Vars(reader, promptrender.KickFixture())
-					contractcheck.FailErr(t, "prompts.Vars", err)
-					corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
+					corpus, err := kickEngine.RenderKick(context.Background(), reader, binding.Render, promptrender.KickFixture())
 					contractcheck.FailErr(t, "render kick", err)
 					checkBannedMention(t, retired, fmt.Sprintf("kick %s for %s", binding.Render, profile.ID), corpus)
 				})
@@ -134,10 +135,11 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 		}
 		for id := range plans {
 			t.Run("kick/"+binding.Render+"/"+id, func(t *testing.T) {
+				reader := coordinatorTestReader(t, id, 1)
 				data := promptrender.KickFixture()
 				delete(data, "tools")
-				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
-				corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
+				prompts.MergeCoordinatorKickVarsForTools(data, reader)
+				corpus, err := kickEngine.RenderKick(context.Background(), reader, binding.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
 				checkBannedMention(t, retired, fmt.Sprintf("kick %s on %s", binding.Render, id), corpus)
 			})
@@ -174,9 +176,10 @@ func TestRenderedPhaseKicksNeverNameFullyRetiredTools(t *testing.T) {
 				continue
 			}
 			t.Run(filepath.Base(filepath.Dir(file))+"/"+inject.Selector.Phase, func(t *testing.T) {
+				reader := coordinatorTestReader(t, id, 1)
 				data := promptrender.KickFixture()
-				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
-				corpus, err := kickEngine.RenderKick(context.Background(), inject.Render, data)
+				prompts.MergeCoordinatorKickVarsForTools(data, reader)
+				corpus, err := kickEngine.RenderKick(context.Background(), reader, inject.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
 				checkBannedMention(t, retired, fmt.Sprintf("phase kick %s on %s", inject.Render, id), corpus)
 			})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -19,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -66,6 +68,7 @@ type ContextSurfaceDeps struct {
 	SetPromptTurnSurface            func(sessionID, surfaceID string)
 	PromptTurnSurface               func(sessionID string) string
 	ToolObserved                    func(ctx context.Context, sess *api.Session, toolCtx tools.ToolContext, tool string)
+	SwapObservedSessionMode         func(sessionID string, mode api.SessionMode) (api.SessionMode, bool)
 }
 
 type ModelDeps struct {
@@ -79,8 +82,8 @@ type ModelDeps struct {
 }
 
 type ToolsDeps struct {
-	// ProgramReach freezes which native programs a model turn can run.
-	ProgramReach                func(ctx context.Context, profileID, surfaceID string) toolreach.Programs
+	// ProgramReach freezes which native programs and modes a model turn admits.
+	ProgramReach                func(ctx context.Context, profileID, surfaceID string) *toolreach.ProgramTable
 	Invocations                 invocation.Recorder
 	VisualStore                 visual.Store
 	AgentPresence               *agentpresence.Tracker
@@ -122,7 +125,7 @@ type CloseoutTrackingDeps struct {
 	CitationRoots                       func(ctx context.Context, sess *api.Session) evidence.CitationRoots
 	OnGroundedSynthesisAccepted         func(ctx context.Context, sess *api.Session, sessionID string)
 	MaxCloseoutCitationGroundingRetries int
-	RenderHostKick                      func(ctx context.Context, kickID string, data map[string]any) (string, error)
+	RenderHostKick                      func(ctx context.Context, reader prompts.Reader, kickID string, data map[string]any) (string, error)
 	BeginCloseoutIntent                 func(ctx context.Context, sessionID string)
 	RecordGroundingFriction             func(ctx context.Context, sessionID string) guidance.GroundingFriction
 	NoteCloseoutGroundingReject         func(ctx context.Context, sessionID, code, offenderKey string, draft guidance.CloseoutDraft, unread []jsonshape.Issue) (attempt int, prevKey string)
@@ -184,8 +187,9 @@ type InboxDeps struct {
 }
 
 type promptContext struct {
-	Deps     ContextDeps
-	Closeout *turnCloseout
+	Deps          ContextDeps
+	Closeout      *turnCloseout
+	observedModes sync.Map
 }
 
 type modelTurn struct {

@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -174,7 +175,16 @@ func TestGoldenKickRenderByteIdenticalViaEmit(t *testing.T) {
 
 func TestKickTemplateReceivesStructuredContext(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
-	out, err := engine.RenderKick(t.Context(), "coordinator-gate-blocked", map[string]any{
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader coordinator", err)
+	out, err := engine.RenderKick(t.Context(), reader, "coordinator-gate-blocked", map[string]any{
 		"gate_obligations": []map[string]any{{
 			"id": "gate.evidence", "purpose": "prove", "missing": []string{"x"}, "satisfy": []string{"x"},
 		}},
@@ -205,7 +215,7 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"tool_calls": true, "tools_done": true, "child_session_id": true,
 		"workspace_path": true, "project_id": true, "config_root": true,
 		"coordinator_brief": true, "pending_feedback": true, "current_phase": true,
-		"folder": true, "roots": true, "active_root": true, "reviews_confined_writes": true, "command_external_changed": true, "command_external_hidden": true, "canceled": true, "root_id": true, "root_label": true, "session_folder_changed": true,
+		"folder": true, "roots": true, "active_root": true, "command_external_changed": true, "canceled": true, "root_id": true, "root_label": true, "session_folder_changed": true,
 		"label": true, "paths": true, "sessions": true, "overlays": true, "workers": true,
 		"before_count": true, "after_count": true, "after_omitted_count": true, "added_count": true, "removed_count": true,
 		"changes": true, "changes_omitted": true, "generation": true, "primary_changed": true,

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -52,12 +53,16 @@ func TestPackageReadAccessRequiresSuccessfulExplicitPreflight(t *testing.T) {
 				calls := 0
 				executor := func() *Executor {
 					e := NewExecutor(nil, nil, "")
-					e.Boundary.readPathPreflight = func(_ context.Context, gotTool string, _ map[string]any, _ tools.ToolContext, gotPath string) (bool, bool, string, error) {
+					e.Boundary.readPathPreflight = func(_ context.Context, gotTool string, _ map[string]any, _ tools.ToolContext, gotPath string) (PathPreflightResult, error) {
 						calls++
 						if gotTool != tool || gotPath != path {
 							t.Fatalf("reviewed %q %q, want %q %q", gotTool, gotPath, tool, path)
 						}
-						return approved, !approved, "", nil
+						cause := isolation.PathDenialNone
+						if !approved {
+							cause = isolation.PathDenialUserDeclined
+						}
+						return PathPreflightResult{Authorized: approved, Denied: !approved, DenialCause: cause}, nil
 					}
 					return e
 				}()

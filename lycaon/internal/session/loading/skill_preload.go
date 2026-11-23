@@ -41,7 +41,7 @@ func (m *Service) selectSkillPreload(ctx context.Context, sess *api.Session, pro
 		return
 	}
 	roster, _ := m.skills(ctx, sess, profileID, roots)
-	roster = eligibleSkillsForOfferedTools(roster, reader.Held())
+	roster = eligibleSkillsForReader(roster, reader)
 	decision.ranking = turnload.RankSkills(ctx, m.Decider(), decision.catalog.Turn.Deadline(), text, roster)
 	decision.skill, decision.skillScore = RankedSkillPreload(decision.ranking, roster, decision.catalog.Turn.Skills)
 }
@@ -77,24 +77,29 @@ func (m *Service) decisionReader(ctx context.Context, sess *api.Session, profile
 			surfaceID = cand
 		}
 	}
+	sessionMode := string(api.SessionModeAgent)
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		sessionMode = string(api.SessionModeAsk)
+	}
 	plan := toolsurface.Compile(decision.floor, loadable)
 	visible := append(append([]string(nil), decision.floor...), loadable...)
 	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID: profileID,
-		SurfaceID: surfaceID,
-		Profiles:  profiles,
-		Plan:      plan,
-		Loaded:    loaded,
-		Visible:   visible,
-		RootCount: decision.state.RootCount,
-		WebSearch: true,
+		ProfileID:   profileID,
+		SurfaceID:   surfaceID,
+		SessionMode: sessionMode,
+		Profiles:    profiles,
+		Plan:        plan,
+		Loaded:      loaded,
+		Visible:     visible,
+		RootCount:   decision.state.RootCount,
+		WebSearch:   true,
 	})
 }
 
-func eligibleSkillsForOfferedTools(roster []skills.Skill, offered map[string]bool) []skills.Skill {
+func eligibleSkillsForReader(roster []skills.Skill, reader prompts.Reader) []skills.Skill {
 	out := make([]skills.Skill, 0, len(roster))
 	for _, sk := range roster {
-		if toolvocab.SkillToolsOffered(sk, offered) {
+		if toolvocab.SkillToolsOfferedForReader(sk, reader) {
 			out = append(out, sk)
 		}
 	}

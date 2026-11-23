@@ -7,79 +7,143 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/flosch/pongo2/v6"
 )
 
-const executionTimeout = 2 * time.Second
+// execStateKey carries the per-render executionState in pongo2.Context. It
+// satisfies pongo2's identifier check while lexing as TokenNumber in templates,
+// so template expressions and bindings cannot reference or shadow it.
+const execStateKey = "0"
 
 type executionAbort struct{ err error }
+
+type executionState struct {
+	ctx          context.Context
+	steps        int
+	forDepth     int
+	includeDepth int
+	includes     int
+	onStep       func(step int)
+}
+
+func (s *executionState) checkContext() {
+	if err := s.ctx.Err(); err != nil {
+		panic(executionAbort{err: fmt.Errorf("%w: %w", ErrExecutionLimit, err)})
+	}
+}
+
+func (s *executionState) step(n int) {
+	s.checkContext()
+	if n < 1 {
+		n = 1
+	}
+	s.steps += n
+	if s.steps > MaxExecutionSteps {
+		panic(executionAbort{err: fmt.Errorf("%w: more than %d execution steps", ErrExecutionLimit, MaxExecutionSteps)})
+	}
+	if s.onStep != nil {
+		s.onStep(s.steps)
+		s.checkContext()
+	}
+}
+
+func execStateFrom(ctx *pongo2.ExecutionContext) *executionState {
+	if ctx == nil {
+		return nil
+	}
+	state, _ := ctx.Public[execStateKey].(*executionState)
+	return state
+}
+
+func requireExecState(ctx *pongo2.ExecutionContext) (*executionState, *pongo2.Error) {
+	if state := execStateFrom(ctx); state != nil {
+		return state, nil
+	}
+	missing := fmt.Errorf("%w: missing execution state", ErrExecutionLimit)
+	if ctx != nil {
+		return nil, ctx.OrigError(missing, nil)
+	}
+	return nil, &pongo2.Error{Sender: "execution", OrigError: missing}
+}
+
 type boundedWriter struct {
-	ctx context.Context
-	buf bytes.Buffer
+	state *executionState
+	buf   bytes.Buffer
 }
 
 func (w *boundedWriter) Write(p []byte) (int, error) {
-	if err := w.ctx.Err(); err != nil {
-		panic(executionAbort{err: fmt.Errorf("%w: %w", ErrExecutionLimit, err)})
-	}
+	w.state.checkContext()
+	w.state.step(1)
 	if len(p) > MaxOutputBytes-w.buf.Len() {
 		panic(executionAbort{err: fmt.Errorf("%w: more than %d bytes", ErrOutputLimit, MaxOutputBytes)})
 	}
 	return w.buf.Write(p)
 }
 
-type executionResult struct {
-	out string
-	err error
+func (w *boundedWriter) WriteString(s string) (int, error) {
+	w.state.checkContext()
+	w.state.step(1)
+	if len(s) > MaxOutputBytes-w.buf.Len() {
+		panic(executionAbort{err: fmt.Errorf("%w: more than %d bytes", ErrOutputLimit, MaxOutputBytes)})
+	}
+	return w.buf.WriteString(s)
 }
 
-// Execute renders with a bounded data-only context.
+func wrapPongoError(prefix string, err error) error {
+	var pErr *pongo2.Error
+	if errors.As(err, &pErr) && pErr.OrigError != nil {
+		return fmt.Errorf("%s: %s: %w", prefix, pErr.Error(), pErr.OrigError)
+	}
+	return fmt.Errorf("%s: %w", prefix, err)
+}
+
+// Execute renders with a bounded data-only context and deterministic step budget.
 func Execute(ctx context.Context, tpl *pongo2.Template, values map[string]any) (string, error) {
+	return executeWithHook(ctx, tpl, values, nil)
+}
+
+func executeWithHook(
+	ctx context.Context,
+	tpl *pongo2.Template,
+	values map[string]any,
+	onStep func(step int),
+) (out string, err error) {
 	if tpl == nil {
 		return "", fmt.Errorf("pongoplain: execute nil template")
 	}
 	if ctx == nil {
 		return "", fmt.Errorf("pongoplain: execute context required")
 	}
-	normalized, err := normalizeContext(values)
-	if err != nil {
-		return "", err
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return "", fmt.Errorf("%w: %w", ErrExecutionLimit, ctxErr)
 	}
-	execCtx, cancel := context.WithTimeout(ctx, executionTimeout)
-	defer cancel()
+	normalized, normErr := normalizeContext(values)
+	if normErr != nil {
+		return "", normErr
+	}
+	state := &executionState{ctx: ctx, onStep: onStep}
+	normalized[execStateKey] = state
 
-	result := make(chan executionResult, 1)
-	go func() {
-		var res executionResult
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				if abort, ok := recovered.(executionAbort); ok {
-					res.err = abort.err
-				} else {
-					res.err = errors.New("pongoplain: internal execution panic")
-				}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			out = ""
+			if abort, ok := recovered.(executionAbort); ok {
+				err = abort.err
+			} else {
+				err = errors.New("pongoplain: internal execution panic")
 			}
-			result <- res
-		}()
-		writer := &boundedWriter{ctx: execCtx}
-		if err := tpl.ExecuteWriterUnbuffered(pongo2.Context(normalized), writer); err != nil {
-			res.err = fmt.Errorf("pongoplain: execute: %w", err)
-			return
 		}
-		res.out = writer.buf.String()
 	}()
 
-	select {
-	case res := <-result:
-		return res.out, res.err
-	case <-execCtx.Done():
-		return "", fmt.Errorf("%w: %w", ErrExecutionLimit, execCtx.Err())
+	writer := &boundedWriter{state: state}
+	if execErr := tpl.ExecuteWriterUnbuffered(pongo2.Context(normalized), writer); execErr != nil {
+		return "", wrapPongoError("pongoplain: execute", execErr)
 	}
+	return writer.buf.String(), nil
 }
 
-// ExecuteDetached uses only the renderer's fixed execution bound.
+// ExecuteDetached renders under deterministic resource and execution bounds.
 func ExecuteDetached(tpl *pongo2.Template, values map[string]any) (string, error) {
 	return Execute(context.Background(), tpl, values)
 }
@@ -89,6 +153,7 @@ type contextBudget struct {
 	bytes int
 	seen  map[visit]bool
 }
+
 type visit struct {
 	typ reflect.Type
 	ptr uintptr
@@ -148,7 +213,7 @@ func (b *contextBudget) normalize(v reflect.Value, depth int) (reflect.Value, er
 		return reflect.ValueOf(v.String()), nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return reflect.ValueOf(v.Int()), nil
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+	case reflect.Uint, reflect.Uint8, reflect.Uint32, reflect.Uint64, reflect.Uint16, reflect.Uintptr:
 		return reflect.ValueOf(v.Uint()), nil
 	case reflect.Float32, reflect.Float64:
 		return reflect.ValueOf(v.Float()), nil
@@ -169,13 +234,20 @@ func (b *contextBudget) normalizeMap(v reflect.Value, depth int) (reflect.Value,
 	if v.Type().Key().Kind() != reflect.String {
 		return reflect.Value{}, fmt.Errorf("%w: map key type %s is not string", ErrContextLimit, v.Type().Key())
 	}
-	if v.Len() > MaxCollectionItems {
+	limit := MaxCollectionItems
+	if depth == 0 {
+		limit = MaxContextEntries
+	}
+	if v.Len() > limit {
 		return reflect.Value{}, fmt.Errorf("%w: map has %d entries", ErrContextLimit, v.Len())
 	}
 	out := make(map[string]any, v.Len())
 	iter := v.MapRange()
 	for iter.Next() {
 		key := iter.Key().String()
+		if depth == 0 && key == execStateKey {
+			return reflect.Value{}, fmt.Errorf("%w: reserved context key %q", ErrContextLimit, key)
+		}
 		if err := b.addBytes(len(key)); err != nil {
 			return reflect.Value{}, err
 		}

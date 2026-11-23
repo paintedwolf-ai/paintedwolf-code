@@ -135,7 +135,17 @@ func renderWorkerLegBlock(t *testing.T, ctx inject.WorkerLegContext) string {
 	t.Helper()
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	renderer := prompts.NewInjectRenderer(engine)
-	block, err := inject.RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", ctx)
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "implement",
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader implement", err)
+	block, err := inject.RenderWorkerLegInject(context.Background(), renderer, reader, "sess-inject-test", ctx)
 	testutil.FailErr(t, "inject.RenderWorkerLegInject failed", err)
 	return block
 }

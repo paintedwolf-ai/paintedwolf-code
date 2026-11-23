@@ -1,0 +1,10 @@
+steps:
+  - when: "size(paintedwolf.admitted_process_capability_fields) > 0"
+    tool: "command"
+    say: "Use {{ call }} with the required capability field ({{ paintedwolf.admitted_process_capability_fields }}), describing the exact intended operation."
+  - when: "size(paintedwolf.admitted_process_capability_fields) == 0 && paintedwolf.command_loadable_without_schema"
+    tool: "request_tools"
+    args:
+      need: "command"
+    complete: true
+    say: "Call {{ call }}. Its schema arrives on the next model call; check whether it admits process capability fields before retrying."

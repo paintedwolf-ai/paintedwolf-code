@@ -126,6 +126,7 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 	fillOccurrenceIdentity(ctx, gc)
 	gc.Session.PermissionProfile = profile
 	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
+	gc.DeriveToolClassFacts()
 	if bp.MCPCatalog != nil {
 		oar.ObserveMCPStructuralPre(gc, tool, bp.MCPCatalog)
 	}
@@ -192,6 +193,9 @@ func ApplyToolRejectObservations(gc *oar.GuardContext, tr *toolrejection.ToolRej
 	}
 	if code != "" {
 		gc.PutRejectData(code, tr.Data)
+		if code == "TOOL_COMMAND_OPERATION" {
+			gc.ObserveCommandOperationReach()
+		}
 	}
 	// MCP rules branch on the structured machine code.
 	if strings.HasPrefix(strings.TrimSpace(gc.Invocation.Tool), "mcp_") {

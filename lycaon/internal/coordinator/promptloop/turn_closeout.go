@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -165,7 +165,7 @@ func (l *turnCloseout) applyLandingAdvisories(
 	sessionID, profileID string,
 	step, maxIter int,
 	spendRunway SpendRunway,
-	spendWindDown bool,
+	spendWindDown HostNudge,
 	st *promptLoopTurnState,
 ) (closeoutNudgeSent bool, err error) {
 	updated, err := l.maybeTurnCloseout(ctx, sess, sessionID, profileID, st.history, step, maxIter, st)
@@ -189,7 +189,7 @@ func (l *turnCloseout) applyLandingAdvisories(
 	if err != nil {
 		return closeoutNudgeSent, err
 	}
-	st.history, err = l.Nudges.maybeSpendSoftStopNudge(ctx, sess, sessionID, st.history, spendWindDown, st)
+	st.history, err = l.Nudges.appendHostNudge(ctx, sessionID, st.history, spendWindDown, "", st)
 	return closeoutNudgeSent, err
 }
 
@@ -363,8 +363,8 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		)
 	}
 
-	if st != nil && !tools.CallReach(ctx).Known() {
-		ctx = tools.WithCallReach(ctx, st.requestReach())
+	if st != nil && !toolreach.FromContext(ctx).Known() {
+		ctx = toolreach.WithRequest(ctx, st.requestReach())
 	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, surfaceID, assistantMsg)
 	if err != nil {

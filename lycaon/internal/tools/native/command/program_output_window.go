@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -122,7 +123,7 @@ func sampleOutput(reader io.Reader, budget int) (outputSample, error) {
 	return sample, nil
 }
 
-func (s outputSample) window(ctx context.Context, stream, ref, path string, complete bool) (string, api.CommandProgramOutputWindow, []deliveredOutputPart, error) {
+func (s outputSample) window(ctx context.Context, reach toolreach.Request, stream, ref, path string, complete bool) (string, api.CommandProgramOutputWindow, []deliveredOutputPart, error) {
 	window := api.CommandProgramOutputWindow{Stream: stream, Ref: ref, OutputPath: path, TotalBytes: s.total, TotalLines: s.lines, Complete: complete, InlineBudgetBytes: s.budget}
 	if s.total <= int64(s.budget) {
 		if complete {
@@ -130,7 +131,7 @@ func (s outputSample) window(ctx context.Context, stream, ref, path string, comp
 		}
 		// The capture ended before the stream did: deliver the prefix with the
 		// incomplete notice instead of presenting it as the full stream.
-		notice, err := guidance.RenderCommandOutputOmitted(ctx, formatDecimalCommas(0), formatOmittedSize(0), path, s.lines+1, s.lines+1, s.lines, s.total, complete)
+		notice, err := guidance.RenderCommandOutputOmitted(ctx, reach, formatDecimalCommas(0), formatOmittedSize(0), path, s.lines+1, s.lines+1, s.lines, s.total, complete)
 		if err != nil {
 			return "", window, nil, err
 		}
@@ -144,7 +145,7 @@ func (s outputSample) window(ctx context.Context, stream, ref, path string, comp
 	omittedLines := s.lines - countLines(head) - countLines(tail)
 	nextLine := countLines(head) + 1
 	endLine := min(nextLine+149, nextLine+omittedLines-1)
-	notice, err := guidance.RenderCommandOutputOmitted(ctx, formatDecimalCommas(omittedLines), formatOmittedSize(start-int64(headEnd)), path, nextLine, max(nextLine, endLine), s.lines, s.total, complete)
+	notice, err := guidance.RenderCommandOutputOmitted(ctx, reach, formatDecimalCommas(omittedLines), formatOmittedSize(start-int64(headEnd)), path, nextLine, max(nextLine, endLine), s.lines, s.total, complete)
 	if err != nil {
 		return "", window, nil, err
 	}

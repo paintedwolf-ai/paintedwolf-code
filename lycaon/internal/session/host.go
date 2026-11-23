@@ -238,6 +238,7 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 	}, OverlayStatus: ResolveWorkerSummaryStatus, OverlayPending: OverlayAwaitingPromote})
 	workerResults.SetSummaries(workerSummaries)
 	m.Coordinator.Guidance = guidancedelivery.New(store.Sessions, store.Transcript, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
+	m.Coordinator.Guidance.SetPostureView(m.Profiles)
 	m.Processes = processcontrol.New(store.Sessions, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)
 	m.Submissions.SetProcessObserver(m.Processes.Observe)
 	m.Workers = workerexecution.New(store.Sessions, store.Evidence, m.Workspace, gate, m.Coordinator.Guidance, m.Limits, router, workerexecution.PeerServices{Cancel: workerCancel, Cards: workerCards, Cancellations: workerCancellations, Delivery: workerDelivery, Summaries: workerSummaries, Results: workerResults, Digests: workerDigests, State: workerState, Notes: workerNotes, Workspaces: workerworkspace.New(store.Sessions, m.Workspace, newBranchWorkspace)})
@@ -247,6 +248,8 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 	m.Coordinator.Batch = batchcontrol.New(store.Sessions, store.Transcript, workerState, m.Verification, m.Coordinator.Guidance)
 	turnSettlement := turnsettlement.New(store.Sessions, gate, &turnExecution.Prompt, turnStatus, m.Workspace, m.Coordinator.Batch)
 	m.Coordinator.Nudges = turnnudges.New(m.Coordinator.Loading.Ledger, turnSpend)
+	m.Coordinator.Nudges.SetProfiles(m.Profiles)
+	m.Coordinator.Nudges.SetWorkspace(m.Workspace)
 	turnInstructions := instructions.New(store.Sessions, store.Transcript, turnTranscript, captures, m.Coordinator.Guidance.DeliverPending)
 	turnInstructions.SetWaitEnds(func(sessionID string) []string {
 		var texts []string

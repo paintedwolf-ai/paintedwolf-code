@@ -31,9 +31,8 @@ func (p *promptSurface) renderSystemPrefix(ctx context.Context, sess *api.Sessio
 	coordinatorSurface := coordinator && (!frame.Machine.Compiled() || frame.Machine.ProfileID == orchestration.ProfileCoordinator)
 	if !coordinatorSurface {
 		p.mergeVisibleTools(ctx, sess, frame, vars)
-		p.mergeVisibleToolCapabilityVars(ctx, sess, turn, vars)
 	}
-	p.mergeEffectivePromptSurface(ctx, sess, frame, vars)
+	p.mergeEffectivePromptSurfaceWithTurn(ctx, sess, frame, turn, vars)
 	pe, revision, err := p.projectPromptsSnapshot(ctx, sess)
 	if err != nil {
 		return "", err
@@ -41,7 +40,7 @@ func (p *promptSurface) renderSystemPrefix(ctx context.Context, sess *api.Sessio
 	if coordinatorSurface {
 		return p.renderCoordinatorStablePrompt(ctx, pe, revision, sess, frame, history, turn, vars)
 	}
-	rendered, err := p.renderSystemPromptWithEngine(ctx, pe, sess, templateRef, vars)
+	rendered, err := p.renderSystemPromptWithEngine(ctx, pe, sess, frame, turn, templateRef, vars)
 	if err != nil {
 		return "", fmt.Errorf("system prompt %q: %w", templateRef, err)
 	}
@@ -78,7 +77,7 @@ func (e *AssemblyEngine) BuildKnownPrefix(ctx context.Context, sess *api.Session
 		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
 		messages = contextAssembler.interleaveViewContexts(ctx, sess, frame, history, turn, messages)
 	}
-	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, messages)
+	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, frame, history, turn, messages)
 	// Pending scan guidance is delivered only by a real turn.
 	out = llm.AppendHostSecretRedactionNotice(append(out, messages...))
 	markPromptCacheBreakpoints(out, standing, len(out)-1)

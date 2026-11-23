@@ -2,9 +2,6 @@ package prompts
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"slices"
@@ -16,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolschema"
-	"github.com/lycaon/lycaon/internal/toolscope"
 )
 
 // RenderPersona renders a runtime worker persona and enforces its final contract.
@@ -30,7 +26,7 @@ func RenderPersona(ctx context.Context, engine *FileTemplateEngine, agentID stri
 		return "", err
 	}
 	// Artifact budgets catch authoring regressions before runtime expansion.
-	violations, err := validatePersonaContractRender(id, body)
+	violations, err := validatePersonaContractRenderForReader(engine.Layers().Catalog, reader, data, id, body)
 	if err != nil {
 		return "", err
 	}
@@ -72,12 +68,9 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 	if err != nil {
 		return nil, "", "", nil, err
 	}
-	occ := PersonaDataMap(def)
+	occ := PersonaDataMapForReader(def, reader)
 	for k, v := range occurrence {
 		occ[k] = v
-	}
-	if _, ok := occ["has_file_tools"]; !ok {
-		occ["has_file_tools"] = reader.RootCount() > 0 && slices.ContainsFunc(reader.Offered(), toolscope.RequiresProjectRoots)
 	}
 	if err := MergeWorkerPolicyTemplateVars(id, occ); err != nil {
 		return nil, "", "", nil, fmt.Errorf("agent spawn vars for %q: %w", id, err)
@@ -98,24 +91,88 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 	return engine, id, ref, data, nil
 }
 
-// pathCache memoizes one load per active path.
+func validatePersonaContractRenderForReader(
+	eff *extpacks.EffectiveCatalog,
+	reader Reader,
+	data map[string]any,
+	agentID, body string,
+) ([]string, error) {
+	if agentID == "" {
+		return nil, nil
+	}
+	contract, err := loadPersonaContractCached(eff)
+	if err != nil {
+		return nil, fmt.Errorf("persona contract: %w", err)
+	}
+	var violations []string
+	for _, heading := range contract.RequiredHeadingsRendered {
+		heading = strings.TrimSpace(heading)
+		if heading != "" && !strings.Contains(body, heading) {
+			violations = append(violations, "missing_heading:"+heading)
+		}
+	}
+	def, ok := contract.Agents[agentID]
+	if !ok {
+		return violations, nil
+	}
+	vocab, _ := BuildReaderFactVocabulary(eff)
+	held := reader.Held()
+	reqTools := reader.Requestable()
+	webEnabled := true
+	if ws, hasWS := data["web_search_enabled"].(bool); hasWS {
+		webEnabled = ws
+	}
+	for _, must := range def.MustSubstringsRendered {
+		must = strings.TrimSpace(must)
+		if must == "" {
+			continue
+		}
+		if must == "Stale-training check" && !webEnabled {
+			if !strings.Contains(body, "External facts:") {
+				violations = append(violations, "missing_substring:External facts:")
+			}
+			continue
+		}
+		if must == "web_search" && !webEnabled {
+			continue
+		}
+		canReach := held[must] || (held["request_tools"] && slices.Contains(reqTools, must))
+		if reader.Valid() && vocab.Tools[must] && !canReach {
+			continue
+		}
+		if !strings.Contains(body, must) {
+			violations = append(violations, "missing_substring:"+must)
+		}
+	}
+	return violations, nil
+}
+
+// pathCache memoizes bounded loads keyed by catalog or policy fingerprint.
 type pathCache[T any] struct {
-	mu     sync.Mutex
-	key    string
-	val    T
-	err    error
-	loaded bool
+	mu      sync.Mutex
+	entries map[string]T
 }
 
 func (c *pathCache[T]) get(key string, load func(string) (T, error)) (T, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.loaded && c.key == key && c.err == nil {
-		return c.val, nil
+	if val, ok := c.entries[key]; ok {
+		c.mu.Unlock()
+		return val, nil
 	}
+	c.mu.Unlock()
+
 	val, err := load(key)
-	c.key, c.val, c.err, c.loaded = key, val, err, true
-	return val, err
+	if err != nil {
+		return val, err
+	}
+
+	c.mu.Lock()
+	if c.entries == nil || len(c.entries) >= 64 {
+		c.entries = make(map[string]T, 16)
+	}
+	c.entries[key] = val
+	c.mu.Unlock()
+	return val, nil
 }
 
 var (
@@ -143,8 +200,18 @@ func catalogCacheKey(eff *extpacks.EffectiveCatalog) string {
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
+func catalogRevisionKey(eff *extpacks.EffectiveCatalog) string {
+	if eff == nil {
+		return "nil"
+	}
+	if rev := strings.TrimSpace(eff.Revision); rev != "" {
+		return fmt.Sprintf("fp:%s:%d", rev, len(eff.Loaded))
+	}
+	return catalogCacheKey(eff)
+}
+
 func loadHintPolicyCached(eff *extpacks.EffectiveCatalog) ([]hintregistry.Entry, error) {
-	return hintPolicyCache.get(catalogCacheKey(eff), func(string) ([]hintregistry.Entry, error) {
+	return hintPolicyCache.get(catalogRevisionKey(eff), func(string) ([]hintregistry.Entry, error) {
 		return hintregistry.ListEffectiveWithCatalog(eff)
 	})
 }
@@ -179,12 +246,17 @@ func loadToolSchemaCached(eff *extpacks.EffectiveCatalog) (*toolschema.Config, e
 }
 
 func loadHintCodeRowsCached(revision string, entries []hintregistry.Entry) (map[string]hintCodeRow, error) {
-	raw, err := json.Marshal(entries)
-	if err != nil {
-		return nil, fmt.Errorf("hint policy cache key: %w", err)
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(strings.TrimSpace(revision)))
+	for _, e := range entries {
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(e.Code))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(e.Body)
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(e.NextSteps)
 	}
-	sum := sha256.Sum256(raw)
-	key := "policy:" + strings.TrimSpace(revision) + ":" + hex.EncodeToString(sum[:])
+	key := "policy:" + strings.TrimSpace(revision) + ":" + strconv.FormatUint(h.Sum64(), 16)
 	return hintCodeRowsCache.get(key, func(string) (map[string]hintCodeRow, error) {
 		return LoadHintCodeRowsFromEntries(entries)
 	})

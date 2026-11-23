@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 // activation publishes occurrence facts under their rule-visible names.
@@ -63,6 +65,7 @@ func activation(gc *GuardContext) map[string]any {
 		}
 		// Authoritative invocation and diagnostic facts overwrite any untrusted keys in ObservationData or Published.
 		oarcopy.PublishInvocationRecovery(out, gc.Invocation.Tool, gc.Invocation.ToolArgs, gc.Invocation.CapabilityContract)
+		narrowCapabilityRecoveryByProjectedSchema(out, gc.Reach, gc.Invocation.Tool)
 		oarcopy.PublishDiagnosticKnowledge(out, gc.ObservationData)
 		// A sandbox refusal names its sockets outside the observation data.
 		if len(gc.Refusals.RefusedSocketPaths) > 0 {
@@ -77,6 +80,30 @@ func activation(gc *GuardContext) map[string]any {
 	return out
 }
 
+func narrowCapabilityRecoveryByProjectedSchema(out map[string]any, reach toolreach.Request, tool string) {
+	if !reach.Known() || tool == "" || reach.Status(tool) != toolreach.Callable {
+		return
+	}
+	if _, hasSchema := reach.ToolSchema(tool); !hasSchema {
+		return
+	}
+	if cur, ok := out["paintedwolf.capability_request_fields"].([]string); ok {
+		admitted := make([]string, 0, len(cur))
+		for _, field := range cur {
+			if reach.AcceptsField(tool, "capability_request."+field) {
+				admitted = append(admitted, field)
+			}
+		}
+		out["paintedwolf.capability_request_fields"] = admitted
+	}
+	for _, field := range toolcontract.CapabilityRequestFields() {
+		if !reach.AcceptsField(tool, "capability_request."+field) {
+			out["paintedwolf.supports_"+field] = false
+			out["paintedwolf.missing_capability_"+field] = false
+		}
+	}
+}
+
 func bareActivation(gc *GuardContext) map[string]any {
 	if gc == nil {
 		gc = NewGuardContext()
@@ -84,6 +111,11 @@ func bareActivation(gc *GuardContext) map[string]any {
 	out := map[string]any{
 		"tool":                                gc.Invocation.Tool,
 		"tool_args":                           mapOrEmpty(gc.Invocation.ToolArgs),
+		"command_operation_reachable":         false,
+		"command_external_reachable":          false,
+		"admitted_process_capability_fields":  []string{},
+		"command_loadable_without_schema":     false,
+		"admitted_command_forms":              []string{},
 		"unpublished_tool_text_pending":       gc.Session.UnpublishedToolTextPending,
 		"mid_turn_citations_required":         gc.Session.MidTurnCitationsRequired,
 		"mid_turn_citation_attempted":         gc.Session.MidTurnCitationAttempted,
@@ -197,7 +229,10 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"agent_is_scout":                      gc.Workers.AgentIsScout,
 		"agent_is_implementer":                gc.Workers.AgentIsImplementer,
 		"profile_surveys_project_tree":        gc.Grounding.ProfileSurveysProjectTree,
-		"profile_fetches_urls":                gc.Grounding.ProfileFetchesURLs,
+		"ask_user_secret_allowed":             false,
+		"ask_user_loadable_without_schema":    false,
+		"task_callable":                       false,
+		"surface_snapshot_handles":            "",
 		"repo_known_empty":                    gc.Grounding.RepoKnownEmpty,
 		"last_audit_ungrounded":               gc.Grounding.LastAuditUngrounded,
 		"grounding_escalated":                 gc.Grounding.GroundingEscalated,
@@ -205,17 +240,6 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"jailbreak_score":                     gc.Content.JailbreakScore,
 		"pii_entities":                        mapList(gc.Content.PIIEntities),
 		"secret_matches":                      mapList(gc.Content.SecretMatches),
-		"mcp_server_id":                       gc.MCP.MCPServerID,
-		"mcp_tool_name":                       gc.MCP.MCPToolName,
-		"mcp_qualified_tool":                  gc.MCP.MCPQualifiedTool,
-		"mcp_server_configured":               gc.MCP.MCPServerConfigured,
-		"mcp_server_enabled":                  gc.MCP.MCPServerEnabled,
-		"mcp_configured_servers":              gc.MCP.configuredServers(),
-		"mcp_enabled_servers":                 gc.MCP.enabledServers(),
-		"mcp_result":                          mapOrEmpty(gc.MCP.MCPFields),
-		"mcp_call_ok":                         gc.MCP.MCPCallOK,
-		"mcp_error_code":                      gc.MCP.MCPErrorCode,
-		"mcp_schema_matched":                  gc.MCP.MCPSchemaMatched,
 		"editorconfig_mismatch":               gc.Source.EditorConfigMismatch,
 		"syntax_check_overridden":             gc.Source.SyntaxCheckOverridden,
 		"source_analysis_unavailable":         gc.Source.SourceAnalysisUnavailable,
@@ -228,10 +252,27 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"reproduced_source_start_line":        gc.Source.ReproducedSourceStartLine,
 		"reproduced_source_end_line":          gc.Source.ReproducedSourceEndLine,
 	}
+	maps.Copy(out, mcpActivation(gc))
 	maps.Copy(out, rejectObservationActivation(gc))
 	maps.Copy(out, sessionActivation(gc))
 	maps.Copy(out, workflowActivation(gc))
 	return out
+}
+
+func mcpActivation(gc *GuardContext) map[string]any {
+	return map[string]any{
+		"mcp_server_id":          gc.MCP.MCPServerID,
+		"mcp_tool_name":          gc.MCP.MCPToolName,
+		"mcp_qualified_tool":     gc.MCP.MCPQualifiedTool,
+		"mcp_server_configured":  gc.MCP.MCPServerConfigured,
+		"mcp_server_enabled":     gc.MCP.MCPServerEnabled,
+		"mcp_configured_servers": gc.MCP.configuredServers(),
+		"mcp_enabled_servers":    gc.MCP.enabledServers(),
+		"mcp_result":             mapOrEmpty(gc.MCP.MCPFields),
+		"mcp_call_ok":            gc.MCP.MCPCallOK,
+		"mcp_error_code":         gc.MCP.MCPErrorCode,
+		"mcp_schema_matched":     gc.MCP.MCPSchemaMatched,
+	}
 }
 
 // rejectObservationActivation defines the structured tool-rejection vocabulary:

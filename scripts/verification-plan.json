@@ -1719,6 +1719,9 @@
       "./internal/tools/native/mutation": {
         "FuzzArchiveExtractionStaysInDestination": 300
       },
+      "./test/contract/invariants/promptrender": {
+        "FuzzRecipientGuidanceAcrossHostStates": 30
+      },
       "./test/wiring/conformance": {
         "FuzzCatalogBinderSafetyAndTypedRefusals": 30,
         "FuzzParseProgramSafetyAndCeilings": 30,

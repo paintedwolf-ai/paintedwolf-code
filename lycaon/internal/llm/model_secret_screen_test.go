@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/secretharvest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -747,5 +748,118 @@ func TestRegistryScreenOutboundUsesTheInstalledScreen(t *testing.T) {
 	}))
 	if _, err := reg.ScreenOutbound(t.Context(), ScreenDestination{ID: "test"}, req); err == nil {
 		t.Fatal("installed screen let a recognised token through without an answer")
+	}
+}
+
+type capturingRecipientProvider struct {
+	received []modelcall.CompletionRequest
+}
+
+func (p *capturingRecipientProvider) ID() string                    { return "recipient-sink" }
+func (p *capturingRecipientProvider) Models() []modelcall.ModelInfo { return nil }
+func (p *capturingRecipientProvider) Profile() providerprofile.Profile {
+	return providerprofile.Profile{}
+}
+
+func (p *capturingRecipientProvider) Complete(_ context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
+	p.received = append(p.received, req)
+	return &modelcall.Completion{Content: "ok"}, nil
+}
+
+func (p *capturingRecipientProvider) Stream(_ context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+	p.received = append(p.received, req)
+	ch := make(chan modelcall.StreamChunk, 1)
+	ch <- modelcall.StreamChunk{Content: "ok", Done: true}
+	close(ch)
+	return ch, nil
+}
+
+func verifyProviderRecipientBoundary(
+	req modelcall.CompletionRequest,
+	forbiddenValues []string,
+	requiredRef string,
+) error {
+	raw, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+	payload := string(raw)
+	for _, val := range forbiddenValues {
+		if val != "" && strings.Contains(payload, val) {
+			return errors.New("provider-bound CompletionRequest leaked protected value into final model payload")
+		}
+	}
+	if requiredRef != "" && !strings.Contains(payload, requiredRef) {
+		return errors.New("provider-bound CompletionRequest omitted expected {{paintedwolf-secret:...}} reference")
+	}
+	return nil
+}
+
+func TestSecretScreenedProviderRecipientBoundaryAndSeededLeakFault(t *testing.T) {
+	t.Parallel()
+	m := modelScreenMatcher(t)
+	harvest := secretharvest.NewRuntime(nil)
+	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
+		values := harvest.ValuesFor("sess-recipient")
+		out := make([]secretmatch.HarvestedValue, 0, len(values))
+		for _, value := range values {
+			out = append(out, secretmatch.HarvestedValue{
+				Name: value.Name, Container: value.Container, Secret: value.Secret(),
+				RuleID: value.RuleID, Title: value.Title, Source: value.Source,
+				Reference: value.Reference, NonDisclosable: true,
+			})
+		}
+		return out
+	})
+	m.SetRemember(func(root string, values []secretmatch.Remembered) { harvest.Remember(root, values...) })
+
+	screen := NewModelSecretScreen(m, func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
+		return secretmatch.Resolution{Decision: secretmatch.TrackAndReplace}, nil
+	})
+	const refMarker = "{{paintedwolf-secret:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb}}"
+	screen.SetManagedSecretAdopter(func(_ context.Context, adoptReq ManagedSecretAdoptRequest) (string, error) {
+		m.Remember(adoptReq.RootSessionID, []secretmatch.Remembered{{
+			Secret: adoptReq.Value, Name: adoptReq.Name, Origin: "managed secret",
+			RuleID: "managed-secret", Title: "A managed secret",
+			Source: secretmatch.SourceRememberedMatch, Reference: refMarker, NonDisclosable: true,
+		}})
+		return refMarker, nil
+	})
+
+	sink := &capturingRecipientProvider{}
+	wrapped := &secretScreenedProvider{
+		inner:       sink,
+		destination: ScreenDestination{ID: "provider-main", Label: "Provider Main"},
+		screen:      screen,
+	}
+
+	inbound := modelSecretRequest()
+	inbound.Debug.SessionID = "sess-recipient"
+	inbound.Debug.RootSessionID = "sess-recipient"
+
+	_, err := wrapped.Complete(t.Context(), inbound)
+	testutil.FailErr(t, "secretScreenedProvider.Complete", err)
+	streamCh, err := wrapped.Stream(t.Context(), inbound)
+	testutil.FailErr(t, "secretScreenedProvider.Stream", err)
+	for range streamCh {
+	}
+
+	if len(sink.received) != 2 {
+		t.Fatalf("captured provider requests = %d, want 2 (Complete + Stream)", len(sink.received))
+	}
+	for i, delivered := range sink.received {
+		if bErr := verifyProviderRecipientBoundary(delivered, []string{modelScreenGitHubToken}, refMarker); bErr != nil {
+			t.Fatalf("positive recipient-boundary check failed on request %d: %v", i, bErr)
+		}
+	}
+
+	// Deterministic fault witness: inject a synthetic protected value into the final model payload
+	// after screening and prove the recipient-boundary check catches it deterministically.
+	const syntheticPayloadVal = "synthetic-unredacted-payload-probe-987654"
+	faulted := sink.received[0]
+	faulted.Messages = append([]api.Message(nil), faulted.Messages...)
+	faulted.Messages[0].Content += "\nX_SYNTHETIC=" + syntheticPayloadVal
+	if bErr := verifyProviderRecipientBoundary(faulted, []string{modelScreenGitHubToken, syntheticPayloadVal}, refMarker); bErr == nil {
+		t.Fatal("expected recipient-boundary check to fail when synthetic value reaches final model payload")
 	}
 }

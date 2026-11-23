@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,7 +29,7 @@ func TestBuildWorkerLegInjectData(t *testing.T) {
 
 func TestRenderWorkerLegInject(t *testing.T) {
 	renderer := testInjectRenderer(t)
-	block, err := RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", WorkerLegContext{
+	block, err := RenderWorkerLegInject(context.Background(), renderer, testWorkerReader(t), "sess-inject-test", WorkerLegContext{
 		LegID:     "leg-1",
 		PhaseID:   "implement",
 		LegTools:  []string{"read"},
@@ -47,7 +48,7 @@ func TestRenderWorkerLegInject(t *testing.T) {
 
 func TestRenderWorkerLegInjectSiblingNotes(t *testing.T) {
 	renderer := testInjectRenderer(t)
-	block, err := RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", WorkerLegContext{
+	block, err := RenderWorkerLegInject(context.Background(), renderer, testWorkerReader(t), "sess-inject-test", WorkerLegContext{
 		LegID:    "leg-1",
 		LegTools: []string{"read"},
 		SiblingNotes: []SiblingNote{
@@ -72,7 +73,8 @@ func TestRenderWorkerLegInjectReservedPaths(t *testing.T) {
 		t.Fatalf("reserved paths = %+v", data.ReservedPaths)
 	}
 	renderer := testInjectRenderer(t)
-	block, err := RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", legCtx)
+	reader := testWorkerReader(t)
+	block, err := RenderWorkerLegInject(context.Background(), renderer, reader, "sess-inject-test", legCtx)
 	testutil.FailErr(t, "RenderWorkerLegInject failed", err)
 	for _, want := range []string{hold.Path, hold.Worker} {
 		if !strings.Contains(block, want) {
@@ -80,17 +82,55 @@ func TestRenderWorkerLegInjectReservedPaths(t *testing.T) {
 		}
 	}
 	legCtx.ReservedPaths = nil
-	block, err = RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", legCtx)
+	block, err = RenderWorkerLegInject(context.Background(), renderer, reader, "sess-inject-test", legCtx)
 	testutil.FailErr(t, "RenderWorkerLegInject without reservations failed", err)
 	if strings.Contains(block, hold.Path) || strings.Contains(block, hold.Worker) {
 		t.Fatalf("reservation rendered with none held: %q", block)
 	}
 }
 
+func testCoordReader(t *testing.T) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	r, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader coordinator", err)
+	return r
+}
+
+func testWorkerReader(t *testing.T) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	r, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "implement",
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader worker", err)
+	return r
+}
+
 func TestRenderBoardOrientationInject_NilRenderer(t *testing.T) {
-	_, err := RenderBoardOrientationInject(context.Background(), nil, "sess-inject-test", api.BoardSnapshot{}, packboard.InjectScopeFull, false, true, time.Now())
+	_, err := RenderBoardOrientationInject(context.Background(), nil, testCoordReader(t), "sess-inject-test", api.BoardSnapshot{}, packboard.InjectScopeFull, false, true, time.Now())
 	if err == nil {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRenderBoardOrientationInject_ZeroReaderFailsClosed(t *testing.T) {
+	renderer := testInjectRenderer(t)
+	_, err := RenderBoardOrientationInject(context.Background(), renderer, prompts.Reader{}, "sess-inject-test", api.BoardSnapshot{}, packboard.InjectScopeFull, false, true, time.Now())
+	if err == nil {
+		t.Fatal("expected zero Reader to fail closed")
 	}
 }
 
@@ -100,7 +140,7 @@ func TestBuildBoardInjectData(t *testing.T) {
 		Repo: api.RepoBrief{Languages: []string{"Go"}, FileCount: 12},
 		Git:  &api.BoardGitSlice{Available: true, Branch: "main", Dirty: true, StagedCount: 1, UnstagedCount: 2},
 	}
-	data := BuildBoardInjectData(snap, packboard.InjectScopeFull, false, true, now)
+	data := BuildBoardInjectData(testCoordReader(t), snap, packboard.InjectScopeFull, false, true, now)
 	if data.NowLine == "" || !strings.HasPrefix(data.NowLine, "Now: ") {
 		t.Fatalf("now_line = %q", data.NowLine)
 	}
@@ -115,7 +155,7 @@ func TestBuildBoardInjectDataPulseOmitsStableLines(t *testing.T) {
 		Repo: api.RepoBrief{Languages: []string{"Go"}, FileCount: 12},
 		Git:  &api.BoardGitSlice{Available: false},
 	}
-	data := BuildBoardInjectData(snap, packboard.InjectScopePulse, false, true, now)
+	data := BuildBoardInjectData(testCoordReader(t), snap, packboard.InjectScopePulse, false, true, now)
 	for _, line := range data.Lines {
 		if strings.HasPrefix(line.Text, "Repo:") || strings.HasPrefix(line.Text, "Git:") {
 			t.Fatalf("pulse inject leaked stable line %q", line.Text)
@@ -134,7 +174,7 @@ func TestRenderBoardOrientationInject_CharBudget(t *testing.T) {
 		Repo:        api.RepoBrief{Languages: langs, FileCount: 9999},
 		DetailLevel: api.BoardDetailLevelCompact,
 	}
-	block, err := RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", snap, packboard.InjectScopeFull, false, true, now)
+	block, err := RenderBoardOrientationInject(context.Background(), renderer, testCoordReader(t), "sess-inject-test", snap, packboard.InjectScopeFull, false, true, now)
 	testutil.FailErr(t, "RenderBoardOrientationInject failed", err)
 	packStart := strings.Index(block, packboard.PackBoardSentinel)
 	if packStart < 0 {
@@ -164,7 +204,7 @@ func TestRenderBoardOrientationInject_PartialWithinBudget(t *testing.T) {
 		},
 	}
 	for _, scope := range []packboard.InjectScope{packboard.InjectScopeFull, packboard.InjectScopePulse} {
-		block, err := RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", snap, scope, false, true, now)
+		block, err := RenderBoardOrientationInject(context.Background(), renderer, testCoordReader(t), "sess-inject-test", snap, scope, false, true, now)
 		testutil.FailErr(t, "RenderBoardOrientationInject", err)
 		_, body, found := strings.Cut(block, packboard.InjectSentinel(scope))
 		if !found {
@@ -192,7 +232,7 @@ func TestRenderBoardOrientationInject_RepoLine(t *testing.T) {
 		Repo:        api.RepoBrief{Languages: []string{"Go", "TypeScript"}, FileCount: 142},
 		DetailLevel: api.BoardDetailLevelCompact,
 	}
-	block, err := RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", snap, packboard.InjectScopeFull, false, true, now)
+	block, err := RenderBoardOrientationInject(context.Background(), renderer, testCoordReader(t), "sess-inject-test", snap, packboard.InjectScopeFull, false, true, now)
 	testutil.FailErr(t, "RenderBoardOrientationInject failed", err)
 	if !strings.Contains(block, "Repo: 142 files · Go+TypeScript") {
 		t.Fatalf("block missing repo line: %q", block)
@@ -203,7 +243,7 @@ func TestRenderBoardOrientationInject_OmitsEmptyRepo(t *testing.T) {
 	renderer := testInjectRenderer(t)
 	now := time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC)
 	snap := api.BoardSnapshot{DetailLevel: api.BoardDetailLevelCompact}
-	block, err := RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", snap, packboard.InjectScopeFull, false, true, now)
+	block, err := RenderBoardOrientationInject(context.Background(), renderer, testCoordReader(t), "sess-inject-test", snap, packboard.InjectScopeFull, false, true, now)
 	testutil.FailErr(t, "RenderBoardOrientationInject failed", err)
 	// The legend can include every board label.
 	if strings.Contains(boardLinesOnly(t, block), "Repo:") {
@@ -228,7 +268,7 @@ func TestRenderWorkerLegInject_MissingSentinel(t *testing.T) {
 		testutil.FailErr(t, "engine.Register failed", err)
 	}
 	renderer := prompts.NewInjectRenderer(engine)
-	_, err := RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", WorkerLegContext{LegID: "leg-1"})
+	_, err := RenderWorkerLegInject(context.Background(), renderer, testWorkerReader(t), "sess-inject-test", WorkerLegContext{LegID: "leg-1"})
 	if err == nil || !strings.Contains(err.Error(), WorkerLegInjectSentinel) {
 		t.Fatalf("err = %v", err)
 	}

@@ -410,9 +410,18 @@ host_facts:
    type: bool
  - name: paintedwolf.profile_surveys_project_tree
    type: bool
- - name: paintedwolf.profile_fetches_urls
+ - name: paintedwolf.ask_user_secret_allowed
    type: bool
-   observation: True when this agent's tool profile can retrieve a URL, so guidance may tell it to observe one before citing it.
+   observation: True when ask_user is reachable on the request and its projected schema admits secret input.
+ - name: paintedwolf.ask_user_loadable_without_schema
+   type: bool
+   observation: True when ask_user is loadable on a non-Ask request and no projected post-load schema is recorded.
+ - name: paintedwolf.task_callable
+   type: bool
+   observation: True when task is callable on the frozen turn request.
+ - name: paintedwolf.surface_snapshot_handles
+   type: string
+   observation: Conjunction of runtime surface snapshot handle kinds (page#, tui#, terminal_session#) mintable by tools callable on the frozen turn request, or empty when none is callable.
  - name: paintedwolf.repo_known_empty
    type: bool
  - name: paintedwolf.last_audit_ungrounded
@@ -878,6 +887,117 @@ host_facts:
    type: list<string>
  - name: paintedwolf.need
    type: string
+ - name: paintedwolf.command_operation_reachable
+   type: bool
+   observation: True when the frozen request can run or load command and admits at least one replacement form for paintedwolf.need.
+ - name: paintedwolf.command_external_reachable
+   type: bool
+   observation: True when the frozen request can run or load command and admits external host program execution on the current turn.
+ - name: paintedwolf.can_render_view
+   type: bool
+ - name: paintedwolf.can_skills_read
+   type: bool
+ - name: paintedwolf.can_summarize
+   type: bool
+ - name: paintedwolf.can_survey_repo
+   type: bool
+ - name: paintedwolf.can_wait
+   type: bool
+ - name: paintedwolf.can_update_progress
+   type: bool
+ - name: paintedwolf.can_preview_overlay
+   type: bool
+ - name: paintedwolf.can_fetch_url
+   type: bool
+ - name: paintedwolf.can_workflow_advance
+   type: bool
+ - name: paintedwolf.admitted_process_capability_fields
+   type: list<string>
+ - name: paintedwolf.command_loadable_without_schema
+   type: bool
+ - name: paintedwolf.command_loader_call
+   type: string
+ - name: paintedwolf.uncompressed_reader_call
+   type: string
+ - name: paintedwolf.admitted_source_read_forms
+   type: list<string>
+ - name: paintedwolf.source_read_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.admitted_range_read_forms
+   type: list<string>
+ - name: paintedwolf.range_read_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.admitted_text_search_forms
+   type: list<string>
+ - name: paintedwolf.text_search_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.admitted_file_read_forms
+   type: list<string>
+ - name: paintedwolf.file_read_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.admitted_raw_read_forms
+   type: list<string>
+ - name: paintedwolf.raw_read_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.admitted_large_read_forms
+   type: list<string>
+ - name: paintedwolf.large_read_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.admitted_read_addressing_forms
+   type: list<string>
+ - name: paintedwolf.read_symbol_call
+   type: string
+ - name: paintedwolf.read_range_call
+   type: string
+ - name: paintedwolf.read_window_calls
+   type: list<string>
+ - name: paintedwolf.read_addressing_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.admitted_stream_edit_forms
+   type: list<string>
+ - name: paintedwolf.stream_edit_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.admitted_archive_forms
+   type: list<string>
+ - name: paintedwolf.archive_unzip_stream_call
+   type: string
+ - name: paintedwolf.archive_tar_list_call
+   type: string
+ - name: paintedwolf.archive_tar_extract_call
+   type: string
+ - name: paintedwolf.archive_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.admitted_mutation_forms
+   type: list<string>
+ - name: paintedwolf.mutation_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.admitted_secret_config_forms
+   type: list<string>
+ - name: paintedwolf.secret_jq_edit_call
+   type: string
+ - name: paintedwolf.secret_external_command_admitted
+   type: bool
+ - name: paintedwolf.secret_forms_loadable_without_schema
+   type: bool
+ - name: paintedwolf.command_jq_edit_reachable
+   type: bool
+ - name: paintedwolf.command_git_config_reachable
+   type: bool
+ - name: paintedwolf.command_wc_reachable
+   type: bool
+ - name: paintedwolf.command_tee_reachable
+   type: bool
+ - name: paintedwolf.command_sed_reachable
+   type: bool
+ - name: paintedwolf.command_find_reachable
+   type: bool
+ - name: paintedwolf.command_grep_reachable
+   type: bool
+ - name: paintedwolf.command_repo_map_reachable
+   type: bool
+ - name: paintedwolf.admitted_command_forms
+   type: list<string>
+   observation: Replacement command forms for paintedwolf.need admitted by the frozen request; empty when none are admitted or reach is unknown.
  - name: paintedwolf.bare_repo_scope
    type: bool
  - name: paintedwolf.blocked
@@ -954,6 +1074,14 @@ host_facts:
    type: int
  - name: paintedwolf.extracted_paths_sample
    type: list<string>
+ - name: paintedwolf.extract_allowed
+   type: list<string>
+ - name: paintedwolf.extract_format_cause
+   type: string
+ - name: paintedwolf.extract_invalid_format
+   type: bool
+ - name: paintedwolf.extract_rejected_value
+   type: string
  - name: paintedwolf.extracted_paths_omitted
    type: int
  - name: paintedwolf.http_method

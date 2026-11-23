@@ -1,10 +1,13 @@
 package promptsource
 
 import (
+	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/loading"
@@ -47,5 +50,55 @@ func TestPromptSurfaceNamesEachToolsSourceAndTheUnitsItAttached(t *testing.T) {
 	}
 	if !attached {
 		t.Fatal("no unit names the offered tool that attached it")
+	}
+}
+
+// verify carries a narrowed schema (socks_proxy only) while command is offered with nil schema.
+func TestToolProceduresPartialSchemasKeepExactPerToolCapabilities(t *testing.T) {
+	reg, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load anchor registry", err)
+	t.Cleanup(anchor.SetAnchorsFor(func(context.Context, string) *anchor.Registry { return reg }))
+	narrowedVerify := map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"socks_proxy": map[string]any{"type": "boolean"}},
+	}
+	m := &Context{
+		Prompts: prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()}),
+	}
+	sess := &api.Session{ID: "proc-partial", AgentType: "implementer", WorkspacePath: t.TempDir(), Posture: api.SessionPostureBuild}
+
+	partialCtx := prompts.WithProjectedSchemas(t.Context(), map[string]map[string]any{
+		"verify": narrowedVerify,
+	})
+	reader, err := m.procedureReader(partialCtx, sess, "implementer", []string{"command", "verify"})
+	testutil.FailErr(t, "procedureReader partial", err)
+	facts := reader.Facts()
+	if got, _ := facts["runner_socks_proxy_tools"].([]string); !slices.Equal(got, []string{"verify"}) {
+		t.Fatalf("runner_socks_proxy_tools = %v, want [verify]", got)
+	}
+	if got, _ := facts["runner_capability_request_tools"].([]string); len(got) != 0 {
+		t.Fatalf("runner_capability_request_tools = %v, want empty", got)
+	}
+	if facts["profile_has_command"] != true || facts["can_command_verify"] != true {
+		t.Fatalf("command presence/effect facts lost: has=%v verify=%v", facts["profile_has_command"], facts["can_command_verify"])
+	}
+
+	block, err := m.ToolProcedures(partialCtx, sess, "implementer", []string{"command", "verify"})
+	testutil.FailErr(t, "ToolProcedures partial", err)
+	if !strings.Contains(block, "`socks_proxy: true` on `verify`") || strings.Contains(block, "`command` or `verify`") {
+		t.Fatalf("procedure block did not restrict socks_proxy to verify:\n%s", block)
+	}
+	if strings.Contains(block, "Declare access needs in `capability_request`") {
+		t.Fatalf("procedure block leaked pruned capability_request:\n%s", block)
+	}
+	if !strings.Contains(block, "Use `command(verification: true)`") {
+		t.Fatalf("procedure block lost command effect capability:\n%s", block)
+	}
+
+	emptyCtx := prompts.WithProjectedSchemas(t.Context(), map[string]map[string]any{})
+	emptyBlock, err := m.ToolProcedures(emptyCtx, sess, "implementer", []string{"command", "verify"})
+	testutil.FailErr(t, "ToolProcedures empty", err)
+	if strings.Contains(emptyBlock, "socks_proxy: true") || strings.Contains(emptyBlock, "Declare access needs in `capability_request`") {
+		t.Fatalf("empty projected map fell back to raw catalog schemas:\n%s", emptyBlock)
 	}
 }

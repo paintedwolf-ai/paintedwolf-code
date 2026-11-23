@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -171,7 +172,7 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-posture-changed" {
 		t.Fatalf("pending kick = %q want coordinator-posture-changed", got)
 	}
-	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{ReviewsConfinedWrites: true})
 	testutil.FailErr(t, "render strict posture nudge", err)
 	if !ok || strings.TrimSpace(text) != "Declared writes outside the project and scratch now require review, including writes to standard caches." {
 		t.Fatalf("strict nudge = %q (ok=%v)", text, ok)
@@ -245,10 +246,21 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	prof.SetCommandExternalHidden(func() bool { return externalHidden })
 
 	renderPrompt := func(surface prompts.AgentPromptSurface) string {
-		vars := prompts.AgentPromptSurfaceTemplateVars(surface)
-		vars["tool_profile"] = "implement"
-		vars["root_count"] = len(roots)
-		prompts.MergeWorkspaceRootsVars(vars, roots, created.Roots[0].ID)
+		profilesList, err := sandbox.LoadToolProfiles()
+		testutil.FailErr(t, "load tool profiles", err)
+		reader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID:             "implement",
+			Profiles:              profilesList,
+			RootCount:             len(roots),
+			ReviewsConfinedWrites: surface.Posture.ReviewsConfinedWrites(),
+			CommandExternalHidden: surface.CommandExternalHidden,
+			SharedTempLocations:   surface.SharedTempLocations,
+		})
+		testutil.FailErr(t, "new reader", err)
+		occ := prompts.AgentPromptSurfaceTemplateVars(surface)
+		prompts.MergeWorkspaceRootsVars(occ, roots, created.Roots[0].ID)
+		vars, err := prompts.Vars(reader, occ)
+		testutil.FailErr(t, "vars", err)
 		out, err := engine.Render(ctx, "partials/command-surface.md", vars)
 		testutil.FailErr(t, "render command-surface", err)
 		return out
@@ -281,7 +293,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != "coordinator-posture-changed" {
 		t.Fatalf("pending kick after overlay tightening = %q want coordinator-posture-changed", got)
 	}
-	notice, lease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{})
+	notice, lease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{ReviewsConfinedWrites: true})
 	testutil.FailErr(t, "render overlay tightening notice", err)
 	if !ok || strings.TrimSpace(notice) != "Declared writes outside the project and scratch now require review, including writes to standard caches." {
 		t.Fatalf("overlay tightening notice = %q (ok=%v)", notice, ok)
@@ -294,9 +306,12 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != "coordinator-posture-changed" {
 		t.Fatalf("pending kick after external hidden = %q want coordinator-posture-changed", got)
 	}
-	extNotice, extLease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{})
+	extNotice, extLease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{
+		ReviewsConfinedWrites: true,
+		CommandExternalHidden: true,
+	})
 	testutil.FailErr(t, "render external hidden notice", err)
-	if !ok {
+	if !ok || !strings.Contains(extNotice, "The `external` selector is now hidden on `command`.") {
 		t.Fatalf("external hidden notice = %q (ok=%v)", extNotice, ok)
 	}
 	kicks.AckPendingNudge(sess.ID, extLease)

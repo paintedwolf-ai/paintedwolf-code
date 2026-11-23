@@ -1,6 +1,8 @@
 ---
 name: write-prompt-override
 description: Create and render-test a project or extension override for an existing prompt template or persona.
+metadata:
+  authoring_reference: "true"
 ---
 
 # Write a prompt override

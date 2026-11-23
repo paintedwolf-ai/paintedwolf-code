@@ -883,7 +883,7 @@
       "summary": "edit received conflicting arguments: {{ paintedwolf.detail }}."
     },
     "EDIT_FILE_TOO_LARGE": {
-      "branch_instruction": "{% if paintedwolf.can_command %}Change the file with command, or split it into smaller files{% else %}Report the size dependency, or split the file into smaller files{% endif %}",
+      "branch_instruction": "{% if paintedwolf.admitted_stream_edit_forms %}Change bounded parts with command, or split the file into smaller files{% else %}Report the size dependency, or split the file into smaller files{% endif %}",
       "category": "recoverable",
       "emit": "guard:write",
       "summary": "{{ tool }} did not change {{ paintedwolf.path }}: the file or its new content exceeds the {{ paintedwolf.max_file_bytes }}-byte whole-file mutation limit.{% if paintedwolf.size %} Measured size is at least {{ paintedwolf.size }} bytes.{% endif %}"
@@ -927,7 +927,7 @@
       "branch_instruction": "Branch on Code",
       "category": "recoverable",
       "emit": "guard:extract_archive",
-      "summary": "path {{ paintedwolf.path }} is not a supported archive extension."
+      "summary": "{% if paintedwolf.extract_invalid_format %}archive format {{ paintedwolf.extract_rejected_value }} is not supported for {{ paintedwolf.path }}.{% else %}path {{ paintedwolf.path }} ({{ paintedwolf.extract_rejected_value }}) does not have a supported archive suffix.{% endif %}"
     },
     "EXTRACT_IS_DIRECTORY": {
       "branch_instruction": "Branch on Code; fix args and retry once",
@@ -1042,7 +1042,7 @@
       "category": "expected_behavior",
       "emit": "banner",
       "severity": "warning",
-      "summary": "Find returned a distribution digest with selected=0. Use name_glob or a concrete path with max_results/offset for literal results. If the question needs a briefing, use summarize when offered; preserve this digest as a successful observation."
+      "summary": "Find returned a distribution digest with selected=0. Use name_glob or a concrete path with max_results/offset for literal results. If the question needs a briefing, use an offered summary tool; preserve this digest as a successful observation."
     },
     "FIND_PATH_NOT_FOUND": {
       "branch_instruction": "Branch on Code; pick an existing path before retrying find",
@@ -1081,7 +1081,7 @@
       "summary": "The bundled Git engine is unavailable."
     },
     "GIT_INTERNALS_WRITE_DENIED": {
-      "branch_instruction": "Inspect settings with `git config --list` or `git config --get` inside command and ask the user to apply `.git` changes in their terminal; do not retry the write",
+      "branch_instruction": "{% if paintedwolf.command_git_config_reachable %}Inspect settings with `git config --list` or `git config --get` inside command and ask{% else %}Ask{% endif %} the user to apply `.git` changes in their terminal; do not retry the write",
       "category": "recoverable",
       "emit": "guard:git_internals_write",
       "summary": "Cannot write {{ paintedwolf.path }} — repository git internals ({{ paintedwolf.class }}) are not writable via native tools."
@@ -1916,7 +1916,7 @@
       "summary": "The operating system could not inspect or signal this process."
     },
     "PROCESS_UNSUPPORTED": {
-      "branch_instruction": "Branch on Code; Use command with the required process_control or host_execution capability, describing the exact intended operation.",
+      "branch_instruction": "Branch on Code; report the unsupported process operation if no host process capability is offered.",
       "category": "recoverable",
       "emit": "guard:host_process",
       "summary": "This host does not support instance-bound process operations."
@@ -1940,7 +1940,7 @@
       "summary": "**`{{ tool }}`** did not run: the current request has no progress checklist."
     },
     "PROGRESS_NESTED_LINE": {
-      "branch_instruction": "Branch on Code; flatten to top-level lines and retry update_progress",
+      "branch_instruction": "{% if paintedwolf.can_update_progress %}Branch on Code; flatten to top-level lines and retry update_progress{% else %}Branch on Code; flatten checklist rows to top-level lines{% endif %}",
       "category": "recoverable",
       "emit": "guard:update_progress",
       "summary": "Checklist line \"{{ paintedwolf.line }}\" is indented — only top-level `- [ ]`/`- [x]`/`- [~]`/`- [\u003e]` rows are allowed."
@@ -1958,7 +1958,7 @@
       "summary": "This tool-free response would end the turn with {{ paintedwolf.progress_open_items }} progress {% if paintedwolf.progress_has_one_open_item %}step{% else %}steps{% endif %} still pending."
     },
     "PROGRESS_PENDING_AFTER_OPTIONAL": {
-      "branch_instruction": "Branch on Code; reorder so optional `- [\u003e]` lines are last and retry update_progress",
+      "branch_instruction": "{% if paintedwolf.can_update_progress %}Branch on Code; reorder so optional `- [\u003e]` lines are last and retry update_progress{% else %}Branch on Code; reorder so optional `- [\u003e]` lines are last{% endif %}",
       "category": "recoverable",
       "emit": "guard:update_progress",
       "summary": "Pending checklist label \"{{ paintedwolf.label }}\" appears after a `- [\u003e]` optional line."
@@ -1994,7 +1994,7 @@
       "summary": "You called **`update_progress`** on **`implement_synthesis`**, but the proposed checklist would add new scope or reopen finished rows."
     },
     "PROGRESS_TOO_MANY_LINES": {
-      "branch_instruction": "Branch on Code; shorten to ≤ {{ paintedwolf.max_lines }} top-level lines and retry update_progress",
+      "branch_instruction": "{% if paintedwolf.can_update_progress %}Branch on Code; shorten to ≤ {{ paintedwolf.max_lines }} top-level lines and retry update_progress{% else %}Branch on Code; shorten checklist rows to ≤ {{ paintedwolf.max_lines }} top-level lines{% endif %}",
       "category": "recoverable",
       "emit": "guard:update_progress",
       "summary": "update_progress had {{ paintedwolf.line_count }} checklist lines; the limit is {{ paintedwolf.max_lines }}."
@@ -2018,7 +2018,7 @@
       "summary": "{{ tool }} could not decode {{ paintedwolf.path }}{% if paintedwolf.bytes %} ({{ paintedwolf.bytes }} input bytes){% endif %} as supported bounded text."
     },
     "READ_FILE_TOO_LARGE": {
-      "branch_instruction": "{% if paintedwolf.can_command %}Inspect bounded parts of the file with command{% else %}Reduce the input before retrying; report the size dependency when no bounded source is available{% endif %}",
+      "branch_instruction": "{% if paintedwolf.admitted_large_read_forms %}Inspect bounded parts of the file with command{% else %}Reduce the input before retrying; report the size dependency when no bounded source is available{% endif %}",
       "category": "recoverable",
       "emit": "guard:read",
       "summary": "{{ tool }} could not load {{ paintedwolf.path }} within the {{ paintedwolf.max_file_bytes }}-byte input budget.{% if paintedwolf.size %} Measured input is at least {{ paintedwolf.size }} bytes.{% endif %}"
@@ -2095,13 +2095,13 @@
       "summary": "Downloaded package code tried to connect to `{{ paintedwolf.destination }}`; the remote-package execution boundary blocked that destination."
     },
     "REMOTE_PACKAGE_EXECUTION_REQUIRES_FRESH_BOUNDARY": {
-      "branch_instruction": "Use command for this package action; keep the terminal for already-installed local programs",
+      "branch_instruction": "Do not send downloaded package actions into an already-running terminal; keep the terminal for already-installed local programs",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "the package action `{{ paintedwolf.command }}` needs a fresh remote-package execution boundary."
     },
     "RENDER_ASSET_DENIED": {
-      "branch_instruction": "Branch on Code RENDER_ASSET_DENIED; use an allowed path or clean the asset content, then retry render_view",
+      "branch_instruction": "{% if paintedwolf.can_render_view %}Branch on Code RENDER_ASSET_DENIED; use an allowed path or clean the asset content, then retry render_view{% else %}Branch on Code RENDER_ASSET_DENIED; use an allowed path or clean the asset content{% endif %}",
       "category": "recoverable",
       "emit": "guard:visual_render",
       "summary": "render_view refused project asset {{ paintedwolf.path }} or its content: {{ paintedwolf.rejection_reason }}."
@@ -2113,19 +2113,19 @@
       "summary": "render_view could not serve project asset {{ paintedwolf.path }}: {{ paintedwolf.rejection_reason }}."
     },
     "RENDER_ASSET_TOO_LARGE": {
-      "branch_instruction": "Branch on Code RENDER_ASSET_TOO_LARGE; shrink or drop assets until under the caps in the reject data, then retry render_view",
+      "branch_instruction": "{% if paintedwolf.can_render_view %}Branch on Code RENDER_ASSET_TOO_LARGE; shrink or drop assets until under the caps in the reject data, then retry render_view{% else %}Branch on Code RENDER_ASSET_TOO_LARGE; shrink or drop assets until under the caps in the reject data{% endif %}",
       "category": "recoverable",
       "emit": "guard:visual_render",
       "summary": "{% if paintedwolf.render_total_exceeded %}Serving {{ paintedwolf.path }} would bring render assets to {{ paintedwolf.total_bytes }} bytes; the limit is {{ paintedwolf.max_render_bytes }}.{% else %}Asset {{ paintedwolf.path }} exceeds {{ paintedwolf.max_asset_bytes }} bytes (observed {{ paintedwolf.bytes }}).{% endif %}"
     },
     "RENDER_ASSET_TYPE": {
-      "branch_instruction": "Branch on Code RENDER_ASSET_TYPE; reference an allowed image or css file instead, then retry render_view",
+      "branch_instruction": "{% if paintedwolf.can_render_view %}Branch on Code RENDER_ASSET_TYPE; reference an allowed image or css file instead, then retry render_view{% else %}Branch on Code RENDER_ASSET_TYPE; reference an allowed image or css file instead{% endif %}",
       "category": "recoverable",
       "emit": "guard:visual_render",
       "summary": "render_view markup referenced a project file that is not an allowed asset type."
     },
     "RENDER_CANVAS_OVERFLOW": {
-      "branch_instruction": "Branch on Code RENDER_CANVAS_OVERFLOW; split or shorten the document, then retry render_view",
+      "branch_instruction": "{% if paintedwolf.can_render_view %}Branch on Code RENDER_CANVAS_OVERFLOW; split or shorten the document, then retry render_view{% else %}Branch on Code RENDER_CANVAS_OVERFLOW; split or shorten the document{% endif %}",
       "category": "recoverable",
       "emit": "guard:visual_render",
       "summary": "The laid-out document is {{ paintedwolf.content_height }} CSS pixels tall; content fit can grow to {{ paintedwolf.max_height }}."
@@ -2897,7 +2897,7 @@
       "summary": "Delegation/implement tools are forbidden until the plan workflow is complete"
     },
     "SPEC_POSTURE_HANDOFF_FORBIDDEN": {
-      "branch_instruction": "Use command redirects or scoped patches for blueprint files until approval/handoff",
+      "branch_instruction": "Advance through the remaining blueprint workflow phases before handoff",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "Handoff tools blocked until plan workflow milestones are met"
@@ -2946,13 +2946,13 @@
       "summary": "Plan scope section required before research or critic Tasks"
     },
     "SPEC_POSTURE_STATE_FORBIDDEN": {
-      "branch_instruction": "Use command redirects or scoped patches on the blueprint file; state tracking tools are build-only",
+      "branch_instruction": "Keep plan progress in the blueprint workflow; state tracking tools are build-only",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "State tracking tools are forbidden in spec posture"
     },
     "SPEC_POSTURE_STUB_REQUIRED": {
-      "branch_instruction": "Write blueprint stub with a staged command redirect before starting research workers",
+      "branch_instruction": "Complete the Phase 1 blueprint stub before starting research workers",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "Phase 1 plan stub required before starting a plan-writer worker"
@@ -3072,7 +3072,7 @@
       "summary": "`summarize` received a cursor that is not valid for this scope and source generation."
     },
     "SUMMARIZE_NO_INPUT": {
-      "branch_instruction": "Branch on Code; call `summarize` with a path (or paths/content) and retry once",
+      "branch_instruction": "{% if paintedwolf.can_summarize %}Branch on Code; call `summarize` with a path (or paths/content) and retry once{% else %}Branch on Code; supply path, paths, or content when summarization is offered{% endif %}",
       "category": "recoverable",
       "emit": "guard:summarize",
       "summary": "`summarize` was called with no material — path, paths, and content were all missing or empty."

@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -67,7 +68,7 @@ func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sessionID stri
 	if l.Closeout.Deps.RenderHostKick == nil {
 		return state.history, nil
 	}
-	content, err := l.Closeout.Deps.RenderHostKick(ctx, "session-agent-enabled", nil)
+	content, err := l.Closeout.Deps.RenderHostKick(ctx, closeoutTurnReader(state), "session-agent-enabled", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -75,4 +76,60 @@ func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sessionID stri
 		SignalID: anchor.SessionAgentEnabled.String(),
 		Content:  content,
 	}, "", state)
+}
+
+func (l *promptContext) swapObservedMode(sessionID string, mode api.SessionMode) (api.SessionMode, bool) {
+	if sessionID == "" {
+		return "", false
+	}
+	if fn := l.Deps.SwapObservedSessionMode; fn != nil {
+		return fn(sessionID, mode)
+	}
+	prev, ok := l.observedModes.Swap(sessionID, mode)
+	if !ok {
+		return "", false
+	}
+	m, _ := prev.(api.SessionMode)
+	return m, m != ""
+}
+
+// observeModeUpgrade reports whether this coordinator round is the first round
+// observing that sessionID switched from Ask to Agent (mid-turn or between turns).
+func (l *promptContext) observeModeUpgrade(
+	sess *api.Session,
+	sessionID string,
+	previous api.SessionMode,
+	current api.SessionMode,
+	history []api.Message,
+) bool {
+	if sess == nil || sess.IsWorkerChild() {
+		return false
+	}
+	prevObserved, hadObserved := l.swapObservedMode(sessionID, current)
+	if current != api.SessionModeAgent || hasAgentEnabledSignal(history) {
+		return false
+	}
+	if previous == api.SessionModeAsk || (hadObserved && prevObserved == api.SessionModeAsk) {
+		return true
+	}
+	return !hadObserved && historyHadAskRejection(history)
+}
+
+func hasAgentEnabledSignal(history []api.Message) bool {
+	want := anchor.SessionAgentEnabled.String()
+	for _, msg := range history {
+		if msg.HostSignalID == want {
+			return true
+		}
+	}
+	return false
+}
+
+func historyHadAskRejection(history []api.Message) bool {
+	for _, msg := range history {
+		if msg.ToolResult != nil && slices.Contains(msg.ToolResult.Codes, tools.AskModeActiveCode) {
+			return true
+		}
+	}
+	return false
 }

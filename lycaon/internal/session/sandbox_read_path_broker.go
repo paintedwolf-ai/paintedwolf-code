@@ -13,7 +13,9 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
+	"github.com/lycaon/lycaon/internal/settings"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -30,17 +32,41 @@ func (b *WriteRootCheckpointBroker) AuthorizeRead(ctx context.Context, in comman
 	}
 	// Control-plane reads are denied without prompting.
 	if confine.ControlPlanePathDenied(proposed, false, in.SessionScratchRoot, in.SessionOutputRoot) {
-		return command.SandboxReadPathResult{Denied: true, ProposedReadPath: proposed}, nil
+		return command.SandboxReadPathResult{
+			Denied:           true,
+			DenialCause:      isolation.PathDenialControlPlanePolicy,
+			ProposedReadPath: proposed,
+		}, nil
 	}
 	if confine.PathAtOrUnder(proposed, in.SessionScratchRoot) || !b.readPathNeedsApproval(proposed, in.ReadDenyPaths) {
 		// Nothing denies this read; the declaration needs no grant.
 		return command.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
 	}
 	invokingSessionID, rootSessionID := askSessionIDs(ctx, b.Store, in.SessionID, in.ParentSessionID)
+	projectDir := strings.TrimSpace(in.ProjectDir)
+	if b.Authority != nil {
+		evalRes, evalErr := b.Authority.Evaluate(ctx, hitl.ProposedAction{
+			Invocation: hitl.ActionInvocation{Files: []string{proposed}},
+			Scope:      hitl.ActionScope{ProjectID: in.ProjectID, ProjectDir: projectDir, SessionID: invokingSessionID, RootSessionID: rootSessionID},
+		})
+		if evalErr == nil && evalRes != nil && evalRes.Denied && len(evalRes.MatchedRules) > 0 {
+			m := evalRes.MatchedRules[0]
+			return command.SandboxReadPathResult{
+				Denied:      true,
+				DenialCause: isolation.PathDenialApprovalRule,
+				DeniedRule: &settings.ApprovalRule{
+					Category: settings.ApprovalCategory(m.Category),
+					Pattern:  m.Pattern,
+					Effect:   settings.ApprovalEffect(m.Effect),
+					Source:   settings.ApprovalRuleSource{Scope: settings.ApprovalRuleScope(m.Scope), PackID: m.PackID, UnitID: m.UnitID},
+				},
+				ProposedReadPath: proposed,
+			}, nil
+		}
+	}
 	if sessionOverlayHasExact(b.ReadRuntime, rootSessionID, proposed) {
 		return command.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
 	}
-	projectDir := strings.TrimSpace(in.ProjectDir)
 	target := &gate.FileTarget{
 		Path: proposed, Mode: gate.ModeRead,
 		OutsideRoots: true, ProtectedSubject: true,
@@ -116,9 +142,17 @@ func (b *WriteRootCheckpointBroker) raiseReadPathCard(
 	if err != nil || !resolved.Answered {
 		return command.SandboxReadPathResult{}, err
 	}
+	cause := resolved.DenialCause
+	if resolved.Denied && cause == isolation.PathDenialNone {
+		if resolved.HumanDeclined {
+			cause = isolation.PathDenialUserDeclined
+		} else {
+			cause = isolation.PathDenialNonHumanRejected
+		}
+	}
 	return command.SandboxReadPathResult{
 		Raised: resolved.Raised, Authorized: resolved.Authorized, Denied: resolved.Denied,
-		ProposedReadPath: proposed, UserGuidance: resolved.UserGuidance,
+		DenialCause: cause, ProposedReadPath: proposed, UserGuidance: resolved.UserGuidance,
 	}, nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
@@ -91,8 +92,11 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	}
 	// Control-plane writes are denied without prompting.
 	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot, in.SessionOutputRoot) {
-		out.Denied = isSharedTempRoot(proposed)
-		return out, nil
+		return command.SandboxWriteRootResult{
+			Denied:            true,
+			DenialCause:       isolation.PathDenialControlPlanePolicy,
+			ProposedWriteRoot: proposed,
+		}, nil
 	}
 	// The invocation's own scratch is already inside its boundary.
 	if confine.WithinSessionDirectory(proposed, in.SessionScratchRoot) {
@@ -106,8 +110,11 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	if subject.Kind == confine.WriteSubjectOrdinary {
 		// A root granted here must also pass the boundary's granted lane.
 		if refused, _ := confine.GrantedWriteRootRefused(proposed); refused {
-			out.Denied = isSharedTempRoot(proposed)
-			return out, nil
+			return command.SandboxWriteRootResult{
+				Denied:            true,
+				DenialCause:       isolation.PathDenialControlPlanePolicy,
+				ProposedWriteRoot: proposed,
+			}, nil
 		}
 	}
 	invokingSessionID, rootSessionID := askSessionIDs(ctx, b.Store, in.SessionID, in.ParentSessionID)
@@ -152,7 +159,13 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 		rule, matched := b.Rule(ctx, in.ProjectID, projectDir, proposed)
 		if matched && rule.Effect == settings.ApprovalEffectDeny {
 			b.recordRuleDeny(ctx, invokingSessionID, in, proposed, rule)
-			return command.SandboxWriteRootResult{Denied: true, ProposedWriteRoot: proposed}, nil
+			deniedRule := rule
+			return command.SandboxWriteRootResult{
+				Denied:            true,
+				DenialCause:       isolation.PathDenialApprovalRule,
+				DeniedRule:        &deniedRule,
+				ProposedWriteRoot: proposed,
+			}, nil
 		}
 		if matched && rule.Effect == settings.ApprovalEffectAsk {
 			approvalMatches = []hitl.ApprovalRuleMatch{approvalRuleMatch(rule)}
@@ -222,10 +235,19 @@ func (b *WriteRootCheckpointBroker) raiseWriteRootCard(
 	if err != nil || !resolved.Answered {
 		return command.SandboxWriteRootResult{}, err
 	}
+	cause := resolved.DenialCause
+	if resolved.Denied && cause == isolation.PathDenialNone {
+		if resolved.HumanDeclined {
+			cause = isolation.PathDenialUserDeclined
+		} else {
+			cause = isolation.PathDenialNonHumanRejected
+		}
+	}
 	return command.SandboxWriteRootResult{
 		Raised:            resolved.Raised,
 		Authorized:        resolved.Authorized,
 		Denied:            resolved.Denied,
+		DenialCause:       cause,
 		ProposedWriteRoot: proposed,
 		UserGuidance:      resolved.UserGuidance,
 	}, nil
@@ -422,7 +444,7 @@ func writeRootChatGrant(action hitl.ProposedAction, root string) hitl.ApprovalGr
 }
 
 func resolvedUserGuidance(final *hitl.CheckpointResponse) string {
-	if final == nil || final.Result == nil || final.Status != hitl.DecisionStatusRejected {
+	if final == nil || final.Result == nil || final.Status != hitl.DecisionStatusRejected || final.ResolvedBy != authzledger.ResolvedByHuman {
 		return ""
 	}
 	return strings.TrimSpace(final.Result.Comments)

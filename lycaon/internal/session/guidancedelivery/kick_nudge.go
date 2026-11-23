@@ -219,6 +219,10 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 	}
 	rc.GateObligations = m.GateObligations(ctx, sessionID, frame)
 	rc.ProgressOpenItems, rc.ProgressClosureArmed = m.closureState(ctx, sessionID)
+	if m.posture != nil {
+		rc.ReviewsConfinedWrites = m.posture.ProjectApprovalPosture(ctx, sess).ReviewsConfinedWrites()
+		rc.CommandExternalHidden = m.posture.CommandExternalHidden()
+	}
 	return rc
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -377,5 +378,101 @@ func TestSkillRejectsUnknownAnyOfToolsMember(t *testing.T) {
 	real.Metadata = map[string]string{"paintedwolf.any_of_tools": "capture_page"}
 	if err := validateWith(t, catalog, "explore_readonly", real); err != nil {
 		t.Fatalf("registered any_of_tools member was rejected: %v", err)
+	}
+}
+
+// Identical offered names with different projected schemas must not collide in either order.
+func TestSkillToolsOfferedForReaderDistinguishesProjectedSchemasBothOrders(t *testing.T) {
+	profiles := []sandbox.ToolProfile{{
+		ID:    "worker",
+		Tools: map[string]bool{"ask_user": true, "verify": true},
+	}}
+	makeAskSchema := func(enumVals []any) map[string]any {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"response_type": map[string]any{"type": "string", "enum": enumVals},
+				"secret":        map[string]any{"type": "object"},
+			},
+		}
+	}
+	wideAsk, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "worker", Profiles: profiles,
+		Visible: []string{"ask_user"}, Loaded: map[string]bool{"ask_user": true},
+		ProjectedSchemas: map[string]map[string]any{
+			"ask_user": makeAskSchema([]any{"text", "secret"}),
+		},
+		RootCount: 1, HasGit: true, WebSearch: true,
+	})
+	testutil.FailErr(t, "wideAsk reader", err)
+	narrowAsk, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "worker", Profiles: profiles,
+		Visible: []string{"ask_user"}, Loaded: map[string]bool{"ask_user": true},
+		ProjectedSchemas: map[string]map[string]any{
+			"ask_user": makeAskSchema([]any{"text", "single_choice"}),
+		},
+		RootCount: 1, HasGit: true, WebSearch: true,
+	})
+	testutil.FailErr(t, "narrowAsk reader", err)
+
+	wideVerify, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "worker", Profiles: profiles,
+		Visible: []string{"verify"}, Loaded: map[string]bool{"verify": true},
+		ProjectedSchemas: map[string]map[string]any{
+			"verify": {
+				"type": "object",
+				"properties": map[string]any{
+					"capability_request": map[string]any{
+						"type":       "object",
+						"properties": map[string]any{"host_resources": map[string]any{"type": "array"}},
+					},
+				},
+			},
+		},
+		RootCount: 1, HasGit: true, WebSearch: true,
+	})
+	testutil.FailErr(t, "wideVerify reader", err)
+	narrowVerify, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "worker", Profiles: profiles,
+		Visible: []string{"verify"}, Loaded: map[string]bool{"verify": true},
+		ProjectedSchemas: map[string]map[string]any{
+			"verify": {"type": "object", "properties": map[string]any{"socks_proxy": map[string]any{"type": "boolean"}}},
+		},
+		RootCount: 1, HasGit: true, WebSearch: true,
+	})
+	testutil.FailErr(t, "narrowVerify reader", err)
+
+	for _, order := range []struct {
+		name      string
+		wideFirst bool
+	}{
+		{"wide_then_narrow", true},
+		{"narrow_then_wide", false},
+	} {
+		t.Run(order.name, func(t *testing.T) {
+			branched := skills.Skill{
+				Name: "secret-branch-" + order.name,
+				Body: "{% if can_ask_user_secret %}Collect it via `ask_user`.{% else %}Load support via `request_tools`.{% endif %}",
+			}
+			hostRes := skills.Skill{
+				Name:     "host-res-" + order.name,
+				Body:     "Run `verify`.",
+				Metadata: map[string]string{"host_resources": "cloud-cli"},
+			}
+			check := func(wide bool) {
+				askReader, verifyReader := narrowAsk, narrowVerify
+				if wide {
+					askReader, verifyReader = wideAsk, wideVerify
+				}
+				if got := toolvocab.SkillToolsOfferedForReader(branched, askReader); got != wide {
+					t.Fatalf("branched offered(wide=%t) = %t, want %t", wide, got, wide)
+				}
+				if got := toolvocab.SkillToolsOfferedForReader(hostRes, verifyReader); got != wide {
+					t.Fatalf("hostRes offered(wide=%t) = %t, want %t", wide, got, wide)
+				}
+			}
+			check(order.wideFirst)
+			check(!order.wideFirst)
+		})
 	}
 }

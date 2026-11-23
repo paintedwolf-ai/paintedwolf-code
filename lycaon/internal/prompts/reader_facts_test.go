@@ -302,7 +302,11 @@ func TestNoDeclaredReaderFactAssignedOutsideReaderAndGeneratedFile(t *testing.T)
 				return err
 			}
 			rel = filepath.ToSlash(rel)
-			if rel == "internal/prompts/reader.go" || rel == "internal/prompts/reader_facts.go" || rel == "internal/prompts/reader_facts.generated.go" {
+			if rel == "internal/prompts/reader.go" ||
+				rel == "internal/prompts/reader_facts.go" ||
+				rel == "internal/prompts/reader_facts.generated.go" ||
+				strings.HasPrefix(rel, "internal/oar/") ||
+				rel == "internal/commandsurface/reject_vars.go" {
 				return nil
 			}
 			file, err := parser.ParseFile(fset, path, nil, 0)
@@ -310,26 +314,44 @@ func TestNoDeclaredReaderFactAssignedOutsideReaderAndGeneratedFile(t *testing.T)
 				return err
 			}
 			ast.Inspect(file, func(n ast.Node) bool {
-				assign, ok := n.(*ast.AssignStmt)
-				if !ok {
-					return true
-				}
-				for _, lhs := range assign.Lhs {
-					idx, ok := lhs.(*ast.IndexExpr)
-					if !ok {
-						continue
+				switch node := n.(type) {
+				case *ast.AssignStmt:
+					for _, lhs := range node.Lhs {
+						idx, ok := lhs.(*ast.IndexExpr)
+						if !ok {
+							continue
+						}
+						lit, ok := idx.Index.(*ast.BasicLit)
+						if !ok || lit.Kind != token.STRING {
+							continue
+						}
+						key, err := strconv.Unquote(lit.Value)
+						if err != nil {
+							continue
+						}
+						if prompts.IsDeclaredOrReservedReaderFact(key) {
+							pos := fset.Position(lit.Pos())
+							violations = append(violations, fmt.Sprintf("%s:%d assigns reader fact %q", rel, pos.Line, key))
+						}
 					}
-					lit, ok := idx.Index.(*ast.BasicLit)
-					if !ok || lit.Kind != token.STRING {
-						continue
-					}
-					key, err := strconv.Unquote(lit.Value)
-					if err != nil {
-						continue
-					}
-					if prompts.IsDeclaredOrReservedReaderFact(key) {
-						pos := fset.Position(lit.Pos())
-						violations = append(violations, fmt.Sprintf("%s:%d assigns reader fact %q", rel, pos.Line, key))
+				case *ast.CompositeLit:
+					for _, elt := range node.Elts {
+						kv, ok := elt.(*ast.KeyValueExpr)
+						if !ok {
+							continue
+						}
+						lit, ok := kv.Key.(*ast.BasicLit)
+						if !ok || lit.Kind != token.STRING {
+							continue
+						}
+						key, err := strconv.Unquote(lit.Value)
+						if err != nil {
+							continue
+						}
+						if prompts.IsDeclaredOrReservedReaderFact(key) {
+							pos := fset.Position(lit.Pos())
+							violations = append(violations, fmt.Sprintf("%s:%d composite literal assigns reader fact %q", rel, pos.Line, key))
+						}
 					}
 				}
 				return true
@@ -340,5 +362,99 @@ func TestNoDeclaredReaderFactAssignedOutsideReaderAndGeneratedFile(t *testing.T)
 	}
 	if len(violations) > 0 {
 		t.Fatalf("reader facts assigned outside reader.go / reader_facts.generated.go:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+func TestCheckTemplateVocabularyRejectsCapabilitySetDerivations(t *testing.T) {
+	eff, err := extpacks.CatalogForConsumers()
+	testutil.FailErr(t, "CatalogForConsumers", err)
+
+	withUnit := func(src string) *extpacks.EffectiveCatalog {
+		clone := *eff
+		clone.Revision = ""
+		clone.Loaded = maps.Clone(eff.Loaded)
+		clone.Loaded["shared/partials/synthetic-set-check.md"] = extpacks.UnitEffective{
+			ID:           "shared/partials/synthetic-set-check.md",
+			Kind:         "shared",
+			WinnerPackID: "painted-wolf/platform",
+			Content:      []byte(src),
+		}
+		return &clone
+	}
+
+	rejected := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "boolean and over reader facts",
+			src:  `{% set local_verify = profile_has_command and profile_command_external_exec != false %}{% if local_verify %}run{% endif %}`,
+		},
+		{
+			name: "boolean or over skill facts",
+			src:  `{% set any_visual_skill = agent_has_skill_mock_before_build or agent_has_skill_verify_visual_change %}{% if any_visual_skill %}ok{% endif %}`,
+		},
+		{
+			name: "boolean negation of reader fact",
+			src:  `{% set read_only_branch = not on_worker_branch %}{% if read_only_branch %}ok{% endif %}`,
+		},
+		{
+			name: "equality comparison on reader fact",
+			src:  `{% set ask_turn = session_mode == "ask" %}{% if ask_turn %}ask{% endif %}`,
+		},
+		{
+			name: "direct alias of boolean reader fact",
+			src:  `{% set git_here = has_git %}{% if git_here %}git{% endif %}`,
+		},
+		{
+			name: "two-hop transitive alias of boolean reader fact",
+			src:  `{% set step1 = profile_has_command %}{% set step2 = step1 %}{% if step2 %}cmd{% endif %}`,
+		},
+		{
+			name: "reserved can_ prefix on set target",
+			src:  `{% set can_custom_thing = "yes" %}{{ can_custom_thing }}`,
+		},
+		{
+			name: "reserved has_ prefix on set target",
+			src:  `{% set has_custom_thing = "yes" %}{{ has_custom_thing }}`,
+		},
+		{
+			name: "declared reader fact name on set target",
+			src:  `{% set surface_card_label = "override" %}{{ surface_card_label }}`,
+		},
+	}
+	for _, tc := range rejected {
+		t.Run("reject/"+tc.name, func(t *testing.T) {
+			if _, err := prompts.CheckTemplateVocabulary(withUnit(tc.src)); err == nil {
+				t.Fatalf("expected CheckTemplateVocabulary to reject %q", tc.src)
+			}
+		})
+	}
+
+	allowed := []struct {
+		name string
+		src  string
+	}{
+		{
+			name: "string display label alias",
+			src:  `{% set card_label = surface_card_label %}{{ card_label }}`,
+		},
+		{
+			name: "string cadence alias",
+			src:  `{% set cadence = visual_review_cadence %}{{ cadence }}`,
+		},
+		{
+			name: "literal string finish note",
+			src:  `{% set finish_note = "complete_leg" %}{{ finish_note }}`,
+		},
+	}
+	for _, tc := range allowed {
+		t.Run("allow/"+tc.name, func(t *testing.T) {
+			notes, err := prompts.CheckTemplateVocabulary(withUnit(tc.src))
+			testutil.FailErr(t, "CheckTemplateVocabulary", err)
+			if len(notes) > 0 {
+				t.Fatalf("unexpected vocabulary notes: %v", notes)
+			}
+		})
 	}
 }
