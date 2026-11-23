@@ -30,27 +30,39 @@ type Repo struct {
 //
 // Lstat, so a .git symlink counts by name; a dangling one still marks a boundary.
 func IsRoot(dir string) bool {
-	_, err := os.Lstat(filepath.Join(dir, dotGit))
+	_, err := os.Lstat(WorktreeEntry(dir))
 	return err == nil
+}
+
+// WorktreeEntry names the .git directory or pointer for a worktree.
+func WorktreeEntry(dir string) string {
+	return filepath.Join(dir, dotGit)
 }
 
 // Discover returns the repository containing dir, walking up to the filesystem root.
 // The second result is false when no ancestor holds a .git entry.
 func Discover(dir string) (Repo, bool) {
-	cur := CanonicalDir(dir)
-	if cur == "" {
+	root := FindRoot(dir)
+	if root == "" {
 		return Repo{}, false
 	}
-	for {
+	return repoAt(root), true
+}
+
+// FindRoot finds the nearest .git entry without opening repository metadata.
+func FindRoot(dir string) string {
+	cur := CanonicalDir(dir)
+	for cur != "" {
 		if IsRoot(cur) {
-			return repoAt(cur), true
+			return cur
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
-			return Repo{}, false
+			break
 		}
 		cur = parent
 	}
+	return ""
 }
 
 // LocalConfigFiles returns the files whose content decides what `git config --local`
@@ -87,7 +99,7 @@ func CanonicalDir(dir string) string {
 // repoAt fills in the layout for a directory already known to hold a .git entry.
 func repoAt(root string) Repo {
 	repo := Repo{Root: root}
-	dot := filepath.Join(root, dotGit)
+	dot := WorktreeEntry(root)
 	info, err := os.Stat(dot)
 	if err != nil {
 		// Present to Lstat, unreadable to Stat: a dangling symlink, or an untraversable
@@ -182,7 +194,7 @@ func scopePathIncludesLinkedCheckout(root, raw string) bool {
 		return false
 	}
 	for cur := target; ; {
-		gitPath := filepath.Join(cur, dotGit)
+		gitPath := WorktreeEntry(cur)
 		if IsGitlinkFile(gitPath) {
 			return true
 		}
@@ -277,11 +289,17 @@ func readGitDirPointer(root, dot string) string {
 	if !ok {
 		return ""
 	}
-	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, gitDirPrefix) {
+	return GitDirFromPointer(root, line)
+}
+
+// GitDirFromPointer resolves the first line of a gitfile against its worktree.
+func GitDirFromPointer(root, contents string) string {
+	line, _, _ := strings.Cut(contents, "\n")
+	path, ok := strings.CutPrefix(strings.TrimSpace(line), gitDirPrefix)
+	if !ok {
 		return ""
 	}
-	return resolveAgainst(root, strings.TrimSpace(strings.TrimPrefix(line, gitDirPrefix)))
+	return resolveAgainst(root, strings.TrimSpace(path))
 }
 
 // readCommonDir resolves the shared git directory for gitDir. No commondir file means an
@@ -297,7 +315,12 @@ func readCommonDir(gitDir string) string {
 	if err != nil {
 		return ""
 	}
-	return resolveAgainst(gitDir, strings.TrimSpace(string(raw)))
+	return CommonDirFromPointer(gitDir, string(raw))
+}
+
+// CommonDirFromPointer resolves the contents of commondir against its Git directory.
+func CommonDirFromPointer(gitDir, contents string) string {
+	return resolveAgainst(gitDir, strings.TrimSpace(contents))
 }
 
 // resolveAgainst cleans a pointer value, resolving a relative one against base.

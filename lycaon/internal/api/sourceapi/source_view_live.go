@@ -21,6 +21,9 @@ func (s *Trees) watchTreeView(view *sourceView, p *project.Project) {
 			s.refreshTreeReview(view)
 		}}
 	unsubscribe := sourcefeed.Subscribe(p.ID, p.WorkspaceID(), func(notice sourcefeed.Notice) {
+		if len(view.outsideLocations()) > 0 {
+			s.background.Go(view.ctx, func(_ context.Context) { s.refreshChatLocations(view, p.Outside.ID, notice.Changed) })
+		}
 		if !notice.FileWritesOnly {
 			refresher.notify()
 		}

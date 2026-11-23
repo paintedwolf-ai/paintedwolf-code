@@ -8,6 +8,8 @@ import { applySourceTreeChanges, requestSourceTreeResync } from "../tree/source-
 import { requestWalkRefresh } from "../walk/walk-store.ts";
 import { refreshWalkPreviews } from "../walk/walk-preview.ts";
 import { invalidateTurnDiffs } from "../review/turn-diffs.ts";
+import { refreshChatLocations } from "./chat-locations.ts";
+import { outsideRootId } from "./outside-namespace.ts";
 
 /** Routes changes by workspace kind. */
 export function applySourceChangesEvent(event: SourceChangesEvent): void {
@@ -37,6 +39,11 @@ export function applySourceChangesEvent(event: SourceChangesEvent): void {
     refreshWalkPreviews(pid, sessionId);
   }
   if (!projectWorkspace) return;
+  // A native change can rebind a location even when the path stays the same.
+  const outside = outsideRootId(pid);
+  if (outside && (event.changes.length === 0 || event.changes.some((change) => change.from_root_id === outside || change.root_id === outside))) {
+    refreshChatLocations(pid);
+  }
   requestSourceRefresh(pid, { watchCoverage: event.resync });
 }
 
@@ -45,6 +52,7 @@ export function requestSourceProjectionResync(projectId: string): void {
   const pid = projectId.trim();
   if (!pid) return;
   requestSourceTreeResync(pid);
+  refreshChatLocations(pid);
   applyBufferSourceResync(pid);
   requestSourceRefresh(pid, { watchCoverage: true });
   requestWalkRefresh(pid);

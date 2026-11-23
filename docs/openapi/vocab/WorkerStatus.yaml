@@ -1,0 +1,10 @@
+name: WorkerStatus
+go_const_prefix: WorkerStatus
+values:
+  - id: pending
+  - id: running
+  - id: waiting
+  - id: complete
+  - id: failed
+  - id: canceled
+  - id: held

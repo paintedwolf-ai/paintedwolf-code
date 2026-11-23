@@ -232,6 +232,10 @@ func (o *OpenGrepScanner) consoleTail(console []byte) string {
 func opengrepSubprocessEnv(files opengrepRunFiles) []string {
 	out := append([]string(nil), os.Environ()...)
 	pins := map[string]string{
+		"XDG_CACHE_HOME":             files.dir(),
+		"TMPDIR":                     files.dir(),
+		"TMP":                        files.dir(),
+		"TEMP":                       files.dir(),
 		"LANG":                       "C.UTF-8",
 		"LC_ALL":                     "C.UTF-8",
 		"LC_CTYPE":                   "C.UTF-8",
@@ -303,7 +307,7 @@ func filterNonCode(ctx context.Context, result *scanoutput.Result, project strin
 
 // opengrepLaunch confines OpenGrep to reading the project and writing its run files.
 func opengrepLaunch(projectDir string, runFiles opengrepRunFiles) (exec.LaunchPlan, error) {
-	confinement, err := scan.BundledScannerConfinement(projectDir, runFiles.dir())
+	confinement, err := scan.BundledScannerConfinement(projectDir, runFiles.workspace)
 	if err != nil {
 		return exec.LaunchPlan{}, err
 	}

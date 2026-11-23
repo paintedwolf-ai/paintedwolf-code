@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -41,18 +42,25 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
 			return "", missingCommandHandleReject(t.Registry, tctx.Identity.SessionID, handle)
 		}
+		if reject := rejectOutputScreenLimit(captureprojection.ScreeningLimit(err), snapshot.Output.ExitCode, nil); reject != nil {
+			if snapshot.Output.ExitCode != nil {
+				t.Registry.Observe(tctx.Identity.SessionID, handle)
+			}
+			return "", reject
+		}
 		return "", err
 	}
-	t.Registry.Observe(tctx.Identity.SessionID, handle)
 	out := commandOutputOf(snapshot.Output, snapshot.TerminationReason)
 	capBackgroundOutput(&out, 0)
 	payload := observeBackgroundOutput(tctx, out, snapshot.Confinement, snapshot.TerminationReason)
 	payload.ExecFailure = snapshot.Failure
+	payload.ProgramStopCode = snapshot.ProgramStopCode
 	t.Registry.Output.NoteRefusalsShown(tctx.Identity.SessionID, handle, len(payload.SandboxRefusals))
 	encoded, err := surveyjson.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("command_output encode: %w", err)
 	}
+	snapshot.ExitObservation.Observe()
 	return string(encoded), nil
 }
 
@@ -87,8 +95,9 @@ func commandOutputOf(raw bgprocess.RawOutput, reason bgprocess.TerminationReason
 type commandOutputResult struct {
 	commandOutput
 	// ExecFailure is the run error the exit status does not carry.
-	ExecFailure *hostcmd.ExecFailure `json:"exec_failure,omitempty"`
-	Network     []confine.EgressHost `json:"network,omitempty"`
+	ExecFailure     *hostcmd.ExecFailure `json:"exec_failure,omitempty"`
+	ProgramStopCode string               `json:"program_stop_code,omitempty"`
+	Network         []confine.EgressHost `json:"network,omitempty"`
 	confine.Report
 }
 
@@ -147,6 +156,9 @@ func (t *CommandStopTool) Run(ctx context.Context, args map[string]any, tctx too
 	})
 	if err != nil {
 		return "", fmt.Errorf("command_stop encode: %w", err)
+	}
+	if out.ExitCode != nil {
+		t.Registry.Observe(tctx.Identity.SessionID, handle)
 	}
 	return string(encoded), nil
 }

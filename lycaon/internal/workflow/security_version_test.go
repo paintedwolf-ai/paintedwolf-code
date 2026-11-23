@@ -67,6 +67,7 @@ func TestRetiredSecurityRunProjectsItsSelectedDefinition(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
 	run, err := startRun(t.Context(), mgr, "sess-1", "security-survey", "2.0.1")
 	testutil.FailErr(t, "start current workflow", err)
+	run.ID = "released-run-without-snapshot"
 	run.WorkflowVersion = "1.0.0"
 	ui, err := mgr.Presentation.ComputeRunUI(t.Context(), run)
 	testutil.FailErr(t, "project retired workflow", err)

@@ -21,6 +21,8 @@ const (
 	ReasonFloor    = "floor"
 	ReasonDeclared = "declared"
 	ReasonIgnored  = "ignored"
+	// ReasonOmitted marks a folder the caller observes elsewhere or never records.
+	ReasonOmitted = "omitted"
 )
 
 // Scope applies one plane's admission policy and is safe for concurrent use.
@@ -34,6 +36,7 @@ type Scope struct {
 	collapsed  []gitignore.Pattern
 	boundaries []string
 	identity   string
+	omitted    map[string]struct{}
 	// editorOnly marks a root agents do not use; it is observed on demand.
 	editorOnly bool
 	// controlPlane is set when the root meets the engine's own state.
@@ -54,6 +57,8 @@ type Options struct {
 	// Floor patterns exclude paths at any depth and take precedence over project settings.
 	Floor    []string
 	Declared Declared
+	// Omit names root-relative folders the scope never enters.
+	Omit []string
 }
 
 func New(root string, opts Options) *Scope {
@@ -70,6 +75,14 @@ func New(root string, opts Options) *Scope {
 		dirs:     make(map[string]dirDecision),
 	}
 	s.floor = patternsAtAnyDepth(opts.Floor)
+	for _, rel := range opts.Omit {
+		if rel = cleanRel(rel); rel != "." {
+			if s.omitted == nil {
+				s.omitted = make(map[string]struct{})
+			}
+			s.omitted[rel] = struct{}{}
+		}
+	}
 	s.deferred = patternsAtAnyDepth(opts.Plane.DeferredDirectories)
 	s.collapsed = patternsAtAnyDepth(opts.Plane.CollapsedDirectories)
 	s.boundaries = append([]string(nil), opts.Plane.BoundaryDirectories...)
@@ -196,6 +209,9 @@ func (s *Scope) decideDirLocked(rel string) (string, bool) {
 func (s *Scope) decideLocked(rel string, isDir bool) (string, bool) {
 	if settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel) {
 		return ReasonFloor, true
+	}
+	if _, omitted := s.omitted[rel]; omitted && isDir {
+		return ReasonOmitted, true
 	}
 	segments := strings.Split(rel, "/")
 	if matchAny(s.floor, segments, isDir) == gitignore.Exclude {

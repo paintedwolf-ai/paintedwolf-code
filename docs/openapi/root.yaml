@@ -237,6 +237,12 @@ paths:
     $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source
   /v1/projects/{id}/source/workspace:
     $ref: paths/projects/source-workspace.yaml#/paths/~1v1~1projects~1{id}~1source~1workspace
+  /v1/projects/{id}/source/outside-files:
+    $ref: paths/projects/source-outside.yaml#/paths/~1v1~1projects~1{id}~1source~1outside-files
+  /v1/projects/{id}/source/outside-locations/{location_id}:
+    $ref: paths/projects/source-outside.yaml#/paths/~1v1~1projects~1{id}~1source~1outside-locations~1{location_id}
+  /v1/projects/{id}/source/outside-locations/{location_id}/files:
+    $ref: "paths/projects/source-outside.yaml#/paths/~1v1~1projects~1{id}~1source~1outside-locations~1{location_id}~1files"
   /v1/projects/{id}/agent-presence:
     $ref: paths/projects/source-workspace.yaml#/paths/~1v1~1projects~1{id}~1agent-presence
   /v1/projects/{id}/editor-documents:
@@ -313,6 +319,8 @@ paths:
     $ref: paths/projects/source-index.yaml#/paths/~1v1~1projects~1{id}~1source~1symbols
   /v1/projects/{id}/source/walk-summary:
     $ref: paths/projects/source-walk.yaml#/paths/~1v1~1projects~1{id}~1source~1walk-summary
+  /v1/projects/{id}/source/command-windows/{window_id}:
+    $ref: paths/projects/source-walk.yaml#/paths/~1v1~1projects~1{id}~1source~1command-windows~1{window_id}
   /v1/projects/{id}/source/git-changes/{git_change_id}/review:
     $ref: paths/projects/source-comparison.yaml#/paths/~1v1~1projects~1{id}~1source~1git-changes~1{git_change_id}~1review
   /v1/projects/{id}/source/revisions:
@@ -479,6 +487,12 @@ paths:
     $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1credential
   /v1/providers/{provider_id}/test:
     $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1test
+  /v1/providers/{provider_id}/local-model:
+    $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1local-model
+  /v1/providers/{provider_id}/local-model/select:
+    $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1local-model~1select
+  /v1/providers/{provider_id}/local-model/cancel:
+    $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1local-model~1cancel
   /v1/providers/{provider_id}/repair:
     $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1repair
   /v1/providers/{provider_id}/refresh:
@@ -1153,6 +1167,8 @@ components:
       $ref: components/schemas/session/context.yaml#/components/schemas/SessionContextResponse
     SessionPosture:
       $ref: components/schemas/session/identity.yaml#/components/schemas/SessionPosture
+    SessionMode:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/SessionMode
     SessionStatus:
       $ref: components/schemas/session/identity.yaml#/components/schemas/SessionStatus
     SessionListSort:

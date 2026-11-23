@@ -34,6 +34,7 @@ function transcriptItemsForMessages(
   return messagesToTranscriptItems(messages, {
     verboseMode: options?.verboseMode ?? false,
     layout: "chat",
+    sessionId: options?.sessionId,
     turnLoads: options?.turnLoads,
   });
 }
@@ -109,6 +110,7 @@ function buildSpanBlocks(
 }
 
 export type ChatSpanBuildOptions = {
+  sessionId?: string;
   verboseMode?: boolean;
   workers?: readonly WorkerTask[];
   pendingCheckpoints?: readonly PendingCheckpoint[];

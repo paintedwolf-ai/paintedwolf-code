@@ -91,7 +91,11 @@ func MergeForTurn(
 	if err != nil {
 		return err
 	}
-	MergeVars(into, surf.Flags)
+	flags := surf.Flags
+	if reader.Valid() {
+		flags = Derive(reader.RootCount(), reader.Offered(), spawnAllowlist)
+	}
+	MergeVars(into, flags)
 	for k, v := range prompts.SpawnRosterRoleVars(surf.Roster) {
 		into[k] = v
 	}

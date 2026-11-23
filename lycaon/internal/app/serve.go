@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectliveness"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
+	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"log/slog"
@@ -53,6 +54,7 @@ type ServeApp struct {
 	CoordinatorRuntime   *coordinator.Runtime
 	AgentRegistry        *orchestration.MemoryAgentRegistry
 	ToolRegistry         *tools.DefaultRegistry
+	Commands             *toolhost.CommandServices
 	DB                   db.ReadHandle
 	Events               events.ReplayHub
 	ConfigRoot           string
@@ -205,7 +207,11 @@ func (a *ServeApp) Run(ctx context.Context) error {
 	}
 
 	if a.projects != nil && a.eventPub != nil {
-		sock, err := clisocket.Listen(ctx, a.projects, a.eventPub)
+		var models clisocket.LocalModels
+		if a.Server != nil && a.Server.Admin.Models != nil {
+			models = a.Server.Admin.Models
+		}
+		sock, err := clisocket.Listen(ctx, a.projects, a.eventPub, models)
 		if err != nil {
 			slog.WarnContext(ctx, "cli socket unavailable", "err", err)
 		} else {

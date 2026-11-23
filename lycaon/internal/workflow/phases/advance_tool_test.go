@@ -1,18 +1,18 @@
 package phases_test
 
 import (
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-
 	"context"
 	"encoding/json"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/vocabulary"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func registerAdvanceToolTestRegistry(t *testing.T, mgr *workflow.RunManager) *tools.DefaultRegistry {
@@ -71,7 +71,7 @@ func TestWorkflowAdvanceGateUnmet(t *testing.T) {
 		Version: "1.0.0",
 		PhaseDefs: []workflowdef.PhaseDef{{
 			ID:                 "stub",
-			CompleteWhen:       workflowdef.CompleteWhenGatesSatisfied,
+			CompleteWhen:       vocabulary.CompleteWhenGatesSatisfied,
 			Gates:              []string{"plan_stub_valid"},
 			Next:               "research",
 			AdvanceWhenGateMet: workflowdef.AdvanceWhenGateMetCoordinator,
@@ -117,7 +117,7 @@ func TestWorkflowAdvanceAlreadyAdvanced(t *testing.T) {
 		Version: "1.0.0",
 		PhaseDefs: []workflowdef.PhaseDef{{
 			ID:                 "stub",
-			CompleteWhen:       workflowdef.CompleteWhenGatesSatisfied,
+			CompleteWhen:       vocabulary.CompleteWhenGatesSatisfied,
 			Gates:              []string{"plan_stub_valid"},
 			Next:               "research",
 			AdvanceWhenGateMet: workflowdef.AdvanceWhenGateMetCoordinator,

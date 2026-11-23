@@ -51,7 +51,7 @@ run_leg() {
   local browser
   case "$1" in
     sandbox)
-      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-sandbox -- ./internal/confine/... -count=1
+      bash "${ROOT}/scripts/go-test-digest.sh" --full --name test:confine:linux-sandbox -- ./internal/confine/... ./cmd/pw-service-guest ./internal/serviceguest -count=1
       ;;
     supervisor)
       PW_NATIVE_PRIVILEGE_QUALIFICATION=ci bash "${ROOT}/scripts/go-test-digest.sh" --full --tags nativeprivileges --name test:confine:linux-supervisor -- ./internal/exec ./internal/osprocess -count=1

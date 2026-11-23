@@ -55,6 +55,8 @@ class StageEngineFloorTests(unittest.TestCase):
             shutil.copy2(ROOT / "scripts" / "stage-engine.sh", fixture / "scripts" / "stage-engine.sh")
             for name in (*STUBBED_SCRIPTS, "gitengine-fetch.sh"):
                 (fixture / "scripts" / name).write_text("")
+            (fixture / "scripts" / "service-guest").mkdir()
+            (fixture / "scripts" / "service-guest" / "assemble.py").write_text("")
             (fixture / "scripts" / "resolve-opengrep.sh").write_text(f"echo {work / 'opengrep'}\n")
             (fixture / "scripts" / "stage-decide-heads.sh").write_text('mkdir -p "$1/decide/heads"\n')
             (fixture / "schemas").mkdir()

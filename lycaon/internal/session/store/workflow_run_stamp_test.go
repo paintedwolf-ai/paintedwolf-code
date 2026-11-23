@@ -15,13 +15,13 @@ func TestRequireWorkflowRunStamp(t *testing.T) {
 	if err := requireWorkflowRunStamp(api.Message{
 		Kind:           api.MessageKindProgressUpdate,
 		WorkflowRunID:  "run-1",
-		ProgressUpdate: &api.ProgressUpdateMeta{Seq: 1},
+		ProgressUpdate: &api.ProgressUpdateMeta{},
 	}); err != nil {
 		t.Fatalf("stamped progress_update: %v", err)
 	}
 	err := requireWorkflowRunStamp(api.Message{
 		Kind:           api.MessageKindProgressUpdate,
-		ProgressUpdate: &api.ProgressUpdateMeta{Seq: 1},
+		ProgressUpdate: &api.ProgressUpdateMeta{},
 	})
 	if !errors.Is(err, ErrWorkflowRunStampRequired) {
 		t.Fatalf("err = %v want ErrWorkflowRunStampRequired", err)

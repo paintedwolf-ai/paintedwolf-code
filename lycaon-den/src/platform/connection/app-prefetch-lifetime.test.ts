@@ -17,7 +17,7 @@ it.each(["binding", "generation", "current"] as const)("fences deferred prefetch
     clearSessionChatCacheForTests();
     const scope = { projectId: "project", sessionId: "session" };
     const fixture = withBootstrap({
-      getSession: async () => ({ id: scope.sessionId, project_id: scope.projectId, workspace_path: "/project", owner_person_id: "person", posture: "build", status: "idle", created_at: "t", updated_at: "t", activity_at: "t" }),
+      getSession: async () => ({ mode: "agent" as const, started: true, root_session_id: scope.sessionId, id: scope.sessionId, project_id: scope.projectId, workspace_path: "/project", owner_person_id: "person", posture: "build", status: "idle", created_at: "t", updated_at: "t", activity_at: "t" }),
       listSessionMessages: async () => ({ messages: [], watermark: 1, turn_clocks: {}, turn_loads: {} }),
     });
     const payload = await fixture.getSessionBootstrap(scope.sessionId);

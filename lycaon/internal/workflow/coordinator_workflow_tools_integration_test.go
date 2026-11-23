@@ -6,18 +6,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
-	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -83,7 +84,7 @@ func TestAdvanceToolMatchesHTTPGateShape(t *testing.T) {
 		Version: "1.0.0",
 		PhaseDefs: []workflowdef.PhaseDef{{
 			ID:                 "stub",
-			CompleteWhen:       workflowdef.CompleteWhenGatesSatisfied,
+			CompleteWhen:       vocabulary.CompleteWhenGatesSatisfied,
 			Gates:              []string{"plan_stub_valid"},
 			Next:               "next",
 			AdvanceWhenGateMet: workflowdef.AdvanceWhenGateMetCoordinator,

@@ -133,7 +133,7 @@ func readReportPage(ctx context.Context, tx *sql.Tx, projectID string, query Rep
 	querySQL := reportSessionTotalsSQL + `, selected AS MATERIALIZED (
  SELECT id, ` + expression + ` AS rank FROM chats WHERE matches` + after + `
  ORDER BY ` + expression + ` DESC, id DESC LIMIT ?` + fmt.Sprint(len(args)) + `)
- SELECT s.id, s.project_id, COALESCE(s.title,''), s.posture, s.status, s.archived_at, s.pin_rank,
+ SELECT s.id, s.project_id, COALESCE(s.title,''), s.mode, s.posture, s.status, s.archived_at, s.pin_rank,
  s.created_at, s.activity_at, (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id), selected.rank
  FROM selected CROSS JOIN sessions s ON s.id = selected.id ORDER BY selected.rank DESC, s.id DESC`
 	rows, err := tx.QueryContext(ctx, querySQL, args...)
@@ -147,7 +147,7 @@ func readReportPage(ctx context.Context, tx *sql.Tx, projectID string, query Rep
 		var archived sql.NullString
 		var pinned sql.NullInt64
 		var created, activity, value string
-		if err := rows.Scan(&row.ID, &row.ProjectID, &row.Title, &row.Posture, &row.Status, &archived, &pinned, &created, &activity, &row.MessageCount, &value); err != nil {
+		if err := rows.Scan(&row.ID, &row.ProjectID, &row.Title, &row.Mode, &row.Posture, &row.Status, &archived, &pinned, &created, &activity, &row.MessageCount, &value); err != nil {
 			return report, err
 		}
 		if len(report.Sessions) == query.Limit {

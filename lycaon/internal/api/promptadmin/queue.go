@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	queuestore "github.com/lycaon/lycaon/internal/queue"
+	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -32,6 +33,16 @@ func (s *Queue) HandleUpdateSessionQueue(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := r.Context()
+	if req.Mode != nil {
+		if *req.Mode != api.SessionModeAgent || (req.Op != "send" && req.Op != "fire_now") {
+			s.responses.Fail(w, api.ApiErrorCodeInvalidRequest, "Queued sends can only carry an upgrade to Agent mode.")
+			return
+		}
+		if _, err := s.Sessions.Chats.SetMode(ctx, id, *req.Mode); err != nil {
+			s.writeQueueError(w, r, err, api.QueueDraft{})
+			return
+		}
+	}
 	var (
 		draft api.QueueDraft
 		err   error
@@ -83,6 +94,10 @@ func (s *Queue) HandleUpdateSessionQueue(w http.ResponseWriter, r *http.Request)
 // writeQueueError maps queue rejections to client-rendered error codes.
 func (s *Queue) writeQueueError(w http.ResponseWriter, r *http.Request, err error, draft api.QueueDraft) {
 	switch {
+	case requestscope.WriteSessionModeError(s.responses, w, err):
+		return
+	case errors.Is(err, chats.ErrWorkerChildLifecycle):
+		s.responses.Fail(w, api.ApiErrorCodeInvalidRequest, "Worker chats inherit the root chat’s mode.")
 	case errors.Is(err, queuestore.ErrRevisionConflict):
 		var conflict *queuestore.RevisionConflictError
 		_ = errors.As(err, &conflict)

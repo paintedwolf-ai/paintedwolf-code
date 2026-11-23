@@ -9,7 +9,7 @@ export function FilesAgentChip(props: { chip: Chip; testId: string; showTooltip?
       data-agent-state={props.chip.state}
       data-agent-phase={props.chip.phase}
       aria-label={props.chip.description}
-      data-tip={props.showTooltip === false ? undefined : props.chip.description}
+      data-tip={props.showTooltip === false || props.chip.description === props.chip.text ? undefined : props.chip.description}
     >
       {props.chip.text}
     </span>

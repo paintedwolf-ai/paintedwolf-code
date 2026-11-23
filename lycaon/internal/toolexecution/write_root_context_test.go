@@ -2,13 +2,15 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools"
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestNativeContextReceivesCurrentConfinementWriteGrants(t *testing.T) {
@@ -54,5 +56,19 @@ func TestNativeContextReceivesCurrentConfinementWriteGrants(t *testing.T) {
 		if session == "other" {
 			active = false
 		}
+	}
+}
+
+func TestNativeGrantRemainsScopedWhenSubprocessConfinementIsDisabled(t *testing.T) {
+	t.Setenv("LYCAON_SANDBOX", "off")
+	root := t.TempDir()
+	req := confine.Request{GrantedWriteRoots: []string{root}}
+	action := proposedActionFromPolicy(platform.PolicyContext{ConfineRequest: req})
+	if action.Execution.Contained.Active() || !slices.Equal(action.Scope.GrantedWriteRoots, []string{root}) {
+		t.Fatalf("native grants %v, subprocess boundary %+v", action.Scope.GrantedWriteRoots, action.Execution.Contained)
+	}
+	req.GrantedWriteRoots[0] = ""
+	if action.Scope.GrantedWriteRoots[0] != root {
+		t.Fatal("action shares mutable grants with the request")
 	}
 }

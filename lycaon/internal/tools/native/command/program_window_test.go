@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
@@ -40,6 +41,7 @@ type countingOpener struct {
 	inner  sourceledger.CommandWindowOpener
 	opens  atomic.Int32
 	before func(context.Context) error
+	last   atomic.Pointer[sourceledger.OpenCommandWindow]
 }
 
 func (o *countingOpener) OpenCommandWindow(ctx context.Context, in sourceledger.CommandWindowInput) (*sourceledger.OpenCommandWindow, error) {
@@ -49,7 +51,11 @@ func (o *countingOpener) OpenCommandWindow(ctx context.Context, in sourceledger.
 			return nil, err
 		}
 	}
-	return o.inner.OpenCommandWindow(ctx, in)
+	win, err := o.inner.OpenCommandWindow(ctx, in)
+	if win != nil {
+		o.last.Store(win)
+	}
+	return win, err
 }
 
 func newWindowFixture(t *testing.T, timing sourceledger.Timing) *windowFixture {
@@ -80,31 +86,43 @@ func (f *windowFixture) run(t *testing.T, source string) command.ProgramOutcome 
 	testutil.FailErr(t, "run program", err)
 	var running command.RunningProgramResult
 	if json.Unmarshal([]byte(out), &running) == nil && running.State == "running" && running.Handle != "" {
-		return f.continued(t, running.Handle)
+		return f.continued(t, running)
 	}
 	return decodeOutcome(t, out)
 }
 
-// continued follows a program that outlasted its call to the outcome its job
-// writes to stderr when it ends.
-func (f *windowFixture) continued(t *testing.T, handle string) command.ProgramOutcome {
+// continued follows a program that outlasted its call to its settled receipt.
+func (f *windowFixture) continued(t *testing.T, running command.RunningProgramResult) command.ProgramOutcome {
 	t.Helper()
-	testutil.WaitFor(t, "the continued program ends", func() bool {
-		_, running := f.Background.State(f.Session, handle)
-		return !running
-	})
-	snap, err := f.Background.Snapshot(t.Context(), f.Session, handle, 1<<20)
-	testutil.FailErr(t, "read continued program", err)
-	lines := strings.Split(snap.Output, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		body, ok := strings.CutPrefix(lines[i], "stderr: ")
-		var outcome command.ProgramOutcome
-		if ok && json.Unmarshal([]byte(body), &outcome) == nil && outcome.ProgramID != "" {
-			return outcome
+	_, _, err := f.Background.Lifecycle.Wait(t.Context(), f.Session, running.Handle)
+	testutil.FailErr(t, "wait for continued program", err)
+	raw, err := f.Runtime.ReceiptResult(t.Context(), f.Session, running.ProgramID)
+	testutil.FailErr(t, "read continued program receipt", err)
+	outcome := decodeOutcome(t, raw)
+	outcome.Stdout, outcome.Stderr = f.retainedStreams(t, running.Handle)
+	if win := f.opener.last.Load(); win != nil && outcome.SourceWindow == nil {
+		outcome.SourceWindow = &hostcmd.SourceWindow{ID: win.ID, Settled: win.IsSettled()}
+	}
+	return outcome
+}
+
+// retainedStreams reads a settled program's delivered streams the way an
+// agent's output read would; the receipt keeps the settlement separate from
+// them, so its outcome carries no stdout or stderr text.
+func (f *windowFixture) retainedStreams(t *testing.T, handle string) (string, string) {
+	t.Helper()
+	output, err := f.Background.Output.ReadCommandOutput(t.Context(), f.Session, handle, 0)
+	testutil.FailErr(t, "read retained program output", err)
+	var stdout, stderr strings.Builder
+	for _, chunk := range output.Output.Chunks {
+		switch chunk.Stream {
+		case "stdout":
+			stdout.WriteString(chunk.Text)
+		case "stderr":
+			stderr.WriteString(chunk.Text)
 		}
 	}
-	t.Fatalf("continued program wrote no outcome:\n%s", snap.Output)
-	return command.ProgramOutcome{}
+	return stdout.String(), stderr.String()
 }
 
 // effects reads the session's recorded effects by path.
@@ -154,12 +172,22 @@ func TestProgramWindowACCW01UntrustedTokenSettlesBeforeTheResult(t *testing.T) {
 func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	gate := make(chan time.Time)
 	f := newWindowFixture(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
+	out := &tools.ToolInvocationOut{}
+	configure := f.Configure
+	f.Configure = func(tc *tools.ToolContext) {
+		configure(tc)
+		tc.Effects.Out = out
+	}
 	f.continuousCoverage.Store(true)
 	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 	outcome := f.run(t, writeGen)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.Settled {
 		t.Fatalf("outcome = %+v, want an unsettled source window", outcome)
+	}
+	if facts := out.CardFacts; len(facts) != 1 || facts[0].Kind != api.ActionFactSourceObservation ||
+		len(facts[0].SourceWindows) != 1 || facts[0].SourceWindows[0] != outcome.SourceWindow.ID {
+		t.Fatalf("tool result facts = %+v, want pending window %q", facts, outcome.SourceWindow.ID)
 	}
 	listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
 	if len(listed) != 1 || listed[0].ID != outcome.SourceWindow.ID || !listed[0].Closing {
@@ -305,7 +333,7 @@ func TestProgramWindowACCW05OpenFailureRunsUnobservedOnce(t *testing.T) {
 	f := newWindowFixture(t, sourceledger.Timing{})
 	f.opener.before = func(context.Context) error { return errors.New("reconcile unavailable") }
 	outcome := f.run(t, writeGen+`; external -- /bin/sh -c 'echo second > second.txt'`)
-	if outcome.Status != 0 || outcome.SourceWindow == nil || outcome.SourceWindow.ID != "" || !outcome.SourceWindow.Unobserved {
+	if outcome.Status != 0 || outcome.SourceWindow == nil || outcome.SourceWindow.ID != "" || !everyFolderMissed(outcome.SourceWindow) {
 		t.Fatalf("outcome = %+v, want the program run with an unobserved fact and no window", outcome)
 	}
 	for _, name := range []string{"gen.txt", "second.txt"} {
@@ -484,7 +512,7 @@ func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
 	if !strings.Contains(outcome.Stdout, "status=0") {
 		t.Fatalf("stdout = %q, want the launch's own status", outcome.Stdout)
 	}
-	if outcome.SourceWindow == nil || outcome.SourceWindow.ID == "" || !outcome.SourceWindow.Unobserved {
+	if outcome.SourceWindow == nil || outcome.SourceWindow.ID == "" || !everyFolderMissed(outcome.SourceWindow) {
 		t.Fatalf("source window = %+v, want the later window and the unobserved launch", outcome.SourceWindow)
 	}
 	if opens := f.opener.opens.Load(); opens != 1 {
@@ -503,8 +531,14 @@ func TestProgramResultStatesWhenObservationNeverStarted(t *testing.T) {
 		SourceWindow map[string]any `json:"source_window"`
 	}
 	testutil.FailErr(t, "decode result", json.Unmarshal([]byte(raw), &result))
-	if len(result.SourceWindow) != 1 || result.SourceWindow["unobserved"] != true {
-		t.Fatalf("source_window = %v, want only unobserved", result.SourceWindow)
+	folders, _ := result.SourceWindow["coverage"].([]any)
+	if len(result.SourceWindow) != 1 || len(folders) == 0 {
+		t.Fatalf("source_window = %v, want only coverage", result.SourceWindow)
+	}
+	for _, folder := range folders {
+		if entry, _ := folder.(map[string]any); entry["coverage"] != "not_observed" || entry["reason"] != "baseline_incomplete" {
+			t.Fatalf("source_window = %v, want every folder not observed", result.SourceWindow)
+		}
 	}
 }
 
@@ -724,7 +758,7 @@ func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 	result := testutil.Receive(t, "program result", done)
 	testutil.FailErr(t, "run program", result.err)
 	outcome := decodeOutcome(t, result.content)
-	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != windowID || outcome.SourceWindow.Unobserved {
+	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != windowID || anyFolderNotObserved(outcome.SourceWindow) {
 		t.Fatalf("outcome = %+v", outcome)
 	}
 	f.wantWindowEffect(t, "second.txt", windowID)
@@ -734,4 +768,27 @@ func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 	if opens := f.opener.opens.Load(); opens != 1 {
 		t.Fatalf("window opens = %d, want the one window re-anchored", opens)
 	}
+}
+
+// everyFolderMissed reports whether a fact states each folder it lists as not
+// observed for want of a baseline, as after a launch the window did not watch.
+func everyFolderMissed(fact *hostcmd.SourceWindow) bool {
+	if fact == nil || len(fact.Coverage) == 0 {
+		return false
+	}
+	for _, folder := range fact.Coverage {
+		if folder.Coverage != "not_observed" || folder.Reason != "baseline_incomplete" {
+			return false
+		}
+	}
+	return true
+}
+
+func anyFolderNotObserved(fact *hostcmd.SourceWindow) bool {
+	for _, folder := range fact.Coverage {
+		if folder.Coverage == "not_observed" {
+			return true
+		}
+	}
+	return false
 }

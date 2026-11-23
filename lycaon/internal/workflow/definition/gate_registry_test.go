@@ -6,15 +6,15 @@ import (
 )
 
 func TestDecomposeGateExpressionCompositeAndParameterized(t *testing.T) {
-	leaves := DecomposeGateExpression("delegation_closeout_complete and evidence_passed:verify")
+	leaves, err := CompletionLeaves("delegation_closeout_complete and evidence_passed:verify")
 	want := []string{"delegation_closeout_complete", "evidence_passed:verify"}
-	if !slices.Equal(leaves, want) {
+	if err != nil || !slices.Equal(leaves, want) {
 		t.Fatalf("leaves = %v want %v", leaves, want)
 	}
-	if got := DecomposeGateExpression("gate_satisfied:plan_stub_valid"); !slices.Equal(got, []string{"plan_stub_valid"}) {
+	if got, err := CompletionLeaves("gate_satisfied:plan_stub_valid"); err != nil || !slices.Equal(got, []string{"plan_stub_valid"}) {
 		t.Fatalf("gate_satisfied prefix = %v", got)
 	}
-	if got := DecomposeGateExpression("plan_stub_valid"); !slices.Equal(got, []string{"plan_stub_valid"}) {
+	if got, err := CompletionLeaves("plan_stub_valid"); err != nil || !slices.Equal(got, []string{"plan_stub_valid"}) {
 		t.Fatalf("single leaf = %v", got)
 	}
 }

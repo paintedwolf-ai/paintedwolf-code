@@ -157,6 +157,7 @@ export function rekeyFilesEditorHostsUnderPath(
   rootId: string,
   fromPath: string,
   toPath: string,
+  toRootId = rootId,
 ): void {
   const moves: Array<{ from: string; to: string; entry: LiveEntry }> = [];
   for (const [from, entry] of live) {
@@ -167,7 +168,8 @@ export function rekeyFilesEditorHostsUnderPath(
     if (
       nextPath != null &&
       parsed?.kind === "file" &&
-      !parsed.jobId
+      !parsed.jobId &&
+      (projectFilesState(projectId).byKey[entry.key]?.rootId ?? rootId) === rootId
     ) {
       entry.path = nextPath;
       continue;
@@ -181,7 +183,7 @@ export function rekeyFilesEditorHostsUnderPath(
     ) {
       continue;
     }
-    const nextKey = fileBufferKey(rootId, nextPath);
+    const nextKey = fileBufferKey(toRootId, nextPath);
     entry.key = nextKey;
     entry.path = nextPath;
     moves.push({ from, to: id(projectId, nextKey), entry });

@@ -50,6 +50,9 @@ const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
 
 function session(status: Session["status"]): Session {
   return {
+    mode: "agent" as const,
+    started: true,
+    root_session_id: SESSION_ID,
     id: SESSION_ID,
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: PROJECT_ID,

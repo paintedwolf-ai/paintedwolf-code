@@ -15,6 +15,7 @@ rules:
 
   - id: spec_posture_state_forbidden_stub_invalid
     when:
+      session_is_agent_mode: true
       posture_is: spec
       tool_is_state: true
       stub_invalid: true
@@ -80,6 +81,7 @@ rules:
 
   - id: spec_posture_stub_required_plan_writer
     when:
+      session_is_agent_mode: true
       posture_is: spec
       tool_names_agent: true
       stub_invalid: true
@@ -94,6 +96,7 @@ rules:
 
   - id: spec_posture_research_stub_required
     when:
+      session_is_agent_mode: true
       posture_is: spec
       research_task: true
       stub_invalid: true
@@ -107,6 +110,7 @@ rules:
 
   - id: spec_posture_critic_stub_required
     when:
+      session_is_agent_mode: true
       posture_is: spec
       critic_task: true
       stub_invalid: true
@@ -120,6 +124,7 @@ rules:
 
   - id: spec_posture_stub_required_task
     when:
+      session_is_agent_mode: true
       posture_is: spec
       tool_is_task: true
       stub_invalid: true
@@ -145,6 +150,7 @@ rules:
 
   - id: spec_posture_handoff_early_stub_invalid
     when:
+      session_is_agent_mode: true
       posture_is: spec
       tool_is_handoff: true
       stub_invalid: true

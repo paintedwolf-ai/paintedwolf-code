@@ -48,7 +48,7 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
       });
       unanswered--;
     });
-    await seedAppState(page, { onboarding: { firstRunSetupCompleted: true } });
+    await seedAppState(page);
     await page.goto("/");
     await expect(page.getByTestId("critical-stop")).toHaveAttribute("data-code", "store_incompatible", { timeout: 30_000 });
     await expect(page.getByTestId("shell")).toHaveCount(0);
@@ -130,9 +130,7 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
         );
       });
 
-      await seedAppState(page, {
-        onboarding: { firstRunSetupCompleted: true },
-      });
+      await seedAppState(page);
       await page.setViewportSize({ width: 1280, height: 1000 });
       await page.goto("/");
 
@@ -234,9 +232,7 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
         );
       });
 
-      await seedAppState(page, {
-        onboarding: { firstRunSetupCompleted: true },
-      });
+      await seedAppState(page);
       await page.goto("/");
 
       const stop = page.getByTestId("critical-stop");

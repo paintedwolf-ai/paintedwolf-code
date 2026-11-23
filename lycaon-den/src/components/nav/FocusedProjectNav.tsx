@@ -92,7 +92,6 @@ type Props = {
 function ClusterIconButton(props: {
   testId: string;
   label: string;
-  tip: string;
   active?: boolean;
   onClick: () => void;
   children: JSX.Element;
@@ -104,7 +103,6 @@ function ClusterIconButton(props: {
       classList={{ "project-cluster__icon-btn--active": props.active === true }}
       data-testid={props.testId}
       aria-label={props.label}
-      data-tip={props.tip}
       aria-pressed={props.active === true ? true : undefined}
       onClick={() => props.onClick()}
     >
@@ -152,7 +150,6 @@ export function FocusedProjectNav(props: Props) {
                   <ClusterIconButton
                     testId="project-configuration-entry"
                     label={PROJECT_SETTINGS_OVERLAY_COPY.stageTitle}
-                    tip={PROJECT_SETTINGS_OVERLAY_COPY.stageTitle}
                     active={props.configActive}
                     onClick={() => props.onOpenConfiguration()}
                   >

@@ -147,7 +147,7 @@ func buildReaderFacts(
 		toolViews = append(toolViews, view)
 	}
 
-	connects := command.mutation && (command.externalExec || command.networkEgress)
+	connects := command.mutation && command.externalExec
 
 	f := ReaderFacts{
 		CapsVision:                    false,
@@ -181,7 +181,7 @@ func buildReaderFacts(
 		RunnerLocalListenTools:        runnerCapabilityTools(offered, toolcontract.CapabilityLocalListen, connects),
 		RunnerLoopbackConnectTools:    runnerCapabilityTools(offered, toolcontract.CapabilityLoopbackConnect, connects),
 		RunnerSocketTools:             runnerCapabilityTools(offered, toolcontract.CapabilitySocket, connects),
-		RunnerWriteRootTools:          runnerCapabilityTools(offered, toolcontract.CapabilityWriteRoot, command.mutation),
+		RunnerWriteRootTools:          runnerCapabilityTools(offered, toolcontract.CapabilityWriteRoot, command.mutation && command.externalExec),
 		SurfaceID:                     surfaceID,
 		ToolCheckScanDrilldownTools:   scanDrilldownToolsForCheck(offeredSet),
 		ToolCheckSurveyTools:          surveyTools,
@@ -192,11 +192,11 @@ func buildReaderFacts(
 	}
 
 	if isCoordinator {
-		if err := fillCoordinatorReaderFacts(in, surfaceID, offered, requestable, offeredSet, command.mutation, schemas, &f); err != nil {
+		if err := fillCoordinatorReaderFacts(in, surfaceID, offered, requestable, offeredSet, command.mutation, command.externalExec, schemas, &f); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := fillWorkerReaderFacts(profile, offered, requestable, toolViews, schemas, catalog, &f); err != nil {
+		if err := fillWorkerReaderFacts(profile, offered, requestable, command.externalExec, toolViews, schemas, catalog, &f); err != nil {
 			return nil, err
 		}
 	}
@@ -257,6 +257,7 @@ func fillCoordinatorReaderFacts(
 	offered, requestable []string,
 	offeredSet map[string]bool,
 	commandMutates bool,
+	commandExternalExec bool,
 	schemas *toolschema.Config,
 	f *ReaderFacts,
 ) error {
@@ -300,7 +301,7 @@ func fillCoordinatorReaderFacts(
 		f.CardOnlyTools = cv.OnlyTools
 	}
 	runOffered := offered
-	if !commandMutates {
+	if !commandExternalExec {
 		runOffered = filterToolName(offered, "command")
 	}
 	fillVisualShowFacts(runOffered, requestable, f)
@@ -310,6 +311,7 @@ func fillCoordinatorReaderFacts(
 func fillWorkerReaderFacts(
 	profile sandbox.ToolProfile,
 	offered, requestable []string,
+	commandExternalExec bool,
 	toolViews []AgentToolArgView,
 	schemas *toolschema.Config,
 	catalog *extpacks.EffectiveCatalog,
@@ -347,6 +349,10 @@ func fillWorkerReaderFacts(
 			}
 		}
 	}
-	fillVisualShowFacts(offered, requestable, f)
+	runOffered := offered
+	if !commandExternalExec {
+		runOffered = filterToolName(offered, "command")
+	}
+	fillVisualShowFacts(runOffered, requestable, f)
 	return nil
 }

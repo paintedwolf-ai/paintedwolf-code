@@ -414,6 +414,15 @@ anchors:
 
   # ── In-loop landing advisories (rendered immediately into turn history) ──────
 
+  - id: session.mode.agent_enabled
+    title: Agent mode enabled
+    description: The next coordinator round sees the user-approved switch from Ask to Agent.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
   - id: turn.closeout
     title: Turn closeout
     description: Host limit forces a final prose-only turn on a non-closeout coordinator surface.
@@ -832,6 +841,16 @@ anchors:
   - id: tool.post_invoke
     title: Tool post-invoke
     description: Complete tool results, including failures, before logging and delivery.
+    trigger_class: post_tool
+    surface: coordinator
+    planes: [block]
+    envelope:
+      vars:
+        tool: { type: string }
+
+  - id: sandbox.shared_temp
+    title: Shared temporary directory write
+    description: A command encountered a refused write to a shared temporary directory.
     trigger_class: post_tool
     surface: coordinator
     planes: [block]

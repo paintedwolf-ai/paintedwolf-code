@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use mlx_rs::{ops, ops::indexing::IndexOp, Array};
+use mlx_rs::{Array, ops, ops::indexing::IndexOp};
 use serde_json::Value;
 
 use super::Result;
@@ -9,6 +9,7 @@ use super::Result;
 pub fn quantization_bits(config: &Value, name: &str) -> Result<i32> {
     let recipe = config
         .get(format!("language_model.{name}"))
+        .or_else(|| config.get(name))
         .unwrap_or(config);
     let bits = i32::try_from(recipe["bits"].as_i64().ok_or("Missing quantization bits")?)?;
     if ![4, 6, 8].contains(&bits)
@@ -26,8 +27,27 @@ pub struct Weights {
 }
 
 impl Weights {
+    #[cfg(test)]
+    pub(super) fn fixture(tensors: HashMap<String, Array>) -> Self {
+        Self {
+            tensors,
+            quantization: serde_json::json!({"bits": 4, "group_size": 64, "mode": "affine"}),
+        }
+    }
+
     pub fn load(path: &Path, quantization: Value) -> Result<Self> {
-        let mut tensors = Array::load_safetensors(path)?;
+        let loaded = Array::load_safetensors(path)?;
+        let mut tensors: HashMap<_, _> = loaded
+            .into_iter()
+            .map(|(name, tensor)| {
+                let key = if name.starts_with("model.") {
+                    format!("language_model.{name}")
+                } else {
+                    name
+                };
+                (key, tensor)
+            })
+            .collect();
         tensors.retain(|name, _| !name.starts_with("language_model.model.embed_tokens_per_layer."));
         Ok(Self {
             tensors,

@@ -241,7 +241,6 @@ export function DiffViewerDrawer(props: Props) {
                   "den-diff-viewer__tool--ok": copiedPath(),
                 }}
                 data-testid="diff-viewer-copy"
-                data-tip="Copy path"
                 aria-label="Copy path"
                 onClick={onCopy}
                 onContextMenu={copyMenuBind.onContextMenu}

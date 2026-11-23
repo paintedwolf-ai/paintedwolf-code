@@ -8,66 +8,31 @@ import (
 
 const bootstrapGoalMaxRunes = 2000
 
-// RunScopedStore persists progress and the workflow run associated with the current document.
-type RunScopedStore interface {
-	Store
-	BoundRunID(sessionID string) string
-	BindRun(sessionID, workflowRunID string)
-	EnsureRun(sessionID, workflowRunID, goal string) (refreshed bool)
+// AdoptActiveRun preserves an unbound plan and resets a plan from another run.
+func AdoptActiveRun(ctx context.Context, store Store, sessionID, runID, goal string) (bool, error) {
+	return refreshRun(ctx, store, sessionID, runID, goal, false)
 }
 
-// AdoptActiveRun binds the progress doc to workflowRunID on phase enter and
-// child handoff. Unbound docs bind in place; a different run resets Goal + Progress.
-// Same-run re-entry is a no-op (terminal same-run refresh is EnsureBootstrap).
-func AdoptActiveRun(_ context.Context, store RunScopedStore, sessionID, workflowRunID, goal string) (refreshed bool) {
-	if store == nil {
-		return false
-	}
-	workflowRunID = strings.TrimSpace(workflowRunID)
-	sessionID = normalizeKey(sessionID)
-	if workflowRunID == "" || sessionID == "" {
-		return false
-	}
-	stored := store.BoundRunID(sessionID)
-	switch stored {
-	case "":
-		store.BindRun(sessionID, workflowRunID)
-		return false
-	case workflowRunID:
-		return false
-	default:
-		store.EnsureRun(sessionID, workflowRunID, goal)
-		BumpRevision(sessionID)
-		return true
-	}
+// EnsureBootstrap starts a fresh plan after completion or a run change.
+func EnsureBootstrap(ctx context.Context, store Store, sessionID, runID, goal string) (bool, error) {
+	return refreshRun(ctx, store, sessionID, runID, goal, true)
 }
 
-// EnsureBootstrap refreshes Goal + Progress on a user-intent turn when the bound
-// run changes, or when the same long-lived run has a fully terminal checklist.
-// Each request starts its own checklist; the completed one stays in the transcript as progress_complete.
-// An unbound doc is adopted without wiping seeded content.
-func EnsureBootstrap(ctx context.Context, store RunScopedStore, sessionID, workflowRunID, goal string) (refreshed bool) {
-	if store == nil {
-		return false
+func refreshRun(ctx context.Context, store Store, sessionID, runID, goal string, bootstrap bool) (bool, error) {
+	if store == nil || normalizeKey(sessionID) == "" || strings.TrimSpace(runID) == "" {
+		return false, nil
 	}
-	workflowRunID = strings.TrimSpace(workflowRunID)
-	if workflowRunID == "" {
-		return false
-	}
-	sessionID = normalizeKey(sessionID)
-	if sessionID == "" {
-		return false
-	}
-	stored := store.BoundRunID(sessionID)
-	if stored == "" || stored != workflowRunID {
-		return AdoptActiveRun(ctx, store, sessionID, workflowRunID, goal)
-	}
-	if !AllTerminal(store.Get(ctx, sessionID)) {
-		return false
-	}
-	store.EnsureRun(sessionID, workflowRunID, goal)
-	BumpRevision(sessionID)
-	return true
+	var refreshed bool
+	_, err := store.Update(ctx, sessionID, func(before Snapshot) (Document, error) {
+		doc := Document{RunID: strings.TrimSpace(runID), Content: before.Content, ItemIDs: before.ItemIDs}
+		refreshed = before.RunID != "" && (before.RunID != doc.RunID || (bootstrap && AllTerminal(before.Content)))
+		if refreshed {
+			doc.Content = formatBootstrapContent(goal)
+			doc.ItemIDs = nil
+		}
+		return doc, nil
+	})
+	return refreshed && err == nil, err
 }
 
 func formatBootstrapContent(goal string) string {

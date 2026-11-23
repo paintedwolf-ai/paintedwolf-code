@@ -6,7 +6,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/progress/progresstest"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,8 +32,19 @@ func (r stubWorkflowRuns) ActiveBySession(context.Context, string) (*api.Workflo
 }
 
 func TestBootstrapProgressNotifiesWithBeforeAndAfterSnapshots(t *testing.T) {
-	store := progresstest.New(t, "sess-1")
-	store.EnsureRun("sess-1", "run-0", "Initial run")
+	database := testdbfixture.Open(t, "progress.db")
+	testdbseed.InsertWorkflowRun(t, database, "run-0", "sess-1", testdbseed.DefaultProjectID)
+	_, err := database.ExecContext(t.Context(), `UPDATE workflow_runs SET status = 'complete', completed_at = updated_at WHERE id = 'run-0'`)
+	if err != nil {
+		t.Fatalf("mark prior run complete: %v", err)
+	}
+	testdbseed.InsertWorkflowRun(t, database, "run-1", "sess-1", testdbseed.DefaultProjectID)
+	store := progress.NewSQLStore(database)
+	if _, err := store.Update(t.Context(), "sess-1", func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{RunID: "run-0", Content: "# Goal\n\n" + "Initial run" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	svc := New(stubInstructionStore{session: &api.Session{ID: "sess-1"}}, stubInstructionStore{session: &api.Session{ID: "sess-1"}}, nil, nil, nil)
 	svc.SetProgress(store)
 	svc.SetWorkflow(&WorkflowDomains{Runs: stubWorkflowRuns{run: &api.WorkflowRun{ID: "run-1"}}})

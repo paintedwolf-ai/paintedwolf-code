@@ -15,6 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
@@ -55,7 +57,13 @@ func reportUnoffered(r *invariants.Run, label, text string, held map[string]bool
 	}
 	schema := func(tool string) (map[string]any, bool) {
 		meta, ok := s.Schemas.ToolMeta(tool)
-		return meta.ArgsSchema, ok
+		if !ok {
+			return nil, false
+		}
+		if tool == "command" && !held[toolcontract.ReachCommandExternalExec] {
+			return tools.PruneCommandReadOnlySchema(meta.ArgsSchema), true
+		}
+		return meta.ArgsSchema, true
 	}
 	for _, claim := range toolvocabtest.UnacceptedArgs(s.Names, text, schema) {
 		r.Report("%s gives %s argument `%s`, which its schema lacks: %s", label, claim.Tool, claim.Arg, lineNaming(text, claim.Arg))

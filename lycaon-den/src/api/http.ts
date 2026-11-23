@@ -6,7 +6,7 @@ import {
 } from "../platform/connection/request-connectivity.ts";
 import { isRecord } from "../utils/type-guards.ts";
 import type { Error as ApiErrorResponse } from "./types.ts";
-import { assertOperationRequest } from "./operations.generated.ts";
+import { assertOperationQuery, assertOperationRequest } from "./operation-contract.ts";
 
 type LycaonApiErrorOptions = {
   retryAfterMs?: number;
@@ -110,7 +110,9 @@ export async function lycaonFetch(
   init: RequestInit = {},
 ): Promise<Response> {
   assertV1Path(path);
-  assertOperationRequest(path, init.method ?? "GET");
+  const method = init.method ?? "GET";
+  if (import.meta.env.DEV) assertOperationQuery(path, method);
+  else assertOperationRequest(path, method);
   const token = requireToken(connection);
   const headers = new Headers(init.headers);
   if (!headers.has("Authorization")) {

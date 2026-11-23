@@ -19,15 +19,13 @@ type Part struct {
 	Writes func(ctx context.Context, store DBTX, storeBytes uint64) (uint64, error)
 }
 
-// Revision5 is the single step from the shipped revision-4 shape. Until a build
-// holding revision 5 is published, release candidates included, schema changes
-// join these parts instead of advancing SchemaVersion.
+// Revision5 composes the transformations from the shipped revision 4 schema.
 func Revision5(target Baseline) Step {
 	return composeStep(Step{
 		ID:       "source-manifests-and-command-records",
-		Checksum: "3c1367dfa1ba765e99099758135817ceee1550418b6a2d105643a606966da999",
+		Checksum: "02cc4ded97994fdd6c993f9ec200dc5875b72811f44496dc5d3a5638a635672b",
 		From:     manifestLayoutSource, To: target,
-	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), VersionReclaimProbe(), ProgramPublications())
+	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), VersionReclaimProbe(), ProgramPublications(), WorkflowManifestStorage(), OutsideNamespace(), ChatLocations(), CommandWindowCoverage(), SessionMode())
 }
 
 func composeStep(step Step, parts ...Part) Step {
@@ -92,5 +90,16 @@ func ProgramPublications() Part {
 		return err
 	}, Writes: func(context.Context, DBTX, uint64) (uint64, error) {
 		return 1 << 20, nil
+	}}
+}
+
+//go:embed workflow_manifest_storage.sql
+var workflowManifestStorageSQL []byte
+
+func WorkflowManifestStorage() Part {
+	// The added column uses a constant default and leaves existing rows in place.
+	return Part{Source: workflowManifestStorageSQL, Writes: func(context.Context, DBTX, uint64) (uint64, error) { return 0, nil }, Apply: func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, string(workflowManifestStorageSQL))
+		return err
 	}}
 }

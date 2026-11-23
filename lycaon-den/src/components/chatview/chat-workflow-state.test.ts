@@ -1,6 +1,7 @@
 import { createRoot } from "solid-js";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { createChatWorkflowState } from "./chat-workflow-state.ts";
+import type { WorkflowSummary } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { emptyProjects } from "../../test/projects-fixture.ts";
 
@@ -184,5 +185,41 @@ describe("createChatWorkflowState", () => {
       expect(workflow.armed()?.workflow_id).toBe("plan");
       dispose();
     });
+  });
+
+  it("keeps an Ask chat from arming or starting a workflow that requires Agent", async () => {
+    const summary: WorkflowSummary = {
+      id: "plan", version: "1.0.0", name: "Plan", trigger: "/plan", requires_agent: true,
+    };
+    const clientOrThrow = vi.fn(() => { throw new Error("Workflow cannot start in Ask"); });
+    const workflow = createRoot((dispose) => {
+      onTestFinished(dispose);
+      return createChatWorkflowState({
+        appStore: {
+          state: {
+            currentSession: { id: "session", mode: "ask", started: true },
+            workflowCatalog: [summary],
+          },
+          actions: {},
+        } as unknown as AppStore,
+        projects: emptyProjects,
+        sessionId: () => "session",
+        projectDir: () => "/repo",
+        catalogRun: () => null,
+        workflowsOpen: () => true,
+        setWorkflowsOpen: vi.fn(),
+        scrollToRun: vi.fn(),
+        clientOrThrow,
+      });
+    });
+
+    workflow.armWorkflow(summary);
+    expect(workflow.armed()).toBeNull();
+    expect(workflow.error()).toBe("This workflow needs Agent.");
+
+    workflow.startProposalWorkflow({ workflow_id: summary.id, workflow_version: summary.version });
+    await vi.waitFor(() => expect(workflow.busy()).toBe(false));
+    expect(workflow.error()).toBe("This workflow needs Agent.");
+    expect(clientOrThrow).not.toHaveBeenCalled();
   });
 });

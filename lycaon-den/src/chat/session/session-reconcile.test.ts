@@ -37,9 +37,28 @@ function bootstrap(
 }
 
 describe("reconcileActiveScope", () => {
+  it("reconciles authoritative mode on a chat without a workspace root", async () => {
+    const store = createAppStore();
+    const session: Session = {
+      id: "s1", root_session_id: "s1", project_id: "p1", owner_person_id: "person",
+      posture: "build", mode: "ask", started: true, status: "idle",
+      created_at: "t", activity_at: "t", updated_at: "t",
+    };
+    store.actions.setCurrentSession(session);
+    const client = stubClient({
+      getSessionBootstrap: async () => bootstrap({ ...session, mode: "agent" }),
+      getActiveWorkflowRun: async () => undefined,
+      listSessionWorkflowRuns: async () => ({ runs: [] }),
+      listWorkflows: async () => [],
+    });
+    await reconcileActiveScope(store, client, [], { resumeVisible: true });
+    expect(store.state.currentSession).toMatchObject({ mode: "agent", started: true });
+    expect(store.state.chatHydrationLock).toBeUndefined();
+  });
+
   it("rejects delayed bootstrap chrome and transcript after an additional authority gate expires", async () => {
     const store = createAppStore();
-    const session: Session = { id: "kept", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", workspace_path: "/project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" };
+    const session: Session = { mode: "agent" as const, started: true, root_session_id: "kept", id: "kept", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", workspace_path: "/project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" };
     store.actions.setCurrentSession(session);
     let finish!: (value: SessionBootstrap) => void;
     let current = true;
@@ -57,7 +76,7 @@ describe("reconcileActiveScope", () => {
     "replaces missed %s activity edges from the host snapshot without touching another chat",
     async (kind) => {
       const store = createAppStore();
-      const session: Session = { id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", workspace_path: "/project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" };
+      const session: Session = { mode: "agent" as const, started: true, root_session_id: "s1", id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", workspace_path: "/project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" };
       store.actions.setCurrentSession(session);
       const lease: ActivityEvent = { activity_id: "old", session_id: session.id, kind, status: "active", started_at: "2026-09-15T00:00:00Z" };
       store.actions.setActivity(lease);
@@ -82,7 +101,7 @@ describe("reconcileActiveScope", () => {
 
   it("does not clear a new session while missing-session cleanup awaits persistence", async () => {
     const store = createAppStore();
-    const session: Session = { id: "a", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", workspace_path: "/project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" };
+    const session: Session = { mode: "agent" as const, started: true, root_session_id: "a", id: "a", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", workspace_path: "/project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" };
     store.actions.setCurrentSession(session);
     let entered!: () => void;
     let finish!: () => void;
@@ -103,7 +122,7 @@ describe("reconcileActiveScope", () => {
 
   it.each([true, false])("keeps the latest bootstrap when older finishes first: %s", async (olderFirst) => {
     const store = createAppStore();
-    const session: Session = { id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", workspace_path: "/project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" };
+    const session: Session = { mode: "agent" as const, started: true, root_session_id: "s1", id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", workspace_path: "/project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" };
     store.actions.setCurrentSession(session);
     let finishOld!: (value: SessionBootstrap) => void;
     let finishNew!: (value: SessionBootstrap) => void;
@@ -135,6 +154,9 @@ describe("reconcileActiveScope", () => {
   it("discards a bootstrap after switching away and back to the same session", async () => {
     const store = createAppStore();
     const session: Session = {
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "s1",
       id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", workspace_path: "/project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
     };
     store.actions.setCurrentSession(session);
@@ -151,6 +173,9 @@ describe("reconcileActiveScope", () => {
   it("opens the transcript while the board is pending and reports enrichment failure independently", async () => {
     const store = createAppStore();
     const session: Session = {
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "opening",
       id: "opening", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "00000000-0000-4000-8000-000000000001",
       workspace_path: "/tmp/p", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
     };
@@ -186,6 +211,9 @@ describe("reconcileActiveScope", () => {
     projects.load([wireProject("/tmp/p")]);
     bindAppConnection(connectionServicesFixture({ projects: projects }));
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -224,6 +252,9 @@ describe("reconcileActiveScope", () => {
       getSessionBootstrap: vi.fn(async () =>
         bootstrap(
           {
+            mode: "agent" as const,
+            started: true,
+            root_session_id: "sess-1",
             id: "sess-1",
             owner_person_id: "00000000-0000-4000-8000-000000000002",
             project_id: "00000000-0000-4000-8000-000000000001",
@@ -267,6 +298,9 @@ describe("reconcileActiveScope", () => {
   it("clears foreground when session was deleted server-side", async () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "gone",
       id: "gone",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -299,6 +333,9 @@ describe("reconcileActiveScope", () => {
   it("resumeVisible keeps the transcript mounted while reconciling", async () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -335,6 +372,9 @@ describe("reconcileActiveScope", () => {
         await messagesGate;
         return bootstrap(
           {
+            mode: "agent" as const,
+            started: true,
+            root_session_id: "sess-1",
             id: "sess-1",
             owner_person_id: "00000000-0000-4000-8000-000000000002",
             project_id: "00000000-0000-4000-8000-000000000001",
@@ -372,6 +412,9 @@ describe("reconcileActiveScope", () => {
   it("drops stale resumeVisible writes after the foreground session changes", async () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-a",
       id: "sess-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -397,6 +440,9 @@ describe("reconcileActiveScope", () => {
         await messagesGate;
         return bootstrap(
           {
+            mode: "agent" as const,
+            started: true,
+            root_session_id: "sess-a",
             id: "sess-a",
             owner_person_id: "00000000-0000-4000-8000-000000000002",
             project_id: "00000000-0000-4000-8000-000000000001",
@@ -427,6 +473,9 @@ describe("reconcileActiveScope", () => {
     expect(store.state.chatHydrationLock).toBe("sess-a");
 
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-b",
       id: "sess-b",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -456,6 +505,9 @@ describe("reconcileActiveScope", () => {
   it("skips reconnect reconcile while a different session controls the hydration lock", async () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-a",
       id: "sess-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -482,6 +534,9 @@ describe("reconcileActiveScope", () => {
   it("skips reconnect reconcile while a cross-project wildcard lock is held", async () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-a",
       id: "sess-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -510,6 +565,9 @@ describe("reconcileActiveScope", () => {
     store.actions.clearChatForSessionSwitch("*");
     // The switch rebinds currentSession before reconciliation.
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-b",
       id: "sess-b",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -553,6 +611,9 @@ describe("reconcileActiveScope", () => {
   it("resumeVisible skips beginSessionResumeSwitch when the lock already matches", async () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -616,6 +677,9 @@ describe("reconcileActiveScope", () => {
     const { dispose } = bindAppConnection(services);
     try {
       const session: Session = {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-chrome-err",
         id: "sess-chrome-err",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "proj-1",
@@ -681,6 +745,9 @@ describe("reconcileActiveScope", () => {
   it("surfaces transcript hydration errors after installSessionBootstrap instead of treating the epoch bump as supersession", async () => {
     const store = createAppStore();
     const session: Session = {
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-post-epoch-err",
       id: "sess-post-epoch-err",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",

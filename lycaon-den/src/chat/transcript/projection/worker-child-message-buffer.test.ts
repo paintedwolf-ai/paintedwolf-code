@@ -15,6 +15,9 @@ describe("worker-child-message-buffer", () => {
     const appStore = createAppStore({
       ...INITIAL_APP_STATE,
       currentSession: {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "parent-1",
         id: "parent-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "proj-1",
@@ -86,6 +89,9 @@ describe("worker-child-message-buffer", () => {
     const appStore = createAppStore({
       ...INITIAL_APP_STATE,
       currentSession: {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "parent-1",
         id: "parent-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "proj-1",
@@ -109,6 +115,9 @@ describe("worker-child-message-buffer", () => {
     expect(appStore.state.messages.map((m) => m.id)).toEqual([]);
 
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "parent-2",
       id: "parent-2",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",

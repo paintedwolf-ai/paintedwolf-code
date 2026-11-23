@@ -6,6 +6,7 @@ components:
       type: string
       enum:
         - result
+        - source_observation
         - changed
         - found
         - took

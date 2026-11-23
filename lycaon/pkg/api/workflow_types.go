@@ -1,19 +1,5 @@
 package api
 
-type WorkflowRunStatus string
-
-const (
-	WorkflowRunStatusRunning       WorkflowRunStatus = "running"
-	WorkflowRunStatusPaused        WorkflowRunStatus = "paused"
-	WorkflowRunStatusPausedOnChild WorkflowRunStatus = "paused_on_child"
-	WorkflowRunStatusComplete      WorkflowRunStatus = "complete"
-	WorkflowRunStatusFailed        WorkflowRunStatus = "failed"
-	WorkflowRunStatusCanceled      WorkflowRunStatus = "canceled"
-	// WorkflowRunStatusInterrupted closes orphaned catalog or child runs.
-	// Session-ambient roots persist across idle gaps.
-	WorkflowRunStatusInterrupted WorkflowRunStatus = "interrupted"
-)
-
 // WorkflowRunObligation status vocabulary.
 const (
 	ObligationStatusOff      = "off"

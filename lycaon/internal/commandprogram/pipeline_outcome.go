@@ -47,7 +47,9 @@ type PipelineStageOutcome struct {
 type PipelineOutcome struct {
 	Status                        int
 	Complete, PublicationEligible bool
+	PublicationBasis              toolcontract.PublicationBasis
 	PipeStatuses                  []int
+	ConsumerClosedExecutions      []string
 }
 
 var pipelineStageMaximum = sync.OnceValues(func() (int, error) {
@@ -99,13 +101,7 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 			consumer = following[1]
 		}
 		expected := closure.recognized && closure.producer == stage.ExecutionID && hasConsumer && closure.consumer == consumer.ExecutionID && closure.producer != "" && closure.consumer != ""
-		// Authority, interruption and explicit owner stops are never pipe closure.
-		// A consumer must have an ordinary settled result. Its utility error and
-		// publication eligibility remain independent later factors; normalizing the
-		// producer's pipe closure cannot erase the consumer's own failed outcome.
-		// A native byte close cannot settle an unresolved mutation. External
-		// process effects retain their existing uncertainty independently of the
-		// executor's sealed expected-SIGPIPE classification.
+		// Native closure requires settled effects. External closure uses the executor's sealed classification.
 		if expected && !closure.external && (result.EffectCertainty == toolcontract.EffectAttempted || result.EffectCertainty == toolcontract.EffectUnknown) {
 			expected = false
 		}
@@ -113,8 +109,7 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 			consumerResult := consumer.Result
 			expected = result.StopCode == "" && (result.Terminal == toolcontract.ProducerFailed || result.Terminal == toolcontract.ProducerCompleted) && consumerResult.Validate() == nil && (consumerResult.Terminal == toolcontract.ProducerCompleted || consumerResult.Terminal == toolcontract.ProducerFailed) && consumerResult.StopCode == "" && consumer.RequiredInputComplete
 		}
-		// Duplicate or missing dynamic IDs are invalid settlement, independently of
-		// coincident static nodes or equal ordinary statuses.
+		// Every stage needs its own dynamic identity.
 		identityValid := stage.ExecutionID != ""
 		for _, prior := range stages[:i] {
 			if prior.ExecutionID == stage.ExecutionID {
@@ -131,16 +126,16 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 			}
 			expected = false
 		}
-		// Normalize only the control/byte-plane exception. Never rewrite the original
-		// owner result or its effect/recovery references in the supplied stage record.
+		// Preserve the owner receipt while normalizing pipeline control status.
 		reported := result.Status
 		if expected && !closure.external {
-			reported = 141 // Bash reports a producer stopped by a closed pipe as SIGPIPE.
+			reported = 141 // Report native closure as SIGPIPE in PIPESTATUS.
 		}
 		out.PipeStatuses = append(out.PipeStatuses, reported)
 		effective := result
 		inputComplete := stage.RequiredInputComplete
 		if expected {
+			out.ConsumerClosedExecutions = append(out.ConsumerClosedExecutions, stage.ExecutionID)
 			effective.Status = 0
 			effective.Terminal = toolcontract.ProducerCompleted
 			effective.Complete = true
@@ -153,6 +148,7 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 		}
 		if effective.Status != 0 {
 			out.Status = effective.Status
+			out.PublicationBasis = effective.PublicationBasis
 		}
 		out.Complete = out.Complete && effective.Complete && inputComplete
 		out.PublicationEligible = out.PublicationEligible && effective.PublicationEligible
@@ -162,5 +158,8 @@ func SettlePipeline(executionID string, stages []PipelineStageOutcome, latch *Ou
 		out.PublicationEligible = false
 	}
 	out.PublicationEligible = out.PublicationEligible && out.Complete && firstError == nil
+	if !out.Complete || firstError != nil {
+		out.ConsumerClosedExecutions = nil
+	}
 	return out, firstError
 }

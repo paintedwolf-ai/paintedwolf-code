@@ -12,19 +12,28 @@ export class TextWindow {
   private text = "";
   /** Characters read from the document, for work bounds. */
   read = 0;
+  /** Furthest offset consulted by the current scanner state. */
+  readTo = 0;
 
   constructor(readonly doc: Text, readonly tokens: PrettyTokenSource | null = null) {}
 
   at(pos: number): number {
+    if (pos >= this.readTo) this.readTo = pos + 1;
     if (pos < this.from || pos >= this.from + this.text.length) this.load(pos);
     return this.text.charCodeAt(pos - this.from);
   }
 
   slice(from: number, to: number): string {
+    if (to > this.readTo) this.readTo = to;
     if (from >= this.from && to <= this.from + this.text.length) {
       return this.text.slice(from - this.from, to - this.from);
     }
     return this.doc.sliceString(from, to);
+  }
+
+  startsWithFolded(pos: number, lower: string, end: number): boolean {
+    return pos + lower.length <= end && this.at(pos) === lower.charCodeAt(0)
+      && this.slice(pos, pos + lower.length).toLowerCase() === lower;
   }
 
   private load(pos: number): void {

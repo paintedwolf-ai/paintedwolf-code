@@ -90,11 +90,11 @@ var targetForms = map[string]bool{"git init": true, "git worktree": true}
 func bindTargetLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, written ...string) (context.Context, func(failed bool), error) {
 	launchTC := tc
 	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), written...)
-	plan, release, err := p.owners.Launch(ctx, launchTC, "git", p.commandLine(), nil)
+	plan, release, err := p.bindLaunch(ctx, launchTC, nil)
 	if err != nil {
 		return ctx, nil, err
 	}
-	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Scratch: tc.Host.SessionScratchDir}), func(failed bool) {
+	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Workspace: tc.Host.ActionWorkspace}), func(failed bool) {
 		release(context.WithoutCancel(ctx), tools.AgentLaunchOutcome{Failed: failed})
 	}, nil
 }
@@ -218,7 +218,8 @@ type Prepared struct {
 	// filesystem supplies the program's shared file effects and pinned inputs.
 	filesystem *mutation.Owners
 	// execution records the pinned file inputs.
-	execution string
+	execution          string
+	saveWorktreeDrafts func(context.Context) error
 	// request and nested let git bisect run dispatch its check as a child.
 	request commandprogram.OperationRequest
 	nested  commandprogram.NestedCommand
@@ -286,16 +287,26 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	// Network forms bind their launch once their remotes are admitted, and
 	// target forms once the path they create is bound, so the confinement
 	// carries exactly those recipients and paths.
+	name := p.command.spec.Name
+	if _, mutates := mutateForms[name]; mutates && !bisectReads[name] && !targetForms[name] && (!networkForms[name] || name == "git pull") {
+		workspace, err := confine.NewActionWorkspace()
+		if err != nil {
+			return settle(0, err, p.command.spec.Name)
+		}
+		defer exec.TrackScratchDir(workspace.Path())()
+		tc.Host.ActionWorkspace = workspace
+	}
 	if !networkForms[p.command.spec.Name] && !targetForms[p.command.spec.Name] {
-		plan, release, launchErr := p.owners.Launch(ctx, tc, "git", p.commandLine(), nil)
+		plan, release, launchErr := p.bindLaunch(ctx, tc, nil)
 		if launchErr != nil {
 			return settle(0, launchErr, p.command.spec.Name)
 		}
 		defer func() {
 			release(context.WithoutCancel(ctx), tools.AgentLaunchOutcome{Failed: err != nil || result.Status != 0})
 		}()
-		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Scratch: tc.Host.SessionScratchDir})
+		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Workspace: tc.Host.ActionWorkspace})
 	}
+	p.bindWorktreeDrafts(tc)
 	ctx = reportRepositoryRead(ctx, p.commandDir())
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)

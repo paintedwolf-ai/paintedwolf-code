@@ -33,13 +33,16 @@ func RegisterAskUserTool(reg *tools.DefaultRegistry, runs *Asks, boundary *sandb
 		if err != nil {
 			return "", err
 		}
+		if tctx.Source.AskMode && (req.ResponseType == workflowdef.FeedbackResponseSecret || req.Secret != nil) {
+			return "", tools.AskModeReject("ask_user")
+		}
 		req.ToolCallID = strings.TrimSpace(tctx.Identity.ToolCallID)
 		req.WorkspaceImages = WorkspaceImageReaderForBoundary(boundary, tctx)
 		handle, err := runs.RequestUserInput(ctx, tctx.Identity.SessionID, req)
 		if err != nil {
 			reject := &AskUserReject{}
 			if errors.As(err, &reject) {
-				return "", &toolrejection.ToolReject{Code: reject.Code, Data: reject.Data}
+				return "", &toolrejection.ToolReject{Code: reject.Code, Data: reject.Data, BeforeEffect: true}
 			}
 			return "", err
 		}
@@ -64,7 +67,7 @@ func parseAskUserArgs(args map[string]any) (UserInputRequest, error) {
 	prompt, _ := args["prompt"].(string)
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
-		return UserInputRequest{}, &toolrejection.ToolReject{Code: "ASK_USER_PROMPT_REQUIRED"}
+		return UserInputRequest{}, &toolrejection.ToolReject{Code: "ASK_USER_PROMPT_REQUIRED", BeforeEffect: true}
 	}
 
 	var rt workflowdef.FeedbackResponseType

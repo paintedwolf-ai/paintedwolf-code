@@ -22,6 +22,7 @@ const (
 	decideEngineRelPath = "Contents/MacOS/bialy"
 	// decideMetallibRelPath is MLX's compiled kernels, which the engine needs on Apple silicon.
 	decideMetallibRelPath = "Contents/Resources/engine-root/decide/mlx.metallib"
+	serviceGuestHelper    = "Contents/Resources/service-guest/pw-service-vm"
 	engineSchemasRelPath  = "Contents/Resources/engine-root/schemas"
 	engineBrowserRelPath  = "Contents/Resources/engine-root/browser"
 	noticesRelPath        = "Contents/Resources/THIRD-PARTY-NOTICES.md"
@@ -87,6 +88,7 @@ func Verify(ctx context.Context, opts Options) (Report, error) {
 		return Report{}, err
 	}
 	report.MachOCount = len(machOs)
+	findings = append(findings, checkServiceGuestAssets(opts.AppPath, machOs)...)
 
 	findings = append(findings, checkMachOs(opts.AppPath, machOs)...)
 	findings = append(findings, checkBuildPathLeak(opts.AppPath)...)
@@ -124,6 +126,7 @@ func checkLayout(appPath string) []Finding {
 		{sidecarRelPath, CodeSidecarMissing},
 		{logsCLIRelPath, CodeLogsCLIMissing},
 		{documentCoreRelPath, CodeDocumentCoreMissing},
+		{serviceGuestHelper, CodeEngineResourceMissing},
 		{decideEngineRelPath, CodeDecideEngineMissing},
 	} {
 		info, err := os.Stat(filepath.Join(appPath, executable.rel))

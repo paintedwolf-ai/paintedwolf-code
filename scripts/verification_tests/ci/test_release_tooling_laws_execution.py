@@ -1,6 +1,7 @@
 """Release tooling keeps one source for what it ships and signs with."""
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -14,8 +15,12 @@ IDENTIFIER = "test.fixture.identifier"
 
 class ReleaseToolingLaws(unittest.TestCase):
     def test_notices_cover_exactly_the_go_binaries_the_engine_stages(self):
-        staged = {argv[-1] for argv in commands((ROOT / "scripts/stage-engine.sh").read_text())
+        stage_src = (ROOT / "scripts/stage-engine.sh").read_text()
+        staged = {argv[-1] for argv in commands(stage_src)
                   if argv[:2] == ["go", "build"] and argv[-1].startswith("./cmd/")}
+        self.assertIn("scripts/service-guest/assemble.py", stage_src)
+        guest_src = (ROOT / "scripts/service-guest/assemble.py").read_text()
+        staged.update(re.findall(r'"go",\s*"build",[^\]]*?"(\./cmd/[\w.-]+)"', guest_src))
         noticed = set(shell_array((ROOT / "scripts/licenses-notices.sh").read_text(), "SHIPPED_GO_PACKAGES"))
         self.assertTrue(staged)
         self.assertEqual(staged, noticed)

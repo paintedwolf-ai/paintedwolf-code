@@ -39,9 +39,24 @@ func (a editorDocumentsAdapter) RetainRevision(ctx context.Context, projectID, d
 	return documentEditError(err)
 }
 
+func agentCall(call tools.EditorAgentCall) editordoc.AgentCall {
+	return editordoc.AgentCall{SessionID: call.SessionID, Turn: call.Turn, ToolCallID: call.ToolCallID, ToolName: call.ToolName}
+}
+
 func (a editorDocumentsAdapter) SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, call tools.EditorAgentCall) error {
-	return documentEditError(a.service.SaveForAgentOperation(ctx, projectID, branch, rootID, path, descendants,
-		editordoc.AgentCall{SessionID: call.SessionID, Turn: call.Turn, ToolCallID: call.ToolCallID, ToolName: call.ToolName}))
+	return documentEditError(a.service.SaveForAgentOperation(ctx, projectID, branch, rootID, path, descendants, agentCall(call)))
+}
+
+func (a editorDocumentsAdapter) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call tools.EditorAgentCall, pinned func(string, int64) bool) (tools.EditorLaunchSave, error) {
+	saved, err := a.service.SaveForAgentLaunch(ctx, projectID, branch, agentCall(call), pinned)
+	if err != nil {
+		return tools.EditorLaunchSave{Published: saved.Published}, documentEditError(err)
+	}
+	unsaved := make([]tools.EditorUnsavedDocument, 0, len(saved.Unsaved))
+	for _, document := range saved.Unsaved {
+		unsaved = append(unsaved, tools.EditorUnsavedDocument{RootID: document.RootID, Path: document.Path, Cause: string(document.Cause)})
+	}
+	return tools.EditorLaunchSave{Unsaved: unsaved, Published: saved.Published}, nil
 }
 
 func (a editorDocumentsAdapter) DirtyDocuments(ctx context.Context, projectID string, branch sourcebranch.ID) ([]tools.EditorDocumentPath, error) {
@@ -113,7 +128,8 @@ func editorDocumentText(d *editordoc.Document) (tools.EditorDocumentText, error)
 		base = ""
 	}
 	return tools.EditorDocumentText{
-		ID: d.ID, Revision: d.Revision, Text: d.Draft, SHA256: sha, BaseSHA256: base, Encoding: d.Encoding, EOL: d.EOL, Dirty: d.Dirty, Diverged: d.Diverged, Absent: d.Absent, ReadWhole: true,
+		ID: d.ID, FileID: d.FileID, RootID: d.RootID, Path: d.Path,
+		Revision: d.Revision, Text: d.Draft, SHA256: sha, BaseSHA256: base, Encoding: d.Encoding, EOL: d.EOL, Dirty: d.Dirty, Diverged: d.Diverged, Absent: d.Absent, ReadWhole: true,
 	}, nil
 }
 

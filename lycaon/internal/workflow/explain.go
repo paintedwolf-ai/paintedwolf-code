@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/session/store"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type SessionReader interface {
+	ResolveEffectiveMode(context.Context, string) (store.RootAuthority, error)
 	Get(context.Context, string) (*api.Session, error)
 }
 

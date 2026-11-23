@@ -3,6 +3,7 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/privateguesthost/linuxruntime"
 	"github.com/lycaon/lycaon/internal/launchbroker"
 )
 
@@ -233,4 +235,21 @@ func resolveRelayedProgram(cmd *exec.Cmd, state protectedLaunch) {
 // relayedCommand reports a command that is the broker relay.
 func relayedCommand(cmd *exec.Cmd) bool {
 	return cmd != nil && len(cmd.Args) > 1 && cmd.Args[1] == relayCommand
+}
+
+// StartPrivateService activates the installed controller outside the protected desktop.
+func StartPrivateService(ctx context.Context, image string, control *os.File) (*exec.Cmd, error) {
+	// The retained channel controls the process after the startup handshake.
+	cmd := linuxruntime.ControllerCommand(context.WithoutCancel(ctx), image, "--acquire-native")
+	cmd.Stdin = control
+	if err := relayThroughBroker(cmd); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return cmd, nil
 }

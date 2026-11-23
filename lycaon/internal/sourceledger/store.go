@@ -58,6 +58,7 @@ type Store struct {
 	withheld       func(ctx context.Context, projectID, rootID, rel string) bool
 	people         *peoplestore.Store
 	recordMu       sync.Mutex
+	outsideRoots   sync.Map
 	mutationScopes MutationScopeProvider
 	Content        *sourceblob.Store
 	Baselines      *workspacebaseline.Store
@@ -94,7 +95,7 @@ func New(sqlDB db.Handle, contentDir string, timing Timing) *Store {
 	snapshots := sourcesnapshot.New(sqlDB, blobs, filepath.Join(filepath.Dir(contentDir), enginepaths.SourceObservationsDBName), backgroundwork.Process())
 	s := &Store{sqlDB: sqlDB, queries: queries, people: peoplestore.New(sqlDB), Content: blobs, Baselines: baselines, Snapshots: snapshots}
 	s.Inventory = &Inventory{inventoryJobs: make(map[string]*inventoryJob), inventoryNow: time.Now, queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, writer: s}
-	s.Commands = &Commands{openWindows: make(map[string][]*openCommandWindow), now: time.Now, queries: queries, recordMu: &s.recordMu, retention: &startRetention{objects: blobs, queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, files: windowRetainFiles}, sqlDB: sqlDB, startQuietGrace: windowStartQuietGrace, startQuietWait: windowStartQuietWait, windowSettle: func() <-chan time.Time { return timing.After(commandWindowSettle) }}
+	s.Commands = &Commands{openWindows: make(map[string][]*openCommandWindow), now: time.Now, queries: queries, recordMu: &s.recordMu, retention: &startRetention{objects: blobs, queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, files: windowRetainFiles, bytes: windowRetainBytes}, outsideSnapshots: snapshots, sqlDB: sqlDB, startQuietGrace: windowStartQuietGrace, startQuietWait: windowStartQuietWait, windowSettle: func() <-chan time.Time { return timing.After(commandWindowSettle) }}
 	s.Git = &Git{queries: queries, recordMu: &s.recordMu, sqlDB: sqlDB}
 	s.History = &History{queries: queries, sqlDB: sqlDB}
 	s.Walk = &Walk{queries: queries, sqlDB: sqlDB}
@@ -205,6 +206,10 @@ type AuthorshipReader interface {
 
 // TrackFile establishes or refreshes a file's tracked baseline.
 func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, error) {
+	return s.trackFile(ctx, raw, nil)
+}
+
+func (s *Store) trackFile(ctx context.Context, raw TrackInput, also func(context.Context, *db.Queries, TrackInput, TrackedFile) error) (TrackedFile, error) {
 	if s == nil || s.sqlDB == nil {
 		return TrackedFile{}, fmt.Errorf("ledger not configured")
 	}
@@ -229,6 +234,11 @@ func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, err
 	tracked, err := s.trackFileTx(ctx, q, preparedTrack{TrackInput: in, object: object})
 	if err != nil {
 		return TrackedFile{}, err
+	}
+	if also != nil {
+		if err := also(ctx, q, in, tracked); err != nil {
+			return TrackedFile{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return TrackedFile{}, err

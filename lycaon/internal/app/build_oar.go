@@ -69,6 +69,7 @@ func (b *serveBuilder) wireOARBlockPlane() error {
 	pipeline.EnableAnchor(oar.AnchorCoordinatorMidTurnNote)
 	pipeline.EnableAnchor(oar.AnchorToolPost)
 	pipeline.EnableAnchor(oar.AnchorCredentialAssignment)
+	pipeline.EnableAnchor(oar.AnchorSharedTemp)
 	pipeline.EnableAnchor(oar.AnchorWorkerFinalize)
 	pipeline.EnableAnchor(oar.AnchorWorkerReportCheck)
 	pipeline.EnableAnchor(oar.AnchorContentInput)

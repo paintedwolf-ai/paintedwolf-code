@@ -1,4 +1,5 @@
 import { WalkPageLede, useWalkStepBriefing } from "./walk-briefing.tsx";
+import { CommandCoverageNotices } from "../source/CommandCoverageNotices.tsx";
 import { For, Show, createMemo, createSignal } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import { WalkGitReview, type OpenGitReviewFile } from "./WalkGitReview.tsx";
@@ -14,6 +15,7 @@ import { countLabel, fileBasename, fileDirname, opGlyph } from "../review/review
 import { wholeFileOpChange } from "../../components/source/reader/source-reader-change.ts";
 import {
   commandWindowAdmissionLabel,
+  commandWindowCoverageNotices,
   commandWindowLine,
   commandWindowObservation,
   commandWindowStateNote,
@@ -200,6 +202,15 @@ export function WalkStepPage(props: Props) {
                   <p class="den-walk-page__note" data-testid="walk-page-state">
                     {note()}
                   </p>
+                )}
+              </Show>
+              <Show when={command()} keyed>
+                {(current) => (
+                  <CommandCoverageNotices
+                    notices={commandWindowCoverageNotices(current, props.rootLabelFor)}
+                    class="den-walk-page__note"
+                    testId="walk-page-coverage"
+                  />
                 )}
               </Show>
 

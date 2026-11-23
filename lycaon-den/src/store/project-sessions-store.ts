@@ -54,6 +54,8 @@ export function sessionSummaryFromSession(session: Session): SessionSummary {
     owner_person_id: session.owner_person_id,
     title: session.title,
     posture: session.posture,
+    mode: session.mode,
+    started: session.started,
     status: session.status,
     ...(session.pin_rank != null ? { pin_rank: session.pin_rank } : {}),
     message_count: 0,

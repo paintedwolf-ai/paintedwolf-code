@@ -411,8 +411,8 @@ func TestAgentTransitionRefusalAndResolutionMatrix(t *testing.T) {
 	}
 
 	// Planned leg worker seals its agent across rounds.
-	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES ('child-bound', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now(), now(), now())
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('child-bound', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?, 'coord', NULL)`, testdbseed.DefaultProjectID, now(), now(), now())
 	testutil.FailErr(t, "insert child-bound", err)
 	_, err = f.db.ExecContext(t.Context(), `INSERT INTO workflow_runs (id, session_id, project_id, workflow_id, workflow_version, status, revision, current_phase, created_at, updated_at)
 		VALUES ('run-1', 'coord', ?, 'wf', '1.0.0', 'running', 1, 'implement', ?, ?)`, testdbseed.DefaultProjectID, now(), now())

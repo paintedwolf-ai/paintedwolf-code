@@ -20,6 +20,10 @@ export type ActivitySpanEntry =
       row: TurnLoadRow;
     };
 
+export function activitySpanEntryKey(entry: ActivitySpanEntry): string {
+  return entry.kind === "tool" ? entry.part.id : entry.key;
+}
+
 export type TranscriptItem =
   | {
       kind: "user";
@@ -190,6 +194,7 @@ export type DisplayTranscriptItem = Exclude<
 >;
 
 export type TranscriptBuildOptions = {
+  sessionId?: string;
   /** Shows benign tool activity when enabled. */
   verboseMode?: boolean;
   /** Controls tool visibility by transcript surface. */

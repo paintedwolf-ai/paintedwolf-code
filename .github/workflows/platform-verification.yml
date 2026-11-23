@@ -212,6 +212,7 @@ jobs:
         run: >
           ./task test:full --
           ./cmd/lycaon
+          ./internal/configlayout
           ./internal/credentialstore
           ./internal/documentcore
           ./internal/fspath

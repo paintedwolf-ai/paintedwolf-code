@@ -14,13 +14,15 @@ export type ArmedWorkflow = {
   /** Catalog slash trigger used to synthesize the start line (e.g. `/plan`). */
   trigger: string;
   label: string;
+  requiresAgent?: boolean;
   request?: WorkflowSummary["request"];
 };
 
 export type ComposerWorkflowStartResolution =
   | { kind: "pass"; text: string }
   | { kind: "arm"; armed: ArmedWorkflow }
-  | { kind: "synthesize"; text: string };
+  | { kind: "synthesize"; text: string }
+  | { kind: "needs_agent" };
 
 
 function suggestionToArmed(
@@ -35,6 +37,7 @@ function suggestionToArmed(
     preset_id: row.preset_id,
     trigger: row.trigger,
     label: row.label,
+    requiresAgent: wf.requires_agent,
     request: wf.request,
   };
 }
@@ -79,6 +82,7 @@ export function armedWorkflowFromPickerRow(wf: CatalogPickerRow): ArmedWorkflow 
     preset_id: wf.start_preset_id,
     trigger,
     label,
+    requiresAgent: wf.requires_agent,
     request: wf.request,
   };
 }
@@ -98,18 +102,21 @@ export function resolveComposerWorkflowStart(args: {
   text: string;
   catalog: readonly WorkflowSummary[];
   armed: ArmedWorkflow | null;
+  askMode?: boolean;
 }): ComposerWorkflowStartResolution {
   const trimmed = args.text.trim();
   const slash = matchWorkflowSlashPrefix(trimmed, args.catalog);
   if (slash) {
+    const armed = suggestionToArmed(slash.suggestion, args.catalog);
+    if (args.askMode && armed?.requiresAgent) return { kind: "needs_agent" };
     if (!slash.remainder) {
-      const armed = suggestionToArmed(slash.suggestion, args.catalog);
       if (armed) return { kind: "arm", armed };
       return { kind: "pass", text: trimmed };
     }
     return { kind: "pass", text: trimmed };
   }
   if (args.armed) {
+    if (args.askMode && args.armed.requiresAgent) return { kind: "needs_agent" };
     return {
       kind: "synthesize",
       text: synthesizeArmedSlashLine(args.armed, trimmed),

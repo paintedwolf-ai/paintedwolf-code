@@ -61,7 +61,7 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [workspace_id, session_scoped, roots, inventory]
+      required: [workspace_id, session_scoped, roots, outside_root_id, inventory]
       properties:
         workspace_id:
           type: string
@@ -80,6 +80,13 @@ components:
           description: Ordered physical roots used by every Files read and path action.
           items:
             $ref: '#/components/schemas/SourceWorkspaceRoot'
+        outside_root_id:
+          type: string
+          format: uuid
+          description: >
+            The project's namespace for files beyond every root. Source history
+            addresses those files by this root id and their host path without
+            its leading slash.
         inventory:
           $ref: 'source-storage.yaml#/components/schemas/SourceInventoryState'
           description: >

@@ -45,8 +45,15 @@ func settledSnapshot(t *testing.T, catalog *Catalog, root Root) Snapshot {
 	snapshot, err := catalog.Observe(t.Context(), "p", []Root{root})
 	testutil.FailErr(t, "observe", err)
 	if snapshot.Moving {
-		snapshot, err = catalog.Snapshot(t.Context(), "p", []Root{root})
-		testutil.FailErr(t, "join reconciliation", err)
+		// The live watcher fixture delivers the change the hook already
+		// classified; when that event lands while a join pass is in flight the
+		// epoch advances again and settlement needs one more pass. Each pass
+		// consumes what the watcher published, so join until one settles.
+		testutil.WaitFor(t, "catalog generation settles", func() bool {
+			snapshot, err = catalog.Snapshot(t.Context(), "p", []Root{root})
+			testutil.FailErr(t, "join reconciliation", err)
+			return !snapshot.Moving
+		})
 	}
 	return snapshot
 }

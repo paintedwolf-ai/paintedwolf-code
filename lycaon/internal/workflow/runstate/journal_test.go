@@ -17,7 +17,7 @@ func TestIsTerminalClassifiesEveryWorkflowRunStatus(t *testing.T) {
 		"canceled":        true,
 		"interrupted":     true,
 	}
-	declared := api.AllWorkflowRunStatuses()
+	declared := api.AllWorkflowRunStatusValues()
 	if len(declared) != len(terminal) {
 		t.Fatalf("declared statuses = %v; classify each one here", declared)
 	}

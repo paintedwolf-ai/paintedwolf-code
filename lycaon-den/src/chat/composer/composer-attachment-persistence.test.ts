@@ -83,9 +83,23 @@ describe("staged composer restart retention", () => {
     expect(retainedComposerAttachment({ ...secret, reference: "PRIVATE SECRET" }, "project-1")).toBeUndefined();
   });
 
+  it("restores one attachment per uploaded blob in saved order", () => {
+    const duplicate = { ...attachment, id: "duplicate", name: "copy.md" };
+    const distinct = { ...attachment, id: "distinct", blobId: "b".repeat(64) };
+    const parsed = parseComposerAttachmentDrafts({
+      "session-1": { projectId: destination.projectId, attachments: [attachment, duplicate, distinct] },
+    });
+    expect(parsed["session-1"]?.attachments).toEqual([attachment, distinct]);
+  });
+
   it("bounds untrusted saved metadata and rejects incomplete or foreign references", () => {
+    const attachments = Array.from({ length: 140 }, (_, i) => ({
+      ...attachment,
+      id: `attachment-${i}`,
+      blobId: i.toString(16).padStart(64, "0"),
+    }));
     const drafts = Object.fromEntries(Array.from({ length: COMPOSER_DRAFTS_SESSION_CAP + 3 }, (_, i) => [String(i), {
-      projectId: "project-1", attachments: Array.from({ length: 140 }, () => attachment),
+      projectId: "project-1", attachments,
     }]));
     const parsed = parseComposerAttachmentDrafts(drafts);
     expect(Object.keys(parsed)).toHaveLength(COMPOSER_DRAFTS_SESSION_CAP);

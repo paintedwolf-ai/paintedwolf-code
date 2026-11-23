@@ -3,7 +3,7 @@ id: UNKNOWN_ROOT_LABEL
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.attached_folders, paintedwolf.profile_surveys_project_tree, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.attached_folders, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "UNKNOWN_ROOT_LABEL"
 effect: block
 x-paintedwolf-category: recoverable

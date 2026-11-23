@@ -13,7 +13,7 @@ void pw_generation::reset_active() {
 
 void pw_generation::clear_sequence(int32_t sequence) {
     auto * cache = dynamic_cast<llama_kv_cache_iswa *>(llama_get_memory(context.get()));
-    if (!cache) throw std::runtime_error("E4B requires separate global and sliding caches");
+    if (!cache) throw std::runtime_error("model requires separate global and sliding caches");
     // Attention can read freed cells; clear their tensors as well as metadata.
     cache->get_base()->state_clear(sequence);
     cache->get_swa()->state_clear(sequence);
@@ -31,10 +31,10 @@ void pw_generation::save_prefix() {
         throw std::runtime_error("prefix exceeds its allocation");
     clear_prefix();
     auto * cache = dynamic_cast<llama_kv_cache_iswa *>(llama_get_memory(context.get()));
-    if (!cache) throw std::runtime_error("E4B requires separate global and sliding caches");
+    if (!cache) throw std::runtime_error("model requires separate global and sliding caches");
     cache->get_base()->seq_cp(0, 1, -1, -1);
     // Only live sliding rows may be pinned by the retained prefix.
-    cache->get_swa()->seq_cp(0, 1, std::max(0, static_cast<int>(position) - 511), -1);
+    cache->get_swa()->seq_cp(0, 1, std::max(0, static_cast<int>(position) - static_cast<int>(sliding_window) + 1), -1);
     prefix_position = position;
     // Cold and reused tails start from the same live window and row layout.
     clear_sequence(0);

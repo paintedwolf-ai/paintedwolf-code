@@ -75,9 +75,7 @@ func HardDenyWriteSpecs(c Confinement) ([]HardDenyWriteSpec, error) {
 		// Validated workspaces are re-allowed after this tree deny.
 		out = append(out, HardDenyWriteSpec{Layer: FloorBaseline, Subpath: fspath.CanonicalPath(userDir)})
 		exceptions := resolveEach(agentWorkspaceRootsUnderControlPlane())
-		if c.SessionScratchRoot != "" {
-			exceptions = append(exceptions, fspath.CanonicalPath(c.SessionScratchRoot))
-		}
+		exceptions = append(exceptions, c.privateWorkRoots()...)
 		out = append(out, HardDenyWriteSpec{
 			Layer: FloorControlPlane, Subpath: fspath.CanonicalPath(userDir),
 			ExceptSubpaths: exceptions,

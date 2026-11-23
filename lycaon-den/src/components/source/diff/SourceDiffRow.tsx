@@ -11,6 +11,7 @@ import { SourceChangeChip } from "./SourceChangeChip.tsx";
 import { LineStat, WholeFileDetails } from "./SourceDiffParts.tsx";
 import { wholeFileChange } from "../reader/source-reader-change.ts";
 import { animateHeightToggle, heightToggleTargetFor } from "../../../ui/height-toggle-motion.ts";
+import { bindDisclosureSummary } from "../../../ui/disclosure-summary.ts";
 import { SOURCE_COMPARISON_FAILURE, SOURCE_SEARCH_FAILURE, SourceReader, type SourceReaderHandle } from "../reader/SourceReader.tsx";
 import { observeSurfaceFailure } from "../../../notices/surface-failure.ts";
 import { bindReaderFind } from "../reader/source-reader-find.ts";
@@ -55,6 +56,7 @@ export function SourceDiffRow(props: Props) {
   const [findRoot, setFindRoot] = createSignal<HTMLElement | null>(null);
   let root: HTMLElement | undefined;
   let header: HTMLElement | undefined;
+  let toggle: HTMLButtonElement | undefined;
 
   const asRow = () => props.chrome === "row";
   // Rows start closed; cards follow the display preference.
@@ -100,6 +102,11 @@ export function SourceDiffRow(props: Props) {
 
   const change = () => props.source.change(activeIndex());
   const path = () => props.source.path(activeIndex());
+  const navigationTarget = () => props.source.navigationTarget?.(activeIndex());
+  const openable = () => {
+    const target = navigationTarget();
+    return target === undefined ? props.source.openable(activeIndex()) : target !== null;
+  };
   const isNoop = () => props.source.isNoop(activeIndex());
   const wholeFile = () => wholeFileChange(change());
 
@@ -179,17 +186,19 @@ export function SourceDiffRow(props: Props) {
       data-disclosure-key={props.disclosureKey}
     >
       <div
-        ref={(el) => { header = el; }}
+        ref={(el) => {
+          header = el;
+          bindDisclosureSummary(el, () => toggle);
+        }}
         class="den-file-edit-diff-header"
-        onClick={toggleDiff}
       >
-        {/* The path handles clicks separately. */}
         <SourcePathLink
           truncate
           strong
           path={path()}
           rootId={props.source.rootId(activeIndex())}
-          openable={props.source.openable(activeIndex())}
+          openable={false}
+          navigationTarget={navigationTarget() ?? undefined}
           change={wholeFileChange(change())}
           projectId={props.source.projectId}
           jobId={props.source.jobId}
@@ -220,15 +229,13 @@ export function SourceDiffRow(props: Props) {
           </span>
         </Show>
         <button
+          ref={(el) => { toggle = el; }}
           type="button"
           class="den-file-edit-diff-disclosure"
           aria-expanded={bodyOpen()}
           aria-label={`${bodyOpen() ? "Collapse" : "Show"} diff for ${path()}`}
           data-testid="file-edit-diff-toggle"
-          onClick={(event) => {
-            event.stopPropagation();
-            toggleDiff();
-          }}
+          onClick={toggleDiff}
         >
           <Show when={asRow()} fallback={<DisclosureCaret open={bodyOpen()} />}>
             <span class="den-row-mark" aria-hidden="true" />
@@ -300,6 +307,18 @@ export function SourceDiffRow(props: Props) {
           </div>
 
           <footer class="den-file-edit-diff-footer">
+            <Show when={openable() !== false}>
+              <SourcePathLink
+                label="Open in Files"
+                path={path()}
+                rootId={props.source.rootId(activeIndex())}
+                navigationTarget={navigationTarget() ?? undefined}
+                projectId={props.source.projectId}
+                jobId={props.source.jobId}
+                rootRefs={props.source.rootRefs}
+                chatDestination={props.source.chatDestination}
+              />
+            </Show>
             <button
               type="button"
               class="den-file-edit-diff-fullscreen-btn den-inset-icon-btn"

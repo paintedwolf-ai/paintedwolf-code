@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -92,7 +93,13 @@ type ToolInvocationOut struct {
 	// Verdict is Den UI metadata for a recorded review_loop verdict.
 	Verdict *api.VerdictOutcome
 	// CommandProgram is the settled command program receipt for a portable command call.
-	CommandProgram *api.CommandProgramReceipt
+	CommandProgram           *api.CommandProgramReceipt
+	ProgramRefusal           *ProgramRefusalVisibility
+	programProgressPublished atomic.Bool
+	// CommandStarted records whether any operation started in the program.
+	CommandStarted bool
+	// CommandDeliveryReject records a refused output delivery after evaluation.
+	CommandDeliveryReject *toolrejection.ToolReject
 	// SourceDeliveries lists the source deliveries confirmed during the call.
 	SourceDeliveries []SourceDeliveryTag
 	// Listener is Den UI and wire metadata for loopback listener attribution on http_request.
@@ -187,6 +194,8 @@ type SourceDeliveryTag struct {
 
 // InvocationSource carries the source workspace and mutation services.
 type InvocationSource struct {
+	// AskMode is the root authority captured for the model round.
+	AskMode             bool
 	ProjectSourceBranch sourcebranch.ID
 	ProjectRootBranches map[string]sourcebranch.ID
 	// ModelSourceContext is the source context of the request that proposed this call.
@@ -195,6 +204,8 @@ type InvocationSource struct {
 	// the response's own accepted writes advance it.
 	EditorReadBases *AgentReadBases
 	Roots           []projectroot.RootRef
+	// OutsideRoot is the project's namespace for files beyond every root.
+	OutsideRoot projectroot.RootRef
 	// RootHistory is the project's attachment generation when Roots was
 	// captured; it answers stale spellings and later removals from facts.
 	RootHistory         projectroot.HistoryView
@@ -220,6 +231,7 @@ type InvocationSource struct {
 	MutationRecorder PrimaryMutationRecorder
 	// SourceLedger records project mutations in this app instance.
 	SourceLedger    sourceledger.Recorder
+	OutsideReads    sourceledger.ChatFileRecorder
 	History         SourceHistory
 	Commands        sourceledger.CommandWindowOpener
 	GitMutations    SourceGitMutations
@@ -280,6 +292,7 @@ type InvocationHost struct {
 	HostDataDir string
 	// SessionScratchDir contains writable session-scoped scratch data.
 	SessionScratchDir string
+	ActionWorkspace   confine.ActionWorkspace `json:"-"`
 	// SessionOutputDir contains host-published session output, never a command write root.
 	SessionOutputDir string
 	// MaxToolSpillBytes shares the retention bound with recovery reads.

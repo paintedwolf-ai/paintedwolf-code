@@ -109,7 +109,7 @@ impl Renderer {
         tokenizer.with_truncation(None).map_err(tokenizer_error)?;
         tokenizer.with_padding(None);
         if tokenizer.token_to_id(&bos) != Some(2) || tokenizer.get_vocab_size(true) != 262144 {
-            return Err(tokenizer_error("unsupported E4B vocabulary"));
+            return Err(tokenizer_error("unsupported Gemma 4 vocabulary"));
         }
         for (marker, id) in [
             ("<|tool_call>", 48),
@@ -121,7 +121,7 @@ impl Renderer {
             ("<turn|>", 106),
         ] {
             if tokenizer.token_to_id(marker) != Some(id) {
-                return Err(tokenizer_error("unsupported E4B control tokens"));
+                return Err(tokenizer_error("unsupported Gemma 4 control tokens"));
             }
         }
         let template = String::from_utf8(read_bounded(

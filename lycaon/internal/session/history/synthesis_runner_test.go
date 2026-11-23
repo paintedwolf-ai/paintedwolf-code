@@ -56,3 +56,30 @@ func TestSynthesisRunnerReleasesCompletedSlots(t *testing.T) {
 		t.Fatal("sealed runner admitted work")
 	}
 }
+
+func TestSynthesisRunnerRetainsOnlyTheLatestSuccessor(t *testing.T) {
+	for _, cancel := range []bool{false, true} {
+		t.Run(fmt.Sprint(cancel), func(t *testing.T) {
+			runner := NewSynthesisRunner()
+			release := make(chan struct{})
+			if !runner.Start(t.Context(), "session", func(context.Context) { <-release }) {
+				t.Fatal("first synthesis declined")
+			}
+			runs := 0
+			runner.StartLatest(t.Context(), "session", func(context.Context) { t.Error("superseded job ran") })
+			runner.StartLatest(t.Context(), "session", func(context.Context) { runs++ })
+			if cancel {
+				runner.Cancel("session")
+			}
+			close(release)
+			testutil.FailErr(t, "drain synthesis and any successor", runner.WaitContext(t.Context()))
+			want := 1
+			if cancel {
+				want = 0
+			}
+			if runs != want {
+				t.Fatalf("latest job ran %d times, want %d", runs, want)
+			}
+		})
+	}
+}

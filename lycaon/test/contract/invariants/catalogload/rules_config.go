@@ -12,6 +12,7 @@ import (
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
 
@@ -37,7 +38,7 @@ func ruleConditions(r *invariants.Run) *conditions.ConditionRegistry {
 
 // knownWhenKey reports a when key the rules engine fixes or a condition implements.
 func knownWhenKey(reg *conditions.ConditionRegistry, key string) bool {
-	return key == "posture_is" || (!conditions.IsHostOnlyCondition(key) && reg.Has(key))
+	return key == "posture_is" || (!vocabulary.IsHostOnlyCondition(key) && reg.Has(key))
 }
 
 // legacyPostures are retired posture values.
@@ -107,13 +108,13 @@ var rulesConfig = []invariants.Invariant{{
 }, {
 	// Workflows reference only implemented plan predicates.
 	Name:    "bundled-workflows-reference-implemented-predicates",
-	Anchors: []invariants.Anchor{invariants.Func("internal/vocabulary", "ValidateBundled")},
+	Anchors: []invariants.Anchor{invariants.Func("internal/workflow/validation", "ValidateBundled")},
 	Check: func(r *invariants.Run) {
 		manifests, err := workflowdef.RegistryFromDirs("")
 		r.Must(err)
 		ruleConfigs, err := rules.LoadBundledRuleConfigs()
 		r.Must(err)
-		for _, diag := range vocabulary.ValidateBundled(ruleConditions(r), manifests, ruleConfigs) {
+		for _, diag := range workflowvalidation.ValidateBundled(ruleConditions(r), manifests, ruleConfigs) {
 			r.Report("%v", diag)
 		}
 	},
@@ -190,7 +191,7 @@ var rulesConfig = []invariants.Invariant{{
 				}
 			}
 			for _, leaf := range gates {
-				if !workflowdef.IsKnownGateLeaf(leaf) {
+				if !vocabulary.IsPredicate(leaf) {
 					r.Report("%s: unknown gate leaf %q", key, leaf)
 				}
 				if !reg.Has(leaf) {

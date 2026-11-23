@@ -102,7 +102,7 @@ export function createTranscriptDisplayProjector() {
     options: TranscriptBuildOptions = {},
   ): DisplayTranscriptItem[][] => {
     const buildOpts = { verboseMode: options.verboseMode ?? false, layout: options.layout ?? "chat" } as const;
-    const freshItems = messagesToTranscriptItems(messages, buildOpts);
+    const freshItems = messagesToTranscriptItems(messages, { ...buildOpts, sessionId: options.sessionId });
     const fresh = new Map(freshItems.map((item) => [item.key, item]));
     const order = buildTranscriptOrder(messages, buildOpts);
     const next = (spans ?? [freshItems]).map((span, index): SpanProjection => {

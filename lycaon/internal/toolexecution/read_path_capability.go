@@ -19,21 +19,33 @@ func (e *Boundary) preflightReadPath(ctx context.Context, tool string, args map[
 	if reject != nil {
 		return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
-	if request == nil || request.ReadPath == "" {
+	if request == nil || len(request.ReadPaths) == 0 {
 		return nil
 	}
+	for _, path := range request.ReadPaths {
+		if err := e.authorizeReadPath(ctx, tool, args, tc, path); err != nil {
+			return err
+		}
+	}
+	if tc.Files.PackageExecution != nil {
+		tc.Files.PackageExecution.ApprovedReadPaths = request.ReadPaths
+	}
+	return nil
+}
+
+func (e *Boundary) authorizeReadPath(ctx context.Context, tool string, args map[string]any, tc *tools.ToolContext, path string) error {
 	if e.readPathPreflight == nil {
 		return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeApprovalUnavailable,
 			Data: map[string]any{"reason": "read-path approval is not configured"},
 		})
 	}
-	authorized, denied, guidance, err := e.readPathPreflight(ctx, tool, args, *tc, request.ReadPath)
+	authorized, denied, guidance, err := e.readPathPreflight(ctx, tool, args, *tc, path)
 	if err != nil {
 		return e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
 	}
 	if !authorized {
-		data := map[string]any{"path": request.ReadPath}
+		data := map[string]any{"path": path}
 		if guidance != "" {
 			data[toolrejection.UserGuidanceKey] = guidance
 		}
@@ -45,9 +57,6 @@ func (e *Boundary) preflightReadPath(ctx context.Context, tool string, args map[
 		return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: code, Data: data,
 		})
-	}
-	if tc.Files.PackageExecution != nil {
-		tc.Files.PackageExecution.ApprovedReadPaths = []string{request.ReadPath}
 	}
 	return nil
 }

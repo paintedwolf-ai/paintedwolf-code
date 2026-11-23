@@ -23,7 +23,7 @@ func TestPackageBoundaryRejectsAuthorityThatWouldEscapeFirstRun(t *testing.T) {
 		DirectIP:        &capabilityrequest.DirectIPRequest{},
 		LocalListen:     &capabilityrequest.LocalListenRequest{},
 		LoopbackConnect: &capabilityrequest.LoopbackConnectRequest{},
-		ReadPath:        "/Users/example/.ssh/id_ed25519",
+		ReadPaths:       []string{"/Users/example/.ssh/id_ed25519"},
 		WriteRoot:       "/Users/example/Library/Caches/tool",
 	}
 	got := packageBoundaryWidening(request, true)

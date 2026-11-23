@@ -1,6 +1,8 @@
 package store
 
 import (
+	"context"
+	"database/sql"
 	"strings"
 	"sync"
 
@@ -8,7 +10,9 @@ import (
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/people/peoplestore"
 	"github.com/lycaon/lycaon/internal/scopedstore"
+	"github.com/lycaon/lycaon/internal/session/promptstate"
 	"github.com/lycaon/lycaon/internal/visual"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // SessionRevisionSource orders all session-event publishers.
@@ -48,6 +52,7 @@ type sqlCore struct {
 	promptPending    PromptPendingSource
 	dataDir          string
 	mutationLocks    [64]sync.Mutex
+	modeLocks        promptstate.MutexRegistry
 	peopleStore      *peoplestore.Store
 	// artifacts binds minted evidence handles onto visual artifact rows.
 	artifacts *visual.Records
@@ -160,4 +165,19 @@ func (s *Repositories) DB() db.Handle {
 		return nil
 	}
 	return s.core.db
+}
+
+// AppendMessages appends messages to the session transcript.
+func (s *Repositories) AppendMessages(ctx context.Context, id string, msgs ...api.Message) error {
+	return s.Transcript.AppendMessages(ctx, id, msgs...)
+}
+
+// AppendMessagesWith commits derived messages inside the same transaction as mutate.
+func (s *Repositories) AppendMessagesWith(ctx context.Context, id string, mutate func(*sql.Tx) ([]api.Message, error)) error {
+	return s.Transcript.AppendMessagesWith(ctx, id, mutate)
+}
+
+// GetMessages reads the canonical messages for a session.
+func (s *Repositories) GetMessages(ctx context.Context, id string) ([]api.Message, error) {
+	return s.Transcript.GetMessages(ctx, id)
 }

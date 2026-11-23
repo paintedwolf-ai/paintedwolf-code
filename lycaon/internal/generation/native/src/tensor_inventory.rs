@@ -74,7 +74,11 @@ fn inventory_values(
             return Err(invalid());
         }
         ranges.push([begin, end]);
-        if name.starts_with("language_model.model.embed_tokens_per_layer.") {
+        if name
+            .strip_prefix("language_model.")
+            .unwrap_or(&name)
+            .starts_with("model.embed_tokens_per_layer.")
+        {
             ple_count += 1;
             mapped += bytes;
         } else {
@@ -82,7 +86,7 @@ fn inventory_values(
         }
     }
     ranges.sort_unstable();
-    if ple_count != 3 || ranges.windows(2).any(|r| r[0][1] > r[1][0]) {
+    if !matches!(ple_count, 0 | 3) || ranges.windows(2).any(|r| r[0][1] > r[1][0]) {
         return Err(invalid());
     }
     Ok((resident, mapped))

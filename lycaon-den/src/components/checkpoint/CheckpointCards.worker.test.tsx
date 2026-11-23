@@ -16,6 +16,9 @@ import {
 } from "../../chat/stream/transcript-viewport.tsx";
 
 const parentSession = {
+  mode: "agent" as const,
+  started: true,
+  root_session_id: "parent-1",
   id: "parent-1",
   owner_person_id: "00000000-0000-4000-8000-000000000002",
   project_id: "00000000-0000-4000-8000-000000000001",

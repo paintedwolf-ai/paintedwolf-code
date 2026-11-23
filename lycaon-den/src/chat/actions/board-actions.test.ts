@@ -156,6 +156,9 @@ describe("createBoardRefreshScheduler", () => {
     } as never;
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",
@@ -184,6 +187,9 @@ describe("createBoardRefreshScheduler", () => {
     } as never;
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",
@@ -234,6 +240,9 @@ describe("createBoardRefreshScheduler", () => {
     } as never;
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",
@@ -272,6 +281,9 @@ describe("createBoardRefreshScheduler", () => {
     } as never;
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",
@@ -625,7 +637,7 @@ describe("foreground list request ordering", () => {
 
   function store() {
     const appStore = createAppStore();
-    appStore.actions.setCurrentSession({ id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    appStore.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "s1", id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     return appStore;
   }
 

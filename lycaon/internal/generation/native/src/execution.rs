@@ -70,6 +70,7 @@ pub struct Executor<B> {
     context: usize,
     chunk: usize,
     eos: Vec<u32>,
+    suppressed: Vec<u32>,
     prefix: Vec<u32>,
     evaluated: Vec<u32>,
     active: Option<Generation>,
@@ -78,7 +79,13 @@ pub struct Executor<B> {
 }
 
 impl<B: Backend> Executor<B> {
-    pub fn new(backend: B, context: usize, chunk: usize, eos: Vec<u32>) -> Result<Self> {
+    pub fn new(
+        backend: B,
+        context: usize,
+        chunk: usize,
+        eos: Vec<u32>,
+        suppressed: Vec<u32>,
+    ) -> Result<Self> {
         if !(2..=65536).contains(&context)
             || !(1..=256).contains(&chunk)
             || !eos.iter().any(|id| matches!(id, 1 | 106))
@@ -92,6 +99,7 @@ impl<B: Backend> Executor<B> {
             context,
             chunk,
             eos,
+            suppressed,
             prefix: Vec::new(),
             evaluated: Vec::new(),
             active: None,
@@ -142,6 +150,7 @@ impl<B: Backend> Executor<B> {
             temperature: request.temperature,
             top_p: request.top_p,
             top_k: request.top_k,
+            suppressed: self.suppressed.clone(),
             rng: Rng::new(request.seed),
             constraint,
             envelope,

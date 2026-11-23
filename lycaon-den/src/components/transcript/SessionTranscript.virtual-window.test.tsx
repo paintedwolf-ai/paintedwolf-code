@@ -342,11 +342,10 @@ describe("SessionTranscript virtual window", () => {
       const catalog = container.querySelector<HTMLElement>(
         '[data-msg-id="catalog"]',
       );
-      // Entering a run and leaving it are both section seams, never a sum of two.
-      expect(catalog?.dataset.seam).toBe("section");
+      expect(catalog?.dataset.seam).toBe("message");
       expect(
         container.querySelector<HTMLElement>('[data-msg-id="after"]')?.dataset.seam,
-      ).toBe("section");
+      ).toBe("message");
       expect(
         transcriptRowHeightForScope(scope, "catalog", "collapsed"),
       ).toBe(100);
@@ -354,13 +353,13 @@ describe("SessionTranscript virtual window", () => {
       expect(
         container.querySelector<HTMLElement>('[data-msg-id="after"]')?.dataset
           .virtualStart,
-      ).toBe(String(200 + transcriptSeamPx("section")));
+      ).toBe(String(200 + transcriptSeamPx("message")));
 
-      for (const sectionGap of [1.9375, 0, DEFAULT_TRANSCRIPT_SPACING.sectionGap]) {
-        setTranscriptSpacing({ ...DEFAULT_TRANSCRIPT_SPACING, sectionGap });
+      for (const messageGap of [1.9375, 0, DEFAULT_TRANSCRIPT_SPACING.messageGap]) {
+        setTranscriptSpacing({ ...DEFAULT_TRANSCRIPT_SPACING, messageGap });
         await Promise.resolve();
         expect(container.querySelector<HTMLElement>('[data-msg-id="after"]')?.dataset.virtualStart)
-          .toBe(String(200 + transcriptSeamPx("section")));
+          .toBe(String(200 + transcriptSeamPx("message")));
         expect(transcriptRowHeightForScope(scope, "catalog", "collapsed")).toBe(100);
       }
     } finally {

@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS project_trust_baselines (
     review_state TEXT NOT NULL CHECK (json_valid(review_state))
 ) STRICT, WITHOUT ROWID;
 
--- Folder roots attached to a project (path, label, primary flag).
+-- A project's source namespaces: attached folders, the draft workspace, and one
+-- outside namespace whose paths are host paths beyond every folder.
 CREATE TABLE IF NOT EXISTS project_roots (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -83,7 +84,9 @@ CREATE TABLE IF NOT EXISTS project_roots (
     is_primary INTEGER NOT NULL DEFAULT 0,
     git_remote_hash TEXT,
     added_at TEXT NOT NULL,
-    kind TEXT NOT NULL DEFAULT 'attached' CHECK (kind IN ('attached', 'draft')),
+    kind TEXT NOT NULL DEFAULT 'attached' CHECK (kind IN ('attached', 'draft', 'outside')),
+    CHECK ((kind = 'outside') = (path = '')),
+    CHECK (kind != 'outside' OR is_primary = 0),
     UNIQUE(project_id, path)
 ) STRICT;
 
@@ -91,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_project_roots_project_id ON project_roots(project
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_roots_one_primary
     ON project_roots(project_id) WHERE is_primary = 1;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_roots_label
-    ON project_roots(project_id, label COLLATE NOCASE);
+    ON project_roots(project_id, label COLLATE NOCASE) WHERE kind != 'outside';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_roots_one_draft
     ON project_roots(project_id) WHERE kind = 'draft';
 
@@ -317,6 +320,7 @@ CREATE TABLE IF NOT EXISTS editor_documents (
     held_agent_version_id TEXT NOT NULL DEFAULT '',
     -- The path has no file on disk; the draft and saved base stay.
     absent INTEGER NOT NULL DEFAULT 0 CHECK (absent IN (0, 1)),
+    outside_parent_binding TEXT NOT NULL DEFAULT '',
     -- One document per branch path; file_id rebinds when the path is recreated.
     UNIQUE(project_id, branch_id, root_id, path)
 ) STRICT;
@@ -692,6 +696,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- When the person last had this chat readable on screen. A turn that
     -- completed after this stamp is a result they have not seen yet.
     seen_at TEXT,
+    root_session_id TEXT NOT NULL DEFAULT '' REFERENCES sessions(id) ON DELETE CASCADE,
+    mode TEXT CHECK (mode IN ('agent', 'ask')),
+    started INTEGER NOT NULL DEFAULT 0 CHECK (
+        started IN (0, 1) AND
+        ((parent_session_id IS NULL AND id = root_session_id AND mode IS NOT NULL) OR
+         (parent_session_id IS NOT NULL AND id != root_session_id AND mode IS NULL AND started = 0))
+    ),
     CHECK (
         (provider_id IS NULL AND model IS NULL) OR
         (provider_id IS NOT NULL AND model IS NOT NULL AND
@@ -715,6 +726,45 @@ BEFORE UPDATE OF owner_person_id ON sessions
 BEGIN
     SELECT RAISE(ABORT, 'session ownership is immutable');
 END;
+CREATE INDEX IF NOT EXISTS idx_sessions_root_session ON sessions(root_session_id);
+
+CREATE TRIGGER IF NOT EXISTS sessions_child_shares_root
+BEFORE INSERT ON sessions
+WHEN NEW.parent_session_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM sessions p
+    WHERE p.id = NEW.parent_session_id AND p.root_session_id = NEW.root_session_id
+      AND p.project_id = NEW.project_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'a child session shares its parent''s root');
+END;
+
+CREATE TRIGGER IF NOT EXISTS sessions_lineage_immutable
+BEFORE UPDATE OF id, parent_session_id, root_session_id ON sessions
+WHEN NEW.id IS NOT OLD.id OR NEW.parent_session_id IS NOT OLD.parent_session_id
+    OR NEW.root_session_id IS NOT OLD.root_session_id
+BEGIN
+    SELECT RAISE(ABORT, 'session lineage is immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS sessions_mode_latch
+BEFORE UPDATE OF mode, started ON sessions
+WHEN OLD.started = 1 AND (NEW.started = 0 OR (OLD.mode = 'agent' AND NEW.mode IS NOT 'agent'))
+BEGIN
+    SELECT RAISE(ABORT, 'started session cannot reset or return to Ask');
+END;
+
+CREATE VIEW IF NOT EXISTS session_mode_authority AS
+SELECT s.id AS session_id, root.id AS root_session_id, root.mode, root.started
+FROM sessions s
+LEFT JOIN sessions parent ON parent.id = s.parent_session_id
+LEFT JOIN sessions root ON root.id = s.root_session_id AND root.root_session_id = root.id
+    AND root.parent_session_id IS NULL AND root.project_id = s.project_id
+    AND root.owner_person_id = s.owner_person_id AND root.mode IN ('agent', 'ask') AND root.started IN (0, 1)
+    AND ((s.id = root.id AND s.parent_session_id IS NULL) OR
+         (s.id != root.id AND s.mode IS NULL AND s.started = 0 AND parent.root_session_id = root.id
+            AND parent.project_id = s.project_id AND parent.owner_person_id = s.owner_person_id));
+
 CREATE INDEX IF NOT EXISTS idx_sessions_status
     ON sessions(status, id);
 CREATE INDEX IF NOT EXISTS idx_sessions_active_activity
@@ -1693,6 +1743,7 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     complete INTEGER NOT NULL DEFAULT 0 CHECK (complete IN (0,1)),
     publication_eligible INTEGER NOT NULL DEFAULT 0 CHECK (publication_eligible IN (0,1)),
     publication_basis INTEGER NOT NULL DEFAULT 0 CHECK (publication_basis IN (0,1)),
+    consumer_closed INTEGER NOT NULL DEFAULT 0 CHECK (consumer_closed IN (0,1)),
     effect_certainty TEXT NOT NULL DEFAULT 'none' CHECK (effect_certainty IN ('none','completed','attempted','unknown')),
     evidence_kind TEXT NOT NULL DEFAULT '',
     evidence_ref TEXT NOT NULL DEFAULT '',
@@ -2259,6 +2310,11 @@ CREATE INDEX IF NOT EXISTS idx_landed_changes_delegation_created
 CREATE INDEX IF NOT EXISTS idx_landed_changes_path_created
     ON landed_changes(canonical_path, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS workflow_run_manifests (
+    run_id TEXT PRIMARY KEY REFERENCES workflow_runs(id) ON DELETE CASCADE,
+    manifest_yaml TEXT NOT NULL CHECK (length(manifest_yaml) > 0)
+) STRICT, WITHOUT ROWID;
+
 -- Workflows attached to sessions.
 CREATE TABLE IF NOT EXISTS session_workflows (
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -2269,6 +2325,7 @@ CREATE TABLE IF NOT EXISTS session_workflows (
     created_at TEXT NOT NULL,
     created_by TEXT NOT NULL CHECK (created_by IN ('user', 'coordinator')),
     created_by_person_id TEXT REFERENCES people(id),
+    authored_yaml TEXT NOT NULL DEFAULT '',
     CHECK ((created_by = 'user') = (created_by_person_id IS NOT NULL)),
     PRIMARY KEY (session_id, workflow_id, version)
 ) STRICT, WITHOUT ROWID;
@@ -3096,6 +3153,53 @@ CREATE TABLE IF NOT EXISTS source_files (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_source_files_project ON source_files(project_id, created_ts, id);
 
+-- Outside files a chat touched. A reference keeps the file's history; deleting
+-- the chat releases it.
+CREATE TABLE IF NOT EXISTS source_chat_files (
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    file_id TEXT NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
+    changed INTEGER NOT NULL DEFAULT 0 CHECK (changed IN (0, 1)),
+    read INTEGER NOT NULL DEFAULT 0 CHECK (read IN (0, 1)),
+    opened INTEGER NOT NULL DEFAULT 0 CHECK (opened IN (0, 1)),
+    first_ts TEXT NOT NULL,
+    last_ts TEXT NOT NULL,
+    CHECK (changed + read + opened > 0),
+    PRIMARY KEY (session_id, file_id)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_source_chat_files_file ON source_chat_files(file_id);
+
+-- A reference names a root chat and a file of the chat's project.
+CREATE TRIGGER IF NOT EXISTS source_chat_files_chat_insert
+BEFORE INSERT ON source_chat_files
+WHEN NOT EXISTS (
+    SELECT 1 FROM sessions s JOIN source_files f ON f.project_id = s.project_id
+    WHERE s.id = new.session_id AND f.id = new.file_id AND s.parent_session_id IS NULL
+)
+BEGIN
+    SELECT RAISE(ABORT, 'source_chat_files session_id is not a root chat of the file project');
+END;
+
+-- Where a root chat has worked outside the project: an outside-namespace
+-- folder, repository work tree, or exact file. Hiding presents nothing and
+-- revokes nothing.
+CREATE TABLE IF NOT EXISTS source_chat_locations (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    anchor TEXT NOT NULL CHECK (anchor != '' AND substr(anchor, 1, 1) != '/'),
+    anchor_identity TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('repository', 'folder', 'file')),
+    hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
+    created_ts TEXT NOT NULL,
+    UNIQUE(session_id, anchor)
+) STRICT;
+
+CREATE TRIGGER IF NOT EXISTS source_chat_locations_chat_insert
+BEFORE INSERT ON source_chat_locations
+WHEN NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = new.session_id AND s.parent_session_id IS NULL)
+BEGIN
+    SELECT RAISE(ABORT, 'source_chat_locations session_id is not a root chat');
+END;
+
 -- Last observed git position per attached root. A row states what was true at
 -- observed_ts; transitions are minted by comparing a fresh reading against it.
 -- A detached root has no position to state, so the row leaves with it.
@@ -3150,8 +3254,8 @@ CREATE INDEX idx_source_git_transitions_command_window
 -- One host-run command's observation window on the project's source clock.
 -- Reconcile passes attribute drift observed while it is open to it and admit
 -- untracked files its start snapshot did not hold. A window that observed
--- nothing is removed when it ends. State is the SourceCommandWindowState wire
--- vocabulary (docs/openapi/vocab).
+-- nothing and compared every folder it covered is removed when it ends. State
+-- is the SourceCommandWindowState wire vocabulary (docs/openapi/vocab).
 -- Only the project's own tree has observation windows: a worker's branch
 -- commands mutate an overlay whose promotion records the change.
 CREATE TABLE IF NOT EXISTS source_command_windows (
@@ -3172,6 +3276,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_source_command_windows_project_ordinal
     ON source_command_windows(project_id, ordinal);
 CREATE INDEX IF NOT EXISTS idx_source_command_windows_session
     ON source_command_windows(project_id, session_id, turn);
+
+-- How much of each folder a command observation window compared: complete,
+-- partial with the folders it did not enter, or not observed with one reason.
+-- path is the folder within root_id: empty for an attached root's whole tree,
+-- the outside-namespace path of an outside write root, and empty under the
+-- outside namespace for every host folder beyond the project.
+CREATE TABLE IF NOT EXISTS source_command_window_coverage (
+    window_id TEXT NOT NULL REFERENCES source_command_windows(id) ON DELETE CASCADE,
+    root_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    coverage TEXT NOT NULL CHECK (coverage IN ('complete', 'partial', 'not_observed')),
+    reason TEXT NOT NULL DEFAULT '' CHECK (reason IN ('', 'unconfined', 'baseline_incomplete', 'canceled', 'io_error', 'settlement_failed', 'time_budget')),
+    boundaries_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(boundaries_json)),
+    omitted_boundaries INTEGER NOT NULL DEFAULT 0 CHECK (omitted_boundaries >= 0),
+    CHECK ((coverage = 'not_observed') = (reason != '')),
+    CHECK (coverage = 'partial' OR (boundaries_json = '[]' AND omitted_boundaries = 0)),
+    PRIMARY KEY (window_id, root_id, path)
+) STRICT, WITHOUT ROWID;
 
 -- Causal actions with ordered effects. branch_id is where the action landed;
 -- job_id is who authored it. An overlay promotion lands on the trunk while
@@ -3505,7 +3627,7 @@ CREATE INDEX IF NOT EXISTS idx_session_worktrees_project ON session_worktrees(pr
 CREATE TRIGGER IF NOT EXISTS sessions_workspace_root_project_insert
 BEFORE INSERT ON sessions
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
+    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
 )
 BEGIN
     SELECT RAISE(ABORT, 'sessions workspace_root_id outside project');
@@ -3514,7 +3636,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS sessions_workspace_root_project_update
 BEFORE UPDATE OF project_id, workspace_root_id ON sessions
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
+    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
 )
 BEGIN
     SELECT RAISE(ABORT, 'sessions workspace_root_id outside project');
@@ -3577,7 +3699,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS worker_jobs_workspace_root_project_insert
 BEFORE INSERT ON worker_jobs
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
+    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
 )
 BEGIN
     SELECT RAISE(ABORT, 'worker_jobs workspace_root_id outside project');
@@ -3586,7 +3708,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS worker_jobs_workspace_root_project_update
 BEFORE UPDATE OF project_id, workspace_root_id ON worker_jobs
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
+    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
 )
 BEGIN
     SELECT RAISE(ABORT, 'worker_jobs workspace_root_id outside project');

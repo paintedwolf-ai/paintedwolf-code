@@ -78,6 +78,15 @@ components:
       properties:
         kind:
           $ref: "#/components/schemas/ActionFactKind"
+        source_coverage:
+          type: array
+          description: "source_observation: gaps in a command's before-and-after comparison."
+          items:
+            $ref: "#/components/schemas/CommandFolderCoverage"
+        source_windows:
+          type: array
+          description: "source_observation: windows still settling when the result was published."
+          items: {type: string, format: uuid}
         outcome:
           type: string
           description: "result: how the action ended."
@@ -201,6 +210,37 @@ components:
         mode:
           type: string
           description: "containment: the confinement mode."
+    CommandFolderCoverage:
+      x-go-generate: true
+      type: object
+      required: [folder, coverage]
+      additionalProperties: false
+      properties:
+        folder:
+          type: string
+          description: The covered folder's host path. A slash alone with unconfined coverage denotes all folders outside the project.
+        coverage:
+          $ref: ../project/source-walk.yaml#/components/schemas/SourceWindowCoverage
+        reason:
+          $ref: ../project/source-walk.yaml#/components/schemas/SourceWindowGapReason
+        boundaries:
+          type: array
+          items:
+            $ref: ../project/source-walk.yaml#/components/schemas/SourceWindowBoundary
+        omitted_boundaries:
+          type: integer
+          minimum: 0
+    CommandObservationStatus:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [settling, coverage]
+      properties:
+        settling: {type: boolean}
+        coverage:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommandFolderCoverage"
     ActionPreview:
       x-go-generate: true
       type: object

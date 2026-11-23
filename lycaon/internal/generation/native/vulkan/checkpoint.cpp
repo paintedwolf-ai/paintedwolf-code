@@ -62,9 +62,9 @@ llama_kv_cache::slot_info_vec_t layout(llama_kv_cache * cache) {
     return result;
 }
 
-llama_kv_cache_iswa * e4b_cache(llama_memory_i * memory) {
+llama_kv_cache_iswa * sliding_cache(llama_memory_i * memory) {
     auto * cache = dynamic_cast<llama_kv_cache_iswa *>(memory);
-    if (!cache) throw std::runtime_error("checkpoint requires E4B caches");
+    if (!cache) throw std::runtime_error("checkpoint requires global and sliding caches");
     return cache;
 }
 
@@ -166,7 +166,7 @@ pw_checkpoint::~pw_checkpoint() { close(fd); }
 
 std::unique_ptr<pw_checkpoint> pw_checkpoint::save(llama_memory_i * memory) {
     auto file = std::unique_ptr<pw_checkpoint>(new pw_checkpoint(private_file()));
-    auto * cache = e4b_cache(memory);
+    auto * cache = sliding_cache(memory);
     file->global_layout = layout(cache->get_base());
     file->sliding_layout = layout(cache->get_swa());
     file->global_head = cache->get_base()->get_allocation_head(0);
@@ -182,7 +182,7 @@ std::unique_ptr<pw_checkpoint> pw_checkpoint::save(llama_memory_i * memory) {
 void pw_checkpoint::restore(llama_memory_i * memory) {
     if (lseek(fd, 0, SEEK_SET) < 0) throw std::runtime_error("checkpoint seek failed");
     stream input(fd);
-    auto * cache = e4b_cache(memory);
+    auto * cache = sliding_cache(memory);
     // Physical row placement preserves the attention reduction order.
     cache->get_base()->state_read_sinfo(input, 1, 0, nullptr, &global_layout);
     cache->get_swa()->state_read_sinfo(input, 1, 0, nullptr, &sliding_layout);
@@ -199,7 +199,7 @@ void pw_checkpoint::restore(llama_memory_i * memory) {
 void pw_checkpoint::verify(llama_memory_i * memory) {
     if (lseek(fd, 0, SEEK_SET) < 0) throw std::runtime_error("checkpoint verification seek failed");
     comparison verified(fd);
-    auto * cache = e4b_cache(memory);
+    auto * cache = sliding_cache(memory);
     cache->get_base()->state_write(verified, 1, 0);
     cache->get_swa()->state_write(verified, 1, 0);
 }

@@ -135,6 +135,11 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 	refreshed.Turn.TurnOfferedToolNames = slices.Clone(base.Turn.TurnOfferedToolNames)
 	refreshed.Turn.TurnOfferedToolSchemas = base.Turn.TurnOfferedToolSchemas
 	refreshed.Source.ModelSourceContext = base.Source.ModelSourceContext
+	refreshed.Source.AskMode = base.Source.AskMode
+	refreshed.Source.ReadOnly = refreshed.Source.ReadOnly || base.Source.ReadOnly
+	if base.Identity.RootSessionID != "" {
+		refreshed.Identity.RootSessionID = base.Identity.RootSessionID
+	}
 	refreshed.Source.EditorReadBases = base.Source.EditorReadBases
 	refreshed.Turn.TurnWritePinRootID = base.Turn.TurnWritePinRootID
 	refreshed.Turn.TurnWritePinGlobs = append([]string(nil), base.Turn.TurnWritePinGlobs...)
@@ -533,6 +538,9 @@ func (l *toolBatch) executeOneToolCall(
 		return attachRejectReceipt(l.refuseToolCall(tc, assistantMessageID, reject), settled.receipt)
 	}
 
+	if program := run.captures.commandProgram; program != nil && program.State == "rejected" {
+		run.facts = run.facts.WithOutcome(api.ToolResultOutcomeRejected).WithCode(program.StopCode)
+	}
 	toolMsg := l.Tools.composeToolResultMessage(ctx, sess, sessionID, tc, assistantMessageID, toolOrigin, &run)
 	settled, settleErr := l.settleToolResult(ctx, tc, toolCtx, toolMsg, run)
 	if settleErr != nil {

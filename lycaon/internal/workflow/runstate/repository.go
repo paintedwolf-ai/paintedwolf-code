@@ -24,6 +24,7 @@ type Repository struct {
 }
 
 type RunsRepository interface {
+	RunManifest(context.Context, string) (string, error)
 	Get(ctx context.Context, id string) (*api.WorkflowRun, error)
 	ActiveBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
 	ActiveStateBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, map[string]any, error)
@@ -88,6 +89,7 @@ type TransactionsRepository interface {
 }
 
 type Sessions interface {
+	AdmitModeInTx(context.Context, *sql.Tx, string, *api.SessionMode, func(api.SessionMode) error) error
 	Get(ctx context.Context, id string) (*api.Session, error)
 	SetPostureTx(ctx context.Context, tx *sql.Tx, sessionID string, posture api.SessionPosture) error
 }

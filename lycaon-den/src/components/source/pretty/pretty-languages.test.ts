@@ -1,23 +1,20 @@
-// @vitest-environment jsdom
-import { forceParsing, indentUnit } from "@codemirror/language";
+import { ensureSyntaxTree, indentUnit, syntaxTreeAvailable } from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath, prettyLayoutCatalog } from "../editor/codemirror-lang.ts";
 import { createPrettyExtension, prettyOutcomeOf } from "./pretty-layout.ts";
+import { copyAsShown } from "./pretty-copy.ts";
 import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 
 /** Layout follows the parse, which a new state only starts; a live view carries it to the end. */
 function open(doc: string, path: string): EditorState {
   const language = languageExtensionForPath(path);
   const extensions: Extension[] = [indentUnit.of("  "), EditorState.tabSize.of(4), createPrettyExtension({ enabled: true, path })];
-  const view = new EditorView({ state: EditorState.create({ doc, extensions: language ? [language, ...extensions] : extensions }) });
-  try {
-    expect(forceParsing(view, doc.length, 5_000), path).toBe(true);
-    return view.state;
-  } finally {
-    view.destroy();
-  }
+  const state = EditorState.create({ doc, extensions: language ? [language, ...extensions] : extensions });
+  if (!language || syntaxTreeAvailable(state)) return state;
+  // Publish the completed parse so Pretty can lay out the whole fixture.
+  expect(ensureSyntaxTree(state, doc.length, Infinity), path).not.toBeNull();
+  return state.update({}).state;
 }
 
 function breaks(state: EditorState): number[] {
@@ -99,6 +96,7 @@ describe("bracket layout for every language declared with it", () => {
       for (const pos of positions) {
         for (const [from, to] of protectedRanges) expect(pos > from && pos < to, `${ext} break at ${pos} inside ${from}-${to}`).toBe(false);
       }
+      expect(copyAsShown(state, 0, state.doc.length)).toBe(writtenOut(state));
       expect(breaks(open(writtenOut(state), path)), `${ext} second pass`).toEqual([]);
       expect(breaks(open("value = call(item0, [item1], (item2))\n", path)), `${ext} formatted`).toEqual([]);
 
@@ -112,8 +110,8 @@ describe("bracket layout for every language declared with it", () => {
     });
   }
 
-  it("keeps a Go header clause on its line", () => {
-    const line = `if err := load(${Array.from({ length: 60 }, (_, i) => `a${i}`).join(", ")}); err != nil { return err }`;
+  it("keeps a Go header clause on its line beyond the initial parse viewport", () => {
+    const line = `if err := load(${Array.from({ length: 800 }, (_, i) => `a${i}`).join(", ")}); err != nil { return err }`;
     const state = open(line, "main.go");
     const semicolon = line.indexOf(";");
     expect(breaks(state)).not.toContain(line.indexOf("err", semicolon));
@@ -204,6 +202,7 @@ describe("after-block breaks, PowerShell, and SQL predicates/CASE", () => {
     for (const [path, src, needle] of fixtures) {
       const state = open(src, path);
       expect(breaks(state), `${path} should break before ${needle}`).toContain(src.indexOf(needle));
+      expect(copyAsShown(state, 0, state.doc.length)).toBe(writtenOut(state));
       expect(breaks(open(writtenOut(state), path)), `${path} pass 2`).toEqual([]);
     }
 
@@ -220,6 +219,7 @@ describe("after-block breaks, PowerShell, and SQL predicates/CASE", () => {
     for (const path of ["deploy.ps1", "module.psm1", "manifest.psd1"]) {
       const state = open(ps, path);
       expect(breaks(state).length, `${path} breaks`).toBeGreaterThan(0);
+      expect(copyAsShown(state, 0, state.doc.length)).toBe(writtenOut(state));
       expect(breaks(open(writtenOut(state), path)), `${path} pass 2`).toEqual([]);
     }
     expect(breaks(open("param($x)\nWrite-Host $x\n", "ok.ps1"))).toEqual([]);

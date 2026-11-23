@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -114,9 +115,21 @@ func (l *PromptLoop) runPreparedPromptLoop(ctx context.Context, in PromptRunInpu
 	var loopExit loopExitKind
 
 	firstModelTurn := st.turnsRanThisRun == 0
+	baseToolCtx := in.ToolCtx
 loop:
 	for completed < maxIter {
 		step := completed
+		authority, err := l.Context.roundAuthority(ctx, sess, baseToolCtx.Source.ReadOnly)
+		if err != nil {
+			return nil, err
+		}
+		previous := sess.Mode
+		sess, err = l.Context.applyRoundAuthority(ctx, sess, authority, profileID, st)
+		if err != nil {
+			return nil, err
+		}
+		setup.sess = sess
+		in.ToolCtx = authority.toolContext(baseToolCtx)
 		sentBeforeCall, err := l.Inbox.takeUserSend(ctx, id, st, &userPrompt)
 		if err != nil {
 			return nil, err
@@ -127,16 +140,22 @@ loop:
 		if err := l.Inbox.takePhaseGuidance(ctx, id, st); err != nil {
 			return nil, err
 		}
-		if sentBeforeCall || !firstModelTurn {
+		if sentBeforeCall || !firstModelTurn || previous != authority.Mode {
 			surfaceID, err = l.Context.refreshCoordinatorSurface(ctx, sess, id, profileID, st, surfaceID)
 			if err != nil {
 				return nil, err
 			}
 		}
+		if previous == api.SessionModeAsk && authority.Mode == api.SessionModeAgent {
+			st.history, err = l.appendAgentEnabledNudge(ctx, id, st)
+			if err != nil {
+				return nil, err
+			}
+		}
 		firstModelTurn = false
-		turnCtx := ctx
+		turnCtx := hostctx.WithRoundMode(ctx, id, authority.Mode)
 		if guard.IsCoordinatorProfile(profileID) && st.coordinatorFrameReady {
-			turnCtx = toolpolicy.WithCoordinatorTurnFrame(ctx, &st.coordinatorFrame)
+			turnCtx = toolpolicy.WithCoordinatorTurnFrame(turnCtx, &st.coordinatorFrame)
 		}
 		spend, err := l.Nudges.applySpendCeiling(turnCtx, sess, id, profileID, userPrompt, maxIter, in, st)
 		if err != nil {
@@ -242,7 +261,8 @@ loop:
 		}
 	}
 
-	return l.finalizePromptLoopRun(ctx, sess, id, profileID, userPrompt, maxIter, closeoutNudgeSent, loopExit, in, st)
+	closeoutCtx := hostctx.WithRoundMode(ctx, id, sess.Mode)
+	return l.finalizePromptLoopRun(closeoutCtx, sess, id, profileID, userPrompt, maxIter, closeoutNudgeSent, loopExit, in, st)
 }
 
 func (l *turnInbox) takeUserSend(
@@ -332,6 +352,11 @@ func (l *promptContext) refreshCoordinatorSurface(
 	st *promptLoopTurnState,
 	current string,
 ) (string, error) {
+	if l.Deps.WritableSharedTemp != nil && st.machine.Compiled() {
+		surface := &st.machine.Surface
+		surface.SharedTempLocations = l.Deps.WritableSharedTemp(ctx, sess)
+		surface.Fingerprint = surface.CacheFingerprint()
+	}
 	if !guard.IsCoordinatorProfile(profileID) {
 		st.coordinatorFrame = inject.CoordinatorTurnFrame{}
 		inject.StampMachine(&st.coordinatorFrame, st.machine)
@@ -354,7 +379,7 @@ func (l *promptContext) refreshCoordinatorSurface(
 	} else {
 		inject.StampMachine(&st.coordinatorFrame, st.machine)
 	}
-	if l.Deps.CoordinatorPostureRules != nil {
+	if l.Deps.CoordinatorPostureRules != nil && sess.Mode != api.SessionModeAsk {
 		paths, err := l.Deps.CoordinatorPostureRules(ctx, sess)
 		if err != nil {
 			return "", err

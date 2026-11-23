@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandActivity, CommandActivityStep, CommandProgramReceipt } from "../../api/types.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
+import { FORM_PROGRAM_TOOLS } from "./command-activity-facts.ts";
 import { commandActivityHeadline, commandActivityRank, createCommandActivityProjection } from "./command-activity-model.ts";
 
 function fact(id: string, overrides: Partial<CommandActivity> = {}): CommandActivity {
@@ -25,6 +26,27 @@ describe("command activity composition", () => {
   const rows = parts(project([entry("call", [fact("build"), fact("test")])]));
   expect(rows.map(row => row.id)).toEqual(["call", "call:activity:test"]);
  });
+ it("keeps live rows when a displayed call settles without activity facts", () => {
+  const project = createCommandActivityProjection();
+  const live = entry("call", [fact("build", { state: "running" }), fact("test", { state: "waiting" })]);
+  const keys = parts(project([live])).map(row => row.id);
+  const settled = entry("call", []);
+  if (settled.kind !== "tool") throw new Error("Expected a tool entry");
+  settled.part.shownInFlight = true;
+  const rows = parts(project([settled]));
+  expect(rows.map(row => row.id)).toEqual(keys);
+  expect(rows.map(row => row.commandActivity?.fact.state)).toEqual(["unknown", "unknown"]);
+ });
+ it("takes failure from host activity state while preserving raw exit codes", () => {
+  const project = createCommandActivityProjection();
+  const rows = parts(project([entry("call", [
+   fact("no-match", { status_code: 1 }),
+   fact("closed", { status_code: 141 }),
+   fact("failed", { status_code: 1, state: "failed" }),
+  ])]));
+  expect(rows.map(row => row.status)).toEqual(["completed", "completed", "error"]);
+  expect(rows.map(row => row.commandActivity?.fact.status_code)).toEqual([1, 141, 1]);
+ });
  it("coalesces consecutive read-only calls into the established row", () => {
   const project = createCommandActivityProjection();
   const first = entry("a", [fact("read-a")]);
@@ -34,6 +56,14 @@ describe("command activity composition", () => {
   expect(after[0]!.commandActivity!.calls.map(call => call.toolCallId)).toEqual(["a", "b"]);
   expect(after[0]!.commandActivity!.members.map(member => member.id)).toEqual(["read-a", "read-b"]);
   expect(after[0]!.commandActivity!.receiptScopes).toEqual([{ programId: "program:a", activityId: "read-a" }, { programId: "program:b", activityId: "read-b" }]);
+ });
+ it("keeps an activity visible when an earlier receipt arrives", () => {
+  const project = createCommandActivityProjection();
+  const earlier = entry("comparison");
+  const later = entry("closure", [fact("grep"), fact("yes", { phase: "execute", label: "Run process" })]);
+  const live = parts(project([earlier, later])).filter(row => row.toolCallId === "closure");
+  const settled = parts(project([entry("comparison", [fact("compare")]), later]));
+  expect(settled.filter(row => row.toolCallId === "closure").map(row => row.id)).toEqual(live.map(row => row.id));
  });
  it("keeps coalescing idempotent across re-projections", () => {
   const project = createCommandActivityProjection();
@@ -190,7 +220,7 @@ it("ranks the span headline by two-level phase and group tiers (AT-ACT-HEAD-01)"
 
 it("holds running FormTool calls back and coalesces the settled inspect sequence (AT-ACT-PROJ-01)", () => {
  const project = createCommandActivityProjection();
- const formTools = ["command", "summarize", "survey_repo", "code_rewrite"];
+ const formTools = [...FORM_PROGRAM_TOOLS];
  const running = formTools.map((tool, index) => {
   const row = entry(`call-${index}`, undefined, tool);
   if (row.kind === "tool") row.part.status = "running";
@@ -216,6 +246,25 @@ it("holds running FormTool calls back and coalesces the settled inspect sequence
   entry("side-d", [fact("side-d")], "code_rewrite"),
  ]));
  expect(jobBetween.map(row => row.id)).toEqual(["side-c", "job", "side-d"]);
+});
+
+it("projects source inspection using its program receipt and keeps Git HEAD visible", () => {
+ const project = createCommandActivityProjection();
+ const read = entry("read", undefined, "inspect_source");
+ const head = entry("head", undefined, "inspect_source");
+ if (read.kind === "tool") {
+  read.part.args = { operation: "read", path: "README.md" };
+  read.part.status = "running";
+ }
+ if (head.kind === "tool") {
+  head.part.args = { operation: "git_head" };
+  head.part.status = "running";
+ }
+ expect(parts(project([read, head])).map(row => row.id)).toEqual(["head"]);
+
+ const settled = parts(project([entry("list", [fact("list")]), entry("read", [fact("read")], "inspect_source")]));
+ expect(settled).toHaveLength(1);
+ expect(settled[0]!.commandActivity!.calls.map(call => call.toolCallId)).toEqual(["list", "read"]);
 });
 
 it("keeps a program-level failure visible after successful child activities", () => {

@@ -19,7 +19,7 @@ const SESSION_LENGTH = 5000;
 const DOUBLE_SESSION_LENGTH = 10_000;
 
 function uniformWindowRowBound(viewportHeight: number, rowHeight: number) {
-  const rowExtent = rowHeight + DEFAULT_TRANSCRIPT_SPACING.rowGap;
+  const rowExtent = rowHeight + DEFAULT_TRANSCRIPT_SPACING.itemGap;
   const visibleRows = Math.ceil(viewportHeight / rowExtent) + 1;
   const bufferRows = Math.max(
     TRANSCRIPT_VIRTUAL_MIN_BUFFER_ROWS,

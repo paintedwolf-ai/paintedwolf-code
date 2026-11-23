@@ -18,7 +18,7 @@ import { resolvedLensView, scopeEffectFor } from "../tree/scope-resolution.ts";
 import { diffsAddressKey, diffsPageCopy } from "../review/diffs-address.ts";
 
 type WorkspaceReview = {
-  scope: Pick<FilesScope, "projectId" | "client" | "sourceSessionId" | "filesWorkspaceId" |
+  scope: Pick<FilesScope, "projectId" | "client" | "sourceSessionId" | "filesWorkspaceId" | "rootLabelFor" |
     "filesRoots" | "activeBuffer" | "versionForBuffer">;
   appStore: ProjectFilesViewProps["appStore"];
   chatSessionId: () => string | undefined;

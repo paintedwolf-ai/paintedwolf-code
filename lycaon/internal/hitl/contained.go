@@ -42,7 +42,7 @@ type Contained struct {
 	Egress string
 	// Roots identify attached project and draft trees.
 	Roots []string
-	// WriteRoots includes roots, system scratch, and approved grants.
+	// WriteRoots lists writable subprocess directories.
 	WriteRoots []string
 	// ReadRoots are read-only capabilities from the applied boundary.
 	ReadRoots []string
@@ -173,7 +173,7 @@ func ContainedFromConfinement(c *confine.Confinement, ok bool) Contained {
 	if !ok || c == nil {
 		return Contained{}
 	}
-	writeRoots, err := confine.WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	writeRoots, err := confine.WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.Workspaces.SessionScratch)
 	if err != nil {
 		return Contained{}
 	}

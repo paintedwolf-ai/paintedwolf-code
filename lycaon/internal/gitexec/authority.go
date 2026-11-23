@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
 )
 
@@ -23,12 +24,10 @@ type authority struct {
 
 // AgentLaunch is one agent Git command's admitted launch.
 type AgentLaunch struct {
-	Plan exec.LaunchPlan
+	Plan      exec.LaunchPlan
+	Workspace confine.ActionWorkspace
 	// Credentials serves a network command's Git; nil leaves it without any.
 	Credentials *AgentCredentials
-	// Scratch holds the host's working files for Git under this launch. The
-	// launch writes it; the host's temporary directory may not be writable.
-	Scratch string
 }
 
 // AgentEntry marks ctx as an agent's tool call. Git launched under it runs
@@ -65,15 +64,18 @@ func AgentLaunchFrom(ctx context.Context) (AgentLaunch, bool) {
 	return *a.agent, true
 }
 
-// MkdirTemp creates a directory for the working files of Git launched under
-// ctx: in the agent launch's scratch when ctx carries one, else in the host's
-// temporary directory.
-func MkdirTemp(ctx context.Context, pattern string) (string, error) {
-	dir := ""
-	if agent, ok := AgentLaunchFrom(ctx); ok {
-		dir = agent.Scratch
+// MakeScratch creates a private staging directory for Git and its host-side preparation.
+func MakeScratch(ctx context.Context, pattern string) (string, error) {
+	plan, err := launchPlan(ctx, "git")
+	if err != nil {
+		return "", err
 	}
-	return os.MkdirTemp(dir, pattern)
+	launch, _ := AgentLaunchFrom(ctx)
+	root := launch.Workspace.Path()
+	if root == "" && plan.Kind == exec.LaunchAgentCommand {
+		return "", errors.New("git operation workspace unavailable")
+	}
+	return os.MkdirTemp(root, pattern)
 }
 
 // launchPlan selects the process authority for one Git subprocess.

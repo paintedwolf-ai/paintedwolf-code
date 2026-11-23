@@ -93,7 +93,7 @@ def recipe(root: Path, payload: Path, architecture: str, product: str) -> str:
         "PKGVER": pacman_package_version(parse(product)),
         "PKGREL": str(parse_release_build((root / "RELEASE_BUILD").read_text().strip())),
         "ARCH": shlex.quote(architecture),
-        "DEPENDS": " ".join(shlex.quote(row.format(**floors)) for row in catalog["depends"]),
+        "DEPENDS": " ".join(shlex.quote(row.format(**floors)) for row in [*catalog["depends"], *catalog["architecture_depends"][architecture]]),
         "OPTDEPENDS": " ".join(shlex.quote(row.format(**floors)) for row in catalog["recommends"]),
         "INSTALL": "install=" + shlex.quote(install.name) if install.is_file() else "",
         "BOOTSTRAP": shlex.quote(load_payload(root / 'packaging/linux/payload.json')['setuid_bootstrap']['path']),

@@ -1,7 +1,8 @@
+import { outsideFileId } from "../source/outside-namespace.ts";
 import { SurfaceDeck } from "../../components/primitives/SurfaceDeck.tsx";
 import { usePresentationParticipant } from "../../ui/presentation-context.tsx";
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
-import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
+import { tipWithShortcut } from "../../shortcuts/display-binding-for.ts";
 import type { SourceContributor } from "../../api/types.ts";
 import { Show, createMemo, createEffect, createSignal } from "solid-js";
 import type { DenEditorVersionComparison } from "../../../shared/app-state-types.ts";
@@ -68,7 +69,9 @@ function FileVersionContent(props: FileVersionDocumentProps) {
     if (version.source.kind === "reader") {
       if (props.comparison() === "before" || props.preview) return sourceReaderAccess(client, props.projectId, version.source.reader, props.sessionId);
       const original = sourceReaderAccess(client, props.projectId, version.source.reader, props.sessionId);
-      return currentComparisonAccess(original, client, props.projectId, props.buffer.rootId, props.buffer.path, props.sessionId);
+      const fileId = outsideFileId(props.projectId, props.buffer);
+      const address = fileId ? { file_id: fileId } : { root_id: props.buffer.rootId, path: props.buffer.path };
+      return currentComparisonAccess(original, client, props.projectId, address, props.sessionId);
     }
     if (version.source.kind !== "text") return undefined;
     return sourceReaderAccess(client, props.projectId, { kind: "text", path: version.path, before: props.comparison() === "current" ? props.currentContent() : version.beforeAvailability === "absent" ? null : version.source.before, after: version.availability === "absent" ? null : version.source.after }, props.sessionId);
@@ -85,11 +88,11 @@ function FileVersionContent(props: FileVersionDocumentProps) {
   };
   return <div class="den-file-version__document" data-testid="file-version-document" hidden={!props.version()}>
     <Show when={unavailable()}>{notice => <div class="den-file-version__state" classList={{ "den-file-version__state--error": notice().tone === "error" }} role={notice().tone === "error" ? "alert" : "status"}>{notice().message}</div>}</Show>
-    <Show when={!props.preview && !access()}><div class="den-document-actions"><button type="button" class="den-document-action den-document-action--exit" data-testid="file-version-exit" aria-label="Back to the current file" data-tip={`Back to the current file (${bindingForHandler("files.currentVersion")} or Esc)`} data-tip-pos="below" onClick={props.onCurrent}><ThemeIcon slot="back" size={11} />Current</button></div></Show>
+    <Show when={!props.preview && !access()}><div class="den-document-actions"><button type="button" class="den-document-action den-document-action--exit" data-testid="file-version-exit" aria-label="Back to the current file" data-tip={tipWithShortcut("Back to the current file", "files.currentVersion", { also: "Esc" })} data-tip-pos="below" onClick={props.onCurrent}><ThemeIcon slot="back" size={11} />Current</button></div></Show>
     <div class="den-file-version__host" data-testid="file-version-file">
       <Show keyed when={access()}>{reader => <SourceReader projectId={props.projectId} access={reader} path={props.version()?.path ?? props.buffer.path}
-        leadingActions={<Show when={!props.preview}><button type="button" class="den-document-action den-document-action--exit" data-testid="file-version-exit" aria-label="Back to the current file" data-tip={`Back to the current file (${bindingForHandler("files.currentVersion")} or Esc)`} data-tip-pos="below" onClick={props.onCurrent}><ThemeIcon slot="back" size={11} />Current</button></Show>}
-        trailingActions={<Show when={!props.preview}><button type="button" class="den-document-action" data-testid="file-version-compare-trigger" aria-haspopup="menu" aria-expanded={props.comparisonMenuOpen()} data-tip={`Compare options (${bindingForHandler("files.toggleComparison")})`} data-tip-pos="below" onClick={event => props.onOpenComparisonMenu(event.currentTarget)}>Compare: {props.comparison() === "current" ? "Current" : "Before"} ▾</button></Show>}
+        leadingActions={<Show when={!props.preview}><button type="button" class="den-document-action den-document-action--exit" data-testid="file-version-exit" aria-label="Back to the current file" data-tip={tipWithShortcut("Back to the current file", "files.currentVersion", { also: "Esc" })} data-tip-pos="below" onClick={props.onCurrent}><ThemeIcon slot="back" size={11} />Current</button></Show>}
+        trailingActions={<Show when={!props.preview}><button type="button" class="den-document-action" data-testid="file-version-compare-trigger" aria-haspopup="menu" aria-expanded={props.comparisonMenuOpen()} data-tip={tipWithShortcut("Compare options", "files.toggleComparison")} data-tip-pos="below" onClick={event => props.onOpenComparisonMenu(event.currentTarget)}>Compare: {props.comparison() === "current" ? "Current" : "Before"} ▾</button></Show>}
         displayPrefs={currentDisplayPrefs(props.buffer)} primaryFind onContributor={props.onContributor} onReady={props.onReady} onHandle={props.onHandle} />}</Show>
     </div>
   </div>;

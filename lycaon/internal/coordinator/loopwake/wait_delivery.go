@@ -52,6 +52,16 @@ func processWakeReport(wake anchor.ID, env anchor.Envelope) string {
 	}
 }
 
+// ObserveProcessWait records exits delivered by a satisfied process wait.
+func ObserveProcessWait(sessionID string, winner awaitstore.Condition, observe func(string, string)) {
+	if observe == nil || winner.Kind != string(WaitTriggerProcessDone) || winner.Outcome != "satisfied" || winner.Report == "" {
+		return
+	}
+	for _, handle := range winner.Handles {
+		observe(sessionID, handle)
+	}
+}
+
 // WaitEndedText is how a wait's end reaches the turn that follows it: the
 // winning condition, its outcome and code, and the report it carries.
 func WaitEndedText(winner awaitstore.Condition) string {

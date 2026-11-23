@@ -149,19 +149,19 @@ func TestSchemaRejectsCrossProjectRelationship(t *testing.T) {
 	const now = "2026-01-01T00:00:00Z"
 
 	_, err = sqlDB.ExecContext(t.Context(), `
-		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at)
-		VALUES ('bad-session', 'project-1', (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?)
+		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('bad-session', 'project-1', (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?, 'bad-session', 'agent')
 	`, root2, now, now, now)
 	assertConstraintContains(t, err, "workspace_root_id outside project")
 
 	_, err = sqlDB.ExecContext(t.Context(), `
-		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at)
-		VALUES ('session-1', 'project-1', (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?)
+		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('session-1', 'project-1', (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?, 'session-1', 'agent')
 	`, root1, now, now, now)
 	testutil.FailErr(t, "insert valid session", err)
 	_, err = sqlDB.ExecContext(t.Context(), `
-		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
-		VALUES ('bad-child', 'project-2', (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', 'session-1', ?, ?, ?)
+		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('bad-child', 'project-2', (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', 'session-1', ?, ?, ?, 'session-1', NULL)
 	`, root2, now, now, now)
 	assertConstraintContains(t, err, "parent_session_id outside project")
 
@@ -201,8 +201,8 @@ func TestProjectDeleteCascadesDurableProjectState(t *testing.T) {
 	rootID := testdbseed.InsertProjectRoot(t, sqlDB, projectID, t.TempDir())
 	const now = "2026-01-01T00:00:00Z"
 	_, err = sqlDB.ExecContext(t.Context(), `
-		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at)
-		VALUES ('delete-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?)
+		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('delete-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?, 'delete-session', 'agent')
 	`, projectID, rootID, now, now, now)
 	testutil.FailErr(t, "seed session", err)
 	seedProjectDeleteSourceHistory(t, sqlDB, projectID, rootID, now)

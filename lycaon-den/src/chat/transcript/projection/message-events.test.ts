@@ -9,18 +9,29 @@ function seedMessages(store: ReturnType<typeof createAppStore>, rows: Message[])
   store.actions.installTranscriptBaseline(sid, rows, 0);
 }
 
-function activeLlmTurn(store: ReturnType<typeof createAppStore>, sessionId: string) {
-  store.actions.setCurrentSession({
-    id: sessionId,
+function testSession(
+  id: string,
+  posture: "build" | "spec" = "build",
+  status: "idle" | "busy" = "idle",
+) {
+  return {
+    id,
+    root_session_id: id,
+    mode: "agent" as const,
+    started: true,
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: "00000000-0000-4000-8000-000000000001",
     workspace_path: "/tmp/p",
-    posture: "build",
-    status: "busy",
+    posture,
+    status,
     created_at: "t",
     activity_at: "t",
     updated_at: "t",
-  });
+  };
+}
+
+function activeLlmTurn(store: ReturnType<typeof createAppStore>, sessionId: string) {
+  store.actions.setCurrentSession(testSession(sessionId, "build", "busy"));
   store.actions.setLLMCallStatus({
     call_id: "a1",
     session_id: sessionId,
@@ -34,17 +45,7 @@ function activeLlmTurn(store: ReturnType<typeof createAppStore>, sessionId: stri
 describe("applyMessageEvent", () => {
   it("resolves the pending-send bubble when its echo row lands", () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "parent-1",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "build",
-      status: "idle",
-      created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
-    });
+    store.actions.setCurrentSession(testSession("parent-1"));
     seedMessages(store, []);
     store.actions.addPendingSend("parent-1", {
       kind: "prompt",
@@ -84,17 +85,7 @@ describe("applyMessageEvent", () => {
 
   it("skips no-op patches", () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "parent-1",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "build",
-      status: "idle",
-      created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
-    });
+    store.actions.setCurrentSession(testSession("parent-1"));
     const row = { id: "a1", role: "assistant" as const, origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const, content: "Hello", created_at: "t" };
     seedMessages(store, [row]);
 
@@ -109,17 +100,7 @@ describe("applyMessageEvent", () => {
 
   it("adopts patch events as full-row snapshots — absent fields clear", () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "0a4c8296-291e-42e4-8daf-af798b03c5e0",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "spec",
-      status: "busy",
-      created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
-    });
+    store.actions.setCurrentSession(testSession("0a4c8296-291e-42e4-8daf-af798b03c5e0", "spec", "busy"));
     const planRunId = "0ea26756-a763-4c2a-b933-fa6b64064a20";
     seedMessages(store, [
       {
@@ -152,17 +133,7 @@ describe("applyMessageEvent", () => {
 
   it("clears llm turn chrome when authoritative assistant patch arrives after llm idle", () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "parent-1",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "build",
-      status: "idle",
-      created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
-    });
+    store.actions.setCurrentSession(testSession("parent-1"));
     store.actions.setLLMCallStatus({
       call_id: "a1",
       session_id: "parent-1",
@@ -207,17 +178,7 @@ describe("applyMessageEvent", () => {
 
   it("clears llm turn chrome when authoritative assistant patch includes tool_calls", () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "parent-1",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "build",
-      status: "idle",
-      created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
-    });
+    store.actions.setCurrentSession(testSession("parent-1"));
     store.actions.setLLMCallStatus({
       call_id: "a1",
       session_id: "parent-1",
@@ -245,17 +206,7 @@ describe("applyMessageEvent", () => {
 
   it("ignores events for unrelated sessions", () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "parent-1",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "build",
-      status: "idle",
-      created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
-    });
+    store.actions.setCurrentSession(testSession("parent-1"));
     seedMessages(store, []);
 
     expect(
@@ -315,17 +266,7 @@ describe("applyMessageEvent", () => {
 
   it("syncs worker roster when parent task tool result arrives over SSE", () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "parent-1",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "build",
-      status: "busy",
-      created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
-    });
+    store.actions.setCurrentSession(testSession("parent-1", "build", "busy"));
 
     applyMessageEvent(store, {
       session_id: "parent-1",
@@ -431,17 +372,7 @@ describe("applyMessageEvent", () => {
 
   it("buffers parent events under the hydration lock and replays them on completion", () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "parent-1",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "build",
-      status: "busy",
-      created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
-    });
+    store.actions.setCurrentSession(testSession("parent-1", "build", "busy"));
     // Lock the session as a resume hydrate would.
     store.actions.beginSessionResumeSwitch("parent-1");
 

@@ -28,8 +28,8 @@ func TestProjectSessionStatsFollowSessionLifecycle(t *testing.T) {
 	insertSession := func(id, projectID, activityAt string) {
 		t.Helper()
 		_, err := store.ExecContext(ctx, `
-			INSERT INTO sessions (id, project_id, owner_person_id, posture, created_at, activity_at, updated_at)
-			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', '2026-01-01T00:00:00Z', ?, ?)`,
+			INSERT INTO sessions (id, project_id, owner_person_id, posture, created_at, activity_at, updated_at, root_session_id, mode)
+			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', '2026-01-01T00:00:00Z', ?, ?, ?1, 'agent')`,
 			id, projectID, activityAt, activityAt)
 		testutil.FailErr(t, "insert "+id, err)
 	}

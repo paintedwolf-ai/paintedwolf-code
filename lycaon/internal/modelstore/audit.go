@@ -42,13 +42,17 @@ func auditFile(ctx context.Context, root *os.Root, name string, artifact Artifac
 	if !info.Mode().IsRegular() || info.Size() != artifact.Bytes {
 		return errors.New("payload shape differs from manifest")
 	}
-	f, err := openBundleFile(root, name, artifact.Bytes)
+	f, err := openBoundedFile(root, name, artifact.Bytes)
 	if err != nil {
 		return err
 	}
 	defer func() { resultErr = errors.Join(resultErr, f.Close()) }()
+	return verifyReader(contextReader{ctx: ctx, reader: f}, artifact)
+}
+
+func verifyReader(r io.Reader, artifact Artifact) error {
 	hash := sha256.New()
-	n, err := io.Copy(hash, contextReader{ctx: ctx, reader: io.LimitReader(f, artifact.Bytes+1)})
+	n, err := io.Copy(hash, io.LimitReader(r, artifact.Bytes+1))
 	if err != nil {
 		return err
 	}

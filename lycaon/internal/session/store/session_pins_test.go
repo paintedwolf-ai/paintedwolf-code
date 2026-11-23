@@ -136,9 +136,8 @@ func TestActivityFollowsVisibleTranscript(t *testing.T) {
 		testutil.FailErr(t, "append internal row", st.Transcript.AppendMessages(ctx, id, api.Message{
 			Role: api.MessageRoleUser, Content: "host note", Visibility: api.MessageVisibilityInternal,
 		}))
-		testutil.FailErr(t, "mark seen", st.Sessions.UpdateSession(ctx, id, func(sess *api.Session) {
-			now := time.Now().UTC()
-			sess.SeenAt = &now
+		testutil.FailErr(t, "mark seen", st.Sessions.MarkSessionSeen(ctx, id, time.Now().UTC()))
+		testutil.FailErr(t, "rename chat", st.Sessions.UpdateSession(ctx, id, func(sess *api.Session) {
 			sess.Title = "renamed"
 		}))
 		testutil.FailErr(t, "pin", st.Sessions.PinSession(ctx, id))

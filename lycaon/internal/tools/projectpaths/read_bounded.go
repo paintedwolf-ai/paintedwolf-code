@@ -12,6 +12,9 @@ import (
 // ErrIsDirectory reports a read aimed at a directory.
 var ErrIsDirectory = errors.New("path is a directory")
 
+// ErrNotRegular reports a read aimed at a special file.
+var ErrNotRegular = errors.New("path is not a regular file")
+
 // FileTooLargeError reports a file over the reader's bound. Size is unknown (-1) for
 // compressed host data, which is refused as soon as decoding passes the bound.
 type FileTooLargeError struct {
@@ -26,6 +29,15 @@ func (e *FileTooLargeError) Error() string {
 // ReadBounded reads a resolved file of at most limit bytes. Host data stored compressed,
 // such as a prompt attachment, is returned decoded.
 func (r Resolved) ReadBounded(limit int64) ([]byte, error) {
+	return r.readBounded(limit, false)
+}
+
+// ReadRegularBounded reads at most limit bytes from a regular file.
+func (r Resolved) ReadRegularBounded(limit int64) ([]byte, error) {
+	return r.readBounded(limit, true)
+}
+
+func (r Resolved) readBounded(limit int64, regularOnly bool) ([]byte, error) {
 	f, err := fseffect.OpenRead(r.EffectLocation())
 	if err != nil {
 		return nil, err
@@ -37,6 +49,9 @@ func (r Resolved) ReadBounded(limit int64) ([]byte, error) {
 	}
 	if info.IsDir() {
 		return nil, ErrIsDirectory
+	}
+	if regularOnly && !info.Mode().IsRegular() {
+		return nil, ErrNotRegular
 	}
 	if r.Compressed {
 		raw, err := zstdcodec.ReadBounded(f, limit)

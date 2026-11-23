@@ -78,6 +78,9 @@ function envelope(topic: EventEnvelopeBase["topic"], data: unknown): { data: str
 function storeForSession() {
   const appStore = createAppStore();
   appStore.actions.setCurrentSession({
+    mode: "agent" as const,
+    started: true,
+    root_session_id: SESSION_ID,
     id: SESSION_ID,
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: PROJECT_ID,

@@ -66,6 +66,9 @@ func (m *Service) FireTransition(ctx context.Context, runID, transitionID, actor
 	if !workflowdef.TransitionActorAllowed(edge, actor) {
 		return nil, fmt.Errorf("%w: %s on %q", runstate.ErrTransitionActorDenied, actor, transitionID)
 	}
+	if err := m.checkAskPhase(ctx, run, manifest, edge.To); err != nil {
+		return nil, err
+	}
 
 	vars, err := m.Runs.GetScaffoldVars(ctx, runID)
 	if err != nil {
@@ -141,7 +144,9 @@ func (m *Service) FireTransition(ctx context.Context, runID, transitionID, actor
 			PreviousPhase:   prevPhase,
 		}
 		if m.PhaseEnterHook != nil {
-			m.PhaseEnterHook(ctx, rc, def)
+			if err := m.PhaseEnterHook(ctx, rc, def); err != nil {
+				return nil, err
+			}
 		}
 		if err := m.Settlement.InvokeOnPhaseEnter(ctx, run, def); err != nil {
 			return nil, err

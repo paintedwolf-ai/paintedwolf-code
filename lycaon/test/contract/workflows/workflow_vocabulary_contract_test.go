@@ -5,7 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -17,7 +17,7 @@ func TestWorkflowVocabularyDelegateLeavesRegistered(t *testing.T) {
 		if !reg.Has(id) {
 			t.Fatalf("delegate/subroutine leaf %q not registered", id)
 		}
-		if !workflowdef.IsKnownGateLeaf(id) {
+		if !vocabulary.IsPredicate(id) {
 			t.Fatalf("leaf %q missing from workflow gate vocabulary", id)
 		}
 	}

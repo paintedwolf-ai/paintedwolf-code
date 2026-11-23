@@ -46,9 +46,17 @@ func enqueueSessionEventWithHostError(
 		}
 		pending = s.promptPending.PromptPendingAmong(sess.ID, unsettled)
 	}
+	var mode api.SessionMode
+	var started *bool
+	if action != api.SessionEventActionDeleted {
+		root, err := resolveEffectiveModeSQL(ctx, qtx, sess.ID)
+		if err == nil {
+			mode, started = root.Mode, &root.Started
+		}
+	}
 	return s.outbox.EnqueueTx(ctx, tx, api.EventTopicSession, key, api.SessionEvent{
 		ID: sess.ID, ProjectID: sess.ProjectID, Action: action, Title: sess.Title, Status: sess.Status, HostError: hostError,
-		CurrentTurn: int(turn), PromptPending: pending,
+		CurrentTurn: int(turn), PromptPending: pending, Mode: mode, Started: started,
 	})
 }
 

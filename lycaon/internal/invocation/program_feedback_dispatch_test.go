@@ -53,6 +53,9 @@ func (s *feedbackForbiddenStart) BeforeNativeOwner(context.Context, toolcontract
 	return errors.New("policy block dispatched owner start")
 }
 
+func (*feedbackForbiddenStart) BeforeNativeApprovalWait(context.Context, toolcontract.BoundOperation, string) {
+}
+
 func stockFeedbackBlockPlane(t *testing.T) *toolfeedback.BlockPlane {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)

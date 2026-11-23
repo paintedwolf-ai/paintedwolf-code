@@ -78,12 +78,21 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 			// Filesystem layers and their grants are grouped below.
 		}
 	}
+	var ordinary confine.SandboxRefusals
+	for _, refusal := range refusals.Refusals {
+		if refusal.Layer != confine.FloorSharedTemp {
+			ordinary.Refusals = append(ordinary.Refusals, refusal)
+		}
+	}
 	for _, path := range refusals.Paths(confine.AccessWrite) {
 		if path.Layer.Recovery().Terminal() {
 			gc.Refusals.RefusedTerminalWritePaths = append(gc.Refusals.RefusedTerminalWritePaths, path.Path)
 			continue
 		}
 		gc.Refusals.RefusedWritePaths = append(gc.Refusals.RefusedWritePaths, path.Path)
+		if path.Layer != confine.FloorSharedTemp {
+			gc.Refusals.OrdinaryWritePaths = append(gc.Refusals.OrdinaryWritePaths, path.Path)
+		}
 	}
 	for _, path := range refusals.Paths(confine.AccessRead) {
 		if path.Layer == confine.FloorReadCredentialStore {
@@ -97,6 +106,7 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 		gc.Refusals.RefusedReadPaths = append(gc.Refusals.RefusedReadPaths, path.Path)
 	}
 	gc.Refusals.RefusedWriteGrants = refusals.Grants(confine.AccessWrite)
+	gc.Refusals.OrdinaryWriteGrants = ordinary.Grants(confine.AccessWrite)
 	gc.Refusals.RefusedReadGrants = refusals.Grants(confine.AccessRead)
 }
 
@@ -267,11 +277,25 @@ func ObserveHTTPRequestLoopbackOtherSession(gc *oar.GuardContext, raised guidanc
 
 // DeferredUnactivatedCount is how many of surfaceID's deferred tools this
 // session has not loaded.
-func (m *Service) DeferredUnactivatedCount(sessionID, surfaceID string) int64 {
+func (m *Service) DeferredUnactivatedCount(ctx context.Context, sessionID, surfaceID string) int64 {
 	if m == nil || surfaceID == "" {
 		return 0
 	}
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, 1)
+	rootCount := 1
+	var sess *api.Session
+	if m.sessionStore != nil && sessionID != "" {
+		sess, _ = m.sessionStore.Get(ctx, sessionID)
+		if sess != nil && m.workspace != nil {
+			if roots, err := m.workspace.Roots(ctx, sess); err == nil {
+				rootCount = len(roots)
+			}
+		}
+	}
+	prof := surface.TurnProfile{SurfaceID: surfaceID}
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		prof.SessionMode = sess.Mode
+	}
+	plan, err := surface.CompileToolPlan(prof, rootCount)
 	if err != nil {
 		return 0
 	}
@@ -287,10 +311,10 @@ func (m *Service) DeferredUnactivatedCount(sessionID, surfaceID string) int64 {
 }
 
 // ObserveDeferredUnactivated publishes the count for the session's turn surface.
-func (m *Service) ObserveDeferredUnactivated(gc *oar.GuardContext, sessionID string) {
+func (m *Service) ObserveDeferredUnactivated(ctx context.Context, gc *oar.GuardContext, sessionID string) {
 	if m == nil || gc == nil {
 		return
 	}
 	surfaceID := m.surface.PromptTurnSurfaceID(sessionID)
-	gc.SetDeferredUnactivated(m.DeferredUnactivatedCount(sessionID, surfaceID))
+	gc.SetDeferredUnactivated(m.DeferredUnactivatedCount(ctx, sessionID, surfaceID))
 }

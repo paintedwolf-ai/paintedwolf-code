@@ -1,0 +1,12 @@
+name: WorkflowBoundaryKind
+go_const_prefix: WorkflowBoundaryKind
+values:
+  - id: started
+  - id: exited
+  - id: canceled
+  - id: completed
+  - id: failed
+  - id: paused
+  - id: resumed
+  - id: paused_on_child
+  - id: interrupted

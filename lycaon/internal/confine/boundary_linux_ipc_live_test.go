@@ -3,6 +3,8 @@
 package confine_test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,14 +12,16 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 const ipcProbeEnv = "PW_CONFINE_IPC_PROBE"
@@ -224,4 +228,93 @@ func TestLinuxIPCIsolatesHostAndSiblingActions(t *testing.T) {
 	testutil.FailErr(t, "finish sibling owner", input.Close())
 	testutil.FailErr(t, "wait for sibling owner", owner.Wait())
 	testutil.FailErr(t, "host IPC remains intact", host.check(true))
+}
+
+func TestLinuxSessionSocketAcrossCommands(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	state, err := os.MkdirTemp("/tmp", "pw-uds-") //nolint:usetesting // Unix socket addresses have a fixed size.
+	testutil.FailErr(t, "create session fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(state) })
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	folders := scratch.New(state)
+	project := t.TempDir()
+	session := func(id string) confine.Confinement {
+		dirs, err := folders.Ensure(id)
+		testutil.FailErr(t, "prepare session", err)
+		c := denyConfinement(project)
+		c.Workspaces.SessionScratch = dirs.Scratch
+		return c
+	}
+	owner, worker := session("owner"), session("worker")
+	listenerPath := filepath.Join(owner.Workspaces.SessionScratch, "service.sock")
+	hostPath := filepath.Join(owner.Workspaces.SessionScratch, "external.sock")
+	greeter(t, "unix", hostPath)
+	ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)
+	defer cancel()
+	listen := `import socket, sys
+with socket.socket(socket.AF_UNIX) as server:
+    server.bind(sys.argv[1])
+    server.listen()
+    print("listening", flush=True)
+    with server.accept()[0] as peer: peer.sendall(b"session")
+`
+	server, release, err := confine.Command(ctx, helperBinary(t, self), "/usr/bin/python3", []string{"-I", "-c", listen, listenerPath}, owner)
+	testutil.FailErr(t, "prepare listener", err)
+	defer release()
+	stdout, err := server.StdoutPipe()
+	testutil.FailErr(t, "open listener output", err)
+	var diagnostic bytes.Buffer
+	server.Stderr = &diagnostic
+	testutil.FailErr(t, "start listener", server.Start())
+	defer func() { cancel(); _ = server.Wait() }()
+	ready, err := bufio.NewReader(stdout).ReadString('\n')
+	if err != nil || ready != "listening\n" {
+		_ = server.Wait()
+		t.Fatalf("session listener startup %q: %v: %s", ready, err, diagnostic.String())
+	}
+	dial := `import socket, sys
+with socket.socket(socket.AF_UNIX) as client:
+    try:
+        client.connect(sys.argv[1])
+        print(client.recv(7).decode())
+    except OSError as e: print("errno", e.errno)
+`
+	probe := func(c confine.Confinement, path, want string) {
+		t.Helper()
+		status, out := linuxConfinedRun(t, self, c, nil, "/usr/bin/python3", "-I", "-c", dial, path)
+		if !status.Exited() || status.ExitStatus() != 0 || !strings.Contains(out, want+"\n") {
+			t.Fatalf("session %s accessing %s: status %v; output %q; want %q", c.Workspaces.SessionScratch, path, status, out, want)
+		}
+	}
+	probe(owner, hostPath, "errno 13")
+	alias := filepath.Join(worker.Workspaces.SessionScratch, "other-session.sock")
+	testutil.FailErr(t, "link socket into other session", os.Link(listenerPath, alias))
+	probe(worker, alias, "errno 13")
+	moved := filepath.Join(owner.Workspaces.SessionScratch, "moved.sock")
+	testutil.FailErr(t, "rename session socket", os.Rename(listenerPath, moved))
+	testutil.FailErr(t, "reuse original selector", os.Rename(hostPath, listenerPath))
+	probe(owner, listenerPath, "errno 13")
+	probe(owner, moved, "session")
+
+	shared, err := os.MkdirTemp("/var/tmp", "pw-shared-") //nolint:usetesting // Exercise the machine-wide directory.
+	testutil.FailErr(t, "create shared directory fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(shared) })
+	granted := owner
+	granted.GrantedWriteRoots = []string{"/var/tmp"}
+	sharedProbe := `import pathlib, socket, sys
+root = pathlib.Path(sys.argv[1])
+(root / "file").write_text("approved")
+with socket.socket(socket.AF_UNIX) as server:
+    try: server.bind(str(root / "socket"))
+    except OSError as e: print("bind errno", e.errno)
+`
+	status, out := linuxConfinedRun(t, self, granted, nil, "/usr/bin/python3", "-I", "-c", sharedProbe, shared)
+	if status.ExitStatus() != 0 || !strings.Contains(out, "bind errno 13") {
+		t.Fatalf("shared directory grant: status %v, output %q", status, out)
+	}
+	contents, err := os.ReadFile(filepath.Join(shared, "file"))
+	testutil.FailErr(t, "read granted shared file", err)
+	if string(contents) != "approved" {
+		t.Fatalf("shared file contains %q", contents)
+	}
 }

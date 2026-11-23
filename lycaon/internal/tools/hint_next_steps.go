@@ -20,7 +20,7 @@ func HintNextSteps(ctx context.Context, rules *oar.RuleSet, code string, data ma
 		return ""
 	}
 	gc := oar.NewGuardContext()
-	gc.Reach = CallReach(ctx)
+	RegisterRecoveryFacts(ctx, gc)
 	if tool, _ := data["tool"].(string); tool != "" {
 		gc.Invocation.Tool = tool
 	}

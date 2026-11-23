@@ -85,6 +85,11 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		if err != nil {
 			return "", err
 		}
+		if tctx.Source.AskMode {
+			if err := workeradmission.RequireAskReadScope("task", identity.MutationCapable, true, identity.Scope); err != nil {
+				return "", err
+			}
+		}
 		agentType := identity.AgentType
 		if _, err := deps.Agents.Get(agentType); err != nil {
 			return "", &toolrejection.ToolReject{

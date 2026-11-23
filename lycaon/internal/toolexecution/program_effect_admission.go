@@ -26,6 +26,13 @@ func (s ProgramSurface) Effects() toolcontract.CommandEffects {
 	return s.allowed
 }
 
+// ReadOnly retains the subset of the surface permitted to inspect sources.
+func (s ProgramSurface) ReadOnly() ProgramSurface {
+	read, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	s.allowed &= read
+	return s
+}
+
 // AllowsEffects reports the frozen profile and surface restriction only.
 // Reached operations still require full native admission.
 func (s ProgramSurface) AllowsEffects(effects toolcontract.CommandEffects) bool {

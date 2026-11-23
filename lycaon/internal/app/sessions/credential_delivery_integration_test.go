@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/httpaction/httpactiontest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -61,7 +62,7 @@ func TestCredentialFileScreensCommandOutputWithoutRead(t *testing.T) {
 	}
 	outboundCards := 0
 	registry := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register HTTP tool", httpaction.Register(registry, httpaction.Deps{Boundary: boundary, SecretMatcher: matcher, SecretAsk: func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
+	testutil.FailErr(t, "register HTTP tool", httpactiontest.Register(registry, httpaction.Deps{Boundary: boundary, SecretMatcher: matcher, SecretAsk: func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 		outboundCards++
 		return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
 	}}))

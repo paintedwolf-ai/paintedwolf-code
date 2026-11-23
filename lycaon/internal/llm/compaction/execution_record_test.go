@@ -35,10 +35,12 @@ func TestContinuationRetainsFailedExecutionWithoutSummary(t *testing.T) {
 	}
 	rendered, err := RenderContinuation(t.Context(), record, true, 0)
 	testutil.FailErr(t, "render execution without prose", err)
-	for _, want := range []string{`"exit_code":1`, `"completed":2`, `"uncertain":1`, `"background_handles":["job"]`, `"receipt_id":"receipt"`, `"process_handle":"process"`, `"source_verdict":"failed"`} {
-		if !strings.Contains(rendered, want) {
-			t.Fatalf("missing %s in %s", want, rendered)
-		}
+	detail := recordedDetails(record.Sources)[0]
+	if detail["exit_code"] != "1" || detail["verdict"] != "failed" || detail["message_id"] != "result" {
+		t.Fatalf("recorded outcome = %+v", detail)
+	}
+	if rendered == "" || strings.Contains(rendered, `"receipt_id":"receipt"`) {
+		t.Fatal("continuation rendered internal receipt JSON")
 	}
 }
 

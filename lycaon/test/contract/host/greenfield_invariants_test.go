@@ -3,8 +3,8 @@ package contract
 import (
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
@@ -15,18 +15,20 @@ import (
 
 func TestBundledWorkflowsUseShippedCompleteWhenOnly(t *testing.T) {
 	t.Parallel()
-	reg, err := workflowdef.RegistryFromDirs("")
+	registry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "load bundled workflows", err)
-	manifests := reg.List()
+	manifests := registry.All()
 	if len(manifests) == 0 {
-		t.Fatal("no bundled workflow manifests loaded")
+		t.Fatal("empty bundled workflow catalog")
 	}
 	phases := 0
-	for _, m := range manifests {
-		for _, p := range m.PhaseDefs {
+	for key, manifest := range manifests {
+		for _, phase := range manifest.PhaseDefs {
 			phases++
-			if conditions.IsCatalogStub(p.CompleteWhen) {
-				t.Errorf("%s@%s phase %q uses catalog stub complete_when %q", m.ID, m.Version, p.ID, p.CompleteWhen)
+			for _, completion := range []string{phase.CompleteWhen, phase.ChildCompleteWhen} {
+				if !workflowdef.IsKnownCompleteWhen(completion) {
+					t.Errorf("%s phase %s has unknown completion %q", key, phase.ID, completion)
+				}
 			}
 		}
 	}
@@ -39,7 +41,7 @@ func TestRunManagerDefaultGateEvaluatorFailClosed(t *testing.T) {
 	t.Parallel()
 	sessions := storetest.New(t)
 	manager := workflow.NewManager(workflowpersistence.New(sessions.DB()), sessions, nil, nil)
-	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{{ID: "work", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"research_satisfied"}}}}
+	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{{ID: "work", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"research_satisfied"}}}}
 	run := &api.WorkflowRun{CurrentPhase: "work"}
 	for name, gate := range map[string]workflowgates.GateEvaluator{"policy": manager.Policy.Gates, "phases": manager.Phases.Gates, "obligations": manager.Obligations.Gates} {
 		met, result, err := gate.PhaseGateMet(t.Context(), manifest, run, nil)

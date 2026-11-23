@@ -166,7 +166,6 @@ describe("SessionTranscript tools and progress", () => {
         kind: "progress_update",
         progress_update: {
           initial: true,
-          seq: 1,
           steps: [{ state: "pending", label: planLabel }],
         },
         created_at: "2026-06-28T04:45:10.611Z",
@@ -220,7 +219,6 @@ describe("SessionTranscript tools and progress", () => {
         kind: "progress_update",
         progress_update: {
           initial: true,
-          seq: 1,
           steps: [{ state: "pending", label: "Ship auth" }, { state: "pending", label: "Verify build" }],
         },
         created_at: "2026-06-28T04:45:10.000Z",
@@ -229,7 +227,7 @@ describe("SessionTranscript tools and progress", () => {
         ...host,
         id: "pu-change",
         kind: "progress_update",
-        progress_update: { seq: 2, changes: [{ kind: "done", label: "Ship auth", state: "done" }] },
+        progress_update: { initial: false, changes: [{ kind: "done", label: "Ship auth", state: "done" }] },
         created_at: "2026-06-28T04:45:11.000Z",
       },
       {
@@ -237,7 +235,6 @@ describe("SessionTranscript tools and progress", () => {
         id: "pc-done",
         kind: "progress_complete",
         progress_complete: {
-          seq: 3,
           steps: [{ state: "done", label: "Ship auth" }, { state: "done", label: "Verify build" }],
         },
         created_at: "2026-06-28T04:45:12.000Z",
@@ -263,7 +260,6 @@ describe("SessionTranscript tools and progress", () => {
       kind: "progress_update",
       progress_update: {
         initial: true,
-        seq: 1,
         steps: [{ state: "pending", label: "Build the lexer" }],
       },
       created_at: "2026-06-28T04:45:10.611Z",
@@ -313,14 +309,13 @@ describe("SessionTranscript tools and progress", () => {
         kind: "progress_update",
         progress_update: {
           initial: true,
-          seq: 1,
           steps: [{ state: "pending", label: "Ship auth" }],
         },
         created_at: "2026-06-28T04:45:10.611Z",
       },
     ];
     const appStore = createAppStore();
-    appStore.actions.setCurrentSession({ id: "sess", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    appStore.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "sess", id: "sess", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     appStore.actions.setProgress("sess", appStore.state.sessionViewEpoch, {
       steps: [
         { state: "done", label: "Ship auth" },

@@ -54,9 +54,9 @@ export function createFilesTreeKeyboard(ports: KeyboardPorts) {
     try {
     let row = ports.displayModel().rowAt(displayIndex);
     if (end) {
-      const root = ports.roots().at(-1);
-      if (!root) return;
-      const frame = await view.frameAt({ root_id: root.id, path: "." }, abort.signal, 199, Number.MAX_SAFE_INTEGER);
+      const lastRoot = view.presentation().state?.outside_locations.at(-1)?.id ?? ports.roots().at(-1)?.id;
+      if (!lastRoot) return;
+      const frame = await view.frameAt({ root_id: lastRoot, path: "." }, abort.signal, 199, Number.MAX_SAFE_INTEGER);
       displayIndex = ports.displayModel().displayIndex(frame.span.end - 1);
     } else if (row?.kind !== "entry") {
       const at = ports.displayModel().sourceIndex(displayIndex);

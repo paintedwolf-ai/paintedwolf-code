@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -156,6 +157,7 @@ func TestRewindRefusesWhileBusy(t *testing.T) {
 // Rewind clears separately persisted progress so deleted commitments stay out of the next prompt.
 func TestRewindClearsTheProgressChecklist(t *testing.T) {
 	mgr, sessionID, _, repositories := newCheckpointTestSession(t)
+	testdbseed.InsertWorkflowRun(t, repositories.DB(), "run-"+sessionID, sessionID, testdbseed.DefaultProjectID)
 	mgr.SetProgressStore(progress.NewSQLStore(repositories.DB()))
 	ctx := context.Background()
 

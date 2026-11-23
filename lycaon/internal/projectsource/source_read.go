@@ -64,17 +64,18 @@ type SourceRevision struct {
 
 // SourceReadObservation is the host fact behind one source projection.
 type SourceReadObservation struct {
-	Path      string
-	RootID    string
-	Revision  SourceRevision
-	OverLimit bool
-	SizeBytes int64
-	MTime     time.Time
-	MIME      string
-	Writable  bool
-	sniff     []byte
-	image     bool
-	decodeAs  string
+	OutsideParentIdentity string
+	Path                  string
+	RootID                string
+	Revision              SourceRevision
+	OverLimit             bool
+	SizeBytes             int64
+	MTime                 time.Time
+	MIME                  string
+	Writable              bool
+	sniff                 []byte
+	image                 bool
+	decodeAs              string
 }
 
 // SourceReadResult is sandbox-validated file content or metadata for GET …/source.
@@ -106,8 +107,9 @@ type SourceReadRequest struct {
 }
 
 type sourceReadTarget struct {
-	abs, path, rootID string
-	info              os.FileInfo
+	outsideParentIdentity string
+	abs, path, rootID     string
+	info                  os.FileInfo
 }
 
 func resolveSourceReadTarget(p ProjectSource, pathQuery, rootID string) (sourceReadTarget, error) {
@@ -163,22 +165,14 @@ func ObserveProjectSource(p ProjectSource, req SourceReadRequest) (*SourceReadOb
 		return nil, ErrSourceDecodeAsInvalid
 	}
 
-	target, err := resolveSourceReadTarget(p, pathQuery, req.RootID)
+	target, f, err := openSourceRead(p, req.Path, req.RootID)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = f.Close() }()
 
 	size := target.info.Size()
 	overLimit := size > SourceReadMaxBytes
-
-	f, err := os.Open(target.abs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, ErrSourceNotFound
-		}
-		return nil, fmt.Errorf("open source: %w", err)
-	}
-	defer func() { _ = f.Close() }()
 
 	sniffLen := int64(sourceSniffPrefixBytes)
 	if size < sniffLen {
@@ -194,16 +188,17 @@ func ObserveProjectSource(p ProjectSource, req SourceReadRequest) (*SourceReadOb
 	writable := SourceFileWritable(uint32(target.info.Mode().Perm()))
 
 	observation := &SourceReadObservation{
-		Path:      target.path,
-		OverLimit: overLimit,
-		SizeBytes: size,
-		MTime:     target.info.ModTime().UTC(),
-		MIME:      mime,
-		RootID:    target.rootID,
-		Writable:  writable,
-		sniff:     sniffBuf,
-		image:     image,
-		decodeAs:  req.DecodeAs,
+		OutsideParentIdentity: target.outsideParentIdentity,
+		Path:                  target.path,
+		OverLimit:             overLimit,
+		SizeBytes:             size,
+		MTime:                 target.info.ModTime().UTC(),
+		MIME:                  mime,
+		RootID:                target.rootID,
+		Writable:              writable,
+		sniff:                 sniffBuf,
+		image:                 image,
+		decodeAs:              req.DecodeAs,
 	}
 
 	var revision []byte
@@ -338,23 +333,16 @@ func ReadProjectSourceRaw(p ProjectSource, req SourceReadRequest) (*SourceRawRes
 	if len(p.SourceRoots()) == 0 {
 		return nil, ErrSourceNoRoot
 	}
-	target, err := resolveSourceReadTarget(p, pathQuery, req.RootID)
+	target, f, err := openSourceRead(p, req.Path, req.RootID)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = f.Close() }()
+
 	size := target.info.Size()
 	if size > SourceRawMaxBytes {
 		return nil, ErrSourceRawTooLarge
 	}
-
-	f, err := os.Open(target.abs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, ErrSourceNotFound
-		}
-		return nil, fmt.Errorf("open source: %w", err)
-	}
-	defer func() { _ = f.Close() }()
 
 	sniffLen := int64(sourceSniffPrefixBytes)
 	if size < sniffLen {
@@ -401,6 +389,9 @@ func sourceSearchBases(p ProjectSource, rootID string) ([]sourceBase, error) {
 	}
 	bases := make([]sourceBase, 0, len(roots))
 	for _, root := range roots {
+		if root.Outside {
+			continue
+		}
 		bases = append(bases, sourceBase{Dir: root.Path, RootID: root.ID})
 	}
 	return bases, nil

@@ -1,0 +1,6 @@
+name: NavigationEntryKind
+description: Navigable project filesystem entry identity.
+go_const_prefix: NavigationEntryKind
+values:
+  - id: file
+  - id: folder

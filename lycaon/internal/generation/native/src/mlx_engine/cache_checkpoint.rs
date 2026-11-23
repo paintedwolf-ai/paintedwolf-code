@@ -13,7 +13,7 @@ use std::{
 pub struct Checkpoint {
     file: File,
     sliding: Cache,
-    globals: [bool; 4],
+    globals: Vec<bool>,
 }
 
 impl Checkpoint {
@@ -22,12 +22,12 @@ impl Checkpoint {
             return Err("invalid prefix checkpoint offset".into());
         }
         let mut file = private_file()?;
-        let mut globals = [false; 4];
+        let mut globals = vec![false; cache.globals.len()];
         for (index, bank) in cache.globals.iter().enumerate() {
             let Some(bank) = bank else { continue };
             let kv = bank.borrow();
             for array in [&kv.keys, &kv.values] {
-                for head in 0..2 {
+                for head in 0..cache.profile.global_heads as i32 {
                     let row = array.index((0, head, ..cache.offset, ..)).contiguous()?;
                     let values = row.try_as_slice::<half::f16>()?;
                     // F16 bytes retain their exact representation.
@@ -60,11 +60,21 @@ impl Checkpoint {
                 continue;
             }
             let mut kv = KV {
-                keys: Array::zeros::<half::f16>(&[1, 2, cache.capacity, 512])?,
-                values: Array::zeros::<half::f16>(&[1, 2, cache.capacity, 512])?,
+                keys: Array::zeros::<half::f16>(&[
+                    1,
+                    cache.profile.global_heads as i32,
+                    cache.capacity,
+                    512,
+                ])?,
+                values: Array::zeros::<half::f16>(&[
+                    1,
+                    cache.profile.global_heads as i32,
+                    cache.capacity,
+                    512,
+                ])?,
             };
             for array in [&mut kv.keys, &mut kv.values] {
-                for head in 0..2 {
+                for head in 0..cache.profile.global_heads as i32 {
                     // Every bit pattern is a valid F16 storage value.
                     let bytes = unsafe {
                         std::slice::from_raw_parts_mut(
@@ -126,7 +136,7 @@ mod tests {
     use std::os::unix::fs::MetadataExt;
 
     fn source() -> Cache {
-        let mut cache = Cache::new(1024).unwrap();
+        let mut cache = Cache::new(1024, crate::profile::E4B).unwrap();
         for (layer, dimension) in [(0, 256), (5, 512), (23, 512)] {
             let data: Vec<_> = (0..2 * 3 * dimension)
                 .map(|i| half::f16::from_f32(((i + layer as i32) % 127) as f32))
@@ -203,6 +213,6 @@ mod tests {
         let mut checkpoint = Checkpoint::save(&source()).unwrap();
         checkpoint.file.set_len(0).unwrap();
         assert!(checkpoint.restore().is_err());
-        assert!(Checkpoint::save(&Cache::new(1024).unwrap()).is_err());
+        assert!(Checkpoint::save(&Cache::new(1024, crate::profile::E4B).unwrap()).is_err());
     }
 }

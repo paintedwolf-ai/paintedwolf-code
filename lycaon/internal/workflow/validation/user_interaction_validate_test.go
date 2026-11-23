@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
@@ -41,7 +42,7 @@ func TestValidateUserInteractionGatesAcceptsHitlConsultedWithoutOnEnter(t *testi
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "intake",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{"hitl_consulted:intake"},
 				Next:         "done",
 			},
