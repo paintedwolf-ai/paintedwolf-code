@@ -154,18 +154,32 @@ func RunReaper(in io.Reader) int {
 // without close-on-exec; the runtime marks every descriptor it opens, so only
 // those strays lack it. Standard streams stay.
 func closeInheritedDescriptors() {
-	entries, err := os.ReadDir("/dev/fd")
-	if err != nil {
-		return
+	dir, err := os.Open("/dev/fd")
+	if err == nil {
+		names, readErr := dir.Readdirnames(-1)
+		_ = dir.Close()
+		if readErr == nil {
+			for _, name := range names {
+				if fd, err := strconv.Atoi(name); err == nil && fd > 2 {
+					closeInheritedDescriptor(fd)
+				}
+			}
+			return
+		}
 	}
-	for _, entry := range entries {
-		fd, err := strconv.Atoi(entry.Name())
-		if err != nil || fd <= 2 {
-			continue
+
+	// A confined reaper may have no readable descriptor directory.
+	var limit unix.Rlimit
+	if unix.Getrlimit(unix.RLIMIT_NOFILE, &limit) == nil {
+		for fd := 3; uint64(fd) < uint64(limit.Cur); fd++ {
+			closeInheritedDescriptor(fd)
 		}
-		if flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err == nil && flags&unix.FD_CLOEXEC == 0 {
-			_ = unix.Close(fd)
-		}
+	}
+}
+
+func closeInheritedDescriptor(fd int) {
+	if flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0); err == nil && flags&unix.FD_CLOEXEC == 0 {
+		_ = unix.Close(fd)
 	}
 }
 
