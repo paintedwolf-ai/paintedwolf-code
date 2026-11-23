@@ -281,3 +281,131 @@ func TestResolveNextStepsFormatsNestedWaitConditionsAndPartialCalls(t *testing.T
 		t.Fatalf("complete step with missing nested template should be suppressed, got %+v", suppressed)
 	}
 }
+
+func TestResolveNextStepsPreservesStepIdentityAndObserverProvenance(t *testing.T) {
+	rule := &Rule{
+		Namespace:     "painted-wolf/security",
+		ID:            "CRED_STEP_PROVENANCE",
+		Anchor:        AnchorCredentialAssignment,
+		RequiresFacts: []string{"paintedwolf.listed"},
+		NextSteps: &NextSteps{
+			Steps: []NextStep{
+				{
+					When:      "paintedwolf.listed",
+					Tool:      "secret_generate",
+					Args:      map[string]any{"format": "base64url", "scope": "chat"},
+					Say:       "For a new credential, use {{ call }} and carry its returned reference.",
+					Otherwise: "Report protected generation need.",
+				},
+				{
+					Tool: "secret_generate",
+					Args: map[string]any{"format": "base64url", "scope": "chat"},
+					Say:  "For a new credential, use {{ call }} and carry its returned reference.",
+					Or: []NextStep{
+						{
+							Tool: "ask_user",
+							Say:  "Fallback to {{ call }}.",
+						},
+					},
+				},
+				{
+					Tool:      "recall",
+					Say:       "Recall via {{ call }}.",
+					Otherwise: "No recall or view available.",
+					Or: []NextStep{
+						{
+							Tool: "view_image",
+							Say:  "Inspect via {{ call }}.",
+						},
+						{
+							Tool: "ask_user",
+							Say:  "Ask via {{ call }}.",
+						},
+					},
+				},
+				{
+					Tool:      "task",
+					Say:       "Dispatch via {{ call }}.",
+					Otherwise: "Escalation unavailable.",
+				},
+			},
+		},
+	}
+
+	var observed []ResolvedSteps
+	key := new(int)
+	ActiveNextStepObservers.Store(key, NextStepObserver(func(gotRule *Rule, resolved ResolvedSteps) {
+		if gotRule == rule {
+			observed = append(observed, resolved)
+		}
+	}))
+	defer ActiveNextStepObservers.Delete(key)
+
+	gc := reachContext(toolreach.Offered([]string{"secret_generate", "view_image"}))
+	gc.Published["paintedwolf.listed"] = false
+	got := ResolveNextSteps(rule, gc)
+
+	if len(observed) != 1 {
+		t.Fatalf("expected 1 observed evaluation, got %d", len(observed))
+	}
+	gcScenario := reachContext(toolreach.Offered([]string{"secret_generate"}))
+	gcScenario.FromScenario = true
+	_ = ResolveNextSteps(rule, gcScenario)
+	if len(observed) != 1 {
+		t.Fatalf("scenario evaluation must not notify observer, got %d", len(observed))
+	}
+
+	wantOutcomes := []struct {
+		prefix  string
+		outcome StepResolutionOutcome
+		calls   int
+		hasText bool
+	}{
+		{"steps[0]", StepOutcomeDisabled, 0, false},
+		{"steps[1]", StepOutcomeEmittedCall, 1, true},
+		{"steps[1].or[0]", StepOutcomeUnselected, 0, false},
+		{"steps[2]", StepOutcomeOmitted, 0, false},
+		{"steps[2].or[0]", StepOutcomeEmittedCall, 1, true},
+		{"steps[2].or[1]", StepOutcomeUnselected, 0, false},
+		{"steps[3]", StepOutcomeEmittedOtherwise, 0, true},
+	}
+	if len(got.Resolutions) != len(wantOutcomes) {
+		t.Fatalf("resolutions len = %d, want %d (%+v)", len(got.Resolutions), len(wantOutcomes), got.Resolutions)
+	}
+	for i, w := range wantOutcomes {
+		res := got.Resolutions[i]
+		if res.QualifiedRule != rule.Qualified() || res.Anchor != rule.Anchor || res.RuleID != rule.ID {
+			t.Fatalf("res[%d] identity = %+v", i, res)
+		}
+		if res.BranchPrefix != w.prefix || res.Outcome != w.outcome || len(res.SelectedCalls) != w.calls || (res.RenderedText != "") != w.hasText {
+			t.Fatalf("res[%d] = %+v, want %+v", i, res, w)
+		}
+	}
+}
+
+func TestNextStepObserversAreIndependentRegistrations(t *testing.T) {
+	rule := stepRule(NextStep{Tool: "view_image", Say: "View with {{ call }}."})
+	gc := reachContext(toolreach.Offered([]string{"view_image"}))
+
+	var first, second int
+	firstKey, secondKey := new(int), new(int)
+	ActiveNextStepObservers.Store(firstKey, NextStepObserver(func(got *Rule, _ ResolvedSteps) {
+		if got == rule {
+			first++
+		}
+	}))
+	ActiveNextStepObservers.Store(secondKey, NextStepObserver(func(got *Rule, _ ResolvedSteps) {
+		if got == rule {
+			second++
+		}
+	}))
+	defer ActiveNextStepObservers.Delete(secondKey)
+
+	ResolveNextSteps(rule, gc)
+	ActiveNextStepObservers.Delete(firstKey)
+	ResolveNextSteps(rule, gc)
+
+	if first != 1 || second != 2 {
+		t.Fatalf("observer counts first=%d second=%d, want 1 and 2", first, second)
+	}
+}

@@ -40,18 +40,21 @@ func (h *Harness) recordRefusal(out *[]FiredOutcome, anchor, evLabel string, cel
 	actCopy := joinActionCopy(fix, ref.Copy["instead"])
 	calls := extractRefusalNextCalls(ref)
 	rule := h.ruleByAnchorAndCode(anchor, ref.Code())
+	resolved, hasResolved := h.takeObservedNextSteps(rule)
 	if actCopy != "" || len(calls) > 0 || (rule != nil && rule.NextSteps != nil) {
 		*out = append(*out, FiredOutcome{
-			Anchor:         anchor,
-			RuleID:         ref.Code(),
-			EventLabel:     evLabel,
-			Cell:           cell,
-			FixCopy:        fix,
-			ActionCopy:     actCopy,
-			CheckClaims:    checkClaims && !cell.IsBoundary,
-			NextCalls:      calls,
-			Steps:          resolveRuleStepOutcomes(rule, actCopy, calls),
-			ExercisedEdges: h.snapshotExercisedEdges(),
+			Anchor:           anchor,
+			RuleID:           ref.Code(),
+			EventLabel:       evLabel,
+			Cell:             cell,
+			FixCopy:          fix,
+			ActionCopy:       actCopy,
+			CheckClaims:      checkClaims && !cell.IsBoundary,
+			NextCalls:        calls,
+			HasResolvedSteps: hasResolved,
+			StepsText:        resolved.Text,
+			Steps:            buildFiredStepOutcomes(rule, resolved),
+			ExercisedEdges:   h.snapshotExercisedEdges(),
 		})
 	}
 }
@@ -66,21 +69,25 @@ func (h *Harness) drainAdvisoriesTo(out *[]FiredOutcome, anchor, evLabel string,
 		actCopy := joinActionCopy(fix, adv.Copy["instead"])
 		calls := extractDecisionNextCalls(adv)
 		rule := h.ruleByAnchorAndCode(anchor, adv.Code)
+		resolved, hasResolved := h.takeObservedNextSteps(rule)
 		if actCopy != "" || len(calls) > 0 || (rule != nil && rule.NextSteps != nil) {
 			*out = append(*out, FiredOutcome{
-				Anchor:         anchor,
-				RuleID:         adv.Code,
-				EventLabel:     evLabel,
-				Cell:           cell,
-				FixCopy:        fix,
-				ActionCopy:     actCopy,
-				CheckClaims:    checkClaims && !cell.IsBoundary,
-				NextCalls:      calls,
-				Steps:          resolveRuleStepOutcomes(rule, actCopy, calls),
-				ExercisedEdges: slices.Clone(edges),
+				Anchor:           anchor,
+				RuleID:           adv.Code,
+				EventLabel:       evLabel,
+				Cell:             cell,
+				FixCopy:          fix,
+				ActionCopy:       actCopy,
+				CheckClaims:      checkClaims && !cell.IsBoundary,
+				NextCalls:        calls,
+				HasResolvedSteps: hasResolved,
+				StepsText:        resolved.Text,
+				Steps:            buildFiredStepOutcomes(rule, resolved),
+				ExercisedEdges:   slices.Clone(edges),
 			})
 		}
 	}
+	h.clearObservedNextSteps()
 }
 
 func (h *Harness) runDoomLoopRejectedProducers(ctx context.Context, cells []AuthCell) []FiredOutcome {
@@ -134,6 +141,8 @@ func (h *Harness) runDoomLoopRejectedProducers(ctx context.Context, cells []Auth
 // RunLifecycleHookProducers executes production hook producers indexed by their
 // lifecycle anchor across coordinator, worker, and boundary cells.
 func (h *Harness) RunLifecycleHookProducers(ctx context.Context, cells []AuthCell) ([]FiredOutcome, error) {
+	restore := h.installNextStepObserver()
+	defer restore()
 	byAnchor := map[string]func(context.Context, []AuthCell) []FiredOutcome{
 		oar.AnchorSessionPreInvoke:         h.runSessionPreInvokeHook,
 		oar.AnchorCoordinatorPreInvoke:     h.runCoordinatorPreInvokeHook,

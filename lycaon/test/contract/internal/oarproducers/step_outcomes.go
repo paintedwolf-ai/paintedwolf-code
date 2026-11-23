@@ -21,18 +21,21 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// FiredStepOutcome records whether one compiled OAR next-steps entry emitted a
-// structured recovery call or rendered its declared otherwise fallback copy.
+// FiredStepOutcome pairs one observed oar.StepResolution from ResolveNextSteps
+// with the compiled rule step metadata needed for its catalog InstructionID.
 type FiredStepOutcome struct {
-	StepPath         string
-	InstructionID    string
-	Action           string
-	Tool             string
-	Program          string
-	Otherwise        string
-	EmittedCall      bool
-	EmittedOtherwise bool
-	MatchedCalls     []toolreach.Call
+	StepPath      string
+	InstructionID string
+	Action        string
+	Tool          string
+	Program       string
+	Otherwise     string
+	HasGuard      bool
+	GuardApplies  bool
+	Reachable     bool
+	Outcome       oar.StepResolutionOutcome
+	SelectedCalls []toolreach.Call
+	RenderedText  string
 }
 
 // ObserveIndirectProducerCall inspects the active runtime call stack to derive
@@ -91,7 +94,7 @@ func extractDecisionNextCalls(d *oar.Decision) []toolreach.Call {
 }
 
 func (h *Harness) ruleByAnchorAndCode(anchor, code string) *oar.Rule {
-	if h == nil || h.Rules == nil {
+	if h == nil || h.Rules == nil || code == "" {
 		return nil
 	}
 	short := code
@@ -106,82 +109,91 @@ func (h *Harness) ruleByAnchorAndCode(anchor, code string) *oar.Rule {
 	return nil
 }
 
-func resolveRuleStepOutcomes(rule *oar.Rule, fixCopy string, nextCalls []toolreach.Call) []FiredStepOutcome {
-	if rule == nil || rule.NextSteps == nil {
+func buildFiredStepOutcomes(rule *oar.Rule, resolved oar.ResolvedSteps) []FiredStepOutcome {
+	if rule == nil || rule.NextSteps == nil || len(resolved.Resolutions) == 0 {
 		return nil
 	}
-	var out []FiredStepOutcome
-	var walk func(prefix string, steps []oar.NextStep)
-	walk = func(prefix string, steps []oar.NextStep) {
+	stepByPath := make(map[string]oar.NextStep, len(resolved.Resolutions))
+	var indexSteps func(prefix string, steps []oar.NextStep)
+	indexSteps = func(prefix string, steps []oar.NextStep) {
 		for i, st := range steps {
-			stepPath := fmt.Sprintf("%s[%d]", prefix, i)
-			action := st.Tool
-			prog := ""
-			if len(st.Program) > 0 {
-				prog = st.Program[0]
-				action = "command:" + prog
-			}
-			if st.Tool == "request_tools" {
-				if need, ok := st.Args["need"].(string); ok && need != "" {
-					action = "request_tools(need=" + need + ")"
-				}
-			}
-			if action != "" {
-				matched := matchStepCalls(st, prog, nextCalls)
-				otherwise := strings.TrimSpace(st.Otherwise)
-				emittedOtherwise := len(matched) == 0 && otherwise != "" && !strings.Contains(otherwise, "{{") && strings.Contains(fixCopy, otherwise)
-				instrID := fmt.Sprintf("oar:%s:%s|policy/%s#next-steps:%s||%s", rule.Anchor, rule.ID, rule.ID, stepPath, action)
-				out = append(out, FiredStepOutcome{
-					StepPath:         stepPath,
-					InstructionID:    instrID,
-					Action:           action,
-					Tool:             st.Tool,
-					Program:          prog,
-					Otherwise:        otherwise,
-					EmittedCall:      len(matched) > 0,
-					EmittedOtherwise: emittedOtherwise,
-					MatchedCalls:     matched,
-				})
-			}
-			walk(stepPath+".or", st.Or)
+			p := fmt.Sprintf("%s[%d]", prefix, i)
+			stepByPath[p] = st
+			indexSteps(p+".or", st.Or)
 		}
 	}
-	walk("steps", rule.NextSteps.Steps)
+	indexSteps("steps", rule.NextSteps.Steps)
+
+	out := make([]FiredStepOutcome, 0, len(resolved.Resolutions))
+	for _, res := range resolved.Resolutions {
+		st, ok := stepByPath[res.BranchPrefix]
+		if !ok {
+			continue
+		}
+		action := st.Tool
+		prog := ""
+		if len(st.Program) > 0 {
+			prog = st.Program[0]
+			action = "command:" + prog
+		}
+		if st.Tool == "request_tools" {
+			if need, ok := st.Args["need"].(string); ok && need != "" {
+				action = "request_tools(need=" + need + ")"
+			}
+		}
+		instrID := ""
+		if action != "" {
+			instrID = fmt.Sprintf("oar:%s:%s|policy/%s#next-steps:%s||%s", rule.Anchor, rule.ID, rule.ID, res.BranchPrefix, action)
+		}
+		out = append(out, FiredStepOutcome{
+			StepPath:      res.BranchPrefix,
+			InstructionID: instrID,
+			Action:        action,
+			Tool:          st.Tool,
+			Program:       prog,
+			Otherwise:     strings.TrimSpace(st.Otherwise),
+			HasGuard:      res.HasGuard,
+			GuardApplies:  res.GuardApplies,
+			Reachable:     res.Reachable,
+			Outcome:       res.Outcome,
+			SelectedCalls: slices.Clone(res.SelectedCalls),
+			RenderedText:  res.RenderedText,
+		})
+	}
 	return out
 }
 
-func matchStepCalls(st oar.NextStep, prog string, calls []toolreach.Call) []toolreach.Call {
-	var out []toolreach.Call
-	for _, c := range calls {
-		if prog != "" {
-			if c.Tool == "command" && c.Program == prog {
-				out = append(out, c)
-			}
-			continue
+// installNextStepObserver records resolutions only for this harness's own rule
+// pointers, so concurrently running harnesses cannot see each other's steps.
+func (h *Harness) installNextStepObserver() func() {
+	oar.ActiveNextStepObservers.Store(h, oar.NextStepObserver(func(r *oar.Rule, resolved oar.ResolvedSteps) {
+		if !h.rulePtrs[r] {
+			return
 		}
-		if c.Tool != st.Tool {
-			continue
-		}
-		if st.Tool == "request_tools" {
-			if need, ok := st.Args["need"].(string); ok && need != "" && fmt.Sprint(c.Args["need"]) != need {
-				continue
-			}
-		}
-		argsMatch := true
-		for k, rawVal := range st.Args {
-			sVal, isStr := rawVal.(string)
-			if isStr && !strings.Contains(sVal, "{{") {
-				if fmt.Sprint(c.Args[k]) != sVal {
-					argsMatch = false
-					break
-				}
-			}
-		}
-		if argsMatch {
-			out = append(out, c)
-		}
+		h.edgeMu.Lock()
+		h.observedNextSteps[r] = resolved
+		h.edgeMu.Unlock()
+	}))
+	return func() { oar.ActiveNextStepObservers.Delete(h) }
+}
+
+func (h *Harness) takeObservedNextSteps(rule *oar.Rule) (oar.ResolvedSteps, bool) {
+	if rule == nil {
+		return oar.ResolvedSteps{}, false
 	}
-	return out
+	h.edgeMu.Lock()
+	defer h.edgeMu.Unlock()
+	res, ok := h.observedNextSteps[rule]
+	if ok {
+		delete(h.observedNextSteps, rule)
+	}
+	return res, ok
+}
+
+func (h *Harness) clearObservedNextSteps() {
+	h.edgeMu.Lock()
+	clear(h.observedNextSteps)
+	h.edgeMu.Unlock()
 }
 
 type transcriptStoreMap struct {
@@ -240,6 +252,7 @@ func (h *Harness) wireAmbientGrounding() {
 func (h *Harness) resetExercisedEdges() {
 	h.edgeMu.Lock()
 	h.exercisedEdges = nil
+	clear(h.observedNextSteps)
 	h.edgeMu.Unlock()
 }
 

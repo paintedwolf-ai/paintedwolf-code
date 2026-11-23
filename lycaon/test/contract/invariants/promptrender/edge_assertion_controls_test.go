@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/heldcall"
+	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/toolreach"
@@ -529,6 +531,30 @@ func assertOARProducerEdgeOutcomes(
 	}
 }
 
+func callsSliceEqual(a, b []toolreach.Call) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !reflect.DeepEqual(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func stepActionRendered(st oarproducers.FiredStepOutcome, stepActions map[string]bool) bool {
+	if stepActions[st.Action] || (st.Tool != "" && stepActions[st.Tool]) {
+		return true
+	}
+	if st.Program != "" {
+		return strings.Contains(st.RenderedText, "`"+st.Program+" ") ||
+			strings.Contains(st.RenderedText, "\""+st.Program+" ") ||
+			strings.Contains(st.RenderedText, "`"+st.Program+"`")
+	}
+	return false
+}
+
 func recordVerifiedStepEvidence(
 	t *testing.T,
 	s *promptrender.Stock,
@@ -540,17 +566,47 @@ func recordVerifiedStepEvidence(
 	skipStep stepCheckFilter,
 ) {
 	t.Helper()
+	if !o.HasResolvedSteps || len(o.Steps) == 0 {
+		return
+	}
 	copyBody := o.ActionCopy
 	if strings.TrimSpace(copyBody) == "" {
 		copyBody = o.FixCopy
 	}
-	present := renderedActionsInProse(s.Names, copyBody)
+	presentInCopy := renderedActionsInProse(s.Names, copyBody)
 	inputState := o.Cell.Label + "|" + o.EventLabel
 
-	for _, st := range o.Steps {
+	type callSpan struct{ start, end int }
+	spans := make([]callSpan, len(o.Steps))
+	var expectedCalls []toolreach.Call
+	var expectedTexts []string
+	for i, st := range o.Steps {
+		spans[i].start = len(expectedCalls)
+		if st.Outcome == oar.StepOutcomeEmittedCall {
+			expectedCalls = append(expectedCalls, st.SelectedCalls...)
+		}
+		spans[i].end = len(expectedCalls)
+		if (st.Outcome == oar.StepOutcomeEmittedCall || st.Outcome == oar.StepOutcomeEmittedOtherwise) && strings.TrimSpace(st.RenderedText) != "" {
+			expectedTexts = append(expectedTexts, st.RenderedText)
+		}
+	}
+	joinedText := strings.TrimSpace(strings.Join(expectedTexts, " "))
+	callsDelivered := callsSliceEqual(expectedCalls, o.NextCalls)
+	joinedTextDelivered := joinedText == "" || strings.Contains(copyBody, joinedText)
+
+	for i, st := range o.Steps {
+		if st.InstructionID == "" {
+			continue
+		}
 		if skipStep != nil && skipStep(shortID, st.StepPath, st.Action) {
 			continue
 		}
+		trimmedStepText := strings.TrimSpace(st.RenderedText)
+		stepTextDelivered := trimmedStepText != "" && joinedTextDelivered && strings.Contains(copyBody, trimmedStepText)
+		stepCallsDelivered := callsDelivered && spans[i].end > spans[i].start && spans[i].end <= len(o.NextCalls) &&
+			callsSliceEqual(st.SelectedCalls, o.NextCalls[spans[i].start:spans[i].end])
+		stepActions := renderedActionsInProse(s.Names, st.RenderedText)
+
 		ambKey := o.Cell.Role + "|" + st.InstructionID
 		if shortID == "AMBIENT_UNGROUNDED_COMPLETION" {
 			ev := ambientByStep[ambKey]
@@ -558,26 +614,28 @@ func recordVerifiedStepEvidence(
 				ev = &ambientStepEvidence{}
 				ambientByStep[ambKey] = ev
 			}
-			if st.EmittedCall && slices.Contains(o.Cell.Auth.Offered, st.Tool) && present[st.Action] && ev.emittedState == "" {
+			if st.Outcome == oar.StepOutcomeEmittedCall && st.GuardApplies && st.Reachable &&
+				stepCallsDelivered && stepTextDelivered && stepActionRendered(st, stepActions) &&
+				slices.Contains(o.Cell.Auth.Offered, st.Tool) && ev.emittedState == "" {
 				ev.emittedState = inputState
-			} else if !st.EmittedCall && !present[st.Tool] && len(o.ExercisedEdges) > 0 && ev.omittedState == "" {
+			} else if st.Outcome == oar.StepOutcomeDisabled && st.HasGuard && !st.GuardApplies && !st.Reachable &&
+				len(st.SelectedCalls) == 0 && trimmedStepText == "" && !presentInCopy[st.Tool] &&
+				len(o.ExercisedEdges) > 0 && ev.omittedState == "" {
 				ev.omittedState = inputState
 				ev.omittedEdges = slices.Clone(o.ExercisedEdges)
 			}
 			continue
 		}
 
-		if st.EmittedCall {
-			for _, mc := range st.MatchedCalls {
+		if st.Outcome == oar.StepOutcomeEmittedCall {
+			for _, mc := range st.SelectedCalls {
 				isOffered := slices.Contains(o.Cell.Auth.Offered, mc.Tool)
 				isLoadable := o.Cell.Reach.Status(mc.Tool) == toolreach.Loadable
 				if !isOffered && !isLoadable {
 					t.Fatalf("step %s emitted unreachable tool %s on %s", st.InstructionID, mc.Tool, o.Cell.Label)
 				}
 			}
-			stepRendered := present[st.Action] || (st.Tool != "" && present[st.Tool]) ||
-				(st.Program != "" && (strings.Contains(copyBody, "`"+st.Program+" ") || strings.Contains(copyBody, "\""+st.Program+" ") || strings.Contains(copyBody, "`"+st.Program+"`")))
-			if !stepRendered {
+			if !st.GuardApplies || !st.Reachable || !stepCallsDelivered || !stepTextDelivered || !stepActionRendered(st, stepActions) {
 				continue
 			}
 			for _, eid := range o.ExercisedEdges {
@@ -598,13 +656,14 @@ func recordVerifiedStepEvidence(
 		if strings.HasPrefix(st.Action, "request_tools(need=") {
 			targetTool = strings.TrimSuffix(strings.TrimPrefix(st.Action, "request_tools(need="), ")")
 		}
-		if o.Cell.Role == "worker" && !workerReachableTools[targetTool] && !present[targetTool] {
+		if o.Cell.Role == "worker" && !workerReachableTools[targetTool] &&
+			!presentInCopy[st.Action] && !presentInCopy[targetTool] && len(st.SelectedCalls) == 0 {
 			checked := ""
-			if st.Otherwise != "" && !strings.Contains(st.Otherwise, "{{") {
-				if st.EmittedOtherwise {
+			if st.Otherwise != "" {
+				if st.Outcome == oar.StepOutcomeEmittedOtherwise && st.GuardApplies && !st.Reachable && stepTextDelivered {
 					checked = "omitted_otherwise"
 				}
-			} else {
+			} else if (st.Outcome == oar.StepOutcomeOmitted || st.Outcome == oar.StepOutcomeDisabled) && trimmedStepText == "" {
 				checked = "omitted_unavailable"
 			}
 			if checked != "" {
@@ -625,17 +684,22 @@ func recordVerifiedStepEvidence(
 }
 
 // TestDisposableControlRetainsFiredRuleAndSiblingWhileFailingRemovedStepOrCheck
-// verifies that keeping CREDENTIAL_LITERAL firing with valid FixCopy and sibling
-// ask_user evidence fails the secret_generate obligation when either (a) a
-// disposable catalog suppresses steps[0]'s runtime emission or (b) the step check
-// on steps[0] is skipped, while sibling steps[1] (ask_user) retains its evidence.
+// verifies that step provenance preserves each step's own obligation across
+// suppressed targets, skipped checks, identical-argument same-tool siblings,
+// unselected alternatives, and undelivered step text.
 func TestDisposableControlRetainsFiredRuleAndSiblingWhileFailingRemovedStepOrCheck(t *testing.T) {
 	s := mustStock(t)
 	moduleRoot := configlayout.FindModuleRoot()
-	origSteps, err := os.ReadFile(filepath.Join(moduleRoot, "config", "packs", "painted-wolf", "security", "host", "next-steps", "CREDENTIAL_LITERAL.yaml"))
+	origStepsBytes, err := os.ReadFile(filepath.Join(moduleRoot, "config", "packs", "painted-wolf", "security", "host", "next-steps", "CREDENTIAL_LITERAL.yaml"))
 	if err != nil {
 		t.Fatalf("read stock next-steps CREDENTIAL_LITERAL.yaml: %v", err)
 	}
+	origPolicyBytes, err := os.ReadFile(filepath.Join(moduleRoot, "config", "packs", "painted-wolf", "security", "policy", "CREDENTIAL_LITERAL.yaml"))
+	if err != nil {
+		t.Fatalf("read stock policy CREDENTIAL_LITERAL.yaml: %v", err)
+	}
+	origSteps := string(origStepsBytes)
+	origPolicy := string(origPolicyBytes)
 
 	coordStates, err := hoststate.CoordinatorStates(t.Context())
 	if err != nil {
@@ -657,23 +721,29 @@ func TestDisposableControlRetainsFiredRuleAndSiblingWhileFailingRemovedStepOrChe
 	}
 
 	const (
-		targetInstr  = "oar:credential.assignment:CREDENTIAL_LITERAL|policy/CREDENTIAL_LITERAL#next-steps:steps[0]||secret_generate"
-		siblingInstr = "oar:credential.assignment:CREDENTIAL_LITERAL|policy/CREDENTIAL_LITERAL#next-steps:steps[1]||ask_user"
+		targetInstr         = "oar:credential.assignment:CREDENTIAL_LITERAL|policy/CREDENTIAL_LITERAL#next-steps:steps[0]||secret_generate"
+		askSiblingInstr     = "oar:credential.assignment:CREDENTIAL_LITERAL|policy/CREDENTIAL_LITERAL#next-steps:steps[1]||ask_user"
+		sameToolSiblingInst = "oar:credential.assignment:CREDENTIAL_LITERAL|policy/CREDENTIAL_LITERAL#next-steps:steps[3]||secret_generate"
+		unselectedOrInstr   = "oar:credential.assignment:CREDENTIAL_LITERAL|policy/CREDENTIAL_LITERAL#next-steps:steps[0].or[0]||secret_generate"
+		weakSiblingInstr    = "oar:credential.assignment:WEAK_CREDENTIAL_LITERAL|policy/WEAK_CREDENTIAL_LITERAL#next-steps:steps[0]||secret_generate"
+		origStepZeroBlock   = "  - tool: \"secret_generate\"\n" +
+			"    say: \"For a new credential, use {{ call }} and carry its returned reference.\"\n" +
+			"    otherwise: \"If you need a new credential, report that need to the coordinating session for protected generation.\"\n"
 	)
 
 	var diagReport strings.Builder
 
 	t.Run("disposable_catalog_suppresses_target_step_action", func(t *testing.T) {
 		mutatedSteps := strings.Replace(
-			string(origSteps),
+			origSteps,
 			"  - tool: \"secret_generate\"\n",
 			"  - tool: \"secret_generate\"\n    when: \"paintedwolf.listed\"\n",
 			1,
 		)
-		if mutatedSteps == string(origSteps) {
+		if mutatedSteps == origSteps {
 			t.Fatal("failed to mutate steps[0] in CREDENTIAL_LITERAL next-steps")
 		}
-		dispEff := buildDisposableSecurityNextStepsCatalog(t, moduleRoot, mutatedSteps)
+		dispEff := buildDisposableSecurityCatalog(t, moduleRoot, mutatedSteps, "")
 		dispStock := cloneStockWithCatalog(t, s, dispEff)
 		dispLedger, err := interactions.BuildInteractionLedger(dispEff, s.Schemas, s.Names, nil)
 		if err != nil {
@@ -681,7 +751,7 @@ func TestDisposableControlRetainsFiredRuleAndSiblingWhileFailingRemovedStepOrChe
 		}
 		closeExercisedEdgeScopes(t, dispStock, dispLedger, reps, nil)
 		valErr := dispLedger.ValidateZeroUnexplainedGaps()
-		assertTargetFailedAndSiblingRetained(t, dispLedger, valErr, targetInstr, siblingInstr, "disposable_catalog_suppresses_target_step_action", &diagReport)
+		assertTargetFailedAndSiblingRetained(t, dispLedger, valErr, targetInstr, askSiblingInstr, "ask_user", "disposable_catalog_suppresses_target_step_action", &diagReport)
 	})
 
 	t.Run("stock_catalog_skips_target_step_check", func(t *testing.T) {
@@ -693,7 +763,97 @@ func TestDisposableControlRetainsFiredRuleAndSiblingWhileFailingRemovedStepOrChe
 			return ruleID == "CREDENTIAL_LITERAL" && stepPath == "steps[0]" && action == "secret_generate"
 		})
 		valErr := skipLedger.ValidateZeroUnexplainedGaps()
-		assertTargetFailedAndSiblingRetained(t, skipLedger, valErr, targetInstr, siblingInstr, "stock_catalog_skips_target_step_check", &diagReport)
+		assertTargetFailedAndSiblingRetained(t, skipLedger, valErr, targetInstr, askSiblingInstr, "ask_user", "stock_catalog_skips_target_step_check", &diagReport)
+	})
+
+	t.Run("disposable_same_tool_identical_args_sibling_retains_own_credit_while_suppressed_target_fails", func(t *testing.T) {
+		suppressedTargetWithArgs := "  - tool: \"secret_generate\"\n" +
+			"    when: \"paintedwolf.listed\"\n" +
+			"    args:\n" +
+			"      format: \"base64url\"\n" +
+			"      scope: \"chat\"\n" +
+			"    say: \"For a new credential, use {{ call }} and carry its returned reference.\"\n" +
+			"    otherwise: \"If you need a new credential, report that need to the coordinating session for protected generation.\"\n"
+		identicalSiblingWithArgs := "  - tool: \"secret_generate\"\n" +
+			"    args:\n" +
+			"      format: \"base64url\"\n" +
+			"      scope: \"chat\"\n" +
+			"    say: \"For a new credential, use {{ call }} and carry its returned reference.\"\n" +
+			"    otherwise: \"If you need a new credential, report that need to the coordinating session for protected generation.\"\n"
+		mutatedSteps := strings.Replace(origSteps, origStepZeroBlock, suppressedTargetWithArgs, 1) + identicalSiblingWithArgs
+		if !strings.Contains(mutatedSteps, "when: \"paintedwolf.listed\"") {
+			t.Fatal("failed to construct identical-args same-tool sibling fixture")
+		}
+		dispEff := buildDisposableSecurityCatalog(t, moduleRoot, mutatedSteps, "")
+		dispStock := cloneStockWithCatalog(t, s, dispEff)
+		dispLedger, err := interactions.BuildInteractionLedger(dispEff, s.Schemas, s.Names, nil)
+		if err != nil {
+			t.Fatalf("BuildInteractionLedger(same-tool sibling): %v", err)
+		}
+		closeExercisedEdgeScopes(t, dispStock, dispLedger, reps, nil)
+		valErr := dispLedger.ValidateZeroUnexplainedGaps()
+		assertTargetFailedAndSiblingRetained(
+			t, dispLedger, valErr,
+			targetInstr, sameToolSiblingInst, "secret_generate",
+			"disposable_same_tool_identical_args_sibling_retains_own_credit_while_suppressed_target_fails",
+			&diagReport,
+		)
+	})
+
+	t.Run("disposable_unselected_or_alternative_does_not_gain_sibling_credit", func(t *testing.T) {
+		primaryWithIdenticalOr := "  - tool: \"secret_generate\"\n" +
+			"    args:\n" +
+			"      format: \"base64url\"\n" +
+			"      scope: \"chat\"\n" +
+			"    say: \"For a new credential, use {{ call }} and carry its returned reference.\"\n" +
+			"    otherwise: \"If you need a new credential, report that need to the coordinating session for protected generation.\"\n" +
+			"    or:\n" +
+			"      - tool: \"secret_generate\"\n" +
+			"        args:\n" +
+			"          format: \"base64url\"\n" +
+			"          scope: \"chat\"\n" +
+			"        say: \"For a new credential, use {{ call }} and carry its returned reference.\"\n"
+		mutatedSteps := strings.Replace(origSteps, origStepZeroBlock, primaryWithIdenticalOr, 1)
+		dispEff := buildDisposableSecurityCatalog(t, moduleRoot, mutatedSteps, "")
+		dispStock := cloneStockWithCatalog(t, s, dispEff)
+		dispLedger, err := interactions.BuildInteractionLedger(dispEff, s.Schemas, s.Names, nil)
+		if err != nil {
+			t.Fatalf("BuildInteractionLedger(unselected or): %v", err)
+		}
+		closeExercisedEdgeScopes(t, dispStock, dispLedger, reps, nil)
+		valErr := dispLedger.ValidateZeroUnexplainedGaps()
+		assertTargetFailedAndSiblingRetained(
+			t, dispLedger, valErr,
+			unselectedOrInstr, targetInstr, "secret_generate",
+			"disposable_unselected_or_alternative_does_not_gain_sibling_credit",
+			&diagReport,
+		)
+	})
+
+	t.Run("disposable_missing_step_text_delivery_loses_credit", func(t *testing.T) {
+		mutatedPolicy := strings.Replace(
+			origPolicy,
+			"{{ paintedwolf.next_steps }}",
+			"{% if paintedwolf.listed %}{{ paintedwolf.next_steps }}{% endif %}",
+			1,
+		)
+		if mutatedPolicy == origPolicy {
+			t.Fatal("failed to gate paintedwolf.next_steps in CREDENTIAL_LITERAL policy")
+		}
+		dispEff := buildDisposableSecurityCatalog(t, moduleRoot, "", mutatedPolicy)
+		dispStock := cloneStockWithCatalog(t, s, dispEff)
+		dispLedger, err := interactions.BuildInteractionLedger(dispEff, s.Schemas, s.Names, nil)
+		if err != nil {
+			t.Fatalf("BuildInteractionLedger(missing step text): %v", err)
+		}
+		closeExercisedEdgeScopes(t, dispStock, dispLedger, reps, nil)
+		valErr := dispLedger.ValidateZeroUnexplainedGaps()
+		assertTargetFailedAndSiblingRetained(
+			t, dispLedger, valErr,
+			targetInstr, weakSiblingInstr, "secret_generate",
+			"disposable_missing_step_text_delivery_loses_credit",
+			&diagReport,
+		)
 	})
 
 	if outDir := strings.TrimSpace(os.Getenv("PW_INTERACTION_LEDGER_DIR")); outDir != "" {
@@ -711,7 +871,7 @@ func assertTargetFailedAndSiblingRetained(
 	t *testing.T,
 	ledger *interactions.InteractionLedger,
 	valErr error,
-	targetInstr, siblingInstr, label string,
+	targetInstr, siblingInstr, siblingAction, label string,
 	diag *strings.Builder,
 ) {
 	t.Helper()
@@ -734,14 +894,19 @@ func assertTargetFailedAndSiblingRetained(
 	if len(siblingOpen) > 0 {
 		t.Fatalf("%s: expected sibling %s (coordinator) to retain its closed evidence, but found open gaps=%+v", label, siblingInstr, siblingOpen)
 	}
+	for _, ex := range ledger.ExecutedEdgeAssertions {
+		if ex.InstructionID == targetInstr && ex.Recipient == "coordinator" && ex.CheckedOutcome == "emitted" {
+			t.Fatalf("%s: target %s unexpectedly received emitted credit: %+v", label, targetInstr, ex)
+		}
+	}
 	var siblingClosed []interactions.ExecutedEdgeAssertion
 	for _, ex := range ledger.ExecutedEdgeAssertions {
-		if ex.InstructionID == siblingInstr && ex.Recipient == "coordinator" && ex.AssertedAction == "ask_user" && ex.CheckedOutcome == "emitted" {
+		if ex.InstructionID == siblingInstr && ex.Recipient == "coordinator" && ex.AssertedAction == siblingAction && ex.CheckedOutcome == "emitted" {
 			siblingClosed = append(siblingClosed, ex)
 		}
 	}
 	if len(siblingClosed) == 0 {
-		t.Fatalf("%s: expected sibling %s to retain ExecutedEdgeAssertions for ask_user on coordinator", label, siblingInstr)
+		t.Fatalf("%s: expected sibling %s to retain ExecutedEdgeAssertions for %s on coordinator", label, siblingInstr, siblingAction)
 	}
 
 	fmt.Fprintf(diag, "[%s]\n", label)
@@ -756,7 +921,7 @@ func assertTargetFailedAndSiblingRetained(
 	diag.WriteString("\n")
 }
 
-func buildDisposableSecurityNextStepsCatalog(t *testing.T, moduleRoot, mutatedSteps string) *extpacks.EffectiveCatalog {
+func buildDisposableSecurityCatalog(t *testing.T, moduleRoot, mutatedSteps, mutatedPolicy string) *extpacks.EffectiveCatalog {
 	t.Helper()
 	srcSec := filepath.Join(moduleRoot, "config", "packs", "painted-wolf", "security")
 	dstSec := filepath.Join(t.TempDir(), "security-disposable")
@@ -781,9 +946,17 @@ func buildDisposableSecurityNextStepsCatalog(t *testing.T, moduleRoot, mutatedSt
 	if err != nil {
 		t.Fatalf("copy security pack: %v", err)
 	}
-	stepFile := filepath.Join(dstSec, "host", "next-steps", "CREDENTIAL_LITERAL.yaml")
-	if err := os.WriteFile(stepFile, []byte(mutatedSteps), 0o644); err != nil {
-		t.Fatalf("write mutated CREDENTIAL_LITERAL.yaml: %v", err)
+	if mutatedSteps != "" {
+		stepFile := filepath.Join(dstSec, "host", "next-steps", "CREDENTIAL_LITERAL.yaml")
+		if err := os.WriteFile(stepFile, []byte(mutatedSteps), 0o644); err != nil {
+			t.Fatalf("write mutated next-steps CREDENTIAL_LITERAL.yaml: %v", err)
+		}
+	}
+	if mutatedPolicy != "" {
+		polFile := filepath.Join(dstSec, "policy", "CREDENTIAL_LITERAL.yaml")
+		if err := os.WriteFile(polFile, []byte(mutatedPolicy), 0o644); err != nil {
+			t.Fatalf("write mutated policy CREDENTIAL_LITERAL.yaml: %v", err)
+		}
 	}
 
 	stockContent, err := extpacks.DiscoverStockContent()

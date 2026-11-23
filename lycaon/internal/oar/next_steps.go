@@ -2,6 +2,7 @@ package oar
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -294,10 +295,36 @@ func ruleFactRefs(r *Rule) map[string]bool {
 	return out
 }
 
+// StepResolutionOutcome describes how ResolveNextSteps resolved one step path.
+type StepResolutionOutcome string
+
+const (
+	StepOutcomeEmittedCall      StepResolutionOutcome = "emitted_call"
+	StepOutcomeEmittedOtherwise StepResolutionOutcome = "emitted_otherwise"
+	StepOutcomeOmitted          StepResolutionOutcome = "omitted"
+	StepOutcomeDisabled         StepResolutionOutcome = "disabled"
+	StepOutcomeUnselected       StepResolutionOutcome = "unselected"
+)
+
+// StepResolution records pre-concatenation provenance for one step or alternative.
+type StepResolution struct {
+	QualifiedRule string
+	Anchor        string
+	RuleID        string
+	BranchPrefix  string
+	HasGuard      bool
+	GuardApplies  bool
+	Reachable     bool
+	Outcome       StepResolutionOutcome
+	SelectedCalls []toolreach.Call
+	RenderedText  string
+}
+
 // ResolvedSteps is one occurrence's reachable steps.
 type ResolvedSteps struct {
-	Text  string
-	Calls []toolreach.Call
+	Text        string
+	Calls       []toolreach.Call
+	Resolutions []StepResolution
 }
 
 func assembleNextStepFacts(steps []NextStep, gc *GuardContext) {
@@ -320,25 +347,52 @@ func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
 	}
 	assembleNextStepFacts(r.NextSteps.Steps, gc)
 	facts := activation(gc)
-	ruleID := r.Qualified()
 	var sentences []string
 	for i, step := range r.NextSteps.Steps {
-		text, calls := resolveStep(ruleID, fmt.Sprintf("steps[%d]", i), i, step, gc, facts)
+		text, calls := resolveStep(r, fmt.Sprintf("steps[%d]", i), i, step, gc, facts, &out.Resolutions)
 		if strings.TrimSpace(text) != "" {
 			sentences = append(sentences, text)
 		}
 		out.Calls = append(out.Calls, calls...)
 	}
 	out.Text = strings.Join(sentences, " ")
+	recordResolvedNextSteps(r, gc, out)
 	return out
 }
 
-func resolveStep(ruleID, branchPrefix string, stepIndex int, step NextStep, gc *GuardContext, facts map[string]any) (string, []toolreach.Call) {
+func appendUnselectedAlternatives(r *Rule, parentPrefix string, startIdx int, alts []NextStep, resolutions *[]StepResolution) {
+	ruleID := r.Qualified()
+	for offset, alt := range alts {
+		prefix := fmt.Sprintf("%s.or[%d]", parentPrefix, startIdx+offset)
+		*resolutions = append(*resolutions, StepResolution{
+			QualifiedRule: ruleID,
+			Anchor:        r.Anchor,
+			RuleID:        r.ID,
+			BranchPrefix:  prefix,
+			HasGuard:      strings.TrimSpace(alt.When) != "",
+			Outcome:       StepOutcomeUnselected,
+		})
+		appendUnselectedAlternatives(r, prefix, 0, alt.Or, resolutions)
+	}
+}
+
+func resolveStep(r *Rule, branchPrefix string, stepIndex int, step NextStep, gc *GuardContext, facts map[string]any, resolutions *[]StepResolution) (string, []toolreach.Call) {
+	ruleID := r.Qualified()
+	hasGuard := strings.TrimSpace(step.When) != ""
 	applies, err := EvaluateCondition(step.When, gc)
-	if strings.TrimSpace(step.When) != "" && err == nil {
+	if hasGuard && err == nil {
 		recordRuleBranch(ruleID, branchPrefix+".when", stepIndex, gc, applies)
 	}
 	if err != nil || !applies {
+		*resolutions = append(*resolutions, StepResolution{
+			QualifiedRule: ruleID,
+			Anchor:        r.Anchor,
+			RuleID:        r.ID,
+			BranchPrefix:  branchPrefix,
+			HasGuard:      hasGuard,
+			Outcome:       StepOutcomeDisabled,
+		})
+		appendUnselectedAlternatives(r, branchPrefix, 0, step.Or, resolutions)
 		return "", nil
 	}
 	if call, built := stepCall(step, gc, facts); built {
@@ -349,16 +403,54 @@ func resolveStep(ruleID, branchPrefix string, stepIndex int, step NextStep, gc *
 				bound[name] = value
 			}
 			bound[stepCallBinding] = sequenceText(sequence)
-			return oarcore.RenderCopy(step.Say, bound), sequence
+			say := oarcore.RenderCopy(step.Say, bound)
+			outcome := StepOutcomeOmitted
+			var selected []toolreach.Call
+			rendered := ""
+			if strings.TrimSpace(say) != "" {
+				outcome = StepOutcomeEmittedCall
+				selected = slices.Clone(sequence)
+				rendered = say
+			}
+			*resolutions = append(*resolutions, StepResolution{
+				QualifiedRule: ruleID,
+				Anchor:        r.Anchor,
+				RuleID:        r.ID,
+				BranchPrefix:  branchPrefix,
+				HasGuard:      hasGuard,
+				GuardApplies:  true,
+				Reachable:     true,
+				Outcome:       outcome,
+				SelectedCalls: selected,
+				RenderedText:  rendered,
+			})
+			appendUnselectedAlternatives(r, branchPrefix, 0, step.Or, resolutions)
+			return say, sequence
 		}
 	}
 	recordRuleBranch(ruleID, branchPrefix+".reach", stepIndex, gc, false)
+	parentIdx := len(*resolutions)
+	*resolutions = append(*resolutions, StepResolution{
+		QualifiedRule: ruleID,
+		Anchor:        r.Anchor,
+		RuleID:        r.ID,
+		BranchPrefix:  branchPrefix,
+		HasGuard:      hasGuard,
+		GuardApplies:  true,
+		Outcome:       StepOutcomeOmitted,
+	})
 	for j, alternative := range step.Or {
-		if text, calls := resolveStep(ruleID, fmt.Sprintf("%s.or[%d]", branchPrefix, j), stepIndex, alternative, gc, facts); strings.TrimSpace(text) != "" {
+		if text, calls := resolveStep(r, fmt.Sprintf("%s.or[%d]", branchPrefix, j), stepIndex, alternative, gc, facts, resolutions); strings.TrimSpace(text) != "" {
+			appendUnselectedAlternatives(r, branchPrefix, j+1, step.Or[j+1:], resolutions)
 			return text, calls
 		}
 	}
-	return oarcore.RenderCopy(step.Otherwise, facts), nil
+	otherwise := oarcore.RenderCopy(step.Otherwise, facts)
+	if strings.TrimSpace(otherwise) != "" {
+		(*resolutions)[parentIdx].Outcome = StepOutcomeEmittedOtherwise
+		(*resolutions)[parentIdx].RenderedText = otherwise
+	}
+	return otherwise, nil
 }
 
 func sequenceText(sequence []toolreach.Call) string {

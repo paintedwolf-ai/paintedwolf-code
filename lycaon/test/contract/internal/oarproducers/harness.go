@@ -92,16 +92,18 @@ func (c AuthCell) Session(sessionID string) *api.Session {
 // production hook entry point along with its emitted next-step calls and
 // dynamically observed indirect producer edges.
 type FiredOutcome struct {
-	Anchor         string
-	RuleID         string
-	EventLabel     string
-	Cell           AuthCell
-	FixCopy        string
-	ActionCopy     string
-	CheckClaims    bool
-	NextCalls      []toolreach.Call
-	Steps          []FiredStepOutcome
-	ExercisedEdges []string
+	Anchor           string
+	RuleID           string
+	EventLabel       string
+	Cell             AuthCell
+	FixCopy          string
+	ActionCopy       string
+	CheckClaims      bool
+	NextCalls        []toolreach.Call
+	HasResolvedSteps bool
+	StepsText        string
+	Steps            []FiredStepOutcome
+	ExercisedEdges   []string
 }
 
 type noopNudgeFormatter struct{}
@@ -187,29 +189,31 @@ func (evidenceStoreStub) LoadLedger(context.Context, string) (evidence.Ledger, e
 // hook producers (BlockPlane, policyfacts.Service, turnguards.Service,
 // secretharvest, coordgrounding.AmbientGroundingCoordinator, and workercompletion).
 type Harness struct {
-	ModuleRoot      string
-	Loader          *oar.Loader
-	Rules           *oar.RuleSet
-	Pipeline        *oar.GuardPipeline
-	Renderer        *oar.Renderer
-	BlockPlane      *toolfeedback.BlockPlane
-	Policy          *policyfacts.Service
-	Feedback        *policyfeedback.Service
-	TurnGuards      *turnguards.Service
-	Harvest         *secretharvest.Runtime
-	Ambient         *coordgrounding.AmbientGroundingCoordinator
-	Sessions        *sessionStoreMap
-	Transcripts     *transcriptStoreMap
-	WorkerQueue     *workerQueueMap
-	Surfaces        *surfaceMap
-	Profiles        *profileMap
-	FactTypes       map[string]string
-	CapabilityFacts map[string]bool
-	EvalCount       int
-	advisoryMu      sync.Mutex
-	advisories      []*oar.Decision
-	edgeMu          sync.Mutex
-	exercisedEdges  []string
+	ModuleRoot        string
+	Loader            *oar.Loader
+	Rules             *oar.RuleSet
+	Pipeline          *oar.GuardPipeline
+	Renderer          *oar.Renderer
+	BlockPlane        *toolfeedback.BlockPlane
+	Policy            *policyfacts.Service
+	Feedback          *policyfeedback.Service
+	TurnGuards        *turnguards.Service
+	Harvest           *secretharvest.Runtime
+	Ambient           *coordgrounding.AmbientGroundingCoordinator
+	Sessions          *sessionStoreMap
+	Transcripts       *transcriptStoreMap
+	WorkerQueue       *workerQueueMap
+	Surfaces          *surfaceMap
+	Profiles          *profileMap
+	FactTypes         map[string]string
+	CapabilityFacts   map[string]bool
+	EvalCount         int
+	advisoryMu        sync.Mutex
+	advisories        []*oar.Decision
+	edgeMu            sync.Mutex
+	exercisedEdges    []string
+	rulePtrs          map[*oar.Rule]bool
+	observedNextSteps map[*oar.Rule]oar.ResolvedSteps
 }
 
 // NewHarness constructs a production OAR hook harness for eff and schemas.
@@ -298,24 +302,32 @@ func NewHarness(eff *extpacks.EffectiveCatalog, schemas *toolschema.Config, engi
 	policy.SetCredentialSlotProvider(func(context.Context, *api.Session) *secretmint.Inspector { return inspector })
 	policy.SetSecretFingerprinter(fp)
 
+	rulePtrs := make(map[*oar.Rule]bool, len(rs.All()))
+	for _, r := range rs.All() {
+		if r != nil {
+			rulePtrs[r] = true
+		}
+	}
 	h := &Harness{
-		ModuleRoot:      moduleRoot,
-		Loader:          loader,
-		Rules:           rs,
-		Pipeline:        pipeline,
-		Renderer:        renderer,
-		BlockPlane:      bp,
-		Policy:          policy,
-		Feedback:        fb,
-		TurnGuards:      &turnguards.Service{ToolPolicy: policy, Feedback: fb},
-		Harvest:         harvest,
-		Sessions:        sessions,
-		Transcripts:     transcripts,
-		WorkerQueue:     workerQueue,
-		Surfaces:        surfaces,
-		Profiles:        profiles,
-		FactTypes:       factTypes,
-		CapabilityFacts: capFacts,
+		ModuleRoot:        moduleRoot,
+		Loader:            loader,
+		Rules:             rs,
+		Pipeline:          pipeline,
+		Renderer:          renderer,
+		BlockPlane:        bp,
+		Policy:            policy,
+		Feedback:          fb,
+		TurnGuards:        &turnguards.Service{ToolPolicy: policy, Feedback: fb},
+		Harvest:           harvest,
+		Sessions:          sessions,
+		Transcripts:       transcripts,
+		WorkerQueue:       workerQueue,
+		Surfaces:          surfaces,
+		Profiles:          profiles,
+		FactTypes:         factTypes,
+		CapabilityFacts:   capFacts,
+		rulePtrs:          rulePtrs,
+		observedNextSteps: map[*oar.Rule]oar.ResolvedSteps{},
 	}
 	policy.SetIgnoredCredentialCandidate(func(_ context.Context, _, _ string) bool {
 		h.recordExercisedEdges(ObserveIndirectProducerCall(moduleRoot, "paintedwolf.credential_ignored")...)
@@ -456,6 +468,8 @@ func selectCellsForRejectedRule(rule *oar.Rule, rIdx int, cells []AuthCell) []Au
 // h.Rules and exercises real BlockPlane.RejectObservation and doom-loop
 // escalation producers across cells without rule-ID switches.
 func (h *Harness) RunToolRejectedProducers(ctx context.Context, cells []AuthCell) ([]FiredOutcome, error) {
+	restore := h.installNextStepObserver()
+	defer restore()
 	var outcomes []FiredOutcome
 	if len(cells) == 0 {
 		return nil, nil
