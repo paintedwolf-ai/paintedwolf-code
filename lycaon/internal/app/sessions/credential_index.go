@@ -32,6 +32,8 @@ type credentialRoot struct {
 	full      bool
 	queue     []repochange.Event
 	running   bool
+	// applying marks a step taken off the queue but not yet settled.
+	applying  bool
 	cancel    context.CancelFunc
 	withdrawn bool
 	passes    int
@@ -250,7 +252,7 @@ func (i *credentialIndex) await(ctx context.Context, root *credentialRoot, activ
 
 // current requires i.mu.
 func (i *credentialIndex) current(root *credentialRoot) bool {
-	return root.ready && root.err == nil && len(root.queue) == 0 &&
+	return root.ready && root.err == nil && len(root.queue) == 0 && !root.applying &&
 		!root.coverageExpired(i.coverage(root.path), i.now()) &&
 		repochange.EpochCurrent(root.path, root.epoch)
 }
@@ -304,6 +306,7 @@ func (i *credentialIndex) run(ctx context.Context, root *credentialRoot) {
 			i.mu.Unlock()
 			return
 		}
+		root.applying = true
 		i.mu.Unlock()
 		err := i.apply(ctx, root, step)
 		i.mu.Lock()
@@ -358,6 +361,7 @@ func (i *credentialIndex) next(root *credentialRoot) (credentialStep, bool) {
 
 // settle records a step's outcome. It requires i.mu.
 func (i *credentialIndex) settle(root *credentialRoot, step credentialStep, err error) {
+	root.applying = false
 	if err != nil {
 		root.err, root.ready = err, false
 	} else {
