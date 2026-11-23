@@ -532,6 +532,9 @@ host_facts:
    type: string
  - name: paintedwolf.search_provider_statuses
    type: list<string>
+ - name: paintedwolf.web_fallback_empty_count
+   type: int
+   observation: Fallback providers that ran without results when no provider found a hit.
  - name: paintedwolf.period_max_year
    type: int
  - name: paintedwolf.period_min_year

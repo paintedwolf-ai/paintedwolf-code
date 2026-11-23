@@ -17,10 +17,6 @@ const (
 	// crawlOnlySeedProbePath marks stub provider hits that should launch a host
 	// crawl without entering verification — see discovererSeedingURLs in tests.
 	crawlOnlySeedProbePath = "/.lycaon-seed-probe"
-	// seedGateMaxWait is the pacing-slot queue allowance for provider seed
-	// probes. It is short so a paced provider fails fast instead of
-	// serializing the whole seed wave behind one slot.
-	seedGateMaxWait = 3 * time.Second
 )
 
 type searchOrigin string
@@ -86,7 +82,7 @@ func (c *providerSeedChannel) Probe(ctx context.Context, req seedRequest, emit f
 	start := time.Now()
 	outcome, cached := c.d.registry.cachedProviderSeed(c.providerID, req.Query, budget, c.d.settings)
 	if !cached {
-		outcome = p.Search(withProviderGateWait(ctx, seedGateMaxWait), c.d.settings, req.Query, budget)
+		outcome = p.Search(withProviderGateWait(ctx, firstAttemptGateWait), c.d.settings, req.Query, budget)
 		c.d.registry.storeProviderSeed(c.providerID, req.Query, budget, c.d.settings, outcome)
 	}
 	if !outcome.ok {

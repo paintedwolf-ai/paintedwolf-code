@@ -40,6 +40,9 @@ type WebSearchResult struct {
 	ProvidersSkipped []SkippedProvider `json:"providers_skipped"`
 	Partial          bool              `json:"partial"`
 	Error            string            `json:"error,omitempty"`
+	// FallbackEmptyCount counts fallback providers that ran when no provider
+	// found a hit.
+	FallbackEmptyCount int `json:"fallback_empty_count,omitempty"`
 	// RepeatSearch marks a whole-search cache hit for the same normalized query.
 	RepeatSearch bool `json:"repeat_search,omitempty"`
 	// Rerank says what the local engine ranked inside this search; absent when it answered nothing.

@@ -31,6 +31,10 @@ type providerGate struct {
 	coolUntil time.Time
 }
 
+// firstAttemptGateWait bounds how long a provider's first call in a search
+// waits for a pacing slot. It stays inside fanOutZeroHitTimeout.
+const firstAttemptGateWait = 3 * time.Second
+
 type gateWaitCtxKey struct{}
 
 // withProviderGateWait allows a bounded wait for a reserved pacing slot.

@@ -57,6 +57,7 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"env_assignment", oarcore.TypeBool, FactTierHost, ""},
 	{"mime", oarcore.TypeString, FactTierHost, ""},
 	{"search_provider_statuses", oarcore.TypeListString, FactTierHost, ""},
+	{"web_fallback_empty_count", oarcore.TypeInt, FactTierHost, ""},
 	{"period_max_year", oarcore.TypeInt, FactTierHost, ""},
 	{"period_min_year", oarcore.TypeInt, FactTierHost, ""},
 	{"wait_allowed_conditions", oarcore.TypeListString, FactTierHost, ""},

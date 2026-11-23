@@ -154,7 +154,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 			return "", &toolrejection.ToolReject{
 				Code:        webSearchProvidersFailedCode,
 				Observation: webSearchProvidersFailedObservation,
-				Data:        map[string]any{"detail": result.Error, "search_provider_statuses": statuses},
+				Data:        map[string]any{"detail": result.Error, "search_provider_statuses": statuses, "web_fallback_empty_count": result.FallbackEmptyCount},
 			}
 		}
 		if !result.OK {
