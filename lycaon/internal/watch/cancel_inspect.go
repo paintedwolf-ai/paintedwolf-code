@@ -3,14 +3,10 @@ package watch
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
-	awaitstore "github.com/lycaon/lycaon/internal/await"
 )
 
 // CancelReceipt is the single final receipt returned when a watch is canceled.
