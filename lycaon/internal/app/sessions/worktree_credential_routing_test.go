@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/db"
@@ -101,7 +102,11 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		}
 	}))
 
-	ledger := f.AttachLedger(t, sourceledger.Timing{WindowSettle: 0})
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time {
+		ch := make(chan time.Time)
+		close(ch)
+		return ch
+	}})
 	_, err = f.Database.ExecContext(t.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
 		VALUES ('outside-r1', ?, ?, 'outside', 0, '2026-01-01T00:00:00Z', 'outside')`, testdbseed.DefaultProjectID, projectroot.OutsidePath)
 	testutil.FailErr(t, "insert outside root row", err)
@@ -113,7 +118,7 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		}
 		tc.Effects.CredentialFiles = files
 		tc.Source.OutsideRoot = projectroot.OutsideRef("outside-r1")
-		tc.Files.ApprovedWriteAreas = []string{siblingWT, unrelatedDir}
+		tc.Files.GrantedWriteRoots = []string{siblingWT, unrelatedDir}
 	}
 
 	releaseGrant := projectpaths.SetGrantedAccessSource(func(_, _, abs string, _ bool) (projectpaths.Access, bool) {

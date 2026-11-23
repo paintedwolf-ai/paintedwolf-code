@@ -18,6 +18,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type recordingBlueprintObserver struct {
+	paths []string
+}
+
+func (r *recordingBlueprintObserver) AfterWrite(_ context.Context, _, relPath string) {
+	r.paths = append(r.paths, relPath)
+}
+
 func runGitRoutingTest(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
@@ -54,7 +62,10 @@ func TestMutationRoutingSeparatesAttachedLinkedMovedAndExternalPaths(t *testing.
 		}
 	}))
 
-	var blueprintDisplays []string
+	blueprintObs := &recordingBlueprintObserver{}
+	drainBlueprint := SetBlueprintWriteObserver(blueprintObs)
+	t.Cleanup(func() { testutil.FailErr(t, "drain blueprint observer", drainBlueprint(context.Background())) })
+
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{ProjectID: "proj-routing", SessionID: "sess-routing"},
 		Source: tools.InvocationSource{
@@ -64,11 +75,6 @@ func TestMutationRoutingSeparatesAttachedLinkedMovedAndExternalPaths(t *testing.
 			},
 			ActiveRootID:        "r1",
 			SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-		},
-		Effects: tools.InvocationEffects{
-			OnBlueprintWrite: func(_ context.Context, paths ...string) {
-				blueprintDisplays = append(blueprintDisplays, paths...)
-			},
 		},
 	}
 
@@ -88,7 +94,7 @@ func TestMutationRoutingSeparatesAttachedLinkedMovedAndExternalPaths(t *testing.
 		mutationLocation{abs: filepath.Join(siblingWT, "pkg/added.go"), display: "../sibling-wt/pkg/added.go"},
 		mutationLocation{abs: filepath.Join(prefixCollision, ".env"), display: "../workspace-other/.env"},
 		mutationLocation{abs: filepath.Join(unrelated, ".env"), display: "../unrelated/.env"},
-		mutationLocation{display: "unclassified-external"},
+		mutationLocation{display: "blueprint.md"},
 	)
 	repochange.UseDebounce(t.Context(), repochange.DefaultDebounce)()
 
@@ -98,8 +104,8 @@ func TestMutationRoutingSeparatesAttachedLinkedMovedAndExternalPaths(t *testing.
 	if repochange.CurrentEpoch(primary) != primaryStart || repochange.CurrentEpoch(secondary) != secondaryStart {
 		t.Fatal("external/linked mutations advanced attached-root epochs")
 	}
-	if len(blueprintDisplays) != 4 {
-		t.Fatalf("blueprint observer saw %v, want 4 display paths", blueprintDisplays)
+	if len(blueprintObs.paths) != 1 || blueprintObs.paths[0] != "blueprint.md" {
+		t.Fatalf("blueprint observer saw %v, want [blueprint.md]", blueprintObs.paths)
 	}
 	obsAfter, err := cat.Directories.ObserveDirectory(t.Context(), "proj-routing", wtRoot, "pkg", sourcecatalog.DirectoryRead{})
 	testutil.FailErr(t, "re-observe sibling directory", err)
