@@ -610,3 +610,85 @@ func intersectSubtrees(projectedRoot, admittedPath string, admittedIsDir bool) (
 	}
 	return "", false
 }
+
+// ContainingRegisteredCheckout resolves the nearest enclosing Git working tree
+// for path and verifies its forward and reverse registration metadata.
+func ContainingRegisteredCheckout(path string) (RegisteredCheckout, bool) {
+	dir := existingAncestorDir(path)
+	if dir == "" {
+		return RegisteredCheckout{}, false
+	}
+	repo, ok := Discover(dir)
+	if !ok || repo.Root == "" || repo.CommonDir == "" {
+		return RegisteredCheckout{}, false
+	}
+	commonCanon := CanonicalDir(repo.CommonDir)
+	if commonCanon == "" || isMarkedBare(commonCanon) {
+		return RegisteredCheckout{}, false
+	}
+	return VerifyRegisteredCheckout(commonCanon, repo.Root)
+}
+
+// ReadCheckoutHead reads branch and detached HEAD state directly from adminDir/HEAD.
+func ReadCheckoutHead(commonDir, adminDir string) (branch, headSHA string, detached bool) {
+	line, exists, valid := readOptionalSingleLine(filepath.Join(adminDir, "HEAD"))
+	if !exists || !valid || line == "" {
+		return "", "", false
+	}
+	if strings.HasPrefix(line, "ref:") {
+		ref := strings.TrimSpace(strings.TrimPrefix(line, "ref:"))
+		branch = strings.TrimPrefix(ref, "refs/heads/")
+		if commonDir != "" && ref != "" {
+			if sha, refExists, refValid := readOptionalSingleLine(filepath.Join(commonDir, filepath.FromSlash(ref))); refExists && refValid && isHexHash(sha) {
+				headSHA = sha
+			}
+		}
+		return branch, headSHA, false
+	}
+	if isHexHash(line) {
+		return "", line, true
+	}
+	return "", "", false
+}
+
+func existingAncestorDir(path string) string {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(trimmed)
+	if err != nil {
+		return ""
+	}
+	cur := filepath.Clean(abs)
+	for {
+		if info, statErr := os.Stat(cur); statErr == nil {
+			if info.IsDir() {
+				return CanonicalDir(cur)
+			}
+			parent := filepath.Dir(cur)
+			if parent != "" {
+				return CanonicalDir(parent)
+			}
+			return ""
+		}
+		next := filepath.Dir(cur)
+		if next == cur || next == "" {
+			return ""
+		}
+		cur = next
+	}
+}
+
+func isHexHash(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') && (ch < 'A' || ch > 'F') {
+			return false
+		}
+	}
+	return true
+}

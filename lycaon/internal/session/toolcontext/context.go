@@ -86,6 +86,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		tctx.Source.GitMutations = m.gitMutations
 		tctx.Source.Observations = m.observations
 		tctx.Source.SourceMutations = m.sourceMutations
+		tctx.Source.CheckoutUsage = m.checkoutUsage
 		tctx.Source.EditorDocuments = m.editorDocuments
 		tctx.Effects.CredentialFiles = m.CredentialFiles
 		directories := m.execution.SessionDirectories(ctx, sess)

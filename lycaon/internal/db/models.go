@@ -2117,6 +2117,33 @@ type SourceVersions struct {
 	Landing              string         `json:"landing"`
 }
 
+type SourceWorktreeUsageReceipts struct {
+	RootSessionID  string `json:"root_session_id"`
+	ActivityID     string `json:"activity_id"`
+	WorktreeID     string `json:"worktree_id"`
+	Relation       string `json:"relation"`
+	ActorSessionID string `json:"actor_session_id"`
+	WorkerID       string `json:"worker_id"`
+	ProjectID      string `json:"project_id"`
+	RepoID         string `json:"repo_id"`
+	RecordedTs     string `json:"recorded_ts"`
+}
+
+type SourceWorktreeUsages struct {
+	ProjectID       string `json:"project_id"`
+	RepoID          string `json:"repo_id"`
+	WorktreeID      string `json:"worktree_id"`
+	RootSessionID   string `json:"root_session_id"`
+	ActorSessionID  string `json:"actor_session_id"`
+	WorkerID        string `json:"worker_id"`
+	CreatedByActor  int64  `json:"created_by_actor"`
+	UsedByActor     int64  `json:"used_by_actor"`
+	FirstActivityID string `json:"first_activity_id"`
+	LastActivityID  string `json:"last_activity_id"`
+	FirstTs         string `json:"first_ts"`
+	LastTs          string `json:"last_ts"`
+}
+
 type SourceWorktrees struct {
 	ID               string `json:"id"`
 	ProjectID        string `json:"project_id"`

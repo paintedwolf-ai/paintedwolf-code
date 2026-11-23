@@ -206,6 +206,8 @@ var tableLifetimes = map[string]tableLifetime{
 	"source_recovery_reclaim_queue":   cascadeOwnedBy("projects"),
 	"source_versions":                 cascadeOwnedBy("projects"),
 	"source_worktrees":                cascadeOwnedBy("projects"),
+	"source_worktree_usage_receipts":  cascadeOwnedBy("sessions"),
+	"source_worktree_usages":          cascadeOwnedBy("sessions"),
 	"turn_attempt_closeouts":          cascadeOwnedBy("turn_attempts"),
 	"turn_attempts":                   cascadeOwnedBy("turns"),
 	"turn_clocks":                     cascadeOwnedBy("sessions"),

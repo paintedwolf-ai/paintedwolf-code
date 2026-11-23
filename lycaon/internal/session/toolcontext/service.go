@@ -47,6 +47,7 @@ type Service struct {
 	gitMutations    tools.SourceGitMutations
 	observations    *sourceledger.Inventory
 	sourceMutations sourceeffect.Journal
+	checkoutUsage   tools.CheckoutUsageRecorder
 	editorDocuments tools.EditorDocuments
 	CredentialFiles tools.CredentialFiles
 	repoProvider    repoinfo.Provider
@@ -83,6 +84,7 @@ func (m *Service) SetSourceLedger(source sourceledger.Recorder, outsideReads sou
 	m.gitMutations = mutations
 	m.observations = observations
 }
-func (m *Service) SetSourceMutations(source sourceeffect.Journal)     { m.sourceMutations = source }
-func (m *Service) SetEditorDocuments(documents tools.EditorDocuments) { m.editorDocuments = documents }
+func (m *Service) SetSourceMutations(source sourceeffect.Journal)          { m.sourceMutations = source }
+func (m *Service) SetCheckoutUsage(usage tools.CheckoutUsageRecorder)      { m.checkoutUsage = usage }
+func (m *Service) SetEditorDocuments(documents tools.EditorDocuments)      { m.editorDocuments = documents }
 func (m *Service) SetRepoProvider(provider repoinfo.Provider)         { m.repoProvider = provider }

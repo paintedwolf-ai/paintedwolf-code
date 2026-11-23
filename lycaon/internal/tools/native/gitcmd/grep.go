@@ -139,6 +139,7 @@ func (p Prepared) grep(ctx context.Context, tc tools.ToolContext, streams comman
 			break
 		}
 	}
+	tc.RecordCheckoutUsed(context.WithoutCancel(ctx), repo.Root, p.activityID(tc))
 	if g.matched {
 		return 0, nil
 	}

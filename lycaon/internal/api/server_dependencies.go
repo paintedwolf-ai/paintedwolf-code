@@ -39,6 +39,7 @@ import (
 	"github.com/lycaon/lycaon/internal/preflight"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/projectliveness"
 	"github.com/lycaon/lycaon/internal/projectsource"
@@ -175,6 +176,7 @@ type SourceDependencies struct {
 	SourceInventory sourceapi.InventoryService
 	CatalogSnapshot sourceapi.CatalogSnapshotFunc
 	WatchNeedsSeed  func(rootPath string) bool
+	Worktrees       *worktrees.Inventory
 }
 
 type ExtensionsDependencies struct {

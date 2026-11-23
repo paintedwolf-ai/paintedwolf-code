@@ -64,49 +64,55 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 		}
 	}
 	scopedTC := withRepoRoot(tc, repo.Root)
+	if spec.Name == "git worktree" {
+		return runWorktree(ctx, p, tc, dir, repo, stderr)
+	}
+	var res toolcontract.ProducerResult
 	switch spec.Name {
 	case "git rm", "git mv":
-		return runFileMutation(ctx, p, scopedTC, dir, repo, out, stderr)
+		res, err = runFileMutation(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git add":
-		return runAdd(ctx, p, scopedTC, dir, repo, out, stderr)
+		res, err = runAdd(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git commit":
-		return runCommit(ctx, p, scopedTC, dir, repo, out, stderr)
+		res, err = runCommit(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git restore":
-		return runRestore(ctx, p, scopedTC, dir, repo, stderr)
+		res, err = runRestore(ctx, p, scopedTC, dir, repo, stderr)
 	case "git checkout":
-		return runCheckout(ctx, p, scopedTC, dir, repo, out, stderr)
+		res, err = runCheckout(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git switch":
-		return runSwitch(ctx, p, scopedTC, out, stderr)
+		res, err = runSwitch(ctx, p, scopedTC, out, stderr)
 	case "git merge":
-		return runMerge(ctx, p, scopedTC, out, stderr)
+		res, err = runMerge(ctx, p, scopedTC, out, stderr)
 	case "git cherry-pick":
-		return runSequence(ctx, p, scopedTC, "cherry-pick", out, stderr)
+		res, err = runSequence(ctx, p, scopedTC, "cherry-pick", out, stderr)
 	case "git revert":
-		return runSequence(ctx, p, scopedTC, "revert", out, stderr)
+		res, err = runSequence(ctx, p, scopedTC, "revert", out, stderr)
 	case "git rebase":
-		return runRebase(ctx, p, scopedTC, out, stderr)
+		res, err = runRebase(ctx, p, scopedTC, out, stderr)
 	case "git stash":
-		return runStash(ctx, p, scopedTC, dir, repo, out, stderr)
+		res, err = runStash(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git reset":
-		return runReset(ctx, p, scopedTC, dir, repo, out, stderr)
+		res, err = runReset(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git clean":
-		return runClean(ctx, p, scopedTC, dir, repo, out, stderr)
-	case "git worktree":
-		return runWorktree(ctx, p, tc, dir, repo, stderr)
+		res, err = runClean(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git fetch":
-		return runNetwork(ctx, p, scopedTC, repo, out, stderr, toolcontract.EffectCompleted)
+		res, err = runNetwork(ctx, p, scopedTC, repo, out, stderr, toolcontract.EffectCompleted)
 	case "git push":
-		return runNetwork(ctx, p, scopedTC, repo, out, stderr, toolcontract.EffectCompleted)
+		res, err = runNetwork(ctx, p, scopedTC, repo, out, stderr, toolcontract.EffectCompleted)
 	case "git ls-remote":
-		return runNetwork(ctx, p, scopedTC, repo, out, stderr, toolcontract.NoEffect)
+		res, err = runNetwork(ctx, p, scopedTC, repo, out, stderr, toolcontract.NoEffect)
 	case "git pull":
-		return runPull(ctx, p, scopedTC, repo, out, stderr)
+		res, err = runPull(ctx, p, scopedTC, repo, out, stderr)
 	case "git bisect", "git bisect start", "git bisect skip", "git bisect run", "git bisect reset",
 		"git bisect log", "git bisect terms", "git bisect visualize", "git bisect view":
-		return runBisect(ctx, p, scopedTC, repo, out, stderr)
+		res, err = runBisect(ctx, p, scopedTC, repo, out, stderr)
 	default:
 		return settleMutationError(fmt.Errorf("unhandled git command %s", spec.Name), toolcontract.NoEffect)
 	}
+	if err == nil && res.Status == 0 {
+		tc.RecordCheckoutUsed(context.WithoutCancel(ctx), repo.Root, p.activityID(tc))
+	}
+	return res, err
 }
 
 func runAdd(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {

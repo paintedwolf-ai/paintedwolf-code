@@ -91,6 +91,25 @@ func (inv *Inventory) NotifyChange(projectID, repoID string) uint64 {
 	return gen
 }
 
+// ScheduleRefresh marks the repository dirty and starts a background reconciliation
+// pass when none is running, returning immediately without blocking command delivery.
+func (inv *Inventory) ScheduleRefresh(ctx context.Context, spec RepoSpec) {
+	key, slot, err := inv.slot(spec)
+	if err != nil {
+		return
+	}
+	slot.mu.Lock()
+	slot.desiredGen++
+	startWorker := !slot.running
+	if startWorker {
+		slot.running = true
+	}
+	slot.mu.Unlock()
+	if startWorker {
+		go inv.runRefreshLoop(context.WithoutCancel(ctx), key, slot)
+	}
+}
+
 // Read returns the inventory covering the latest requested generation, coalescing concurrent callers.
 func (inv *Inventory) Read(ctx context.Context, spec RepoSpec) ([]Checkout, error) {
 	if err := ctx.Err(); err != nil {

@@ -8,10 +8,12 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/board"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/session"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
@@ -22,11 +24,13 @@ type Deps struct {
 	Board *board.SnapshotBuilder
 	// CommitDrafter replaces the lite model for commit drafts; nil uses LLMService.
 	CommitDrafter   compaction.Summarizer
+	Database        db.Handle
 	LLMService      *llm.Service
 	ProjectRegistry project.Registry
 	RepoSetCache    *git.RepoSetCache
 	SessionStore    *sessionstore.Repositories
 	Sessions        *session.Host
+	Worktrees       *worktrees.Inventory
 	DataDir         string
 }
 
@@ -38,6 +42,7 @@ type Handler struct {
 	RepoSetCache    *git.RepoSetCache
 	SessionStore    sessionstore.SessionRepository
 	Sessions        *session.Host
+	Worktrees       *worktrees.Inventory
 	DataDir         string
 	// git is the board's Git manager; worktree verbs need the concrete manager.
 	git       *git.Manager
@@ -60,12 +65,24 @@ func New(responses *httpio.Responder, deps Deps) Handler {
 		httpio.Required{Name: "SessionStore.Sessions", Present: deps.SessionStore != nil && deps.SessionStore.Sessions != nil},
 		httpio.Required{Name: "Sessions", Present: deps.Sessions != nil},
 	)
+	wt := deps.Worktrees
+	if wt == nil && deps.Database != nil {
+		wt = worktrees.New(deps.Database, worktrees.Options{Git: manager})
+	}
 	return Handler{
 		Board: deps.Board, CommitDrafter: deps.CommitDrafter, LLMService: deps.LLMService,
 		ProjectRegistry: deps.ProjectRegistry, RepoSetCache: deps.RepoSetCache,
-		SessionStore: deps.SessionStore.Sessions, Sessions: deps.Sessions, DataDir: deps.DataDir,
+		SessionStore: deps.SessionStore.Sessions, Sessions: deps.Sessions, Worktrees: wt, DataDir: deps.DataDir,
 		git: manager, responses: responses,
 	}
+}
+
+// ScheduleWorktreeRefresh marks a project's repository checkouts dirty for background reconciliation.
+func (s *Handler) ScheduleWorktreeRefresh(ctx context.Context, projectID string) {
+	if s == nil || s.Worktrees == nil {
+		return
+	}
+	s.Worktrees.ScheduleRepoRefreshForProject(ctx, projectID)
 }
 
 // Manager returns the board's Git manager, the one every read goes through.

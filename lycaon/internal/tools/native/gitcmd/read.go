@@ -302,7 +302,7 @@ func (p Prepared) run(ctx context.Context, tc tools.ToolContext, streams command
 	if stderr == nil {
 		stderr = io.Discard
 	}
-	dir, _, status, err := resolveCommandRepo(ctx, p, tc, stderr, false)
+	dir, repo, status, err := resolveCommandRepo(ctx, p, tc, stderr, false)
 	if err != nil || status != 0 {
 		return status, err
 	}
@@ -326,6 +326,9 @@ func (p Prepared) run(ctx context.Context, tc tools.ToolContext, streams command
 	}
 	if _, werr := stderr.Write(diagnostics); werr != nil {
 		return 0, werr
+	}
+	if status == 0 {
+		tc.RecordCheckoutUsed(context.WithoutCancel(ctx), repo.Root, p.activityID(tc))
 	}
 	return status, nil
 }

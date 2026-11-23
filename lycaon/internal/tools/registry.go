@@ -237,6 +237,7 @@ type InvocationSource struct {
 	GitMutations    SourceGitMutations
 	Observations    *sourceledger.Inventory
 	SourceMutations sourceeffect.Journal
+	CheckoutUsage   CheckoutUsageRecorder
 	// EditorDocuments serves and lands text for files the person has open.
 	// Nil when the app runs without an editor host; tools then use the file.
 	EditorDocuments EditorDocuments

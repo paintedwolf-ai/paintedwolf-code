@@ -31,6 +31,7 @@ import (
 	"github.com/lycaon/lycaon/internal/people/personactions"
 	"github.com/lycaon/lycaon/internal/pkgregistry"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/projectliveness"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/scan"
@@ -291,6 +292,9 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 		deps.Source.FileOperations.HoldBeforeWorkForTest(hold)
 	}
 	b.sessions.Manager.ToolContext.SetSourceMutations(sourceMutations)
+	worktreeInventory := worktrees.New(b.storage.Database, worktrees.Options{Git: b.git.mgr})
+	deps.Source.Worktrees = worktreeInventory
+	b.sessions.Manager.ToolContext.SetCheckoutUsage(worktrees.NewToolUsageRecorder(worktreeInventory))
 	editorDocuments := editordoc.New(editordoc.NewStore(b.storage.Database), b.storage.SourceLedger, b.storage.SourceLedger.History, b.storage.Projects)
 	if b.worker.merge != nil {
 		b.worker.merge.Documents = editorDocuments

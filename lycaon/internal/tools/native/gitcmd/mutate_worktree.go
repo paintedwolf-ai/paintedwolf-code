@@ -168,6 +168,7 @@ func runWorktree(ctx context.Context, p Prepared, tc tools.ToolContext, dir stri
 		if addErr != nil {
 			return settleGitError(addErr, stderr, toolcontract.NoEffect)
 		}
+		tc.RecordCheckoutCreated(context.WithoutCancel(ctx), bound.Resolved.Abs, p.activityID(tc))
 	case "remove":
 		target := ops[1]
 		if !filepath.IsAbs(target) {
@@ -193,6 +194,7 @@ func runWorktree(ctx context.Context, p Prepared, tc tools.ToolContext, dir stri
 		if removeErr != nil {
 			return settleGitError(removeErr, stderr, toolcontract.NoEffect)
 		}
+		tc.NotifyCheckoutChange(context.WithoutCancel(ctx), repo.Root)
 	case "prune":
 		ctx, done, err := bindTargetLaunch(ctx, p, tc)
 		if err != nil {
@@ -205,6 +207,7 @@ func runWorktree(ctx context.Context, p Prepared, tc tools.ToolContext, dir stri
 		if pruneErr != nil {
 			return settleGitError(pruneErr, stderr, toolcontract.NoEffect)
 		}
+		tc.NotifyCheckoutChange(context.WithoutCancel(ctx), repo.Root)
 	}
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
 }
