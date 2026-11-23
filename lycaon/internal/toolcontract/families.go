@@ -12,6 +12,7 @@ type ResourcePresence struct {
 	Terminals   bool
 	Pages       bool
 	HeldCalls   bool
+	Watches     bool
 }
 
 var (

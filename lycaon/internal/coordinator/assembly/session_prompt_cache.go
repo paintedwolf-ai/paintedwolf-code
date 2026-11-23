@@ -19,6 +19,8 @@ type TurnAssemblyScratch struct {
 	Reader                     prompts.Reader
 	PendingKickIDs             []string
 	PendingMessages            MessageDelivery
+	PendingWatches             WatchDelivery
+	WatchRequestSeq            int
 	StablePrompt               string
 	StablePromptKey            string
 	BoardBlock                 string

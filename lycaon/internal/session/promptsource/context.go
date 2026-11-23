@@ -119,6 +119,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 			}
 			if m != nil {
 				presence.HeldCalls = m.Processes.Held.HasHandles(sessionID)
+				presence.Watches = m.Processes.HasActionableWatches(context.Background(), sessionID)
 			}
 			return presence
 		},

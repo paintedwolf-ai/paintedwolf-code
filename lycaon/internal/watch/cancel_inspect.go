@@ -63,6 +63,7 @@ func (s *Store) Cancel(ctx context.Context, owner Owner, handle string) (CancelR
 		return CancelReceipt{}, err
 	}
 	s.heap.Remove(KindWatchExpiry, reg.WatchID)
+	_ = WithdrawAmbientWakeIfNoDemand(ctx, s, owner.SessionID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
 		s.notifyLeaseWake(ctx, w.lease, w.winner)
@@ -149,6 +150,11 @@ func (s *Store) SetDelivery(ctx context.Context, owner Owner, handle string, mod
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
+	if mode == DeliveryCollect {
+		_ = WithdrawAmbientWakeIfNoDemand(ctx, s, owner.SessionID)
+	} else if owner.Kind == OwnerSession && mode == DeliveryWake {
+		_, _ = s.TriggerAmbientWake(ctx, owner.SessionID)
+	}
 	return mode, nil
 }
 
@@ -206,7 +212,11 @@ func (s *Store) AdvanceDue(ctx context.Context) error {
 			if err := settleDueLease(ctx, s, entry.Key.ID, now); err != nil {
 				return err
 			}
-		case KindTimerTick, KindScheduleRun, KindSamplerProbe:
+		case KindTimerTick:
+			if sessionID, ok := strings.CutPrefix(entry.Key.ID, "wake-retry:"); ok && sessionID != "" {
+				_, _ = s.TriggerAmbientWake(ctx, sessionID)
+			}
+		case KindScheduleRun, KindSamplerProbe:
 		}
 	}
 	return nil
@@ -268,6 +278,26 @@ func (s *Store) Recover(ctx context.Context) error {
 	}
 	_ = leaseRows.Close()
 	if err := leaseRows.Err(); err != nil {
+		return err
+	}
+
+	retryRows, err := s.db.QueryContext(ctx,
+		`SELECT session_id, wake_retry_due_at FROM watch_session_state WHERE wake_retry_due_at IS NOT NULL AND wake_retry_due_at != ''`)
+	if err != nil {
+		return err
+	}
+	for retryRows.Next() {
+		var sessionID, retryStr string
+		if err := retryRows.Scan(&sessionID, &retryStr); err != nil {
+			_ = retryRows.Close()
+			return err
+		}
+		if retryAt, err := time.Parse(time.RFC3339Nano, retryStr); err == nil {
+			s.heap.Upsert(KindTimerTick, "wake-retry:"+sessionID, retryAt)
+		}
+	}
+	_ = retryRows.Close()
+	if err := retryRows.Err(); err != nil {
 		return err
 	}
 	return s.AdvanceDue(ctx)

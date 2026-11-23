@@ -53,6 +53,8 @@ type Assembly struct {
 	Notes    *workeroutcomes.Notes
 	// MessageDelivery delivers coordinator and worker messages into requests.
 	MessageDelivery assembly.MessageDeliveryRecorder
+	// WatchDelivery reserves and commits collected watch observations per request.
+	WatchDelivery assembly.WatchDeliveryRecorder
 	// WorkerRoster lists a coordinator's workers for its requests.
 	WorkerRoster  assembly.WorkerRosterSource
 	PolicyIndex   *policyindex.Service
@@ -81,7 +83,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		Workflows:             m.Workflow.Manifests,
 		CoordinatorFrame:      m.Frame,
 		Workers:               assembly.Workers{Leg: m.WorkerContext, Roster: m.WorkerRoster},
-		Deliveries:            assembly.Deliveries{SiblingNotes: m.Notes, Messages: m.MessageDelivery},
+		Deliveries:            assembly.Deliveries{SiblingNotes: m.Notes, Messages: m.MessageDelivery, Watches: m.WatchDelivery},
 		PeerReservations:      m.Workspaces,
 		ImplementSessionState: m.State.ForSession,
 		ExecutionModes:        rt.ExecutionModeStore(),

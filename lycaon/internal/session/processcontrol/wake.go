@@ -64,39 +64,69 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		})
 	}
 	m.processReports.publish(completion.SessionID, completion.Handle, processReport{digest: digest, exit: completion.ExitObservation})
-	if m.watches != nil {
-		outcome := "satisfied"
-		if completion.ExitCode != 0 || completion.Failure != nil || completion.BoundaryRefusal != "" {
-			outcome = "failed"
-		}
-		occID := strings.TrimSpace(completion.RunID)
-		if occID == "" {
-			occID = "process_done:" + strings.TrimSpace(completion.Handle)
-		}
-		_, _ = m.watches.RecordProcessDone(ctx, completion.SessionID, watch.ProcessCompletionFact{
-			OccurrenceID: occID,
-			Handle:       strings.TrimSpace(completion.Handle),
-			Outcome:      outcome,
-			Code:         completion.ProgramStop.Code,
-			Report:       digest,
-		})
+	handle := strings.TrimSpace(completion.Handle)
+	occID := strings.TrimSpace(completion.RunID)
+	if occID == "" {
+		occID = "process_done:" + handle + ":" + completion.FinishedAt.UTC().Format(time.RFC3339Nano)
 	}
 	env := anchor.Envelope{
-		Subject:                 strings.TrimSpace(completion.Handle),
+		Subject:                 handle,
 		CommandCompletionDigest: digest,
 	}
 	if completion.ExitObservation != nil {
 		env.CommandExitObservation = completion.ExitObservation
 	}
-	if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
-		return
+
+	if m.waits != nil && m.nudges != nil && m.waits.SessionSleepingOnProcess(completion.SessionID, completion.Handle) {
+		if m.watches != nil {
+			dec, _ := watch.ClaimPresentation(ctx, m.watches, watch.SessionOwner(completion.SessionID), occID, watch.ClaimDirectWait, true, "direct_wait:"+handle)
+			if dec.TransferredKick {
+				m.dropQueuedProcessKick(completion.SessionID, handle)
+			}
+		}
+		if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
+			return
+		}
 	}
+
+	if m.watches != nil {
+		outcome := "satisfied"
+		if completion.ExitCode != 0 || completion.Failure != nil || completion.BoundaryRefusal != "" {
+			outcome = "failed"
+		}
+		pres, _ := m.watches.RecordProcessCompletion(ctx, completion.SessionID, watch.ProcessCompletionFact{
+			OccurrenceID: occID,
+			Handle:       handle,
+			Outcome:      outcome,
+			Code:         completion.ProgramStop.Code,
+			Report:       digest,
+		})
+		if pres.TransferredKick {
+			m.dropQueuedProcessKick(completion.SessionID, handle)
+		}
+		if pres.Claimed {
+			return
+		}
+	}
+
 	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent ||
 		completion.ExitObservation.Observed() {
 		return
 	}
 	if sess == nil || !sess.IsWorkerChild() {
+		if m.watches != nil {
+			dec, err := watch.ClaimPresentation(ctx, m.watches, watch.SessionOwner(completion.SessionID), occID, watch.ClaimFallbackKick, false, "")
+			if err == nil && !dec.Granted {
+				return
+			}
+		}
 		m.Guidance.Emit(ctx, completion.SessionID, anchor.ProcessFinished, env)
+	}
+}
+
+func (m *Service) dropQueuedProcessKick(sessionID, handle string) {
+	if dropper, ok := m.Guidance.(SubjectDropper); ok {
+		dropper.DropSubject(sessionID, anchor.ProcessFinished, handle)
 	}
 }
 

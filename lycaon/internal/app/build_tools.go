@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/invocation"
@@ -66,6 +67,35 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 			}
 			subscriptions.Deliveries.NotifyWatchLeaseResolved(ctx, lease.SessionID, lease.ID, winner)
 		})
+		if b.sessions != nil && b.sessions.Manager != nil {
+			mgr := b.sessions.Manager
+			mgr.SetWatchDelivery(&watch.Delivery{
+				Store: watchStore,
+				WorkerJobID: func(ctx context.Context, childSessionID string) string {
+					var jobID string
+					_ = b.storage.Database.QueryRowContext(ctx,
+						`SELECT id FROM worker_jobs WHERE child_session_id = ? ORDER BY created_at DESC LIMIT 1`,
+						childSessionID).Scan(&jobID)
+					return jobID
+				},
+			})
+			coordLoop := b.server.Coordinator.CoordinatorLoop()
+			watchStore.SetAmbientWakeGate(watch.AmbientWakeGate{
+				SessionEligible: mgr.Submissions.AmbientWakeEligible,
+				WorkflowAdmit:   coordLoop.Admission.AdmitAmbientWatchWake,
+				DispatchTurn: func(ctx context.Context, sessionID, submissionID, text string, onAdmitted func() error) error {
+					_, err := mgr.Submissions.AmbientWatchWake(ctx, sessionID, submissionID, text, onAdmitted)
+					return err
+				},
+			})
+			if mgr.Coordinator.Guidance != nil {
+				mgr.Coordinator.Guidance.SetKickAdmittedObserver(func(ctx context.Context, sessionID, kickID, subject, receiptID string) {
+					if anchor.SameInform(kickID, anchor.ProcessFinished) && subject != "" {
+						_ = watch.MarkPresentationAdmittedByHandle(ctx, watchStore, sessionID, subject, receiptID)
+					}
+				})
+			}
+		}
 	}
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
 		Store: waitStore, Watches: watchStore, ProfileConditions: waitConditions,

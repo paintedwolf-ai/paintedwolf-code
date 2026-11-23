@@ -48,6 +48,18 @@ func (m *Service) Drop(sessionID string, id anchor.ID) {
 	m.anchors.Drop(sessionID, id)
 }
 
+// DropSubject removes queued or staged guidance for one subject.
+func (m *Service) DropSubject(sessionID string, id anchor.ID, subject string) bool {
+	if m == nil || m.kicks == nil {
+		return false
+	}
+	templateID := anchor.InformRender(id)
+	if templateID == "" {
+		templateID = id.String()
+	}
+	return m.kicks.DropKickSubject(sessionID, templateID, subject)
+}
+
 // PendingIDs drops guidance whose live obligation has cleared and
 // lists the kicks the turn opening now delivers.
 func (m *Service) PendingIDs(ctx context.Context, sessionID string) []string {
@@ -110,10 +122,14 @@ func (m *Service) DeliverPending(ctx context.Context, sessionID string) error {
 		if !ok {
 			continue
 		}
-		if _, err := m.appendHostKickMessage(ctx, sessionID, kickID, nudge); err != nil {
+		msg, err := m.appendHostKickMessage(ctx, sessionID, kickID, nudge)
+		if err != nil {
 			return err
 		}
-		kicks.AckPendingNudge(sessionID, lease)
+		subject := kicks.AckPendingNudge(sessionID, lease)
+		if m.onKickAdmitted != nil && msg.ID != "" {
+			m.onKickAdmitted(ctx, sessionID, kickID, subject, msg.ID)
+		}
 	}
 	return nil
 }

@@ -151,6 +151,9 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 	} else if ok {
 		tail = append(tail, msg)
 	}
+	if msg, ok := e.watchDeliveryInject(turn); ok {
+		tail = append(tail, msg)
+	}
 
 	if coordinator && !sess.IsWorkerChild() {
 		surfaceID := ""

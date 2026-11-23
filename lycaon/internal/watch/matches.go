@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -75,22 +74,38 @@ func (s *Store) RecordMatch(ctx context.Context, watchID string, input MatchInpu
 		s.heap.Remove(KindWaitDeadline, woke.lease.ID)
 		s.notifyLeaseWake(ctx, woke.lease, woke.winner)
 	}
+	if len(wokeLeases) == 0 && reg.Owner.Kind == OwnerSession && reg.Lifecycle.Delivery == DeliveryWake {
+		_, _ = s.TriggerAmbientWake(ctx, reg.Owner.SessionID)
+	}
 	return recorded, true, nil
+}
+
+// ProcessPresentationOutcome summarizes how process completion matched watches and presentation claims.
+type ProcessPresentationOutcome struct {
+	Matches         []RecordedMatch
+	Claimed         bool
+	TransferredKick bool
 }
 
 // RecordProcessDone delivers a process_done completion to every matching live watch in the session.
 func (s *Store) RecordProcessDone(ctx context.Context, sessionID string, fact ProcessCompletionFact) ([]RecordedMatch, error) {
+	res, err := s.RecordProcessCompletion(ctx, sessionID, fact)
+	return res.Matches, err
+}
+
+// RecordProcessCompletion records process_done matches and coordinates presentation claims per owner.
+func (s *Store) RecordProcessCompletion(ctx context.Context, sessionID string, fact ProcessCompletionFact) (ProcessPresentationOutcome, error) {
 	if !s.Configured() {
-		return nil, nil
+		return ProcessPresentationOutcome{}, nil
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	handle := strings.TrimSpace(fact.Handle)
 	if sessionID == "" || handle == "" {
-		return nil, nil
+		return ProcessPresentationOutcome{}, nil
 	}
-	watchIDs, err := s.matchingProcessWatchIDs(ctx, sessionID, handle)
-	if err != nil || len(watchIDs) == 0 {
-		return nil, err
+	targets, err := s.matchingProcessWatches(ctx, sessionID, handle)
+	if err != nil || len(targets) == 0 {
+		return ProcessPresentationOutcome{}, err
 	}
 	occ := strings.TrimSpace(fact.OccurrenceID)
 	if occ == "" {
@@ -100,9 +115,36 @@ func (s *Store) RecordProcessDone(ctx context.Context, sessionID string, fact Pr
 	if outcome == "" {
 		outcome = "satisfied"
 	}
-	var out []RecordedMatch
-	for _, watchID := range watchIDs {
-		match, ok, err := s.RecordMatch(ctx, watchID, MatchInput{
+	var res ProcessPresentationOutcome
+	for _, reg := range targets {
+		decision, err := ClaimPresentation(ctx, s, reg.Owner, occ, ClaimWatchEvidence, false, "")
+		if err != nil {
+			return res, err
+		}
+		if decision.TransferredKick {
+			res.TransferredKick = true
+		}
+		if decision.AlreadyAdmitted {
+			_, _, _ = s.recordAlreadyAdmittedMatch(ctx, reg.WatchID, MatchInput{
+				SourceKind:   ConditionProcessDone,
+				OccurrenceID: occ,
+				Outcome:      outcome,
+				RetainedRef:  decision.ExistingReceiptID,
+				Evidence: map[string]any{
+					"kind":             ConditionProcessDone,
+					"handle":           handle,
+					"outcome":          outcome,
+					"code":             fact.Code,
+					"admitted_receipt": decision.ExistingReceiptID,
+				},
+			}, map[string]string{"process_done:" + handle: occ}, decision.ExistingReceiptID)
+			res.Claimed = true
+			continue
+		}
+		if !decision.Granted {
+			continue
+		}
+		match, ok, err := s.RecordMatch(ctx, reg.WatchID, MatchInput{
 			SourceKind:   ConditionProcessDone,
 			OccurrenceID: occ,
 			Outcome:      outcome,
@@ -115,38 +157,66 @@ func (s *Store) RecordProcessDone(ctx context.Context, sessionID string, fact Pr
 			},
 		}, map[string]string{"process_done:" + handle: occ})
 		if err != nil {
-			return out, err
+			return res, err
 		}
 		if ok {
-			out = append(out, match)
+			res.Matches = append(res.Matches, match)
+			res.Claimed = true
 		}
 	}
-	return out, nil
+	return res, nil
 }
 
-func (s *Store) matchingProcessWatchIDs(ctx context.Context, sessionID, handle string) ([]string, error) {
+func (s *Store) recordAlreadyAdmittedMatch(ctx context.Context, watchID string, input MatchInput, cursorUpdates map[string]string, existingReceipt string) (RecordedMatch, bool, error) {
+	now := s.clock.Now()
+	nowStr := now.UTC().Format(time.RFC3339Nano)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return RecordedMatch{}, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	recorded, inserted, err := insertMatchTx(ctx, tx, watchID, input, cursorUpdates, now)
+	if err != nil || !inserted {
+		return RecordedMatch{}, false, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE watch_matches SET reservation_state = 'delivered', delivery_id = NULLIF(?, '') WHERE match_id = ?`,
+		strings.TrimSpace(existingReceipt), recorded.MatchID); err != nil {
+		return RecordedMatch{}, false, err
+	}
+	reg, err := loadRegistrationByIDTx(ctx, tx, watchID)
+	if err == nil {
+		_ = releaseCompletedOneShotSlotTx(ctx, tx, &reg, nowStr)
+	}
+	if err := tx.Commit(); err != nil {
+		return RecordedMatch{}, false, err
+	}
+	if reg.Lifecycle.State == StateTerminal {
+		s.heap.Remove(KindWatchExpiry, reg.WatchID)
+	}
+	return recorded, true, nil
+}
+
+func (s *Store) matchingProcessWatches(ctx context.Context, sessionID, handle string) ([]Registration, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT watch_id, conditions_json FROM watch_registrations WHERE session_id = ? AND state = 'live'`, sessionID)
+		`SELECT `+registrationColumns+` FROM watch_registrations WHERE session_id = ? AND state = 'live' ORDER BY seq ASC`, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var matched []string
+	var matched []Registration
 	for rows.Next() {
-		var watchID, condJSON string
-		if err := rows.Scan(&watchID, &condJSON); err != nil {
+		reg, err := scanRegistration(rows)
+		if err != nil {
 			return nil, err
 		}
-		var conds []awaitstore.Condition
-		if err := json.Unmarshal([]byte(condJSON), &conds); err != nil {
-			continue
-		}
-		for _, c := range conds {
+		for _, c := range reg.Conditions {
 			if c.Kind != ConditionProcessDone {
 				continue
 			}
 			if len(c.Handles) == 0 || containsHandle(c.Handles, handle) {
-				matched = append(matched, watchID)
+				matched = append(matched, reg)
 				break
 			}
 		}
