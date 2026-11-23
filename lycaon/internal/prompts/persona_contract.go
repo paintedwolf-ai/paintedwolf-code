@@ -258,11 +258,6 @@ func ValidatePersonaContractCoverage(cfg *PersonaContract, agentIDs []string) er
 	return fmt.Errorf("persona contract: no row for agent(s) %s", strings.Join(missing, ", "))
 }
 
-// PersonaDataMap builds default render variables from an agent contract row.
-func PersonaDataMap(def AgentPersonaDef) map[string]any {
-	return PersonaDataMapForReader(def, Reader{})
-}
-
 // PersonaDataMapForReader builds render variables from an agent contract row,
 // resolving declarative process variants against reader when reader.Valid().
 func PersonaDataMapForReader(def AgentPersonaDef, reader Reader) map[string]any {

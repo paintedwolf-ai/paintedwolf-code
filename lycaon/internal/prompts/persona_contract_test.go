@@ -73,9 +73,9 @@ agents:
 		t.Fatalf("DecodeYAML: %v", err)
 	}
 	def := cfg.Agents["acme-worker"]
-	defaultMap := PersonaDataMap(def)
+	defaultMap := PersonaDataMapForReader(def, Reader{})
 	if !strings.Contains(defaultMap["process"].(string), "Use web_search and fetch_url.") {
-		t.Fatalf("PersonaDataMap default = %q", defaultMap["process"])
+		t.Fatalf("PersonaDataMapForReader default = %q", defaultMap["process"])
 	}
 
 	profiles, err := sandbox.LoadToolProfiles()
