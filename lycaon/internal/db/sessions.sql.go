@@ -1070,7 +1070,7 @@ func (q *Queries) InvalidateMessageCompactionView(ctx context.Context, arg Inval
 
 const lastAssistantMessageContent = `-- name: LastAssistantMessageContent :one
 SELECT content FROM messages
-WHERE session_id = ? AND role = 'assistant'
+WHERE session_id = ? AND role = 'assistant' AND visibility = 'transcript'
 ORDER BY ord DESC
 LIMIT 1
 `
@@ -1084,7 +1084,7 @@ func (q *Queries) LastAssistantMessageContent(ctx context.Context, sessionID str
 
 const lastTurnMessageContent = `-- name: LastTurnMessageContent :one
 SELECT content FROM messages
-WHERE session_id = ? AND role IN ('user', 'assistant')
+WHERE session_id = ? AND role IN ('user', 'assistant') AND visibility = 'transcript'
 ORDER BY ord DESC
 LIMIT 1
 `

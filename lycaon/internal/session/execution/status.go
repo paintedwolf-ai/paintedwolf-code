@@ -51,9 +51,8 @@ func (m *Status) PublishIdleWithMessage(ctx context.Context, sessionID string, d
 	m.events.PublishSessionIdle(ctx, updated.ProjectID, sessionID, lastMessage, disposition)
 }
 
-// LastAssistantMessageContent is the idle preview: one tail read, never the
-// transcript. A read failure yields an empty preview rather than a lost event.
-
+// LastAssistantMessageContent is the idle preview. A read failure yields an
+// empty preview so the idle event is still published.
 func LastAssistantMessageContent(ctx context.Context, store Transcript, sessionID string) string {
 	if store == nil {
 		return ""
