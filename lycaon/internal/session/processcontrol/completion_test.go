@@ -329,10 +329,13 @@ func TestBackgroundCommandCompletionSettlesSharedTempOnceWithHandle(t *testing.T
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	service := New(f, f, f, f)
 	var calls int
-	service.SharedTemp = func(_ context.Context, sessionID, _, toolName, toolCallID, command string, obs confine.SharedTempObservation, failed bool) guidance.SharedTempSettlement {
+	service.SharedTemp = func(_ context.Context, sess *api.Session, completion bgprocess.Completion, obs confine.SharedTempObservation, failed bool) guidance.SharedTempSettlement {
 		calls++
-		if sessionID != "session" || toolName != "command" || toolCallID != "call-bg" || command != "build-bg" || !failed {
-			t.Fatalf("unexpected background settlement args: session=%s tool=%s call=%s cmd=%s failed=%t", sessionID, toolName, toolCallID, command, failed)
+		if sess.ID != "session" || completion.OriginTool != "command" || completion.ToolCallID != "call-bg" {
+			t.Fatalf("unexpected background settlement args: sess=%s tool=%s call=%s", sess.ID, completion.OriginTool, completion.ToolCallID)
+		}
+		if !failed {
+			return guidance.SharedTempSettlement{Refused: obs.Writes, Tolerated: true}
 		}
 		return guidance.SharedTempSettlement{
 			Refused: obs.Writes,
@@ -341,21 +344,22 @@ func TestBackgroundCommandCompletionSettlesSharedTempOnceWithHandle(t *testing.T
 		}
 	}
 	target := confine.SharedTempLocation("/tmp") + "/bg-out/result.txt"
+	refusals := confine.SandboxRefusals{Refusals: []confine.SandboxRefusal{{Operation: "file-write-create", Target: target}}}
 	now := time.Now()
 	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
-		SessionID: "session", Handle: "bg-77", OriginTool: "command", ToolCallID: "call-bg", Command: "build-bg",
-		ExitCode: 0, FinishedAt: now,
-		SandboxRefusals: confine.SandboxRefusals{Refusals: []confine.SandboxRefusal{{Operation: "file-write-create", Target: target}}},
+		SessionID: "session", Handle: "bg-77", OriginTool: "command", ToolCallID: "call-bg",
+		ExitCode: 0, FinishedAt: now, TerminationReason: bgprocess.TerminationExited,
+		Observation: confine.Observation{Applied: true, Refusals: refusals},
 	})
-	if calls != 1 || f.lastFacts.SharedTemp != nil {
-		t.Fatalf("successful background run settled as failure: calls=%d facts=%+v", calls, f.lastFacts.SharedTemp)
+	if calls != 1 || f.lastFacts.SharedTemp == nil || !f.lastFacts.SharedTemp.Tolerated || len(f.lastFacts.SharedTemp.Allowed) != 0 {
+		t.Fatalf("successful background run settlement = %+v (calls=%d)", f.lastFacts.SharedTemp, calls)
 	}
 	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
-		SessionID: "session", Handle: "bg-77", OriginTool: "command", ToolCallID: "call-bg", Command: "build-bg",
-		ExitCode: 1, FinishedAt: now,
-		SandboxRefusals: confine.SandboxRefusals{Refusals: []confine.SandboxRefusal{{Operation: "file-write-create", Target: target}}},
+		SessionID: "session", Handle: "bg-77", OriginTool: "command", ToolCallID: "call-bg",
+		ExitCode: 1, FinishedAt: now, TerminationReason: bgprocess.TerminationExited,
+		Observation: confine.Observation{Applied: true, Refusals: refusals},
 	})
-	if calls != 2 || f.lastFacts.SharedTemp == nil || f.lastFacts.SharedTemp.JobHandle != "bg-77" {
+	if calls != 2 || f.lastFacts.SharedTemp == nil || f.lastFacts.SharedTemp.JobHandle != "bg-77" || len(f.lastFacts.SharedTemp.Allowed) != 1 {
 		t.Fatalf("failed background run settlement = %+v (calls=%d)", f.lastFacts.SharedTemp, calls)
 	}
 }

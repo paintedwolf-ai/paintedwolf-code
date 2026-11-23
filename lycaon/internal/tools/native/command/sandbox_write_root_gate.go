@@ -17,6 +17,7 @@ type SandboxWriteRootAsk struct {
 	// fact its confinement and control-plane verdict carry.
 	SessionScratchRoot string
 	SessionOutputRoot  string
+	ReadDenyPaths      []string
 }
 
 // SandboxWriteRootResult is the gate outcome after optional HITL.

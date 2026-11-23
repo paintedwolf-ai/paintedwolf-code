@@ -125,7 +125,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 	})
 }
 
-func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, launches bool, review *commandprogram.ReviewSummary, body func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, launches bool, review *commandprogram.ArgvReview, body func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
 	spec, ok := d.run.commands[request.OperationID]
 	if !ok {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("evaluator operation is not catalogued")
