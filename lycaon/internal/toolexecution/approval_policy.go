@@ -128,7 +128,7 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	if args == nil {
 		return nil
 	}
-	if targets := nativePathTargetsFromArgs(args); targets != nil {
+	if targets := nativePathTargetsFromArgs(tool, args); targets != nil {
 		files := make([]string, 0, len(targets))
 		for _, target := range targets {
 			files = append(files, target.Path)

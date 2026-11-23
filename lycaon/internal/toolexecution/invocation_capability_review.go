@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/toolcontract"

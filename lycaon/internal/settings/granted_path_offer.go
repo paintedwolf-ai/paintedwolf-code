@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
-	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/pkg/api"
