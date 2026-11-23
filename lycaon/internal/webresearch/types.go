@@ -49,6 +49,10 @@ type WebSearchResult struct {
 	Rerank *decide.RerankReceipt `json:"rerank,omitempty"`
 	// Unprobed candidates feed post-search warming outside the wire payload.
 	residualURLs []string
+	// Refusal facts: providers that rejected their credential, and whether a
+	// provider rejected the request itself.
+	credentialRejected []string
+	queryRetryable     bool
 	// Direct-pipeline fill counts decide whether the post-search seed runs.
 	directStrongHits   int
 	directMaxResults   int

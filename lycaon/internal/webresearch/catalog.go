@@ -64,6 +64,7 @@ type CatalogEntry struct {
 	Roles                  []ProviderRole       `yaml:"roles"`
 	DefaultEnabled         bool                 `yaml:"default_enabled"`
 	Pacing                 *PacingSpec          `yaml:"pacing"`
+	Errors                 *ErrorSpec           `yaml:"errors"`
 	// Family / FamilyParams drive runtime RegisterCatalogProviders (ignored by wire-id codegen).
 	Family       string            `yaml:"family"`
 	FamilyParams map[string]string `yaml:"family_params"`
@@ -85,6 +86,12 @@ const (
 	RulePrivateEndpointNotKeylessEndpoint CatalogRule = "private_endpoint_not_keyless_endpoint"
 	RuleEmptyRoles                        CatalogRule = "empty_roles"
 	RuleUnknownRole                       CatalogRule = "unknown_role"
+	RuleErrorsEmpty                       CatalogRule = "errors_empty"
+	RuleErrorCodesWithoutPaths            CatalogRule = "error_codes_without_paths"
+	RuleErrorCodePathInvalid              CatalogRule = "error_code_path_invalid"
+	RuleErrorCodeInvalid                  CatalogRule = "error_code_invalid"
+	RuleErrorStateUnknown                 CatalogRule = "error_state_unknown"
+	RuleErrorStatusOutOfRange             CatalogRule = "error_status_out_of_range"
 )
 
 // CatalogEntryError rejects one provider entry of the catalog.
@@ -194,7 +201,7 @@ func catalogEntryRule(entry CatalogEntry) CatalogRule {
 			return RuleUnknownRole
 		}
 	}
-	return ""
+	return errorSpecRule(entry.Errors)
 }
 
 // RolesOrDefault returns roles, defaulting to [results] when absent in YAML.

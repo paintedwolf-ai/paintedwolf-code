@@ -9269,6 +9269,13 @@ type VisualArtifact struct {
 	OriginMessageID string `json:"origin_message_id,omitempty"`
 }
 
+// WebResearchCredentialRejection The provider rejected the credential currently in this slot. Clears when the credential changes or the provider is tested.
+type WebResearchCredentialRejection struct {
+	// Machine error code from the provider response, or http_<status>.
+	Code       string    `json:"code"`
+	ObservedAt time.Time `json:"observed_at"`
+}
+
 // WebResearchDirectCardContent
 type WebResearchDirectCardContent struct {
 	ProviderID string `json:"provider_id"`
@@ -9311,15 +9318,16 @@ type WebResearchIndexStatus struct {
 
 // WebResearchProviderMeta
 type WebResearchProviderMeta struct {
-	ID                WebSearchProvider         `json:"id"`
-	Kind              WebResearchProviderKind   `json:"kind"`
-	Label             string                    `json:"label"`
-	Roles             []WebResearchProviderRole `json:"roles"`
-	DefaultEnabled    bool                      `json:"default_enabled,omitempty"`
-	Configured        bool                      `json:"configured"`
-	CredentialPresent bool                      `json:"credential_present"`
-	CredentialSource  string                    `json:"credential_source,omitempty"`
-	CredentialSlot    string                    `json:"credential_slot,omitempty"`
+	ID                 WebSearchProvider               `json:"id"`
+	Kind               WebResearchProviderKind         `json:"kind"`
+	Label              string                          `json:"label"`
+	Roles              []WebResearchProviderRole       `json:"roles"`
+	DefaultEnabled     bool                            `json:"default_enabled,omitempty"`
+	Configured         bool                            `json:"configured"`
+	CredentialPresent  bool                            `json:"credential_present"`
+	CredentialSource   string                          `json:"credential_source,omitempty"`
+	CredentialSlot     string                          `json:"credential_slot,omitempty"`
+	CredentialRejected *WebResearchCredentialRejection `json:"credential_rejected,omitempty"`
 	// Catalog flag — when true, endpoint may use http and private/LAN addresses (still blocking loopback and link-local metadata).
 	AllowPrivateEndpoint bool              `json:"allow_private_endpoint,omitempty"`
 	Config               map[string]string `json:"config,omitempty"`

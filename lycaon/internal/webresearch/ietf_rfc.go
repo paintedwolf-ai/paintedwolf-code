@@ -16,7 +16,10 @@ func newIETFRFCProvider(exchange Exchange) *ietfRFCProvider {
 	return &ietfRFCProvider{exchange: exchange}
 }
 
-type ietfRFCProvider struct{ exchange Exchange }
+type ietfRFCProvider struct {
+	exchange Exchange
+	errors   *ErrorSpec
+}
 
 func (p *ietfRFCProvider) ID() string { return ietfRFCProviderID }
 
@@ -84,6 +87,7 @@ func (p *ietfRFCProvider) Search(ctx context.Context, s Settings, query string, 
 	seen := make(map[string]struct{}, count*2)
 	var lastStatus int
 	var lastErr error
+	var httpErr *ProviderError
 	okCount := 0
 	for i := 0; i < len(filters); i++ {
 		fr := <-results
@@ -93,7 +97,8 @@ func (p *ietfRFCProvider) Search(ctx context.Context, s Settings, query string, 
 		}
 		lastStatus = fr.status
 		if fr.status < 200 || fr.status >= 300 {
-			lastErr = fmt.Errorf("HTTP %d", fr.status)
+			failed := classifyProviderError(p.errors, fr.status, fr.body, false)
+			httpErr = &failed
 			continue
 		}
 		part, err := parseIETFRFCHits(fr.body)
@@ -118,13 +123,14 @@ func (p *ietfRFCProvider) Search(ctx context.Context, s Settings, query string, 
 		detail := "ietf_rfc search failed"
 		if lastErr != nil {
 			detail = lastErr.Error()
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				reason = "timeout"
-			} else if errors.Is(ctx.Err(), context.Canceled) {
-				reason = "cut"
-			} else if strings.HasPrefix(detail, "HTTP ") {
-				reason = "http_error"
-			}
+		}
+		switch {
+		case errors.Is(ctx.Err(), context.DeadlineExceeded):
+			reason = "timeout"
+		case errors.Is(ctx.Err(), context.Canceled):
+			reason = "cut"
+		case httpErr != nil && lastErr == nil:
+			return providerErrorOutcome(ietfRFCProviderID, lastStatus, *httpErr)
 		}
 		return providerOutcome{
 			providerID: ietfRFCProviderID,

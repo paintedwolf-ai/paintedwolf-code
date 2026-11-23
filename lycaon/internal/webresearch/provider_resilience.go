@@ -83,8 +83,8 @@ func isHardProviderFailure(out providerOutcome) bool {
 		return false
 	}
 	switch out.reason {
-	case "timeout", "parse_error", "http_error":
-		// Pacing, authentication, and cancellation do not affect health.
+	case "timeout", "parse_error", string(ErrorUnavailable):
+		// Rejections, limits, pacing and cancellation do not affect health.
 		return true
 	default:
 		return false

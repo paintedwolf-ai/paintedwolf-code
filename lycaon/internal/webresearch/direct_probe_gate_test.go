@@ -80,34 +80,34 @@ func TestProviderSeedCacheRoundTrip(t *testing.T) {
 	if _, hit := registry.cachedProviderSeed("github", "AdGuard Home", 5, changedEndpoint); hit {
 		t.Fatal("endpoint changes must select a different cache entry")
 	}
-	registry.storeProviderSeed("github", "fail", 5, settings, providerOutcome{ok: false, reason: "http_error"})
+	registry.storeProviderSeed("github", "fail", 5, settings, providerOutcome{ok: false, reason: "unavailable"})
 	if _, hit := registry.cachedProviderSeed("github", "fail", 5, settings); hit {
 		t.Fatal("errors must not be cached")
 	}
 }
 
-func TestProviderHealthTripsOnHTTPError(t *testing.T) {
+func TestProviderHealthTripsOnUnavailable(t *testing.T) {
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	clock := now
 	health := newProviderHealth("css_tricks", func() time.Time { return clock })
-	inner := &httpErrorStubProvider{id: "css_tricks", status: 404}
+	inner := &unavailableStubProvider{id: "css_tricks", status: 503}
 	wrap := &healthWrappedProvider{inner: inner, health: health}
 	for i := 0; i < providerHealthFailureThreshold; i++ {
 		out := wrap.Search(context.Background(), Settings{}, "probe", 5)
-		if out.reason != "http_error" {
+		if out.reason != "unavailable" {
 			t.Fatalf("failure %d = %+v", i, out)
 		}
 	}
 	out := wrap.Search(context.Background(), Settings{}, "probe", 5)
 	if out.reason != "down" {
-		t.Fatalf("after http_errors = %+v want down", out)
+		t.Fatalf("after failures = %+v want down", out)
 	}
 }
 
 func TestProviderHealthResetClosesBreakerImmediately(t *testing.T) {
 	health := newProviderHealth("css_tricks", nil)
-	health.record(providerOutcome{reason: "http_error"})
-	health.record(providerOutcome{reason: "http_error"})
+	health.record(providerOutcome{reason: "unavailable"})
+	health.record(providerOutcome{reason: "unavailable"})
 	if !health.isOpen() {
 		t.Fatal("breaker did not open")
 	}
@@ -117,17 +117,17 @@ func TestProviderHealthResetClosesBreakerImmediately(t *testing.T) {
 	}
 }
 
-type httpErrorStubProvider struct {
+type unavailableStubProvider struct {
 	id     string
 	status int
 }
 
-func (p *httpErrorStubProvider) ID() string { return p.id }
+func (p *unavailableStubProvider) ID() string { return p.id }
 
-func (p *httpErrorStubProvider) Kind() ProviderKind { return KindKeyless }
+func (p *unavailableStubProvider) Kind() ProviderKind { return KindKeyless }
 
-func (p *httpErrorStubProvider) Configured(Settings) bool { return true }
+func (p *unavailableStubProvider) Configured(Settings) bool { return true }
 
-func (p *httpErrorStubProvider) Search(context.Context, Settings, string, int) providerOutcome {
-	return providerOutcome{providerID: p.id, reason: "http_error", httpStatus: p.status, detail: "HTTP 404"}
+func (p *unavailableStubProvider) Search(context.Context, Settings, string, int) providerOutcome {
+	return providerOutcome{providerID: p.id, reason: "unavailable", httpStatus: p.status, detail: "HTTP 503"}
 }

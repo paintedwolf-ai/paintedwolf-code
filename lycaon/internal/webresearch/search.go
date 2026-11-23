@@ -206,6 +206,12 @@ func finalizeSearchResult(q string, maxResults int, outcomes []providerOutcome, 
 				detail = o.reason
 			}
 			parts = append(parts, fmt.Sprintf("%s: %s", o.providerID, detail))
+			switch ProviderErrorState(o.reason) {
+			case ErrorCredentialRejected:
+				result.credentialRejected = append(result.credentialRejected, o.providerID)
+			case ErrorRequestRejected:
+				result.queryRetryable = true
+			}
 		}
 		result.OK = false
 		result.Error = strings.Join(parts, "; ")

@@ -63,7 +63,7 @@ func TestFinalizeSearchResultUsesPrimaryOutcomes(t *testing.T) {
 		{
 			name: "zero-hit fallback does not mask a failed primary",
 			outcomes: []providerOutcome{
-				{providerID: "brave", reason: "http_error", detail: "HTTP 422"},
+				{providerID: "brave", reason: "request_rejected", detail: "HTTP 422"},
 				{providerID: "fb1", ok: true},
 				{providerID: "fb2", reason: "paced"},
 			},
@@ -72,7 +72,7 @@ func TestFinalizeSearchResultUsesPrimaryOutcomes(t *testing.T) {
 		{
 			name: "fallback hits stand in for a failed primary",
 			outcomes: []providerOutcome{
-				{providerID: "brave", reason: "http_error"},
+				{providerID: "brave", reason: "unavailable"},
 				{providerID: "fb1", ok: true, hits: []WebHit{hit}},
 			},
 			ok: true, partial: true, hits: 1, skipped: []string{"brave"},
@@ -81,7 +81,7 @@ func TestFinalizeSearchResultUsesPrimaryOutcomes(t *testing.T) {
 			name: "unconfigured primary is an empty result",
 			outcomes: []providerOutcome{
 				{providerID: "brave", reason: "auth_missing"},
-				{providerID: "fb1", reason: "http_error"},
+				{providerID: "fb1", reason: "unavailable"},
 			},
 			ok: true, skipped: []string{"brave"}, fallbackEmpty: 1,
 		},
@@ -89,7 +89,7 @@ func TestFinalizeSearchResultUsesPrimaryOutcomes(t *testing.T) {
 			name: "primary hits ignore fallbacks",
 			outcomes: []providerOutcome{
 				{providerID: "brave", ok: true, hits: []WebHit{hit}},
-				{providerID: "fb1", reason: "http_error"},
+				{providerID: "fb1", reason: "unavailable"},
 			},
 			ok: true, hits: 1, skipped: []string{},
 		},

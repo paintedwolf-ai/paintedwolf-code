@@ -3,7 +3,7 @@ id: WEB_SEARCH_PROVIDERS_FAILED
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.detail, paintedwolf.rejection_code, paintedwolf.search_provider_statuses, paintedwolf.web_fallback_empty_count]
+requires_facts: [paintedwolf.detail, paintedwolf.rejection_code, paintedwolf.search_provider_statuses, paintedwolf.web_fallback_empty_count, paintedwolf.web_credential_rejected_providers, paintedwolf.web_has_retryable_provider]
 when: paintedwolf.rejection_code == "WEB_SEARCH_PROVIDERS_FAILED"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,16 +12,28 @@ message: Every configured web_search provider failed
 what: The selected search providers did not produce web evidence.
 cause: '{{ paintedwolf.detail }}{% if paintedwolf.search_provider_statuses %} Enabled provider status: {{ paintedwolf.search_provider_statuses }}.{% endif %}{% if paintedwolf.web_fallback_empty_count %} Fallback providers without results: {{ paintedwolf.web_fallback_empty_count }}.{% endif %}'
 why: Rewording the same request usually reaches the same unavailable providers and does not make their failure useful evidence
-fix: Make at most one materially different retry when the query itself can be corrected. Missing configuration, disabled providers, or unavailable services require their own remedy; rewording does not repair them. Otherwise proceed without web evidence and state that limitation.
+fix: '{% if paintedwolf.web_credential_rejected_providers %}These providers rejected their API key: {{ paintedwolf.web_credential_rejected_providers }}. The person can replace or clear it in Settings → Web research. {% endif %}{% if paintedwolf.web_has_retryable_provider %}Make at most one materially different retry when the query itself can be corrected. {% endif %}Missing configuration, disabled providers, rejected keys, or unavailable services require their own remedy; rewording does not repair them. Otherwise proceed without web evidence and state that limitation.'
 instead: Use existing evidence or continue without an external claim
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      detail: 'direct: upstream unavailable; brave: HTTP 422'
+      detail: 'direct: upstream unavailable; brave: HTTP 503'
+      tool: web_search
+  - id: credential-rejected
+    vars:
+      detail: 'brave: HTTP 422 SUBSCRIPTION_TOKEN_INVALID'
+      search_provider_statuses: ['brave: credential_rejected']
+      web_credential_rejected_providers: ['Brave Search']
+      tool: web_search
+  - id: retryable-query
+    vars:
+      detail: 'brave: HTTP 422'
+      search_provider_statuses: ['brave: request_rejected']
+      web_has_retryable_provider: true
       tool: web_search
   - id: fallback-empty
     vars:
-      detail: 'brave: HTTP 422'
-      search_provider_statuses: ['brave: http_error']
+      detail: 'brave: HTTP 503'
+      search_provider_statuses: ['brave: unavailable']
       web_fallback_empty_count: 28
       tool: web_search

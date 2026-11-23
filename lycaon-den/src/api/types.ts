@@ -9976,6 +9976,7 @@ export interface components {
             /** @enum {string} */
             credential_source?: "none" | "stored" | "environment";
             credential_slot?: string;
+            credential_rejected?: components["schemas"]["WebResearchCredentialRejection"];
             /** @description Catalog flag — when true, endpoint may use http and private/LAN addresses (still blocking loopback and link-local metadata). */
             allow_private_endpoint?: boolean;
             config?: {
@@ -15655,6 +15656,13 @@ export interface components {
         };
         /** @enum {string} */
         WebResearchProviderRole: "results" | "seeds";
+        /** @description The provider rejected the credential currently in this slot. Clears when the credential changes or the provider is tested. */
+        WebResearchCredentialRejection: {
+            /** @description Machine error code from the provider response, or http_<status>. */
+            code: string;
+            /** Format: date-time */
+            observed_at: string;
+        };
         WebResearchIndexHealth: {
             /** Format: int64 */
             writes_applied: number;
@@ -31607,6 +31615,7 @@ export type ProviderKindTemplate = components["schemas"]["ProviderKindTemplate"]
 export type ProviderKindListResponse = components["schemas"]["ProviderKindListResponse"];
 export type LocalGenerationRepairResult = components["schemas"]["LocalGenerationRepairResult"];
 export type WebResearchProviderRole = components["schemas"]["WebResearchProviderRole"];
+export type WebResearchCredentialRejection = components["schemas"]["WebResearchCredentialRejection"];
 export type WebResearchIndexHealth = components["schemas"]["WebResearchIndexHealth"];
 export type WebResearchWarmActivity = components["schemas"]["WebResearchWarmActivity"];
 export type WebResearchIndexStatus = components["schemas"]["WebResearchIndexStatus"];

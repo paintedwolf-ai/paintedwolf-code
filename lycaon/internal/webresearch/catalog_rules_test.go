@@ -62,6 +62,13 @@ func TestLoadCatalogRejectsEachRuleViolation(t *testing.T) {
 		{"private endpoint keyed", keyedFixture + "    allow_private_endpoint: true\n", RulePrivateEndpointNotKeylessEndpoint},
 		{"empty roles", keyedFixture + "    roles: []\n", RuleEmptyRoles},
 		{"unknown role", keyedFixture + "    roles: [gossip]\n", RuleUnknownRole},
+		{"empty errors", keyedFixture + "    errors: {}\n", RuleErrorsEmpty},
+		{"error codes without paths", keyedFixture + "    errors: {codes: {BAD_KEY: credential_rejected}}\n", RuleErrorCodesWithoutPaths},
+		{"error code path", keyedFixture + "    errors: {code_paths: [error..code]}\n", RuleErrorCodePathInvalid},
+		{"error code token", keyedFixture + "    errors: {code_paths: [error.code], codes: {\"bad key\": credential_rejected}}\n", RuleErrorCodeInvalid},
+		{"error code state", keyedFixture + "    errors: {code_paths: [error.code], codes: {BAD_KEY: broken}}\n", RuleErrorStateUnknown},
+		{"error status state", keyedFixture + "    errors: {statuses: {403: broken}}\n", RuleErrorStateUnknown},
+		{"error status range", keyedFixture + "    errors: {statuses: {302: request_rejected}}\n", RuleErrorStatusOutOfRange},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := loadCatalogFixture(t, tc.entry)

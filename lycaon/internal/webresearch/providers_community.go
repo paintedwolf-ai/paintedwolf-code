@@ -207,7 +207,7 @@ func stackexchangeRESTSpec(providerID, site string) RESTSpec {
 		ParseHits: func(body []byte) ([]WebHit, error) {
 			return parseStackExchangeHits(body, providerID)
 		},
-		GateRecordStatus: stackExchangeGateRecordStatus,
+		GateCooldown: stackExchangeGateCooldown,
 	}
 }
 
@@ -243,15 +243,13 @@ func parseStackExchangeHits(body []byte, providerID string) ([]WebHit, error) {
 	return hits, nil
 }
 
-func stackExchangeGateRecordStatus(body []byte) (int, bool) {
+// stackExchangeGateCooldown reports a nearly spent daily quota.
+func stackExchangeGateCooldown(body []byte) bool {
 	var data struct {
-		QuotaRemaining int `json:"quota_remaining"`
+		QuotaRemaining *int `json:"quota_remaining"`
 	}
-	if err := json.Unmarshal(body, &data); err != nil {
-		return 0, false
+	if err := json.Unmarshal(body, &data); err != nil || data.QuotaRemaining == nil {
+		return false
 	}
-	if data.QuotaRemaining <= stackexchangeQuotaLowWater {
-		return 403, true
-	}
-	return 0, false
+	return *data.QuotaRemaining <= stackexchangeQuotaLowWater
 }

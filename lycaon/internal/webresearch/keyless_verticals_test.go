@@ -96,9 +96,13 @@ func TestStackExchangeVariantsSharePacingGate(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s backoff inner is %T", id, backoff.inner)
 		}
-		provider, ok := health.inner.(*gatedSearchProvider)
+		guard, ok := health.inner.(*credentialGuardProvider)
 		if !ok {
 			t.Fatalf("%s health inner is %T", id, health.inner)
+		}
+		provider, ok := guard.inner.(*gatedSearchProvider)
+		if !ok {
+			t.Fatalf("%s guard inner is %T", id, guard.inner)
 		}
 		if shared == nil {
 			shared = provider.gate
@@ -148,12 +152,14 @@ data: {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\"res
 	}
 }
 
-func TestStackExchangeGateRecordStatus(t *testing.T) {
-	if st, ok := stackExchangeGateRecordStatus([]byte(`{"quota_remaining":3}`)); !ok || st != 403 {
-		t.Fatalf("status = %d ok = %v", st, ok)
+func TestStackExchangeGateCooldown(t *testing.T) {
+	if !stackExchangeGateCooldown([]byte(`{"quota_remaining":3}`)) {
+		t.Fatal("low quota must cool the gate down")
 	}
-	if _, ok := stackExchangeGateRecordStatus([]byte(`{"quota_remaining":100}`)); ok {
-		t.Fatal("expected no gate record for healthy quota")
+	for _, body := range []string{`{"quota_remaining":100}`, `{"items":[]}`, `not json`} {
+		if stackExchangeGateCooldown([]byte(body)) {
+			t.Fatalf("%s cooled the gate down", body)
+		}
 	}
 }
 
