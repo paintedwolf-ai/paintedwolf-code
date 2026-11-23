@@ -42,15 +42,24 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 	allowedWT := filepath.Join(allowedParent, "wt-allowed")
 	deniedWT := filepath.Join(deniedParent, "wt-denied")
 
-	var activeWorker string
+	rootSession := fixture.Session
+	testdbseed.InsertChildSession(t, fixture.Database, "worker-sess-a", rootSession)
+	testdbseed.InsertChildSession(t, fixture.Database, "worker-sess-b", rootSession)
+
+	var activeHandoffAgent string
 	baseConfigure := fixture.Configure
 	fixture.Configure = func(tc *tools.ToolContext) {
 		baseConfigure(tc)
 		tc.Source.CheckoutUsage = recorder
-		tc.Identity.WorkerJobID = activeWorker
+		if fixture.Session != rootSession {
+			tc.Identity.RootSessionID = rootSession
+			tc.Identity.ParentSessionID = rootSession
+			tc.Identity.SessionID = fixture.Session
+			tc.Identity.HandoffAgentID = activeHandoffAgent
+		}
 		tc.Files.GrantedWriteRoots = []string{allowedParent}
 		tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{
-			{Path: allowedParent, Write: true},
+			{Path: allowedParent, Write: true, Tree: true},
 		}
 	}
 
@@ -60,7 +69,7 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 		t.Fatalf("expected unauthorized git worktree add to fail, got %+v", refusedOutcome)
 	}
 	repoID := git.DeriveRepoID(fixture.Dir)
-	usagesBefore, err := inv.SummarizeChatRepoUsages(t.Context(), testdbseed.DefaultProjectID, repoID, fixture.Session)
+	usagesBefore, err := inv.SummarizeChatRepoUsages(t.Context(), testdbseed.DefaultProjectID, repoID, rootSession)
 	testutil.FailErr(t, "summarize usages after refusal", err)
 	if len(usagesBefore) != 0 {
 		t.Fatalf("unauthorized git worktree add created usage association: %+v", usagesBefore)
@@ -70,13 +79,14 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 	}
 
 	// 2. Authorized native `git worktree add` records creation + use without binding session_worktrees.
-	activeWorker = "worker-a"
+	fixture.Session = "worker-sess-a"
+	activeHandoffAgent = "worker-a"
 	addOutcome := callComposedProgram(t, fixture, "git worktree add -b feat/allowed "+allowedWT)
 	if addOutcome.Status != 0 || addOutcome.Refusal != nil {
 		t.Fatalf("authorized git worktree add failed: %+v refusal=%+v", addOutcome, addOutcome.Refusal)
 	}
 
-	if _, bindErr := db.New(fixture.Database).GetSessionWorktree(t.Context(), fixture.Session); !db.IsNoRows(bindErr) {
+	if _, bindErr := db.New(fixture.Database).GetSessionWorktree(t.Context(), rootSession); !db.IsNoRows(bindErr) {
 		t.Fatalf("git worktree add mutated session_worktrees binding: err=%v", bindErr)
 	}
 
@@ -102,7 +112,7 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 		t.Fatalf("expected both allowed and external checkouts in %+v", items)
 	}
 
-	usagesMid, err := inv.SummarizeChatRepoUsages(t.Context(), testdbseed.DefaultProjectID, repoID, fixture.Session)
+	usagesMid, err := inv.SummarizeChatRepoUsages(t.Context(), testdbseed.DefaultProjectID, repoID, rootSession)
 	testutil.FailErr(t, "summarize mid usages", err)
 	if !usagesMid[allowedID].CreatedByChat || !usagesMid[allowedID].UsedByChat {
 		t.Fatalf("allowed checkout missing created+used association: %+v", usagesMid[allowedID])
@@ -111,13 +121,14 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 		t.Fatalf("external checkout had fabricated chat association before use: %+v", usagesMid[externalID])
 	}
 
-	activeWorker = "worker-b"
+	fixture.Session = "worker-sess-b"
+	activeHandoffAgent = "worker-b"
 	useOutcome := callComposedProgram(t, fixture, "cd "+externalWT+" && edit --path readme.txt --old-string v1 --new-string v2")
 	if useOutcome.Status != 0 || useOutcome.Refusal != nil {
 		t.Fatalf("worker-b cd + edit in external worktree failed: %+v refusal=%+v", useOutcome, useOutcome.Refusal)
 	}
 
-	usagesAfter, err := inv.SummarizeChatRepoUsages(t.Context(), testdbseed.DefaultProjectID, repoID, fixture.Session)
+	usagesAfter, err := inv.SummarizeChatRepoUsages(t.Context(), testdbseed.DefaultProjectID, repoID, rootSession)
 	testutil.FailErr(t, "summarize final usages", err)
 	if usagesAfter[externalID].CreatedByChat || !usagesAfter[externalID].UsedByChat {
 		t.Fatalf("external checkout usage mismatch: %+v", usagesAfter[externalID])

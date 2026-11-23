@@ -34,3 +34,5 @@ CREATE TABLE IF NOT EXISTS source_worktree_usage_receipts (
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS idx_source_worktree_usage_receipts_project
     ON source_worktree_usage_receipts(project_id, worktree_id);
+CREATE INDEX IF NOT EXISTS idx_source_worktree_usage_receipts_actor
+    ON source_worktree_usage_receipts(actor_session_id);

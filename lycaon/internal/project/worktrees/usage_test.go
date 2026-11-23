@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/git"
@@ -15,23 +14,13 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 func seedActorSessions(t *testing.T, sqlDB *db.Store, rootSessionID string, childSessionIDs ...string) {
 	t.Helper()
-	now := timelayout.Format(time.Now().UTC())
-	_, err := sqlDB.ExecContext(t.Context(),
-		`INSERT INTO sessions (id, project_id, title, posture, status, created_at, updated_at) VALUES (?, ?, 'Root chat', 'build', 'idle', ?, ?)`,
-		rootSessionID, testdbseed.DefaultProjectID, now, now,
-	)
-	testutil.FailErr(t, "insert root session", err)
+	testdbseed.InsertSession(t, sqlDB, rootSessionID, testdbseed.DefaultProjectID)
 	for _, child := range childSessionIDs {
-		_, err := sqlDB.ExecContext(t.Context(),
-			`INSERT INTO sessions (id, project_id, parent_session_id, title, posture, status, created_at, updated_at) VALUES (?, ?, ?, 'Worker chat', 'build', 'idle', ?, ?)`,
-			child, testdbseed.DefaultProjectID, rootSessionID, now, now,
-		)
-		testutil.FailErr(t, "insert child session", err)
+		testdbseed.InsertChildSession(t, sqlDB, child, rootSessionID)
 	}
 }
 
