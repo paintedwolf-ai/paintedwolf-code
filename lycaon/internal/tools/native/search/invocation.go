@@ -45,6 +45,9 @@ type invocation struct {
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
+	if _, ok := tools.ProgramDraftsFrom(ctx); !ok {
+		ctx = tools.WithProgramDrafts(ctx, tools.NewProgramDrafts(tc.Invocation.ToolName, nil))
+	}
 	owners := *p.owners
 	if owners.Catalog != nil {
 		owners.Revisions.Literals = owners.Catalog.Literals
@@ -203,14 +206,18 @@ func (inv *invocation) openPinnedStream(bound projectpaths.BoundPath) (native.Ex
 }
 
 func (inv *invocation) openWalkedPinnedStream(e entry, w *walker) (native.ExecutionStream, *toolcontract.SourcePin, error) {
-	if e.depth == 0 || e.link || e.bound.Resolved.External || w == nil || strings.HasSuffix(strings.ToLower(e.name), ".gz") {
+	if e.depth == 0 || e.link || e.followed || w == nil || strings.HasSuffix(strings.ToLower(e.name), ".gz") {
 		return inv.openPinnedStream(e.bound)
 	}
-	root := w.readRoot(e.bound)
-	if root == nil {
-		return inv.openPinnedStream(e.bound)
+	var catalog *native.CatalogObservation
+	if e.bound.Resolved.External {
+		if e.catalog == nil || !e.catalog.Valid() {
+			return inv.openPinnedStream(e.bound)
+		}
+		catalog = &native.CatalogObservation{RootPath: e.catalog.RootPath, Rel: e.catalog.Rel}
 	}
-	streamed, err := inv.owners.Revisions.OpenWalkedStream(inv.ctx, inv.tc, e.bound.Resolved, root, 0)
+	root := w.readRootFor(e)
+	streamed, err := inv.owners.Revisions.OpenBoundWalkedStream(inv.ctx, inv.tc, e.bound, root, catalog, 0)
 	if err != nil {
 		return native.ExecutionStream{}, nil, err
 	}
