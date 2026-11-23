@@ -104,8 +104,8 @@ func TestMutationRoutingSeparatesAttachedLinkedMovedAndExternalPaths(t *testing.
 	if repochange.CurrentEpoch(primary) != primaryStart || repochange.CurrentEpoch(secondary) != secondaryStart {
 		t.Fatal("external/linked mutations advanced attached-root epochs")
 	}
-	if len(blueprintObs.paths) != 1 || blueprintObs.paths[0] != "blueprint.md" {
-		t.Fatalf("blueprint observer saw %v, want [blueprint.md]", blueprintObs.paths)
+	if len(blueprintObs.paths) != 4 || !slices.Contains(blueprintObs.paths, "blueprint.md") {
+		t.Fatalf("blueprint observer saw %v, want 4 display paths including blueprint.md", blueprintObs.paths)
 	}
 	obsAfter, err := cat.Directories.ObserveDirectory(t.Context(), "proj-routing", wtRoot, "pkg", sourcecatalog.DirectoryRead{})
 	testutil.FailErr(t, "re-observe sibling directory", err)

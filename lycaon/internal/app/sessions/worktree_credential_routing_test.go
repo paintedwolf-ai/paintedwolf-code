@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,6 +21,8 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+	"github.com/lycaon/lycaon/internal/secretharvest"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -73,10 +76,25 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 	testutil.FailErr(t, "mkdir unrelated", os.MkdirAll(unrelatedDir, 0o755))
 	runSessionGit(t, primary, "worktree", "add", "-q", "-b", "feat/tp04", siblingWT)
 
-	files := credentialFilesFixture(t)
-	testutil.FailErr(t, "attach primary credential root", files.queries.CreateProjectRoot(t.Context(), db.CreateProjectRootParams{
-		ID: "r1", ProjectID: testdbseed.DefaultProjectID, Path: primary, Label: "root", IsPrimary: 1, AddedAt: "2026-01-01T00:00:00Z", Kind: "attached",
-	}))
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time {
+		ch := make(chan time.Time)
+		close(ch)
+		return ch
+	}})
+	_, err = f.Database.ExecContext(t.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
+		VALUES ('outside-r1', ?, ?, 'outside', 0, '2026-01-01T00:00:00Z', 'outside')`, testdbseed.DefaultProjectID, projectroot.OutsidePath)
+	testutil.FailErr(t, "insert outside root row", err)
+
+	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x3c}, 32))
+	testutil.FailErr(t, "fingerprinter", err)
+	files := &credentialFiles{
+		harvest:  secretharvest.NewRuntime(fp),
+		fp:       fp,
+		queries:  db.New(f.Database),
+		managed:  func(string) []secretmatch.Remembered { return nil },
+		exposure: func(context.Context, string, string) error { return nil },
+	}
+	files.index = newCredentialIndex(files)
 	files.startCredentialIndex()
 	t.Cleanup(func() { testutil.FailErr(t, "close credential index", files.closeCredentialIndex(context.Background())) })
 	testutil.FailErr(t, "admit primary credentials", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
@@ -101,15 +119,6 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 			primaryEvents = append(primaryEvents, ev)
 		}
 	}))
-
-	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time {
-		ch := make(chan time.Time)
-		close(ch)
-		return ch
-	}})
-	_, err = f.Database.ExecContext(t.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
-		VALUES ('outside-r1', ?, ?, 'outside', 0, '2026-01-01T00:00:00Z', 'outside')`, testdbseed.DefaultProjectID, projectroot.OutsidePath)
-	testutil.FailErr(t, "insert outside root row", err)
 
 	prevConfigure := f.Configure
 	f.Configure = func(tc *tools.ToolContext) {
