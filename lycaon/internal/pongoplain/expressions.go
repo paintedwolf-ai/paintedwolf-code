@@ -398,11 +398,17 @@ func parseIncludeClause(rest string) (string, []Binding, error) {
 		return dep, nil, nil
 	}
 	toks, err := lexExpr(rest)
-	if err != nil || len(toks) == 0 || toks[0].kind != tokString {
+	if err != nil || len(toks) == 0 || toks[0].kind != tokString || toks[0].val == "" {
 		return "", nil, fmt.Errorf("include target must be a static string literal")
 	}
 	dep := toks[0].val
 	tail := strings.TrimSpace(rest[toks[0].end:])
+	if tail == "if_exists" {
+		return dep, nil, nil
+	}
+	if strings.HasPrefix(tail, "if_exists ") {
+		tail = strings.TrimSpace(strings.TrimPrefix(tail, "if_exists "))
+	}
 	if tail == "" || tail == "only" {
 		return dep, nil, nil
 	}

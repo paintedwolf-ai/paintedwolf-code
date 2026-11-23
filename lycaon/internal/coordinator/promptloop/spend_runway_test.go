@@ -29,6 +29,7 @@ type softStopSequenceLLM struct {
 	completions  []*modelcall.Completion
 	index        int
 	requestTools [][]string
+	requests     []modelcall.CompletionRequest
 }
 
 func (s *softStopSequenceLLM) Complete(ctx context.Context, _ modelcall.CompletionRequest) (*modelcall.Completion, error) {
@@ -49,6 +50,7 @@ func (s *softStopSequenceLLM) Stream(ctx context.Context, req modelcall.Completi
 		names = append(names, meta.Name)
 	}
 	s.requestTools = append(s.requestTools, names)
+	s.requests = append(s.requests, req)
 	ch := make(chan modelcall.StreamChunk, 1)
 	completion, err := s.Complete(ctx, req)
 	if err != nil {
@@ -114,6 +116,7 @@ func TestApplySpendCeilingGrantsOneCoordinatorWindDown(t *testing.T) {
 	ceilingErr := errors.New("ceiling reached")
 	loop := NewPromptLoop(PromptLoopDeps{
 		Nudges: NudgesDeps{
+			SpendSoftStopNudge: func(context.Context, *api.Session) HostNudge { return HostNudge{Content: "bounded landing"} },
 			CheckSpendCeiling: func(context.Context, string, *api.Session) (SpendCeilingCheck, error) {
 				return SpendCeilingCheck{SoftStop: true}, ceilingErr
 			},
@@ -128,35 +131,8 @@ func TestApplySpendCeilingGrantsOneCoordinatorWindDown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("applySpendCeiling: %v", err)
 	}
-	if !decision.WindDown || !st.spendSoftStopGranted {
+	if decision.WindDown.Content != "bounded landing" || !st.spendSoftStopGranted {
 		t.Fatalf("decision=%+v state=%+v", decision, st)
-	}
-}
-
-func TestMaybeSpendSoftStopNudge(t *testing.T) {
-	var appended []api.Message
-	loop := NewPromptLoop(PromptLoopDeps{
-		Nudges: NudgesDeps{
-			SpendSoftStopNudge: func(context.Context, *api.Session) HostNudge {
-				return HostNudge{Content: "bounded landing"}
-			},
-		},
-		Projection: ProjectionDeps{
-			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-				appended = append(appended, msgs...)
-				return nil
-			},
-		},
-	})
-	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "hi"}}
-	got, err := loop.Nudges.maybeSpendSoftStopNudge(
-		context.Background(), &api.Session{ID: "s1"}, "s1", history, true, &promptLoopTurnState{},
-	)
-	if err != nil {
-		t.Fatalf("maybeSpendSoftStopNudge: %v", err)
-	}
-	if len(got) != 2 || len(appended) != 1 || appended[0].Visibility != api.MessageVisibilityInternal {
-		t.Fatalf("history=%+v appended=%+v", got, appended)
 	}
 }
 
@@ -175,67 +151,86 @@ func TestSoftStopDropsWorkerDelegation(t *testing.T) {
 }
 
 func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
-	ceilingErr := errors.New("ceiling reached")
-	client := &softStopSequenceLLM{completions: []*modelcall.Completion{
-		{ToolCalls: []api.ToolCall{{Name: "read", ID: "before", Args: map[string]any{"path": "a"}}}},
-		{ToolCalls: []api.ToolCall{{Name: "read", ID: "landing", Args: map[string]any{"path": "b"}}}},
-		{Content: "Landed with the best usable result."},
-	}}
-	messages := storetest.New(t, testdbseed.DefaultProjectID, "project")
-	deps := StoreDeps(messages)
-	deps.Model.LLM = client
-	deps.Context.Policy = softStopToolPolicy{}
-	deps.Context.Tools = toolstest.NewRegistry()
-	var checks int
-	deps.Nudges.CheckSpendCeiling = func(context.Context, string, *api.Session) (SpendCeilingCheck, error) {
-		checks++
-		if checks == 1 {
-			return SpendCeilingCheck{}, nil
-		}
-		return SpendCeilingCheck{SoftStop: true}, ceilingErr
-	}
-	deps.Nudges.IsSpendCeiling = func(err error) bool { return errors.Is(err, ceilingErr) }
-	deps.Nudges.SpendSoftStopNudge = func(context.Context, *api.Session) HostNudge {
-		return HostNudge{Content: "Use one bounded wind-down round."}
-	}
-	deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
-		return HostNudge{Content: "Give the final prose closeout."}
-	}
-	var admitted int
-	deps.Projection.AdmitModelResponse = func(_ context.Context, _ string, attemptID string) error {
-		if attemptID != "attempt" {
-			t.Fatalf("admitted attempt = %q", attemptID)
-		}
-		admitted++
-		return nil
-	}
-	loop := NewPromptLoopForTest(deps)
-	sess, err := messages.Sessions.Create(
-		context.Background(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project",
-	)
-	testutil.FailErr(t, "create session", err)
-	result, err := loop.Run(context.Background(), PromptRunInput{
-		TurnID: "turn", AttemptID: "attempt",
-		SessionID: sess.ID,
-		Session:   sess,
-		History:   []api.Message{{Role: api.MessageRoleUser, Content: "finish it"}},
-		ProfileID: "implement",
-		ToolCtx: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		},
-	})
-	testutil.FailErr(t, "run prompt loop", err)
-	if admitted != 3 || result.Closeout == nil || result.Closeout.ID != result.LastAssistantID || result.Closeout.Content != result.LastAssistantContent {
-		t.Fatalf("execution admission=%d sealed=%+v result=%+v", admitted, result.Closeout, result)
-	}
-	if checks != 3 || client.index != 3 {
-		t.Fatalf("checks=%d model turns=%d want 3/3", checks, client.index)
-	}
-	if len(client.requestTools) != 3 || slices.Contains(client.requestTools[1], "task") {
-		t.Fatalf("wind-down advertised tools = %v", client.requestTools)
-	}
-	if result.LastAssistantContent != "Landed with the best usable result." {
-		t.Fatalf("content = %q", result.LastAssistantContent)
+	for _, tc := range []struct {
+		name, guidance string
+		wantCalls      int
+	}{
+		{"with guidance", "Use one bounded wind-down round.", 3},
+		{"missing guidance", "", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ceilingErr := errors.New("ceiling reached")
+			client := &softStopSequenceLLM{completions: []*modelcall.Completion{
+				{ToolCalls: []api.ToolCall{{Name: "read", ID: "before", Args: map[string]any{"path": "a"}}}},
+				{ToolCalls: []api.ToolCall{{Name: "read", ID: "landing", Args: map[string]any{"path": "b"}}}},
+				{Content: "Landed with the best usable result."},
+			}}
+			if tc.guidance == "" {
+				client.completions = append(client.completions[:1], client.completions[2])
+			}
+			messages := storetest.New(t, testdbseed.DefaultProjectID, "project")
+			deps := StoreDeps(messages)
+			deps.Model.LLM = client
+			deps.Context.Policy = softStopToolPolicy{}
+			deps.Context.Tools = toolstest.NewRegistry()
+			var checks int
+			deps.Nudges.CheckSpendCeiling = func(context.Context, string, *api.Session) (SpendCeilingCheck, error) {
+				checks++
+				if checks == 1 {
+					return SpendCeilingCheck{}, nil
+				}
+				return SpendCeilingCheck{SoftStop: true}, ceilingErr
+			}
+			deps.Nudges.IsSpendCeiling = func(err error) bool { return errors.Is(err, ceilingErr) }
+			deps.Nudges.SpendSoftStopNudge = func(context.Context, *api.Session) HostNudge {
+				return HostNudge{Content: tc.guidance}
+			}
+			deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
+				return HostNudge{Content: "Give the final prose closeout."}
+			}
+			var admitted int
+			deps.Projection.AdmitModelResponse = func(_ context.Context, _ string, attemptID string) error {
+				if attemptID != "attempt" {
+					t.Fatalf("admitted attempt = %q", attemptID)
+				}
+				admitted++
+				return nil
+			}
+			loop := NewPromptLoopForTest(deps)
+			sess, err := messages.Sessions.Create(
+				context.Background(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project",
+			)
+			testutil.FailErr(t, "create session", err)
+			result, err := loop.Run(context.Background(), PromptRunInput{
+				TurnID: "turn", AttemptID: "attempt",
+				SessionID: sess.ID,
+				Session:   sess,
+				History:   []api.Message{{Role: api.MessageRoleUser, Content: "finish it"}},
+				ProfileID: "implement",
+				ToolCtx: tools.ToolContext{
+					Identity: tools.InvocationIdentity{SessionID: sess.ID},
+				},
+			})
+			testutil.FailErr(t, "run prompt loop", err)
+			if admitted != tc.wantCalls || result.Closeout == nil || result.Closeout.ID != result.LastAssistantID || result.Closeout.Content != result.LastAssistantContent {
+				t.Fatalf("execution admission=%d sealed=%+v result=%+v", admitted, result.Closeout, result)
+			}
+			if checks != tc.wantCalls || client.index != tc.wantCalls {
+				t.Fatalf("checks=%d model turns=%d want %d each", checks, client.index, tc.wantCalls)
+			}
+			if client.requests[tc.wantCalls-1].ToolUse != modelcall.ToolUseForbidden {
+				t.Fatal("final closeout permitted tool calls")
+			}
+			if tc.guidance != "" && !slices.ContainsFunc(client.requests[1].Messages, func(msg api.Message) bool { return strings.Contains(msg.Content, tc.guidance) }) {
+				t.Fatal("wind-down request missing spend guidance")
+			}
+			if tc.guidance != "" && (client.requests[1].ToolUse != modelcall.ToolUseAllowed || slices.Contains(client.requestTools[1], "task")) {
+				t.Fatalf("wind-down advertised tools = %v", client.requestTools)
+			}
+			if result.LastAssistantContent != "Landed with the best usable result." {
+				t.Fatalf("content = %q", result.LastAssistantContent)
+			}
+		})
 	}
 }
 

@@ -167,8 +167,8 @@ func applyInspectedTag(
 		if profile != Composed {
 			return nil
 		}
-		dep, ok := quotedDependency(rest)
-		if !ok {
+		dep, _, err := parseIncludeClause(rest)
+		if err != nil || dep == "" {
 			return fmt.Errorf("%w: %s dependency must be a string literal", ErrComposition, tag)
 		}
 		analysis.Dependencies = append(analysis.Dependencies, dep)

@@ -21,6 +21,7 @@ const (
 	MaxContextDepth     = 32
 	MaxTemplateTags     = 4096
 	MaxForNesting       = 2
+	MaxExecutionSteps   = 131072
 	MaxCompositionFiles = 256
 	MaxCompositionDepth = 12
 )
@@ -85,7 +86,9 @@ func NewSet(name string, loader pongo2.TemplateLoader, profile Profile) (*pongo2
 	if err != nil {
 		return nil, err
 	}
-	set := pongo2.NewSet(name, loader)
+	wrapped := &composedSetLoader{inner: loader}
+	set := pongo2.NewSet(name, wrapped)
+	wrapped.set = set
 	for _, tag := range bans {
 		if err := set.BanTag(tag); err != nil {
 			return nil, fmt.Errorf("pongoplain: ban tag %q on set %q: %w", tag, name, err)
@@ -130,7 +133,7 @@ func Compile(source string) (*pongo2.Template, error) {
 	}
 	tpl, err := set.FromFile(inlineID)
 	if err != nil {
-		return nil, fmt.Errorf("pongoplain: compile: %w", err)
+		return nil, wrapPongoError("pongoplain: compile", err)
 	}
 	compiledIsolated.Store(source, tpl)
 	return tpl, nil

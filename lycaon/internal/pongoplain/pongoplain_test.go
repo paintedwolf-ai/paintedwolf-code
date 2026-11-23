@@ -85,8 +85,147 @@ func TestCompileAndExecuteResourceCeilings(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		_, err = Execute(ctx, tpl, map[string]any{"value": "x"})
-		if !errors.Is(err, ErrExecutionLimit) {
+		if !errors.Is(err, ErrExecutionLimit) || !errors.Is(err, context.Canceled) {
 			t.Fatalf("cancellation error = %v", err)
+		}
+	})
+
+	t.Run("reserved context key", func(t *testing.T) {
+		tpl, err := Compile(`{{ value }}`)
+		testutil.FailErr(t, "compile", err)
+		_, err = Execute(t.Context(), tpl, map[string]any{"0": "injected", "value": "x"})
+		if !errors.Is(err, ErrContextLimit) {
+			t.Fatalf("reserved key error = %v", err)
+		}
+	})
+}
+
+func TestExecuteDeterministicMidRenderCancellationAndWorkBounds(t *testing.T) {
+	t.Run("mid-render cancellation stops zero-output loop immediately", func(t *testing.T) {
+		tpl, err := Compile(`{% for a in xs %}{% set y = a %}{% endfor %}`)
+		testutil.FailErr(t, "compile", err)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		var stepsObserved int
+		_, err = ExecuteWithStepHook(ctx, tpl, map[string]any{"xs": make([]int, MaxCollectionItems)}, func(step int) {
+			stepsObserved = step
+			if step == 7 {
+				cancel()
+			}
+		})
+		if !errors.Is(err, ErrExecutionLimit) || !errors.Is(err, context.Canceled) {
+			t.Fatalf("mid-render cancellation error = %v", err)
+		}
+		if stepsObserved != 7 {
+			t.Fatalf("stepsObserved = %d, want immediate stop at step 7", stepsObserved)
+		}
+	})
+
+	t.Run("zero-output work exhaustion hits MaxExecutionSteps", func(t *testing.T) {
+		tpl, err := Compile(`{% for a in xs %}{% for b in xs %}{% set y = a %}{% if y == b %}{% endif %}{% endfor %}{% endfor %}`)
+		testutil.FailErr(t, "compile", err)
+
+		out, err := Execute(t.Context(), tpl, map[string]any{"xs": make([]int, MaxCollectionItems)})
+		if !errors.Is(err, ErrExecutionLimit) {
+			t.Fatalf("zero-output exhaustion out=%q err=%v", out, err)
+		}
+		if out != "" {
+			t.Fatalf("unexpected output on abort: %q", out)
+		}
+	})
+}
+
+func TestComposedIncludeSharesDeterministicBudgets(t *testing.T) {
+	t.Run("cross-include nested loops enforce MaxForNesting", func(t *testing.T) {
+		set, err := NewSet("nested-for-include", memTemplateLoader{
+			"a.md": `{% for a in xs %}{% for b in xs %}{% include "b.md" only %}{% endfor %}{% endfor %}`,
+			"b.md": `{% for c in ys %}{% endfor %}`,
+		}, Composed)
+		testutil.FailErr(t, "NewSet", err)
+		tpl, err := set.FromFile("a.md")
+		testutil.FailErr(t, "FromFile", err)
+
+		_, err = Execute(t.Context(), tpl, map[string]any{"xs": []int{1}, "ys": []int{1}})
+		if !errors.Is(err, ErrExecutionLimit) {
+			t.Fatalf("cross-include loop nesting error = %v", err)
+		}
+	})
+
+	t.Run("cross-include with only shares cumulative step budget", func(t *testing.T) {
+		set, err := NewSet("only-step-budget", memTemplateLoader{
+			"a.md": `{% for a in xs %}{% include "b.md" with xs=xs only %}{% endfor %}`,
+			"b.md": `{% for b in xs %}{% set y = b %}{% if y == 0 %}{% endif %}{% endfor %}`,
+		}, Composed)
+		testutil.FailErr(t, "NewSet", err)
+		tpl, err := set.FromFile("a.md")
+		testutil.FailErr(t, "FromFile", err)
+
+		_, err = Execute(t.Context(), tpl, map[string]any{"xs": make([]int, MaxCollectionItems)})
+		if !errors.Is(err, ErrExecutionLimit) {
+			t.Fatalf("cross-include only step exhaustion error = %v", err)
+		}
+	})
+
+	t.Run("cross-include unbuffered output enforces MaxOutputBytes", func(t *testing.T) {
+		set, err := NewSet("include-output-ceiling", memTemplateLoader{
+			"a.md": `{% for a in xs %}{% include "b.md" with xs=xs block=block only %}{% endfor %}`,
+			"b.md": `{% for b in xs %}{{ block }}{% endfor %}`,
+		}, Composed)
+		testutil.FailErr(t, "NewSet", err)
+		tpl, err := set.FromFile("a.md")
+		testutil.FailErr(t, "FromFile", err)
+
+		_, err = Execute(t.Context(), tpl, map[string]any{
+			"xs":    make([]int, MaxCollectionItems),
+			"block": strings.Repeat("x", 32),
+		})
+		if !errors.Is(err, ErrOutputLimit) {
+			t.Fatalf("cross-include output ceiling error = %v", err)
+		}
+	})
+
+	t.Run("dynamic include expression refused with ErrComposition", func(t *testing.T) {
+		if _, err := Inspect(`{% include target %}`, Composed); !errors.Is(err, ErrComposition) {
+			t.Fatalf("Inspect dynamic include error = %v", err)
+		}
+		set, err := NewSet("dynamic-include", memTemplateLoader{"a.md": `{% include target %}`}, Composed)
+		testutil.FailErr(t, "NewSet", err)
+		_, err = set.FromFile("a.md")
+		if err == nil || !strings.Contains(err.Error(), ErrComposition.Error()) {
+			t.Fatalf("FromFile dynamic include error = %v", err)
+		}
+	})
+
+	t.Run("include runtime depth and file count ceilings", func(t *testing.T) {
+		files := memTemplateLoader{}
+		for i := range MaxCompositionDepth + 2 {
+			name := filepath.ToSlash(strings.Join([]string{"d", string(rune('a' + i))}, "_") + ".md")
+			next := filepath.ToSlash(strings.Join([]string{"d", string(rune('a' + i + 1))}, "_") + ".md")
+			if i == MaxCompositionDepth+1 {
+				files[name] = "leaf"
+			} else {
+				files[name] = `{% include "` + next + `" %}`
+			}
+		}
+		depthSet, err := NewSet("depth-ceiling", files, Composed)
+		testutil.FailErr(t, "NewSet depth", err)
+		depthTpl, err := depthSet.FromFile("d_a.md")
+		testutil.FailErr(t, "FromFile depth", err)
+		if _, err := Execute(t.Context(), depthTpl, nil); !errors.Is(err, ErrComposition) {
+			t.Fatalf("runtime include depth error = %v", err)
+		}
+
+		countSet, err := NewSet("count-ceiling", memTemplateLoader{
+			"a.md": `{% include "b.md" %}{% for x in xs %}{% include "b.md" if_exists %}{% endfor %}{% include "missing.md" if_exists %}`,
+			"b.md": `ok`,
+		}, Composed)
+		testutil.FailErr(t, "NewSet count", err)
+		countTpl, err := countSet.FromFile("a.md")
+		testutil.FailErr(t, "FromFile count", err)
+		if _, err := Execute(t.Context(), countTpl, map[string]any{"xs": make([]int, MaxCompositionFiles)}); !errors.Is(err, ErrComposition) {
+			t.Fatalf("runtime include count error = %v", err)
 		}
 	})
 }

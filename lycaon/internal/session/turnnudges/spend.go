@@ -2,6 +2,7 @@ package turnnudges
 
 import (
 	"context"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -14,7 +15,15 @@ func (m *Service) SpendSoftStop(ctx context.Context, sess *api.Session) promptlo
 	if m == nil || sess == nil || sess.IsWorkerChild() {
 		return promptloop.HostNudge{}
 	}
-	return m.Render(ctx, sess, anchor.TurnSpendSoftStop, nil)
+	stem := anchor.InformRenderFor(ctx, anchor.TurnSpendSoftStop, anchor.MatchContext{Surface: "coordinator", SessionID: sess.ID})
+	if stem == "" {
+		return promptloop.HostNudge{}
+	}
+	content, err := m.renderKick(ctx, m.activeTurnReader(ctx, sess, ""), stem, nil)
+	if err != nil || strings.TrimSpace(content) == "" {
+		return promptloop.HostNudge{}
+	}
+	return promptloop.HostNudge{Content: content, SignalID: string(anchor.TurnSpendSoftStop)}
 }
 
 // SpendRunway returns one warning per session and ceiling.

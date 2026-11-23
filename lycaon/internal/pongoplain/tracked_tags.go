@@ -7,11 +7,24 @@ import (
 )
 
 func installTrackedControlTags() {
-	if err := pongo2.ReplaceTag("if", parseTrackedIfTag); err != nil {
-		panic(fmt.Sprintf("pongoplain: install tracked if tag: %v", err))
-	}
-	if err := pongo2.ReplaceTag("for", parseTrackedForTag); err != nil {
-		panic(fmt.Sprintf("pongoplain: install tracked for tag: %v", err))
+	for _, entry := range []struct {
+		name   string
+		parser pongo2.TagParser
+	}{
+		{"if", parseTrackedIfTag},
+		{"for", parseTrackedForTag},
+		{"include", parseTrackedIncludeTag},
+		{"set", parseTrackedSetTag},
+		{"with", parseTrackedWithTag},
+		{"ifequal", parseTrackedIfEqualTag},
+		{"ifnotequal", parseTrackedIfNotEqualTag},
+		{"firstof", parseTrackedFirstofTag},
+		{"widthratio", parseTrackedWidthratioTag},
+		{"autoescape", parseTrackedAutoescapeTag},
+	} {
+		if err := pongo2.ReplaceTag(entry.name, entry.parser); err != nil {
+			panic(fmt.Sprintf("pongoplain: install tracked %s tag: %v", entry.name, err))
+		}
 	}
 }
 
@@ -30,8 +43,13 @@ type trackedIfNode struct {
 }
 
 func (node *trackedIfNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
+	state, stateErr := requireExecState(ctx)
+	if stateErr != nil {
+		return stateErr
+	}
 	rec := ActiveBranchRecorder.Load()
 	for i, condition := range node.conditions {
+		state.step(1)
 		result, err := condition.Evaluate(ctx)
 		if err != nil {
 			return err
@@ -48,6 +66,7 @@ func (node *trackedIfNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 			return node.wrappers[i].Execute(ctx, writer)
 		}
 		if len(node.conditions) == i+1 && len(node.wrappers) > i+1 {
+			state.step(1)
 			if rec != nil && node.elseSite != nil {
 				rec.record(node.elseSite.filename, node.elseSite.line, node.elseSite.col, BranchElse, true)
 			}
@@ -139,6 +158,17 @@ type trackedForLoopInfo struct {
 }
 
 func (node *trackedForNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) (forError *pongo2.Error) {
+	state, stateErr := requireExecState(ctx)
+	if stateErr != nil {
+		return stateErr
+	}
+	state.forDepth++
+	defer func() { state.forDepth-- }()
+	if state.forDepth > MaxForNesting {
+		panic(executionAbort{err: fmt.Errorf("%w: for nesting exceeds %d", ErrExecutionLimit, MaxForNesting)})
+	}
+	state.step(1)
+
 	rec := ActiveBranchRecorder.Load()
 	forCtx := pongo2.NewChildExecutionContext(ctx)
 	loopInfo := &trackedForLoopInfo{First: true}
@@ -154,6 +184,7 @@ func (node *trackedForNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 
 	entered := false
 	obj.IterateOrder(func(idx, count int, key, value *pongo2.Value) bool {
+		state.step(1)
 		entered = true
 		forCtx.Private[node.key] = key
 		if value != nil && node.value != "" {
@@ -177,6 +208,7 @@ func (node *trackedForNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		return true
 	}, func() {
 		if node.emptyWrapper != nil {
+			state.step(1)
 			if execErr := node.emptyWrapper.Execute(forCtx, writer); execErr != nil {
 				forError = execErr
 			}
