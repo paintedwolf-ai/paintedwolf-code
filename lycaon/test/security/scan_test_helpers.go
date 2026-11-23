@@ -39,6 +39,12 @@ import (
 
 const BundledScannerWaitBudget = 5 * time.Minute
 
+// BackgroundSettleBudget bounds background drains after project attachment or
+// removal. The behavior suite runs alongside dozens of parallel package tests
+// under -race, so those drains contend for CPU and can exceed a tight bound;
+// the budget absorbs that load while remaining a bounded deadlock guard.
+const BackgroundSettleBudget = 2 * time.Minute
+
 type staticHeadSHA struct {
 	sha string
 }
@@ -172,7 +178,7 @@ func EnqueueCodeScan(t *testing.T, srv *api.Server, projectDir string, categorie
 
 func EnqueueSingleScanner(t *testing.T, srv *api.Server, projectID string, categories []wire.ScanCategory) wire.CodeScan {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), BackgroundSettleBudget)
 	defer cancel()
 	srv.WaitForBackground(ctx)
 	testutil.FailErr(t, "settle project attachment", ctx.Err())

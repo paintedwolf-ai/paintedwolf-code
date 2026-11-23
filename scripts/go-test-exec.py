@@ -122,27 +122,42 @@ def execute(binary, arguments, env, owner, observe_forks, settle, resource_limit
     return status, bytes(captured), observed, monitor.violation if monitor else None, leaked
 
 
+# A supervised child settles itself once the engine exits: its lifetime pipe closes, it kills its
+# tree, and it exits. The scan lets that bounded settlement finish so a package is not failed for
+# children that were already on their way out; survivors at the deadline are leaks.
+SETTLE_WINDOW = 5.0
+SETTLE_POLL = 0.1
+
+
 def settle_package_children(owner, entry):
-    """Kill and name every live process that kept the package's file or environment entry."""
+    """Settle and name every live process that kept the package's file or environment entry."""
     stat = os.fstat(owner.fileno())
     expected = (stat.st_dev, stat.st_ino)
-    found = (custody.lease_holders(owner.name) | custody.carriers(entry)) - {os.getpid()}
-    births = {pid: custody.birth(pid) for pid in found}
-    names = custody.commands(found)
-    leaked = {}
-    for pid, created in births.items():
-        # A process gone by the time it is named exited on its own.
-        if created is None or pid not in names or custody.birth(pid) != created:
-            continue
-        leaked[pid] = names[pid]
-        if custody.carries(pid, entry) and custody.birth(pid) == created:
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-        else:
-            custody.signal_holder(pid, created, owner.name, expected, signal.SIGKILL)
-    return leaked
+    deadline = time.monotonic() + SETTLE_WINDOW
+    while True:
+        found = (custody.lease_holders(owner.name) | custody.carriers(entry)) - {os.getpid()}
+        if not found:
+            return {}
+        births = {pid: custody.birth(pid) for pid in found}
+        names = custody.commands(found)
+        stable = {pid: names[pid] for pid, created in births.items()
+                  # A process gone by the time it is named exited on its own.
+                  if created is not None and pid in names and custody.birth(pid) == created}
+        if not stable:
+            return {}
+        if time.monotonic() >= deadline:
+            for pid, created in births.items():
+                if pid not in stable:
+                    continue
+                if custody.carries(pid, entry) and custody.birth(pid) == created:
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                else:
+                    custody.signal_holder(pid, created, owner.name, expected, signal.SIGKILL)
+            return stable
+        time.sleep(SETTLE_POLL)
 
 
 def fork_observable():

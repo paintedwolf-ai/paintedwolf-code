@@ -104,6 +104,9 @@ func TestLoopScheduleAndDrain(t *testing.T) {
 	if !engine.Admission.ConsumeBudget(ctx, "s1", "run-1", anchor.LegFinished) {
 		t.Fatal("expected budget consume on drain path")
 	}
+	// The release path may spawn an asynchronous drain once prompt execution
+	// ends; join it so the pending check observes the settled queue.
+	engine.Turns.WaitForAsyncTurns(t.Context())
 	engine.Nudges.DrainPending(ctx, "s1")
 	if _, ok := engine.Nudges.Pending("s1"); ok {
 		t.Fatal("pending should be cleared")

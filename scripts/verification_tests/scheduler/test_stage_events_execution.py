@@ -82,6 +82,10 @@ printf '=== RUN   TestFixture\\n'
 if [ "$FIXTURE_MODE" = orphan ]; then
   python3 -c 'import subprocess; subprocess.Popen(["/bin/sleep", "300"], close_fds=False, start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)'
 fi
+if [ "$FIXTURE_MODE" = settle ]; then
+  # A supervised child that settles once the engine exits: it outlives the binary briefly.
+  python3 -c 'import subprocess, time; subprocess.Popen(["/bin/sleep", "1"], close_fds=False, start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(0.3)'
+fi
 if [ "$FIXTURE_MODE" = holder ]; then /bin/sleep 300 & fi
 if [ "$FIXTURE_MODE" = daemon ]; then
   python3 -c 'import os; os.fork() or (os.setsid(), os.closerange(0, 256), os.execv("/bin/sleep", ["sleep", "300"]))'
@@ -126,6 +130,15 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
         self.assertIn("--- FAIL: TestFixture", Path(event["output"]).read_text())
 
     @unittest.skipUnless(sys.platform in {"darwin", "linux"}, "process custody requires a supported POSIX host")
+    def test_a_child_that_settles_after_the_engine_exits_is_not_a_leak(self):
+        """A supervised child settles itself once the engine dies; the scan waits for it."""
+        result, event = self.run_wrapper("settle")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(b"package left child processes", result.stdout)
+        self.assertEqual(event["exit_code"], 0)
+        self.assertGreaterEqual(event["child_scan_seconds"], 0)
+
+    @unittest.skipUnless(sys.platform in {"darwin", "linux"}, "process custody requires a supported POSIX host")
     def test_a_detached_child_fails_the_package(self):
         result, event = self.run_wrapper("orphan")
         self.assertEqual(result.returncode, 1, result.stderr)
@@ -154,6 +167,7 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
         spec.loader.exec_module(wrapper)
         births = {11: 100, 12: 200}
         with tempfile.NamedTemporaryFile() as owner, \
+                patch.object(wrapper, "SETTLE_WINDOW", 0.05), \
                 patch.object(wrapper.custody, "lease_holders", return_value={11}), \
                 patch.object(wrapper.custody, "carriers", return_value={12}), \
                 patch.object(wrapper.custody, "birth", side_effect=births.get), \
