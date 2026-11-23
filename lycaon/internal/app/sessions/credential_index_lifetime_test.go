@@ -6,16 +6,18 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/app/security"
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestCredentialEvidenceWaitersCancelWithoutReleasingActiveCapture(t *testing.T) {
 	files := credentialFilesFixture(t)
-	root := attachCredentialRoot(t, files)
-	_, finish, err := files.index.begin(t.Context())
+	attachCredentialRoot(t, files)
+	_, finish, err := files.index.work.Begin(t.Context())
 	testutil.FailErr(t, "hold evidence capture", err)
 	defer finish()
+	release, err := files.index.access.Acquire(t.Context(), credentialRootKey("proj-1", "r1"))
+	testutil.FailErr(t, "hold root access", err)
+	defer release()
 	runtime := &security.Runtime{CredentialFiles: files}
 	for _, operation := range []struct {
 		name string
@@ -25,9 +27,7 @@ func TestCredentialEvidenceWaitersCancelWithoutReleasingActiveCapture(t *testing
 			_, err := runtime.ModelScreeningValues(ctx, "proj-1", "chat")
 			return err
 		}},
-		{"observer", func(ctx context.Context) error {
-			return files.index.changed(ctx, repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged})
-		}},
+		{"tool", func(ctx context.Context) error { return awaitCredentials(ctx, files) }},
 		{"deletion", func(ctx context.Context) error { return files.ForgetProject(ctx, "proj-1") }},
 	} {
 		t.Run(operation.name, func(t *testing.T) {
@@ -57,7 +57,7 @@ func TestCredentialEvidenceWaitersCancelWithoutReleasingActiveCapture(t *testing
 
 func TestCredentialIndexShutdownCancelsAndDrainsAdmittedWork(t *testing.T) {
 	files := credentialFilesFixture(t)
-	ctx, finish, err := files.index.begin(t.Context())
+	ctx, finish, err := files.index.work.Begin(t.Context())
 	testutil.FailErr(t, "admit capture", err)
 	result := make(chan error, 1)
 	go func() { result <- files.closeCredentialIndex(t.Context()) }()
@@ -78,7 +78,7 @@ func TestCredentialIndexShutdownCancelsAndDrainsAdmittedWork(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("shutdown did not finish after the capture drained")
 	}
-	if err := files.EnsureProject(t.Context(), "proj-1"); !errors.Is(err, context.Canceled) {
+	if err := awaitCredentials(t.Context(), files); !errors.Is(err, context.Canceled) {
 		t.Fatalf("stopped index admitted project work: %v", err)
 	}
 }

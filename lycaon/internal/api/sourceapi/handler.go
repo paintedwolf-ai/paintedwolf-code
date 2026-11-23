@@ -49,11 +49,13 @@ type Deps struct {
 	// and platform watch policy; nil uses the process defaults.
 	CatalogSnapshot CatalogSnapshotFunc
 	WatchNeedsSeed  func(rootPath string) bool
-	EditorClients   *editordoc.ClientLiveness
-	ProjectViews    *viewstate.Service
-	EditorDocuments *editordoc.Service
-	Events          events.ReplayHub
-	Briefings       briefingadmin.Services
+	// StartCredentialIndex begins a project's credential-file index.
+	StartCredentialIndex func(projectID string)
+	EditorClients        *editordoc.ClientLiveness
+	ProjectViews         *viewstate.Service
+	EditorDocuments      *editordoc.Service
+	Events               events.ReplayHub
+	Briefings            briefingadmin.Services
 	// FileOperations journals file requests.
 	FileOperations  *fileops.Service
 	ManagedSecrets  *secretcap.Service
@@ -203,20 +205,21 @@ type Views struct {
 }
 
 type Watch struct {
-	CatalogSnapshot  CatalogSnapshotFunc
-	EditorDocuments  *editordoc.Service
-	ProjectRegistry  project.Registry
-	ScanCadence      *scancadence.Service
-	SourceInventory  InventoryService
-	WatchNeedsSeed   func(rootPath string) bool
-	background       *taskgroup.Group
-	responses        *httpio.Responder
-	watches          sourcefeed.WatchLifetime
-	watchWork        workscope.Group
-	watchBindingMu   sync.Mutex
-	suspendedWatches map[string]int
-	sourceWatchJobs  map[string]*sourceWatchJob
-	sourceWatchMu    sync.Mutex
+	CatalogSnapshot      CatalogSnapshotFunc
+	EditorDocuments      *editordoc.Service
+	ProjectRegistry      project.Registry
+	ScanCadence          *scancadence.Service
+	SourceInventory      InventoryService
+	WatchNeedsSeed       func(rootPath string) bool
+	StartCredentialIndex func(projectID string)
+	background           *taskgroup.Group
+	responses            *httpio.Responder
+	watches              sourcefeed.WatchLifetime
+	watchWork            workscope.Group
+	watchBindingMu       sync.Mutex
+	suspendedWatches     map[string]int
+	sourceWatchJobs      map[string]*sourceWatchJob
+	sourceWatchMu        sync.Mutex
 }
 
 type Workspace struct {
@@ -275,7 +278,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	h.Review = &Review{Git: deps.Git, ProjectRegistry: deps.ProjectRegistry, SessionQueries: deps.SessionStore.Sessions, SourceLedger: deps.SourceLedger, ArrivalAnchorTimeBound: arrivalAnchorTimeBound, responses: responses}
 	h.Trees = &Trees{ProjectRegistry: deps.ProjectRegistry, SourceLedger: deps.SourceLedger, background: background, responses: responses, sourceViews: sourceViews}
 	h.Views = &Views{Events: deps.Events, ProjectRegistry: deps.ProjectRegistry, SessionQueries: deps.SessionStore.Sessions, background: background, responses: responses, sourceReaders: sourceReaders, sourceViews: sourceViews}
-	h.Watch = &Watch{CatalogSnapshot: deps.CatalogSnapshot, EditorDocuments: deps.EditorDocuments, ProjectRegistry: deps.ProjectRegistry, ScanCadence: deps.ScanCadence, SourceInventory: deps.SourceInventory, WatchNeedsSeed: deps.WatchNeedsSeed, background: background, responses: responses, sourceWatchJobs: make(map[string]*sourceWatchJob)}
+	h.Watch = &Watch{CatalogSnapshot: deps.CatalogSnapshot, EditorDocuments: deps.EditorDocuments, ProjectRegistry: deps.ProjectRegistry, ScanCadence: deps.ScanCadence, SourceInventory: deps.SourceInventory, WatchNeedsSeed: deps.WatchNeedsSeed, StartCredentialIndex: deps.StartCredentialIndex, background: background, responses: responses, sourceWatchJobs: make(map[string]*sourceWatchJob)}
 	h.Workspace = &Workspace{Branches: deps.Branches, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionQueries: deps.SessionStore.Sessions, SourceLedger: deps.SourceLedger, Workers: deps.Workers, responses: responses}
 	h.Analysis.Workspace = h.Workspace
 	h.ComparisonViews.Comparisons = h.Comparisons

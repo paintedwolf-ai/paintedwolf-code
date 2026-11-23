@@ -25,20 +25,3 @@ func (r *Runtime) wireCredentialFiles(ctx context.Context, deps CheckpointDepend
 	deps.Security.CredentialFiles = files
 	return nil
 }
-
-func (c *credentialFiles) ForgetProject(ctx context.Context, project string) error {
-	_, finish, err := c.index.begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer finish()
-	if err := c.harvest.ForgetProject(project); err != nil {
-		return err
-	}
-	for key, root := range c.index.roots {
-		if root.projectID == project {
-			delete(c.index.roots, key)
-		}
-	}
-	return nil
-}
