@@ -69,26 +69,57 @@ func (w *walker) close() {
 	}
 }
 
+func (w *walker) evictRoot(path string) {
+	if old, ok := w.roots[path]; ok {
+		w.work.opens += old.DescriptorOpens()
+		peak, held := old.DirectoryIdentityDescriptors()
+		w.work.identityPeak = max(w.work.identityPeak, peak)
+		w.work.identityHeld += held
+		_ = old.Close()
+		delete(w.roots, path)
+	}
+}
+
 func (w *walker) readRoot(bound projectpaths.BoundPath) *fseffect.ReadRoot {
 	path := bound.Resolved.Root.Path
 	if path == "" || bound.Resolved.External {
 		return nil
 	}
 	if err := bound.Validate(); err != nil {
-		if old, ok := w.roots[path]; ok {
-			w.work.opens += old.DescriptorOpens()
-			peak, held := old.DirectoryIdentityDescriptors()
-			w.work.identityPeak = max(w.work.identityPeak, peak)
-			w.work.identityHeld += held
-			_ = old.Close()
-			delete(w.roots, path)
-		}
+		w.evictRoot(path)
 		return nil
 	}
 	if r, ok := w.roots[path]; ok {
 		return r
 	}
 	r, err := fseffect.OpenReadRoot(path)
+	if err != nil {
+		return nil
+	}
+	w.work.roots++
+	w.roots[path] = r
+	return r
+}
+
+func (w *walker) readRootFor(e entry) *fseffect.ReadRoot {
+	if !e.bound.Resolved.External {
+		return w.readRoot(e.bound)
+	}
+	if e.catalog == nil || !e.catalog.Valid() {
+		return nil
+	}
+	path := e.bound.Resolved.Root.Path
+	if path == "" {
+		return nil
+	}
+	if err := e.bound.AdmitPathRead(path); err != nil {
+		w.evictRoot(path)
+		return nil
+	}
+	if r, ok := w.roots[path]; ok {
+		return r
+	}
+	r, err := e.bound.OpenSharedRoot()
 	if err != nil {
 		return nil
 	}
@@ -143,7 +174,7 @@ func (w *walker) openDirectory(dir entry) (*projectpaths.BoundDir, error) {
 	if dir.parent != nil {
 		return dir.parent.OpenChildDirectory(dir.name)
 	}
-	return dir.bound.OpenDirWithRoot(w.readRoot(dir.bound))
+	return dir.bound.OpenDirWithRoot(w.readRootFor(dir))
 }
 
 // directoryNames observes membership without retaining it across command actions.

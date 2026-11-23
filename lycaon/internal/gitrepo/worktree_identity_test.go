@@ -34,6 +34,17 @@ func initGitRepo(t *testing.T, files map[string]string) string {
 	return root
 }
 
+func rewriteWorktreeRelativePointers(t *testing.T, mainRepo, wt string) {
+	t.Helper()
+	adminDir := filepath.Join(mainRepo, ".git", "worktrees", filepath.Base(wt))
+	relToAdmin, err := filepath.Rel(wt, adminDir)
+	testutil.FailErr(t, "rel to admin", err)
+	relToDotGit, err := filepath.Rel(adminDir, filepath.Join(wt, ".git"))
+	testutil.FailErr(t, "rel to dotgit", err)
+	testutil.FailErr(t, "write relative .git", os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+relToAdmin+"\n"), 0o644))
+	testutil.FailErr(t, "write relative gitdir", os.WriteFile(filepath.Join(adminDir, "gitdir"), []byte(relToDotGit+"\n"), 0o644))
+}
+
 func TestCheckoutResolverVerifiesReciprocalLinkedWorktrees(t *testing.T) {
 	mainRepo := initGitRepo(t, map[string]string{
 		"packages/a/a.go": "package a\n",
@@ -43,7 +54,8 @@ func TestCheckoutResolverVerifiesReciprocalLinkedWorktrees(t *testing.T) {
 	withSpaces := filepath.Join(sandboxDir, "branch with spaces ")
 	detached := filepath.Join(sandboxDir, "detached")
 	runGit(t, mainRepo, "worktree", "add", "-q", "-b", "feat/spaces", withSpaces)
-	runGit(t, mainRepo, "worktree", "add", "-q", "--detach", "--relative-paths", detached)
+	runGit(t, mainRepo, "worktree", "add", "-q", "--detach", detached)
+	rewriteWorktreeRelativePointers(t, mainRepo, detached)
 
 	resolver := gitrepo.NewCheckoutResolver([]gitrepo.AttachedRoot{{ID: "primary", Path: mainRepo}})
 

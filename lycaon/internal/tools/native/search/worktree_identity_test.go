@@ -113,6 +113,22 @@ func TestWorktreeIdentityMemoizesPerOperandRootWithoutGitSubprocesses(t *testing
 	}
 }
 
+func externalNonTempDir(t *testing.T) string {
+	t.Helper()
+	home, err := os.UserHomeDir()
+	testutil.FailErr(t, "locate home", err)
+	if hostHome := os.Getenv("PW_TEST_HOST_HOME"); hostHome != "" {
+		home = hostHome
+	}
+	//nolint:usetesting // Fixture must reside outside shared temporary roots to exercise grant boundaries.
+	outside, err := os.MkdirTemp(home, "paintedwolf-wt-grant-*")
+	testutil.FailErr(t, "create outside dir", err)
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+	resolved, err := filepath.EvalSymlinks(outside)
+	testutil.FailErr(t, "canonicalize outside dir", err)
+	return resolved
+}
+
 func TestWorktreeIdentityFileGrantNeverAdmitsParentListing(t *testing.T) {
 	logs := discoveryCapture(t)
 	h := newHarness(t, map[string]string{
@@ -121,8 +137,7 @@ func TestWorktreeIdentityFileGrantNeverAdmitsParentListing(t *testing.T) {
 	})
 	initGitCheckout(t, h.root, nil)
 
-	extBase, err := filepath.EvalSymlinks(t.TempDir())
-	testutil.FailErr(t, "resolve external base", err)
+	extBase := externalNonTempDir(t)
 	wt := filepath.Join(extBase, "wt-file-grant")
 	gitCmd(t, h.root, "worktree", "add", "-q", "-b", "feat/file-grant", wt)
 

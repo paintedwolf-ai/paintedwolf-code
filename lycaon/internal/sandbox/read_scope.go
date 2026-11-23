@@ -23,6 +23,18 @@ type CompiledReadScope struct {
 }
 
 // CompileReadFilter builds one root-scoped inventory predicate.
+// ReadGlobsForProfile returns resolved read globs for profileID (empty when unrestricted).
+func (b *Boundary) ReadGlobsForProfile(ctx context.Context, profileID string) []string {
+	if b == nil {
+		return nil
+	}
+	prof, ok := b.lookupProfile(ctx, profileID)
+	if !ok || len(prof.ReadGlobs) == 0 {
+		return nil
+	}
+	return SubstituteScopeGlobs(prof.ReadGlobs, ScopeTokensFromContext(ctx))
+}
+
 func (b *Boundary) CompileReadFilter(ctx context.Context, projectDir, profileID string) (ReadFilter, error) {
 	scope, err := b.CompileReadScope(ctx, projectDir, profileID)
 	return scope.Filter, err

@@ -38,7 +38,7 @@ func newWorktreeIdentityMemo(tc tools.ToolContext) *worktreeIdentityMemo {
 }
 
 func (m *worktreeIdentityMemo) bindOperand(e *entry) {
-	if m == nil || !m.resolver.HasRepositories() {
+	if m == nil || !m.resolver.HasRepositories() || !e.dir() {
 		return
 	}
 	res := e.bound.Resolved
@@ -49,14 +49,7 @@ func (m *worktreeIdentityMemo) bindOperand(e *entry) {
 	if admittedDir == "" || e.bound.AdmitPathRead(admittedDir) != nil {
 		return
 	}
-	targetDir := res.Abs
-	if !e.dir() {
-		targetDir = filepath.Dir(res.Abs)
-		if e.bound.AdmitPathRead(targetDir) != nil {
-			return
-		}
-	}
-	binding, ok := m.resolveDir(targetDir, admittedDir)
+	binding, ok := m.resolveDir(res.Abs, admittedDir)
 	if !ok {
 		return
 	}
