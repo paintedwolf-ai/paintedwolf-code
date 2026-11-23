@@ -142,6 +142,7 @@ func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
 		return nil
 	}
 	r.add(fsRule{op: opRead, matches: subpathMatches(r.sharedTemp, FloorSharedTemp)})
+	r.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(withDarwinAliases(r.sharedTemp), "")})
 	excluded := resolveEach(c.ReadDenyPaths)
 	var readSubpaths, readLiterals, reachable []string
 	for _, root := range append(nonExcludedPaths(resolveEach(c.Roots), excluded), nonExcludedPaths(resolveEach(c.ReadRoots), excluded)...) {

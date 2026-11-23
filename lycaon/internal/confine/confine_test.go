@@ -68,6 +68,9 @@ func confinedRun(t *testing.T, self string, c confine.Confinement, name string, 
 	}
 	defer release()
 	c.Roots = liveBoundaryRoots(c.Roots...)
+	if name == self && confine.SharedTempLocation(self) != "" && len(c.ProtectedReadGrants) < confine.MaxProtectedPathGrants {
+		c.ProtectedReadGrants = append(append([]confine.ProtectedPathGrant(nil), c.ProtectedReadGrants...), confine.NewProtectedPathGrant(self))
+	}
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
@@ -88,6 +91,9 @@ func confinedStdout(t *testing.T, self string, c confine.Confinement, name strin
 	}
 	defer release()
 	c.Roots = liveBoundaryRoots(c.Roots...)
+	if name == self && confine.SharedTempLocation(self) != "" && len(c.ProtectedReadGrants) < confine.MaxProtectedPathGrants {
+		c.ProtectedReadGrants = append(append([]confine.ProtectedPathGrant(nil), c.ProtectedReadGrants...), confine.NewProtectedPathGrant(self))
+	}
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()

@@ -93,9 +93,6 @@ func (s *supervisor) performPath(target *targetProcess, n seccompNotif) (int64, 
 	if errno != 0 {
 		return 0, errno, true
 	}
-	if call.Op == callOpen && call.Flags&openWriteFlags == 0 && !args.how {
-		return 0, unix.EINVAL, true
-	}
 	if !target.valid() {
 		return 0, unix.EINTR, true
 	}

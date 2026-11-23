@@ -269,6 +269,9 @@ func linuxConfinedRun(t *testing.T, self string, c confine.Confinement, env []st
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	if name == self && confine.SharedTempLocation(self) != "" && len(c.ProtectedReadGrants) < confine.MaxProtectedPathGrants {
+		c.ProtectedReadGrants = append(append([]confine.ProtectedPathGrant(nil), c.ProtectedReadGrants...), confine.NewProtectedPathGrant(self))
+	}
 	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), name, args, c)
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
@@ -429,7 +432,11 @@ func TestLinuxTerminalInjectionKillsTheProcess(t *testing.T) {
 	for _, mode := range []string{"tiocsti", "tioclinux"} {
 		master, slave := openPty(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, denyConfinement(t.TempDir()))
+		c := denyConfinement(t.TempDir())
+		if confine.SharedTempLocation(self) != "" {
+			c.ProtectedReadGrants = []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(self)}
+		}
+		cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, c)
 		testutil.FailErr(t, "confine.Command", err)
 		cmd.Env = probeEnv(mode)
 		var out bytes.Buffer

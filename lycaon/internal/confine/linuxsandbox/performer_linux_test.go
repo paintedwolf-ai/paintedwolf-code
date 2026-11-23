@@ -605,3 +605,86 @@ func BenchmarkPerformerCreate(b *testing.B) {
 		_ = unix.Close(opened)
 	}
 }
+
+func TestPerformerObservesSharedTempReadsAndWriteOnlySubtrees(t *testing.T) {
+	base := t.TempDir()
+	temp := filepath.Join(base, "shared-temp")
+	outside := filepath.Join(base, "outside")
+	exchange := filepath.Join(temp, "exchange")
+	export := filepath.Join(temp, "export")
+	for _, dir := range []string{temp, outside, exchange, export} {
+		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(dir, 0o755))
+	}
+	allowedInput := filepath.Join(temp, "incoming.csv")
+	deniedSibling := filepath.Join(temp, "secret.csv")
+	exportOut := filepath.Join(export, "result.csv")
+	for _, file := range []string{allowedInput, deniedSibling, exportOut, filepath.Join(exchange, "ok.txt")} {
+		testutil.FailErr(t, "write "+file, os.WriteFile(file, []byte("payload"), 0o644))
+	}
+	linkToDenied := filepath.Join(outside, "to-secret")
+	testutil.FailErr(t, "symlink to temp", os.Symlink(filepath.Join(temp, "missing-secret.csv"), linkToDenied))
+
+	client := startTestPerformer(t, Filesystem{
+		SharedTemp:     []string{temp},
+		Hidden:         []string{temp},
+		Restored:       []string{allowedInput, exchange, export},
+		ReadRoots:      []string{exchange},
+		ReadFiles:      []string{allowedInput},
+		WriteRoots:     []string{export},
+		WriteOnlyRoots: []string{export},
+	})
+	rootFD := openDirFD(t, base)
+	do := func(call pathCall) (pathResult, int) {
+		t.Helper()
+		if call.Path != "" && call.Path[0] == '/' {
+			call.Absolute = 1
+			res, fd, err := client.call(call, nil)
+			testutil.FailErr(t, "performer call "+call.Path, err)
+			if fd >= 0 {
+				t.Cleanup(func() { _ = unix.Close(fd) })
+			}
+			return res, fd
+		}
+		call.Dirs = 1
+		res, fd, err := client.call(call, []int{rootFD})
+		testutil.FailErr(t, "performer rel call "+call.Path, err)
+		if fd >= 0 {
+			t.Cleanup(func() { _ = unix.Close(fd) })
+		}
+		return res, fd
+	}
+
+	if res, fd := do(pathCall{Op: callOpen, Path: allowedInput, Flags: unix.O_RDONLY}); res.Errno != 0 || fd < 0 || res.Refusal != nil {
+		t.Fatalf("allowed exact input read failed: res=%+v fd=%d", res, fd)
+	}
+	if res, _ := do(pathCall{Op: callOpen, Path: deniedSibling, Flags: unix.O_RDONLY}); unix.Errno(res.Errno) != unix.EACCES || res.Refusal == nil || res.Refusal.Operation != refusalReadData || res.Refusal.Target != deniedSibling {
+		t.Fatalf("denied sibling read: %+v (%+v)", res, res.Refusal)
+	}
+	if res, _ := do(pathCall{Op: callOpen, Path: temp, Flags: unix.O_RDONLY | unix.O_DIRECTORY}); unix.Errno(res.Errno) != unix.EACCES || res.Refusal == nil || res.Refusal.Operation != refusalReadData || res.Refusal.Target != temp {
+		t.Fatalf("denied temp directory open: %+v (%+v)", res, res.Refusal)
+	}
+	missingDenied := filepath.Join(temp, "absent", "probe.txt")
+	if res, _ := do(pathCall{Op: callOpen, Path: missingDenied, Flags: unix.O_RDONLY}); unix.Errno(res.Errno) != unix.EACCES || res.Refusal == nil || res.Refusal.Target != missingDenied {
+		t.Fatalf("missing denied temp open: %+v (%+v)", res, res.Refusal)
+	}
+	if res, _ := do(pathCall{Op: callOpen, Path: linkToDenied, Flags: unix.O_RDONLY}); unix.Errno(res.Errno) != unix.EACCES || res.Refusal == nil || res.Refusal.Target != filepath.Join(temp, "missing-secret.csv") {
+		t.Fatalf("symlink into denied temp: %+v (%+v)", res, res.Refusal)
+	}
+	if res, _ := do(pathCall{Op: callOpen, Path: filepath.Join(exchange, "missing.txt"), Flags: unix.O_RDONLY}); unix.Errno(res.Errno) != unix.ENOENT || res.Refusal != nil {
+		t.Fatalf("authorized missing temp file lost ENOENT: %+v (%+v)", res, res.Refusal)
+	}
+	if res, _ := do(pathCall{Op: callOpen, Path: filepath.Join(outside, "missing.txt"), Flags: unix.O_RDONLY}); unix.Errno(res.Errno) != unix.ENOENT || res.Refusal != nil {
+		t.Fatalf("outside missing file lost ENOENT: %+v (%+v)", res, res.Refusal)
+	}
+	for _, flags := range []uint64{unix.O_RDONLY, unix.O_RDWR, unix.O_CREAT | unix.O_RDONLY} {
+		if res, _ := do(pathCall{Op: callOpen, Path: exportOut, Flags: flags}); unix.Errno(res.Errno) != unix.EACCES || res.Refusal == nil || res.Refusal.Operation != refusalReadData || res.Refusal.Target != exportOut {
+			t.Fatalf("write-only file flags=%#x admitted read: %+v (%+v)", flags, res, res.Refusal)
+		}
+	}
+	if res, _ := do(pathCall{Op: callOpen, Path: export, Flags: unix.O_RDONLY | unix.O_DIRECTORY}); unix.Errno(res.Errno) != unix.EACCES || res.Refusal == nil || res.Refusal.Operation != refusalReadData || res.Refusal.Target != export {
+		t.Fatalf("write-only dir listing admitted: %+v (%+v)", res, res.Refusal)
+	}
+	if res, fd := do(pathCall{Op: callOpen, Path: filepath.Join(export, "created.csv"), Flags: unix.O_CREAT | unix.O_WRONLY | unix.O_TRUNC, Mode: 0o600}); res.Errno != 0 || fd < 0 {
+		t.Fatalf("write-only dir create failed: %+v fd=%d", res, fd)
+	}
+}

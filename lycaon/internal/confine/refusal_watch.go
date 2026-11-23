@@ -403,6 +403,9 @@ func (f *refusalFeed) record(k kernelRefusal) {
 			f.keys[key] = -1
 			f.omitted++
 		}
+		if f.witness == WitnessKernel {
+			f.witness = WitnessIncomplete
+		}
 		f.mu.Unlock()
 		return
 	}

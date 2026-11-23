@@ -221,8 +221,9 @@ func readOnlyMount(dirfd int, name string) bool {
 }
 
 const (
-	refusalCreate = "file-write-create"
-	refusalUnlink = "file-write-unlink"
+	refusalReadData = "file-read-data"
+	refusalCreate   = "file-write-create"
+	refusalUnlink   = "file-write-unlink"
 )
 
 func errnoResult(err error) pathResult {
@@ -235,8 +236,11 @@ func errnoResult(err error) pathResult {
 func (f creationFloors) open(dirfd int, call pathCall) (pathResult, int) {
 	how := unix.OpenHow{Flags: call.Flags, Mode: uint64(call.Mode), Resolve: call.Resolve}
 	writes := call.Flags&unix.O_ACCMODE != unix.O_RDONLY || call.Flags&unix.O_TRUNC != 0
+	reads := call.Flags&unix.O_PATH == 0 && call.Flags&unix.O_ACCMODE != unix.O_WRONLY
 	if call.Flags&unix.O_CREAT == 0 && !writes {
-		// An openat2 that neither creates nor writes is the caller's own open.
+		if len(f.sharedTemp) > 0 && call.Flags&unix.O_PATH == 0 {
+			return f.openRead(dirfd, call)
+		}
 		fd, err := unix.Openat2(dirfd, call.Path, &how)
 		return errnoResult(err), fd
 	}
@@ -245,6 +249,10 @@ func (f creationFloors) open(dirfd int, call pathCall) (pathResult, int) {
 		if err == nil && f.refuses(createEntry, p.path) {
 			defer p.close()
 			return refusal(refusalCreate, p), -1
+		}
+		if err == nil && reads && f.refusesTempRead(p.path, true) {
+			defer p.close()
+			return pathResult{Errno: int(unix.EACCES), Refusal: &Refusal{Operation: refusalReadData, Target: p.path}}, -1
 		}
 		p.close()
 		fd, err := unix.Openat2(dirfd, call.Path, &how)
@@ -264,11 +272,174 @@ func (f creationFloors) open(dirfd int, call pathCall) (pathResult, int) {
 	if (!exists || writes) && f.refuses(createEntry, p.path) {
 		return refusal(refusalCreate, p), -1
 	}
+	if reads && f.refusesTempRead(p.path, exists && st.Mode&unix.S_IFMT == unix.S_IFDIR || call.Flags&unix.O_DIRECTORY != 0) {
+		return pathResult{Errno: int(unix.EACCES), Refusal: &Refusal{Operation: refusalReadData, Target: p.path}}, -1
+	}
 	// The final component was resolved above; a symlink swapped in since then
 	// fails rather than redirecting the open.
 	final := unix.OpenHow{Flags: call.Flags | unix.O_NOFOLLOW, Mode: uint64(call.Mode), Resolve: call.Resolve & unix.RESOLVE_NO_XDEV}
 	fd, err := unix.Openat2(p.fd, p.base, &final)
 	return f.tempWriteResult(err, refusalCreate, p), fd
+}
+
+func (f creationFloors) openRead(dirfd int, call pathCall) (pathResult, int) {
+	how := unix.OpenHow{Flags: call.Flags, Mode: uint64(call.Mode), Resolve: call.Resolve}
+	if call.Path == "" {
+		fd, err := unix.Openat2(dirfd, call.Path, &how)
+		return errnoResult(err), fd
+	}
+	probeHow := unix.OpenHow{
+		Flags:   unix.O_PATH | unix.O_CLOEXEC | (call.Flags & unix.O_NOFOLLOW),
+		Resolve: call.Resolve,
+	}
+	probeFD, err := unix.Openat2(dirfd, call.Path, &probeHow)
+	if err == nil {
+		resolved, linkErr := os.Readlink("/proc/self/fd/" + strconv.Itoa(probeFD))
+		var st unix.Stat_t
+		statErr := unix.Fstat(probeFD, &st)
+		_ = unix.Close(probeFD)
+		if linkErr != nil || statErr != nil || strings.HasSuffix(resolved, " (deleted)") {
+			stripped := strings.TrimSuffix(resolved, " (deleted)")
+			if stripped == "" || underAny(stripped, f.sharedTemp) {
+				return pathResult{Errno: int(unix.EACCES), Refusal: &Refusal{Unexamined: true}}, -1
+			}
+			fd, openErr := unix.Openat2(dirfd, call.Path, &how)
+			return errnoResult(openErr), fd
+		}
+		asDir := st.Mode&unix.S_IFMT == unix.S_IFDIR || call.Flags&unix.O_DIRECTORY != 0 || strings.HasSuffix(call.Path, "/")
+		if f.refusesTempRead(resolved, asDir) {
+			return pathResult{Errno: int(unix.EACCES), Refusal: &Refusal{Operation: refusalReadData, Target: resolved}}, -1
+		}
+		fd, openErr := unix.Openat2(dirfd, call.Path, &how)
+		return errnoResult(openErr), fd
+	}
+	if errors.Is(err, unix.ENOENT) {
+		resolved, unresolvable := f.resolveMissingReadPath(dirfd, call)
+		if unresolvable {
+			return pathResult{Errno: int(unix.EACCES), Refusal: &Refusal{Unexamined: true}}, -1
+		}
+		asDir := call.Flags&unix.O_DIRECTORY != 0 || strings.HasSuffix(call.Path, "/")
+		if resolved != "" && f.refusesTempRead(resolved, asDir) {
+			return pathResult{Errno: int(unix.EACCES), Refusal: &Refusal{Operation: refusalReadData, Target: resolved}}, -1
+		}
+	}
+	fd, openErr := unix.Openat2(dirfd, call.Path, &how)
+	return errnoResult(openErr), fd
+}
+
+func (f creationFloors) resolveMissingReadPath(dirfd int, call pathCall) (string, bool) {
+	curDir := dirfd
+	owned := -1
+	closeOwned := func() {
+		if owned >= 0 {
+			_ = unix.Close(owned)
+			owned = -1
+		}
+	}
+	defer closeOwned()
+	raw := call.Path
+	for hops := 0; hops < maxSymlinkHops; hops++ {
+		trimmed := strings.TrimRight(raw, "/")
+		if trimmed == "" {
+			return "/", false
+		}
+		if strings.HasPrefix(trimmed, "/") {
+			curDir = unix.AT_FDCWD
+		}
+		dirFD, remaining, ok := openDeepestExistingDir(curDir, trimmed, call.Resolve)
+		if !ok {
+			return "", f.dirMayTouchSharedTemp(curDir)
+		}
+		if len(remaining) > 0 && isSymlinkAt(dirFD, remaining[0]) {
+			noFollow := call.Resolve&unix.RESOLVE_NO_SYMLINKS != 0 || (len(remaining) == 1 && call.Flags&unix.O_NOFOLLOW != 0)
+			if !noFollow {
+				target, linkErr := readlinkat(dirFD, remaining[0])
+				if linkErr != nil {
+					_ = unix.Close(dirFD)
+					return "", true
+				}
+				if len(remaining) > 1 {
+					raw = strings.TrimRight(target, "/") + "/" + strings.Join(remaining[1:], "/")
+				} else {
+					raw = target
+				}
+				closeOwned()
+				if strings.HasPrefix(raw, "/") {
+					_ = unix.Close(dirFD)
+					curDir = unix.AT_FDCWD
+				} else {
+					owned = dirFD
+					curDir = dirFD
+				}
+				continue
+			}
+		}
+		where, linkErr := os.Readlink("/proc/self/fd/" + strconv.Itoa(dirFD))
+		_ = unix.Close(dirFD)
+		if linkErr != nil || strings.HasSuffix(where, " (deleted)") {
+			stripped := strings.TrimSuffix(where, " (deleted)")
+			return "", stripped == "" || underAny(stripped, f.sharedTemp)
+		}
+		return joinMissingComponents(where, remaining), false
+	}
+	return "", false
+}
+
+func (f creationFloors) dirMayTouchSharedTemp(dirfd int) bool {
+	if dirfd == unix.AT_FDCWD {
+		cwd, err := os.Readlink("/proc/self/cwd")
+		return err != nil || underAny(strings.TrimSuffix(cwd, " (deleted)"), f.sharedTemp)
+	}
+	where, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(dirfd))
+	return err != nil || underAny(strings.TrimSuffix(where, " (deleted)"), f.sharedTemp)
+}
+
+func openDeepestExistingDir(dirfd int, trimmed string, resolve uint64) (int, []string, bool) {
+	var remaining []string
+	cur := trimmed
+	for {
+		dirPart, base := ".", cur
+		if i := strings.LastIndexByte(cur, '/'); i >= 0 {
+			dirPart, base = cur[:i], cur[i+1:]
+			if dirPart == "" {
+				dirPart = "/"
+			}
+		}
+		if base != "" && base != "." {
+			remaining = append(remaining, base)
+		}
+		how := unix.OpenHow{Flags: unix.O_PATH | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: resolve}
+		fd, err := unix.Openat2(dirfd, dirPart, &how)
+		if err == nil {
+			for l, r := 0, len(remaining)-1; l < r; l, r = l+1, r-1 {
+				remaining[l], remaining[r] = remaining[r], remaining[l]
+			}
+			return fd, remaining, true
+		}
+		if !errors.Is(err, unix.ENOENT) || dirPart == "." || dirPart == "/" {
+			return -1, nil, false
+		}
+		cur = dirPart
+	}
+}
+
+func joinMissingComponents(where string, remaining []string) string {
+	out := where
+	for i, seg := range remaining {
+		if seg == "" || seg == "." {
+			continue
+		}
+		// Traversal past a nonexistent directory fails before climbing "..".
+		if seg == ".." {
+			if i == 0 {
+				out = filepath.Dir(out)
+				continue
+			}
+			break
+		}
+		out = joinName(out, seg)
+	}
+	return out
 }
 
 func (f creationFloors) create(dirfd int, call pathCall) pathResult {

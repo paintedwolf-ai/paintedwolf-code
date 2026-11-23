@@ -44,6 +44,7 @@ func TestCompileFilesystemPlanMasksDenialsInsideGrants(t *testing.T) {
 	fs, err := compileFilesystemPlan(rules)
 	testutil.FailErr(t, "compile", err)
 	want := linuxsandbox.Filesystem{
+		ReadRoots:  []string{ws},
 		WriteRoots: []string{proj, ws},
 		ReadOnly:   []string{ro},
 		Hidden:     []string{cfg},

@@ -7,8 +7,11 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -29,7 +32,7 @@ func TestAppliedSocketCreationFloor(t *testing.T) {
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		t.Fatalf("no new privileges: %v", err)
 	}
-	listener, err := applySeccomp()
+	listener, err := applySeccomp(false)
 	if err != nil {
 		t.Fatalf("apply production filter: %v", err)
 	}
@@ -83,4 +86,111 @@ func TestAppliedSocketCreationFloor(t *testing.T) {
 	}
 	_ = unix.Close(listener)
 	os.Exit(0)
+}
+
+func TestObservedOpenFilterDeliversZeroNotificationsPerFDRead(t *testing.T) {
+	const childEnv = "PW_TEST_OBSERVED_OPEN_NOTIF_CHILD"
+	const targetEnv = "PW_TEST_OBSERVED_OPEN_TARGET"
+	if os.Getenv(childEnv) == "1" {
+		target := os.Getenv(targetEnv)
+		if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+			os.Exit(2)
+		}
+		listener, err := applySeccomp(true)
+		if err != nil {
+			os.Exit(3)
+		}
+		rights := unix.UnixRights(listener)
+		if err := unix.Sendmsg(3, []byte{1}, rights, nil, 0); err != nil {
+			os.Exit(4)
+		}
+		_ = unix.Close(listener)
+		_ = unix.Close(3)
+		const opens = 4
+		buf := make([]byte, 16)
+		for range opens {
+			pathFD, err := unix.Openat(unix.AT_FDCWD, target, unix.O_PATH|unix.O_CLOEXEC, 0)
+			if err != nil {
+				os.Exit(5)
+			}
+			_ = unix.Close(pathFD)
+			fd, err := unix.Openat(unix.AT_FDCWD, target, unix.O_RDONLY|unix.O_CLOEXEC, 0)
+			if err != nil {
+				os.Exit(6)
+			}
+			for range 250 {
+				if _, err := unix.Pread(fd, buf, 0); err != nil {
+					os.Exit(7)
+				}
+			}
+			_ = unix.Close(fd)
+		}
+		os.Exit(0)
+	}
+
+	target := filepath.Join(t.TempDir(), "payload.txt")
+	if err := os.WriteFile(target, []byte("hello-shared-temp"), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		t.Fatalf("socketpair: %v", err)
+	}
+	defer func() { _ = unix.Close(pair[0]) }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	child := os.NewFile(uintptr(pair[1]), "notif-sock")
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestObservedOpenFilterDeliversZeroNotificationsPerFDRead$")
+	cmd.Env = append(os.Environ(), childEnv+"=1", targetEnv+"="+target)
+	cmd.ExtraFiles = []*os.File{child}
+	if err := cmd.Start(); err != nil {
+		_ = child.Close()
+		t.Fatalf("start child: %v", err)
+	}
+	_ = child.Close()
+
+	msg, oob := make([]byte, 8), make([]byte, unix.CmsgSpace(4))
+	_, oobn, _, _, err := unix.Recvmsg(pair[0], msg, oob, unix.MSG_CMSG_CLOEXEC)
+	if err != nil {
+		t.Fatalf("recv listener: %v", err)
+	}
+	fds := receivedFDs(oob[:oobn])
+	if len(fds) != 1 {
+		t.Fatalf("received %d fds, want 1", len(fds))
+	}
+	listener := fds[0]
+	var openNotifs, otherNotifs atomic.Int64
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer func() { _ = unix.Close(listener) }()
+		for {
+			var n seccompNotif
+			if err := ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_RECV, unsafe.Pointer(&n)); err != nil {
+				if errors.Is(err, unix.EINTR) || errors.Is(err, unix.ENOENT) {
+					continue
+				}
+				return
+			}
+			if uint32(n.Nr) == unix.SYS_OPENAT || (legacyOpen != 0 && uint32(n.Nr) == legacyOpen) {
+				openNotifs.Add(1)
+			} else {
+				otherNotifs.Add(1)
+			}
+			resp := seccompNotifResp{ID: n.ID, Flags: unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE}
+			_ = ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_SEND, unsafe.Pointer(&resp))
+		}
+	}()
+
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("child failed: %v", err)
+	}
+	<-done
+	if got := openNotifs.Load(); got != 4 {
+		t.Fatalf("open notifications = %d, want 4 across 4 O_RDONLY opens, 4 O_PATH opens, and 1000 pread calls", got)
+	}
+	if got := otherNotifs.Load(); got != 0 {
+		t.Fatalf("unexpected non-open notifications = %d", got)
+	}
 }

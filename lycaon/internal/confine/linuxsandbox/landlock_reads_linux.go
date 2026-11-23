@@ -28,12 +28,8 @@ const maxReadRules = 4096
 // creation floors still refuse the sandbox making it.
 func readRules(fs Filesystem) ([]landlockRule, error) {
 	chain := map[string]map[string]bool{}
-	for _, hidden := range fs.Hidden {
-		hidden = filepath.Clean(hidden)
-		if _, err := os.Lstat(hidden); !errors.Is(err, os.ErrNotExist) || underAny(hidden, fs.WriteRoots) {
-			continue
-		}
-		for dir, next := filepath.Dir(hidden), filepath.Base(hidden); ; dir, next = filepath.Dir(dir), filepath.Base(dir) {
+	addChain := func(target string) {
+		for dir, next := filepath.Dir(target), filepath.Base(target); ; dir, next = filepath.Dir(dir), filepath.Base(dir) {
 			if chain[dir] == nil {
 				chain[dir] = map[string]bool{}
 			}
@@ -41,6 +37,19 @@ func readRules(fs Filesystem) ([]landlockRule, error) {
 			if dir == "/" {
 				break
 			}
+		}
+	}
+	for _, hidden := range fs.Hidden {
+		hidden = filepath.Clean(hidden)
+		if _, err := os.Lstat(hidden); !errors.Is(err, os.ErrNotExist) || underAny(hidden, fs.WriteRoots) {
+			continue
+		}
+		addChain(hidden)
+	}
+	for _, wo := range append(append([]string(nil), fs.WriteOnlyRoots...), fs.WriteOnlyFiles...) {
+		wo = filepath.Clean(wo)
+		if _, err := os.Lstat(wo); err == nil {
+			addChain(wo)
 		}
 	}
 	if len(chain) == 0 {
@@ -57,7 +66,10 @@ func readRules(fs Filesystem) ([]landlockRule, error) {
 			// A directory on the way that does not exist holds nothing yet.
 			continue
 		}
-		rules = append(rules, landlockRule{path: dir, access: unix.LANDLOCK_ACCESS_FS_READ_DIR})
+		dirReadable := readDirAllowed(fs, dir)
+		if dirReadable {
+			rules = append(rules, landlockRule{path: dir, access: unix.LANDLOCK_ACCESS_FS_READ_DIR})
+		}
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			return nil, &Unsupported{Code: UnsupportedFilesystemRule, Detail: "list " + dir + " for a read-denied path: " + err.Error()}
@@ -67,13 +79,53 @@ func readRules(fs Filesystem) ([]landlockRule, error) {
 				// The way on is ruled itself; a link is ruled where it points.
 				continue
 			}
-			rules = append(rules, landlockRule{path: joinName(dir, entry.Name()), access: landlockReadExecute})
+			child := joinName(dir, entry.Name())
+			if !dirReadable && !explicitReadEntry(fs, child) {
+				continue
+			}
+			rules = append(rules, landlockRule{path: child, access: landlockReadExecute})
 		}
 		if len(rules) > maxReadRules {
 			return nil, &Unsupported{Code: UnsupportedFilesystemRule, Detail: "read-denied paths absent at launch need more than " + strconv.Itoa(maxReadRules) + " read rules"}
 		}
 	}
 	return rules, nil
+}
+
+func readDirAllowed(fs Filesystem, dir string) bool {
+	if underAny(dir, fs.WriteOnlyRoots) {
+		return underDeeper(dir, fs.ReadRoots, fs.WriteOnlyRoots)
+	}
+	if underAny(dir, fs.Hidden) {
+		return underDeeper(dir, fs.ReadRoots, fs.Hidden)
+	}
+	return true
+}
+
+func explicitReadEntry(fs Filesystem, path string) bool {
+	for _, f := range fs.ReadFiles {
+		if filepath.Clean(f) == path {
+			return true
+		}
+	}
+	return underAny(path, fs.ReadRoots)
+}
+
+func underDeeper(path string, allow, deny []string) bool {
+	bestAllow, bestDeny := -1, -1
+	for _, a := range allow {
+		a = filepath.Clean(a)
+		if underAny(path, []string{a}) && len(a) > bestAllow {
+			bestAllow = len(a)
+		}
+	}
+	for _, d := range deny {
+		d = filepath.Clean(d)
+		if underAny(path, []string{d}) && len(d) > bestDeny {
+			bestDeny = len(d)
+		}
+	}
+	return bestAllow > bestDeny
 }
 
 func underAny(path string, roots []string) bool {

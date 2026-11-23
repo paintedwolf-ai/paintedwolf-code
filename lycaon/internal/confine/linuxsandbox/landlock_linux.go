@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -63,10 +64,28 @@ func landlockRules(fs Filesystem, abi int) ([]landlockRule, error) {
 		{path: "/dev/shm", access: handled},
 	}...)
 	for _, root := range fs.WriteRoots {
-		rules = append(rules, landlockRule{path: root, access: handled})
+		access := handled
+		if slices.Contains(fs.WriteOnlyRoots, root) {
+			access &^= unix.LANDLOCK_ACCESS_FS_READ_FILE | unix.LANDLOCK_ACCESS_FS_READ_DIR
+		}
+		rules = append(rules, landlockRule{path: root, access: access})
 	}
 	for _, file := range fs.WriteFiles {
-		rules = append(rules, landlockRule{path: file, access: landlockFileAccesses & handled})
+		access := landlockFileAccesses & handled
+		if slices.Contains(fs.WriteOnlyFiles, file) {
+			access &^= unix.LANDLOCK_ACCESS_FS_READ_FILE
+		}
+		rules = append(rules, landlockRule{path: file, access: access})
+	}
+	for _, root := range fs.ReadRoots {
+		if underAny(root, fs.WriteOnlyRoots) || underAny(root, fs.Hidden) {
+			rules = append(rules, landlockRule{path: root, access: landlockReadExecute & handled})
+		}
+	}
+	for _, file := range fs.ReadFiles {
+		if underAny(file, fs.WriteOnlyRoots) || underAny(file, fs.Hidden) {
+			rules = append(rules, landlockRule{path: file, access: (unix.LANDLOCK_ACCESS_FS_EXECUTE | unix.LANDLOCK_ACCESS_FS_READ_FILE) & handled})
+		}
 	}
 	return rules, nil
 }

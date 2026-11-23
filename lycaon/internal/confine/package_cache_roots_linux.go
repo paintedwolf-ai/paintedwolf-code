@@ -55,9 +55,9 @@ func preparePackageCacheDataRoots(c Confinement, mkdir func(fseffect.Location, o
 	if err != nil {
 		return err
 	}
-	for _, candidate := range packageCacheDataRoots() {
+	for _, candidate := range append(packageCacheDataRoots(), c.GrantedWriteRoots...) {
 		if err := packageCacheDirectoryAvailable(candidate); err != nil {
-			slog.Debug("package store directory unavailable", "path", candidate, "error", err)
+			slog.Debug("writable directory unavailable", "path", candidate, "error", err)
 			continue
 		}
 		path := fspath.CanonicalPath(candidate)
@@ -67,7 +67,7 @@ func preparePackageCacheDataRoots(c Confinement, mkdir func(fseffect.Location, o
 		_, err := mkdir(fseffect.Location{Root: string(filepath.Separator), Rel: strings.TrimPrefix(path, string(filepath.Separator))}, 0o700)
 		if err != nil {
 			// An optional cache's OS permissions must not prevent unrelated work.
-			slog.Debug("package store directory unavailable", "path", path, "error", err)
+			slog.Debug("writable directory unavailable", "path", path, "error", err)
 		}
 	}
 	return nil
