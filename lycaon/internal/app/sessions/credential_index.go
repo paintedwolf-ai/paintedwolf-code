@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -35,6 +36,9 @@ type credentialRoot struct {
 	withdrawn bool
 	passes    int
 	settled   chan struct{}
+
+	// Counts of the running step, read by waiters without the root's lock.
+	directories, credentialFiles atomic.Int64
 }
 
 // credentialStep is one unit of root work. A step with no paths and no full
@@ -49,19 +53,23 @@ type credentialIndex struct {
 	files    *credentialFiles
 	access   keylock.Group
 	work     workscope.Group
+	events   activityPublisher
 	coverage func(string) repochange.WatchCoverage
 	now      func() time.Time
+	after    func(time.Duration) <-chan time.Time
 	stop     func()
 
 	mu    sync.Mutex
 	roots map[string]*credentialRoot
 }
 
-func newCredentialIndex(files *credentialFiles) *credentialIndex {
+func newCredentialIndex(files *credentialFiles, events activityPublisher) *credentialIndex {
 	return &credentialIndex{
 		files:    files,
+		events:   events,
 		coverage: repochange.Coverage,
 		now:      time.Now,
+		after:    time.After,
 		roots:    map[string]*credentialRoot{},
 	}
 }
@@ -122,7 +130,8 @@ func (c *credentialFiles) Start(projectID string) {
 }
 
 // Await returns once every admitted root of the project is current. A waiter
-// that stops early leaves the builds running.
+// that stops early leaves the builds running. A session's wait on a root is
+// shown once it has lasted credentialWaitShown.
 func (c *credentialFiles) Await(ctx context.Context, wait tools.CredentialWait) error {
 	if !c.indexing() || wait.ProjectID == "" {
 		return nil
@@ -132,6 +141,7 @@ func (c *credentialFiles) Await(ctx context.Context, wait tools.CredentialWait) 
 		return err
 	}
 	defer finish()
+	shownAt := c.index.now().Add(credentialWaitShown)
 	for {
 		roots, err := c.index.admit(ctx, wait.ProjectID)
 		if err != nil {
@@ -139,7 +149,7 @@ func (c *credentialFiles) Await(ctx context.Context, wait tools.CredentialWait) 
 		}
 		replaced := false
 		for _, root := range roots {
-			withdrawn, err := c.index.await(ctx, root)
+			withdrawn, err := c.index.await(ctx, root, c.index.waitActivity(wait, root), shownAt)
 			if err != nil {
 				return err
 			}
@@ -197,7 +207,12 @@ func (i *credentialIndex) admit(ctx context.Context, projectID string) ([]*crede
 
 // await blocks until root is current. It reports a withdrawn root so the
 // caller can admit its replacement.
-func (i *credentialIndex) await(ctx context.Context, root *credentialRoot) (bool, error) {
+func (i *credentialIndex) await(ctx context.Context, root *credentialRoot, activity *credentialWaitActivity, shownAt time.Time) (bool, error) {
+	var tick <-chan time.Time
+	if activity != nil {
+		tick = i.after(max(0, shownAt.Sub(i.now())))
+		defer activity.finish(ctx)
+	}
 	kicked := false
 	for {
 		i.mu.Lock()
@@ -226,6 +241,9 @@ func (i *credentialIndex) await(ctx context.Context, root *credentialRoot) (bool
 		case <-ctx.Done():
 			return false, ctx.Err()
 		case <-settled:
+		case <-tick:
+			activity.show(ctx)
+			tick = i.after(credentialWaitShown)
 		}
 	}
 }
@@ -361,6 +379,8 @@ func (i *credentialIndex) apply(ctx context.Context, root *credentialRoot, step 
 		return err
 	}
 	defer release()
+	root.directories.Store(0)
+	root.credentialFiles.Store(0)
 	if step.full {
 		return i.refresh(ctx, root, []string{"."})
 	}
