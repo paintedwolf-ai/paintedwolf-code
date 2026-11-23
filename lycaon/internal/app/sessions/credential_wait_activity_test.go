@@ -54,7 +54,12 @@ func blockedCredentialWait(t *testing.T) (*credentialFiles, *recordedActivity, c
 	files.index.after = func(time.Duration) <-chan time.Time { return ticks }
 	release, err := files.index.access.Acquire(t.Context(), credentialRootKey("proj-1", "r1"))
 	testutil.FailErr(t, "hold root access", err)
-	t.Cleanup(func() { testutil.FailErr(t, "stop index", files.closeCredentialIndex(t.Context())) })
+	// The test context is already cancelled when cleanups run.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		testutil.FailErr(t, "stop index", files.closeCredentialIndex(ctx))
+	})
 	return files, recorder, ticks, release
 }
 
