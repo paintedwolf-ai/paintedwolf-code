@@ -33,7 +33,7 @@ func TestCollectCoordinatorAndWorkerAssemblyResourcePresenceAndFailedRender(t *t
 	store, _, database, owner := openTestWatchStore(t)
 	workerSessID := "worker-sess-1"
 	workerJobID := "worker-job-1"
-	testdbseed.InsertChildSession(t, database, workerSessID, testdbseed.DefaultProjectID, owner.SessionID)
+	testdbseed.InsertChildSession(t, database, workerSessID, owner.SessionID)
 	_, err := database.ExecContext(t.Context(), `INSERT INTO worker_jobs
 		(id, project_id, parent_session_id, child_session_id, agent_type, status, task_prompt, spawn_reason, execution_target, created_at, updated_at)
 		VALUES (?, ?, ?, ?, 'implement', 'running', 'implement feature', 'initial', 'local', '2026-11-23T12:00:00Z', '2026-11-23T12:00:00Z')`,
@@ -171,7 +171,7 @@ func TestCollectCoordinatorAndWorkerAssemblyResourcePresenceAndFailedRender(t *t
 func TestAmbientWakeNoWorkflowActiveWorkflowHoldsAndWorkerExclusion(t *testing.T) {
 	store, _, database, owner := openTestWatchStore(t)
 	workerSessID := "worker-sess-2"
-	testdbseed.InsertChildSession(t, database, workerSessID, testdbseed.DefaultProjectID, owner.SessionID)
+	testdbseed.InsertChildSession(t, database, workerSessID, owner.SessionID)
 
 	var (
 		sessionIdle     = true
