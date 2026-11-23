@@ -2,6 +2,7 @@ package turnnudges
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"regexp"
 	"sort"
@@ -39,6 +40,27 @@ func (r *recordedKick) RenderKick(_ context.Context, reader prompts.Reader, name
 	r.reader = reader
 	r.data = data
 	return name, nil
+}
+
+type failingSpendKick struct {
+	prompts.PromptTemplateEngine
+	called bool
+}
+
+func (r *failingSpendKick) RenderKick(context.Context, prompts.Reader, string, map[string]any) (string, error) {
+	r.called = true
+	return "partial", errors.New("render failed")
+}
+
+func TestFailedSpendSoftStopDoesNotDeliverPartialGuidance(t *testing.T) {
+	setupanchor.Install()
+	r := &failingSpendKick{}
+	s := New(turnload.NewLedger(), nil)
+	s.SetPrompts(r)
+	n := s.SpendSoftStop(t.Context(), &api.Session{ID: "parent"})
+	if !r.called || !n.Empty() {
+		t.Fatalf("render called=%v nudge=%+v", r.called, n)
+	}
 }
 
 type fixedSurface string
