@@ -17,7 +17,7 @@ type StopSummary struct {
 	CanceledHandles []string
 }
 
-// FenceSessions writes a durable stop fence across sessionIDs, blocking watch creation, callbacks, and ambient wakes.
+// FenceSessions writes a durable stop fence across sessionIDs.
 func (s *Store) FenceSessions(ctx context.Context, sessionIDs []string) error {
 	if !s.Configured() {
 		return nil
@@ -62,7 +62,7 @@ func (s *Store) FenceAndCancelSessions(ctx context.Context, sessionIDs []string)
 	return s.ReconcileStoppedSessions(ctx, sessionIDs...)
 }
 
-// ReconcileStoppedSessions cancels live watches, releases uncommitted reservations, and retires armed waits in stopped sessions.
+// ReconcileStoppedSessions cancels live watches and uncommitted reservations in stopped sessions.
 func (s *Store) ReconcileStoppedSessions(ctx context.Context, sessionIDs ...string) (StopSummary, error) {
 	if !s.Configured() {
 		return StopSummary{}, nil
