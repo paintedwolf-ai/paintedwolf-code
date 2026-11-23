@@ -109,21 +109,6 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		t.Fatalf("expected escaping path rejection, got %v", err)
 	}
 
-	var scanMu sync.Mutex
-	var scannedPaths []string
-	files.index.onScan = func(rootPath, path string) {
-		scanMu.Lock()
-		scannedPaths = append(scannedPaths, gitrepo.CanonicalDir(rootPath)+":"+path)
-		scanMu.Unlock()
-	}
-
-	var primaryEvents []repochange.Event
-	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
-		if ev.Kind == repochange.WorktreeChanged && gitrepo.CanonicalDir(ev.ProjectDir) == primary {
-			primaryEvents = append(primaryEvents, ev)
-		}
-	}))
-
 	prevConfigure := f.Configure
 	f.Configure = func(tc *tools.ToolContext) {
 		if prevConfigure != nil {
@@ -183,6 +168,26 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 	if got := callStdout(fmt.Sprintf("cd %q && find src -name '*.go' && grep -rl UpdatedCommandToken src || true", siblingWT)); got != "src/item.go" {
 		t.Fatalf("unexpected cold search output: %q", got)
 	}
+	repochange.UseDebounce(t.Context(), repochange.DefaultDebounce)()
+	testutil.FailErr(t, "settle initial primary credentials", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
+
+	var scanMu sync.Mutex
+	var scannedPaths []string
+	files.index.onScan = func(rootPath, path string) {
+		scanMu.Lock()
+		scannedPaths = append(scannedPaths, gitrepo.CanonicalDir(rootPath)+":"+path)
+		scanMu.Unlock()
+	}
+
+	var eventsMu sync.Mutex
+	var primaryEvents []repochange.Event
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+		if ev.Kind == repochange.WorktreeChanged && gitrepo.CanonicalDir(ev.ProjectDir) == primary {
+			eventsMu.Lock()
+			primaryEvents = append(primaryEvents, ev)
+			eventsMu.Unlock()
+		}
+	}))
 	primaryEpochBefore := repochange.CurrentEpoch(primary)
 
 	// Part A: Normal native mutation tool edit in sibling worktree + unrelated external write.
@@ -201,9 +206,11 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 
 	testutil.FailErr(t, "recheck primary credentials after sibling edit", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
 	scanMu.Lock()
+	eventsMu.Lock()
 	if len(scannedPaths) != 0 || len(primaryEvents) != 0 || repochange.CurrentEpoch(primary) != primaryEpochBefore || len(files.index.roots) != 1 {
 		t.Fatalf("sibling/external write disturbed primary: scans=%v events=%v roots=%d", scannedPaths, primaryEvents, len(files.index.roots))
 	}
+	eventsMu.Unlock()
 	scanMu.Unlock()
 
 	if got := callStdout(fmt.Sprintf("cd %q && grep -rl UpdatedCommandToken src", siblingWT)); got != "src/item.go" {
@@ -220,9 +227,11 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 
 	testutil.FailErr(t, "recheck primary credentials after external process", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
 	scanMu.Lock()
+	eventsMu.Lock()
 	if len(scannedPaths) != 0 || len(primaryEvents) != 0 {
 		t.Fatalf("external process sibling edit disturbed primary: scans=%v events=%v", scannedPaths, primaryEvents)
 	}
+	eventsMu.Unlock()
 	scanMu.Unlock()
 
 	if got := callStdout(fmt.Sprintf("cd %q && find src -name '*.go' && grep -rl ExternalProcToken src", siblingWT)); !strings.Contains(got, "src/ext_added.go") {
