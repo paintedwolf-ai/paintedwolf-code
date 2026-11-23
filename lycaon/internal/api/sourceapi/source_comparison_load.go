@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -105,7 +107,50 @@ func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Proje
 	if source.RootID == "" || !filepath.IsLocal(source.Path) || source.Path == "." {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "A commit comparison requires a folder and a relative file path."}
 	}
-	rootAbs, _, mapped := s.resolveRootRepoPosition(ctx, p, source.RootID)
+	stage := strings.TrimSpace(source.Stage)
+	if stage == "" {
+		stage = "working"
+	}
+	if stage != "working" && stage != "staged" && stage != "unstaged" {
+		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "A commit comparison stage must be working, staged, or unstaged."}
+	}
+	targetProject := p
+	if strings.TrimSpace(source.WorktreeID) != "" {
+		baseProject := p
+		if s.ProjectRegistry != nil {
+			if loaded, err := s.ProjectRegistry.Get(ctx, p.ID); err == nil && loaded != nil {
+				baseProject = loaded
+			}
+		}
+		baseRootAbs, _, baseMapped := s.resolveRootRepoPosition(ctx, baseProject, source.RootID)
+		if !baseMapped {
+			return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeSourceVersionUnavailable, "Git is unavailable for this folder."}
+		}
+		baseRepo, ok := gitrepo.Discover(baseRootAbs)
+		if !ok {
+			return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeSourceVersionUnavailable, "Git is unavailable for this folder."}
+		}
+		projected, checkout, errCode, errMsg, resolved := s.Git.ResolveCheckoutProject(ctx, baseProject, source.WorktreeID)
+		if !resolved {
+			return sourceledger.Comparison{}, &comparisonFailure{errCode, errMsg}
+		}
+		if gitrepo.CanonicalDir(checkout.Toplevel) != gitrepo.CanonicalDir(baseRepo.Root) {
+			return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeWorktreeNotFound, "That checkout is not registered for this repository."}
+		}
+		rootRetained := false
+		for _, r := range projected.Roots {
+			if r.ID == source.RootID {
+				rootRetained = true
+				break
+			}
+		}
+		if !rootRetained {
+			return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeWorktreeUnavailable, "That checkout is unavailable for this folder."}
+		}
+		targetProject = projected
+		trees = nil
+	}
+	rootAbs, prefix, mapped := s.resolveRootRepoPosition(ctx, targetProject, source.RootID)
 	mgr := s.Git.Manager()
 	if !mapped {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeSourceVersionUnavailable, "Git is unavailable for this folder."}
@@ -117,17 +162,54 @@ func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Proje
 	if source.ExpectedHead != nil && *source.ExpectedHead != head {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeSourceHistoryChanged, "Git HEAD changed. Refresh the comparison."}
 	}
-	oid, batched := trees.oid(source.RootID, head, source.Path)
-	if !batched {
-		read, err := commitPathOID(ctx, mgr, rootAbs, head, source.Path)
+
+	var before, after sourceledger.ComparisonSide
+	relRepoPath := prefix + strings.TrimPrefix(filepath.ToSlash(source.Path), "/")
+
+	switch stage {
+	case "working":
+		oid, batched := trees.oid(source.RootID, head, source.Path)
+		if !batched {
+			read, err := commitPathOID(ctx, mgr, rootAbs, head, source.Path)
+			if err != nil {
+				return sourceledger.Comparison{}, err
+			}
+			oid = read
+		}
+		before = gitBlobComparisonSide(ctx, mgr, rootAbs, oid)
+		before.RootID, before.Path = source.RootID, source.Path
+		after = readWorkingCommit(targetProject, source.RootID, rootAbs, source.Path).Side
+	case "staged":
+		headOID, err := commitPathOID(ctx, mgr, rootAbs, head, source.Path)
 		if err != nil {
 			return sourceledger.Comparison{}, err
 		}
-		oid = read
+		concrete := s.Git.ConcreteManager()
+		if concrete == nil {
+			return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeSourceVersionUnavailable, "Git index inspection is unavailable."}
+		}
+		indexOID, err := concrete.IndexBlobOID(ctx, rootAbs, relRepoPath)
+		if err != nil {
+			return sourceledger.Comparison{}, err
+		}
+		before = gitBlobComparisonSide(ctx, mgr, rootAbs, headOID)
+		before.RootID, before.Path = source.RootID, source.Path
+		after = gitBlobComparisonSide(ctx, mgr, rootAbs, indexOID)
+		after.RootID, after.Path = source.RootID, source.Path
+	case "unstaged":
+		concrete := s.Git.ConcreteManager()
+		if concrete == nil {
+			return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeSourceVersionUnavailable, "Git index inspection is unavailable."}
+		}
+		indexOID, err := concrete.IndexBlobOID(ctx, rootAbs, relRepoPath)
+		if err != nil {
+			return sourceledger.Comparison{}, err
+		}
+		before = gitBlobComparisonSide(ctx, mgr, rootAbs, indexOID)
+		before.RootID, before.Path = source.RootID, source.Path
+		after = readWorkingCommit(targetProject, source.RootID, rootAbs, source.Path).Side
 	}
-	before := gitBlobComparisonSide(ctx, mgr, rootAbs, oid)
-	before.RootID, before.Path = source.RootID, source.Path
-	after := readWorkingCommit(p, source.RootID, rootAbs, source.Path).Side
+
 	op := wire.SourceChangeOpWrite
 	if after.State == "absent" {
 		op = wire.SourceChangeOpDelete

@@ -547,6 +547,12 @@ paths:
     $ref: paths/settings/preferences.yaml#/paths/~1v1~1settings~1project-trust
   /v1/projects/{id}/git/repos:
     $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos
+  /v1/projects/{id}/git/repos/{repo_id}/worktrees:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1worktrees
+  /v1/projects/{id}/git/repos/{repo_id}/diff:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1diff
+  /v1/projects/{id}/git/repos/{repo_id}/stashes:
+    $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1stashes
   /v1/projects/{id}/git/repos/{repo_id}/status:
     $ref: paths/git.yaml#/paths/~1v1~1projects~1{id}~1git~1repos~1{repo_id}~1status
   /v1/projects/{id}/git/repos/{repo_id}/changes:
@@ -1335,6 +1341,18 @@ components:
       $ref: components/schemas/git.yaml#/components/schemas/GitWorktreeLandResult
     GitWorktreeBindRequest:
       $ref: components/schemas/git.yaml#/components/schemas/GitWorktreeBindRequest
+    GitWorktreeEntry:
+      $ref: components/schemas/git.yaml#/components/schemas/GitWorktreeEntry
+    GitWorktreesView:
+      $ref: components/schemas/git.yaml#/components/schemas/GitWorktreesView
+    GitDiffStatItem:
+      $ref: components/schemas/git.yaml#/components/schemas/GitDiffStatItem
+    GitDiffView:
+      $ref: components/schemas/git.yaml#/components/schemas/GitDiffView
+    GitStashEntry:
+      $ref: components/schemas/git.yaml#/components/schemas/GitStashEntry
+    GitStashesView:
+      $ref: components/schemas/git.yaml#/components/schemas/GitStashesView
     GroundingEvent:
       $ref: components/schemas/settings/verification.yaml#/components/schemas/GroundingEvent
     McpCheckRow:

@@ -82,6 +82,9 @@ components:
         - worktree_dirty
         - worktree_stale
         - worktree_land_blocked
+        - worktree_not_found
+        - worktree_unavailable
+        - git_state_changed
         - internal_error
         - invalid_json
         - invalid_path

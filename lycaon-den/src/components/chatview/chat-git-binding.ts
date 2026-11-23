@@ -3,6 +3,7 @@ import type { LycaonClient } from "../../api/client.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import type { createProjectsStore } from "../../store/projects-store.ts";
 import { projectIdForPath } from "../../store/app-state.ts";
+import { resolveGitWorktreeTarget } from "../../store/git-cache-actions.ts";
 import { valueOf } from "../../store/load-state.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { resolveScope, type GitScope } from "../git-repo-scope.ts";
@@ -178,12 +179,14 @@ export function createChatGitBinding(options: ChatGitOptions) {
     const projectId = gitProjectId();
     const repoId = gitScopedRepoId();
     if (!projectId || !repoId) return "";
+    const worktreeId = resolveGitWorktreeTarget(appStore().state, projectId, repoId);
     try {
       return await draftCommitMessage(
         clientOrThrow(),
         projectId,
         repoId,
         gitSessionId(),
+        worktreeId,
       );
     } catch (err) {
       chatNotices().reportError(err);
@@ -194,7 +197,8 @@ export function createChatGitBinding(options: ChatGitOptions) {
     const projectId = gitProjectId();
     const repoId = gitScopedRepoId();
     if (!projectId || !repoId) return [];
-    return listBranches(clientOrThrow(), projectId, repoId, gitSessionId());
+    const worktreeId = resolveGitWorktreeTarget(appStore().state, projectId, repoId);
+    return listBranches(clientOrThrow(), projectId, repoId, gitSessionId(), worktreeId);
   },
   onCheckout: async (branch, create) => {
     const projectId = gitProjectId();

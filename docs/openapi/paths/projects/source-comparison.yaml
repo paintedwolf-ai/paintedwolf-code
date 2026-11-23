@@ -175,6 +175,18 @@ paths:
         required: false
         schema: {type: string}
         description: Commit path mode. HEAD observed by the listing, or empty for an unborn repository.
+      - name: worktree_id
+        in: query
+        required: false
+        schema: {type: string, format: uuid}
+        description: Commit path mode. Explicit registered checkout incarnation to compare instead of the project checkout.
+      - name: stage
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [working, staged, unstaged]
+        description: Commit path mode. Selects HEAD vs working tree (working), HEAD vs index (staged), or index vs working tree (unstaged).
       - name: baseline
         in: query
         required: false

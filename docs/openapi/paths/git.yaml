@@ -81,6 +81,178 @@ paths:
         '422':
           $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
 
+  /v1/projects/{id}/git/repos/{repo_id}/worktrees:
+    get:
+      tags:
+      - git
+      operationId: listGitWorktrees
+      summary: Registered worktree checkouts for one project repository
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Canonical project UUID.
+      - name: repo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        description: Repository to list checkouts for.
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Optional session whose binding and recorded checkout usage are projected.
+      responses:
+        '200':
+          description: Verified checkouts registered under this repository
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/git.yaml#/components/schemas/GitWorktreesView
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+
+  /v1/projects/{id}/git/repos/{repo_id}/diff:
+    get:
+      tags:
+      - git
+      operationId: getGitDiff
+      summary: Staged, unstaged, or commit-preview diff for one checkout
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Canonical project UUID.
+      - name: repo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        description: Repository to diff.
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Optional session whose checkout supplies the default target.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation to diff.
+      - name: mode
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [unstaged, staged, commit]
+          default: unstaged
+        description: Selects index-vs-worktree (unstaged), HEAD-vs-index (staged), or HEAD-vs-working-tree commit preview (commit).
+      - name: path
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Optional repo-relative path filter.
+      responses:
+        '200':
+          description: Unified patch and per-file stats for the selected checkout
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/git.yaml#/components/schemas/GitDiffView
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+
+  /v1/projects/{id}/git/repos/{repo_id}/stashes:
+    get:
+      tags:
+      - git
+      operationId: listGitStashes
+      summary: Shared repository stash entries
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Canonical project UUID.
+      - name: repo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        description: Repository whose shared stashes are listed.
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      responses:
+        '200':
+          description: Shared repository stashes
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/git.yaml#/components/schemas/GitStashesView
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../components/responses.yaml#/components/responses/Conflict
+
   /v1/projects/{id}/git/repos/{repo_id}/status:
     get:
       tags:
@@ -109,6 +281,13 @@ paths:
           type: string
           format: uuid
         description: Optional session whose checkout supplies the status.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation to report status for.
       responses:
         '200':
           description: Git status snapshot
@@ -161,6 +340,13 @@ paths:
           type: string
           format: uuid
         description: Optional session whose checkout supplies the changes.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation to page changes for.
       - name: revision
         in: query
         required: false
@@ -232,6 +418,13 @@ paths:
           type: string
           format: uuid
         description: Optional session whose checkout scopes the repository.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation to mark current branch for.
       responses:
         '200':
           description: Local branches
@@ -279,6 +472,13 @@ paths:
           type: string
           format: uuid
         description: Optional session whose checkout scopes the operation.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation to switch branches in.
       requestBody:
         required: true
         content:
@@ -340,6 +540,26 @@ paths:
           type: string
           format: uuid
         description: Optional session whose checkout scopes the operation.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation to discard changes in.
+      - name: expected_head
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Optional HEAD commit SHA observed during confirmation.
+      - name: expected_revision
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: uint64
+        description: Optional status revision observed during confirmation.
       responses:
         '200':
           description: Fresh git status after discard
@@ -395,6 +615,25 @@ paths:
           type: string
           format: uuid
         description: Optional session whose checkout scopes the operation.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation whose branch is pushed.
+      - name: remote
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Optional remote name when overriding default upstream.
+      - name: ref
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Optional branch or refspec when overriding default upstream.
       responses:
         '200':
           description: Fresh git status after push
@@ -450,6 +689,25 @@ paths:
           type: string
           format: uuid
         description: Optional session whose checkout scopes the operation.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation to fast-forward.
+      - name: remote
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Optional remote name when overriding default upstream.
+      - name: ref
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Optional remote branch when overriding default upstream.
       responses:
         '200':
           description: Fresh git status after pull
@@ -505,6 +763,13 @@ paths:
           type: string
           format: uuid
         description: Optional session whose checkout scopes the operation.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation to commit in.
       requestBody:
         required: true
         content:
@@ -566,6 +831,13 @@ paths:
           type: string
           format: uuid
         description: Optional session whose checkout scopes the operation.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation to stash or apply in.
       requestBody:
         required: true
         content:
@@ -627,6 +899,13 @@ paths:
           type: string
           format: uuid
         description: Optional session whose checkout scopes the operation.
+      - name: worktree_id
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Explicit checkout incarnation whose diff is summarized.
       responses:
         '200':
           description: Drafted commit message

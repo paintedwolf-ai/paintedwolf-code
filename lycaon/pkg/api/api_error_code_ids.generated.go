@@ -224,6 +224,15 @@ const (
 	// ApiErrorCodeWorktreeLandBlocked bind/land refused for a machine-checked
 	// base-checkout or merge reason
 	ApiErrorCodeWorktreeLandBlocked ApiErrorCode = "worktree_land_blocked"
+	// ApiErrorCodeWorktreeNotFound named worktree_id is not registered for this
+	// project repository
+	ApiErrorCodeWorktreeNotFound ApiErrorCode = "worktree_not_found"
+	// ApiErrorCodeWorktreeUnavailable named worktree checkout is retired, missing
+	// on disk, or failed registration verification
+	ApiErrorCodeWorktreeUnavailable ApiErrorCode = "worktree_unavailable"
+	// ApiErrorCodeGitStateChanged checkout HEAD or working-tree state changed
+	// since preview; refresh before retrying
+	ApiErrorCodeGitStateChanged ApiErrorCode = "git_state_changed"
 	// ApiErrorCodeInternalError unhandled server error fallthrough
 	ApiErrorCodeInternalError ApiErrorCode = "internal_error"
 	// ApiErrorCodeInvalidJson request body is not one well-formed JSON value of
@@ -1036,6 +1045,9 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeWorktreeDirty,
 	ApiErrorCodeWorktreeStale,
 	ApiErrorCodeWorktreeLandBlocked,
+	ApiErrorCodeWorktreeNotFound,
+	ApiErrorCodeWorktreeUnavailable,
+	ApiErrorCodeGitStateChanged,
 	ApiErrorCodeInternalError,
 	ApiErrorCodeInvalidJson,
 	ApiErrorCodeInvalidPath,
@@ -1401,6 +1413,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeFileBriefingNotFound,
 		ApiErrorCodeChoiceTransitionNotFound,
 		ApiErrorCodeGitRepoNotFound,
+		ApiErrorCodeWorktreeNotFound,
 		ApiErrorCodeChoiceSourceNotFound,
 		ApiErrorCodeSearchSourceNotFound,
 		ApiErrorCodeMessageNotFound,
@@ -1487,6 +1500,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeWorktreeDirty,
 		ApiErrorCodeWorktreeStale,
 		ApiErrorCodeWorktreeLandBlocked,
+		ApiErrorCodeWorktreeUnavailable,
+		ApiErrorCodeGitStateChanged,
 		ApiErrorCodeBlueprintContentConflict,
 		ApiErrorCodeIdempotencyConflict,
 		ApiErrorCodeCommandDisabled,

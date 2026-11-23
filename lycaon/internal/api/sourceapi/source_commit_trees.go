@@ -41,6 +41,9 @@ func (s *Comparisons) resolveCommitTrees(ctx context.Context, p *project.Project
 		if source.Commit == nil || source.Commit.RootID == "" || source.Commit.Path == "" {
 			continue
 		}
+		if source.Commit.WorktreeID != "" || (source.Commit.Stage != "" && source.Commit.Stage != "working") {
+			continue
+		}
 		paths[source.Commit.RootID] = append(paths[source.Commit.RootID], source.Commit.Path)
 	}
 	mgr := s.Git.Manager()

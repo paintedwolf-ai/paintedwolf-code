@@ -44,6 +44,7 @@ func (s *Handler) buildWorktreeView(ctx context.Context, mgr *git.Manager, b *st
 	view := wire.GitWorktreeView{
 		Bound:      true,
 		SessionID:  b.SessionID,
+		WorktreeID: b.WorktreeID,
 		RepoID:     b.RepoID,
 		Branch:     b.Branch,
 		BaseBranch: b.BaseBranch,

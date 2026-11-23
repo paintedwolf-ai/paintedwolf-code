@@ -245,11 +245,13 @@ export function GitStrip(props: Props) {
     const projectId = props.projectId;
     const sessionId = props.sessionId;
     const repoId = status()?.repo_id;
+    const worktreeId = status()?.worktree_id;
     setCommitting(true);
     try {
       const committed = await props.onCommit(submitted.trim());
       if (committed && message() === submitted && props.projectId === projectId &&
-          props.sessionId === sessionId && status()?.repo_id === repoId) {
+          props.sessionId === sessionId && status()?.repo_id === repoId &&
+          status()?.worktree_id === worktreeId) {
         setMessage("");
       }
     } finally {
@@ -298,6 +300,16 @@ export function GitStrip(props: Props) {
     if (active) return active;
     return (status()?.repo_id ?? "").trim();
   };
+
+  let discardTargetKey = "";
+  const currentDiscardTargetKey = () =>
+    [props.projectId ?? "", props.sessionId ?? "", worktreeRepoId(), status()?.worktree_id ?? "", status()?.head_sha ?? ""].join("\0");
+  createEffect(() => {
+    const key = currentDiscardTargetKey();
+    if (confirmDiscard() && discardTargetKey && key !== discardTargetKey) {
+      setConfirmDiscard(false);
+    }
+  });
 
   const checkout = (children?: import("solid-js").JSX.Element) => (
     <GitCheckout
@@ -702,7 +714,10 @@ export function GitStrip(props: Props) {
                 data-testid="git-discard"
                 disabled={busy()}
                 data-tip="Discard all changes (cannot be undone)"
-                onClick={() => setConfirmDiscard(true)}
+                onClick={() => {
+                  discardTargetKey = currentDiscardTargetKey();
+                  setConfirmDiscard(true);
+                }}
               >
                 Discard
               </button>

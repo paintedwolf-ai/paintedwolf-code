@@ -19,17 +19,17 @@ var gitChangesPages = pagecursor.For[int]("git_changes")
 
 // HandleGitStatus returns the working-tree snapshot for the Den Git tab.
 func (s *Handler) HandleGitStatus(w http.ResponseWriter, r *http.Request) {
-	repo, _, ok := s.requireGitRepoQuery(w, r)
+	target, ok := s.requireGitCheckoutTarget(w, r)
 	if !ok {
 		return
 	}
-	summary, status := s.gitStatusSummary(r.Context(), repo)
+	summary, status := s.gitStatusSummary(r.Context(), target.Repo, target.Checkout.ID)
 	httpio.WriteJSON(w, status, summary)
 }
 
 // HandleGitChanges returns one cached changed-path page.
 func (s *Handler) HandleGitChanges(w http.ResponseWriter, r *http.Request) {
-	repo, p, ok := s.requireGitRepoQuery(w, r)
+	target, ok := s.requireGitCheckoutTarget(w, r)
 	if !ok {
 		return
 	}
@@ -40,7 +40,7 @@ func (s *Handler) HandleGitChanges(w http.ResponseWriter, r *http.Request) {
 	} else if present {
 		limit = parsed
 	}
-	scope := pagecursor.Scope(repo.ID, repo.Toplevel)
+	scope := pagecursor.Scope(target.Repo.ID, target.Checkout.ID, target.Repo.Toplevel)
 	offset := 0
 	expectedRevision := uint64(0)
 	if parsed, present, err := httpio.OptionalUint64Query(r, "revision", 1); err != nil {
@@ -59,7 +59,7 @@ func (s *Handler) HandleGitChanges(w http.ResponseWriter, r *http.Request) {
 		}
 		expectedRevision, offset = cursorRevision, cursorOffset
 	}
-	page, status, err := s.gitChangesPage(r.Context(), repo, p.SourceRoots(), offset, limit, expectedRevision)
+	page, status, err := s.gitChangesPage(r.Context(), target.Repo, target.Checkout.ID, target.ProjectedProject.SourceRoots(), offset, limit, expectedRevision)
 	if errors.Is(err, pagecursor.ErrExpired) {
 		s.responses.PageCursorError(w, r, "cursor", pagecursor.ErrExpired)
 		return
@@ -74,33 +74,46 @@ func (s *Handler) HandleGitChanges(w http.ResponseWriter, r *http.Request) {
 
 // gitStatusSummary maps the newest cached status generation. A repository with no
 // snapshot answers 202; an aged one answers its values with refreshing set.
-func (s *Handler) gitStatusSummary(ctx context.Context, repo git.RepoRef) (wire.GitStatusSummary, int) {
+func (s *Handler) gitStatusSummary(ctx context.Context, repo git.RepoRef, checkoutID string) (wire.GitStatusSummary, int) {
 	rootIDs := append([]string(nil), repo.RootIDs...)
 	if rootIDs == nil {
 		rootIDs = []string{}
 	}
 	empty := wire.GitStatusSummary{
-		Available: repo.Available,
-		RepoID:    repo.ID,
-		RootIDs:   rootIDs,
+		Available:  repo.Available,
+		RepoID:     repo.ID,
+		WorktreeID: checkoutID,
+		RootIDs:    rootIDs,
 	}
 	if !repo.Available || repo.Toplevel == "" {
 		return empty, http.StatusOK
 	}
+	headSHA, _ := git.ReadHeadSHA(repo.Toplevel)
+	branchName, _ := git.ReadBranch(repo.Toplevel)
+	detached := branchName == "" && headSHA != ""
 	cached, found, err := s.Board.StatusCache.PeekOrRevalidate(ctx, repo.Toplevel)
 	if err != nil || !found || cached.Status == nil {
 		empty.Refreshing = true
+		empty.HeadSHA = headSHA
+		empty.Detached = detached
 		return empty, http.StatusAccepted
 	}
 	status := cached.Status
+	branch := status.Branch
+	if detached && (branch == "HEAD" || strings.HasPrefix(branch, "HEAD (")) {
+		branch = ""
+	}
 	return wire.GitStatusSummary{
 		Available:     true,
 		RepoID:        repo.ID,
+		WorktreeID:    checkoutID,
 		RootIDs:       rootIDs,
 		Revision:      cached.Revision,
 		Refreshing:    !cached.CacheHit,
-		Branch:        status.Branch,
+		Branch:        branch,
+		HeadSHA:       headSHA,
 		HeadShort:     status.HeadShort,
+		Detached:      detached,
 		Upstream:      status.Upstream,
 		Ahead:         status.Ahead,
 		Behind:        status.Behind,
@@ -114,12 +127,13 @@ func (s *Handler) gitStatusSummary(ctx context.Context, repo git.RepoRef) (wire.
 func (s *Handler) gitChangesPage(
 	ctx context.Context,
 	repo git.RepoRef,
+	checkoutID string,
 	roots []projectroot.RootRef,
 	offset int,
 	limit int,
 	expectedRevision uint64,
 ) (wire.GitChangesPage, int, error) {
-	empty := wire.GitChangesPage{RepoID: repo.ID, Files: []wire.GitFileEntry{}}
+	empty := wire.GitChangesPage{RepoID: repo.ID, WorktreeID: checkoutID, Files: []wire.GitFileEntry{}}
 	cached, found, err := s.Board.StatusCache.PeekOrRevalidate(ctx, repo.Toplevel)
 	if err != nil {
 		return empty, http.StatusInternalServerError, err
@@ -146,7 +160,7 @@ func (s *Handler) gitChangesPage(
 	}
 	empty.Files = files
 	if end < len(cached.Status.Files) {
-		empty.NextCursor, err = gitChangesPages.EncodeAt(pagecursor.Scope(repo.ID, repo.Toplevel), cached.Revision, end)
+		empty.NextCursor, err = gitChangesPages.EncodeAt(pagecursor.Scope(repo.ID, checkoutID, repo.Toplevel), cached.Revision, end)
 		if err != nil {
 			return empty, http.StatusInternalServerError, err
 		}
@@ -154,11 +168,12 @@ func (s *Handler) gitChangesPage(
 	return empty, http.StatusOK, nil
 }
 
-func (s *Handler) gitMutationResult(ctx context.Context, repo git.RepoRef) wire.GitMutationResult {
-	result := wire.GitMutationResult{RepoID: repo.ID, Refreshing: true}
+func (s *Handler) gitMutationResult(ctx context.Context, repo git.RepoRef, checkoutID string) wire.GitMutationResult {
+	result := wire.GitMutationResult{RepoID: repo.ID, WorktreeID: checkoutID, Refreshing: true}
 	if repo.Toplevel == "" {
 		return result
 	}
+	result.HeadSHA, _ = s.git.HeadSHA(ctx, repo.Toplevel)
 	s.Board.StatusCache.InvalidateWithSource(repo.Toplevel, repochange.SourceMutation)
 	cached, found, _ := s.Board.StatusCache.PeekOrRevalidate(ctx, repo.Toplevel)
 	if found {

@@ -16,9 +16,10 @@ import (
 
 // GitCommitOpts selects the message, staged paths, and whether to replace HEAD.
 type GitCommitOpts struct {
-	Message string
-	Paths   []string
-	Amend   bool
+	Message    string
+	Paths      []string
+	StagedOnly bool
+	Amend      bool
 	// IdentityName and IdentityEmail, when set, replace the resolved author
 	// and committer fields.
 	IdentityName, IdentityEmail string
@@ -38,6 +39,9 @@ func (m *gitCommitManager) Commit(ctx context.Context, projectDir string, opts G
 		return "", err
 	}
 	defer release()
+	if err := checkLockedVerify(ctx); err != nil {
+		return "", err
+	}
 	finish, err := gitstate.BeginMutation(ctx, dir, nil)
 	if err != nil {
 		return "", err
@@ -56,7 +60,7 @@ func (m *gitCommitManager) Commit(ctx context.Context, projectDir string, opts G
 	if len(paths) > 0 {
 		return commitSelected(ctx, dir, opts, paths)
 	}
-	if !opts.Amend {
+	if !opts.Amend && !opts.StagedOnly {
 		if _, code, err := gitexec.Run(ctx, dir, []string{"add", "-A"}, hermeticOpts(0)); err != nil {
 			return "", err
 		} else if code != 0 {

@@ -18,26 +18,31 @@ import (
 // HandleGitCommitMessage drafts a commit message from the current diff via the lite model.
 func (s *Handler) HandleGitCommitMessage(w http.ResponseWriter, r *http.Request) {
 	mgr := s.git
-	repo, p, ok := s.requireGitRepoQuery(w, r)
+	target, ok := s.requireGitCheckoutTarget(w, r)
 	if !ok {
 		return
 	}
-	diff := combinedDiff(r.Context(), mgr, repo.Toplevel)
+	diff := combinedDiff(r.Context(), mgr, target.Repo.Toplevel)
 	if strings.TrimSpace(diff) == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeGitNoChanges, "no changes to summarize")
 		return
 	}
+	headSHA, _ := mgr.HeadSHA(r.Context(), target.Repo.Toplevel)
 	ctx := curationctx.WithSession(r.Context(), curationctx.Session{
 		SessionID:  strings.TrimSpace(r.URL.Query().Get("session_id")),
-		ProjectID:  p.ID,
-		ProjectDir: repo.Toplevel,
+		ProjectID:  target.BaseProject.ID,
+		ProjectDir: target.Repo.Toplevel,
 	})
-	msg, err := s.draftCommitMessage(ctx, repo.Toplevel, diff)
+	msg, err := s.draftCommitMessage(ctx, target.Repo.Toplevel, diff)
 	if err != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeGitDraftFailed, "could not draft a commit message")
 		return
 	}
-	httpio.WriteJSON(w, http.StatusOK, wire.GitCommitMessageResponse{Message: msg})
+	httpio.WriteJSON(w, http.StatusOK, wire.GitCommitMessageResponse{
+		WorktreeID: target.Checkout.ID,
+		HeadSHA:    headSHA,
+		Message:    msg,
+	})
 }
 
 // combinedDiff concatenates staged and unstaged hunks for the commit-message draftsman.

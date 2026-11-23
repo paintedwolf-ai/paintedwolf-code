@@ -20,15 +20,19 @@ export async function loadGitWorkspaceStatus(
   projectId: string,
   repoId: string,
   sessionId?: string,
+  worktreeId?: string,
 ): Promise<GitWorkspaceStatus> {
   let latest: GitStatusSummary | undefined;
+  const targetWorktree = worktreeId?.trim() || undefined;
   for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
-    const summary = await client.getGitStatus(projectId, repoId, sessionId);
+    const summary = targetWorktree
+      ? await client.getGitStatus(projectId, repoId, sessionId, targetWorktree)
+      : await client.getGitStatus(projectId, repoId, sessionId);
     latest = summary;
     if (!summary.available) return workspaceStatus(summary, []);
     if (summary.revision !== 0) {
       // A refresh landing between the two reads expires the requested generation.
-      const files = await readChanges(client, projectId, repoId, summary.revision, sessionId).catch((error: unknown) => {
+      const files = await readChanges(client, projectId, repoId, summary.revision, sessionId, targetWorktree).catch((error: unknown) => {
         if (isApiErrorCode(error, ["cursor_generation_expired"])) return undefined;
         throw error;
       });
@@ -47,12 +51,16 @@ async function readChanges(
   repoId: string,
   revision: number,
   sessionId?: string,
+  worktreeId?: string,
 ): Promise<GitFileEntry[] | undefined> {
   const files: GitFileEntry[] = [];
   let cursor: string | undefined;
   do {
     const page = await client.listGitChanges(projectId, repoId, {
-      session_id: sessionId, revision, limit: CHANGES_PAGE_LIMIT,
+      session_id: sessionId,
+      ...(worktreeId ? { worktree_id: worktreeId } : {}),
+      revision,
+      limit: CHANGES_PAGE_LIMIT,
       ...(cursor ? { cursor } : {}),
     });
     if (page.revision !== revision) return undefined;

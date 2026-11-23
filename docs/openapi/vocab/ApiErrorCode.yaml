@@ -314,6 +314,18 @@ values:
     status: 409
     comment: >-
       bind/land refused for a machine-checked base-checkout or merge reason
+  - id: worktree_not_found
+    status: 404
+    comment: >-
+      named worktree_id is not registered for this project repository
+  - id: worktree_unavailable
+    status: 409
+    comment: >-
+      named worktree checkout is retired, missing on disk, or failed registration verification
+  - id: git_state_changed
+    status: 409
+    comment: >-
+      checkout HEAD or working-tree state changed since preview; refresh before retrying
   - id: internal_error
     status: 500
     comment: >-

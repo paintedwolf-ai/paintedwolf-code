@@ -211,6 +211,29 @@ func (inv *Inventory) ListSuperseded(ctx context.Context, projectID, repoID, che
 	return out, nil
 }
 
+// VerifyLive loads checkoutID and verifies its live registration and incarnation continuity on disk.
+func (inv *Inventory) VerifyLive(ctx context.Context, projectID, checkoutID string) (Checkout, error) {
+	if inv == nil || inv.database == nil {
+		return Checkout{}, ErrCheckoutNotFound
+	}
+	return VerifyLiveCheckout(ctx, inv.database, projectID, checkoutID)
+}
+
+// IsBoundToAnySession reports whether any session_worktrees binding targets checkoutID.
+func (inv *Inventory) IsBoundToAnySession(ctx context.Context, projectID, checkoutID string) (bool, error) {
+	if inv == nil || inv.database == nil {
+		return false, nil
+	}
+	n, err := db.New(inv.database).CountSessionWorktreesByWorktreeID(ctx, db.CountSessionWorktreesByWorktreeIDParams{
+		ProjectID:  strings.TrimSpace(projectID),
+		WorktreeID: strings.TrimSpace(checkoutID),
+	})
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 // VerifyLiveCheckout loads checkoutID and verifies its live registration and incarnation continuity on disk.
 func VerifyLiveCheckout(ctx context.Context, database db.Handle, projectID, checkoutID string) (Checkout, error) {
 	row, err := db.New(database).GetSourceWorktreeByID(ctx, db.GetSourceWorktreeByIDParams{

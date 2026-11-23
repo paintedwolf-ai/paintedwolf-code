@@ -30,6 +30,31 @@ type operationIndexEntry struct {
 }
 type operationIndex map[operationIndexKey]operationIndexEntry
 
+// IndexBlobOID returns the stage-0 blob OID recorded in projectDir's index for repoRelPath.
+// An unindexed path returns ("", nil).
+func (m *Manager) IndexBlobOID(ctx context.Context, projectDir, repoRelPath string) (string, error) {
+	dir, err := repositoryProjectDir(projectDir)
+	if err != nil {
+		return "", err
+	}
+	repo, ok := gitrepo.Discover(dir)
+	if !ok {
+		return "", ErrNotRepository
+	}
+	clean := strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(repoRelPath)), "/")
+	if clean == "" || clean == "." {
+		return "", fmt.Errorf("repository-relative path is required")
+	}
+	entries, err := readOperationIndex(ctx, repo.Root, hermeticOpts(0), clean)
+	if err != nil {
+		return "", err
+	}
+	if entry, ok := entries[operationIndexKey{path: clean, stage: 0}]; ok {
+		return entry.oid, nil
+	}
+	return "", nil
+}
+
 // Conflict resolution replaces stages 1–3 with stage 0, even when file bytes match.
 func readOperationIndex(ctx context.Context, dir string, opts gitexec.Opts, paths ...string) (operationIndex, error) {
 	if len(paths) == 0 && opts.IndexFile == "" && ctx.Err() == nil {

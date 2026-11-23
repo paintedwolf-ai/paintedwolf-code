@@ -90,3 +90,6 @@ ON CONFLICT(session_id) DO UPDATE SET project_id=excluded.project_id, worktree_i
 
 -- name: DeleteSessionWorktree :exec
 DELETE FROM session_worktrees WHERE session_id=?;
+
+-- name: CountSessionWorktreesByWorktreeID :one
+SELECT COUNT(1) FROM session_worktrees WHERE project_id=? AND worktree_id=?;
