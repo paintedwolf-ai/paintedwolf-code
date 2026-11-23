@@ -3,7 +3,10 @@ use mlx_rs::{nn, ops::indexing::*, transforms::compile::compile};
 
 fn reference(gate: &Array, up: &Array) -> Array {
     let operation = |input: &Array| nn::gelu_approximate(input)?.as_dtype(input.dtype());
-    compile(operation, true)(gate).unwrap().multiply(up).unwrap()
+    compile(operation, true)(gate)
+        .unwrap()
+        .multiply(up)
+        .unwrap()
 }
 
 fn assert_product(activation: &Activation, gate: &Array, up: &Array) {
@@ -21,7 +24,10 @@ fn assert_product(activation: &Activation, gate: &Array, up: &Array) {
         .enumerate()
     {
         if want.is_finite() {
-            assert!((got - want).abs() <= 0.00002, "element {index}: {got} != {want}");
+            assert!(
+                (got - want).abs() <= 0.00002,
+                "element {index}: {got} != {want}"
+            );
         } else {
             assert_eq!(got, want, "element {index}");
         }
@@ -77,8 +83,8 @@ fn product_rejects_unsupported_shapes_and_precision() {
         vec![1, 256],
         vec![2, 1, 256],
         vec![1, 0, 256],
-        vec![1, 257, 256],
-        vec![1, 1, 255],
+        vec![1, 2049, 256],
+        vec![1, 1, 15361],
     ] {
         let input = Array::zeros::<half::f16>(&shape).unwrap();
         assert!(activation.product(&input, &input).is_err());

@@ -2,11 +2,12 @@ package workflow
 
 import (
 	"context"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -55,7 +56,7 @@ func TestFailClosedGateEvaluatorBlocksUnmetGates(t *testing.T) {
 	eval := workflowgates.FailClosedGateEvaluator{}
 	manifest := workflowdef.Manifest{
 		PhaseDefs: []workflowdef.PhaseDef{
-			{ID: "verify", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"human_approval"}},
+			{ID: "verify", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"human_approval"}},
 		},
 	}
 	run := &api.WorkflowRun{CurrentPhase: "verify"}
@@ -64,7 +65,7 @@ func TestFailClosedGateEvaluatorBlocksUnmetGates(t *testing.T) {
 	if ok {
 		t.Fatal("expected gate blocked")
 	}
-	if result.Reason != workflowdef.CompleteWhenGatesSatisfied {
+	if result.Reason != vocabulary.CompleteWhenGatesSatisfied {
 		t.Fatalf("reason = %q", result.Reason)
 	}
 	vars := runstate.SetGateSatisfied(map[string]any{}, "human_approval", true)

@@ -226,7 +226,7 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 		ResetWorkers: m.RewindRuntime.ResetWorkers, ResetCoordinator: m.RewindRuntime.ResetCoordinator, ResetTurnLedgers: m.RewindRuntime.ResetTurnLedgers, ResetProgress: m.RewindRuntime.ResetProgress, ResetQueue: m.RewindRuntime.ResetQueue,
 	})
 	interruptions := execution.NewRecovery(store.Sessions, store.Turns, turnTranscript, turnStatus, rewinds)
-	m.Resources = resources.New(&resources.Work{Execution: turnExecution, Curation: turnCuration, History: turnHistory.Runner, Research: research}, &resources.TurnState{Capture: &captures.Capture, Streams: turnTranscript.Streams, ProgressClosure: m.Coordinator.ProgressClosure, Closeouts: turnCloseouts, Spend: turnSpend, Promotion: m.Promotion, History: turnHistory, Gate: gate, PolicyIndex: m.Coordinator.PolicyIndex, Protection: protection}, &resources.ToolState{}, &resources.Authority{}, queueStore)
+	m.Resources = resources.New(&resources.Work{Execution: turnExecution, Curation: turnCuration, History: turnHistory.Runner, Research: research}, &resources.TurnState{Capture: &captures.Capture, Streams: turnTranscript.Streams, ProgressClosure: m.Coordinator.ProgressClosure, Closeouts: turnCloseouts, Spend: turnSpend, Promotion: m.Promotion, History: turnHistory, Gate: gate, PolicyIndex: m.Coordinator.PolicyIndex, Protection: protection}, &resources.ToolState{Policy: m.ToolPolicy}, &resources.Authority{}, queueStore)
 	m.Chats = chats.New(store.Sessions, m.Coordinator.PolicyIndex, &turnExecution.Prompt, queueStore, m.Resources.Registry, chats.Lifecycle{Gate: gate, Captures: captures, Naming: namingService, Research: research, Protection: protection, Recovery: recovery, Rewinds: rewinds, Drafts: drafts})
 	m.Stops = stopping.New(store.Sessions, store.Submissions, gate, turnExecution, m.Chats, queueStore, drafts, interruptions, turnStatus)
 	workerDigests := workeroutcomes.NewDigests()
@@ -239,6 +239,7 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 	workerResults.SetSummaries(workerSummaries)
 	m.Coordinator.Guidance = guidancedelivery.New(store.Sessions, store.Transcript, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
 	m.Processes = processcontrol.New(store.Sessions, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)
+	m.Submissions.SetProcessObserver(m.Processes.Observe)
 	m.Workers = workerexecution.New(store.Sessions, store.Evidence, m.Workspace, gate, m.Coordinator.Guidance, m.Limits, router, workerexecution.PeerServices{Cancel: workerCancel, Cards: workerCards, Cancellations: workerCancellations, Delivery: workerDelivery, Summaries: workerSummaries, Results: workerResults, Digests: workerDigests, State: workerState, Notes: workerNotes, Workspaces: workerworkspace.New(store.Sessions, m.Workspace, newBranchWorkspace)})
 	m.Verification.SetWorkspaceTrackers(m.Workers.Workspaces)
 	turnPreparation := preparation.New(turnHistory, m.Coordinator.Loading, m.Profiles, m.SourceBriefs, m.ViewContexts, m.ToolContext, m.Workers.Workspaces, m.Workers.State)

@@ -132,7 +132,7 @@ func buildEvidenceRecord(roots CitationRoots, toolName string, args map[string]a
 		rec.Fidelity = FidelityStructured
 		addRecordPath(roots, &rec, stringArg(args, "path"), FidelityStructured)
 		captureRecordBody(&rec, content)
-	case "git_status", "git_diff", "git_log", "git_show", "git_blame", "git_branches", "git_ref", "git_compare", "git_stash_list",
+	case "inspect_source", "git_status", "git_diff", "git_log", "git_show", "git_blame", "git_branches", "git_ref", "git_compare", "git_stash_list",
 		"git_commit", "git_restore", "git_checkout", "git_merge", "git_stash":
 		// Git results can index unreadable paths.
 		rec.Fidelity = FidelityStructured

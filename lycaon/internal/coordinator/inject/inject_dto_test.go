@@ -156,14 +156,32 @@ func TestAttachGateObligationsProjectsUnsatisfiedLeaves(t *testing.T) {
 	}
 }
 
-func TestBuildActiveWorkflowInjectData_NextPhaseFallsBackToSequence(t *testing.T) {
-	runCtx := api.CoordinatorRunContext{CurrentPhase: "research"}
-	snap := WorkflowRuntimeSnapshot{Phases: []WorkflowPhaseRow{
-		{ID: "research"},
-		{ID: "expand"},
-	}}
-	data := BuildActiveWorkflowInjectData(CoordinatorTurnFrame{RunContext: runCtx, Runtime: snap})
-	if data.NextPhase != "expand" {
-		t.Fatalf("next = %q (want implicit sequence successor)", data.NextPhase)
+func TestBuildActiveWorkflowInjectDataProjectsAdvanceTarget(t *testing.T) {
+	for _, test := range []struct {
+		name, current, next, want string
+		terminal                  bool
+	}{
+		{name: "first", current: "research", next: "expand", want: "expand"},
+		{name: "middle", current: "expand", next: "done", want: "done"},
+		{name: "self loop", current: "expand", next: "expand"},
+		{name: "no edge", current: "expand"},
+		{name: "terminal", current: "done", next: "expand", terminal: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			phases := []WorkflowPhaseRow{{ID: "research"}, {ID: "expand"}, {ID: "done"}}
+			for i := range phases {
+				if phases[i].ID == test.current {
+					phases[i].Next = test.next
+					phases[i].Terminal = test.terminal
+				}
+			}
+			data := BuildActiveWorkflowInjectData(CoordinatorTurnFrame{
+				RunContext: api.CoordinatorRunContext{CurrentPhase: test.current},
+				Runtime:    WorkflowRuntimeSnapshot{Phases: phases},
+			})
+			if data.NextPhase != test.want {
+				t.Fatalf("next = %q, want %q", data.NextPhase, test.want)
+			}
+		})
 	}
 }

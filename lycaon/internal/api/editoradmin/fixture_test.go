@@ -108,6 +108,7 @@ func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
 		ProjectRegistry: deps.Projects,
 		SecretSpans:     secretspan.New(matcher),
 		SessionStore:    deps.Store.Sessions,
+		SourceLedger:    deps.SourceLedger,
 		TryRunPromotion: promotions.record,
 	})
 	t.Cleanup(func() {

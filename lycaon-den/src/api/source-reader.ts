@@ -94,12 +94,12 @@ export async function loadComparisonSnapshot(client: LycaonClient, projectId: st
 
 /** Current-file comparison retains the selected historical endpoint across handle renewal. */
 export function currentComparisonAccess(original: SourceReaderAccess, client: LycaonClient, projectId: string,
-  rootId: string, path: string, sessionId?: string): SourceReaderAccess {
+  address: { file_id: string } | { root_id: string; path: string }, sessionId?: string): SourceReaderAccess {
   let resolvedSessionId = sessionId;
   const source = async (): Promise<SourceComparisonSelector> => {
     const reference = await original.reference();
     resolvedSessionId ??= reference.session_id;
-    return { kind: "retained", view_id: reference.view.id, comparison: "current", root_id: rootId, path };
+    return { kind: "retained", view_id: reference.view.id, comparison: "current", ...address };
   };
   let opening: Promise<SourceReaderAccess> | undefined;
   const get = () => opening ??= source().then(selector => sourceReaderAccess(client, projectId, selector, resolvedSessionId, source))

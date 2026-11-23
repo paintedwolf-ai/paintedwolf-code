@@ -26,6 +26,9 @@ func (r *Output) ReadCommandOutput(ctx context.Context, sessionID, handle string
 	snapshot.Output.Next = projection.Next
 	snapshot.Output.Truncated = projection.Truncated
 	snapshot.Output.Chunks = projection.Chunks
+	if projection.Limit != nil && cursor < projection.Next {
+		return snapshot, projection.Limit
+	}
 	if !projection.Screened && cursor < projection.Next {
 		snapshot.Output.Chunks = []OutputChunk{{Cursor: max(cursor, projection.Head), Stream: "combined", Text: captureUnavailableText}}
 	}

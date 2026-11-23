@@ -43,8 +43,14 @@ type ParkedProgram interface {
 	Settle(ctx context.Context, result string, err error)
 }
 
-// ProgramEffectSink records what a program did after the call that started it
-// returned. Those file edits belong on that call's stored result.
+type ProgramEffects struct {
+	FileEdits     []api.FileEditSnapshot
+	Omitted       int
+	Observation   *api.ActionFact
+	SourceContext *api.SourceContext
+}
+
+// ProgramEffectSink applies deferred facts to the original call's result.
 type ProgramEffectSink interface {
-	AppendProgramEffects(ctx context.Context, sessionID, toolCallID string, edits []api.FileEditSnapshot, omitted int)
+	AppendProgramEffects(ctx context.Context, sessionID, toolCallID string, effects ProgramEffects)
 }

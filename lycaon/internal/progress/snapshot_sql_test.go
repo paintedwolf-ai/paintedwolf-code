@@ -3,6 +3,7 @@ package progress_test
 import (
 	"context"
 	"errors"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
@@ -14,8 +15,8 @@ import (
 
 func TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA(t *testing.T) {
 	database := testdbfixture.Open(t, "progress-snapshot")
-	testdbseed.InsertSession(t, database, "session", testdbseed.DefaultProjectID)
-	store := progress.NewSQLStore(database)
+	testdbseed.InsertWorkflowRun(t, database, "run", "session", testdbseed.DefaultProjectID)
+	store := progress.NewSQLStore(database, sessionstore.NewSQL(database))
 	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver"))
 	before, err := store.Snapshot(t.Context(), "session")
 	testutil.FailErr(t, "read checklist", err)
@@ -27,7 +28,7 @@ func TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA(t *testing.T) {
 		_, applyErr := update.ExpectRevision(observed.Revision).ExpectItemIDs(observed.ItemIDs...).Apply(t.Context(), store, "session", nil)
 		testutil.FailErr(t, "replace checklist", applyErr)
 	}
-	reopened := progress.NewSQLStore(database)
+	reopened := progress.NewSQLStore(database, sessionstore.NewSQL(database))
 	after, err := reopened.Snapshot(t.Context(), "session")
 	testutil.FailErr(t, "read reopened checklist", err)
 	if before.Content != after.Content || before.Revision == after.Revision {
@@ -98,13 +99,12 @@ func TestSQLProgressKeepsAtomicSnapshotOnRejectedOrCanceledUpdates(t *testing.T)
 
 func TestSQLProgressReplacesChecklistWithPlainTextOrEmptyDocument(t *testing.T) {
 	store := progresstest.New(t, "session")
-	store.BindRun("session", "run-1")
 	t.Run("set prose", func(t *testing.T) {
 		testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver"))
 		testutil.FailErr(t, "replace checklist with prose", store.Set("session", "Deliver the changes."))
 		snapshot, err := store.Snapshot(t.Context(), "session")
 		testutil.FailErr(t, "read replacement", err)
-		if snapshot.Content != "Deliver the changes." || len(snapshot.ItemIDs) != 0 || snapshot.RunID != "run-1" {
+		if snapshot.Content != "Deliver the changes." || len(snapshot.ItemIDs) != 0 || snapshot.RunID != "run-session" {
 			t.Fatalf("plain progress snapshot = %+v", snapshot)
 		}
 	})

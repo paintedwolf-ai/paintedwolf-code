@@ -234,6 +234,14 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 	testutil.FailErr(t, "load handoff manifests", err)
 	wfStore := workflowpersistence.New(database)
 	manager := workflow.NewManager(wfStore, sessionsStore, manifests, nil)
+	testdbseed.InsertWorkflowRun(t, database, "previous-run", "chat", testdbseed.DefaultProjectID)
+	progressStore := progress.NewSQLStore(database)
+	if _, err := progress.AdoptActiveRun(t.Context(), progressStore, "chat", "previous-run", ""); err != nil {
+		t.Fatalf("bind progress run: %v", err)
+	}
+	testutil.FailErr(t, "seed old progress", progressStore.Set("chat", "old run checklist"))
+	_, err = database.ExecContext(ctx, `DELETE FROM workflow_runs WHERE id = 'previous-run'`)
+	testutil.FailErr(t, "clear previous run before handoff run", err)
 	now := time.Now().UTC()
 	run := &api.WorkflowRun{ID: "handoff", SessionID: "chat", ProjectID: testdbseed.DefaultProjectID, WorkflowID: "security-survey", WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusRunning, CurrentPhase: "claims", CreatedAt: now, UpdatedAt: now}
 	vars := map[string]any{"evidence_digest": "retained-evidence-identity", "topology_outputs": map[string]any{"fan_out": "retained-topology-output"}, "options": map[string]any{"criterion": "explicit-selection-criterion"}, "review_verdict": map[string]any{"claim": "approved"}}
@@ -248,19 +256,20 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 	anchor.SetDefaultRegistry(registry)
 	t.Cleanup(func() { anchor.SetDefaultRegistry(previousRegistry) })
 	host.Coordinator.Guidance.Bind(kicks, bus)
-	progressStore := progress.NewSQLStore(database)
-	progressStore.BindRun("chat", "previous-run")
-	testutil.FailErr(t, "seed old progress", progressStore.Set("chat", "old run checklist"))
 	runtime := workerruntime.New(database, nil, worker.WorkersConfig{})
 	topologyCalls := 0
-	runtime.SetDependencies(workerruntime.Dependencies{Sessions: &sessions.Runtime{Manager: host}, Workflows: &workflows.Runtime{Manager: manager}, Progress: func() progress.RunScopedStore { return progressStore }, StartOrchestratedTopology: func(_ context.Context, id string, snapshot *api.WorkflowRun) {
+	runtime.SetDependencies(workerruntime.Dependencies{Sessions: &sessions.Runtime{Manager: host}, Workflows: &workflows.Runtime{Manager: manager}, Progress: func() progress.Store { return progressStore }, StartOrchestratedTopology: func(_ context.Context, id string, snapshot *api.WorkflowRun) {
 		topologyCalls++
 		if id != "chat" || snapshot.ID != run.ID || snapshot.CurrentPhase != "claims" {
 			t.Fatalf("topology handoff used wrong run:%q,%+v", id, snapshot)
 		}
 	}})
-	runtime.OnWorkflowPhaseEnter(ctx, &workflowphases.RunContext{SessionID: "chat", RunID: run.ID, WorkflowID: run.WorkflowID, WorkflowVersion: run.WorkflowVersion, PreviousPhase: "execute", Phase: "claims"}, workflowdef.PhaseDef{ID: "claims", BindTopologyStage: "claims"})
-	if topologyCalls != 1 || progressStore.BoundRunID("chat") != run.ID || strings.Contains(progressStore.Get(ctx, "chat"), "old run checklist") {
+	previous, err := progressStore.Snapshot(ctx, "chat")
+	testutil.FailErr(t, "read previous run progress", err)
+	testutil.FailErr(t, "enter phase", runtime.OnWorkflowPhaseEnter(ctx, &workflowphases.RunContext{SessionID: "chat", RunID: run.ID, WorkflowID: run.WorkflowID, WorkflowVersion: run.WorkflowVersion, PreviousPhase: "execute", Phase: "claims"}, workflowdef.PhaseDef{ID: "claims", BindTopologyStage: "claims"}))
+	snapshot, err := progressStore.Snapshot(ctx, "chat")
+	testutil.FailErr(t, "read adopted run", err)
+	if topologyCalls != 1 || snapshot.RunID != run.ID || snapshot.Content == previous.Content {
 		t.Fatal("phase handoff retained previous run progress or missed topology")
 	}
 	kicks.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()}))

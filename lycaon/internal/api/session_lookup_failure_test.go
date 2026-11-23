@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
@@ -33,6 +34,10 @@ type lookupSessions struct {
 func (s lookupSessions) Get(context.Context, string) (*wire.Session, error) { return nil, s.err }
 
 func (s lookupSessions) UpdateSession(context.Context, string, func(*wire.Session)) error {
+	return s.err
+}
+
+func (s lookupSessions) MarkSessionSeen(context.Context, string, time.Time) error {
 	return s.err
 }
 

@@ -653,11 +653,12 @@ func (v *SourceComparisonSelector) UnmarshalJSON(data []byte) error {
 }
 
 type SourceTreeCommand struct {
-	Toggle   *SourceTreeToggle   `json:"-"`
-	Disclose *SourceTreeDisclose `json:"-"`
-	Reveal   *SourceTreeReveal   `json:"-"`
-	Filter   *SourceTreeFilter   `json:"-"`
-	Review   *SourceTreeReview   `json:"-"`
+	Toggle     *SourceTreeToggle     `json:"-"`
+	Disclose   *SourceTreeDisclose   `json:"-"`
+	Reveal     *SourceTreeReveal     `json:"-"`
+	Filter     *SourceTreeFilter     `json:"-"`
+	Review     *SourceTreeReview     `json:"-"`
+	SelectChat *SourceTreeSelectChat `json:"-"`
 }
 
 func (v SourceTreeCommand) Validate() error {
@@ -692,6 +693,12 @@ func (v SourceTreeCommand) Validate() error {
 			return fmt.Errorf("SourceTreeCommand has an inconsistent discriminator")
 		}
 	}
+	if v.SelectChat != nil {
+		count++
+		if v.SelectChat.Kind != "select_chat" {
+			return fmt.Errorf("SourceTreeCommand has an inconsistent discriminator")
+		}
+	}
 	if count != 1 {
 		return fmt.Errorf("SourceTreeCommand requires exactly one kind")
 	}
@@ -715,6 +722,9 @@ func (v SourceTreeCommand) MarshalJSON() ([]byte, error) {
 	}
 	if v.Review != nil {
 		return json.Marshal(v.Review)
+	}
+	if v.SelectChat != nil {
+		return json.Marshal(v.SelectChat)
 	}
 	return nil, fmt.Errorf("SourceTreeCommand is empty")
 }
@@ -757,6 +767,12 @@ func (v *SourceTreeCommand) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		out.Review = &part
+	case "select_chat":
+		var part SourceTreeSelectChat
+		if err := decodeSourceViewVariant(data, &part); err != nil {
+			return err
+		}
+		out.SelectChat = &part
 	default:
 		return fmt.Errorf("unknown SourceTreeCommand kind %q", tag.Kind)
 	}

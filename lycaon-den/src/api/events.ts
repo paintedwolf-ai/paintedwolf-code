@@ -1,3 +1,5 @@
+import { applyCachedSessionMode } from "../chat/session/session-chat-cache.ts";
+import { rebaseSessionModeIntents } from "../chat/session/session-mode-state.ts";
 import { deliverSourceOperationCompletion } from "./source-operation-completion.ts";
 import { traceSourceViewDelivery } from "./source-view-event-trace.ts";
 import {
@@ -31,11 +33,17 @@ import { applyTurnOutcome } from "../chat/recovery/turn-outcome.ts";
 import { invalidateApprovalGrantsCache } from "../settings/security/approval-grants-cache.ts";
 import { LycaonApiError } from "./http.ts";
 import { resetSessionSnapshotReads, sessionSnapshotReadFence } from "./session-snapshot-refresh.ts";
-import { forgetSessionRevisions, sessionRevisionWatermarks } from "./session-event-revisions.ts";
+import {
+  forgetSessionRevisions,
+  sessionModeRevisionWatermarks,
+  sessionRevisionWatermarks,
+  takeSessionModeFields,
+} from "./session-event-revisions.ts";
 
 /** Starts a new backend connection generation for this store. */
 export function resetSessionEventRevisions(storeActions: AppStoreActions): void {
   forgetSessionRevisions(storeActions);
+  rebaseSessionModeIntents(storeActions);
   resetSessionSnapshotReads(storeActions);
 }
 
@@ -227,7 +235,7 @@ function dispatchTopic(
   if (!storeActions) return;
   switch (envelope.topic) {
     case "session": {
-      const session = envelope.data;
+      const { mode: _mode, started: _started, ...session } = envelope.data;
       if (session.action === "deleted") break;
       storeActions.mergeSession(session);
       if (!session.host_error && session.idle_disposition === "completed") {
@@ -304,6 +312,7 @@ export function subscribeEvents(
     : undefined;
   const revisionContext = options.storeActions ?? options.appStore?.actions ?? handlers;
   const sessionRevisions = sessionRevisionWatermarks(revisionContext);
+  const modeRevisions = sessionModeRevisionWatermarks(revisionContext);
   const snapshotReads = sessionSnapshotReadFence(revisionContext);
   const seenEventIds = new Set<string>();
   const seenEventOrder: string[] = [];
@@ -383,6 +392,19 @@ export function subscribeEvents(
         publishSessionHostError(session.host_error, session.project_id, session.id);
       }
       const revision = envelope.entity_revision;
+      // Status can overtake the outbox event carrying the corresponding mode.
+      if (
+        (session.mode !== undefined || session.started !== undefined) &&
+        session.action !== "deleted" &&
+        sessionModeRevisionWatermarks(revisionContext) === modeRevisions
+      ) {
+        const projection = takeSessionModeFields(modeRevisions, session, revision);
+        if (projection) {
+          snapshotReads.invalidate(session.id);
+          applyCachedSessionMode(session.id, projection);
+          options.storeActions?.applySessionMode(session.id, projection);
+        }
+      }
       if (revision !== undefined) {
         const previous = sessionRevisions.get(session.id);
         if (previous !== undefined && revision < previous) return;
@@ -508,6 +530,7 @@ export function subscribeEvents(
             if (closed || version !== runVersion || signal.aborted) return;
             deliveryQueue.cancel();
             sessionRevisions.clear();
+            modeRevisions.clear();
             snapshotReads.clear();
             seenEventIds.clear();
             seenEventOrder.length = 0;

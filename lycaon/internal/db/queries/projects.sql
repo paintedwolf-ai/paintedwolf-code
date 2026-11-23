@@ -75,10 +75,13 @@ UPDATE projects
 SET starred = ?
 WHERE id = ?;
 
--- name: TouchProjectLastOpened :exec
+-- name: MostRecentlyOpenedProjectID :one
+SELECT id FROM projects ORDER BY last_opened_at DESC, rowid DESC LIMIT 1;
+
+-- name: TouchProjectLastOpened :execrows
 UPDATE projects
-SET last_opened_at = ?
-WHERE id = ?;
+SET last_opened_at = MAX(last_opened_at, sqlc.arg(last_opened_at))
+WHERE id = sqlc.arg(id);
 
 -- name: SetProjectCover :exec
 UPDATE projects
@@ -123,12 +126,13 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 -- name: ListProjectRoots :many
 SELECT id, project_id, path, label, is_primary, git_remote_hash, added_at, kind
 FROM project_roots
-WHERE project_id = ?
+WHERE project_id = ? AND kind != 'outside'
 ORDER BY added_at;
 
 -- name: ListAllProjectRoots :many
 SELECT id, project_id, path, label, is_primary, git_remote_hash, added_at, kind
 FROM project_roots
+WHERE kind != 'outside'
 ORDER BY project_id, added_at;
 
 -- name: GetProjectRootByPath :one
@@ -149,14 +153,20 @@ WHERE id = ? AND project_id = ?;
 -- name: GetProjectRootByID :one
 SELECT id, project_id, path, label, is_primary, git_remote_hash, added_at, kind
 FROM project_roots
-WHERE id = ? AND project_id = ?;
+WHERE id = ? AND project_id = ? AND kind != 'outside';
+
+-- name: GetProjectOutsideRootID :one
+SELECT id FROM project_roots WHERE project_id = ? AND kind = 'outside';
+
+-- name: ListProjectOutsideRoots :many
+SELECT project_id, id FROM project_roots WHERE kind = 'outside' ORDER BY project_id;
 
 -- ProjectIDForCanonicalPath resolves the innermost attached root containing an
 -- absolute path, which is how a scan addressed by path names its project.
 -- name: ProjectIDForCanonicalPath :one
 SELECT project_id
 FROM project_roots
-WHERE sqlc.arg(canonical_path) = path OR instr(sqlc.arg(canonical_path), path || '/') = 1
+WHERE kind != 'outside' AND (sqlc.arg(canonical_path) = path OR instr(sqlc.arg(canonical_path), path || '/') = 1)
 ORDER BY length(path) DESC
 LIMIT 1;
 

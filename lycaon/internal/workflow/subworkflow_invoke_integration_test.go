@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -285,7 +286,7 @@ func TestChildManifestWithInvokeRejectedAtRuntime(t *testing.T) {
 		PhaseDefs: []workflowdef.PhaseDef{{
 			ID:             "nest",
 			InvokeWorkflow: &workflowdef.InvokeWorkflowSpec{WorkflowID: "implement", Version: "1.0.0"},
-			CompleteWhen:   workflowdef.CompleteWhenGatesSatisfied,
+			CompleteWhen:   vocabulary.CompleteWhenGatesSatisfied,
 			Gates:          []string{"child_run_complete"},
 		}},
 	}

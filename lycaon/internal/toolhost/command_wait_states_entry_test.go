@@ -462,16 +462,8 @@ func TestCommandEntryStopEndsTheProgramsBackgroundJobs(t *testing.T) {
 	testutil.FailErr(t, "join the stopped program", err)
 	output, err := f.Background.Output.ReadCommandOutput(t.Context(), f.Session, running.Handle, 0)
 	testutil.FailErr(t, "read the stopped program's result", err)
-	var stderr strings.Builder
-	for _, chunk := range output.Output.Chunks {
-		if chunk.Stream == "stderr" {
-			stderr.WriteString(chunk.Text)
-		}
-	}
-	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
-	outcome := decodeWaitOutcome(t, lines[len(lines)-1])
-	if outcome.Refusal == nil || outcome.Refusal.Code != toolrejection.ToolOwnerInterruptedCode || outcome.Refusal.Details["jobs_stopped"] != float64(1) {
-		t.Fatalf("stopped program %+v", outcome)
+	if output.ProgramStopCode != toolrejection.ToolOwnerInterruptedCode || output.TerminationReason != bgprocess.TerminationStoppedByAgent {
+		t.Fatalf("stopped program %+v", output)
 	}
 }
 

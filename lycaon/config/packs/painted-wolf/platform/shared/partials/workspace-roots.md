@@ -1,5 +1,5 @@
 {% if root_count == 0 %}
-No folder is attached. File and shell tools stay off until the user attaches one (Folders button); chat and web research still work.
+No folder is attached. File and shell tools stay off until the user attaches one (Folders button); chat{% if web_search_enabled %} and web research{% endif %} still work.
 {% else %}
 Workspace folders:
 {% for r in workspace_roots %}

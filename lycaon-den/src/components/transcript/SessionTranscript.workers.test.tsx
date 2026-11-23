@@ -42,7 +42,7 @@ describe("SessionTranscript workers and synthesis", () => {
       workerTranscripts={{ "job-1": workerTranscriptFixture([{
         id: "overlay-write", ord: 1, role: "tool", origin: "tool", authority: "none",
         trust_tier: "untrusted", content: "", created_at: "t",
-        tool_result: { content: "", file_edit_previews: [fileEditPreviewFixture({ path: "new.ts", after: "overlay bytes" })] },
+        tool_result: { content: "", file_edit_previews: [fileEditPreviewFixture({ root_id: "secondary", path: "new.ts", after: "overlay bytes" })] },
       }]) }}
     />);
     expect(container.querySelector('[data-testid="diff-group"]')).toBeNull();
@@ -57,6 +57,8 @@ describe("SessionTranscript workers and synthesis", () => {
       ] },
     }]);
     expect(container.querySelector('[data-testid="diff-group"]')?.getAttribute("data-files")).toBe("2");
+    fireEvent.click(disclosureToggle(container.querySelector('[data-testid="diff-group"]')));
+    container.querySelector<HTMLButtonElement>('[data-path="new.ts"] [data-testid="file-edit-diff-toggle"]')!.click();
     const links = container.querySelectorAll<HTMLButtonElement>('[data-testid="source-path-link"]');
     expect(links).toHaveLength(1);
     links[0]!.click();

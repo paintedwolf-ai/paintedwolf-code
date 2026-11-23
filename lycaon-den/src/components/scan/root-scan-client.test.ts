@@ -26,8 +26,8 @@ describe("folder scan authority", () => {
     expect(calls.deleteProjectFindingIgnore).toHaveBeenCalledWith("project", "entry", rootId);
     expect(calls.exportProjectFindings).toHaveBeenCalledWith("project", { format: "sarif" }, rootId);
     expect(calls.startFullScan).toHaveBeenCalledWith("project", { scanner_ids: ["scanner"] }, rootId);
-    expect(client.getCodeScan).toBe(calls.getCodeScan);
-    expect(calls.getProjectSecurity).not.toBe(client.getProjectSecurity);
+    void client.getCodeScan("project", "scan", "summary");
+    expect(calls.getCodeScan).toHaveBeenCalledWith("project", "scan", "summary");
   });
 
   it("returns one client per folder so retained reads survive a re-render", () => {

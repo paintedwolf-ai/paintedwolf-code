@@ -65,6 +65,7 @@ type SandboxReadPathResult struct {
 // exposes the chat-scoped overlays used by command confinement. Write roots
 // and read paths are separate namespaces: a grant in one never covers the other.
 type SandboxWriteRootGate interface {
+	SharedTempReviewer
 	Authorize(ctx context.Context, in SandboxWriteRootAsk) (SandboxWriteRootResult, error)
 	SessionWriteRoots(ctx context.Context, sessionID, parentSessionID string) []string
 	AuthorizeRead(ctx context.Context, in SandboxReadPathAsk) (SandboxReadPathResult, error)

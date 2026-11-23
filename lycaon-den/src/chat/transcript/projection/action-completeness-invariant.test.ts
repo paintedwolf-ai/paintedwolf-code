@@ -3,9 +3,13 @@ import type { CheckpointStatus, Message } from "../../../api/types.ts";
 import { resolvedCheckpointStatuses } from "../../../api/enum-registries.ts";
 import { type ActivitySpanEntry, type TranscriptItem } from "./transcript-item-model.ts";
 import { createTranscriptDisplayProjector } from "./transcript-display-projection.ts";
+import { activityDecision, activityFact, activityProgram, activityTool, outputRead } from "../../../test/command-activity-fixtures.ts";
+import { foldActionEntries } from "../../action/part-action.ts";
+import { FORM_PROGRAM_TOOLS } from "../../tool/command-activity-facts.ts";
+import { createCommandActivityProjection } from "../../tool/command-activity-model.ts";
 import { taskCardStatus } from "../../task/task-card-model.ts";
 import { isTaskToolName } from "../../tool/tool-part-model.ts";
-import { LONG_RUNNING_COORDINATOR_TOOLS } from "../../tool/tool-presentation.generated.ts";
+import { PROGRAM_ACTIVITY_TOOLS } from "../../tool/tool-transcript-visibility.ts";
 
 function taskJobMessages(status: string): Message[] {
   return [
@@ -143,7 +147,6 @@ function inFlightVisibleToolRejected(tool: string): Message[] {
         tool,
         tool_call_id: "tc1",
         assistant_message_id: "a1",
-        // Long-running tools keep the chicklet when the settle is benign.
         ui_visibility: "benign",
       },
       created_at: "t",
@@ -193,15 +196,13 @@ describe("action completeness invariant", () => {
     expect(taskCardStatus(cards[0]!.part)).toBe("canceled");
   });
 
-  it("in-flight-visible tool rejects stay as durable error cards (verbose off)", () => {
-    for (const tool of LONG_RUNNING_COORDINATOR_TOOLS) {
-      const items = createTranscriptDisplayProjector()(inFlightVisibleToolRejected(tool), undefined, {
-        verboseMode: false,
-      })[0]!;
-		const cards = toolCards(items, tool);
-      expect(cards, tool).toHaveLength(1);
-      expect(cards[0]!.part.status, tool).toBe("error");
-    }
+  it.each([...PROGRAM_ACTIVITY_TOOLS])("%s omits pre-admission benign refusals in quiet chat", (tool) => {
+    const messages = inFlightVisibleToolRejected(tool);
+    const project = createTranscriptDisplayProjector();
+    expect(toolCards(project(messages, undefined, { verboseMode: false })[0]!, tool)).toHaveLength(0);
+    const cards = toolCards(project(messages, undefined, { verboseMode: true })[0]!, tool);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.part.status).toBe("error");
   });
 
   it("failed worker dispatch rejects hide when verbose is off", () => {
@@ -222,13 +223,13 @@ describe("action completeness invariant", () => {
     expect(cards[0]!.part.status).toBe("error");
   });
 
-  it("in-flight-visible completed+benign (doom-loop warn) never vanishes (verbose off)", () => {
-    for (const tool of LONG_RUNNING_COORDINATOR_TOOLS) {
-      const items = createTranscriptDisplayProjector()(inFlightVisibleToolCompletedBenign(tool), undefined, { verboseMode: false })[0]!;
-		const cards = toolCards(items, tool);
-      expect(cards, tool).toHaveLength(1);
-      expect(cards[0]!.part.status, tool).toBe("completed");
-    }
+  it.each([...PROGRAM_ACTIVITY_TOOLS])("%s hides benign repeat outcomes that never went live", (tool) => {
+    const messages = inFlightVisibleToolCompletedBenign(tool);
+    const project = createTranscriptDisplayProjector();
+    expect(toolCards(project(messages, undefined, { verboseMode: false })[0]!, tool)).toHaveLength(0);
+    const cards = toolCards(project(messages, undefined, { verboseMode: true })[0]!, tool);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.part.status).toBe("completed");
   });
 
   it("resolved checkpoint retains the checkpoint lifecycle key", () => {
@@ -241,5 +242,44 @@ describe("action completeness invariant", () => {
       const toolRows = msgs.filter((m) => m.role === "tool");
       expect(toolRows[0]!.tool_result?.checkpoint_decision?.status).toBe(status);
     }
+  });
+});
+
+it.each([...FORM_PROGRAM_TOOLS])("accounts for every %s span call and decision", tool => {
+  const project = createCommandActivityProjection();
+  const launch = activityTool("launch", tool, { commandProgram: activityProgram("launch", {
+    activities: [activityFact("job", { phase: "execute", job_handle: "job" })],
+  }) });
+  const inspect = (id: string) => activityTool(id, tool, {
+    commandProgram: activityProgram(id, { activities: [activityFact(id)] }),
+  });
+  const running = activityTool("pending", tool, { status: "running" });
+  const decisionKeys = ["before-command", "before-read", "before-pending", "last"];
+  const entries = [
+    activityDecision(decisionKeys[0]!), inspect("first"), inspect("folded"), launch,
+    activityDecision(decisionKeys[1]!), outputRead("output"), activityTool("other", "read"),
+    activityDecision(decisionKeys[2]!), running, activityDecision(decisionKeys[3]!),
+  ];
+  const allCalls = entries.flatMap(entry => entry.kind === "tool" ? [entry.part.id] : []);
+  const projectedItems = (source: ActivitySpanEntry[]) => {
+    const calls: string[] = [];
+    const decisions: string[] = [];
+    for (const row of foldActionEntries(project(source))) {
+      if (row.kind === "turn_load") decisions.push(row.key);
+      if (row.kind !== "tool") continue;
+      for (const part of [row.part, ...(row.part.foldMembers ?? [])]) {
+        calls.push(...(part.commandActivity?.calls ?? [part]).map(call => call.id));
+        decisions.push(...(part.commandActivity?.decisions ?? []).map(decision => decision.key));
+      }
+    }
+    return { calls: calls.sort(), decisions: decisions.sort() };
+  };
+
+  expect(projectedItems(entries)).toEqual({
+    calls: allCalls.filter(id => id !== "pending").sort(),
+    decisions: decisionKeys.filter(key => key !== "before-pending").sort(),
+  });
+  expect(projectedItems(entries.map(entry => entry === running ? inspect("pending") : entry))).toEqual({
+    calls: allCalls.sort(), decisions: decisionKeys.sort(),
   });
 });

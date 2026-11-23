@@ -58,6 +58,7 @@ func (m *Service) BuildPreparation(ctx context.Context, id string) (contextprepa
 	frame.Machine = m.Profiles.ProjectMachine(ctx, sess, profile)
 	if m.Assembly.ToolContext != nil {
 		frame.Machine.Surface.SessionScratchDir = m.Assembly.ToolContext.ScratchDir(ctx, sess)
+		frame.Machine.Surface.Fingerprint = frame.Machine.Surface.CacheFingerprint()
 	}
 	ctx = toolpolicy.WithCoordinatorTurnFrame(ctx, &frame)
 	rows, err := m.Model.History.Project(ctx, sess)

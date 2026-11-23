@@ -89,6 +89,8 @@ These steps migrate SQL only. Every non-SQL durable format retains its explicit 
 
 Unknown shapes, including earlier development shapes with revision 1, remain untouched and enter recovery. Development may explicitly recreate its store with `LYCAON_DB_FRESH=1` or `./task db:wipe`; an upgrade failure never triggers that reset. Credentials, configuration and unrelated preferences remain outside the database reset boundary.
 
+Root sessions hold the effective Agent or Ask mode and a permanent admission latch. Each worker records its root alongside its immediate parent. The verified authority view checks both links and the project and person bindings by indexed identity. A session with damaged lineage remains available for diagnostics. Execution requires verified lineage. Prompt and workflow admission commit the mode and latch in the same transaction as the receipt. Revision 5 derives the latch from retained session-tree activity and leaves an unused ambient workflow attachment unstarted.
+
 ### Schema version lock
 
 **The schema version lock is committed with the baseline.** [`lycaon/internal/db/schema_version_lock.json`](../lycaon/internal/db/schema_version_lock.json) carries the declared `schema_version` that the bundle smoke test, the upgrade corpus boot, and the upgrade rehearsal read back from a real store, which lets those checks assert a version rather than trust one. `TestReleaseSchemaLockMatchesHost` holds it equal to `SchemaVersion`.

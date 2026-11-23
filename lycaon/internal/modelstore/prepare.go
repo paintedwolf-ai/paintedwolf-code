@@ -58,7 +58,7 @@ func PrepareBundle(ctx context.Context, directory string, recipe Manifest) (resu
 }
 
 func measurePayload(ctx context.Context, root *os.Root, payload Artifact) (result Artifact, resultErr error) {
-	file, err := openBundleFile(root, payload.Name, MaxArtifactBytes)
+	file, err := openBoundedFile(root, payload.Name, MaxArtifactBytes)
 	if err != nil {
 		return Artifact{}, err
 	}

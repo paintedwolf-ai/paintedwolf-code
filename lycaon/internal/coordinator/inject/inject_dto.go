@@ -248,9 +248,8 @@ func BuildActiveWorkflowInjectData(frame CoordinatorTurnFrame) ActiveWorkflowInj
 			if len(row.Gates) > 0 {
 				out.FailedLeaves = liveFailedLeaves(out.FailedLeaves, out.CurrentGates)
 			}
-			out.NextPhase = strings.TrimSpace(row.Next)
-			if out.NextPhase == "" && !row.Terminal && i+1 < len(snap.Phases) {
-				out.NextPhase = snap.Phases[i+1].ID
+			if next := strings.TrimSpace(row.Next); !row.Terminal && next != current {
+				out.NextPhase = next
 			}
 			if out.Topology != "" {
 				out.TopologyPhaseID = strings.TrimSpace(row.BindTopologyStage)

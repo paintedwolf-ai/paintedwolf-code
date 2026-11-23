@@ -27,7 +27,7 @@ type Fanout struct {
 	Questions        *workflowreview.Questions
 	Assignments      *workflowreview.Assignments
 	Policy           FanoutRoster
-	Progress         progress.RunScopedStore
+	Progress         progress.Store
 	WorkerTasks      func(context.Context, string) ([]api.WorkerTask, error)
 	PlannedWorkKnown func(ctx context.Context, sessionID, workID string) (bool, error)
 }

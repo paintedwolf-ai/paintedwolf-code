@@ -76,7 +76,7 @@ func (s *Commands) reanchorWindow(ctx context.Context, w *openCommandWindow, anc
 	snapshotID, err := s.anchorStart(ctx, w.projectID, w.roots)
 	if err == nil {
 		w.moveStart(snapshotID)
-		if retainErr := s.retention.Retain(ctx, w.id, snapshotID); retainErr != nil {
+		if retainErr := s.retention.Retain(ctx, w.id, w.retained, snapshotID); retainErr != nil {
 			slog.WarnContext(ctx, "command window start retention", "window_id", w.id, "err", retainErr)
 		}
 	}

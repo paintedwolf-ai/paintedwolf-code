@@ -52,7 +52,6 @@ webE2e(
           kind: "progress_update",
           progress_update: {
             initial: true,
-            seq: 1,
             steps: [pending("Read the app package"), pending("Add a greeting helper"), pending("Run the tests")],
           },
           seq: 2,
@@ -64,7 +63,7 @@ webE2e(
           content: "",
           kind: "progress_update",
           progress_update: {
-            seq: 2,
+            initial: false,
             changes: [
               { kind: "done", label: "Read the app package", state: "done" },
               { kind: "done", label: "Add a greeting helper", state: "done" },
@@ -80,7 +79,6 @@ webE2e(
           content: "",
           kind: "progress_complete",
           progress_complete: {
-            seq: 3,
             steps: [done("Read the app package"), done("Add a greeting helper"), done("Run the tests")],
           },
           seq: 4,

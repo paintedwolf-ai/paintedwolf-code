@@ -31,6 +31,7 @@ var (
 	operationBeginProjectManagedSecretReveal    = generatedOperation{ID: "beginProjectManagedSecretReveal", Method: "POST", Path: "/v1/projects/{id}/secrets/{secret_id}/reveal-challenges", Params: []string{"id", "secret_id"}}
 	operationBindGitWorktree                    = generatedOperation{ID: "bindGitWorktree", Method: "PUT", Path: "/v1/sessions/{id}/git-worktree", Params: []string{"id"}, RecordsPersonAction: true}
 	operationBrowseProjectSource                = generatedOperation{ID: "browseProjectSource", Method: "GET", Path: "/v1/projects/{id}/source/browse", Params: []string{"id"}}
+	operationCancelLocalModelTransfer           = generatedOperation{ID: "cancelLocalModelTransfer", Method: "POST", Path: "/v1/providers/{provider_id}/local-model/cancel", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationCancelMcpOAuth                     = generatedOperation{ID: "cancelMcpOAuth", Method: "POST", Path: "/v1/mcp/providers/{provider_id}/oauth/cancel", Params: []string{"provider_id"}}
 	operationCancelProjectPromotion             = generatedOperation{ID: "cancelProjectPromotion", Method: "DELETE", Path: "/v1/projects/{id}/promotion", Params: []string{"id"}, RecordsPersonAction: true}
 	operationCancelSourceOperation              = generatedOperation{ID: "cancelSourceOperation", Method: "POST", Path: "/v1/projects/{id}/source/operations/{operation_id}/cancel", Params: []string{"id", "operation_id"}, RecordsPersonAction: true}
@@ -75,6 +76,7 @@ var (
 	operationDeleteExtensionPack                = generatedOperation{ID: "deleteExtensionPack", Method: "DELETE", Path: "/v1/extensions/packs/{pack_id}", Params: []string{"pack_id"}, RecordsPersonAction: true}
 	operationDeleteGitWorktree                  = generatedOperation{ID: "deleteGitWorktree", Method: "DELETE", Path: "/v1/sessions/{id}/git-worktree", Params: []string{"id"}, RecordsPersonAction: true}
 	operationDeleteHistoryProtection            = generatedOperation{ID: "deleteHistoryProtection", Method: "DELETE", Path: "/v1/history-storage/protections/{protection_id}", Params: []string{"protection_id"}, RecordsPersonAction: true}
+	operationDeleteLocalModel                   = generatedOperation{ID: "deleteLocalModel", Method: "DELETE", Path: "/v1/providers/{provider_id}/local-model", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationDeleteMcpProvider                  = generatedOperation{ID: "deleteMcpProvider", Method: "DELETE", Path: "/v1/mcp/providers/{provider_id}", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationDeleteProjectArtifact              = generatedOperation{ID: "deleteProjectArtifact", Method: "DELETE", Path: "/v1/projects/{id}/artifacts/{artifact_id}", Params: []string{"id", "artifact_id"}, RecordsPersonAction: true}
 	operationDeleteProjectFindingIgnore         = generatedOperation{ID: "deleteProjectFindingIgnore", Method: "DELETE", Path: "/v1/projects/{id}/findings/ignores/{entry_id}", Params: []string{"id", "entry_id"}, RecordsPersonAction: true}
@@ -132,6 +134,7 @@ var (
 	operationGetHostResources                   = generatedOperation{ID: "getHostResources", Method: "GET", Path: "/v1/host-resources"}
 	operationGetLimitsSettings                  = generatedOperation{ID: "getLimitsSettings", Method: "GET", Path: "/v1/settings/limits"}
 	operationGetLocalData                       = generatedOperation{ID: "getLocalData", Method: "GET", Path: "/v1/local-data"}
+	operationGetLocalModelStatus                = generatedOperation{ID: "getLocalModelStatus", Method: "GET", Path: "/v1/providers/{provider_id}/local-model", Params: []string{"provider_id"}}
 	operationGetModelPolicySettings             = generatedOperation{ID: "getModelPolicySettings", Method: "GET", Path: "/v1/settings/model-policy"}
 	operationGetPowerSettings                   = generatedOperation{ID: "getPowerSettings", Method: "GET", Path: "/v1/settings/power"}
 	operationGetPreflight                       = generatedOperation{ID: "getPreflight", Method: "GET", Path: "/v1/preflight"}
@@ -143,6 +146,7 @@ var (
 	operationGetProjectSecurity                 = generatedOperation{ID: "getProjectSecurity", Method: "GET", Path: "/v1/projects/{id}/security", Params: []string{"id"}}
 	operationGetProjectSource                   = generatedOperation{ID: "getProjectSource", Method: "GET", Path: "/v1/projects/{id}/source", Params: []string{"id"}}
 	operationGetProjectSourceAttribution        = generatedOperation{ID: "getProjectSourceAttribution", Method: "GET", Path: "/v1/projects/{id}/source/attribution", Params: []string{"id"}}
+	operationGetProjectSourceCommandObservation = generatedOperation{ID: "getProjectSourceCommandObservation", Method: "GET", Path: "/v1/projects/{id}/source/command-windows/{window_id}", Params: []string{"id", "window_id"}}
 	operationGetProjectSourceComparison         = generatedOperation{ID: "getProjectSourceComparison", Method: "GET", Path: "/v1/projects/{id}/source/comparison", Params: []string{"id"}}
 	operationGetProjectSourceFormatSettings     = generatedOperation{ID: "getProjectSourceFormatSettings", Method: "GET", Path: "/v1/projects/{id}/source/format-settings", Params: []string{"id"}}
 	operationGetProjectSourceGitReview          = generatedOperation{ID: "getProjectSourceGitReview", Method: "GET", Path: "/v1/projects/{id}/source/git-changes/{git_change_id}/review", Params: []string{"id", "git_change_id"}}
@@ -235,7 +239,9 @@ var (
 	operationMarkEditorSecret                   = generatedOperation{ID: "markEditorSecret", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/secret-spans/mark", Params: []string{"id", "document_id"}, RecordsPersonAction: true}
 	operationMarkSessionSeen                    = generatedOperation{ID: "markSessionSeen", Method: "POST", Path: "/v1/sessions/{id}/seen", Params: []string{"id"}}
 	operationObserveEditorDocument              = generatedOperation{ID: "observeEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/observe", Params: []string{"id", "document_id"}}
+	operationOpenChatLocationFile               = generatedOperation{ID: "openChatLocationFile", Method: "POST", Path: "/v1/projects/{id}/source/outside-locations/{location_id}/files", Params: []string{"id", "location_id"}, RecordsPersonAction: true}
 	operationOpenEditorDocument                 = generatedOperation{ID: "openEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents", Params: []string{"id"}}
+	operationOpenOutsideFile                    = generatedOperation{ID: "openOutsideFile", Method: "POST", Path: "/v1/projects/{id}/source/outside-files", Params: []string{"id"}, RecordsPersonAction: true}
 	operationOpenProjectTrustReview             = generatedOperation{ID: "openProjectTrustReview", Method: "POST", Path: "/v1/projects/{id}/trust/review", Params: []string{"id"}}
 	operationPauseWorkflowRun                   = generatedOperation{ID: "pauseWorkflowRun", Method: "POST", Path: "/v1/workflow-runs/{id}/pause", Params: []string{"id"}, RecordsPersonAction: true}
 	operationPersistWorkflow                    = generatedOperation{ID: "persistWorkflow", Method: "POST", Path: "/v1/sessions/{id}/workflows/{workflow_id}/persist", Params: []string{"id", "workflow_id"}, RecordsPersonAction: true}
@@ -305,6 +311,7 @@ var (
 	operationSearchContributionSource           = generatedOperation{ID: "searchContributionSource", Method: "POST", Path: "/v1/projects/{id}/contribution-search/{source_id}", Params: []string{"id", "source_id"}}
 	operationSearchProjectSource                = generatedOperation{ID: "searchProjectSource", Method: "GET", Path: "/v1/projects/{id}/source/search", Params: []string{"id"}}
 	operationSearchSourceView                   = generatedOperation{ID: "searchSourceView", Method: "GET", Path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search", Params: []string{"id", "view_id", "presentation_id"}}
+	operationSelectLocalModel                   = generatedOperation{ID: "selectLocalModel", Method: "POST", Path: "/v1/providers/{provider_id}/local-model/select", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationSendPrompt                         = generatedOperation{ID: "sendPrompt", Method: "POST", Path: "/v1/sessions/{id}/prompts", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStartFullScan                      = generatedOperation{ID: "startFullScan", Method: "POST", Path: "/v1/projects/{id}/scans", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStartMcpOAuth                      = generatedOperation{ID: "startMcpOAuth", Method: "POST", Path: "/v1/mcp/providers/{provider_id}/oauth/start", Params: []string{"provider_id"}}
@@ -346,6 +353,7 @@ var (
 	operationUpdateSecurityScannersSettings     = generatedOperation{ID: "updateSecurityScannersSettings", Method: "PATCH", Path: "/v1/settings/security-scanners", RecordsPersonAction: true}
 	operationUpdateSession                      = generatedOperation{ID: "updateSession", Method: "PATCH", Path: "/v1/sessions/{id}", Params: []string{"id"}, RecordsPersonAction: true}
 	operationUpdateSessionQueue                 = generatedOperation{ID: "updateSessionQueue", Method: "PATCH", Path: "/v1/sessions/{id}/queue", Params: []string{"id"}, RecordsPersonAction: true}
+	operationUpdateSourceChatLocation           = generatedOperation{ID: "updateSourceChatLocation", Method: "PATCH", Path: "/v1/projects/{id}/source/outside-locations/{location_id}", Params: []string{"id", "location_id"}, RecordsPersonAction: true}
 	operationUpdateTrustSettings                = generatedOperation{ID: "updateTrustSettings", Method: "PATCH", Path: "/v1/settings/project-trust", RecordsPersonAction: true}
 	operationUpdateVerifySettings               = generatedOperation{ID: "updateVerifySettings", Method: "PATCH", Path: "/v1/settings/verify", RecordsPersonAction: true}
 	operationUpdateWebResearchProvider          = generatedOperation{ID: "updateWebResearchProvider", Method: "PATCH", Path: "/v1/web-research/providers/{provider_id}", Params: []string{"provider_id"}, RecordsPersonAction: true}
@@ -371,6 +379,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationBeginProjectManagedSecretReveal,
 	operationBindGitWorktree,
 	operationBrowseProjectSource,
+	operationCancelLocalModelTransfer,
 	operationCancelMcpOAuth,
 	operationCancelProjectPromotion,
 	operationCancelSourceOperation,
@@ -415,6 +424,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationDeleteExtensionPack,
 	operationDeleteGitWorktree,
 	operationDeleteHistoryProtection,
+	operationDeleteLocalModel,
 	operationDeleteMcpProvider,
 	operationDeleteProjectArtifact,
 	operationDeleteProjectFindingIgnore,
@@ -472,6 +482,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetHostResources,
 	operationGetLimitsSettings,
 	operationGetLocalData,
+	operationGetLocalModelStatus,
 	operationGetModelPolicySettings,
 	operationGetPowerSettings,
 	operationGetPreflight,
@@ -483,6 +494,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetProjectSecurity,
 	operationGetProjectSource,
 	operationGetProjectSourceAttribution,
+	operationGetProjectSourceCommandObservation,
 	operationGetProjectSourceComparison,
 	operationGetProjectSourceFormatSettings,
 	operationGetProjectSourceGitReview,
@@ -575,7 +587,9 @@ var allGeneratedOperations = []generatedOperation{
 	operationMarkEditorSecret,
 	operationMarkSessionSeen,
 	operationObserveEditorDocument,
+	operationOpenChatLocationFile,
 	operationOpenEditorDocument,
+	operationOpenOutsideFile,
 	operationOpenProjectTrustReview,
 	operationPauseWorkflowRun,
 	operationPersistWorkflow,
@@ -645,6 +659,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationSearchContributionSource,
 	operationSearchProjectSource,
 	operationSearchSourceView,
+	operationSelectLocalModel,
 	operationSendPrompt,
 	operationStartFullScan,
 	operationStartMcpOAuth,
@@ -686,6 +701,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationUpdateSecurityScannersSettings,
 	operationUpdateSession,
 	operationUpdateSessionQueue,
+	operationUpdateSourceChatLocation,
 	operationUpdateTrustSettings,
 	operationUpdateVerifySettings,
 	operationUpdateWebResearchProvider,

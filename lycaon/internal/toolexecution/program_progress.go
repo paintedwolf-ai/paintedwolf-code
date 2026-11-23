@@ -39,10 +39,10 @@ func CheckOperationProgressState(definition toolcontract.OperationDefinition, in
 	return CheckOperationProgress(definition, invocation, state.Content, state.WorkerChild, state.ReviewLoopActive)
 }
 
-// checkReachedMutationProgress checks the current checklist at the write door.
+// CheckReachedMutationProgress checks the current checklist at the write door.
 // The caller supplies a resolved attached root, so scratch and output writes
 // never acquire a project-file prerequisite.
-func checkReachedMutationProgress(ctx context.Context, provider ProgramProgressFacts, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, rootID, path string) error {
+func CheckReachedMutationProgress(ctx context.Context, provider ProgramProgressFacts, definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation, rootID, path string) error {
 	if rootID == "" {
 		return nil
 	}

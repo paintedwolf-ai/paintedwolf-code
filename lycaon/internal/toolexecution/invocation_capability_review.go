@@ -8,10 +8,12 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +33,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	if reject != nil {
 		return ctx, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
-	if !multipleCapabilityFamilies(request) {
+	if request == nil || (len(request.ReadPaths) < 2 && !multipleCapabilityFamilies(request)) {
 		return ctx, nil
 	}
 	permission, err := e.Secrets.prepareSecretPermission(ctx, tool, args, tc)
@@ -42,6 +44,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	if err != nil || len(reviews) == 0 {
 		return ctx, err
 	}
+	confReq := e.Boundary.actionConfineRequest(ctx, tc)
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			NativeInputs: tc.Invocation.NativeInputs,
@@ -53,13 +56,14 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 			Command: commandsurface.PrimaryCommandLine(args, nil),
 		},
 		Scope: hitl.ActionScope{
-			ProjectID:     tc.Identity.ProjectID,
-			ProjectDir:    tc.ActiveRootPath(),
-			SessionID:     tc.Identity.SessionID,
-			RootSessionID: tc.ChatSessionID(),
+			ProjectID:         tc.Identity.ProjectID,
+			ProjectDir:        tc.ActiveRootPath(),
+			SessionID:         tc.Identity.SessionID,
+			RootSessionID:     tc.ChatSessionID(),
+			GrantedWriteRoots: append([]string(nil), confReq.GrantedWriteRoots...),
 		},
 		Execution: hitl.ActionExecution{
-			Contained: hitl.ContainedForRequest(e.Boundary.actionConfineRequest(ctx, tc)),
+			Contained: hitl.ContainedForRequest(confReq),
 		},
 		Resources: hitl.ActionResources{
 			HostResources:        append([]string(nil), tc.Host.HostResources...),
@@ -94,7 +98,16 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	}
 	ctx = hitl.WithPreparedApprovalAnswer(ctx, reviews, final)
 	if !hitl.CheckpointAuthorizes(final) {
-		return ctx, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, isolationCheckpointReject(capabilityReviewDenialCode(plan), final))
+		denialCode, denialPath := capabilityReviewDenialCodeAndPath(plan)
+		reject := isolationCheckpointReject(denialCode, final)
+		if denialPath != "" {
+			if reject.Data == nil {
+				reject.Data = map[string]any{}
+			}
+			reject.Data["path"] = denialPath
+			reject.Data["tool"] = tool
+		}
+		return ctx, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, reject)
 	}
 	if secretIncluded {
 		ctx = context.WithValue(ctx, capabilityReviewSecretKey{}, permission)
@@ -102,24 +115,27 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	return ctx, nil
 }
 
-func capabilityReviewDenialCode(plan *hitl.ApprovalPlan) string {
+func capabilityReviewDenialCodeAndPath(plan *hitl.ApprovalPlan) (string, string) {
+	if plan == nil {
+		return isolation.CodeApprovalUnavailable, ""
+	}
 	for _, target := range plan.Subject.Targets {
 		switch target.Kind {
-		case "write_root", "credential_file", "key_material":
-			return isolation.CodeWriteRootDenied
+		case "write_root", "credential_file", "key_material", "shared_temp":
+			return isolation.CodeWriteRootDenied, strings.TrimSpace(target.Label)
 		case "read_path":
-			return isolation.CodeReadPathDenied
+			return isolation.CodeReadPathDenied, strings.TrimSpace(target.Label)
 		case "socket":
-			return isolation.CodeSocketPathDenied
+			return isolation.CodeSocketPathDenied, strings.TrimSpace(target.Label)
 		case "process_control", "credential_store", "host_execution":
-			return isolation.CodeExecutionCapabilityDenied
+			return isolation.CodeExecutionCapabilityDenied, ""
 		case "direct_ip":
-			return isolation.CodeDirectIPDenied
+			return isolation.CodeDirectIPDenied, ""
 		case "local_listen", "loopback_connect":
-			return isolation.CodeLocalNetworkDenied
+			return isolation.CodeLocalNetworkDenied, ""
 		}
 	}
-	return isolation.CodeApprovalUnavailable
+	return isolation.CodeApprovalUnavailable, ""
 }
 
 func multipleCapabilityFamilies(request *capabilityrequest.CapabilityRequest) bool {
@@ -128,7 +144,7 @@ func multipleCapabilityFamilies(request *capabilityrequest.CapabilityRequest) bo
 	}
 	count := 0
 	for _, present := range []bool{
-		request.WriteRoot != "", request.ReadPath != "", len(request.SocketPaths) > 0,
+		request.WriteRoot != "", len(request.ReadPaths) > 0, len(request.SocketPaths) > 0,
 		request.ProcessControl || request.HostExecution, request.CredentialStore, request.DirectIP != nil, request.LocalListen != nil || request.LoopbackConnect != nil,
 	} {
 		if present {
@@ -155,15 +171,17 @@ func (e *Executor) prepareInvocationCapabilities(ctx context.Context, tool strin
 	if request.WriteRoot != "" && len(reviews) > 0 {
 		ctx = context.WithValue(ctx, capabilityReviewRootsKey{}, []string{request.WriteRoot})
 	}
-	if err := collect(e.Boundary.preflightReadPath(ctx, tool, args, &tc)); err != nil {
-		return nil, err
+	if tc.Invocation.Contract.Supports(toolcontract.CapabilityReadPath) {
+		for _, path := range request.ReadPaths {
+			if err := collect(e.Boundary.authorizeReadPath(ctx, tool, args, &tc, path)); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if e.Boundary.sessionReadOverlay != nil {
 		tc.Files.SessionReadPaths = append([]string(nil), e.Boundary.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)
 	}
-	if request.ReadPath != "" {
-		tc.Files.SessionReadPaths = append(tc.Files.SessionReadPaths, request.ReadPath)
-	}
+	tc.Files.SessionReadPaths = append(tc.Files.SessionReadPaths, request.ReadPaths...)
 	sockets, err := e.Capabilities.preflightSocketCapability(ctx, tool, args, tc)
 	if err := collect(err); err != nil {
 		return nil, err

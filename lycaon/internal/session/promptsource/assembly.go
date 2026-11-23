@@ -139,6 +139,7 @@ func (m *Assembly) PromptSurface(ctx context.Context, sess *api.Session) prompts
 	surface := m.Profiles.CompileMachine(ctx, sess, profileID).Surface
 	if m.ToolContext != nil {
 		surface.SessionScratchDir = m.ToolContext.ScratchDir(ctx, sess)
+		surface.Fingerprint = surface.CacheFingerprint()
 	}
 	return surface
 }

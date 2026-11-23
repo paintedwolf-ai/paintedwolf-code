@@ -217,6 +217,31 @@ describe("tree file AI actions", () => {
   });
 });
 
+describe("chat location rows", () => {
+  it("browse and copy outside files but never reorganize them", () => {
+    const hideChatLocation = vi.fn();
+    const items = filesContextMenuItems(
+      { surface: "tree-row", rootId: "outside", path: "Users/me/site", name: "site", isDir: true, isRoot: true, outsideLocation: "loc-1" },
+      { ...actions, hideChatLocation },
+    ) ?? [];
+    const ids = items.map((item) => item.testId);
+    expect(ids).toContain("files-ctx-copy-path");
+    for (const absent of ["files-ctx-new-file", "files-ctx-new-folder", "files-ctx-rename", "files-ctx-move-to", "files-ctx-trash", "files-ctx-duplicate", "files-ctx-add-to-chat"]) {
+      expect(ids).not.toContain(absent);
+    }
+    items.find((item) => item.testId === "files-ctx-hide-location")?.onSelect?.();
+    expect(hideChatLocation).toHaveBeenCalledWith("loc-1");
+  });
+
+  it("offers hiding only on the location itself", () => {
+    const items = filesContextMenuItems(
+      { surface: "tree-row", rootId: "outside", path: "Users/me/site/a.ts", name: "a.ts", isDir: false, isRoot: false, outsideLocation: "loc-1" },
+      { ...actions, hideChatLocation: vi.fn() },
+    ) ?? [];
+    expect(items.map((item) => item.testId)).not.toContain("files-ctx-hide-location");
+  });
+});
+
 describe("filesContextMenuItems", () => {
   it("keeps the editor top level within its menu budget", () => {
     const el = document.createElement("div");

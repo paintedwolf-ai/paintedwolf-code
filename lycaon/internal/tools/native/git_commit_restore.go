@@ -44,6 +44,11 @@ func (m GitMutations) Restore(ctx context.Context, tctx tools.ToolContext, opts 
 	opts.Review = func(ctx context.Context, files []git.RestoreFile) error {
 		return reviewGitFiles(ctx, tctx, m.Boundary, "git_restore", files)
 	}
+	if m.BeforeWorktree != nil {
+		if err := m.BeforeWorktree(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if err := m.Git.Restore(ctx, gitRoot, opts); err != nil {
 		return nil, err
 	}
@@ -108,6 +113,11 @@ func (m GitMutations) Commit(ctx context.Context, tc tools.ToolContext, request 
 	case request.Amend && len(request.Staged) == 0:
 		// A message-only amend commits no paths.
 	default:
+		if m.BeforeWorktree != nil {
+			if err := m.BeforeWorktree(ctx); err != nil {
+				return "", git.CommitStaging{}, err
+			}
+		}
 		var err error
 		staging, err = sessionCommitStaging(ctx, m.Git, tc, cwd, request.Staged)
 		if err != nil {
@@ -125,6 +135,11 @@ func (m GitMutations) Commit(ctx context.Context, tc tools.ToolContext, request 
 	ctx, historyErr := tools.GitHistoryContext(ctx, tc)
 	if historyErr != nil {
 		return "", git.CommitStaging{}, historyErr
+	}
+	if m.BeforeWorktree != nil && len(staged) > 0 {
+		if err := m.BeforeWorktree(ctx); err != nil {
+			return "", git.CommitStaging{}, err
+		}
 	}
 	hash, err := m.Git.Commit(ctx, cwd, git.GitCommitOpts{Message: request.Message, Paths: staged, Amend: request.Amend,
 		IdentityName: request.IdentityName, IdentityEmail: request.IdentityEmail})

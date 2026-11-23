@@ -2,12 +2,10 @@ package composition
 
 import (
 	"fmt"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/boolexpr"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -210,23 +208,8 @@ func phasePredicateIDs(p workflowdef.PhaseDef) map[string]struct{} {
 			out[g] = struct{}{}
 		}
 	}
-	cw := strings.TrimSpace(p.CompleteWhen)
-	if cw == "" || cw == workflowdef.CompleteWhenGatesSatisfied {
-		return out
-	}
-	if strings.HasPrefix(cw, workflowdef.CompleteWhenGateSatisfied) {
-		out[strings.TrimPrefix(cw, workflowdef.CompleteWhenGateSatisfied)] = struct{}{}
-		return out
-	}
-	if !workflowvalidation.NeedsExpressionParser(cw) {
-		out[cw] = struct{}{}
-		return out
-	}
-	node, err := boolexpr.Parse(cw)
-	if err != nil {
-		return out
-	}
-	for _, id := range boolexpr.CollectIdents(node) {
+	leaves, _ := workflowdef.CompletionLeaves(p.CompleteWhen)
+	for _, id := range leaves {
 		out[id] = struct{}{}
 	}
 	return out

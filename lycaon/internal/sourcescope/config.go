@@ -34,6 +34,9 @@ type Plane struct {
 type Config struct {
 	Capture Plane
 	Catalog Plane
+	// Outside bounds a command window's walk of a write root outside the
+	// project, which may be as large as a home folder.
+	Outside Plane
 }
 
 type budgetsYAML struct {
@@ -60,6 +63,7 @@ type configYAML struct {
 	Budgets struct {
 		Capture budgetsYAML `yaml:"capture"`
 		Catalog budgetsYAML `yaml:"catalog"`
+		Outside budgetsYAML `yaml:"outside"`
 	} `yaml:"budgets"`
 	IgnoreFiles struct {
 		Capture *bool `yaml:"capture"`
@@ -72,6 +76,7 @@ type configYAML struct {
 func (y configYAML) apply(onto Config) Config {
 	onto.Capture.Budgets = y.Budgets.Capture.apply(onto.Capture.Budgets)
 	onto.Catalog.Budgets = y.Budgets.Catalog.apply(onto.Catalog.Budgets)
+	onto.Outside.Budgets = y.Budgets.Outside.apply(onto.Outside.Budgets)
 	if y.IgnoreFiles.Capture != nil {
 		onto.Capture.IgnoreFiles = *y.IgnoreFiles.Capture
 	}
@@ -139,7 +144,16 @@ func (c Config) validate() error {
 	if err := validateBudgets("capture", c.Capture.Budgets); err != nil {
 		return err
 	}
-	return validateBudgets("catalog", c.Catalog.Budgets)
+	if err := validateBudgets("catalog", c.Catalog.Budgets); err != nil {
+		return err
+	}
+	if err := validateBudgets("outside", c.Outside.Budgets); err != nil {
+		return err
+	}
+	if b := c.Outside.Budgets; b.DirectoryEntries == 0 || b.SubtreeEntries == 0 || b.WalkEntries == 0 {
+		return fmt.Errorf("budgets.outside: directory_entries, subtree_entries, and walk_entries must be positive")
+	}
+	return nil
 }
 
 func validateBudgets(plane string, b sandbox.SurveyBudgets) error {

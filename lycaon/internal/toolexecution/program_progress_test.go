@@ -22,14 +22,14 @@ func TestReachedMutationProgressUsesResolvedProjectTarget(t *testing.T) {
 	definition := nativeDefinition(t, "write")
 	state := progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: invocation.SessionID}
 	provider := fixedMutationProgress{state}
-	testutil.FailErr(t, "scratch write", checkReachedMutationProgress(t.Context(), provider, definition, invocation, "", "/tmp/output"))
-	err := checkReachedMutationProgress(t.Context(), provider, definition, invocation, "r1", "/project/config.json")
+	testutil.FailErr(t, "scratch write", CheckReachedMutationProgress(t.Context(), provider, definition, invocation, "", "/tmp/output"))
+	err := CheckReachedMutationProgress(t.Context(), provider, definition, invocation, "r1", "/project/config.json")
 	var refusal *toolrejection.ToolReject
 	if !errors.As(err, &refusal) || refusal.Code != "PROGRESS_MISSING" || refusal.Data["path"] != "/project/config.json" {
 		t.Fatalf("project write refusal = %v", err)
 	}
 	provider.state.Content = "- [ ] Update config"
-	testutil.FailErr(t, "planned project write", checkReachedMutationProgress(t.Context(), provider, definition, invocation, "r1", "/project/config.json"))
+	testutil.FailErr(t, "planned project write", CheckReachedMutationProgress(t.Context(), provider, definition, invocation, "r1", "/project/config.json"))
 }
 
 func TestOperationProgressUsesMetadataAndExistingExemptions(t *testing.T) {
@@ -81,7 +81,7 @@ func TestReachedProgressGateRefreshesFinishObligationsBeforeMutation(t *testing.
 	provider := fixedMutationProgress{progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: invocation.SessionID, Content: "- [ ] Deliver"}}
 	testutil.FailErr(t, "admit planned operation", CheckOperationProgressState(definition, invocation, provider.state))
 	provider.state.Reconciliation = &progress.Reconciliation{Token: "new-finish", Jobs: []string{"worker-one"}}
-	err := checkReachedMutationProgress(t.Context(), provider, definition, invocation, "project-root", "/project/result.txt")
+	err := CheckReachedMutationProgress(t.Context(), provider, definition, invocation, "project-root", "/project/result.txt")
 	var refused *toolrejection.ToolReject
 	if !errors.As(err, &refused) || refused.Code != "PROGRESS_RECONCILIATION_REQUIRED" {
 		t.Fatalf("late finish bypassed write-door refresh: %v", err)
@@ -93,5 +93,5 @@ func TestReachedProgressGateRefreshesFinishObligationsBeforeMutation(t *testing.
 		testutil.FailErr(t, "preserve ungated operation", CheckOperationProgressState(nativeDefinition(t, name), invocation, provider.state))
 	}
 	provider.state.Reconciliation = nil
-	testutil.FailErr(t, "admit acknowledged write", checkReachedMutationProgress(t.Context(), provider, definition, invocation, "project-root", "/project/result.txt"))
+	testutil.FailErr(t, "admit acknowledged write", CheckReachedMutationProgress(t.Context(), provider, definition, invocation, "project-root", "/project/result.txt"))
 }

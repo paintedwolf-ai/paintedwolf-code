@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
@@ -69,5 +70,20 @@ func TestWorkerBranchWritesReportNoIntent(t *testing.T) {
 	reportTextIntent(tctx, resolved, sourceview.Text{Content: "one\n"}, true, "two\n")
 	if len(recorder.intents) != 0 {
 		t.Fatalf("worker write reported %+v", recorder.intents)
+	}
+}
+
+func TestLandedOutsideDocumentRecordsItsFileTarget(t *testing.T) {
+	tc := tools.ToolContext{}
+	tc.Identity.ProjectID = "project"
+	tc.Source.OutsideRoot = projectroot.OutsideRef("outside")
+	tc.Effects.Out = &tools.ToolInvocationOut{}
+	recordLandedDocument(tc, tools.EditorDocumentText{ID: "d1", FileID: "attached-file", RootID: "attached", Path: "notes.txt"})
+	recordLandedDocument(tc, tools.EditorDocumentText{ID: "d2", RootID: "outside", Path: "home/other.txt"})
+	recordLandedDocument(tc, tools.EditorDocumentText{ID: "d3", FileID: "outside-file", RootID: "outside", Path: "home/notes.txt"})
+	want := api.NavigationTarget{ProjectID: "project", RootID: "outside", Path: "home/notes.txt", FileID: "outside-file", EntryKind: api.NavigationEntryKindFile}
+	got := tc.Effects.Out.SourceContext
+	if got == nil || len(got.Locations) != 1 || got.Locations[0] != want {
+		t.Fatalf("source context = %+v, want the outside document's file target", got)
 	}
 }

@@ -5,7 +5,7 @@ description: >-
   images and recordings as evidence.
 slot: conduct
 order: 40
-attaches: [render_view, view_image, view_video, capture_page, page_open, command_mutation, terminal_open, terminal_snapshot]
+attaches: [render_view, view_image, view_video, capture_page, page_open, command_external_exec, terminal_open, terminal_snapshot]
 hosts: [coordinator, worker]
 ---
 ### Visual evidence

@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"testing"
 
@@ -29,7 +30,10 @@ func TestInitialTerminalPhaseCompletesWithoutCoordinatorHooks(t *testing.T) {
 		completedIDs = append(completedIDs, run.ID)
 	}
 	mgr.Publication.OnPhaseAutoAdvanced = func(context.Context, string, string, string, string) { phaseWakeCount++ }
-	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) { phaseEnterCount++ }
+	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) error {
+		phaseEnterCount++
+		return nil
+	}
 
 	run, err := startRun(context.Background(), mgr, "sess-1", manifest.ID, manifest.Version)
 	testutil.FailErr(t, "start terminal workflow", err)
@@ -76,7 +80,10 @@ func TestInitialTerminalChildCompletesAndResumesParentWithoutCoordinatorHooks(t 
 		}
 		completedIDs = append(completedIDs, run.ID)
 	}
-	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) { phaseEnterCount++ }
+	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) error {
+		phaseEnterCount++
+		return nil
+	}
 
 	child, err := mgr.Children.InvokeChild(context.Background(), parent.ID, workflowdef.InvokeWorkflowSpec{
 		WorkflowID: childManifest.ID,
@@ -97,5 +104,38 @@ func TestInitialTerminalChildCompletesAndResumesParentWithoutCoordinatorHooks(t 
 	}
 	if phaseEnterCount != 0 {
 		t.Fatalf("terminal child phase-enter callbacks = %d", phaseEnterCount)
+	}
+}
+
+func TestChildPhaseEntryFailureReachesCaller(t *testing.T) {
+	mgr, _, _, _ := testManager(t)
+	parentManifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
+		ID: "parent", Version: "1.0.0",
+		PhaseDefs: []workflowdef.PhaseDef{{ID: "work", CompleteWhen: "gates_satisfied", Gates: []string{"stay_open"}}},
+	})
+	childManifest := parentManifest
+	childManifest.ID = "child"
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{
+		workflowdef.ManifestKey(parentManifest.ID, parentManifest.Version): parentManifest,
+		workflowdef.ManifestKey(childManifest.ID, childManifest.Version):   childManifest,
+	})
+	parent, err := startRun(t.Context(), mgr, "sess-1", parentManifest.ID, parentManifest.Version)
+	testutil.FailErr(t, "start parent", err)
+	refused := errors.New("progress persistence unavailable")
+	var enteredRun string
+	mgr.Phases.PhaseEnterHook = func(_ context.Context, run *workflowphases.RunContext, _ workflowdef.PhaseDef) error {
+		enteredRun = run.RunID
+		return refused
+	}
+	child, err := mgr.Children.InvokeChild(t.Context(), parent.ID, workflowdef.InvokeWorkflowSpec{
+		WorkflowID: childManifest.ID, Version: childManifest.Version, Blueprint: workflowdef.ChildBlueprintNone,
+	})
+	if !errors.Is(err, refused) || child != nil {
+		t.Fatalf("child=%+v err=%v", child, err)
+	}
+	stored, err := mgr.Store.Runs.LatestChildByParentRunID(t.Context(), parent.ID)
+	testutil.FailErr(t, "read child", err)
+	if stored == nil || enteredRun != stored.ID {
+		t.Fatalf("hook run=%q stored child=%+v", enteredRun, stored)
 	}
 }

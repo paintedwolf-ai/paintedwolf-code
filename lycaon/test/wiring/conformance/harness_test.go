@@ -233,7 +233,8 @@ func (r *conformanceRunner) promptAnsweringApprovals(t *testing.T, projectID, se
 
 // joinRunningProgram follows a program past the foreground budget to its end: how long
 // a case takes on a given host decides nothing about what it prints. The program's
-// final outcome is the last line of its stderr stream.
+// settled outcome comes from its durable receipts, as the host reports programs it
+// no longer runs live.
 func (r *conformanceRunner) joinRunningProgram(t *testing.T, projectID, sessionID string, running command.RunningProgramResult) command.ProgramOutcome {
 	t.Helper()
 	type outputPage struct {
@@ -268,11 +269,11 @@ func (r *conformanceRunner) joinRunningProgram(t *testing.T, projectID, sessionI
 			stdout.WriteString(chunk.Text)
 		}
 	}
-	text := strings.TrimRight(stderr.String(), "\n")
-	cut := strings.LastIndexByte(text, '\n') + 1
+	raw, err := r.h.Commands.ProgramReceiptResult(t.Context(), sessionID, running.ProgramID)
+	testutil.FailErr(t, "read settled program receipt", err)
 	var outcome command.ProgramOutcome
-	testutil.FailErr(t, "decode final outcome", json.Unmarshal([]byte(text[cut:]), &outcome))
-	outcome.Stdout, outcome.Stderr = stdout.String(), text[:cut]
+	testutil.FailErr(t, "decode settled program", json.Unmarshal([]byte(raw), &outcome))
+	outcome.Stdout, outcome.Stderr = stdout.String(), stderr.String()
 	return outcome
 }
 

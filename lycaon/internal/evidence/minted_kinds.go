@@ -71,8 +71,8 @@ func (b *Binding) MintedKinds(reachable map[string]bool) (map[string]bool, error
 				out[kind] = true
 			}
 		}
-		if reachable[tool] && toolcontract.CommandFormTool(tool) {
-			out[b.ReceiptKind(tool)] = true
+		if reachable[tool] && (toolcontract.CommandFormTool(tool) || tool == "inspect_source") {
+			out[b.ToolKind("command")] = true
 			out[SourceDeliveryKind] = true
 		}
 	}

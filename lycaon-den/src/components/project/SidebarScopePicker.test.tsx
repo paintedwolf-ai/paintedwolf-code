@@ -411,7 +411,7 @@ describe("SidebarScopePicker", () => {
     expect(control.disabled).toBe(true);
     expect(control.checked).toBe(true);
     expect(screen.getByTestId("sidebar-scope-mark-my-edits").dataset.tip).toBe(
-      "Git doesn’t record who made a change, so every change is marked.",
+      "Git doesn’t record who made a change, so every change is marked",
     );
   });
 

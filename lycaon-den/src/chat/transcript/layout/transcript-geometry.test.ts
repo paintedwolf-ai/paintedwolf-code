@@ -96,7 +96,7 @@ describe("transcript column geometry", () => {
     resize.listener!({ width: 600, height: 800 });
     const metrics = f.geometry.metrics();
     const key = f.geometry.key();
-    setTranscriptSpacing({ ...DEFAULT_TRANSCRIPT_SPACING, rowGap: 25 });
+    setTranscriptSpacing({ ...DEFAULT_TRANSCRIPT_SPACING, itemGap: 25 });
     expect(f.geometry.metrics()).toBe(metrics);
     expect(f.geometry.key()).toBe(key);
     setTranscriptSpacing({ ...DEFAULT_TRANSCRIPT_SPACING, paragraphGap: 1.5 });

@@ -2,12 +2,12 @@ package conditions_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/vocabularytest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -164,7 +164,7 @@ func TestDeferredScanCatalogStubIDsDocumented(t *testing.T) {
 		"findings_triaged":     true,
 		"remediation_complete": true,
 	}
-	for _, id := range conditionstest.DeferredScanIDs {
+	for _, id := range vocabularytest.DomainIDs("scan", "catalog") {
 		if !want[id] {
 			t.Fatalf("unexpected deferred scan catalog stub %q", id)
 		}
@@ -173,7 +173,7 @@ func TestDeferredScanCatalogStubIDsDocumented(t *testing.T) {
 	if len(want) > 0 {
 		t.Fatalf("missing deferred scan catalog stubs: %v", want)
 	}
-	for _, id := range conditionstest.ScanIDs {
+	for _, id := range vocabularytest.DomainIDs("scan", "shipped") {
 		if id == "findings_triaged" || id == "remediation_complete" {
 			t.Fatalf("deferred id %q must not be shipped", id)
 		}
@@ -183,7 +183,7 @@ func TestDeferredScanCatalogStubIDsDocumented(t *testing.T) {
 func TestDeferredScanCatalogStubsNotRegistered(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
-	for _, id := range conditionstest.DeferredScanIDs {
+	for _, id := range vocabularytest.DomainIDs("scan", "catalog") {
 		if reg.Has(id) {
 			t.Fatalf("deferred catalog stub %q must not register always-false evaluator", id)
 		}
@@ -191,7 +191,7 @@ func TestDeferredScanCatalogStubsNotRegistered(t *testing.T) {
 }
 
 func TestShippedScanDomainIDsRegistered(t *testing.T) {
-	shipped := conditionstest.ScanIDs
+	shipped := vocabularytest.DomainIDs("scan", "shipped")
 	if len(shipped) == 0 {
 		t.Fatal("no shipped scan domain ids")
 	}

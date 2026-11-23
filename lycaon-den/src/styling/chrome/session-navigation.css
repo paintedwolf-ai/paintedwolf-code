@@ -74,6 +74,10 @@
   z-index: 1;
   pointer-events: none;
 }
+.den-shell-nav-sub-link > .den-nav-marker {
+  top: 50%;
+  transform: translateY(-50%);
+}
 /* Row padding reserves the marker. */
 .den-settings-sidebar-list .den-shell-nav-sub-link,
 .focused-session-list__list .focused-session-list__row,

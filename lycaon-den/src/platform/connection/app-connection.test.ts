@@ -68,6 +68,9 @@ describe("app connection cache", () => {
     noteStoreRevision.mockReturnValue(true);
     const appStore = createFixtureApp();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -215,6 +218,9 @@ describe("app connection cache", () => {
     });
     const appStore = createFixtureApp();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -314,6 +320,9 @@ describe("app connection cache", () => {
     const mod = await loadModule();
     await mod.connectAppBackend(appStore);
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "s1",
       id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "p1", workspace_path: "/tmp/p", posture: "build", status: "busy",
       created_at: "t", activity_at: "t", updated_at: "t",

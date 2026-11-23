@@ -1,10 +1,14 @@
 import type { FileBuffer } from "../documents/files-buffer-state.ts";
+import { outsideHostPath } from "../source/outside-namespace.ts";
 
 type FileIdentity = Pick<FileBuffer, "key" | "name" | "path" | "rootId" | "rootLabel" | "jobId">;
 export type FileTabName = { name: string; qualifier: string; label: string; path: string };
 
-/** Duplicate basenames carry the shortest parent suffix that distinguishes them. */
-export function filesTabNames(buffers: readonly FileIdentity[]): Map<string, FileTabName> {
+/**
+ * Duplicate basenames carry the shortest parent suffix that distinguishes them.
+ * An outside file is named by its host path rather than a root label.
+ */
+export function filesTabNames(buffers: readonly FileIdentity[], isOutside: (rootId: string) => boolean = () => false): Map<string, FileTabName> {
   const groups = new Map<string, FileIdentity[]>();
   for (const buffer of buffers) {
     const group = groups.get(buffer.name) ?? [];
@@ -13,7 +17,9 @@ export function filesTabNames(buffers: readonly FileIdentity[]): Map<string, Fil
   }
   const names = new Map<string, FileTabName>();
   for (const group of groups.values()) {
-    const parents = group.map(buffer => [buffer.rootLabel || buffer.rootId, ...buffer.path.split("/").slice(0, -1)]);
+    const parents = group.map(buffer => isOutside(buffer.rootId)
+      ? ["", ...buffer.path.split("/").slice(0, -1)]
+      : [buffer.rootLabel || buffer.rootId, ...buffer.path.split("/").slice(0, -1)]);
     for (const [index, buffer] of group.entries()) {
       let qualifier = "";
       // A composed page has no address to distinguish it by; its name carries its identity.
@@ -32,7 +38,7 @@ export function filesTabNames(buffers: readonly FileIdentity[]): Map<string, Fil
       }
       names.set(buffer.key, { name: buffer.name, qualifier,
         label: qualifier ? `${buffer.name} — ${qualifier}` : buffer.name,
-        path: `${buffer.rootLabel || buffer.rootId}/${buffer.path}` });
+        path: isOutside(buffer.rootId) ? outsideHostPath(buffer.path) : `${buffer.rootLabel || buffer.rootId}/${buffer.path}` });
     }
   }
   return names;

@@ -29,7 +29,7 @@ func (m *Service) Append(ctx context.Context, sessionID string, msgs ...api.Mess
 	}
 	copy(msgs, stamped)
 	m.PublishAppends(ctx, sessionID, stamped...)
-	m.applyHeldProgramEdits(ctx, sessionID, stamped)
+	m.applyHeldProgramEffects(ctx, sessionID, stamped)
 	return nil
 }
 

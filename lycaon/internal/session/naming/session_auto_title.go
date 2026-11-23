@@ -59,6 +59,10 @@ func (m *Service) PublishSession(ctx context.Context, sess *wire.Session, title 
 		Action:           wire.SessionEventActionUpdated,
 		Title:            title,
 		Status:           status,
+		Mode:             sess.Mode,
+		CurrentTurn:      sess.CurrentTurn,
+		UI:               sess.UI,
+		PromptPending:    sess.PromptPending,
 		LastMessage:      m.lastMessage(ctx, sess.ID),
 		UntrustedContent: m.evidenceStore.SessionUntrustedContent(sess.ID),
 	}

@@ -6,8 +6,8 @@ Maintained sources of truth: the live scan tool schemas and structured rejection
 
 {% if profile_has_scan_list %}- Find stored runs with `scan_list` — use a full returned id; omit project paths the host already knows.
 {% endif %}{% if profile_has_scan_summary %}- Check completion and category totals with `scan_summary` — summary first; full view only when ingest audit rows matter.
-{% endif %}- Inspect findings with `scan_query` — filter and paginate; retain the scan id with every conclusion.
-{% if profile_has_scan_pack %}- Run configured scanners with `scan_pack` — use supported categories; completion may be asynchronous.
+{% endif %}{% if profile_has_scan_query %}- Inspect findings with `scan_query` — filter and paginate; retain the scan id with every conclusion.
+{% endif %}{% if profile_has_scan_pack %}- Run configured scanners with `scan_pack` — use supported categories; completion may be asynchronous.
 {% endif %}{% if profile_has_scan_compare %}- Prove a fix changed scanner state with `scan_compare` — use the bound comparison pair; choose latest/baseline only when unbound.
 {% endif %}
 Keep workflow-bound scan ids throughout. On `SCAN_NOT_FOUND`, report a missing bound run{% if profile_has_scan_list %}; use `scan_list` to resolve ids only for unbound work{% endif %}. On incomplete-scan rejection, wait for or report completion rather than querying around it. When the list is empty, distinguish no stored scan from a clean completed scan.
@@ -37,5 +37,5 @@ findings:
 
 When proposing an ignore entry:
 1. Confirm the finding is deliberate test material or verified false positive from scanner evidence.
-2. Edit `.paintedwolf/ignores.yaml` with native write or edit tools.
-3. The host routes the edit through agent-policy review (`GateAgentPolicyChange`), presenting the exact diff to the user for approval.
+{% if profile_has_write_tools %}2. Edit `.paintedwolf/ignores.yaml` with native write or edit tools.
+3. The host routes the edit through agent-policy review (`GateAgentPolicyChange`), presenting the exact diff to the user for approval.{% else %}2. Report the proposed `.paintedwolf/ignores.yaml` entry (`id`, `path`, `kind`, `reason`) for a write-capable surface to apply under agent-policy review.{% endif %}

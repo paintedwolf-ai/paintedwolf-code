@@ -5,6 +5,7 @@ use crate::error::{Error, Result};
 pub struct Sampling {
     pub temperature: f32,
     pub top_p: f32,
+    pub suppressed: Vec<u32>,
     pub top_k: usize,
     pub rng: Rng,
     pub constraint: Option<llguidance::Matcher>,
@@ -20,7 +21,8 @@ impl Sampling {
             .transpose()?;
         let candidates = self
             .envelope
-            .candidates(masked.as_deref().unwrap_or(logits));
+            .candidates(masked.as_deref().unwrap_or(logits))
+            .filter(|(id, _)| !self.suppressed.contains(id));
         let token = sample(
             candidates,
             self.temperature,

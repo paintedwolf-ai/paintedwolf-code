@@ -17,6 +17,11 @@ describe("included model readiness", () => {
     expect(providerStatusLabel(included)).toBe("Repair needed");
   });
 
+  it("directs an unseeded damaged model to download or import", () => {
+    const included = includedProvider({state: "repair_required", recovery_action: "retry", seed_available: false});
+    expect(localGenerationView(included)).toMatchObject({action: "none", detail: "Download the model again or import a signed offline bundle."});
+  });
+
   it("does not infer recovery from diagnostic prose", () => {
     const included = includedProvider({ state: "unavailable", recovery_action: "retry", detail: "repair required; reinstall" });
     expect(localGenerationView(included)).toMatchObject({ action: "retry", reinstall: false });

@@ -4,6 +4,9 @@ import { createLycaonClient } from "./client-impl.ts";
 describe("LycaonClient integration", () => {
   it("createSession round-trip via mock fetch", async () => {
     const session = {
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-new",
       id: "sess-new",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",

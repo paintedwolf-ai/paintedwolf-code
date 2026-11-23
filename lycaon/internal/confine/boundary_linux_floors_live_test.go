@@ -393,7 +393,7 @@ func TestLinuxAbsentReadDeniedPathCreatedDuringTheCommandIsUnreadable(t *testing
 	// the read floor stands in the way; the test environment's HOME may not.
 	account, err := user.Current()
 	testutil.FailErr(t, "account", err)
-	base, err := os.MkdirTemp(account.HomeDir, ".pw-confine-absent-read-") //nolint:usetesting // Must lie outside standard temporary write roots.
+	base, err := os.MkdirTemp(account.HomeDir, ".pw-confine-absent-read-") //nolint:usetesting // The probe needs a path outside machine temp.
 	testutil.FailErr(t, "fixture base", err)
 	t.Cleanup(func() { _ = os.RemoveAll(base) })
 	store := filepath.Join(base, "store")

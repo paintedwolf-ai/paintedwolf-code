@@ -64,6 +64,7 @@ type Config struct {
 	BatchSerialWhenArg    map[string]string   `yaml:"batch_serial_when_arg"`
 	TurnOrder             map[string]string   `yaml:"turn_order"`
 	Lifecycle             map[string]string   `yaml:"lifecycle"`
+	AskAllowed            []string            `yaml:"ask_allowed"`
 	GrantTargetScope      map[string]string   `yaml:"grant_target_scope"`
 	RequiresWorkerBranch  []string            `yaml:"requires_worker_branch"`
 	SpawnsProcess         []string            `yaml:"spawns_process"`

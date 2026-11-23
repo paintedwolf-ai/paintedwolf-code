@@ -16,6 +16,15 @@ host facts -> deterministic item projection -> activity-span presentation
 
 Grouping may change chrome. It cannot change whether an event exists.
 
+### Plan transitions
+
+A visible plan transition and its transcript row commit together. The row uses
+that transition's workflow run and receives its ordinal in the same transaction.
+For a tool-originated transition, it follows the calling assistant message and
+is stored before the call returns. Concurrent messages may intervene; adjacency
+is not required. Failed persistence leaves neither the plan change nor its row.
+Post-commit notifications refresh consumers without creating transcript history.
+
 ## Transcript scale
 
 Long sessions render as a window over canonical rows. Virtualization, collapsed disclosures, and reveal anchors keep interaction bounded while stable row identity preserves focus and scroll. The transcript store retains ordered facts for the loaded window; older ranges remain addressable through host pagination, and Den does not concatenate the whole session to find one item.
@@ -110,7 +119,7 @@ Activity-span principles:
 - retain stable constituent ids and expansion state;
 - show zero-net-change rather than erase the activity;
 - keep worker branches separate because their paths resolve in different workspaces;
-- show the group headline, status, and applicable action and failure counts in the header. Command groups reserve a second line so the header keeps its height when another activity type appears. Groups with multiple distinct activity labels show the first three in order, joined by arrows, followed by the number of additional labels.
+- show the group headline, status, and applicable action and failure counts in the header. Command groups reserve a second line so the header keeps its height when another activity type appears. Groups with multiple distinct activity labels show the first three in order, joined by arrows, followed by the number of additional labels. In quiet mode the failure count appears on spans that end in error. Verbose mode also shows earlier failures in spans that recover. Expanding the span shows the member rows and their individual statuses.
 
 A large set of file folds may receive a manifest group. That is presentation over the same rows, not a new source of change history.
 
@@ -149,12 +158,23 @@ and enclosing program outcome are distinct facts; exit zero never proves an
 external program's purpose succeeded.
 
 Den fixes each row's key, label, subject and initial position when it appears.
-Repetitions update counts and outcomes in place. Group titles retain their first
-activity's description. Decision-engine receipts belong in host-decision details,
-not in the count of actions performed. Receipt-page changes do not redefine the
-activity's result. Retained transcripts resolve host activity summaries before
-mounting rows when their stored snapshot has no structural steps. Failed detail
-reads preserve the recorded command.
+A read-only activity can join the preceding compatible row when it first has
+facts. A late report keeps its own row if an earlier call's work is still
+unknown. Membership then stays fixed across updates and remounts while the
+call's projection is cached. If a span splits and leaves a folded call without
+its row, the call opens its own row. Once the chat reloads, a parallel batch
+can group differently from its live run.
+
+Repetitions update counts and outcomes in place. A row shows as running while
+any member or output read is active, then shows an error if any failed. A
+pending receipt read preserves any activities already drawn. On a cold load,
+the span waits for host activity summaries when the stored snapshot lacks
+structural steps. A failed detail read still leaves the recorded command
+inspectable.
+
+A decision-engine receipt follows the call it introduces into host-decision
+details when that call opens a command row. A decision without such a row
+is shown on its own.
 
 Activities sit in the span as single-line rows that open into details; grouping
 adds no further disclosure level. Rows show only the action and outcome, with
@@ -169,6 +189,14 @@ does a call whose arguments were not kept inline. The command wraps to at most
 four lines; copying it copies all of it.
 
 An expanded activity is an action card: its descriptor comes from the activity's typed receipt facts (exit status, executions, failures, host stop, interruption, background job), never from command text or output prose. The preview reads up to four lines of output from the activity's execution receipts when the card opens: the end of a failure, refusal or running action, and the start otherwise. Records load on demand in Files; cards contain no record paging controls.
+
+Activity summaries have two labelled sections: **Intent** explains why the
+activity ran; **Outcome** explains what happened. Each section keeps its own
+pending space, AI mark, inline code, and **Show all** control. The sections
+reveal together with one fade when summary generation settles. A running activity
+says its outcome comes after settlement; unavailable sections offer a retry
+without hiding available text. Intent remains visible while settlement requests
+a new summary. **Summary evidence** opens the supporting record in Files.
 
 The projection records each row's receipt scopes as it folds calls: a program
 and the host activity that produced the row, or the whole program when the
@@ -187,7 +215,7 @@ Timestamps are display data, not a total order. Arrival order is a transport acc
 
 A row keeps the place it is first drawn at ([`transcript-item-order.ts`](../lycaon-den/src/chat/transcript/projection/transcript-item-order.ts)). Its place is the `ord` of the message that first shows it:
 
-- a call whose tool draws while it runs (`long_running`, or any call in verbose mode and worker transcripts) sits at its assistant row;
+- a call drawn in flight sits at its assistant row. Quiet chat draws program calls there after host progress arrives. Other lifecycle tools, verbose chat, and worker transcripts draw in-flight calls when their assistant row commits;
 - a call drawn once it settles sits at its result;
 - a note sits at the assistant row whose calls it introduces.
 
@@ -260,7 +288,7 @@ Physical message deletion occurs only through the explicit rewind/truncation ope
 
 ## Liveness
 
-Streaming and running status is a runtime projection over the active turn, not a durable claim that survives restart. A settled row is never reopened by a late stream chunk. Active tool calls render before their result classification so current work is intelligible; only settled quiet results may be hidden by the explicit visibility setting.
+Streaming and running status is a runtime projection over the active turn, not a durable claim that survives restart. A settled row is never reopened by a late stream chunk. Quiet chat shows a program call when the host reports command activity or returns a live process handle. A program row shown in flight remains visible when progress clears and the result settles. Quiet chat omits benign results when the call never appeared in flight. Verbose chat and worker transcripts show tool calls as soon as the assistant row commits.
 
 On reconnect, durable content loads first and current operation state reattaches liveness where identities match. Missing runtime state means interrupted or settled according to host reconciliation, not "still running because the last bubble animated."
 

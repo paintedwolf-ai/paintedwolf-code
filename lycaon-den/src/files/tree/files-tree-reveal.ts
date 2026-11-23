@@ -30,6 +30,7 @@ export function createFilesTreeReveal(options: {
   buffers: Accessor<readonly TreeBuffer[]>;
   deletedPaths: (rootId: string) => readonly string[];
   browse: SourceTreeBrowse;
+  outsideAddress?: (rootId: string, path: string) => { available: boolean } | undefined;
 }) {
   const [connection, setConnection] = createSignal<SourceTreeConnection>();
   const [revision, setRevision] = createSignal(0);
@@ -74,6 +75,8 @@ export function createFilesTreeReveal(options: {
   const unavailable = (buffer: TreeBuffer | null | undefined): string | null => {
     if (!options.available()) return "The file tree is unavailable in this window.";
     if (!buffer || !hasFilesTreeAddress(buffer)) return "This tab has no item in the file tree.";
+    const outside = options.outsideAddress?.(buffer.rootId, buffer.path);
+    if (outside) return outside.available ? null : "The containing folder is unavailable.";
     if (!options.rootIds().includes(buffer.rootId)) return "The containing folder is unavailable.";
     // Review tombstones are tree items even when the file no longer exists on disk.
     if (options.deletedPaths(buffer.rootId).includes(buffer.path)) return null;

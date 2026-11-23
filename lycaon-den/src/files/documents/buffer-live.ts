@@ -109,9 +109,16 @@ export function applyBufferSourceChanged(
   const handlers = handlersByProject.get(pid);
   if (
     workspaceKind === "project" &&
-    [event.path, event.from_path].some((path) => isFormatConfigPath(pid, path))
+    isFormatConfigPath(pid, event.path)
   ) {
     handlers?.onFormatConfigChange?.(rootId);
+  }
+
+  const fromRootId = event.from_root_id?.trim() || rootId;
+  if (workspaceKind === "project" && isFormatConfigPath(pid, event.from_path)) {
+    if (fromRootId !== rootId || !isFormatConfigPath(pid, event.path)) {
+      handlers?.onFormatConfigChange?.(fromRootId);
+    }
   }
 
   // Worker buffers expose content updates only.
@@ -122,7 +129,7 @@ export function applyBufferSourceChanged(
     const to = event.path?.trim() || "";
     if (from && to) {
       if (workspaceKind === "project") {
-        retargetOpenFilesUnderPath(pid, rootId, from, to);
+        retargetOpenFilesUnderPath(pid, fromRootId, from, to, rootId);
       }
     }
     return;

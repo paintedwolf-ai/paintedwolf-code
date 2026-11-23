@@ -37,6 +37,8 @@ const row = (
   updatedAt: string,
 ): ProjectCostSession => ({
   session: {
+    mode: "agent" as const,
+    started: true,
     id,
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: "project-1",

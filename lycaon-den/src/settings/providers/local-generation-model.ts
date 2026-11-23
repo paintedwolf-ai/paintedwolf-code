@@ -1,10 +1,12 @@
 import type { LocalGenerationStatus, ProviderMeta } from "../../api/types.ts";
 
 const STATES = {
+  downloading: { label: "Installing", detail: "The model is being installed on this device." },
+  opted_out: { label: "No local model", detail: "Choose a tier to use a local model." },
   idle: { label: "Not loaded", detail: "Load the included model to use it on this device." },
   loading: { label: "Loading", detail: "The included model is loading." },
   ready: { label: "Ready", detail: "The included model is ready on this device." },
-  repairing: { label: "Repairing", detail: "The included model is being restored from its bundled copy." },
+  repairing: { label: "Repairing", detail: "The included model is being restored from verified model files." },
   unavailable: { label: "Unavailable", detail: "The included model could not start." },
   repair_required: { label: "Repair needed", detail: "The installed model needs repair." },
   insufficient_memory: { label: "Not enough memory", detail: "There is not enough memory to load the included model." },
@@ -14,13 +16,19 @@ const STATES = {
 export function localGenerationView(provider: Pick<ProviderMeta, "local_runtime">) {
   const status = provider.local_runtime;
   const state = status?.state ?? "unavailable";
-  const action = status?.recovery_action ?? "none";
+  const replace = state === "repair_required" && status?.recovery_action !== "repair";
+  const action = replace ? "none" : status?.recovery_action ?? "none";
   return {
     ...STATES[state],
+    detail: replace ? "Download the model again or import a signed offline bundle." : STATES[state].detail,
     ready: state === "ready",
     action,
     actionLabel: action === "repair" ? "Repair model" : state === "idle" ? "Load model" : "Try again",
     reinstall: action === "reinstall",
-    busy: state === "loading" || state === "repairing",
+    busy: state === "loading" || state === "repairing" || state === "downloading",
   };
+}
+
+export function localModelDisplayName(provider: ProviderMeta | undefined, model?: string) {
+  return provider?.local_runtime?.available_models?.find(tier => tier.id === model)?.display_name;
 }

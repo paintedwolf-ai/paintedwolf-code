@@ -58,7 +58,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient, local *nativegen.
 	if ProviderUtilityCallsEnabled() {
 		refreshCancel, refreshDone = startModelFeedRefresh(ctx, feed)
 	}
-	router := NewStaticModelRouter(policy).WithLocalDefault(registry.IncludedModelAvailable)
+	router := NewStaticModelRouter(policy).WithLocalDefault(registry.IncludedModel)
 
 	svc := &Service{
 		modelFeedRefreshCancel: refreshCancel,
@@ -72,6 +72,18 @@ func NewService(ctx context.Context, mock modelcall.LLMClient, local *nativegen.
 		Utility:                NewUtilityPlane(),
 		Capacity:               NewCapacityGate(catalog.CapacityPolicy()),
 		Refusals:               providerretry.NewModelRefusalGate(),
+	}
+	if local != nil && local.Store != nil {
+		if err := local.Store.BindSelectedRoles(svc.initializeLocalRoles); err != nil {
+			if local.Runtime != nil {
+				local.Runtime.ReportSelectionError(err)
+			} else {
+				registry.localStartup.Detail = err.Error()
+			}
+		}
+	}
+	if local != nil && local.OfflineInstaller && local.Runtime != nil {
+		local.Runtime.SetupInstaller(local.OfflineTier, svc.initializeLocalRoles, func() { registry.RefreshDiscovery(IncludedProviderID); svc.ResetPlanes() }) //nolint:contextcheck // The runtime owns the installer transfer.
 	}
 	return svc, nil
 }
@@ -127,6 +139,8 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 	if local != nil {
 		r.localRuntime = local.Runtime
 		r.localStartup = local.Initial
+		r.localStore = local.Store
+		r.offlineInstaller = local.OfflineInstaller
 	}
 	r.rateGate = providerretry.NewProviderRateGate(rateDirectory)
 	r.catalog = catalog

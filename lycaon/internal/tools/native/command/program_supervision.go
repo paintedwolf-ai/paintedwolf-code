@@ -37,9 +37,9 @@ type ProgramSupervisor struct {
 	// Background is the session process registry that holds & jobs.
 	Background *bgprocess.Registry
 
-	mu       sync.Mutex
-	programs map[string]*supervisedProgram
-	sessions map[string]*SessionJobs
+	mu           sync.Mutex
+	programs     map[string]*supervisedProgram
+	sessions     map[string]*SessionJobs
 }
 
 // Jobs returns the session's job set; wait and kill read the same outcomes

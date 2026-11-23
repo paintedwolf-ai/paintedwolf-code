@@ -18,6 +18,12 @@ func buildOccurrenceFactDecls() []factDecl {
 }
 
 var staticOccurrenceFactDecls = []factDecl{
+	{"refused_shared_temp", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_allowed", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_declined", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_unanswered", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_tolerated", oarcore.TypeBool, FactTierHost, ""},
+	{"session_scratch_available", oarcore.TypeBool, FactTierHost, ""},
 	{"native_command", oarcore.TypeString, FactTierHost, ""},
 	{"source_line", oarcore.TypeInt, FactTierHost, ""},
 	{"source_column", oarcore.TypeInt, FactTierHost, ""},
@@ -403,6 +409,9 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"ref", oarcore.TypeString, FactTierHost, ""},
 	{"requested", oarcore.TypeString, FactTierHost, ""},
 	{"resource", oarcore.TypeString, FactTierHost, ""},
+	{"command_exit_recorded", oarcore.TypeBool, FactTierHost, ""},
+	{"command_exit_status", oarcore.TypeInt, FactTierHost, ""},
+	{"saved_output_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"receipt_token", oarcore.TypeString, FactTierHost, ""},
 	{"settled_work", oarcore.TypeListString, FactTierHost, ""},
 	{"retryable", oarcore.TypeBool, FactTierHost, ""},
@@ -442,6 +451,9 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"misplaced_fields", oarcore.TypeListString, FactTierHost, ""},
 	{"inapplicable_fields", oarcore.TypeListString, FactTierHost, ""},
 	{"missing_required_arguments", oarcore.TypeString, FactTierHost, ""},
+	{"missing_required_paths", oarcore.TypeListString, FactTierHost, ""},
+	{"unsupported_property_paths", oarcore.TypeListString, FactTierHost, ""},
+	{"controlled_header", oarcore.TypeString, FactTierHost, ""},
 	{"found_under", oarcore.TypeString, FactTierHost, ""},
 	{"belongs_under", oarcore.TypeString, FactTierHost, ""},
 	{"close_before", oarcore.TypeString, FactTierHost, ""},

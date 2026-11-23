@@ -14,15 +14,13 @@ func ValidateCapabilityPathAuthority(args map[string]any, scratch, output string
 	if reject != nil || request == nil {
 		return reject
 	}
-	for _, capability := range []struct {
-		name, path string
-		write      bool
-	}{
-		{"read_path", request.ReadPath, false}, {"write_root", request.WriteRoot, true},
-	} {
-		if capability.path != "" && confine.ControlPlanePathDenied(capability.path, capability.write, scratch, output) {
-			return &toolrejection.ToolReject{Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": capability.path, "capability": capability.name}}
+	for _, path := range request.ReadPaths {
+		if confine.ControlPlanePathDenied(path, false, scratch, output) {
+			return &toolrejection.ToolReject{Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": path, "capability": "read_path"}}
 		}
+	}
+	if root := request.WriteRoot; root != "" && confine.ControlPlanePathDenied(root, true, scratch, output) {
+		return &toolrejection.ToolReject{Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": root, "capability": "write_root"}}
 	}
 	return nil
 }

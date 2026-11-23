@@ -195,7 +195,7 @@ paths:
         - sessions
       operationId: updateSession
       x-person-action: record
-      summary: Mutate session lifecycle state (title, archived, pinned, pin position)
+      summary: Mutate session lifecycle state (title, archived, pinned, pin position, mode)
       parameters:
         - $ref: '#/components/parameters/SessionId'
       requestBody:
@@ -225,6 +225,8 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
     delete:
@@ -1600,6 +1602,8 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/sessions/{id}/coordinator-context:
@@ -3333,10 +3337,16 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - name: file_id
+          in: query
+          description: Recorded file ID. Required for outside files. Use without path, root_id or worker_id.
+          schema:
+            type: string
+            format: uuid
         - name: path
           in: query
-          required: true
-          description: Repo-relative path (slash-separated)
+          required: false
+          description: Attached-root-relative path. Required when file_id is omitted.
           schema:
             type: string
             minLength: 1
@@ -3358,7 +3368,7 @@ paths:
             format: uuid
         - name: include_deleted
           in: query
-          description: Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id; does not search history for other paths.
+          description: Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id or file_id; does not search history for other paths.
           schema:
             type: boolean
             default: false
@@ -3715,6 +3725,175 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/source/outside-files:
+    post:
+      tags:
+        - projects
+      operationId: openOutsideFile
+      x-person-action: record
+      summary: Open a file outside the project in a chat's Files section
+      description: |
+        Adds a file the person chose in the native file picker to the chat: records that the chat opened it and places it in one of the chat's locations. Afterwards the file is addressed by the project's outside namespace and its path like any other source file.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenOutsideFileRequest'
+      responses:
+        '200':
+          description: The file and the location holding it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenedOutsideFile'
+        '400':
+          description: The path is not an absolute file path outside the project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Project, chat, or file not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: This project is changing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The request or the chosen file is too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/source/outside-locations/{location_id}:
+    patch:
+      tags:
+        - projects
+      operationId: updateSourceChatLocation
+      x-person-action: record
+      summary: Hide or show a chat location
+      description: Changes only whether the chat's Files section presents the location; agent access and history are unchanged.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: location_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSourceChatLocationRequest'
+      responses:
+        '200':
+          description: The updated location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceChatLocation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Project or location not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The request body is too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/source/outside-locations/{location_id}/files:
+    post:
+      tags:
+        - projects
+      operationId: openChatLocationFile
+      x-person-action: record
+      summary: Open a file from a chat's outside location
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: location_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenChatLocationFileRequest'
+      responses:
+        '200':
+          description: The opened file and its identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenedOutsideFile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Project, location, or file not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: This project is changing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The request or file is too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
   /v1/projects/{id}/agent-presence:
@@ -4927,10 +5106,16 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - name: file_id
+          in: query
+          description: Recorded file ID. Required for outside files. Use without path, root_id or worker_id.
+          schema:
+            type: string
+            format: uuid
         - name: path
           in: query
-          required: true
-          description: Repo-relative path (slash-separated)
+          required: false
+          description: Attached-root-relative path. Required when file_id is omitted.
           schema:
             type: string
             minLength: 1
@@ -5816,6 +6001,41 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/source/command-windows/{window_id}:
+    get:
+      tags:
+        - projects
+      operationId: getProjectSourceCommandObservation
+      summary: Read a chat command window's observation gaps
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: session_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: window_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Observation gaps currently recorded for this window
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandObservationStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Error'
   /v1/projects/{id}/source/git-changes/{git_change_id}/review:
@@ -7618,6 +7838,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflows:
@@ -7911,6 +8133,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/sessions/{id}/workflow-runs/active:
@@ -8049,6 +8273,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/resume:
@@ -8096,6 +8322,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/cancel:
@@ -8143,6 +8371,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/exit:
@@ -8190,6 +8420,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/advance:
@@ -8237,6 +8469,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/transitions/{transition_id}:
@@ -8290,6 +8524,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/decisions/{phase_id}:
@@ -8453,6 +8689,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workers:
@@ -10219,6 +10457,142 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/providers/{provider_id}/local-model:
+    get:
+      tags:
+        - providers
+      operationId: getLocalModelStatus
+      summary: Inspect local model selection
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      responses:
+        '200':
+          description: Current local model status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalGenerationStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags:
+        - providers
+      operationId: deleteLocalModel
+      x-person-action: record
+      summary: Remove the local model
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      responses:
+        '204':
+          description: Local model removed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/providers/{provider_id}/local-model/select:
+    post:
+      tags:
+        - providers
+      operationId: selectLocalModel
+      x-person-action: record
+      summary: Start a local model download or offline import
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalModelSelectionRequest'
+      responses:
+        '200':
+          description: Current local model status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalGenerationStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/providers/{provider_id}/local-model/cancel:
+    post:
+      tags:
+        - providers
+      operationId: cancelLocalModelTransfer
+      x-person-action: record
+      summary: Cancel a local model transfer
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      responses:
+        '200':
+          description: Current local model status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalGenerationStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         default:
@@ -14725,6 +15099,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    ServiceUnavailable:
+      description: A subsystem the operation needs is not available yet; `code` names it.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     Forbidden:
       description: Policy or confinement refuses the operation; `code` says which.
       content:
@@ -14733,12 +15113,6 @@ components:
             $ref: '#/components/schemas/Error'
     UnprocessableContent:
       description: The request is well formed but its content cannot be processed; `code` says why.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    ServiceUnavailable:
-      description: A subsystem the operation needs is not available yet; `code` names it.
       content:
         application/json:
           schema:
@@ -16467,9 +16841,13 @@ components:
         path:
           type: string
           description: Root-relative path after the change (destination for rename).
+        from_root_id:
+          type: string
+          format: uuid
+          description: Source root for a rename across roots.
         from_path:
           type: string
-          description: Root-relative path before a rename; omit for other ops.
+          description: Path before a rename, relative to from_root_id when present and root_id otherwise.
         op:
           $ref: '#/components/schemas/SourceChangeOp'
         origin:
@@ -17524,6 +17902,7 @@ components:
         - id
         - name
         - roots
+        - outside_root_id
         - roots_generation
         - session_count
         - starred
@@ -17541,6 +17920,7 @@ components:
         - id
         - name
         - roots
+        - outside_root_id
         - roots_generation
         - session_count
         - starred
@@ -17561,6 +17941,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectRoot'
+        outside_root_id:
+          type: string
+          format: uuid
+          description: |
+            The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
         roots_generation:
           type: integer
           minimum: 0
@@ -20496,6 +20881,10 @@ components:
         model:
           - provider_id
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Initial session mode. Defaults to Agent.
         project_id:
           type: string
           format: uuid
@@ -20681,10 +21070,10 @@ components:
         - system
     MessageLiveStatus:
       type: string
+      description: Runtime-derived streaming affordance stamped at query/SSE time; not persisted
       enum:
         - streaming
         - complete
-      description: Runtime-derived streaming affordance stamped at query/SSE time; not persisted
     DraftStatus:
       type: string
       enum:
@@ -20735,6 +21124,10 @@ components:
         - text
       additionalProperties: false
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Bind or upgrade the session mode at admission.
         operation_id:
           type: string
           format: uuid
@@ -20980,6 +21373,8 @@ components:
         - host_error
         - idle_disposition
         - prompt_pending
+        - mode
+        - started
       type: object
       required:
         - id
@@ -20988,6 +21383,12 @@ components:
         - status
       additionalProperties: false
       properties:
+        mode:
+          $ref: '#/components/schemas/SessionMode'
+        started:
+          x-go-pointer: true
+          type: boolean
+          description: Root chat started state. Omitted when the event carries no update.
         id:
           type: string
           format: uuid
@@ -21034,6 +21435,9 @@ components:
         - workspace_root_id
         - workspace_path
         - posture
+        - mode
+        - started
+        - root_session_id
         - agent_type
         - provider_id
         - model
@@ -21056,12 +21460,28 @@ components:
         - project_id
         - owner_person_id
         - posture
+        - mode
+        - started
+        - root_session_id
         - status
         - created_at
         - activity_at
         - updated_at
       additionalProperties: false
       properties:
+        mode:
+          $ref: '#/components/schemas/SessionMode'
+          readOnly: true
+          description: Effective mode of the root chat.
+        started:
+          type: boolean
+          readOnly: true
+          description: True once the root chat has admitted a prompt or workflow. Rewind preserves this fact.
+        root_session_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: The root chat that owns the mode and started state.
         id:
           type: string
           format: uuid
@@ -21385,6 +21805,12 @@ components:
         - build
         - orchestrate
         - vet
+    SessionMode:
+      type: string
+      description: Capability ceiling for a root chat and its workers.
+      enum:
+        - agent
+        - ask
     SessionStatus:
       type: string
       description: Session lifecycle state.
@@ -21415,6 +21841,8 @@ components:
         - project_id
         - owner_person_id
         - posture
+        - mode
+        - started
         - status
         - message_count
         - created_at
@@ -21422,6 +21850,14 @@ components:
       additionalProperties: false
       description: Metadata-only chat list row; worker child sessions are never listed
       properties:
+        mode:
+          $ref: '#/components/schemas/SessionMode'
+          readOnly: true
+          description: Effective mode of the root chat.
+        started:
+          type: boolean
+          readOnly: true
+          description: True once the root chat has admitted a prompt or workflow. Rewind preserves this fact.
         id:
           type: string
           format: uuid
@@ -21844,6 +22280,7 @@ components:
       type: string
       enum:
         - result
+        - source_observation
         - changed
         - found
         - took
@@ -21866,6 +22303,17 @@ components:
       properties:
         kind:
           $ref: '#/components/schemas/ActionFactKind'
+        source_coverage:
+          type: array
+          description: 'source_observation: gaps in a command''s before-and-after comparison.'
+          items:
+            $ref: '#/components/schemas/CommandFolderCoverage'
+        source_windows:
+          type: array
+          description: 'source_observation: windows still settling when the result was published.'
+          items:
+            type: string
+            format: uuid
         outcome:
           type: string
           description: 'result: how the action ended.'
@@ -23183,6 +23631,10 @@ components:
       required:
         - expected_revision
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Upgrade the session to Agent when sending queued prompts.
         op:
           type: string
           enum:
@@ -27034,6 +27486,10 @@ components:
         - workflow_id
         - workflow_version
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Bind or upgrade the session mode at admission.
         operation_id:
           type: string
           format: uuid
@@ -27250,6 +27706,9 @@ components:
         - name
       additionalProperties: false
       properties:
+        requires_agent:
+          type: boolean
+          description: The workflow entry phase requires Agent mode.
         id:
           type: string
           pattern: ^[a-z0-9_-]+$
@@ -27588,6 +28047,9 @@ components:
         - worker_owner_unsettled
         - worker_workspace_unavailable
         - session_archived
+        - session_mode_locked
+        - session_mode_unavailable
+        - session_ask_mode_workflow_requires_agent
         - session_not_found
         - session_not_pinned
         - session_preparation_failed
@@ -28076,8 +28538,12 @@ components:
       maxProperties: 1
       additionalProperties: false
       description: |
-        One session lifecycle command. Exactly one of title, archived, pinned, or pin_position is required; compound commands are rejected without changing the session.
+        One session lifecycle command. Exactly one of title, archived, pinned, pin_position, or mode is required; compound commands are rejected without changing the session.
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Changes the root chat mode. A started chat can only move from Ask to Agent.
         title:
           x-go-pointer: true
           type: string
@@ -28233,6 +28699,65 @@ components:
           minItems: 1
           items:
             $ref: '#/components/schemas/RedactedSpan'
+    SourceWindowCoverage:
+      type: string
+      enum:
+        - complete
+        - partial
+        - not_observed
+    SourceWindowGapReason:
+      type: string
+      enum:
+        - unconfined
+        - baseline_incomplete
+        - canceled
+        - io_error
+        - settlement_failed
+        - time_budget
+    SourceWindowBoundaryReason:
+      type: string
+      enum:
+        - scope
+        - directory_cap
+        - subtree_cap
+        - walk_budget
+        - unreadable
+    SourceWindowBoundary:
+      x-go-generate: true
+      type: object
+      required:
+        - path
+        - reason
+      additionalProperties: false
+      description: One folder a partial observation did not enter.
+      properties:
+        path:
+          type: string
+          description: Slash-separated, relative to the covered folder; "." is the folder itself.
+        reason:
+          $ref: '#/components/schemas/SourceWindowBoundaryReason'
+    CommandFolderCoverage:
+      x-go-generate: true
+      type: object
+      required:
+        - folder
+        - coverage
+      additionalProperties: false
+      properties:
+        folder:
+          type: string
+          description: The covered folder's host path. A slash alone with unconfined coverage denotes all folders outside the project.
+        coverage:
+          $ref: '#/components/schemas/SourceWindowCoverage'
+        reason:
+          $ref: '#/components/schemas/SourceWindowGapReason'
+        boundaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceWindowBoundary'
+        omitted_boundaries:
+          type: integer
+          minimum: 0
     ChatContentRow:
       x-go-generate: true
       type: object
@@ -28702,11 +29227,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProgressStep'
-        seq:
-          type: integer
       required:
         - steps
-        - seq
     ProgressChangeKind:
       type: string
       enum:
@@ -28777,10 +29299,8 @@ components:
           $ref: '#/components/schemas/ProgressUpdateSummary'
         initial:
           type: boolean
-        seq:
-          type: integer
       required:
-        - seq
+        - initial
     FeedbackResponseType:
       type: string
       enum:
@@ -28968,8 +29488,7 @@ components:
           type: boolean
     CompletionReportScope:
       type: string
-      description: |
-        What a grounded completion report is a report of. `session` covers a chat session's own work; `phase` covers one workflow phase; `run` is the run's declared deliverable, produced in the phase gated on topology_report_delivered. Stated on the record, never re-derived from live run state.
+      description: What a grounded completion report is a report of. `session` covers a chat session's own work; `phase` covers one workflow phase; `run` is the run's declared deliverable, produced in the phase gated on topology_report_delivered. Stated on the record, never re-derived from live run state.
       enum:
         - session
         - phase
@@ -28992,8 +29511,7 @@ components:
           minimum: 0
     CompletionReportFindingDisposition:
       type: string
-      description: |
-        What a finding asks for. `act` needs work; `accept` is a risk kept on purpose; `held` is a surface examined and found sound; `unresolved` is an unanswered review question.
+      description: What a finding asks for. `act` needs work; `accept` is a risk kept on purpose; `held` is a surface examined and found sound; `unresolved` is an unanswered review question.
       enum:
         - act
         - accept
@@ -29779,6 +30297,7 @@ components:
         root_id:
           type: string
           format: uuid
+          description: Attached folder containing the file. Absent for edits outside attached folders.
         reference:
           $ref: '#/components/schemas/FileEditReference'
         added:
@@ -29808,7 +30327,7 @@ components:
         root_id:
           type: string
           format: uuid
-          description: Attached project root containing the file.
+          description: Attached folder containing the file. Absent for edits outside attached folders.
         deleted:
           type: boolean
           description: The write removed the file; its diff has no current file target.
@@ -30197,6 +30716,10 @@ components:
           format: uuid
         path:
           type: string
+        file_id:
+          type: string
+          format: uuid
+          description: Host-recorded logical identity for a file outside the project folders.
         entry_kind:
           $ref: '#/components/schemas/NavigationEntryKind'
         worker_id:
@@ -30265,6 +30788,10 @@ components:
         path:
           type: string
           minLength: 1
+        file_id:
+          type: string
+          format: uuid
+          description: Host-recorded logical identity for a file outside the project folders.
         entry_kind:
           $ref: '#/components/schemas/NavigationEntryKind'
         status:
@@ -30274,7 +30801,7 @@ components:
           description: True only for an authored Markdown destination, rather than an inferred prose path.
         deleted:
           type: boolean
-          description: The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version.
+          description: The current address is absent and has retained deletion history. Availability is rechecked when opening.
         worker_id:
           type: string
           format: uuid
@@ -33636,6 +34163,7 @@ components:
         - workspace_id
         - session_scoped
         - roots
+        - outside_root_id
         - inventory
       properties:
         workspace_id:
@@ -33652,10 +34180,161 @@ components:
           description: Ordered physical roots used by every Files read and path action.
           items:
             $ref: '#/components/schemas/SourceWorkspaceRoot'
+        outside_root_id:
+          type: string
+          format: uuid
+          description: |
+            The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
         inventory:
           $ref: '#/components/schemas/SourceInventoryState'
           description: |
             The ledger's pass over the tree. Outside edits to tracked files reach history by path before it completes; untracked files enter history when the pass, or an open command window, admits them.
+    OpenOutsideFileRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - session_id
+        - path
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: The chat whose Files section receives the file.
+        path:
+          type: string
+          minLength: 1
+          description: Absolute host path the person chose in the native file picker.
+    SourceLocationAccess:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - path
+        - mode
+        - tree
+        - scope
+      description: The strongest active saved approval covering this location or a path within it.
+      properties:
+        path:
+          type: string
+        mode:
+          type: string
+          enum:
+            - read
+            - write
+        tree:
+          type: boolean
+        scope:
+          type: string
+          enum:
+            - chat
+            - project
+            - device
+        expires_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
+    SourceChatLocation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - session_id
+        - root_id
+        - anchor
+        - path
+        - kind
+        - label
+        - hidden
+        - available
+      description: |
+        A place outside the project where a root chat has worked. A Files tree view for the chat lists each visible location as a root whose id is the location id; its rows address files by the location and their path under the anchor.
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+          description: The root chat the location belongs to.
+        root_id:
+          type: string
+          format: uuid
+          description: The project's outside namespace, which addresses the location's files in source history.
+        anchor:
+          type: string
+          minLength: 1
+          description: The anchor's outside-namespace path, its host path without the leading slash.
+        path:
+          type: string
+          minLength: 1
+          description: The anchor's host path.
+        kind:
+          type: string
+          enum:
+            - repository
+            - folder
+            - file
+          description: |
+            What the location is anchored at: a repository work tree, a folder, or one protected file listed alone.
+        label:
+          type: string
+          minLength: 1
+          description: The anchor's name for display.
+        hidden:
+          type: boolean
+          description: Hidden from the chat's Files section. Hiding revokes and deletes nothing.
+        available:
+          type: boolean
+          description: Whether the host can still address the observed location.
+        access:
+          $ref: '#/components/schemas/SourceLocationAccess'
+          x-go-pointer: true
+    OpenedOutsideFile:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - root_id
+        - path
+        - file_id
+        - location
+      properties:
+        root_id:
+          type: string
+          format: uuid
+          description: The project's outside namespace.
+        path:
+          type: string
+          minLength: 1
+          description: The file's outside-namespace path.
+        file_id:
+          type: string
+          format: uuid
+        location:
+          $ref: '#/components/schemas/SourceChatLocation'
+    UpdateSourceChatLocationRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        hidden:
+          type: boolean
+          x-go-pointer: true
+          description: Whether the chat's Files section hides the location; omitted keeps it.
+    OpenChatLocationFileRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - path
+      properties:
+        path:
+          type: string
+          minLength: 1
+          description: File row path under the location root.
     AgentActivityKind:
       type: string
       enum:
@@ -34025,10 +34704,13 @@ components:
       type: object
       additionalProperties: false
       required:
-        - path
-        - root_id
         - client_id
+      description: Use file_id for an outside file, or root_id and path for an attached file.
       properties:
+        file_id:
+          type: string
+          format: uuid
+          description: Recorded project file identity for an outside tab.
         path:
           type: string
           minLength: 1
@@ -35864,6 +36546,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SourceWalkTurnSummary'
+    CommandObservationStatus:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - settling
+        - coverage
+      properties:
+        settling:
+          type: boolean
+        coverage:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandFolderCoverage'
     SourceGitChangeKind:
       type: string
       enum:
@@ -36505,6 +37201,41 @@ components:
         - running
         - ended
         - interrupted
+    SourceWindowFolderCoverage:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - coverage
+      additionalProperties: false
+      description: |
+        How much of one folder the window compared. root_id is an attached
+        root, with an empty path for its whole tree, or the project's outside
+        namespace, where path is the folder's host path without its leading
+        slash and an empty path stands for every host folder beyond the
+        project. Partial and not observed never mean no changes.
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        coverage:
+          $ref: '#/components/schemas/SourceWindowCoverage'
+        reason:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SourceWindowGapReason'
+          description: Why nothing can be said about the folder; present only when not observed.
+        boundaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceWindowBoundary'
+          description: The folders a partial observation did not enter; empty otherwise.
+        omitted_boundaries:
+          type: integer
+          minimum: 0
+          description: Boundaries past the listed ones; zero when the list is whole.
     SourceCommandWindow:
       x-go-generate: true
       type: object
@@ -36568,6 +37299,14 @@ components:
           type: string
           format: date-time
           description: When the window ended; omitted while running.
+        coverage:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceWindowFolderCoverage'
+          description: |
+            One entry per folder the window covered: its attached roots and the
+            command's write roots beyond the project. A folder appears once its
+            observation is decided.
     SourceWalkResponse:
       x-go-generate: true
       type: object
@@ -36619,8 +37358,9 @@ components:
             $ref: '#/components/schemas/SourceCommandWindow'
           description: |
             Every command observation window an effect on this page references
-            by command_id, newest first. A window that observed nothing has no
-            row, so there is no bare command to list.
+            by command_id, and every window in the page's span that left a
+            folder uncompared, newest first. A window that observed nothing and
+            compared every folder has no row, so there is no bare command to list.
         briefing_targets:
           type: object
           description: Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them.
@@ -38918,6 +39658,38 @@ components:
           type: integer
           format: int64
           description: Estimated USD overage in nano-USD for usage above the included daily allowance when applicable.
+    LocalModelTier:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - display_name
+        - description
+        - download_bytes
+        - min_memory_bytes
+        - eligible
+        - recommended
+        - download_available
+      properties:
+        id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]+$
+        display_name:
+          type: string
+        description:
+          type: string
+          description: Short guidance for choosing this tier.
+        download_bytes:
+          type: integer
+        min_memory_bytes:
+          type: integer
+        eligible:
+          type: boolean
+        recommended:
+          type: boolean
+        download_available:
+          type: boolean
     LocalGenerationStatus:
       x-go-generate: true
       type: object
@@ -38936,6 +39708,8 @@ components:
             - unavailable
             - repair_required
             - insufficient_memory
+            - downloading
+            - opted_out
             - stopped
           description: Current host runtime state, independent of cached model discovery.
         recovery_action:
@@ -38956,6 +39730,47 @@ components:
           type: integer
           minimum: 0
           description: Admitted context capacity of the ready process.
+        memory_kind:
+          type: string
+          enum:
+            - system
+            - gpu
+          description: Memory named in local model requirements on this generation host.
+        selection_state:
+          type: string
+          enum:
+            - unconfigured
+            - selected
+            - opted_out
+          description: Persisted local model decision when the host can read its store.
+        selected_model:
+          type: string
+        target_model:
+          type: string
+        transfer_phase:
+          type: string
+          enum:
+            - preparing
+            - downloading
+            - importing
+            - activating
+          description: Current phase of an active model installation.
+        downloaded_bytes:
+          type: integer
+        total_bytes:
+          type: integer
+        offline_installer:
+          type: boolean
+          description: This installation was packaged with an explicitly selected offline tier.
+        seed_model:
+          type: string
+          description: Tier contained in the packaged offline seed.
+        seed_available:
+          type: boolean
+        available_models:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalModelTier'
     ProviderListResponse:
       x-go-generate: true
       type: object
@@ -39042,6 +39857,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProviderKindTemplate'
+    LocalModelSelectionRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - model
+      additionalProperties: false
+      properties:
+        model:
+          type: string
+        packaged_seed:
+          type: boolean
+          description: Use the packaged offline seed for the requested tier.
+        bundle_path:
+          type: string
     LocalGenerationRepairResult:
       x-go-generate: true
       type: object
@@ -41635,6 +42464,10 @@ components:
         review:
           $ref: '#/components/schemas/SourceTreeReviewScope'
           x-go-pointer: true
+        chat_id:
+          type: string
+          format: uuid
+          description: Chat whose outside locations are shown. Omit for project folders only.
     SourceTreeViewCreate:
       x-go-generate: true
       type: object
@@ -41675,13 +42508,15 @@ components:
       description: A read-only, immutable snapshot of the current on-disk file. Frames and search remain bounded for files above the editing limit.
       required:
         - kind
-        - root_id
-        - path
       properties:
         kind:
           type: string
           enum:
             - current
+        file_id:
+          type: string
+          format: uuid
+          description: The recorded outside file ID. Use without root_id or path.
         root_id:
           type: string
           format: uuid
@@ -41964,6 +42799,10 @@ components:
           enum:
             - before
             - current
+        file_id:
+          type: string
+          format: uuid
+          description: The recorded outside file ID. Use without root_id or path.
         root_id:
           type: string
           format: uuid
@@ -42124,6 +42963,7 @@ components:
         - workspace_id
         - intent
         - roots
+        - outside_locations
         - loading_directories
       properties:
         kind:
@@ -42164,6 +43004,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectRoot'
+        outside_locations:
+          type: array
+          description: |
+            The view's chat's visible locations outside the project, in tree order after the roots. Each is also a tree root whose id is the location id.
+          items:
+            $ref: '#/components/schemas/SourceChatLocation'
         loading_directories:
           type: integer
           minimum: 0
@@ -42387,6 +43233,21 @@ components:
           description: One digest per requested source, in request order.
           items:
             $ref: '#/components/schemas/SourceComparisonDigest'
+    SourceTreeSelectChat:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - select_chat
+        chat_id:
+          type: string
+          format: uuid
+          description: Chat whose outside locations are shown. Omit for project folders only.
     SourceTreeToggle:
       x-go-generate: true
       type: object
@@ -42473,9 +43334,11 @@ components:
         - $ref: '#/components/schemas/SourceTreeReveal'
         - $ref: '#/components/schemas/SourceTreeFilter'
         - $ref: '#/components/schemas/SourceTreeReview'
+        - $ref: '#/components/schemas/SourceTreeSelectChat'
       discriminator:
         propertyName: kind
         mapping:
+          select_chat: '#/components/schemas/SourceTreeSelectChat'
           toggle: '#/components/schemas/SourceTreeToggle'
           disclose: '#/components/schemas/SourceTreeDisclose'
           reveal: '#/components/schemas/SourceTreeReveal'

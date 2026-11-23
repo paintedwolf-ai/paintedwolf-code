@@ -166,19 +166,41 @@ func (l *toolInvocations) retractRejectedAssistantTurn(
 
 // Intrinsic refusals retain occurrence identity and the offered recovery surface.
 func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Session, tc api.ToolCall, toolCtx tools.ToolContext, code string, data map[string]any) *guidance.Refusal {
-	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
-	ctx = curationctx.WithSession(ctx, curationctx.Session{SessionID: sess.ID, ProjectID: sess.ProjectID, OwnerPersonID: sess.OwnerPersonID, Posture: string(sess.Posture), Agent: toolCtx.Identity.Agent})
+	reach := tools.TurnReach(toolCtx)
+	ctx = tools.WithCallReach(ctx, reach)
+	ctx = curationctx.WithSession(ctx, curationctx.Session{
+		SessionID:       sess.ID,
+		ProjectID:       sess.ProjectID,
+		OwnerPersonID:   sess.OwnerPersonID,
+		Posture:         string(sess.Posture),
+		Mode:            string(sess.Mode),
+		Surface:         toolCtx.Turn.TurnSurfaceID,
+		Agent:           toolCtx.Identity.Agent,
+		ParentSessionID: toolCtx.Identity.ParentSessionID,
+	})
 	data = maps.Clone(data)
 	if data == nil {
 		data = map[string]any{}
 	}
 	data["tool"], data["profile"], data["turn_surface"] = tc.Name, toolCtx.Identity.Agent, toolCtx.Turn.TurnSurfaceID
 	if code == "TOOL_NOT_OFFERED" {
-		route := oar.RouteTool(tools.CallReach(ctx), tc.Name)
+		route := oar.RouteTool(reach, tc.Name)
 		data["tool_loadable"] = route.Status == toolreach.Loadable
 		data["tool_retired_to_content"] = toolRetiredToPublishedText(sess, tc.Name, toolCtx.Turn.TurnSurfaceID)
 		if route.Retired {
-			data["tool_retired_to_command"], data["tool_command_forms"] = true, route.Forms
+			forms := route.Forms
+			if toolCtx.Turn.TurnPrograms != nil {
+				var reachableForms []string
+				for _, form := range route.Forms {
+					if reach.Program(form) {
+						reachableForms = append(reachableForms, form)
+					}
+				}
+				forms = reachableForms
+			}
+			if len(forms) > 0 || (len(route.Forms) == 0 && reach.Status("command") != toolreach.Absent) {
+				data["tool_retired_to_command"], data["tool_command_forms"] = true, forms
+			}
 		}
 		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
 		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0

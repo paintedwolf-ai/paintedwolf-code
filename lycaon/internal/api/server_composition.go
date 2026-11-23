@@ -123,11 +123,12 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		LLMService: deps.Providers.LLM, ManagedSecrets: deps.Approvals.ManagedSecrets, Projects: deps.Core.Projects, Store: deps.Core.Store,
 		Settings: deps.Core.Settings,
 	})
+	s.Sources.Trees.LocationAccess = s.Admin.Capabilities.Inventory.SourceLocationAccess
 	s.Admin.Settings = settingsadmin.New(&s.responses, settingsadmin.Deps{
 		Pricing: deps.Host.Pricing, Power: deps.Host.HostPower, Events: deps.Host.Events, Projects: deps.Core.Projects,
 		Sessions: deps.Core.Sessions, Service: deps.Core.Settings, Sources: &s.Sources,
 	})
-	s.Admin.modelAdmin = modeladmin.New(deps.Providers.LLM, deps.Core.Projects, deps.Host.Events, &s.responses)
+	s.Admin.Models = modeladmin.New(deps.Providers.LLM, deps.Core.Projects, deps.Host.Events, &s.responses)
 	s.Admin.historyAdmin = historyadmin.New(deps.External.HistoryStorage, &s.responses)
 	s.Admin.mcpAdmin = mcpadmin.New(deps.External.MCP, deps.Core.Projects, &s.responses)
 	s.Admin.researchAdmin = researchadmin.New(&s.responses, researchadmin.Deps{

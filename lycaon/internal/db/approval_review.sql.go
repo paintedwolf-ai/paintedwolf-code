@@ -63,6 +63,68 @@ func (q *Queries) ApprovalReviewSuppressed(ctx context.Context, arg ApprovalRevi
 	return suppressed, err
 }
 
+const chatSharedTempHistory = `-- name: ChatSharedTempHistory :many
+WITH RECURSIVE family(id) AS (
+    SELECT s.id FROM sessions s WHERE s.id = ?1
+    UNION ALL
+    SELECT s.id FROM sessions s JOIN family f ON s.parent_session_id = f.id
+), requested(locations_json) AS (
+    SELECT CAST(?2 AS TEXT)
+), locations(path, review_key) AS (
+    SELECT json_extract(item.value, '$.path'), json_extract(item.value, '$.key')
+    FROM requested, json_each(requested.locations_json) item
+)
+SELECT CAST(locations.path AS TEXT) AS path,
+       EXISTS(
+           SELECT 1 FROM messages m JOIN family f ON f.id = m.session_id
+           JOIN json_each(NULLIF(m.tool_result_json, ''), '$.feedback') feedback
+           JOIN json_each(feedback.value, '$.details.refused_shared_temp') location
+           WHERE m.role = 'tool' AND json_extract(feedback.value, '$.code') = 'SANDBOX_SHARED_TEMP_TOLERATED'
+             AND location.value = locations.path
+       ) AS reported,
+       EXISTS(
+           SELECT 1 FROM checkpoints c JOIN family f ON f.id = c.session_id
+           JOIN json_each(c.payload_json, '$.review_keys') review
+           WHERE c.kind = 'tool_approval' AND c.status = 'rejected' AND c.resolved_by = 'human'
+             AND review.value = locations.review_key
+       ) AS declined
+FROM locations
+`
+
+type ChatSharedTempHistoryParams struct {
+	ChatID        string `json:"chat_id"`
+	LocationsJson string `json:"locations_json"`
+}
+
+type ChatSharedTempHistoryRow struct {
+	Path     string `json:"path"`
+	Reported int64  `json:"reported"`
+	Declined int64  `json:"declined"`
+}
+
+func (q *Queries) ChatSharedTempHistory(ctx context.Context, arg ChatSharedTempHistoryParams) ([]ChatSharedTempHistoryRow, error) {
+	rows, err := q.db.QueryContext(ctx, chatSharedTempHistory, arg.ChatID, arg.LocationsJson)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatSharedTempHistoryRow
+	for rows.Next() {
+		var i ChatSharedTempHistoryRow
+		if err := rows.Scan(&i.Path, &i.Reported, &i.Declined); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const currentApprovalReviewIntent = `-- name: CurrentApprovalReviewIntent :one
 WITH RECURSIVE ancestors(id, parent_session_id) AS (
     SELECT seed.id, seed.parent_session_id FROM sessions seed WHERE seed.id = ?1

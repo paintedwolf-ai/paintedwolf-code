@@ -261,7 +261,7 @@ export function WorkspaceStage(props: Props) {
           void showConversation();
           return (await startEmptySession(
             { kind: "new-project" },
-            { prompt: draft.text, ideaAttachments: draft.attachments },
+            { prompt: draft.text, ideaAttachments: draft.attachments, mode: draft.mode },
           )) === true;
         }}
         submitting={props.shell.state.materializingDraft}

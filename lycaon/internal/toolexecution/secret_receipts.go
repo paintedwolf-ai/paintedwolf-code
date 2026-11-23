@@ -3,6 +3,7 @@ package toolexecution
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"slices"
 	"strings"
 	"sync"
 
@@ -45,14 +46,13 @@ func (r *secretReceiptRuntime) Mint(rootSessionID, destinationID string, fingerp
 	r.byToken[token] = secretReceipt{
 		rootSessionID: rootSessionID,
 		destinationID: destinationID,
-		fingerprints:  append([]secretmatch.SecretFingerprint(nil), fingerprints...),
+		fingerprints:  receiptFingerprints(fingerprints),
 	}
 	return token
 }
 
-// Consume redeems a token once. It fails for another session's token, a spent
-// token, or a session past the contest cap — the caller proceeds redacted.
-func (r *secretReceiptRuntime) Consume(rootSessionID, token string) (secretReceipt, bool) {
+// Consume spends a receipt only for its original chat, recipient and protected values.
+func (r *secretReceiptRuntime) Consume(rootSessionID, token, destinationID string, fingerprints []secretmatch.SecretFingerprint) (secretReceipt, bool) {
 	if r == nil {
 		return secretReceipt{}, false
 	}
@@ -63,7 +63,8 @@ func (r *secretReceiptRuntime) Consume(rootSessionID, token string) (secretRecei
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	receipt, ok := r.byToken[token]
-	if !ok || receipt.rootSessionID != strings.TrimSpace(rootSessionID) {
+	if !ok || receipt.rootSessionID != strings.TrimSpace(rootSessionID) || receipt.destinationID != destinationID ||
+		!slices.Equal(receipt.fingerprints, receiptFingerprints(fingerprints)) {
 		return secretReceipt{}, false
 	}
 	if r.contests[receipt.rootSessionID] >= maxContestAsksPerChat {
@@ -96,4 +97,10 @@ func (r *secretReceiptRuntime) Forget(rootSessionID string) {
 		}
 	}
 	delete(r.contests, rootSessionID)
+}
+
+func receiptFingerprints(values []secretmatch.SecretFingerprint) []secretmatch.SecretFingerprint {
+	set := slices.Clone(values)
+	slices.Sort(set)
+	return slices.Compact(set)
 }

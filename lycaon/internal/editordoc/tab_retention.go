@@ -51,8 +51,7 @@ func (p *PresenceService) ReplaceRetention(ctx context.Context, projectID, clien
 		return err
 	}
 	s.ops.RLock()
-	defer s.ops.RUnlock()
-	return s.store.Tx(ctx, func(tx *sql.Tx) error {
+	err = s.store.Tx(ctx, func(tx *sql.Tx) error {
 		if retainedClients != nil {
 			orphans, err := orphanedRetentionClients(ctx, tx, actor.personID, namespace, string(clients), live)
 			if err != nil {
@@ -72,6 +71,11 @@ func (p *PresenceService) ReplaceRetention(ctx context.Context, projectID, clien
 		 SELECT id,?,? FROM editor_documents WHERE project_id=? AND id IN (SELECT value FROM json_each(?))`, clientID, actor.personID, projectID, string(encoded))
 		return err
 	})
+	s.ops.RUnlock()
+	if err != nil {
+		return err
+	}
+	return s.releaseClosedOutsideDocuments(ctx, projectID)
 }
 
 // orphanedRetentionClients lists the person's clients in the namespace that the

@@ -19,6 +19,18 @@ func (s *Store) Stage(r io.Reader, want Artifact) (resultErr error) {
 	if err := validateArtifact(want); err != nil {
 		return err
 	}
+	lock, err := s.provisioningLock()
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
+	return s.stage(r, want)
+}
+
+func (s *Store) stage(r io.Reader, want Artifact) (resultErr error) {
+	if err := validateArtifact(want); err != nil {
+		return err
+	}
 	if err := s.CheckSpace(SpaceRequirement{StagingBytes: want.Bytes}); err != nil {
 		return err
 	}

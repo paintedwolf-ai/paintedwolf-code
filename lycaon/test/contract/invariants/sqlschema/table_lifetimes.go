@@ -189,7 +189,10 @@ var tableLifetimes = map[string]tableLifetime{
 	"sessions":                        cascadeOwnedBy("projects"),
 	"source_agent_presentations":      cascadeOwnedBy("projects"),
 	"source_checkpoint_git_states":    cascadeOwnedBy("source_checkpoints"),
+	"source_chat_files":               cascadeOwnedBy("sessions"),
+	"source_chat_locations":           cascadeOwnedBy("sessions"),
 	"source_checkpoints":              cascadeOwnedBy("projects"),
+	"source_command_window_coverage":  cascadeOwnedBy("source_command_windows"),
 	"source_command_window_objects":   cascadeOwnedBy("source_command_windows"),
 	"source_command_windows":          cascadeOwnedBy("projects"),
 	"source_effects":                  cascadeOwnedBy("projects"),
@@ -229,6 +232,7 @@ var tableLifetimes = map[string]tableLifetime{
 	"worker_turns":                    cascadeOwnedBy("worker_jobs"),
 	"workflow_review_assignments":     cascadeOwnedBy("workflow_runs"),
 	"workflow_review_subjects":        cascadeOwnedBy("workflow_runs"),
+	"workflow_run_manifests":          cascadeOwnedBy("workflow_runs"),
 	"workflow_runs":                   cascadeOwnedBy("sessions"),
 	"workflow_scan_bindings":          cascadeOwnedBy("workflow_runs"),
 }

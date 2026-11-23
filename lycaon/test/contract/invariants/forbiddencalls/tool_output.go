@@ -83,7 +83,7 @@ var toolOutput = []invariants.Invariant{{
 	// whose returned content the tool result carries.
 	Name:    "tool-visuals-attach-only-in-promptloop",
 	Anchors: append(goPaths(visualProducers), invariants.Func("internal/visual", "AttachToolResult")),
-	Exempt:  []invariants.Exemption{{Key: "internal/coordinator/promptloop/tools.go", Reason: "the one tool-result path that attaches visuals"}},
+	Exempt:  []invariants.Exemption{{Key: "internal/coordinator/promptloop/tool_result_message.go", Reason: "the one tool-result path that attaches visuals"}},
 	Check: func(r *invariants.Run) {
 		producers := map[string]bool{}
 		for _, f := range r.GoFiles(invariants.Production, "internal") {

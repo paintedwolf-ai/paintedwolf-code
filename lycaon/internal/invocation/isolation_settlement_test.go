@@ -263,3 +263,16 @@ func assertIsolationSettlementRefused(t *testing.T, recorder *invocation.SQLReco
 		t.Fatalf("refused receipt = %+v, want a host fault without isolation", settled)
 	}
 }
+
+func TestSharedTempObservationsPreserveCommandSettlement(t *testing.T) {
+	for _, code := range []string{isolation.CodeSharedTempRefused, isolation.CodeSharedTempTolerated} {
+		t.Run(code, func(t *testing.T) {
+			if got := invocation.SettlementIsolation(nil, []string{code}); got != nil {
+				t.Fatalf("observation supplied receipt isolation: %+v", got)
+			}
+			if got := invocation.SettlementIsolation(nil, []string{code, isolation.CodeTryReadPath}); got == nil || got.Code != isolation.CodeTryReadPath {
+				t.Fatalf("independent recovery was lost: %+v", got)
+			}
+		})
+	}
+}

@@ -264,11 +264,13 @@ function parseContextNav(value: unknown): DenContextNavPrefs | undefined {
 
 function parseOnboarding(value: unknown): DenOnboardingPrefs | undefined {
   if (typeof value !== "object" || value === null) return undefined;
-  const row = value as Partial<DenOnboardingPrefs>;
+  const row = value as Record<string, unknown>;
   const onboarding: DenOnboardingPrefs = {};
-  if (typeof row.firstRunSetupCompleted === "boolean") {
-    onboarding.firstRunSetupCompleted = row.firstRunSetupCompleted;
+  for (const key of ["completedSetupRevision", "completedLocalModelStepRevision"] as const) {
+    const revision = row[key];
+    if (typeof revision === "number" && Number.isSafeInteger(revision) && revision > 0) onboarding[key] = revision;
   }
+  if (!onboarding.completedSetupRevision && row.firstRunSetupCompleted === true) onboarding.completedSetupRevision = 1;
   return Object.keys(onboarding).length > 0 ? onboarding : undefined;
 }
 
@@ -356,6 +358,9 @@ function parseChat(value: unknown): DenChatPrefs | undefined {
   const chat: DenChatPrefs = {};
   if (row.messageTimes === "hover" || row.messageTimes === "always") {
     chat.messageTimes = row.messageTimes;
+  }
+  if (row.lastStartedMode === "agent" || row.lastStartedMode === "ask") {
+    chat.lastStartedMode = row.lastStartedMode;
   }
   return Object.keys(chat).length > 0 ? chat : undefined;
 }
@@ -556,6 +561,7 @@ function parseCachedProject(value: unknown): CachedProject | null {
     id: row.id,
     name: typeof row.name === "string" ? row.name : row.name ?? null,
     roots,
+    outside_root_id: typeof row.outside_root_id === "string" ? row.outside_root_id : "",
     roots_generation: row.roots_generation,
     session_count: row.session_count,
     starred: row.starred,

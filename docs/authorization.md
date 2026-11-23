@@ -191,7 +191,7 @@ Advanced Off disables eligible prompted asks and allows the effect when enforcem
 | Shape | Root tree | Exact path or approved tree according to subject |
 | Review surface | Project folders | Approval card and Saved approvals |
 
-Approving access does not edit the person's project definition. Native tools do not extend past attached project folders without an explicit path grant. Filesystem resolution checks attached roots, explicit grants, and the shared default temporary, cache, and tool data boundary. Ordinary scratch access needs no additional outside-folders grant, except that Strict reviews a native write there. Sensitive-location and protected-path rules still apply.
+Approving access does not edit the person's project definition. Native tools resolve changes under attached folders, session scratch, and reviewed paths. Native reads also admit the operating system’s temporary, cache, and tool data folders. Strict reviews writes in scratch. Sensitive-location and protected-path rules still apply.
 
 Applied read-only confinement roots, including the current session’s command output, satisfy read scope without granting writes. Other sessions and paths reached through escaping symlinks remain outside that authority.
 
@@ -204,7 +204,9 @@ Reaching a folder outside the attached folders always has a route to a card, at 
 | Command write refused outside its write roots | The enclosing repository work tree, otherwise the containing folder ([Security](security.md#credentials-the-agent-drives)) |
 | Native write outside the attached folders | The exact path |
 
-Sensitive and protected targets stay exact even under a broader tree grant. A symlink alias matches only after canonical descriptor-relative resolution proves the same location. Write-root authority expands the subprocess write profile; it does not become an attached root, project label, or evidence path namespace.
+Sensitive and protected targets stay exact even under a broader tree grant. A symlink alias matches only after canonical descriptor-relative resolution proves the same location. Write-root authority expands the subprocess write profile; it does not become an attached root or project label. Where files are recorded comes from what happened, not from the grant: a change outside the attached folders is recorded in the project's outside namespace whether or not a grant covered it ([Files outside the project](files-live.md#files-outside-the-project)).
+
+The Files tree shows where a chat has used this authority. Its location row shows the applicable saved approval, including its scope and expiry. Revoking the grant changes the agent's access. The person opens a location with their own source operation and saves through the normal document service.
 
 When the target of an outside-root read does not exist, the card leads with the host's missing-path fact (`file.exists: false` — "This path doesn't exist") and cites the resolved absolute path the host actually probed. The fact is human-only: it never reaches the model's tool results, rejection payloads, or approval-rationale requests, so a denied approval reads identically to the model whether the path exists or not. A directory-tree grant is never offered for a folder that does not exist; such a card keeps only the exact-path option and denial.
 

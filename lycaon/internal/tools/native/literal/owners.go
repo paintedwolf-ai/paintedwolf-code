@@ -163,6 +163,14 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	return Prepared{Operation: o.ops[command], Argv: bound, Review: review, owners: o, paths: paths, request: request, spec: spec, run: utilities[command]}, nil
 }
 
+// CheckAdmission validates repo-map paths using the invocation's admitted roots.
+func (p Prepared) CheckAdmission(ctx context.Context) error {
+	if p.spec.Name == "repo-map" && !p.Argv.Help {
+		return validateRepoMapPath(ctx, p.paths, p.Argv, p.request.Invocation.Span)
+	}
+	return nil
+}
+
 // InvokeOwner runs the bound utility once and settles its producer outcome.
 func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if p.run == nil {

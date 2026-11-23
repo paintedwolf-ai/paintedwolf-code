@@ -23,9 +23,16 @@ func (p *Runtime) Repair(ctx context.Context) (err error) {
 	p.publishReadiness("repairing", "none")
 	defer func() { p.settleReadiness(err) }()
 	p.unload()
-	target := modelstore.Slot{Model: DefaultModelID, Device: p.config.Backend}
+	selection, err := p.config.ModelStore.Selection()
+	if err != nil {
+		return err
+	}
+	if selection.Model == "" {
+		return errors.New("select a local model to repair")
+	}
+	target := modelstore.Slot{Model: selection.Model, Device: p.config.Backend}
 	if err := p.config.ModelStore.RepairBundle(ctx, p.config.SeedDirectory, target); err != nil {
 		return err
 	}
-	return p.ensureLoaded(ctx, DefaultModelID)
+	return p.ensureLoaded(ctx, selection.Model)
 }

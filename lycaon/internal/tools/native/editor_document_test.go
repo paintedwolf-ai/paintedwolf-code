@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
@@ -143,6 +144,21 @@ func (f *fakeEditorDocuments) SaveForAgentOperation(ctx context.Context, project
 		doc.Dirty, doc.BaseSHA256, doc.Revision = false, doc.SHA256, doc.Revision+1
 		return nil
 	})
+}
+
+func (f *fakeEditorDocuments) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, _ tools.EditorAgentCall, _ func(string, int64) bool) (tools.EditorLaunchSave, error) {
+	var save tools.EditorLaunchSave
+	err := f.VisitUnsavedDocuments(ctx, projectID, branch, "", "", true, func(state tools.EditorDocumentState) error {
+		doc := f.docs[state.RootID+"/"+state.Path]
+		if doc.Diverged {
+			save.Unsaved = append(save.Unsaved, tools.EditorUnsavedDocument{RootID: state.RootID, Path: state.Path, Cause: toolcontract.UnsavedChangedOutside})
+			return nil
+		}
+		doc.Dirty, doc.BaseSHA256, doc.Revision = false, doc.SHA256, doc.Revision+1
+		save.Published = true
+		return nil
+	})
+	return save, err
 }
 
 func (f *fakeEditorDocuments) DirtyDocuments(_ context.Context, _ string, _ sourcebranch.ID) ([]tools.EditorDocumentPath, error) {

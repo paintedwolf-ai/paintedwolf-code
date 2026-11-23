@@ -5,6 +5,24 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// ProgramRefusalVisibility records the refusal code and whether it preceded admission.
+type ProgramRefusalVisibility struct {
+	Code            string
+	BeforeAdmission bool
+}
+
+// MarkProgramProgressPublished keeps a published live program visible at settlement.
+func (o *ToolInvocationOut) MarkProgramProgressPublished() {
+	if o != nil {
+		o.programProgressPublished.Store(true)
+	}
+}
+
+// ProgramProgressPublished reports whether a live program frame was emitted.
+func (o *ToolInvocationOut) ProgramProgressPublished() bool {
+	return o != nil && o.programProgressPublished.Load()
+}
+
 // MergeScope names the seam a child's outputs cross.
 type MergeScope int
 
@@ -22,8 +40,8 @@ const (
 const MaxSourceDeliveryTags = 16
 
 // MergeChild moves a child's outputs onto o. Effects that already happened
-// always cross, advisory facts cross by scope, and fields that describe the
-// child's own call never do.
+// always cross. Advisory facts cross by scope. Program settlement facts cross
+// only with the whole program.
 func (o *ToolInvocationOut) MergeChild(child *ToolInvocationOut, scope MergeScope) {
 	if o == nil || child == nil || o == child {
 		return
@@ -62,6 +80,10 @@ func (o *ToolInvocationOut) MergeChild(child *ToolInvocationOut, scope MergeScop
 		o.Facts.Confine = o.Facts.Confine.Merge(child.Facts.Confine)
 	case MergeProgram:
 		o.Facts = o.Facts.Merge(child.Facts)
+		o.CommandStarted = o.CommandStarted || child.CommandStarted
+		if child.CommandDeliveryReject != nil {
+			o.CommandDeliveryReject = child.CommandDeliveryReject
+		}
 	case MergeStageFailed:
 	}
 }

@@ -17,7 +17,7 @@ import type { FilesTreeEntrySelection } from "../tree/files-tree-context.ts";
 import { scopeChangeKindFor, scopeEffectFor } from "../tree/scope-resolution.ts";
 import type { FilesScope } from "../components/files-scope.ts";
 
-type ReviewNavigationOptions = Pick<FilesScope, "projectId" | "client" | "sourceSessionId" | "filesRoots" |
+type ReviewNavigationOptions = Pick<FilesScope, "projectId" | "client" | "sourceSessionId" | "filesRoots" | "rootLabelFor" |
   "activeBuffer" | "versionForBuffer"> & {
   walkPresentation: () => { step: WalkStep; comparison: ComparisonSnapshot | null; selectionRevision: number } | null;
   scrollActiveTabIntoView: () => void;
@@ -26,7 +26,7 @@ type ReviewNavigationOptions = Pick<FilesScope, "projectId" | "client" | "source
 };
 
 export function createFilesReviewNavigation(options: ReviewNavigationOptions) {
-  const { projectId, client, sourceSessionId, filesRoots, walkPresentation,
+  const { projectId, client, sourceSessionId, filesRoots, rootLabelFor, walkPresentation,
     scrollActiveTabIntoView, setSelectedEntry, selectWalkEffect, activeBuffer, versionForBuffer } = options;
   // Completed Walk selections take focus; refreshes preserve pending file opens.
   createEffect(on(walkPresentation, (selected) => batch(() => {
@@ -56,7 +56,7 @@ export function createFilesReviewNavigation(options: ReviewNavigationOptions) {
     const root = filesRoots().find((entry) => entry.id === rootId);
     openFilesBuffer(projectId(), {
       rootId,
-      rootLabel: root?.label ?? "repo",
+      rootLabel: root?.label ?? rootLabelFor(rootId),
       fileId: effect.file_id,
       path,
       intent: "transient",
@@ -84,7 +84,7 @@ export function createFilesReviewNavigation(options: ReviewNavigationOptions) {
     const root = filesRoots().find((entry) => entry.id === effect.root_id);
     openFilesBuffer(projectId(), {
       rootId: effect.root_id,
-      rootLabel: root?.label ?? "repo",
+      rootLabel: root?.label ?? rootLabelFor(effect.root_id),
       fileId: effect.file_id,
       path: effect.path,
       intent: "permanent",
@@ -113,7 +113,7 @@ export function createFilesReviewNavigation(options: ReviewNavigationOptions) {
       setSelectedEntry({ rootId, path, kind: "file" });
       const key = openFilesBuffer(projectId(), {
         rootId,
-        rootLabel: root?.label ?? "repo",
+        rootLabel: root?.label ?? rootLabelFor(rootId),
         fileId: version.file_id,
         path,
         intent: "transient",
@@ -128,7 +128,7 @@ export function createFilesReviewNavigation(options: ReviewNavigationOptions) {
     const deleted = change?.tip.state === "absent" || change?.entryOp === "delete" || change?.commit?.op === "delete" || scopeChangeKindFor(projectId(), rootId, path) === "deleted";
     const key = openFilesBuffer(projectId(), {
       rootId,
-      rootLabel: root?.label ?? "repo",
+      rootLabel: root?.label ?? rootLabelFor(rootId),
       fileId,
       path,
       intent: "transient",
@@ -148,7 +148,7 @@ export function createFilesReviewNavigation(options: ReviewNavigationOptions) {
     const root = filesRoots().find((entry) => entry.id === rootId);
     const key = openFilesBuffer(projectId(), {
       rootId,
-      rootLabel: root?.label ?? "repo",
+      rootLabel: root?.label ?? rootLabelFor(rootId),
       path,
       intent: "transient",
       revealLine: line,

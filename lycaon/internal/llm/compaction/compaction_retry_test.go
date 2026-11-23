@@ -62,7 +62,7 @@ func TestCompactionRetriesMalformedOutputWithSmallerPrompt(t *testing.T) {
 		})
 	}
 
-	got, _, err := compactor.summarizePrefix(t.Context(), SessionInfo{ID: "s1"}, messages)
+	got, _, err := compactor.summarizePrefix(t.Context(), SessionInfo{ID: "s1"}, messages, nil)
 	if err == nil {
 		t.Fatal("partial summary omitted its remaining source coverage")
 	}

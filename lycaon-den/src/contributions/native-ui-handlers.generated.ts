@@ -83,6 +83,7 @@ export const NATIVE_UI_HANDLER_IDS: readonly string[] = [
   "files.nextVersion",
   "files.openAllDiffs",
   "files.openFilesList",
+  "files.openOutsideFile",
   "files.openVersionHistory",
   "files.prevTab",
   "files.previousVersion",

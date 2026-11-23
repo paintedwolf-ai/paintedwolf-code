@@ -1,13 +1,11 @@
 import { sourceTextHash, fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { describe, expect, it } from "vitest";
 import {
-  activitySpanFailureCount,
-  activitySpanStatus,
   omitIndexWarmingFromTranscript,
   projectActivitySpans,
 } from "./activity-span-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
-import type { ActivitySpanEntry, RawTranscriptItem, TranscriptItem } from "../transcript/projection/transcript-item-model.ts";
+import type { RawTranscriptItem, TranscriptItem } from "../transcript/projection/transcript-item-model.ts";
 
 function part(
   id: string,
@@ -40,10 +38,6 @@ function spanOf(items: readonly RawTranscriptItem[]) {
   expect(projected).toHaveLength(1);
   expect(projected[0]?.kind).toBe("activity_span");
   return projected[0] as Extract<TranscriptItem, { kind: "activity_span" }>;
-}
-
-function toolEntry(partView: ToolPartView): ActivitySpanEntry {
-  return { kind: "tool", part: partView };
 }
 
 function turnLoadItem(key: string, anchorMessageId: string): RawTranscriptItem {
@@ -220,21 +214,22 @@ describe("activity span membership", () => {
     expect(projected.map((item) => item.key)).toEqual(["r1", "pu-delta-1", "r2"]);
   });
 
-  it("keeps a command that ran below the diff card above it once it edits a file", () => {
-    const edit = (id: string, path: string) =>
+  it("keeps a live command below the earlier diff once the command edits a file", () => {
+    const edit = (id: string, path: string, shownInFlight?: true) =>
       tool(
         part(id, "command", `edit ${path}`, {
           kind: "command",
+          shownInFlight,
           workflowRunId: "workflow-1",
           fileEdits: [fileEditPreviewFixture({ path, before: "old", after: "new" })],
         }),
       );
     const running = tool(
-      part("c2", "command", "edit b.go", { kind: "command", workflowRunId: "workflow-1", status: "running" }),
+      part("c2", "command", "edit b.go", { kind: "command", workflowRunId: "workflow-1", status: "running", shownInFlight: true }),
     );
 
     const whileRunning = projectActivitySpans([edit("c1", "a.go"), running]);
-    const settled = projectActivitySpans([edit("c1", "a.go"), edit("c2", "b.go")]);
+    const settled = projectActivitySpans([edit("c1", "a.go"), edit("c2", "b.go", true)]);
 
     expect(whileRunning.map((item) => item.key)).toEqual(["c1", "file-edit:c1:0", "c2"]);
     expect(settled.map((item) => item.key)).toEqual(["c1", "file-edit:c1:0", "c2", "file-edit:c2:0"]);
@@ -593,21 +588,6 @@ describe("index warming activity", () => {
     expect(omitted).toHaveLength(1);
     expect(omitted[0]?.kind).toBe("tool");
   });
-});
-
-describe("activity span summary", () => {
-  it("reports status from running and newest settled calls", () => {
-    const entries = (...statuses: ToolPartView["status"][]) =>
-      statuses.map((status, index) =>
-        toolEntry(part(`r${index}`, "read", `${index}.go`, { status })),
-      );
-
-    expect(activitySpanStatus(entries("completed", "error"))).toBe("error");
-    expect(activitySpanStatus(entries("error", "completed"))).toBe("completed");
-    expect(activitySpanStatus(entries("completed", "running"))).toBe("running");
-    expect(activitySpanFailureCount(entries("error", "completed", "error"))).toBe(2);
-  });
-
 });
 
 describe("application testing and title stability", () => {

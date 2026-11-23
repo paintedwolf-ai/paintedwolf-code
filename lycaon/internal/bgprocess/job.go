@@ -107,22 +107,20 @@ type CompletionPublisher func(ctx context.Context, completion Completion)
 
 // PipelineSpec is the complete, immutable identity and lifecycle policy for a command job.
 type PipelineSpec struct {
-	IsCheck          bool
-	SourceRevision   string
-	SourceRootDigest string
-	Cwd              string
-	SessionID        string
-	RootSessionID    string
-	ProjectID        string
-	Request          hostcmd.Request
-	Runner           *hostcmd.Runner
-	Mode             JobMode
-	OriginTool       string
-	ToolCallID       string
-	RunID            string
-	Timeout          time.Duration
-	AllowConcurrent  bool
-	Facts            confine.SpawnFacts
+	IsCheck         bool
+	Cwd             string
+	SessionID       string
+	RootSessionID   string
+	ProjectID       string
+	Request         hostcmd.Request
+	Runner          *hostcmd.Runner
+	Mode            JobMode
+	OriginTool      string
+	ToolCallID      string
+	RunID           string
+	Timeout         time.Duration
+	AllowConcurrent bool
+	Facts           confine.SpawnFacts
 }
 
 // JobSnapshot is the bounded command ledger exposed to coordinator assembly.
@@ -164,6 +162,10 @@ func (e *StartConflict) Unwrap() error { return e.Kind }
 
 // Completion is the terminal, host-authoritative result for one command job.
 type Completion struct {
+	ExitObservation *ExitObservation
+	ProgramStop     ProgramStop
+	// ReleaseNotices returns admission after the completion consumer finishes.
+	ReleaseNotices   func()
 	IsCheck          bool
 	SourceRevision   string
 	SourceRootDigest string

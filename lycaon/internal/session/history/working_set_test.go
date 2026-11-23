@@ -490,9 +490,9 @@ func TestOneLiveConfigBoundsEveryRequestAC_KV_09(t *testing.T) {
 }
 
 func TestRestoredCoverageNeverClipsSummaryProse(t *testing.T) {
-	prior := &messageview.Continuation{ThroughOrd: 80, SummaryThroughOrd: 60, Reason: "summarized",
+	prior := &messageview.Continuation{ThroughOrd: 80, SummaryThroughOrd: 60, Reason: "summarized", RecordedRows: 3,
 		Summary: messageview.ContinuationSummary{Facts: []string{"fact"}},
-		Sources: []messageview.ContinuationSource{{MessageID: "kept", Ord: 40}, {MessageID: "restored", Ord: 70}}}
+		Sources: []messageview.ContinuationSource{{MessageID: "kept", Ord: 40, Command: "go test ./inventory"}, {MessageID: "restored", Ord: 70, Conclusion: "Inventory checks passed."}}}
 	for _, tc := range []struct {
 		name      string
 		tailStart int64
@@ -501,13 +501,14 @@ func TestRestoredCoverageNeverClipsSummaryProse(t *testing.T) {
 		facts     int
 		reason    string
 		sources   int
+		recorded  int
 	}{
-		{name: "tail after the summary keeps it", tailStart: 71, through: 70, summary: 60, facts: 1, reason: "summarized", sources: 2},
-		{name: "tail inside the summary drops prose", tailStart: 50, through: 49, reason: "references_only", sources: 1},
+		{name: "tail after the summary keeps it", tailStart: 71, through: 70, summary: 60, facts: 1, reason: "summarized", sources: 2, recorded: 2},
+		{name: "tail inside the summary drops prose", tailStart: 50, through: 49, reason: "references_only", sources: 1, recorded: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := restoredCoverage(prior, tc.tailStart)
-			if got.ThroughOrd != tc.through || got.SummaryThroughOrd != tc.summary || len(got.Summary.Facts) != tc.facts || got.Reason != tc.reason || len(got.Sources) != tc.sources {
+			if got.ThroughOrd != tc.through || got.SummaryThroughOrd != tc.summary || len(got.Summary.Facts) != tc.facts || got.Reason != tc.reason || len(got.Sources) != tc.sources || got.RecordedRows != tc.recorded || !got.RecordedRowsClipped {
 				t.Fatalf("restored coverage = %+v", got)
 			}
 		})

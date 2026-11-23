@@ -44,7 +44,10 @@ function fixture(path: string): DocumentFixture {
 function wire(path: string): EditorDocument { return fixture(path).snapshot(); }
 function connect(overrides: ClientStubs = {}): void {
   const client = stubClient({
-    openEditorDocument: async (_project: string, request: OpenEditorDocumentRequest) => wire(request.path),
+    openEditorDocument: async (_project: string, request: OpenEditorDocumentRequest) => {
+      if (!request.path) throw new Error("Expected a project path");
+      return wire(request.path);
+    },
     createEditorDocumentSnapshot: async (_project: string, id: string) => wire(id.slice("document-".length)),
     replaceEditorDocumentRetention: async () => undefined,
     syncEditorDocument: async (project: string, id: string, request: SyncEditorDocumentRequest) => fixture(id.slice("document-".length)).sync(project, id, request),

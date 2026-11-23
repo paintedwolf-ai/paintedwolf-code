@@ -165,7 +165,7 @@ export function UserBubble(props: {
                         class="den-status-mark den-user-attach-chip"
                         data-testid="transcript-attachment-chip"
                         data-kind={chip.kind}
-                        data-tip={chip.detail || chip.label}
+                        data-tip={chip.detail ? `${chip.label} · ${chip.detail}` : chip.label}
                         data-tip-when-clipped=".den-composer-chip-label, .den-composer-chip-detail"
                       >
                         <span class="den-composer-chip-glyph" aria-hidden="true">
@@ -183,7 +183,7 @@ export function UserBubble(props: {
                       class="den-inline-control den-user-attach-chip"
                       data-testid="transcript-attachment-chip"
                       data-kind={chip.kind}
-                      data-tip={chip.detail || chip.label}
+                      data-tip={chip.detail ? `${chip.label} · ${chip.detail}` : chip.label}
                       data-tip-when-clipped=".den-composer-chip-label, .den-composer-chip-detail"
                       aria-label={`Open ${chip.label}`}
                       data-project-id={props.projectId}

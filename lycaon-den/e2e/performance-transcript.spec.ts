@@ -8,7 +8,7 @@ test("republishes settled transcript geometry across resize and restoration", as
   const messages = transcriptMessages(Array.from({ length: 6 }, (_, index) => ({
     id: crypto.randomUUID(), role: (index % 3 === 2 ? "assistant" : "system") as "assistant" | "system",
     content: index % 3 === 2 ? `# Report ${index}\n\n` + "| Item | Result |\n| --- | --- |\n" + "| Check | Complete |\n".repeat(12) : "",
-    ...(index % 3 === 2 ? {} : { kind: "progress_complete" as const, progress_complete: { seq: index + 1, steps: Array.from({ length: 6 }, (_, step) => ({ label: `Verified step ${step + 1}`, state: "done" as const })) } }),
+    ...(index % 3 === 2 ? {} : { kind: "progress_complete" as const, progress_complete: { steps: Array.from({ length: 6 }, (_, step) => ({ label: `Verified step ${step + 1}`, state: "done" as const })) } }),
     seq: index + 1, ord: index + 1, created_at: "2026-09-15T00:00:00Z",
   })));
   await apiSeedSessionTranscript(request, sessionId, messages);

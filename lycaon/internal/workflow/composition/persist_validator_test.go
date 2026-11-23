@@ -23,7 +23,7 @@ func testPersister(t *testing.T) (*workflowcomposition.Persister, *workflowdraft
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	store := draftstest.NewStore(t, "sess-1")
+	store := draftstest.NewStore(t, "sess-1", "s")
 	return &workflowcomposition.Persister{
 		SessionStore: store,
 		Registry:     reg,

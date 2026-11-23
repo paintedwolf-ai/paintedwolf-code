@@ -359,6 +359,7 @@ func TestFirstChecklistPublicationResolvesMissingProgressWithoutGeneralAdvanceme
 	manager, sessions := newTestManager(t)
 	session, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator", err)
+	testdbseed.InsertWorkflowRun(t, sessions.DB(), "run-"+session.ID, session.ID, testdbseed.DefaultProjectID)
 	store := progress.NewSQLStore(sessions.DB())
 	manager.SetProgressStore(store)
 	guard := loopguard.NewMemoryDoomLoopGuard()

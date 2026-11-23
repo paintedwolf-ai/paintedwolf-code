@@ -9,6 +9,7 @@ import {
   ariaKeyShortcutsFor,
   displayBindingFor,
   formatChordsDisplay,
+  tipWithShortcut,
 } from "./display-binding-for.ts";
 import { setShortcutPlatformForTests } from "./platform.ts";
 import { resetShortcutPrefsForTests } from "../settings/system/shortcut-prefs.ts";
@@ -86,5 +87,20 @@ describe("displayBindingFor", () => {
         },
       }),
     ).toBe("Control+Shift+J");
+  });
+});
+
+describe("tipWithShortcut", () => {
+  it("puts the live binding after the label", () => {
+    expect(tipWithShortcut("Match case", "search.toggleMatchCase")).toBe("Match case (⌥C)");
+  });
+
+  it("leaves an unbound handler as the bare label", () => {
+    expect(tipWithShortcut("Find", "no.such.handler")).toBe("Find");
+  });
+
+  it("adds a fixed key after the binding, or alone when unbound", () => {
+    expect(tipWithShortcut("Match case", "search.toggleMatchCase", { also: "Esc" })).toBe("Match case (⌥C / Esc)");
+    expect(tipWithShortcut("Back", "no.such.handler", { also: "Esc" })).toBe("Back (Esc)");
   });
 });

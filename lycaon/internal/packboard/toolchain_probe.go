@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"log/slog"
+	"errors"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/exec"
@@ -60,7 +60,6 @@ func (tc toolchainDef) parse(out string) string {
 }
 
 const (
-	toolchainProbeTimeout  = 500 * time.Millisecond
 	toolchainProbeBudget   = 2 * time.Second
 	toolchainResultTTL     = time.Hour
 	toolchainRetryInterval = time.Minute
@@ -72,50 +71,47 @@ const (
 type toolchainHost struct {
 	pathValue func() string
 	lookPath  func(name, pathValue string) (string, error)
-	version   func(ctx context.Context, binary string, args []string) string
+	version   func(ctx context.Context, binary string, args []string) (string, error)
 }
 
 var defaultToolchainHost = toolchainHost{
 	pathValue: exec.EffectivePathValue,
 	lookPath:  exec.LookPathIn,
-	version: func(ctx context.Context, binary string, args []string) string {
-		out, _, _ := exec.Run(ctx, binary, args, exec.ExecOpts{
+	version: func(ctx context.Context, binary string, args []string) (string, error) {
+		out, _, err := exec.Run(ctx, binary, args, exec.ExecOpts{
 			Launch:         exec.HostLaunch("toolchain_version_probe"),
-			Timeout:        toolchainProbeTimeout,
 			MaxOutputBytes: 4096,
 		})
-		return string(out)
+		return string(out), err
 	},
 }
 
-type toolchainResult struct {
-	toolchains []string
-	completed  time.Time
+type toolchainAnswer struct {
+	version string
+	due     time.Time
+	backoff time.Duration
 }
 
-// toolchainProbes caches completed probes per resolved PATH and language focus.
+type toolchainResult struct {
+	answers  []toolchainAnswer
+	inflight bool
+}
+
+// toolchainProbes caches answers per resolved PATH and language focus.
 type toolchainProbes struct {
-	host toolchainHost
-	mu   sync.Mutex
-	// results holds only probes that ran to completion.
-	results  map[string]toolchainResult
-	inflight map[string]bool
-	// failed records when an interrupted probe may be retried.
-	failed map[string]time.Time
-	// wg tracks background refreshes; tests wait on it.
-	wg sync.WaitGroup
+	host    toolchainHost
+	mu      sync.Mutex
+	results map[string]toolchainResult
+	wg      sync.WaitGroup
 }
 
 func newToolchainProbes(host toolchainHost) *toolchainProbes {
-	return &toolchainProbes{host: host, results: map[string]toolchainResult{}, inflight: map[string]bool{}, failed: map[string]time.Time{}}
+	return &toolchainProbes{host: host, results: map[string]toolchainResult{}}
 }
 
 var sharedToolchainProbes = newToolchainProbes(defaultToolchainHost)
 
-// Toolchains returns the last completed probe of local toolchains for the
-// languages under the engine's resolved PATH. It never blocks: a missing or
-// expired result schedules a background refresh and the caller keeps the last
-// completed value, or none.
+// Toolchains returns cached toolchain versions and refreshes due candidates asynchronously.
 func Toolchains(ctx context.Context, languages []string) []string {
 	return sharedToolchainProbes.toolchains(ctx, languages)
 }
@@ -128,84 +124,60 @@ func (p *toolchainProbes) toolchains(ctx context.Context, languages []string) []
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	result, known := p.results[key]
-	retryAt, failed := p.failed[key]
-	stale := !known || now.Sub(result.completed) >= toolchainResultTTL
-	if stale && !p.inflight[key] && (!failed || !now.Before(retryAt)) {
-		p.inflight[key] = true
-		p.wg.Add(1)
-		// Detached so a finished prompt does not cancel the refresh; the budget bounds it.
-		go p.refresh(context.WithoutCancel(ctx), key, pathValue, focus)
+	result := p.results[key]
+	if result.answers == nil {
+		result.answers = make([]toolchainAnswer, len(knownToolchains))
 	}
-	return append([]string(nil), result.toolchains...)
+	var due []int
+	var versions []string
+	for i, answer := range result.answers {
+		if len(focus) != 0 && !slices.Contains(focus, strings.ToLower(knownToolchains[i].language)) {
+			continue
+		}
+		if !result.inflight && !now.Before(answer.due) {
+			due = append(due, i)
+		}
+		if answer.version != "" && (len(focus) != 0 || len(versions) < unfocusedToolchainLimit) {
+			versions = append(versions, answer.version)
+		}
+	}
+	if len(due) != 0 {
+		result.inflight = true
+		p.results[key] = result
+		p.wg.Go(func() {
+			p.refresh(context.WithoutCancel(ctx), key, pathValue, slices.Clone(result.answers), due)
+		})
+	}
+	return versions
 }
 
-func (p *toolchainProbes) refresh(parent context.Context, key, pathValue string, focus []string) {
-	defer p.wg.Done()
+func (p *toolchainProbes) refresh(parent context.Context, key, pathValue string, answers []toolchainAnswer, due []int) {
 	ctx, cancel := context.WithTimeout(parent, toolchainProbeBudget)
 	defer cancel()
-	found, complete := p.probe(ctx, pathValue, focus)
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	delete(p.inflight, key)
-	if !complete {
-		// A version query cut short says nothing about the toolchain; keep the last result.
-		p.failed[key] = time.Now().Add(toolchainRetryInterval)
-		slog.DebugContext(parent, "toolchain probe interrupted", "path_hash", pathHash(pathValue))
-		return
-	}
-	delete(p.failed, key)
-	p.results[key] = toolchainResult{toolchains: found, completed: time.Now()}
-}
-
-// probe runs every candidate in parallel and reports in priority order. It is
-// complete only when no version query was cut short by its timeout or the budget.
-func (p *toolchainProbes) probe(ctx context.Context, pathValue string, focus []string) ([]string, bool) {
-	languages := make(map[string]bool, len(focus))
-	for _, language := range focus {
-		languages[language] = true
-	}
-	versions := make([]string, len(knownToolchains))
-	var interrupted atomic.Bool
 	var wg sync.WaitGroup
-	for i, tc := range knownToolchains {
-		if len(languages) > 0 && !languages[strings.ToLower(tc.language)] {
-			continue
-		}
-		binary, err := p.host.lookPath(tc.binary, pathValue)
-		if err != nil {
-			continue
-		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			probeCtx, cancel := context.WithTimeout(ctx, toolchainProbeTimeout)
-			defer cancel()
-			versions[i] = tc.parse(p.host.version(probeCtx, binary, tc.args))
-			if probeCtx.Err() != nil {
-				interrupted.Store(true)
-			}
-		}()
+	for _, i := range due {
+		wg.Go(func() {
+			answers[i] = p.probe(ctx, pathValue, knownToolchains[i], answers[i].backoff)
+		})
 	}
 	wg.Wait()
-	if interrupted.Load() || ctx.Err() != nil {
-		return nil, false
-	}
 
-	var out []string
-	seen := make(map[string]bool)
-	for _, version := range versions {
-		if version == "" || seen[version] {
-			continue
-		}
-		seen[version] = true
-		out = append(out, version)
-		if len(languages) == 0 && len(out) >= unfocusedToolchainLimit {
-			break
-		}
+	p.mu.Lock()
+	p.results[key] = toolchainResult{answers: answers}
+	p.mu.Unlock()
+}
+
+func (p *toolchainProbes) probe(ctx context.Context, pathValue string, tc toolchainDef, previousBackoff time.Duration) toolchainAnswer {
+	binary, err := p.host.lookPath(tc.binary, pathValue)
+	if err != nil {
+		return toolchainAnswer{due: time.Now().Add(toolchainResultTTL)}
 	}
-	return out, true
+	output, err := p.host.version(ctx, binary, tc.args)
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, exec.ErrTimeout) {
+		backoff := min(toolchainResultTTL, max(toolchainRetryInterval, previousBackoff*2))
+		return toolchainAnswer{due: time.Now().Add(backoff), backoff: backoff}
+	}
+	return toolchainAnswer{version: tc.parse(output), due: time.Now().Add(toolchainResultTTL)}
 }
 
 // normalizeLanguages maps repository languages onto the toolchain families that serve them.

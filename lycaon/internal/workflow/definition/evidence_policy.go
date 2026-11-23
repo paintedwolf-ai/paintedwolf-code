@@ -35,7 +35,8 @@ func PhaseEvidenceRequirements(manifest Manifest, phaseID string) []string {
 	for _, gate := range phase.Gates {
 		add(gate)
 	}
-	for _, leaf := range DecomposeGateExpression(phase.CompleteWhen) {
+	leaves, _ := CompletionLeaves(phase.CompleteWhen)
+	for _, leaf := range leaves {
 		add(leaf)
 	}
 	return out

@@ -49,6 +49,9 @@ func (e *promptSurface) mergeVisibleTools(ctx context.Context, sess *api.Session
 	}
 	names := make([]string, 0, len(metas))
 	for _, meta := range metas {
+		if sess.Mode == api.SessionModeAsk && !tools.AllowedInAsk(meta) {
+			continue
+		}
 		if strings.TrimSpace(meta.Name) != "" {
 			names = append(names, meta.Name)
 		}
@@ -76,6 +79,8 @@ func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *a
 	}
 	for key, value := range prompts.AgentPromptSurfaceTemplateVars(surface) {
 		switch value := value.(type) {
+		case []string:
+			vars[key] = value
 		case []map[string]any:
 			if len(value) > 0 {
 				vars[key] = value
@@ -164,6 +169,9 @@ func (e *promptSurface) resolveTurnRoster(
 	if len(declared) == 0 {
 		declared = spawn.AmbientAllowedAgents()
 	}
+	if sess.Mode == api.SessionModeAsk {
+		declared = prompts.ReadOnlyAgents(declared)
+	}
 	roster := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, repoKnownEmpty, webSearchEnabled)
 	return &roster
 }
@@ -182,7 +190,11 @@ func (e *promptSurface) toolAddressable(ctx context.Context, sess *api.Session, 
 }
 
 func (e *promptSurface) taskOffered(sess *api.Session, surfaceID string, rootCount int) bool {
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, rootCount)
+	var mode api.SessionMode
+	if sess != nil {
+		mode = sess.Mode
+	}
+	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID, SessionMode: mode}, rootCount)
 	if err != nil {
 		return false
 	}
@@ -202,7 +214,7 @@ func (e *promptSurface) turnReader(
 ) (prompts.Reader, error) {
 	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
 	if frame.Roster != nil && strings.TrimSpace(frame.Roster.Facts.SurfaceID) != "" {
-		profile = surface.TurnProfile{SurfaceID: strings.TrimSpace(frame.Roster.Facts.SurfaceID)}
+		profile.SurfaceID = strings.TrimSpace(frame.Roster.Facts.SurfaceID)
 	}
 	// A turn that moves to another surface, as a dispatch moves it to park,
 	// is read with that surface's tools.

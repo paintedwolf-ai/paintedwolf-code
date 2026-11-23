@@ -1,5 +1,4 @@
 import {
-  NAV_WIDTH_DEFAULT_PX,
   NAV_WIDTH_MIN_PX,
 } from "../../../shared/app-state-types.ts";
 import { dragRequestsHide, PANE_HIDDEN_PX } from "../../layout/drag-to-hide.ts";
@@ -36,7 +35,7 @@ export function NavResizeHandle(props: Props) {
       ariaLabel="Resize navigation sidebar"
       ariaMin={() => NAV_WIDTH_MIN_PX}
       ariaMax={() => maxNavWidthPx(window.innerWidth)}
-      tip={`Drag to resize or hide the sidebar — double-click to reset (${NAV_WIDTH_DEFAULT_PX}px)`}
+      tip="Double-click to reset width · drag past the edge to hide"
     />
   );
 }

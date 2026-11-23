@@ -87,7 +87,7 @@ func (r EffectRequirement) CommandEffects(child *CommandEffects) (CommandEffects
 		switch requirement {
 		case "pure", "child-dispatch", "read", "read-request-inputs", "platform-metadata-capability", "session-resource-read", "await-owned-job", "confinement", "recovery", "review", "revision", "secret-disclosure":
 			// These obligations remain with the existing execution/effect boundary.
-		case "write", "session-owned-process-control":
+		case "write", "managed-jar-write", "session-owned-process-control":
 			effects |= commandEffectBit(CommandMutation)
 		case "external-exec":
 			effects |= commandEffectBit(CommandExternalExec)

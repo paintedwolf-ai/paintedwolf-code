@@ -45,7 +45,7 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 			}
 			testutil.FailErr(t, "change captured state", err)
 			report := compaction.CompactionReport{SessionCompacted: true, TokensBefore: 1000, TokensAfter: 20,
-				Continuation: &messageview.Continuation{Format: 1, ThroughOrd: source.Ord}}
+				Continuation: &messageview.Continuation{Format: messageview.ContinuationFormat, ThroughOrd: source.Ord}}
 			if changed == "chunk_only" {
 				report.SessionCompacted, report.ChunksCompacted, report.Continuation = false, 1, nil
 			}
@@ -81,7 +81,7 @@ func TestOptionalEnrichmentCannotExpandTheAcceptedProjection(t *testing.T) {
 	rows, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read source", err)
 	source := rows[0]
-	record := &messageview.Continuation{Format: 1, ThroughOrd: source.Ord, Window: 8192}
+	record := &messageview.Continuation{Format: messageview.ContinuationFormat, ThroughOrd: source.Ord, Window: 8192}
 	snapshot := store.CompactionView{Generation: 1, CoveredThroughOrd: source.Ord, CoveredThroughID: source.ID, SourceSeq: source.Seq, Continuation: record,
 		Messages: []api.Message{{ID: "summary", Role: "assistant", Content: "small", ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "small"}}}}}
 	testutil.FailErr(t, "publish compact baseline", sessionStore.Compaction.PutCompactionView(t.Context(), sess.ID, snapshot))
@@ -89,7 +89,9 @@ func TestOptionalEnrichmentCannotExpandTheAcceptedProjection(t *testing.T) {
 	enriched.SummaryThroughOrd = source.Ord
 	enriched.Summary.Facts = []string{strings.Repeat("larger generated continuation ", 100)}
 	svc := &Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction}
-	testutil.FailErr(t, "reject growing enrichment", svc.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
+	if err := svc.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched); !errors.Is(err, synthesisWouldGrow) {
+		t.Fatalf("expected size refusal, got %v", err)
+	}
 	current, _, err := sessionStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "read preserved baseline", err)
 	if current.Generation != 1 || current.Messages[0].Content != "small" {

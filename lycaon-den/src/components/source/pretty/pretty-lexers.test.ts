@@ -1,8 +1,10 @@
+// @vitest-environment jsdom
 import { indentUnit } from "@codemirror/language";
 import { EditorState, Text } from "@codemirror/state";
 import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
+import { finishFixtureParsing } from "../../../test/codemirror-parsing-fixture.ts";
 import { createPrettyExtension } from "./pretty-layout.ts";
 import { ScriptLexer } from "./pretty-lexers.ts";
 import { TextWindow } from "./pretty-text-window.ts";
@@ -249,10 +251,10 @@ function generateScriptDocument(seed: number, targetTokens: number, jsx: boolean
 }
 
 function open(doc: string, path: string): EditorState {
-  return EditorState.create({
+  return finishFixtureParsing(EditorState.create({
     doc,
     extensions: [languageExtensionForPath(path)!, indentUnit.of("  "), createPrettyExtension({ enabled: true, path })],
-  });
+  }));
 }
 
 function breaks(state: EditorState): number[] {

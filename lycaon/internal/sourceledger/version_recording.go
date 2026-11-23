@@ -105,8 +105,8 @@ func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSp
 func (s *Store) preserveObservedPreimageWithCache(ctx context.Context, q *db.Queries, in preparedRecord, tracked TrackedFile, head *db.SourceBranchHeads, cache *TxBatchCache) (string, error) {
 	// Preserve the observed pre-image when it differs from the tracked head.
 	preSHA, preSize, preRoot, prePath := in.BeforeSHA256, in.BeforeSize, in.RootID, in.Path
-	if in.Op == api.SourceChangeOpRename {
-		preRoot, prePath = in.RootID, in.FromPath
+	if in.Op == api.SourceChangeOpRename && in.FromPath != "" {
+		preRoot, prePath = in.FromRootID, in.FromPath
 		if preSHA == "" {
 			preSHA, preSize = in.AfterSHA256, in.AfterSize
 		}

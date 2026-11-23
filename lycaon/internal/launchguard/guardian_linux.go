@@ -350,7 +350,7 @@ func (state *protectedGuardian) recordExit(pid int, status unix.WaitStatus) {
 
 func (state *protectedGuardian) registeredAlive() bool {
 	polls := []unix.PollFd{{Fd: 15, Events: unix.POLLIN}, {Fd: 16, Events: unix.POLLIN}, {Fd: 17, Events: unix.POLLIN}}
-	if _, err := unix.Poll(polls, 0); err != nil {
+	if err := pollGuardianNow(polls, unix.Poll); err != nil {
 		return false
 	}
 	for _, poll := range polls {
@@ -363,7 +363,7 @@ func (state *protectedGuardian) registeredAlive() bool {
 
 func (state *protectedGuardian) registeredSettled() bool {
 	polls := []unix.PollFd{{Fd: 15, Events: unix.POLLIN}, {Fd: 16, Events: unix.POLLIN}, {Fd: 17, Events: unix.POLLIN}}
-	if _, err := unix.Poll(polls, 0); err != nil {
+	if err := pollGuardianNow(polls, unix.Poll); err != nil {
 		return false
 	}
 	for _, poll := range polls {

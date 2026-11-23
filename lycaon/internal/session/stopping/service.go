@@ -43,7 +43,7 @@ type Service struct {
 	Workers              WorkerAbort
 	workflowStop         WorkflowStop
 	checkpointStop       CheckpointStop
-	progress             progress.RunScopedStore
+	progress             progress.Store
 	turnReleaseTimeout   time.Duration
 	workerReleaseTimeout time.Duration
 }
@@ -64,7 +64,7 @@ func New(sessionStore Sessions, submissionStore Submissions, gate *lifecycle.Sta
 }
 func (m *Service) SetWorkers(workers WorkerAbort)                { m.Workers = workers }
 func (m *Service) SetCoordinator(runtime *coordinator.Runtime)   { m.runtime = runtime }
-func (m *Service) SetProgress(progress progress.RunScopedStore)  { m.progress = progress }
+func (m *Service) SetProgress(progress progress.Store)           { m.progress = progress }
 func (m *Service) SetTurnReleaseTimeout(timeout time.Duration)   { m.turnReleaseTimeout = timeout }
 func (m *Service) SetWorkerReleaseTimeout(timeout time.Duration) { m.workerReleaseTimeout = timeout }
 func (m *Service) QueueChecklistReconcileNudge(ctx context.Context, id string) {

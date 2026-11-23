@@ -39,6 +39,7 @@ type SessionFacts struct {
 	ProjectID                string
 	SessionID                string
 	SessionPosture           string
+	SessionMode              string
 	Surface                  string
 	Role                     string
 	Phase                    string
@@ -87,6 +88,7 @@ type WorkflowFacts struct {
 }
 
 type WorkersFacts struct {
+	AskWorkerWrites         bool
 	WorkersIdle             bool
 	WorkerSpawnBlocked      bool
 	ActiveWorkerCount       int64
@@ -138,9 +140,12 @@ type ExecutionFacts struct {
 }
 
 type RefusalsFacts struct {
+	OrdinaryWritePaths          []string
+	OrdinaryWriteGrants         []string
 	RefusedWritePaths           []string
 	RefusedWriteGrants          []string
 	RefusedReadPaths            []string
+	OptionalReadPaths           []string
 	RefusedReadGrants           []string
 	RefusedCredentialStorePaths []string
 	RefusedTerminalReadPaths    []string

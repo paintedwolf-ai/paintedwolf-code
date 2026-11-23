@@ -20,6 +20,12 @@
   );
 }
 
+/* With no window controls above it, the sidebar keeps only the strip. */
+.den-custom-chrome .den-shell-aside:not([data-window-edge]) .den-shell-aside-titlebar {
+  height: calc(var(--den-titlebar-inset) + var(--den-tabs-top-gap));
+  min-height: calc(var(--den-titlebar-inset) + var(--den-tabs-top-gap));
+}
+
 /* The navigation collapse control mirrors the title bar reopen controls: same
    size, same row, on every stage. */
 .den-custom-chrome

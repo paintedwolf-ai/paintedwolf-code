@@ -158,6 +158,7 @@ func renderProfile(c Confinement) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	fs.SharedTemp = SharedTempLocations()
 	plan := linuxsandbox.Plan{
 		Version:        linuxsandbox.PlanVersion,
 		ProcessControl: c.ProcessControl,
@@ -199,6 +200,7 @@ var hostResolvers = func() []string {
 func networkPlan(c Confinement) linuxsandbox.Network {
 	n := linuxsandbox.Network{
 		Mode:                 c.Network.Name(),
+		SessionSocketRoot:    sessionSocketRoot(c),
 		LoopbackConnect:      c.Network == NetworkDirectIP || c.LoopbackConnect,
 		LoopbackConnectPorts: append([]uint16(nil), c.LoopbackConnectPorts...),
 		Listen:               c.Network == NetworkDirectIP || c.Browser || c.LocalListen,

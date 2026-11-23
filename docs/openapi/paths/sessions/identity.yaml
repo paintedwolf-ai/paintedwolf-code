@@ -67,7 +67,7 @@ paths:
       - sessions
       operationId: updateSession
       x-person-action: record
-      summary: Mutate session lifecycle state (title, archived, pinned, pin position)
+      summary: Mutate session lifecycle state (title, archived, pinned, pin position, mode)
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
       requestBody:
@@ -99,6 +99,8 @@ paths:
           $ref: ../../components/responses.yaml#/components/responses/Conflict
         '413':
           $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '503':
+          $ref: ../../components/responses.yaml#/components/responses/ServiceUnavailable
     delete:
       tags:
       - sessions

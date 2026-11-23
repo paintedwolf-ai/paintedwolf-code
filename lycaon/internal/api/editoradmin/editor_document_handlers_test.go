@@ -29,6 +29,7 @@ func TestOpenEditorDocumentValidatesRequestFields(t *testing.T) {
 		field string
 	}{
 		{name: "malformed", body: "{", code: wire.ApiErrorCodeInvalidJson},
+		{name: "file ID", body: wire.OpenEditorDocumentRequest{FileID: "bad-id", ClientID: "window"}, code: wire.ApiErrorCodeInvalidRequest, field: "file_id"},
 		{name: "path", body: wire.OpenEditorDocumentRequest{RootID: rootID, ClientID: "window"}, code: wire.ApiErrorCodeInvalidRequest, field: "path"},
 		{name: "root", body: wire.OpenEditorDocumentRequest{Path: "a.txt", RootID: "root", ClientID: "window"}, code: wire.ApiErrorCodeInvalidRequest, field: "root_id"},
 		{name: "client", body: wire.OpenEditorDocumentRequest{Path: "a.txt", RootID: rootID, ClientID: " "}, code: wire.ApiErrorCodeInvalidRequest, field: "client_id"},

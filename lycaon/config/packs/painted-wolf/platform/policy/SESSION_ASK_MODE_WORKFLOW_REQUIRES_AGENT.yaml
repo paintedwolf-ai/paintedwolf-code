@@ -1,0 +1,18 @@
+spec_version: "1.0"
+id: SESSION_ASK_MODE_WORKFLOW_REQUIRES_AGENT
+kind: policy
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SESSION_ASK_MODE_WORKFLOW_REQUIRES_AGENT"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+message: This workflow phase requires Agent mode
+what: This workflow phase requires Agent mode.
+cause: The next phase needs actions unavailable in Ask.
+fix: Tell the user they can switch to Agent mode to continue the workflow.
+x-paintedwolf-scenarios:
+  - id: phase
+    vars:
+      tool: workflow_advance

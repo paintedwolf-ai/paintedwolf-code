@@ -1,0 +1,3 @@
+{% if session_scratch_dir %}`@scratch` is this session’s private temporary directory. Programs receive its path in `TMPDIR`.
+{% endif %}{% if profile_command_mutation != false %}For host commands, `/tmp` names shared machine storage.{% if shared_temp_writable %} Shared temp grants cover {% for location in shared_temp_locations %}`{{ location }}`{% if not forloop.Last %}, {% endif %}{% endfor %}.{% else %} Shared writes outside attached folders and grants require approval.{% endif %}
+{% endif %}

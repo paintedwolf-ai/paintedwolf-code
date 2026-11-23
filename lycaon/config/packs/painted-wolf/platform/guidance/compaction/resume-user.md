@@ -3,7 +3,7 @@
   content: {{ msg.content }}
 {% endfor %}
 
-## Prior continuation
+## Accepted clues (read-only context)
 {{ prior_continuation }}
 {% if current_request %}
 ## Current request (relevance only)
@@ -11,9 +11,9 @@ The host retains this request verbatim. Use it to select relevant observations; 
 {{ current_request }}
 {% endif %}
 ## Summary instructions
-Generate a continuation record for the receiving agent.
-- Merge the prior continuation with this page; retain constraints and unresolved work.
-- Use the newest supported state. Distinguish completed effects, attempted actions, and pending verification; preserve failures still requiring recovery.
+Add observations from the covered page.
+- Use accepted clues as context. Return only supported additions from this page.
+- Identify changes to earlier observations as new events. Distinguish completed effects, attempted actions, and pending verification.
 - Keep paths and usable receipt, process, or message references needed to resume or inspect results.
 - Write one supported fact per item. Populate applicable arrays; leave an array empty only when the supplied evidence supports no entries.
 

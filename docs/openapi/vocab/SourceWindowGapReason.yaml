@@ -1,0 +1,16 @@
+# Why a command observation window could say nothing about a folder.
+name: SourceWindowGapReason
+go_const_prefix: SourceWindowGap
+values:
+  - id: unconfined
+    comment: The command ran without confinement, so it could write anywhere.
+  - id: baseline_incomplete
+    comment: The folder's starting state was not recorded before the command started.
+  - id: canceled
+    comment: The observation was canceled.
+  - id: io_error
+    comment: Reading the folder failed.
+  - id: settlement_failed
+    comment: The folder was read but its changes could not be compared or recorded.
+  - id: time_budget
+    comment: The observation's time budget ran out before the folder was read.

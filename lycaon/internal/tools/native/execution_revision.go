@@ -117,6 +117,7 @@ func (e ExecutionRevisions) CaptureSource(ctx context.Context, tctx tools.ToolCo
 		retained()
 		return ExecutionSource{}, err
 	}
+	sourceview.RecordOutsideRead(ctx, tctx, resolved, revision.DiskSHA256, int64(len(raw)))
 	return ExecutionSource{Path: resolved.DisplayPath, Content: content, Encoding: detection.Encoding, Revision: revision, release: retained}, nil
 }
 
@@ -225,7 +226,7 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 			return sourceview.Text{}, link, err
 		}
 	}
-	st, err := sourceview.LoadText(ctx, "write", sourceview.AccessMutate, tctx, resolved)
+	st, err := sourceview.LoadPinnedDestination(ctx, tctx, resolved)
 	if rawDestination(err) {
 		return captureRawRevision(resolved, revision)
 	}
@@ -244,7 +245,7 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 		revision.Mode, revision.Representation = toolcontract.AcceptedDocumentRevision, toolcontract.LogicalUTF8LF
 		revision.DocumentID, revision.DocumentRevision, revision.DiskSHA256 = st.Editor.ID, st.Editor.Revision, st.Editor.BaseSHA256
 		// Retaining the anchor lets later typing merge with the edit.
-		if documents, ok := sourceview.DocumentsFor(tctx, resolved); ok {
+		if documents, _, ok := sourceview.DocumentsFor(tctx, resolved); ok {
 			if err := documents.RetainRevision(ctx, tctx.Identity.ProjectID, st.Editor.ID, st.Editor.Revision); err != nil {
 				return sourceview.Text{}, toolcontract.ExecutionRevision{}, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision, Cause: err}
 			}

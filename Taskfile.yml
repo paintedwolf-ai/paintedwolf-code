@@ -1153,6 +1153,21 @@ tasks:
     cmds:
       - go run ./cmd/codegen-approval-explanations --check
 
+  codegen:vocabulary-catalog:
+    desc: Regenerate the committed workflow vocabulary catalog snapshot
+    dir: '{{.GO_DIR}}'
+    sources:
+      - internal/vocabulary/**
+      - cmd/codegen-vocabulary-catalog/**/*
+    cmds:
+      - go run ./cmd/codegen-vocabulary-catalog --out ../schemas/workflow_vocabulary.json
+
+  codegen:vocabulary-catalog:check:
+    desc: Fail if the workflow vocabulary catalog snapshot is stale
+    dir: '{{.GO_DIR}}'
+    cmds:
+      - go run ./cmd/codegen-vocabulary-catalog --out ../schemas/workflow_vocabulary.json --check
+
   codegen:native-tool-contracts:
     desc: >-
       Generate host approval membership and exact invocation contracts from

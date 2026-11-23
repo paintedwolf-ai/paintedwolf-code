@@ -513,8 +513,9 @@ function applyChanges(state: WorkspaceState, changes: SourceChange[]): boolean {
     if (change.op === "rename") {
       const fromPath = normalizePath(change.from_path);
       if (fromPath) {
-        patches.push({ change, path: fromPath, effect: "remove" });
-        changed = evictSubtree(state, change.root_id, fromPath) || changed;
+        const source = change.from_root_id ? { ...change, root_id: change.from_root_id } : change;
+        patches.push({ change: source, path: fromPath, effect: "remove" });
+        changed = evictSubtree(state, source.root_id, fromPath) || changed;
       }
       patches.push({ change, path, effect: "upsert" });
       ancestorChecks.push({ change, path });
@@ -546,6 +547,7 @@ function recordMembershipChanges(state: WorkspaceState, changes: readonly Source
       if (entry && (change.is_dir == null || entry.is_dir === change.is_dir)) continue;
     }
     state.membershipRevisions.set(change.root_id, state.revision);
+    if (change.from_root_id) state.membershipRevisions.set(change.from_root_id, state.revision);
   }
 }
 

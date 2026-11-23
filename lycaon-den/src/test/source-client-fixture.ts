@@ -4,7 +4,7 @@ import type { SourceComparison, SourceComparisonSelector } from "../api/types.ts
 import type { ProjectSourceReadResponse } from "../api/types.ts";
 import type { LycaonClient } from "../api/client.ts";
 import type { SourceComparisonTarget } from "../api/http-capabilities/source-history.ts";
-import { stubClient, type ClientStubs } from "./client-fixture.ts";
+import { stubbedFunction, stubClient, type ClientStubs } from "./client-fixture.ts";
 import { LycaonApiError } from "../api/http.ts";
 import { vi } from "vitest";
 import type { ComparisonSnapshot } from "../api/source-reader.ts";
@@ -38,10 +38,10 @@ export function stubFilesClient(overrides: FileClientStubs = {}, prepareDocument
   const openEditorDocument = vi.fn<LycaonClient["openEditorDocument"]>(async function (this: unknown, projectId, request, sessionId) {
     if (!classifiedOpens.has(request)) {
       const sourceClient = (this as LycaonClient | undefined) ?? client;
-      const observed = await sourceClient.getProjectSource(projectId, request.path, {
-        rootId: request.root_id, sessionId, decodeAs: request.decode_as, includeDeleted: true,
+      const observed = await sourceClient.getProjectSource(projectId, request.path ?? "", {
+        rootId: request.root_id, ...(request.file_id ? { fileId: request.file_id } : {}), sessionId, decodeAs: request.decode_as, includeDeleted: true,
       });
-      const source = { ...observed, file_id: observed.file_id ?? "", version_id: observed.version_id ?? "", root_id: observed.root_id ?? request.root_id };
+      const source = { ...observed, file_id: observed.file_id ?? "", version_id: observed.version_id ?? "", root_id: observed.root_id ?? request.root_id ?? "" };
       servedSources.set(servedKey(projectId, source.root_id, source.path), source);
       prepareDocument?.(projectId, source);
       if (!source.writable || source.binary || source.over_limit || !source.encoding || source.deleted) {
@@ -71,8 +71,10 @@ export function stubFilesClient(overrides: FileClientStubs = {}, prepareDocument
     releaseSourceView: ((project, id) => tree.has(id) ? tree.methods.releaseSourceView(project, id) : reader.releaseSourceView(project, id)) as LycaonClient["releaseSourceView"],
     locateSourceView: ((project, id, query, signal) => tree.has(id) ? tree.methods.locateSourceView(project, id, query, signal) : reader.locateSourceView(project, id, query, signal)) as LycaonClient["locateSourceView"],
   };
-  const explicit = Object.fromEntries(Object.entries(overrides).filter(([key, value]) =>
-    key !== "openEditorDocument" && (typeof value !== "function" || !fixtureMethods.has(value))));
+  const explicit = Object.fromEntries(Object.entries(overrides).filter(([key, value]) => {
+    const stub = stubbedFunction(value);
+    return key !== "openEditorDocument" && (typeof stub !== "function" || !fixtureMethods.has(stub));
+  }));
   Object.values(methods).forEach(method => fixtureMethods.add(method));
   const stubs: ClientStubs = { ...methods, ...explicit, ...(tree.getSourceWorkspace ? { getSourceWorkspace: tree.getSourceWorkspace } : {}) };
   // Without a host opener the refusal model stays callable but does not travel with a spread,

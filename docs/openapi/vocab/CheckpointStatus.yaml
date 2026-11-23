@@ -1,0 +1,8 @@
+name: CheckpointStatus
+go_const_prefix: CheckpointStatus
+values:
+  - id: pending
+  - id: approved
+  - id: rejected
+  - id: expired
+  - id: canceled

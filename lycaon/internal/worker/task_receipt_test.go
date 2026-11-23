@@ -178,8 +178,8 @@ func TestTaskToolPlannedWorkerDispatchNameValidationAndReplay(t *testing.T) {
 		Release:    q.ReleaseAdmitted,
 	}
 	now := timelayout.Format(time.Now().UTC())
-	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES ('planned-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'parent-1', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('planned-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'parent-1', 'repo-researcher', ?, ?, ?, 'parent-1', NULL)`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert planned child", err)
 	w, err := records.Resolve(t.Context(), actor, plannedName)
 	testutil.FailErr(t, "resolve planned worker", err)

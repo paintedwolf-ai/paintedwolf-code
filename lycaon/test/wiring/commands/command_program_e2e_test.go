@@ -468,7 +468,7 @@ func TestCommandProgramEnvMatchesExternalChildEnv(t *testing.T) {
 func TestCommandProgramTeeAndRedirectShareTheProgressGate(t *testing.T) {
 	p := newProgramHost(t)
 	for _, c := range []struct{ name, program, target, want, stop string }{
-		{"redirect", "echo via_redirect > redirected.txt", "redirected.txt", "via_redirect\n", `"stderr": ">: redirected.txt: `},
+		{"redirect", "echo via_redirect > redirected.txt", "redirected.txt", "via_redirect\n", `"stop_code": "PROGRESS_MISSING"`},
 		{"tee", "printf 'via_tee\\n' | tee teed.txt", "teed.txt", "via_tee\n", `"stderr": "tee: `},
 	} {
 		t.Run(c.name+" without progress", func(t *testing.T) {

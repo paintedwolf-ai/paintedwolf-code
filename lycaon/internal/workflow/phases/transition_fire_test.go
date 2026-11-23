@@ -182,7 +182,10 @@ func TestFireTransitionIntoTerminalCompletesWithoutCoordinatorHook(t *testing.T)
 	phaseWakeCount := 0
 	phaseEnterCount := 0
 	mgr.Publication.OnPhaseAutoAdvanced = func(context.Context, string, string, string, string) { phaseWakeCount++ }
-	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) { phaseEnterCount++ }
+	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) error {
+		phaseEnterCount++
+		return nil
+	}
 	completed, err := mgr.Phases.FireTransition(context.Background(), run.ID, "finish", workflowdef.TransitionActorHuman)
 	testutil.FailErr(t, "FireTransition finish", err)
 	if completed.Status != api.WorkflowRunStatusComplete || completed.CurrentPhase != "done" {
@@ -212,10 +215,12 @@ func TestFireTransitionPersistsPhaseBeforeEnterHook(t *testing.T) {
 	testutil.FailErr(t, "StartHuman", err)
 
 	var hookPhases []string
-	mgr.Phases.PhaseEnterHook = func(ctx context.Context, rc *workflowphases.RunContext, _ workflowdef.PhaseDef) {
+	mgr.Phases.PhaseEnterHook = func(ctx context.Context, rc *workflowphases.RunContext, _ workflowdef.PhaseDef) error {
 		stored, err := mgr.Store.Runs.Get(ctx, rc.RunID)
 		testutil.FailErr(t, "Get run inside PhaseEnterHook", err)
 		hookPhases = append(hookPhases, stored.CurrentPhase)
+
+		return nil
 	}
 
 	out, err := mgr.Phases.FireTransition(ctx, run.ID, "deepen", workflowdef.TransitionActorHuman)

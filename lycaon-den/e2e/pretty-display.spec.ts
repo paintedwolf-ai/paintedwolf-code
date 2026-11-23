@@ -235,6 +235,21 @@ modelIndependentWebE2e("moves by visual rows and stops line keys at the visual l
   await page.keyboard.press("Shift+End");
   await page.keyboard.press("Shift+End");
   expect(await selection(page)).toMatchObject({ anchor: startPos, head: short.line.to });
+  for (const [key, anchor, head, assoc] of [
+    ["Shift+End", short.line.to + 1, short.line.to, -1],
+    ["Shift+Home", short.line.from - 1, short.line.from, 1],
+  ] as const) {
+    await page.evaluate(({ anchor, inside }) => {
+      window.__pretty.view().dispatch({ selection: { anchor, head: inside } });
+    }, { anchor, inside: startPos });
+    for (let repeat = 0; repeat < 2; repeat++) {
+      await page.keyboard.press(key);
+      expect(await selection(page)).toEqual({ anchor, head, assoc });
+      const marker = page.getByTestId("files-editor-host").locator(".pw-pretty-active-line");
+      const caret = await coords(page, head, assoc);
+      await expect.poll(async () => Math.abs((await marker.boundingBox())!.y - caret!.top)).toBeLessThan(3);
+    }
+  }
   if (process.platform === "darwin") {
     for (const [end, start_] of [["Meta+ArrowRight", "Meta+ArrowLeft"], ["Control+e", "Control+a"]] as const) {
       await page.mouse.click(start!.left + 1, (start!.top + start!.bottom) / 2);
@@ -283,6 +298,44 @@ modelIndependentWebE2e("moves by visual rows and stops line keys at the visual l
   expect(rows.length).toBeGreaterThan(1);
   for (const left of rows) expect(Math.abs(left - rows[0]!)).toBeLessThan(1.5);
   await expect(content).toBeFocused();
+});
+
+modelIndependentWebE2e("reserves text width at every Pretty indent depth", async ({ page, request }) => {
+  const long = "x".repeat(180);
+  const text = `["${long}",${"[".repeat(62)}"${long}"${"]".repeat(62)}]`;
+  await page.setViewportSize({ width: 2100, height: 950 });
+  const { scroller } = await openPretty(page, request, { name: "deep.json", text });
+  for (const columns of [30, 60, 120]) {
+    await page.evaluate((columns) => {
+      const view = window.__pretty.view();
+      view.dom.style.width = `${columns * view.defaultCharacterWidth}px`;
+      view.requestMeasure();
+    }, columns);
+    await settle(page);
+    const boxes = await scroller.evaluate((element) => {
+      const view = window.__pretty.view();
+      const marks = [...view.contentDOM.querySelectorAll<HTMLElement>(".pw-pretty-line")];
+      return {
+        overflow: element.scrollWidth - element.clientWidth,
+        lines: marks.filter(mark => mark.textContent?.includes("x".repeat(180))).map((mark) => {
+          const line = mark.closest<HTMLElement>(".cm-line")!;
+          const style = getComputedStyle(line);
+          const width = line.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+          const left = mark.getBoundingClientRect().left - line.getBoundingClientRect().left - parseFloat(style.paddingLeft);
+          const indent = Number([...mark.classList].find(name => name.startsWith("pw-pretty-line-"))!.slice("pw-pretty-line-".length));
+          return { width, left, indent, textWidth: mark.getBoundingClientRect().width, ch: view.defaultCharacterWidth };
+        }),
+      };
+    });
+    expect(boxes.overflow).toBeLessThanOrEqual(1);
+    expect(boxes.lines.length).toBeGreaterThan(1);
+    expect(boxes.lines.some(line => line.indent * line.ch > line.width - 20 * line.ch)).toBe(true);
+    for (const line of boxes.lines) {
+      const expected = Math.min(line.indent * line.ch, Math.max(0, line.width - 20 * line.ch));
+      expect(Math.abs(line.left - expected)).toBeLessThan(2);
+      expect(line.textWidth).toBeGreaterThanOrEqual(Math.min(line.width, 20 * line.ch) - 2);
+    }
+  }
 });
 
 modelIndependentWebE2e("shades exactly the visual line holding the caret", async ({ page, request }) => {

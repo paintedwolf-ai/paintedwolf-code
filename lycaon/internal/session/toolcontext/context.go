@@ -49,15 +49,18 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 			return tools.ToolContext{}, err
 		}
 		tctx.Source.Roots = roots
+		base, err := m.projects.Get(ctx, tctx.Identity.ProjectID)
+		if err != nil {
+			return tools.ToolContext{}, err
+		}
+		if outside, ok := base.OutsideRef(); ok {
+			tctx.Source.OutsideRoot = outside
+		}
 		binding, bound, err := m.workspace.Binding(ctx, sess)
 		if err != nil {
 			return tools.ToolContext{}, err
 		}
 		if bound {
-			base, err := m.projects.Get(ctx, tctx.Identity.ProjectID)
-			if err != nil {
-				return tools.ToolContext{}, err
-			}
 			workspace := project.WithWorktree(base, binding)
 			tctx.Source.ProjectSourceBranch = workspace.SourceBranch
 			tctx.Source.ProjectRootBranches = workspace.RootBranches
@@ -77,6 +80,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		tctx.Host.ModelContextWindow = m.limits.Compaction(ctx, sess).ModelContextWindow
 		tctx.Source.MutationRecorder = m.captures
 		tctx.Source.SourceLedger = m.SourceLedger
+		tctx.Source.OutsideReads = m.outsideReads
 		tctx.Source.History = m.history
 		tctx.Source.Commands = m.commands
 		tctx.Source.GitMutations = m.gitMutations
