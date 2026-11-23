@@ -109,6 +109,23 @@ func TestCredentialIndexRetainsRemovedBindings(t *testing.T) {
 	}
 }
 
+func TestCredentialIndexWaitsForAnAppliedChange(t *testing.T) {
+	files := credentialFilesFixture(t)
+	root := attachCredentialRoot(t, files)
+	testutil.FailErr(t, "admit root", awaitCredentials(t.Context(), files))
+	release, err := files.index.access.Acquire(t.Context(), credentialRootKey("proj-1", "r1"))
+	testutil.FailErr(t, "hold root access", err)
+	defer release()
+	testutil.FailErr(t, "write credential", os.WriteFile(filepath.Join(root, ".env"), []byte("DB_PASSWORD=held-value-7788"), 0600))
+	files.index.changed(repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{".env"}})
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	// The runner holds the change off the queue while it waits for access.
+	if err := awaitCredentials(ctx, files); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("await during an unapplied change = %v", err)
+	}
+}
+
 func TestCredentialIndexDoesNotFollowLinks(t *testing.T) {
 	files := credentialFilesFixture(t)
 	root := attachCredentialRoot(t, files)
