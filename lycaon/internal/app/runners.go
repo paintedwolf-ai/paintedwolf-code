@@ -48,6 +48,7 @@ var serveRunnerOrder = []string{
 	"store-integrity-audit",
 	"managed-secret-maintenance",
 	"vault-unlock-sweep",
+	"watch-scheduler",
 	"worker-poller",
 	"scan-runner",
 	"scan-cadence",

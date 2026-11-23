@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerlane"
 	"github.com/lycaon/lycaon/internal/workerops"
@@ -44,8 +45,30 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	}
 	waitStore := &awaitstore.Store{DB: b.storage.Database}
 	subscriptions := b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions
+	var watchStore *watch.Store
+	if b.storage.Database != nil {
+		watchStore = watch.NewStore(b.storage.Database, nil)
+		if b.sessions != nil && b.sessions.Manager != nil && b.sessions.Manager.Processes != nil {
+			processes := b.sessions.Manager.Processes
+			processes.SetWatches(watchStore)
+			watchStore.SetProcessLookup(func(_ context.Context, sessionID, handle string) (watch.ProcessCompletionFact, bool, error) {
+				fact, ok := processes.CompletedReport(sessionID, handle)
+				return fact, ok, nil
+			})
+		}
+		watchStore.SetLeaseWakeHandler(func(ctx context.Context, lease awaitstore.Lease, winner awaitstore.Condition) {
+			if lease.WorkerJobID != "" {
+				subscriptions.Waits.BreakSleep(ctx, lease.SessionID, winner.Kind, true)
+				if b.workerRuntime != nil && b.workerRuntime.Queue != nil {
+					_, _ = b.workerRuntime.Queue.ResumeReadyWaits(ctx)
+				}
+				return
+			}
+			subscriptions.Deliveries.NotifyWatchLeaseResolved(ctx, lease.SessionID, lease.ID, winner)
+		})
+	}
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
-		Store: waitStore, ProfileConditions: waitConditions,
+		Store: waitStore, Watches: watchStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
 		WorkerKnown: waitWorkerKnown(b.boards.WorkerRecords, b.workerRuntime.Queue),
 	}); err != nil {

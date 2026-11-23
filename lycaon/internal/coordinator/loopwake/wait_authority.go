@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/watch"
 )
 
 func screenWaitURLs(ctx context.Context, deps WaitToolDeps, tctx tools.ToolContext, conditions []awaitstore.Condition) error {
@@ -79,6 +80,9 @@ func validateProfileConditions(profile string, conditions []awaitstore.Condition
 	}
 	allowed := profiles[strings.TrimSpace(profile)]
 	for _, condition := range conditions {
+		if condition.Kind == watch.ConditionWatchMatch {
+			continue
+		}
 		if !allowed[condition.Kind] {
 			kinds := make([]string, 0, len(allowed))
 			for kind, enabled := range allowed {

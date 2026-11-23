@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -63,6 +64,23 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		})
 	}
 	m.processReports.publish(completion.SessionID, completion.Handle, processReport{digest: digest, exit: completion.ExitObservation})
+	if m.watches != nil {
+		outcome := "satisfied"
+		if completion.ExitCode != 0 || completion.Failure != nil || completion.BoundaryRefusal != "" {
+			outcome = "failed"
+		}
+		occID := strings.TrimSpace(completion.RunID)
+		if occID == "" {
+			occID = "process_done:" + strings.TrimSpace(completion.Handle)
+		}
+		_, _ = m.watches.RecordProcessDone(ctx, completion.SessionID, watch.ProcessCompletionFact{
+			OccurrenceID: occID,
+			Handle:       strings.TrimSpace(completion.Handle),
+			Outcome:      outcome,
+			Code:         completion.ProgramStop.Code,
+			Report:       digest,
+		})
+	}
 	env := anchor.Envelope{
 		Subject:                 strings.TrimSpace(completion.Handle),
 		CommandCompletionDigest: digest,

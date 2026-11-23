@@ -65,6 +65,22 @@ func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 	if b.security.Unlocks != nil {
 		byName["vault-unlock-sweep"] = registration{run: b.security.Unlocks.RunSweeper}
 	}
+	if b.sessions != nil && b.sessions.Manager != nil && b.sessions.Manager.Coordinator.Runtime != nil {
+		if ws := b.sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Waits.Subscriptions.WatchStore(); ws != nil {
+			byName["watch-scheduler"] = registration{run: func(ctx context.Context) error {
+				ticker := time.NewTicker(time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-ticker.C:
+						_ = ws.AdvanceDue(ctx)
+					}
+				}
+			}}
+		}
+	}
 	if b.worker.poller != nil {
 		byName["worker-poller"] = registration{run: b.worker.poller.Run}
 	}
