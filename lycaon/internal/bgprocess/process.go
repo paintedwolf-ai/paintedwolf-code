@@ -93,7 +93,9 @@ type processConfinementState struct {
 	boundary         confine.Boundary
 	facts            confine.SpawnFacts
 	// program holds a program job's stage confinement.
-	program programStages
+	program            programStages
+	settledObservation *confine.Observation
+	programReceipt     *ProgramReceipt
 	// refusalsShown counts the refusals a result has already shown.
 	refusalsShown int
 	// refusalNotice gathers a burst of refusals before one notice.

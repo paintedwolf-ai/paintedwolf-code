@@ -26,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/sshproxy"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -60,7 +61,8 @@ type Owners struct {
 	PrivateGit *privategit.Manager
 	// Launch admits the confined launch every Git process of one command runs
 	// under. Without it no Git command runs.
-	Launch AgentLaunch
+	Launch   AgentLaunch
+	StartSSH func(context.Context, sshproxy.DialFunc) (*gitexec.AgentSSH, error)
 	// SecretAsk and SecretMatcher review each saved credential before it
 	// leaves for its recipient. Without them no saved credential is used.
 	SecretAsk     secretmatch.AskFunc

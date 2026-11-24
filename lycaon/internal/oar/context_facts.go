@@ -131,12 +131,21 @@ type GroundingFacts struct {
 }
 
 type ExecutionFacts struct {
-	ConfineApplied bool
-	NetworkMode    string
-	DenialSubject  string
-	ConfineSignals []string
-	FailedStages   []string
-	ProcessRunning bool
+	ConfineApplied                bool
+	NetworkMode                   string
+	DenialSubject                 string
+	ConfineSignals                []string
+	FailedStages                  []string
+	ProcessRunning                bool
+	GitTransportCause             string
+	GitTransportStage             string
+	GitTransportDestination       string
+	GitTransportPort              string
+	GitTransportLoopbackRetryable bool
+	GitTransportPolicyReason      string
+	GitTransportErrorClass        string
+	GitTransportCommand           string
+	GitTransportExitCode          int64
 }
 
 type RefusalsFacts struct {

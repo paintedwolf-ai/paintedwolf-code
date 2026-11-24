@@ -42,6 +42,7 @@ func StartEgressBroker(stateRoot string, listen egressproxy.ListenFunc) (egressp
 		return broker.addrs, nil
 	}
 	b := egressproxy.New(egressBroker.decideEndpoint)
+	b.SetEndpointReasonDecider(egressBroker.decideEndpointDecision)
 	b.SetPeerResolver(egressBroker.resolvePeer)
 	b.SetDialReporter(egressBroker.reportDialOutcome)
 	b.SetHTTPReporter(egressBroker.reportHTTPOutcome)

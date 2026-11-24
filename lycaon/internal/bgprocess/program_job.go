@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 )
 
@@ -39,9 +40,11 @@ type ProgramStop struct {
 // ProgramJobResult carries host notice facts separately from command bytes.
 // The producing program collects them before releasing its lifetime hold.
 type ProgramJobResult struct {
-	ExitCode    int
-	ProgramStop ProgramStop
-	FinishedAt  time.Time
+	ExitCode       int
+	ProgramStop    ProgramStop
+	ProgramReceipt *ProgramReceipt
+	Observation    *confine.Observation
+	FinishedAt     time.Time
 	// PersonWait includes any waits before the registry took over the job.
 	PersonWait     *time.Duration
 	ReleaseNotices func()
@@ -114,6 +117,14 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		proc.programStopCode = settled.ProgramStop.Code
 		proc.resources.programStop = settled.ProgramStop
 		proc.resources.releaseNotices = settled.ReleaseNotices
+		proc.programReceipt = settled.ProgramReceipt
+		if settled.Observation != nil {
+			obs := *settled.Observation
+			proc.settledObservation = &obs
+			if !proc.boundary.Applied && obs.Applied {
+				proc.boundary.Applied = true
+			}
+		}
 		proc.Stages[0].ExitCode, proc.Stages[0].Failed = &exitCode, exitCode != 0
 		proc.failure = hostcmd.ExecFailureOf(err)
 		proc.finishedAt = settled.FinishedAt

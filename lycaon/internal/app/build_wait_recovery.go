@@ -17,6 +17,7 @@ func (b *serveBuilder) wireWaitRecovery(subscriptions *loopwake.WaitSubscription
 	if commands := b.execution.Host.Commands; commands != nil {
 		commands.SetProgramParking(loopwake.ProgramParking{Subscriptions: subscriptions})
 		commands.SetProgramEffects(b.sessions.Manager.Runner.Transcript)
+		commands.SetProgramPostTool(b.sessions.Manager.ToolPolicy.AfterTool)
 		subscriptions.SetLostProgramResult(commands.ProgramReceiptResult)
 		publications := bootrecovery.Entry{
 			Name: "command-output-publications", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,

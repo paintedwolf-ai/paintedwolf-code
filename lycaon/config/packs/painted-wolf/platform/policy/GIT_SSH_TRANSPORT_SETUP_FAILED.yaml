@@ -1,0 +1,40 @@
+spec_version: "1.0"
+id: GIT_SSH_TRANSPORT_SETUP_FAILED
+kind: policy
+on: tool.post_invoke
+selector:
+  tools:
+    - command
+    - verify
+    - command_output
+requires_facts: [paintedwolf.confine_applied, paintedwolf.git_transport_cause, paintedwolf.git_transport_command, paintedwolf.git_transport_destination, paintedwolf.git_transport_exit_code, paintedwolf.git_transport_policy_reason, paintedwolf.git_transport_stage]
+when: >-
+  paintedwolf.confine_applied && paintedwolf.git_transport_cause in ["setup_failed", "invalid_request"]
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_git_remote
+message: managed SSH transport setup failed before reaching the remote
+what: Painted Wolf Code could not mediate the SSH connection{% if paintedwolf.git_transport_command %} for `{{ paintedwolf.git_transport_command }}`{% endif %}{% if paintedwolf.git_transport_destination %} to `{{ paintedwolf.git_transport_destination }}`{% endif %} (exit {{ paintedwolf.git_transport_exit_code }}).
+cause: Host SSH mediation failed{% if paintedwolf.git_transport_stage %} at `{{ paintedwolf.git_transport_stage }}`{% endif %} before dialing upstream{% if paintedwolf.git_transport_policy_reason %} (`{{ paintedwolf.git_transport_policy_reason }}`){% endif %}.
+why: Transport setup ended inside the host before any upstream TCP connection or SSH authentication attempt ran.
+fix: Report the host SSH mediation failure and inspect the command receipt; no capability request can repair host transport setup.
+instead: Do not request SSH agent sockets or host keys for a failed host transport setup.
+x-paintedwolf-scenarios:
+  - id: host_setup_failed
+    vars:
+      tool: command
+      confine_applied: true
+      git_transport_cause: setup_failed
+      git_transport_command: git ls-remote ssh://git@github.com/org/repo.git
+      git_transport_destination: github.com:22
+      git_transport_exit_code: 128
+      git_transport_policy_reason: service_start_failed
+  - id: helper_bind_failed
+    vars:
+      tool: command_output
+      confine_applied: true
+      git_transport_cause: setup_failed
+      git_transport_command: git fetch origin
+      git_transport_destination: github.com:22
+      git_transport_exit_code: 128
+      git_transport_policy_reason: helper_bind_failed

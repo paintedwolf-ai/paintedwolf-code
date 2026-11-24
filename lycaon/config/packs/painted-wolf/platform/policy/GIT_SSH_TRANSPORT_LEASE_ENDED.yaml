@@ -1,0 +1,38 @@
+spec_version: "1.0"
+id: GIT_SSH_TRANSPORT_LEASE_ENDED
+kind: policy
+on: tool.post_invoke
+selector:
+  tools:
+    - command
+    - verify
+    - command_output
+requires_facts: [paintedwolf.confine_applied, paintedwolf.git_transport_cause, paintedwolf.git_transport_command, paintedwolf.git_transport_destination, paintedwolf.git_transport_exit_code]
+when: >-
+  paintedwolf.confine_applied && paintedwolf.git_transport_cause == "lease_ended"
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_git_remote
+message: managed SSH connection failed after the launching action lease ended
+what: The mediated SSH connection{% if paintedwolf.git_transport_command %} for `{{ paintedwolf.git_transport_command }}`{% endif %}{% if paintedwolf.git_transport_destination %} to `{{ paintedwolf.git_transport_destination }}`{% endif %} stopped because its action lease ended (exit {{ paintedwolf.git_transport_exit_code }}).
+cause: The launching action's network authority closed before the SSH connect request completed.
+why: Managed SSH connections cannot outlive or borrow another action's network lease.
+fix: If the remote operation is still needed, inspect any completed or uncertain repository effects first, then submit only remaining work in a fresh command.
+instead: Do not speculate about SSH keys or signing agents when the action lease ended.
+x-paintedwolf-scenarios:
+  - id: lease_ended_command
+    vars:
+      tool: command
+      confine_applied: true
+      git_transport_cause: lease_ended
+      git_transport_command: git fetch origin
+      git_transport_destination: github.com:22
+      git_transport_exit_code: 128
+  - id: lease_ended_output
+    vars:
+      tool: command_output
+      confine_applied: true
+      git_transport_cause: lease_ended
+      git_transport_command: git fetch --all
+      git_transport_destination: github.com:22
+      git_transport_exit_code: 128

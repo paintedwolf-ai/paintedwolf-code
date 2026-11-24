@@ -538,8 +538,8 @@ func TestMediatedGitExpiredLeaseDirectIPLocalRetainedJobAndHandleCounts(t *testi
 	expiredLease.Close(context.Background())
 	ep, err := egressproxy.ParseTCPEndpoint("127.0.0.1", sshFixture.port)
 	testutil.FailErr(t, "parse endpoint", err)
-	if conn, disp, err := expiredLease.DialManagedTCP(context.Background(), ep); err == nil || conn != nil || disp != egressproxy.TCPDialLeaseEnded {
-		t.Fatalf("DialManagedTCP after Close = (%v, %v, %v), want (nil, TCPDialLeaseEnded, err)", conn, disp, err)
+	if res, err := expiredLease.DialManagedTCP(context.Background(), ep); err == nil || res.Conn != nil || res.Disposition != egressproxy.TCPDialLeaseEnded {
+		t.Fatalf("DialManagedTCP after Close = (%+v, %v), want (TCPDialLeaseEnded, err)", res, err)
 	}
 	if sshFixture.acceptedConns.Load() != 0 {
 		t.Fatalf("expired lease dial reached upstream %d times", sshFixture.acceptedConns.Load())

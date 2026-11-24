@@ -3,18 +3,22 @@ package toolhost
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/commandprogram"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/sshproxy"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // CommandServices owns native command configuration and background lifecycle.
@@ -123,6 +127,8 @@ type ProgramServices struct {
 	ExternalHidden bool
 	// Clock times program waits; nil is the system clock.
 	Clock commandprogram.Clock
+	// GitStartSSH starts the managed Git SSH service; nil uses gitexec.StartAgentSSH.
+	GitStartSSH func(context.Context, sshproxy.DialFunc) (*gitexec.AgentSSH, error)
 }
 
 func (r *CommandServices) programs() *command.ProgramRuntime {
@@ -149,6 +155,7 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	programs.Supervisor.Interrupter = services.Recorder
 	programs.ExternalHidden = services.ExternalHidden
 	programs.Clock = services.Clock
+	r.owners.startSSH = services.GitStartSSH
 	if programs.Executor != nil {
 		programs.Executor.Metadata.SetCommandExternalHidden(services.ExternalHidden)
 		r.owners.reviewRoot = programs.Executor.Boundary.ReviewRedirectRoot
@@ -173,6 +180,13 @@ func (r *CommandServices) SetProgramParking(parking tools.ProgramParking) {
 func (r *CommandServices) SetProgramEffects(effects tools.ProgramEffectSink) {
 	if programs := r.programs(); programs != nil {
 		programs.Effects = effects
+	}
+}
+
+// SetProgramPostTool enriches settled parked programs with post-tool policy guidance.
+func (r *CommandServices) SetProgramPostTool(fn func(context.Context, *api.Session, string, map[string]any, string, int, guidance.ToolResultFacts) (string, guidance.ToolResultFacts)) {
+	if programs := r.programs(); programs != nil {
+		programs.PostTool = fn
 	}
 }
 

@@ -24,6 +24,8 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -72,6 +74,7 @@ type ProgramRuntime struct {
 	Clock commandprogram.Clock
 	// Effects records the file edits a program makes after its call returns.
 	Effects        tools.ProgramEffectSink
+	PostTool       func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, doomCount int, raised guidance.ToolResultFacts) (string, guidance.ToolResultFacts)
 	SharedTemp     SharedTempReviewer
 	SourceRuns     SourceRunRecorder
 	FailureTracker *CommandFailureTracker
@@ -115,25 +118,26 @@ type programRun struct {
 
 	externalHidden bool
 	// retainOutput keeps one child stream in the program output store.
-	retainOutput  func(ctx context.Context, executionID, stream string, data []byte, complete bool) error
-	executor      *toolexecution.Executor
-	registry      *tools.DefaultRegistry
-	recorder      *invocation.SQLRecorder
-	supervisor    *ProgramSupervisor
-	progress      toolexecution.ProgramProgressFacts
-	frame         toolexecution.ProgramFrame
-	surface       toolexecution.ProgramSurface
-	memory        *toolcontract.ProgramMemory
-	capture       invocation.ProgramInputCapture
-	tc            tools.ToolContext
-	root          toolcontract.OperationInvocation
-	parentReceipt string
-	source        string
-	sourcesMu     sync.RWMutex
-	sources       map[string]string
-	catalog       toolcontract.LanguageCatalog
-	commands      map[string]toolcontract.CommandSpecification
-	baseEnv       []string
+	retainOutput    func(ctx context.Context, executionID, stream string, data []byte, complete bool) error
+	retainTransport executionTransportRecorder
+	executor        *toolexecution.Executor
+	registry        *tools.DefaultRegistry
+	recorder        *invocation.SQLRecorder
+	supervisor      *ProgramSupervisor
+	progress        toolexecution.ProgramProgressFacts
+	frame           toolexecution.ProgramFrame
+	surface         toolexecution.ProgramSurface
+	memory          *toolcontract.ProgramMemory
+	capture         invocation.ProgramInputCapture
+	tc              tools.ToolContext
+	root            toolcontract.OperationInvocation
+	parentReceipt   string
+	source          string
+	sourcesMu       sync.RWMutex
+	sources         map[string]string
+	catalog         toolcontract.LanguageCatalog
+	commands        map[string]toolcontract.CommandSpecification
+	baseEnv         []string
 
 	// envelope carries the call's launch capability requests to each launch.
 	envelope   map[string]any
@@ -227,6 +231,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	if err := r.bindProgramCapture(ctx, run); err != nil {
 		return "", err
 	}
+	ctx = withExecutionTransportRecorder(ctx, run.retainTransport)
 	outputs, scope, screening := run.capture.Outputs, run.capture.Scope, run.capture.Screening
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
 	ctx, err = jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: run.tool, ToolCallID: tc.Identity.ToolCallID, RootSessionID: tc.ChatSessionID()})
@@ -357,6 +362,14 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 		output := invocation.RetainedOutput{ExecutionID: executionID, Stream: stream, Reference: "output:" + executionID + ":" + stream, Complete: complete && spill.Complete, Redacted: redacted}
 		_, err = outputs.Attach(ctx, root.Identity.ProgramID, output, spill)
 		return errors.Join(err, spill.Close())
+	}
+	run.retainTransport = func(ctx context.Context, obs confine.GitTransportObservation) error {
+		if err := run.custodyError(); err != nil {
+			return err
+		}
+		retainSerial.Lock()
+		defer retainSerial.Unlock()
+		return outputs.AttachExecutionTransport(ctx, root.Identity.ProgramID, obs.ExecutionID, toWireExecutionTransport(obs))
 	}
 	maximumNodes := 0
 	for _, limit := range run.catalog.Language.Limits {

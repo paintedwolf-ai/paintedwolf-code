@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"syscall"
 	"time"
 )
 
@@ -81,8 +82,8 @@ func (b *Broker) handleSOCKSConn(parent context.Context, conn net.Conn) {
 		return
 	}
 
-	upstream, disp, _ := b.DialAttributedTCP(ctx, peer, ep)
-	switch disp {
+	res, _ := b.DialAttributedTCP(ctx, peer, ep)
+	switch res.Disposition {
 	case TCPDialEstablished:
 	case TCPDialLeaseEnded, TCPDialEndpointDenied:
 		_ = writeSocksReply(conn, socksRepNotAllow, nil)
@@ -91,6 +92,7 @@ func (b *Broker) handleSOCKSConn(parent context.Context, conn net.Conn) {
 		_ = writeSocksReply(conn, socksRepHostUn, nil)
 		return
 	}
+	upstream := res.Conn
 	defer func() { _ = upstream.Close() }()
 
 	if err := writeSocksReply(conn, socksRepSuccess, upstream.LocalAddr()); err != nil {
@@ -109,42 +111,102 @@ const (
 	TCPDialFailed
 )
 
+// TCPDialResult records the outcome, stage, policy reason and error class of an attributed TCP dial.
+type TCPDialResult struct {
+	Conn         net.Conn
+	Disposition  TCPDialDisposition
+	Stage        string
+	PolicyReason string
+	ErrorClass   string
+}
+
 // DialAttributedTCP checks lease liveness, authorizes ep, rechecks the lease after
 // any approval wait, and dials upstream with outcome recording.
-func (b *Broker) DialAttributedTCP(ctx context.Context, peer Peer, ep Endpoint) (net.Conn, TCPDialDisposition, error) {
+func (b *Broker) DialAttributedTCP(ctx context.Context, peer Peer, ep Endpoint) (TCPDialResult, error) {
 	if b == nil {
-		return nil, TCPDialFailed, errors.New("egress broker is unavailable")
+		err := errors.New("egress broker is unavailable")
+		return TCPDialResult{Disposition: TCPDialFailed, Stage: "broker_setup", ErrorClass: "broker_unavailable"}, err
 	}
 	if !peer.Leased || !b.stillLeased(peer.Lineage) {
 		b.noteRefusal(peer, ep, RefusedLeaseEnded)
-		return nil, TCPDialLeaseEnded, errCommandAuthorizationRevoked
+		return TCPDialResult{Disposition: TCPDialLeaseEnded, Stage: "lease"}, errCommandAuthorizationRevoked
 	}
-	if !b.allowedEndpoint(ctx, peer.Lineage, ep) {
-		return nil, TCPDialEndpointDenied, errors.New("endpoint denied")
+	decision := b.endpointDecision(ctx, peer.Lineage, ep)
+	if !decision.Allowed {
+		reason := decision.Reason
+		if reason == "" {
+			reason = "endpoint_denied"
+		}
+		return TCPDialResult{Disposition: TCPDialEndpointDenied, Stage: "policy", PolicyReason: reason}, errors.New("endpoint denied")
 	}
 	if !b.stillLeased(peer.Lineage) {
 		b.noteRefusal(peer, ep, RefusedLeaseEnded)
-		return nil, TCPDialLeaseEnded, errCommandAuthorizationRevoked
+		return TCPDialResult{Disposition: TCPDialLeaseEnded, Stage: "lease"}, errCommandAuthorizationRevoked
 	}
 	upstream, err := b.dialAuthorizedEndpoint(ctx, peer.Lineage, ep)
 	if err != nil {
 		if errors.Is(err, errCommandAuthorizationRevoked) {
 			b.noteRefusal(peer, ep, RefusedLeaseEnded)
-			return nil, TCPDialLeaseEnded, err
+			return TCPDialResult{Disposition: TCPDialLeaseEnded, Stage: "lease"}, err
 		}
 		if errors.Is(err, ErrLoopbackNotAuthorized) {
-			return nil, TCPDialEndpointDenied, err
+			return TCPDialResult{Disposition: TCPDialEndpointDenied, Stage: "policy", PolicyReason: "loopback_port_ungranted"}, err
 		}
-		return nil, TCPDialFailed, err
+		return TCPDialResult{Disposition: TCPDialFailed, Stage: "dial", ErrorClass: ClassifyDialError(err)}, err
 	}
-	return upstream, TCPDialEstablished, nil
+	return TCPDialResult{Conn: upstream, Disposition: TCPDialEstablished, Stage: "dial"}, nil
+}
+
+// ClassifyDialError returns a stable machine error class for an upstream TCP dial failure.
+func ClassifyDialError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, context.Canceled) {
+		return "canceled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, syscall.ETIMEDOUT) {
+		return "timeout"
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		if dnsErr.IsTimeout {
+			return "timeout"
+		}
+		return "dns_failed"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "timeout"
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return "connection_refused"
+	}
+	if errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
+		return "network_unreachable"
+	}
+	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) {
+		return "connection_reset"
+	}
+	return "dial_error"
+}
+
+func (b *Broker) endpointDecision(ctx context.Context, lineage string, ep Endpoint) EndpointDecision {
+	if b.decideEndpointReason != nil {
+		return b.decideEndpointReason(ctx, lineage, ep)
+	}
+	if b.decideEndpoint == nil {
+		return EndpointDecision{Allowed: true}
+	}
+	allowed := b.decideEndpoint(ctx, lineage, ep)
+	if allowed {
+		return EndpointDecision{Allowed: true}
+	}
+	return EndpointDecision{Allowed: false, Reason: "endpoint_denied"}
 }
 
 func (b *Broker) allowedEndpoint(ctx context.Context, lineage string, ep Endpoint) bool {
-	if b.decideEndpoint == nil {
-		return true
-	}
-	return b.decideEndpoint(ctx, lineage, ep)
+	return b.endpointDecision(ctx, lineage, ep).Allowed
 }
 
 func socksHandshake(conn net.Conn) error {

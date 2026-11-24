@@ -134,5 +134,13 @@ func TestBindAgentLaunchSettlesOutcomeFacts(t *testing.T) {
 			Recovery:  confine.RecoverSocketPath,
 			Grant:     "/tmp/agent.sock",
 		}},
+		GitTransport: &confine.GitTransportObservation{
+			ExecutionID:  "exec-bind-test",
+			Command:      "git ls-remote origin",
+			ExitCode:     128,
+			Cause:        confine.GitTransportCauseEndpointDenied,
+			Stage:        "policy",
+			PolicyReason: "egress_rule_deny",
+		},
 	})
 }

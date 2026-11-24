@@ -119,8 +119,10 @@ func observeBackgroundOutput(
 				Running:                out.Running,
 				TerminationReason:      string(terminationReason),
 				Refusals:               refusals,
+				GitTransports:          confinement.GitTransports(),
 			},
 		)
+		stamped.Observation = confinement.MergedObservation(stamped.Observation)
 		report.BoundaryRefusal = string(stamped.Attribution)
 		if tctx.Effects.Out != nil {
 			tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
