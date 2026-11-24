@@ -153,7 +153,7 @@ func (l *promptContext) coordinatorToolsForTurn(
 	}
 	all = l.askEnabledMCPMetas(ctx, sess, all)
 	mcpPlan := l.mcpToolPlan(ctx, sess, all, activated)
-	plan = l.compileRuntimeToolPlan(plan, surfaceID, frame.RunContext, all, activated, mcpPlan, openWorld, sess)
+	plan = l.compileRuntimeToolPlanForSurface(plan, surfaceID, frame.RunContext, all, activated, mcpPlan, openWorld, sess)
 	plan = filterToolPlanForRootCount(plan, rootCount)
 	if ask {
 		plan = clampAskMode(plan, all)
@@ -213,6 +213,18 @@ func trimCoordinatorToolMetasForPlan(plan toolsurface.Plan, all []tools.ToolMeta
 }
 
 func (l *promptContext) compileRuntimeToolPlan(
+	plan toolsurface.Plan,
+	runCtx api.CoordinatorRunContext,
+	metas []tools.ToolMeta,
+	activated map[string]bool,
+	mcpPlan tools.MCPToolPlan,
+	openWorld bool,
+	sess *api.Session,
+) toolsurface.Plan {
+	return l.compileRuntimeToolPlanForSurface(plan, toolcontract.SurfaceImplementInvestigate, runCtx, metas, activated, mcpPlan, openWorld, sess)
+}
+
+func (l *promptContext) compileRuntimeToolPlanForSurface(
 	plan toolsurface.Plan,
 	surfaceID string,
 	runCtx api.CoordinatorRunContext,

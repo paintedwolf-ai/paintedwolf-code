@@ -10,48 +10,38 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
-	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func buildWatchSurfaceMetadata(t *testing.T) (*toolexecution.Metadata, *sandbox.Boundary) {
+func buildWatchSurfaceMetadata(t *testing.T) *toolexecution.Metadata {
 	t.Helper()
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: filepath.Join("..", "..", "..")})
 	testutil.FailErr(t, "toolhost.NewRuntime", err)
-	schemas, err := toolschema.LoadBundled()
-	testutil.FailErr(t, "toolschema.LoadBundled", err)
-	for _, name := range schemas.Names() {
-		meta, ok := schemas.ToolMeta(name)
-		if !ok {
-			continue
-		}
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "toolschema.LoadSchemaDir", err)
+	for name := range schemas.Tools {
 		if _, exists := rt.Registry.Meta(name); !exists {
 			_ = rt.Registry.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "{}", nil
 			})
 		}
-		_ = rt.Registry.SetMeta(name, meta)
 	}
 	_ = watch.RegisterWatchTools(rt.Registry, watch.ToolDeps{})
-	metaSvc := toolexecution.NewMetadata(rt.Registry)
-	metaSvc.SetToolSchemas(schemas)
-	metaSvc.SetPolicy(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(rt.Boundary), nil))
-	return metaSvc, rt.Boundary
+	rt.Executor.Metadata.SetToolSchemas(schemas)
+	return rt.Executor.Metadata
 }
 
 func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
-	metaSvc, _ := buildWatchSurfaceMetadata(t)
+	metaSvc := buildWatchSurfaceMetadata(t)
 	cat, err := surfacecatalog.Load()
 	testutil.FailErr(t, "surfacecatalog.Load", err)
 
@@ -77,21 +67,18 @@ func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
 		ProjectChat:      func(context.Context, *api.Session) bool { return projectBelongs },
 	})
 
-	pctx := &promptContext{
-		Deps: PromptContextDeps{
+	loop := NewPromptLoop(PromptLoopDeps{
+		Context: ContextDeps{
 			Policy:           policyEngine,
 			ProjectRootCount: func(context.Context, *api.Session) int { return rootCount },
 			LiveResources: func(string) toolcontract.ResourcePresence {
 				return toolcontract.ResourcePresence{Watches: activeWatches > 0}
 			},
 		},
-	}
+	})
 
-	budgets, err := prompts.LoadPromptBudgets()
-	testutil.FailErr(t, "LoadPromptBudgets", err)
 	const defaultLimit = 40000
 	const promoteExceptionLimit = 44000
-	_ = budgets
 
 	for _, surfaceID := range cat.SurfaceIDs() {
 		for _, watchesCount := range []int{0, 1, 8} {
@@ -106,7 +93,7 @@ func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
 
 			listCtx := toolpolicy.WithCoordinatorSurface(t.Context(), surfaceID)
 			all := policyEngine.ListForPrompt(listCtx, sess, prompts.CoordinatorProfileID)
-			compiled := pctx.compileRuntimeToolPlan(basePlan, surfaceID, api.CoordinatorRunContext{}, all, nil, tools.MCPToolPlan{}, basePlan.Immediate("request_tools"), sess)
+			compiled := loop.Context.compileRuntimeToolPlanForSurface(basePlan, surfaceID, api.CoordinatorRunContext{}, all, nil, tools.MCPToolPlan{}, basePlan.Immediate("request_tools"), sess)
 			compiled = filterToolPlanForRootCount(compiled, rootCount)
 			offered := trimCoordinatorToolMetasForPlan(compiled, all, nil, nil)
 
@@ -131,7 +118,6 @@ func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
 				t.Fatalf("surface %s (watches=%d): wait promoted despite not being addressable on surface", surfaceID, watchesCount)
 			}
 
-			// Measure serialized tool schemas against surface budget for 0, 1, and 8 watches.
 			serialized, err := json.Marshal(offered)
 			testutil.FailErr(t, "marshal offered tools", err)
 			limit := defaultLimit
@@ -144,8 +130,6 @@ func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
 		}
 	}
 
-	// Verify rootless no_folder_allowlist prunes file_change/git_ref and preserves watch_control promotion,
-	// and draft chat without project omits standing.
 	activeWatches = 1
 	rootCount = 0
 	projectBelongs = false
@@ -153,7 +137,7 @@ func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
 	basePlan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_investigate"}, 0)
 	testutil.FailErr(t, "CompileToolPlan rootless", err)
 	all := policyEngine.ListForPrompt(toolpolicy.WithCoordinatorSurface(t.Context(), "implement_investigate"), sess, prompts.CoordinatorProfileID)
-	compiled := filterToolPlanForRootCount(pctx.compileRuntimeToolPlan(basePlan, "implement_investigate", api.CoordinatorRunContext{}, all, nil, tools.MCPToolPlan{}, true, sess), 0)
+	compiled := filterToolPlanForRootCount(loop.Context.compileRuntimeToolPlanForSurface(basePlan, "implement_investigate", api.CoordinatorRunContext{}, all, nil, tools.MCPToolPlan{}, true, sess), 0)
 	offered := trimCoordinatorToolMetasForPlan(compiled, all, nil, nil)
 
 	var watchMeta *tools.ToolMeta
@@ -185,18 +169,7 @@ func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
 }
 
 func TestWorkerProfilesWatchPruningAndIneligibleProfile(t *testing.T) {
-	metaSvc, boundary := buildWatchSurfaceMetadata(t)
-
-	// Register an ineligible worker profile (no wait or watch).
-	ineligible, err := sandbox.ParseToolProfile([]byte(`
-id: custom_ineligible_worker
-description: Worker without wait or watch
-command_effects: [read_only]
-tools:
-  summarize: sticky
-`), nil)
-	testutil.FailErr(t, "ParseToolProfile ineligible", err)
-	boundary.RegisterProfile(ineligible)
+	metaSvc := buildWatchSurfaceMetadata(t)
 
 	var activeWatches bool
 	policyEngine := toolpolicy.NewEngine(toolpolicy.EngineDeps{
@@ -204,20 +177,20 @@ tools:
 		ProjectRootCount: func(context.Context, *api.Session) int { return 1 },
 		ProjectChat:      func(context.Context, *api.Session) bool { return true },
 	})
-	pctx := &promptContext{
-		Deps: PromptContextDeps{
+	loop := NewPromptLoop(PromptLoopDeps{
+		Context: ContextDeps{
 			Policy: policyEngine,
 			LiveResources: func(string) toolcontract.ResourcePresence {
 				return toolcontract.ResourcePresence{Watches: activeWatches}
 			},
 		},
-	}
+	})
 
 	workerSess := &api.Session{ID: "worker-sess", ParentSessionID: "root-sess", ProjectID: "proj-1"}
 
 	for _, profileID := range []string{"implement", "explore_readonly", "web_research"} {
 		activeWatches = false
-		idleMetas, _, _, err := pctx.coordinatorToolsForTurn(t.Context(), workerSess, profileID, nil, 0, 10, inject.CoordinatorTurnFrame{}, nil)
+		idleMetas, _, _, err := loop.Context.coordinatorToolsForTurn(t.Context(), workerSess, profileID, nil, 0, 10, inject.CoordinatorTurnFrame{}, nil)
 		testutil.FailErr(t, "worker tools idle "+profileID, err)
 
 		var watchSchema map[string]any
@@ -241,9 +214,8 @@ tools:
 			t.Fatalf("worker %s watch delivery enum = %v, want [collect]", profileID, delivEnum)
 		}
 
-		// With active watches, watch_control promotes and also prunes delivery=[collect].
 		activeWatches = true
-		liveMetas, _, _, err := pctx.coordinatorToolsForTurn(t.Context(), workerSess, profileID, nil, 0, 10, inject.CoordinatorTurnFrame{}, nil)
+		liveMetas, _, _, err := loop.Context.coordinatorToolsForTurn(t.Context(), workerSess, profileID, nil, 0, 10, inject.CoordinatorTurnFrame{}, nil)
 		testutil.FailErr(t, "worker tools live "+profileID, err)
 		var controlSchema map[string]any
 		for _, m := range liveMetas {
@@ -261,14 +233,13 @@ tools:
 		}
 	}
 
-	// Ineligible worker profile never offers watch or watch_control even when session has watches.
+	// An unknown/ineligible profile without watch or watch_control never exposes them even with active watches.
 	activeWatches = true
-	ineligibleMetas, _, _, err := pctx.coordinatorToolsForTurn(t.Context(), workerSess, "custom_ineligible_worker", nil, 0, 10, inject.CoordinatorTurnFrame{}, nil)
+	ineligibleMetas, _, _, err := loop.Context.coordinatorToolsForTurn(t.Context(), workerSess, "ineligible_worker_no_watches", nil, 0, 10, inject.CoordinatorTurnFrame{}, nil)
 	testutil.FailErr(t, "ineligible worker tools", err)
 	for _, m := range ineligibleMetas {
 		if m.Name == "watch" || m.Name == "watch_control" {
 			t.Fatalf("ineligible worker offered %s", m.Name)
 		}
 	}
-	_ = platform.ToolFilter{}
 }
