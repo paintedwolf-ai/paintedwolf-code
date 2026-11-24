@@ -44,10 +44,15 @@ type BranchHit struct {
 // ActiveBranchRecorder. Tracked tags perform an atomic pointer load and skip
 // recording when nil; concurrent renders attribute hits via each token's
 // parsed filename (or Aliases entry) and must access Aliases and Hits under Mu.
+//
+// With ObserveConditions set, each evaluated if or elif arm also records its
+// atoms' values in Conditions.
 type BranchRecorder struct {
-	Mu      sync.Mutex
-	Aliases map[string]string
-	Hits    map[string]*BranchHit
+	Mu                sync.Mutex
+	Aliases           map[string]string
+	Hits              map[string]*BranchHit
+	ObserveConditions bool
+	Conditions        map[string]*ConditionHit
 }
 
 // ActiveBranchRecorder is the opt-in global recorder consulted by tracked tags.
@@ -73,7 +78,7 @@ func (r *BranchRecorder) record(filename string, line, col int, kind BranchKind,
 	if alias := r.Aliases[filename]; alias != "" {
 		resolved = alias
 	}
-	branchID := fmt.Sprintf("%s@L%d:C%d:%s", resolved, line, col, kind)
+	branchID := branchKey(resolved, line, col, kind)
 	hit, ok := r.Hits[branchID]
 	if !ok {
 		hit = &BranchHit{
@@ -91,4 +96,8 @@ func (r *BranchRecorder) record(filename string, line, col int, kind BranchKind,
 	} else {
 		hit.TakenFalse++
 	}
+}
+
+func branchKey(template string, line, col int, kind BranchKind) string {
+	return fmt.Sprintf("%s@L%d:C%d:%s", template, line, col, kind)
 }

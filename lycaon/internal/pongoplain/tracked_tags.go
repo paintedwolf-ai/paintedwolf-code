@@ -37,6 +37,7 @@ type branchSite struct {
 
 type trackedIfNode struct {
 	conditions []pongo2.IEvaluator
+	arms       []*conditionArm
 	sites      []branchSite
 	wrappers   []*pongo2.NodeWrapper
 	elseSite   *branchSite
@@ -48,6 +49,9 @@ func (node *trackedIfNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		return stateErr
 	}
 	rec := ActiveBranchRecorder.Load()
+	if rec != nil && isAtomReplay(ctx) {
+		rec = nil
+	}
 	for i, condition := range node.conditions {
 		state.step(1)
 		result, err := condition.Evaluate(ctx)
@@ -58,6 +62,10 @@ func (node *trackedIfNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		if rec != nil {
 			site := node.sites[i]
 			rec.record(site.filename, site.line, site.col, site.kind, taken)
+			if rec.ObserveConditions {
+				atoms, values := node.arms[i].observe(ctx)
+				rec.recordCondition(site, node.arms[i].source, atoms, values, taken)
+			}
 		}
 		if taken {
 			if rec != nil && node.elseSite != nil {
@@ -90,6 +98,7 @@ func siteFromToken(tok *pongo2.Token, kind BranchKind) branchSite {
 
 func parseTrackedIfTag(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
 	ifNode := &trackedIfNode{}
+	ifNode.arms = append(ifNode.arms, &conditionArm{source: tokenSource(arguments)})
 	condition, err := arguments.ParseExpression()
 	if err != nil {
 		return nil, err
@@ -109,6 +118,7 @@ func parseTrackedIfTag(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo
 		endTok := doc.GetR(-(tagArgs.Count() + 2))
 
 		if wrapper.Endtag == "elif" {
+			ifNode.arms = append(ifNode.arms, &conditionArm{source: tokenSource(tagArgs)})
 			elifCond, condErr := tagArgs.ParseExpression()
 			if condErr != nil {
 				return nil, condErr
