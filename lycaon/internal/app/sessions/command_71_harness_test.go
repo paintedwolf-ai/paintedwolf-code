@@ -20,8 +20,8 @@ import (
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/db"
@@ -32,8 +32,8 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
-	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/programtest"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -298,7 +298,9 @@ func newCommand71Harness(t *testing.T) *command71Harness {
 	}
 	credFiles.index = newCredentialIndex(credFiles, nil)
 	credFiles.startCredentialIndex()
-	t.Cleanup(func() { testutil.FailErr(t, "close credential index", credFiles.closeCredentialIndex(context.Background())) })
+	t.Cleanup(func() {
+		testutil.FailErr(t, "close credential index", credFiles.closeCredentialIndex(context.Background()))
+	})
 	secRuntime.CredentialFiles = credFiles
 
 	h := &command71Harness{
