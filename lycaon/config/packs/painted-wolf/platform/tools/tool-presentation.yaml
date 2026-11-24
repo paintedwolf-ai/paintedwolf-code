@@ -553,6 +553,7 @@ tools:
     label: "Wait"
     title_keys: [reason]
     running_label: "Waiting…"
+    visibility: long_running
     activity: {headline: "waiting", salience: incidental, role: coordination}
   wc:
     label: "Count lines"

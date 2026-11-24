@@ -7,7 +7,6 @@ import type {
   ProgressStep,
   ProviderKindTemplate,
   ProviderMeta,
-  TurnLoadTrigger,
   WorkerTask,
   WorkflowRun,
 } from "../../api/types.ts";
@@ -27,6 +26,12 @@ import {
   isInternalTranscriptUserMessage,
 } from "../transcript/projection/message-transcript.ts";
 import { isWorkerTaskActive } from "./session-activity.ts";
+import {
+  formatDecidingActivity,
+  formatIndexingCredentialsActivity,
+  isWaitResultSettled,
+  resolveWaitTargetLabel,
+} from "./wait-target-activity.ts";
 import {
   workerBriefTitleLine,
 } from "../worker/workers-model.ts";
@@ -66,6 +71,7 @@ export const ACTIVITY_LABEL_WEIGHTS = {
   runningTool: 100,
   preparingContext: 90,
   startingWorkflow: 90,
+  pendingWait: 85,
   humanReview: 80,
   provisionalCloseout: 72,
   workerRich: 60,
@@ -220,9 +226,14 @@ function toolRunningVerb(part: ToolPartView, hasObject: boolean): string {
   return hasObject ? verbs.withObject : verbs.alone;
 }
 
-function thinkingToolRunningLabel(part: ToolPartView): string {
+function thinkingToolRunningLabel(
+  part: ToolPartView,
+  sessionId?: string,
+  messages: readonly Message[] = [],
+): string {
   if (part.tool.toLowerCase() === "wait") {
-    return waitToolRunningLabel(part.args);
+    const resolved = resolveWaitTargetLabel(part.args, sessionId, messages);
+    return resolved.state === "condition_default" ? waitToolRunningLabel(part.args) : resolved.label;
   }
   const object = part.title || resolveChickletTitle(part.tool, part.args);
   const verb = toolRunningVerb(part, !!object);
@@ -305,12 +316,14 @@ export function findLatestRunningToolInTurn(
 function runningToolCandidate(
   messages: readonly Message[],
   activities: readonly ActivityEvent[] = [],
+  sessionId?: string,
 ): ActivityLabelCandidate | undefined {
   const part = findLatestRunningToolInTurn(messages, activities);
   if (!part) return undefined;
+  const isWait = part.tool.toLowerCase() === "wait";
   return {
-    label: thinkingToolRunningLabel(part),
-    weight: ACTIVITY_LABEL_WEIGHTS.runningTool,
+    label: thinkingToolRunningLabel(part, sessionId, messages),
+    weight: isWait ? ACTIVITY_LABEL_WEIGHTS.pendingWait : ACTIVITY_LABEL_WEIGHTS.runningTool,
     source: "running_tool",
   };
 }
@@ -354,108 +367,100 @@ function newestActivity(
   })[0];
 }
 
-/** Labels the host-reported selection activity. */
-const DECIDING_LABELS: Record<TurnLoadTrigger, string> = {
-  turn: "Local AI is deciding what to load",
-  request: "Local AI is matching tools",
-  lookup: "Local AI is matching skills",
-  tool_event: "Local AI is choosing a skill for this tool",
-  visibility: "Updating available tools and skills",
-};
-
-function decidingLabel(activity: ActivityEvent): string {
-  return DECIDING_LABELS[activity.decision_trigger ?? "turn"];
-}
-
-/** Highest-confidence host activity: an open lease from the execution boundary. */
-function hostActivityCandidate(
-  activities: readonly ActivityEvent[] | undefined,
+function singleHostActivityCandidate(
+  activity: ActivityEvent,
   messages: readonly Message[],
+  sessionId?: string,
 ): ActivityLabelCandidate | undefined {
-  const activity = newestActivity(
-    (activities ?? []).filter((candidate) => candidate.status === "active"),
-  );
-  if (!activity) return undefined;
   if (activity.kind === "preparing_context") {
-    return {
-      label: "Preparing context",
-      weight: ACTIVITY_LABEL_WEIGHTS.preparingContext,
-      source: "host_activity",
-    };
+    return { label: "Preparing context", weight: ACTIVITY_LABEL_WEIGHTS.preparingContext, source: "host_activity" };
   }
-  if (activity.kind === "indexing_credentials" && activity.indexing) {
-    const { root_label, directories_visited, credential_files_read } = activity.indexing;
-    const folders = `${directories_visited} ${directories_visited === 1 ? "folder" : "folders"}`;
-    const files = `${credential_files_read} ${credential_files_read === 1 ? "file" : "files"}`;
-    return {
-      label: `Checking credential files in ${root_label} · ${folders} · ${files}`,
-      weight: ACTIVITY_LABEL_WEIGHTS.preparingContext,
-      source: "host_activity",
-    };
+  const indexingLabel = formatIndexingCredentialsActivity(activity);
+  if (indexingLabel) {
+    return { label: indexingLabel, weight: ACTIVITY_LABEL_WEIGHTS.preparingContext, source: "host_activity" };
   }
   if (activity.kind === "deciding") {
-    return {
-      label: decidingLabel(activity),
-      weight: ACTIVITY_LABEL_WEIGHTS.deciding,
-      source: "host_activity",
-    };
+    return { label: formatDecidingActivity(activity), weight: ACTIVITY_LABEL_WEIGHTS.deciding, source: "host_activity" };
   }
   if (activity.kind === "starting_workflow") {
-    return {
-      label: "Starting workflow",
-      weight: ACTIVITY_LABEL_WEIGHTS.startingWorkflow,
-      source: "host_activity",
-    };
+    return { label: "Starting workflow", weight: ACTIVITY_LABEL_WEIGHTS.startingWorkflow, source: "host_activity" };
   }
   if (activity.kind === "awaiting_wake") {
     // Only the host arms program_done; it is not a wait-tool condition.
     const command = activity.tool_name === "command" && activity.wait_triggers?.includes("program_done");
-    const part = command ? toolPartForActivity(activity, messages) : undefined;
-    const reason = part?.completion?.state === "parked" ? part.completion.reason?.trim() : undefined;
+    const part = toolPartForActivity(activity, messages);
+    if (!command && activity.tool_name?.trim().toLowerCase() === "wait" && part) {
+      const target = resolveWaitTargetLabel(part.args, sessionId, messages);
+      if (target.state !== "condition_default") {
+        return { label: target.label, weight: ACTIVITY_LABEL_WEIGHTS.pendingWait, source: "host_activity" };
+      }
+    }
+    const reason = command && part?.completion?.state === "parked" ? part.completion.reason?.trim() : undefined;
     const named = command ? WAIT_CONDITION_LABELS.process_done : waitConditionsLabel(activity.wait_triggers ?? []);
     return {
       label: reason ? `Waiting · ${reason}` : named ?? WAIT_CONDITION_LABELS.timer,
-      weight: named
-        ? ACTIVITY_LABEL_WEIGHTS.awaitingWake
-        : ACTIVITY_LABEL_WEIGHTS.awaitingWakeUnnamed,
+      weight: named ? ACTIVITY_LABEL_WEIGHTS.awaitingWake : ACTIVITY_LABEL_WEIGHTS.awaitingWakeUnnamed,
       source: "host_activity",
     };
   }
   if (activity.kind === "running_tool") {
     if (activity.progress && activity.progress.phase !== "executing") {
-      const progress = activity.progress;
+      const p = activity.progress;
       return {
-        label: progress.phase === "selecting"
+        label: p.phase === "selecting"
           ? "Selecting files for search"
-          : `Searching files · ${progress.files_searched} searched · ${progress.matches} matches${progress.files_skipped > 0 ? ` · ${progress.files_skipped} skipped` : ""}`,
+          : `Searching files · ${p.files_searched} searched · ${p.matches} matches${p.files_skipped > 0 ? ` · ${p.files_skipped} skipped` : ""}`,
         weight: ACTIVITY_LABEL_WEIGHTS.hostRunningTool,
         source: "host_activity",
       };
     }
     const part = toolPartForActivity(activity, messages);
     const fallback = activity.tool_name?.trim();
+    const isWait = (part?.tool ?? fallback ?? "").toLowerCase() === "wait";
+    if (isWait && part && isWaitResultSettled(part)) return undefined;
     return {
       label: part
-        ? thinkingToolRunningLabel(part)
+        ? thinkingToolRunningLabel(part, sessionId, messages)
         : fallback
-          ? toolRunningVerb(
-              {
-                id: activity.activity_id,
-                toolCallId: activity.tool_call_id ?? "",
-                assistantMessageId: "",
-                messageId: "",
-                tool: fallback,
-                kind: classifyToolKind(fallback),
-                status: "running",
-              },
-              false,
-            )
+          ? toolRunningVerb({ id: activity.activity_id, toolCallId: activity.tool_call_id ?? "", assistantMessageId: "", messageId: "", tool: fallback, kind: classifyToolKind(fallback), status: "running" }, false)
           : THINKING_GENERIC_TOOL_LABEL,
-      weight: ACTIVITY_LABEL_WEIGHTS.hostRunningTool,
+      weight: isWait ? ACTIVITY_LABEL_WEIGHTS.pendingWait : ACTIVITY_LABEL_WEIGHTS.hostRunningTool,
       source: "host_activity",
     };
   }
   return undefined;
+}
+
+/** Collects active host leases in recency order so blocking phases beat pending waits. */
+function hostActivityCandidates(
+  activities: readonly ActivityEvent[] | undefined,
+  messages: readonly Message[],
+  sessionId?: string,
+): ActivityLabelCandidate[] {
+  const sid = sessionId?.trim();
+  const active = (activities ?? []).filter(
+    (c) => c.status === "active" && (!sid || !c.session_id?.trim() || c.session_id.trim() === sid),
+  );
+  if (!active.length) return [];
+  const ordered: ActivityEvent[] = [];
+  const remaining = [...active];
+  while (remaining.length > 0) {
+    const next = newestActivity(remaining)!;
+    ordered.push(next);
+    remaining.splice(remaining.indexOf(next), 1);
+  }
+  const seenKinds = new Set<string>();
+  const out: ActivityLabelCandidate[] = [];
+  for (const item of ordered) {
+    const key = item.kind === "running_tool" && item.tool_name?.trim().toLowerCase() === "wait" ? "running_wait" : item.kind;
+    if (seenKinds.has(key)) continue;
+    const candidate = singleHostActivityCandidate(item, messages, sid);
+    if (candidate) {
+      seenKinds.add(key);
+      out.push(candidate);
+    }
+  }
+  return out;
 }
 
 /** Hidden-report activity comes from host visibility flags. */
@@ -643,10 +648,9 @@ export function collectThinkingActivityCandidates(
   );
   if (providerWait) candidates.push(providerWait);
 
-  const activity = hostActivityCandidate(input.activities, messages);
-  if (activity) candidates.push(activity);
+  candidates.push(...hostActivityCandidates(input.activities, messages, input.sessionId));
 
-  const tool = runningToolCandidate(messages, input.activities);
+  const tool = runningToolCandidate(messages, input.activities, input.sessionId);
   if (tool) candidates.push(tool);
 
   const closeout = provisionalCloseoutCandidate(input);

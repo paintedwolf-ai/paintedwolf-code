@@ -32,6 +32,7 @@ import type { VirtualListMatch } from "../../find/virtual-list-find.ts";
 
 export type ActivitySpanCardProps = {
   label: string;
+  activeHeadline?: string;
   sequence?: string;
   entries: readonly ActivitySpanEntry[];
   layout: TranscriptLayout;
@@ -138,7 +139,7 @@ function ActivityFailureChip(props: { failed: number }) {
 
 export function ActivitySpanCard(props: ActivitySpanCardProps) {
   const entries = () => props.entries;
-  const label = () => formatSentenceCase(props.label);
+  const label = () => props.activeHeadline?.trim() || formatSentenceCase(props.label);
   const { bindTranscriptEntry } = useTranscriptEntry(() => {
     const key = props.entryKey?.trim();
     if (!key) return { sessionId: props.sessionId };

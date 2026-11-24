@@ -47,6 +47,12 @@ export class ThinkingLabelHoldEngine {
     return this.displayed;
   }
 
+  syncImmediate(): string {
+    const next = this.resolveLabel();
+    this.displayed = next;
+    return next;
+  }
+
   dispose(): void {
     this.stopCycle();
     this.displayed = undefined;
@@ -106,7 +112,7 @@ export function createThinkingLabelHold(
     // Reading the revision refreshes the label after each hold interval.
     revision();
     if (!options.visible()) return undefined;
-    if (options.immediate?.()) return options.resolveLabel();
+    if (options.immediate?.()) return engine.syncImmediate();
     return engine.read();
   };
 }

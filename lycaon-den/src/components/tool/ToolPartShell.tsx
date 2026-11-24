@@ -86,7 +86,7 @@ export function ToolPartShell(props: Props) {
   onCleanup(
     subscribeBackgroundProcessStore(() => {
       setProcessRevision((n) => n + 1);
-    }, () => ({ sessionId: props.sessionId, processId: props.part.process?.handle, statusOnly: true })),
+    }, () => ({ sessionId: props.sessionId, processId: props.part.process?.handle ?? props.part.commandActivity?.fact.job_handle, statusOnly: true })),
   );
   const summary = () => {
     processRevision();

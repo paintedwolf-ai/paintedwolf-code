@@ -1,10 +1,11 @@
-import { createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { createMemo, createSignal, onCleanup } from "solid-js";
 import { softPauseWorkerHint } from "../../chat/composer/composer-rules.ts";
 import { subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
 import { isBackendReachable } from "../../platform/connection/sidecar-status.ts";
 import { isPromptStarting, isChatActivityLive, llmTurnFor, sessionActivityFor } from "../../chat/session/session-activity.ts";
 import { resolveThinkingActivityLabel } from "../../chat/session/thinking-activity-label.ts";
 import { createThinkingLabelHold } from "../../chat/session/thinking-label-hold.ts";
+import { hasImmediateWaitTransition } from "../../chat/session/wait-target-activity.ts";
 import { sameSessionWorkers, sessionWorkers } from "../../chat/actions/chat-actions.ts";
 import { plainMessageRows } from "../../chat/transcript/projection/plain-message-rows.ts";
 import { buildChatTranscriptBlocks } from "../../chat/workflow/workflow-spans.ts";
@@ -19,13 +20,11 @@ export function createChatViewActivity(props: ChatViewProps) {
   const [backgroundProcessRevision, setBackgroundProcessRevision] =
     createSignal(0);
 
-  onMount(() => {
-    onCleanup(
-      subscribeBackgroundProcessStore(() => {
-        setBackgroundProcessRevision((n) => n + 1);
-      }, () => ({ sessionId: props.sessionId, statusOnly: true })),
-    );
-  });
+  onCleanup(
+    subscribeBackgroundProcessStore(() => {
+      setBackgroundProcessRevision((n) => n + 1);
+    }, () => ({ sessionId: props.sessionId, statusOnly: true })),
+  );
 
   const offline = () => !isBackendReachable(props.appStore.state.sidecarStatus);
 
@@ -62,9 +61,14 @@ export function createChatViewActivity(props: ChatViewProps) {
   const thinkingLabel = createThinkingLabelHold({
     visible: chatLive,
     resolveLabel: resolvedThinkingLabel,
-    immediate: () => Object.values(
-      sessionActivityFor(props.appStore, props.sessionId).activities ?? {},
-    ).some((activity) => activity.status === "active" && activity.kind === "running_tool" && activity.progress !== undefined),
+    immediate: () => {
+      backgroundProcessRevision();
+      const activities = Object.values(sessionActivityFor(props.appStore, props.sessionId).activities ?? {});
+      return (
+        activities.some((a) => a.status === "active" && a.kind === "running_tool" && a.progress !== undefined) ||
+        hasImmediateWaitTransition(props.sessionId, props.appStore.state.messages, activities)
+      );
+    },
   });
 
   const activeRun = () => props.appStore.state.activeWorkflowRun;
