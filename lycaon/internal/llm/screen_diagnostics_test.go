@@ -37,6 +37,8 @@ func (p *diagMockProvider) Stream(_ context.Context, _ modelcall.CompletionReque
 }
 
 func TestScreenLifecycleEmitsJoinedValueFreePhasesThroughDispatch(t *testing.T) {
+	t.Setenv("LYCAON_LLM_MOCK", "")
+	t.Setenv("LYCAON_LLM_MANUAL", "")
 	var mu sync.Mutex
 	var records []secretmatch.ScreenPhaseRecord
 	unsub := secretmatch.RegisterPhaseObserver(func(rec secretmatch.ScreenPhaseRecord) {
@@ -59,16 +61,10 @@ func TestScreenLifecycleEmitsJoinedValueFreePhasesThroughDispatch(t *testing.T) 
 	})
 
 	base := &diagMockProvider{id: "ollama-diag", singleFlight: true}
-	dispatched := &dispatchProvider{Provider: base}
-	screened := &secretScreenedProvider{
-		inner:       dispatched,
-		destination: ScreenDestination{ID: "ollama-diag", Label: "Local"},
-		screen:      screen,
-	}
-	lifecycle := &lifecycleProvider{Provider: screened}
 
 	reg := newTestRegistry()
-	testutil.FailErr(t, "register provider", reg.Register(lifecycle))
+	reg.SetOutboundSecretScreen(screen)
+	testutil.FailErr(t, "register provider", reg.Register(base))
 	plane := NewUtilityPlane()
 	client := NewRoutingClient(reg, nil, nil, plane, NewCapacityGate(CapacityPolicy{}), nil, func(context.Context) (*ModelSelection, error) {
 		return &ModelSelection{ProviderID: "ollama-diag", Model: "m1"}, nil
