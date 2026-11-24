@@ -70,6 +70,18 @@ func (c *capturingScriptLLM) Stream(ctx context.Context, req modelcall.Completio
 	return ch, nil
 }
 
+type completionCueToolPolicy struct {
+	tools []tools.ToolMeta
+}
+
+func (p completionCueToolPolicy) ListForPrompt(context.Context, *api.Session, string) []tools.ToolMeta {
+	return p.tools
+}
+
+func (completionCueToolPolicy) EvaluateInvoke(context.Context, *api.Session, string, map[string]any) error {
+	return nil
+}
+
 type completionCueHarness struct {
 	t            *testing.T
 	st           *store.Repositories
@@ -178,7 +190,14 @@ func newCompletionCueHarness(t *testing.T, withFeature bool, steps []scriptedSte
 	deps := promptloop.StoreDeps(st)
 	deps.Model.LLM = h.llm
 	deps.Context.Tools = reg
-	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.Policy = completionCueToolPolicy{
+		tools: []tools.ToolMeta{
+			{Name: "update_progress"},
+			{Name: "read"},
+			{Name: "verify"},
+			{Name: "command"},
+		},
+	}
 	deps.Context.Limits = loopTestLimits(20)
 	deps.Closeout.HintConfig = hints
 	deps.Context.BuildMessages = func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
