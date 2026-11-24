@@ -47,11 +47,11 @@ type AgentHostResourceView struct {
 // AgentPromptSurface holds skill availability and host resources for prompts.
 type AgentPromptSurface struct {
 	// Skills are the applicable catalog; bodies remain on demand.
-	Skills                []AgentSkillView
-	FullCatalog           bool
-	HostResources         []AgentHostResourceView
-	HostResourcesOmitted  int // rows the ambient budget dropped
-	Fingerprint           string
+	Skills                  []AgentSkillView
+	FullCatalog             bool
+	HostResources           []AgentHostResourceView
+	HostResourcesOmitted    int // rows the ambient budget dropped
+	Fingerprint             string
 	SessionScratchDir       string
 	SharedTempLocations     []string
 	SharedTempReadLocations []string

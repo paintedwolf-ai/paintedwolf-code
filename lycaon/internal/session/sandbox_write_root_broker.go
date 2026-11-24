@@ -36,7 +36,7 @@ type WriteRootCheckpointBroker struct {
 	ReadRuntime  *approvalstate.SandboxPathGrantRuntime
 	GrantedPaths *grantedpath.Runtime
 	Consequence  toolapproval.ConsequenceDeriver
-	Authority   hitl.ApprovalGate
+	Authority    hitl.ApprovalGate
 	// ApprovalsDisabled authorizes the request without a prompt.
 	ApprovalsDisabled func(projectDir string) bool
 	// Posture reads the ask-line for a project.

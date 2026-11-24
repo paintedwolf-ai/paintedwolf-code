@@ -30,6 +30,7 @@ type Nudges interface {
 	NudgeProcessRefused(context.Context, string, string, anchor.Envelope)
 	NudgeProcessFinished(context.Context, string, string, anchor.Envelope)
 }
+
 // BackgroundSharedTempReview settles a background job's terminal shared-temp refusals once.
 type BackgroundSharedTempReview func(ctx context.Context, sess *api.Session, completion bgprocess.Completion, observed confine.SharedTempObservation, failed bool) guidance.SharedTempSettlement
 

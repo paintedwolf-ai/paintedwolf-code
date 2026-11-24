@@ -121,7 +121,7 @@ func TestSharedTempPreflightCoalescesWriteRootArrayAndAliasesIntoOnePlan(t *test
 		primary, cited, reasons := hitl.PresentDecision(decision)
 		grant := hitl.ApprovalGrant{
 			ID: "g_write", Scope: hitl.ApprovalGrantScopeChat,
-			Predicate: hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryWriteRoot, Pattern: exportDir},
+			Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryWriteRoot, Pattern: exportDir},
 			ChatSessionID: "chat-p", Title: hitl.TitleAllowForThisChat, Coverage: "creating, changing, and removing files in `" + exportDir + "`",
 			ExpiresWhen: hitl.ExpiresWhenChatDeleted, ReaskWhen: hitl.ReaskWhenOutsideFolder,
 		}
@@ -151,7 +151,7 @@ func TestSharedTempPreflightCoalescesWriteRootArrayAndAliasesIntoOnePlan(t *test
 		primary, cited, reasons := hitl.PresentDecision(decision)
 		grant := hitl.ApprovalGrant{
 			ID: "g_read", Scope: hitl.ApprovalGrantScopeChat,
-			Predicate: hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryReadPath, Pattern: inputFile},
+			Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryReadPath, Pattern: inputFile},
 			ChatSessionID: "chat-p", Title: hitl.TitleAllowForThisChat, Coverage: "reading `" + inputFile + "`",
 			ExpiresWhen: hitl.ExpiresWhenChatDeleted, ReaskWhen: hitl.ReaskWhenDifferentPath,
 		}

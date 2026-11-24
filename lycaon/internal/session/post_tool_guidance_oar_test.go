@@ -519,9 +519,9 @@ func TestSharedTempXcodeMixedRefusalReconcilesToSingleGuidance(t *testing.T) {
 			},
 			{
 				Operation: "file-write-create", Target: filepath.Join(home, ".swiftpm"),
-				Layer:     confine.FloorOutsideWriteRoots,
-				Grant:     confine.FloorOutsideWriteRoots.RecoveryFor(confine.AccessWrite).GrantPath(filepath.Join(home, ".swiftpm")),
-				Recovery:  confine.RecoverWriteRoot,
+				Layer:    confine.FloorOutsideWriteRoots,
+				Grant:    confine.FloorOutsideWriteRoots.RecoveryFor(confine.AccessWrite).GrantPath(filepath.Join(home, ".swiftpm")),
+				Recovery: confine.RecoverWriteRoot,
 			},
 			{
 				Operation: "file-read-data", Target: filepath.Join(home, "Library", "Keychains", "login.keychain-db"),

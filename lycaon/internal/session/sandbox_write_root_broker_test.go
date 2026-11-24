@@ -607,6 +607,7 @@ func (c *tempDecisionFixture) RequestCheckpoint(_ context.Context, req hitl.Chec
 							Path: delta.GrantedPath.Path, Mode: mode, Tree: delta.GrantedPath.Tree,
 						})
 					}
+				default:
 				}
 			}
 			break

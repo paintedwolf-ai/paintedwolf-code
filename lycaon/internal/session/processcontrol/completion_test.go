@@ -20,12 +20,12 @@ import (
 )
 
 type completionFixture struct {
-	captures   []tools.SourceRunCapture
-	wakes      []anchor.ID
-	emitted    []anchor.ID
-	envelopes  []anchor.Envelope
-	lastFacts  guidance.ToolResultFacts
-	waiting    bool
+	captures  []tools.SourceRunCapture
+	wakes     []anchor.ID
+	emitted   []anchor.ID
+	envelopes []anchor.Envelope
+	lastFacts guidance.ToolResultFacts
+	waiting   bool
 }
 
 func (*completionFixture) Get(context.Context, string) (*api.Session, error) {

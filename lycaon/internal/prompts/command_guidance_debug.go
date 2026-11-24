@@ -68,14 +68,14 @@ func ExtractCommandGuidanceFacts(vars map[string]any) map[string]any {
 // CommandGuidanceSnapshotInput describes the turn facts used to record
 // command-guidance debug metadata in llm-requests.jsonl.
 type CommandGuidanceSnapshotInput struct {
-	ProfileID             string
-	SurfaceID             string
-	AgentType             string
-	IsCoordinator         bool
-	OfferedTools          []string
-	DeferredTools         []string
-	RootCount             int
-	ProjectDir            string
+	ProfileID               string
+	SurfaceID               string
+	AgentType               string
+	IsCoordinator           bool
+	OfferedTools            []string
+	DeferredTools           []string
+	RootCount               int
+	ProjectDir              string
 	SessionScratchDir       string
 	SharedTempLocations     []string
 	SharedTempReadLocations []string

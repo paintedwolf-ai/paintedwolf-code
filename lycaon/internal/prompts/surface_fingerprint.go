@@ -13,11 +13,11 @@ func (surface AgentPromptSurface) CacheFingerprint() string {
 		catalog = surface.Skills
 	}
 	payload, err := json.Marshal(struct {
-		HasSkills             bool
-		FullCatalog           bool
-		Skills                []AgentSkillView
-		HostResources         []AgentHostResourceView
-		HostResourcesOmitted  int
+		HasSkills               bool
+		FullCatalog             bool
+		Skills                  []AgentSkillView
+		HostResources           []AgentHostResourceView
+		HostResourcesOmitted    int
 		SessionScratchDir       string
 		SharedTempLocations     []string
 		SharedTempReadLocations []string
