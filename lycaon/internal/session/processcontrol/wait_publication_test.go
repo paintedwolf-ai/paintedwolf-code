@@ -11,9 +11,9 @@ import (
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -74,12 +74,17 @@ func TestHandlesRunningHoldsUntilTerminalReportPublishesAndEmitsValueFreePhase(t
 	}
 
 	// Held call settlement also records publication phase.
+	releaseHeld := make(chan struct{})
 	outcome, err := service.Held.Run(t.Context(), heldcall.Spec{
 		SessionID: "session", Tool: "grep", Budget: time.Millisecond,
 	}, func(ctx context.Context) heldcall.Settled {
-		time.Sleep(5 * time.Millisecond)
+		select {
+		case <-releaseHeld:
+		case <-ctx.Done():
+		}
 		return heldcall.Settled{Outcome: api.ToolResultOutcomeCompleted, Content: secretOutput}
 	})
+	close(releaseHeld)
 	testutil.FailErr(t, "run held call", err)
 	if outcome.Handle != "" {
 		testutil.WaitFor(t, "held call settles", func() bool {
@@ -101,4 +106,6 @@ func TestHandlesRunningHoldsUntilTerminalReportPublishesAndEmitsValueFreePhase(t
 	}
 }
 
-func ProgramJobResultZero() bgprocess.ProgramJobResult { return bgprocess.ProgramJobResult{ExitCode: 0} }
+func ProgramJobResultZero() bgprocess.ProgramJobResult {
+	return bgprocess.ProgramJobResult{ExitCode: 0}
+}

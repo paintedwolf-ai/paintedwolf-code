@@ -55,7 +55,7 @@ func (g *gatedCredentialFiles) EnsureProject(ctx context.Context, _ string) erro
 	}
 	return nil
 }
-func (*gatedCredentialFiles) ForgetProject(context.Context, string) error              { return nil }
+func (*gatedCredentialFiles) ForgetProject(context.Context, string) error               { return nil }
 func (*gatedCredentialFiles) Delivered(context.Context, tools.CredentialFileRead) error { return nil }
 func (*gatedCredentialFiles) Authored(context.Context, tools.AuthoredCredentialValues) error {
 	return nil

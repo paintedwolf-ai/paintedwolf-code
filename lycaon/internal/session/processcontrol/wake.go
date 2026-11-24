@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/bgprocess"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
