@@ -58,7 +58,7 @@ func FindOversizedChunks(messages []ContextMessage, cfg CompactionConfig, bindin
 		if i >= protectedStart {
 			continue
 		}
-		if m.CompactionCheckpoint {
+		if m.CompactionCheckpoint || isContinuationSummary(m) {
 			continue
 		}
 		if m.CompactedChunk != nil && m.CompactedChunk.CompactedTokens < m.CompactedChunk.OriginalTokens {
