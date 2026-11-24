@@ -258,7 +258,26 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		t.Fatal("expected outside file effect to be recorded in sourceledger")
 	}
 
-	// Part C: In-root credential edit refreshes the exact relative path without walking the root.
+	// Part C: Index-only updates advance root epoch contiguously without scanning, and
+	// a subsequent in-root credential edit refreshes only the changed relative path.
+	repochange.Notify(t.Context(), repochange.Event{
+		ProjectDir: primary,
+		Kind:       repochange.IndexChanged,
+		Source:     repochange.SourceMutation,
+	})
+	repochange.Notify(t.Context(), repochange.Event{
+		ProjectDir: unrelatedDir,
+		Kind:       repochange.WorktreeChanged,
+		Source:     repochange.SourceMutation,
+		Changes:    []repochange.WorktreeChange{{Path: ".env", Kind: repochange.WorktreeChangeModified}},
+	})
+	aliasParent := t.TempDir()
+	primaryAlias := filepath.Join(aliasParent, "primary-alias")
+	testutil.FailErr(t, "symlink primary", os.Symlink(primary, primaryAlias))
+	if !sameCredentialRootDir(primaryAlias, primary) || sameCredentialRootDir(primaryAlias, unrelatedDir) {
+		t.Fatal("sameCredentialRootDir failed to canonicalize symlinked root directory")
+	}
+
 	_, err = f.Invoke(t, t.Context(), "write", map[string]any{
 		"path":    ".env.local",
 		"content": "LOCAL_SECRET=in-root-credential-8899\n",
