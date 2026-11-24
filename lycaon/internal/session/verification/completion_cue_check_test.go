@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session/scope"
@@ -57,7 +59,7 @@ func TestCheckMatchesCurrentSourceAndRecordsIntentAttribution(t *testing.T) {
 		observed = run
 	})
 
-	m.RecordSourceRun(ctx, sess, ProducerCommand, tools.SourceRunCapture{
+	m.RecordSourceRunTerminal(ctx, sess, sess.ID, ProducerCommand, tools.SourceRunCapture{
 		CheckID:          "chk-1",
 		IsCheck:          true,
 		Command:          "go test ./...",
@@ -67,13 +69,13 @@ func TestCheckMatchesCurrentSourceAndRecordsIntentAttribution(t *testing.T) {
 		SourceRootDigest: root,
 		UserIntentID:     "  intent-42  ",
 		WorkflowRunID:    "wf-1",
-	})
+	}, time.Now().UTC())
 
 	if observedProducer != ProducerCommand || observed.CheckID != "chk-1" || observed.UserIntentID != "  intent-42  " {
 		t.Fatalf("unexpected observer call: producer=%q run=%+v", observedProducer, observed)
 	}
 
-	records, err := evStore.Read(ctx, m.EvidenceRootFor(sess))
+	records, err := evStore.ReadAll(ctx, m.EvidenceRootFor(sess), sess.ID, VerifySlot, evidence.GateTypeVerify)
 	testutil.FailErr(t, "read evidence", err)
 	if len(records) != 1 || records[0].Artifacts["user_intent_id"] != "intent-42" {
 		t.Fatalf("expected trimmed user_intent_id artifact, got %+v", records)

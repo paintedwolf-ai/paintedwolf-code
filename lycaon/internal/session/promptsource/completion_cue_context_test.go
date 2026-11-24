@@ -32,11 +32,19 @@ type stubProgressStore struct {
 	err  error
 }
 
-func (s stubProgressStore) Snapshot(context.Context, string) (progress.Snapshot, error) {
+func (s *stubProgressStore) Set(string, string) error {
+	return nil
+}
+
+func (s *stubProgressStore) Get(context.Context, string) string {
+	return s.snap.Content
+}
+
+func (s *stubProgressStore) Snapshot(context.Context, string) (progress.Snapshot, error) {
 	return s.snap, s.err
 }
 
-func (s stubProgressStore) Put(context.Context, string, string, int) (progress.Snapshot, error) {
+func (s *stubProgressStore) Update(context.Context, string, func(progress.Snapshot) (progress.Document, error)) (progress.Snapshot, error) {
 	return s.snap, s.err
 }
 
