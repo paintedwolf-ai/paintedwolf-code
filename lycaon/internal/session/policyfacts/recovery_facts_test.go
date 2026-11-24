@@ -146,3 +146,32 @@ func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
 		}
 	}
 }
+
+func TestObserveConfinePublishesGitTransportFacts(t *testing.T) {
+	gc := oar.NewGuardContext()
+	gc.Invocation.Tool = "command"
+	ObserveConfine(gc, confine.Observation{
+		Applied: true,
+		GitTransports: []confine.GitTransportObservation{
+			{ExitCode: 0, Cause: confine.GitTransportCauseEstablished},
+			{
+				ExitCode:     128,
+				Command:      "git push",
+				Cause:        confine.GitTransportCauseEndpointDenied,
+				Stage:        "policy",
+				Destination:  "ssh://127.0.0.1:2222/repo.git",
+				Host:         "127.0.0.1",
+				Port:         2222,
+				PolicyReason: "loopback_port_ungranted",
+				ErrorClass:   "denied",
+			},
+		},
+	})
+	if !gc.Execution.GitTransportLoopbackRetryable || gc.Execution.GitTransportPort != "2222" {
+		t.Fatalf("git transport facts = %+v", gc.Execution)
+	}
+	data := gc.RejectData["GIT_SSH_TRANSPORT_DENIED"]
+	if data["git_transport_cause"] != string(confine.GitTransportCauseEndpointDenied) || data["git_transport_port"] != "2222" {
+		t.Fatalf("reject data = %+v", data)
+	}
+}

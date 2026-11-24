@@ -126,14 +126,8 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"arg_validation_errors":               strList(gc.Invocation.ArgValidationErrors),
 		"worker_leg":                          gc.Session.WorkerLeg,
 		"action_host_resource_denials":        strList(gc.Access.ActionHostResourceDenials),
-		"confine_applied":                     gc.Execution.ConfineApplied,
-		"network_mode":                        gc.Execution.NetworkMode,
-		"denial_subject":                      gc.Execution.DenialSubject,
-		"confine_signals":                     strList(gc.Execution.ConfineSignals),
-		"failed_stages":                       strList(gc.Execution.FailedStages),
 		"response_tools_callable":             gc.Response.ToolsCallable,
 		"response_structured_output":          gc.Response.StructuredOutput,
-		"process_running":                     gc.Execution.ProcessRunning,
 		"ordinary_write_paths":                strList(gc.Refusals.OrdinaryWritePaths),
 		"ordinary_write_grants":               strList(gc.Refusals.OrdinaryWriteGrants),
 		"refused_write_paths":                 strList(gc.Refusals.RefusedWritePaths),
@@ -228,10 +222,31 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"reproduced_source_start_line":        gc.Source.ReproducedSourceStartLine,
 		"reproduced_source_end_line":          gc.Source.ReproducedSourceEndLine,
 	}
+	maps.Copy(out, executionActivation(gc))
 	maps.Copy(out, rejectObservationActivation(gc))
 	maps.Copy(out, sessionActivation(gc))
 	maps.Copy(out, workflowActivation(gc))
 	return out
+}
+
+func executionActivation(gc *GuardContext) map[string]any {
+	return map[string]any{
+		"confine_applied":                  gc.Execution.ConfineApplied,
+		"network_mode":                     gc.Execution.NetworkMode,
+		"denial_subject":                   gc.Execution.DenialSubject,
+		"confine_signals":                  strList(gc.Execution.ConfineSignals),
+		"failed_stages":                    strList(gc.Execution.FailedStages),
+		"process_running":                  gc.Execution.ProcessRunning,
+		"git_transport_cause":              gc.Execution.GitTransportCause,
+		"git_transport_stage":              gc.Execution.GitTransportStage,
+		"git_transport_destination":        gc.Execution.GitTransportDestination,
+		"git_transport_port":               gc.Execution.GitTransportPort,
+		"git_transport_loopback_retryable": gc.Execution.GitTransportLoopbackRetryable,
+		"git_transport_policy_reason":      gc.Execution.GitTransportPolicyReason,
+		"git_transport_error_class":        gc.Execution.GitTransportErrorClass,
+		"git_transport_command":            gc.Execution.GitTransportCommand,
+		"git_transport_exit_code":          gc.Execution.GitTransportExitCode,
+	}
 }
 
 // rejectObservationActivation defines the structured tool-rejection vocabulary:

@@ -75,3 +75,65 @@ func TestMediatedProjectUsesExactHostKeyFile(t *testing.T) {
 		t.Fatalf("offline key file = %q, %v", path, err)
 	}
 }
+
+func TestSummarizeGitTransportAndMergeObservations(t *testing.T) {
+	setup := SummarizeGitTransport("exec-1", "git ls-remote origin", 128, true, "", "service_start_failed", "github.com:22", "github.com", 22, nil)
+	if setup.Cause != GitTransportCauseSetupFailed || !setup.Cause.PreAuthFailure() || setup.Stage != "host_setup" || setup.PolicyReason != "service_start_failed" {
+		t.Fatalf("setup summary = %+v", setup)
+	}
+
+	attempts := []GitTransportAttempt{
+		{Ordinal: 1, Destination: "127.0.0.1:2201", Host: "127.0.0.1", Port: 2201, Stage: "dial", Outcome: "established", ReplyCode: 0},
+		{Ordinal: 2, Destination: "127.0.0.1:2202", Host: "127.0.0.1", Port: 2202, Stage: "policy", Outcome: "endpoint_denied", ReplyCode: 2, PolicyReason: "loopback_port_ungranted"},
+	}
+	partial := SummarizeGitTransport("exec-2", "git fetch --all", 1, true, "", "", "127.0.0.1:2201", "127.0.0.1", 2201, attempts)
+	if partial.Cause != GitTransportCauseEndpointDenied || !partial.Cause.PreAuthFailure() || partial.Destination != "127.0.0.1:2202" || len(partial.Attempts) != 2 {
+		t.Fatalf("partial summary = %+v", partial)
+	}
+
+	okSummary := SummarizeGitTransport("exec-3", "git fetch origin", 128, true, "", "", "127.0.0.1:2201", "127.0.0.1", 2201, attempts[:1])
+	if okSummary.Cause != GitTransportCauseEstablished || okSummary.Cause.PreAuthFailure() {
+		t.Fatalf("established summary = %+v", okSummary)
+	}
+
+	unknown := SummarizeGitTransport("exec-4", "git ls-remote origin", 128, true, "", "", "127.0.0.1:2201", "127.0.0.1", 2201, nil)
+	if unknown.Cause != GitTransportCauseUnknown || unknown.Cause.PreAuthFailure() {
+		t.Fatalf("unknown summary = %+v", unknown)
+	}
+
+	none := SummarizeGitTransport("exec-5", "git ls-remote ./local", 0, false, "", "", "", "", 0, nil)
+	if none.Cause != GitTransportCauseNone {
+		t.Fatalf("none summary = %+v", none)
+	}
+
+	obs1 := Observation{Applied: true, Network: "proxy_only", GitTransports: []GitTransportObservation{setup}}
+	obs2 := Observation{Applied: true, Network: "proxy_only", GitTransports: []GitTransportObservation{partial}}
+	merged := obs1.Merge(obs2)
+	if len(merged.GitTransports) != 2 || merged.GitTransports[0].ExecutionID != "exec-1" || merged.GitTransports[1].ExecutionID != "exec-2" {
+		t.Fatalf("merged GitTransports = %+v", merged.GitTransports)
+	}
+}
+
+func TestStampRefusalIgnoresInheritedProbesAndRetainsGitTransports(t *testing.T) {
+	boundary := Boundary{Applied: true, Network: NetworkProxyOnly}
+	transport := GitTransportObservation{
+		ExecutionID: "exec-ok",
+		Command:     "git fetch origin",
+		ExitCode:    0,
+		Cause:       GitTransportCauseEstablished,
+		Destination: "github.com:22",
+	}
+	stamped := StampRefusal("command", "sess-1", boundary, RefusalContext{
+		MediatedNetwork: []EgressHost{
+			{Host: "probe.example", Port: 443, Allowed: false, Inherited: true, Attempts: 1},
+			{Host: "github.com", Port: 22, Allowed: true, Attempts: 1},
+		},
+		GitTransports: []GitTransportObservation{transport},
+	})
+	if stamped.Attribution != "" || len(stamped.GuidanceCodes) != 0 || stamped.Observation.HasSignal(SignalBoundaryRefused) {
+		t.Fatalf("inherited background probe created refusal on successful command: %+v", stamped)
+	}
+	if len(stamped.Observation.GitTransports) != 1 || stamped.Observation.GitTransports[0].ExecutionID != "exec-ok" {
+		t.Fatalf("GitTransports lost during StampRefusal: %+v", stamped.Observation.GitTransports)
+	}
+}

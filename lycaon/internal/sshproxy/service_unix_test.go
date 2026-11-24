@@ -27,11 +27,11 @@ import (
 
 func echoDialer(t *testing.T, dials *atomic.Int32) DialFunc {
 	t.Helper()
-	return func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, ReplyCode, error) {
+	return func(ctx context.Context, ep egressproxy.Endpoint) (DialResult, error) {
 		dials.Add(1)
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
-			return nil, ReplyDialFailed, err
+			return DialResult{Reply: ReplyDialFailed}, err
 		}
 		go func() {
 			defer func() { _ = ln.Close() }()
@@ -47,9 +47,9 @@ func echoDialer(t *testing.T, dials *atomic.Int32) DialFunc {
 		client, err := d.DialContext(ctx, "tcp", ln.Addr().String())
 		if err != nil {
 			_ = ln.Close()
-			return nil, ReplyDialFailed, err
+			return DialResult{Reply: ReplyDialFailed}, err
 		}
-		return client, ReplySuccess, nil
+		return DialResult{Conn: client, Reply: ReplySuccess, Stage: StageDial, Outcome: OutcomeEstablished}, nil
 	}
 }
 
@@ -224,12 +224,22 @@ func TestServiceRejectsWrongHelperWrongInvocationAndTwoSessions(t *testing.T) {
 	if dialsB.Load() != 0 {
 		t.Fatalf("cross-session helper triggered %d dials on B", dialsB.Load())
 	}
+	if got := serviceB.Attempts(); len(got) != 0 {
+		t.Fatalf("unverified helper recorded attempts on B: %+v", got)
+	}
+	if got := serviceA.Attempts(); len(got) != 0 {
+		t.Fatalf("foreign helper recorded attempts on A: %+v", got)
+	}
 
 	// Meanwhile service A still serves its own verified helper cleanly.
+	serviceA.SetExecutionID("exec-a")
 	out, err := runHelperChild(t, self, serviceA.Path(), "connect", "github.com", "22", "hello\n")
 	testutil.FailErr(t, "connect A", err)
 	if out != "dest=github.com:22\nhello\n" || dialsA.Load() != 1 {
 		t.Fatalf("service A output = %q, dials = %d", out, dialsA.Load())
+	}
+	if got := serviceA.Attempts(); len(got) != 1 || got[0].ExecutionID != "exec-a" || got[0].Outcome != OutcomeEstablished || got[0].Destination != "github.com:22" {
+		t.Fatalf("service A attempts = %+v", got)
 	}
 }
 
@@ -240,11 +250,12 @@ func TestServiceFrameValidationReplyCodesAndConnectionLimit(t *testing.T) {
 	var dials atomic.Int32
 	var nextCode atomic.Uint32
 	service, err := Serve(t.Context(), ServeOptions{
-		GitBinary: self,
-		Dial: func(_ context.Context, _ egressproxy.Endpoint) (net.Conn, ReplyCode, error) {
+		GitBinary:   self,
+		ExecutionID: "exec-validate",
+		Dial: func(_ context.Context, _ egressproxy.Endpoint) (DialResult, error) {
 			dials.Add(1)
 			code := ReplyCode(nextCode.Load())
-			return nil, code, errors.New("refused")
+			return DialResult{Reply: code, PolicyReason: "test_policy", ErrorClass: "connection_refused"}, errors.New("refused")
 		},
 	})
 	testutil.FailErr(t, "serve", err)
@@ -255,6 +266,9 @@ func TestServiceFrameValidationReplyCodesAndConnectionLimit(t *testing.T) {
 		if out, err := runHelperChild(t, self, service.Path(), mode, "github.com", "22", ""); err == nil {
 			t.Fatalf("%s unexpectedly succeeded: %q", mode, out)
 		}
+	}
+	if got := service.Attempts(); len(got) != 0 {
+		t.Fatalf("aborted frames recorded attempts: %+v", got)
 	}
 	for _, mode := range []string{"bad-opcode", "zero-host", "oversize-host", "zero-port", "bad-host"} {
 		out, err := runHelperChild(t, self, service.Path(), mode, "github.com", "22", "")
@@ -273,6 +287,9 @@ func TestServiceFrameValidationReplyCodesAndConnectionLimit(t *testing.T) {
 			t.Fatalf("reply code %d = (%q, %v)", code, out, err)
 		}
 	}
+	if got := service.Attempts(); len(got) != 8 || got[5].Outcome != OutcomeLeaseEnded || got[6].Outcome != OutcomeEndpointDenied || got[6].PolicyReason != "test_policy" || got[7].Outcome != OutcomeDialFailed || got[7].ErrorClass != "connection_refused" {
+		t.Fatalf("service attempts = %+v", got)
+	}
 
 	// Hold 16 active connections from a verified child helper, assert the 17th gets ReplyServiceBusy (5),
 	// then release one connection and verify the freed slot admits the next request.
@@ -281,13 +298,13 @@ func TestServiceFrameValidationReplyCodesAndConnectionLimit(t *testing.T) {
 	slotReleased := make(chan struct{}, MaxActiveConnections)
 	busyService, err := Serve(t.Context(), ServeOptions{
 		GitBinary: self,
-		Dial: func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, ReplyCode, error) {
+		Dial: func(ctx context.Context, ep egressproxy.Endpoint) (DialResult, error) {
 			entered <- struct{}{}
 			select {
 			case <-gate:
 			case <-ctx.Done():
 				slotReleased <- struct{}{}
-				return nil, ReplyLeaseEnded, ctx.Err()
+				return DialResult{Reply: ReplyLeaseEnded}, ctx.Err()
 			}
 			return echoDialer(t, &dials)(ctx, ep)
 		},
@@ -321,6 +338,9 @@ func TestServiceFrameValidationReplyCodesAndConnectionLimit(t *testing.T) {
 	if err == nil || !strings.Contains(out, fmt.Sprintf("code=%d", ReplyServiceBusy)) {
 		t.Fatalf("17th connection = (%q, %v), want ReplyServiceBusy (5)", out, err)
 	}
+	if got := busyService.Attempts(); len(got) != 0 {
+		t.Fatalf("over-limit ReplyServiceBusy recorded verified attempts before completion: %+v", got)
+	}
 
 	// Ask the child to drop one held connection; disconnect cancels its pending dial and frees a slot.
 	_, err = io.WriteString(holdIn, "drop-one\n")
@@ -352,11 +372,11 @@ func TestServiceClosureDuringSetupAndActiveStream(t *testing.T) {
 	dialCanceled := make(chan struct{})
 	service, err := Serve(t.Context(), ServeOptions{
 		GitBinary: self,
-		Dial: func(ctx context.Context, _ egressproxy.Endpoint) (net.Conn, ReplyCode, error) {
+		Dial: func(ctx context.Context, _ egressproxy.Endpoint) (DialResult, error) {
 			close(dialEntered)
 			<-ctx.Done()
 			close(dialCanceled)
-			return nil, ReplyLeaseEnded, ctx.Err()
+			return DialResult{Reply: ReplyLeaseEnded}, ctx.Err()
 		},
 	})
 	testutil.FailErr(t, "serve", err)

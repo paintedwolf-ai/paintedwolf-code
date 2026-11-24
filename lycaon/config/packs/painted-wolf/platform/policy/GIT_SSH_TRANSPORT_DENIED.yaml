@@ -1,0 +1,44 @@
+spec_version: "1.0"
+id: GIT_SSH_TRANSPORT_DENIED
+kind: policy
+on: tool.post_invoke
+selector:
+  tools:
+    - command
+    - verify
+    - command_output
+requires_facts: [paintedwolf.confine_applied, paintedwolf.git_transport_cause, paintedwolf.git_transport_command, paintedwolf.git_transport_destination, paintedwolf.git_transport_exit_code, paintedwolf.git_transport_loopback_retryable, paintedwolf.git_transport_policy_reason, paintedwolf.git_transport_port, paintedwolf.missing_capability_loopback_connect]
+when: >-
+  paintedwolf.confine_applied && paintedwolf.git_transport_cause == "endpoint_denied"
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_git_remote
+message: managed SSH connection was refused by host policy
+what: The host refused the mediated SSH connection{% if paintedwolf.git_transport_command %} for `{{ paintedwolf.git_transport_command }}`{% endif %}{% if paintedwolf.git_transport_destination %} to `{{ paintedwolf.git_transport_destination }}`{% endif %} (exit {{ paintedwolf.git_transport_exit_code }}).
+cause: Host egress policy denied this SSH destination{% if paintedwolf.git_transport_policy_reason %} (`{{ paintedwolf.git_transport_policy_reason }}`){% endif %}.
+why: The connection stopped at host policy before any upstream SSH handshake or authentication ran.
+fix: '{% if paintedwolf.git_transport_loopback_retryable %}{% if paintedwolf.missing_capability_loopback_connect %}For the still-needed local SSH remote, submit only remaining work with `capability_request.loopback_connect: {"ports": [{{ paintedwolf.git_transport_port }}]}`. Preserve completed effects and resolve uncertain outcomes first.{% else %}Do not retry the denied SSH destination unless endpoint authorization changes; preserve completed sibling remote updates.{% endif %}{% else %}Do not retry the denied SSH destination unless endpoint authorization changes; preserve completed sibling remote updates.{% endif %}'
+instead: Do not speculate about SSH keys or signing agents when the host refused the transport endpoint.
+x-paintedwolf-scenarios:
+  - id: loopback_port_denied
+    vars:
+      tool: command
+      confine_applied: true
+      git_transport_cause: endpoint_denied
+      git_transport_command: git fetch origin
+      git_transport_destination: 127.0.0.1:2222
+      git_transport_port: '2222'
+      git_transport_loopback_retryable: true
+      git_transport_policy_reason: loopback_port_ungranted
+      git_transport_exit_code: 128
+      tool_args: {}
+  - id: rule_denied
+    vars:
+      tool: command_output
+      confine_applied: true
+      git_transport_cause: endpoint_denied
+      git_transport_command: git fetch --all
+      git_transport_destination: blocked.example:22
+      git_transport_loopback_retryable: false
+      git_transport_policy_reason: egress_rule_deny
+      git_transport_exit_code: 128

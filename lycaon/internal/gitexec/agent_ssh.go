@@ -2,7 +2,6 @@ package gitexec
 
 import (
 	"context"
-	"net"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -50,21 +49,55 @@ func (s *AgentSSH) HostService() confine.HostService { return s.hostService }
 // HasDialer reports whether the SSH service has an outbound dialer bound.
 func (s *AgentSSH) HasDialer() bool { return s.service.HasDialer() }
 
-// BindLease connects the service to the live broker lease before any helper is served.
-func (s *AgentSSH) BindLease(lease *confine.ActionLease) {
-	s.service.SetDial(func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, sshproxy.ReplyCode, error) {
-		conn, disp, err := lease.DialManagedTCP(ctx, ep)
-		switch disp {
+// BindExecution connects the service to the originating execution identity and
+// live broker lease before any helper is served.
+func (s *AgentSSH) BindExecution(executionID string, lease *confine.ActionLease) {
+	s.service.SetExecutionID(executionID)
+	s.service.SetDial(func(ctx context.Context, ep egressproxy.Endpoint) (sshproxy.DialResult, error) {
+		res, err := lease.DialManagedTCP(ctx, ep)
+		switch res.Disposition {
 		case egressproxy.TCPDialEstablished:
-			return conn, sshproxy.ReplySuccess, nil
+			return sshproxy.DialResult{Conn: res.Conn, Reply: sshproxy.ReplySuccess, Stage: res.Stage, Outcome: sshproxy.OutcomeEstablished}, nil
 		case egressproxy.TCPDialLeaseEnded:
-			return nil, sshproxy.ReplyLeaseEnded, err
+			return sshproxy.DialResult{Reply: sshproxy.ReplyLeaseEnded, Stage: res.Stage, Outcome: sshproxy.OutcomeLeaseEnded}, err
 		case egressproxy.TCPDialEndpointDenied:
-			return nil, sshproxy.ReplyEndpointDenied, err
+			return sshproxy.DialResult{Reply: sshproxy.ReplyEndpointDenied, Stage: res.Stage, Outcome: sshproxy.OutcomeEndpointDenied, PolicyReason: res.PolicyReason}, err
 		default:
-			return nil, sshproxy.ReplyDialFailed, err
+			outcome := sshproxy.OutcomeDialFailed
+			if res.Stage == "broker_setup" {
+				outcome = sshproxy.OutcomeSetupFailed
+			}
+			return sshproxy.DialResult{Reply: sshproxy.ReplyDialFailed, Stage: res.Stage, Outcome: outcome, ErrorClass: res.ErrorClass}, err
 		}
 	})
+}
+
+// Observation returns the ordered verified connect attempts and summarized transport outcome for this launch.
+func (s *AgentSSH) Observation(executionID, command string, exitCode int, failed bool, primaryDest, primaryHost string, primaryPort uint16) confine.GitTransportObservation {
+	if s == nil {
+		return confine.GitTransportObservation{}
+	}
+	raw := s.service.Attempts()
+	attempts := make([]confine.GitTransportAttempt, len(raw))
+	for i, a := range raw {
+		attempts[i] = confine.GitTransportAttempt{
+			Ordinal:      a.Ordinal,
+			Destination:  a.Destination,
+			Host:         a.Host,
+			Port:         a.Port,
+			Stage:        a.Stage,
+			Outcome:      a.Outcome,
+			ReplyCode:    uint8(a.Reply),
+			PolicyReason: a.PolicyReason,
+			ErrorClass:   a.ErrorClass,
+		}
+	}
+	setupStage, setupReason := "", ""
+	if s.BindError() != nil && len(attempts) == 0 {
+		setupStage = "helper_bind"
+		setupReason = "helper_bind_failed"
+	}
+	return confine.SummarizeGitTransport(executionID, command, exitCode, failed, setupStage, setupReason, primaryDest, primaryHost, primaryPort, attempts)
 }
 
 // Bind records the started Git or supervisor PID once.

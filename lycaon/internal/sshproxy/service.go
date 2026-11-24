@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -20,13 +21,55 @@ const (
 	relayIdleTimeout   = 5 * time.Minute
 )
 
+const (
+	OutcomeEstablished    = "established"
+	OutcomeLeaseEnded     = "lease_ended"
+	OutcomeEndpointDenied = "endpoint_denied"
+	OutcomeDialFailed     = "dial_failed"
+	OutcomeInvalidRequest = "invalid_request"
+	OutcomeSetupFailed    = "setup_failed"
+)
+
+const (
+	StageRequest     = "request"
+	StageBrokerSetup = "broker_setup"
+	StageLease       = "lease"
+	StagePolicy      = "policy"
+	StageDial        = "dial"
+)
+
+// Attempt records one verified connect attempt in arrival order.
+type Attempt struct {
+	Ordinal      int
+	ExecutionID  string
+	Destination  string
+	Host         string
+	Port         uint16
+	Stage        string
+	Outcome      string
+	Reply        ReplyCode
+	PolicyReason string
+	ErrorClass   string
+}
+
+// DialResult carries the upstream connection or typed refusal detail for a verified connect request.
+type DialResult struct {
+	Conn         net.Conn
+	Reply        ReplyCode
+	Stage        string
+	Outcome      string
+	PolicyReason string
+	ErrorClass   string
+}
+
 // DialFunc dials an authorized endpoint on behalf of the service's bound action.
-type DialFunc func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, ReplyCode, error)
+type DialFunc func(ctx context.Context, ep egressproxy.Endpoint) (DialResult, error)
 
 // ServeOptions configures one per-invocation SSH service.
 type ServeOptions struct {
-	GitBinary string
-	Dial      DialFunc
+	GitBinary   string
+	ExecutionID string
+	Dial        DialFunc
 }
 
 // Service mediates SSH TCP streams for one launched Git invocation over a private Unix socket.
@@ -40,9 +83,11 @@ type Service struct {
 	accepted  func()
 
 	mu               sync.Mutex
+	executionID      string
 	active           int
 	closed           bool
 	conns            map[io.Closer]struct{}
+	attempts         []Attempt
 	releaseAdmission []func()
 
 	wg        sync.WaitGroup
@@ -65,13 +110,14 @@ func serve(ctx context.Context, options ServeOptions, configure func(*Service)) 
 	}
 	serviceCtx, cancel := context.WithCancel(ctx)
 	s := &Service{
-		cancel:    cancel,
-		listener:  listener,
-		directory: directory,
-		binding:   binding,
-		dial:      options.Dial,
-		deadline:  githelper.SetupDeadline,
-		conns:     make(map[io.Closer]struct{}),
+		cancel:      cancel,
+		listener:    listener,
+		directory:   directory,
+		binding:     binding,
+		executionID: options.ExecutionID,
+		dial:        options.Dial,
+		deadline:    githelper.SetupDeadline,
+		conns:       make(map[io.Closer]struct{}),
 	}
 	if configure != nil {
 		configure(s)
@@ -109,6 +155,30 @@ func (s *Service) OnClose(fn func()) {
 func (s *Service) SetDial(dial DialFunc) {
 	s.mu.Lock()
 	s.dial = dial
+	s.mu.Unlock()
+}
+
+// SetExecutionID binds the originating execution identity stamped onto verified attempts.
+func (s *Service) SetExecutionID(executionID string) {
+	s.mu.Lock()
+	s.executionID = executionID
+	s.mu.Unlock()
+}
+
+// Attempts returns verified connect attempts in the order they were recorded.
+func (s *Service) Attempts() []Attempt {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.attempts)
+}
+
+func (s *Service) recordAttempt(attempt Attempt) {
+	s.mu.Lock()
+	attempt.Ordinal = len(s.attempts) + 1
+	if attempt.ExecutionID == "" {
+		attempt.ExecutionID = s.executionID
+	}
+	s.attempts = append(s.attempts, attempt)
 	s.mu.Unlock()
 }
 
@@ -240,49 +310,117 @@ func (s *Service) handle(ctx context.Context, conn *net.UnixConn) {
 	case frameProtocolAbort:
 		return
 	case frameInvalidRequest:
+		s.recordAttempt(Attempt{
+			Stage:   StageRequest,
+			Outcome: OutcomeInvalidRequest,
+			Reply:   ReplyInvalidRequest,
+		})
 		_ = writeReply(conn, ReplyInvalidRequest)
 		return
 	}
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return
 	}
+	dest := ep.DialAddr()
 	dial := s.currentDial()
 	if dial == nil {
+		s.recordAttempt(Attempt{
+			Destination:  dest,
+			Host:         ep.Host,
+			Port:         ep.Port,
+			Stage:        StageBrokerSetup,
+			Outcome:      OutcomeSetupFailed,
+			Reply:        ReplyDialFailed,
+			PolicyReason: "service_unbound",
+		})
 		_ = writeReply(conn, ReplyDialFailed)
 		return
 	}
-	upstream, code, rest, clientClosed := s.dialWhileConnected(ctx, conn, dial, reader.remaining(), ep)
+	res, rest, clientClosed := s.dialWhileConnected(ctx, conn, dial, reader.remaining(), ep)
 	if clientClosed {
-		if upstream != nil {
-			_ = upstream.Close()
+		if res.Conn != nil {
+			_ = res.Conn.Close()
 		}
 		return
 	}
-	if code != ReplySuccess || upstream == nil {
-		if upstream != nil {
-			_ = upstream.Close()
+	code := res.Reply
+	if code != ReplySuccess || res.Conn == nil {
+		if res.Conn != nil {
+			_ = res.Conn.Close()
 		}
 		if !code.Valid() || code == ReplySuccess {
 			code = ReplyDialFailed
 		}
+		s.recordAttempt(Attempt{
+			Destination:  dest,
+			Host:         ep.Host,
+			Port:         ep.Port,
+			Stage:        defaultStage(res.Stage, code),
+			Outcome:      defaultOutcome(res.Outcome, code),
+			Reply:        code,
+			PolicyReason: res.PolicyReason,
+			ErrorClass:   res.ErrorClass,
+		})
 		_ = writeReply(conn, code)
 		return
 	}
-	if !s.trackUpstream(upstream) {
-		_ = upstream.Close()
+	if !s.trackUpstream(res.Conn) {
+		_ = res.Conn.Close()
 		return
 	}
 	defer func() {
-		s.untrackConn(upstream, false)
-		_ = upstream.Close()
+		s.untrackConn(res.Conn, false)
+		_ = res.Conn.Close()
 	}()
+	s.recordAttempt(Attempt{
+		Destination: dest,
+		Host:        ep.Host,
+		Port:        ep.Port,
+		Stage:       defaultStage(res.Stage, ReplySuccess),
+		Outcome:     OutcomeEstablished,
+		Reply:       ReplySuccess,
+	})
 	if err := writeReply(conn, ReplySuccess); err != nil {
 		return
 	}
-	relayStreams(ctx, conn, rest, upstream)
+	relayStreams(ctx, conn, rest, res.Conn)
 }
 
-func (s *Service) dialWhileConnected(ctx context.Context, conn *net.UnixConn, dial DialFunc, buffered []byte, ep egressproxy.Endpoint) (net.Conn, ReplyCode, []byte, bool) {
+func defaultStage(stage string, code ReplyCode) string {
+	if stage != "" {
+		return stage
+	}
+	switch code {
+	case ReplyLeaseEnded:
+		return StageLease
+	case ReplyEndpointDenied:
+		return StagePolicy
+	case ReplyInvalidRequest:
+		return StageRequest
+	default:
+		return StageDial
+	}
+}
+
+func defaultOutcome(outcome string, code ReplyCode) string {
+	if outcome != "" {
+		return outcome
+	}
+	switch code {
+	case ReplySuccess:
+		return OutcomeEstablished
+	case ReplyLeaseEnded:
+		return OutcomeLeaseEnded
+	case ReplyEndpointDenied:
+		return OutcomeEndpointDenied
+	case ReplyInvalidRequest:
+		return OutcomeInvalidRequest
+	default:
+		return OutcomeDialFailed
+	}
+}
+
+func (s *Service) dialWhileConnected(ctx context.Context, conn *net.UnixConn, dial DialFunc, buffered []byte, ep egressproxy.Endpoint) (DialResult, []byte, bool) {
 	dialCtx, cancelDial := context.WithCancel(ctx)
 	defer cancelDial()
 
@@ -298,7 +436,7 @@ func (s *Service) dialWhileConnected(ctx context.Context, conn *net.UnixConn, di
 		}
 	}()
 
-	upstream, code, err := dial(dialCtx, ep)
+	res, err := dial(dialCtx, ep)
 	_ = conn.SetReadDeadline(time.Now())
 	<-probeDone
 	_ = conn.SetReadDeadline(time.Time{})
@@ -306,12 +444,12 @@ func (s *Service) dialWhileConnected(ctx context.Context, conn *net.UnixConn, di
 	if probeN > 0 {
 		buffered = append(buffered, probe[:probeN]...)
 	} else if probeErr != nil && !os.IsTimeout(probeErr) {
-		return upstream, code, nil, true
+		return res, nil, true
 	}
-	if err != nil && code == ReplySuccess {
-		code = ReplyDialFailed
+	if err != nil && res.Reply == ReplySuccess {
+		res.Reply = ReplyDialFailed
 	}
-	return upstream, code, buffered, false
+	return res, buffered, false
 }
 
 func writeReply(conn *net.UnixConn, code ReplyCode) error {

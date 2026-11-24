@@ -183,8 +183,8 @@ func TestActionLeaseDialManagedTCP(t *testing.T) {
 	testutil.FailErr(t, "parse endpoint", err)
 
 	var nilLease *confine.ActionLease
-	if conn, disp, err := nilLease.DialManagedTCP(t.Context(), ep); conn != nil || disp != egressproxy.TCPDialLeaseEnded || err == nil {
-		t.Fatalf("nil lease DialManagedTCP = (%v, %v, %v)", conn, disp, err)
+	if res, err := nilLease.DialManagedTCP(t.Context(), ep); res.Conn != nil || res.Disposition != egressproxy.TCPDialLeaseEnded || err == nil {
+		t.Fatalf("nil lease DialManagedTCP = (%+v, %v)", res, err)
 	}
 
 	_ = liveBroker(t)
@@ -207,19 +207,19 @@ func TestActionLeaseDialManagedTCP(t *testing.T) {
 	_, lease := boundAction(t, confine.EgressCommand{ProjectID: "proj-tcp", SessionID: "s-tcp"})
 	liveEP, err := egressproxy.ParseTCPEndpoint("127.0.0.1", uint16(ln.Addr().(*net.TCPAddr).Port))
 	testutil.FailErr(t, "parse live endpoint", err)
-	conn, disp, err := lease.DialManagedTCP(t.Context(), liveEP)
+	res, err := lease.DialManagedTCP(t.Context(), liveEP)
 	testutil.FailErr(t, "DialManagedTCP live", err)
-	if disp != egressproxy.TCPDialEstablished || conn == nil {
-		t.Fatalf("live DialManagedTCP disp=%v conn=%v", disp, conn)
+	if res.Disposition != egressproxy.TCPDialEstablished || res.Conn == nil {
+		t.Fatalf("live DialManagedTCP res=%+v", res)
 	}
-	payload, _ := io.ReadAll(conn)
-	_ = conn.Close()
+	payload, _ := io.ReadAll(res.Conn)
+	_ = res.Conn.Close()
 	if string(payload) != "ok" {
 		t.Fatalf("payload = %q, want ok", payload)
 	}
 
 	lease.Close(t.Context())
-	if conn, disp, err := lease.DialManagedTCP(t.Context(), liveEP); conn != nil || disp != egressproxy.TCPDialLeaseEnded || err == nil {
-		t.Fatalf("closed lease DialManagedTCP = (%v, %v, %v)", conn, disp, err)
+	if res, err := lease.DialManagedTCP(t.Context(), liveEP); res.Conn != nil || res.Disposition != egressproxy.TCPDialLeaseEnded || err == nil {
+		t.Fatalf("closed lease DialManagedTCP = (%+v, %v)", res, err)
 	}
 }

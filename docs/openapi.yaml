@@ -31896,6 +31896,82 @@ components:
           type: string
         observed_revision:
           type: string
+    CommandExecutionTransportAttempt:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - ordinal
+        - stage
+        - outcome
+        - reply_code
+      properties:
+        ordinal:
+          type: integer
+          minimum: 1
+        destination:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        stage:
+          type: string
+        outcome:
+          type: string
+          enum:
+            - established
+            - setup_failed
+            - lease_ended
+            - endpoint_denied
+            - dial_failed
+            - invalid_request
+        reply_code:
+          type: integer
+          minimum: 0
+          maximum: 5
+        policy_reason:
+          type: string
+        error_class:
+          type: string
+    CommandExecutionTransport:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Host-evidenced transport mediation summary and verified per-attempt outcomes for a network Git execution.
+      required:
+        - cause
+      properties:
+        cause:
+          type: string
+          enum:
+            - established
+            - setup_failed
+            - lease_ended
+            - endpoint_denied
+            - dial_failed
+            - invalid_request
+            - unknown
+        stage:
+          type: string
+        destination:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        policy_reason:
+          type: string
+        error_class:
+          type: string
+        attempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandExecutionTransportAttempt'
     CommandExecutionReceipt:
       x-go-generate: true
       type: object
@@ -32038,6 +32114,9 @@ components:
         revision_conflict:
           x-go-pointer: true
           $ref: '#/components/schemas/CommandRevisionConflict'
+        transport:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CommandExecutionTransport'
     CommandProgramNode:
       x-go-generate: true
       type: object

@@ -323,7 +323,7 @@ type launchClosure struct{ lycexec.StageRun }
 
 func (launchClosure) Error() string { return "external producer stopped after its consumer closed" }
 
-func (l ExternalStages) settleStageConfine(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, boundary confine.Boundary, report confine.Report, settleJob func(confine.SandboxRefusals, []confine.EgressHost), commandLine string, run *lycexec.PipelineResult) {
+func (l ExternalStages) settleStageConfine(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, boundary confine.Boundary, report confine.Report, settleJob func(confine.SandboxRefusals, []confine.EgressHost, ...confine.GitTransportObservation), commandLine string, run *lycexec.PipelineResult) {
 	settleCtx := context.WithoutCancel(ctx)
 	refusals := bound.lease.SettledRefusals(settleCtx)
 	network := bound.close(settleCtx)

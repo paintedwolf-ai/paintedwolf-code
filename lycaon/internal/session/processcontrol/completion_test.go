@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -308,6 +309,67 @@ func TestCommandCompletionDigestSeparatesApprovalWaitFromRunTime(t *testing.T) {
 	completion.PersonWait = 0
 	if digest := CommandCompletionDigest(completion); !strings.Contains(digest, " elapsed=21.75s ") || strings.Contains(digest, "awaited_approval") {
 		t.Fatalf("digest without a wait = %q", digest)
+	}
+}
+
+func TestCommandCompletionDigestIncludesGitTransportAndEffectCertainty(t *testing.T) {
+	started := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	released := false
+	f := &completionFixture{}
+	bg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
+	service := New(f, f, f, f)
+	service.Background = bg
+	service.Observe("session", "unreported-handle")
+
+	completion := bgprocess.Completion{
+		SessionID:         "session",
+		Handle:            "bg-git",
+		OriginTool:        "command",
+		RunID:             "run-git",
+		TerminationReason: bgprocess.TerminationExited,
+		ExitCode:          128,
+		StartedAt:         started,
+		FinishedAt:        started.Add(2 * time.Second),
+		Stages:            []hostcmd.StageResult{{Command: "git push origin main"}},
+		ReleaseNotices:    func() { released = true },
+		ProgramReceipt: &bgprocess.ProgramReceipt{
+			ProgramID:       "prog-1",
+			StdoutRef:       "out-1",
+			StderrRef:       "err-1",
+			EffectCertainty: "none",
+		},
+		Observation: confine.Observation{
+			GitTransports: []confine.GitTransportObservation{
+				{Cause: ""},
+				{
+					Cause:        "endpoint_denied",
+					Stage:        "policy",
+					Destination:  "git@github.com:org/repo.git",
+					PolicyReason: "egress_rule_deny",
+					ErrorClass:   "connection_refused",
+				},
+			},
+		},
+	}
+	service.HandleCommandCompletion(t.Context(), completion)
+	if !released {
+		t.Fatal("HandleCommandCompletion did not invoke ReleaseNotices")
+	}
+	if len(f.captures) != 1 || f.captures[0].Command != "git push origin main" {
+		t.Fatalf("source run captures = %+v, want 1 git push capture", f.captures)
+	}
+	report, ok := service.Report("session", "bg-git")
+	if !ok {
+		t.Fatal("expected completion report for bg-git")
+	}
+	for _, want := range []string{
+		"program_id=prog-1",
+		"effect_certainty=none",
+		"git_transport=endpoint_denied stage=policy destination=git@github.com:org/repo.git policy_reason=egress_rule_deny error_class=connection_refused",
+	} {
+		if !strings.Contains(report, want) {
+			t.Fatalf("report missing %q:\n%s", want, report)
+		}
 	}
 }
 

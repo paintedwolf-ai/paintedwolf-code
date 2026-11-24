@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/indexwatch"
@@ -26,6 +27,10 @@ var sandboxPostInvokeCodes = []string{
 	isolation.CodeBoundaryRefused,
 	isolation.CodeRemotePackageDestinationDenied,
 	toolrejection.VerifyUnverifiableCode,
+	"GIT_SSH_TRANSPORT_SETUP_FAILED",
+	"GIT_SSH_TRANSPORT_DENIED",
+	"GIT_SSH_TRANSPORT_LEASE_ENDED",
+	"GIT_SSH_TRANSPORT_DIAL_FAILED",
 }
 
 // ObserveConfine publishes post-invoke boundary facts.
@@ -47,8 +52,53 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	if obs.Port > 0 {
 		data["port"] = strconv.Itoa(obs.Port)
 	}
+	observeGitTransport(gc, obs.GitTransports, data)
 	for _, code := range sandboxPostInvokeCodes {
 		gc.PutRejectData(code, data)
+	}
+}
+
+func observeGitTransport(gc *oar.GuardContext, transports []confine.GitTransportObservation, data map[string]any) {
+	for _, tr := range transports {
+		if tr.ExitCode == 0 || tr.Cause == "" {
+			continue
+		}
+		gc.Execution.GitTransportCause = string(tr.Cause)
+		gc.Execution.GitTransportStage = tr.Stage
+		gc.Execution.GitTransportDestination = tr.Destination
+		if tr.Port > 0 {
+			gc.Execution.GitTransportPort = strconv.Itoa(int(tr.Port))
+		}
+		isLoopback := tr.Host != "" && egress.SyntacticLoopback(tr.Host) && tr.Port > 0
+		gc.Execution.GitTransportLoopbackRetryable = tr.Cause == confine.GitTransportCauseEndpointDenied &&
+			tr.PolicyReason == "loopback_port_ungranted" &&
+			isLoopback
+		gc.Execution.GitTransportPolicyReason = tr.PolicyReason
+		gc.Execution.GitTransportErrorClass = tr.ErrorClass
+		gc.Execution.GitTransportCommand = tr.Command
+		gc.Execution.GitTransportExitCode = int64(tr.ExitCode)
+
+		data["git_transport_cause"] = gc.Execution.GitTransportCause
+		if tr.Stage != "" {
+			data["git_transport_stage"] = tr.Stage
+		}
+		if tr.Destination != "" {
+			data["git_transport_destination"] = tr.Destination
+		}
+		if gc.Execution.GitTransportPort != "" {
+			data["git_transport_port"] = gc.Execution.GitTransportPort
+		}
+		if tr.PolicyReason != "" {
+			data["git_transport_policy_reason"] = tr.PolicyReason
+		}
+		if tr.ErrorClass != "" {
+			data["git_transport_error_class"] = tr.ErrorClass
+		}
+		if tr.Command != "" {
+			data["git_transport_command"] = tr.Command
+		}
+		data["git_transport_exit_code"] = gc.Execution.GitTransportExitCode
+		return
 	}
 }
 

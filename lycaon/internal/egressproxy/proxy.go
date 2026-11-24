@@ -62,6 +62,15 @@ type RefusalReporter func(peer Peer, ep Endpoint, refusal Refusal)
 // EndpointDecider returns whether the lineage may connect to ep.
 type EndpointDecider func(ctx context.Context, lineage string, ep Endpoint) bool
 
+// EndpointDecision pairs an endpoint admission verdict with its policy reason.
+type EndpointDecision struct {
+	Allowed bool
+	Reason  string
+}
+
+// EndpointReasonDecider returns an endpoint decision and its recorded reason.
+type EndpointReasonDecider func(ctx context.Context, lineage string, ep Endpoint) EndpointDecision
+
 // LoopbackConnectAuthority checks one lineage's local port grant.
 type LoopbackConnectAuthority func(lineage string, port uint16) bool
 
@@ -100,6 +109,7 @@ type HTTPReporter func(lineage string, ep Endpoint, statusCode int, requestErr e
 type Broker struct {
 	resolvePeer           PeerResolver
 	decideEndpoint        EndpointDecider
+	decideEndpointReason  EndpointReasonDecider
 	loopbackGrant         LoopbackConnectAuthority
 	ownedLoopback         OwnedLoopbackAuthority
 	reportLoopbackRefusal func(context.Context, string, Endpoint)
@@ -125,6 +135,13 @@ func New(decide EndpointDecider) *Broker {
 func (b *Broker) SetPeerResolver(fn PeerResolver) {
 	if b != nil {
 		b.resolvePeer = fn
+	}
+}
+
+// SetEndpointReasonDecider wires endpoint decisions that retain policy reasons.
+func (b *Broker) SetEndpointReasonDecider(fn EndpointReasonDecider) {
+	if b != nil {
+		b.decideEndpointReason = fn
 	}
 }
 

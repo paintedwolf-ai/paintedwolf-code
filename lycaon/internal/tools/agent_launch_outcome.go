@@ -10,4 +10,6 @@ type AgentLaunchOutcome struct {
 	// Refusals are refusals the host's own services made inside the launch,
 	// such as a credential request no grant covered.
 	Refusals []confine.SandboxRefusal
+	// GitTransport records verified transport mediation attempts and summary cause.
+	GitTransport *confine.GitTransportObservation
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/invocation"
-	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -103,16 +102,9 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 	}
 
 	for _, child := range projection.Nonzero {
-		receipt := child.Receipt
-		observed := ProgramExecutionOutcome{EvidenceKind: receipt.EvidenceKind, ExecutionID: receipt.ID, SourceUnitID: child.SourceUnitID, Span: child.Span,
-			State: receipt.State, StatusCode: receipt.StatusCode, OwnerStarted: receipt.OwnerStarted, OwnerInvoked: receipt.OwnerInvoked,
-			OutputPublishable: receipt.OutputPublishable, DetailRef: receipt.DetailRef}
-		for _, output := range receipt.Outputs {
-			path, err := (scratch.CommandOutput{ProgramID: programID, ExecutionID: receipt.ID, Stream: output.Stream}).Path()
-			if err != nil {
-				return ProgramOutcome{}, err
-			}
-			observed.Outputs = append(observed.Outputs, ProgramExecutionOutput{Stream: output.Stream, Ref: output.Ref, OutputPath: "@output/" + path, SizeBytes: output.SizeBytes, Complete: output.Complete})
+		observed, err := projectNonzeroExecution(programID, child)
+		if err != nil {
+			return ProgramOutcome{}, err
 		}
 		out.NonzeroExecutions = append(out.NonzeroExecutions, observed)
 	}

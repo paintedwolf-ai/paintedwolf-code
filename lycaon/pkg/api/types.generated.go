@@ -1706,8 +1706,34 @@ type CommandExecutionReceipt struct {
 	// Host background job this child started, for the existing background process views.
 	JobHandle string `json:"job_handle,omitempty"`
 	// Latest retained stdout and stderr of this child, each with a bounded screened preview. Absent streams retained nothing.
-	Outputs          []CommandExecutionOutput `json:"outputs,omitempty"`
-	RevisionConflict *CommandRevisionConflict `json:"revision_conflict,omitempty"`
+	Outputs          []CommandExecutionOutput   `json:"outputs,omitempty"`
+	RevisionConflict *CommandRevisionConflict   `json:"revision_conflict,omitempty"`
+	Transport        *CommandExecutionTransport `json:"transport,omitempty"`
+}
+
+// CommandExecutionTransport Host-evidenced transport mediation summary and verified per-attempt outcomes for a network Git execution.
+type CommandExecutionTransport struct {
+	Cause        string                             `json:"cause"`
+	Stage        string                             `json:"stage,omitempty"`
+	Destination  string                             `json:"destination,omitempty"`
+	Host         string                             `json:"host,omitempty"`
+	Port         int                                `json:"port,omitempty"`
+	PolicyReason string                             `json:"policy_reason,omitempty"`
+	ErrorClass   string                             `json:"error_class,omitempty"`
+	Attempts     []CommandExecutionTransportAttempt `json:"attempts,omitempty"`
+}
+
+// CommandExecutionTransportAttempt
+type CommandExecutionTransportAttempt struct {
+	Ordinal      int    `json:"ordinal"`
+	Destination  string `json:"destination,omitempty"`
+	Host         string `json:"host,omitempty"`
+	Port         int    `json:"port,omitempty"`
+	Stage        string `json:"stage"`
+	Outcome      string `json:"outcome"`
+	ReplyCode    int    `json:"reply_code"`
+	PolicyReason string `json:"policy_reason,omitempty"`
+	ErrorClass   string `json:"error_class,omitempty"`
 }
 
 // CommandFolderCoverage

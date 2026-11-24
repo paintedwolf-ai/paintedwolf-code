@@ -359,6 +359,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	}
 	owned := proc.resources.take()
 	completion.ProgramStop = owned.programStop
+	completion.ProgramReceipt = proc.programReceipt
 	completion.ReleaseNotices = owned.releaseNotices
 	completion.IndexWatch = owned.indexWatch
 	exitCode := proc.exitCode
@@ -379,7 +380,9 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		FailedStages:           hostcmd.FailedStages(completion.Stages, exitCode),
 		TerminationReason:      string(completion.TerminationReason),
 		Refusals:               confinement.SettledRefusals(ctx),
+		GitTransports:          confinement.GitTransports(),
 	})
+	stamped.Observation = confinement.MergedObservation(stamped.Observation)
 	completion.BoundaryRefusal = string(stamped.Attribution)
 	completion.GuidanceCodes = append([]string(nil), stamped.GuidanceCodes...)
 	completion.Observation = stamped.Observation

@@ -367,14 +367,20 @@ func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, comma
 // observeAgentLaunch settles a native owner's confined launch into the
 // command's confinement facts, as an external stage's are: what the kernel
 // refused, what the host's own services declined, and whether it failed.
-func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, boundary confine.Boundary, settleJob func(confine.SandboxRefusals, []confine.EgressHost), commandLine string, outcome tools.AgentLaunchOutcome) {
+func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, boundary confine.Boundary, settleJob func(confine.SandboxRefusals, []confine.EgressHost, ...confine.GitTransportObservation), commandLine string, outcome tools.AgentLaunchOutcome) {
 	settleCtx := context.WithoutCancel(ctx)
 	refusals := bound.lease.SettledRefusals(settleCtx)
 	if len(outcome.Refusals) > 0 {
 		refusals = refusals.Merge(confine.SandboxRefusals{Refusals: outcome.Refusals})
 	}
 	network := bound.close(settleCtx)
-	settleJob(refusals, network)
+	var transports []confine.GitTransportObservation
+	if outcome.GitTransport != nil && outcome.GitTransport.Cause != "" {
+		tr := outcome.GitTransport.Clone()
+		recordExecutionTransport(settleCtx, tr)
+		transports = []confine.GitTransportObservation{tr}
+	}
+	settleJob(refusals, network, transports...)
 	if !boundary.Applied || tctx.Effects.Out == nil {
 		return
 	}
@@ -383,7 +389,7 @@ func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound comma
 		failed = []string{commandLine}
 	}
 	stamped := confine.StampRefusal("command", tctx.Identity.SessionID, boundary, confine.RefusalContext{
-		MediatedNetwork: network, FailedStages: failed, Refusals: refusals,
+		MediatedNetwork: network, FailedStages: failed, Refusals: refusals, GitTransports: transports,
 	})
 	tctx.Effects.Out.WithLock(func(out *tools.ToolInvocationOut) {
 		out.Facts = tools.ApplyRefusalFacts(out.Facts, stamped)

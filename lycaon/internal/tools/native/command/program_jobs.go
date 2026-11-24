@@ -93,7 +93,7 @@ type jobProcessTracker struct {
 	ready    chan struct{}
 	onRecord func(jobProcess)
 	// attachStage counts an external stage's confinement toward the job.
-	attachStage func(bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost)
+	attachStage func(bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost, ...confine.GitTransportObservation)
 }
 
 func noteJobProcess(ctx context.Context, pid int, args []string) {
@@ -122,10 +122,10 @@ func noteJobNative(ctx context.Context, args []string) {
 
 // attachJobStage counts an external stage launched inside a & job toward that
 // job's confinement. The returned func records the stage's settled reports.
-func attachJobStage(ctx context.Context, stage bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost) {
+func attachJobStage(ctx context.Context, stage bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost, ...confine.GitTransportObservation) {
 	t, _ := ctx.Value(jobProcessKey{}).(*jobProcessTracker)
 	if t == nil || t.attachStage == nil {
-		return func(confine.SandboxRefusals, []confine.EgressHost) {}
+		return func(confine.SandboxRefusals, []confine.EgressHost, ...confine.GitTransportObservation) {}
 	}
 	return t.attachStage(stage)
 }
@@ -241,7 +241,7 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	tracker.onRecord = func(process jobProcess) {
 		j.recordProcess(handle, process)
 	}
-	tracker.attachStage = func(stage bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost) {
+	tracker.attachStage = func(stage bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost, ...confine.GitTransportObservation) {
 		return j.Registry.AttachProgramStage(context.WithoutCancel(jobCtx), j.SessionID, handle, stage)
 	}
 	close(ready)

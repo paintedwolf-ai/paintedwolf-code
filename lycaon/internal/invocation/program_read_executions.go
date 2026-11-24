@@ -82,7 +82,10 @@ func readExecutionOutputs(ctx context.Context, tx *sql.Tx, program string, execu
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	return rows.Close()
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	return readExecutionTransports(ctx, tx, program, executions)
 }
 
 const latestExecutionOutput = `o.stream IN ('stdout','stderr') AND NOT EXISTS (SELECT 1 FROM invocation_program_outputs later WHERE later.program_id=o.program_id AND later.execution_id=o.execution_id AND later.stream=o.stream AND (later.created_at>o.created_at OR (later.created_at=o.created_at AND later.id>o.id)))`
