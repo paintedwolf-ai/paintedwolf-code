@@ -160,7 +160,11 @@ func watch(session exec.PTY) *terminal {
 }
 
 func (t *terminal) await(marker string) bool {
-	deadline := time.Now().Add(15 * time.Second)
+	return t.awaitFor(marker, 15*time.Second)
+}
+
+func (t *terminal) awaitFor(marker string, within time.Duration) bool {
+	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
 		t.mu.Lock()
 		seen := strings.Contains(t.buf.String(), marker)
@@ -205,8 +209,15 @@ func terminalProbe(ctx context.Context) (bool, string) {
 	// Ctrl-C sent before the interpreter returns to its prompt is lost in the gap
 	// where it leaves evaluation, so the marker alone does not mean it can be interrupted.
 	output.awaitPrompt()
-	send("\x03")
-	if !output.await("KeyboardInterrupt") {
+	// The prompt is written before the interpreter blocks in its read, so on a
+	// loaded host the first Ctrl-C can still land in that gap and be lost. An
+	// interpreter that can be interrupted answers one of a few sent in turn.
+	interrupted := false
+	for attempt := 0; attempt < 5 && !interrupted; attempt++ {
+		send("\x03")
+		interrupted = output.awaitFor("KeyboardInterrupt", 3*time.Second)
+	}
+	if !interrupted {
 		return false, "no interrupt: " + output.text()
 	}
 	output.awaitPrompt()

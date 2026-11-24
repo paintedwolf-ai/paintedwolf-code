@@ -21,18 +21,20 @@ export function SettingsNavSidebar(props: Props) {
           <For each={APP_SETTINGS}>
             {(item, index) => (
               <li {...navRow(index())}>
-                <button
-                  type="button"
-                  class="den-shell-nav-sub-link"
-                  classList={{ "den-shell-nav-sub-link-active": props.section === item.id }}
-                  data-testid={`settings-nav-${item.id}`}
-                  onClick={() => props.onSectionChange?.(item.id)}
-                >
-                  <Show when={!props.onSectionChange && props.section === item.id}>
-                    <span class="den-nav-marker" aria-hidden="true" />
-                  </Show>
-                  <span class="den-shell-nav-sub-link-label">{item.label}</span>
-                </button>
+                <div class="den-settings-sidebar-row">
+                  <button
+                    type="button"
+                    class="den-shell-nav-sub-link"
+                    classList={{ "den-shell-nav-sub-link-active": props.section === item.id }}
+                    data-testid={`settings-nav-${item.id}`}
+                    onClick={() => props.onSectionChange?.(item.id)}
+                  >
+                    <Show when={!props.onSectionChange && props.section === item.id}>
+                      <span class="den-nav-marker" aria-hidden="true" />
+                    </Show>
+                    <span class="den-shell-nav-sub-link-label">{item.label}</span>
+                  </button>
+                </div>
               </li>
             )}
           </For>

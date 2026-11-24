@@ -246,8 +246,10 @@ func executeMacOSDevelopmentWorkflowPhase(phase, dir string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("hostidentity.LoadOrCreate: %w", err)
 		}
-		if _, err := os.Stat(filepath.Join(dir, hostidentity.FileName)); !errors.Is(err, os.ErrNotExist) {
-			return "", fmt.Errorf("legacy %s still present after import: %v", hostidentity.FileName, err)
+		if _, err := os.Stat(filepath.Join(dir, hostidentity.FileName)); err == nil {
+			return "", fmt.Errorf("legacy %s still present after import", hostidentity.FileName)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("stat legacy %s: %w", hostidentity.FileName, err)
 		}
 		reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          dir,
@@ -278,12 +280,17 @@ func executeMacOSDevelopmentWorkflowPhase(phase, dir string) (string, error) {
 		if _, err := internalapi.WriteAPIToken("macos-dev-daemon-token-987"); err != nil {
 			return "", fmt.Errorf("WriteAPIToken: %w", err)
 		}
-		if _, err := os.Stat(filepath.Join(dir, internalapi.LegacyTokenFileName)); !errors.Is(err, os.ErrNotExist) {
-			return "", fmt.Errorf("legacy %s still present after WriteAPIToken: %v", internalapi.LegacyTokenFileName, err)
+		if _, err := os.Stat(filepath.Join(dir, internalapi.LegacyTokenFileName)); err == nil {
+			return "", fmt.Errorf("legacy %s still present after WriteAPIToken", internalapi.LegacyTokenFileName)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("stat legacy %s: %w", internalapi.LegacyTokenFileName, err)
 		}
 		tok, err := internalapi.ReadAPIToken()
-		if err != nil || tok != "macos-dev-daemon-token-987" {
-			return "", fmt.Errorf("ReadAPIToken after write = (%q, %v)", tok, err)
+		if err != nil {
+			return "", fmt.Errorf("ReadAPIToken after write: %w", err)
+		}
+		if tok != "macos-dev-daemon-token-987" {
+			return "", fmt.Errorf("ReadAPIToken after write = %q", tok)
 		}
 		if _, err := os.Stat(filepath.Join(dir, ".credential-vault-development-identity")); err != nil {
 			return "", fmt.Errorf("expected .credential-vault-development-identity under development custody: %w", err)
@@ -311,13 +318,19 @@ func executeMacOSDevelopmentWorkflowPhase(phase, dir string) (string, error) {
 			return "", fmt.Errorf("reopen NewStaticCredentialStoreForDir: %w", err)
 		}
 		rec, ok, err := store.Get("wf-http")
-		if err != nil || !ok || rec.Token != "rotated-mcp-token-v2" ||
+		if err != nil {
+			return "", fmt.Errorf("reopen store.Get(wf-http): %w", err)
+		}
+		if !ok || rec.Token != "rotated-mcp-token-v2" ||
 			rec.Headers["X-Custom-Auth"] != "legacy-header-secret" || rec.PendingCommit != nil {
-			return "", fmt.Errorf("unexpected reopened wf-http record (ok=%v err=%v): %+v", ok, err, rec)
+			return "", fmt.Errorf("unexpected reopened wf-http record: %+v", rec)
 		}
 		stdioRec, ok, err := store.Get("wf-stdio")
-		if err != nil || !ok || stdioRec.Env["MCP_API_KEY"] != "legacy-env-secret" || stdioRec.PendingCommit != nil {
-			return "", fmt.Errorf("unexpected reopened wf-stdio record (ok=%v err=%v): %+v", ok, err, stdioRec)
+		if err != nil {
+			return "", fmt.Errorf("reopen store.Get(wf-stdio): %w", err)
+		}
+		if !ok || stdioRec.Env["MCP_API_KEY"] != "legacy-env-secret" || stdioRec.PendingCommit != nil {
+			return "", fmt.Errorf("unexpected reopened wf-stdio record: %+v", stdioRec)
 		}
 		if _, err := internalapi.ReadAPIToken(); err != nil {
 			return "", fmt.Errorf("reopen ReadAPIToken: %w", err)

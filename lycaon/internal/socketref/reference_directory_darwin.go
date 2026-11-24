@@ -49,7 +49,7 @@ func captureReferenceDirectory(aliases, source string) (string, *os.File, func()
 		return "", nil, nil, ErrUnbound
 	}
 	releaseParent := func() error {
-		defer parent.Close()
+		defer func() { _ = parent.Close() }()
 		var current unix.Stat_t
 		if unix.Lstat(root, &current) != nil || current.Dev != expected.Dev || current.Ino != expected.Ino {
 			return ErrUnbound
