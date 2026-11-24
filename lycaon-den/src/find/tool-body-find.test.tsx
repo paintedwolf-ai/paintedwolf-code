@@ -291,4 +291,171 @@ describe("tool body find + collapsed reveal", () => {
     },
   );
 
+  it("reveals retained output and retained args on a standalone closed action card", async () => {
+    const sink = vi.fn();
+    registerOpenFilesSurfaceSink(sink);
+    const outRef = {
+      field: "tool_output" as const,
+      tool_call_id: "direct-call",
+      sha256: "blob-out",
+      size_bytes: 512,
+      total_runes: 256,
+      rows: 10,
+    };
+    const argRef = {
+      field: "tool_result_args" as const,
+      tool_call_id: "direct-call",
+      sha256: "blob-arg",
+      size_bytes: 256,
+      total_runes: 128,
+      rows: 4,
+    };
+    const client = stubClient({
+      searchChatContent: vi.fn(async (_sid, req) => {
+        if (req.query === "DIRECT_OUT_NEEDLE" && req.field === "tool_output") {
+          return { matches: [{ offset: 17, length: 6, preview: "DIRECT_OUT_NEEDLE" }] };
+        }
+        if (req.query === "DIRECT_ARG_NEEDLE" && req.field === "tool_result_args") {
+          return { matches: [{ offset: 9, length: 6, preview: "DIRECT_ARG_NEEDLE" }] };
+        }
+        return { matches: [] };
+      }),
+    });
+
+    const directPart: ToolPartView = {
+      id: "a1:direct-call",
+      toolCallId: "direct-call",
+      assistantMessageId: "a1",
+      messageId: "m-direct",
+      tool: "read",
+      kind: "read",
+      status: "completed",
+      args: { path: "direct.go" },
+      output: "",
+      outputReference: outRef,
+      argsReference: argRef,
+      error: null,
+    };
+
+    render(() => (
+      <FindRoot>
+        <ToolPartCard
+          part={directPart}
+          layout="chat"
+          sessionId="s-direct"
+          projectId="proj-1"
+          client={client}
+        />
+      </FindRoot>
+    ));
+
+    openFind();
+    setFindQuery("DIRECT_OUT_NEEDLE");
+    await waitFor(() => expect(sink).toHaveBeenCalled());
+    expect(sink.mock.lastCall?.[0]).toMatchObject({
+      kind: "chat-content",
+      projectId: "proj-1",
+      document: {
+        sessionId: "s-direct",
+        toolCallId: "direct-call",
+        revealOffset: 17,
+        content: { kind: "retained", reference: outRef },
+      },
+    });
+
+    sink.mockClear();
+    closeFind();
+    openFind();
+    setFindQuery("DIRECT_ARG_NEEDLE");
+    await waitFor(() => expect(sink).toHaveBeenCalled());
+    expect(sink.mock.lastCall?.[0]).toMatchObject({
+      kind: "chat-content",
+      projectId: "proj-1",
+      document: {
+        sessionId: "s-direct",
+        toolCallId: "direct-call",
+        revealOffset: 9,
+        content: { kind: "retained", reference: argRef },
+      },
+    });
+  });
+
+  it("forwards an explicit client when searching a standalone command-activity card", async () => {
+    const sink = vi.fn();
+    registerOpenFilesSurfaceSink(sink);
+    const cmdRef = {
+      field: "tool_output" as const,
+      tool_call_id: "cmd-subcall",
+      sha256: "blob-cmd",
+      size_bytes: 640,
+      total_runes: 320,
+      rows: 12,
+    };
+    const searchChatContent = vi.fn(async () => ({
+      matches: [{ offset: 23, length: 6, preview: "CMD_CLIENT_NEEDLE" }],
+    }));
+    const client = stubClient({ searchChatContent });
+
+    const subCall: ToolPartView = {
+      id: "a1:cmd-subcall",
+      toolCallId: "cmd-subcall",
+      assistantMessageId: "a1",
+      messageId: "m-cmd",
+      tool: "command",
+      kind: "command",
+      status: "completed",
+      args: { command: "go test ./..." },
+      output: "",
+      outputReference: cmdRef,
+      error: null,
+    };
+    const fact = {
+      id: "act-1",
+      label: "test",
+      subject: "go test ./...",
+      role: "automated_test" as const,
+      status: "completed" as const,
+      execution_ids: [],
+    };
+    const cmdPart: ToolPartView = {
+      ...subCall,
+      id: "a1:cmd-host",
+      toolCallId: "cmd-host",
+      commandActivity: {
+        fact,
+        calls: [subCall],
+        members: [fact],
+        receiptScopes: [],
+      },
+    };
+
+    render(() => (
+      <FindRoot>
+        <ToolPartCard
+          part={cmdPart}
+          layout="chat"
+          sessionId="s-cmd"
+          projectId="proj-1"
+          client={client}
+        />
+      </FindRoot>
+    ));
+
+    openFind();
+    setFindQuery("CMD_CLIENT_NEEDLE");
+    await waitFor(() => expect(findController.matches()).toHaveLength(1), { timeout: 2000 });
+    expect(searchChatContent).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(sink).toHaveBeenCalled());
+    expect(sink.mock.lastCall?.[0]).toMatchObject({
+      kind: "chat-content",
+      projectId: "proj-1",
+      document: {
+        sessionId: "s-cmd",
+        toolCallId: "cmd-subcall",
+        revealOffset: 23,
+        content: { kind: "retained", reference: cmdRef },
+      },
+    });
+  });
+
 });
