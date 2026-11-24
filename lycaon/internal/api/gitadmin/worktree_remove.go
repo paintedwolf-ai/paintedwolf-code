@@ -173,7 +173,9 @@ func applyWorktreeDiskRemoval(
 		return runGuardedWorktreeAdminOp(
 			s, w, r, mgr, b.Toplevel,
 			"repository config changed during stale worktree registration cleanup",
-			func(ctx context.Context) error { return mgr.RemoveStaleWorktreeRegistration(ctx, b.Toplevel, b.WorktreePath) },
+			func(ctx context.Context) error {
+				return mgr.RemoveStaleWorktreeRegistration(ctx, b.Toplevel, b.WorktreePath)
+			},
 		)
 	}
 	s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "This chat's worktree is invalid. Repair or remove the checkout at the shown path before returning to the project folder.")
