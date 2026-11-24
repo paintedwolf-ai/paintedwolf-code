@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -78,13 +79,14 @@ func main() {
 	lines := strings.Split(strings.TrimSpace(string(cfgBytes)), "\n")
 	mode := lines[0]
 	target := lines[1]
-	scratch := os.Getenv("SCRATCH_DIR")
-	if scratch != "" {
-		f, err := os.OpenFile(filepath.Join(scratch, "effect.marker"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-		if err == nil {
-			_, _ = f.Write([]byte("1"))
-			_ = f.Close()
-		}
+	if os.Getenv("SCRATCH_DIR") == "" {
+		os.Stderr.WriteString("missing SCRATCH_DIR\n")
+		os.Exit(3)
+	}
+	f, err := os.OpenFile("effect.marker", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err == nil {
+		_, _ = f.Write([]byte("1"))
+		_ = f.Close()
 	}
 	switch mode {
 	case "read":
@@ -173,6 +175,8 @@ func selectOptionMatching(substr string) func(*testing.T, *commandProgramSession
 }
 
 func TestSharedTempBaselineIsolationPreservesHostFixtures(t *testing.T) {
+	admissiontest.Enable(t)
+	t.Setenv("LYCAON_SANDBOX", "on")
 	shared := makeSharedTempDir(t, "pw-st-baseline-")
 	alphaName, betaName := "alpha-hidden-91c2.txt", "beta-hidden-44e8.txt"
 	alphaCanary, betaCanary := "canary-alpha-91c2-payload", "canary-beta-44e8-payload"
@@ -247,6 +251,8 @@ func TestSharedTempBaselineIsolationPreservesHostFixtures(t *testing.T) {
 }
 
 func TestSharedTempOneDecisionDeclaredExchangeAndDirectionalReuse(t *testing.T) {
+	admissiontest.Enable(t)
+	t.Setenv("LYCAON_SANDBOX", "on")
 	shared := makeSharedTempDir(t, "pw-st-exchange-")
 	inFile := filepath.Join(shared, "in.txt")
 	outDir := filepath.Join(shared, "out")
@@ -268,9 +274,9 @@ func TestSharedTempOneDecisionDeclaredExchangeAndDirectionalReuse(t *testing.T) 
 		filepath.Join(s.dir, "probe.cfg"),
 		[]byte("exchange\n"+inFile+"\n"+outFile+"\n"), 0o600,
 	))
-	markerCopy := filepath.Join(s.dir, "marker-count.txt")
+	markerPath := filepath.Join(s.dir, "effect.marker")
 	declArgs := map[string]any{
-		"command": "external -- '" + probeBin + "' && cp \"$SCRATCH_DIR/effect.marker\" '" + markerCopy + "'",
+		"command": "external -- '" + probeBin + "'",
 		"capability_request": map[string]any{
 			"read_path":  inFile,
 			"write_root": outDir,
@@ -283,7 +289,7 @@ func TestSharedTempOneDecisionDeclaredExchangeAndDirectionalReuse(t *testing.T) 
 	if _, err := os.Stat(outFile); !os.IsNotExist(err) {
 		t.Fatalf("declared exchange wrote output before approval: %v", err)
 	}
-	if _, err := os.Stat(markerCopy); !os.IsNotExist(err) {
+	if _, err := os.Stat(markerPath); !os.IsNotExist(err) {
 		t.Fatalf("declared exchange started producer before approval: %v", err)
 	}
 	if len(card.ToolApproval.Plan.Subject.Targets) < 2 {
@@ -304,7 +310,7 @@ func TestSharedTempOneDecisionDeclaredExchangeAndDirectionalReuse(t *testing.T) 
 	if string(outBytes) != "exchange-input\nprocessed\n" {
 		t.Fatalf("host output = %q", outBytes)
 	}
-	markers, err := os.ReadFile(markerCopy)
+	markers, err := os.ReadFile(markerPath)
 	testutil.FailErr(t, "read marker count", err)
 	if len(markers) != 1 {
 		t.Fatalf("producer invocation count = %d, want 1", len(markers))
@@ -348,6 +354,8 @@ func TestSharedTempOneDecisionDeclaredExchangeAndDirectionalReuse(t *testing.T) 
 }
 
 func TestSharedTempExchangeSubdirectoryUnpredictableFilenamesAndWriteOnlyIsolation(t *testing.T) {
+	admissiontest.Enable(t)
+	t.Setenv("LYCAON_SANDBOX", "on")
 	exchangeDir := makeSharedTempDir(t, "pw-st-subdir-")
 	otherDir := makeSharedTempDir(t, "pw-st-other-")
 	seed := filepath.Join(exchangeDir, "seed.txt")
@@ -375,10 +383,15 @@ func TestSharedTempExchangeSubdirectoryUnpredictableFilenamesAndWriteOnlyIsolati
 	}, approveCard); len(extra) != 0 || s.outcome(t, "sub-create").Status != 0 {
 		t.Fatalf("process create in granted exchange dir: cards=%d outcome=%+v", len(extra), s.outcome(t, "sub-create"))
 	}
-	if extra := runTurnDeciding(t, s, "sub-read-replace", "command", map[string]any{
-		"command": "cat '" + unpredictable + "' && edit --path '" + unpredictable + "' --old-string process-written --new-string replaced-ok",
-	}, approveCard); len(extra) != 0 || s.outcome(t, "sub-read-replace").Stdout != "process-written\n" {
-		t.Fatalf("native read+edit in granted exchange dir: cards=%d outcome=%+v", len(extra), s.outcome(t, "sub-read-replace"))
+	if extra := runTurnDeciding(t, s, "sub-read", "command", map[string]any{
+		"command": "cat '" + unpredictable + "'",
+	}, approveCard); len(extra) != 0 || s.outcome(t, "sub-read").Stdout != "process-written\n" {
+		t.Fatalf("native read in granted exchange dir: cards=%d outcome=%+v", len(extra), s.outcome(t, "sub-read"))
+	}
+	if extra := runTurnDeciding(t, s, "sub-replace", "command", map[string]any{
+		"command": "edit --path '" + unpredictable + "' --old-string process-written --new-string replaced-ok",
+	}, approveCard); len(extra) != 0 || s.outcome(t, "sub-replace").Status != 0 {
+		t.Fatalf("native edit in granted exchange dir: cards=%d outcome=%+v", len(extra), s.outcome(t, "sub-replace"))
 	}
 	updated, err := os.ReadFile(unpredictable)
 	testutil.FailErr(t, "read replaced file", err)
@@ -424,6 +437,8 @@ func TestSharedTempExchangeSubdirectoryUnpredictableFilenamesAndWriteOnlyIsolati
 }
 
 func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) {
+	admissiontest.Enable(t)
+	t.Setenv("LYCAON_SANDBOX", "on")
 	shared := makeSharedTempDir(t, "pw-st-auto-")
 	internalInput := filepath.Join(shared, "internal-input.txt")
 	bgInput := filepath.Join(shared, "bg-input.txt")
@@ -454,9 +469,10 @@ func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) 
 
 	// Automatic foreground trigger: no argv path, no capability_request; side effect recorded once, no auto-replay.
 	testutil.FailErr(t, "write auto read cfg", os.WriteFile(filepath.Join(s.dir, "probe.cfg"), []byte("read\n"+internalInput+"\n"), 0o600))
-	markerSnapshot := filepath.Join(s.dir, "fg-markers.txt")
+	markerPath := filepath.Join(s.dir, "effect.marker")
+	_ = os.Remove(markerPath)
 	fgCards := runTurnDeciding(t, s, "auto-fg-1", "command", map[string]any{
-		"command": "rm -f \"$SCRATCH_DIR/effect.marker\" && external -- '" + probeBin + "'",
+		"command": "external -- '" + probeBin + "'",
 	}, approveCard)
 	if len(fgCards) != 1 {
 		t.Fatalf("automatic foreground trigger cards = %d, want 1", len(fgCards))
@@ -465,10 +481,7 @@ func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) 
 	if firstOutcome.Status == 0 {
 		t.Fatalf("original failed invocation must remain visible after settlement: %+v", firstOutcome)
 	}
-	runTurnDeciding(t, s, "auto-fg-check-marker", "command", map[string]any{
-		"command": "cp \"$SCRATCH_DIR/effect.marker\" '" + markerSnapshot + "'",
-	}, approveCard)
-	fgMarkers, err := os.ReadFile(markerSnapshot)
+	fgMarkers, err := os.ReadFile(markerPath)
 	testutil.FailErr(t, "read fg marker", err)
 	if len(fgMarkers) != 1 {
 		t.Fatalf("host replayed failed child automatically: marker bytes = %d, want 1", len(fgMarkers))
@@ -491,8 +504,8 @@ func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) 
 	s.config.Responses[0].ToolCalls = []llm.MockToolCall{{
 		ID: "auto-bg-start", Name: "command",
 		Args: map[string]any{
-			"command":    "external -- /bin/sh -c 'IFS= read -r _ < bg-release.fifo; exec \"" + probeBin + "\"'",
-			"background": true,
+			"command": "external -- /bin/sh -c 'IFS= read -r _ < bg-release.fifo; exec \"" + probeBin + "\"'",
+			"wait_ms": float64(50),
 		},
 	}}
 	testutil.FailErr(t, "start background job", s.prompt(t.Context()))
@@ -518,7 +531,8 @@ func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) 
 		}
 	}
 	approveCard(t, s.commandProgramSession, bgCard)
-	testutil.WaitFor(t, "background approval commits read grant", func() bool {
+	testutil.WaitFor(t, "background approval delivers completion guidance", func() bool {
+		_ = s.h.Sessions.Manager.Guidance.DeliverPending(t.Context(), s.session)
 		msgs, err := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
 		if err != nil {
 			return false
@@ -538,6 +552,8 @@ func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) 
 }
 
 func TestSharedTempIndependentSocketFloorTwoCardSequence(t *testing.T) {
+	admissiontest.Enable(t)
+	t.Setenv("LYCAON_SANDBOX", "on")
 	shared := makeSharedTempDir(t, "pw-st-2step-")
 	confFile := filepath.Join(shared, "service.conf")
 	testutil.FailErr(t, "seed service conf", os.WriteFile(confFile, []byte("/healthz\n"), 0o600))

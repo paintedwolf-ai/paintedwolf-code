@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/sandboxmark"
+	"golang.org/x/sys/unix"
 )
 
 // renderProfile is the Seatbelt profile on this platform, ending with the
@@ -26,6 +27,11 @@ func renderProfile(c Confinement) (string, error) {
 // applyAndExec applies the profile to this process, confirms kernel membership,
 // and replaces the process with the target.
 func applyAndExec(profile []byte, resolved string, target []string) error {
+	if helperPinnedCwdFDArg >= 0 {
+		if err := unix.Fchdir(helperPinnedCwdFDArg); err != nil {
+			return err
+		}
+	}
 	if err := applySeatbelt(string(profile)); err != nil {
 		return err
 	}

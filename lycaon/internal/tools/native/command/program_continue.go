@@ -34,9 +34,12 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 				r.Supervisor.Interrupt(run.root.Identity.ProgramID)
 			}
 			<-ending.done
+			obs := run.tc.Effects.Out.Facts.Confine
 			r.recordParkedRun(context.WithoutCancel(ctx), run)
 			r.recordDetachedEffects(context.WithoutCancel(ctx), run)
-			return ending.jobResult(), errors.Join(ending.err, attachErr)
+			res := ending.jobResult()
+			res.Observation = obs
+			return res, errors.Join(ending.err, attachErr)
 		},
 	})
 	if err != nil {

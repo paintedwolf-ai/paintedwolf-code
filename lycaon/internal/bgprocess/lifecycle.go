@@ -383,6 +383,14 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	completion.BoundaryRefusal = string(stamped.Attribution)
 	completion.GuidanceCodes = append([]string(nil), stamped.GuidanceCodes...)
 	completion.Observation = stamped.Observation
+	if owned.programObservation.Applied {
+		obs := owned.programObservation
+		obs.TerminationReason = string(completion.TerminationReason)
+		if exitCode != 0 && len(obs.FailedStages) == 0 {
+			obs.FailedStages = hostcmd.FailedStages(completion.Stages, exitCode)
+		}
+		completion.Observation = obs
+	}
 	if publish != nil {
 		publish(ctx, proc.ProjectID, proc.SessionID, api.BackgroundProcessEvent{
 			ProcessID:         proc.Handle,

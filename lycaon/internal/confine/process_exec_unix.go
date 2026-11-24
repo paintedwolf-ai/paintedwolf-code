@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"os"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -35,7 +36,7 @@ func execNativeTarget(path string, argv []string) (err error) {
 		binary.LittleEndian.PutUint32(record[1:], uint32(errno))
 		_, _ = unix.Write(readyFD, record[:])
 	}()
-	if !alreadyInPinnedCwd(helperPinnedCwdFDArg) {
+	if !(runtime.GOOS == "linux" && alreadyInPinnedCwd(helperPinnedCwdFDArg)) {
 		if err := unix.Fchdir(helperPinnedCwdFDArg); err != nil {
 			return err
 		}

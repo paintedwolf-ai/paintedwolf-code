@@ -435,22 +435,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		attachedTemp := attachedTempProjectRoots(c, rules.sharedTemp)
 		var subtrees, literals []string
 		for _, g := range c.ProtectedReadGrants {
-			if underAny(g.ResolvedPath, rules.sharedTemp) {
-				if underAny(g.ResolvedPath, editableDeny) || underAny(g.ResolvedPath, attachedTemp) {
-					if g.Subtree {
-						subtrees = append(subtrees, g.ResolvedPath)
-					} else {
-						literals = append(literals, g.ResolvedPath)
-					}
-					continue
-				}
-				if g.Subtree {
-					for _, ed := range editableDeny {
-						if PathAtOrUnder(ed, g.ResolvedPath) {
-							subtrees = append(subtrees, ed)
-						}
-					}
-				}
+			if underAny(g.ResolvedPath, rules.sharedTemp) && !underAny(g.ResolvedPath, editableDeny) && !underAny(g.ResolvedPath, attachedTemp) {
 				continue
 			}
 			if g.Subtree {

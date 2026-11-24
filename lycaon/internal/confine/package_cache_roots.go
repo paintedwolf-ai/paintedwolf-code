@@ -171,6 +171,10 @@ func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
 		}
 	}
 	if pinned := strings.TrimSpace(c.PinnedExecutable); pinned != "" {
+		if clean := filepath.Clean(pinned); filepath.IsAbs(clean) && underAny(clean, r.sharedTemp) && !underAny(clean, excluded) {
+			readLiterals = append(readLiterals, clean)
+			reachable = append(reachable, clean)
+		}
 		if resolved := fspath.CanonicalPath(pinned); resolved != "" && underAny(resolved, r.sharedTemp) && !underAny(resolved, excluded) {
 			readLiterals = append(readLiterals, resolved)
 			reachable = append(reachable, resolved)
@@ -233,10 +237,9 @@ func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
 }
 
 func bundledGitRoot(executable string) string {
-	parent := filepath.Dir(executable)
-	if filepath.Base(parent) == "bin" {
-		if root := filepath.Dir(parent); filepath.Base(root) == "gitengine" {
-			return root
+	for dir := filepath.Dir(executable); dir != "" && dir != filepath.Dir(dir); dir = filepath.Dir(dir) {
+		if filepath.Base(dir) == "gitengine" {
+			return dir
 		}
 	}
 	return ""
