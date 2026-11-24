@@ -880,10 +880,13 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
     const changedRevisions = untrack(collectRevisionChanges);
     setOptions(next);
     const anchorSurvived =
-      anchor !== null && indexOfKey(virtualizer, anchor.key, anchor.index) >= 0;
-    if (!pendingLanding) {
+      anchor !== null &&
+      (indexOfKey(virtualizer, anchor.key, anchor.index) >= 0 ||
+        Boolean(opts.resolveLostAnchor?.(String(anchor.key))));
+    if (!pendingLanding || anchorSurvived) {
+      pendingLanding = undefined;
       carryRowChanges(anchor, countBefore, originBefore);
-    } else if (!anchorSurvived && virtualizer.options.count > 0) {
+    } else if (virtualizer.options.count > 0) {
       const landing = pendingLanding;
       pendingLanding = undefined;
       if (virtualizer.scrollOffset !== null) {

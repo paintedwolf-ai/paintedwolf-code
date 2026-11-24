@@ -290,6 +290,7 @@ export function createTranscriptPaging(
     appStore: AppStore;
     sessionId: () => string | undefined;
     geometry?: () => TranscriptHistoryGeometry | null;
+    following?: () => boolean;
   },
 ): { dispose(): void; readerInput(direction: "up" | "down"): void } {
   let inFlight = false;
@@ -316,7 +317,7 @@ export function createTranscriptPaging(
       opts.appStore.actions.trimTranscriptPages();
     }
     if (layout) {
-      const inBeforeRunway = bottom < layout.residentStartPx - reach;
+      const inBeforeRunway = !opts.following?.() && bottom < layout.residentStartPx - reach;
       const inAfterRunway = top > layout.residentEndPx + reach;
       if (inBeforeRunway || inAfterRunway) {
         const ord = ordInRunway(top, layout, streamTarget.scrollHeight);

@@ -317,17 +317,15 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   const leadKeyBefore = `activity-group:${leadEntryKey}`;
   const leadKeyAfter = `activity-group:${base[56]!.id}:call-boundary-0`;
 
-  const paginationRequest = (url: URL) =>
-    url.pathname.endsWith(`/v1/sessions/${sessionId}/messages`) &&
-    (url.searchParams.has("before_message_id") || url.searchParams.has("after_ord"));
+  const olderPage = (url: URL) =>
+    url.pathname.endsWith(`/v1/sessions/${sessionId}/messages`) && url.searchParams.has("before_message_id");
   let readyToScroll = false;
   let released = false;
   const releases: (() => void)[] = [];
   let markOlderHeld!: () => void;
   const olderRequested = new Promise<void>((resolve) => { markOlderHeld = resolve; });
-  await page.route(paginationRequest, async (route: Route) => {
-    const url = new URL(route.request().url());
-    if (!readyToScroll || !url.searchParams.has("before_message_id")) {
+  await page.route(olderPage, async (route: Route) => {
+    if (!readyToScroll) {
       await route.abort();
       return;
     }
@@ -378,6 +376,6 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
     });
     return Math.abs(topAfter - topBefore);
   }).toBeLessThanOrEqual(2);
-  await page.unroute(paginationRequest);
+  await page.unroute(olderPage);
 });
 
