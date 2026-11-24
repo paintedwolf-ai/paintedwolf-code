@@ -120,7 +120,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 			if strings.TrimSpace(root) == "" {
 				return 0, false
 			}
-			snap, err := m.Progress.Current(ctx, root)
+			snap, err := m.Progress.Snapshot(ctx, root)
 			if err != nil || len(snap.Items()) == 0 {
 				return 0, false
 			}

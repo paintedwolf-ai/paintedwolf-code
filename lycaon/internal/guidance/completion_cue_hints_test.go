@@ -20,7 +20,7 @@ func TestPlanCompletionHintsLoadThroughOARPackLoader(t *testing.T) {
 	loader, err := oar.NewLoader("")
 	testutil.FailErr(t, "create OAR loader", err)
 
-	compiledWithHints, err := loader.LoadEffectiveCatalog(catalog)
+	ruleSetWithHints, err := loader.LoadEffectivePolicyWithCatalog(catalog)
 	testutil.FailErr(t, "load OAR rules with hints", err)
 
 	for _, code := range []string{completioncue.CodeOutcomeCoverage, completioncue.CodeFinalItemCoverage} {
@@ -40,7 +40,7 @@ func TestPlanCompletionHintsLoadThroughOARPackLoader(t *testing.T) {
 		if got := cfg.ResolveHintMessage(code); got != entry.Message {
 			t.Fatalf("ResolveHintMessage(%s) = %q, want %q", code, got, entry.Message)
 		}
-		for _, rule := range compiledWithHints {
+		for _, rule := range ruleSetWithHints.Rules {
 			if rule.ID == code {
 				t.Fatalf("hint %s must never load as an evaluated OAR rule (OAR-HINT-1/6)", code)
 			}

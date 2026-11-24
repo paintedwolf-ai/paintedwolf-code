@@ -55,20 +55,31 @@ func (c *capturingScriptLLM) Complete(_ context.Context, req modelcall.Completio
 	}, nil
 }
 
-func (c *capturingScriptLLM) Stream(ctx context.Context, req modelcall.CompletionRequest, _ func(modelcall.StreamEvent)) (*modelcall.Completion, error) {
-	return c.Complete(ctx, req)
+func (c *capturingScriptLLM) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+	comp, err := c.Complete(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan modelcall.StreamChunk, 1)
+	ch <- modelcall.StreamChunk{
+		Content:   comp.Content,
+		ToolCalls: comp.ToolCalls,
+		Done:      true,
+	}
+	close(ch)
+	return ch, nil
 }
 
 type completionCueHarness struct {
 	t            *testing.T
-	st           *storetest.Store
+	st           *store.Repositories
 	progress     progress.Store
 	tracker      *completioncue.Tracker
 	hints        *guidance.HintConfig
 	sess         *api.Session
 	llm          *capturingScriptLLM
 	loop         *promptloop.PromptLoop
-	reg          *tools.DefaultRegistry
+	reg          tools.ToolRegistry
 	checkCurrent bool
 	oarSawCue    int
 	fitSawCue    int
@@ -80,23 +91,23 @@ func newCompletionCueHarness(t *testing.T, withFeature bool, steps []scriptedSte
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load stock hint config", err)
 
-	prog := progresstest.NewStore(t)
+	ctx := t.Context()
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+
+	prog := progresstest.New(t, sess.ID)
 	h := &completionCueHarness{
 		t:            t,
 		st:           st,
 		progress:     prog,
 		hints:        hints,
+		sess:         sess,
 		llm:          &capturingScriptLLM{steps: steps},
 		checkCurrent: true,
 	}
 	if withFeature {
 		h.tracker = completioncue.NewTracker(completionCueTestStore{st: st})
 	}
-
-	ctx := t.Context()
-	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	h.sess = sess
 
 	reg := toolstest.NewRegistry()
 	scopeKey := func(_ context.Context, id string) string { return id }
@@ -136,7 +147,7 @@ func newCompletionCueHarness(t *testing.T, withFeature bool, steps []scriptedSte
 	})
 	_ = reg.Register("command", func(_ context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		if commitThenFail, _ := args["commit_progress_then_fail"].(bool); commitThenFail {
-			snap, err := prog.Current(ctx, sess.ID)
+			snap, err := prog.Snapshot(ctx, sess.ID)
 			testutil.FailErr(t, "read progress before nested update", err)
 			content, _ := args["content"].(string)
 			prepared, err := progress.PrepareAuthorUpdate(content)
@@ -187,7 +198,7 @@ func newCompletionCueHarness(t *testing.T, withFeature bool, steps []scriptedSte
 		}
 		return req, nil
 	}
-	deps.Closeout.EvaluateContent = func(_ context.Context, _ *api.Session, anchor oar.Anchor, obs oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool) {
+	deps.Closeout.EvaluateContentAnchor = func(_ context.Context, _ *api.Session, anchor string, obs oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool) {
 		if anchor == oar.AnchorContentInput {
 			for _, seg := range obs.Segments {
 				if seg.Content == hints.ResolveHintMessage(completioncue.CodeOutcomeCoverage) ||
@@ -201,7 +212,7 @@ func newCompletionCueHarness(t *testing.T, withFeature bool, steps []scriptedSte
 	if withFeature {
 		deps.Context.CompletionCues = h.tracker
 		deps.Context.PendingProgressCount = func(ctx context.Context, s *api.Session) (int, bool) {
-			snap, err := prog.Current(ctx, s.ID)
+			snap, err := prog.Snapshot(ctx, s.ID)
 			if err != nil || len(snap.Items()) == 0 {
 				return 0, false
 			}
@@ -216,7 +227,7 @@ func newCompletionCueHarness(t *testing.T, withFeature bool, steps []scriptedSte
 }
 
 type completionCueTestStore struct {
-	st *storetest.Store
+	st *store.Repositories
 }
 
 func (s completionCueTestStore) GetCompletionCueState(ctx context.Context, sessionID string) (completioncue.DeliveredState, error) {
@@ -264,7 +275,7 @@ func cueCodesInRequests(reqs []modelcall.CompletionRequest) []string {
 
 func progressUpdateArgs(t *testing.T, prog progress.Store, sessionID, content string) map[string]any {
 	t.Helper()
-	snap, err := prog.Current(t.Context(), sessionID)
+	snap, err := prog.Snapshot(t.Context(), sessionID)
 	testutil.FailErr(t, "read progress snapshot", err)
 	args := map[string]any{"content": content}
 	if len(snap.Items()) > 0 {
@@ -622,11 +633,11 @@ func (d *dynamicScriptLLM) Complete(ctx context.Context, req modelcall.Completio
 	return d.inner.Complete(ctx, req)
 }
 
-func (d *dynamicScriptLLM) Stream(ctx context.Context, req modelcall.CompletionRequest, cb func(modelcall.StreamEvent)) (*modelcall.Completion, error) {
+func (d *dynamicScriptLLM) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
 	if d.beforeStep != nil {
 		d.beforeStep(d.inner.idx)
 	}
-	return d.inner.Stream(ctx, req, cb)
+	return d.inner.Stream(ctx, req)
 }
 
 func TestCompletionCueRebuildStability(t *testing.T) {
