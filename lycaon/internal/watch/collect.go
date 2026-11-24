@@ -107,8 +107,14 @@ func ReserveCollectBatch(ctx context.Context, s *Store, owner Owner, requestKey 
 		Overflow:      overflow,
 		ActiveHandles: activeHandleNames(regs),
 	}
-	mJSON, _ := json.Marshal(matchIDs)
-	wJSON, _ := json.Marshal(watchIDs)
+	mJSON, err := json.Marshal(matchIDs)
+	if err != nil {
+		return CollectedBatch{}, false, err
+	}
+	wJSON, err := json.Marshal(watchIDs)
+	if err != nil {
+		return CollectedBatch{}, false, err
+	}
 	pJSON, err := json.Marshal(batch)
 	if err != nil {
 		return CollectedBatch{}, false, err
