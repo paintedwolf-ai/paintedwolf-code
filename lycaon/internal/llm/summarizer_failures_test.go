@@ -24,7 +24,7 @@ type scriptedUtilityProvider struct {
 
 func (p *scriptedUtilityProvider) ID() string { return p.id }
 func (p *scriptedUtilityProvider) Models() []modelcall.ModelInfo {
-	return []modelcall.ModelInfo{{ID: p.id, ContextLength: 16384}}
+	return []modelcall.ModelInfo{{ID: p.id}}
 }
 func (p *scriptedUtilityProvider) Profile() providerprofile.Profile {
 	return providerprofile.Profile{UtilitySingleFlight: true}
