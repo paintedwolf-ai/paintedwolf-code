@@ -265,7 +265,7 @@ func (s *Store) RecordWorkerDecisionOpened(ctx context.Context, parentSessionID,
 			return claimedAny, cErr
 		}
 		if dec.AlreadyAdmitted {
-			_, _, _ = s.recordAlreadyAdmittedMatch(ctx, reg.WatchID, MatchInput{
+			_, _ = s.recordAlreadyAdmittedMatch(ctx, reg.WatchID, MatchInput{
 				SourceKind:   "worker_decision_needed",
 				OccurrenceID: occ,
 				Outcome:      "needs_decision",
@@ -486,7 +486,7 @@ func (s *Store) claimAndRecordSessionWatch(ctx context.Context, owner Owner, wat
 		}
 		if dec.AlreadyAdmitted {
 			input.RetainedRef = dec.ExistingReceiptID
-			_, ok, rErr := s.recordAlreadyAdmittedMatch(ctx, watchID, input, nil, dec.ExistingReceiptID)
+			ok, rErr := s.recordAlreadyAdmittedMatch(ctx, watchID, input, nil, dec.ExistingReceiptID)
 			return ok, rErr
 		}
 		if !dec.Granted {
