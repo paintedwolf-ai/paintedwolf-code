@@ -849,9 +849,10 @@ describe("SessionTranscript virtual window", () => {
     );
 
     const view = render(() => (
-      <SessionTranscript layout="chat" sessionId={sid} messages={store.state.messages} />
+      <SessionTranscript layout="chat" verboseMode={true} sessionId={sid} messages={store.state.messages} />
     ));
     try {
+      await Promise.resolve();
       expect(view.container.querySelector(".den-enter-fade")).toBeNull();
 
       const applied = store.actions.upsertMessage({
@@ -867,6 +868,7 @@ describe("SessionTranscript virtual window", () => {
         created_at: "2026-01-01T00:00:01Z",
       });
       expect(applied).toBe(true);
+      await Promise.resolve();
 
       expect(view.container.querySelector(".den-enter-fade")).toBeTruthy();
     } finally {

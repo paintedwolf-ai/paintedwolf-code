@@ -239,7 +239,7 @@ describe("parked command presentation", () => {
     expect(screen.getByRole("status").textContent).toBe("Waiting · sleep 120...");
   });
 
-  it("clears a running tool label when its result is updated in place in the store", () => {
+  it("clears a running tool label when its result is updated in place in the store", async () => {
     const userTurn: Message = {
       id: "u-live",
       ord: 1,
@@ -260,18 +260,11 @@ describe("parked command presentation", () => {
     };
     const store = mountActivity([userTurn, runningCall]);
     store.actions.setActivity({ ...park, status: "done" });
-    store.actions.setActivity({
-      ...park,
-      activity_id: "live-read",
-      kind: "running_tool",
-      tool_name: "read",
-      tool_call_id: "read-1",
-      wait_triggers: undefined,
-      progress: { phase: "executing", files_searched: 0, files_skipped: 0, matches: 0 },
-    });
+    store.actions.setLlmTurn("session", { status: "active" });
+    vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
     expect(screen.getByRole("status").textContent).toBe("Reading · main.go...");
 
-    // Complete the tool result and mark host activity done; composer updates immediately.
+    // Append initial incomplete result, then replace that same array slot in place with completed.
     store.actions.upsertMessage({
       id: "r-read",
       ord: 3,
@@ -280,8 +273,25 @@ describe("parked command presentation", () => {
       origin: "tool",
       authority: "none",
       trust_tier: "trusted",
-      content: "package main",
+      content: "",
       created_at: "2026-10-28T00:00:01Z",
+      tool_result: {
+        tool: "read",
+        assistant_message_id: "a-read",
+        tool_call_id: "read-1",
+        content: "",
+      },
+    });
+    store.actions.upsertMessage({
+      id: "r-read",
+      ord: 3,
+      seq: 4,
+      role: "tool",
+      origin: "tool",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "package main",
+      created_at: "2026-10-28T00:00:02Z",
       tool_result: {
         tool: "read",
         assistant_message_id: "a-read",
@@ -290,12 +300,11 @@ describe("parked command presentation", () => {
         outcome: "completed",
       },
     });
-    store.actions.setActivity({
-      ...park,
-      activity_id: "live-read",
-      kind: "running_tool",
-      status: "done",
-    });
-    expect(screen.queryByRole("status")).toBeNull();
+    vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
+    expect(screen.getByRole("status").textContent).toBe("Thinking...");
+
+    store.actions.clearLlmTurn("session");
+    await Promise.resolve();
+    expect(screen.queryByTestId("thinking-indicator")).toBeNull();
   });
 });
