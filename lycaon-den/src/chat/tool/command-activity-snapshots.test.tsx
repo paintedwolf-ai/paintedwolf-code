@@ -94,7 +94,7 @@ it("shares one read across concurrent consumers and reuses empty terminal summar
 });
 
 it("refreshes on revision or client change, retries after failure, and evicts beyond 32 entries", async () => {
- let revision = 20;
+ const revision = 20;
  const firstClient = stubClient({
   getCommandProgramReceipt: vi.fn(async (_sid, id) => {
    if (id === "fail-program") throw new Error("transient");
