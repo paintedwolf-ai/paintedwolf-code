@@ -1,6 +1,6 @@
 description: >-
-  Manage session progress rows by ID (replace, add, update, remove) and
-  acknowledge settled worker result handles (acknowledge_results).
+  Manage progress rows by ID (replace, add, update, remove) and acknowledge
+  settled worker handles (acknowledge_results).
 schema:
   type: object
   minProperties: 1
@@ -11,9 +11,8 @@ schema:
       minItems: 1
       maxItems: 48
       description: >-
-        Seed the plan or replace all rows for a new request. Each entry mints a
-        new p<N> ID in order; optional rows must come last. Mutually exclusive
-        with add, update, and remove.
+        Seed or replace all rows (mints p<N> IDs; optional rows last; exclusive
+        with add/update/remove).
       items:
         type: object
         additionalProperties: false
@@ -23,19 +22,17 @@ schema:
             type: string
             minLength: 1
             maxLength: 240
-            description: Deliverable outcome (display clamped to 60c). For user-facing CLI, terminal, or web UI work, include a separate final row to snapshot the running program.
+            description: Deliverable outcome (include a final snapshot row for CLI/UI work).
           state:
             type: string
             enum: [pending, done, na, optional]
             default: pending
-            description: Initial state (pending default; na = terminal descope; optional = non-blocking note, must be last).
+            description: Row state (na = descoped; optional = trailing note).
     add:
       type: array
       minItems: 1
       maxItems: 48
-      description: >-
-        Insert new rows into the plan (or initialize when empty). Required rows
-        append before trailing optional rows unless after_id places them.
+      description: Insert new rows (appends before optional rows unless after_id is set).
       items:
         type: object
         additionalProperties: false
@@ -50,18 +47,15 @@ schema:
             type: string
             enum: [pending, optional]
             default: pending
-            description: Initial state for the added row.
           after_id:
             type: string
             pattern: '^(start|p[1-9][0-9]*)$'
-            description: Surviving row ID (p1, p2, ...) to insert after, or "start" to prepend. Multiple additions sharing an anchor preserve input order. Omit to append before trailing optional rows.
+            description: Surviving row ID to insert after, or "start" to prepend.
     update:
       type: array
       minItems: 1
       maxItems: 48
-      description: >-
-        Patch existing rows by host-minted ID (p1, p2, ...). Omit unchanged
-        rows and unchanged fields.
+      description: Patch existing rows by ID; omit unchanged rows and fields.
       items:
         type: object
         additionalProperties: false
@@ -70,22 +64,20 @@ schema:
           id:
             type: string
             pattern: '^p[1-9][0-9]*$'
-            description: Target row ID from the current progress snapshot.
           state:
             type: string
             enum: [pending, done, na, optional]
-            description: Updated state (done = verified complete; na = terminal will-not-pursue, never in-progress).
+            description: Updated state (done = verified; na = descoped).
           label:
             type: string
             minLength: 1
             maxLength: 240
-            description: Updated deliverable label when scope is refined.
     remove:
       type: array
       minItems: 1
       maxItems: 48
       uniqueItems: true
-      description: Existing row IDs (p1, p2, ...) to remove when superseded.
+      description: Superseded row IDs to delete.
       items:
         type: string
         pattern: '^p[1-9][0-9]*$'
@@ -94,10 +86,7 @@ schema:
       minItems: 1
       maxItems: 32
       uniqueItems: true
-      description: >-
-        Settled worker result_handle values (for example scout-api#1) reviewed
-        in this step. Accounts for those rounds without closing unfinished
-        deliverables.
+      description: Settled worker result_handle values reviewed in this step.
       items:
         type: string
         minLength: 1
