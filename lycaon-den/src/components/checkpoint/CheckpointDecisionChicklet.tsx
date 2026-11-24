@@ -173,10 +173,9 @@ export function CheckpointDecisionChicklet(props: Props) {
     hostEl,
     isCollapsed: () => !disclosure.open(),
     revealForFind: disclosure.revealTemporarily,
-    collapsedCorpus: () =>
-      [checkpointDecisionLabel(props.meta), tool(), subject(), location(), causing(), grant(), guidance()]
-        .filter(Boolean)
-        .join("\n"),
+    collapsedCorpus: () => (hostEl()?.closest("[hidden]") ? "" : [
+      checkpointDecisionLabel(props.meta), tool(), subject(), location(), causing(), grant(), guidance(),
+    ].filter(Boolean).join("\n")),
     collapsedCorpusAnchor: hostEl,
   });
 
