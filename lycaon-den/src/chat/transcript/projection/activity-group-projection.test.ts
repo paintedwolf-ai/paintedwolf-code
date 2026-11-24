@@ -366,6 +366,31 @@ describe("projectActivityGroups", () => {
 
     const retained = retainTranscriptItemIdentity(transcriptItemsByKey(settledItems), projectChat(settledMessages));
     expect(retained[1]).toBe(settledGroup);
+
+    const aBatch = assistantCallsMsg("a-batch", 2, [
+      { id: "call-run", name: "command", args: { command: "make build" } },
+      { id: "call-allow", name: "command", args: { command: "inspect-env" } },
+      { id: "call-write", name: "command", args: { command: "write report.md" } },
+    ]);
+    const rRun = toolResultMsg("r-run", 3, "a-batch", "call-run", "command");
+    const phase1 = projectChat([u1, aBatch, rRun])[1] as ActivityGroupItem;
+    expect(phase1.key).toBe("activity-group:a-batch:call-run");
+    expect(phase1.sectionOrder).toEqual(["activities"]);
+
+    const rAllow = toolResultMsg("r-allow", 4, "a-batch", "call-allow", "command", {
+      checkpoint_decision: { checkpoint_id: "cp-allow", kind: "tool_approval", status: "approved", grant_title: "Allow once" },
+    });
+    const phase2 = projectChat([u1, aBatch, rRun, rAllow])[1] as ActivityGroupItem;
+    expect(phase2.key).toBe(phase1.key);
+    expect(phase2.sectionOrder).toEqual(["activities", "approvals"]);
+
+    const rWrite = toolResultMsg("r-write", 5, "a-batch", "call-write", "command", {
+      file_edit_previews: [fileEditPreviewFixture({ path: "report.md", before: "", after: "ok" })],
+      checkpoint_decision: { checkpoint_id: "cp-write-2", kind: "tool_approval", status: "approved", grant_title: "Allow once" },
+    });
+    const phase3 = projectChat([u1, aBatch, rRun, rAllow, rWrite])[1] as ActivityGroupItem;
+    expect(phase3.key).toBe(phase1.key);
+    expect(phase3.sectionOrder).toEqual(["activities", "approvals", "files"]);
   });
 
   it("omits turn_load-only intervals and preserves worker layout spans unchanged", () => {

@@ -107,6 +107,7 @@ modelIndependentWebE2e(
 
     const card = stage.getByTestId("activity-group-card").first();
     await expect(card).toHaveAttribute("data-sections", "activities");
+    await expect(card).not.toHaveClass(/den-enter-fade/);
     await page.evaluate(() => document.fonts.ready);
 
     const actHeader = card.getByTestId("activity-span-card").locator(":scope > .den-transcript-disclosure-header");
@@ -218,7 +219,9 @@ modelIndependentWebE2e(
     await actHeader.click();
     await filesToggle.click();
     await expect(card.getByTestId("activity-span-card")).toHaveAttribute("data-expanded", "false");
+    await expect(card.getByTestId("activity-span-card")).not.toHaveAttribute("data-animating", "true");
     await expect(card.getByTestId("diff-group")).toHaveAttribute("data-expanded", "false");
+    await expect(card.getByTestId("diff-group")).not.toHaveAttribute("data-animating", "true");
 
     const wideFit = await card.evaluate((el) => ({ client: el.clientWidth, scroll: el.scrollWidth }));
     expect(wideFit.scroll).toBe(wideFit.client);

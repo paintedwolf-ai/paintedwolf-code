@@ -336,8 +336,8 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   await expect(liveChatStage(page).getByText("Step 160.", { exact: true })).toBeVisible({ timeout: 30_000 });
 
   const spanRow = scroller(page).locator(`.transcript-viewport-row[data-msg-id="${leadKeyBefore}"]`);
-  // Each wheel waits for the transcript to settle, so visibility is read from a resting layout.
-  while (!(await spanRow.isVisible())) await wheelTranscript(page, -1_500);
+  // Step inside viewport height so the top row enters view without a runway seek.
+  while (!(await spanRow.isVisible())) await wheelTranscript(page, -400);
   await olderRequested;
   const spanCard = spanRow.getByTestId("activity-span-card");
   await spanCard.locator(":scope > .den-transcript-disclosure-header").click();

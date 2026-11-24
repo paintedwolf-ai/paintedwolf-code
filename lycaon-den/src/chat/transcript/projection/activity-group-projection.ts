@@ -98,24 +98,36 @@ function workEntryOrdKey(candidate: ActivityCandidate, order: TranscriptOrder): 
     : { ord: order.ordById.get(entry.key) ?? UNORDERED, tier: TIER.row, index: 0 };
 }
 
-function approvalFirstVisibilityKey(approval: ActivityGroupApproval, order: TranscriptOrder): TranscriptOrdSortKey {
+function approvalFirstVisibilityKey(
+  approval: ActivityGroupApproval,
+  candidates: readonly ActivityCandidate[],
+  order: TranscriptOrder,
+): TranscriptOrdSortKey {
   const callIndex = approval.call?.index ?? 0;
   const parentOrd = order.ordById.get(approval.parentMessageId);
-  return parentOrd !== undefined || !approval.call?.resultMessageId
-    ? { ord: parentOrd ?? UNORDERED, tier: TIER.call, index: 2 * callIndex + 1 }
-    : { ord: order.ordById.get(approval.call.resultMessageId) ?? UNORDERED, tier: TIER.call, index: 2 * callIndex - 1 };
+  const resultId = approval.call?.resultMessageId;
+  const atParent = parentOrd !== undefined || !resultId;
+  let ord = atParent ? (parentOrd ?? UNORDERED) : (order.ordById.get(resultId) ?? UNORDERED);
+  if (ord !== UNORDERED && callIndex > 0) {
+    for (const { entry } of candidates) {
+      if (entry.kind === "tool" && entry.part.assistantMessageId === approval.parentMessageId && (entry.batchOrder ?? 0) < callIndex) {
+        const sibOrd = entry.part.messageId !== entry.part.assistantMessageId ? order.ordById.get(entry.part.messageId) : undefined;
+        if (sibOrd !== undefined && sibOrd > ord) ord = sibOrd;
+      }
+    }
+  }
+  return { ord, tier: TIER.call, index: atParent ? 2 * callIndex + 1 : 2 * callIndex - 1 };
 }
 
 function minOrdKey(keys: readonly TranscriptOrdSortKey[]): TranscriptOrdSortKey | undefined {
   let best: TranscriptOrdSortKey | undefined;
-  for (const key of keys) {
-    if (!best || compareTranscriptOrdSortKeys(key, best) < 0) best = key;
-  }
+  for (const key of keys) if (!best || compareTranscriptOrdSortKeys(key, best) < 0) best = key;
   return best;
 }
 
 function resolveGroupLeadKey(
   workCandidates: readonly ActivityCandidate[],
+  allCandidates: readonly ActivityCandidate[],
   approvals: readonly ActivityGroupApproval[],
   fileSteps: readonly TimedFileStep[],
   omitted: readonly TimedOmittedFiles[],
@@ -125,7 +137,7 @@ function resolveGroupLeadKey(
     ...workCandidates.map((c) => ({ id: activitySpanEntryKey(c.entry), key: workEntryOrdKey(c, order) })),
     ...approvals.map((a) => ({
       id: a.parentMessageId && a.toolCallId ? toolPartStableId(a.parentMessageId, { id: a.toolCallId }) : a.key,
-      key: approvalFirstVisibilityKey(a, order),
+      key: approvalFirstVisibilityKey(a, allCandidates, order),
     })),
     ...fileSteps.map(({ step, key }) => ({ id: step.key, key })),
     ...omitted.map((entry) => ({ id: entry.partId, key: entry.key })),
@@ -179,13 +191,13 @@ function buildGroupFromSlice(
   const filesOmitted = slice.omitted.reduce((sum, entry) => sum + entry.count, 0);
   if (!hasWork && approvals.length === 0 && slice.fileSteps.length === 0 && filesOmitted === 0) return null;
 
-  const groupKey = `activity-group:${resolveGroupLeadKey(workCandidates, approvals, slice.fileSteps, slice.omitted, order)}`;
+  const groupKey = `activity-group:${resolveGroupLeadKey(workCandidates, slice.candidates, approvals, slice.fileSteps, slice.omitted, order)}`;
   const folds = slice.fileSteps.length > 0 ? foldIntervalFileEdits(groupKey, slice.fileSteps.map((s) => s.step)) : [];
 
   const rankedSections: { section: ActivityGroupSection; key: TranscriptOrdSortKey }[] = [];
   const actKey = hasWork ? minOrdKey(workCandidates.map((c) => workEntryOrdKey(c, order))) : undefined;
   if (actKey) rankedSections.push({ section: "activities", key: actKey });
-  const appKey = approvals.length > 0 ? minOrdKey(approvals.map((a) => approvalFirstVisibilityKey(a, order))) : undefined;
+  const appKey = approvals.length > 0 ? minOrdKey(approvals.map((a) => approvalFirstVisibilityKey(a, slice.candidates, order))) : undefined;
   if (appKey) rankedSections.push({ section: "approvals", key: appKey });
   const fileKey = folds.length > 0 || filesOmitted > 0
     ? minOrdKey([...slice.fileSteps.map((s) => s.key), ...slice.omitted.map((o) => o.key)])
