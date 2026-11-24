@@ -13,6 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
 	"github.com/lycaon/lycaon/internal/session/loading"
+	"github.com/lycaon/lycaon/internal/session/policyfacts"
+	"github.com/lycaon/lycaon/internal/session/policyfeedback"
 	"github.com/lycaon/lycaon/internal/session/policyindex"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
@@ -76,17 +78,25 @@ func TestContextBuildWiresCompletionCueCallbacks(t *testing.T) {
 		},
 	}
 
+	scope := sessionscope.New(sessions.Sessions)
+	prof := &profiles.Service{}
 	m := &Context{
-		Guards:       &turnguards.Service{},
+		Guards: &turnguards.Service{
+			Feedback:   &policyfeedback.Service{},
+			Profiles:   prof,
+			ToolPolicy: &policyfacts.Service{},
+			Workspace:  scope,
+		},
 		Limits:       &sessionlimits.Service{},
 		Loading:      &loading.Service{},
 		PolicyIndex:  &policyindex.Service{},
-		Profiles:     &profiles.Service{},
+		Profiles:     prof,
 		Progress:     prog,
 		Runtime:      rt,
 		Sessions:     sessions.Sessions,
 		Verification: verif,
 		WorkerState:  &workeroutcomes.State{},
+		Workspace:    scope,
 	}
 
 	deps := m.Build()
