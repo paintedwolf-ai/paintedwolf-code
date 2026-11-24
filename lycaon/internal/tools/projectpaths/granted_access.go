@@ -66,7 +66,9 @@ func resolveGranted(tctx tools.ToolContext, modelPath string, op sandbox.PathOp)
 	}
 	anchor := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(access.Path)))
 	if access.Tree {
-		anchor = existingDirectoryAnchor(anchor)
+		if op != sandbox.PathOpRead {
+			anchor = existingDirectoryAnchor(anchor)
+		}
 	} else {
 		// Missing parents need an existing effect anchor; authority stays on the leaf.
 		anchor = existingEffectAnchor(filepath.Dir(anchor))

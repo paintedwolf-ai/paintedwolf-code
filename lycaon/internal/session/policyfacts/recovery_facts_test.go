@@ -177,9 +177,7 @@ func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
 func tempReadTarget(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "in.csv")
-	if err := os.WriteFile(path, []byte("a,b\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "write temp read target", os.WriteFile(path, []byte("a,b\n"), 0o600))
 	return fspath.CanonicalPath(path)
 }
 

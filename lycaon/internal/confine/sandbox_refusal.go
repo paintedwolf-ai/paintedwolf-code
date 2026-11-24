@@ -359,8 +359,12 @@ func (o SharedTempObservation) All() []string {
 
 // SharedTempObservation extracts deduplicated read and write grant candidates.
 func (s SandboxRefusals) SharedTempObservation() SharedTempObservation {
+	readPaths := s.SharedTempPaths(AccessRead)
 	var rawReads, readDirs []string
-	for _, p := range s.SharedTempPaths(AccessRead) {
+	for i, p := range readPaths {
+		if metadataOnly(p.Operations) && hasGrantableDescendant(readPaths, i) {
+			continue
+		}
 		info, err := os.Lstat(p.Grant)
 		if err != nil {
 			// Speculative probes for absent temp files generate no automatic card.

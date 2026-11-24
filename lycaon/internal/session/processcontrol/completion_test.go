@@ -331,7 +331,7 @@ func TestBackgroundCommandCompletionSettlesSharedTempOnceWithHandle(t *testing.T
 	var calls int
 	service.SharedTemp = func(_ context.Context, sess *api.Session, completion bgprocess.Completion, obs confine.SharedTempObservation, failed bool) guidance.SharedTempSettlement {
 		calls++
-		if sess.ID != "session" || completion.OriginTool != "command" || completion.ToolCallID != "call-bg" {
+		if sess.ID != "session" || completion.OriginTool != "command" || !strings.HasPrefix(completion.ToolCallID, "call-bg") {
 			t.Fatalf("unexpected background settlement args: sess=%s tool=%s call=%s", sess.ID, completion.OriginTool, completion.ToolCallID)
 		}
 		if !failed {

@@ -352,3 +352,23 @@ func TestCredentialStoreRefusalsRouteToCredentialStoreCapability(t *testing.T) {
 		t.Fatalf("read refusal on %s routed to %+v, want RecoverReadPath / FloorReadKeyMaterial", sshKey, gotSSH)
 	}
 }
+
+func TestSharedTempObservationDropsAncestorMetadataTraversal(t *testing.T) {
+	tempDir, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve temp dir", err)
+	sub := filepath.Join(tempDir, "sub")
+	testutil.FailErr(t, "mkdir sub", os.MkdirAll(sub, 0o700))
+	leaf := filepath.Join(sub, "input.txt")
+	testutil.FailErr(t, "write leaf", os.WriteFile(leaf, []byte("ok\n"), 0o600))
+
+	obs := (SandboxRefusals{
+		Refusals: []SandboxRefusal{
+			{Operation: "file-read-metadata", Target: tempDir, Layer: FloorSharedTemp, Recovery: RecoverReadPath, Grant: tempDir},
+			{Operation: "file-read-metadata", Target: sub, Layer: FloorSharedTemp, Recovery: RecoverReadPath, Grant: sub},
+			{Operation: "file-read-data", Target: leaf, Layer: FloorSharedTemp, Recovery: RecoverReadPath, Grant: leaf},
+		},
+	}).SharedTempObservation()
+	if !slices.Equal(obs.Reads, []string{leaf}) {
+		t.Fatalf("SharedTempObservation().Reads = %v, want [%s]", obs.Reads, leaf)
+	}
+}

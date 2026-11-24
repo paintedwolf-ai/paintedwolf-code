@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -72,74 +71,53 @@ func sessionScratchMarker(t *testing.T, s *replaySession) string {
 func buildInternalTempProbe(t *testing.T) string {
 	t.Helper()
 	srcDir := outsideCommandFolder(t)
-	shebang := "#!/usr/bin/env python3\n"
-	if runtime.GOOS == "darwin" {
-		if _, err := os.Stat("/usr/bin/python3"); err == nil {
-			// Platform-signed interpreter reports Sandbox.kext violations on first exec.
-			shebang = "#!/usr/bin/python3\n"
-		}
-	}
-	script := shebang + `import os
-import sys
+	script := `#!/bin/sh
+set -u
 
-if len(sys.argv) > 1 and sys.argv[1] == "warm":
-    sys.exit(0)
+if [ "${1:-}" = "warm" ]; then
+    exit 0
+fi
 
-try:
-    with open("probe.cfg", "r", encoding="utf-8") as fh:
-        lines = fh.read().strip().splitlines()
-except OSError:
-    sys.exit(2)
+if [ ! -r probe.cfg ]; then
+    exit 2
+fi
 
-mode = lines[0]
-target = lines[1]
-scratch = os.environ.get("SCRATCH_DIR", "")
-if not scratch:
-    sys.stderr.write("missing SCRATCH_DIR\n")
-    sys.exit(3)
+{
+    IFS= read -r mode || exit 2
+    IFS= read -r target || exit 2
+    out_path=""
+    IFS= read -r out_path || true
+} < probe.cfg
 
-with open(os.path.join(scratch, "effect.marker"), "ab") as fh:
-    fh.write(b"1")
+if [ -z "${SCRATCH_DIR:-}" ]; then
+    printf 'missing SCRATCH_DIR\n' >&2
+    exit 3
+fi
 
-if mode == "read":
-    try:
-        with open(target, "rb") as fh:
-            sys.stdout.buffer.write(fh.read())
-    except OSError as exc:
-        sys.stderr.write(f"{exc}\n")
-        sys.exit(1)
-elif mode == "tolerated":
-    try:
-        with open(target, "rb") as fh:
-            fh.read()
-    except OSError:
-        pass
-    sys.stdout.write("tolerated-ok\n")
-elif mode == "exchange":
-    out_path = lines[2]
-    try:
-        with open(target, "rb") as fh:
-            data = fh.read()
-        with open(out_path, "wb") as fh:
-            fh.write(data + b"processed\n")
-    except OSError as exc:
-        sys.stderr.write(f"{exc}\n")
-        sys.exit(1)
-elif mode == "list":
-    try:
-        entries = sorted(os.listdir(target))
-    except OSError as exc:
-        sys.stderr.write(f"{exc}\n")
-        sys.exit(1)
-    for name in entries:
-        sys.stdout.write(name + "\n")
-elif mode == "write":
-    try:
-        with open(target, "wb") as fh:
-            fh.write(b"process-written\n")
-    except OSError as exc:
-        sys.stderr.write(f"{exc}\n")
-        sys.exit(1)
+printf '1' >> "${SCRATCH_DIR}/effect.marker" || exit 3
+
+case "$mode" in
+read)
+    exec /bin/cat "$target"
+    ;;
+tolerated)
+    /bin/cat "$target" >/dev/null 2>&1 || true
+    printf 'tolerated-ok\n'
+    ;;
+exchange)
+    /bin/cat "$target" > "${SCRATCH_DIR}/stage.buf" || exit 1
+    { /bin/cat "${SCRATCH_DIR}/stage.buf" && printf 'processed\n'; } > "$out_path" || exit 1
+    ;;
+list)
+    exec /bin/ls -1 "$target"
+    ;;
+write)
+    printf 'process-written\n' > "$target"
+    ;;
+*)
+    exit 2
+    ;;
+esac
 `
 	binPath := filepath.Join(srcDir, "temp-probe")
 	testutil.FailErr(t, "write probe script", os.WriteFile(binPath, []byte(script), 0o755))
