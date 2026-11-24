@@ -20,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -172,7 +171,6 @@ func TestWatchProducersHooksAndOutcomeBridge(t *testing.T) {
 		_ = bridge.OnWorkerWatchTerminal(t.Context(), parent.ID, "job-"+st, st, "done")
 	}
 
-	repochange.Publish(t.Context(), repochange.Event{Kind: repochange.WorktreeChanged, ProjectDir: rootDir})
-	sourcefeed.Publish(testdbseed.DefaultProjectID, rootDir, sourcefeed.Notice{})
+	repochange.Notify(t.Context(), repochange.Event{Kind: repochange.WorktreeChanged, ProjectDir: rootDir})
 	testutil.FailErr(t, "close resources", (&ServeApp{resources: res}).Close())
 }
