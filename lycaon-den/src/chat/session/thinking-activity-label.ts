@@ -383,6 +383,16 @@ function hostActivityCandidate(
       source: "host_activity",
     };
   }
+  if (activity.kind === "indexing_credentials" && activity.indexing) {
+    const { root_label, directories_visited, credential_files_read } = activity.indexing;
+    const folders = `${directories_visited} ${directories_visited === 1 ? "folder" : "folders"}`;
+    const files = `${credential_files_read} ${credential_files_read === 1 ? "file" : "files"}`;
+    return {
+      label: `Checking credential files in ${root_label} · ${folders} · ${files}`,
+      weight: ACTIVITY_LABEL_WEIGHTS.preparingContext,
+      source: "host_activity",
+    };
+  }
   if (activity.kind === "deciding") {
     return {
       label: decidingLabel(activity),

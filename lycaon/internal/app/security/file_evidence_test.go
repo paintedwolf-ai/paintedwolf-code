@@ -13,8 +13,9 @@ type fileEvidenceAdmission struct {
 	err     error
 }
 
-func (f *fileEvidenceAdmission) EnsureProject(_ context.Context, project string) error {
-	f.project = project
+func (*fileEvidenceAdmission) Start(string) {}
+func (f *fileEvidenceAdmission) Await(_ context.Context, wait tools.CredentialWait) error {
+	f.project = wait.ProjectID
 	return f.err
 }
 func (*fileEvidenceAdmission) Delivered(context.Context, tools.CredentialFileRead) error { return nil }
