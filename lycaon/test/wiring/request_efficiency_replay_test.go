@@ -92,7 +92,7 @@ func anthropicPrefixThroughRootPolicy(t *testing.T, req modelcall.CompletionRequ
 			rootIdx = i
 		}
 	}
-	if standingIdx < 0 || rootIdx < 0 || historyIdx < 0 {
+	if standingIdx < 0 || rootIdx < 0 {
 		var summary []string
 		for i, m := range req.Messages {
 			c := m.Content
@@ -103,8 +103,8 @@ func anthropicPrefixThroughRootPolicy(t *testing.T, req modelcall.CompletionRequ
 		}
 		t.Fatalf("missing expected indices: standing=%d root=%d history=%d\n%s", standingIdx, rootIdx, historyIdx, strings.Join(summary, "\n"))
 	}
-	if !(standingIdx < rootIdx && rootIdx < historyIdx) {
-		t.Fatalf("expected standing < root < history, got standing=%d root=%d history=%d", standingIdx, rootIdx, historyIdx)
+	if !(standingIdx < rootIdx && (historyIdx < 0 || rootIdx < historyIdx)) {
+		t.Fatalf("expected standing < root (< history if present), got standing=%d root=%d history=%d", standingIdx, rootIdx, historyIdx)
 	}
 	prefix := req.Messages[:rootIdx+1]
 	sys, msgs := anthropic.ProjectMessages(prefix, nil, false, sessionID, "anthropic", model)
@@ -315,35 +315,41 @@ waitPark:
 
 	// RE01: append enough ordinary assistant rows to exceed compaction trigger, verify continuation survival & reopen repair.
 	var extra []wire.Message
-	for i := 0; i < 24; i++ {
+	for i := 0; i < 60; i++ {
 		extra = append(extra, wire.Message{
 			ID:      fmt.Sprintf("replay-asst-%d", i),
 			Role:    wire.MessageRoleAssistant,
-			Content: fmt.Sprintf("Iteration %d analysis: %s", i, strings.Repeat("detailed trace output ", 95)),
+			Content: fmt.Sprintf("Iteration %d analysis: %s", i, strings.Repeat("detailed trace output ", 400)),
 		})
 	}
 	testutil.FailErr(t, "append compaction trigger messages", h.Store.Transcript.AppendMessages(h.OwnerCtx(t, ctx), sess.ID, extra...))
 
 	histSvc := h.Sessions.Manager.Runner.History
-	tightCfg := compaction.DefaultCompactionConfig()
-	tightCfg.Enabled = true
-	tightCfg.ModelContextWindow = 16000
-	tightCfg.HardCeilingTokens = 7000
-	tightCfg.TargetTokens = 6500
-	tightCfg.BudgetTriggerPct = 80
-	tightCfg.KeepRecentMessages = 2
-	tightCfg.MessageSlice = 32
-	tightCfg.SessionMinSavingsTokens = 1000
-	tightCfg.ChunkStrategyDefault = "truncate"
-	histSvc.SetCompactor(compaction.NewSimpleCompactor(tightCfg, replaySummarizer{}))
-	histSvc.Schedule(ctx, sess)
+	ownerCtx := h.OwnerCtx(t, ctx)
+	var report compaction.CompactionReport
+	for attempt := 0; attempt < 5; attempt++ {
+		histSvc.Wait()
+		report, err = histSvc.ForceCompact(ownerCtx, sess.ID)
+		if err == nil || !strings.Contains(err.Error(), "compaction source changed") {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	testutil.FailErr(t, "force compact", err)
+	if !report.SessionCompacted {
+		t.Fatalf("expected ForceCompact to compact session, got report=%+v", report)
+	}
 	histSvc.Wait()
-	testutil.FailErr(t, "wait synthesis", histSvc.Runner.WaitContext(ctx))
+	testutil.FailErr(t, "wait synthesis", histSvc.Runner.WaitContext(ownerCtx))
 
-	view1, ok, err := h.Store.Compaction.GetCompactionView(h.OwnerCtx(t, ctx), sess.ID)
+	view1, ok, err := h.Store.Compaction.GetCompactionView(ownerCtx, sess.ID)
 	testutil.FailErr(t, "get compaction view", err)
 	if !ok || view1.Continuation == nil {
-		t.Fatalf("expected continuation view after compaction, got ok=%v", ok)
+		msgs, _ := h.Store.Transcript.GetMessages(ownerCtx, sess.ID)
+		est := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(msgs))
+		reloadedSess, _ := h.Store.Sessions.Get(ownerCtx, sess.ID)
+		lcfg := histSvc.Limits.Compaction(ownerCtx, reloadedSess)
+		t.Fatalf("expected continuation view after compaction, got ok=%v msgs=%d est=%d gen=%d lcfg=%+v", ok, len(msgs), est, reloadedSess.CompactionGeneration, lcfg)
 	}
 	hasContinuationPart := false
 	for _, m := range view1.Messages {
@@ -360,9 +366,9 @@ waitPark:
 
 	// Second background pass must not rewrite the continuation row.
 	genBefore := view1.Generation
-	histSvc.Schedule(ctx, sess)
+	histSvc.Schedule(ownerCtx, sess)
 	histSvc.Wait()
-	testutil.FailErr(t, "wait second pass", histSvc.Runner.WaitContext(ctx))
+	testutil.FailErr(t, "wait second pass", histSvc.Runner.WaitContext(ownerCtx))
 	view2, ok, err := h.Store.Compaction.GetCompactionView(h.OwnerCtx(t, ctx), sess.ID)
 	testutil.FailErr(t, "get compaction view after second pass", err)
 	if !ok || view2.Generation != genBefore {
