@@ -166,7 +166,7 @@ describe("parked command presentation", () => {
 });
 
 describe("terminal background command wait delivery presentation", () => {
-  it("settles the command card, clears held running labels, keeps the grouped Wait row in the active orange card, and clears on delivery without advancing timers", () => {
+  it("settles the command card, clears held running labels, keeps the grouped Wait row in the active orange card, and clears on delivery without advancing timers", async () => {
     expect(verboseModePref()).toBe(false);
     applyBackgroundProcessEvent({
       session_id: INCIDENT_SESSION,
@@ -243,6 +243,7 @@ describe("terminal background command wait delivery presentation", () => {
     appStore.actions.upsertMessage(waitSettledResult("wait-35"));
     appStore.actions.setActivity({ ...waitAct, status: "done" });
     appStore.actions.setCurrentSession({ ...appStore.state.currentSession!, status: "idle" });
+    await Promise.resolve();
 
     expect(screen.queryByTestId("thinking-indicator")).toBeNull();
     expect(waitSpan!.getAttribute("data-status")).toBe("done");

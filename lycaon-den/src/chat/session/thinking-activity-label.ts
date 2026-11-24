@@ -17,6 +17,7 @@ import { TOOL_CHICKLET_RUNNING_LABELS } from "../tool/tool-presentation.generate
 import {
   classifyToolKind,
   isLoopbackTarget,
+  toolPartDisplayStatus,
   toolPartFromCall,
   type ToolPartKind,
   type ToolPartView,
@@ -281,6 +282,7 @@ function userTurnStartIndex(messages: readonly Message[]): number {
 export function findLatestRunningToolInTurn(
   messages: readonly Message[],
   activities: readonly ActivityEvent[] = [],
+  sessionId?: string,
 ): ToolPartView | undefined {
   const turnStart = userTurnStartIndex(messages);
   let latest: ToolPartView | undefined;
@@ -304,7 +306,7 @@ export function findLatestRunningToolInTurn(
         message: msg,
         index: callIndex,
       });
-      if (part.status === "running") {
+      if (toolPartDisplayStatus(part, sessionId) === "running") {
         latest = part;
       }
     }
@@ -318,7 +320,7 @@ function runningToolCandidate(
   activities: readonly ActivityEvent[] = [],
   sessionId?: string,
 ): ActivityLabelCandidate | undefined {
-  const part = findLatestRunningToolInTurn(messages, activities);
+  const part = findLatestRunningToolInTurn(messages, activities, sessionId);
   if (!part) return undefined;
   const isWait = part.tool.toLowerCase() === "wait";
   return {
