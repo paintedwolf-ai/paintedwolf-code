@@ -346,7 +346,7 @@ func TestBackgroundCommandCompletionSettlesSharedTempOnceWithHandle(t *testing.T
 	target := confine.SharedTempLocation("/tmp") + "/bg-out/result.txt"
 	refusals := confine.SandboxRefusals{Refusals: []confine.SandboxRefusal{{
 		Operation: "file-write-create", Target: target,
-		Layer: confine.FloorSharedTemp, Grant: confine.GrantSharedTempWrite,
+		Layer: confine.FloorSharedTemp, Grant: confine.FloorSharedTemp.RecoveryFor(confine.AccessWrite).GrantPath(target),
 	}}}
 	now := time.Now()
 	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{

@@ -700,9 +700,9 @@ func TestSharedTempExchangeSettlementCombinesReadsAndWritesAndReopensOnExplicitP
 
 	refusals := confine.SandboxRefusals{
 		Refusals: []confine.SandboxRefusal{
-			{Operation: "file-read-data", Target: inputFile, Layer: confine.FloorSharedTemp, Grant: confine.GrantExactPath},
-			{Operation: "file-read-data", Target: speculativeMissing, Layer: confine.FloorSharedTemp, Grant: confine.GrantExactPath},
-			{Operation: "file-write-create", Target: exportFile, Layer: confine.FloorSharedTemp, Grant: confine.GrantSharedTempWrite},
+			{Operation: "file-read-data", Target: inputFile, Layer: confine.FloorSharedTemp, Grant: inputFile},
+			{Operation: "file-read-data", Target: speculativeMissing, Layer: confine.FloorSharedTemp, Grant: speculativeMissing},
+			{Operation: "file-write-create", Target: exportFile, Layer: confine.FloorSharedTemp, Grant: exportDir},
 		},
 	}
 	obs := refusals.SharedTempObservation()

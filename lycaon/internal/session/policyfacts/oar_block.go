@@ -273,7 +273,8 @@ func reconcileSettledSharedTemp(gc *oar.GuardContext) {
 	}
 	optional := gc.Refusals.OptionalReadPaths
 	gc.Refusals = oar.RefusalsFacts{OptionalReadPaths: optional}
-	if gc.Execution.Destination == "" {
+	dest, _ := gc.RejectData[isolation.CodeBoundaryRefused]["destination"].(string)
+	if dest == "" {
 		filtered := gc.Execution.ConfineSignals[:0]
 		for _, sig := range gc.Execution.ConfineSignals {
 			if sig != "boundary_refused" {
