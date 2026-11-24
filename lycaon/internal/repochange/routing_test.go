@@ -49,6 +49,19 @@ func TestDebouncerCoalescesSymlinkAliasesAndPreservesResync(t *testing.T) {
 	if !EpochCurrent(aliasDir, Epoch{BootID: delivered.EpochBootID, Value: delivered.WorktreeEpoch}) {
 		t.Fatal("alias epoch disagreed with delivered physical epoch")
 	}
+	if !delivered.ContiguousAfter(startEpoch) {
+		t.Fatalf("coalesced burst broke epoch contiguity: start=%v delivered=%+v", startEpoch, delivered)
+	}
+	if (Event{EpochBootID: startEpoch.BootID, FirstWorktreeEpoch: startEpoch.Value + 2, WorktreeEpoch: startEpoch.Value + 2}).ContiguousAfter(startEpoch) {
+		t.Fatal("skipped epoch falsely reported contiguous")
+	}
+
+	epochBeforePrivate := CurrentEpoch(realDir)
+	d.NotifyWorktreeChanges(context.Background(), realDir, []WorktreeChange{{Path: ".paintedwolf/internal", Kind: WorktreeChangeContent}}, SourceWatcher)
+	d.FlushForTest(t.Context())
+	if CurrentEpoch(realDir) != epochBeforePrivate {
+		t.Fatal("private watcher path advanced public worktree epoch")
+	}
 
 	// Whole-root resync in a coalesced burst must survive subsequent path additions.
 	d.NotifyWorktree(context.Background(), realDir, []string{"before.go"}, SourceMutation)

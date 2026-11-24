@@ -122,20 +122,25 @@ func rootFromRow(row db.ProjectRoots) *credentialRoot {
 }
 
 func (i *credentialIndex) changed(ctx context.Context, event repochange.Event) error {
-	if event.Kind == repochange.IndexChanged {
-		return nil
-	}
 	ctx, finish, err := i.begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer finish()
+	if event.Kind == repochange.IndexChanged {
+		for _, root := range i.roots {
+			if sameCredentialRootDir(root.path, event.ProjectDir) && root.ready && event.ContiguousAfter(root.epoch) {
+				root.epoch = repochange.Epoch{BootID: event.EpochBootID, Value: event.WorktreeEpoch}
+			}
+		}
+		return nil
+	}
 	for _, root := range i.roots {
 		if !sameCredentialRootDir(root.path, event.ProjectDir) {
 			continue
 		}
 		epoch := repochange.Epoch{BootID: event.EpochBootID, Value: event.WorktreeEpoch}
-		contiguous := root.ready && epoch.BootID == root.epoch.BootID && epoch.Value == root.epoch.Value+1
+		contiguous := root.ready && event.ContiguousAfter(root.epoch)
 		paths := event.Paths
 		if !contiguous || event.Kind == repochange.HeadMoved || len(paths) == 0 {
 			paths = []string{"."}

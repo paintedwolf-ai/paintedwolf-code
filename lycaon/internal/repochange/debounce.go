@@ -86,6 +86,7 @@ type debounceEntry struct {
 	done       chan struct{}
 	changes    map[string]WorktreeChangeKind
 	source     Source
+	firstEpoch Epoch
 	epoch      Epoch
 }
 
@@ -182,6 +183,10 @@ func (d *debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, chang
 	if source == "" {
 		source = SourceMutation
 	}
+	normalized := normalizeDebouncedChanges(projectDir, key, changes, source)
+	if len(normalized) == 0 {
+		return nil
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.closed {
@@ -189,7 +194,8 @@ func (d *debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, chang
 	}
 	ent := d.pending[key]
 	if ent == nil {
-		ent = &debounceEntry{root: key, projectDir: projectDir, done: make(chan struct{}), changes: map[string]WorktreeChangeKind{}, source: source, epoch: Advance(key)}
+		first := Advance(key)
+		ent = &debounceEntry{root: key, projectDir: projectDir, done: make(chan struct{}), changes: map[string]WorktreeChangeKind{}, source: source, firstEpoch: first, epoch: first}
 		d.pending[key] = ent
 		d.active[ent] = struct{}{}
 		// Preserve context values after the mutating call returns.
@@ -205,11 +211,8 @@ func (d *debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, chang
 	if source == SourceMutation || ent.source == "" {
 		ent.source = source
 	}
-	for _, change := range changes {
-		path := normalizePathForRoot(key, change.Path)
-		if path == "" {
-			continue
-		}
+	for _, change := range normalized {
+		path := change.Path
 		if path == "." && change.Kind == WorktreeChangeResync {
 			clear(ent.changes)
 			ent.changes["."] = WorktreeChangeResync
@@ -259,7 +262,8 @@ func (d *debouncer) deliver(ctx context.Context, key string, ent *debounceEntry)
 	}
 	Notify(ctx, Event{
 		ProjectDir: ent.projectDir, Kind: WorktreeChanged, Changes: changes,
-		Source: ent.source, WorktreeEpoch: ent.epoch.Value, EpochBootID: ent.epoch.BootID,
+		Source: ent.source, FirstWorktreeEpoch: ent.firstEpoch.Value,
+		WorktreeEpoch: ent.epoch.Value, EpochBootID: ent.epoch.BootID,
 	})
 }
 

@@ -4,7 +4,6 @@ package repochange
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -32,6 +31,9 @@ type Event struct {
 	Changes []WorktreeChange
 	// Source is who produced the signal (mutation|watcher|git_host|ttl).
 	Source Source
+	// FirstWorktreeEpoch is the earliest generation coalesced into this event;
+	// zero means a single-generation event at WorktreeEpoch.
+	FirstWorktreeEpoch uint64
 	// WorktreeEpoch is the root generation after this event was accepted.
 	WorktreeEpoch uint64
 	// EpochBootID distinguishes generations created by different host processes.
@@ -148,8 +150,11 @@ func Notify(ctx context.Context, ev Event) {
 	}
 	if ev.WorktreeEpoch == 0 || ev.EpochBootID == "" {
 		epoch := Advance(dir)
+		ev.FirstWorktreeEpoch = epoch.Value
 		ev.WorktreeEpoch = epoch.Value
 		ev.EpochBootID = epoch.BootID
+	} else if ev.FirstWorktreeEpoch == 0 {
+		ev.FirstWorktreeEpoch = ev.WorktreeEpoch
 	}
 	mu.RLock()
 	snapshot := make([]Observer, 0, len(observers))
@@ -268,40 +273,3 @@ func CurrentEpoch(root string) Epoch {
 
 // EpochCurrent reports whether root still has the supplied generation.
 func EpochCurrent(root string, epoch Epoch) bool { return CurrentEpoch(root) == epoch }
-
-func canonicalDir(root string) string {
-	if strings.TrimSpace(root) == "" {
-		return ""
-	}
-	abs, err := filepath.Abs(root)
-	if err != nil {
-		return ""
-	}
-	return filepath.Clean(abs)
-}
-
-func physicalDir(root string) string {
-	abs := canonicalDir(root)
-	if abs == "" {
-		return ""
-	}
-	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
-		return filepath.Clean(resolved)
-	}
-	cur := abs
-	var tail []string
-	for {
-		parent := filepath.Dir(cur)
-		if parent == cur {
-			return abs
-		}
-		tail = append(tail, filepath.Base(cur))
-		cur = parent
-		if resolved, err := filepath.EvalSymlinks(cur); err == nil {
-			for i := len(tail) - 1; i >= 0; i-- {
-				resolved = filepath.Join(resolved, tail[i])
-			}
-			return filepath.Clean(resolved)
-		}
-	}
-}
