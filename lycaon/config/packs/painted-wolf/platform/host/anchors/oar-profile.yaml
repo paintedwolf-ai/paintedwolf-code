@@ -642,6 +642,39 @@ host_facts:
    type: string
  - name: paintedwolf.grep_nested_repeat
    type: bool
+ - name: paintedwolf.grep_input_path
+   type: string
+   observation: Path of the grep input whose record search stopped on a work or memory budget.
+ - name: paintedwolf.grep_stop_line
+   type: int
+   observation: Line number of the record where that search stopped.
+ - name: paintedwolf.grep_record_bytes
+   type: int
+   observation: Byte length of the record where that search stopped.
+ - name: paintedwolf.grep_stop_resource
+   type: string
+   observation: Budget that stopped the record search, regex_work_steps or evaluation_memory_bytes.
+ - name: paintedwolf.grep_stop_memory
+   type: bool
+   observation: True when the record search stopped on evaluation_memory_bytes, so the record is too long for the pattern.
+ - name: paintedwolf.grep_lines_emitted_before_stop
+   type: int
+   observation: Lines the stopped input printed before its stop.
+ - name: paintedwolf.grep_pattern_literal
+   type: bool
+   observation: True when every record is searched by byte comparison.
+ - name: paintedwolf.grep_stopped_count
+   type: int
+   observation: Inputs a completed multi-file grep stopped on a record budget.
+ - name: paintedwolf.grep_stopped_inputs
+   type: list<string>
+   observation: Each stopped input as path:line.
+ - name: paintedwolf.grep_searched_files
+   type: int
+   observation: Inputs a completed multi-file grep searched, stopped ones included.
+ - name: paintedwolf.grep_matched_files
+   type: int
+   observation: Inputs with at least one selected line.
  - name: paintedwolf.can_page_act
    type: bool
  - name: paintedwolf.can_page_snapshot

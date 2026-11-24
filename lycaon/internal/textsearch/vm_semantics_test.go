@@ -74,7 +74,7 @@ func TestRegexDialectsCancelAndReleaseSessionAdmission(t *testing.T) {
 }
 
 func TestRecordDecodeAdmissionPrecedesAllocation(t *testing.T) {
-	matcher, err := Compile(t.Context(), Spec{Patterns: []string{"a"}, Dialect: RE2}, catalogLimits(t))
+	matcher, err := Compile(t.Context(), Spec{Patterns: []string{"[ab]"}, Dialect: RE2}, catalogLimits(t))
 	testutil.FailErr(t, "Compile failed", err)
 	vm := matcher.engine.(vmEngine)
 	vm.limits.MemoryBytes = 1024

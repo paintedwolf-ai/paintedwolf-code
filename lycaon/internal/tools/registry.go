@@ -400,6 +400,8 @@ type InvocationEffects struct {
 	// branch found no repository. Program children have no Out and may run
 	// concurrently, so they share this.
 	GitNoRepository *atomic.Bool
+	// GrepStops receives multi-file grep inputs stopped on a record budget.
+	GrepStops *GrepStops
 	// Presence receives what this call does to project files as the handler
 	// resolves it: targets, resolved mutations, approval holds, and landings.
 	Presence PresenceReporter

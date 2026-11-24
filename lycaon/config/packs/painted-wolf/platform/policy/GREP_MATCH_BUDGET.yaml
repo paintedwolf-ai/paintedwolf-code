@@ -3,17 +3,17 @@ id: GREP_MATCH_BUDGET
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.grep_nested_repeat, paintedwolf.limit_id, paintedwolf.max_len, paintedwolf.maximum, paintedwolf.observed, paintedwolf.operation, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.grep_input_path, paintedwolf.grep_nested_repeat, paintedwolf.grep_pattern_literal, paintedwolf.grep_record_bytes, paintedwolf.grep_stop_line, paintedwolf.grep_stop_memory, paintedwolf.grep_stop_resource, paintedwolf.limit_id, paintedwolf.max_len, paintedwolf.maximum, paintedwolf.observed, paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.operation == "grep" && paintedwolf.rejection_code == "GREP_MATCH_BUDGET"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:grep
 message: grep pattern exceeds safe search budget
-what: '{% if paintedwolf.limit_id %}grep: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} > {{ paintedwolf.maximum }}).{% else %}{% if paintedwolf.grep_nested_repeat %}grep: nested repetition exceeds the pattern budget.{% else %}{% if paintedwolf.max_len %}grep: pattern exceeds the {{ paintedwolf.max_len }}-byte limit.{% else %}grep: pattern budget exceeded.{% endif %}{% endif %}{% endif %}'
-cause: The pattern or matching operation exceeded an admitted search limit.
+what: '{% if paintedwolf.grep_input_path %}grep stopped at {{ paintedwolf.grep_input_path }} line {{ paintedwolf.grep_stop_line }}, a {{ paintedwolf.grep_record_bytes }}-byte record.{% else %}{% if paintedwolf.limit_id %}grep: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} > {{ paintedwolf.maximum }}).{% else %}{% if paintedwolf.grep_nested_repeat %}grep: nested repetition exceeds the pattern budget.{% else %}{% if paintedwolf.max_len %}grep: pattern exceeds the {{ paintedwolf.max_len }}-byte limit.{% else %}grep: pattern budget exceeded.{% endif %}{% endif %}{% endif %}{% endif %}'
+cause: '{% if paintedwolf.grep_stop_memory %}The record is too long for the matching memory this pattern needs.{% else %}{% if paintedwolf.grep_input_path %}Matching this pattern against the record needs more work than the {{ paintedwolf.grep_stop_resource }} budget allows.{% else %}The pattern or matching operation exceeded an admitted search limit.{% endif %}{% endif %}'
 why: The search stops at the limit instead of treating unfinished work as no match.
-fix: Simplify the pattern or search smaller inputs before retrying.
-instead: Use a fixed string search when regular expressions are unnecessary.
+fix: '{% if paintedwolf.grep_input_path %}Exclude {{ paintedwolf.grep_input_path }} with --exclude, or search a line or byte range of it.{% else %}Simplify the pattern or search smaller inputs before retrying.{% endif %}'
+instead: '{% if paintedwolf.grep_pattern_literal %}Search a narrower range of the input.{% else %}Use a fixed-string search (-F) when regular expressions are unnecessary.{% endif %}'
 x-paintedwolf-scenarios:
   - id: default
     vars:

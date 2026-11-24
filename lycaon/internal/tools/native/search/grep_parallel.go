@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	"runtime"
 	"sync"
 )
@@ -30,6 +31,9 @@ type grepFileResult struct {
 	status   int
 	stats    contentSearchStats
 	json     rgStats
+	stops    []tools.GrepStoppedFile
+	searched int
+	matched  int
 }
 
 // grepFiles limits file work and reduces its streams in traversal order.
@@ -126,6 +130,9 @@ func (p *grepFiles) next() (finalErr error) {
 				finished = true
 				p.run.selected = p.run.selected || job.result.selected
 				p.run.inv.status = max(p.run.inv.status, job.result.status)
+				p.run.stops = append(p.run.stops, job.result.stops...)
+				p.run.searched += job.result.searched
+				p.run.matched += job.result.matched
 				p.addStats(job.result)
 				if job.result.err != nil {
 					return job.result.err
@@ -278,6 +285,7 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker, frame *grepWorkerFr
 	local.inv, local.walker, local.files = inv, walker, nil
 	local.selection.inv = inv
 	local.selected, local.stopped = false, false
+	local.stops, local.searched, local.matched = nil, 0, 0
 	local.index.stats = contentSearchStats{}
 	if local.json != nil {
 		local.json = &rgJSON{started: local.json.started}
@@ -300,7 +308,8 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker, frame *grepWorkerFr
 	for _, release := range inv.releases {
 		release()
 	}
-	job.result = grepFileResult{err: err, selected: local.selected, status: inv.status, stats: local.index.stats}
+	job.result = grepFileResult{err: err, selected: local.selected, status: inv.status, stats: local.index.stats,
+		stops: local.stops, searched: local.searched, matched: local.matched}
 	if local.json != nil {
 		job.result.json = local.json.total
 	}
