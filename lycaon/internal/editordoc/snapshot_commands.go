@@ -58,7 +58,7 @@ func (c saveCommitter) checkedSnapshotCommand(ctx context.Context, id, projectID
 			return nil, false, err
 		}
 		d.CommandHistory = receipt.CommandHistory
-		return s.withParticipants(d), true, nil
+		return s.withParticipants(ctx, d), true, nil
 	}
 	if !errors.Is(err, ErrNotFound) {
 		return nil, false, err
@@ -128,7 +128,7 @@ func (c *SnapshotService) ReplaceSnapshot(ctx context.Context, id, projectID str
 		return nil, err
 	}
 	s.changed(ctx, d, true)
-	return s.withParticipants(d), nil
+	return s.withParticipants(ctx, d), nil
 }
 
 func (c *SnapshotService) Discard(ctx context.Context, id, projectID string, in DocumentCommand) (*Document, error) {
@@ -156,7 +156,7 @@ func (c *SnapshotService) Discard(ctx context.Context, id, projectID string, in 
 		return nil, err
 	}
 	s.changed(ctx, d, true)
-	return s.withParticipants(d), nil
+	return s.withParticipants(ctx, d), nil
 }
 
 func (c *SnapshotService) Reload(ctx context.Context, p *project.Project, id string, in DocumentCommand) (*Document, error) {
@@ -194,5 +194,5 @@ func (c *SnapshotService) Reload(ctx context.Context, p *project.Project, id str
 		return nil, err
 	}
 	s.changed(ctx, d, true)
-	return s.withParticipants(d), nil
+	return s.withParticipants(ctx, d), nil
 }

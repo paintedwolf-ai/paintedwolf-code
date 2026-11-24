@@ -102,7 +102,7 @@ func (c *SnapshotService) Revert(ctx context.Context, projectID, id string, in R
 			return nil, err
 		}
 		d.CommandHistory = receipt.CommandHistory
-		return s.withParticipants(d), nil
+		return s.withParticipants(ctx, d), nil
 	}
 	if !errors.Is(err, ErrNotFound) {
 		return nil, err
@@ -127,7 +127,7 @@ func (c *SnapshotService) Revert(ctx context.Context, projectID, id string, in R
 		return nil, err
 	}
 	s.changed(ctx, d, true)
-	return s.withParticipants(d), nil
+	return s.withParticipants(ctx, d), nil
 }
 
 func (w semanticRewinder) prepareRevert(ctx context.Context, d *Document, in RevertChange, change *DocumentChange, inputDigest string) error {

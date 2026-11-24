@@ -156,11 +156,11 @@ func (p *PresenceService) closePresence() {
 	clear(s.participants)
 }
 
-func (p *PresenceService) withParticipants(d *Document) *Document {
+func (p *PresenceService) withParticipants(ctx context.Context, d *Document) *Document {
 	s := p.s
 	out := *d
 	if out.WorkspaceID == "" {
-		s.projectWorkspacePresentation(context.Background(), &out)
+		s.projectWorkspacePresentation(ctx, &out)
 	}
 	out.Participants = nil
 	s.presenceMu.Lock()

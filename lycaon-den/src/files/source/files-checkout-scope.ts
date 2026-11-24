@@ -2,9 +2,9 @@ import { createSignal } from "solid-js";
 import { produce } from "solid-js/store";
 import type { SourceWorkspace, SourceWorkspaceRoot } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
-import { ensureProject, projectFilesState, setFilesStore, type FileBuffer } from "../documents/files-buffer-state.ts";
+import { ensureProject, setFilesStore, type FileBuffer } from "../documents/files-buffer-state.ts";
 
-export type WorkspaceRootCheckoutMeta = {
+type WorkspaceRootCheckoutMeta = {
   rootId: string;
   path: string;
   branchId: string;
@@ -64,7 +64,7 @@ export function activeProjectWorktreeIds(projectId: string): readonly string[] |
 }
 
 /** Records the checkout identity that resolved each root in the current workspace. */
-export function recordWorkspaceRootCheckouts(
+function recordWorkspaceRootCheckouts(
   projectId: string,
   roots: readonly SourceWorkspaceRoot[],
 ): Record<string, WorkspaceRootCheckoutMeta> {
@@ -149,9 +149,4 @@ export function bufferCheckoutQualifier(buffer: Partial<Pick<FileBuffer, "branch
     return base ? `${base} (unavailable)` : "Unavailable checkout";
   }
   return base;
-}
-
-/** Returns current rootBranches for projectId. */
-export function currentRootBranch(projectId: string, rootId: string): string | undefined {
-  return projectFilesState(projectId).rootBranches[rootId];
 }

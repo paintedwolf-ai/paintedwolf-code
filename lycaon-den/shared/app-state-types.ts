@@ -449,7 +449,7 @@ export type DenFilesHotExitBuffer = {
   kind: "text" | "image" | "info";
   rootLabel?: string;
   branchId?: string;
-  worktreeId?: string;
+  checkoutId?: string;
   checkoutLabel?: string;
   pinned?: boolean;
   preview?: boolean;

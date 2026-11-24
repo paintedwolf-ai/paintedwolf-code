@@ -83,7 +83,7 @@ func (e agentEditPlanner) replayAgentEdit(ctx context.Context, d *Document, in A
 	if err := s.replicaProjection(ctx, current, nil); err != nil {
 		return nil, err
 	}
-	result := &AgentEditResult{Document: s.withParticipants(current), Saved: saved, HeldVersionID: held}
+	result := &AgentEditResult{Document: s.withParticipants(ctx, current), Saved: saved, HeldVersionID: held}
 	if publicationError != "" {
 		result.PublicationError = errors.New(publicationError)
 	}
