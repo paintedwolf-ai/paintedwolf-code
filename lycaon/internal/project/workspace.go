@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gitrepo"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceworkspace"
 )
