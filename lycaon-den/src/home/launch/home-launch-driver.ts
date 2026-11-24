@@ -181,7 +181,7 @@ async function runLaunch(
       const client = connected();
       if (!(await bindHost(launchId, client, block))) continue;
       const hostState = record()?.hostState;
-      if (!hostState || (hostState.phase === "failed" && hostState.failure?.resumable && current.localRevision > 0 && !current.sendAttempted && needsResume(current))) {
+      if (!hostState) {
         setLaunchRuntime(launchId, { step: "creating" });
         const reserved = await request((c) => c.reserveHomeStart(launchId, { choices: { mode: current.mode } }));
         applyHostState(launchId, reserved);
@@ -271,13 +271,17 @@ async function runLaunch(
   }
 }
 
-function needsResume(record: LaunchRecord): boolean {
-  return record.hostState?.phase === "failed" && record.hostState.failure?.resumable === true;
-}
+/** Refusals of the launch's model choice, remedied in provider settings. */
+const PROVIDER_REFUSALS = [
+  "provider_not_found",
+  "provider_not_configured",
+  "provider_catalog_unavailable",
+  "model_catalog_unreachable",
+  "model_catalog_refresh_failed",
+] as const;
 
-/** Codes whose remedy is in provider settings. */
 function isProviderRefusal(error: LycaonApiError): boolean {
-  return String(error.code).startsWith("provider_") || String(error.code).startsWith("model_");
+  return isApiErrorCode(error, [...PROVIDER_REFUSALS]);
 }
 
 /**
