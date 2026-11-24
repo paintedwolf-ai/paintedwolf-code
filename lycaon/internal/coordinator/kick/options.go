@@ -1,12 +1,35 @@
 package kick
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// HintResolverFunc resolves a raised OAR hint code to its static copy.
+// found is false when the code is unregistered and text is the bare code.
+type HintResolverFunc func(code string) (text string, found bool)
+
+// StemHintResolver resolves a stem-only queued kick against the session's bound
+// catalog. isHint is true when the bound catalog maps stem to an OAR hint.
+type StemHintResolver func(ctx context.Context, sessionID, stem string) (text string, isHint bool, found bool)
+
+type renderTargetKind uint8
+
+const (
+	renderTargetAuto renderTargetKind = iota
+	renderTargetTemplate
+	renderTargetHint
+)
+
+type kickRenderTarget struct {
+	kind        renderTargetKind
+	hintCode    string
+	resolveHint HintResolverFunc
+}
 
 // DeliveryObservation is shared by guidance and other deliveries of the same fact.
 type DeliveryObservation interface {
@@ -38,6 +61,30 @@ type kickMeta struct {
 	fanoutPlanText        string
 	maxFanoutLegs         int
 	workerDecisionRequest map[string]any
+	renderTarget          kickRenderTarget
+}
+
+// WithHintTarget binds a queued kick to its selected OAR hint code and lookup.
+func WithHintTarget(code string, resolve HintResolverFunc) KickOption {
+	code = strings.TrimSpace(code)
+	return func(m *kickMeta) {
+		if code == "" {
+			return
+		}
+		m.renderTarget = kickRenderTarget{
+			kind:        renderTargetHint,
+			hintCode:    code,
+			resolveHint: resolve,
+		}
+	}
+}
+
+// WithTemplateTarget binds a queued kick explicitly to template rendering so a
+// later stem lookup cannot substitute a different pack or workflow version.
+func WithTemplateTarget() KickOption {
+	return func(m *kickMeta) {
+		m.renderTarget = kickRenderTarget{kind: renderTargetTemplate}
+	}
 }
 
 // WithSubject names the job, leg, scan, or process a kick reports, so kicks
@@ -310,6 +357,7 @@ func cloneKickMeta(m kickMeta) kickMeta {
 		batchSeqSet:       m.batchSeqSet,
 		fanoutPlanText:    m.fanoutPlanText,
 		maxFanoutLegs:     m.maxFanoutLegs,
+		renderTarget:      m.renderTarget,
 	}
 	if m.completedAt != nil {
 		t := m.completedAt.UTC()

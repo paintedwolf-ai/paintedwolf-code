@@ -152,11 +152,15 @@ func TestFeedbackKickQueuedOnPhaseEntry(t *testing.T) {
 	if !kicked {
 		t.Fatal("OnFeedbackPending hook not invoked")
 	}
-	kickPath := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "guidance", "coordinator-feedback-pending.md")
-	data, err := os.ReadFile(kickPath)
-	testutil.FailErr(t, "read file", err)
-	if !strings.Contains(string(data), "pending_feedback") {
-		t.Fatalf("kick template = %q", data)
+	reg, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load anchor registry", err)
+	binding, ok := reg.Inform(anchor.FeedbackPending)
+	if !ok || binding == nil || binding.HintCode == "" {
+		t.Fatalf("feedback.pending binding = %+v, want hint binding", binding)
+	}
+	msg, ok := reg.HintMessage(binding.HintCode)
+	if !ok || !strings.Contains(msg, "pending_feedback") {
+		t.Fatalf("hint %s = %q (ok=%v)", binding.HintCode, msg, ok)
 	}
 }
 

@@ -1,0 +1,4 @@
+spec_version: "1.0"
+id: WORKFLOW_FEEDBACK_ANSWER_RECEIVED
+kind: hint
+message: User answered — read the answered question's tool result and continue. Prose is not the answer.

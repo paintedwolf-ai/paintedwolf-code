@@ -602,6 +602,9 @@
       "emit": "guard:content_apply",
       "summary": "The user reviewed the proposed edit to `{{ paintedwolf.path }}` and rejected it at the edit-review checkpoint."
     },
+    "COORDINATOR_APPROVAL_SEAL_FAILED": {
+      "summary": "[host:coordinator-authz-seal-failed]\n\nThe previous turn did not start: the host could not record the effective approval grants (authorization context seal failed). Never run privileged tools without that record. Wait for host recovery. Tell the user the app could not record approvals and work has stopped until it recovers. Do not claim a restart will repair it or describe the store, logs, or approval machinery."
+    },
     "COORDINATOR_BATCH_ALREADY_CLOSED": {
       "branch_instruction": "Do not repeat the board or the closing report for the batch that is already closed.",
       "category": "recoverable",
@@ -625,6 +628,9 @@
       "category": "recoverable",
       "emit": "guard:grounding",
       "summary": "Planned work {{ paintedwolf.leg_id }} is not settled."
+    },
+    "COORDINATOR_EDIT_FOLLOWUP_REPEATED": {
+      "summary": "Second consecutive user follow-up since your inline edits. If it reports the same breakage, your model of the change is wrong — stop patching the quoted symptom. Re-derive how the affected code actually fits together, audit the whole change rather than the last error, and say what you verified when you hand it back."
     },
     "COORDINATOR_GROUNDING_ESCALATED": {
       "branch_instruction": "Do not assert completion without grounded worker evidence.",
@@ -667,6 +673,9 @@
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Coordinator {{ tool }} on {{ paintedwolf.path }} is outside allowed read scope"
+    },
+    "COORDINATOR_SPEND_WIND_DOWN": {
+      "summary": "[host:coordinator-spend-soft-stop]\n\nThis running session has reached the user's spend ceiling. This is one bounded wind-down round with tools. It withholds starting workers, instructing workers, and answering worker decisions; workers at the ceiling were fenced with reason `limit`, and you can preview, promote, reject, or shelve the changes they kept. If the requested result is nearly complete, use only the essential tool calls needed to resolve those changes or finish verification already in flight; after those calls, the host will request one prose-only closeout. Otherwise, use no tools and give the best usable result now, clearly naming what remains. Prefer a smaller honest result over an unfinished stub, placeholder, skipped test, or abrupt silence."
     },
     "COORDINATOR_SYNTHESIS_WRAPUP_ONLY": {
       "branch_instruction": "Report any unresolved work honestly and end this turn. A formatting or citation repair does not authorize a new execution phase.",
@@ -3619,11 +3628,20 @@
       "severity": "info",
       "summary": "This workflow phase uses host auto-advance when gates pass"
     },
+    "WORKFLOW_COMPOSE_SUCCEEDED": {
+      "summary": "Compose succeeded — paraphrase `coordinator_brief` from host context, then start the workflow run."
+    },
     "WORKFLOW_DELEGATION_NOT_READY": {
       "branch_instruction": "Use the active workflow requirements before delegation",
       "category": "recoverable",
       "emit": "rule:coordinator",
       "summary": "The current workflow has not admitted this delegation."
+    },
+    "WORKFLOW_FEEDBACK_ANSWER_RECEIVED": {
+      "summary": "User answered — read the answered question's tool result and continue. Prose is not the answer."
+    },
+    "WORKFLOW_FEEDBACK_CARD_PENDING": {
+      "summary": "User feedback is pending — a host question card is already in the transcript. Read **pending_feedback** and wait for the card to resolve (host parks; do not re-ask in chat)."
     },
     "WORKFLOW_FEEDBACK_PENDING": {
       "branch_instruction": "Continue after the host records the response and updates workflow readiness.",
@@ -3669,6 +3687,12 @@
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Tried to deliver the workflow's completion report while the durable run is still in phase `{{ paintedwolf.phase }}`."
+    },
+    "WORKFLOW_REVIEW_CAP_REACHED": {
+      "summary": "At this phase's review cap, weigh the required reviewer envelopes and any extra completed reviews, then submit a terminal verdict with `submit_verdict`. Another non-terminal verdict is rejected at the cap. Follow the phase's remaining gates and advancement rules."
+    },
+    "WORKFLOW_REVIEW_ROUND_CONTINUES": {
+      "summary": "The review phase remains open. Continue its work and record the next verdict with `submit_verdict`."
     },
     "WORKFLOW_SESSION_COMPOSE_REQUIRED": {
       "branch_instruction": "Use the current workflow contract and explicit human start action; do not invent a start or composition API call.",

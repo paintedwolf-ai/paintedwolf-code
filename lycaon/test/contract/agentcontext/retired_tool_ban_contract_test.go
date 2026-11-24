@@ -95,7 +95,8 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 	plans, err := surface.CompileToolPlans(1)
 	contractcheck.FailErr(t, "compile tool plans", err)
 	_, profiles := promptNameCatalog(t)
-	for _, binding := range catalogfixture.LoadInformBindings(t).AllInform() {
+	reg := catalogfixture.LoadInformBindings(t)
+	for _, binding := range reg.AllInform() {
 		if binding == nil || !binding.IsInform() {
 			continue
 		}
@@ -134,11 +135,21 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 		}
 		for id := range plans {
 			t.Run("kick/"+binding.Render+"/"+id, func(t *testing.T) {
-				data := promptrender.KickFixture()
-				delete(data, "tools")
-				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
-				corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
-				contractcheck.FailErr(t, "render kick", err)
+				var corpus string
+				if binding.HintCode != "" {
+					var ok bool
+					corpus, ok = reg.HintMessage(binding.HintCode)
+					if !ok {
+						t.Fatalf("hint %s for kick %s missing message", binding.HintCode, binding.Render)
+					}
+				} else {
+					data := promptrender.KickFixture()
+					delete(data, "tools")
+					prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
+					var err error
+					corpus, err = kickEngine.RenderKick(context.Background(), binding.Render, data)
+					contractcheck.FailErr(t, "render kick", err)
+				}
 				checkBannedMention(t, retired, fmt.Sprintf("kick %s on %s", binding.Render, id), corpus)
 			})
 		}

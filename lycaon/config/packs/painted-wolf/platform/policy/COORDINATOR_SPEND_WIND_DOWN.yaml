@@ -1,0 +1,7 @@
+spec_version: "1.0"
+id: COORDINATOR_SPEND_WIND_DOWN
+kind: hint
+message: |-
+  [host:coordinator-spend-soft-stop]
+
+  This running session has reached the user's spend ceiling. This is one bounded wind-down round with tools. It withholds starting workers, instructing workers, and answering worker decisions; workers at the ceiling were fenced with reason `limit`, and you can preview, promote, reject, or shelve the changes they kept. If the requested result is nearly complete, use only the essential tool calls needed to resolve those changes or finish verification already in flight; after those calls, the host will request one prose-only closeout. Otherwise, use no tools and give the best usable result now, clearly naming what remains. Prefer a smaller honest result over an unfinished stub, placeholder, skipped test, or abrupt silence.

@@ -248,7 +248,7 @@ func (l *Loader) compileEntries(entries []hintregistry.Entry, tier Tier, source 
 		return nil, fmt.Errorf("oar load:\n%s", strings.Join(errs, "\n"))
 	}
 	rs := NewRuleSet(rules)
-	rs.hints = hints
+	rs.setHints(hints)
 	return rs, nil
 }
 

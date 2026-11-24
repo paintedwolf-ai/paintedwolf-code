@@ -4,6 +4,7 @@ selector:
   surface: coordinator
 effect: inform
 render: coordinator-feedback-pending
+hint_code: WORKFLOW_FEEDBACK_CARD_PENDING
 tier: builtin
 invariants:
   trigger_class: phase_on_enter

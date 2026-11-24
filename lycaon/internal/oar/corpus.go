@@ -361,7 +361,7 @@ func (cr *ConformanceRunner) prepare(fx ConformanceFixture) (*GuardPipeline, *Co
 		rules = append(rules, r)
 	}
 	rs := NewRuleSet(rules)
-	rs.hints = hints
+	rs.setHints(hints)
 	if _, err := linkRuleSet(rs); err != nil {
 		return nil, nil, err
 	}

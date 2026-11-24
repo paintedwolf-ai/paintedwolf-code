@@ -3,6 +3,7 @@ selector:
   surface: phase
 effect: inform
 render: coordinator-review-loop-continue
+hint_code: WORKFLOW_REVIEW_ROUND_CONTINUES
 tier: builtin
 invariants:
   trigger_class: workflow_event

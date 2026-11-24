@@ -14,7 +14,7 @@ func (m *Service) SpendSoftStop(ctx context.Context, sess *api.Session) promptlo
 	if m == nil || sess == nil || sess.IsWorkerChild() {
 		return promptloop.HostNudge{}
 	}
-	return m.Render(ctx, sess, anchor.TurnSpendSoftStop, nil)
+	return m.renderBinding(ctx, sess, anchor.TurnSpendSoftStop, nil, true)
 }
 
 // SpendRunway returns one warning per session and ceiling.

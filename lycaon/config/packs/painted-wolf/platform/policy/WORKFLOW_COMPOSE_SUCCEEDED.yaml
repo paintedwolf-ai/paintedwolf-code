@@ -1,0 +1,4 @@
+spec_version: "1.0"
+id: WORKFLOW_COMPOSE_SUCCEEDED
+kind: hint
+message: Compose succeeded — paraphrase `coordinator_brief` from host context, then start the workflow run.

@@ -1,0 +1,4 @@
+spec_version: "1.0"
+id: WORKFLOW_FEEDBACK_CARD_PENDING
+kind: hint
+message: User feedback is pending — a host question card is already in the transcript. Read **pending_feedback** and wait for the card to resolve (host parks; do not re-ask in chat).

@@ -37,6 +37,7 @@ type Binding struct {
 	Effect   string
 	When     string
 	Render   string
+	HintCode string
 	Tier     string
 	// Invariants define template guarantees.
 	Invariants BindingInvariants

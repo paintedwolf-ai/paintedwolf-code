@@ -21,14 +21,30 @@ type Bus struct {
 
 // NewBus creates an inform bus.
 func NewBus(kicks *kick.KickEngine) *Bus {
-	return &Bus{kicks: kicks, registry: DefaultRegistry()}
+	b := &Bus{kicks: kicks, registry: DefaultRegistry()}
+	b.bindKickHintLookup()
+	return b
 }
 
 // SetRegistry attaches the Binding registry used for template resolution.
 func (b *Bus) SetRegistry(r *Registry) {
 	if b != nil {
 		b.registry = r
+		b.bindKickHintLookup()
 	}
+}
+
+func (b *Bus) bindKickHintLookup() {
+	if b == nil || b.kicks == nil {
+		return
+	}
+	b.kicks.SetStemHintResolver(func(ctx context.Context, sessionID, stem string) (string, bool, bool) {
+		reg := b.registryFor(ctx, sessionID)
+		if reg == nil {
+			return "", false, false
+		}
+		return reg.RenderHintByStem(stem)
+	})
 }
 
 // Registry returns the active binding registry.
@@ -90,11 +106,19 @@ func (b *Bus) EmitMatch(ctx context.Context, sessionID string, id ID, partial En
 	if !reg.WhenMatches(binding, gc) {
 		return
 	}
+	opts := append(partial.KickOptions(), targetKickOption(binding, reg))
 	if id == PhaseEntered || id == ProjectRootsChanged || id == ProjectPostureChanged {
-		b.kicks.QueueDeferredLatest(sessionID, id.String(), binding.Render, partial.KickOptions()...)
+		b.kicks.QueueDeferredLatest(sessionID, id.String(), binding.Render, opts...)
 		return
 	}
-	b.kicks.QueueDeferred(sessionID, binding.Render, partial.KickOptions()...)
+	b.kicks.QueueDeferred(sessionID, binding.Render, opts...)
+}
+
+func targetKickOption(binding *Binding, reg *Registry) kick.KickOption {
+	if binding != nil && strings.TrimSpace(binding.HintCode) != "" {
+		return kick.WithHintTarget(binding.HintCode, reg.RenderHint)
+	}
+	return kick.WithTemplateTarget()
 }
 
 // HasLatest reports whether a latest-lifecycle inform is still queued or staged for sessionID.
@@ -130,7 +154,7 @@ func (b *Bus) EmitEager(ctx context.Context, sessionID string, id ID, data map[s
 	if err != nil || binding == nil || strings.TrimSpace(binding.Render) == "" {
 		return
 	}
-	b.kicks.QueueEager(sessionID, binding.Render, data)
+	b.kicks.QueueEager(sessionID, binding.Render, data, targetKickOption(binding, reg))
 }
 
 // Drop removes a queued or staged inform.

@@ -15,6 +15,7 @@ type WorkflowInject struct {
 	Effect   string    `yaml:"effect" json:"effect"`
 	When     string    `yaml:"when,omitempty" json:"when,omitempty"`
 	Render   string    `yaml:"render,omitempty" json:"render,omitempty"`
+	HintCode string    `yaml:"hint_code,omitempty" json:"hint_code,omitempty"`
 	Tier     string    `yaml:"tier,omitempty" json:"tier,omitempty"`
 	Dedup    yaml.Node `yaml:"dedup,omitempty" json:"-"`
 }
@@ -46,11 +47,15 @@ func NewWorkflowBinding(in WorkflowInject, workflowID, version string) (*Binding
 	}
 	b := &Binding{
 		On: on, Selector: in.Selector, Effect: effect,
-		When: strings.TrimSpace(in.When), Render: strings.TrimSpace(in.Render), Tier: "workflow",
+		When: strings.TrimSpace(in.When), Render: strings.TrimSpace(in.Render),
+		HintCode: strings.TrimSpace(in.HintCode), Tier: "workflow",
 		workflowVersion: ver,
 	}
 	if b.IsInform() && b.Render == "" {
 		return nil, fmt.Errorf("inject on %s: inform requires render", on)
+	}
+	if !b.IsInform() && b.HintCode != "" {
+		return nil, fmt.Errorf("inject on %s: hint_code requires effect: inform", on)
 	}
 	if b.Selector.Workflow == nil || strings.TrimSpace(*b.Selector.Workflow) == "" {
 		b.Selector.Workflow = &wf

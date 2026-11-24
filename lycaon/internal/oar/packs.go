@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hintregistry"
+	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // PackSource is a named rule pack (tier:pack).
@@ -58,6 +59,7 @@ func (l *Loader) LoadTiers(tl TierLoad) (*RuleSet, error) {
 func MergeTiered(sets ...*RuleSet) (*RuleSet, error) {
 	// Rule identity includes namespace and ID.
 	byIdentity := map[RuleIdentity]*Rule{}
+	var hints []*oarcore.Hint
 	for _, rs := range sets {
 		if rs == nil {
 			continue
@@ -72,12 +74,15 @@ func MergeTiered(sets ...*RuleSet) (*RuleSet, error) {
 			}
 			byIdentity[key] = r
 		}
+		hints = append(hints, rs.hints...)
 	}
 	out := make([]*Rule, 0, len(byIdentity))
 	for _, r := range byIdentity {
 		out = append(out, r)
 	}
-	return linkRuleSet(NewRuleSet(out))
+	merged := NewRuleSet(out)
+	merged.setHints(hints)
+	return linkRuleSet(merged)
 }
 
 func (l *Loader) compileDir(dir extpacks.Source, tier Tier, source string) (*RuleSet, error) {

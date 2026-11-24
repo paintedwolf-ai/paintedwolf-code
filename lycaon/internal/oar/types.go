@@ -170,12 +170,11 @@ type Decision struct {
 
 // RuleSet is the loaded + validated rules indexed for Emit ordering.
 type RuleSet struct {
-	byID    map[string]*Rule
-	byOn    map[string][]*Rule
-	ordered []*Rule
-	// hints are the rule set's hint documents, loaded and never evaluated
-	// ([OAR-HINT-1]).
-	hints []*oarcore.Hint
+	byID        map[string]*Rule
+	byOn        map[string][]*Rule
+	ordered     []*Rule
+	hints       []*oarcore.Hint
+	hintsByCode map[string]*oarcore.Hint
 }
 
 // NewRuleSet indexes rules by id and on-anchor with Emit ordering.
@@ -261,6 +260,67 @@ func (rs *RuleSet) Len() int {
 		return 0
 	}
 	return len(rs.ordered)
+}
+
+func (rs *RuleSet) setHints(hints []*oarcore.Hint) {
+	if rs == nil {
+		return
+	}
+	rs.hints = append([]*oarcore.Hint(nil), hints...)
+	if len(rs.hints) == 0 {
+		rs.hintsByCode = nil
+		return
+	}
+	rs.hintsByCode = make(map[string]*oarcore.Hint, len(rs.hints))
+	for _, h := range rs.hints {
+		if h != nil && h.ID != "" {
+			rs.hintsByCode[h.ID] = h
+		}
+	}
+}
+
+// Hints returns the loaded OAR hint documents in this rule set.
+func (rs *RuleSet) Hints() []*oarcore.Hint {
+	if rs == nil || len(rs.hints) == 0 {
+		return nil
+	}
+	return append([]*oarcore.Hint(nil), rs.hints...)
+}
+
+// Hint returns a loaded OAR hint document by its raised code.
+func (rs *RuleSet) Hint(code string) (*oarcore.Hint, bool) {
+	if rs == nil || len(rs.hintsByCode) == 0 {
+		return nil, false
+	}
+	h, ok := rs.hintsByCode[strings.TrimSpace(code)]
+	return h, ok
+}
+
+// HintMessage returns the static message copy for code when registered and non-empty.
+func (rs *RuleSet) HintMessage(code string) (string, bool) {
+	h, ok := rs.Hint(code)
+	if !ok || h == nil {
+		return "", false
+	}
+	msg := strings.TrimSpace(h.Copy["message"])
+	if msg == "" {
+		return "", false
+	}
+	return msg, true
+}
+
+// RenderHint returns a registered hint's static message, or the bare code when
+// unregistered ([OAR-HINT-4]). found is true only when a registered hint supplied
+// non-empty message copy.
+func (rs *RuleSet) RenderHint(code string) (text string, found bool) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "", false
+	}
+	if msg, ok := rs.HintMessage(code); ok {
+		return msg, true
+	}
+	return code, false
 }
 
 // ParseOnFire parses a closed on_fire action string.

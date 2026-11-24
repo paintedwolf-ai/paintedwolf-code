@@ -161,7 +161,7 @@ func Build(ctx context.Context, moduleRoot string, eff *extpacks.EffectiveCatalo
 		return nil, fmt.Errorf("catalogview rules: %w", err)
 	}
 
-	anchors, err := anchor.LoadRegistryFromConfigRootWithCatalog(eff)
+	anchors, err := anchor.LoadRegistryFromConfigRootWithCatalogAndRules(eff, rules)
 	if err != nil {
 		return nil, fmt.Errorf("catalogview anchors: %w", err)
 	}
