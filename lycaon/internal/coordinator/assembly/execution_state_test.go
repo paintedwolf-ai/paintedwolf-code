@@ -111,7 +111,7 @@ func TestPendingJobOutlivesAnExpiredReminder_ACEXEC04(t *testing.T) {
 	if blocks := assembler.appendExecutionState(t.Context(), sess, true, inject.CoordinatorTurnFrame{}, canonical, &TurnAssemblyScratch{}, nil); len(blocks) != 0 {
 		t.Fatalf("reminder survived its expiry: %+v", blocks)
 	}
-	tail, err := assembler.buildTailSystemInjects(t.Context(), sess, false, inject.CoordinatorTurnFrame{}, nil, canonical, &TurnAssemblyScratch{})
+	tail, err := assembler.buildTailSystemInjects(t.Context(), sess, false, inject.CoordinatorTurnFrame{}, nil, canonical, &TurnAssemblyScratch{}, nil)
 	testutil.FailErr(t, "assembler.buildTailSystemInjects failed", err)
 	if !slices.ContainsFunc(tail, func(m api.Message) bool { return strings.Contains(m.Content, "pending-check") }) {
 		t.Fatalf("pending job left the request: %+v", tail)

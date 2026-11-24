@@ -153,9 +153,9 @@ func TestWorkerGuidanceAppearsOnceOnStartAndResume(t *testing.T) {
 	policy := api.Message{Role: api.MessageRoleSystem, Content: "Project policy sentinel: use the managed task runner.", Origin: api.MessageOriginProject, Authority: api.ContentAuthorityDeveloper, TrustTier: api.ContentTrustTierTrusted}
 	eng := &AssemblyEngine{}
 	eng.SetDeps(AssemblyDeps{Prompts: pe, Injects: prompts.NewInjectRenderer(pe), Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		AgentsMDPolicies: func(context.Context, *api.Session, []api.Message) ([]api.Message, error) {
-			return []api.Message{policy}, nil
-		},
+		AgentsMD: AgentsMD{Policies: func(context.Context, *api.Session, []api.Message) (AgentsMDPolicyDelivery, error) {
+			return AgentsMDPolicyDelivery{Messages: []api.Message{policy}}, nil
+		}},
 		Workers: Workers{Leg: placementWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg", AgentsMDMessage: policy}}},
 	})
 	sess := &api.Session{ID: "policy-worker", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, Posture: api.SessionPostureBuild, AgentType: "implementer", WorkspacePath: t.TempDir()}

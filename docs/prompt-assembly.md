@@ -101,7 +101,7 @@ Git diff producers keep the full selected file page until secret screening, then
 
 Coordinator progress procedures follow the offered checklist, mutation, and dispatch schemas. They specify the checklist tool action and worker-result reconciliation once; mode prompts retain routing and verification policy. Coordinators and workers share invocation-outcome guidance; visual capture and its checklist row remain in the capability-selected visual unit. Browser operating procedures follow the schemas actually offered on each request, alongside runner and HTTP procedures. Deferral therefore postpones detailed browser instructions until the tools are available without dropping them; resumed page controls receive only the instructions for controls actually offered.
 
-The coordinator retains the cached session AGENTS.md index in every standing prefix, pinned against history trimming. Path-specific instruction chains remain outside that prefix.
+The coordinator retains the cached session AGENTS.md index in every standing prefix, pinned against history trimming. The active root's stable `AGENTS.md` (and root overlay when that root has no nested `AGENTS.md`) sits in a role-preserving segment immediately after the standing preamble boundary and before appended history in both idle preparation and live completions, keeping it in the reusable prefix without promoting repository text to system instructions; path-specific nested chains and other roots remain in the tail after history.
 
 Worker project guidance (`AGENTS.md` blocks) is a standalone developer-authority observation, not a copy inside the host-authority worker template. It is assembled on every call, including subsequent worker rounds; identical observations with identical source context appear once.
 
