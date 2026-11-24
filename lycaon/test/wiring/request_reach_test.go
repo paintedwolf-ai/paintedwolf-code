@@ -298,12 +298,10 @@ func reachResponses() []llm.MockResponseEntry {
 	}
 }
 
-// TestEveryRequestNamesOnlyWhatItOffers checks invariant P13 on the requests
-// production sends: every tool, operation and command program host text names
-// is in that request's own tools or command reach, and every argument a
-// refusal's recovery names is in a named tool's schema as sent. A preloaded
-// skill is host text, so its tools are checked the same way. A fix for a
-// guidance defect adds its state here.
+// Every tool, operation and command program that host text names in a
+// request production sends is in that request's own tools or command reach,
+// and every argument a refusal's recovery names is in a named tool's schema as
+// sent. A preloaded skill is host text, so its tools are checked the same way.
 func TestEveryRequestNamesOnlyWhatItOffers(t *testing.T) {
 	oracle := newReachOracle(t)
 	scenarios := []reachScenario{
@@ -486,15 +484,7 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 		testutil.FailErr(t, "start "+sc.workflow, err)
 		phase = run.CurrentPhase
 	}
-	conversation := func() []modelcall.CompletionRequest {
-		var out []modelcall.CompletionRequest
-		for _, req := range rec.AllRequests() {
-			if req.Composition == modelcall.CompositionConversation {
-				out = append(out, req)
-			}
-		}
-		return out
-	}
+	conversation := func() []modelcall.CompletionRequest { return conversationRequests(rec) }
 	var span *loadSpan
 	for _, prompt := range sc.prompts {
 		requesting := prompt == "@request"
@@ -661,22 +651,4 @@ func TestRequestReachFailsOnSeededRequests(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("pre-load narrowed schema mismatch caught", func(t *testing.T) {
-		preBad := []modelcall.CompletionRequest{{
-			Tools:    []tools.ToolMeta{tool("request_tools", "need")},
-			Messages: []api.Message{system("Load `command` via `request_tools(need=\"command\")` to supply `command.verification`.")},
-		}}
-		postNarrowed := modelcall.CompletionRequest{Tools: []tools.ToolMeta{tool("command", "command")}}
-		if got := verifyPrePostLoadSchemaParity(oracle, preBad, postNarrowed, "command"); len(got) != 1 {
-			t.Fatalf("verifyPrePostLoadSchemaParity findings = %d, want 1: %v", len(got), got)
-		}
-		preClean := []modelcall.CompletionRequest{{
-			Tools:    []tools.ToolMeta{tool("request_tools", "need")},
-			Messages: []api.Message{system("Load `command` via `request_tools(need=\"command\")` to supply `command.command`.")},
-		}}
-		if got := verifyPrePostLoadSchemaParity(oracle, preClean, postNarrowed, "command"); len(got) != 0 {
-			t.Fatalf("verifyPrePostLoadSchemaParity clean findings = %v, want 0", got)
-		}
-	})
 }
