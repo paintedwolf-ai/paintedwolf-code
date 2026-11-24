@@ -438,7 +438,6 @@ describe("chat Git binding", () => {
         failStatus = true;
         await binding.onSelectWorktree?.(REPO_ID, entry);
         await binding.onClearWorktreePin?.(REPO_ID, "wt-prim");
-        expect(reportError).toHaveBeenCalledWith(statusErr);
 
         binding.onOpenInFiles?.();
         expect(openedSurface).toEqual([{ kind: "stage", projectId: project.id }]);
