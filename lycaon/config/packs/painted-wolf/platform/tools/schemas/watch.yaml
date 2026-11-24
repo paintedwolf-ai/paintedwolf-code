@@ -1,5 +1,5 @@
 tags: [process, sync]
-description: "Observe conditions asynchronously while continuing work. Returns a handle and a ready-to-use watch_match condition for wait. Use wait directly when the next step depends on the result now. For one-off follow-ups in this chat within 30 days, omit standing and use delivery wake when idle delivery is needed. For recurring work, new-chat runs, or persistence past this chat or 30 days, set standing so the proposal card lets the person keep or edit it; do not ask for chat confirmation or poll in loops."
+description: "Observe conditions asynchronously while continuing work. Returns a handle and a ready-to-use watch_match condition for wait. Use wait directly when the next step depends on the result now. For one-off follow-ups in this chat within 30 days, omit standing, set delivery wake when idle delivery is needed, and state in one sentence when you will return. For recurring work, new-chat runs, or persistence past this chat or 30 days, set standing, state in one sentence when it runs and that the top-of-chat proposal card lets the person keep or edit it (do not ask for chat confirmation), and name any overlapping_standing watch; do not imitate recurrence with repeating watches without a draft, sleep loops, or polling."
 schema:
   type: object
   properties:
@@ -83,7 +83,7 @@ schema:
       description: Optional RFC 3339 timestamp 1 minute to 30 days ahead; defaults to 7 days.
     standing:
       type: object
-      description: "Draft a person-owned standing watch (timer, git_ref, or file_change only; forces delivery collect). Propose unprompted automation only after requested work is done, at most once per turn, and never re-propose a dismissed draft."
+      description: "Draft a person-owned standing watch (timer, git_ref, or file_change only; forces delivery collect). Propose unprompted automation only after requested work is done, at most once per turn, in one sentence on what and why, and never re-propose a dismissed draft (WATCH_DRAFT_DISMISSED means drop it, not rephrase it)."
       properties:
         name: {type: string, minLength: 1, maxLength: 80, description: Standing watch name.}
         prompt: {type: string, minLength: 1, maxLength: 8000, description: Markdown prompt to run on match.}

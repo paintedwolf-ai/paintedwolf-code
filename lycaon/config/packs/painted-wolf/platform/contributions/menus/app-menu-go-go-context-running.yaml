@@ -3,4 +3,4 @@ slot: "app_menu.go"
 command: painted-wolf/platform:go-context-running
 group: "2"
 order: 12
-label: "Running"
+label: "Activity"
