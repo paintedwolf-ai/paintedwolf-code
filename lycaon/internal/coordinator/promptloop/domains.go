@@ -44,7 +44,7 @@ type ContextDeps struct {
 	WritableSharedTemp    func(context.Context, *api.Session) []string
 	RefreshToolContext    func(ctx context.Context, sess *api.Session, machine inject.Machine) (tools.ToolContext, error)
 	LoadedTools           func(sessionID string) map[string]bool
-	LiveResources         func(sessionID string) toolcontract.ResourcePresence
+	LiveResources         func(ctx context.Context, sessionID string) toolcontract.ResourcePresence
 	ProjectRootCount      func(ctx context.Context, sess *api.Session) int
 	ContextSurfaceDeps
 }
