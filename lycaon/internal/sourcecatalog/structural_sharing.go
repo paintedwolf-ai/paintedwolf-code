@@ -94,6 +94,7 @@ func cloneStructuralGeneration(src *structuralGeneration, id int64) *structuralG
 		segments:            segments,
 		encodedBytes:        src.encodedBytes,
 		compactionDebtBytes: src.compactionDebtBytes,
+		verifiedEpoch:       src.verifiedEpoch,
 	}
 	cloned.directories.store = newStructuralDirectoryPages(cloned, nil)
 	return cloned
@@ -172,8 +173,10 @@ func (s *indexStore) adoptPeerCompletedStructure(ctx context.Context, expected i
 			continue
 		}
 		rootDir, found, err := candidate.directories.Get(ctx, ".")
+		currentEpoch := repochange.CurrentEpoch(s.root.Path)
+		epochVerified := rootDir.observation.Epoch == currentEpoch || (currentEpoch != (repochange.Epoch{}) && candidate.verifiedEpoch == currentEpoch)
 		if err != nil || !found || !rootDir.observation.Complete || rootDir.observation.Failure != "" ||
-			rootDir.observation.Invalidation < peerFullMark || rootDir.observation.Epoch != repochange.CurrentEpoch(s.root.Path) ||
+			rootDir.observation.Invalidation < peerFullMark || !epochVerified ||
 			!repochange.DirWatched(s.root.Path, ".") {
 			candidate.close()
 			continue

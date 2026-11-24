@@ -337,15 +337,9 @@ func TestMultiScopeSeparationBothOrderingsAndPostWaitFreshness(t *testing.T) {
 
 func lookupRootEntry(t *testing.T, store *Store, snapshot Snapshot, rootPath, relPath string) Entry {
 	t.Helper()
-	var found Entry
-	err := store.VisitEntries(t.Context(), snapshot.ID, func(entry Entry) error {
-		if entry.RootPath == rootPath && entry.RelPath == relPath {
-			found = entry
-		}
-		return nil
-	})
-	testutil.FailErr(t, "visit entries", err)
-	if found.RelPath == "" {
+	found, ok, err := store.Lookup(t.Context(), snapshot.ID, rootPath, relPath)
+	testutil.FailErr(t, "lookup entry", err)
+	if !ok {
 		t.Fatalf("snapshot %s missing %s:%s", snapshot.ID, rootPath, relPath)
 	}
 	return found

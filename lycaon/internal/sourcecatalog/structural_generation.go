@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/pagedview"
+	"github.com/lycaon/lycaon/internal/repochange"
 )
 
 const structuralMemoryLimit = 32 << 20
@@ -38,6 +39,7 @@ type structuralGeneration struct {
 	segments            map[uint32]*structuralSegment
 	encodedBytes        int64
 	compactionDebtBytes int64
+	verifiedEpoch       repochange.Epoch
 }
 
 func (g *structuralGeneration) close() {

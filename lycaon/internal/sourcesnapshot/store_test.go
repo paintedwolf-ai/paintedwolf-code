@@ -474,7 +474,7 @@ func TestObservationsSurviveAPublishThatNeverCommitted(t *testing.T) {
 		t.Fatalf("cold cache holds a.go: ok=%v err=%v", ok, err)
 	}
 	// One survey, not published.
-	candidate, err := store.survey(t.Context(), request, request.Roots[0])
+	candidate, err := store.survey(t.Context(), request, request.Roots[0], SurveyPhaseInitial, SurveyNoCoveredHead)
 	testutil.FailErr(t, "run one survey", err)
 	candidate.close(t.Context(), store)
 
@@ -562,7 +562,7 @@ func TestSurveyForgetsVanishedPaths(t *testing.T) {
 		t.Fatalf("cache row for gone/b.go: ok=%v err=%v", ok, err)
 	}
 	testutil.FailErr(t, "remove", os.RemoveAll(filepath.Join(root, "gone")))
-	candidate, err := store.survey(t.Context(), request, request.Roots[0])
+	candidate, err := store.survey(t.Context(), request, request.Roots[0], SurveyPhaseInitial, SurveyNoCoveredHead)
 	testutil.FailErr(t, "survey again", err)
 	candidate.close(t.Context(), store)
 	if _, ok, err := store.observations.Get(t.Context(), root, "gone/b.go"); err != nil || ok {

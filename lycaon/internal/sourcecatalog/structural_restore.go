@@ -49,6 +49,7 @@ func (s *indexStore) restoreStructure(ctx context.Context) (bool, []string) {
 		return false, nil
 	}
 	loaded := time.Now()
+	verifyEpoch := repochange.CurrentEpoch(s.root.Path)
 	stale, err := s.verifyStructuralStamps(ctx, generation)
 	if err != nil {
 		if ctx.Err() == nil {
@@ -64,6 +65,9 @@ func (s *indexStore) restoreStructure(ctx context.Context) (bool, []string) {
 	s.mu.Lock()
 	if !s.pins.drained && s.structure.id < headGeneration-1 && s.structure.directories.Len() == 0 {
 		generation.id = s.structure.id + 1
+		if len(stale) == 0 && repochange.DirWatched(s.root.Path, ".") {
+			generation.verifiedEpoch = verifyEpoch
+		}
 		s.installStructureLocked(generation)
 		retained = true
 	}

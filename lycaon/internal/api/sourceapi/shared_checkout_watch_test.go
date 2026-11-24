@@ -42,6 +42,10 @@ func TestSecondProjectBindingAndSubscriberResyncPreserveCoveredPhysicalObservati
 	if !server.Watch.ensureWorkspaceWatch(t.Context(), projA) {
 		t.Fatal("projA watch failed to bind")
 	}
+	repochange.SeedWatch(t.Context(), sharedDir, []repochange.WatchDirectory{
+		{Path: sharedDir, EntryCount: 1},
+		{Path: filepath.Join(sharedDir, "src"), EntryCount: 1},
+	})
 	server.Views.background.Wait(context.Background())
 	testutil.WaitFor(t, "sharedDir watcher complete", func() bool {
 		return repochange.Coverage(sharedDir).Complete && repochange.DirWatched(sharedDir, ".")

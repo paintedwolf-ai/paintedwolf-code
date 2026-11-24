@@ -235,7 +235,7 @@ func TestUnreadableBoundaryCannotPublishExactCoverage(t *testing.T) {
 	testutil.FailErr(t, "prepare readable source", err)
 	defer candidate.close(t.Context(), store)
 	candidate.boundaries["unreadable"] = Boundary{RootPath: root, Path: "unreadable", Reason: "unreadable", Detail: "permission denied"}
-	snapshot, err := store.publishCandidates(t.Context(), req, []rootCapture{{candidate: candidate}}, CaptureExact, time.Now())
+	snapshot, _, _, err := store.publishCandidates(t.Context(), req, []rootCapture{{candidate: candidate}}, CaptureExact, time.Now())
 	testutil.FailErr(t, "publish incomplete observation", err)
 	if snapshot.Quality != CaptureObserved || snapshot.FileCount != 1 {
 		t.Fatalf("incomplete source became exact or lost readable files: %+v", snapshot)

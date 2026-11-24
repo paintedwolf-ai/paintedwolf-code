@@ -2,7 +2,6 @@ package cadence
 
 import (
 	"bytes"
-	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
@@ -18,7 +16,6 @@ import (
 )
 
 func TestDispatchRootRecordsClaimAndUnchangedDecisionsWhileReusingSharedSnapshot(t *testing.T) {
-	repochangetest.Acquire(t)
 	clock := newTestClock()
 	cadence, store := newTestCadence(t, clock)
 	ctx := t.Context()
@@ -26,23 +23,14 @@ func TestDispatchRootRecordsClaimAndUnchangedDecisionsWhileReusingSharedSnapshot
 	rawDir := t.TempDir()
 	canonical, err := scanbase.CanonicalPath(rawDir)
 	testutil.FailErr(t, "canonical root", err)
-	testutil.FailErr(t, "watch root", repochange.Watch(ctx, canonical))
-	t.Cleanup(func() { repochange.Unwatch(canonical) })
-	testutil.WaitFor(t, "watcher ready", func() bool {
-		return repochange.Coverage(canonical).Complete
-	})
-
 	testutil.FailErr(t, "seed main.go", os.WriteFile(filepath.Join(canonical, "main.go"), []byte("package main\n"), 0o600))
 	testutil.FailErr(t, "seed readme.md", os.WriteFile(filepath.Join(canonical, "README.md"), []byte("docs v1\n"), 0o600))
+	repochangetest.Watch(t, canonical)
 
-	snapshots := cadence.coordinator.(*scanbase.CoordinatorImpl).SourceSnapshots
+	snapshots := cadence.Coordinator.(*scanbase.CoordinatorImpl).SourceSnapshots
 	privA := t.TempDir()
-	testutil.FailErr(t, "watch privA", repochange.Watch(ctx, privA))
-	t.Cleanup(func() { repochange.Unwatch(privA) })
-	testutil.WaitFor(t, "privA watched", func() bool {
-		return repochange.Coverage(privA).Complete
-	})
 	testutil.FailErr(t, "seed privA", os.WriteFile(filepath.Join(privA, "a.go"), []byte("package a\n"), 0o600))
+	repochangetest.Watch(t, privA)
 
 	// Project A warms the shared root's snapshot before cadence runs.
 	_, err = snapshots.Ensure(ctx, sourcesnapshot.Request{

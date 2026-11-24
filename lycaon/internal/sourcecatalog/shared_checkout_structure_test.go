@@ -15,18 +15,15 @@ import (
 
 func watchCatalogRoot(t *testing.T, dir string) {
 	t.Helper()
-	testutil.FailErr(t, "watch catalog root", repochange.Watch(t.Context(), dir))
-	t.Cleanup(func() { repochange.Unwatch(dir) })
+	repochangetest.Watch(t, dir)
 	testutil.WaitFor(t, "catalog root watched", func() bool {
 		return repochange.DirWatched(dir, ".")
 	})
 }
 
 func TestSharedCheckoutStructureCoalescesPreservesLanesAndReusesHeads(t *testing.T) {
-	repochangetest.Acquire(t)
 	c, first := indexFixture(t)
 	c.SetScopes(testScopes{plane: sourcescope.Plane{DeferIgnored: true}})
-	watchCatalogRoot(t, first.Path)
 
 	second := Root{ID: "second-registration", Path: first.Path}
 	third := Root{ID: "third-registration", Path: first.Path}
@@ -34,6 +31,7 @@ func TestSharedCheckoutStructureCoalescesPreservesLanesAndReusesHeads(t *testing
 	for _, dir := range []string{"src", "src/deep", "output", "output/nested"} {
 		writeIndexFile(t, first.Path, dir+"/file.txt", "content")
 	}
+	watchCatalogRoot(t, first.Path)
 
 	dirs := []string{".", "src", "src/deep", "output", "output/nested"}
 	var statesA, statesB laneStates
@@ -172,14 +170,13 @@ func TestSharedCheckoutStructureCoalescesPreservesLanesAndReusesHeads(t *testing
 }
 
 func TestStructureDeltaDuringInitialCaptureReconcilesBeforeReadyAndPolicyIsolation(t *testing.T) {
-	repochangetest.Acquire(t)
 	c, root := indexFixture(t)
 	c.SetScopes(testScopes{plane: sourcescope.Plane{DeferIgnored: true}})
-	watchCatalogRoot(t, root.Path)
 
 	writeIndexFile(t, root.Path, ".gitignore", "output/\n")
 	writeIndexFile(t, root.Path, "src/initial.txt", "v1")
 	writeIndexFile(t, root.Path, "output/heavy.txt", "v1")
+	watchCatalogRoot(t, root.Path)
 
 	hitCollapsed := make(chan struct{})
 	releaseCollapsed := make(chan struct{})
