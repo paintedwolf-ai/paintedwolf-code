@@ -56,8 +56,11 @@ func TestDebouncerCoalescesSymlinkAliasesAndPreservesResync(t *testing.T) {
 		t.Fatal("skipped epoch falsely reported contiguous")
 	}
 
+	privDir := filepath.Join(realDir, ".private-state")
+	testutil.FailErr(t, "mkdir privDir", os.MkdirAll(privDir, 0o755))
+	t.Cleanup(HoldPrivateTree(privDir))
 	epochBeforePrivate := CurrentEpoch(realDir)
-	d.NotifyWorktreeChanges(context.Background(), realDir, []WorktreeChange{{Path: ".paintedwolf/internal", Kind: WorktreeChangeContent}}, SourceWatcher)
+	d.NotifyWorktreeChanges(context.Background(), realDir, []WorktreeChange{{Path: ".private-state/internal", Kind: WorktreeChangeContent}}, SourceWatcher)
 	d.FlushForTest(t.Context())
 	if CurrentEpoch(realDir) != epochBeforePrivate {
 		t.Fatal("private watcher path advanced public worktree epoch")
