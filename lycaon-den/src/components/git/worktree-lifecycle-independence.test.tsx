@@ -179,7 +179,7 @@ describe("WT07 worktree inspection and lifecycle independence", () => {
     expect((screen.getByTestId("git-worktree-unbind") as HTMLButtonElement).disabled).toBe(true);
 
     // Selecting sibling B for inspection works during the running turn.
-    const rows = await screen.findAllByTestId("git-worktree-row");
+    const rows = await screen.findAllByTestId("git-worktree-option");
     const siblingRow = rows.find((r) => r.textContent?.includes("feat/sibling-b"));
     if (!siblingRow) throw new Error("expected sibling B row");
     fireEvent.click(siblingRow);

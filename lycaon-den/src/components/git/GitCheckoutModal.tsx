@@ -1,6 +1,7 @@
-import { onCleanup, Show } from "solid-js";
+import { createSignal, onCleanup, Show } from "solid-js";
 import type { GitWorktreeView } from "../../api/types.ts";
 import type { GitWorkspaceStatus } from "../../chat/actions/git-workspace-status.ts";
+import { createModalFocusTrap } from "../../platform/interaction/modal-focus-trap.ts";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { ResidentPortal } from "../primitives/ResidentPortal.tsx";
@@ -26,11 +27,13 @@ export function GitCheckoutModal(props: {
   worktree?: GitWorktreeView;
   actionError?: string;
   blockerNav?: WorktreeBlockerNavigation;
-  onModalRef: (el: HTMLDivElement | undefined) => void;
   onNameInput: (value: string) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  const [modal, setModal] = createSignal<HTMLDivElement | undefined>();
+  createModalFocusTrap(() => true, modal, { onEscape: () => props.onClose() });
+
   return (
     <ResidentPortal>
       <div
@@ -42,8 +45,8 @@ export function GitCheckoutModal(props: {
         <ChromeDragSurface class="den-dialog-backdrop__chrome-drag" />
         <div
           ref={(el) => {
-            props.onModalRef(el);
-            onCleanup(() => props.onModalRef(undefined));
+            setModal(el);
+            onCleanup(() => setModal(undefined));
           }}
           class="den-dialog git-checkout-dialog"
           role="dialog"

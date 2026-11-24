@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -115,10 +116,12 @@ func bindSessionWorktree(s *Handler, w http.ResponseWriter, r *http.Request) {
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	if err := os.MkdirAll(enginepaths.ProjectWorktreeDir(worktreeRoot, projectDir), 0o700); err != nil {
+	projectWorktreeDir := enginepaths.ProjectWorktreeDir(worktreeRoot, projectDir)
+	if err := os.MkdirAll(projectWorktreeDir, 0o700); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
+	path = filepath.Join(gitrepo.CanonicalDir(projectWorktreeDir), filepath.Base(path))
 	row := store.WorktreeBinding{
 		SessionID:    scope.sess.ID,
 		ProjectID:    scope.project.ID,

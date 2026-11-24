@@ -21,7 +21,6 @@ import type { WorktreeLandOutcome } from "../chat/actions/git-actions.ts";
 import type { AppStore } from "../store/app-state-model.ts";
 import {
   createAnchoredPopoverFocus,
-  createModalFocusTrap,
 } from "../platform/interaction/modal-focus-trap.ts";
 import { DenButton } from "./primitives/DenButton.tsx";
 import { formatWorktreeLandResult } from "./git-worktree-result.ts";
@@ -96,7 +95,6 @@ export function GitCheckout(props: Props) {
     createSignal<ReturnType<typeof formatWorktreeLandResult>>();
   let trigger: HTMLButtonElement | undefined;
   let panel: HTMLDivElement | undefined;
-  const [modal, setModal] = createSignal<HTMLDivElement | undefined>();
   let container: HTMLDivElement | undefined;
   let viewVersion = 0;
   let branchVersion = 0;
@@ -296,9 +294,7 @@ export function GitCheckout(props: Props) {
     setDialog(undefined);
     setActionError(undefined);
     setActionBlocker(undefined);
-    setModal(undefined);
   };
-  createModalFocusTrap(() => dialog() !== undefined, modal, { onEscape: closeDialog });
 
   const openDialog = (next: Dialog) => {
     props.onMenuOpenChange(false);
@@ -306,7 +302,6 @@ export function GitCheckout(props: Props) {
     setActionError(undefined);
     setActionBlocker(undefined);
     setResult(undefined);
-    setModal(undefined);
     setDialog(next);
   };
 
@@ -701,7 +696,6 @@ export function GitCheckout(props: Props) {
             worktree={worktree()}
             actionError={actionError()}
             blockerNav={blockerNav()}
-            onModalRef={setModal}
             onNameInput={(val) => {
               setName(val);
               setActionError(undefined);
