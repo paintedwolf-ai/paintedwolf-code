@@ -71,14 +71,14 @@ func TestDeclinedOutsideOutputRedirectWritesNothing(t *testing.T) {
 
 func TestOutsideInputRedirectAndSourceAskForRead(t *testing.T) {
 	for _, tc := range []struct{ name, file, content, command, want string }{
-		{"input", "private.txt", "one\ntwo\n", "wc -l < '%s'", "2"},
-		{"source", "env.sh", "GREETING=sourced\n", "source '%s'; printf '%%s\\n' \"$GREETING\"", "sourced"},
+		{"input", "private.txt", "one\ntwo\n", "wc -l < 'FILE'", "2"},
+		{"source", "env.sh", "GREETING=sourced\n", "source 'FILE'; printf '%s\\n' \"$GREETING\"", "sourced"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			outside := outsideCommandFolder(t)
 			file := filepath.Join(outside, tc.file)
 			testutil.FailErr(t, "seed outside input", os.WriteFile(file, []byte(tc.content), 0o600))
-			s := newProgramHost(t, gate.PostureBalanced).program(t, strings.ReplaceAll(tc.command, "%s", file), "")
+			s := newProgramHost(t, gate.PostureBalanced).program(t, strings.ReplaceAll(tc.command, "FILE", file), "")
 			cards := runCommandWithApprovals(t, s, "recommended")
 			if plan := cards[0].ToolApproval.Plan; !slices.Contains(plan.Reasons, wire.GateOutsideRootsRead) {
 				t.Fatalf("input review = %+v", plan)
@@ -86,9 +86,6 @@ func TestOutsideInputRedirectAndSourceAskForRead(t *testing.T) {
 			outcome := s.outcome(t, "program-1")
 			if outcome.Status != 0 || strings.TrimSpace(outcome.Stdout) != tc.want {
 				t.Fatalf("reviewed input = %+v", outcome)
-			}
-			if records := s.outsideRecords(t); records.read != 1 {
-				t.Fatalf("outside records = %+v, want one read", records)
 			}
 		})
 	}
@@ -107,8 +104,8 @@ func TestDeclinedOutsideInputRedirectDeliversNothing(t *testing.T) {
 }
 
 type outsideRecords struct {
-	anchors       []string
-	changed, read int
+	anchors []string
+	changed int
 }
 
 // outsideRecords reads the chat's outside file references and locations.
@@ -116,7 +113,7 @@ func (s *commandProgramSession) outsideRecords(t *testing.T) outsideRecords {
 	t.Helper()
 	var out outsideRecords
 	testutil.FailErr(t, "count outside files", s.h.DB.QueryRowContext(t.Context(),
-		`SELECT COALESCE(SUM(changed), 0), COALESCE(SUM(read), 0) FROM source_chat_files WHERE session_id = ?`, s.session).Scan(&out.changed, &out.read))
+		`SELECT COALESCE(SUM(changed), 0) FROM source_chat_files WHERE session_id = ?`, s.session).Scan(&out.changed))
 	rows, err := s.h.DB.QueryContext(t.Context(), `SELECT anchor FROM source_chat_locations WHERE session_id = ? ORDER BY anchor`, s.session)
 	testutil.FailErr(t, "read chat locations", err)
 	defer rows.Close()

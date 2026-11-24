@@ -73,7 +73,7 @@ func TestRedirectWriteRootAsksForTheSmallestUsefulGrant(t *testing.T) {
 	for _, tc := range []struct{ name, path, requested, want string }{
 		{"ordinary folder", file, "", outside},
 		{"declared file", file, file, file},
-		{"declared root refused", file, home, outside},
+		{"declared root refused", file, string(filepath.Separator), outside},
 		{"declaration elsewhere", file, filepath.Join(shared, "x"), outside},
 		{"shared temp", filepath.Join(shared, "out.txt"), "", confine.SharedTempLocation(filepath.Join(shared, "out.txt"))},
 		{"declared temp file", filepath.Join(shared, "out.txt"), filepath.Join(shared, "out.txt"), filepath.Join(shared, "out.txt")},
