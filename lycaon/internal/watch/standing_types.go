@@ -366,7 +366,10 @@ func canonicalStandingConditionKey(c awaitstore.Condition) string {
 		return fmt.Sprintf("file_change|root=%s|path=%s|glob=%s",
 			strings.TrimSpace(c.Root), strings.TrimSpace(c.Path), strings.TrimSpace(c.Glob))
 	default:
-		raw, _ := json.Marshal(c)
+		raw, err := json.Marshal(c)
+		if err != nil {
+			return c.Kind
+		}
 		return string(raw)
 	}
 }

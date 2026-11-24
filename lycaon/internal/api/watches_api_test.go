@@ -166,14 +166,13 @@ func (env *watchAPITestEnv) doJSON(t *testing.T, method, path string, body any) 
 	return rec
 }
 
-func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
+func TestStandingWatchCRUDAndProjectListing(t *testing.T) {
 	env := newWatchAPITestEnv(t)
 	ctx := people.WithCaller(t.Context(), env.owner)
 	proj := createProjectForTest(t, env.srv, resolveTestPath(t, t.TempDir()))
 	sess, err := env.store.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj.ID)
 	testutil.FailErr(t, "create session", err)
 
-	// Unpriced model without allow_unpriced returns watch_spend_unenforceable.
 	rec := env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches", wire.CreateStandingWatchRequest{
 		Name:    "Unpriced check",
 		Prompt:  "Review main",
@@ -185,7 +184,6 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 	})
 	assertErrorResponse(t, rec, http.StatusUnprocessableEntity, "watch_spend_unenforceable")
 
-	// Person-owned process condition returns watch_condition_invalid.
 	rec = env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches", wire.CreateStandingWatchRequest{
 		Name:   "Invalid process watch",
 		Prompt: "Check process",
@@ -196,7 +194,6 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 	})
 	assertErrorResponse(t, rec, http.StatusUnprocessableEntity, "watch_condition_invalid")
 
-	// Create standing watch (201).
 	rec = env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches", wire.CreateStandingWatchRequest{
 		Name:                 "Weekday commit review",
 		Prompt:               "Summarize new commits on main.",
@@ -220,7 +217,6 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 		t.Fatalf("unexpected created watch: %+v", created)
 	}
 
-	// Duplicate name returns watch_name_taken.
 	rec = env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches", wire.CreateStandingWatchRequest{
 		Name:   "weekday commit review",
 		Prompt: "Duplicate",
@@ -231,7 +227,6 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 	})
 	assertErrorResponse(t, rec, http.StatusConflict, "watch_name_taken")
 
-	// Register an agent watch and verify listProjectWatches owner filters + daily spend cap.
 	agentRec, err := env.watches.Register(ctx, watch.RegisterRequest{
 		Owner:      watch.Owner{Kind: watch.OwnerSession, ProjectID: proj.ID, SessionID: sess.ID},
 		Conditions: []awaitstore.Condition{{Kind: "timer", DelayMS: 120_000}},
@@ -248,11 +243,9 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 		t.Fatalf("unexpected project watch list: %+v", projList)
 	}
 
-	// Addressing a standing-watch mutation to an agent watch returns watch_not_person_owned.
 	rec = env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches/"+agentRec.WatchID+"/pause", wire.StandingWatchRevisionRequest{Revision: 1})
 	assertErrorResponse(t, rec, http.StatusConflict, "watch_not_person_owned")
 
-	// getProjectWatch works for both owners.
 	rec = env.doJSON(t, http.MethodGet, "/v1/projects/"+proj.ID+"/watches/"+agentRec.WatchID, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("getProjectWatch agent status=%d body=%s", rec.Code, rec.Body.String())
@@ -262,8 +255,33 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 	if gotAgentPW.SessionID != sess.ID || gotAgentPW.Handle != agentRec.Handle || gotAgentPW.AgentWatch == nil {
 		t.Fatalf("unexpected project agent watch: %+v", gotAgentPW)
 	}
+}
 
-	// Update standing watch with stale revision -> watch_revision_conflict, then valid revision.
+func TestStandingWatchLifecycleRunsAndProvenance(t *testing.T) {
+	env := newWatchAPITestEnv(t)
+	ctx := people.WithCaller(t.Context(), env.owner)
+	proj := createProjectForTest(t, env.srv, resolveTestPath(t, t.TempDir()))
+
+	rec := env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches", wire.CreateStandingWatchRequest{
+		Name:                 "Weekday commit review",
+		Prompt:               "Summarize new commits on main.",
+		RunSpendLimitNanoUsd: 2_000_000_000,
+		DailyRunCap:          5,
+		TimeZone:             "America/New_York",
+		Conditions: []wire.WatchCondition{{
+			Kind: "timer",
+			Calendar: &wire.WatchCalendarSchedule{
+				Days:  []string{"weekdays"},
+				Times: []string{"09:00"},
+			},
+		}},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create standing watch status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var created wire.StandingWatch
+	testutil.FailErr(t, "decode created watch", json.Unmarshal(rec.Body.Bytes(), &created))
+
 	newCap := 2
 	rec = env.doJSON(t, http.MethodPatch, "/v1/projects/"+proj.ID+"/watches/"+created.WatchID, wire.UpdateStandingWatchRequest{
 		Revision:    99,
@@ -284,7 +302,6 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 		t.Fatalf("unexpected updated watch: %+v", updated)
 	}
 
-	// Pause and resume standing watch.
 	rec = env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches/"+created.WatchID+"/pause", wire.StandingWatchRevisionRequest{Revision: updated.Revision})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("pause status=%d body=%s", rec.Code, rec.Body.String())
@@ -305,7 +322,6 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 		t.Fatalf("expected enabled state, got %+v", resumed)
 	}
 
-	// Run now: first run starts and binds chat provenance; second run while active returns watch_run_active.
 	rec = env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches/"+created.WatchID+"/run", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("run now status=%d body=%s", rec.Code, rec.Body.String())
@@ -319,7 +335,6 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 	rec = env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches/"+created.WatchID+"/run", nil)
 	assertErrorResponse(t, rec, http.StatusConflict, "watch_run_active")
 
-	// Settle run1, run again to hit daily_run_cap=2, then verify watch_daily_cap_reached on third run.
 	testutil.FailErr(t, "settle run1", env.watches.Standing().SettleRun(ctx, run1.SessionID, watch.RunCompleted))
 	rec = env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches/"+created.WatchID+"/run", nil)
 	if rec.Code != http.StatusOK {
@@ -332,7 +347,6 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 	rec = env.doJSON(t, http.MethodPost, "/v1/projects/"+proj.ID+"/watches/"+created.WatchID+"/run", nil)
 	assertErrorResponse(t, rec, http.StatusConflict, "watch_daily_cap_reached")
 
-	// listWatchRuns cursor pagination and invalid cursor refusal.
 	rec = env.doJSON(t, http.MethodGet, "/v1/projects/"+proj.ID+"/watches/"+created.WatchID+"/runs?limit=1", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("listWatchRuns page 1 status=%d body=%s", rec.Code, rec.Body.String())
@@ -349,7 +363,6 @@ func TestStandingWatchOperationsAndErrorCodes(t *testing.T) {
 	rec = env.doJSON(t, http.MethodGet, "/v1/projects/"+proj.ID+"/watches/"+created.WatchID+"/runs?limit=1&cursor=bad-cursor", nil)
 	assertErrorResponse(t, rec, http.StatusBadRequest, "invalid_page_cursor")
 
-	// Verify run chat provenance before and after deleteStandingWatch.
 	rec = env.doJSON(t, http.MethodGet, "/v1/sessions/"+run1.SessionID, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("get run session status=%d body=%s", rec.Code, rec.Body.String())
@@ -470,6 +483,48 @@ func TestWatchAuthorizationAndDisabledTakeover(t *testing.T) {
 	}
 }
 
+func openProjectWatchSSE(t *testing.T, baseURL, projectID, after string) (*http.Response, *bufio.Reader, context.CancelFunc) {
+	t.Helper()
+	sctx, cancel := context.WithCancel(t.Context())
+	url := baseURL + "/v1/events?project_id=" + projectID
+	if after != "" {
+		url += "&after=" + after
+	}
+	req, reqErr := http.NewRequestWithContext(sctx, http.MethodGet, url, nil)
+	testutil.FailErr(t, "build SSE req", reqErr)
+	req.Header.Set("Authorization", "Bearer "+TestAPIToken)
+	resp, doErr := http.DefaultClient.Do(req)
+	testutil.FailErr(t, "open SSE", doErr)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("SSE status=%d", resp.StatusCode)
+	}
+	return resp, bufio.NewReader(resp.Body), cancel
+}
+
+func readNextWatchUpdatedEnvelope(t *testing.T, reader *bufio.Reader) (string, wire.WatchEvent) {
+	t.Helper()
+	for {
+		line, readErr := reader.ReadString('\n')
+		testutil.FailErr(t, "read SSE line", readErr)
+		line = strings.TrimRight(line, "\r\n")
+		data, ok := strings.CutPrefix(line, "data:")
+		if !ok {
+			continue
+		}
+		var envEvent struct {
+			Cursor string          `json:"cursor"`
+			Topic  wire.EventTopic `json:"topic"`
+			Data   json.RawMessage `json:"data"`
+		}
+		testutil.FailErr(t, "decode SSE envelope", json.Unmarshal([]byte(strings.TrimSpace(data)), &envEvent))
+		if envEvent.Topic == wire.EventTopicWatchUpdated {
+			var ev wire.WatchEvent
+			testutil.FailErr(t, "decode WatchEvent", json.Unmarshal(envEvent.Data, &ev))
+			return envEvent.Cursor, ev
+		}
+	}
+}
+
 func TestSessionWatchKeepCancelAndSSEReconnectReceipts(t *testing.T) {
 	env := newWatchAPITestEnv(t)
 	ctx := people.WithCaller(t.Context(), env.owner)
@@ -478,54 +533,12 @@ func TestSessionWatchKeepCancelAndSSEReconnectReceipts(t *testing.T) {
 	sess, err := env.store.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, proj.ID)
 	testutil.FailErr(t, "create session", err)
 
-	openSSE := func(after string) (*http.Response, *bufio.Reader, context.CancelFunc) {
-		sctx, cancel := context.WithCancel(t.Context())
-		url := baseURL + "/v1/events?project_id=" + proj.ID
-		if after != "" {
-			url += "&after=" + after
-		}
-		req, reqErr := http.NewRequestWithContext(sctx, http.MethodGet, url, nil)
-		testutil.FailErr(t, "build SSE req", reqErr)
-		req.Header.Set("Authorization", "Bearer "+TestAPIToken)
-		resp, doErr := http.DefaultClient.Do(req)
-		testutil.FailErr(t, "open SSE", doErr)
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("SSE status=%d", resp.StatusCode)
-		}
-		return resp, bufio.NewReader(resp.Body), cancel
-	}
-
-	readWatchEnvelope := func(reader *bufio.Reader) (string, wire.WatchEvent) {
-		t.Helper()
-		for {
-			line, readErr := reader.ReadString('\n')
-			testutil.FailErr(t, "read SSE line", readErr)
-			line = strings.TrimRight(line, "\r\n")
-			data, ok := strings.CutPrefix(line, "data:")
-			if !ok {
-				continue
-			}
-			var envEvent struct {
-				Cursor string           `json:"cursor"`
-				Topic  wire.EventTopic  `json:"topic"`
-				Data   json.RawMessage  `json:"data"`
-			}
-			testutil.FailErr(t, "decode SSE envelope", json.Unmarshal([]byte(strings.TrimSpace(data)), &envEvent))
-			if envEvent.Topic == wire.EventTopicWatchUpdated {
-				var ev wire.WatchEvent
-				testutil.FailErr(t, "decode WatchEvent", json.Unmarshal(envEvent.Data, &ev))
-				return envEvent.Cursor, ev
-			}
-		}
-	}
-
-	resp1, reader1, cancel1 := openSSE("")
+	resp1, reader1, cancel1 := openProjectWatchSSE(t, baseURL, proj.ID, "")
 	defer func() {
 		cancel1()
 		_ = resp1.Body.Close()
 	}()
 
-	// Register one plain timer watch, one draft watch, and one non-keepable process watch.
 	plainRec, err := env.watches.Register(ctx, watch.RegisterRequest{
 		Owner:      watch.Owner{Kind: watch.OwnerSession, ProjectID: proj.ID, SessionID: sess.ID},
 		Conditions: []awaitstore.Condition{{Kind: "timer", DelayMS: 900_000}},
@@ -547,19 +560,16 @@ func TestSessionWatchKeepCancelAndSSEReconnectReceipts(t *testing.T) {
 	})
 	testutil.FailErr(t, "register process watch", err)
 
-	var lastCursor string
 	for range 3 {
-		c, _ := readWatchEnvelope(reader1)
-		lastCursor = c
+		_, _ = readNextWatchUpdatedEnvelope(t, reader1)
 	}
 
-	// Switch delivery on plain one-shot watch: create one-shot git_ref watch and toggle collect -> wake.
 	gitRec, err := env.watches.Register(ctx, watch.RegisterRequest{
 		Owner:      watch.Owner{Kind: watch.OwnerSession, ProjectID: proj.ID, SessionID: sess.ID},
 		Conditions: []awaitstore.Condition{{Kind: "http_ready", URL: "http://127.0.0.1:9999/health"}},
 	})
 	testutil.FailErr(t, "register http watch", err)
-	lastCursor, _ = readWatchEnvelope(reader1)
+	_, _ = readNextWatchUpdatedEnvelope(t, reader1)
 
 	patchDeliv := env.doJSON(t, http.MethodPatch, "/v1/sessions/"+sess.ID+"/watches/"+gitRec.Handle, wire.UpdateWatchDeliveryRequest{
 		Delivery: "wake",
@@ -572,20 +582,17 @@ func TestSessionWatchKeepCancelAndSSEReconnectReceipts(t *testing.T) {
 	if toggled.Delivery != "wake" || toggled.Revision != 2 {
 		t.Fatalf("unexpected toggled watch: %+v", toggled)
 	}
-	lastCursor, _ = readWatchEnvelope(reader1)
+	lastCursor, _ := readNextWatchUpdatedEnvelope(t, reader1)
 
-	// Non-keepable process watch returns watch_keep_unavailable.
 	badKeep := env.doJSON(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/watches/"+procRec.Handle+"/keep", wire.KeepWatchRequest{
 		Name:   "Bad keep",
 		Prompt: "Cannot keep process",
 	})
 	assertErrorResponse(t, badKeep, http.StatusConflict, "watch_keep_unavailable")
 
-	// Disconnect SSE stream before Cancel (Dismiss) and Keep, then reconnect with ?after=lastCursor.
 	cancel1()
 	_ = resp1.Body.Close()
 
-	// Cancel draft watch -> dismissed final receipt.
 	cancelDraft := env.doJSON(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/watches/"+draftRec.Handle+"/cancel", nil)
 	if cancelDraft.Code != http.StatusOK {
 		t.Fatalf("cancelWatch draft status=%d body=%s", cancelDraft.Code, cancelDraft.Body.String())
@@ -596,7 +603,6 @@ func TestSessionWatchKeepCancelAndSSEReconnectReceipts(t *testing.T) {
 		t.Fatalf("expected dismissed outcome, got %+v", cancelResp)
 	}
 
-	// Keep plain repeating timer watch -> converts 900_000ms to every_minutes=15 and records kept final receipt.
 	keepPlain := env.doJSON(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/watches/"+plainRec.Handle+"/keep", wire.KeepWatchRequest{
 		Name:   "Every 15m status",
 		Prompt: "Check CI every 15m.",
@@ -613,15 +619,14 @@ func TestSessionWatchKeepCancelAndSSEReconnectReceipts(t *testing.T) {
 		t.Fatalf("expected delay_ms converted to every_minutes=15, got %+v", keepResp.StandingWatch.Conditions)
 	}
 
-	// Reconnect SSE with ?after=lastCursor and verify ordered replay of Dismiss + Keep + created StandingWatch!
-	resp2, reader2, cancel2 := openSSE(lastCursor)
+	resp2, reader2, cancel2 := openProjectWatchSSE(t, baseURL, proj.ID, lastCursor)
 	defer func() {
 		cancel2()
 		_ = resp2.Body.Close()
 	}()
 	var replayed []wire.WatchEvent
 	for range 3 {
-		_, ev := readWatchEnvelope(reader2)
+		_, ev := readNextWatchUpdatedEnvelope(t, reader2)
 		replayed = append(replayed, ev)
 	}
 	if replayed[0].WatchID != draftRec.WatchID || replayed[0].Revision < 2 {

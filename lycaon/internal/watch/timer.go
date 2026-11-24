@@ -344,7 +344,10 @@ func collectDueTimerTicks(cond awaitstore.Condition, anchor, after, now, expires
 	const maxCatchupBatch = 512
 	for len(due) < maxCatchupBatch {
 		cands, err := NextTimerOccurrences(cond, anchor, cur, 32)
-		if err != nil || len(cands) == 0 {
+		if err != nil {
+			return nil, err
+		}
+		if len(cands) == 0 {
 			break
 		}
 		stopped := false

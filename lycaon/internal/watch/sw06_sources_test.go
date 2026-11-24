@@ -117,7 +117,7 @@ func TestSW06CoordinatorWorkAndParkAcrossWorkerDecisionAndFailure(t *testing.T) 
 	}
 	testutil.FailErr(t, "commit second decision batch", CommitCollectBatch(t.Context(), store, owner.SessionID, batch2.DeliveryID))
 
-	// 3. Coordinator parks selecting failWatch; worker fails -> wakes parked lease once and deduplicates overlapping alternatives.
+	// 3. Coordinator parks on failWatch; worker failure wakes lease once and deduplicates alternatives.
 	wokeCh := make(chan awaitstore.Condition, 2)
 	store.SetLeaseWakeHandler(func(_ context.Context, _ awaitstore.Lease, winner awaitstore.Condition) {
 		wokeCh <- winner
@@ -423,10 +423,14 @@ func TestSW06SamplerDeduplicationDomainIsolationOwnerTeardownAndRevocation(t *te
 		t.Fatalf("revoked probe must transition watch to source_lost: %+v", afterProbeRevoke)
 	}
 	revoked.Store(false)
+}
+
+func TestSW06SamplerFairRoundRobinAndOwnerTeardown(t *testing.T) {
+	store, clock, database, _ := openTestWatchStore(t)
 
 	// Worker-owned port_ready watch + RetireOwner teardown + fair round-robin contention across 6 TCP targets.
 	testdbseed.InsertSession(t, database, "worker-sess-2", testdbseed.DefaultProjectID)
-	_, err = database.ExecContext(t.Context(), `INSERT INTO worker_jobs
+	_, err := database.ExecContext(t.Context(), `INSERT INTO worker_jobs
 		(id, project_id, parent_session_id, child_session_id, agent_type, prompt, brief, status, created_at)
 		VALUES ('job-retire', ?, 'session-1', 'worker-sess-2', 'implementer', 'work', 'work', 'running', '2026-11-23T12:00:00Z')`,
 		testdbseed.DefaultProjectID)

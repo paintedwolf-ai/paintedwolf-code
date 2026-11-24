@@ -81,7 +81,7 @@ type processTable struct {
 	maxBackground    int
 	maxAwaited       int
 	maxRecent        int
-	onHandleEvicted  func(ctx context.Context, sessionID, handle string)
+	onHandleEvicted  func(sessionID, handle string)
 }
 
 // Terminal owns held PTY interaction and sealed captures.
@@ -285,7 +285,7 @@ func (r *processTable) pruneCompletedLocked(sessionID string) {
 		delete(procs, job.handle)
 		r.cleanupHandleAuxLocked(sessionID, job.projectID, job.handle)
 		if fn := r.onHandleEvicted; fn != nil {
-			go fn(context.Background(), sessionID, job.handle)
+			go fn(sessionID, job.handle)
 		}
 	}
 }

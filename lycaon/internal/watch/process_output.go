@@ -91,6 +91,10 @@ func (s *Store) NotifyProcessOutput(ctx context.Context, sessionID, handle strin
 	if !s.Configured() {
 		return nil
 	}
+	return notifyProcessOutput(s, ctx, sessionID, handle)
+}
+
+func notifyProcessOutput(s *Store, ctx context.Context, sessionID, handle string) error {
 	sessionID = strings.TrimSpace(sessionID)
 	handle = strings.TrimSpace(handle)
 	if sessionID == "" || handle == "" {
@@ -108,11 +112,11 @@ func (s *Store) NotifyProcessOutput(ctx context.Context, sessionID, handle strin
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	var regs []Registration
 	for rows.Next() {
 		reg, sErr := scanRegistration(rows)
 		if sErr != nil {
-			_ = rows.Close()
 			return sErr
 		}
 		for _, c := range reg.Conditions {
@@ -121,6 +125,9 @@ func (s *Store) NotifyProcessOutput(ctx context.Context, sessionID, handle strin
 				break
 			}
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	_ = rows.Close()
 	if len(regs) == 0 {
