@@ -9,10 +9,14 @@ func (p Plan) BoundedRetainedStorage() bool {
 
 func (p Plan) reviewedRetainedRoute() bool {
 	const sourceID = "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
-	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "616ca6576c84b4d055b6eb519b1748977b93b8bb4664ab30658141c6d4aa5f14"}) {
+	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Source != manifestLayoutSource || p.CopyPlan() == nil {
 		return false
 	}
-	if p.Source != manifestLayoutSource || p.CopyPlan() == nil || len(p.steps) != 1 {
+	// Home starts then add two empty tables, their indexes and two triggers.
+	switch {
+	case len(p.steps) == 1 && p.Target == Revision5Baseline:
+	case len(p.steps) == 2 && p.steps[1].ID == "home-starts" && p.steps[1].Checksum == homeStartsChecksum:
+	default:
 		return false
 	}
 	// Manifest inserts maintain their indexes incrementally. Receipt index
@@ -20,8 +24,7 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// worker record rewrites use their declared write estimates. Briefing
 	// and publication indexes start empty. Dropping live_model_outputs and
 	// replacing the version reclaim trigger do not rewrite rows. Workflow
-	// manifest storage adds an empty table and a constant-default column, and
-	// Home starts add empty tables.
+	// manifest storage adds an empty table and a constant-default column.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "5aa3616cf7de48fa19a0f745bf232954577dd8a7c6ac42c19f87369c259b0811"
+		p.steps[0].Checksum == "02cc4ded97994fdd6c993f9ec200dc5875b72811f44496dc5d3a5638a635672b"
 }
