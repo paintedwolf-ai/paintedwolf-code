@@ -398,4 +398,21 @@ describe("bars above the editor", () => {
     ));
     expect(screen.getByTestId("files-editor-conflict")).toBeTruthy();
   });
+
+  it("renders unavailable checkout recovery actions for preserved drafts", () => {
+    const buf = { ...loadedBuffer(), checkoutUnavailable: true };
+    const saveAs = vi.fn();
+    render(() => (
+      <FilesEditor
+        {...editorProps(buf)}
+        onSaveToActiveCheckout={saveAs}
+      />
+    ));
+    expect(screen.getByTestId("files-editor-checkout-unavailable").textContent).toContain(
+      "This checkout is no longer available on disk.",
+    );
+    fireEvent.click(screen.getByTestId("files-editor-copy-unavailable-draft"));
+    fireEvent.click(screen.getByTestId("files-editor-save-as-live"));
+    expect(saveAs).toHaveBeenCalledOnce();
+  });
 });
