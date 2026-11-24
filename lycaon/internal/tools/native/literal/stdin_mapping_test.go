@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -56,9 +57,7 @@ func TestHeadAndTailCarryPipedStdinMappings(t *testing.T) {
 	} {
 		h := newHarness(t, nil)
 		memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1 << 20})
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "program memory", err)
 		h.owners.Revisions.Memory = memory
 		var stdout mappingBuffer
 		streams := commandprogram.Streams{Input: newPipedStdin(text), Output: &stdout, Error: &bytes.Buffer{}}
