@@ -23,9 +23,6 @@ const connection = vi.hoisted(() => ({
   subscribeProjectEvents: vi.fn(),
   waitForProjectEvents: vi.fn(async () => true),
 }));
-const sendPrompt = vi.hoisted(() =>
-  vi.fn<typeof import("../../chat/session/session-lifecycle.ts").sendChatPrompt>(async () => undefined),
-);
 vi.mock("../../platform/connection/app-connection.ts", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../platform/connection/app-connection.ts")>(),
   ...connection,
@@ -34,7 +31,6 @@ vi.mock("../../chat/session/session-lifecycle.ts", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../chat/session/session-lifecycle.ts")>(),
   enrichCreatedSession: vi.fn(async () => undefined),
   refreshCreatedSessionBoard: vi.fn(async () => undefined),
-  sendChatPrompt: sendPrompt,
 }));
 
 const disposals: (() => void)[] = [];
@@ -47,20 +43,16 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function setup(homeDraft: boolean) {
+function setup() {
   return createRoot((dispose) => {
     disposals.push(dispose);
     const shell = createShellStore("connected");
-    if (homeDraft) shell.beginDraftMaterialization();
-    else shell.beginStageSwitch({ projectId: "outgoing", kind: "cross-project" });
+    shell.beginStageSwitch({ projectId: "outgoing", kind: "cross-project" });
     let resolveProject!: (project: Project) => void;
     const pending = new Promise<Project>((resolve) => { resolveProject = resolve; });
-    const observed: { opening: boolean; materializingDraft: boolean }[] = [];
+    const observed: { opening: boolean }[] = [];
     const createProject = vi.fn(() => {
-      observed.push({
-        opening: shell.state.opening !== null,
-        materializingDraft: shell.state.materializingDraft,
-      });
+      observed.push({ opening: shell.state.opening !== null });
       return pending;
     });
     const client = stubClient({ createProject });
@@ -83,10 +75,10 @@ function setup(homeDraft: boolean) {
 
 describe("session creation presentation", () => {
   it("covers the outgoing workspace before creating a new project", async () => {
-    const creation = setup(false);
+    const creation = setup();
     const request = creation.start({ kind: "new-project" });
     expect(creation.createProject).toHaveBeenCalledTimes(1);
-    expect(creation.observed).toEqual([{ opening: true, materializingDraft: false }]);
+    expect(creation.observed).toEqual([{ opening: true }]);
     expect(creation.shell.state.opening).not.toBeNull();
     expect(creation.sessionSwitchDeps).not.toHaveBeenCalled();
 
@@ -96,28 +88,14 @@ describe("session creation presentation", () => {
     expect(creation.projects.byId("p1")).toBeUndefined();
     expect(creation.sessionSwitchDeps).not.toHaveBeenCalled();
   });
-
-  it("keeps a submitted Home idea visible while its project materializes", async () => {
-    const creation = setup(true);
-    const request = creation.start({ kind: "new-project" });
-    expect(creation.observed).toEqual([{ opening: false, materializingDraft: true }]);
-    expect(creation.shell.state.materializingDraft).toBe(true);
-    expect(creation.shell.state.opening).toBeNull();
-
-    shellSessionSwitchGeneration.next();
-    creation.resolveProject(wireProject("/repo", "p1"));
-    await request;
-    expect(creation.sessionSwitchDeps).not.toHaveBeenCalled();
-  });
 });
 
-function setupModeEntry(lastStartedMode: SessionMode, homeDraft = false) {
+function setupModeEntry(lastStartedMode: SessionMode) {
   setAppStateSnapshot({ ...EMPTY_APP_STATE_V1, chat: { lastStartedMode } });
   syncChatPrefsFromSnapshot();
   return createRoot((dispose) => {
     disposals.push(dispose);
     const shell = createShellStore("connected");
-    if (homeDraft) shell.beginDraftMaterialization();
     const appStore = createAppStore();
     const project = wireProject("/repo", "p1");
     const session = { ...demoSession, project_id: project.id, started: false };
@@ -156,21 +134,6 @@ function setupModeEntry(lastStartedMode: SessionMode, homeDraft = false) {
 }
 
 describe("session mode at shell entry", () => {
-  it("carries the Home Ask selection into creation, reveal, and first send", async () => {
-    const { start, observedModes, createSession, project, session, reportError } = setupModeEntry("agent", true);
-
-    expect(await start({ kind: "new-project" }, { mode: "ask", prompt: "What is in this repository?" })).toBe(true);
-
-    expect(createSession).toHaveBeenCalledWith({ mode: "ask", posture: "build", project_id: project.id });
-    expect(observedModes).toEqual(["ask"]);
-    expect(sendPrompt).toHaveBeenCalledOnce();
-    const sendArgs = sendPrompt.mock.calls[0];
-    expect(sendArgs?.[3]).toBe(session.id);
-    expect(sendArgs?.[7]).toBe("What is in this repository?");
-    expect(sendArgs?.[11]).toMatchObject({ mode: "ask" });
-    expect(reportError).not.toHaveBeenCalled();
-  });
-
   it("reveals Agent on a pre-armed supporting workflow when the last chat used Ask", async () => {
     const { start, observedModes, createSession, project, session, reportError } = setupModeEntry("ask");
     const workflow: WorkflowSummary = {
@@ -182,7 +145,6 @@ describe("session mode at shell entry", () => {
     expect(createSession).toHaveBeenCalledWith({ posture: "build", project_id: project.id });
     expect(observedModes).toEqual(["agent"]);
     expect(peekArmWorkflow(session.id)).toEqual(workflow);
-    expect(sendPrompt).not.toHaveBeenCalled();
     expect(reportError).not.toHaveBeenCalled();
   });
 });

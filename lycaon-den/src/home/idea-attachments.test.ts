@@ -2,32 +2,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   HOME_IDEA_FOLDER_REJECT,
-  deliverStagedIdea,
   homeIdeaChipDetail,
   homeIdeaChipGlyph,
-  homeIdeaRejectsPresent,
   intakeHomeIdeaDrop,
-  stageHomeIdeaAttachments,
+  launchChipsFromIdea,
   type HomeIdeaAttachment,
 } from "./idea-attachments.ts";
 import { DROP_REJECT_MISSING } from "../platform/files/file-drop.ts";
 import { setPreflightReport } from "../platform/persistence/preflight-report.ts";
-import {
-  rejectMessageForCode,
-  type ComposerPendingAttachment,
-} from "../chat/composer/composer-attachments.ts";
-import type { AttachmentUploadResponse } from "../api/types.ts";
+import { rejectMessageForCode } from "../chat/composer/composer-attachments.ts";
+import { resetHomeLaunchesForTest } from "./launch/home-launches.ts";
+import { memoryHomeOutbox } from "./launch/home-outbox.ts";
 
 vi.mock("../platform/files/read-path-bytes.ts", () => ({
   importPathKind: vi.fn(),
   readPathBytes: vi.fn(),
 }));
-vi.mock("../platform/files/external-attachment-import.ts", () => ({
-  importExternalAttachment: vi.fn(),
-}));
 
 import { importPathKind } from "../platform/files/read-path-bytes.ts";
-import { importExternalAttachment } from "../platform/files/external-attachment-import.ts";
 
 const TEST_CAPS = {
   auto_attach_paste_bytes: 16 * 1024,
@@ -65,6 +57,7 @@ function pathItem(absolutePath: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetHomeLaunchesForTest(memoryHomeOutbox());
   setPreflightReport({
     overall: "ok",
     probes: [],
@@ -221,197 +214,19 @@ describe("chip projection", () => {
     );
     expect(homeIdeaChipGlyph(path)).toBe("▣");
     expect(homeIdeaChipGlyph(rejected)).toBe("!");
-    expect(homeIdeaRejectsPresent([web, rejected])).toBe(true);
-    expect(homeIdeaRejectsPresent([web, path])).toBe(false);
   });
 });
 
-describe("stageHomeIdeaAttachments", () => {
-  function receipt(over: Partial<AttachmentUploadResponse>): AttachmentUploadResponse {
-    return {
-      blob_id: "b".repeat(64),
-      filename: "file",
-      mime: "text/plain",
-      kind: "text",
-      bytes: 12,
-      ...over,
-    };
-  }
-
-  it("uploads web files against the draft project", async () => {
-    const client = {
-      uploadAttachment: vi.fn(async (_p: string, filename: string) =>
-        receipt({ filename }),
-      ),
-    };
-    const buffered = await intakeOne([fileItem(webFile("a.txt", 12))], []);
-    const staged = await stageHomeIdeaAttachments(client, "proj-1", [buffered]);
-    expect(client.uploadAttachment).toHaveBeenCalledWith(
-      "proj-1",
-      "a.txt",
-      "text/plain",
-      expect.any(File),
-    );
-    expect(staged[0]).toMatchObject({ kind: "text", name: "a.txt" });
-  });
-
-  it("stages native image paths as live external references", async () => {
+describe("launchChipsFromIdea", () => {
+  it("keeps item identity and marks bytes pending until the outbox holds them", async () => {
     vi.mocked(importPathKind).mockResolvedValue("file");
-    vi.mocked(importExternalAttachment).mockResolvedValue(
-      receipt({ filename: "shot.png", kind: "image", mime: "image/png" }),
-    );
-    const buffered = await intakeOne([pathItem("/tmp/shot.png")], []);
-    const staged = await stageHomeIdeaAttachments(
-      { uploadAttachment: vi.fn() },
-      "proj-1",
-      [buffered],
-    );
-    expect(importExternalAttachment).not.toHaveBeenCalled();
-    expect(staged[0]).toMatchObject({
-      kind: "external-file", projectId: "proj-1", path: "/tmp/shot.png",
-      name: "shot.png",
-    });
-  });
-
-  it.each([
-    { path: "/tmp/report.pdf", kind: "document" as const, mime: "application/pdf" },
-    { path: "/tmp/bug.mov", kind: "video" as const, mime: "video/quicktime" },
-  ])("keeps the native $kind projection and its live original path", async ({ path, kind, mime }) => {
-    vi.mocked(importPathKind).mockResolvedValue("file");
-    vi.mocked(importExternalAttachment).mockResolvedValue(receipt({ filename: path.split("/").pop(), kind, mime }));
-    const buffered = await intakeOne([pathItem(path)], []);
-    const staged = await stageHomeIdeaAttachments({ uploadAttachment: vi.fn() }, "proj-1", [buffered]);
-    expect(staged).toMatchObject([{ kind, importedCopy: true }, { kind: "external-file", path, projectId: "proj-1" }]);
-  });
-
-  it("maps an import failure to a structured reject chip", async () => {
-    vi.mocked(importPathKind).mockResolvedValue("file");
-    vi.mocked(importExternalAttachment).mockRejectedValue(
-      Object.assign(new Error("too large"), { code: "attachment_too_large" }),
-    );
-    const buffered = await intakeOne([pathItem("/tmp/huge.mov")], []);
-    const staged = await stageHomeIdeaAttachments(
-      { uploadAttachment: vi.fn() },
-      "proj-1",
-      [buffered],
-    );
-    expect(staged[0]).toMatchObject({
-      kind: "reject",
-      name: "huge.mov",
-      rejectCode: "attachment_too_large",
-    });
-  });
-
-  it("carries buffered rejects through as reject chips", async () => {
-    const buffered: HomeIdeaAttachment = {
-      id: "r1",
-      kind: "reject",
-      name: "e.txt",
-      reason: "nope",
-    };
-    const staged = await stageHomeIdeaAttachments(
-      { uploadAttachment: vi.fn() },
-      "proj-1",
-      [buffered],
-    );
-    expect(staged[0]).toMatchObject({ kind: "reject", rejectMessage: "nope" });
-  });
-});
-
-describe("deliverStagedIdea", () => {
-  const sendableChip: ComposerPendingAttachment = {
-    id: "c1",
-    kind: "text",
-    name: "a.txt",
-    mime: "text/plain",
-    blobId: "b".repeat(64),
-    byteLength: 12,
-  };
-  const rejectChip: ComposerPendingAttachment = {
-    id: "c2",
-    kind: "reject",
-    name: "bad.bin",
-    mime: "application/octet-stream",
-    byteLength: 0,
-    rejectMessage: "refused",
-  };
-
-  it("sends when every chip staged cleanly", async () => {
-    const send = vi.fn(async () => undefined);
-    const stageFallback = vi.fn(async () => ({ ok: true as const }));
-    const result = await deliverStagedIdea({
-      text: "build it",
-      staged: [sendableChip],
-      send,
-      stageFallback,
-    });
-    expect(result).toEqual({ mode: "sent" });
-    expect(send).toHaveBeenCalledWith(
-      "build it",
-      { attachments: [{ blob_id: sendableChip.blobId }], references: [], secrets: [] },
-      ["a.txt"],
-    );
-    expect(stageFallback).not.toHaveBeenCalled();
-  });
-
-  it("sends a plain-text idea with no parts", async () => {
-    const send = vi.fn(async () => undefined);
-    const result = await deliverStagedIdea({
-      text: "just words",
-      staged: [],
-      send,
-      stageFallback: vi.fn(async () => ({ ok: true as const })),
-    });
-    expect(result).toEqual({ mode: "sent" });
-    expect(send).toHaveBeenCalledWith(
-      "just words",
-      { attachments: [], references: [], secrets: [] },
-      [],
-    );
-  });
-
-  it("parks the whole payload in the composer when a chip failed to stage", async () => {
-    const send = vi.fn(async () => undefined);
-    const stageFallback = vi.fn(async () => ({ ok: true as const }));
-    const result = await deliverStagedIdea({
-      text: "build it",
-      staged: [sendableChip, rejectChip],
-      send,
-      stageFallback,
-    });
-    expect(result).toEqual({ mode: "staged" });
-    expect(send).not.toHaveBeenCalled();
-    expect(stageFallback).toHaveBeenCalledWith(
-      [sendableChip, rejectChip],
-      "build it",
-    );
-  });
-
-  it("parks the payload when the send itself fails", async () => {
-    const send = vi.fn(async () => {
-      throw new Error("offline");
-    });
-    const stageFallback = vi.fn(async () => ({ ok: true as const }));
-    const result = await deliverStagedIdea({
-      text: "build it",
-      staged: [sendableChip],
-      send,
-      stageFallback,
-    });
-    expect(result).toEqual({ mode: "staged" });
-    expect(stageFallback).toHaveBeenCalledTimes(1);
-  });
-
-  it("reports the reason when even parking fails", async () => {
-    const result = await deliverStagedIdea({
-      text: "build it",
-      staged: [rejectChip],
-      send: vi.fn(async () => undefined),
-      stageFallback: vi.fn(async () => ({
-        ok: false as const,
-        reason: "no lease",
-      })),
-    });
-    expect(result).toEqual({ mode: "failed", reason: "no lease" });
+    const web = await intakeOne([fileItem(webFile("a.txt", 12))], []);
+    const path = await intakeOne([pathItem("/tmp/shot.png")], []);
+    const rejected = await intakeOne([fileItem(webFile("e.txt", 0))], []);
+    expect(launchChipsFromIdea([web, path, rejected])).toEqual([
+      { kind: "bytes", itemId: web.id, name: "a.txt", mime: "text/plain", byteLength: 12, snapshot: "pending" },
+      { kind: "path", itemId: path.id, name: "shot.png", absolutePath: "/tmp/shot.png", expected: "image", snapshot: "ready" },
+      { kind: "reject", itemId: rejected.id, name: "e.txt", reason: rejectMessageForCode("unsupported_attachment") },
+    ]);
   });
 });

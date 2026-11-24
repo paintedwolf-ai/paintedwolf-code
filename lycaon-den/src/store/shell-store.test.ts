@@ -7,41 +7,44 @@ describe("shell-store", () => {
     store.commitStageScope({ projectId: "p1", sessionId: "s1" });
     expect(store.state.activeProjectId).toBe("p1");
     expect(store.state.foreground).toEqual({ projectId: "p1", sessionId: "s1" });
-    expect(store.state.materializingDraft).toBe(false);
+    expect(store.state.launch).toBeNull();
   });
 
-  it("holds Home materialization until the coherent real scope commits", () => {
-    const store = createShellStore("connected");
-    expect(store.beginDraftMaterialization()).toBe(true);
-    expect(store.beginDraftMaterialization()).toBe(false);
+  it("shows a Home launch as the foreground conversation before any project exists", () => {
+    const store = createShellStore("offline");
+    store.commitStageScope({ projectId: "p1", sessionId: "s1" });
+    store.openLaunch("launch-1");
     expect(store.state).toMatchObject({
       activeProjectId: null,
       foreground: null,
-      materializingDraft: true,
-    });
-
-    store.commitStageScope({
-      projectId: "p1",
-      sessionId: "s1",
-      initialPrompt: true,
-    });
-    expect(store.state).toMatchObject({
-      activeProjectId: "p1",
-      foreground: { projectId: "p1", sessionId: "s1", initialPrompt: true },
-      materializingDraft: false,
+      launch: { launchId: "launch-1" },
+      opening: null,
     });
   });
 
-  it("navigation and Home recovery cancel draft materialization", () => {
+  it("any other navigation replaces the launch foreground", () => {
     const store = createShellStore("connected");
-    store.beginDraftMaterialization();
+    store.openLaunch("launch-1");
     store.beginStageSwitch({ projectId: "p2", kind: "cross-project" });
-    expect(store.state.materializingDraft).toBe(false);
+    expect(store.state.launch).toBeNull();
 
+    store.openLaunch("launch-1");
     store.clearToHome();
-    store.beginDraftMaterialization();
-    store.clearToHome();
-    expect(store.state.materializingDraft).toBe(false);
+    expect(store.state.launch).toBeNull();
+
+    store.openLaunch("launch-1");
+    store.commitStageScope({ projectId: "p1", sessionId: "s1" });
+    expect(store.state.launch).toBeNull();
+  });
+
+  it("closing a launch leaves newer navigation alone", () => {
+    const store = createShellStore("connected");
+    store.openLaunch("launch-1");
+    store.openLaunch("launch-2");
+    store.closeLaunch("launch-1");
+    expect(store.state.launch).toEqual({ launchId: "launch-2" });
+    store.closeLaunch("launch-2");
+    expect(store.state.launch).toBeNull();
   });
 
   it("keeps an initial Home prompt with the foreground session", () => {
@@ -124,15 +127,15 @@ describe("shell-store", () => {
     });
   });
 
-  it("Home recovery and draft materialization leave no opening behind", () => {
+  it("Home recovery and a launch leave no opening behind", () => {
     const store = createShellStore("connected");
     store.beginWorkspaceOpening({ label: "widgets" });
     store.clearToHome();
     expect(store.state.opening).toBeNull();
 
-    store.beginDraftMaterialization();
     store.beginWorkspaceOpening({ label: "widgets" });
-    expect(store.state.materializingDraft).toBe(false);
+    store.openLaunch("launch-1");
+    expect(store.state.opening).toBeNull();
   });
 
   it("evicting active project clears active foreground", () => {

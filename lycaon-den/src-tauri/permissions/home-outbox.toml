@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-home-outbox"
+description = "Preserve submitted Home ideas and their attachments until their chat holds them."
+commands.allow = ["read_home_outbox", "commit_home_outbox", "put_home_outbox_blob", "read_home_outbox_blob", "sweep_home_outbox", "fingerprint_home_path"]

@@ -1,13 +1,15 @@
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
-import { noticeReporterFor } from "../../platform/connection/app-connection.ts";
-import { APP_SCOPE } from "../../notices/notice-scope.ts";
-import { batch, For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { batch, For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js";
 import { SessionModeSwitch } from "../chatview/SessionModeSwitch.tsx";
 import { ASK_INPUT_HINT } from "../chatview/session-mode-copy.ts";
 import { createHomeIdeaDraftMode } from "../../home/idea-draft-mode.ts";
+import { createHomeComposition, type FrozenComposition } from "../../home/home-composition.ts";
+import type { CompositionRecord } from "../../home/launch/home-launch-model.ts";
+import type { SessionMode } from "../../api/types.ts";
 import { createFadingInputHint } from "../../ui/fading-input-hint.ts";
 import { PreflightNudge } from "./PreflightNudge.tsx";
 import { AttentionBand } from "./AttentionBand.tsx";
+import { PendingLaunches } from "./PendingLaunches.tsx";
 import type { AttentionRow } from "../../api/types.ts";
 import type { ProjectSummary } from "../../project/project-summary.ts";
 import {
@@ -56,11 +58,8 @@ import {
   HOME_IDEA_DROP_AFFORDANCE,
   homeIdeaChipDetail,
   homeIdeaChipGlyph,
-  homeIdeaRejectsPresent,
   intakeHomeIdeaDrop,
   revokeHomeIdeaAttachment,
-  type HomeIdeaAttachment,
-  type HomeIdeaDraft,
 } from "../../home/idea-attachments.ts";
 
 type Props = {
@@ -72,9 +71,12 @@ type Props = {
   providerGap?: ProviderGap;
   onOpenProviders?: () => void;
   onOpenDiagnostics?: () => void;
-  /** The submitted Home draft is becoming its first durable chat. */
-  submitting?: boolean;
-  onSubmitIdea: (draft: HomeIdeaDraft) => boolean | Promise<boolean>;
+  /** Opens the submitted idea as its chat; returns once the chat is foreground. */
+  onSubmitIdea: (draft: FrozenComposition & { mode: SessionMode }) => void;
+  /** The last saved composition, restored into an empty Home. */
+  restoredComposition?: () => CompositionRecord | undefined;
+  /** Reopens a submitted idea that has not reached its chat. */
+  onOpenLaunch?: (launchId: string) => void;
   onOpenFolder: () => void;
   onCloneRepo: () => void;
   onOpenProject: (id: string) => void;
@@ -115,12 +117,17 @@ function sortGlyph(active: boolean, direction: ProjectListSortDir): string {
 }
 
 export function HomeView(props: Props) {
-  const [idea, setIdea] = createSignal("");
-  const [ideaAttachments, setIdeaAttachments] = createSignal<HomeIdeaAttachment[]>([]);
   const [dragActive, setDragActive] = createSignal(false);
   const residentPresence = useResidentPresence();
+  let ideaModeAccessor: () => SessionMode | undefined = () => undefined;
+  const composition = createHomeComposition({ mode: () => ideaModeAccessor() });
+  const idea = composition.text;
+  const setIdea = composition.setText;
+  const ideaAttachments = composition.attachments;
+  const setIdeaAttachments = composition.setAttachments;
   const hasIdeaDraft = () => Boolean(idea() || ideaAttachments().length);
   const ideaMode = createHomeIdeaDraftMode(() => residentPresence() === "active", hasIdeaDraft);
+  ideaModeAccessor = ideaMode.mode;
   const ideaHint = createFadingInputHint(
     () => ideaMode.mode() === "ask" ? ASK_INPUT_HINT : IDEA_HINT,
     () => residentPresence() === "active" && !idea(),
@@ -202,7 +209,7 @@ export function HomeView(props: Props) {
   // Serialized so a burst of drops sees the caps it actually lands against.
   let intakeQueue: Promise<void> = Promise.resolve();
   const appendDroppedItems = (items: readonly DroppedItem[]) => {
-    if (props.submitting || items.length === 0) return;
+    if (items.length === 0) return;
     intakeQueue = intakeQueue.then(async () => {
       const added = await intakeHomeIdeaDrop(items, ideaAttachments());
       if (added.length > 0) setIdeaAttachments((prev) => [...prev, ...added]);
@@ -218,17 +225,14 @@ export function HomeView(props: Props) {
     clearIdeaModeIfEmpty();
   };
 
-  const clearIdeaAttachments = () => {
-    for (const item of ideaAttachments()) revokeHomeIdeaAttachment(item);
-    setIdeaAttachments([]);
-  };
+  const clearIdeaAttachments = composition.clearAttachments;
 
   // Home stays mounted while hidden; it takes window drops only while presented.
   createEffect(() => {
     if (residentPresence() === "idle") return;
     onCleanup(registerChatDrop({
       htmlTarget: frameRef,
-      onDragActive: (active) => setDragActive(active && !props.submitting),
+      onDragActive: (active) => setDragActive(active),
       onDrop: (event) => {
         setDragActive(false);
         appendDroppedItems(event.items);
@@ -236,40 +240,30 @@ export function HomeView(props: Props) {
     }));
   });
 
+  createEffect(on(() => props.restoredComposition?.(), (saved) => {
+    void composition.restore(saved);
+  }));
+
   onMount(() => {
     onCleanup(() => {
       for (const item of ideaAttachments()) revokeHomeIdeaAttachment(item);
     });
   });
 
-  const rejectsBlockSubmit = () => homeIdeaRejectsPresent(ideaAttachments());
-  const sendableIdeaAttachments = () =>
-    ideaAttachments().filter((item) => item.kind !== "reject");
+  // A rejected chip travels with the idea; the chat asks for it to be fixed.
   const canSubmit = () =>
-    !props.submitting &&
     ideaMode.mode() !== undefined &&
-    !rejectsBlockSubmit() &&
-    (idea().trim().length > 0 || sendableIdeaAttachments().length > 0);
+    (idea().trim().length > 0 || ideaAttachments().length > 0);
 
-  const submit = async () => {
+  /** Hands the idea to its chat in the same reactive update that clears Home. */
+  const submit = () => {
     const mode = ideaMode.mode();
     if (!mode || !canSubmit()) return;
-    const text = idea();
-    const attachments = ideaAttachments();
-    try {
-      const accepted = await props.onSubmitIdea({ text: text.trim(), attachments, mode });
-      if (!accepted) return;
-      // Preserve edits made while submission was pending.
-      const sameText = idea() === text;
-      const sameAttachments = ideaAttachments() === attachments;
-      batch(() => {
-        if (sameText) setIdea("");
-        if (sameAttachments) clearIdeaAttachments();
-        if (sameText && sameAttachments) ideaMode.accept(mode);
-      });
-    } catch (cause) {
-      noticeReporterFor(APP_SCOPE).reportError(cause);
-    }
+    batch(() => {
+      const frozen = composition.take();
+      props.onSubmitIdea({ ...frozen, text: frozen.text.trim(), mode });
+      ideaMode.accept(mode);
+    });
   };
 
   const deleteOne = (id: string) => {
@@ -329,7 +323,7 @@ export function HomeView(props: Props) {
       classList={bootAttrs().classList}
       data-boot={bootAttrs()["data-boot"]}
       data-testid="home-view"
-      aria-busy={props.submitting || bootAttrs()["aria-busy"]}
+      aria-busy={bootAttrs()["aria-busy"]}
       aria-hidden={bootAttrs()["aria-hidden"]}
       inert={bootAttrs().inert}
     >
@@ -369,6 +363,7 @@ export function HomeView(props: Props) {
             }
           />
         </div>
+        <PendingLaunches onOpen={(id) => props.onOpenLaunch?.(id)} />
         {/* Attention precedes new work. */}
         <AttentionBand
           rows={props.attentionRows ?? []}
@@ -395,7 +390,6 @@ export function HomeView(props: Props) {
                 data-hint-out={ideaHint.out() ? "" : undefined}
                 aria-label={webkitAtspiWorkaroundActive() ? (ideaMode.mode() === "ask" ? "Ask a question" : "Describe your idea") : undefined}
                 value={idea()}
-                disabled={props.submitting}
                 onInput={(e) => {
                   const cleared = Boolean(idea()) && !e.currentTarget.value;
                   setIdea(e.currentTarget.value);
@@ -410,27 +404,24 @@ export function HomeView(props: Props) {
                   if (isImeComposition(e)) return;
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    void submit();
+                    if (!e.repeat) submit();
                   }
                 }}
               />
             </Scrollport>
             <ShowLatest when={ideaMode.mode()}>
-              {(mode) => <SessionModeSwitch mode={mode()} disabled={props.submitting} onSelect={ideaMode.select} />}
+              {(mode) => <SessionModeSwitch mode={mode()} onSelect={ideaMode.select} />}
             </ShowLatest>
             <button
               type="button"
               class="home-view__idea-send"
               data-testid="home-idea-send"
               disabled={!canSubmit()}
-              aria-label={props.submitting ? "Starting chat" : "Start"}
-              onClick={() => void submit()}
+              aria-label="Start"
+              onClick={() => submit()}
             >
-              <ThemeIcon slot={props.submitting ? "pending" : "upload"} size={16} />
+              <ThemeIcon slot="upload" size={16} />
             </button>
-            <Show when={props.submitting}>
-              <span class="sr-only" role="status">Starting chat…</span>
-            </Show>
           </div>
           <Show when={ideaAttachments().length > 0}>
             <div class="den-composer-attach-note">
@@ -514,11 +505,6 @@ export function HomeView(props: Props) {
                 )}
               </For>
             </Scrollport>
-          </Show>
-          <Show when={rejectsBlockSubmit()}>
-            <p class="home-view__idea-error" data-testid="home-idea-attach-error">
-              Remove unsupported attachments before starting.
-            </p>
           </Show>
         </div>
 

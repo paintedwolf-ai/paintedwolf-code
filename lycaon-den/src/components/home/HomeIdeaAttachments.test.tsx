@@ -4,15 +4,23 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-li
 import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
 import { syncChatPrefsFromSnapshot } from "../../settings/chat/chat-prefs.ts";
 import { HomeView } from "./HomeView.tsx";
-import type { HomeIdeaDraft } from "../../home/idea-attachments.ts";
+import type { FrozenComposition } from "../../home/home-composition.ts";
+import type { SessionMode } from "../../api/types.ts";
+import { homeLaunches, resetHomeLaunchesForTest, readLaunchBytes } from "../../home/launch/home-launches.ts";
+import { memoryHomeOutbox } from "../../home/launch/home-outbox.ts";
+
+type Submitted = FrozenComposition & { mode: SessionMode };
 import { loaded } from "../../store/load-state.ts";
 import { createSignal } from "solid-js";
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
 import type { ResidentPresence } from "../../ui/resident-surfaces.ts";
 
+let outbox = memoryHomeOutbox();
 beforeEach(() => {
   resetAppStateSnapshotForTests();
   syncChatPrefsFromSnapshot();
+  outbox = memoryHomeOutbox();
+  resetHomeLaunchesForTest(outbox);
 });
 
 afterEach(() => {
@@ -20,7 +28,7 @@ afterEach(() => {
 });
 
 const homeHandlers = {
-  onSubmitIdea: () => true,
+  onSubmitIdea: () => undefined,
   onOpenFolder: () => undefined,
   onCloneRepo: () => undefined,
   onOpenProject: () => undefined,
@@ -115,31 +123,33 @@ describe("Home idea drop intake", () => {
     );
   });
 
-  it("blocks submission while a reject chip is present", async () => {
-    const onSubmitIdea = vi.fn(() => true);
+  it("sends a rejected chip with the idea so the chat can ask for it", async () => {
+    const onSubmitIdea = vi.fn<(draft: Submitted) => void>();
     renderHome({ onSubmitIdea });
     const frame = screen.getByTestId("home-view");
     frame.dispatchEvent(dragEvent("drop", [webFile("empty.txt", 0)]));
-    await screen.findByTestId("home-idea-attach-error");
+    await screen.findByTestId("home-idea-attachment-chip");
 
     const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
     fireEvent.input(input, { target: { value: "Build it anyway" } });
-    expect(
-      (screen.getByTestId("home-idea-send") as HTMLButtonElement).disabled,
-    ).toBe(true);
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(onSubmitIdea).not.toHaveBeenCalled();
+    expect(onSubmitIdea).toHaveBeenCalledOnce();
+    expect(onSubmitIdea.mock.calls[0]![0].attachments[0]).toMatchObject({ kind: "reject", name: "empty.txt" });
+  });
 
-    fireEvent.click(screen.getByTestId("home-idea-attachment-remove"));
-    await waitFor(() =>
-      expect(
-        (screen.getByTestId("home-idea-send") as HTMLButtonElement).disabled,
-      ).toBe(false),
-    );
+  it("stages dropped bytes into the outbox at intake", async () => {
+    renderHome();
+    screen.getByTestId("home-view").dispatchEvent(dragEvent("drop", [webFile("shot.png", 24, "image/png")]));
+    const chip = await screen.findByTestId("home-idea-attachment-chip");
+    expect(chip).toBeTruthy();
+    await waitFor(() => expect(outbox.blobs.size).toBe(1));
+    const [itemId] = [...outbox.blobs.keys()];
+    expect((await readLaunchBytes(itemId!))?.size).toBe(24);
+    expect(homeLaunches.pending()).toEqual([]);
   });
 
   it("submits the idea with its buffered attachments", async () => {
-    const onSubmitIdea = vi.fn<(draft: HomeIdeaDraft) => boolean>().mockReturnValue(true);
+    const onSubmitIdea = vi.fn<(draft: Submitted) => void>();
     renderHome({ onSubmitIdea });
     const frame = screen.getByTestId("home-view");
     frame.dispatchEvent(dragEvent("drop", [webFile("shot.png", 24, "image/png")]));
@@ -162,17 +172,17 @@ describe("Home idea drop intake", () => {
   });
 
   it("binds the local Ask selection when immediately submitting the Home idea", () => {
-    const onSubmitIdea = vi.fn<(draft: HomeIdeaDraft) => boolean>().mockReturnValue(true);
+    const onSubmitIdea = vi.fn<(draft: Submitted) => void>();
     renderHome({ onSubmitIdea });
     fireEvent.click(screen.getByRole("radio", { name: "Ask" }));
     const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
     fireEvent.input(input, { target: { value: "How do I get started?" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(onSubmitIdea).toHaveBeenCalledWith({ text: "How do I get started?", mode: "ask", attachments: [] });
+    expect(onSubmitIdea.mock.calls[0]?.[0]).toMatchObject({ text: "How do I get started?", mode: "ask", attachments: [] });
   });
 
   it("allows an attachment-only submission", async () => {
-    const onSubmitIdea = vi.fn<(draft: HomeIdeaDraft) => boolean>().mockReturnValue(true);
+    const onSubmitIdea = vi.fn<(draft: Submitted) => void>();
     renderHome({ onSubmitIdea });
     const frame = screen.getByTestId("home-view");
     frame.dispatchEvent(dragEvent("drop", [webFile("spec.txt", 16)]));
@@ -181,19 +191,6 @@ describe("Home idea drop intake", () => {
     fireEvent.click(screen.getByTestId("home-idea-send"));
     expect(onSubmitIdea).toHaveBeenCalledTimes(1);
     expect(onSubmitIdea.mock.calls[0]![0].text).toBe("");
-  });
-
-  it("ignores drops while the draft is materializing", async () => {
-    renderHome({ submitting: true });
-    const frame = screen.getByTestId("home-view");
-
-    frame.dispatchEvent(dragEvent("dragenter", [webFile("late.txt", 8)]));
-    expect(screen.queryByTestId("home-drop-overlay")).toBeNull();
-
-    frame.dispatchEvent(dragEvent("drop", [webFile("late.txt", 8)]));
-    // Let the async intake settle before asserting nothing was buffered.
-    await Promise.resolve();
-    expect(screen.queryByTestId("home-idea-attachment-chip")).toBeNull();
   });
 
   it("takes drops again when Home returns from being parked", () => {

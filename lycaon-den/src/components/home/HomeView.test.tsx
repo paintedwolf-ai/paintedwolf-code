@@ -11,12 +11,17 @@ import { getAppStateSnapshot, resetAppStateSnapshotForTests, setAppStateSnapshot
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
 import type { ResidentPresence } from "../../ui/resident-surfaces.ts";
 import type { SessionMode } from "../../api/types.ts";
-import type { HomeIdeaDraft } from "../../home/idea-attachments.ts";
+import type { FrozenComposition } from "../../home/home-composition.ts";
+import { resetHomeLaunchesForTest } from "../../home/launch/home-launches.ts";
+import { memoryHomeOutbox } from "../../home/launch/home-outbox.ts";
 import { HomeView } from "./HomeView.tsx";
+
+type Submitted = FrozenComposition & { mode: SessionMode };
 
 beforeEach(() => {
   resetAppStateSnapshotForTests();
   syncChatPrefsFromSnapshot();
+  resetHomeLaunchesForTest(memoryHomeOutbox());
 });
 
 afterEach(() => {
@@ -49,7 +54,7 @@ function stubSummary(i: number): ProjectSummary {
 }
 
 const homeHandlers = {
-  onSubmitIdea: () => true,
+  onSubmitIdea: () => undefined,
   onOpenFolder: () => undefined,
   onCloneRepo: () => undefined,
   onOpenProject: () => undefined,
@@ -103,11 +108,10 @@ describe("HomeView missing provider config", () => {
   });
 });
 
-describe("HomeView draft materialization", () => {
+describe("HomeView idea submission", () => {
   it("submits and keeps Ask, and an untouched Home uses it on its next show", async () => {
-    const onSubmitIdea = vi.fn((draft: HomeIdeaDraft) => {
+    const onSubmitIdea = vi.fn((draft: Submitted) => {
       reflectStartedMode(draft.mode);
-      return true;
     });
     const [presence, setPresence] = createSignal<ResidentPresence>("active");
     render(() => <ResidentPresenceProvider presence={presence()}>
@@ -131,34 +135,23 @@ describe("HomeView draft materialization", () => {
     expect(screen.getByRole("radio", { name: "Agent" }).getAttribute("aria-checked")).toBe("true");
   });
 
-  it("retains a typed Home draft across preference changes and a rejected send", async () => {
+  it("keeps a typed draft's mode across preference changes until it is sent", () => {
     reflectStartedMode("ask");
     const [presence, setPresence] = createSignal<ResidentPresence>("active");
-    const [submitting, setSubmitting] = createSignal(false);
-    const onSubmitIdea = vi.fn((_draft: HomeIdeaDraft) => false);
+    const onSubmitIdea = vi.fn((_draft: Submitted) => undefined);
     render(() => <ResidentPresenceProvider presence={presence()}>
-      <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} submitting={submitting()} onSubmitIdea={onSubmitIdea} />
+      <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} onSubmitIdea={onSubmitIdea} />
     </ResidentPresenceProvider>);
     const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
     const ask = screen.getByRole("radio", { name: "Ask" });
-    expect(ask.getAttribute("aria-checked")).toBe("true");
     fireEvent.input(input, { target: { value: "Keep this draft" } });
     setPresence("idle");
     reflectStartedMode("agent");
     setPresence("active");
-
-    setSubmitting(true);
-    fireEvent.click(screen.getByRole("radio", { name: "Agent" }));
     expect(ask.getAttribute("aria-checked")).toBe("true");
-    setSubmitting(false);
     fireEvent.click(screen.getByTestId("home-idea-send"));
-    expect(onSubmitIdea).toHaveBeenCalledExactlyOnceWith({ text: "Keep this draft", mode: "ask", attachments: [] });
-    await Promise.resolve();
-    expect(input.value).toBe("Keep this draft");
-    expect(ask.getAttribute("aria-checked")).toBe("true");
-
-    fireEvent.input(input, { target: { value: "" } });
-    expect(screen.getByRole("radio", { name: "Agent" }).getAttribute("aria-checked")).toBe("true");
+    expect(onSubmitIdea).toHaveBeenCalledOnce();
+    expect(onSubmitIdea.mock.calls[0]?.[0]).toMatchObject({ text: "Keep this draft", mode: "ask", attachments: [] });
   });
 
   it("keeps pointer focus and the input node while fading the empty hint", () => {
@@ -235,68 +228,51 @@ describe("HomeView draft materialization", () => {
     expect(document.querySelector(".home-view__idea-hint")).toBeNull();
   });
 
-  it.each([true, false])("clears only accepted Home drafts (accepted=%s)", async (accepted) => {
-    let settle!: (accepted: boolean) => void;
-    const result = new Promise<boolean>((resolve) => { settle = resolve; });
-    const onSubmitIdea = vi.fn(() => result);
+  it("hands the idea over in one update: Home is empty when the handler runs", () => {
+    let seen: { text: string; value: string } | undefined;
+    const onSubmitIdea = vi.fn((draft: Submitted) => {
+      seen = { text: draft.text, value: (screen.getByTestId("home-idea-input") as HTMLTextAreaElement).value };
+    });
     render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} onSubmitIdea={onSubmitIdea} />);
     const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
-    fireEvent.input(input, { target: { value: "An orchard notebook" } });
-    fireEvent.click(screen.getByTestId("home-idea-send"));
-    expect(input.value).toBe("An orchard notebook");
-    settle(accepted);
-    await vi.waitFor(() => expect(input.value).toBe(accepted ? "" : "An orchard notebook"));
+    fireEvent.input(input, { target: { value: "  Build a tic tac game with AI I can beat  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(seen?.text).toBe("Build a tic tac game with AI I can beat");
+    expect(input.value).toBe("");
+    expect(input.disabled).toBe(false);
   });
 
-  it("preserves a newer Home draft when an older submission settles", async () => {
-    let settle!: (accepted: boolean) => void;
-    const result = new Promise<boolean>((resolve) => { settle = resolve; });
-    render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} onSubmitIdea={() => result} />);
-    const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
-    fireEvent.input(input, { target: { value: "First idea" } });
-    fireEvent.click(screen.getByTestId("home-idea-send"));
-    fireEvent.input(input, { target: { value: "Next idea" } });
-    settle(true);
-    await result;
-    expect(input.value).toBe("Next idea");
-  });
-
-  it("keeps the submitted text and disables duplicate submission", () => {
-    const [submitting, setSubmitting] = createSignal(false);
-    const onSubmitIdea = vi.fn((draft: { text: string }) => {
-      expect(draft.text).toBe("Build a release dashboard");
-      setSubmitting(true);
-      return false;
-    });
-    render(() => (
-      <HomeView
-        summaries={[]}
-        section="recents"
-        registry={loaded(null)}
-        {...homeHandlers}
-        submitting={submitting()}
-        onSubmitIdea={onSubmitIdea}
-      />
-    ));
-
+  it("consumes one composition revision per deliberate submission", () => {
+    const onSubmitIdea = vi.fn((_draft: Submitted) => undefined);
+    render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} onSubmitIdea={onSubmitIdea} />);
     const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
     fireEvent.input(input, { target: { value: "Build a release dashboard" } });
     for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
       fireEvent.keyDown(input, { key: "Enter", ...composition });
-      expect(onSubmitIdea).not.toHaveBeenCalled();
-      expect(input.disabled).toBe(false);
     }
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    expect(onSubmitIdea).not.toHaveBeenCalled();
+
     fireEvent.keyDown(input, { key: "Enter" });
-
-    expect(onSubmitIdea).toHaveBeenCalledTimes(1);
-    expect(input.value).toBe("Build a release dashboard");
-    expect(input.disabled).toBe(true);
-    expect(
-      (screen.getByTestId("home-idea-send") as HTMLButtonElement).disabled,
-    ).toBe(true);
-
+    fireEvent.keyDown(input, { key: "Enter", repeat: true });
     fireEvent.click(screen.getByTestId("home-idea-send"));
     expect(onSubmitIdea).toHaveBeenCalledTimes(1);
+
+    // The same words typed again are a new, deliberate idea.
+    fireEvent.input(input, { target: { value: "Build a release dashboard" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSubmitIdea).toHaveBeenCalledTimes(2);
+    const [first, second] = onSubmitIdea.mock.calls.map(([draft]) => draft);
+    expect(first?.compositionId).not.toBe(second?.compositionId);
+  });
+
+  it("ignores empty input", () => {
+    const onSubmitIdea = vi.fn();
+    render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} onSubmitIdea={onSubmitIdea} />);
+    const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
+    fireEvent.input(input, { target: { value: "   " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSubmitIdea).not.toHaveBeenCalled();
   });
 });
 

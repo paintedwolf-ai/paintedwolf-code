@@ -3,6 +3,7 @@ import type { LycaonClient } from "./client.ts";
 import { lycaonJson } from "./http.ts";
 import { createSourceViewsClient } from "./source-views-client.ts";
 import { createHostClient } from "./http-capabilities/host.ts";
+import { createHomeStartsClient } from "./http-capabilities/home-starts.ts";
 import { createSessionsClient } from "./http-capabilities/sessions.ts";
 import { createWorkflowsClient } from "./http-capabilities/workflows.ts";
 import { createProjectsClient } from "./http-capabilities/projects.ts";
@@ -58,6 +59,7 @@ export function createLycaonClient(connection: BackendConnection): LycaonClient 
   return {
     ...createSourceViewsClient(j),
     ...createHostClient(j),
+    ...createHomeStartsClient(j),
     ...createSessionsClient(j, connection),
     ...createWorkflowsClient(j, connection),
     ...createProjectsClient(j),

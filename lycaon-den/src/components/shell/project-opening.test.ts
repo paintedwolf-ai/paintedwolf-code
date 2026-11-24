@@ -24,7 +24,7 @@ function setup(detectFolder: () => Promise<FolderDetect>, overrides: ClientStubs
     const client = stubClient({ detectFolder: vi.fn(detectFolder), createProject: vi.fn(async () => project), ...overrides });
     connection.getLycaonClient.mockReturnValue(client);
     const shell = createShellStore("connected");
-    const startSession = vi.fn(async () => true);
+    const startSession = vi.fn(async () => undefined);
     const reportError = vi.fn();
     const known = new Map<string, Project>([[project.id, project]]);
     const projects = {

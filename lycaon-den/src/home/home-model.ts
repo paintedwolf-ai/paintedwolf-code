@@ -70,15 +70,6 @@ export function projectsForSection(
   }
 }
 
-/** Holds the prior rows while an idea materializes so the new draft does not flash on Home before chat opens. */
-export function retainedHomeSummaries(
-  previous: ProjectSummary[] | undefined,
-  next: ProjectSummary[],
-  materializing: boolean,
-): ProjectSummary[] {
-  return materializing && previous ? previous : next;
-}
-
 export function draftCount(summaries: ProjectSummary[]): number {
   return summaries.reduce((n, s) => (s.isDraft ? n + 1 : n), 0);
 }

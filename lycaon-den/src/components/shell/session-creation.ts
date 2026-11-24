@@ -1,11 +1,5 @@
-import { beginSessionSnapshotRead } from "../../api/session-snapshot-refresh.ts";
 import { batch } from "solid-js";
-import type { SessionMode, WorkflowSummary } from "../../api/types.ts";
-import {
-  revokeComposerAttachment,
-  type ComposerPendingAttachment,
-} from "../../chat/composer/composer-attachments.ts";
-import { stageComposerMutation } from "../../chat/composer/composer-document-store.ts";
+import type { WorkflowSummary } from "../../api/types.ts";
 import { prepareProjectScope } from "../../chat/session/prepare-project.ts";
 import {
   bindCreatedSession,
@@ -13,21 +7,14 @@ import {
   enrichCreatedSession,
   recordCreatedSessionInRecents,
   refreshCreatedSessionBoard,
-  sendChatPrompt
 } from "../../chat/session/session-lifecycle.ts";
-import { isPendingSessionId, type SessionScope } from "../../chat/session/session-scope.ts";
+import type { SessionScope } from "../../chat/session/session-scope.ts";
 import {
   runCreateSession,
   shellSessionSwitchGeneration,
   type SessionSwitchDeps
 } from "../../chat/session/session-switch.ts";
-import { setDraftSessionMode } from "../../chat/session/session-mode-state.ts";
 import { requestArmWorkflow } from "../../chat/workflow/pending-arm.ts";
-import {
-  deliverStagedIdea,
-  stageHomeIdeaAttachments,
-  type HomeIdeaAttachment,
-} from "../../home/idea-attachments.ts";
 import { projectScope } from "../../notices/notice-scope.ts";
 import { sessionSummaryFromSession, type ProjectSessionsStore } from "../../store/project-sessions-store.ts";
 import {
@@ -96,23 +83,16 @@ export function createSessionCreation(options: {
   const startEmptySession = async (
     target: DraftTarget,
     opts?: {
-      prompt?: string;
-      mode?: SessionMode;
-      /** Home idea buffer; staged once the draft project exists. */
-      ideaAttachments?: readonly HomeIdeaAttachment[];
       armWorkflow?: WorkflowSummary;
       switchKind?: SwitchKind;
       stageSwitchDone?: boolean;
     },
   ) => {
-    const materializingHomeDraft =
-      target.kind === "new-project" && options.shell.state.materializingDraft;
     const creationGeneration = shellSessionSwitchGeneration.next();
     // Fence responses until the new project has a navigation target.
     let openingToken: number | null = null;
     const creationIsCurrent = () =>
       shellSessionSwitchGeneration.isLatest(creationGeneration) &&
-      (!materializingHomeDraft || options.shell.state.materializingDraft) &&
       (openingToken == null || options.shell.state.opening?.token === openingToken);
     // Capture switch kind before active project changes.
     const switchKind: SwitchKind =
@@ -127,8 +107,7 @@ export function createSessionCreation(options: {
           projectId: target.projectId,
           kind: switchKind,
         });
-      } else if (!materializingHomeDraft) {
-        // Home ideas retain Home while the project is created.
+      } else {
         openingToken = options.beginWorkspaceOpening(UNTITLED_PROJECT_NAME);
       }
     }
@@ -147,13 +126,6 @@ export function createSessionCreation(options: {
     }
     const activeClient = client;
     let projectId = target.kind === "new-session" ? target.projectId : "";
-    // Release staged attachments if another navigation supersedes creation.
-    let stagingAttachments: Promise<ComposerPendingAttachment[]> | null = null;
-    const discardStagedAttachments = () => {
-      void stagingAttachments?.then((staged) => {
-        for (const attachment of staged) revokeComposerAttachment(attachment);
-      });
-    };
     try {
       if (target.kind === "new-project") {
         const project = await activeClient.createProject({ roots: [], draft: true });
@@ -169,47 +141,21 @@ export function createSessionCreation(options: {
             });
           }
         });
-        if ((opts?.ideaAttachments?.length ?? 0) > 0) {
-          // Uploads need only the project, so they overlap session creation.
-          stagingAttachments = stageHomeIdeaAttachments(
-            activeClient,
-            projectId,
-            opts?.ideaAttachments ?? [],
-          );
-        }
       }
 
       if (!options.conversationInLayout()) options.showProjects();
-      let materializedScope: SessionScope | null = null;
       const baseDeps = options.sessionSwitchDeps();
-      const holdHome = materializingHomeDraft;
-      const created = await runCreateSession({
+      await runCreateSession({
         generation: shellSessionSwitchGeneration,
         projectId,
         deps: {
           ...baseDeps,
-          openSession: holdHome
-            ? (scope) => {
-              if (!isPendingSessionId(scope.sessionId)) {
-                materializedScope = scope;
-              }
-            }
-            : baseDeps.openSession,
-          completeChatSessionHydration: holdHome
-            ? () => {
-              baseDeps.completeChatSessionHydration();
-              if (!materializedScope) {
-                throw new Error("Created chat did not publish its scope.");
-              }
-              baseDeps.openSession(materializedScope);
-            }
-            : baseDeps.completeChatSessionHydration,
           prepareProject: (id) =>
             prepareProjectScope(options.appStore, options.projects, id),
         },
         hasClient: true,
         create: async ({ shouldApply }) => {
-          const session = await createSessionForProject(activeClient, projectId, opts?.mode);
+          const session = await createSessionForProject(activeClient, projectId);
           if (!shouldApply()) {
             return {
               projectId: session.project_id?.trim() || projectId,
@@ -223,17 +169,12 @@ export function createSessionCreation(options: {
             });
           }
           bindCreatedSession(options.appStore, session);
-          if (opts?.mode) setDraftSessionMode(options.appStore, session.id, opts.mode);
           // The sidebar shows the new chat with the workspace, not on the next list refresh.
           options.projectSessions?.insertRow(sessionSummaryFromSession(session));
-          const scope = {
+          return {
             projectId: session.project_id?.trim() || projectId,
             sessionId: session.id,
-            ...(opts?.prompt?.trim() || stagingAttachments
-              ? { initialPrompt: true as const }
-              : {}),
           };
-          return scope;
         },
         enrich: async (scope, { shouldApply }) => {
           await workspacePreparation(scope.projectId).run(
@@ -272,72 +213,7 @@ export function createSessionCreation(options: {
         },
         onOpened: (scope) => recordCreatedSessionInRecents(options.recents, scope),
       });
-      if (!created) {
-        discardStagedAttachments();
-        return;
-      }
-      const out = created.scope;
-      const text = opts?.prompt?.trim() ?? "";
-      const staged = stagingAttachments ? await stagingAttachments : [];
-      if (!text && staged.length === 0) return;
-      if (!created.shouldApply()) {
-        discardStagedAttachments();
-        return;
-      }
-      let promptClient = getLycaonClient();
-      if (!promptClient) {
-        try {
-          promptClient = await connectAppBackend(options.appStore, { reportFailure: true });
-        } catch {
-          discardStagedAttachments();
-          return;
-        }
-      }
-      if (!created.shouldApply()) {
-        discardStagedAttachments();
-        return;
-      }
-      const sendClient = promptClient;
-      const sendBackend = beginSessionSnapshotRead(options.appStore, out.sessionId);
-      sendBackend.finish();
-      const delivery = await deliverStagedIdea({
-        text,
-        staged,
-        send: async (promptText, parts, attachmentLabels) => {
-          await sendChatPrompt(
-            options.appStore,
-            options.recents,
-            async () => sendClient,
-            out.sessionId,
-            out.projectId,
-            projectDirForScope(options.projects, options.appStore, out),
-            options.projects.state.projects,
-            promptText,
-            parts.attachments,
-            parts.references,
-            undefined,
-            {
-              mode: opts?.mode,
-              attachmentLabels: attachmentLabels.length > 0 ? attachmentLabels : undefined,
-              shouldSend: (client) => created.shouldApply() && getLycaonClient() === client && sendBackend.isSameBackend(),
-            },
-          );
-        },
-        stageFallback: (chips, draftText) =>
-          stageComposerMutation(
-            { projectId: out.projectId, sessionId: out.sessionId },
-            chips,
-            draftText || undefined,
-          ),
-      });
-      if (delivery.mode === "failed") {
-        noticeReporterFor(projectScope(out.projectId)).reportError(
-          new Error(delivery.reason),
-        );
-      }
-      return delivery.mode !== "failed";
     } catch (err) {
-      discardStagedAttachments();
       if (!shellSessionSwitchGeneration.isLatest(creationGeneration)) return;
       options.appStore.actions.resetChatForSessionSwitch();
       options.shell.clearToHome();

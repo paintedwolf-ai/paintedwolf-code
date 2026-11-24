@@ -24,6 +24,7 @@
     "allow-read-app-state",
     "allow-patch-app-state",
     "allow-document-outbox",
+    "allow-home-outbox",
     "allow-app-exit",
     "allow-save-bytes",
     "allow-backup-transfer",

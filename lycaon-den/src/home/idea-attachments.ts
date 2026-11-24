@@ -1,31 +1,23 @@
-import type { SessionMode } from "../api/types.ts";
-/** Home buffers attachments until its draft project exists. */
-
+/** Home buffers attachments until they travel with a launch. */
+import type { LaunchChip, PathFingerprint } from "./launch/home-launch-model.ts";
+import { fingerprintPath, stageLaunchBytes } from "./launch/home-launches.ts";
 import { basenameOfPath } from "../api/project-path.ts";
-import type { LycaonClient } from "../api/client.ts";
 import {
   attachmentKindGlyph,
-  attachmentReceiptToPending,
-  attachmentRejectCode,
   byteAttachmentIntakeReject,
   referenceAttachmentIntakeReject,
-  fileToComposerAttachment,
   expectedPayloadKind,
   formatAttachmentBytes,
   isAllowedImageMime,
   mediaMimeFromPath,
   nativeProjectionMimeFromPath,
-  isSendablePendingAttachment,
   rejectMessageForCode,
-  revokeComposerAttachment,
   type ComposerPendingAttachment,
 } from "../chat/composer/composer-attachments.ts";
-import { promptPartsFromPendingAttachments, type PromptParts } from "../chat/composer/prompt-parts.ts";
 import {
   DROP_REJECT_MISSING,
   type DroppedItem,
 } from "../platform/files/file-drop.ts";
-import { importExternalAttachment } from "../platform/files/external-attachment-import.ts";
 import { importPathKind } from "../platform/files/read-path-bytes.ts";
 
 export type HomeIdeaAttachment =
@@ -45,15 +37,10 @@ export type HomeIdeaAttachment =
       absolutePath: string;
       /** Extension-guessed; the host decides the real kind at import. */
       expected: "image" | "video" | "document";
+      /** Recorded at intake so a changed file is noticed before it is sent. */
+      fingerprint?: PathFingerprint;
     }
   | { id: string; kind: "reject"; name: string; reason: string };
-
-/** What Home submits: the idea text plus its locally buffered attachments. */
-export type HomeIdeaDraft = {
-  text: string;
-  attachments: readonly HomeIdeaAttachment[];
-  mode: SessionMode;
-};
 
 export const HOME_IDEA_FOLDER_REJECT =
   "Drop a single file to attach it. To start from a folder, use Open a folder below.";
@@ -141,16 +128,21 @@ async function intakePath(
   const mime = mediaMimeFromPath(absolutePath);
   const refusal = nativeProjectionMimeFromPath(absolutePath) ? byteAttachmentIntakeReject(capsProjection(taken), undefined, mime) : referenceAttachmentIntakeReject(capsProjection(taken), mime);
   if (refusal) return reject(name, refusal);
+  const fingerprint = await fingerprintPath(absolutePath);
   return {
     id: crypto.randomUUID(),
     kind: "path",
     name,
     absolutePath,
     expected: expectedPayloadKind(mime),
+    ...(fingerprint ? { fingerprint } : {}),
   };
 }
 
-/** Refused drops remain visible as rejected attachment chips. */
+/**
+ * Refused drops remain visible as rejected attachment chips. Byte-backed
+ * chips begin copying into the outbox at intake.
+ */
 export async function intakeHomeIdeaDrop(
   items: readonly DroppedItem[],
   current: readonly HomeIdeaAttachment[],
@@ -164,7 +156,26 @@ export async function intakeHomeIdeaDrop(
         : await intakePath(item.absolutePath, taken),
     );
   }
+  for (const item of added) {
+    if (item.kind === "web-file") void stageLaunchBytes(item.id, item.file).catch(() => undefined);
+  }
   return added;
+}
+
+/** The chips a launch carries for this buffer. */
+export function launchChipsFromIdea(items: readonly HomeIdeaAttachment[]): LaunchChip[] {
+  return items.map((item): LaunchChip => {
+    if (item.kind === "web-file") {
+      return { kind: "bytes", itemId: item.id, name: item.name, mime: item.mime, byteLength: item.byteLength, snapshot: "pending" };
+    }
+    if (item.kind === "path") {
+      return {
+        kind: "path", itemId: item.id, name: item.name, absolutePath: item.absolutePath, expected: item.expected,
+        ...(item.fingerprint ? { fingerprint: item.fingerprint } : {}), snapshot: "ready",
+      };
+    }
+    return { kind: "reject", itemId: item.id, name: item.name, reason: item.reason };
+  });
 }
 
 export function revokeHomeIdeaAttachment(item: HomeIdeaAttachment): void {
@@ -177,13 +188,6 @@ export function revokeHomeIdeaAttachment(item: HomeIdeaAttachment): void {
   }
 }
 
-/** Rejected chips block idea submission. */
-export function homeIdeaRejectsPresent(
-  buffer: readonly HomeIdeaAttachment[],
-): boolean {
-  return buffer.some((item) => item.kind === "reject");
-}
-
 export function homeIdeaChipGlyph(item: HomeIdeaAttachment): string {
   if (item.kind === "reject") return attachmentKindGlyph("reject");
   return attachmentKindGlyph(item.kind === "web-file" ? expectedPayloadKind(item.mime) : item.expected);
@@ -193,88 +197,4 @@ export function homeIdeaChipDetail(item: HomeIdeaAttachment): string {
   if (item.kind === "reject") return item.reason;
   if (item.kind === "web-file") return formatAttachmentBytes(item.byteLength);
   return item.absolutePath;
-}
-
-/** Imports buffered attachments into the project, retaining failures as chips. */
-export async function stageHomeIdeaAttachments(
-  client: Pick<LycaonClient, "uploadAttachment">,
-  projectId: string,
-  items: readonly HomeIdeaAttachment[],
-): Promise<ComposerPendingAttachment[]> {
-  const staged: ComposerPendingAttachment[] = [];
-  for (const item of items) {
-    if (item.kind === "web-file") {
-      staged.push(await fileToComposerAttachment(item.file, projectId, client));
-      continue;
-    }
-    if (item.kind === "path") {
-      const reference: ComposerPendingAttachment = { id: item.id, kind: "external-file", projectId, path: item.absolutePath, name: item.name, mediaType: mediaMimeFromPath(item.absolutePath) };
-      if (!nativeProjectionMimeFromPath(item.absolutePath)) { staged.push(reference); continue; }
-      try {
-        const receipt = await importExternalAttachment(projectId, item.absolutePath);
-        reference.mediaType = receipt.mime;
-        const payload = attachmentReceiptToPending(receipt, { importedCopy: true });
-        staged.push(...(receipt.kind === "document" || receipt.kind === "video" ? [payload, reference] : [reference]));
-      } catch (error) {
-        staged.push({
-          id: crypto.randomUUID(),
-          kind: "reject",
-          name: item.name,
-          mime: "application/octet-stream",
-          byteLength: 0,
-          rejectCode: attachmentRejectCode(error),
-          rejectMessage: rejectMessageForCode(attachmentRejectCode(error)),
-        });
-      }
-      continue;
-    }
-    // Rejected chips retain their reason through staging.
-    staged.push({
-      id: item.id,
-      kind: "reject",
-      name: item.name,
-      mime: "application/octet-stream",
-      byteLength: 0,
-      rejectMessage: item.reason,
-    });
-  }
-  return staged;
-}
-
-export type IdeaDelivery =
-  | { mode: "sent" }
-  /** The payload landed in the new chat's composer instead of sending. */
-  | { mode: "staged" }
-  | { mode: "failed"; reason: string };
-
-/** Failed staging or sending retains the whole payload in the chat composer. */
-export async function deliverStagedIdea(opts: {
-  text: string;
-  staged: readonly ComposerPendingAttachment[];
-  send: (
-    text: string,
-    parts: PromptParts,
-    attachmentLabels: readonly string[],
-  ) => Promise<void>;
-  stageFallback: (
-    staged: ComposerPendingAttachment[],
-    draft: string,
-  ) => Promise<{ ok: true } | { ok: false; reason: string }>;
-}): Promise<IdeaDelivery> {
-  const staged = [...opts.staged];
-  if (staged.every(isSendablePendingAttachment)) {
-    try {
-      await opts.send(
-        opts.text,
-        promptPartsFromPendingAttachments(staged),
-        staged.map((attachment) => attachment.name),
-      );
-      for (const attachment of staged) revokeComposerAttachment(attachment);
-      return { mode: "sent" };
-    } catch {
-      // The chat composer holds the payload for a retry instead.
-    }
-  }
-  const parked = await opts.stageFallback(staged, opts.text);
-  return parked.ok ? { mode: "staged" } : { mode: "failed", reason: parked.reason };
 }

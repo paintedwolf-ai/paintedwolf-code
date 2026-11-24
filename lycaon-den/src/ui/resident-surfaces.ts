@@ -133,6 +133,14 @@ export function stageSurfaceKey(
   return `stage:${projectId ?? "app"}:${stage}`;
 }
 
+export function launchSurfaceKey(launchId: string): string {
+  return `launch:${launchId}`;
+}
+
+export function parseLaunchSurfaceKey(key: string): string | null {
+  return key.startsWith("launch:") && key.length > "launch:".length ? key.slice("launch:".length) : null;
+}
+
 export function chatsSurfaceKey(projectId: string): string {
   return `chats:${projectId}`;
 }

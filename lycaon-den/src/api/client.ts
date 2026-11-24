@@ -1,5 +1,6 @@
 // The authenticated host client composes its capability contracts.
 import type { HostClient } from "./http-capabilities/host.ts";
+import type { HomeStartsClient } from "./http-capabilities/home-starts.ts";
 import type { SessionsClient } from "./http-capabilities/sessions.ts";
 import type { WorkflowsClient } from "./http-capabilities/workflows.ts";
 import type { ProjectsClient } from "./http-capabilities/projects.ts";
@@ -18,6 +19,7 @@ import type { SourceViewsClient } from "./source-views-client.ts";
 
 export interface LycaonClient extends
   HostClient,
+  HomeStartsClient,
   SessionsClient,
   WorkflowsClient,
   ProjectsClient,

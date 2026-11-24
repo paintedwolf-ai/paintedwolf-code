@@ -2,7 +2,6 @@ import { type ShellScope, type ShellProps } from "./shell-scope.ts";
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { isPendingSessionId } from "../../chat/session/session-scope.ts";
 import { contributionFrameReady } from "../../contributions/contribution-store.ts";
-import { retainedHomeSummaries } from "../../home/home-model.ts";
 import { type ProjectSummary } from "../../project/project-summary.ts";
 import { isHomePresentation, deriveProjectPresentation, projectScopeSettled, retainMountedProjectPresentation, type ProjectPresentation } from "../../shell/project-presentation.ts";
 import { deriveStageScope, holdChatPresence, holdPresentedChat, stabilizeActiveChat, type ActiveChat, type ChatPresence } from "../../shell/stage-scope.ts";
@@ -10,6 +9,7 @@ import { workspacePreparation } from "../../shell/workspace-preparation.ts";
 import { recordWorkspaceOpen, traceWorkspaceOpening } from "../../shell/workspace-open-diagnostic.ts";
 import { isResolved } from "../../store/load-state.ts";
 import { useSurfaceReveal } from "../../ui/surface-reveal.ts";
+import { launchSurfaceKey } from "../../ui/resident-surfaces.ts";
 
 type WorkspacePresentationDependencies =
   Pick<ShellScope, "shell" | "appStore" | "projects" | "recents" | "projectSessions" | "stageScope" | "nav">;
@@ -127,10 +127,16 @@ export function createShellWorkspacePresentation({ shell, appStore, projects, re
   );
 
   const showHome = () =>
-    nav() === "projects" && isHomePresentation(projectPresentation());
+    nav() === "projects" && !shell.state.launch && isHomePresentation(projectPresentation());
+
+  const launchSurface = () => {
+    const launch = shell.state.launch;
+    return nav() === "projects" && launch ? launchSurfaceKey(launch.launchId) : null;
+  };
 
   return {
     showHome,
+    launchSurface,
     projectPresentation, identityReady, workspaceMounted, workspaceOpen, workspacePending,
     workspaceRevealed, workspaceVeilKey, workspaceVeilLabel, workspaceVeilNotice,
     sidebarChatsPublished, railStatusProject,
@@ -182,14 +188,7 @@ export function createWorkspaceIdentity(props: Pick<ShellProps, "shell" | "appSt
     holdChatPresence(prev, stageScope()),
   );
 
-  /** Home rows and counts hold still while a submitted idea becomes a project. */
-  const homeSummaries = createMemo<ProjectSummary[]>((previous) =>
-    retainedHomeSummaries(
-      previous,
-      props.projects.summaries(),
-      props.shell.state.materializingDraft,
-    ),
-  );
+  const homeSummaries = createMemo<ProjectSummary[]>(() => props.projects.summaries());
 
   return { activeProject, activeChat, stageScope, readyChat, presentedChat, chatPresence, homeSummaries };
 }
