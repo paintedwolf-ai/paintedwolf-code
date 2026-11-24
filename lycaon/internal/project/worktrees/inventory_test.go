@@ -64,7 +64,7 @@ func makeRegistrationRelative(t *testing.T, checkout string) {
 	dotGit := filepath.Join(checkout, ".git")
 	raw, err := os.ReadFile(dotGit)
 	testutil.FailErr(t, "read .git", err)
-	adminDir := filepath.Clean(string(raw[len("gitdir: "):len(raw)-1]))
+	adminDir := filepath.Clean(string(raw[len("gitdir: ") : len(raw)-1]))
 	relAdmin, err := filepath.Rel(checkout, adminDir)
 	testutil.FailErr(t, "rel admin", err)
 	relBack, err := filepath.Rel(adminDir, dotGit)
@@ -140,7 +140,7 @@ func TestInventoryAcrossMovesPathReuseBranchReuseAndRestart(t *testing.T) {
 		t.Fatalf("proven move changed checkout ID across restart: %s -> %s", spacedRow.ID, movedRow.ID)
 	}
 
-	// Record an editor draft on movedRow's branch, then remove moved and recreate at the original path AND on the same branch.
+	// Record a draft on movedRow's branch, then remove moved and recreate at the original path and branch.
 	rootID := seedDraftForCheckout(t, sqlDB, filepath.Join(primary, "packages", "a"), movedRow.ID, "app.go", "draft from first incarnation\n")
 
 	runGitCmd(t, primary, "worktree", "remove", moved)
