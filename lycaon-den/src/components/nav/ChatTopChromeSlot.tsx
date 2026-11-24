@@ -25,6 +25,7 @@ type ChatTopChromeSlotId =
   | "session"
   | "spend"
   | "notifications"
+  | "proposal"
   | "verify"
   | "protection"
   | "promote"

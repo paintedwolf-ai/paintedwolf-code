@@ -21,7 +21,7 @@ describe("stage registry", () => {
       artifacts: "Artifacts",
       blueprints: "Blueprints",
       extensions: "Extensions",
-      running: "Running",
+      running: "Activity",
     };
     for (const id of CONTEXT_NAV_CATALOG) {
       const def = STAGE_REGISTRY[id];

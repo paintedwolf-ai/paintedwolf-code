@@ -33,6 +33,7 @@ import {
   spendCeilingReachedNotice,
 } from "../SpendCeilingReachedNudge.tsx";
 import { VerifyTestNudge } from "../VerifyTestNudge.tsx";
+import { createWatchProposalSlot } from "../watches/WatchProposalStack.tsx";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
 import { WindowControls } from "./WindowControls.tsx";
 import { nativeWindowEdgeAttributes } from "./window-edges.ts";
@@ -158,6 +159,12 @@ export function ChatWorkspace(props: Props) {
       appStore: props.appStore,
       projectId: () => chat.projectId,
     });
+    const proposalSlot = createWatchProposalSlot({
+      sessionId: () => chat.sessionId,
+      projectId: () => chat.projectId,
+      client: connectedClient,
+      announceLive: () => !isAnySessionActivityLive(props.appStore),
+    });
     return (
       <ChatTopChromeStack
         session={{
@@ -216,6 +223,7 @@ export function ChatWorkspace(props: Props) {
           present: () => hasSharedNotices(noticeIndex()),
           children: notificationStack,
         }}
+        proposal={proposalSlot}
         verify={{
           present: () => verify.suggesting(),
           children: () => (

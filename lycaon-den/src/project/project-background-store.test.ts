@@ -16,7 +16,6 @@ import {
   resetProjectBackgroundForTests,
   resyncProjectBackground,
   retainProjectBackgroundProject,
-  runningBackgroundCountFor,
   stopProjectBackgroundCommand,
 } from "./project-background-store.ts";
 
@@ -70,7 +69,7 @@ describe("project-background-store", () => {
       processes: [makeProcess({ process_id: "bg_1", ports: [] })],
     });
 
-    expect(runningBackgroundCountFor("proj_1")).toBe(1);
+    expect(projectBackgroundFor("proj_1").runningCount).toBe(1);
     expect(projectBackgroundFor("proj_1").hydrated).toBe(true);
 
     // Stale event at or below floor is ignored.
@@ -88,7 +87,7 @@ describe("project-background-store", () => {
         termination_reason: "exited",
       }),
     });
-    expect(runningBackgroundCountFor("proj_1")).toBe(1);
+    expect(projectBackgroundFor("proj_1").runningCount).toBe(1);
 
     // Newer ports_changed event updates the row.
     applyProjectBackgroundEvent({
@@ -125,7 +124,7 @@ describe("project-background-store", () => {
         termination_reason: "stopped_by_agent",
       }),
     });
-    expect(runningBackgroundCountFor("proj_1")).toBe(0);
+    expect(projectBackgroundFor("proj_1").runningCount).toBe(0);
     expect(projectBackgroundFor("proj_1").recentlyEnded).toHaveLength(1);
     expect(
       projectBackgroundFor("proj_1").recentlyEnded[0]?.termination_reason,

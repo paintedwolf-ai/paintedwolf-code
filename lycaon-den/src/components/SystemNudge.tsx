@@ -19,8 +19,13 @@ export type SystemNudgeProps = {
   tertiaryAction?: SystemNudgeAction;
   /** Dedicated (×) dismiss control, required for all notification cards. */
   onDismiss: () => void;
+  /** Overrides the default "Dismiss" aria-label on the close control. */
+  dismissLabel?: string;
+  dismissDisabled?: boolean;
+  dismissTestId?: string;
   /** "status" for a card that reports what happened; default "note". */
   role?: "note" | "status";
+  ariaLive?: "polite" | "off";
   testId?: string;
   /** Overrides the default `system-nudge-title` test id on the title line. */
   titleTestId?: string;
@@ -32,6 +37,7 @@ export function SystemNudge(props: SystemNudgeProps): JSX.Element {
     <div
       class="system-nudge"
       role={props.role ?? "note"}
+      aria-live={props.ariaLive}
       data-testid={props.testId ?? "system-nudge"}
     >
       <div class="system-nudge__text">
@@ -83,8 +89,9 @@ export function SystemNudge(props: SystemNudgeProps): JSX.Element {
         <button
           type="button"
           class="system-nudge__close den-inset-icon-btn"
-          aria-label="Dismiss"
-          data-testid="system-nudge-dismiss"
+          aria-label={props.dismissLabel ?? "Dismiss"}
+          disabled={props.dismissDisabled}
+          data-testid={props.dismissTestId ?? "system-nudge-dismiss"}
           onClick={() => props.onDismiss()}
         >
           ×

@@ -1,21 +1,43 @@
-import { viewerCalendarTimeFormat } from "../../time/calendar-time.ts";
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { Show, createEffect, createMemo, createSignal } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
-import type { ProjectBackgroundProcess } from "../../api/types.ts";
-import { sessionTitle } from "../../chat/session/session-title.ts";
+import type { AgentWatch, ProjectBackgroundProcess } from "../../api/types.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
-import { formatBackgroundTerminationReason } from "../../project/background-termination-reason.ts";
+import {
+  activityFocusRequest,
+  clearActivityFocusRequest,
+} from "../../platform/navigation/open-running.ts";
 import {
   ensureProjectBackgroundHydrated,
   projectBackgroundFor,
   stopProjectBackgroundCommand,
 } from "../../project/project-background-store.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
-import { formatRelativeTime } from "../../time/time-copy.ts";
+import {
+  DEFAULT_DAILY_RUN_CAP,
+  DEFAULT_MIN_GAP_MINUTES,
+  DEFAULT_RUN_SPEND_LIMIT_NANO_USD,
+  formatActivitySpendHeader,
+  viewerTimeZone,
+} from "../../watches/watch-format.ts";
+import {
+  buildEditorSeedFromAgentWatch,
+  type StandingWatchEditorSeed,
+} from "../../watches/watch-schedule-preview.ts";
+import {
+  ensureProjectWatchesHydrated,
+  ensureSessionWatchesHydrated,
+  projectWatchesFor,
+  sessionWatchesFor,
+} from "../../watches/watches-store.ts";
 import { BrowseStagePanel } from "../browse/BrowseStagePanel.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
-import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import type { StageBack } from "../shell/StageBackChip.tsx";
+import { ActivityEndedSection } from "../watches/ActivityEndedSection.tsx";
+import { ActivityLiveSection } from "../watches/ActivityLiveSection.tsx";
+import {
+  StandingWatchesSection,
+  seedFromExistingStandingWatch,
+} from "../watches/StandingWatchesSection.tsx";
 
 type Props = {
   projectId: string;
@@ -25,20 +47,34 @@ type Props = {
   onOpenSession: (sessionId: string) => void;
 };
 
-function formatTimeLabel(iso: string): string {
-  const ms = Date.parse(iso);
-  return Number.isNaN(ms) ? "—" : formatRelativeTime(ms);
+function createBlankEditorSeed(): StandingWatchEditorSeed {
+  return {
+    mode: "create",
+    name: "",
+    prompt: "",
+    conditions: [{ kind: "timer", every_minutes: 60 }],
+    gate: null,
+    minGapMinutes: DEFAULT_MIN_GAP_MINUTES,
+    targetKind: "new_chat",
+    targetSessionId: "",
+    workflowId: "default",
+    modelId: "",
+    runSpendLimitNanoUsd: DEFAULT_RUN_SPEND_LIMIT_NANO_USD,
+    allowUnpriced: false,
+    dailyRunCap: DEFAULT_DAILY_RUN_CAP,
+    timeZone: viewerTimeZone(),
+    changedFields: new Set(),
+  };
 }
 
-function formatPortsLabel(ports: readonly string[]): string {
-  if (ports.length === 0) return "";
-  if (ports.length === 1) return `Port ${ports[0]}`;
-  return `Ports ${ports.join(", ")}`;
-}
-
-/** Project Context → Running — live background commands grouped by chat, plus recently ended commands. */
+/** Project Context → Activity — standing watches, live work, and recently ended items. */
 export function ProjectRunningView(props: Props) {
-  const [endedExpanded, setEndedExpanded] = createSignal(false);
+  const [selectedWatchId, setSelectedWatchId] = createSignal<string | null>(null);
+  const [editorSeed, setEditorSeed] =
+    createSignal<StandingWatchEditorSeed | null>(null);
+  const [highlightedSessionId, setHighlightedSessionId] = createSignal<
+    string | null
+  >(null);
 
   const resolveClient = (): LycaonClient | null =>
     props.client ?? getLycaonClient();
@@ -47,33 +83,102 @@ export function ProjectRunningView(props: Props) {
     const projectId = props.projectId;
     const client = resolveClient();
     ensureProjectBackgroundHydrated(client, projectId);
+    ensureProjectWatchesHydrated(client, projectId);
   });
 
-  const view = () => projectBackgroundFor(props.projectId);
+  const bgView = () => projectBackgroundFor(props.projectId);
+  const watchesView = () => projectWatchesFor(props.projectId);
+
+  // Consume in-app Activity navigation intents (Edit and keep, Review in Activity, notice links).
+  createEffect(() => {
+    const intent = activityFocusRequest();
+    if (!intent) return;
+    if (intent.projectId && intent.projectId !== props.projectId) return;
+
+    if (intent.createNew) {
+      setSelectedWatchId(null);
+      setEditorSeed(createBlankEditorSeed());
+      clearActivityFocusRequest(intent.serial);
+      return;
+    }
+    if (intent.watchId) {
+      const target = watchesView().standingById.get(intent.watchId);
+      setSelectedWatchId(intent.watchId);
+      if (target) setEditorSeed(seedFromExistingStandingWatch(target));
+      clearActivityFocusRequest(intent.serial);
+      return;
+    }
+    if (intent.sessionId) {
+      setHighlightedSessionId(intent.sessionId);
+      clearActivityFocusRequest(intent.serial);
+      return;
+    }
+    if (intent.prefillFromWatch) {
+      const { sessionId, handle } = intent.prefillFromWatch;
+      ensureSessionWatchesHydrated(resolveClient(), sessionId);
+      const found =
+        sessionWatchesFor(sessionId).byHandle.get(handle) ??
+        watchesView().liveAgentWatches.find(
+          (w) => w.session_id === sessionId && w.handle === handle,
+        );
+      if (!found) return;
+      const replaced = found.standing_draft?.replaces
+        ? watchesView().standingById.get(found.standing_draft.replaces)
+        : undefined;
+      if (found.standing_draft?.replaces && !replaced && !watchesView().hydrated) {
+        return;
+      }
+      const seed = buildEditorSeedFromAgentWatch(found, replaced, Date.now());
+      setSelectedWatchId(seed.watchId ?? null);
+      setEditorSeed(seed);
+      clearActivityFocusRequest(intent.serial);
+    }
+  });
+
   const isDisconnected = () =>
     props.appStore.state.sidecarStatus === "disconnected" ||
     props.appStore.state.sidecarStatus === "reconnecting";
+
+  const hasStandingSection = () =>
+    watchesView().standingWatches.length > 0 || editorSeed() != null;
+  const hasLiveSection = () =>
+    bgView().runningGroups.length > 0 ||
+    watchesView().liveAgentWatches.length > 0 ||
+    watchesView().activeRunBySession.size > 0 ||
+    watchesView().queuedRuns.length > 0;
+  const hasEndedSection = () =>
+    bgView().recentlyEnded.length > 0 ||
+    watchesView().recentlyEndedRuns.length > 0;
+
   const hasCachedRows = () =>
-    view().runningGroups.length > 0 || view().recentlyEnded.length > 0;
+    hasStandingSection() || hasLiveSection() || hasEndedSection();
+  const isHydrated = () => bgView().hydrated || watchesView().hydrated;
   const showUnhydratedPlaceholder = () =>
-    (isDisconnected() || !view().hydrated) && !hasCachedRows();
+    (isDisconnected() || !isHydrated()) && !hasCachedRows();
+  const stageError = () => bgView().error ?? watchesView().error;
 
-  const runningSessionIds = createMemo(() =>
-    view().runningGroups.map((g) => g.sessionId),
+  const spendLine = createMemo(() =>
+    formatActivitySpendHeader(
+      watchesView().standingWatches,
+      watchesView().hasUnpricedStandingWatch,
+    ),
   );
-  const groupForSession = (sessionId: string) =>
-    view().runningGroups.find((g) => g.sessionId === sessionId);
-  const endedProcessIds = createMemo(() =>
-    view().recentlyEnded.map((p) => p.process_id),
-  );
-  const endedProcessById = (processId: string) =>
-    view().recentlyEnded.find((p) => p.process_id === processId);
 
-  const isStopping = (processId: string) => view().stoppingIds.has(processId);
-  const stopError = (processId: string) =>
-    view().stopErrors.get(processId) ?? null;
+  const openCreateEditor = () => {
+    setSelectedWatchId(null);
+    setEditorSeed(createBlankEditorSeed());
+  };
 
-  const handleStop = (proc: ProjectBackgroundProcess) => {
+  const openPrefillFromWatch = (watch: AgentWatch) => {
+    const replaced = watch.standing_draft?.replaces
+      ? watchesView().standingById.get(watch.standing_draft.replaces)
+      : undefined;
+    const seed = buildEditorSeedFromAgentWatch(watch, replaced, Date.now());
+    setSelectedWatchId(seed.watchId ?? null);
+    setEditorSeed(seed);
+  };
+
+  const handleStopProcess = (proc: ProjectBackgroundProcess) => {
     const client = resolveClient();
     if (!client) return;
     void stopProjectBackgroundCommand(
@@ -83,17 +188,18 @@ export function ProjectRunningView(props: Props) {
     );
   };
 
+  const allEmpty = () =>
+    !hasStandingSection() && !hasLiveSection() && !hasEndedSection();
+
   return (
     <BrowseStagePanel
       appStore={props.appStore}
       back={props.back}
-      title="Running"
+      title="Activity"
       scrollHost="main"
       requireClient={false}
       testId="project-running-view"
-      error={
-        !showUnhydratedPlaceholder() ? (view().error ?? undefined) : undefined
-      }
+      error={!showUnhydratedPlaceholder() ? (stageError() ?? undefined) : undefined}
       errorTestId="project-running-error"
     >
       <div class="project-running-view flex flex-col gap-den-4 px-den-stage-x py-den-3">
@@ -106,7 +212,7 @@ export function ProjectRunningView(props: Props) {
             >
               {isDisconnected()
                 ? "Reconnecting to backend…"
-                : "Loading running commands…"}
+                : "Loading activity…"}
             </p>
           }
         >
@@ -119,250 +225,96 @@ export function ProjectRunningView(props: Props) {
             </p>
           </Show>
 
+          <Show when={!allEmpty()}>
+            <header
+              class="flex flex-wrap items-center justify-between gap-den-2"
+              data-testid="activity-header"
+            >
+              <div class="text-den-caption text-den-text-muted">
+                <Show when={spendLine()}>
+                  {(line) => (
+                    <span data-testid="activity-daily-spend-line">
+                      {line()}
+                    </span>
+                  )}
+                </Show>
+              </div>
+              <DenButton
+                variant="primary"
+                compact
+                disabled={isDisconnected()}
+                data-testid="activity-new-standing-watch"
+                onClick={openCreateEditor}
+              >
+                New standing watch
+              </DenButton>
+            </header>
+          </Show>
+
           <Show
-            when={runningSessionIds().length > 0}
+            when={!allEmpty()}
             fallback={
-              <Show when={view().hydrated && !isDisconnected() && !view().error}>
-                <p
-                  class="den-browse-stage__hint"
-                  data-testid="project-running-empty"
+              <Show when={isHydrated() && !isDisconnected() && !stageError()}>
+                <div
+                  class="flex flex-col items-start gap-den-2-5"
+                  data-testid="activity-empty-state"
                 >
-                  No background commands are running. Servers and watchers an
-                  agent starts appear here until they are stopped.
-                </p>
+                  <p
+                    class="den-browse-stage__hint"
+                    data-testid="project-running-empty"
+                  >
+                    Nothing running or watching
+                  </p>
+                  <DenButton
+                    variant="primary"
+                    compact
+                    data-testid="activity-empty-new-standing-watch"
+                    onClick={openCreateEditor}
+                  >
+                    New standing watch
+                  </DenButton>
+                </div>
               </Show>
             }
           >
-            <div
-              class="project-running-groups flex flex-col gap-den-4"
-              data-testid="project-running-groups"
-            >
-              <For each={runningSessionIds()}>
-                {(sessionId) => {
-                  const group = () => groupForSession(sessionId);
-                  const processIds = createMemo(
-                    () => group()?.processes.map((p) => p.process_id) ?? [],
-                  );
-                  const processById = (processId: string) =>
-                    group()?.processes.find((p) => p.process_id === processId);
+            <StandingWatchesSection
+              projectId={props.projectId}
+              standingWatches={watchesView().standingWatches}
+              selectedWatchId={selectedWatchId()}
+              editorSeed={editorSeed()}
+              client={resolveClient}
+              isDisconnected={isDisconnected()}
+              onSelectWatch={setSelectedWatchId}
+              onOpenEditorSeed={setEditorSeed}
+              onOpenSession={props.onOpenSession}
+            />
 
-                  return (
-                    <section
-                      class="project-running-group flex flex-col gap-den-2 rounded-den-md border border-den-line bg-den-bg-surface p-den-3"
-                      data-testid={`project-running-group-${sessionId}`}
-                      aria-label={sessionTitle(group()?.sessionTitle)}
-                    >
-                      <header class="project-running-group__header flex items-center justify-between gap-den-2">
-                        <div class="flex items-center gap-den-2">
-                          <h3
-                            class="text-den-body font-medium text-den-text-primary"
-                            data-testid={`project-running-group-title-${sessionId}`}
-                          >
-                            {sessionTitle(group()?.sessionTitle)}
-                          </h3>
-                          <Show when={group()?.sessionArchived}>
-                            <span
-                              class="rounded-den-sm border border-den-line px-den-1-5 py-den-0-5 text-den-caption text-den-text-muted"
-                              data-testid={`project-running-group-archived-${sessionId}`}
-                            >
-                              Archived
-                            </span>
-                          </Show>
-                        </div>
-                      </header>
+            <ActivityLiveSection
+              runningGroups={bgView().runningGroups}
+              liveAgentWatches={watchesView().liveAgentWatches}
+              activeRunBySession={watchesView().activeRunBySession}
+              standingById={watchesView().standingById}
+              queuedRuns={watchesView().queuedRuns}
+              highlightedSessionId={highlightedSessionId()}
+              isDisconnected={isDisconnected()}
+              isStopping={(id) => bgView().stoppingIds.has(id)}
+              stopError={(id) => bgView().stopErrors.get(id) ?? null}
+              client={resolveClient}
+              onStopProcess={handleStopProcess}
+              onOpenSession={props.onOpenSession}
+              onSelectStandingWatch={(watchId) => {
+                const sw = watchesView().standingById.get(watchId);
+                setSelectedWatchId(watchId);
+                if (sw) setEditorSeed(seedFromExistingStandingWatch(sw));
+              }}
+              onPrefillFromAgentWatch={openPrefillFromWatch}
+            />
 
-                      <ul class="project-running-group__list flex flex-col gap-den-2">
-                        <For each={processIds()}>
-                          {(processId) => {
-                            const proc = () => processById(processId);
-                            return (
-                              <ShowLatest when={proc()}>
-                                {(item) => (
-                                  <li
-                                    class="project-running-row flex flex-col gap-den-1-5 rounded-den-sm border border-den-line p-den-2-5"
-                                    data-testid={`project-running-row-${processId}`}
-                                  >
-                                    <div class="flex items-start justify-between gap-den-3">
-                                      <code
-                                        class="project-running-row__command font-mono text-den-body text-den-text-primary break-all"
-                                        data-testid={`project-running-command-${processId}`}
-                                      >
-                                        {item().command}
-                                      </code>
-                                      <div class="project-running-row__actions flex shrink-0 items-center gap-den-2">
-                                        <DenButton
-                                          variant="ghost"
-                                          compact
-                                          data-testid={`project-running-open-chat-${processId}`}
-                                          onClick={() =>
-                                            props.onOpenSession(
-                                              item().session_id,
-                                            )
-                                          }
-                                        >
-                                          Open chat
-                                        </DenButton>
-                                        <DenButton
-                                          variant="secondary"
-                                          compact
-                                          data-testid={`project-running-stop-${processId}`}
-                                          aria-label={`Stop ${item().command}`}
-                                          disabled={
-                                            isStopping(processId) ||
-                                            isDisconnected()
-                                          }
-                                          onClick={() => handleStop(item())}
-                                        >
-                                          {isStopping(processId)
-                                            ? "Stopping…"
-                                            : "Stop"}
-                                        </DenButton>
-                                      </div>
-                                    </div>
-
-                                    <div class="project-running-row__meta flex flex-wrap items-center gap-den-3 text-den-caption text-den-text-muted">
-                                      <Show when={item().ports.length > 0}>
-                                        <span
-                                          data-testid={`project-running-ports-${processId}`}
-                                        >
-                                          {formatPortsLabel(item().ports)}
-                                        </span>
-                                      </Show>
-                                      <Show when={item().working_dir}>
-                                        <span
-                                          class="font-mono"
-                                          data-testid={`project-running-workdir-${processId}`}
-                                        >
-                                          {item().working_dir}
-                                        </span>
-                                      </Show>
-                                      <span
-                                        data-testid={`project-running-started-${processId}`}
-                                        data-tip={viewerCalendarTimeFormat().fullDateTime(Date.parse(item().started_at))}
-                                      >
-                                        Started{" "}
-                                        {formatTimeLabel(item().started_at)}
-                                      </span>
-                                    </div>
-
-                                    <Show when={stopError(processId)}>
-                                      {(errText) => (
-                                        <p
-                                          role="alert"
-                                          class="text-den-caption text-den-err"
-                                          data-testid={`project-running-stop-error-${processId}`}
-                                        >
-                                          {errText()}
-                                        </p>
-                                      )}
-                                    </Show>
-                                  </li>
-                                )}
-                              </ShowLatest>
-                      );
-                          }}
-                        </For>
-                      </ul>
-                    </section>
-                  );
-                }}
-              </For>
-            </div>
-          </Show>
-
-          <Show when={endedProcessIds().length > 0}>
-            <section
-              class="project-running-ended flex flex-col gap-den-2 border-t border-den-line pt-den-3"
-              data-testid="project-running-ended-section"
-              aria-label="Recently ended"
-            >
-              <button
-                type="button"
-                class="project-running-ended__toggle flex items-center gap-den-2 text-left text-den-body font-medium text-den-text-muted"
-                aria-expanded={endedExpanded()}
-                data-testid="project-running-ended-toggle"
-                onClick={() => setEndedExpanded((prev) => !prev)}
-              >
-                <span>Recently ended ({endedProcessIds().length})</span>
-              </button>
-
-              <Show when={endedExpanded()}>
-                <ul
-                  class="project-running-ended__list flex flex-col gap-den-2"
-                  data-testid="project-running-ended-list"
-                >
-                  <For each={endedProcessIds()}>
-                    {(processId) => {
-                      const proc = () => endedProcessById(processId);
-                      return (
-                        <ShowLatest when={proc()}>
-                          {(item) => (
-                            <li
-                              class="project-running-ended__row flex flex-col gap-den-1 rounded-den-sm border border-den-line bg-den-bg-surface p-den-2-5"
-                              data-testid={`project-running-ended-row-${processId}`}
-                            >
-                              <div class="flex items-start justify-between gap-den-3">
-                                <code
-                                  class="font-mono text-den-body text-den-text-primary break-all"
-                                  data-testid={`project-running-ended-command-${processId}`}
-                                >
-                                  {item().command}
-                                </code>
-                                <DenButton
-                                  variant="ghost"
-                                  compact
-                                  data-testid={`project-running-ended-open-chat-${processId}`}
-                                  onClick={() =>
-                                    props.onOpenSession(item().session_id)
-                                  }
-                                >
-                                  Open chat
-                                </DenButton>
-                              </div>
-
-                              <div class="flex flex-wrap items-center gap-den-3 text-den-caption text-den-text-muted">
-                                <span
-                                  data-testid={`project-running-ended-reason-${processId}`}
-                                >
-                                  {formatBackgroundTerminationReason(
-                                    item().termination_reason,
-                                  )}
-                                </span>
-                                <span
-                                  data-testid={`project-running-ended-chat-${processId}`}
-                                >
-                                  {sessionTitle(item().session_title)}
-                                </span>
-                                <Show when={item().session_archived}>
-                                  <span
-                                    class="rounded-den-sm border border-den-line px-den-1-5 py-den-0-5 text-den-caption text-den-text-muted"
-                                    data-testid={`project-running-ended-archived-${processId}`}
-                                  >
-                                    Archived
-                                  </span>
-                                </Show>
-                                <Show when={item().working_dir}>
-                                  <span class="font-mono">
-                                    {item().working_dir}
-                                  </span>
-                                </Show>
-                                <Show when={item().ended_at}>
-                                  {(endedAt) => (
-                                    <span data-tip={viewerCalendarTimeFormat().fullDateTime(Date.parse(endedAt()))}>
-                                      Ended {formatTimeLabel(endedAt())}
-                                    </span>
-                                  )}
-                                </Show>
-                              </div>
-                            </li>
-                          )}
-                        </ShowLatest>
-                      );
-                    }}
-                  </For>
-                </ul>
-              </Show>
-            </section>
+            <ActivityEndedSection
+              endedProcesses={bgView().recentlyEnded}
+              endedRuns={watchesView().recentlyEndedRuns}
+              onOpenSession={props.onOpenSession}
+            />
           </Show>
         </Show>
       </div>

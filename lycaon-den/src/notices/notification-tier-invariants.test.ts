@@ -5,6 +5,7 @@ import { clientNoticeError } from "./client-notices.ts";
 import { CLIENT_NOTICES } from "./client-notices.generated.ts";
 import { resolveCriticalStop } from "./critical-stop-model.ts";
 import { BackendTransportError } from "../platform/connection/request-connectivity.ts";
+import { denSourceRoot, loadSourceCorpus } from "../test/source-corpus.ts";
 import { shouldReportToNoticeRail } from "./report-policy.ts";
 
 function report(
@@ -75,5 +76,40 @@ describe("notification tier partition", () => {
     expect(shouldReportToNoticeRail(clientNoticeError("fetch_failure"))).toBe(
       false,
     );
+  });
+
+  it("mounts watch proposal cards only in the chat top dock proposal slot and never as notices or transcript cards", () => {
+    const corpus = loadSourceCorpus(denSourceRoot, {
+      extensions: [".ts", ".tsx"],
+      excludeTests: true,
+    });
+    const proposalImporters = corpus.files
+      .filter(
+        (file) =>
+          file.rel !== "components/watches/WatchProposalStack.tsx" &&
+          file.text.includes("WatchProposalStack"),
+      )
+      .map((file) => file.rel);
+
+    expect(proposalImporters).toEqual(["components/shell/ChatWorkspace.tsx"]);
+
+    const proposalFile = corpus.files.find(
+      (file) => file.rel === "components/watches/WatchProposalStack.tsx",
+    )!;
+    expect(proposalFile.text).not.toContain("notice-store");
+    expect(proposalFile.text).not.toContain("NoticeStore");
+
+    const dockStack = corpus.files.find(
+      (file) => file.rel === "components/nav/ChatTopChromeStack.tsx",
+    )!;
+    const notificationsIdx = dockStack.text.indexOf('slot="notifications"');
+    const proposalIdx = dockStack.text.indexOf('slot="proposal"');
+    const verifyIdx = dockStack.text.indexOf('slot="verify"');
+    expect(notificationsIdx).toBeGreaterThan(-1);
+    expect(proposalIdx).toBeGreaterThan(notificationsIdx);
+    expect(verifyIdx).toBeGreaterThan(proposalIdx);
+
+    expect(CLIENT_NOTICES.standing_watch_paused.scope).toBe("project");
+    expect(CLIENT_NOTICES.standing_watch_disabled.scope).toBe("project");
   });
 });

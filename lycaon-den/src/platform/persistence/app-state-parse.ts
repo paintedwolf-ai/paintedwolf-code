@@ -477,6 +477,25 @@ function parseProjectIdList(value: unknown): string[] | undefined {
   return seen.size > 0 ? [...seen] : undefined;
 }
 
+function parseHiddenProposalOverflows(
+  value: unknown,
+): Record<string, string> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const next: Record<string, string> = {};
+  for (const [sessionId, handle] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    const sid = sessionId.trim();
+    const h = typeof handle === "string" ? handle.trim() : "";
+    if (sid && h && Object.keys(next).length < 128) {
+      next[sid] = h;
+    }
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
 function parseComposerDrafts(
   value: unknown,
 ): Record<string, string> | undefined {
@@ -625,6 +644,7 @@ function capState(state: DenAppStateV1): DenAppStateV1 {
     filesHotExit: state.filesHotExit,
     draftPromoteDismissed: state.draftPromoteDismissed,
     nofolderDismissed: state.nofolderDismissed,
+    hiddenProposalOverflows: state.hiddenProposalOverflows,
     editorViewState: state.editorViewState,
     closedBufferRing: state.closedBufferRing,
     filesTreeView: state.filesTreeView,
@@ -663,6 +683,9 @@ function parseCurrentAppState(doc: AppStateDoc): DenAppStateV1 {
   const filesHotExit = parseFilesHotExitState(doc.filesHotExit);
   const draftPromoteDismissed = parseProjectIdList(doc.draftPromoteDismissed);
   const nofolderDismissed = parseProjectIdList(doc.nofolderDismissed);
+  const hiddenProposalOverflows = parseHiddenProposalOverflows(
+    doc.hiddenProposalOverflows,
+  );
   const editorViewState = parseEditorViewStateStore(doc.editorViewState);
   const closedBufferRing = parseClosedBufferRing(doc.closedBufferRing);
   const filesTreeView = parseFilesTreeViewState(doc.filesTreeView);
@@ -708,6 +731,7 @@ function parseCurrentAppState(doc: AppStateDoc): DenAppStateV1 {
     ...(filesHotExit !== undefined ? { filesHotExit } : {}),
     ...(draftPromoteDismissed !== undefined ? { draftPromoteDismissed } : {}),
     ...(nofolderDismissed !== undefined ? { nofolderDismissed } : {}),
+    ...(hiddenProposalOverflows !== undefined ? { hiddenProposalOverflows } : {}),
     ...(editorViewState !== undefined ? { editorViewState } : {}),
     ...(closedBufferRing !== undefined ? { closedBufferRing } : {}),
     ...(filesTreeView !== undefined ? { filesTreeView } : {}),

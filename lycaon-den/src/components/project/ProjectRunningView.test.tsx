@@ -22,6 +22,10 @@ import {
 import { syncContextNavPrefsFromSnapshot } from "../../settings/editor/context-nav-prefs.ts";
 import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
 import { createAppStore } from "../../store/app-state.ts";
+import {
+  refreshProjectWatches,
+  retainProjectWatchesProject,
+} from "../../watches/watches-store.ts";
 import { ProjectContextZone } from "../nav/ProjectContextZone.tsx";
 import { ProjectRunningView } from "./ProjectRunningView.tsx";
 
@@ -46,6 +50,7 @@ function makeProcess(
 describe("ProjectRunningView", () => {
   beforeEach(() => {
     resetProjectBackgroundForTests();
+    retainProjectWatchesProject(null);
     resetOpenRunningForTests();
     resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1 });
     syncContextNavPrefsFromSnapshot();
@@ -86,8 +91,11 @@ describe("ProjectRunningView", () => {
     ));
 
     expect(screen.getByTestId("project-running-empty").textContent).toBe(
-      "No background commands are running. Servers and watchers an agent starts appear here until they are stopped.",
+      "Nothing running or watching",
     );
+    expect(
+      screen.getByTestId("activity-empty-new-standing-watch").textContent,
+    ).toBe("New standing watch");
   });
 
   it("groups running commands by chat, updates live on start/rename/archive, and opens the owning chat", () => {
@@ -189,6 +197,12 @@ describe("ProjectRunningView", () => {
 
     let resolveStop!: (res: BackgroundProcessStopResult) => void;
     const client = stubClient({
+      listProjectWatches: vi.fn(async () => ({
+        watches: [],
+        daily_spend_cap_nano_usd: 0,
+        has_unpriced_standing_watch: false,
+        enabled_standing_total: 0,
+      })),
       stopProjectBackgroundProcess: vi.fn(
         () =>
           new Promise<BackgroundProcessStopResult>((resolve) => {
@@ -287,6 +301,12 @@ describe("ProjectRunningView", () => {
         running: true,
       });
     const client = stubClient({
+      listProjectWatches: vi.fn(async () => ({
+        watches: [],
+        daily_spend_cap_nano_usd: 0,
+        has_unpriced_standing_watch: false,
+        enabled_standing_total: 0,
+      })),
       stopProjectBackgroundProcess: stopFn,
     });
 
@@ -335,66 +355,93 @@ describe("ProjectRunningView", () => {
     }
   });
 
-  it("updates the Running nav badge as commands start and end", () => {
+  it("shows no live command count badge on Activity and shows the attention dot only for paused, disabled, or waiting-for-owner standing watches", async () => {
+    const projectId = "00000000-0000-4000-8000-000000000091";
     render(() => (
       <ProjectContextZone
-        projectId="proj_1"
+        projectId={projectId}
         onOpenStage={() => undefined}
         isStageActive={(id) => id === "running"}
         isStageAvailable={() => true}
       />
     ));
 
-    expect(screen.getByTestId("project-running-entry")).toBeTruthy();
+    expect(screen.getByTestId("project-running-entry").textContent).toContain(
+      "Activity",
+    );
     expect(screen.queryByTestId("project-context-badge-running")).toBeNull();
+    expect(
+      screen.queryByTestId("project-context-attention-running"),
+    ).toBeNull();
 
-    applyProjectBackgroundSnapshot("proj_1", {
+    applyProjectBackgroundSnapshot(projectId, {
       revision: 1,
       processes: [
-        makeProcess({ process_id: "bg_1" }),
-        makeProcess({ process_id: "bg_2", command: "redis-server" }),
+        makeProcess({ process_id: "bg_1", project_id: projectId }),
+        makeProcess({ process_id: "bg_2", project_id: projectId, command: "redis-server" }),
       ],
     });
-
-    expect(
-      screen.getByTestId("project-context-badge-running").textContent,
-    ).toBe("2");
-
-    applyProjectBackgroundEvent({
-      project_id: "proj_1",
-      process_id: "bg_1",
-      session_id: "sess_1",
-      action: "ended",
-      revision: 2,
-      running: false,
-      termination_reason: "exited",
-      process: makeProcess({
-        process_id: "bg_1",
-        running: false,
-        termination_reason: "exited",
-      }),
-    });
-
-    expect(
-      screen.getByTestId("project-context-badge-running").textContent,
-    ).toBe("1");
-
-    applyProjectBackgroundEvent({
-      project_id: "proj_1",
-      process_id: "bg_2",
-      session_id: "sess_1",
-      action: "ended",
-      revision: 3,
-      running: false,
-      termination_reason: "exited",
-      process: makeProcess({
-        process_id: "bg_2",
-        running: false,
-        termination_reason: "exited",
-      }),
-    });
-
     expect(screen.queryByTestId("project-context-badge-running")).toBeNull();
+    expect(
+      screen.queryByTestId("project-context-attention-running"),
+    ).toBeNull();
+
+    await refreshProjectWatches(
+      stubClient({
+        listProjectWatches: vi.fn(async () => ({
+          daily_spend_cap_nano_usd: 0,
+          has_unpriced_standing_watch: false,
+          enabled_standing_total: 0,
+          watches: [
+            {
+              watch_id: "00000000-0000-4000-8000-000000000001",
+              owner_kind: "person" as const,
+              project_id: projectId,
+              revision: 2,
+              standing_watch: {
+                watch_id: "00000000-0000-4000-8000-000000000001",
+                project_id: projectId,
+                owner_person_id: "00000000-0000-4000-8000-000000000010",
+                name: "CI check",
+                prompt: "Verify main",
+                conditions: [{ kind: "timer" as const, every_minutes: 60 }],
+                condition_summary: "Every hour",
+                min_gap_minutes: 15,
+                target: { kind: "new_chat" as const },
+                workflow_id: "default",
+                model_id: "mock:fast",
+                run_spend_limit_nano_usd: 2_000_000_000,
+                allow_unpriced: false,
+                daily_run_cap: 8,
+                time_zone: "UTC",
+                state: "paused" as const,
+                state_reason: "consecutive_failures" as const,
+                revision: 2,
+                created_at: "2026-04-20T12:00:00Z",
+                updated_at: "2026-04-20T12:05:00Z",
+              },
+            },
+          ],
+        })),
+      }),
+      projectId,
+    );
+    expect(screen.getByTestId("project-context-attention-running")).toBeTruthy();
+
+    await refreshProjectWatches(
+      stubClient({
+        listProjectWatches: vi.fn(async () => ({
+          daily_spend_cap_nano_usd: 16_000_000_000,
+          has_unpriced_standing_watch: false,
+          enabled_standing_total: 1,
+          watches: [],
+        })),
+      }),
+      projectId,
+    );
+    expect(
+      screen.queryByTestId("project-context-attention-running"),
+    ).toBeNull();
   });
 
   it("routes openRunningStage requests to the registered sink", async () => {
