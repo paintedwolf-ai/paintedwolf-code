@@ -48,7 +48,7 @@ function summaryPending(view: BriefingView): boolean {
 function formatFailureSentence(reason: string): string {
   const trimmed = reason.trim();
   if (!trimmed) return "";
-  const capitalized = trimmed[0]!.toUpperCase() + trimmed.slice(1);
+  const capitalized = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
   return /[.!?]$/.test(capitalized) ? capitalized : `${capitalized}.`;
 }
 
