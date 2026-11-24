@@ -159,7 +159,8 @@ func (e *Executor) validateInvocation(
 			return reject
 		}
 	}
-	if reject := tools.ValidateCallArguments(qualifiedName, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName), *tc); reject != nil {
+	filter := platform.ToolFilter{ProfileID: profileID, ToolAccess: tc.Turn.ToolAccess}
+	if reject := tools.ValidateCallArguments(qualifiedName, args, e.Metadata.invocationArgsSchema(ctx, tc.Identity.SessionID, qualifiedName, filter), *tc); reject != nil {
 		return reject
 	}
 	if reject := toolcommand.ArgvShapeReject(qualifiedName, args); reject != nil {
@@ -277,7 +278,8 @@ func (e *Executor) ensureWorkerBranchIfNeeded(ctx context.Context, tool string, 
 // entry. The entry validates the whole program before any effect; each reached
 // child then passes the full per-operation boundary through InvokeNative.
 func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID string, args map[string]any, tc tools.ToolContext) (string, error) {
-	if reject := tools.ValidateCallArguments(tool, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, tool), tc); reject != nil {
+	filter := platform.ToolFilter{ProfileID: profileID, ToolAccess: tc.Turn.ToolAccess}
+	if reject := tools.ValidateCallArguments(tool, args, e.Metadata.invocationArgsSchema(ctx, tc.Identity.SessionID, tool, filter), tc); reject != nil {
 		ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
 		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 	}
