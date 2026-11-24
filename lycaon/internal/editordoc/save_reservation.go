@@ -67,7 +67,7 @@ func (c savePublisher) mutationResponse(ctx context.Context, current *Document, 
 		if err := s.replicaProjection(ctx, current, nil); err != nil {
 			return nil, err
 		}
-		return s.withParticipants(current), nil
+		return s.withParticipants(ctx, current), nil
 	}
 	return decodeMutationResponse(m)
 }

@@ -30,7 +30,6 @@ import {
   scheduleEditorDocumentDraft,
   flushEditorDocumentDraft,
   forgetEditorDocument,
-  preserveEditorDocumentDraft,
   retainEditorDocument,
   editorReplica,
 } from "./editor-document.ts";
@@ -248,54 +247,6 @@ type ClosingBuffer = {
 };
 
 const closingBuffers = new Map<string, Set<ClosingBuffer>>();
-
-/** A checkout switch preserves replicas, then reopens only the substituted roots. */
-export async function switchFilesRootBranches(projectId: string, branches: Record<string, string>, current: () => boolean): Promise<boolean> {
-  ensureProject(projectId);
-  const state = projectFilesState(projectId);
-  const changed = new Set(Object.keys(branches).filter((root) => state.rootBranches[root] !== undefined && state.rootBranches[root] !== branches[root]));
-  const affected = state.order.flatMap((key) => {
-    const buffer = state.byKey[key];
-    if (!buffer || buffer.jobId || !changed.has(buffer.rootId)) return [];
-    flushFilesDraftSyncFor(projectId, key);
-    return [{ ...unwrap(buffer) }];
-  });
-  if (!affected.length) {
-    if (!current()) return false;
-    setFilesStore(projectId, produce((next) => { next.rootBranches = branches; }));
-    return true;
-  }
-  for (const buffer of affected) {
-    if (buffer.dirty && !(await preserveEditorDocumentDraft(buffer))) {
-      throw new Error(`Couldn't preserve the unsaved edits in ${buffer.path}.`);
-    }
-  }
-  if (!current()) return false;
-  for (const buffer of affected) {
-    if (!(await evictEditorDocument(buffer.documentId))) return false;
-  }
-  if (!current()) return false;
-  batch(() => {
-    const order = [...state.order], aimed = state.pendingKey ?? state.activeKey, origin = state.aimOrigin;
-    const replacements = new Map<string, string>();
-    setFilesStore(projectId, produce((next) => {
-      next.rootBranches = branches;
-      for (const buffer of affected) detachBuffer(next, buffer.key);
-      next.aimOrigin = "presentation";
-    }));
-    for (const buffer of affected) {
-      const key = openFilesBuffer(projectId, { rootId: buffer.rootId, rootLabel: buffer.rootLabel, path: buffer.path,
-        intent: buffer.preview ? "transient" : "permanent", pinned: buffer.pinned, origin: "presentation" });
-      replacements.set(buffer.key, key);
-    }
-    setFilesStore(projectId, produce((next) => {
-      next.order = order.map((key) => replacements.get(key) ?? key).filter((key) => next.byKey[key]);
-      if (aimed) focusBuffer(next, replacements.get(aimed) ?? aimed, "presentation");
-      next.aimOrigin = origin;
-    }));
-  });
-  return true;
-}
 
 /** Resolves the tabs affected by a close action. */
 export function filesCloseTargetKeys(

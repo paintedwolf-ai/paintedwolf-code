@@ -143,7 +143,7 @@ func TestInspectListedCheckoutRetainsAdminIdentityWhenWorktreeMissing(t *testing
 	}
 }
 
-func TestProjectSubtreeAndMatchAdmittedSiblingRespectPartialRootsAndNestedRepos(t *testing.T) {
+func TestProjectSubtreeRespectsPartialRootsAndNestedRepos(t *testing.T) {
 	t.Parallel()
 	base := canonicalTempDir(t)
 	primary := filepath.Join(base, "primary")
@@ -157,27 +157,21 @@ func TestProjectSubtreeAndMatchAdmittedSiblingRespectPartialRootsAndNestedRepos(
 
 	// Attached partial root primary/packages/a maps only to sibling/packages/a.
 	attachedSub := filepath.Join(primary, "packages", "a")
-	proj, ok := gitrepo.MatchAdmittedSibling([]string{attachedSub}, sibling)
-	if !ok {
-		t.Fatal("expected sibling to project attached subdirectory")
-	}
 	wantSub := filepath.Join(sibling, "packages", "a")
-	if proj.ProjectedRoot != wantSub || proj.CatalogBase != wantSub || proj.CatalogRel != "" {
-		t.Fatalf("unexpected projection: %+v, want %q", proj, wantSub)
+	projectedSub, ok := gitrepo.ProjectSubtree(primary, sibling, attachedSub)
+	if !ok || projectedSub != wantSub {
+		t.Fatalf("unexpected projection: %q (%v), want %q", projectedSub, ok, wantSub)
 	}
 
-	// Nested unrelated repository inside sibling must not match parent checkout.
-	if bad, matched := gitrepo.MatchAdmittedSibling([]string{primary}, nested); matched {
-		t.Fatalf("nested unrelated repository matched parent sibling: %+v", bad)
-	}
+	// Nested unrelated repository inside sibling must not cross boundary.
 	if projected, ok := gitrepo.ProjectSubtree(primary, sibling, filepath.Join(primary, "packages", "nested-unrelated")); ok {
 		t.Fatalf("ProjectSubtree crossed nested repository boundary: %q", projected)
 	}
 
-	// Linked attached root can also match primary checkout as a sibling.
-	projPrimary, ok := gitrepo.MatchAdmittedSibling([]string{filepath.Join(sibling, "packages", "a")}, primary)
-	if !ok || projPrimary.Checkout.Kind != gitrepo.CheckoutPrimary || projPrimary.ProjectedRoot != attachedSub {
-		t.Fatalf("linked attached root did not project onto primary checkout: %+v, %v", projPrimary, ok)
+	// Linked checkout root also projects back onto primary checkout.
+	projectedPrimary, ok := gitrepo.ProjectSubtree(sibling, primary, wantSub)
+	if !ok || projectedPrimary != attachedSub {
+		t.Fatalf("linked root did not project onto primary checkout: %q (%v), want %q", projectedPrimary, ok, attachedSub)
 	}
 }
 

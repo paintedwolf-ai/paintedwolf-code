@@ -199,7 +199,7 @@ func (s *Service) CurrentSnapshot(ctx context.Context, projectID, documentID str
 	}
 	copy := *d
 	s.projectWorkspacePresentation(ctx, &copy)
-	return s.withParticipants(&copy), nil
+	return s.withParticipants(ctx, &copy), nil
 }
 
 // Open admits an editable document with optional client replica state;
@@ -296,5 +296,5 @@ func (l *LifecycleService) ObserveDisk(ctx context.Context, p *project.Project, 
 	}
 	d.WorkspaceID = p.WorkspaceID()
 	d.CheckoutUnavailable = false
-	return s.withParticipants(d), nil
+	return s.withParticipants(ctx, d), nil
 }

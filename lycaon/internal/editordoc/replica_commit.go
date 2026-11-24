@@ -159,7 +159,7 @@ func (c replicaCommitter) SubmitReplica(ctx context.Context, projectID, document
 		s.recoverHistoryCapacity(ctx, d.ID, err)
 		return nil, err
 	}
-	s.changed(ctx, s.withParticipants(d), true)
+	s.changed(ctx, s.withParticipants(ctx, d), true)
 	if err := s.replicaProjection(ctx, d, in.Vector); err != nil {
 		return nil, err
 	}
