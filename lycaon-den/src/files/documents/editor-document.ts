@@ -1,4 +1,6 @@
 import { isOutsideRoot } from "../source/outside-namespace.ts";
+import { activeProjectWorktreeIds, bufferCheckoutWorktreeId } from "../source/files-checkout-scope.ts";
+import { LycaonApiError } from "../../api/http.ts";
 import type { EditorEditingBlock } from "./editor-draft.ts";
 import { applyFilesBufferDocumentStatus, projectFilesState, registerFilesBufferReplicaReader, suspendFilesBufferContent, type FileBuffer, type LoadedDocumentText } from "./files-buffer-state.ts";
 import { batch } from "solid-js";
@@ -27,6 +29,8 @@ import { SourceWorkspaceMismatchError } from "../source/source-workspace-identit
 export type EditorDocumentState = {
   projectId: string;
   workspaceId: string;
+  branchId?: string;
+  checkoutUnavailable?: boolean;
   documentId: string;
   fileId: string;
   rootId: string;
@@ -118,7 +122,8 @@ export function configureEditorDocuments(projectId: string, client: () => Lycaon
 
 function fromWire(wire: EditorDocument, replica?: DocumentReplica): EditorDocumentState {
   return {
-    projectId: wire.project_id, workspaceId: wire.workspace_id, documentId: wire.id, fileId: wire.file_id,
+    projectId: wire.project_id, workspaceId: wire.workspace_id, branchId: wire.branch_id, checkoutUnavailable: wire.checkout_unavailable,
+    documentId: wire.id, fileId: wire.file_id,
     rootId: wire.root_id, path: wire.path, localGeneration: replica?.localGeneration ?? 0, dirty: replica?.dirty ?? wire.dirty,
     baseSha256: wire.base_sha256,
     encoding: wire.encoding, sizeBytes: wire.size_bytes, eol: replica?.format.eol ?? wire.eol, baseEol: wire.base_eol,
@@ -217,8 +222,9 @@ export async function resolveEditorDocument(projectId: string, buffer: EditorDra
     if (closing) await closing;
   }
   const connection = connectionFor(projectId);
-  const workspaceId = connection?.workspaceId?.() ?? "";
-  const key = [projectId, workspaceId, buffer.rootId, buffer.path, buffer.fileId, buffer.encoding].join("\0");
+  const activeWorkspaceId = connection?.workspaceId?.() ?? "";
+  const workspaceId = buffer.workspaceId || activeWorkspaceId;
+  const key = [projectId, workspaceId, buffer.branchId ?? "", buffer.rootId, buffer.path, buffer.fileId, buffer.encoding].join("\0");
   const suppliedId = suppliedDocuments.get(key);
   const existing = editorReplica(buffer.documentId) ?? (suppliedId ? replicas.get(suppliedId) : undefined);
   if (existing) {
@@ -233,7 +239,7 @@ export async function resolveEditorDocument(projectId: string, buffer: EditorDra
   const task = (async () => {
     const reservation = held ?? await documentResidency.acquire(documentResourceKey(projectId, buffer), documentOpeningReservation(), priority, current);
     if (!reservation) return null;
-    try { return await openReplica(projectId, buffer, connection, workspaceId, incarnation, reservation); }
+    try { return await openReplica(projectId, buffer, connection, activeWorkspaceId, incarnation, reservation); }
     finally { if (!held) reservation.release(); }
   })();
   opening.set(key, task);
@@ -246,12 +252,31 @@ async function openReplica(projectId: string, buffer: EditorDraft, connection: C
   const sessionId = connection?.sessionId();
   await prepareClientIdentity();
   const decodeAs = buffer.encoding === "utf-16le" || buffer.encoding === "utf-16be" ? buffer.encoding : undefined;
-  const document = buffer.documentId ? await client.createEditorDocumentSnapshot(projectId, buffer.documentId, { client_id: clientIdentity() }) : await client.openEditorDocument(projectId, {
-    path: buffer.path, root_id: buffer.rootId,
-    ...(buffer.fileId && isOutsideRoot(projectId, buffer.rootId) ? { file_id: buffer.fileId } : {}),
-    client_id: clientIdentity(), ...(decodeAs ? { decode_as: decodeAs } : {}),
-  }, sessionId);
-  if (workspaceId && document.workspace_id !== workspaceId) {
+  const worktreeId = bufferCheckoutWorktreeId(projectId, buffer, activeProjectWorktreeIds(projectId));
+  const openByAddress = () => {
+    const req = {
+      path: buffer.path, root_id: buffer.rootId,
+      ...(buffer.fileId && isOutsideRoot(projectId, buffer.rootId) ? { file_id: buffer.fileId } : {}),
+      client_id: clientIdentity(), ...(decodeAs ? { decode_as: decodeAs } : {}),
+    };
+    return worktreeId ? client.openEditorDocument(projectId, req, sessionId, worktreeId) : client.openEditorDocument(projectId, req, sessionId);
+  };
+  let document: EditorDocument;
+  if (buffer.documentId) {
+    try {
+      document = await client.createEditorDocumentSnapshot(projectId, buffer.documentId, { client_id: clientIdentity() });
+    } catch (error) {
+      if (error instanceof LycaonApiError && error.code === "editor_document_not_found") {
+        document = await openByAddress();
+      } else {
+        throw error;
+      }
+    }
+  } else {
+    document = await openByAddress();
+  }
+  const explicitCheckout = Boolean(buffer.workspaceId || buffer.worktreeId || buffer.branchId !== undefined || buffer.documentId);
+  if (!explicitCheckout && workspaceId && document.workspace_id !== workspaceId) {
     if (!document.workspace_id) throw new Error("The backend did not identify this file's workspace. Update and restart the backend, then retry editing.");
     throw new SourceWorkspaceMismatchError(workspaceId, document.workspace_id);
   }
@@ -300,21 +325,29 @@ async function adoptOpenedReplica(projectId: string, client: LycaonClient, opene
 export type RetainedOpening = { replica?: RetainedReplica; checkpoint?: ReplicaCheckpoint };
 
 /** What an open sends so the host projects only the state this window lacks. */
-export async function retainedOpening(projectId: string, buffer: { rootId: string; path: string; documentId?: string | null }, reservation?: DocumentReservation): Promise<RetainedOpening | undefined> {
+export async function retainedOpening(projectId: string, buffer: { rootId: string; path: string; documentId?: string | null; branchId?: string; workspaceId?: string }, reservation?: DocumentReservation): Promise<RetainedOpening | undefined> {
   const live = editorReplica(buffer.documentId ?? undefined);
   if (live) return { replica: live.retainedIdentity() };
   try {
     const outbox = documentOutbox();
-    const entry = buffer.documentId ? { documentId: buffer.documentId }
-      : (await outbox.list(projectId)).find((item) => item.rootId === buffer.rootId && item.path === buffer.path);
-    if (!entry) return undefined;
-    const records = await (reservation ? readReservedRecovery(outbox, entry.documentId, reservation) : outbox.read(entry.documentId));
-    const windowRecords = records.filter(record => record.clientId === clientIdentity());
-    const command = windowRecords.find(record => record.kind === "command" && record.historyBase);
-    const checkpoint = windowRecords.find((record): record is ReplicaCheckpoint => record.kind === "checkpoint")
-      ?? (command?.kind === "command" ? command.historyBase : undefined);
-    const replica = checkpoint && retainedCheckpointIdentity(checkpoint);
-    return checkpoint ? { replica, checkpoint } : undefined;
+    const candidates = buffer.documentId
+      ? [{ documentId: buffer.documentId }]
+      : (await outbox.list(projectId)).filter((item) => item.rootId === buffer.rootId && item.path === buffer.path);
+    for (const entry of candidates) {
+      const records = await (reservation ? readReservedRecovery(outbox, entry.documentId, reservation) : outbox.read(entry.documentId));
+      const windowRecords = records.filter(record => record.clientId === clientIdentity());
+      const command = windowRecords.find(record => record.kind === "command" && record.historyBase);
+      const checkpoint = windowRecords.find((record): record is ReplicaCheckpoint => record.kind === "checkpoint")
+        ?? (command?.kind === "command" ? command.historyBase : undefined);
+      if (!checkpoint) continue;
+      if (!buffer.documentId) {
+        if (buffer.branchId !== undefined && checkpoint.confirmed.branch_id !== undefined && checkpoint.confirmed.branch_id !== buffer.branchId) continue;
+        if (buffer.workspaceId && checkpoint.confirmed.workspace_id && checkpoint.confirmed.workspace_id !== buffer.workspaceId) continue;
+      }
+      const replica = retainedCheckpointIdentity(checkpoint);
+      return { replica, checkpoint };
+    }
+    return undefined;
   } catch (error) {
     if (reservation) throw error;
     return undefined;
@@ -324,7 +357,10 @@ export async function retainedOpening(projectId: string, buffer: { rootId: strin
 /** Completes the opening frame from retained state before its first paint. */
 export function presentOpenedDocument(document: EditorDocument | undefined, retained?: RetainedOpening): { confirmed?: Y.Doc; loaded: LoadedDocumentText } | undefined {
   if (!document) return undefined;
-  const loaded = (text: string): LoadedDocumentText => ({ text, eol: document.eol, mixed: document.mixed_eol, dirty: document.dirty, absent: document.absent });
+  const loaded = (text: string): LoadedDocumentText => ({
+    text, eol: document.eol, mixed: document.mixed_eol, dirty: document.dirty, absent: document.absent,
+    checkoutUnavailable: document.checkout_unavailable, branchId: document.branch_id, workspaceId: document.workspace_id,
+  });
   const live = editorReplica(document.id);
   if (live) return { loaded: loaded(live.text.toString()) };
   const { confirmed, text } = decodeDocumentState(document, retained?.checkpoint);
@@ -333,7 +369,7 @@ export function presentOpenedDocument(document: EditorDocument | undefined, reta
 
 /** Adopts the source response and reuses its decoded state from the first paint. */
 export function receiveOpenedEditorDocument(projectId: string, client: LycaonClient, document: EditorDocument, confirmed?: Y.Doc, reservation?: DocumentReservation, offline = false): Promise<EditorDocumentState | null> {
-  const key = [projectId, document.workspace_id, document.root_id, document.path, document.file_id, document.encoding].join("\0");
+  const key = [projectId, document.workspace_id, document.branch_id ?? "", document.root_id, document.path, document.file_id, document.encoding].join("\0");
   suppliedDocuments.set(key, document.id);
   const existing = opening.get(key);
   if (existing) { confirmed?.destroy(); return existing; }
@@ -350,9 +386,13 @@ export function receiveOpenedEditorDocument(projectId: string, client: LycaonCli
 
 export async function releaseUnclaimedEditorDocument(projectId: string, document: EditorDocument): Promise<void> {
   const wanted = (connections.get(projectId) ?? []).some(connection =>
-    connection.workspaceId?.() === document.workspace_id && connection.drafts.all().some(buffer =>
-      !buffer.jobId && !buffer.deleted && buffer.rootId === document.root_id && buffer.path === document.path &&
-      (!buffer.fileId || buffer.fileId === document.file_id)));
+    connection.drafts.all().some(buffer => {
+      if (buffer.jobId || buffer.deleted) return false;
+      if (buffer.documentId === document.id) return true;
+      const bufWorkspace = buffer.workspaceId || connection.workspaceId?.();
+      return bufWorkspace === document.workspace_id && buffer.rootId === document.root_id && buffer.path === document.path &&
+        (!buffer.fileId || buffer.fileId === document.file_id);
+    }));
   if (wanted) return;
   for (const [key, id] of suppliedDocuments) if (id === document.id) suppliedDocuments.delete(key);
   if (replicas.has(document.id)) await evictEditorDocument(document.id);

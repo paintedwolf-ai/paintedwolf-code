@@ -13,13 +13,13 @@ import { createResidentActivity } from "../../ui/resident-activity.ts";
 import { restoreFilesHotExitForProject } from "../documents/files-hot-exit.ts";
 import {
   WORKSPACE_IDENTITY_RECONCILE_LIMIT,
-  WORKSPACE_SYNC_RETRYING,
   workspaceFaultMessage,
   workspaceLookupRetryable,
   workspaceRetryMessage,
 } from "./files-workspace-fault.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
-import { dropFilesBuffersForRoot, switchFilesRootBranches } from "../documents/project-files-buffer-lifecycle.ts";
+import { dropFilesBuffersForRoot } from "../documents/project-files-buffer-lifecycle.ts";
+import { adoptFilesWorkspaceRoots } from "./files-checkout-scope.ts";
 import { type FileBuffer } from "../documents/files-buffer-state.ts";
 import { connectSourceTreeWorkspace, prepareSourceTreeWorkspace, type SourceTreeConnection } from "../tree/source-tree-store.ts";
 import { sourceWatchNotice } from "./source-watch-notice.ts";
@@ -35,6 +35,7 @@ type FilesWorkspacePresentation = {
   roots: ProjectRoot[];
   /** The chat every read of this workspace carries; absent when the project's checkout answers. */
   address: string | undefined;
+  worktreeIds?: readonly string[];
 };
 
 /** True when the displayed snapshot is this answer, so resolving it again publishes nothing. */
@@ -44,6 +45,7 @@ function samePresentation(shown: FilesWorkspacePresentation | undefined, next: F
     shown.scopeKey === next.scopeKey &&
     shown.workspaceId === next.workspaceId &&
     shown.address === next.address &&
+    (shown.worktreeIds?.join(",") ?? "") === (next.worktreeIds?.join(",") ?? "") &&
     JSON.stringify(shown.roots) === JSON.stringify(next.roots);
 }
 
@@ -53,11 +55,13 @@ export function createFilesWorkspace(options: {
   client: () => LycaonClient | null;
   /** The chat whose workspace to resolve; it is never part of the scope key. */
   chatSessionId: () => string | undefined;
+  worktreeIds?: () => readonly string[];
   reachable: () => boolean;
   restoreHotExit: () => boolean;
 }) {
   const client = options.client;
   const chatSessionId = options.chatSessionId;
+  const worktrees = () => { const ids = options.worktreeIds?.(); return ids && ids.length > 0 ? ids : undefined; };
   let previousRootIds: Set<string> | undefined;
   createEffect(() => {
     const current = new Set(options.roots().map((root) => root.id));
@@ -83,6 +87,10 @@ export function createFilesWorkspace(options: {
     // Before the first answer, the selected chat addresses it.
     return shown ? shown.address : chatSessionId();
   });
+  const filesWorktreeIds = createMemo(() => {
+    const shown = displayedWorkspace();
+    return shown ? shown.worktreeIds : worktrees();
+  });
   const filesRoots = () =>
     displayedWorkspace()?.roots ?? (chatSessionId() ? [] : options.roots());
   const [workspaceError, setWorkspaceError] = createSignal<string | null>(null);
@@ -101,8 +109,9 @@ export function createFilesWorkspace(options: {
     const c = client();
     if (!c || !options.reachable()) return;
     const sessionId = untrack(chatSessionId);
+    const wt = untrack(worktrees);
     const request = workspaceRequest;
-    const workspace = await c.getSourceWorkspace(options.projectId, sessionId);
+    const workspace = wt ? await c.getSourceWorkspace(options.projectId, sessionId, wt) : await c.getSourceWorkspace(options.projectId, sessionId);
     if (request !== workspaceRequest || c !== client() || sessionId !== untrack(chatSessionId)) return;
     recordWatchCoverage(workspace.roots);
   };
@@ -143,6 +152,7 @@ export function createFilesWorkspace(options: {
       const c = client();
       const reachable = options.reachable();
       const sessionId = chatSessionId();
+      const wt = worktrees();
       const scopeKey = JSON.stringify([options.projectId, sourceRootsIdentity()]);
       workspaceRefreshRevision();
       const request = ++workspaceRequest;
@@ -183,8 +193,7 @@ export function createFilesWorkspace(options: {
       });
       const resolveWorkspace = (attempt: number) => {
         if (disposed || request !== workspaceRequest) return;
-        void c
-          .getSourceWorkspace(options.projectId, sessionId)
+        void (wt ? c.getSourceWorkspace(options.projectId, sessionId, wt) : c.getSourceWorkspace(options.projectId, sessionId))
           .then(async (workspace: SourceWorkspace) => {
             if (disposed || request !== workspaceRequest) return;
             const workspaceId = workspace.workspace_id.trim();
@@ -207,27 +216,17 @@ export function createFilesWorkspace(options: {
               workspaceId,
               rootIds: resolvedRoots.map((root) => root.id),
               browse: (rootId, dir) =>
-                c.browseProjectSource(
-                  options.projectId,
-                  { rootId, dir },
-                  address,
-                ),
+                wt ? c.browseProjectSource(options.projectId, { rootId, dir }, address, wt) : c.browseProjectSource(options.projectId, { rootId, dir }, address),
             });
             if (disposed || request !== workspaceRequest) return;
-            if (!(await switchFilesRootBranches(options.projectId,
-              Object.fromEntries(workspace.roots.map((root) => [root.id, root.branch_id ?? ""])),
-              () => !disposed && request === workspaceRequest))) {
-              if (disposed || request !== workspaceRequest) return;
-              setWorkspaceError(WORKSPACE_SYNC_RETRYING);
-              retryTimer = setTimeout(() => resolveWorkspace(attempt + 1), 1000);
-              return;
-            }
+            adoptFilesWorkspaceRoots(options.projectId, workspace);
             const answer: FilesWorkspacePresentation = {
               client: c,
               scopeKey,
               workspaceId,
               roots: resolvedRoots,
               address,
+              worktreeIds: wt,
             };
             const published = samePresentation(untrack(displayedWorkspace), answer)
               ? candidate.retain()
@@ -279,11 +278,12 @@ export function createFilesWorkspace(options: {
     const c = displayedClient();
     const workspaceId = filesWorkspaceId();
     const address = filesSourceAddress();
+    const wt = filesWorktreeIds();
     if (!c || !workspaceId) return;
     const connection = connectSourceTreeWorkspace({
       projectId: options.projectId,
       workspaceId,
-      browse: (rootId, dir) => c.browseProjectSource(options.projectId, { rootId, dir }, address),
+      browse: (rootId, dir) => wt ? c.browseProjectSource(options.projectId, { rootId, dir }, address, wt) : c.browseProjectSource(options.projectId, { rootId, dir }, address),
     });
     // Read the same projection as the tree without adding watched directories.
     setListingConnection(connection);
@@ -313,7 +313,7 @@ export function createFilesWorkspace(options: {
   const confirmDirectoryChange = (change: SourceChange) => listingConnection()?.confirm(change);
 
   return {
-    directoryEntries, confirmDirectoryChange, observeDirectory, filesWorkspaceId, filesSourceAddress, filesRoots, workspaceError, workspaceFault, workspaceSettled,
+    directoryEntries, confirmDirectoryChange, observeDirectory, filesWorkspaceId, filesSourceAddress, filesWorktreeIds, filesRoots, workspaceError, workspaceFault, workspaceSettled,
     treeSettled, setTreeSettled, refreshProjectWorkspace, refreshWatchCoverage, observationNoticeFor
   };
 }

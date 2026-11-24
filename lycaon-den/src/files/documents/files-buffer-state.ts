@@ -40,6 +40,16 @@ export type FileBuffer = {
   key: FileBufferKey;
   rootId: string;
   rootLabel: string;
+  /** Physical workspace identity that resolved this buffer's checkout. */
+  workspaceId?: string;
+  /** Durable branch identity ("" for trunk/project folder, "worktree:<id>" for linked checkouts). */
+  branchId?: string;
+  /** Explicit checkout UUID addressing this buffer. */
+  worktreeId?: string;
+  /** Human-readable checkout label when disambiguating tabs. */
+  checkoutLabel?: string;
+  /** Live backing checkout was removed or replaced on disk; retained draft stays copyable/exportable. */
+  checkoutUnavailable?: boolean;
   /** Host file identity, when available. */
   fileId: string | null;
   /** Root-relative slash path; non-file tabs have no source address. */
@@ -205,7 +215,19 @@ export function applyFilesBufferDocumentStatus(projectId: string, document: impo
       buffer.documentRevision = document.revision;
       buffer.diverged = document.diverged;
       buffer.absent = document.absent;
-      buffer.sourcePresent = !document.absent;
+      if ("branch_id" in document && typeof document.branch_id === "string") {
+        buffer.branchId = document.branch_id;
+        if (document.branch_id.startsWith("worktree:")) {
+          buffer.worktreeId = document.branch_id.slice("worktree:".length) || buffer.worktreeId;
+        }
+      }
+      if ("workspace_id" in document && typeof document.workspace_id === "string" && document.workspace_id) {
+        buffer.workspaceId = document.workspace_id;
+      }
+      if ("checkout_unavailable" in document) {
+        buffer.checkoutUnavailable = Boolean(document.checkout_unavailable);
+      }
+      buffer.sourcePresent = !document.absent && !buffer.checkoutUnavailable;
       buffer.heldAgentVersionId = document.held_agent_version_id ?? null;
       if (synchronized) buffer.editorSynchronization = "accepted";
       buffer.dirty = document.dirty || buffer.editorSynchronization !== "accepted";
@@ -224,7 +246,7 @@ export function applyFilesBufferDocumentStatus(projectId: string, document: impo
 export function nextBufferPayloadGeneration(): number { return ++payloadGeneration; }
 
 /** Text an open response carried inside its editor document, with the host's line-ending facts. */
-export type LoadedDocumentText = { text: string; eol: EolKind; mixed: boolean; dirty: boolean; absent?: boolean };
+export type LoadedDocumentText = { text: string; eol: EolKind; mixed: boolean; dirty: boolean; absent?: boolean; checkoutUnavailable?: boolean; branchId?: string; workspaceId?: string };
 
 type ReplicaSnapshot = { currentText: string; baseText: string; dirty: boolean };
 let replicaReader: ((documentId: string | null | undefined) => ReplicaSnapshot | undefined) | undefined;
@@ -248,12 +270,15 @@ export function filesBufferBase(buffer: Pick<FileBuffer, "content" | "documentId
 }
 
 export function bufferKeyAtAddress(
-  state: ProjectFilesState, rootId: string, path: string, jobId?: string,
+  state: ProjectFilesState, rootId: string, path: string, jobId?: string, branchId?: string,
 ): FileBufferKey | null {
   const wantedJob = jobId?.trim() ?? "";
+  const wantedBranch = wantedJob ? undefined : (branchId ?? state.rootBranches[rootId]);
   const matches = (candidate: FileBufferKey) => {
     const buffer = state.byKey[candidate];
-    return buffer != null && buffer.rootId === rootId && buffer.path === path && (buffer.jobId ?? "") === wantedJob;
+    if (!buffer || buffer.rootId !== rootId || buffer.path !== path || (buffer.jobId ?? "") !== wantedJob) return false;
+    if (wantedBranch !== undefined && buffer.branchId !== undefined && buffer.branchId !== wantedBranch) return false;
+    return true;
   };
   // Pending navigation takes precedence over the displayed buffer.
   const aimed = state.pendingKey ?? state.activeKey;
@@ -266,9 +291,20 @@ export function bufferKeyAtAddress(
 }
 
 export function filesBufferKeyAtAddress(
-  projectId: string, rootId: string, path: string, jobId?: string,
+  projectId: string, rootId: string, path: string, jobId?: string, branchId?: string,
 ): FileBufferKey | null {
-  return bufferKeyAtAddress(projectFilesState(projectId), rootId, path, jobId);
+  return bufferKeyAtAddress(projectFilesState(projectId), rootId, path, jobId, branchId);
+}
+
+export function markFilesBufferCheckoutUnavailable(
+  projectId: string, key: FileBufferKey, unavailable = true,
+): void {
+  setFilesStore(projectId, produce((state) => {
+    const buffer = state.byKey[key];
+    if (!buffer) return;
+    buffer.checkoutUnavailable = unavailable;
+    if (unavailable) buffer.sourcePresent = false;
+  }));
 }
 
 /** Aim the editor at `key`, presenting it once it has content. */

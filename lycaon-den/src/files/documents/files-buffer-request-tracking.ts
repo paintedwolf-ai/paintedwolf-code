@@ -79,13 +79,14 @@ export class FilesBufferLatestRequests {
 
 export function bufferRequestIdentity(
   projectId: string,
-  buffer: Pick<FileBuffer, "rootId" | "path" | "jobId">,
+  buffer: Pick<FileBuffer, "rootId" | "path" | "jobId"> & Partial<Pick<FileBuffer, "branchId" | "documentId">>,
 ): string {
   return [
     projectId,
     buffer.rootId,
     buffer.path,
     buffer.jobId ?? "",
+    buffer.branchId ?? (buffer.documentId ? `doc:${buffer.documentId}` : ""),
   ].join("\u0000");
 }
 

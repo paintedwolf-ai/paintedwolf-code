@@ -53,6 +53,11 @@ import {
 } from "./files-buffer-state.ts";
 import { discardFilesBufferDraft } from "./project-files-buffer-io.ts";
 import { documentResidency, documentResourceKey } from "./document-residency.ts";
+import {
+  resetWorkspaceRootCheckoutsForTests,
+  workspaceRootCheckout,
+  worktreeIdFromBranchId,
+} from "../source/files-checkout-scope.ts";
 
 /** A replaced preview keeps its document until nothing presents it and no tab has reopened it. */
 function releaseReplacedDocument(projectId: string, documentId: string | null | undefined): void {
@@ -103,20 +108,34 @@ export function openFilesBuffer(
     name?: string;
     /** Who is aiming; a reader unless the open follows a presentation. */
     origin?: AimOrigin;
+    branchId?: string;
+    worktreeId?: string;
+    workspaceId?: string;
+    checkoutLabel?: string;
   },
 ): FileBufferKey {
   const jobId = args.jobId?.trim() || undefined;
   const origin = args.origin ?? "reader";
+  ensureProject(projectId);
+  const currentState = projectFilesState(projectId);
+  const composed = isComposedBufferKind(args.kind ?? "text");
+  const rootMeta = !jobId && !composed ? workspaceRootCheckout(projectId, args.rootId) : undefined;
+  const resolvedBranchId = !jobId && !composed
+    ? args.branchId ?? (args.worktreeId ? `worktree:${args.worktreeId.trim()}` : args.documentId ? undefined : currentState.rootBranches[args.rootId])
+    : undefined;
+  const resolvedWorktreeId = !jobId && !composed
+    ? args.worktreeId?.trim() || worktreeIdFromBranchId(resolvedBranchId) || (resolvedBranchId !== undefined && resolvedBranchId === rootMeta?.branchId ? rootMeta?.worktreeId : undefined)
+    : undefined;
+  const keyBranchTag = resolvedBranchId ?? (args.documentId ? `doc:${args.documentId.trim()}` : undefined);
   let key = args.kind === "chat" && args.chatContent ? chatContentDocumentKey(args.chatContent)
     : args.kind === "trust" ? `trust:${projectId}`
     : args.kind === "briefing" && args.briefingRecordId ? `briefing:${args.briefingRecordId}`
     : args.kind === "walk" && args.walkStep ? walkPageBufferKey(args.walkStep.key)
     : args.kind === "diffs" && args.diffs ? diffsBufferKey(diffsAddressKey(args.diffs))
-    : fileBufferKey(args.rootId, args.path, jobId, args.fileId);
-  ensureProject(projectId);
+    : fileBufferKey(args.rootId, args.path, jobId, args.fileId, keyBranchTag);
   setFilesStore(projectId, produce((state) => {
-    if (!isComposedBufferKind(args.kind ?? "text") && !args.fileId && !state.byKey[key]) {
-      const addressed = bufferKeyAtAddress(state, args.rootId, args.path, jobId);
+    if (!composed && !args.fileId && !args.documentId && !state.byKey[key]) {
+      const addressed = bufferKeyAtAddress(state, args.rootId, args.path, jobId, resolvedBranchId);
       if (addressed) key = addressed;
     }
     const existing = state.byKey[key];
@@ -182,6 +201,10 @@ export function openFilesBuffer(
       key, rootId: args.rootId, rootLabel: args.rootLabel, fileId: args.fileId?.trim() || null,
       path: args.path, name: args.name ?? fileDisplayName(args.path),
       documentId: args.documentId ?? null, documentRevision: null,
+      ...(args.workspaceId ? { workspaceId: args.workspaceId } : {}),
+      ...(resolvedBranchId !== undefined ? { branchId: resolvedBranchId } : {}),
+      ...(resolvedWorktreeId ? { worktreeId: resolvedWorktreeId } : {}),
+      ...(args.checkoutLabel ? { checkoutLabel: args.checkoutLabel } : {}),
       ...(jobId ? { jobId } : {}), loading: true, sourcePresent: false, loadError: null,
       content: { state: "unloaded" }, payloadGeneration: nextBufferPayloadGeneration(),
       eol: defaultEol(), baseEol: defaultEol(), mixedEol: false, baseMixedEol: false,
@@ -319,7 +342,7 @@ function restoreClosedBuffer(
     projectId,
     produce((state) => {
       if (state.byKey[buffer.key]) return;
-      if (bufferKeyAtAddress(state, buffer.rootId, buffer.path, buffer.jobId)) return;
+      if (bufferKeyAtAddress(state, buffer.rootId, buffer.path, buffer.jobId, buffer.branchId)) return;
       const suspended = buffer.content.state === "document" && !editorReplica(buffer.documentId);
       state.byKey[buffer.key] = {
         ...buffer,
@@ -551,6 +574,7 @@ export function dirtyFilesBuffersUnderPath(
 
 export function resetProjectFilesForTests(): void {
   resetFilesDraftSyncForTests();
+  resetWorkspaceRootCheckoutsForTests();
   closingBuffers.clear();
   setFilesStoreRaw(
     produce((all) => {

@@ -11,14 +11,17 @@ import { workspaceMismatchId } from "../source/source-workspace-identity.ts";
 import { WORKSPACE_IDENTITY_RECONCILE_LIMIT } from "../source/files-workspace-fault.ts";
 
 function supportsDocument(buffer: FileBuffer): boolean {
-  return buffer.content.state !== "suspended" && !buffer.loading && !buffer.loadError && !buffer.deleted && canEditLoadedSource({
-    kind: buffer.kind, overLimit: buffer.overLimit, sha256: buffer.baseSha256,
-    encoding: buffer.encoding, jobId: buffer.jobId, writable: buffer.writable,
-  });
+  return buffer.content.state !== "suspended" && !buffer.loading && !buffer.loadError && !buffer.deleted && (
+    Boolean(buffer.documentId && buffer.checkoutUnavailable) ||
+    canEditLoadedSource({
+      kind: buffer.kind, overLimit: buffer.overLimit, sha256: buffer.baseSha256,
+      encoding: buffer.encoding, jobId: buffer.jobId, writable: buffer.writable,
+    })
+  );
 }
 
 function identity(buffer: FileBuffer, workspaceId: string): string {
-  return [workspaceId, buffer.rootId, buffer.path, buffer.fileId, buffer.encoding, buffer.baseSha256, buffer.editRevision].join("\0");
+  return [buffer.workspaceId || workspaceId, buffer.branchId ?? "", buffer.rootId, buffer.path, buffer.fileId, buffer.encoding, buffer.baseSha256, buffer.editRevision].join("\0");
 }
 
 export function createFilesDocumentOpening(options: {
@@ -71,7 +74,7 @@ export function createFilesDocumentOpening(options: {
     },
     release: async (document) => {
       const wanted = Object.values(projectFilesState(projectId).byKey).some((buffer) =>
-        buffer.documentId === document.documentId || (workspace() === document.workspaceId &&
+        buffer.documentId === document.documentId || ((buffer.workspaceId || workspace()) === document.workspaceId &&
           !buffer.jobId && !buffer.deleted && buffer.path === document.path && buffer.rootId === document.rootId));
       if (!wanted) await evictEditorDocument(document.documentId);
     },

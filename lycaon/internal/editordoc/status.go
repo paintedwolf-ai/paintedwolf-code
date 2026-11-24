@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -44,6 +47,28 @@ func (l *LifecycleService) Statuses(ctx context.Context, projectID string, ids [
 		if !found[id] {
 			result.Missing = append(result.Missing, id)
 			found[id] = true
+		}
+	}
+	_ = rows.Close()
+	checked := make(map[string]bool)
+	for i := range result.Documents {
+		wtID, ok := sourcebranch.ID(result.Documents[i].BranchID).WorktreeID()
+		if !ok {
+			continue
+		}
+		unavailable, seen := checked[wtID]
+		if !seen {
+			checkout, verifyErr := worktrees.VerifyLiveCheckout(ctx, s.store.db, projectID, wtID)
+			if verifyErr != nil {
+				unavailable = true
+			} else if refused, _ := confine.AttachedWriteRootRefused(checkout.WorktreePath); refused || confine.ControlPlaneWriteDenied(checkout.WorktreePath) {
+				unavailable = true
+			}
+			checked[wtID] = unavailable
+		}
+		if unavailable {
+			result.Documents[i].CheckoutUnavailable = true
+			result.Documents[i].Absent = true
 		}
 	}
 	return result, nil

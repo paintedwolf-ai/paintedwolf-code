@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -84,7 +85,7 @@ func (s *Views) requestedSourceView(w http.ResponseWriter, r *http.Request) (*so
 
 // Every retained read rechecks the current project and session relationship.
 func (s *Views) sourceViewProject(ctx context.Context, p *project.Project, view *sourceView) (*project.Project, error) {
-	scope, err := requestscope.ResolveSessionProject(s.SessionQueries, ctx, p, view.sessionID)
+	scope, err := requestscope.ResolveSessionProjectWithWorktrees(s.SessionQueries, ctx, p, view.sessionID, view.worktreeIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +196,12 @@ func (s *Views) writeSourceViewAddressError(w http.ResponseWriter, r *http.Reque
 		s.responses.Fail(w, wire.ApiErrorCodeSourceNotFound, "This file is no longer available.")
 	case errors.As(err, &handle):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, handle.Error())
+	case errors.Is(err, requestscope.ErrInvalidWorktreeID), errors.Is(err, requestscope.ErrConflictingWorktreeIDs):
+		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, err.Error())
+	case errors.Is(err, worktrees.ErrCheckoutNotFound):
+		s.responses.Fail(w, wire.ApiErrorCodeWorktreeNotFound, "That checkout is not registered for this repository.")
+	case errors.Is(err, worktrees.ErrCheckoutRetired), errors.Is(err, worktrees.ErrCheckoutUnavailable):
+		s.responses.Fail(w, wire.ApiErrorCodeWorktreeUnavailable, "That checkout is no longer available on disk.")
 	case errors.Is(err, sessionscope.ErrWorktreeStale):
 		s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "This chat's worktree is missing or invalid. Unbind it in the Git tab to continue.")
 	case errors.Is(err, store.ErrSessionNotFound):

@@ -1,7 +1,9 @@
 import type { FileBuffer } from "../documents/files-buffer-state.ts";
+import { bufferCheckoutQualifier } from "../source/files-checkout-scope.ts";
 import { outsideHostPath } from "../source/outside-namespace.ts";
 
-type FileIdentity = Pick<FileBuffer, "key" | "name" | "path" | "rootId" | "rootLabel" | "jobId">;
+type FileIdentity = Pick<FileBuffer, "key" | "name" | "path" | "rootId" | "rootLabel" | "jobId"> &
+  Partial<Pick<FileBuffer, "branchId" | "worktreeId" | "checkoutLabel" | "checkoutUnavailable">>;
 export type FileTabName = { name: string; qualifier: string; label: string; path: string };
 
 /**
@@ -31,10 +33,14 @@ export function filesTabNames(buffers: readonly FileIdentity[], isOutside: (root
         }
         if (parents.some((peer, at) => at !== index && peer.join("/") === parent.join("/"))) {
           const sameRoot = group.filter(peer => peer.rootId === buffer.rootId);
+          const distinctCheckouts = sameRoot.some(peer => !peer.jobId && !buffer.jobId && (peer.branchId ?? "") !== (buffer.branchId ?? ""));
+          const checkoutLabel = distinctCheckouts ? bufferCheckoutQualifier(buffer) : "";
           qualifier += sameRoot.length > 1
-            ? ` · ${buffer.jobId ? buffer.jobId.startsWith("trust:") ? "Trust" : `Worker ${buffer.jobId}` : "Working file"}`
+            ? ` · ${buffer.jobId ? buffer.jobId.startsWith("trust:") ? "Trust" : `Worker ${buffer.jobId}` : checkoutLabel || "Working file"}`
             : ` · ${buffer.rootId}`;
         }
+      } else if (buffer.checkoutUnavailable) {
+        qualifier = bufferCheckoutQualifier(buffer);
       }
       names.set(buffer.key, { name: buffer.name, qualifier,
         label: qualifier ? `${buffer.name} — ${qualifier}` : buffer.name,

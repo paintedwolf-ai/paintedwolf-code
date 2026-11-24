@@ -6,6 +6,7 @@ import type { SourceChange } from "../../api/types.ts";
 import { closeFilesBuffersUnderPath } from "../documents/project-files-buffer-lifecycle.ts";
 import { childTreePath, fileDisplayName } from "../components/project-files-model.ts";
 import { retargetOpenFilesUnderPath } from "./project-files-retarget.ts";
+import { activeProjectWorktreeIds } from "../source/files-checkout-scope.ts";
 
 export type LifecycleClient = Pick<
   LycaonClient,
@@ -60,14 +61,13 @@ export async function renameSourcePath(
   sessionId?: string,
 ): Promise<ProjectSourceLifecycleResponse> {
   const operationId = args.operationId ?? crypto.randomUUID();
+  const wt = activeProjectWorktreeIds(projectId);
+  const req = { operation_id: operationId, root_id: args.rootId, from: args.from, to: args.to };
   const res = args.retry
     ? await client.retrySourceOperation(projectId, operationId) as ProjectSourceLifecycleResponse
-    : await client.renameProjectSource(projectId, {
-    operation_id: operationId,
-    root_id: args.rootId,
-    from: args.from,
-    to: args.to,
-  }, sessionId);
+    : wt
+      ? await client.renameProjectSource(projectId, req, sessionId, wt)
+      : await client.renameProjectSource(projectId, req, sessionId);
   retargetOpenFilesUnderPath(projectId, args.rootId, args.from, res.path);
   hooks.confirmChange({
     root_id: res.root_id,
@@ -88,12 +88,11 @@ export async function copySourcePath(
   hooks: LifecycleHooks,
   sessionId?: string,
 ): Promise<ProjectSourceLifecycleResponse> {
-  const res = await client.copyProjectSource(projectId, {
-    operation_id: crypto.randomUUID(),
-    root_id: args.rootId,
-    from: args.from,
-    to: args.to,
-  }, sessionId);
+  const wt = activeProjectWorktreeIds(projectId);
+  const req = { operation_id: crypto.randomUUID(), root_id: args.rootId, from: args.from, to: args.to };
+  const res = wt
+    ? await client.copyProjectSource(projectId, req, sessionId, wt)
+    : await client.copyProjectSource(projectId, req, sessionId);
   hooks.confirmChange({
     root_id: res.root_id,
     path: res.path,
@@ -135,12 +134,16 @@ export async function deleteSourcePath(
     const guard = await hooks.guardDirtyUnderPath(args.rootId, args.path);
     if (guard === "cancel") return { ok: false, cancelled: true };
     if (args.retry) await client.retrySourceOperation(projectId, args.operationId);
-    else await client.deleteProjectSource(projectId, args.path, {
-      operationId: args.operationId,
-      rootId: args.rootId,
-      recursive: args.recursive,
-      sessionId,
-    });
+    else {
+      const wt = activeProjectWorktreeIds(projectId);
+      await client.deleteProjectSource(projectId, args.path, {
+        operationId: args.operationId,
+        rootId: args.rootId,
+        recursive: args.recursive,
+        sessionId,
+        ...(wt ? { worktreeId: wt } : {}),
+      });
+    }
   } catch (err) {
     if (err instanceof SourceOperationStoppedError && err.state === "canceled") return { ok: false, cancelled: true };
     if (err instanceof LycaonApiError) {

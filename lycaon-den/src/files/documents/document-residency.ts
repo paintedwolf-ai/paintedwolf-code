@@ -274,13 +274,13 @@ export function windowDocumentBudget(windows: number): number {
 }
 
 type DocumentResourceAddress = {
-  rootId: string; path: string; documentId?: string | null; fileId?: string | null; jobId?: string;
-} | { documentId: string; rootId?: string; path?: string; fileId?: string | null; jobId?: string };
+  rootId: string; path: string; documentId?: string | null; fileId?: string | null; jobId?: string; branchId?: string | null;
+} | { documentId: string; rootId?: string; path?: string; fileId?: string | null; jobId?: string; branchId?: string | null };
 
 export function documentResourceKey(projectId: string, address: DocumentResourceAddress): string {
   if (address.documentId) return `${projectId}\0document\0${address.documentId}`;
   if (address.fileId && !address.jobId) return `${projectId}\0file\0${address.fileId}`;
-  return `${projectId}\0${address.rootId}\0${address.jobId ?? ""}\0${address.path}`;
+  return `${projectId}\0${address.rootId}\0${address.jobId ?? ""}\0${address.branchId ?? ""}\0${address.path}`;
 }
 
 /** Leave room for the displayed document and a preparing replacement in each window. */

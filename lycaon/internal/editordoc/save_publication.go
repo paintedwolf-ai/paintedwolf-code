@@ -192,19 +192,33 @@ func (c savePublisher) finishMutation(ctx context.Context, p *project.Project, d
 // publishMutation lands the journaled bytes: an exclusive create when the
 // document expected no file, a guarded replacement otherwise.
 func (c savePublisher) publishMutation(ctx context.Context, p *project.Project, d *Document, m *Mutation) (*projectsource.SourceWriteResult, error) {
+	if c.s.beforePublish != nil {
+		c.s.beforePublish(ctx, d, m)
+	}
 	if d.Path != m.Path || d.RootID != m.RootID {
 		return nil, projectsource.ErrSourceWriteConflict
 	}
-	identity, err := c.s.publicationParent(ctx, rootPath(p, m.RootID), d)
+	liveP := p
+	if c.s.roots != nil {
+		resolved, err := c.s.projectBranch(ctx, d.ProjectID, d.BranchID)
+		if err != nil {
+			return nil, err
+		}
+		liveP = resolved
+	}
+	if err := checkWorkspace(liveP, d); err != nil {
+		return nil, err
+	}
+	identity, err := c.s.publicationParent(ctx, rootPath(liveP, m.RootID), d)
 	if err != nil {
 		return nil, err
 	}
 	req := projectsource.SourceWriteRequest{Path: m.Path, RootID: m.RootID, Content: m.Content, Encoding: m.Encoding, BaseSHA256: m.ExpectedSHA256, OutsideParentIdentity: identity}
-	p = documentProject(p, m.RootID)
+	liveP = documentProject(liveP, m.RootID)
 	if m.Creates() {
-		return projectsource.ApplySourceWriteCreate(p, req)
+		return projectsource.ApplySourceWriteCreate(liveP, req)
 	}
-	return projectsource.ApplySourceWriteCAS(p, req)
+	return projectsource.ApplySourceWriteCAS(liveP, req)
 }
 
 // Creates reports a publication that expects no file at its path.

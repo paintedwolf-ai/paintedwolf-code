@@ -112,6 +112,7 @@ func (c savePublisher) settleRejectedReservation(ctx context.Context, d *Documen
 func savePreflightRejected(err error) bool {
 	var rejected *documentcore.Rejected
 	return errors.As(err, &rejected) || errors.Is(err, ErrNotFound) || errors.Is(err, ErrRevisionConflict) || errors.Is(err, ErrRootDetached) ||
+		isCheckoutGone(err) ||
 		errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, projectsource.ErrSourcePathDenied) || errors.Is(err, projectsource.ErrSourceWriteTooLarge) ||
 		errors.Is(err, textfile.ErrRawTooLarge) || errors.Is(err, textfile.ErrTextTooLarge) || errors.Is(err, textfile.ErrBinary) || errors.Is(err, textfile.ErrUnsupported)
 }

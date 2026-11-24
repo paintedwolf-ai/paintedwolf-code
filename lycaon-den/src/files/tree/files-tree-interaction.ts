@@ -18,6 +18,7 @@ import { createResidentActivity } from "../../ui/resident-activity.ts";
 import { type ContextMenuAnchor, type ContextMenuItem } from "../../components/ContextMenu.tsx";
 import { recordInventoryOpen } from "../tree/file-inventory.ts";
 import { createFilesWorkspace } from "../source/files-workspace.ts";
+import { activeProjectWorktreeIds } from "../source/files-checkout-scope.ts";
 import type { FilesScope } from "../components/files-scope.ts";
 import { type FilesTreeHandle, type FilesTreeSelection } from "../tree/files-tree-context.ts";
 import { dirtyFilesBuffersUnderPath, openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
@@ -89,11 +90,10 @@ export function createFilesTreeInteraction(options: TreeInteraction) {
   const browse = async (rootId: string, dir: string) => {
     const c = client();
     if (!c) throw new Error("Sidecar is not connected.");
-    const listing = await c.browseProjectSource(
-      props.projectId,
-      { rootId, dir },
-      sourceSessionId(),
-    );
+    const wt = activeProjectWorktreeIds(props.projectId);
+    const listing = wt
+      ? await c.browseProjectSource(props.projectId, { rootId, dir }, sourceSessionId(), wt)
+      : await c.browseProjectSource(props.projectId, { rootId, dir }, sourceSessionId());
     return listing;
   };
 
@@ -228,11 +228,11 @@ export function createFilesTreeInteraction(options: TreeInteraction) {
   ) => {
     const c = client();
     if (!c) throw new Error("Sidecar is not connected.");
-    const res = await c.createProjectSourceEntry(
-      props.projectId,
-      { operation_id: crypto.randomUUID(), path, kind, root_id: rootId },
-      sourceSessionId(),
-    );
+    const wt = activeProjectWorktreeIds(props.projectId);
+    const req = { operation_id: crypto.randomUUID(), path, kind, root_id: rootId };
+    const res = wt
+      ? await c.createProjectSourceEntry(props.projectId, req, sourceSessionId(), wt)
+      : await c.createProjectSourceEntry(props.projectId, req, sourceSessionId());
     noteLifecycleChange(
       `${kind === "folder" ? "Created folder" : "Created file"} ${fileDisplayName(res.path)}`,
     );

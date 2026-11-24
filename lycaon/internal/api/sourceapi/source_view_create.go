@@ -51,8 +51,9 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		s.writeSourceViewError(w, r, err)
 		return true
 	}
-	operationID, clientID, sessionID := sourceViewCreateIdentity(request)
-	scoped, err := requestscope.ResolveSessionProject(s.SessionQueries, r.Context(), p, sessionID)
+	baseProject := p
+	operationID, clientID, sessionID, worktreeIDs := sourceViewCreateIdentity(request)
+	scoped, err := requestscope.ResolveSessionProjectWithWorktrees(s.SessionQueries, r.Context(), baseProject, sessionID, worktreeIDs)
 	if err != nil {
 		s.writeSourceViewError(w, r, err)
 		return true
@@ -95,7 +96,7 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		return true
 	}
 	// The preparation pin protects accepted-state construction.
-	viewProject, err := s.sourceViewProject(r.Context(), p, view)
+	viewProject, err := s.sourceViewProject(r.Context(), baseProject, view)
 	if err != nil {
 		if created {
 			view.cancel()
@@ -128,11 +129,15 @@ func SourceViewURL(projectID, viewID string) string {
 	return "/v1/projects/" + projectID + "/source/views/" + viewID
 }
 
-func sourceViewCreateIdentity(request wire.SourceViewCreate) (string, string, string) {
+func sourceViewCreateIdentity(request wire.SourceViewCreate) (string, string, string, []string) {
 	if request.Tree != nil {
-		return request.Tree.OperationID, request.Tree.ClientID, request.Tree.SessionID
+		return request.Tree.OperationID, request.Tree.ClientID, request.Tree.SessionID, request.Tree.WorktreeIds
 	}
-	return request.Comparison.OperationID, request.Comparison.ClientID, request.Comparison.SessionID
+	worktreeIDs := request.Comparison.WorktreeIds
+	if len(worktreeIDs) == 0 && request.Comparison.Source.Current != nil && request.Comparison.Source.Current.WorktreeID != "" {
+		worktreeIDs = []string{request.Comparison.Source.Current.WorktreeID}
+	}
+	return request.Comparison.OperationID, request.Comparison.ClientID, request.Comparison.SessionID, worktreeIDs
 }
 
 func rejectedSourceIntent(message string) error {
@@ -143,7 +148,7 @@ func validateSourceViewCreate(p *project.Project, request wire.SourceViewCreate)
 	if err := request.Validate(); err != nil {
 		return rejectedSourceIntent(err.Error())
 	}
-	id, client, session := sourceViewCreateIdentity(request)
+	id, client, session, worktreeIDs := sourceViewCreateIdentity(request)
 	if _, err := uuid.Parse(id); err != nil {
 		return rejectedSourceIntent("operation_id must be a UUID.")
 	}
@@ -153,6 +158,11 @@ func validateSourceViewCreate(p *project.Project, request wire.SourceViewCreate)
 	if session != "" {
 		if _, err := uuid.Parse(session); err != nil {
 			return rejectedSourceIntent("session_id must be a UUID.")
+		}
+	}
+	for _, wtID := range worktreeIDs {
+		if _, err := uuid.Parse(strings.TrimSpace(wtID)); err != nil {
+			return rejectedSourceIntent("worktree_id must be a UUID.")
 		}
 	}
 	if request.Tree != nil {

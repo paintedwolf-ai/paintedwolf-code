@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/projectsource"
 
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -21,12 +22,26 @@ import (
 )
 
 func (s *Handler) editorProject(w http.ResponseWriter, r *http.Request) (*project.Project, bool) {
+	return s.editorProjectWithLive(w, r, false)
+}
+
+func (s *Handler) editorLiveProject(w http.ResponseWriter, r *http.Request) (*project.Project, bool) {
+	return s.editorProjectWithLive(w, r, true)
+}
+
+func (s *Handler) editorProjectWithLive(w http.ResponseWriter, r *http.Request, requireLive bool) (*project.Project, bool) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return nil, false
 	}
 	if id := chi.URLParam(r, "document_id"); id != "" {
-		scoped, err := s.EditorDocuments.Workspace(r.Context(), p, id)
+		var scoped *project.Project
+		var err error
+		if requireLive {
+			scoped, err = s.EditorDocuments.LiveWorkspace(r.Context(), p, id)
+		} else {
+			scoped, err = s.EditorDocuments.Workspace(r.Context(), p, id)
+		}
 		if err != nil {
 			s.writeEditorDocumentError(w, r, err)
 			return nil, false
@@ -47,6 +62,31 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	defer release()
+	if strings.TrimSpace(req.ClientID) == "" {
+		s.responses.InvalidField(w, "client_id", "is required")
+		return
+	}
+	if req.DocumentID != "" {
+		if uuid.Validate(req.DocumentID) != nil {
+			s.responses.InvalidField(w, "document_id", "must be a UUID")
+			return
+		}
+		p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
+		if !ok {
+			return
+		}
+		d, err := s.EditorDocuments.OpenByID(r.Context(), p.ID, req.DocumentID, req.DecodeAs, req.ClientID, retainedReplica(req.Replica))
+		if err != nil {
+			s.writeEditorDocumentError(w, r, err)
+			return
+		}
+		document := s.editorDocumentDTO(r.Context(), d)
+		if retained := req.Replica; retained != nil && retained.DocumentID == document.ID && retained.Epoch == document.Epoch && retained.BaseSHA256 == document.BaseSHA256 {
+			document.BaseContent = nil
+		}
+		httpio.WriteJSON(w, http.StatusOK, document)
+		return
+	}
 	p, ok := s.editorProject(w, r)
 	if !ok {
 		return
@@ -63,9 +103,6 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 		return
 	case req.FileID == "" && uuid.Validate(req.RootID) != nil:
 		s.responses.InvalidField(w, "root_id", "must be a UUID")
-		return
-	case strings.TrimSpace(req.ClientID) == "":
-		s.responses.InvalidField(w, "client_id", "is required")
 		return
 	}
 	p, target, err := outsideaccess.Resolve(r.Context(), s.SourceLedger, p, outsideaccess.Address{RootID: req.RootID, Path: req.Path, FileID: req.FileID})
@@ -264,7 +301,7 @@ func (s *Handler) HandleReloadEditorDocument(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer release()
-	p, ok := s.editorProject(w, r)
+	p, ok := s.editorLiveProject(w, r)
 	if !ok {
 		return
 	}
@@ -314,7 +351,7 @@ func (s *Handler) HandleSaveEditorDocument(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	defer release()
-	p, ok := s.editorProject(w, r)
+	p, ok := s.editorLiveProject(w, r)
 	if !ok {
 		return
 	}
@@ -372,10 +409,15 @@ func editorBaseContent(d *editordoc.Document) *string {
 func (s *Handler) editorDocumentDTO(ctx context.Context, d *editordoc.Document) wire.EditorDocument {
 	presentation := s.projectEditorDocumentPresentation(ctx, d)
 	return wire.EditorDocument{
-		SaveRevision:   d.SaveRevision,
-		CommandHistory: editorCommandHistoryDTO(d.CommandHistory),
-		ID:             d.ID, ProjectID: d.ProjectID, WorkspaceID: d.WorkspaceID, FileID: d.FileID,
-		ReplicaID: d.ReplicaID, RootID: d.RootID, Path: d.Path, BaseSHA256: d.BaseSHA256,
+		SaveRevision:        d.SaveRevision,
+		CommandHistory:      editorCommandHistoryDTO(d.CommandHistory),
+		ID:                  d.ID,
+		ProjectID:           d.ProjectID,
+		WorkspaceID:         d.WorkspaceID,
+		BranchID:            string(d.BranchID),
+		CheckoutUnavailable: d.CheckoutUnavailable,
+		FileID:              d.FileID,
+		ReplicaID:           d.ReplicaID, RootID: d.RootID, Path: d.Path, BaseSHA256: d.BaseSHA256,
 		Encoding: wire.SourceEncoding(d.Encoding), SizeBytes: d.SizeBytes,
 		EOL: d.EOL, BaseEOL: d.BaseEOL, MixedEOL: d.MixedEOL,
 		BaseMixedEOL: d.BaseMixedEOL, Revision: d.Revision, Dirty: d.Dirty,
@@ -394,8 +436,11 @@ func (s *Handler) editorReplicaFrameDTO(ctx context.Context, d *editordoc.Docume
 		base = &content
 	}
 	return wire.EditorReplicaFrame{
-		ID: d.ID, ProjectID: d.ProjectID, WorkspaceID: d.WorkspaceID, FileID: d.FileID,
-		ReplicaID: d.ReplicaID, RootID: d.RootID, Path: d.Path, BaseSHA256: d.BaseSHA256,
+		ID: d.ID, ProjectID: d.ProjectID, WorkspaceID: d.WorkspaceID,
+		BranchID:            string(d.BranchID),
+		CheckoutUnavailable: d.CheckoutUnavailable,
+		FileID:              d.FileID,
+		ReplicaID:           d.ReplicaID, RootID: d.RootID, Path: d.Path, BaseSHA256: d.BaseSHA256,
 		Encoding: wire.SourceEncoding(d.Encoding), SizeBytes: d.SizeBytes,
 		EOL: d.EOL, BaseEOL: d.BaseEOL, MixedEOL: d.MixedEOL,
 		BaseMixedEOL: d.BaseMixedEOL, Revision: d.Revision, Dirty: d.Dirty,
@@ -409,8 +454,11 @@ func (s *Handler) editorReplicaFrameDTO(ctx context.Context, d *editordoc.Docume
 func (s *Handler) EditorDocumentEventDTO(ctx context.Context, d *editordoc.Document, contentChanged bool) wire.EditorDocumentEvent {
 	presentation := s.projectEditorDocumentPresentation(ctx, d)
 	event := wire.EditorDocumentEvent{
-		ID: d.ID, ProjectID: d.ProjectID, WorkspaceID: d.WorkspaceID, FileID: d.FileID,
-		RootID: d.RootID, Path: d.Path, BaseSHA256: d.BaseSHA256,
+		ID: d.ID, ProjectID: d.ProjectID, WorkspaceID: d.WorkspaceID,
+		BranchID:            string(d.BranchID),
+		CheckoutUnavailable: d.CheckoutUnavailable,
+		FileID:              d.FileID,
+		RootID:              d.RootID, Path: d.Path, BaseSHA256: d.BaseSHA256,
 		Encoding: wire.SourceEncoding(d.Encoding), SizeBytes: d.SizeBytes,
 		EOL: d.EOL, BaseEOL: d.BaseEOL, MixedEOL: d.MixedEOL,
 		BaseMixedEOL: d.BaseMixedEOL, Revision: d.Revision, Dirty: d.Dirty,
@@ -435,6 +483,10 @@ func (s *Handler) writeEditorDocumentError(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	switch {
+	case errors.Is(err, worktrees.ErrCheckoutNotFound):
+		s.responses.Fail(w, wire.ApiErrorCodeWorktreeNotFound, "That checkout is not registered for this repository.")
+	case errors.Is(err, worktrees.ErrCheckoutRetired), errors.Is(err, worktrees.ErrCheckoutUnavailable):
+		s.responses.Fail(w, wire.ApiErrorCodeWorktreeUnavailable, "That checkout is no longer available on disk.")
 	case errors.Is(err, projectsource.ErrSourceBusy):
 		s.responses.Fail(w, wire.ApiErrorCodeSourcePathBusy, "another file operation is using this path")
 	case errors.Is(err, editordoc.ErrInvalidEOL):
@@ -515,7 +567,7 @@ func (s *Handler) HandleResolveEditorDocumentConflict(w http.ResponseWriter, r *
 	}
 	defer release()
 
-	p, ok := s.editorProject(w, r)
+	p, ok := s.editorLiveProject(w, r)
 	if !ok {
 		return
 	}

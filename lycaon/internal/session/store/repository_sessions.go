@@ -6,11 +6,13 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/attention"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // SessionRepository persists session identity, lifecycle and workspace binding.
 type SessionRepository interface {
+	DB() db.Handle
 	SessionEventsOutboxed() bool
 	AdmitModeInTx(ctx context.Context, tx *sql.Tx, id string, mode *api.SessionMode, validate func(api.SessionMode) error) error
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)

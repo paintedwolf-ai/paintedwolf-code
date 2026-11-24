@@ -46,7 +46,7 @@ export async function watchIndexedFiles(
   projectId: string,
   query: string,
   publish: (files: readonly InventoryFile[], page: SourceSearchResponse) => void,
-  opts?: { sessionId?: string; rootId?: string; signal?: AbortSignal },
+  opts?: { sessionId?: string; rootId?: string; worktreeId?: string | readonly string[]; signal?: AbortSignal },
 ): Promise<void> {
   let attempt = 0;
   for (;;) {
@@ -54,6 +54,7 @@ export async function watchIndexedFiles(
     const result = await client.searchProjectSource(projectId, query, {
       rootId: opts?.rootId,
       sessionId: opts?.sessionId,
+      ...(opts?.worktreeId ? { worktreeId: opts.worktreeId } : {}),
       limit: QUICK_OPEN_CAP,
       signal: opts?.signal,
     });

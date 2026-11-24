@@ -266,9 +266,9 @@ export function FilesEditorHeaderChrome(props: {
               variant="primary"
               compact
               data-testid="files-editor-save"
-              data-tip={tipWithShortcut("Save", "files.save")}
+              data-tip={props.buffer.checkoutUnavailable ? "Checkout is no longer available on disk" : tipWithShortcut("Save", "files.save")}
               data-tip-pos="below"
-              disabled={props.saving || props.conflict}
+              disabled={props.saving || props.conflict || props.buffer.checkoutUnavailable === true}
               onClick={() => props.onSave()}
             >
               {props.saving ? "Saving…" : "Save"}

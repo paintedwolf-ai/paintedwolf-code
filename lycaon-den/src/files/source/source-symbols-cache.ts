@@ -69,12 +69,14 @@ export async function fetchCachedSourceSymbols(args: {
   path: string;
   sha256: string | null;
   sessionId?: string;
+  worktreeId?: string | readonly string[];
   signal?: AbortSignal;
 }): Promise<Symbols> {
   args.signal?.throwIfAborted();
   const sha = args.sha256?.trim() ?? "";
   if (!sha) return [];
-  const key = [args.projectId, args.sessionId?.trim() ?? "", args.rootId, args.path, sha].join("\0");
+  const wtKey = Array.isArray(args.worktreeId) ? args.worktreeId.join(",") : (args.worktreeId ?? "");
+  const key = [args.projectId, args.sessionId?.trim() ?? "", wtKey, args.rootId, args.path, sha].join("\0");
   const cache = cacheFor(args.client);
   const failure = cache.failures.get(key);
   if (failure && failure.until > Date.now()) throw failure.error;
@@ -90,7 +92,7 @@ export async function fetchCachedSourceSymbols(args: {
     const controller = new AbortController();
     const next: Flight = { controller, users: 0, result: Promise.resolve([]) };
     next.result = args.client.listProjectSourceSymbols(args.projectId, args.path, {
-      rootId: args.rootId, sessionId: args.sessionId, signal: controller.signal,
+      rootId: args.rootId, sessionId: args.sessionId, ...(args.worktreeId ? { worktreeId: args.worktreeId } : {}), signal: controller.signal,
     }).then((response): Symbols => {
       controller.signal.throwIfAborted();
       // A file may change between the buffer read and the outline request.

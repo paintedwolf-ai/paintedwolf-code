@@ -44,7 +44,9 @@ function snapshotProject(projectId: string): DenFilesHotExitProject | null {
   const activeIndex = active?.jobId || (active && isComposedBufferKind(active.kind))
     ? -1
     : buffers.findIndex(
-      (row) => row.rootId === active?.rootId && row.path === active.path,
+      (row) => active?.documentId
+        ? row.documentId === active.documentId
+        : row.rootId === active?.rootId && row.path === active.path,
     );
   return { buffers, ...(activeIndex >= 0 ? { activeIndex } : {}) };
 }
@@ -137,8 +139,9 @@ export function restoreFilesHotExitForProject(projectId: string, roots: ProjectR
       origin: "presentation" });
     if (entry.activeIndex === index) activeKey = key;
   }
+  const firstOrderKey = projectFilesState(projectId).order[0];
   const first = entry.buffers[0];
-  if (!activeKey && first) activeKey = fileBufferKey(first.rootId, first.path);
+  if (!activeKey) activeKey = firstOrderKey ?? (first ? fileBufferKey(first.rootId, first.path) : null);
   if (activeKey) setFilesActiveBuffer(projectId, activeKey, "presentation");
 }
 

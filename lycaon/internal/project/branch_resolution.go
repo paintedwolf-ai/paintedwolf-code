@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -23,6 +24,9 @@ func ResolveBranch(ctx context.Context, database db.Handle, p *Project, branch s
 	checkout, err := worktrees.VerifyLiveCheckout(ctx, database, p.ID, id)
 	if err != nil {
 		return nil, err
+	}
+	if refused, _ := confine.AttachedWriteRootRefused(checkout.WorktreePath); refused || confine.ControlPlaneWriteDenied(checkout.WorktreePath) {
+		return nil, worktrees.ErrCheckoutUnavailable
 	}
 	return WithWorktree(p, Binding{
 		ID:           checkout.ID,

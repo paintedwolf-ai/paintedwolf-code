@@ -1,4 +1,5 @@
 import { outsideFileId } from "../source/outside-namespace.ts";
+import { activeProjectWorktreeIds, bufferCheckoutWorktreeId } from "../source/files-checkout-scope.ts";
 import { retainFileDocument } from "../documents/files-residency.ts";
 import { DocumentCapacityError, type DocumentReservation } from "../documents/document-residency.ts";
 import { onCleanup } from "solid-js";
@@ -86,7 +87,7 @@ export function createBufferLoading({ projectId, client, sourceSessionId, dropFi
           releaseOpened();
           throw new Error("Source read returned the wrong workspace kind.");
         }
-        if (!buf.jobId && res.workspace_id !== filesWorkspaceId()) {
+        if (!buf.jobId && !buf.worktreeId && buf.branchId === undefined && !buf.documentId && res.workspace_id !== filesWorkspaceId()) {
           refreshProjectWorkspace(res.workspace_id);
           releaseOpened();
           return;
@@ -156,13 +157,11 @@ export function createBufferLoading({ projectId, client, sourceSessionId, dropFi
           err.code === "source_not_found" &&
           !buf.jobId
         ) {
-          const listing = await c
-            .browseProjectSource(
-              projectId(),
-              { rootId: buf.rootId, dir: buf.path },
-              sourceSessionId(),
-            )
-            .catch(() => null);
+          const wt = bufferCheckoutWorktreeId(projectId(), buf, activeProjectWorktreeIds(projectId()));
+          const listing = await (wt
+            ? c.browseProjectSource(projectId(), { rootId: buf.rootId, dir: buf.path }, sourceSessionId(), wt)
+            : c.browseProjectSource(projectId(), { rootId: buf.rootId, dir: buf.path }, sourceSessionId())
+          ).catch(() => null);
           if (!isCurrent()) return;
           if (listing) {
             if (!closeFilesBuffer(projectId(), bufferKey)) return;
@@ -219,18 +218,20 @@ export function createBufferLoading({ projectId, client, sourceSessionId, dropFi
       bufferLoadRequests.isCurrent(requestKey, reopenToken) && projectFilesState(projectId()).byKey[settledKey] != null;
     void (async () => {
       try {
+        const wt = buf.jobId ? undefined : bufferCheckoutWorktreeId(projectId(), buf, activeProjectWorktreeIds(projectId()));
         const res = await c.getProjectSource(projectId(), buf.path, {
           workerId: buf.jobId,
           rootId: buf.rootId || undefined,
           fileId: outsideFileId(projectId(), buf),
           sessionId: sourceSessionId(),
+          ...(wt ? { worktreeId: wt } : {}),
           decodeAs,
         });
         if (!isCurrent()) return;
         if (res.workspace_kind !== (buf.jobId ? "worker" : "project")) {
           throw new Error("Source read returned the wrong workspace kind.");
         }
-        if (!buf.jobId && res.workspace_id !== filesWorkspaceId()) {
+        if (!buf.jobId && !buf.worktreeId && buf.branchId === undefined && !buf.documentId && res.workspace_id !== filesWorkspaceId()) {
           refreshProjectWorkspace(res.workspace_id);
           return;
         }

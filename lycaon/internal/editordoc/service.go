@@ -22,11 +22,12 @@ type serviceCore struct {
 	store       *Store
 	ledger      Ledger
 	history     *sourceledger.History
-	sourcePaths *projectsource.SourcePaths
-	roots       RootSource
-	ops         sync.RWMutex
-	docLocks    keyedLocks
-	onChange    func(context.Context, Change)
+	sourcePaths   *projectsource.SourcePaths
+	roots         RootSource
+	ops           sync.RWMutex
+	docLocks      keyedLocks
+	onChange      func(context.Context, Change)
+	beforePublish func(context.Context, *Document, *Mutation)
 }
 
 type Service struct {
@@ -138,6 +139,11 @@ func New(store *Store, ledger Ledger, history *sourceledger.History, roots RootS
 }
 
 func (l *LifecycleService) SetOnChange(fn func(context.Context, Change)) { l.s.onChange = fn }
+
+// SetBeforePublish installs an optional hook invoked immediately before a prepared save writes to disk.
+func (l *LifecycleService) SetBeforePublish(fn func(context.Context, *Document, *Mutation)) {
+	l.s.beforePublish = fn
+}
 
 // ForgetRemoved drops presence for deleted documents.
 func (s *Service) ForgetRemoved(documentIDs []string) {
@@ -279,7 +285,26 @@ func (l *LifecycleService) ObserveDisk(ctx context.Context, p *project.Project, 
 	if err != nil {
 		return nil, err
 	}
-	if err := s.reconcileDocumentDisk(ctx, p, d, clientID); err != nil {
+	liveP := p
+	if liveP == nil || liveP.BranchForRoot(d.RootID) != d.BranchID {
+		resolved, branchErr := s.projectBranch(ctx, p.ID, d.BranchID)
+		if branchErr != nil {
+			if _, isWT := d.BranchID.WorktreeID(); isWT && isCheckoutGone(branchErr) {
+				if err := s.markAbsent(ctx, d); err != nil {
+					return nil, err
+				}
+				if err := s.replicaProjection(ctx, d, nil); err != nil {
+					return nil, err
+				}
+				d.CheckoutUnavailable = true
+				d.WorkspaceID = unavailableBranchWorkspaceID(d.ProjectID, d.BranchID)
+				return s.withParticipants(d), nil
+			}
+			return nil, branchErr
+		}
+		liveP = resolved
+	}
+	if err := s.reconcileDocumentDisk(ctx, liveP, d, clientID); err != nil {
 		return nil, err
 	}
 	if err := s.replicaProjection(ctx, d, nil); err != nil {
