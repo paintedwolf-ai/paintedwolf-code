@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitrepo"
@@ -51,11 +52,7 @@ func deleteSessionWorktree(s *Handler, w http.ResponseWriter, r *http.Request) {
 	b := scope.binding
 
 	if !isManagedSessionWorktreePath(scope.dataRoot, b.WorktreePath) {
-		s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeStale, map[string]any{
-			"blocker": "unmanaged_worktree",
-			"repo_id": b.RepoID,
-			"path":    b.WorktreePath,
-		}, "Only worktrees created by Painted Wolf Code can be removed from here.")
+		s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "Only worktrees created by Painted Wolf Code can be removed from here.")
 		return
 	}
 
@@ -135,7 +132,7 @@ func applyWorktreeDiskRemoval(
 	s *Handler,
 	w http.ResponseWriter,
 	r *http.Request,
-	mgr git.Manager,
+	mgr *git.Manager,
 	proj *project.Project,
 	b *store.WorktreeBinding,
 	primaryCheckoutID string,
@@ -150,12 +147,7 @@ func applyWorktreeDiskRemoval(
 	if pathExists && s.Worktrees != nil && strings.TrimSpace(b.WorktreeID) != "" {
 		if _, _, errCode, _, okLive := resolveCheckoutProject(s, r.Context(), proj, b.WorktreeID); !okLive &&
 			(errCode == wire.ApiErrorCodeWorktreeUnavailable || errCode == wire.ApiErrorCodeWorktreeNotFound) {
-			s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeStale, map[string]any{
-				"blocker":     "incarnation_mismatch",
-				"repo_id":     b.RepoID,
-				"worktree_id": b.WorktreeID,
-				"path":        b.WorktreePath,
-			}, "The directory at this worktree path was replaced outside Painted Wolf Code and will not be deleted automatically.")
+			s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "The directory at this worktree path was replaced outside Painted Wolf Code and will not be deleted automatically.")
 			return false
 		}
 	}
@@ -192,7 +184,7 @@ func runGuardedWorktreeAdminOp(
 	s *Handler,
 	w http.ResponseWriter,
 	r *http.Request,
-	mgr git.Manager,
+	mgr *git.Manager,
 	toplevel string,
 	driftMsg string,
 	op func() error,
@@ -225,7 +217,7 @@ func failDirtyWorktree(
 	proj *project.Project,
 	b *store.WorktreeBinding,
 	primaryCheckoutID string,
-	files []git.FileStatus,
+	files []git.GitStatusEntry,
 ) {
 	const msg = "The worktree has uncommitted changes. Commit or discard them first."
 	if len(files) == 0 {
@@ -328,8 +320,8 @@ func collectBindingCheckoutIDs(ctx context.Context, s *Handler, projectID string
 	return ids
 }
 
-func queryWorktreeIDsByPath(ctx context.Context, db *sql.DB, projectID, repoID, cleanPath string) []string {
-	rows, err := db.QueryContext(ctx,
+func queryWorktreeIDsByPath(ctx context.Context, database db.Handle, projectID, repoID, cleanPath string) []string {
+	rows, err := database.QueryContext(ctx,
 		`SELECT id FROM source_worktrees WHERE project_id = ? AND repo_id = ? AND worktree_path = ?`,
 		projectID, repoID, cleanPath)
 	if err != nil {
@@ -405,8 +397,8 @@ func acquireRelatedCheckoutSessionLocks(
 	return releaseAll, "", ""
 }
 
-func querySessionDescendants(ctx context.Context, db *sql.DB, rootSessionID string) []string {
-	rows, err := db.QueryContext(ctx, `
+func querySessionDescendants(ctx context.Context, database db.Handle, rootSessionID string) []string {
+	rows, err := database.QueryContext(ctx, `
 		WITH RECURSIVE descendants(id) AS (
 			SELECT id FROM sessions WHERE parent_session_id = ?
 			UNION ALL
@@ -430,8 +422,8 @@ func querySessionDescendants(ctx context.Context, db *sql.DB, rootSessionID stri
 	return ids
 }
 
-func queryCheckoutUsageActors(ctx context.Context, db *sql.DB, worktreeID string) []string {
-	rows, err := db.QueryContext(ctx,
+func queryCheckoutUsageActors(ctx context.Context, database db.Handle, worktreeID string) []string {
+	rows, err := database.QueryContext(ctx,
 		`SELECT DISTINCT actor_session_id FROM source_worktree_usages WHERE worktree_id = ?`, worktreeID)
 	if err != nil {
 		return nil

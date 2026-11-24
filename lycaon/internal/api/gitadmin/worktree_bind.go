@@ -170,7 +170,7 @@ func finalizeWorktreeBind(
 	s *Handler,
 	w http.ResponseWriter,
 	r *http.Request,
-	mgr git.Manager,
+	mgr *git.Manager,
 	projectID string,
 	repo git.RepoRef,
 	before string,
