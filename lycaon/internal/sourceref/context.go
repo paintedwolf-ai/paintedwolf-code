@@ -12,7 +12,7 @@ import (
 )
 
 func Key(t api.NavigationTarget) string {
-	return t.ProjectID + "\x00" + t.RootID + "\x00" + t.WorkerID + "\x00" + t.Path + "\x00" + t.FileID
+	return t.ProjectID + "\x00" + t.RootID + "\x00" + t.RepoID + "\x00" + t.WorktreeID + "\x00" + t.WorkerID + "\x00" + t.Path + "\x00" + t.FileID + "\x00" + t.Revision
 }
 
 // Merge preserves truncation from each input context.
@@ -45,19 +45,26 @@ func Merge(contexts ...*api.SourceContext) *api.SourceContext {
 		if a.RootID != b.RootID {
 			return a.RootID < b.RootID
 		}
+		if a.WorktreeID != b.WorktreeID {
+			return a.WorktreeID < b.WorktreeID
+		}
 		if a.WorkerID != b.WorkerID {
 			return a.WorkerID < b.WorkerID
 		}
 		if a.Path != b.Path {
 			return a.Path < b.Path
 		}
-		return a.FileID < b.FileID
+		if a.FileID != b.FileID {
+			return a.FileID < b.FileID
+		}
+		return a.Revision < b.Revision
 	})
 	return out
 }
 
 func Valid(t api.NavigationTarget) bool {
 	return t.ProjectID != "" && t.RootID != "" && t.Path != "" && len(t.Path) <= 4096 &&
+		len(t.Revision) <= 128 && !strings.ContainsAny(t.Revision, "\x00\r\n") &&
 		!strings.ContainsAny(t.Path, "\\\x00\r\n") && !strings.HasPrefix(t.Path, "/") &&
 		path.Clean(t.Path) == t.Path && t.Path != ".." && !strings.HasPrefix(t.Path, "../") &&
 		(t.EntryKind == api.NavigationEntryKindFile || t.EntryKind == api.NavigationEntryKindFolder) &&

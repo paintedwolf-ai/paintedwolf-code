@@ -8,8 +8,9 @@ import (
 
 // GitStatusEntry is one changed path from porcelain status.
 type GitStatusEntry struct {
-	Path   string `json:"path"`
-	Status string `json:"status"`
+	Path    string `json:"path"`
+	OldPath string `json:"old_path,omitempty"`
+	Status  string `json:"status"`
 }
 
 // GitStatus is a snapshot for board git slice and git_status tool.
@@ -29,10 +30,13 @@ type GitStatus struct {
 // GitDiffStatEntry summarizes line changes for one path. Untracked marks a
 // file git diff itself would not list, included on request as an addition.
 type GitDiffStatEntry struct {
-	Path       string `json:"path"`
-	Insertions int    `json:"insertions"`
-	Deletions  int    `json:"deletions"`
-	Untracked  bool   `json:"untracked,omitempty"`
+	Path          string `json:"path"`
+	OldPath       string `json:"old_path,omitempty"`
+	Insertions    int    `json:"insertions"`
+	Deletions     int    `json:"deletions"`
+	Untracked     bool   `json:"untracked,omitempty"`
+	BeforeBlobOID string `json:"before_blob_oid,omitempty"`
+	AfterBlobOID  string `json:"after_blob_oid,omitempty"`
 }
 
 // GitCommit is one entry from git_log.

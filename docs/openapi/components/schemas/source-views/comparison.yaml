@@ -161,6 +161,10 @@ components:
           type: "string"
           minLength: 1
           maxLength: 65536
+        before_path:
+          type: "string"
+          minLength: 1
+          maxLength: 65536
         expected_head:
           type: "string"
           x-go-pointer: true

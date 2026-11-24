@@ -273,13 +273,22 @@ func serveGitDiff(s *Handler, w http.ResponseWriter, r *http.Request) {
 	items := make([]wire.GitDiffStatItem, 0, len(stats))
 	for _, st := range stats {
 		rootID, rootRel := attributeChangedFile(dir, st.Path, roots)
+		var oldRootID, oldRootRel string
+		if st.OldPath != "" {
+			oldRootID, oldRootRel = attributeChangedFile(dir, st.OldPath, roots)
+		}
 		items = append(items, wire.GitDiffStatItem{
-			Path:             st.Path,
-			Insertions:       st.Insertions,
-			Deletions:        st.Deletions,
-			Untracked:        st.Untracked,
-			RootID:           rootID,
-			RootRelativePath: rootRel,
+			Path:                st.Path,
+			Insertions:          st.Insertions,
+			Deletions:           st.Deletions,
+			Untracked:           st.Untracked,
+			RootID:              rootID,
+			RootRelativePath:    rootRel,
+			OldPath:             st.OldPath,
+			OldRootID:           oldRootID,
+			OldRootRelativePath: oldRootRel,
+			BeforeBlobOID:       st.BeforeBlobOID,
+			AfterBlobOID:        st.AfterBlobOID,
 		})
 	}
 

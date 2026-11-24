@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -71,6 +72,7 @@ func (p *numstatParser) record(record []byte) error {
 			return err
 		}
 		if p.renameStage == 1 {
+			p.pending.OldPath = path
 			p.renameStage = 2
 			return nil
 		}
@@ -105,6 +107,74 @@ func (p *numstatParser) finish() ([]GitDiffStatEntry, error) {
 		return nil, fmt.Errorf("parse git numstat: rename paths missing")
 	}
 	return p.stats, nil
+}
+
+type rawDiffEntry struct {
+	oldPath   string
+	path      string
+	beforeOID string
+	afterOID  string
+}
+
+type rawDiffParser struct {
+	entries   []rawDiffEntry
+	pending   rawDiffEntry
+	pathStage int
+}
+
+func normalizeDiffOID(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || strings.Trim(trimmed, "0") == "" {
+		return ""
+	}
+	return trimmed
+}
+
+func (p *rawDiffParser) record(record []byte) error {
+	if p.pathStage != 0 {
+		parsed, err := parseRepoPath(record)
+		if err != nil {
+			return err
+		}
+		if p.pathStage == 2 {
+			p.pending.oldPath = parsed
+			p.pathStage = 1
+			return nil
+		}
+		p.pending.path = parsed
+		p.entries = append(p.entries, p.pending)
+		p.pending = rawDiffEntry{}
+		p.pathStage = 0
+		return nil
+	}
+	if len(record) == 0 {
+		return nil
+	}
+	if record[0] != ':' {
+		return fmt.Errorf("parse git raw diff: malformed header")
+	}
+	fields := strings.Fields(string(record[1:]))
+	if len(fields) < 5 {
+		return fmt.Errorf("parse git raw diff: short header")
+	}
+	p.pending = rawDiffEntry{
+		beforeOID: normalizeDiffOID(fields[2]),
+		afterOID:  normalizeDiffOID(fields[3]),
+	}
+	code := fields[4]
+	if strings.HasPrefix(code, "R") || strings.HasPrefix(code, "C") {
+		p.pathStage = 2
+	} else {
+		p.pathStage = 1
+	}
+	return nil
+}
+
+func (p *rawDiffParser) finish() ([]rawDiffEntry, error) {
+	if p.pathStage != 0 {
+		return nil, fmt.Errorf("parse git raw diff: incomplete path record")
+	}
+	return p.entries, nil
 }
 
 func parseNumstatCount(raw []byte) int {

@@ -68,7 +68,7 @@ func (m *gitDiffStatusManager) Status(ctx context.Context, projectDir string) (*
 		status.HeadShort = head
 	}
 	for _, entry := range entries {
-		status.Files = append(status.Files, GitStatusEntry{Path: entry.path, Status: entry.status})
+		status.Files = append(status.Files, GitStatusEntry{Path: entry.path, OldPath: entry.from, Status: entry.status})
 		if entry.status[0] != ' ' && entry.status[0] != '?' {
 			status.StagedCount++
 		}
@@ -302,7 +302,31 @@ func (m *gitDiffStatusManager) DiffStat(ctx context.Context, projectDir string, 
 	if err := gitexec.RunRecords(ctx, dir, args, hermeticOpts(0), p.record); err != nil {
 		return nil, err
 	}
-	return p.finish()
+	stats, err := p.finish()
+	if err != nil || len(stats) == 0 {
+		return stats, err
+	}
+	if rawArgs, rawErr := diffArgs([]string{"diff", "--raw", "--no-abbrev", "-z"}, opts); rawErr == nil {
+		var rp rawDiffParser
+		if gitexec.RunRecords(ctx, dir, rawArgs, hermeticOpts(0), rp.record) == nil {
+			if rawEntries, finErr := rp.finish(); finErr == nil {
+				byPath := make(map[string]rawDiffEntry, len(rawEntries))
+				for _, entry := range rawEntries {
+					byPath[entry.path] = entry
+				}
+				for i := range stats {
+					if match, ok := byPath[stats[i].Path]; ok {
+						stats[i].BeforeBlobOID = match.beforeOID
+						stats[i].AfterBlobOID = match.afterOID
+						if stats[i].OldPath == "" && match.oldPath != "" {
+							stats[i].OldPath = match.oldPath
+						}
+					}
+				}
+			}
+		}
+	}
+	return stats, nil
 }
 
 // LastTouchByPath returns each path's newest committer timestamp.

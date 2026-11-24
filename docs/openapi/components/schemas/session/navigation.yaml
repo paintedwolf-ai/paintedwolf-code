@@ -43,6 +43,18 @@ components:
         worker_id:
           type: string
           format: uuid
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          description: Verified repository identifier when the target belongs to an attached Git repository.
+        worktree_id:
+          type: string
+          format: uuid
+          description: Verified registered checkout identifier when the target belongs to a Git checkout.
+        revision:
+          type: string
+          maxLength: 128
+          description: Captured revision or immutable Git object identifier for historical navigation.
     NavigationReference:
       x-go-generate: true
       type: object
@@ -86,6 +98,15 @@ components:
         deleted:
           type: boolean
           description: The current address is absent and has retained deletion history. Availability is rechecked when opening.
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        worktree_id:
+          type: string
+          format: uuid
+        revision:
+          type: string
+          maxLength: 128
         worker_id:
           type: string
           format: uuid

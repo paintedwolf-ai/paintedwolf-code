@@ -180,7 +180,14 @@ func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Proje
 		before.RootID, before.Path = source.RootID, source.Path
 		after = readWorkingCommit(targetProject, source.RootID, rootAbs, source.Path).Side
 	case "staged":
-		headOID, err := commitPathOID(ctx, mgr, rootAbs, head, source.Path)
+		beforeLookupPath := source.Path
+		if bp := strings.TrimSpace(source.BeforePath); bp != "" {
+			if !filepath.IsLocal(bp) || bp == "." {
+				return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "before_path must be a relative file path."}
+			}
+			beforeLookupPath = bp
+		}
+		headOID, err := commitPathOID(ctx, mgr, rootAbs, head, beforeLookupPath)
 		if err != nil {
 			return sourceledger.Comparison{}, err
 		}
@@ -193,7 +200,7 @@ func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Proje
 			return sourceledger.Comparison{}, err
 		}
 		before = gitBlobComparisonSide(ctx, mgr, rootAbs, headOID)
-		before.RootID, before.Path = source.RootID, source.Path
+		before.RootID, before.Path = source.RootID, beforeLookupPath
 		after = gitBlobComparisonSide(ctx, mgr, rootAbs, indexOID)
 		after.RootID, after.Path = source.RootID, source.Path
 	case "unstaged":
@@ -234,8 +241,10 @@ func (s *Comparisons) loadBlobComparison(ctx context.Context, p *project.Project
 	for _, side := range []*sourceledger.ComparisonSide{&diff.Before, &diff.After} {
 		side.RootID, side.Path = source.RootID, source.DisplayPath
 	}
-	if source.BeforeBlobOid == "" {
+	if source.BeforeBlobOid == "" && source.BlobOid != "" {
 		diff.Op = wire.SourceChangeOpCreate
+	} else if source.BlobOid == "" && source.BeforeBlobOid != "" {
+		diff.Op = wire.SourceChangeOpDelete
 	}
 	return diff, nil
 }
