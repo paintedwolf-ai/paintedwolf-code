@@ -128,9 +128,11 @@ func TestMultipleRootsMountSeparatelyAndBarrierCoversBoth(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create in %s: %v", root, err)
 		}
-		defer func() { _ = f.Close() }()
 		if _, err := f.WriteString("dirty-" + root); err != nil {
 			t.Fatalf("write in %s: %v", root, err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatalf("close in %s: %v", root, err)
 		}
 	}
 	_, release, err := adp.CheckpointBarrier(t.Context(), "view-multi")
