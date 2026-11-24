@@ -26,7 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/promptstate"
-	"github.com/lycaon/lycaon/internal/session/sessionlimits"
+	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/submissions"
@@ -133,11 +133,12 @@ func newTestStandingHostBuilder(
 	res *runtimeResources,
 ) *serveBuilder {
 	t.Helper()
+	hub := events.NewMemoryHub()
 	return &serveBuilder{
 		startup:   startupBootstrap{ctx: t.Context(), resources: res},
 		storage:   persistence.Runtime{Database: database, Sessions: repos},
 		providers: providers.Runtime{Costs: stubCostTracker{}},
-		events:    &eventing.Runtime{Hub: events.NewMemoryHub(), Outbox: eventoutbox.New(database)},
+		events:    &eventing.Runtime{Hub: hub, Outbox: eventoutbox.New(database, hub)},
 		sessions: &sessions.Runtime{
 			Manager: &session.Host{
 				Chats:       &chats.Service{},
