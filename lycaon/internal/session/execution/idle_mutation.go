@@ -21,3 +21,12 @@ func (m *Lifetime) TryIdleMutation(sessionID string) (unlock func(), ok bool) {
 	}
 	return func() { lock.Unlock() }, true
 }
+
+// HasRunningProcess reports whether sessionID owns a live command or terminal process.
+func (m *Lifetime) HasRunningProcess(sessionID string) bool {
+	if m == nil || m.processes == nil {
+		return false
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	return sessionID != "" && m.processes.HasRunning(sessionID)
+}

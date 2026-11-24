@@ -12,12 +12,18 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitargv"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) {
+	bindSessionWorktree(s, w, r)
+}
+
+func bindSessionWorktree(s *Handler, w http.ResponseWriter, r *http.Request) {
 	sessionID := strings.TrimSpace(chi.URLParam(r, "id"))
 	var req wire.GitWorktreeBindRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -148,6 +154,22 @@ func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) 
 	if err := os.Chmod(path, 0o700); err != nil { //nolint:gosec // Private checkout directory.
 		s.responses.InternalError(w, r, err)
 		return
+	}
+	if s.Worktrees != nil {
+		if items, refreshErr := s.Worktrees.Refresh(r.Context(), worktrees.RepoSpec{
+			ProjectID: scope.project.ID,
+			RepoID:    repo.ID,
+			Toplevel:  repo.Toplevel,
+		}); refreshErr == nil {
+			wantPath := gitrepo.CanonicalDir(path)
+			for _, item := range items {
+				if gitrepo.CanonicalDir(item.WorktreePath) == wantPath && item.ID != "" {
+					row.WorktreeID = item.ID
+					_ = s.Worktrees.MarkManaged(r.Context(), item.ID, baseBranch)
+					break
+				}
+			}
+		}
 	}
 	if err := s.SessionStore.PutWorktreeBinding(r.Context(), row); err != nil {
 		s.responses.InternalError(w, r, err)

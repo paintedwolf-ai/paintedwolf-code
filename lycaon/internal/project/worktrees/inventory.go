@@ -118,6 +118,21 @@ type liveWitness struct {
 	available        bool
 }
 
+// MarkManaged records that a checkout registration was created by app-managed lifecycle controls.
+func (inv *Inventory) MarkManaged(ctx context.Context, checkoutID, baseBranch string) error {
+	if inv == nil || inv.database == nil {
+		return nil
+	}
+	checkoutID = strings.TrimSpace(checkoutID)
+	if checkoutID == "" {
+		return nil
+	}
+	_, err := inv.database.ExecContext(ctx,
+		`UPDATE source_worktrees SET managed = 1, base_branch = CASE WHEN ? != '' THEN ? ELSE base_branch END WHERE id = ?`,
+		strings.TrimSpace(baseBranch), strings.TrimSpace(baseBranch), checkoutID)
+	return err
+}
+
 // New constructs an Inventory backed by database.
 func New(database db.Handle, opts Options) *Inventory {
 	gitLister := opts.Git
