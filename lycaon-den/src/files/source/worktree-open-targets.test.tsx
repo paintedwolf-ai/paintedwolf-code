@@ -787,11 +787,8 @@ describe("WT06 checkout and revision open targets", () => {
         onDiscard={() => {}}
         onPush={() => {}}
         onPull={() => {}}
-        onCreateWorktree={async () => true}
         onCheckout={async () => {}}
         onListBranches={async () => []}
-        onLand={async () => ({ outcome: "fast_forwarded" })}
-        onRemoveWorktree={async () => true}
       />
     ));
 
