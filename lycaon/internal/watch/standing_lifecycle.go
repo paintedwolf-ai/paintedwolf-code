@@ -204,15 +204,15 @@ func (e *StandingEngine) RecordChatProvenance(ctx context.Context, prov Standing
 	if e == nil || !e.store.Configured() || strings.TrimSpace(prov.SessionID) == "" {
 		return nil
 	}
-	createdAt := prov.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = e.store.clock.Now()
+	recordedAt := prov.RecordedAt
+	if recordedAt.IsZero() {
+		recordedAt = e.store.clock.Now()
 	}
 	_, err := e.store.db.ExecContext(ctx, `INSERT OR REPLACE INTO standing_watch_chat_provenance
 		(session_id, project_id, watch_id, watch_name, run_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		strings.TrimSpace(prov.SessionID), strings.TrimSpace(prov.ProjectID),
 		strings.TrimSpace(prov.WatchID), strings.TrimSpace(prov.WatchName),
-		strings.TrimSpace(prov.RunID), createdAt.UTC().Format(time.RFC3339Nano))
+		strings.TrimSpace(prov.RunID), recordedAt.UTC().Format(time.RFC3339Nano))
 	return err
 }
 
@@ -234,7 +234,7 @@ func (e *StandingEngine) LookupChatProvenance(ctx context.Context, sessionID str
 		return StandingChatProvenance{}, false, false, err
 	}
 	if parsed, pErr := time.Parse(time.RFC3339Nano, createdStr); pErr == nil {
-		prov.CreatedAt = parsed.UTC()
+		prov.RecordedAt = parsed.UTC()
 	}
 	return prov, true, existsInt == 1, nil
 }

@@ -156,12 +156,12 @@ type WatchRun struct {
 
 // StandingChatProvenance records which standing watch created a run chat.
 type StandingChatProvenance struct {
-	SessionID string    `json:"session_id"`
-	ProjectID string    `json:"project_id"`
-	WatchID   string    `json:"watch_id"`
-	WatchName string    `json:"watch_name"`
-	RunID     string    `json:"run_id"`
-	CreatedAt time.Time `json:"created_at"`
+	SessionID  string    `json:"session_id"`
+	ProjectID  string    `json:"project_id"`
+	WatchID    string    `json:"watch_id"`
+	WatchName  string    `json:"watch_name"`
+	RunID      string    `json:"run_id"`
+	RecordedAt time.Time `json:"recorded_at"`
 }
 
 // StandingRunDispatchOutcome reports how the host dispatcher started or settled a run.
