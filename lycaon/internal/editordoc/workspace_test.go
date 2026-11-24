@@ -120,7 +120,7 @@ func TestOrphanedCheckoutDocumentLifecycleAndStatuses(t *testing.T) {
 
 	wtRoot := t.TempDir()
 	testutil.FailErr(t, "write wt file", os.WriteFile(filepath.Join(wtRoot, "a.txt"), []byte("wt base\n"), 0o600))
-	wtProj := project.WithRootRefs(f.project, []projectroot.RootRef{{ID: f.rootID, Path: wtRoot}})
+	wtProj := withRootRefs(f.project, []projectroot.RootRef{{ID: f.rootID, Path: wtRoot}})
 	wtProj.SourceBranch = sourcebranch.ForWorktree(uuid.NewString())
 	wtDoc, err := f.service.Open(t.Context(), wtProj, "a.txt", f.rootID, "", "window-1", nil)
 	testutil.FailErr(t, "open wt doc", err)
