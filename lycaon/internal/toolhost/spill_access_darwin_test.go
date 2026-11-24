@@ -1,7 +1,7 @@
 package toolhost
 
 import (
-	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -20,7 +20,7 @@ func TestSeatbeltChildCannotOpenAConvertedSpill_ACSPILL01(t *testing.T) {
 		tc.Host.HostDataDir = f.host
 		tc.Files.SessionReadPaths = []string{f.abs}
 	}
-	if out := f.run(t, source); out.Status == 0 || bytes.Contains([]byte(out.Stdout), []byte("alpha")) {
+	if out := f.run(t, source); out.Status == 0 || strings.Contains(out.Stdout, "alpha") {
 		t.Fatalf("exact grant opened the state tree: %+v", out)
 	}
 }

@@ -172,8 +172,8 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		return readResult(0), nil
 	})
 	return map[string]commandprogram.OperationDispatcher{
-		"jobs":            listJobs,
-		"ps":              psBuiltin(jobs, commands["ps"]),
+		"jobs": listJobs,
+		"ps":   psBuiltin(jobs, commands["ps"]),
 		"wait": jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			handles := request.Argv.Values()[1:]
 			named := len(handles) > 0
