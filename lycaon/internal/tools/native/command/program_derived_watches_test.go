@@ -266,19 +266,15 @@ func TestBashDerivedWatchesQuotaBypassCancelCoalescingContinuationAndWorkerColle
 	_, _ = f.Background.Lifecycle.Stop(f.Session, liveCmdHandle, bgprocess.TerminationStoppedByAgent)
 
 	// Worker & job creates a job-scoped derived watch and collects quietly on worker's next eligible input.
-	workerSessID := "worker-sess-sw05"
 	workerJobID := "worker-job-sw05"
-	testdbseed.InsertChildSession(t, f.Database, workerSessID, f.Session)
 	_, err = f.Database.ExecContext(t.Context(), `INSERT INTO worker_jobs
 		(id, project_id, child_session_id, agent_type, prompt, brief, created_at)
 		VALUES (?, ?, ?, 'implementer', 'work', 'work', '2026-11-23T18:00:00Z')`,
-		workerJobID, testdbseed.DefaultProjectID, workerSessID)
+		workerJobID, testdbseed.DefaultProjectID, f.Session)
 	testutil.FailErr(t, "seed worker job", err)
 
 	f.Configure = func(tc *tools.ToolContext) {
-		tc.Identity.SessionID = workerSessID
 		tc.Identity.WorkerJobID = workerJobID
-		tc.Identity.Agent = "implement"
 	}
 	rawWorker, err := f.CallArgs(t, t.Context(), map[string]any{
 		"command": `{ echo worker-bg; } &`,
@@ -292,10 +288,10 @@ func TestBashDerivedWatchesQuotaBypassCancelCoalescingContinuationAndWorkerColle
 		t.Fatalf("worker missing derived watch handoff: %+v", workerOut.BackgroundJobs)
 	}
 	workerJobHandle := workerOut.BackgroundJobs[0].Handle
-	_, _, err = f.Background.Lifecycle.Wait(t.Context(), workerSessID, workerJobHandle)
+	_, _, err = f.Background.Lifecycle.Wait(t.Context(), f.Session, workerJobHandle)
 	testutil.FailErr(t, "await worker bg job", err)
 
-	workerOwner := watch.JobOwner(workerSessID, workerJobID)
+	workerOwner := watch.JobOwner(f.Session, workerJobID)
 	workerOwner.ProjectID = testdbseed.DefaultProjectID
 	testutil.WaitFor(t, "worker job match recorded", func() bool {
 		v, vErr := watchStore.Inspect(t.Context(), workerOwner, workerOut.BackgroundJobs[0].WatchHandle)
