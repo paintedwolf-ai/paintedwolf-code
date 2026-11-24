@@ -2,6 +2,7 @@ package gate
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -9,6 +10,22 @@ import (
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func TestAllPosturesReturnsFreshSortedRegistryKeys(t *testing.T) {
+	t.Parallel()
+	got := AllPostures()
+	want := []Posture{PostureBalanced, PostureLight, PostureStrict}
+	if !slices.Equal(got, want) {
+		t.Fatalf("AllPostures() = %v, want %v", got, want)
+	}
+	if len(got) != len(postureRules) {
+		t.Fatalf("len(AllPostures()) = %d, len(postureRules) = %d", len(got), len(postureRules))
+	}
+	got[0] = "mutated"
+	if again := AllPostures(); !slices.Equal(again, want) {
+		t.Fatalf("AllPostures() aliased caller slice: %v", again)
+	}
+}
 
 // Raising posture preserves every gate already enabled.
 func TestPostureLadderIsMonotone(t *testing.T) {

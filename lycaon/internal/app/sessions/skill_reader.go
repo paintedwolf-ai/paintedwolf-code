@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -74,7 +75,10 @@ func skillToolReader(ctx context.Context, mgr *session.Host, tctx tools.ToolCont
 	}
 	var visible []string
 	if tctx.Turn.TurnOfferedToolNames != nil {
-		visible = tctx.Turn.TurnOfferedToolNames
+		visible = slices.Clone(tctx.Turn.TurnOfferedToolNames)
+		if surfaceID == "" && plan.Compiled() {
+			visible = append(visible, plan.DeferredNames()...)
+		}
 	}
 	webSearch := true
 	if mgr != nil && mgr.Coordinator != nil && mgr.Coordinator.Context != nil {

@@ -117,6 +117,7 @@ type ProducerGraph struct {
 }
 
 var defaultEntryPointPatterns = []string{
+	"./internal/app/workerruntime/...",
 	"./internal/coordinator/...",
 	"./internal/guidance/...",
 	"./internal/oar/...",
@@ -125,6 +126,7 @@ var defaultEntryPointPatterns = []string{
 	"./internal/toolfeedback/...",
 	"./internal/toolexecution/...",
 	"./internal/tools/...",
+	"./internal/worker/...",
 }
 
 var defaultGraphBuilds atomic.Int64

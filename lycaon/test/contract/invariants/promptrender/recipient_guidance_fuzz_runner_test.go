@@ -255,12 +255,14 @@ func decodeWorkerSeed(d *hoststate.SeedDomains, data []byte) hoststate.WorkerSee
 		agentID = ov.WorkerAgents[int(byteAt(data, 5))%len(ov.WorkerAgents)].ID
 	}
 	flags := byteAt(data, 12)
+	rootCount := (int(byteAt(data, 8)) % 2) + 1
 	return hoststate.WorkerSeed{
 		OverlayIndex:             ovIdx,
 		AgentID:                  agentID,
 		Posture:                  d.Postures[int(byteAt(data, 3))%len(d.Postures)].ID,
 		BranchView:               d.WorkerBranches[int(byteAt(data, 6))%len(d.WorkerBranches)],
-		RootCount:                (int(byteAt(data, 8)) % 2) + 1,
+		RootCount:                rootCount,
+		SecondaryRootGit:         rootCount == 2 && flags&8 != 0,
 		Loading:                  d.WorkerLoadings[int(byteAt(data, 7))%len(d.WorkerLoadings)],
 		ParentSessionMode:        d.SessionModes[int(byteAt(data, 4))%len(d.SessionModes)],
 		ParentUpgradedAskToAgent: byteAt(data, 10)%2 == 1,
@@ -274,7 +276,7 @@ func decodeWorkerSeed(d *hoststate.SeedDomains, data []byte) hoststate.WorkerSee
 func mutateWorkerSeed(d *hoststate.SeedDomains, s hoststate.WorkerSeed, axisSel, valSel uint8) hoststate.WorkerSeed {
 	out := s
 	ov := d.Overlays[s.OverlayIndex]
-	switch axisSel % 6 {
+	switch axisSel % 8 {
 	case 0:
 		if len(ov.WorkerAgents) > 0 {
 			out.AgentID = ov.WorkerAgents[int(valSel)%len(ov.WorkerAgents)].ID
@@ -289,6 +291,12 @@ func mutateWorkerSeed(d *hoststate.SeedDomains, s hoststate.WorkerSeed, axisSel,
 		out.ParentSessionMode = d.SessionModes[int(valSel)%len(d.SessionModes)]
 	case 5:
 		out.CommandExternalHidden = !s.CommandExternalHidden
+	case 6:
+		out.ApprovalPosture = d.ApprovalPostures[int(valSel)%len(d.ApprovalPostures)]
+	case 7:
+		if out.RootCount == 2 {
+			out.SecondaryRootGit = !s.SecondaryRootGit
+		}
 	}
 	return out
 }

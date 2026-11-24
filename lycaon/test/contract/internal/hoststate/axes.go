@@ -152,7 +152,7 @@ func resolverReachedSurfaces(postures []sessionprofiles.PostureSpec) (map[string
 		{WorkersInFlight: 1},
 		{WrapupGatesLoaded: true, BatchReadyForSynthesis: true},
 	}
-	for _, mode := range []api.SessionMode{api.SessionModeAgent, api.SessionModeAsk} {
+	for _, mode := range api.AllSessionModeValues() {
 		for _, p := range postures {
 			sess := &api.Session{Mode: mode, Posture: p.ID}
 			for _, st := range ambientStates {

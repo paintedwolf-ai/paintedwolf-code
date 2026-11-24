@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -107,6 +108,8 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		projTurnMu.Unlock()
 	}
 
+	visible := slices.Clone(proj.offered)
+	visible = append(visible, proj.plan.DeferredNames()...)
 	var reviewsConfinedWrites bool
 	if state.ApprovalPosture != "" {
 		reviewsConfinedWrites = state.ApprovalPosture.ReviewsConfinedWrites()
@@ -117,7 +120,7 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		Profiles:              narrowed,
 		Plan:                  proj.plan,
 		Loaded:                state.Loaded,
-		Visible:               proj.offered,
+		Visible:               visible,
 		Schemas:               overlay.Schemas,
 		ProjectedSchemas:      proj.projectedSchemas,
 		RootCount:             state.RootCount,
@@ -188,4 +191,37 @@ func WorkerReaderForSession(ctx context.Context, sessionState CoordinatorState, 
 		return prompts.Reader{}, err
 	}
 	return auth.Reader, nil
+}
+
+func admissibleWorkerDeferredNames(
+	ctx context.Context,
+	overlay PackOverlay,
+	agentID, profileID string,
+	posture api.SessionPosture,
+	parentMode api.SessionMode,
+	rootCount int,
+	webSearch, extHidden bool,
+) ([]string, error) {
+	probe := WorkerState{
+		AgentID:               agentID,
+		ToolProfile:           profileID,
+		Posture:               posture,
+		BranchView:            BranchMainGit,
+		RootCount:             max(rootCount, 1),
+		Loading:               WorkerLoadingStickyOnly,
+		ParentSessionMode:     parentMode,
+		WebSearch:             webSearch,
+		CommandExternalHidden: extHidden,
+		HasGit:                true,
+		HasAnyGitRoot:         true,
+		Loaded:                map[string]bool{},
+		Overlay:               overlay,
+	}
+	auth, err := FreezeWorkerAuthority(ctx, probe)
+	if err != nil {
+		return nil, err
+	}
+	deferred := slices.Clone(auth.Plan.DeferredNames())
+	slices.Sort(deferred)
+	return deferred, nil
 }

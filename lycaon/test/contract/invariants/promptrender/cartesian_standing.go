@@ -469,6 +469,11 @@ func runWorkerPersonaAndInjectMatrix(
 				mutInAsk = true
 			}
 		}
+		wEngine := engineForOverlay(s, ws.Overlay)
+		wRev := s.Catalog.Revision
+		if ws.Overlay.Catalog != nil {
+			wRev = ws.Overlay.Catalog.Revision
+		}
 		if !mutInAsk {
 			occ := workerPersonaOccurrence(auth.Reader, skillsList)
 			if idx%2 == 0 {
@@ -481,9 +486,9 @@ func runWorkerPersonaAndInjectMatrix(
 			if vErr != nil {
 				return vErr
 			}
-			rKey := renderCacheKeyForVars("wpersona:"+ws.AgentID+":"+s.Site, s.Catalog.Revision, nil, fullVars)
+			rKey := renderCacheKeyForVars("wpersona:"+ws.AgentID+":"+s.Site, wRev, nil, fullVars)
 			text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
-				return prompts.RenderPersona(ctx, engine, ws.AgentID, auth.Reader, occ)
+				return prompts.RenderPersona(ctx, wEngine, ws.AgentID, auth.Reader, occ)
 			})
 			if rErr != nil {
 				return rErr
@@ -497,7 +502,11 @@ func runWorkerPersonaAndInjectMatrix(
 			})
 		}
 
-		if err := renderAndCheckToolProcedures(ctx, s, injRenderer, "worker:"+ws.ID, s.Catalog.Revision, auth, ws.ParentSessionMode, ws.Posture, nil, cache, sum); err != nil {
+		wInjRenderer := injRenderer
+		if wEngine != engine {
+			wInjRenderer = prompts.NewInjectRenderer(wEngine)
+		}
+		if err := renderAndCheckToolProcedures(ctx, s, wInjRenderer, "worker:"+ws.ID, wRev, auth, ws.ParentSessionMode, ws.Posture, nil, cache, sum); err != nil {
 			return err
 		}
 		if !checkedDesc[auth.Digest] {

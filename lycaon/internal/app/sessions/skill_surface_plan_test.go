@@ -32,4 +32,20 @@ func TestSkillToolReaderPreservesRuntimePlan(t *testing.T) {
 				reader.Offered(), reader.Requestable(), tc.wantOffered, tc.wantReq)
 		}
 	}
+
+	workerPlan := toolsurface.Compile([]string{"command", "request_tools", "capture_page"}, []string{"fetch_url", "web_search"})
+	workerReader, err := skillToolReader(t.Context(), nil, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: "implementer"},
+		Turn: tools.InvocationTurn{
+			TurnToolPlan:         workerPlan,
+			TurnOfferedToolNames: []string{"command", "request_tools", "capture_page"},
+		},
+	})
+	testutil.FailErr(t, "worker skillToolReader partial load", err)
+	if !slices.Contains(workerReader.Offered(), "capture_page") || slices.Contains(workerReader.Offered(), "fetch_url") {
+		t.Fatalf("worker partial-load Offered() = %v", workerReader.Offered())
+	}
+	if !slices.Contains(workerReader.Requestable(), "fetch_url") || slices.Contains(workerReader.Requestable(), "capture_page") {
+		t.Fatalf("worker partial-load Requestable() = %v", workerReader.Requestable())
+	}
 }

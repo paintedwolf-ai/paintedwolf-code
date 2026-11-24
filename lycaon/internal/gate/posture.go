@@ -2,6 +2,7 @@ package gate
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,6 +23,16 @@ const (
 
 // DefaultPosture is the out-of-the-box ask-line.
 const DefaultPosture = PostureBalanced
+
+// AllPostures returns a fresh sorted slice of every registered approval posture.
+func AllPostures() []Posture {
+	out := make([]Posture, 0, len(postureRules))
+	for p := range postureRules {
+		out = append(out, p)
+	}
+	slices.Sort(out)
+	return out
+}
 
 // ParsePosture accepts exactly light, balanced, or strict; anything else is an
 // error.

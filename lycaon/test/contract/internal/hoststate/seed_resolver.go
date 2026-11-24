@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -58,6 +57,7 @@ type WorkerSeed struct {
 	Posture                  api.SessionPosture
 	BranchView               WorkerBranchView
 	RootCount                int
+	SecondaryRootGit         bool
 	Loading                  WorkerLoadingMode
 	ParentSessionMode        api.SessionMode
 	ParentUpgradedAskToAgent bool
@@ -90,21 +90,22 @@ var (
 		for _, s := range surfaces {
 			surfMap[s.ID] = s.Surface
 		}
+		sessionModes := api.AllSessionModeValues()
 		return &SeedDomains{
 			Overlays:         overlays,
 			Postures:         postures,
 			Surfaces:         surfaces,
 			SurfaceMap:       surfMap,
 			Folderless:       folderless,
-			SessionModes:     []api.SessionMode{api.SessionModeAgent, api.SessionModeAsk},
+			SessionModes:     sessionModes,
 			WorkflowStates:   []WorkflowState{WorkflowActivePhase, WorkflowAmbientIdle, WorkflowPendingOverlays, WorkflowWorkersInFlight},
-			RootTopologies:   []RootTopology{RootsDualGitFirst, RootsDualNonGitFirst, RootsNone, RootsSingleGit, RootsSingleNonGit},
+			RootTopologies:   []RootTopology{RootsDualGitFirst, RootsDualNeitherGit, RootsDualNonGitFirst, RootsNone, RootsSingleGit, RootsSingleNonGit},
 			LoadingModes:     []LoadingMode{LoadingAllLoaded, LoadingFloorOnly, LoadingPartlyLoaded},
-			ApprovalPostures: []gate.Posture{gate.PostureBalanced, gate.PostureStrict},
+			ApprovalPostures: gate.AllPostures(),
 			TempStates:       []TempState{TempNone, TempScratchAndShared, TempScratchOnly},
 			MCPStates:        []MCPState{MCPMutating, MCPNone, MCPReadOnlyHint},
 			WorkerBranches:   []WorkerBranchView{BranchIsolatedWorker, BranchLinkedWorktreeGit, BranchMainGit, BranchMainNonGit},
-			WorkerLoadings:   []WorkerLoadingMode{WorkerLoadingAllLoaded, WorkerLoadingStickyOnly},
+			WorkerLoadings:   []WorkerLoadingMode{WorkerLoadingAllLoaded, WorkerLoadingPartlyLoaded, WorkerLoadingStickyOnly},
 		}, nil
 	})
 )
@@ -182,26 +183,23 @@ func ResolveWorkerSeed(domains *SeedDomains, seed WorkerSeed) (WorkerState, erro
 			break
 		}
 	}
-	parentAsk := seed.ParentSessionMode == api.SessionModeAsk
-	upgraded := seed.ParentUpgradedAskToAgent && parentAsk
+	parentMode := seed.ParentSessionMode
+	if parentMode == "" {
+		parentMode = api.SessionModeAgent
+	}
+	upgraded := seed.ParentUpgradedAskToAgent && parentMode == api.SessionModeAsk
 	rootCount := seed.RootCount
 	if rootCount <= 0 {
 		rootCount = 1
 	}
-	st := buildWorkerState(overlay, *target, prof, seed.Posture, seed.BranchView, rootCount, seed.Loading, parentAsk, upgraded)
-	st.WebSearch = seed.WebSearch
-	st.Vision = seed.Vision
-	st.CommandExternalHidden = seed.CommandExternalHidden
-	if !st.Excluded && !seed.WebSearch && agentdef.DeclaresAny(seed.AgentID, agentdef.CapabilityExternal) {
-		st.Excluded = true
-		st.ExcludedReason = "web_search_disabled_for_external_agent"
+	approval := seed.ApprovalPosture
+	if approval == "" {
+		approval = gate.PostureBalanced
 	}
-	if seed.ApprovalPosture != "" {
-		st.ApprovalPosture = seed.ApprovalPosture
-	}
-	st.ID = fmt.Sprintf(
-		"%s/ov=%s/web=%t/vis=%t/extH=%t/app=%s",
-		st.ID, overlay.ID, st.WebSearch, st.Vision, st.CommandExternalHidden, st.ApprovalPosture,
+	return buildWorkerStateWithEnv(
+		context.Background(), overlay, *target, prof,
+		seed.Posture, seed.BranchView, rootCount, seed.SecondaryRootGit,
+		seed.Loading, parentMode, upgraded,
+		seed.WebSearch, seed.Vision, seed.CommandExternalHidden, approval,
 	)
-	return st, nil
 }

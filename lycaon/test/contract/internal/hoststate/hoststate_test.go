@@ -60,25 +60,36 @@ func TestHostStateEnumeratesAllPosturesSurfacesAndAgents(t *testing.T) {
 	contractcheck.FailErr(t, "CoordinatorStates", err)
 	reachedSurfaces := map[string]bool{}
 	excludedReasons := map[string]int{}
-	hasMixedGitFirst, hasMixedNonGitFirst := false, false
+	coordApprovals := map[string]bool{}
+	hasMixedGitFirst, hasMixedNonGitFirst, hasDualNeitherGit := false, false, false
 	for _, st := range coordStates {
 		if st.Excluded {
 			excludedReasons[st.ExcludedReason]++
 			continue
 		}
 		reachedSurfaces[st.TurnProfile.SurfaceID] = true
+		coordApprovals[string(st.ApprovalPosture)] = true
 		if st.RootTopology == hoststate.RootsDualGitFirst && st.HasGit && st.HasAnyGitRoot {
 			hasMixedGitFirst = true
 		}
 		if st.RootTopology == hoststate.RootsDualNonGitFirst && !st.HasGit && st.HasAnyGitRoot {
 			hasMixedNonGitFirst = true
 		}
+		if st.RootTopology == hoststate.RootsDualNeitherGit && !st.HasGit && !st.HasAnyGitRoot {
+			hasDualNeitherGit = true
+		}
 	}
 	if len(reachedSurfaces) != 22 {
 		t.Fatalf("CoordinatorStates reached %d surfaces, want all 22: %v", len(reachedSurfaces), reachedSurfaces)
 	}
-	if !hasMixedGitFirst || !hasMixedNonGitFirst {
-		t.Fatalf("mixed 2-root Git orders missing: gitFirst=%t nonGitFirst=%t", hasMixedGitFirst, hasMixedNonGitFirst)
+	if !hasMixedGitFirst || !hasMixedNonGitFirst || !hasDualNeitherGit {
+		t.Fatalf("2-root Git pairs missing: gitFirst=%t nonGitFirst=%t neitherGit=%t",
+			hasMixedGitFirst, hasMixedNonGitFirst, hasDualNeitherGit)
+	}
+	for _, app := range []string{"balanced", "light", "strict"} {
+		if !coordApprovals[app] {
+			t.Fatalf("CoordinatorStates missing approval posture %q in %v", app, coordApprovals)
+		}
 	}
 	if excludedReasons["requires_agent_surface_rejected_in_ask_mode"] == 0 {
 		t.Fatalf("expected explicit exclusion reason for requires_agent in Ask mode: %v", excludedReasons)
@@ -88,6 +99,32 @@ func TestHostStateEnumeratesAllPosturesSurfacesAndAgents(t *testing.T) {
 	contractcheck.FailErr(t, "WorkerStates", err)
 	if len(workerStates) == 0 {
 		t.Fatal("WorkerStates returned empty slice")
+	}
+	workerApprovals := map[string]bool{}
+	hasWorkerDualNeither, hasWorkerDualSecondary, hasWorkerPartlyLoaded := false, false, false
+	for _, ws := range workerStates {
+		if ws.Excluded {
+			continue
+		}
+		workerApprovals[string(ws.ApprovalPosture)] = true
+		if ws.RootCount == 2 && !ws.HasGit && !ws.HasAnyGitRoot {
+			hasWorkerDualNeither = true
+		}
+		if ws.RootCount == 2 && !ws.HasGit && ws.HasAnyGitRoot {
+			hasWorkerDualSecondary = true
+		}
+		if ws.Loading == hoststate.WorkerLoadingPartlyLoaded {
+			hasWorkerPartlyLoaded = true
+		}
+	}
+	for _, app := range []string{"balanced", "light", "strict"} {
+		if !workerApprovals[app] {
+			t.Fatalf("WorkerStates missing approval posture %q in %v", app, workerApprovals)
+		}
+	}
+	if !hasWorkerDualNeither || !hasWorkerDualSecondary || !hasWorkerPartlyLoaded {
+		t.Fatalf("WorkerStates missing cases: dualNeither=%t dualSecondary=%t partlyLoaded=%t",
+			hasWorkerDualNeither, hasWorkerDualSecondary, hasWorkerPartlyLoaded)
 	}
 
 	specs, err := hoststate.AnchorCatalogSpecs()

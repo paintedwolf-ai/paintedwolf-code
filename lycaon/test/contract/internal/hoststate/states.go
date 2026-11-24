@@ -35,6 +35,7 @@ const (
 	RootsSingleNonGit    RootTopology = "single_nongit"
 	RootsDualGitFirst    RootTopology = "dual_git_first"
 	RootsDualNonGitFirst RootTopology = "dual_nongit_first"
+	RootsDualNeitherGit  RootTopology = "dual_neither_git"
 )
 
 // LoadingMode classifies deferred-tool schema activation on a turn.
@@ -185,8 +186,11 @@ func buildCoordinatorSeeds(
 	postures []sessionprofiles.PostureSpec,
 	surfaces []SurfaceInfo,
 ) []coordinatorSeed {
-	modes := []api.SessionMode{api.SessionModeAgent, api.SessionModeAsk}
-	rootsAll := []RootTopology{RootsNone, RootsSingleGit, RootsSingleNonGit, RootsDualGitFirst, RootsDualNonGitFirst}
+	modes := api.AllSessionModeValues()
+	rootsAll := []RootTopology{
+		RootsNone, RootsSingleGit, RootsSingleNonGit,
+		RootsDualGitFirst, RootsDualNonGitFirst, RootsDualNeitherGit,
+	}
 	loadings := []LoadingMode{LoadingFloorOnly, LoadingPartlyLoaded, LoadingAllLoaded}
 
 	var seeds []coordinatorSeed
@@ -241,10 +245,11 @@ func buildOverlayAndEnvSeeds(
 			}
 		}
 	}
+	allApprovals := gate.AllPostures()
 	for _, mode := range modes {
 		for _, p := range []api.SessionPosture{api.SessionPostureBuild, api.SessionPostureSpec} {
 			for _, extH := range []bool{false, true} {
-				for _, app := range []gate.Posture{gate.PostureBalanced, gate.PostureStrict} {
+				for _, app := range allApprovals {
 					for _, tmp := range []TempState{TempNone, TempScratchOnly, TempScratchAndShared} {
 						for _, mcp := range []MCPState{MCPNone, MCPReadOnlyHint, MCPMutating} {
 							seeds = append(seeds, coordinatorSeed{

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -364,22 +365,30 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 		t.Fatalf("expected combined masked input to pass on corrected stock, got rep=%+v err=%v", correctedRep, corrErr)
 	}
 
-	corpusRel := filepath.Join("testdata", "fuzz", "FuzzRecipientGuidanceAcrossHostStates", "masked_two_axis_spec_nongit")
+	corpusDir := filepath.Join("testdata", "fuzz", "FuzzRecipientGuidanceAcrossHostStates")
+	corpusRel := filepath.Join(corpusDir, "masked_two_axis_spec_nongit")
 	wantCorpus := formatGoFuzzV1Bytes(combinedMaskedBytes)
 	if os.Getenv("PW_WRITE_FUZZ_CORPUS") == "1" {
-		if err := os.MkdirAll(filepath.Dir(corpusRel), 0o755); err != nil {
+		if err := os.MkdirAll(corpusDir, 0o755); err != nil {
 			t.Fatalf("mkdir corpus dir: %v", err)
 		}
 		if err := os.WriteFile(corpusRel, []byte(wantCorpus), 0o644); err != nil {
 			t.Fatalf("write corpus file: %v", err)
 		}
 	}
-	diskCorpus, err := os.ReadFile(corpusRel)
-	if err != nil {
-		t.Fatalf("missing committed fuzz corpus file %s: %v", corpusRel, err)
-	}
-	if string(diskCorpus) != wantCorpus {
-		t.Fatalf("committed fuzz corpus %s drifted:\ngot:  %q\nwant: %q", corpusRel, string(diskCorpus), wantCorpus)
+	for _, corpusName := range []string{"028e1c4e90279a32", "7a8c30225a082d3d", "masked_two_axis_spec_nongit"} {
+		p := filepath.Join(corpusDir, corpusName)
+		rawCorpus, rErr := os.ReadFile(p)
+		if rErr != nil {
+			t.Fatalf("missing committed fuzz corpus file %s: %v", p, rErr)
+		}
+		seedBytes, pErr := parseGoFuzzV1Bytes(string(rawCorpus))
+		if pErr != nil {
+			t.Fatalf("parse committed fuzz corpus %s: %v", p, pErr)
+		}
+		if _, cErr := executeFuzzRecipientCase(t.Context(), env, seedBytes, wsDir, nil); cErr != nil {
+			t.Fatalf("committed fuzz corpus %s failed replay: %v", p, cErr)
+		}
 	}
 
 	oarCtrlSummary := verifyOARTwoTurnDeliveredRefusalControls(t, env, wsDir, true)
@@ -709,4 +718,19 @@ func formatGoFuzzV1Bytes(b []byte) string {
 	}
 	sb.WriteString("\")\n")
 	return sb.String()
+}
+
+func parseGoFuzzV1Bytes(raw string) ([]byte, error) {
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if rest, ok := strings.CutPrefix(line, "[]byte("); ok {
+			quoted := strings.TrimSuffix(rest, ")")
+			unq, err := strconv.Unquote(quoted)
+			if err != nil {
+				return nil, err
+			}
+			return []byte(unq), nil
+		}
+	}
+	return nil, fmt.Errorf("no []byte(...) entry in fuzz corpus")
 }
