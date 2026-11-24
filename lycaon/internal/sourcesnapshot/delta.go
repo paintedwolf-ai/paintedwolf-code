@@ -175,10 +175,7 @@ func (t *deltaTracker) begin(root, scopeID string) deltaPlan {
 	}
 	if d.overflow && d.overflowAt > cov.upTo {
 		plan.reason = SurveyOverflow
-		delete(d.scopes, scopeID)
-		if len(d.scopes) == 0 {
-			d.resetLocked()
-		}
+		d.consumeOverflowLocked(scopeID)
 		return plan
 	}
 	plan.covered = cov.covered
@@ -197,6 +194,18 @@ func (d *rootDelta) resetLocked() {
 	d.overflow = false
 	d.rescopedAt = 0
 	clear(d.paths)
+}
+
+func (d *rootDelta) consumeOverflowLocked(scopeID string) {
+	delete(d.scopes, scopeID)
+	for k, cov := range d.scopes {
+		if cov.upTo < d.overflowAt {
+			delete(d.scopes, k)
+		}
+	}
+	if len(d.scopes) == 0 {
+		d.resetLocked()
+	}
 }
 
 func (d *rootDelta) manifestPendingLocked(scopeID, manifestID string) bool {
@@ -247,10 +256,7 @@ func (t *deltaTracker) pending(root string, plan deltaPlan) deltaPlan {
 		next.covered = ""
 		next.overflow = true
 		next.reason = SurveyOverflow
-		delete(d.scopes, plan.scopeID)
-		if len(d.scopes) == 0 {
-			d.resetLocked()
-		}
+		d.consumeOverflowLocked(plan.scopeID)
 		return next
 	}
 	for rel, seq := range d.paths {

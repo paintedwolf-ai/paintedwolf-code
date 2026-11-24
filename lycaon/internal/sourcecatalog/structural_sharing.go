@@ -100,11 +100,15 @@ func cloneStructuralGeneration(src *structuralGeneration, id int64) *structuralG
 	return cloned
 }
 
+func (p walkPolicy) isRootBase() bool {
+	return p.base == "" || p.base == "."
+}
+
 func (s *indexStore) structureShareKey(ctx context.Context) (string, walkPolicy, bool) {
 	if s == nil || s.stores == nil || s.root.OnDemand || s.root.DirectoryIdentity != "" || s.root.Only != "" {
 		return "", walkPolicy{}, false
 	}
-	if s.policy.includeDependencies || len(s.policy.selectedPaths) > 0 || s.policy.base != "" {
+	if s.policy.includeDependencies || len(s.policy.selectedPaths) > 0 || !s.policy.isRootBase() {
 		return "", walkPolicy{}, false
 	}
 	policy := s.stores.policyFor(ctx, s.root.Path).forRoot(s.root)

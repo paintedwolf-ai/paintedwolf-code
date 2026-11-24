@@ -27,7 +27,7 @@ func TestDispatchRootRecordsClaimAndUnchangedDecisionsWhileReusingSharedSnapshot
 	testutil.FailErr(t, "seed readme.md", os.WriteFile(filepath.Join(canonical, "README.md"), []byte("docs v1\n"), 0o600))
 	repochangetest.Watch(t, canonical)
 
-	snapshots := cadence.Coordinator.(*scanbase.CoordinatorImpl).SourceSnapshots
+	snapshots := cadence.Coordinator.SnapshotStore()
 	privA := t.TempDir()
 	testutil.FailErr(t, "seed privA", os.WriteFile(filepath.Join(privA, "a.go"), []byte("package a\n"), 0o600))
 	repochangetest.Watch(t, privA)

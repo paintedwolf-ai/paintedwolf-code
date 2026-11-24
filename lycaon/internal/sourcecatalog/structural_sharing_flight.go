@@ -165,7 +165,7 @@ func (s *indexStore) isDrainedOrRetired() bool {
 }
 
 func (s *indexStore) refreshWalkPolicy(ctx context.Context) {
-	if s == nil || s.stores == nil || s.policy.includeDependencies || len(s.policy.selectedPaths) > 0 || s.policy.base != "" {
+	if s == nil || s.stores == nil || s.policy.includeDependencies || len(s.policy.selectedPaths) > 0 || !s.policy.isRootBase() {
 		return
 	}
 	policy := s.stores.policyFor(ctx, s.root.Path).forRoot(s.root)
@@ -180,7 +180,7 @@ func (s *indexStore) prepareSharedFullBuild(ctx context.Context, expected int64)
 		return true, nil, err
 	}
 	flight, policy, leader := s.stores.sharedStructure.beginOrJoin(ctx, s)
-	if !s.policy.includeDependencies && len(s.policy.selectedPaths) == 0 && s.policy.base == "" {
+	if !s.policy.includeDependencies && len(s.policy.selectedPaths) == 0 && s.policy.isRootBase() {
 		s.mu.Lock()
 		s.policy = policy
 		s.mu.Unlock()
