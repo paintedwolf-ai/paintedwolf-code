@@ -67,7 +67,7 @@ func TestScreenLifecycleEmitsJoinedValueFreePhasesThroughDispatch(t *testing.T) 
 	}
 	lifecycle := &lifecycleProvider{Provider: screened}
 
-	reg := NewRegistry()
+	reg := newTestRegistry()
 	testutil.FailErr(t, "register provider", reg.Register(lifecycle))
 	plane := NewUtilityPlane()
 	client := NewRoutingClient(reg, nil, nil, plane, NewCapacityGate(CapacityPolicy{}), nil, func(context.Context) (*ModelSelection, error) {
