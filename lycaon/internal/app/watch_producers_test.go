@@ -159,7 +159,7 @@ func TestWatchProducersHooksAndOutcomeBridge(t *testing.T) {
 	mgr.Coordinator.Workers.OnWatchRunning(t.Context(), parent.ID, "job-1", "fixer", "notice", "notice", "occ-1", "working")
 	_ = mgr.Coordinator.Scans.OnWatchScanFinished(t.Context(), parent.ID, api.CodeScan{
 		ID:            "scan-1",
-		Status:        api.CodeScanStatusCompleted,
+		Status:        api.CodeScanStatusComplete,
 		Categories:    []api.ScanCategory{"security", "quality"},
 		FindingsCount: 1,
 	})
