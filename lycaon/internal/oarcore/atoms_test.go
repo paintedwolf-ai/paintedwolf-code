@@ -85,6 +85,14 @@ func TestRuleAtomsMatchEvaluatedAtoms(t *testing.T) {
 	if want := []Truth{False, False, False}; !slices.Equal([]Truth{values[0].Value, values[1].Value, values[2].Value}, want) {
 		t.Fatalf("values = %+v", values)
 	}
+	if rule.DecideFromAtoms(map[string]bool{"testhost.flag": false, `tool != "x"`: true}) != true ||
+		rule.DecideFromAtoms(map[string]bool{"testhost.flag": true}) != true ||
+		rule.DecideFromAtoms(map[string]bool{}) != false {
+		t.Fatal("DecideFromAtoms disagrees with the condition's logic")
+	}
+	if !(&Rule{}).DecideFromAtoms(nil) {
+		t.Fatal("a rule without a condition must hold")
+	}
 	if empty := (&Rule{}).Atoms(); empty != nil {
 		t.Fatalf("a rule without a condition has atoms %v", empty)
 	}

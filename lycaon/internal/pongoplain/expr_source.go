@@ -57,3 +57,17 @@ func (e *Expr) operand() string {
 	}
 	return "(" + e.Source() + ")"
 }
+
+// Decide evaluates e's Boolean skeleton with each atom's truth read from
+// values by its Source.
+func (e *Expr) Decide(values map[string]bool) bool {
+	switch e.Kind {
+	case ExprNot:
+		return !e.Left.Decide(values)
+	case ExprAnd:
+		return e.Left.Decide(values) && e.Right.Decide(values)
+	case ExprOr:
+		return e.Left.Decide(values) || e.Right.Decide(values)
+	}
+	return values[e.Source()]
+}

@@ -139,3 +139,25 @@ func formatOperand(n *node) string {
 	}
 	return formatNode(n)
 }
+
+// DecideFromAtoms evaluates the condition's Boolean skeleton with each atom's
+// truth read from values by its canonical text. A rule without a condition
+// holds.
+func (r *Rule) DecideFromAtoms(values map[string]bool) bool {
+	if r.When == nil {
+		return true
+	}
+	return decideNode(r.When, values)
+}
+
+func decideNode(n *node, values map[string]bool) bool {
+	switch {
+	case n.kind == nodeUnary && n.op == "!":
+		return !decideNode(n.left, values)
+	case n.kind == nodeBinary && n.op == "&&":
+		return decideNode(n.left, values) && decideNode(n.right, values)
+	case n.kind == nodeBinary && n.op == "||":
+		return decideNode(n.left, values) || decideNode(n.right, values)
+	}
+	return values[formatNode(n)]
+}

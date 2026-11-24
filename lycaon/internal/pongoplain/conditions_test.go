@@ -18,6 +18,14 @@ func TestExprAtomsPrintAsEvaluableSource(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("atoms = %q, want %q", got, want)
 	}
+	all := map[string]bool{"a": true, "e|length > 2": true, "f not in g": true}
+	if !expr.Decide(all) {
+		t.Fatal("Decide: a and not (false or false) and true and true should hold")
+	}
+	all["b.c"] = true
+	if expr.Decide(all) {
+		t.Fatal("Decide: a true disjunct under not must fail the guard")
+	}
 }
 
 func TestObservedConditionsRecordEveryAtomPerArm(t *testing.T) {
