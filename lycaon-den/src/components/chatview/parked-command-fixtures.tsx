@@ -14,7 +14,7 @@ export const INCIDENT_PROJECT = "project-incident-34";
 export const INCIDENT_HANDLE = "1f26f2b0-e3a7-4498-9b98-ff231be0d9be";
 
 export function mountCoordinatorChat(initialMessages: Message[]) {
-  setLycaonClientForTest(stubClient({}));
+  setLycaonClientForTest(stubClient({ listSessionArtifacts: async () => ({ artifacts: [] }) }));
   const appStore = createAppStore();
   appStore.actions.setSidecarStatus("connected");
   appStore.actions.setCurrentSession({
