@@ -822,13 +822,23 @@ export function GitStrip(props: Props) {
                       keyed
                     >
                       {(pid) => {
-                        const liveTarget = () =>
-                          gitChangeOpenTarget({
+                        const navigationTarget = () => {
+                          const target = gitChangeOpenTarget({
                             projectId: pid,
                             repoId: worktreeRepoId(),
                             worktreeId: status()?.worktree_id,
                             file: f,
                           });
+                          if (!target?.rootId) return undefined;
+                          return {
+                            project_id: pid,
+                            root_id: target.rootId,
+                            path: target.path,
+                            entry_kind: "file" as const,
+                            ...(target.repoId ? { repo_id: target.repoId } : {}),
+                            ...(target.worktreeId ? { worktree_id: target.worktreeId } : {}),
+                          };
+                        };
                         return (
                           <>
                             <SourcePathLink
@@ -837,18 +847,7 @@ export function GitStrip(props: Props) {
                               path={f.root_relative_path || f.path}
                               repoId={worktreeRepoId() || undefined}
                               worktreeId={status()?.worktree_id}
-                              navigationTarget={
-                                liveTarget()?.rootId
-                                  ? {
-                                      project_id: pid,
-                                      root_id: liveTarget()!.rootId!,
-                                      path: liveTarget()!.path,
-                                      entry_kind: "file",
-                                      ...(liveTarget()?.repoId ? { repo_id: liveTarget()!.repoId } : {}),
-                                      ...(liveTarget()?.worktreeId ? { worktree_id: liveTarget()!.worktreeId } : {}),
-                                    }
-                                  : undefined
-                              }
+                              navigationTarget={navigationTarget()}
                               change={statusFileChange(f.status)}
                               rootRefs={rootsForFile(f, props.rootRefs)}
                               chatDestination={
