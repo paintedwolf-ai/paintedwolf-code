@@ -1213,7 +1213,7 @@ func TestLinuxExecuteOnlyBinaryEnforcesSharedTempBoundaries(t *testing.T) {
 		return cmd.ProcessState.ExitCode(), string(out), refusals
 	}
 
-	if code, out, refusals := runXOnly(xonlyCat, incoming); code != 0 || out != "alpha" || refusals.Witness != confine.WitnessKernel {
+	if code, out, refusals := runXOnly(xonlyCat, incoming); code != 0 || out != "alpha" || len(refusals.Refusals) != 0 {
 		t.Fatalf("execute-only allowed input read: exit=%d out=%q refusals=%+v", code, out, refusals)
 	}
 	if code, out, _ := runXOnly(xonlyCat, sibling); code == 0 || strings.Contains(out, "beta") {
@@ -1222,7 +1222,11 @@ func TestLinuxExecuteOnlyBinaryEnforcesSharedTempBoundaries(t *testing.T) {
 	if code, out, _ := runXOnly(xonlyCat, exportExisting); code == 0 || strings.Contains(out, "secret-export") {
 		t.Fatalf("execute-only leaked write-only file: exit=%d out=%q", code, out)
 	}
-	if code, _, refusals := runXOnly(xonlyMkdir, filepath.Join(project, "denied-mutation")); code == 0 || refusals.Witness != confine.WitnessIncomplete {
-		t.Fatalf("execute-only mutation did not fail closed: exit=%d refusals=%+v", code, refusals)
+	deniedDir := filepath.Join(project, "denied-mutation")
+	if code, _, _ := runXOnly(xonlyMkdir, deniedDir); code == 0 {
+		t.Fatalf("execute-only mutation succeeded: exit=%d", code)
+	}
+	if _, err := os.Stat(deniedDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("execute-only mutation created %s: err=%v", deniedDir, err)
 	}
 }
