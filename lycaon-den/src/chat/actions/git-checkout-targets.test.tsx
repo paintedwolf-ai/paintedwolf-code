@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, fireEvent } from "@solidjs/testing-library";
+import { render, fireEvent, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { stubClient } from "../../test/client-fixture.ts";
 import { gitWorkspaceStatus } from "../../test/git-status-fixture.ts";
@@ -214,7 +214,7 @@ describe("git checkout targets", () => {
     ));
 
     fireEvent.click(view.getByTestId("git-discard"));
-    expect(view.queryByTestId("git-discard-modal")).not.toBeNull();
+    expect(screen.queryByTestId("git-discard-modal")).not.toBeNull();
 
     // Switching checkout target closes the modal so confirming cannot discard another checkout.
     setStatus(
@@ -229,7 +229,7 @@ describe("git checkout targets", () => {
       }),
     );
 
-    expect(view.queryByTestId("git-discard-modal")).toBeNull();
+    expect(screen.queryByTestId("git-discard-modal")).toBeNull();
     expect(onDiscard).not.toHaveBeenCalled();
   });
 });
