@@ -15,7 +15,7 @@ import {
   type WorktreeRowView,
 } from "./git-worktree-inspection.ts";
 
-export type UseGitCheckoutWorktreesOptions = {
+type UseGitCheckoutWorktreesOptions = {
   appStore?: AppStore;
   projectId: () => string | undefined;
   sessionId: () => string | undefined;

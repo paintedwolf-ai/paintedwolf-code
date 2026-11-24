@@ -9,7 +9,7 @@ import {
   type WorktreeRowView,
 } from "./git-worktree-inspection.ts";
 
-export type GitWorktreeSelectorProps = {
+type GitWorktreeSelectorProps = {
   worktrees: readonly GitWorktreeEntry[];
   inspectedWorktreeId?: string;
   pinned: boolean;
