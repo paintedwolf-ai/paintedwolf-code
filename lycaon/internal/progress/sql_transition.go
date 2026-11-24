@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -289,11 +290,15 @@ func writeRowsTransition(ctx context.Context, q *db.Queries, key string, before 
 		return Snapshot{}, fmt.Errorf("progress workflow run belongs to another session")
 	}
 	stamp := timelayout.Format(nextSnapshotTime(before.version))
+	var nextSeqInt int64 = math.MaxInt64
+	if nextSeq < math.MaxInt64 {
+		nextSeqInt = int64(nextSeq)
+	}
 	if err := q.UpsertSessionProgressHeader(ctx, db.UpsertSessionProgressHeaderParams{
 		SessionID:     key,
 		WorkflowRunID: runID,
 		UpdatedAt:     stamp,
-		NextItemSeq:   int64(nextSeq), //nolint:gosec // G115 — bounded per-session item sequence.
+		NextItemSeq:   nextSeqInt,
 	}); err != nil {
 		return Snapshot{}, err
 	}

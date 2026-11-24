@@ -37,9 +37,9 @@ func (m *Service) openProgressWithWaiver(ctx context.Context, sess *api.Session,
 		return nil, false, false
 	}
 	root := sessiontree.RootID(ctx, m.store, sess.ID)
-	snapshot, err := m.progress.Snapshot(ctx, root)
-	if err != nil {
-		return nil, false, false
+	var snapshot progress.Snapshot
+	if s, err := m.progress.Snapshot(ctx, root); err == nil {
+		snapshot = s
 	}
 	var verifyRequired, verifyPassed, verifyUnverified bool
 	if m.Verification != nil {

@@ -1,6 +1,7 @@
 package progress_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -58,7 +59,7 @@ func TestDeriveProgressSupportsFortyEightRows(t *testing.T) {
 		t.Fatalf("DeriveProgress = %d items + %d more, want 48 + 0", len(res.Items), res.More)
 	}
 
-	overflow := append(rows, progress.Row{ID: "p49", State: progress.ProgressStatePending, Label: "overflow"})
+	overflow := slices.Concat(rows, []progress.Row{{ID: "p49", State: progress.ProgressStatePending, Label: "overflow"}})
 	res = progress.DeriveProgress(overflow, progress.MaxProgressCap+1)
 	if len(res.Items) != 48 || res.More != 1 {
 		t.Fatalf("capped DeriveProgress = %d items + %d more, want 48 + 1", len(res.Items), res.More)
@@ -89,7 +90,7 @@ func TestAllTerminalAndOpenSteps(t *testing.T) {
 	if !progress.AllTerminal(doneAndNA) || progress.HasOpenSteps(doneAndNA) {
 		t.Fatal("done + na + optional should be terminal with zero open steps")
 	}
-	withOpen := append(doneAndNA[:2:2], progress.Row{ID: "p3", State: progress.ProgressStatePending, Label: "c"})
+	withOpen := slices.Concat(doneAndNA[:2], []progress.Row{{ID: "p3", State: progress.ProgressStatePending, Label: "c"}})
 	if progress.AllTerminal(withOpen) || !progress.HasOpenSteps(withOpen) || progress.OpenStepCount(withOpen) != 1 {
 		t.Fatal("pending row must block completion and count as 1 open step")
 	}
