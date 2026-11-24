@@ -188,10 +188,11 @@ modelIndependentWebE2e(
     );
 
     await expect(card).toHaveAttribute("data-sections", "activities,approvals,files");
+    const approvalsHeader = card.getByTestId("activity-group-approvals").locator(":scope > .den-transcript-disclosure-header");
     const approvalsToggle = card.getByTestId("activity-group-approvals-toggle");
     const filesToggle = card.getByTestId("diff-group").locator(":scope > .den-transcript-disclosure-header");
     const boxPhase3 = await actHeader.boundingBox();
-    const appBox = await approvalsToggle.boundingBox();
+    const appBox = await approvalsHeader.boundingBox();
     const filesBox = await filesToggle.boundingBox();
 
     expect(boxPhase3!.y).toBe(boxPhase1!.y);
@@ -239,7 +240,7 @@ modelIndependentWebE2e(
     const narrowFit = await card.evaluate((el) => ({ client: el.clientWidth, scroll: el.scrollWidth }));
     expect(narrowFit.scroll).toBe(narrowFit.client);
     const narrowActH = (await actHeader.boundingBox())!.height;
-    const narrowAppH = (await approvalsToggle.boundingBox())!.height;
+    const narrowAppH = (await approvalsHeader.boundingBox())!.height;
     const narrowFilesH = (await filesToggle.boundingBox())!.height;
     expect(Math.abs(narrowAppH - narrowActH)).toBeLessThanOrEqual(1);
     expect(Math.abs(narrowFilesH - narrowActH)).toBeLessThanOrEqual(1);

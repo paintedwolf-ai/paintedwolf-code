@@ -317,15 +317,17 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   const leadKeyBefore = `activity-group:${leadEntryKey}`;
   const leadKeyAfter = `activity-group:${base[56]!.id}:call-boundary-0`;
 
-  const olderPage = (url: URL) =>
-    url.pathname.endsWith(`/v1/sessions/${sessionId}/messages`) && url.searchParams.has("before_message_id");
-  let postReload = false;
+  const paginationRequest = (url: URL) =>
+    url.pathname.endsWith(`/v1/sessions/${sessionId}/messages`) &&
+    (url.searchParams.has("before_message_id") || url.searchParams.has("after_ord"));
+  let readyToScroll = false;
   let released = false;
   const releases: (() => void)[] = [];
   let markOlderHeld!: () => void;
   const olderRequested = new Promise<void>((resolve) => { markOlderHeld = resolve; });
-  await page.route(olderPage, async (route: Route) => {
-    if (!postReload) {
+  await page.route(paginationRequest, async (route: Route) => {
+    const url = new URL(route.request().url());
+    if (!readyToScroll || !url.searchParams.has("before_message_id")) {
       await route.abort();
       return;
     }
@@ -339,9 +341,9 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   });
 
   await apiSeedSessionTranscript(page.request, sessionId, rows);
-  postReload = true;
   await page.reload();
   await expect(liveChatStage(page).getByText("Step 160.", { exact: true })).toBeVisible({ timeout: 30_000 });
+  readyToScroll = true;
 
   const spanRow = scroller(page).locator(`.transcript-viewport-row[data-msg-id="${leadKeyBefore}"]`);
   // Step inside viewport height so the top row enters view without a runway seek.
@@ -376,6 +378,6 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
     });
     return Math.abs(topAfter - topBefore);
   }).toBeLessThanOrEqual(2);
-  await page.unroute(olderPage);
+  await page.unroute(paginationRequest);
 });
 
