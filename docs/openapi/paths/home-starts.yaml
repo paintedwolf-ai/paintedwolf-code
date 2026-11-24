@@ -20,7 +20,7 @@ paths:
     put:
       tags:
       - home-starts
-      operationId: putHomeStart
+      operationId: reserveHomeStart
       x-person-action: record
       summary: Reserve or resume a Home submission
       description: >
@@ -35,7 +35,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: ../components/schemas/home-starts.yaml#/components/schemas/PutHomeStartRequest
+              $ref: ../components/schemas/home-starts.yaml#/components/schemas/ReserveHomeStartRequest
       responses:
         '202':
           description: The durable reservation and its current phase
@@ -111,13 +111,13 @@ paths:
           $ref: ../components/responses.yaml#/components/responses/Conflict
         '429':
           $ref: ../components/responses.yaml#/components/responses/TooManyRequests
-  /v1/home-starts/{launch_id}/replace-first-prompt:
+  /v1/home-starts/{launch_id}/reissue-first-prompt:
     post:
       tags:
       - home-starts
-      operationId: replaceHomeStartFirstPrompt
+      operationId: reissueHomeStartFirstPrompt
       x-person-action: record
-      summary: Replace an unadmitted first-prompt operation
+      summary: Reissue an unadmitted first prompt under a fresh operation
       description: >
         Retires the named first-prompt operation and binds a fresh one to the same
         chat, unless the old one was already admitted. A repeat with the same ids
@@ -129,7 +129,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: ../components/schemas/home-starts.yaml#/components/schemas/ReplaceHomeStartFirstPromptRequest
+              $ref: ../components/schemas/home-starts.yaml#/components/schemas/ReissueHomeStartFirstPromptRequest
       responses:
         '200':
           description: The Home start bound to the replacement operation

@@ -150,7 +150,7 @@ paths:
     put:
       tags:
         - home-starts
-      operationId: putHomeStart
+      operationId: reserveHomeStart
       x-person-action: record
       summary: Reserve or resume a Home submission
       description: |
@@ -162,7 +162,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PutHomeStartRequest'
+              $ref: '#/components/schemas/ReserveHomeStartRequest'
       responses:
         '202':
           description: The durable reservation and its current phase
@@ -236,11 +236,11 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
-  /v1/home-starts/{launch_id}/replace-first-prompt:
+  /v1/home-starts/{launch_id}/reissue-first-prompt:
     post:
       tags:
         - home-starts
-      operationId: replaceHomeStartFirstPrompt
+      operationId: reissueHomeStartFirstPrompt
       x-person-action: record
       summary: Replace an unadmitted first-prompt operation
       description: |
@@ -252,7 +252,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReplaceHomeStartFirstPromptRequest'
+              $ref: '#/components/schemas/ReissueHomeStartFirstPromptRequest'
       responses:
         '200':
           description: The Home start bound to the replacement operation
@@ -28703,7 +28703,7 @@ components:
         failure:
           x-go-pointer: true
           $ref: '#/components/schemas/HomeStartFailure'
-    PutHomeStartRequest:
+    ReserveHomeStartRequest:
       x-go-generate: true
       type: object
       required:
@@ -28712,7 +28712,7 @@ components:
       properties:
         choices:
           $ref: '#/components/schemas/HomeStartChoices'
-    ReplaceHomeStartFirstPromptRequest:
+    ReissueHomeStartFirstPromptRequest:
       x-go-generate: true
       type: object
       required:

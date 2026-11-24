@@ -220,20 +220,20 @@ func TestHomeStartReplacementRetiresTheUnadmittedOperation(t *testing.T) {
 	bound := putBound(t, srv, launchID, `{}`)
 	replacement := uuid.NewString()
 	body := func(revision int64) string {
-		raw, err := json.Marshal(wire.ReplaceHomeStartFirstPromptRequest{
+		raw, err := json.Marshal(wire.ReissueHomeStartFirstPromptRequest{
 			ExpectedRevision: revision, OperationID: launchID, ReplacementOperationID: replacement,
 		})
 		testutil.FailErr(t, "encode replacement", err)
 		return string(raw)
 	}
-	stale := homeStartCall(t, srv, http.MethodPost, "/v1/home-starts/"+launchID+"/replace-first-prompt", body(bound.Revision+5))
+	stale := homeStartCall(t, srv, http.MethodPost, "/v1/home-starts/"+launchID+"/reissue-first-prompt", body(bound.Revision+5))
 	assertErrorResponse(t, stale, http.StatusConflict, string(wire.ApiErrorCodeHomeStartConflict))
 
-	replaced := decodeHomeStart(t, homeStartCall(t, srv, http.MethodPost, "/v1/home-starts/"+launchID+"/replace-first-prompt", body(bound.Revision)), http.StatusOK)
+	replaced := decodeHomeStart(t, homeStartCall(t, srv, http.MethodPost, "/v1/home-starts/"+launchID+"/reissue-first-prompt", body(bound.Revision)), http.StatusOK)
 	if replaced.FirstPrompt.OperationID != replacement {
 		t.Fatalf("replaced = %#v", replaced.FirstPrompt)
 	}
-	repeat := decodeHomeStart(t, homeStartCall(t, srv, http.MethodPost, "/v1/home-starts/"+launchID+"/replace-first-prompt", body(bound.Revision)), http.StatusOK)
+	repeat := decodeHomeStart(t, homeStartCall(t, srv, http.MethodPost, "/v1/home-starts/"+launchID+"/reissue-first-prompt", body(bound.Revision)), http.StatusOK)
 	if repeat.FirstPrompt.OperationID != replacement || repeat.Revision != replaced.Revision {
 		t.Fatalf("repeat = %#v, want recorded outcome %#v", repeat, replaced)
 	}
@@ -245,11 +245,11 @@ func TestHomeStartReplacementRetiresTheUnadmittedOperation(t *testing.T) {
 	}
 	drainBackground(t, srv.Server)
 
-	afterAdmission, err := json.Marshal(wire.ReplaceHomeStartFirstPromptRequest{
+	afterAdmission, err := json.Marshal(wire.ReissueHomeStartFirstPromptRequest{
 		ExpectedRevision: replaced.Revision + 1, OperationID: replacement, ReplacementOperationID: uuid.NewString(),
 	})
 	testutil.FailErr(t, "encode replacement", err)
-	rec := homeStartCall(t, srv, http.MethodPost, "/v1/home-starts/"+launchID+"/replace-first-prompt", string(afterAdmission))
+	rec := homeStartCall(t, srv, http.MethodPost, "/v1/home-starts/"+launchID+"/reissue-first-prompt", string(afterAdmission))
 	assertErrorResponse(t, rec, http.StatusConflict, string(wire.ApiErrorCodeHomeStartAdmitted))
 }
 

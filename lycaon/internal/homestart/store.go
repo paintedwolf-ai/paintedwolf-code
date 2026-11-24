@@ -235,10 +235,10 @@ func (s *Store) Stop(ctx context.Context, launchID, personID string) (Record, er
 	return rec, nil
 }
 
-// ReplaceFirstPrompt retires an unadmitted first-prompt operation and binds a
-// fresh one to the same chat. Repeating a completed replacement returns the
+// ReissueFirstPrompt retires an unadmitted first-prompt operation and binds a
+// fresh one to the same chat. Repeating a completed reissue returns the
 // current record.
-func (s *Store) ReplaceFirstPrompt(ctx context.Context, launchID, personID string, expectedRevision int64, current, replacement string) (Record, error) {
+func (s *Store) ReissueFirstPrompt(ctx context.Context, launchID, personID string, expectedRevision int64, current, replacement string) (Record, error) {
 	current, err := canonicalUUID(current)
 	if err != nil {
 		return Record{}, err

@@ -50,7 +50,7 @@ components:
           type: string
           minLength: 1
           description: Explicit coordinator model for the chat.
-    PutHomeStartRequest:
+    ReserveHomeStartRequest:
       x-go-generate: true
       type: object
       required:
@@ -59,7 +59,7 @@ components:
       properties:
         choices:
           $ref: '#/components/schemas/HomeStartChoices'
-    ReplaceHomeStartFirstPromptRequest:
+    ReissueHomeStartFirstPromptRequest:
       x-go-generate: true
       type: object
       required:
