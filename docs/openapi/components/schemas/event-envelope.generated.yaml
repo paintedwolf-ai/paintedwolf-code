@@ -41,6 +41,8 @@ components:
       - $ref: '#/components/schemas/EventEnvelopeTurnLoad'
       - $ref: '#/components/schemas/EventEnvelopeChatVault'
       - $ref: '#/components/schemas/EventEnvelopeSourceView'
+      - $ref: '#/components/schemas/EventEnvelopeWatchUpdated'
+      - $ref: '#/components/schemas/EventEnvelopeWatchRunUpdated'
       discriminator:
         propertyName: topic
         mapping:
@@ -80,6 +82,8 @@ components:
           turn_load: '#/components/schemas/EventEnvelopeTurnLoad'
           chat_vault: '#/components/schemas/EventEnvelopeChatVault'
           source_view: '#/components/schemas/EventEnvelopeSourceView'
+          watch.updated: '#/components/schemas/EventEnvelopeWatchUpdated'
+          watch_run.updated: '#/components/schemas/EventEnvelopeWatchRunUpdated'
     EventEnvelopeSession:
       allOf:
       - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'
@@ -512,3 +516,27 @@ components:
             const: source_view
           data:
             $ref: 'source-views/views.yaml#/components/schemas/SourceViewEvent'
+    EventEnvelopeWatchUpdated:
+      allOf:
+      - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'
+      - type: object
+        required:
+        - topic
+        - data
+        properties:
+          topic:
+            const: watch.updated
+          data:
+            $ref: 'watches.yaml#/components/schemas/WatchEvent'
+    EventEnvelopeWatchRunUpdated:
+      allOf:
+      - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'
+      - type: object
+        required:
+        - topic
+        - data
+        properties:
+          topic:
+            const: watch_run.updated
+          data:
+            $ref: 'watches.yaml#/components/schemas/WatchRunEvent'

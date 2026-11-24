@@ -1,0 +1,6 @@
+scope: project
+title: Standing watch disabled
+message: >-
+  A standing watch was disabled because its owner no longer has access to this project.
+suggested_action: >-
+  Open Activity to edit and re-enable the watch as its new owner, or delete it.

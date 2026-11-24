@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Watch changed since you opened it
+message: >-
+  This standing watch was updated since you started editing or acting on it.
+suggested_action: Review the latest watch settings, then try again.
+scenarios:
+  - id: default
+    vars: {}

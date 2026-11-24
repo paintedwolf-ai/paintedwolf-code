@@ -35,6 +35,7 @@ var (
 	operationCancelMcpOAuth                     = generatedOperation{ID: "cancelMcpOAuth", Method: "POST", Path: "/v1/mcp/providers/{provider_id}/oauth/cancel", Params: []string{"provider_id"}}
 	operationCancelProjectPromotion             = generatedOperation{ID: "cancelProjectPromotion", Method: "DELETE", Path: "/v1/projects/{id}/promotion", Params: []string{"id"}, RecordsPersonAction: true}
 	operationCancelSourceOperation              = generatedOperation{ID: "cancelSourceOperation", Method: "POST", Path: "/v1/projects/{id}/source/operations/{operation_id}/cancel", Params: []string{"id", "operation_id"}, RecordsPersonAction: true}
+	operationCancelWatch                        = generatedOperation{ID: "cancelWatch", Method: "POST", Path: "/v1/sessions/{id}/watches/{watch_handle}/cancel", Params: []string{"id", "watch_handle"}, RecordsPersonAction: true}
 	operationCancelWorker                       = generatedOperation{ID: "cancelWorker", Method: "POST", Path: "/v1/workers/{id}/cancel", Params: []string{"id"}, RecordsPersonAction: true}
 	operationCancelWorkflowRun                  = generatedOperation{ID: "cancelWorkflowRun", Method: "POST", Path: "/v1/workflow-runs/{id}/cancel", Params: []string{"id"}, RecordsPersonAction: true}
 	operationCheckMcpProviders                  = generatedOperation{ID: "checkMcpProviders", Method: "POST", Path: "/v1/mcp/providers/check"}
@@ -70,6 +71,7 @@ var (
 	operationCreateSessionArtifact              = generatedOperation{ID: "createSessionArtifact", Method: "POST", Path: "/v1/sessions/{id}/artifacts", Params: []string{"id"}, RecordsPersonAction: true}
 	operationCreateSourcePresentation           = generatedOperation{ID: "createSourcePresentation", Method: "POST", Path: "/v1/projects/{id}/source/views/{view_id}/presentations", Params: []string{"id", "view_id"}}
 	operationCreateSourceView                   = generatedOperation{ID: "createSourceView", Method: "POST", Path: "/v1/projects/{id}/source/views", Params: []string{"id"}}
+	operationCreateStandingWatch                = generatedOperation{ID: "createStandingWatch", Method: "POST", Path: "/v1/projects/{id}/watches", Params: []string{"id"}, RecordsPersonAction: true}
 	operationDeleteBlueprint                    = generatedOperation{ID: "deleteBlueprint", Method: "DELETE", Path: "/v1/projects/{id}/blueprints/{blueprint_id}", Params: []string{"id", "blueprint_id"}, RecordsPersonAction: true}
 	operationDeleteDetectionPack                = generatedOperation{ID: "deleteDetectionPack", Method: "DELETE", Path: "/v1/detection-packs/{pack_id}", Params: []string{"pack_id"}, RecordsPersonAction: true}
 	operationDeleteExtensionMetaPack            = generatedOperation{ID: "deleteExtensionMetaPack", Method: "DELETE", Path: "/v1/extensions/meta-packs/{meta_pack_id}", Params: []string{"meta_pack_id"}, RecordsPersonAction: true}
@@ -87,6 +89,7 @@ var (
 	operationDeleteProviderCredential           = generatedOperation{ID: "deleteProviderCredential", Method: "DELETE", Path: "/v1/providers/{provider_id}/credential", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationDeleteScanner                      = generatedOperation{ID: "deleteScanner", Method: "DELETE", Path: "/v1/scanners/{scanner_id}", Params: []string{"scanner_id"}, RecordsPersonAction: true}
 	operationDeleteSession                      = generatedOperation{ID: "deleteSession", Method: "DELETE", Path: "/v1/sessions/{id}", Params: []string{"id"}, RecordsPersonAction: true}
+	operationDeleteStandingWatch                = generatedOperation{ID: "deleteStandingWatch", Method: "DELETE", Path: "/v1/projects/{id}/watches/{watch_id}", Params: []string{"id", "watch_id"}, RecordsPersonAction: true}
 	operationDeleteWebResearchCredential        = generatedOperation{ID: "deleteWebResearchCredential", Method: "DELETE", Path: "/v1/web-research/providers/{provider_id}/credential", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationDetachProjectRoot                  = generatedOperation{ID: "detachProjectRoot", Method: "DELETE", Path: "/v1/projects/{id}/roots/{root_id}", Params: []string{"id", "root_id"}, RecordsPersonAction: true}
 	operationDetectFolder                       = generatedOperation{ID: "detectFolder", Method: "GET", Path: "/v1/projects/detect"}
@@ -157,6 +160,7 @@ var (
 	operationGetProjectSourceStorage            = generatedOperation{ID: "getProjectSourceStorage", Method: "GET", Path: "/v1/projects/{id}/source/storage", Params: []string{"id"}}
 	operationGetProjectSourceWalkSummary        = generatedOperation{ID: "getProjectSourceWalkSummary", Method: "GET", Path: "/v1/projects/{id}/source/walk-summary", Params: []string{"id"}}
 	operationGetProjectTrust                    = generatedOperation{ID: "getProjectTrust", Method: "GET", Path: "/v1/projects/{id}/trust", Params: []string{"id"}}
+	operationGetProjectWatch                    = generatedOperation{ID: "getProjectWatch", Method: "GET", Path: "/v1/projects/{id}/watches/{watch_id}", Params: []string{"id", "watch_id"}}
 	operationGetReviewSettings                  = generatedOperation{ID: "getReviewSettings", Method: "GET", Path: "/v1/settings/review"}
 	operationGetSecretIgnoreCandidate           = generatedOperation{ID: "getSecretIgnoreCandidate", Method: "GET", Path: "/v1/projects/{id}/secret-ignore-candidates/{candidate_id}", Params: []string{"id", "candidate_id"}}
 	operationGetSecurityScannersSettings        = generatedOperation{ID: "getSecurityScannersSettings", Method: "GET", Path: "/v1/settings/security-scanners"}
@@ -174,6 +178,7 @@ var (
 	operationGetSourceWorkspace                 = generatedOperation{ID: "getSourceWorkspace", Method: "GET", Path: "/v1/projects/{id}/source/workspace", Params: []string{"id"}}
 	operationGetTrustSettings                   = generatedOperation{ID: "getTrustSettings", Method: "GET", Path: "/v1/settings/project-trust"}
 	operationGetVerifySettings                  = generatedOperation{ID: "getVerifySettings", Method: "GET", Path: "/v1/settings/verify"}
+	operationGetWatch                           = generatedOperation{ID: "getWatch", Method: "GET", Path: "/v1/sessions/{id}/watches/{watch_handle}", Params: []string{"id", "watch_handle"}}
 	operationGetWebResearchIndex                = generatedOperation{ID: "getWebResearchIndex", Method: "GET", Path: "/v1/web-research/index"}
 	operationGetWebResearchProviders            = generatedOperation{ID: "getWebResearchProviders", Method: "GET", Path: "/v1/web-research/providers"}
 	operationGetWebResearchSettings             = generatedOperation{ID: "getWebResearchSettings", Method: "GET", Path: "/v1/settings/web-research"}
@@ -187,6 +192,7 @@ var (
 	operationInstallExtensionPack               = generatedOperation{ID: "installExtensionPack", Method: "POST", Path: "/v1/extensions/packs", RecordsPersonAction: true}
 	operationInvokeProjectCommand               = generatedOperation{ID: "invokeProjectCommand", Method: "POST", Path: "/v1/projects/{id}/commands/{command_id}/invoke", Params: []string{"id", "command_id"}, RecordsPersonAction: true}
 	operationInvokeSessionCommand               = generatedOperation{ID: "invokeSessionCommand", Method: "POST", Path: "/v1/sessions/{id}/commands/{command_id}/invoke", Params: []string{"id", "command_id"}, RecordsPersonAction: true}
+	operationKeepWatch                          = generatedOperation{ID: "keepWatch", Method: "POST", Path: "/v1/sessions/{id}/watches/{watch_handle}/keep", Params: []string{"id", "watch_handle"}, RecordsPersonAction: true}
 	operationLandGitWorktree                    = generatedOperation{ID: "landGitWorktree", Method: "POST", Path: "/v1/sessions/{id}/git-worktree/land", Params: []string{"id"}, RecordsPersonAction: true}
 	operationLaunchBlueprint                    = generatedOperation{ID: "launchBlueprint", Method: "POST", Path: "/v1/projects/{id}/blueprints/{blueprint_id}/launch", Params: []string{"id", "blueprint_id"}, RecordsPersonAction: true}
 	operationLeaveEditorDocument                = generatedOperation{ID: "leaveEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/leave", Params: []string{"id", "document_id"}}
@@ -217,6 +223,7 @@ var (
 	operationListProjectSourceSymbols           = generatedOperation{ID: "listProjectSourceSymbols", Method: "GET", Path: "/v1/projects/{id}/source/symbols", Params: []string{"id"}}
 	operationListProjectSourceVersions          = generatedOperation{ID: "listProjectSourceVersions", Method: "GET", Path: "/v1/projects/{id}/source/versions", Params: []string{"id"}}
 	operationListProjectSourceWalk              = generatedOperation{ID: "listProjectSourceWalk", Method: "GET", Path: "/v1/projects/{id}/source/walk", Params: []string{"id"}}
+	operationListProjectWatches                 = generatedOperation{ID: "listProjectWatches", Method: "GET", Path: "/v1/projects/{id}/watches", Params: []string{"id"}}
 	operationListProjects                       = generatedOperation{ID: "listProjects", Method: "GET", Path: "/v1/projects"}
 	operationListProviderKinds                  = generatedOperation{ID: "listProviderKinds", Method: "GET", Path: "/v1/provider-kinds"}
 	operationListProviders                      = generatedOperation{ID: "listProviders", Method: "GET", Path: "/v1/providers"}
@@ -229,6 +236,8 @@ var (
 	operationListSessionPreviews                = generatedOperation{ID: "listSessionPreviews", Method: "GET", Path: "/v1/sessions/{id}/previews", Params: []string{"id"}}
 	operationListSessionWorkflowRuns            = generatedOperation{ID: "listSessionWorkflowRuns", Method: "GET", Path: "/v1/sessions/{id}/workflow-runs", Params: []string{"id"}}
 	operationListSourceOperations               = generatedOperation{ID: "listSourceOperations", Method: "GET", Path: "/v1/projects/{id}/source/operations", Params: []string{"id"}}
+	operationListWatchRuns                      = generatedOperation{ID: "listWatchRuns", Method: "GET", Path: "/v1/projects/{id}/watches/{watch_id}/runs", Params: []string{"id", "watch_id"}}
+	operationListWatches                        = generatedOperation{ID: "listWatches", Method: "GET", Path: "/v1/sessions/{id}/watches", Params: []string{"id"}}
 	operationListWorkers                        = generatedOperation{ID: "listWorkers", Method: "GET", Path: "/v1/workers"}
 	operationListWorkflowTemplates              = generatedOperation{ID: "listWorkflowTemplates", Method: "GET", Path: "/v1/workflow-templates"}
 	operationListWorkflows                      = generatedOperation{ID: "listWorkflows", Method: "GET", Path: "/v1/workflows"}
@@ -243,6 +252,7 @@ var (
 	operationOpenEditorDocument                 = generatedOperation{ID: "openEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents", Params: []string{"id"}}
 	operationOpenOutsideFile                    = generatedOperation{ID: "openOutsideFile", Method: "POST", Path: "/v1/projects/{id}/source/outside-files", Params: []string{"id"}, RecordsPersonAction: true}
 	operationOpenProjectTrustReview             = generatedOperation{ID: "openProjectTrustReview", Method: "POST", Path: "/v1/projects/{id}/trust/review", Params: []string{"id"}}
+	operationPauseStandingWatch                 = generatedOperation{ID: "pauseStandingWatch", Method: "POST", Path: "/v1/projects/{id}/watches/{watch_id}/pause", Params: []string{"id", "watch_id"}, RecordsPersonAction: true}
 	operationPauseWorkflowRun                   = generatedOperation{ID: "pauseWorkflowRun", Method: "POST", Path: "/v1/workflow-runs/{id}/pause", Params: []string{"id"}, RecordsPersonAction: true}
 	operationPersistWorkflow                    = generatedOperation{ID: "persistWorkflow", Method: "POST", Path: "/v1/sessions/{id}/workflows/{workflow_id}/persist", Params: []string{"id", "workflow_id"}, RecordsPersonAction: true}
 	operationPreviewEditorSecretMark            = generatedOperation{ID: "previewEditorSecretMark", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/secret-spans/preview", Params: []string{"id", "document_id"}}
@@ -296,6 +306,7 @@ var (
 	operationRestoreProjectSourceCommitState    = generatedOperation{ID: "restoreProjectSourceCommitState", Method: "POST", Path: "/v1/projects/{id}/source/commits/{commit_sha}/restore", Params: []string{"id", "commit_sha"}, RecordsPersonAction: true}
 	operationRestoreProjectSourceVersion        = generatedOperation{ID: "restoreProjectSourceVersion", Method: "POST", Path: "/v1/projects/{id}/source/versions/{version_id}/restore", Params: []string{"id", "version_id"}, RecordsPersonAction: true}
 	operationRestoreRecoverySnapshot            = generatedOperation{ID: "restoreRecoverySnapshot", Method: "POST", Path: "/v1/backup/restore/recovery-snapshot", RecordsPersonAction: true}
+	operationResumeStandingWatch                = generatedOperation{ID: "resumeStandingWatch", Method: "POST", Path: "/v1/projects/{id}/watches/{watch_id}/resume", Params: []string{"id", "watch_id"}, RecordsPersonAction: true}
 	operationResumeWorkflowRun                  = generatedOperation{ID: "resumeWorkflowRun", Method: "POST", Path: "/v1/workflow-runs/{id}/resume", Params: []string{"id"}, RecordsPersonAction: true}
 	operationRetrySourceOperation               = generatedOperation{ID: "retrySourceOperation", Method: "POST", Path: "/v1/projects/{id}/source/operations/{operation_id}/retry", Params: []string{"id", "operation_id"}, RecordsPersonAction: true}
 	operationRevertEditorDocumentChange         = generatedOperation{ID: "revertEditorDocumentChange", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/changes/{change_id}/revert", Params: []string{"id", "document_id", "change_id"}, RecordsPersonAction: true}
@@ -304,6 +315,7 @@ var (
 	operationRevokeMcpOAuth                     = generatedOperation{ID: "revokeMcpOAuth", Method: "DELETE", Path: "/v1/mcp/providers/{provider_id}/oauth", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationRevokeProjectManagedSecret         = generatedOperation{ID: "revokeProjectManagedSecret", Method: "DELETE", Path: "/v1/projects/{id}/secrets/{secret_id}", Params: []string{"id", "secret_id"}, RecordsPersonAction: true}
 	operationRewindSession                      = generatedOperation{ID: "rewindSession", Method: "POST", Path: "/v1/sessions/{id}/rewind", Params: []string{"id"}, RecordsPersonAction: true}
+	operationRunStandingWatchNow                = generatedOperation{ID: "runStandingWatchNow", Method: "POST", Path: "/v1/projects/{id}/watches/{watch_id}/run", Params: []string{"id", "watch_id"}, RecordsPersonAction: true}
 	operationSaveEditorDocument                 = generatedOperation{ID: "saveEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/save", Params: []string{"id", "document_id"}, RecordsPersonAction: true}
 	operationSearch                             = generatedOperation{ID: "search", Method: "POST", Path: "/v1/search"}
 	operationSearchChatContent                  = generatedOperation{ID: "searchChatContent", Method: "GET", Path: "/v1/sessions/{id}/messages/{message_id}/content/search", Params: []string{"id", "message_id"}}
@@ -354,8 +366,10 @@ var (
 	operationUpdateSession                      = generatedOperation{ID: "updateSession", Method: "PATCH", Path: "/v1/sessions/{id}", Params: []string{"id"}, RecordsPersonAction: true}
 	operationUpdateSessionQueue                 = generatedOperation{ID: "updateSessionQueue", Method: "PATCH", Path: "/v1/sessions/{id}/queue", Params: []string{"id"}, RecordsPersonAction: true}
 	operationUpdateSourceChatLocation           = generatedOperation{ID: "updateSourceChatLocation", Method: "PATCH", Path: "/v1/projects/{id}/source/outside-locations/{location_id}", Params: []string{"id", "location_id"}, RecordsPersonAction: true}
+	operationUpdateStandingWatch                = generatedOperation{ID: "updateStandingWatch", Method: "PATCH", Path: "/v1/projects/{id}/watches/{watch_id}", Params: []string{"id", "watch_id"}, RecordsPersonAction: true}
 	operationUpdateTrustSettings                = generatedOperation{ID: "updateTrustSettings", Method: "PATCH", Path: "/v1/settings/project-trust", RecordsPersonAction: true}
 	operationUpdateVerifySettings               = generatedOperation{ID: "updateVerifySettings", Method: "PATCH", Path: "/v1/settings/verify", RecordsPersonAction: true}
+	operationUpdateWatchDelivery                = generatedOperation{ID: "updateWatchDelivery", Method: "PATCH", Path: "/v1/sessions/{id}/watches/{watch_handle}", Params: []string{"id", "watch_handle"}, RecordsPersonAction: true}
 	operationUpdateWebResearchProvider          = generatedOperation{ID: "updateWebResearchProvider", Method: "PATCH", Path: "/v1/web-research/providers/{provider_id}", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationUpdateWebResearchSettings          = generatedOperation{ID: "updateWebResearchSettings", Method: "PATCH", Path: "/v1/settings/web-research", RecordsPersonAction: true}
 	operationUploadAttachment                   = generatedOperation{ID: "uploadAttachment", Method: "POST", Path: "/v1/projects/{id}/attachments", Params: []string{"id"}, RecordsPersonAction: true}
@@ -383,6 +397,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationCancelMcpOAuth,
 	operationCancelProjectPromotion,
 	operationCancelSourceOperation,
+	operationCancelWatch,
 	operationCancelWorker,
 	operationCancelWorkflowRun,
 	operationCheckMcpProviders,
@@ -418,6 +433,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationCreateSessionArtifact,
 	operationCreateSourcePresentation,
 	operationCreateSourceView,
+	operationCreateStandingWatch,
 	operationDeleteBlueprint,
 	operationDeleteDetectionPack,
 	operationDeleteExtensionMetaPack,
@@ -435,6 +451,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationDeleteProviderCredential,
 	operationDeleteScanner,
 	operationDeleteSession,
+	operationDeleteStandingWatch,
 	operationDeleteWebResearchCredential,
 	operationDetachProjectRoot,
 	operationDetectFolder,
@@ -505,6 +522,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetProjectSourceStorage,
 	operationGetProjectSourceWalkSummary,
 	operationGetProjectTrust,
+	operationGetProjectWatch,
 	operationGetReviewSettings,
 	operationGetSecretIgnoreCandidate,
 	operationGetSecurityScannersSettings,
@@ -522,6 +540,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetSourceWorkspace,
 	operationGetTrustSettings,
 	operationGetVerifySettings,
+	operationGetWatch,
 	operationGetWebResearchIndex,
 	operationGetWebResearchProviders,
 	operationGetWebResearchSettings,
@@ -535,6 +554,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationInstallExtensionPack,
 	operationInvokeProjectCommand,
 	operationInvokeSessionCommand,
+	operationKeepWatch,
 	operationLandGitWorktree,
 	operationLaunchBlueprint,
 	operationLeaveEditorDocument,
@@ -565,6 +585,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationListProjectSourceSymbols,
 	operationListProjectSourceVersions,
 	operationListProjectSourceWalk,
+	operationListProjectWatches,
 	operationListProjects,
 	operationListProviderKinds,
 	operationListProviders,
@@ -577,6 +598,8 @@ var allGeneratedOperations = []generatedOperation{
 	operationListSessionPreviews,
 	operationListSessionWorkflowRuns,
 	operationListSourceOperations,
+	operationListWatchRuns,
+	operationListWatches,
 	operationListWorkers,
 	operationListWorkflowTemplates,
 	operationListWorkflows,
@@ -591,6 +614,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationOpenEditorDocument,
 	operationOpenOutsideFile,
 	operationOpenProjectTrustReview,
+	operationPauseStandingWatch,
 	operationPauseWorkflowRun,
 	operationPersistWorkflow,
 	operationPreviewEditorSecretMark,
@@ -644,6 +668,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationRestoreProjectSourceCommitState,
 	operationRestoreProjectSourceVersion,
 	operationRestoreRecoverySnapshot,
+	operationResumeStandingWatch,
 	operationResumeWorkflowRun,
 	operationRetrySourceOperation,
 	operationRevertEditorDocumentChange,
@@ -652,6 +677,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationRevokeMcpOAuth,
 	operationRevokeProjectManagedSecret,
 	operationRewindSession,
+	operationRunStandingWatchNow,
 	operationSaveEditorDocument,
 	operationSearch,
 	operationSearchChatContent,
@@ -702,8 +728,10 @@ var allGeneratedOperations = []generatedOperation{
 	operationUpdateSession,
 	operationUpdateSessionQueue,
 	operationUpdateSourceChatLocation,
+	operationUpdateStandingWatch,
 	operationUpdateTrustSettings,
 	operationUpdateVerifySettings,
+	operationUpdateWatchDelivery,
 	operationUpdateWebResearchProvider,
 	operationUpdateWebResearchSettings,
 	operationUploadAttachment,

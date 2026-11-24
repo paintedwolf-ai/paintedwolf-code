@@ -57,12 +57,19 @@ func (s *Store) Cancel(ctx context.Context, owner Owner, handle string) (CancelR
 	if err != nil {
 		return CancelReceipt{}, err
 	}
+	prevFinalID := reg.Lifecycle.FinalReceiptID
 	receipt, woke, err := cancelRegistrationTx(ctx, tx, reg, OutcomeCanceled, now)
 	if err != nil {
 		return CancelReceipt{}, err
 	}
+	if prevFinalID == "" {
+		publishAgentWatchEventTx(ctx, s, tx, reg, reg.Lifecycle.Revision+1)
+	}
 	if err := tx.Commit(); err != nil {
 		return CancelReceipt{}, err
+	}
+	if prevFinalID == "" {
+		NotifyEvents(s)
 	}
 	retireWatchRuntime(s, reg.WatchID)
 	_ = WithdrawAmbientWakeIfNoDemand(ctx, s, reg.Owner.SessionID)
@@ -172,9 +179,11 @@ func (s *Store) SetDelivery(ctx context.Context, owner Owner, handle string, mod
 		string(mode), nowStr, reg.WatchID); err != nil {
 		return "", err
 	}
+	publishAgentWatchEventTx(ctx, s, tx, reg, reg.Lifecycle.Revision+1)
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
+	NotifyEvents(s)
 	if mode == DeliveryCollect {
 		_ = WithdrawAmbientWakeIfNoDemand(ctx, s, owner.SessionID)
 	} else if owner.Kind == OwnerSession && mode == DeliveryWake {
@@ -205,6 +214,7 @@ func (s *Store) MarkSourceLost(ctx context.Context, watchID string) error {
 	if err := transitionTerminalTx(ctx, tx, reg, OutcomeSourceLost, now); err != nil {
 		return err
 	}
+	publishAgentWatchEventTx(ctx, s, tx, reg, reg.Lifecycle.Revision+1)
 	woke, err := settleSelectedLeasesForWatchTx(ctx, tx, reg.WatchID, now)
 	if err != nil {
 		return err
@@ -212,6 +222,7 @@ func (s *Store) MarkSourceLost(ctx context.Context, watchID string) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	NotifyEvents(s)
 	retireWatchRuntime(s, reg.WatchID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)

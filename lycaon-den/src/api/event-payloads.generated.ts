@@ -36,6 +36,8 @@ import type {
   SourceViewEvent,
   TurnClock,
   TurnLoad,
+  WatchEvent,
+  WatchRunEvent,
   WorkerEvent,
   WorkflowEvent,
 } from "./types.ts";
@@ -78,4 +80,6 @@ export type EventPayloadMap = {
   turn_load: TurnLoad;
   chat_vault: ChatVault;
   source_view: SourceViewEvent;
+  "watch.updated": WatchEvent;
+  "watch_run.updated": WatchRunEvent;
 };

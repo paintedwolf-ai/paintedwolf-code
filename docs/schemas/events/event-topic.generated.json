@@ -36,7 +36,9 @@
     "turn_clock",
     "turn_load",
     "chat_vault",
-    "source_view"
+    "source_view",
+    "watch.updated",
+    "watch_run.updated"
   ],
   "title": "EventTopic",
   "type": "string"

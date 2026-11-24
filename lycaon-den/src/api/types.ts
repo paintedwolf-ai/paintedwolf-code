@@ -5617,6 +5617,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/watches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List agent watches and person-owned standing watches for a project */
+        get: operations["listProjectWatches"];
+        put?: never;
+        /** Create a person-owned standing watch in a project */
+        post: operations["createStandingWatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/watches/{watch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one project watch for any owner */
+        get: operations["getProjectWatch"];
+        put?: never;
+        post?: never;
+        /** Delete a standing watch and its stored run history */
+        delete: operations["deleteStandingWatch"];
+        options?: never;
+        head?: never;
+        /** Edit a standing watch or take ownership of a disabled standing watch */
+        patch: operations["updateStandingWatch"];
+        trace?: never;
+    };
+    "/v1/projects/{id}/watches/{watch_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause a standing watch and discard pending or queued runs */
+        post: operations["pauseStandingWatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/watches/{watch_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume a paused standing watch from the current time */
+        post: operations["resumeStandingWatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/watches/{watch_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger an immediate standing-watch run ignoring the change gate */
+        post: operations["runStandingWatchNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/watches/{watch_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List runs for a standing watch newest first */
+        get: operations["listWatchRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{id}/watches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List agent watches owned by a session or its worker jobs */
+        get: operations["listWatches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{id}/watches/{watch_handle}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect one session or worker watch without acknowledging pending matches */
+        get: operations["getWatch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Switch delivery mode on a live agent watch */
+        patch: operations["updateWatchDelivery"];
+        trace?: never;
+    };
+    "/v1/sessions/{id}/watches/{watch_handle}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel an agent watch or dismiss a standing-watch proposal */
+        post: operations["cancelWatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{id}/watches/{watch_handle}/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Keep an agent watch as a person-owned standing watch or apply a replaces edit */
+        post: operations["keepWatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5996,9 +6170,9 @@ export interface components {
             actions?: components["schemas"]["NoticeAction"][];
         };
         /** @enum {string} */
-        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
+        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view" | "watch.updated" | "watch_run.updated";
         /** @description Topic-discriminated EventHub SSE envelope. */
-        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
+        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"] | components["schemas"]["EventEnvelopeWatchUpdated"] | components["schemas"]["EventEnvelopeWatchRunUpdated"];
         /** @description One transcript row change. message is always the full post-write row: apply it as a whole-row snapshot ordered by seq, never a field merge onto a cached row — an absent field means the row no longer has it. */
         MessageEvent: {
             /** Format: uuid */
@@ -10846,11 +11020,313 @@ export interface components {
                 [key: string]: components["schemas"]["WorkflowTemplateParameter"];
             };
         };
+        WatchCalendarSchedule: {
+            days: ("every_day" | "weekdays" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday")[];
+            times: string[];
+        };
+        WatchCondition: {
+            /** @enum {string} */
+            kind: "process_done" | "process_output" | "next_worker_done" | "all_workers_idle" | "overlay_promote_pending" | "worker_decision_needed" | "worker_failed" | "scan_done" | "http_ready" | "port_ready" | "timer" | "file_change" | "git_ref";
+            process_id?: string;
+            /** Format: int64 */
+            cursor?: number;
+            url?: string;
+            host?: string;
+            port?: number;
+            /** Format: int64 */
+            delay_ms?: number;
+            at?: string;
+            /** Format: int64 */
+            every_minutes?: number;
+            calendar?: components["schemas"]["WatchCalendarSchedule"];
+            root_id?: string;
+            path?: string;
+            glob?: string;
+            include_own?: boolean;
+            ref?: string;
+        };
+        WatchGate: {
+            /** @enum {string} */
+            kind: "git_ref" | "file_change";
+            root_id?: string;
+            path?: string;
+            glob?: string;
+            ref?: string;
+        };
+        StandingWatchTarget: {
+            /** @enum {string} */
+            kind: "new_chat" | "existing_chat";
+            /** Format: uuid */
+            session_id?: string;
+        };
+        StandingWatchOrigin: {
+            /** Format: uuid */
+            session_id: string;
+            handle: string;
+        };
+        AgentStandingDraft: {
+            name: string;
+            prompt: string;
+            /** Format: uuid */
+            replaces?: string;
+        };
+        OverlappingStandingWatch: {
+            /** Format: uuid */
+            watch_id: string;
+            name: string;
+            /** @enum {string} */
+            state: "enabled" | "paused";
+            condition_summary: string;
+        };
+        AgentWatchReceipt: {
+            handle: string;
+            /** @enum {string} */
+            state: "live" | "terminal";
+            /** @enum {string} */
+            terminal_outcome?: "completed" | "canceled" | "dismissed" | "kept" | "expired" | "source_lost" | "stopped" | "owner_ended";
+            /** Format: uuid */
+            standing_watch_id?: string;
+            matched_kind?: string;
+            /** Format: int64 */
+            occurrence?: number;
+            detail?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            recorded_at?: string;
+        };
+        AgentWatch: {
+            /** Format: uuid */
+            watch_id: string;
+            handle: string;
+            /** @enum {string} */
+            owner_kind: "session" | "job";
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            worker_id?: string;
+            source_process_id?: string;
+            label?: string;
+            conditions: components["schemas"]["WatchCondition"][];
+            condition_summary: string;
+            /** @enum {string} */
+            delivery: "collect" | "wake";
+            repeat: boolean;
+            derived: boolean;
+            keepable: boolean;
+            /** @enum {string} */
+            state: "live" | "terminal";
+            /** @enum {string} */
+            terminal_outcome?: "completed" | "canceled" | "dismissed" | "kept" | "expired" | "source_lost" | "stopped" | "owner_ended";
+            standing_draft?: components["schemas"]["AgentStandingDraft"];
+            overlapping_standing?: components["schemas"]["OverlappingStandingWatch"][];
+            final_receipt?: components["schemas"]["AgentWatchReceipt"];
+            revision: number;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        WatchRun: {
+            /** Format: uuid */
+            run_id: string;
+            /** Format: uuid */
+            watch_id: string;
+            watch_name: string;
+            /** Format: uuid */
+            project_id: string;
+            /** @enum {string} */
+            status: "pending" | "queued" | "running" | "waiting_for_owner" | "completed" | "failed" | "fenced" | "canceled" | "skipped_overlap" | "skipped_unchanged" | "skipped_daily_cap" | "skipped_busy" | "missed";
+            /** Format: date-time */
+            scheduled_at: string;
+            /** Format: uuid */
+            session_id?: string;
+            missed_count: number;
+            condition_detail?: {
+                [key: string]: unknown;
+            };
+            /** Format: int64 */
+            spend_limit_nano_usd: number;
+            allow_unpriced: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            ended_at?: string | null;
+        };
+        StandingWatch: {
+            /** Format: uuid */
+            watch_id: string;
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            owner_person_id: string;
+            name: string;
+            prompt: string;
+            conditions: components["schemas"]["WatchCondition"][];
+            condition_summary: string;
+            gate?: components["schemas"]["WatchGate"];
+            min_gap_minutes: number;
+            target: components["schemas"]["StandingWatchTarget"];
+            workflow_id: string;
+            model_id: string;
+            /** Format: int64 */
+            run_spend_limit_nano_usd: number;
+            allow_unpriced: boolean;
+            daily_run_cap: number;
+            time_zone: string;
+            /** @enum {string} */
+            state: "enabled" | "paused" | "disabled" | "completed";
+            /** @enum {string|null} */
+            state_reason?: "person" | "consecutive_failures" | "target_unavailable" | "owner_access_revoked" | null;
+            kept_from?: components["schemas"]["StandingWatchOrigin"];
+            /** Format: date-time */
+            next_run_at?: string | null;
+            last_outcome?: string;
+            active_run?: components["schemas"]["WatchRun"];
+            recent_runs?: components["schemas"]["WatchRun"][];
+            revision: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ProjectWatch: {
+            /** Format: uuid */
+            watch_id: string;
+            /** @enum {string} */
+            owner_kind: "session" | "job" | "person";
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            session_id?: string;
+            handle?: string;
+            revision: number;
+            agent_watch?: components["schemas"]["AgentWatch"];
+            standing_watch?: components["schemas"]["StandingWatch"];
+        };
+        ProjectWatchListResponse: {
+            watches: components["schemas"]["ProjectWatch"][];
+            /** Format: int64 */
+            daily_spend_cap_nano_usd: number;
+            has_unpriced_standing_watch: boolean;
+            enabled_standing_total: number;
+        };
+        AgentWatchListResponse: {
+            watches: components["schemas"]["AgentWatch"][];
+        };
+        WatchRunListResponse: {
+            runs: components["schemas"]["WatchRun"][];
+            next_cursor?: string;
+        };
+        CreateStandingWatchRequest: {
+            name: string;
+            prompt: string;
+            conditions: components["schemas"]["WatchCondition"][];
+            gate?: components["schemas"]["WatchGate"];
+            min_gap_minutes?: number;
+            target?: components["schemas"]["StandingWatchTarget"];
+            workflow_id?: string;
+            model_id?: string;
+            /** Format: int64 */
+            run_spend_limit_nano_usd?: number;
+            allow_unpriced?: boolean;
+            daily_run_cap?: number;
+            time_zone?: string;
+        };
+        UpdateStandingWatchRequest: {
+            revision?: number;
+            name?: string;
+            prompt?: string;
+            conditions?: components["schemas"]["WatchCondition"][];
+            gate?: components["schemas"]["WatchGate"];
+            clear_gate?: boolean;
+            min_gap_minutes?: number;
+            target?: components["schemas"]["StandingWatchTarget"];
+            workflow_id?: string;
+            model_id?: string;
+            /** Format: int64 */
+            run_spend_limit_nano_usd?: number;
+            allow_unpriced?: boolean;
+            daily_run_cap?: number;
+            time_zone?: string;
+            /** @enum {string} */
+            state?: "enabled" | "paused";
+        };
+        StandingWatchRevisionRequest: {
+            revision: number;
+        };
+        UpdateWatchDeliveryRequest: {
+            /** @enum {string} */
+            delivery?: "collect" | "wake";
+        };
+        KeepWatchRequest: {
+            name?: string;
+            prompt?: string;
+            conditions?: components["schemas"]["WatchCondition"][];
+            gate?: components["schemas"]["WatchGate"];
+            min_gap_minutes?: number;
+            target?: components["schemas"]["StandingWatchTarget"];
+            workflow_id?: string;
+            model_id?: string;
+            /** Format: int64 */
+            run_spend_limit_nano_usd?: number;
+            allow_unpriced?: boolean;
+            daily_run_cap?: number;
+            time_zone?: string;
+            revision?: number;
+        };
+        KeepWatchResponse: {
+            standing_watch: components["schemas"]["StandingWatch"];
+            receipt: components["schemas"]["AgentWatchReceipt"];
+        };
+        CancelWatchResponse: {
+            watch: components["schemas"]["AgentWatch"];
+            receipt: components["schemas"]["AgentWatchReceipt"];
+        };
+        SessionStandingWatchOrigin: {
+            /** Format: uuid */
+            watch_id: string;
+            watch_name: string;
+            /** Format: uuid */
+            run_id: string;
+            deleted: boolean;
+        };
+        WatchEvent: {
+            /** @enum {string} */
+            action: "updated" | "deleted";
+            /** Format: uuid */
+            watch_id: string;
+            /** @enum {string} */
+            owner_kind: "session" | "job" | "person";
+            /** Format: uuid */
+            project_id: string;
+            /** Format: uuid */
+            session_id?: string;
+            handle?: string;
+            revision: number;
+            watch?: components["schemas"]["ProjectWatch"];
+        };
+        WatchRunEvent: {
+            /** Format: uuid */
+            run_id: string;
+            /** Format: uuid */
+            watch_id: string;
+            /** Format: uuid */
+            project_id: string;
+            revision: number;
+            run: components["schemas"]["WatchRun"];
+        };
         /**
          * @description Closed machine-readable error identity emitted by the private Den-sidecar API.
          * @enum {string}
          */
-        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "project_not_draft" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_settings_need_repair" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_model_timeout" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_mode_locked" | "session_mode_unavailable" | "session_ask_mode_workflow_requires_agent" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
+        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "project_not_draft" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_settings_need_repair" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_model_timeout" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_mode_locked" | "session_mode_unavailable" | "session_ask_mode_workflow_requires_agent" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found" | "watch_not_found" | "watch_revision_conflict" | "watch_run_active" | "watch_daily_cap_reached" | "watch_name_taken" | "watch_spend_unenforceable" | "watch_not_owner" | "watch_not_person_owned" | "watch_keep_unavailable" | "watch_condition_invalid";
         /** @enum {string} */
         NoticeAction: "open_ai_providers" | "retry_contribution_frame" | "prompt_retry" | "prompt_keep_going" | "prompt_rewind_and_retry";
         /** @enum {string} */
@@ -11005,6 +11481,7 @@ export interface components {
         SessionUiState: {
             pending_workflow_start?: components["schemas"]["PendingWorkflowStart"] | null;
             protection?: components["schemas"]["SessionProtectionState"];
+            standing_watch?: components["schemas"]["SessionStandingWatchOrigin"];
         };
         /** @description One session lifecycle command. Exactly one of title, archived, pinned, pin_position, or mode is required; compound commands are rejected without changing the session. */
         UpdateSessionRequest: {
@@ -18133,6 +18610,28 @@ export interface components {
              */
             topic: "source_view";
         };
+        EventEnvelopeWatchUpdated: components["schemas"]["EventEnvelopeBase"] & {
+            /** @constant */
+            topic: "watch.updated";
+            data: components["schemas"]["WatchEvent"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            topic: "watch.updated";
+        };
+        EventEnvelopeWatchRunUpdated: components["schemas"]["EventEnvelopeBase"] & {
+            /** @constant */
+            topic: "watch_run.updated";
+            data: components["schemas"]["WatchRunEvent"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            topic: "watch_run.updated";
+        };
         /** @description Indexed coverage and represented material; warming views have unknown totals */
         SummarizeCoverage: {
             /** @description warming | ready | failed; omitted for file, pattern, or inline summaries */
@@ -18396,6 +18895,10 @@ export interface components {
          *     encoded segment.
          */
         ExtensionMetaPackId: string;
+        /** @description Project watch UUID */
+        WatchId: string;
+        /** @description Session or worker watch handle */
+        WatchHandle: string;
     };
     requestBodies: never;
     headers: never;
@@ -31407,6 +31910,474 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    listProjectWatches: {
+        parameters: {
+            query?: {
+                owner?: "agent" | "person" | "all";
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Project watches and daily spend ceiling summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectWatchListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createStandingWatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStandingWatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Created standing watch */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingWatch"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getProjectWatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                /** @description Project watch UUID */
+                watch_id: components["parameters"]["WatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Project watch record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectWatch"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteStandingWatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                /** @description Project watch UUID */
+                watch_id: components["parameters"]["WatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Standing watch deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateStandingWatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                /** @description Project watch UUID */
+                watch_id: components["parameters"]["WatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStandingWatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated standing watch */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingWatch"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    pauseStandingWatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                /** @description Project watch UUID */
+                watch_id: components["parameters"]["WatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandingWatchRevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Paused standing watch */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingWatch"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    resumeStandingWatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                /** @description Project watch UUID */
+                watch_id: components["parameters"]["WatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandingWatchRevisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Resumed standing watch */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingWatch"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    runStandingWatchNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                /** @description Project watch UUID */
+                watch_id: components["parameters"]["WatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created and dispatched standing-watch run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchRun"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listWatchRuns: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                /** @description Project watch UUID */
+                watch_id: components["parameters"]["WatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paged standing-watch runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchRunListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listWatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session agent watches */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentWatchListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getWatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+                /** @description Session or worker watch handle */
+                watch_handle: components["parameters"]["WatchHandle"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session agent watch record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentWatch"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateWatchDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+                /** @description Session or worker watch handle */
+                watch_handle: components["parameters"]["WatchHandle"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWatchDeliveryRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated agent watch record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentWatch"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    cancelWatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+                /** @description Session or worker watch handle */
+                watch_handle: components["parameters"]["WatchHandle"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Terminal watch and final receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelWatchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    keepWatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+                /** @description Session or worker watch handle */
+                watch_handle: components["parameters"]["WatchHandle"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KeepWatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Kept standing watch and terminal agent-watch receipt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KeepWatchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -31893,6 +32864,31 @@ export type WorkflowScope = components["schemas"]["WorkflowScope"];
 export type WorkflowSummary = components["schemas"]["WorkflowSummary"];
 export type WorkflowTemplateParameter = components["schemas"]["WorkflowTemplateParameter"];
 export type WorkflowTemplateSummary = components["schemas"]["WorkflowTemplateSummary"];
+export type WatchCalendarSchedule = components["schemas"]["WatchCalendarSchedule"];
+export type WatchCondition = components["schemas"]["WatchCondition"];
+export type WatchGate = components["schemas"]["WatchGate"];
+export type StandingWatchTarget = components["schemas"]["StandingWatchTarget"];
+export type StandingWatchOrigin = components["schemas"]["StandingWatchOrigin"];
+export type AgentStandingDraft = components["schemas"]["AgentStandingDraft"];
+export type OverlappingStandingWatch = components["schemas"]["OverlappingStandingWatch"];
+export type AgentWatchReceipt = components["schemas"]["AgentWatchReceipt"];
+export type AgentWatch = components["schemas"]["AgentWatch"];
+export type WatchRun = components["schemas"]["WatchRun"];
+export type StandingWatch = components["schemas"]["StandingWatch"];
+export type ProjectWatch = components["schemas"]["ProjectWatch"];
+export type ProjectWatchListResponse = components["schemas"]["ProjectWatchListResponse"];
+export type AgentWatchListResponse = components["schemas"]["AgentWatchListResponse"];
+export type WatchRunListResponse = components["schemas"]["WatchRunListResponse"];
+export type CreateStandingWatchRequest = components["schemas"]["CreateStandingWatchRequest"];
+export type UpdateStandingWatchRequest = components["schemas"]["UpdateStandingWatchRequest"];
+export type StandingWatchRevisionRequest = components["schemas"]["StandingWatchRevisionRequest"];
+export type UpdateWatchDeliveryRequest = components["schemas"]["UpdateWatchDeliveryRequest"];
+export type KeepWatchRequest = components["schemas"]["KeepWatchRequest"];
+export type KeepWatchResponse = components["schemas"]["KeepWatchResponse"];
+export type CancelWatchResponse = components["schemas"]["CancelWatchResponse"];
+export type SessionStandingWatchOrigin = components["schemas"]["SessionStandingWatchOrigin"];
+export type WatchEvent = components["schemas"]["WatchEvent"];
+export type WatchRunEvent = components["schemas"]["WatchRunEvent"];
 export type ApiErrorCode = components["schemas"]["ApiErrorCode"];
 export type NoticeAction = components["schemas"]["NoticeAction"];
 export type NoticeTier = components["schemas"]["NoticeTier"];
@@ -32575,5 +33571,7 @@ export type EventEnvelopeTurnLoad = components["schemas"]["EventEnvelopeTurnLoad
 export type EventEnvelopeChatVault = components["schemas"]["EventEnvelopeChatVault"];
 export type SourceViewEvent = components["schemas"]["SourceViewEvent"];
 export type EventEnvelopeSourceView = components["schemas"]["EventEnvelopeSourceView"];
+export type EventEnvelopeWatchUpdated = components["schemas"]["EventEnvelopeWatchUpdated"];
+export type EventEnvelopeWatchRunUpdated = components["schemas"]["EventEnvelopeWatchRunUpdated"];
 export type SummarizeCoverage = components["schemas"]["SummarizeCoverage"];
 export type SummarizePack = components["schemas"]["SummarizePack"];

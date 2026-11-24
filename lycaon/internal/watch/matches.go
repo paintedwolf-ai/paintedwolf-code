@@ -74,9 +74,13 @@ func (s *Store) RecordMatch(ctx context.Context, watchID string, input MatchInpu
 	if err != nil {
 		return RecordedMatch{}, false, err
 	}
+	if reg.Owner.Kind != OwnerPerson {
+		publishAgentWatchEventTx(ctx, s, tx, reg, reg.Lifecycle.Revision)
+	}
 	if err := tx.Commit(); err != nil {
 		return RecordedMatch{}, false, err
 	}
+	NotifyEvents(s)
 	if reg.Lifecycle.State == StateTerminal {
 		retireWatchRuntime(s, reg.WatchID)
 	}

@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Watch can no longer be kept
+message: >-
+  This agent watch has already ended or uses a session-specific condition that a person cannot own.
+suggested_action: Create a new standing watch in Activity with timer, Git ref, or file change conditions.
+scenarios:
+  - id: default
+    vars: {}

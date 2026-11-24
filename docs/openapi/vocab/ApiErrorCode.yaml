@@ -1416,3 +1416,43 @@ values:
     status: 404
     comment: >-
       history protection owner not found
+  - id: watch_not_found
+    status: 404
+    comment: >-
+      watch id or session watch handle not found
+  - id: watch_revision_conflict
+    status: 409
+    comment: >-
+      standing watch revision no longer matches the stored record
+  - id: watch_run_active
+    status: 409
+    comment: >-
+      standing watch already has a queued, running, or held run
+  - id: watch_daily_cap_reached
+    status: 409
+    comment: >-
+      standing watch reached its configured daily run cap
+  - id: watch_name_taken
+    status: 409
+    comment: >-
+      another standing watch in the project already uses this name
+  - id: watch_spend_unenforceable
+    status: 422
+    comment: >-
+      selected model lacks pricing data and allow_unpriced is false
+  - id: watch_not_owner
+    status: 403
+    comment: >-
+      only the standing watch owner may perform this mutation
+  - id: watch_not_person_owned
+    status: 409
+    comment: >-
+      standing-watch mutation targeted a session or worker agent watch
+  - id: watch_keep_unavailable
+    status: 409
+    comment: >-
+      agent watch has already ended or uses a condition a person cannot own
+  - id: watch_condition_invalid
+    status: 422
+    comment: >-
+      standing watch condition, gate, or field failed domain validation

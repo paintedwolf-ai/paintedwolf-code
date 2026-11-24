@@ -1,0 +1,907 @@
+components:
+  schemas:
+    WatchCalendarSchedule:
+      x-go-generate: true
+      type: object
+      required:
+      - days
+      - times
+      additionalProperties: false
+      properties:
+        days:
+          type: array
+          minItems: 1
+          maxItems: 7
+          items:
+            type: string
+            enum:
+            - every_day
+            - weekdays
+            - monday
+            - tuesday
+            - wednesday
+            - thursday
+            - friday
+            - saturday
+            - sunday
+        times:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+            pattern: '^\d{2}:\d{2}$'
+    WatchCondition:
+      x-go-generate: true
+      type: object
+      required:
+      - kind
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+          - process_done
+          - process_output
+          - next_worker_done
+          - all_workers_idle
+          - overlay_promote_pending
+          - worker_decision_needed
+          - worker_failed
+          - scan_done
+          - http_ready
+          - port_ready
+          - timer
+          - file_change
+          - git_ref
+        process_id:
+          type: string
+          pattern: '^[A-Za-z0-9:._-]+$'
+        cursor:
+          type: integer
+          format: int64
+          minimum: 0
+        url:
+          type: string
+          minLength: 1
+        host:
+          type: string
+          minLength: 1
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        delay_ms:
+          type: integer
+          format: int64
+          minimum: 1
+        at:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$'
+        every_minutes:
+          type: integer
+          format: int64
+          minimum: 15
+          maximum: 10080
+        calendar:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchCalendarSchedule'
+        root_id:
+          type: string
+          pattern: '^[A-Za-z0-9:._-]+$'
+        path:
+          type: string
+        glob:
+          type: string
+        include_own:
+          type: boolean
+        ref:
+          type: string
+          minLength: 1
+    WatchGate:
+      x-go-generate: true
+      type: object
+      required:
+      - kind
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+          - git_ref
+          - file_change
+        root_id:
+          type: string
+          pattern: '^[A-Za-z0-9:._-]+$'
+        path:
+          type: string
+        glob:
+          type: string
+        ref:
+          type: string
+          minLength: 1
+    StandingWatchTarget:
+      x-go-generate: true
+      type: object
+      required:
+      - kind
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+          - new_chat
+          - existing_chat
+        session_id:
+          type: string
+          format: uuid
+    StandingWatchOrigin:
+      x-go-generate: true
+      type: object
+      required:
+      - session_id
+      - handle
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+          minLength: 1
+    AgentStandingDraft:
+      x-go-generate: true
+      type: object
+      required:
+      - name
+      - prompt
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        replaces:
+          type: string
+          format: uuid
+    OverlappingStandingWatch:
+      x-go-generate: true
+      type: object
+      required:
+      - watch_id
+      - name
+      - state
+      - condition_summary
+      additionalProperties: false
+      properties:
+        watch_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        state:
+          type: string
+          enum:
+          - enabled
+          - paused
+        condition_summary:
+          type: string
+    AgentWatchReceipt:
+      x-go-generate: true
+      type: object
+      required:
+      - handle
+      - state
+      additionalProperties: false
+      properties:
+        handle:
+          type: string
+        state:
+          type: string
+          enum:
+          - live
+          - terminal
+        terminal_outcome:
+          type: string
+          enum:
+          - completed
+          - canceled
+          - dismissed
+          - kept
+          - expired
+          - source_lost
+          - stopped
+          - owner_ended
+        standing_watch_id:
+          type: string
+          format: uuid
+        matched_kind:
+          type: string
+        occurrence:
+          type: integer
+          format: int64
+          minimum: 0
+        detail:
+          type: object
+          additionalProperties: true
+        recorded_at:
+          type: string
+          format: date-time
+    AgentWatch:
+      x-go-generate: true
+      type: object
+      required:
+      - watch_id
+      - handle
+      - owner_kind
+      - project_id
+      - session_id
+      - conditions
+      - condition_summary
+      - delivery
+      - repeat
+      - derived
+      - keepable
+      - state
+      - revision
+      - expires_at
+      - created_at
+      - updated_at
+      additionalProperties: false
+      properties:
+        watch_id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        owner_kind:
+          type: string
+          enum:
+          - session
+          - job
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        worker_id:
+          type: string
+          format: uuid
+        source_process_id:
+          type: string
+          pattern: '^[A-Za-z0-9:._-]+$'
+        label:
+          type: string
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchCondition'
+        condition_summary:
+          type: string
+        delivery:
+          type: string
+          enum:
+          - collect
+          - wake
+        repeat:
+          type: boolean
+        derived:
+          type: boolean
+        keepable:
+          type: boolean
+        state:
+          type: string
+          enum:
+          - live
+          - terminal
+        terminal_outcome:
+          type: string
+          enum:
+          - completed
+          - canceled
+          - dismissed
+          - kept
+          - expired
+          - source_lost
+          - stopped
+          - owner_ended
+        standing_draft:
+          x-go-pointer: true
+          $ref: '#/components/schemas/AgentStandingDraft'
+        overlapping_standing:
+          type: array
+          items:
+            $ref: '#/components/schemas/OverlappingStandingWatch'
+        final_receipt:
+          x-go-pointer: true
+          $ref: '#/components/schemas/AgentWatchReceipt'
+        revision:
+          type: integer
+          minimum: 1
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WatchRun:
+      x-go-generate: true
+      type: object
+      required:
+      - run_id
+      - watch_id
+      - watch_name
+      - project_id
+      - status
+      - scheduled_at
+      - missed_count
+      - spend_limit_nano_usd
+      - allow_unpriced
+      - created_at
+      additionalProperties: false
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        watch_id:
+          type: string
+          format: uuid
+        watch_name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - pending
+          - queued
+          - running
+          - waiting_for_owner
+          - completed
+          - failed
+          - fenced
+          - canceled
+          - skipped_overlap
+          - skipped_unchanged
+          - skipped_daily_cap
+          - skipped_busy
+          - missed
+        scheduled_at:
+          type: string
+          format: date-time
+        session_id:
+          type: string
+          format: uuid
+        missed_count:
+          type: integer
+          minimum: 0
+        condition_detail:
+          type: object
+          additionalProperties: true
+        spend_limit_nano_usd:
+          type: integer
+          format: int64
+          minimum: 0
+        allow_unpriced:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: [string, "null"]
+          format: date-time
+        ended_at:
+          type: [string, "null"]
+          format: date-time
+    StandingWatch:
+      x-go-generate: true
+      type: object
+      required:
+      - watch_id
+      - project_id
+      - owner_person_id
+      - name
+      - prompt
+      - conditions
+      - condition_summary
+      - min_gap_minutes
+      - target
+      - workflow_id
+      - model_id
+      - run_spend_limit_nano_usd
+      - allow_unpriced
+      - daily_run_cap
+      - time_zone
+      - state
+      - revision
+      - created_at
+      - updated_at
+      additionalProperties: false
+      properties:
+        watch_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        owner_person_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/WatchCondition'
+        condition_summary:
+          type: string
+        gate:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchGate'
+        min_gap_minutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+        target:
+          $ref: '#/components/schemas/StandingWatchTarget'
+        workflow_id:
+          type: string
+          pattern: '^[A-Za-z0-9@._/-]{1,128}$'
+        model_id:
+          type: string
+          pattern: '^[A-Za-z0-9:._/-]{1,160}$'
+        run_spend_limit_nano_usd:
+          type: integer
+          format: int64
+          minimum: 100000000
+          maximum: 100000000000
+        allow_unpriced:
+          type: boolean
+        daily_run_cap:
+          type: integer
+          minimum: 1
+          maximum: 96
+        time_zone:
+          type: string
+          minLength: 1
+        state:
+          type: string
+          enum:
+          - enabled
+          - paused
+          - disabled
+          - completed
+        state_reason:
+          type: [string, "null"]
+          enum:
+          - person
+          - consecutive_failures
+          - target_unavailable
+          - owner_access_revoked
+          - null
+        kept_from:
+          x-go-pointer: true
+          $ref: '#/components/schemas/StandingWatchOrigin'
+        next_run_at:
+          type: [string, "null"]
+          format: date-time
+        last_outcome:
+          type: string
+        active_run:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchRun'
+        recent_runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchRun'
+        revision:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ProjectWatch:
+      x-go-generate: true
+      type: object
+      required:
+      - watch_id
+      - owner_kind
+      - project_id
+      - revision
+      additionalProperties: false
+      properties:
+        watch_id:
+          type: string
+          format: uuid
+        owner_kind:
+          type: string
+          enum:
+          - session
+          - job
+          - person
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        revision:
+          type: integer
+          minimum: 1
+        agent_watch:
+          x-go-pointer: true
+          $ref: '#/components/schemas/AgentWatch'
+        standing_watch:
+          x-go-pointer: true
+          $ref: '#/components/schemas/StandingWatch'
+    ProjectWatchListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - watches
+      - daily_spend_cap_nano_usd
+      - has_unpriced_standing_watch
+      - enabled_standing_total
+      additionalProperties: false
+      properties:
+        watches:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectWatch'
+        daily_spend_cap_nano_usd:
+          type: integer
+          format: int64
+          minimum: 0
+        has_unpriced_standing_watch:
+          type: boolean
+        enabled_standing_total:
+          type: integer
+          minimum: 0
+    AgentWatchListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - watches
+      additionalProperties: false
+      properties:
+        watches:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentWatch'
+    WatchRunListResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - runs
+      additionalProperties: false
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchRun'
+        next_cursor:
+          type: string
+    CreateStandingWatchRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - name
+      - prompt
+      - conditions
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/WatchCondition'
+        gate:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchGate'
+        min_gap_minutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+        target:
+          x-go-pointer: true
+          $ref: '#/components/schemas/StandingWatchTarget'
+        workflow_id:
+          type: string
+          pattern: '^[A-Za-z0-9@._/-]{1,128}$'
+        model_id:
+          type: string
+          pattern: '^[A-Za-z0-9:._/-]{1,160}$'
+        run_spend_limit_nano_usd:
+          type: integer
+          format: int64
+          minimum: 100000000
+          maximum: 100000000000
+        allow_unpriced:
+          type: boolean
+        daily_run_cap:
+          type: integer
+          minimum: 1
+          maximum: 96
+        time_zone:
+          type: string
+          minLength: 1
+    UpdateStandingWatchRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        name:
+          x-go-pointer: true
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          x-go-pointer: true
+          type: string
+          minLength: 1
+          maxLength: 8000
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/WatchCondition'
+        gate:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchGate'
+        clear_gate:
+          type: boolean
+        min_gap_minutes:
+          x-go-pointer: true
+          type: integer
+          minimum: 15
+          maximum: 1440
+        target:
+          x-go-pointer: true
+          $ref: '#/components/schemas/StandingWatchTarget'
+        workflow_id:
+          x-go-pointer: true
+          type: string
+          pattern: '^[A-Za-z0-9@._/-]{1,128}$'
+        model_id:
+          x-go-pointer: true
+          type: string
+          pattern: '^[A-Za-z0-9:._/-]{1,160}$'
+        run_spend_limit_nano_usd:
+          x-go-pointer: true
+          type: integer
+          format: int64
+          minimum: 100000000
+          maximum: 100000000000
+        allow_unpriced:
+          x-go-pointer: true
+          type: boolean
+        daily_run_cap:
+          x-go-pointer: true
+          type: integer
+          minimum: 1
+          maximum: 96
+        time_zone:
+          x-go-pointer: true
+          type: string
+          minLength: 1
+        state:
+          x-go-pointer: true
+          type: string
+          enum:
+          - enabled
+          - paused
+    StandingWatchRevisionRequest:
+      x-go-generate: true
+      type: object
+      required:
+      - revision
+      additionalProperties: false
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+    UpdateWatchDeliveryRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        delivery:
+          type: string
+          enum:
+          - collect
+          - wake
+    KeepWatchRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/WatchCondition'
+        gate:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WatchGate'
+        min_gap_minutes:
+          type: integer
+          minimum: 15
+          maximum: 1440
+        target:
+          x-go-pointer: true
+          $ref: '#/components/schemas/StandingWatchTarget'
+        workflow_id:
+          type: string
+          pattern: '^[A-Za-z0-9@._/-]{1,128}$'
+        model_id:
+          type: string
+          pattern: '^[A-Za-z0-9:._/-]{1,160}$'
+        run_spend_limit_nano_usd:
+          type: integer
+          format: int64
+          minimum: 100000000
+          maximum: 100000000000
+        allow_unpriced:
+          type: boolean
+        daily_run_cap:
+          type: integer
+          minimum: 1
+          maximum: 96
+        time_zone:
+          type: string
+          minLength: 1
+        revision:
+          type: integer
+          minimum: 1
+    KeepWatchResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - standing_watch
+      - receipt
+      additionalProperties: false
+      properties:
+        standing_watch:
+          $ref: '#/components/schemas/StandingWatch'
+        receipt:
+          $ref: '#/components/schemas/AgentWatchReceipt'
+    CancelWatchResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - watch
+      - receipt
+      additionalProperties: false
+      properties:
+        watch:
+          $ref: '#/components/schemas/AgentWatch'
+        receipt:
+          $ref: '#/components/schemas/AgentWatchReceipt'
+    SessionStandingWatchOrigin:
+      x-go-generate: true
+      type: object
+      required:
+      - watch_id
+      - watch_name
+      - run_id
+      - deleted
+      additionalProperties: false
+      properties:
+        watch_id:
+          type: string
+          format: uuid
+        watch_name:
+          type: string
+        run_id:
+          type: string
+          format: uuid
+        deleted:
+          type: boolean
+    WatchEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - action
+      - watch_id
+      - owner_kind
+      - project_id
+      - revision
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum:
+          - updated
+          - deleted
+        watch_id:
+          type: string
+          format: uuid
+        owner_kind:
+          type: string
+          enum:
+          - session
+          - job
+          - person
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        handle:
+          type: string
+        revision:
+          type: integer
+          minimum: 1
+        watch:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ProjectWatch'
+    WatchRunEvent:
+      x-go-generate: true
+      type: object
+      required:
+      - run_id
+      - watch_id
+      - project_id
+      - revision
+      - run
+      additionalProperties: false
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        watch_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        run:
+          $ref: '#/components/schemas/WatchRun'

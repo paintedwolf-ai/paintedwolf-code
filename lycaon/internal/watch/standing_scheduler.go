@@ -61,7 +61,7 @@ func (e *StandingEngine) RunNow(ctx context.Context, actorPersonID, projectID, w
 		return WatchRun{}, err
 	}
 	publishWatchEventTx(ctx, e, tx, "watch_run.updated", projectID, "", watchID, runID, sw.Revision)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return WatchRun{}, err
 	}
 	if err := e.DispatchProjectRuns(ctx, projectID); err != nil {
@@ -391,7 +391,7 @@ func enqueueStandingTimerOccurrence(ctx context.Context, e *StandingEngine, sw S
 		return err
 	}
 	publishWatchEventTx(ctx, e, tx, "watch_run.updated", sw.ProjectID, "", sw.WatchID, runID, sw.Revision)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return err
 	}
 	if status != RunPending && isAtOnlyStandingWatch(sw.Conditions) {
@@ -512,7 +512,7 @@ func enqueueStandingChangeRun(ctx context.Context, e *StandingEngine, sw Standin
 			if _, err := tx.ExecContext(ctx, `UPDATE watch_runs SET condition_detail_json = ?, scheduled_for = ? WHERE run_id = ?`, string(detailBytes), nowStr, pendingID); err != nil {
 				return err
 			}
-			return tx.Commit()
+			return commitStandingTx(e, tx)
 		}
 		if sw.Target.Kind == "existing_chat" {
 			_, _ = tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'skipped_busy', ended_at = ? WHERE run_id = ?`, nowStr, pendingID)
@@ -538,7 +538,7 @@ func enqueueStandingChangeRun(ctx context.Context, e *StandingEngine, sw Standin
 		return err
 	}
 	publishWatchEventTx(ctx, e, tx, "watch_run.updated", sw.ProjectID, "", sw.WatchID, runID, sw.Revision)
-	return tx.Commit()
+	return commitStandingTx(e, tx)
 }
 
 type persistedGateBaseline struct {

@@ -49,10 +49,13 @@ func (b *serveBuilder) wireStandingWatchHost(watchStore *watch.Store) {
 		PersonAccessCheck:  b.standingPersonAccessCheck,
 		SessionTargetCheck: b.standingSessionTargetCheck,
 		ProjectDefaults:    b.standingProjectDefaults,
-		RunDispatcher:      func(ctx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
+		RunDispatcher: func(ctx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
 			return b.dispatchStandingWatchRun(ctx, engine, sw, run, promptText)
 		},
 	})
+	if b.events != nil {
+		watchStore.SetEventOutbox(b.events.Outbox)
+	}
 
 	if b.events != nil && b.events.Hub != nil {
 		ch, unsub, err := b.events.Hub.Subscribe(b.startup.ctx, events.Subscription{
