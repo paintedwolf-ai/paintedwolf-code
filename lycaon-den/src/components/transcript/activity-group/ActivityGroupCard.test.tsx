@@ -272,6 +272,9 @@ describe("ActivityGroupCard", () => {
     });
 
     group.dispatchEvent(new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }));
+    shiftSpy.mockClear();
+
+    group.dispatchEvent(new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }));
     expect(shiftSpy).not.toHaveBeenCalled();
 
     filesOffsetTop = 186;

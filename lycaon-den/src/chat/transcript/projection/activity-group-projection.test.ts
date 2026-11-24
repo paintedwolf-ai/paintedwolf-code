@@ -159,8 +159,8 @@ describe("projectActivityGroups", () => {
     const beforePlan = quietItems[1] as ActivityGroupItem;
     const afterPlan = quietItems[3] as ActivityGroupItem;
     expect(beforePlan.entries.map((e) => (e.kind === "tool" ? e.part.toolCallId : e.key))).toEqual([
-      "call-wait",
       "call-cmd",
+      "call-wait",
     ]);
     expect(afterPlan.entries.map((e) => (e.kind === "tool" ? e.part.toolCallId : e.key))).toEqual([
       "call-write",

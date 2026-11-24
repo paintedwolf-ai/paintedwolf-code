@@ -118,10 +118,12 @@ describe("session transcript findable adapter", () => {
             grant_title: "Allow once",
           },
           file_edit_previews: [
+            fileEditPreviewFixture({ path: "src/mod_a.ts", before: "a\n", after: "b\n" }),
+            fileEditPreviewFixture({ path: "src/mod_b.ts", before: "a\n", after: "b\n" }),
             fileEditPreviewFixture({
               path: "src/STACK_FIND_OMEGA.ts",
               before: "const oldVal = 1;\n",
-              after: "const STACK_FIND_OMEGA = 2;\n",
+              after: "const nextVal = 2;\n",
             }),
           ],
         },
@@ -176,16 +178,24 @@ describe("session transcript findable adapter", () => {
 
     expect(await screen.findByTestId("message-stream")).toBeTruthy();
     const approvalsToggle = container.querySelector<HTMLButtonElement>('[data-testid="activity-group-approvals-toggle"]');
+    const diffToggle = container.querySelector<HTMLButtonElement>('[data-testid="diff-group"] button.den-transcript-disclosure-toggle');
     expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(diffToggle?.getAttribute("aria-expanded")).toBe("false");
 
     openFind();
     setFindQuery("STACK_FIND_OMEGA");
-    expect(findController.matches().length).toBeGreaterThanOrEqual(2);
-    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(findController.matches().length).toBe(2);
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(diffToggle?.getAttribute("aria-expanded")).toBe("false");
+
+    // Advancing activates the second collapsed section (Files edited), then wraps to Approvals.
+    findNext();
+    expect(diffToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("false");
 
     findNext();
-    const diffToggle = container.querySelector<HTMLButtonElement>('[data-testid="diff-group"] button.den-transcript-disclosure-toggle');
-    expect(diffToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(diffToggle?.getAttribute("aria-expanded")).toBe("false");
 
     fireEvent.click(screen.getByTestId("find-bar-close"));
     expect(document.querySelectorAll(`span[${FIND_MARK_ATTR}="1"]`)).toHaveLength(0);
