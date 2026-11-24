@@ -89,14 +89,18 @@ modelIndependentWebE2e("activity details with a wide filmstrip stay inside their
   const assertContained = async () => {
     const violations = await card.evaluate((cardEl) => {
       const spanEl = cardEl.closest<HTMLElement>('[data-testid="activity-span-card"]');
-      const limit = Math.min(cardEl.getBoundingClientRect().right, spanEl?.getBoundingClientRect().right ?? Infinity);
+      const cardRect = cardEl.getBoundingClientRect();
+      const limit = Math.min(cardRect.right, spanEl?.getBoundingClientRect().right ?? Infinity);
       const selectors = [
         '[data-testid="action-card-body"]',
         '[data-testid="action-ran"]',
         '[data-testid="action-ran-copy"]',
         '[data-testid="activity-summary"]',
+        '[data-testid="activity-summary"] [data-section="intent"] .den-activity-summary__text',
+        '[data-testid="activity-summary"] [data-section="outcome"] .den-activity-summary__text',
         '[data-testid="action-facts"]',
         '[data-testid="transcript-visual-filmstrip"]',
+        '[data-testid="transcript-visual-filmstrip-reading"]',
         '[data-testid="transcript-visual-filmstrip-rail"]',
         '[data-testid="action-links"]',
       ];
@@ -114,10 +118,22 @@ modelIndependentWebE2e("activity details with a wide filmstrip stay inside their
     expect(violations).toEqual([]);
   };
 
-  await assertContained();
+  const stageGeometry = () => card.evaluate((cardEl) => {
+    const hero = cardEl.querySelector<HTMLElement>(".den-transcript-visual-filmstrip__hero")!.getBoundingClientRect();
+    const reading = cardEl.querySelector<HTMLElement>('[data-testid="transcript-visual-filmstrip-reading"]')!.getBoundingClientRect();
+    return { hero, reading };
+  });
 
-  // Narrow the viewport so the card falls below the 520px visual cap and filmstrip stack threshold.
-  await page.setViewportSize({ width: 640, height: 900 });
   await assertContained();
+  const wideStage = await stageGeometry();
+  expect(wideStage.reading.left).toBeGreaterThanOrEqual(wideStage.hero.right - 1);
+
+  // Narrow the viewport so the card falls below the 24rem filmstrip stack threshold.
+  await page.setViewportSize({ width: 520, height: 900 });
+  await assertContained();
+  await expect.poll(async () => {
+    const { hero, reading } = await stageGeometry();
+    return reading.top >= hero.bottom - 1;
+  }).toBe(true);
   await expect.poll(() => viewport.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
 });
