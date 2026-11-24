@@ -3,22 +3,34 @@ package llm
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
 func (c *RoutingClient) openWithCapacity(ctx context.Context, sel *ModelSelection, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, *ModelSelection, error) {
+	callID := firstNonEmpty(req.Debug.CallID, secretmatch.ScreenCallIDFrom(ctx))
+	if callID == "" {
+		callID = uuid.NewString()
+	}
+	req.Debug.CallID = callID
+	ctx = secretmatch.WithScreenCallID(ctx, callID)
+	capStart := time.Now()
 	if sel != nil {
 		// Standing refusals avoid repeated calls.
 		if refused := c.refusals.Err(sel.ProviderID, sel.Model); refused != nil {
 			return nil, sel, refused
 		}
 		if err := c.capacity.Await(ctx, sel.ProviderID, sel.Model); err != nil {
+			emitCapacityWait(ctx, "foreground", capStart, true)
 			return nil, sel, err
 		}
 	}
 	release, err := c.acquireLocalCall(ctx, sel)
+	emitCapacityWait(ctx, "foreground", capStart, err != nil)
 	if err != nil {
 		return nil, sel, err
 	}

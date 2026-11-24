@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
@@ -164,13 +165,47 @@ func (b *Runtime) InstallEvidence(ctx context.Context, m *secretmatch.Matcher, f
 
 // ModelScreeningValues reconciles file evidence before a provider sees the request.
 func (b *Runtime) ModelScreeningValues(ctx context.Context, projectID, rootSessionID string) ([]secretmatch.Remembered, error) {
+	ctx, trace := secretmatch.WithEvidenceTrace(ctx)
+	callID := secretmatch.ScreenCallIDFrom(ctx)
 	if b.CredentialFiles != nil {
 		if err := b.CredentialFiles.EnsureProject(ctx, projectID); err != nil {
+			snap := trace.Snapshot()
+			secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
+				CallID: callID, ProjectID: projectID, Phase: "evidence_reconciled",
+				DurationMS: snap.ReadinessWaitMS, RootsChecked: snap.RootsChecked,
+				BuildsJoined: snap.BuildsJoined, BuildIDs: snap.BuildIDs,
+				DirectoriesListed: snap.DirectoriesListed, PathsClassified: snap.PathsClassified,
+				CredentialFilesRead: snap.CredentialFilesRead, Failed: true,
+			})
 			return nil, err
 		}
 	}
-	if b.Capabilities == nil {
-		return nil, nil
+	var values []secretmatch.Remembered
+	var lookupMS int64
+	if b.Capabilities != nil {
+		started := time.Now()
+		var err error
+		values, err = b.Capabilities.ScreeningValues(ctx, projectID, rootSessionID)
+		lookupMS = time.Since(started).Milliseconds()
+		if err != nil {
+			secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
+				CallID: callID, ProjectID: projectID, Phase: "managed_value_lookup",
+				DurationMS: lookupMS, Failed: true,
+			})
+			return nil, err
+		}
+		secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
+			CallID: callID, ProjectID: projectID, Phase: "managed_value_lookup",
+			DurationMS: lookupMS, ManagedValues: len(values),
+		})
 	}
-	return b.Capabilities.ScreeningValues(ctx, projectID, rootSessionID)
+	snap := trace.Snapshot()
+	secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
+		CallID: callID, ProjectID: projectID, Phase: "evidence_reconciled",
+		DurationMS: snap.ReadinessWaitMS + lookupMS, RootsChecked: snap.RootsChecked,
+		BuildsJoined: snap.BuildsJoined, BuildIDs: snap.BuildIDs,
+		DirectoriesListed: snap.DirectoriesListed, PathsClassified: snap.PathsClassified,
+		CredentialFilesRead: snap.CredentialFilesRead, ManagedValues: len(values),
+	})
+	return values, nil
 }
