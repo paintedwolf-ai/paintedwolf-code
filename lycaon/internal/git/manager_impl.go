@@ -294,7 +294,7 @@ func (m *gitDiffStatusManager) DiffStat(ctx context.Context, projectDir string, 
 	if err != nil {
 		return nil, err
 	}
-	args, err := diffArgs([]string{"diff", "--numstat", "-z"}, opts)
+	args, err := diffArgs([]string{"diff", "-M", "--numstat", "-z"}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +306,7 @@ func (m *gitDiffStatusManager) DiffStat(ctx context.Context, projectDir string, 
 	if err != nil || len(stats) == 0 {
 		return stats, err
 	}
-	if rawArgs, rawErr := diffArgs([]string{"diff", "--raw", "--no-abbrev", "-z"}, opts); rawErr == nil {
+	if rawArgs, rawErr := diffArgs([]string{"diff", "-M", "--raw", "--no-abbrev", "-z"}, opts); rawErr == nil {
 		var rp rawDiffParser
 		if gitexec.RunRecords(ctx, dir, rawArgs, hermeticOpts(0), rp.record) == nil {
 			if rawEntries, finErr := rp.finish(); finErr == nil {

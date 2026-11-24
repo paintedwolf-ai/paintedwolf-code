@@ -52,7 +52,7 @@ func TestWorktreeOpenTargetsHistoricalDiffsRenamesAndSiblingProvenance(t *testin
 	runGitCmd(t, primaryDir, "init", "-b", "main")
 	testutil.FailErr(t, "seed staged.go", os.WriteFile(filepath.Join(primaryDir, "pkg", "staged.go"), []byte("package pkg\nconst staged = \"v1\"\n"), 0o644))
 	testutil.FailErr(t, "seed unstaged.go", os.WriteFile(filepath.Join(primaryDir, "pkg", "unstaged.go"), []byte("package pkg\nconst unstaged = \"v1\"\n"), 0o644))
-	testutil.FailErr(t, "seed old_name.go", os.WriteFile(filepath.Join(primaryDir, "pkg", "old_name.go"), []byte("package pkg\nconst renamed = \"v1\"\n"), 0o644))
+	testutil.FailErr(t, "seed old_name.go", os.WriteFile(filepath.Join(primaryDir, "pkg", "old_name.go"), []byte("package pkg\n\n// Shared header line 1.\n// Shared header line 2.\n// Shared header line 3.\nconst renamed = \"v1\"\n"), 0o644))
 	runGitCmd(t, primaryDir, "add", ".")
 	runGitCmd(t, primaryDir, "commit", "-m", "initial")
 
@@ -66,7 +66,7 @@ func TestWorktreeOpenTargetsHistoricalDiffsRenamesAndSiblingProvenance(t *testin
 	runGitCmd(t, workerDir, "add", "pkg/staged.go")
 
 	runGitCmd(t, workerDir, "mv", "pkg/old_name.go", "pkg/new_name.go")
-	testutil.FailErr(t, "edit new_name.go", os.WriteFile(filepath.Join(workerDir, "pkg", "new_name.go"), []byte("package pkg\nconst renamed = \"worker-renamed-v2\"\n"), 0o644))
+	testutil.FailErr(t, "edit new_name.go", os.WriteFile(filepath.Join(workerDir, "pkg", "new_name.go"), []byte("package pkg\n\n// Shared header line 1.\n// Shared header line 2.\n// Shared header line 3.\nconst renamed = \"worker-renamed-v2\"\n"), 0o644))
 	runGitCmd(t, workerDir, "add", "pkg/new_name.go")
 
 	testutil.FailErr(t, "edit unstaged.go", os.WriteFile(filepath.Join(workerDir, "pkg", "unstaged.go"), []byte("package pkg\nconst unstaged = \"worker-unstaged-v2\"\n"), 0o644))
