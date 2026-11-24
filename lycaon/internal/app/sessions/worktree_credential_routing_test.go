@@ -119,6 +119,9 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		tc.Files.GrantedWriteRoots = []string{siblingWT, unrelatedDir}
 	}
 
+	f.Runtime.Executor.Boundary.SetSessionWriteRootOverlay(func(context.Context, string, string) []string {
+		return []string{siblingWT, unrelatedDir}
+	})
 	releaseGrant := projectpaths.SetGrantedAccessSource(func(_, _, abs string, _ bool) (projectpaths.Access, bool) {
 		for _, allowed := range []string{siblingWT, unrelatedDir} {
 			if rel, relErr := filepath.Rel(allowed, abs); relErr == nil && (rel == "." || filepath.IsLocal(rel)) {
