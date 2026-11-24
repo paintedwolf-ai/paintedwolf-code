@@ -53,7 +53,7 @@ func (m *Service) SetTaskIdentityResolver(resolver workeradmission.TaskIdentityR
 	m.taskIdentities = resolver
 }
 
-func (m *Service) SetAskInstructionCheck(check func(context.Context, string, map[string]any) error) {
+func (m *Service) SetAskInstructionCheck(check AskInstructionChecker) {
 	m.checkAskInstruction = check
 }
 

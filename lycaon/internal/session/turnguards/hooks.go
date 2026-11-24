@@ -33,7 +33,7 @@ func (m *Service) BeforeTool(
 	}
 	var askInstructionReject *toolrejection.ToolReject
 	if tool == "instruct_worker" && sess != nil && sess.Mode == api.SessionModeAsk && m != nil && m.checkAskInstruction != nil {
-		askInstructionReject = toolrejection.AsToolReject(m.checkAskInstruction(ctx, sess.ID, args))
+		askInstructionReject = toolrejection.AsToolReject(m.checkAskInstruction.CheckAskInstruction(ctx, sess.ID, args))
 	}
 	if reject, blocked, err := m.ToolPolicy.Block(ctx, oar.AnchorSessionPreInvoke, sess, tool, args, func(gc *oar.GuardContext) error {
 		observeAskWorkerWrites(sess, tool, identity, askInstructionReject, gc)

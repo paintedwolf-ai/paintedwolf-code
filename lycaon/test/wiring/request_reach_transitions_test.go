@@ -454,8 +454,15 @@ func verifyV1BaselineAskProjectedRequest(t *testing.T, oracle *reachOracle) {
 		t.Fatalf("expected >= 2 requests in v1-baseline Ask turn, got %d", len(reqs))
 	}
 	postLoadReq := reqs[len(reqs)-1]
-	if _, hasCmd := toolMetaSchemaInRequest(postLoadReq, "command"); hasCmd {
-		t.Fatal("v1-baseline Ask request unexpectedly offered command")
+	cmdSchema, hasCmd := toolMetaSchemaInRequest(postLoadReq, "command")
+	if !hasCmd {
+		t.Fatalf("shipped Ask request missing read-only command tool: %v", postLoadReq.Tools)
+	}
+	cmdFields := argFields(cmdSchema)
+	for _, pruned := range []string{"capability_request", "secret_use", "snapshot_capture", "socks_proxy", "terminal_capture", "verification"} {
+		if cmdFields[pruned] {
+			t.Fatalf("shipped Ask command schema retained mutating field %q", pruned)
+		}
 	}
 	taskSchema, hasTask := toolMetaSchemaInRequest(postLoadReq, "task")
 	if !hasTask {

@@ -99,7 +99,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	taskDeps := taskToolDeps(b)
 	taskDeps.Reviews = workerOps
 	b.sessions.Manager.Coordinator.Guards.SetTaskIdentityResolver(taskDeps.IdentityResolver())
-	b.sessions.Manager.Coordinator.Guards.SetAskInstructionCheck(workerOps.CheckAskInstruction)
+	b.sessions.Manager.Coordinator.Guards.SetAskInstructionCheck(workerOps)
 	if err := worker.RegisterTaskTool(b.execution.Host.Registry, taskDeps); err != nil {
 		return fmt.Errorf("task tool: %w", err)
 	}

@@ -78,6 +78,9 @@ type WorkflowRuns interface {
 type PlanCloseoutChecker interface {
 	CheckSessionCloseout(ctx context.Context, sessionID, workspacePath string) (workerplan.CloseoutVerdict, error)
 }
+type AskInstructionChecker interface {
+	CheckAskInstruction(ctx context.Context, sessionID string, args map[string]any) error
+}
 
 type Service struct {
 	store               Sessions
@@ -105,7 +108,7 @@ type Service struct {
 	coordinatorFrame    inject.CoordinatorTurnFrameSource
 	workerQueue         workeroutcomes.CycleLedger
 	taskIdentities      workeradmission.TaskIdentityResolver
-	checkAskInstruction func(context.Context, string, map[string]any) error
+	checkAskInstruction AskInstructionChecker
 	latestResultJob     LatestResultJobs
 	resultJob           ResultJobs
 	jobNames            JobNames

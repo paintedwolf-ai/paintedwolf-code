@@ -72,6 +72,14 @@ func skillBoundaryAuthorities(stock *Stock, coordPairs []coordRep, loaded []skil
 	if err != nil {
 		return nil, err
 	}
+	extReadEffects, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandExternalExec)
+	if err != nil {
+		return nil, err
+	}
+	extReadProfiles := slices.Clone(stock.Profiles)
+	for i := range extReadProfiles {
+		extReadProfiles[i].CommandEffects = extReadEffects
+	}
 	skillsByName := func(names ...string) []skills.Skill {
 		if len(names) == 0 {
 			return nil
@@ -133,6 +141,7 @@ func skillBoundaryAuthorities(stock *Stock, coordPairs []coordRep, loaded []skil
 			ProjectedSchemas:  schemas,
 			RootCount:         rootCount,
 			HasGit:            hasGit,
+			HasAnyGitRoot:     hasGit || rootCount > 1,
 			OnWorkerBranch:    onWorkerBranch,
 			WebSearch:         webSearch,
 			SessionScratchDir: scratchDir,
@@ -210,9 +219,10 @@ func skillBoundaryAuthorities(stock *Stock, coordPairs []coordRep, loaded []skil
 		{"container-cmd-no-socks-or-writeroot", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"command", "recall"}, nil, map[string]map[string]any{"command": narrowContainerCmd}, skillsByName("work-with-containers"), 1, true, false, false, ""},
 		{"task-without-instruct-worker", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"task", "recall", "update_progress"}, []string{"instruct_worker"}, nil, nil, 1, true, false, false, ""},
 		{"source-history-with-deferred-command", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"source_history", "request_tools", "recall"}, []string{"command"}, nil, nil, 1, true, false, false, ""},
+		{"source-history-deferred-command-mixed-git", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"source_history", "request_tools", "recall"}, []string{"command"}, nil, skillsByName("investigate-code-history"), 2, false, false, false, ""},
 		{"readonly-non-git-command-without-source-history", "implement", api.SessionPostureSpec, roProfiles, []string{"command", "recall", "complete_leg"}, nil, map[string]map[string]any{"command": narrowRoCmd}, nil, 1, false, false, false, ""},
-		{"survey-repo-without-command", "worker_readonly", api.SessionPostureSpec, roProfiles, []string{"survey_repo", "summarize", "complete_leg"}, nil, nil, skillsByName("survey-a-threat-model"), 1, true, false, false, ""},
-		{"readonly-container-with-terminal-open", "implement", api.SessionPostureSpec, roProfiles, []string{"command", "terminal_open", "complete_leg"}, nil, map[string]map[string]any{"command": narrowRoCmd}, skillsByName("work-with-containers"), 1, true, false, false, ""},
+		{"survey-repo-without-command", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"survey_repo", "summarize", "recall"}, nil, nil, skillsByName("survey-a-threat-model"), 1, true, false, false, ""},
+		{"readonly-container-with-external-exec", prompts.CoordinatorProfileID, api.SessionPostureBuild, extReadProfiles, []string{"command", "recall"}, nil, nil, skillsByName("work-with-containers"), 1, true, false, false, ""},
 		{"deferred-command-git-and-verify", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"request_tools", "recall", "skills_read", "read", "grep", "glob"}, []string{"command"}, nil, skillsByName("commit-in-logical-groups", "hunt-a-regression-with-bisect", "diagnose-a-tls-failure"), 1, true, false, false, ""},
 	}
 	for _, sp := range specs {

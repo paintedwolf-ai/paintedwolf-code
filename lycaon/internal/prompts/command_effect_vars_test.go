@@ -2,6 +2,7 @@ package prompts_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func toolSetMap(names []string) map[string]bool {
@@ -238,10 +240,16 @@ func TestAskCoordinatorGuidancePairedSpecificityAndOmission(t *testing.T) {
 
 	renderAsk := func(t *testing.T, floor, deferred []string, rootCount int, hasGit bool) (string, string) {
 		t.Helper()
+		var spawnAllowlist []string
+		if slices.Contains(floor, "task") {
+			spawnAllowlist = []string{"repo-researcher"}
+		}
 		reader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: prompts.CoordinatorProfileID,
-			SurfaceID: "observe_investigate",
-			Plan:      toolsurface.Compile(floor, deferred),
+			ProfileID:      prompts.CoordinatorProfileID,
+			SurfaceID:      "observe_investigate",
+			SessionMode:    string(api.SessionModeAsk),
+			Plan:           toolsurface.Compile(floor, deferred),
+			SpawnAllowlist: spawnAllowlist,
 			Profiles: []sandbox.ToolProfile{{
 				ID:             prompts.CoordinatorProfileID,
 				Tools:          toolSetMap(allTools),
@@ -279,24 +287,12 @@ func TestAskCoordinatorGuidancePairedSpecificityAndOmission(t *testing.T) {
 		}
 	}
 
-	deferredOut, _ := renderAsk(t, []string{"request_tools"}, []string{"command", "source_history", "task"}, 1, true)
-	for _, want := range []string{
-		"Load `command` via `request_tools`",
-		"Load `source_history` via `request_tools`",
-		"When delegating via `task` (loaded with `request_tools`), assign only read-scoped workers.",
-	} {
-		if !strings.Contains(deferredOut, want) {
-			t.Fatalf("discoverable-only render missing %q:\n%s", want, deferredOut)
-		}
+	deferredOut, _ := renderAsk(t, []string{"command", "source_history", "request_tools"}, []string{"task"}, 1, true)
+	if !strings.Contains(deferredOut, "When delegating via `task` (loaded with `request_tools`), assign only read-scoped workers.") {
+		t.Fatalf("discoverable-only render missing deferred task guidance:\n%s", deferredOut)
 	}
-	for _, forbidden := range []string{
-		"Use `command` to read",
-		"Use `source_history` to inspect",
-		"Delegate only to read-scoped workers.",
-	} {
-		if strings.Contains(deferredOut, forbidden) {
-			t.Fatalf("discoverable-only render claimed offered floor tool %q:\n%s", forbidden, deferredOut)
-		}
+	if strings.Contains(deferredOut, "Delegate only to read-scoped workers.") {
+		t.Fatalf("discoverable-only render claimed offered floor task:\n%s", deferredOut)
 	}
 
 	noFolderOut, _ := renderAsk(t, []string{"wait"}, nil, 0, false)

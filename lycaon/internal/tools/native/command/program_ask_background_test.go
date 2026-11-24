@@ -11,10 +11,12 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -26,11 +28,12 @@ import (
 
 type askBarrierFixture struct {
 	*programtest.Fixture
-	clock   *programtest.ManualClock
-	entered chan struct{}
-	release chan struct{}
-	mu      sync.Mutex
-	askMode bool
+	clock     *programtest.ManualClock
+	entered   chan struct{}
+	release   chan struct{}
+	completed chan bgprocess.Completion
+	mu        sync.Mutex
+	askMode   bool
 }
 
 type askBarrierSessions struct {
@@ -58,8 +61,15 @@ func newAskBarrierFixture(t *testing.T, initialLine string) *askBarrierFixture {
 	t.Helper()
 	entered := make(chan struct{})
 	release := make(chan struct{})
+	completed := make(chan bgprocess.Completion, 4)
+	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{
+		Complete: func(_ context.Context, completion bgprocess.Completion) { completed <- completion },
+	})
+	registry.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
+	t.Cleanup(func() { _ = registry.Lifecycle.Close(context.Background()) })
 	var enteredOnce sync.Once
 	base := programtest.New(t, programtest.Options{
+		Background: registry,
 		Natives: func(dir string) map[string]command.NativeOperation {
 			op := firstLineOperation()
 			prepare := op.Prepare
@@ -94,11 +104,12 @@ func newAskBarrierFixture(t *testing.T, initialLine string) *askBarrierFixture {
 	base.Runtime.Clock = clock
 
 	f := &askBarrierFixture{
-		Fixture: base,
-		clock:   clock,
-		entered: entered,
-		release: release,
-		askMode: true,
+		Fixture:   base,
+		clock:     clock,
+		entered:   entered,
+		release:   release,
+		completed: completed,
+		askMode:   true,
 	}
 	base.Runtime.Sessions = askBarrierSessions{fixture: f, base: base.Runtime.Sessions}
 	base.Configure = func(tc *tools.ToolContext) {
@@ -324,10 +335,6 @@ func TestAskBudgetContinuedProgramPagesStopsAndRetainsReadOnlyAuthorityAcrossUpg
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newAskBarrierFixture(t, "continued-holding")
-			completed := make(chan bgprocess.JobCompletion, 4)
-			f.Background.Lifecycle.SetCompletionObserver(func(comp bgprocess.JobCompletion) {
-				completed <- comp
-			})
 			type callRes struct {
 				raw string
 				err error
@@ -379,9 +386,9 @@ func TestAskBudgetContinuedProgramPagesStopsAndRetainsReadOnlyAuthorityAcrossUpg
 			if _, statErr := os.Stat(filepath.Join(f.Dir, "continued-escaped.txt")); !os.IsNotExist(statErr) {
 				t.Fatalf("continued Ask program wrote continued-escaped.txt after upgrade: err=%v", statErr)
 			}
-			var comp bgprocess.JobCompletion
+			var comp bgprocess.Completion
 			for {
-				got := testutil.Receive(t, "continued Ask job completion", completed)
+				got := testutil.Receive(t, "continued Ask job completion", f.completed)
 				if got.Handle == running.Handle {
 					comp = got
 					break

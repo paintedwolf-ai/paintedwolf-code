@@ -17,6 +17,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type askCheckFunc func(context.Context, string, map[string]any) error
+
+func (f askCheckFunc) CheckAskInstruction(ctx context.Context, sessionID string, args map[string]any) error {
+	return f(ctx, sessionID, args)
+}
+
 func TestBeforeToolChecksWorkerScopeInAskMode(t *testing.T) {
 	testutil.FailErr(t, "install anchors", anchorcatalog.InstallBundled())
 	loader, err := oar.NewLoader(filepath.Join("..", "..", "..", "..", "schemas"))
@@ -71,9 +77,9 @@ func TestBeforeToolChecksWorkerScopeInAskMode(t *testing.T) {
 				return spawn.WorkflowWork{AgentType: "repo-researcher", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}, true, nil
 			}})
 			if tc.check != nil {
-				svc.SetAskInstructionCheck(func(_ context.Context, id string, args map[string]any) error {
+				svc.SetAskInstructionCheck(askCheckFunc(func(_ context.Context, id string, args map[string]any) error {
 					return tc.check(t, id, args)
-				})
+				}))
 			}
 
 			_, skipped, err := svc.BeforeTool(t.Context(), sess, nil, tc.tool, tc.args)
