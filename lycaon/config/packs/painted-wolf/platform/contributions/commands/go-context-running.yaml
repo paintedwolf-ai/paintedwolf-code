@@ -1,7 +1,10 @@
 id: painted-wolf/platform:go-context-running
-title: "Show running commands"
+title: "Show activity"
 scope: "global"
 keywords:
+  - "activity"
+  - "watches"
+  - "standing watches"
   - "running"
   - "background"
   - "background commands"

@@ -2524,9 +2524,12 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "id": "painted-wolf/platform:go-context-running",
       "provider": "painted-wolf/platform",
-      "title": "Show running commands",
+      "title": "Show activity",
       "scope": "global",
       "keywords": [
+        "activity",
+        "watches",
+        "standing watches",
         "running",
         "background",
         "background commands",
@@ -4287,7 +4290,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "command": "painted-wolf/platform:go-context-running",
       "group": "2",
       "order": 12,
-      "label": "Running"
+      "label": "Activity"
     },
     {
       "id": "painted-wolf/platform:app-menu-go-go-context-search",
