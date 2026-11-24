@@ -77,9 +77,13 @@ func Open(path string) (*Reference, error) {
 		}
 	}()
 	var socketStat, dirStat unix.Stat_t
-	if err := unix.Lstat(alias, &socketStat); err != nil || socketStat.Mode&unix.S_IFMT != unix.S_IFSOCK {
-		return nil, fmt.Errorf("retained local service is not a socket: %v", err)
+	if err := unix.Lstat(alias, &socketStat); err != nil {
+		return nil, fmt.Errorf("stat retained local service: %w", err)
 	}
+	if socketStat.Mode&unix.S_IFMT != unix.S_IFSOCK {
+		return nil, errors.New("retained local service is not a socket")
+	}
+
 	if err := unix.Fstat(int(guard.Fd()), &dirStat); err != nil {
 		return nil, err
 	}
