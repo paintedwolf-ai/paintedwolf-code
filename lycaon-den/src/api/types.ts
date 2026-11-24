@@ -11079,7 +11079,7 @@ export interface components {
         /** @enum {string} */
         SourceWindowCoverage: "complete" | "partial" | "not_observed";
         /** @enum {string} */
-        SourceWindowGapReason: "unconfined" | "baseline_incomplete" | "canceled" | "io_error" | "settlement_failed" | "time_budget";
+        SourceWindowGapReason: "unconfined" | "baseline_incomplete" | "canceled" | "io_error" | "settlement_failed" | "time_budget" | "shared_temp";
         /** @enum {string} */
         SourceWindowBoundaryReason: "scope" | "directory_cap" | "subtree_cap" | "walk_budget" | "unreadable";
         /** @description One folder a partial observation did not enter. */

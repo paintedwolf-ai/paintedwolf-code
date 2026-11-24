@@ -58,3 +58,25 @@ func TestOnlyEntryRootHidesSiblings(t *testing.T) {
 		t.Fatal("a one-entry root shares its listing with the whole folder")
 	}
 }
+
+// A root's hidden entry is neither listed nor opened.
+func TestHiddenEntryIsNeitherListedNorOpened(t *testing.T) {
+	c := New()
+	t.Cleanup(func() { testutil.FailErr(t, "drain index discovery", c.Drain(context.Background())) })
+	dir := t.TempDir()
+	writeIndexFile(t, dir, "notes.md", "notes")
+	writeIndexFile(t, dir, ".tmp/go-build/a.o", "object")
+	root := Root{ID: "scratch", Path: dir, OnDemand: true, Hide: ".tmp"}
+
+	top, err := c.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	testutil.FailErr(t, "open the root", err)
+	if !top.Complete || top.Entries != 1 {
+		t.Fatalf("a root hiding one entry listed %+v", top)
+	}
+	if _, err := c.Directories.ObserveDirectory(t.Context(), "p", root, ".tmp/go-build", DirectoryRead{Priority: backgroundwork.PriorityInteractive}); err == nil {
+		t.Fatal("a folder inside the hidden entry opened")
+	}
+	if rootKey("p", root) == rootKey("p", Root{ID: "scratch", Path: dir, OnDemand: true}) {
+		t.Fatal("a root hiding an entry shares its listing with the whole folder")
+	}
+}

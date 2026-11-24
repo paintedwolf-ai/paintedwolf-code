@@ -70,3 +70,24 @@ func TestAgentWorkspaceRootsUnder_excludesScratch(t *testing.T) {
 		t.Fatalf("scratch root must stay outside the global agent-workspace carve-outs; got %v", roots)
 	}
 }
+
+func TestSessionScratchOwnerNamesTheFolderAndSession(t *testing.T) {
+	state := filepath.Join(string(filepath.Separator), "state")
+	scratch := SessionScratchUnder(state, "s1")
+	for _, tc := range []struct {
+		path    string
+		ok      bool
+		session string
+	}{
+		{scratch, true, "s1"},
+		{filepath.Join(scratch, "sub", "a.txt"), true, "s1"},
+		{filepath.Join(ScratchRootUnder(state)), false, ""},
+		{filepath.Join(state, "store.db"), false, ""},
+		{filepath.Join(string(filepath.Separator), "elsewhere", "scratch", "s1"), false, ""},
+	} {
+		got, session, ok := SessionScratchOwner(state, tc.path)
+		if ok != tc.ok || session != tc.session || ok && got != SessionScratchUnder(state, tc.session) {
+			t.Errorf("SessionScratchOwner(%q) = %q, %q, %v", tc.path, got, session, ok)
+		}
+	}
+}

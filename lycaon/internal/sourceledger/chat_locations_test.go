@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -136,5 +138,47 @@ func TestLocationRetainsItsObservedDirectory(t *testing.T) {
 	testutil.FailErr(t, "find the newly observed directory", err)
 	if !found || replacement.ID == location.ID || !replacement.Available() {
 		t.Fatalf("a new reference did not admit the replacement: %+v", replacement)
+	}
+}
+
+func TestSessionScratchIsOneLocation(t *testing.T) {
+	store, ctx := openLedger(t)
+	outside := outsideRoot(t, store, ctx)
+	insertChat(t, store, ctx, "chat", "")
+	state, _ := outsideFixture(t)
+	t.Setenv(configdir.EnvConfigDir, state)
+	scratch := enginepaths.SessionScratchUnder(state, "chat")
+	testutil.FailErr(t, "make scratch", os.MkdirAll(filepath.Join(scratch, "sub"), 0o700))
+	anchor, ok := projectroot.OutsideRel(scratch)
+	if !ok {
+		t.Fatalf("no outside address for %s", scratch)
+	}
+	recordOutside(t, store, ctx, outside, "chat", anchor+"/notes.md", "notes\n")
+	recordOutside(t, store, ctx, outside, "chat", anchor+"/sub/plan.md", "plan\n")
+	locations, err := store.ChatLocations(ctx, "chat")
+	testutil.FailErr(t, "list locations", err)
+	if len(locations) != 1 || locations[0].Anchor != anchor || locations[0].Kind != ChatLocationFolder {
+		t.Fatalf("locations = %+v, want one folder at %s", locations, anchor)
+	}
+}
+
+func TestSharedTempRootIsNeverALocation(t *testing.T) {
+	store, ctx := openLedger(t)
+	outside := outsideRoot(t, store, ctx)
+	insertChat(t, store, ctx, "chat", "")
+	temp, rel := outsideFixture(t)
+	t.Setenv("TMPDIR", temp)
+	testutil.FailErr(t, "make a temp folder", os.MkdirAll(filepath.Join(temp, "build"), 0o755))
+	recordOutside(t, store, ctx, outside, "chat", rel+"/loose.txt", "loose\n")
+	recordOutside(t, store, ctx, outside, "chat", rel+"/build/out.txt", "out\n")
+	locations, err := store.ChatLocations(ctx, "chat")
+	testutil.FailErr(t, "list locations", err)
+	byAnchor := map[string]ChatLocationKind{}
+	for _, location := range locations {
+		byAnchor[location.Anchor] = location.Kind
+	}
+	want := map[string]ChatLocationKind{rel + "/loose.txt": ChatLocationFile, rel + "/build": ChatLocationFolder}
+	if len(byAnchor) != len(want) || byAnchor[rel+"/loose.txt"] != want[rel+"/loose.txt"] || byAnchor[rel+"/build"] != want[rel+"/build"] {
+		t.Fatalf("locations = %v, want %v", byAnchor, want)
 	}
 }

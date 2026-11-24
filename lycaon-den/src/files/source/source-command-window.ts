@@ -63,6 +63,7 @@ export const GAP_REASONS: Record<GapReason, string> = {
   io_error: "it could not be read",
   settlement_failed: "its changes could not be compared",
   time_budget: "the observation ran out of time",
+  shared_temp: "it is shared temporary storage other programs also write, so it was not compared",
 };
 
 export const BOUNDARY_REASONS: Record<BoundaryReason, string> = {

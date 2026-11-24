@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -437,13 +438,13 @@ func (p BoundPath) OpenReader() (io.ReadCloser, error) {
 	return p.Open()
 }
 
-// TemporaryDirectory is the same real session root supplied to child processes.
-// Creation of individual temporary files is a separate filesystem operation.
+// TemporaryDirectory is the program temporary folder child processes receive
+// as TMPDIR. Creation of individual temporary files is a separate operation.
 func (p *ProgramPaths) TemporaryDirectory(ctx context.Context) (string, error) {
 	if p.context.Host.SessionScratchDir == "" {
 		return "", tools.ErrSessionScratchUnavailable
 	}
-	bound, err := p.Bind(ctx, p.context.Host.SessionScratchDir, false)
+	bound, err := p.Bind(ctx, enginepaths.ProgramTempUnder(p.context.Host.SessionScratchDir), false)
 	if err != nil {
 		return "", err
 	}
