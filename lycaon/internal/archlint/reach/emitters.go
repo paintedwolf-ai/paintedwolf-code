@@ -120,30 +120,59 @@ func (e *Emitters) loadPolicies(root, rel string) error {
 	defer func() { _ = packs.Close() }()
 	found := 0
 	err = fs.WalkDir(packs.FS(), ".", func(name string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || path.Base(path.Dir(name)) != "policy" || path.Ext(name) != ".yaml" {
+		if err != nil || d.IsDir() || path.Ext(name) != ".yaml" {
 			return err
 		}
-		raw, err := packs.ReadFile(name)
-		if err != nil {
-			return err
-		}
-		var policy struct {
-			ID       string   `yaml:"id"`
-			On       string   `yaml:"on"`
-			Requires []string `yaml:"requires_facts"`
-		}
-		if err := yaml.Unmarshal(raw, &policy); err != nil {
-			return fmt.Errorf("%s: %w", name, err)
-		}
-		found++
-		code, ok := e.codes[policy.ID]
-		if !ok || policy.On == "" || containsString(policy.Requires, rejectionCodeFact) {
+		dir := path.Dir(name)
+		switch {
+		case path.Base(dir) == "policy":
+			raw, err := packs.ReadFile(name)
+			if err != nil {
+				return err
+			}
+			var policy struct {
+				ID       string   `yaml:"id"`
+				On       string   `yaml:"on"`
+				Requires []string `yaml:"requires_facts"`
+			}
+			if err := yaml.Unmarshal(raw, &policy); err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
+			found++
+			code, ok := e.codes[policy.ID]
+			if !ok || policy.On == "" || containsString(policy.Requires, rejectionCodeFact) {
+				return nil
+			}
+			code.anchor = policy.On
+			code.pos = path.Join(filepath.ToSlash(rel), name)
+			e.codes[policy.ID] = code
+			return nil
+		case dir == "host/bindings" || strings.HasSuffix(dir, "/host/bindings"):
+			raw, err := packs.ReadFile(name)
+			if err != nil {
+				return err
+			}
+			var binding struct {
+				On       string `yaml:"on"`
+				HintCode string `yaml:"hint_code"`
+			}
+			if err := yaml.Unmarshal(raw, &binding); err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
+			hintCode := strings.TrimSpace(binding.HintCode)
+			on := strings.TrimSpace(binding.On)
+			if hintCode == "" || on == "" {
+				return nil
+			}
+			if code, ok := e.codes[hintCode]; ok {
+				code.anchor = on
+				code.pos = path.Join(filepath.ToSlash(rel), name)
+				e.codes[hintCode] = code
+			}
+			return nil
+		default:
 			return nil
 		}
-		code.anchor = policy.On
-		code.pos = path.Join(filepath.ToSlash(rel), name)
-		e.codes[policy.ID] = code
-		return nil
 	})
 	if err == nil && found == 0 {
 		err = fmt.Errorf("%s holds no policies", rel)

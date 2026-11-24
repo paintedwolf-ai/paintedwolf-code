@@ -34,6 +34,18 @@ func guidanceKickID(feedback api.ToolFeedback) string {
 	return "guidance:" + code + ":" + strings.TrimSpace(feedback.Subject.Kind) + ":" + strings.TrimSpace(feedback.Subject.ID)
 }
 
+var defaultStemHints atomic.Pointer[StemHintResolver]
+
+// SetDefaultStemHintResolver installs the process-wide fallback stem hint
+// resolver for KickEngine instances without an explicit bus binding.
+func SetDefaultStemHintResolver(fn StemHintResolver) {
+	if fn == nil {
+		defaultStemHints.Store(nil)
+		return
+	}
+	defaultStemHints.Store(&fn)
+}
+
 // KickEngine queues coordinator and worker nudges.
 type KickEngine struct {
 	cfg          atomic.Pointer[kickEngineConfig]

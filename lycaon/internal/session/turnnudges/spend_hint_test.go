@@ -59,3 +59,30 @@ func TestSpendSoftStopResolvesOARHintAndRejectsUnregisteredBareCode(t *testing.T
 		t.Fatalf("Render(unregistered hint) = %q, want bare code", bare.Content)
 	}
 }
+
+func TestSpendSoftStopTemplateOverrideRequiresFullCopy(t *testing.T) {
+	setupanchor.Install()
+	tplReg := &anchor.Registry{}
+	tplReg.IndexBinding(&anchor.Binding{
+		On:       anchor.TurnSpendSoftStop,
+		Selector: anchor.Selector{Surface: "coordinator"},
+		Effect:   "inform",
+		Render:   "coordinator-spend-soft-stop",
+		Tier:     "builtin",
+	})
+	release := anchor.SetAnchorsFor(func(context.Context, string) *anchor.Registry { return tplReg })
+	t.Cleanup(release)
+
+	sess := &api.Session{ID: "spend-tpl-sess"}
+	s := New(turnload.NewLedger(), nil)
+	if got := s.SpendSoftStop(t.Context(), sess); !got.Empty() {
+		t.Fatalf("SpendSoftStop with nil prompts returned %+v, want empty", got)
+	}
+
+	r := &recordedKick{}
+	s.SetPrompts(r)
+	got := s.SpendSoftStop(t.Context(), sess)
+	if got.Empty() || got.Content != "coordinator-spend-soft-stop" || got.SignalID != string(anchor.TurnSpendSoftStop) {
+		t.Fatalf("SpendSoftStop template override = %+v, want rendered stem", got)
+	}
+}

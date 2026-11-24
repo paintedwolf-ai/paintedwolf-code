@@ -118,7 +118,11 @@ func (k *KickEngine) resolveHintTarget(ctx context.Context, sessionID, kickID st
 	case renderTargetTemplate:
 		return "", false, nil
 	default:
-		if fn := k.stemHints.Load(); fn != nil && *fn != nil {
+		fn := k.stemHints.Load()
+		if fn == nil || *fn == nil {
+			fn = defaultStemHints.Load()
+		}
+		if fn != nil && *fn != nil {
 			if text, isHint, _ := (*fn)(ctx, sessionID, strings.TrimSpace(kickID)); isHint {
 				return strings.TrimSpace(text), true, nil
 			}

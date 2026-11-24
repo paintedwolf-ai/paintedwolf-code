@@ -4,14 +4,11 @@ package inputs_test
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -113,7 +110,6 @@ func TestClarifyTemplateHTTPSatisfies(t *testing.T) {
 }
 
 func TestFeedbackKickQueuedOnPhaseEntry(t *testing.T) {
-	root := configlayout.FindModuleRoot()
 	sqlDB := testdbfixture.Open(t, "feedback-kick.db")
 
 	store := store.NewSQL(sqlDB)
@@ -152,13 +148,13 @@ func TestFeedbackKickQueuedOnPhaseEntry(t *testing.T) {
 	if !kicked {
 		t.Fatal("OnFeedbackPending hook not invoked")
 	}
-	reg, err := anchor.LoadRegistryFromConfigRoot()
+	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
 	testutil.FailErr(t, "load anchor registry", err)
-	binding, ok := reg.Inform(anchor.FeedbackPending)
+	binding, ok := anchorReg.Inform(anchor.FeedbackPending)
 	if !ok || binding == nil || binding.HintCode == "" {
 		t.Fatalf("feedback.pending binding = %+v, want hint binding", binding)
 	}
-	msg, ok := reg.HintMessage(binding.HintCode)
+	msg, ok := anchorReg.HintMessage(binding.HintCode)
 	if !ok || !strings.Contains(msg, "pending_feedback") {
 		t.Fatalf("hint %s = %q (ok=%v)", binding.HintCode, msg, ok)
 	}

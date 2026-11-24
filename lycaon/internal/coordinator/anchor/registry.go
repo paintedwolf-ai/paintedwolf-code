@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oar"
 	"gopkg.in/yaml.v3"
@@ -37,6 +38,15 @@ func SetDefaultRegistry(r *Registry) {
 	defaultRegMu.Lock()
 	defaultReg = r
 	defaultRegMu.Unlock()
+	if r != nil {
+		kick.SetDefaultStemHintResolver(func(ctx context.Context, sessionID, stem string) (string, bool, bool) {
+			reg := RegistryFor(ctx, sessionID)
+			if reg == nil {
+				return "", false, false
+			}
+			return reg.RenderHintByStem(stem)
+		})
+	}
 }
 
 // DefaultRegistry returns the process-wide Binding registry.
