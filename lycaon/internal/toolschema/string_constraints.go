@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/lycaon/lycaon/internal/scopedstore"
 )
 
 // SchemaAdmitsStringValue reports whether projected admits fieldPath and string value,
@@ -331,12 +333,29 @@ func scalarStringBoundsAdmit(node map[string]any, value string) bool {
 		if !ok {
 			return false
 		}
-		re, err := regexp.Compile(pat)
-		if err != nil || !re.MatchString(value) {
+		if re := compiledPattern(pat); re == nil || !re.MatchString(value) {
 			return false
 		}
 	}
 	return true
+}
+
+// patternCache holds compiled schema patterns; a nil entry records a pattern RE2 cannot compile.
+var patternCache = scopedstore.New[*regexp.Regexp](scopedstore.DefaultEntries)
+
+// compiledPattern returns nil for a pattern RE2 cannot compile: an unevaluable
+// constraint admits no value, so the host never offers a value it cannot check.
+func compiledPattern(pattern string) *regexp.Regexp {
+	if re, ok := patternCache.Load(pattern); ok {
+		return re
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		patternCache.Store(pattern, nil)
+		return nil
+	}
+	patternCache.Store(pattern, re)
+	return re
 }
 
 func stringSliceContains(raw any, value string) bool {
