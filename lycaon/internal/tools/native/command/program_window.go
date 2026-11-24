@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -31,15 +32,17 @@ type programWindow struct {
 	ready  chan struct{}
 	window commandWindow
 
-	mu sync.Mutex
-	// missed means a launch ran without the window watching it.
-	missed bool
+	mu              sync.Mutex
+	missed          bool
+	gitRoots        []gitrepo.AttachedRoot
+	launchedOutside []string
 }
 
 func newProgramWindow(tc tools.ToolContext, commandLine string, clock commandprogram.Clock) *programWindow {
 	return &programWindow{
-		due:  commandWindowDue(tc),
-		open: func(ctx context.Context) commandWindow { return openCommandWindow(ctx, tc, "command", commandLine) },
+		due:      commandWindowDue(tc),
+		gitRoots: attachedGitRoots(tc),
+		open:     func(ctx context.Context) commandWindow { return openCommandWindow(ctx, tc, "command", commandLine) },
 		unobservedFolders: func() []api.CommandFolderCoverage {
 			return unobservedFolders(tc, outsideRootSpecs(tc))
 		},
@@ -56,7 +59,14 @@ func newProgramWindow(tc tools.ToolContext, commandLine string, clock commandpro
 // what remains, then runs unobserved. The open outlives the launch that began it,
 // so a stage's bound does not cost later launches their window.
 func (w *programWindow) enter(ctx context.Context, launch tools.ToolContext, boundary confine.Boundary) (func(), error) {
-	if w == nil || !w.due {
+	if w == nil {
+		return func() {}, nil
+	}
+	launchOutside := outsideRootSpecs(launch)
+	w.mu.Lock()
+	w.launchedOutside = append(w.launchedOutside, outsidePaths(launchOutside)...)
+	w.mu.Unlock()
+	if !w.due {
 		return func() {}, nil
 	}
 	w.once.Do(func() {
@@ -125,7 +135,14 @@ func (w *programWindow) settle(ctx context.Context) {
 	<-w.ready
 	w.mu.Lock()
 	missed := w.missed
+	outside := append([]string(nil), w.launchedOutside...)
 	w.mu.Unlock()
+	if !w.due || w.window.open == nil {
+		if len(outside) > 0 {
+			invalidateUnobservedLinkedWriteRoots(w.gitRoots, outside)
+		}
+		return
+	}
 	if missed {
 		w.window.open.NoteMissedLaunch()
 	}

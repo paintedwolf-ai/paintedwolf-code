@@ -95,14 +95,19 @@ func (t *ExtractArchiveTool) Extract(ctx context.Context, in ExtractInput, tctx 
 		return ExtractResult{}, extractionFailure(err, relArchive, relDest, budget)
 	}
 	resp := ExtractResult{Path: relArchive, Dest: relDest, Extracted: budget.out, Entries: budget.entries, Bytes: budget.bytes, Skipped: budget.skipped}
-	mutLocations := make([]mutationLocation, 0, 1+len(budget.out))
-	mutLocations = append(mutLocations, resolvedMutationLocation(dest))
+	mutLocations := make([]mutationLocation, 0, max(1, len(budget.out)))
 	for _, e := range budget.out {
 		if p := strings.TrimSpace(e.Path); p != "" {
 			loc := resolvedMutationLocation(dest)
 			loc.scopeRel = filepath.ToSlash(filepath.Join(dest.ScopeRel, p))
+			if dest.Abs != "" {
+				loc.abs = filepath.Join(dest.Abs, filepath.FromSlash(p))
+			}
 			mutLocations = append(mutLocations, loc)
 		}
+	}
+	if len(mutLocations) == 0 {
+		mutLocations = append(mutLocations, resolvedMutationLocation(dest))
 	}
 	afterSuccessfulMutationLocations(ctx, tctx, mutLocations...)
 	return resp, nil

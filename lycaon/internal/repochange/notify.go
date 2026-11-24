@@ -4,7 +4,6 @@ package repochange
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -32,6 +31,9 @@ type Event struct {
 	Changes []WorktreeChange
 	// Source is who produced the signal (mutation|watcher|git_host|ttl).
 	Source Source
+	// FirstWorktreeEpoch is the earliest generation coalesced into this event;
+	// zero means a single-generation event at WorktreeEpoch.
+	FirstWorktreeEpoch uint64
 	// WorktreeEpoch is the root generation after this event was accepted.
 	WorktreeEpoch uint64
 	// EpochBootID distinguishes generations created by different host processes.
@@ -62,7 +64,7 @@ func StructuralPaths(ev Event) StructuralPathSet {
 	if ev.Kind != WorktreeChanged {
 		return StructuralPathSet{}
 	}
-	changes := normalizeWorktreeChanges(ev.Paths, ev.Changes)
+	changes := normalizeWorktreeChanges(canonicalDir(ev.ProjectDir), ev.Paths, ev.Changes)
 	if len(changes) == 0 {
 		return StructuralPathSet{Full: true}
 	}
@@ -130,7 +132,7 @@ func Notify(ctx context.Context, ev Event) {
 	}
 	ev.ProjectDir = dir
 	if ev.Kind == WorktreeChanged {
-		ev.Changes = normalizeWorktreeChanges(ev.Paths, ev.Changes)
+		ev.Changes = normalizeWorktreeChanges(dir, ev.Paths, ev.Changes)
 		ev.Paths = pathsFromChanges(ev.Changes)
 	}
 	if ev.Kind == WorktreeChanged && ev.Source == SourceWatcher && len(ev.Changes) > 0 {
@@ -148,8 +150,11 @@ func Notify(ctx context.Context, ev Event) {
 	}
 	if ev.WorktreeEpoch == 0 || ev.EpochBootID == "" {
 		epoch := Advance(dir)
+		ev.FirstWorktreeEpoch = epoch.Value
 		ev.WorktreeEpoch = epoch.Value
 		ev.EpochBootID = epoch.BootID
+	} else if ev.FirstWorktreeEpoch == 0 {
+		ev.FirstWorktreeEpoch = ev.WorktreeEpoch
 	}
 	mu.RLock()
 	snapshot := make([]Observer, 0, len(observers))
@@ -162,11 +167,11 @@ func Notify(ctx context.Context, ev Event) {
 	}
 }
 
-func normalizeWorktreeChanges(paths []string, changes []WorktreeChange) []WorktreeChange {
+func normalizeWorktreeChanges(dir string, paths []string, changes []WorktreeChange) []WorktreeChange {
 	byPath := make(map[string]WorktreeChangeKind, len(paths)+len(changes))
 	order := make([]string, 0, len(paths)+len(changes))
 	remember := func(path string, kind WorktreeChangeKind) {
-		path = filepath.ToSlash(path)
+		path = normalizePathForRoot(dir, path)
 		if path == "" {
 			return
 		}
@@ -181,8 +186,9 @@ func normalizeWorktreeChanges(paths []string, changes []WorktreeChange) []Worktr
 		remember(change.Path, change.Kind)
 	}
 	for _, path := range paths {
-		if _, found := byPath[filepath.ToSlash(path)]; !found {
-			remember(path, WorktreeChangeUnknown)
+		normalized := normalizePathForRoot(dir, path)
+		if _, found := byPath[normalized]; !found {
+			remember(normalized, WorktreeChangeUnknown)
 		}
 	}
 	result := make([]WorktreeChange, 0, len(order))
@@ -190,6 +196,35 @@ func normalizeWorktreeChanges(paths []string, changes []WorktreeChange) []Worktr
 		result = append(result, WorktreeChange{Path: path, Kind: byPath[path]})
 	}
 	return result
+}
+
+func normalizePathForRoot(dir, path string) string {
+	if path == "" {
+		return ""
+	}
+	if dir != "" && filepath.IsAbs(path) {
+		if rel, ok := relWithinRoot(dir, filepath.Clean(path)); ok {
+			return rel
+		}
+		physDir, physPath := physicalDir(dir), physicalDir(path)
+		if physDir != "" && physPath != "" {
+			if rel, ok := relWithinRoot(physDir, physPath); ok {
+				return rel
+			}
+		}
+	}
+	return filepath.ToSlash(path)
+}
+
+func relWithinRoot(root, cand string) (string, bool) {
+	if root == cand {
+		return ".", true
+	}
+	rel, err := filepath.Rel(root, cand)
+	if err != nil || rel == "." || !filepath.IsLocal(rel) {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
 }
 
 func pathsFromChanges(changes []WorktreeChange) []string {
@@ -218,7 +253,7 @@ func mergeWorktreeChangeKind(left, right WorktreeChangeKind) WorktreeChangeKind 
 
 // Advance marks root dirty immediately and returns its new generation.
 func Advance(root string) Epoch {
-	root = canonicalDir(root)
+	root = physicalDir(root)
 	epochMu.Lock()
 	defer epochMu.Unlock()
 	epochByDir[root]++
@@ -227,7 +262,7 @@ func Advance(root string) Epoch {
 
 // CurrentEpoch returns the current generation, initializing a clean root at one.
 func CurrentEpoch(root string) Epoch {
-	root = canonicalDir(root)
+	root = physicalDir(root)
 	epochMu.Lock()
 	defer epochMu.Unlock()
 	if epochByDir[root] == 0 {
@@ -238,15 +273,3 @@ func CurrentEpoch(root string) Epoch {
 
 // EpochCurrent reports whether root still has the supplied generation.
 func EpochCurrent(root string, epoch Epoch) bool { return CurrentEpoch(root) == epoch }
-
-func canonicalDir(root string) string {
-	root = strings.TrimSpace(root)
-	if root == "" {
-		return ""
-	}
-	abs, err := filepath.Abs(root)
-	if err != nil {
-		return ""
-	}
-	return filepath.Clean(abs)
-}
