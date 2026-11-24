@@ -178,8 +178,8 @@ func (r *sedRun) failure(err error) error {
 	return err
 }
 
-// prepareSed builds the admitted prepared plan for sed using shared argument
-// interpretation. Forms with -f defer file capture until runSed.
+// prepareSed binds sed through commandmode.PrepareSedArguments; -f forms defer
+// file capture until runSed.
 func (o *Owners) prepareSed(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, bound commandprogram.BoundArgv) (*preparedSed, string, error) {
 	if o.Regex == nil {
 		return nil, "", toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": "sed", "capability": "the shared POSIX regex engine"})

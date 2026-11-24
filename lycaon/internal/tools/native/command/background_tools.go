@@ -70,22 +70,15 @@ func parseCommandOutputCursor(raw any) (int64, error) {
 	if raw == nil {
 		return 0, nil
 	}
+	if number, ok := raw.(json.Number); ok {
+		raw = number.String()
+	}
 	switch v := raw.(type) {
 	case string:
 		if !isCanonicalDecimalOffset(v) {
 			return 0, invalidCommandOutputCursor()
 		}
 		n, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || n < 0 {
-			return 0, invalidCommandOutputCursor()
-		}
-		return n, nil
-	case json.Number:
-		s := v.String()
-		if !isCanonicalDecimalOffset(s) {
-			return 0, invalidCommandOutputCursor()
-		}
-		n, err := strconv.ParseInt(s, 10, 64)
 		if err != nil || n < 0 {
 			return 0, invalidCommandOutputCursor()
 		}
