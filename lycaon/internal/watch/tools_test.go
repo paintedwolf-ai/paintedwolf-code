@@ -34,7 +34,7 @@ func newWatchToolsHarness(t *testing.T, standingExists map[string]bool) *watchTo
 	sqlDB := testdbfixture.Open(t, "watch-tools.db")
 	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 	now := time.Date(2026, 11, 23, 18, 0, 0, 0, time.UTC)
-	clock := watch.NewFakeClock(now)
+	clock := testutil.NewFakeClock(now)
 	store := watch.NewStore(sqlDB, clock)
 
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
