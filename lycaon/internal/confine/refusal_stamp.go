@@ -21,6 +21,8 @@ type RefusalContext struct {
 	// FailedStages are the finished invocation's failed stage command lines;
 	// empty while it runs.
 	FailedStages []string
+	// SucceededStages are the command lines of stages that completed with exit 0.
+	SucceededStages []string
 	// Running reports an invocation observed before it ended.
 	Running bool
 	// TerminationReason is the executor-observed terminal state, if known.
@@ -29,6 +31,8 @@ type RefusalContext struct {
 	Refusals SandboxRefusals
 	// GitTransports carries host-evidenced transport outcomes for network Git executions.
 	GitTransports []GitTransportObservation
+	// SSHRecoveries carries evidenced SSH trust and signing observations per SSH stage.
+	SSHRecoveries []SSHRecoveryObservation
 }
 
 // StampedRefusal combines denial guidance and observations.
@@ -46,6 +50,7 @@ func StampRefusal(tool, sessionID string, b Boundary, context RefusalContext) St
 	}
 	out.Observation.Network = b.Network.Name()
 	out.Observation.FailedStages = append([]string(nil), context.FailedStages...)
+	out.Observation.SucceededStages = append([]string(nil), context.SucceededStages...)
 	out.Observation.Running = context.Running
 	out.Observation.TerminationReason = context.TerminationReason
 	out.Observation.Refusals = context.Refusals
@@ -53,6 +58,12 @@ func StampRefusal(tool, sessionID string, b Boundary, context RefusalContext) St
 		out.Observation.GitTransports = make([]GitTransportObservation, len(context.GitTransports))
 		for i, tr := range context.GitTransports {
 			out.Observation.GitTransports[i] = tr.Clone()
+		}
+	}
+	if len(context.SSHRecoveries) > 0 {
+		out.Observation.SSHRecoveries = make([]SSHRecoveryObservation, len(context.SSHRecoveries))
+		for i, sr := range context.SSHRecoveries {
+			out.Observation.SSHRecoveries[i] = sr.Clone()
 		}
 	}
 	if len(context.Refusals.Refusals) > 0 {

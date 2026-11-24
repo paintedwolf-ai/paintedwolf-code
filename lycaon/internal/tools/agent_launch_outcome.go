@@ -12,4 +12,8 @@ type AgentLaunchOutcome struct {
 	Refusals []confine.SandboxRefusal
 	// GitTransport records verified transport mediation attempts and summary cause.
 	GitTransport *confine.GitTransportObservation
+	// SSHRecovery records evidenced SSH trust or signing recovery facts for the launch.
+	SSHRecovery *confine.SSHRecoveryObservation
+	// SuppressSSHSpeculation drops speculative .ssh read and socket refusals from the launch lease.
+	SuppressSSHSpeculation bool
 }

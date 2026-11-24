@@ -2520,7 +2520,7 @@
     "SANDBOX_TRY_CREDENTIAL_STORE": {
       "category": "recoverable",
       "emit": "guard:sandbox",
-      "summary": "In `{{ tool }}`, the sandbox refused access to the host OS credential store at {{ paintedwolf.refused_credential_store_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}."
+      "summary": "In `{{ tool }}`{% if paintedwolf.failed_stages %} ({{ paintedwolf.failed_stages }}){% endif %}, the sandbox refused access to the host OS credential store at {{ paintedwolf.refused_credential_store_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}."
     },
     "SANDBOX_TRY_HOST_EXECUTION": {
       "category": "recoverable",
@@ -2986,6 +2986,30 @@
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "Establish spec posture via /plan or write a blueprint file first"
+    },
+    "SSH_AGENT_UNAVAILABLE": {
+      "branch_instruction": "Distinguish an absent host SSH agent from a refused socket grant.",
+      "category": "recoverable",
+      "emit": "guard:sandbox",
+      "summary": "SSH authentication failed{% if paintedwolf.ssh_stage %} in `{{ paintedwolf.ssh_stage }}`{% endif %}{% if paintedwolf.ssh_destination %} to `{{ paintedwolf.ssh_destination }}`{% endif %}."
+    },
+    "SSH_HOST_KEY_CHANGED": {
+      "branch_instruction": "Preserve host-key verification policy; do not bypass `known_hosts` with `StrictHostKeyChecking=no` or `UserKnownHostsFile=/dev/null`.",
+      "category": "recoverable",
+      "emit": "guard:sandbox",
+      "summary": "SSH host key verification failed{% if paintedwolf.ssh_stage %} in `{{ paintedwolf.ssh_stage }}`{% endif %}{% if paintedwolf.ssh_destination %} for `{{ paintedwolf.ssh_destination }}`{% endif %}."
+    },
+    "SSH_HOST_KEY_UNVERIFIED": {
+      "branch_instruction": "Preserve host-key verification policy; do not bypass `known_hosts` with `StrictHostKeyChecking=no`.",
+      "category": "recoverable",
+      "emit": "guard:sandbox",
+      "summary": "SSH host key verification failed{% if paintedwolf.ssh_stage %} in `{{ paintedwolf.ssh_stage }}`{% endif %}{% if paintedwolf.ssh_destination %} for `{{ paintedwolf.ssh_destination }}`{% endif %}."
+    },
+    "SSH_REMOTE_AUTH_REJECTED": {
+      "branch_instruction": "Do not re-request the SSH agent socket grant or request default private-key path grants.",
+      "category": "recoverable",
+      "emit": "guard:sandbox",
+      "summary": "The remote SSH server rejected public-key authentication{% if paintedwolf.ssh_stage %} in `{{ paintedwolf.ssh_stage }}`{% endif %}{% if paintedwolf.ssh_destination %} at `{{ paintedwolf.ssh_destination }}`{% endif %}."
     },
     "STRUCTURAL_APPLY_FAILED": {
       "branch_instruction": "Account for blocked files separately from completed changes",

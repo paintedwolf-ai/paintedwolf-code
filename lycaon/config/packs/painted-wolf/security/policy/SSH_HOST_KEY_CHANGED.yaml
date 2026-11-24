@@ -1,0 +1,38 @@
+spec_version: "1.0"
+id: SSH_HOST_KEY_CHANGED
+kind: policy
+on: tool.post_invoke
+selector:
+  tools:
+    - command
+    - verify
+    - command_output
+requires_facts: [paintedwolf.confine_applied, paintedwolf.ssh_destination, paintedwolf.ssh_failure_cause, paintedwolf.ssh_stage, paintedwolf.ssh_trust_path]
+when: >-
+  paintedwolf.confine_applied && paintedwolf.ssh_failure_cause == "host_key_changed"
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+message: SSH host key verification failed due to a conflicting host key
+what: SSH host key verification failed{% if paintedwolf.ssh_stage %} in `{{ paintedwolf.ssh_stage }}`{% endif %}{% if paintedwolf.ssh_destination %} for `{{ paintedwolf.ssh_destination }}`{% endif %}.
+cause: The remote server presented a host key that conflicts with the existing trusted entry{% if paintedwolf.ssh_trust_path %} in `{{ paintedwolf.ssh_trust_path }}`{% endif %}.
+why: A changed host key indicates either a legitimate host rotation or an untrusted endpoint; weakening `StrictHostKeyChecking` or bypassing `known_hosts` hides that trust conflict.
+fix: Report the host-key conflict{% if paintedwolf.ssh_destination %} for `{{ paintedwolf.ssh_destination }}`{% endif %}{% if paintedwolf.ssh_trust_path %} against `{{ paintedwolf.ssh_trust_path }}`{% endif %} and ask the user before updating trust. Do not request path or socket grants or disable `StrictHostKeyChecking`.
+instead: Preserve host-key verification policy; do not bypass `known_hosts` with `StrictHostKeyChecking=no` or `UserKnownHostsFile=/dev/null`.
+x-paintedwolf-scenarios:
+  - id: direct_ssh_conflict
+    vars:
+      tool: command
+      confine_applied: true
+      ssh_failure_cause: host_key_changed
+      ssh_stage: ssh -p 2222 git@127.0.0.1 uname -a
+      ssh_destination: 127.0.0.1:2222
+      ssh_trust_path: /Users/person/.ssh/known_hosts
+  - id: native_git_conflict
+    vars:
+      tool: command
+      confine_applied: true
+      ssh_failure_cause: host_key_changed
+      ssh_stage: git fetch origin
+      ssh_destination: github.com:22
+      ssh_trust_path: /state/ssh/known_hosts_mirror

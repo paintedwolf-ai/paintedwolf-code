@@ -81,15 +81,17 @@ func (s *AgentSSH) Observation(executionID, command string, exitCode int, failed
 	attempts := make([]confine.GitTransportAttempt, len(raw))
 	for i, a := range raw {
 		attempts[i] = confine.GitTransportAttempt{
-			Ordinal:      a.Ordinal,
-			Destination:  a.Destination,
-			Host:         a.Host,
-			Port:         a.Port,
-			Stage:        a.Stage,
-			Outcome:      a.Outcome,
-			ReplyCode:    uint8(a.Reply),
-			PolicyReason: a.PolicyReason,
-			ErrorClass:   a.ErrorClass,
+			Ordinal:         a.Ordinal,
+			Destination:     a.Destination,
+			Host:            a.Host,
+			Port:            a.Port,
+			Stage:           a.Stage,
+			Outcome:         a.Outcome,
+			ReplyCode:       uint8(a.Reply),
+			PolicyReason:    a.PolicyReason,
+			ErrorClass:      a.ErrorClass,
+			SawServerBanner: a.SawServerBanner,
+			ReachedUserAuth: a.ReachedUserAuth,
 		}
 	}
 	setupStage, setupReason := "", ""

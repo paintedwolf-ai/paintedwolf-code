@@ -127,28 +127,63 @@ func TestCredentialDeniedNamesTheKeptRecipient(t *testing.T) {
 	}
 }
 
-// TestWithheldAgentRefusesTheUngrantedAgent checks the socket refusal a
-// failed SSH network command settles with when the user's agent was never
-// granted, and that HTTP remotes and granted agents never refuse.
-func TestWithheldAgentRefusesTheUngrantedAgent(t *testing.T) {
+func TestEvaluateGitSSHRecoveryRequiresEvidencedFailure(t *testing.T) {
 	socket := shortSocket(t)
 	t.Setenv("SSH_AUTH_SOCK", socket)
-	sshURL := "ssh://git@example.test/org/repo.git"
 
-	if refusal := withheldAgent(t.Context(), []string{"https://example.test/org/repo.git"}, false); refusal != nil {
-		t.Fatalf("an HTTP remote needs no agent: %+v", refusal)
+	base := gitSSHLaunchInput{
+		commandLine: "git ls-remote origin",
+		dest:        "example.test:22",
+		host:        "example.test",
+		port:        22,
+		mediated:    true,
+		exitCode:    128,
+		failed:      true,
+		diagnostics: []byte("git@example.test: Permission denied (publickey).\nfatal: Could not read from remote repository.\n"),
 	}
-	if refusal := withheldAgent(t.Context(), []string{sshURL}, true); refusal != nil {
-		t.Fatalf("a granted agent never refuses: %+v", refusal)
+
+	// Pre-auth transport failure suppresses agent speculation.
+	denied := base
+	denied.transport = confine.GitTransportObservation{Cause: confine.GitTransportCauseEndpointDenied}
+	if obs, refusals, suppress := evaluateGitSSHRecovery(t.Context(), denied); obs != nil || refusals != nil || !suppress {
+		t.Fatalf("pre-auth transport failure produced recovery=%+v refusals=%+v suppress=%v", obs, refusals, suppress)
 	}
-	refusal := withheldAgent(t.Context(), []string{sshURL}, false)
-	if refusal == nil || len(refusal) != 1 {
-		t.Fatalf("want one ungranted agent refusal, got %+v", refusal)
+
+	// Uncorroborated auth text without established stream produces no recovery.
+	unknown := base
+	unknown.transport = confine.GitTransportObservation{Cause: confine.GitTransportCauseUnknown}
+	if obs, refusals, suppress := evaluateGitSSHRecovery(t.Context(), unknown); obs != nil || refusals != nil || !suppress {
+		t.Fatalf("uncorroborated output produced recovery=%+v refusals=%+v suppress=%v", obs, refusals, suppress)
 	}
-	if refusal[0].Operation != "network-outbound" || refusal[0].Process != "ssh" ||
-		refusal[0].Target != socket || refusal[0].Grant != socket ||
-		refusal[0].Count != 1 || refusal[0].Recovery != confine.RecoverSocketPath {
-		t.Fatalf("unexpected refusal: %+v", refusal[0])
+
+	// Established SSH stream reaching userauth without granted agent offers the host agent socket.
+	established := base
+	established.transport = confine.GitTransportObservation{
+		Cause: confine.GitTransportCauseEstablished,
+		Attempts: []confine.GitTransportAttempt{{
+			Ordinal: 1, Destination: "example.test:22", Host: "example.test", Port: 22,
+			Outcome: "established", SawServerBanner: true, ReachedUserAuth: true,
+		}},
+	}
+	obs, refusals, suppress := evaluateGitSSHRecovery(t.Context(), established)
+	if obs == nil || obs.Cause != confine.SSHFailureAgentRequired || obs.AgentSocket != socket || !suppress || len(refusals) != 1 || refusals[0].Grant != socket || refusals[0].Recovery != confine.RecoverSocketPath {
+		t.Fatalf("established ungranted agent = obs=%+v refusals=%+v suppress=%v", obs, refusals, suppress)
+	}
+
+	// Granted agent whose key the remote rejects reports publickey_rejected without re-asking for socket_paths.
+	withAgent := established
+	withAgent.hasAgent = true
+	withAgent.agentPath = socket
+	obs, refusals, _ = evaluateGitSSHRecovery(t.Context(), withAgent)
+	if obs == nil || obs.Cause != confine.SSHFailurePublicKeyRejected || len(refusals) != 0 {
+		t.Fatalf("granted agent rejection = obs=%+v refusals=%+v", obs, refusals)
+	}
+
+	// Post-auth remote Git ref failure does not claim SSH auth failure.
+	missingRef := established
+	missingRef.diagnostics = []byte("fatal: couldn't find remote ref nonexistent\n")
+	if obs, refusals, _ := evaluateGitSSHRecovery(t.Context(), missingRef); obs != nil || len(refusals) != 0 {
+		t.Fatalf("missing remote ref misclassified as SSH auth failure: obs=%+v refusals=%+v", obs, refusals)
 	}
 }
 

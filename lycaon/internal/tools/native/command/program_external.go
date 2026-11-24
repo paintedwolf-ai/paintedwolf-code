@@ -123,7 +123,13 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	}
 	defer release()
 	opts.Started = func(pid int) { noteJobProcess(ctx, pid, launchArgv) }
-	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: launchArgv[0], Args: launchArgv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
+	errWriter := nonNilWriter(streams.Error)
+	var sshStderr sshDiagnosticCapture
+	if isDirectSSHArgv(launchArgv) {
+		sshStderr.max = maxSSHDiagnosticCapture
+		errWriter = io.MultiWriter(errWriter, &sshStderr)
+	}
+	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: launchArgv[0], Args: launchArgv[1:]}}, opts, nonNilWriter(streams.Output), errWriter)
 	if err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.EffectUnknown}, errors.Join(ctx.Err(), err)
@@ -158,7 +164,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	}
 	run, waitErr := async.Wait()
 	detach()
-	l.settleStageConfine(ctx, tctx, bound, boundary, report, settleJob, commandLine, run)
+	l.settleStageConfine(ctx, tctx, bound, boundary, report, settleJob, commandLine, launchArgv, request.Environment, sshStderr.buf, run)
 	if run != nil && len(run.Stages) == 1 {
 		request.Process.Times.Add(run.Stages[0].UserTime, run.Stages[0].SystemTime)
 	}
@@ -323,16 +329,27 @@ type launchClosure struct{ lycexec.StageRun }
 
 func (launchClosure) Error() string { return "external producer stopped after its consumer closed" }
 
-func (l ExternalStages) settleStageConfine(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, boundary confine.Boundary, report confine.Report, settleJob func(confine.SandboxRefusals, []confine.EgressHost, ...confine.GitTransportObservation), commandLine string, run *lycexec.PipelineResult) {
+func (l ExternalStages) settleStageConfine(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, boundary confine.Boundary, report confine.Report, settleJob func(confine.SandboxRefusals, []confine.EgressHost, ...confine.GitTransportObservation), commandLine string, launchArgv, stageEnv []string, sshStderr []byte, run *lycexec.PipelineResult) {
 	settleCtx := context.WithoutCancel(ctx)
 	refusals := bound.lease.SettledRefusals(settleCtx)
 	network := bound.close(settleCtx)
+	exitCode := 127
+	if run != nil {
+		exitCode = run.ExitCode
+		if len(run.Stages) == 1 {
+			exitCode = run.Stages[0].ExitStatus()
+		}
+	}
+	var sshRecoveries []confine.SSHRecoveryObservation
+	if boundary.Applied {
+		refusals, sshRecoveries = evaluateDirectSSHStage(settleCtx, tctx, boundary, commandLine, launchArgv, stageEnv, exitCode, sshStderr, network, refusals)
+	}
 	settleJob(refusals, network)
 	if !boundary.Applied {
 		return
 	}
 	termination := string(bgprocess.TerminationExited)
-	var failed []string
+	var failed, succeeded []string
 	switch {
 	case ctx.Err() != nil:
 		termination = string(bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationStoppedByAgent))
@@ -341,16 +358,24 @@ func (l ExternalStages) settleStageConfine(ctx context.Context, tctx tools.ToolC
 	case len(run.Stages) == 1:
 		if run.Stages[0].Failed {
 			failed = []string{commandLine}
+		} else if commandLine != "" {
+			succeeded = []string{commandLine}
 		}
 	case run.ExitCode != 0:
 		failed = []string{commandLine}
+	default:
+		if commandLine != "" {
+			succeeded = []string{commandLine}
+		}
 	}
 	stamped := confine.StampRefusal("command", tctx.Identity.SessionID, boundary, confine.RefusalContext{
 		MediatedNetwork:        network,
 		RemotePackageExecution: report.RemotePackageExecution,
 		FailedStages:           failed,
+		SucceededStages:        succeeded,
 		TerminationReason:      termination,
 		Refusals:               refusals,
+		SSHRecoveries:          sshRecoveries,
 	})
 	if l.ObserveStage != nil {
 		l.ObserveStage(tctx, stamped, network, bound.directIPApplied)

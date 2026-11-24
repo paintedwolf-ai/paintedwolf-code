@@ -50,6 +50,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 			NativeInputs: tc.Invocation.NativeInputs,
 			Tool:         tool,
 			Args:         args,
+			ToolCallID:   tc.Identity.ToolCallID,
 			ActionID:     tc.EffectActionID(),
 		},
 		Presentation: hitl.ActionPresentation{

@@ -109,6 +109,41 @@ func TestCapabilityCompositionRefusesForeignInvocation(t *testing.T) {
 	}
 }
 
+func TestCapabilityCompositionAdmitsProgramChildExecutionAndRefusesSiblingExecution(t *testing.T) {
+	write, read := capabilityPathReview(t, false), capabilityPathReview(t, true)
+	read.Request.ProposedAction.Invocation.ActionID = "child-exec-1"
+	action := ProposedAction{
+		Invocation: ActionInvocation{
+			Tool:       "git ls-remote",
+			Args:       map[string]any{"argv": []string{"git", "ls-remote", "origin"}},
+			ToolCallID: "call",
+			ActionID:   "child-exec-1",
+		},
+		Scope: ActionScope{
+			SessionID: "session",
+			ProjectID: "project",
+		},
+	}
+	if _, _, err := ComposeCapabilityApprovals(action, []*PreparedApproval{write, read}); err != nil {
+		t.Fatalf("compose program child capability approvals: %v", err)
+	}
+	read.Request.ProposedAction.Invocation.ActionID = "child-exec-2"
+	if _, _, err := ComposeCapabilityApprovals(action, []*PreparedApproval{write, read}); err == nil {
+		t.Fatal("composition accepted contribution from sibling child execution")
+	}
+
+	// Post-run shared-temp reviews compose without a call ID.
+	write.Request.ToolCallID, read.Request.ToolCallID = "", ""
+	write.Request.ProposedAction.Invocation.ActionID, read.Request.ProposedAction.Invocation.ActionID = "", ""
+	postRun := ProposedAction{
+		Invocation: ActionInvocation{Tool: "verify"},
+		Scope:      ActionScope{SessionID: "session", ProjectID: "project"},
+	}
+	if _, _, err := ComposeCapabilityApprovals(postRun, []*PreparedApproval{write, read}); err != nil {
+		t.Fatalf("compose post-run reviews without call ID: %v", err)
+	}
+}
+
 func TestCapabilityCompositionKeepsStrictestContributingPosture(t *testing.T) {
 	write, read := capabilityPathReview(t, false), capabilityPathReview(t, true)
 	write.Request.Decision.Posture, read.Request.Decision.Posture = gate.PostureLight, gate.PostureLight
