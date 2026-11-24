@@ -110,7 +110,7 @@ func TestSharedTempCrossingsOfferChatScopeOnly(t *testing.T) {
 		t.Fatal("shared-temp crossing offered no chat reuse option")
 	}
 	for _, offer := range offers {
-		if offer.Scope != hitl.ApprovalGrantScopeChat || offer.Rung != hitl.ApprovalRungChat || offer.TTLSeconds != 0 || offer.ExpiresAt != nil {
+		if offer.Scope != hitl.ApprovalGrantScopeChat || offer.Rung != hitl.ApprovalRungChat || offer.TTLSeconds != 0 || offer.Grant.ExpiresAt != nil {
 			t.Fatalf("shared-temp offer exceeded chat scope: %+v", offer)
 		}
 	}
