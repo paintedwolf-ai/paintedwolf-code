@@ -18,7 +18,7 @@ func TestPhysicalWorkspacesNeverShareDocumentsOrPublicationTargets(t *testing.T)
 	f, ledger := newLedgerAgentFixture(t, map[string]string{"a.txt": "base tree\n"})
 	otherRoot := t.TempDir()
 	testutil.FailErr(t, "write other workspace", os.WriteFile(filepath.Join(otherRoot, "a.txt"), []byte("other tree\n"), 0o600))
-	other := project.WithRootRefs(f.project, []projectroot.RootRef{{ID: f.rootID, Path: otherRoot}})
+	other := withRootRefs(f.project, []projectroot.RootRef{{ID: f.rootID, Path: otherRoot}})
 	other.SourceBranch = sourcebranch.ForWorktree(uuid.NewString())
 	base := f.open(t, "a.txt")
 	separate, err := f.service.Open(t.Context(), other, "a.txt", f.rootID, "", "other-window", nil)
@@ -172,4 +172,19 @@ func TestOrphanedCheckoutDocumentLifecycleAndStatuses(t *testing.T) {
 	if !joined.CheckoutUnavailable {
 		t.Fatalf("joined = %+v", joined)
 	}
+}
+
+func withRootRefs(p *project.Project, roots []projectroot.RootRef) *project.Project {
+	out := *p
+	out.Roots = append([]project.Root(nil), p.Roots...)
+	paths := make(map[string]string, len(roots))
+	for _, root := range roots {
+		paths[root.ID] = root.Path
+	}
+	for i := range out.Roots {
+		if path, ok := paths[out.Roots[i].ID]; ok {
+			out.Roots[i].Path = path
+		}
+	}
+	return &out
 }
