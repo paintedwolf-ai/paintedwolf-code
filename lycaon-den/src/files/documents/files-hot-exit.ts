@@ -34,6 +34,9 @@ function snapshotProject(projectId: string): DenFilesHotExitProject | null {
     const buf = state.byKey[key];
     if (!buf || buf.jobId || isComposedBufferKind(buf.kind)) return [];
     return [{ ...(buf.documentId ? { documentId: buf.documentId, clientId: clientIdentity() } : {}), rootId: buf.rootId, path: buf.path, kind: buf.kind, rootLabel: buf.rootLabel,
+      ...(buf.branchId ? { branchId: buf.branchId } : {}),
+      ...(buf.worktreeId ? { worktreeId: buf.worktreeId } : {}),
+      ...(buf.checkoutLabel ? { checkoutLabel: buf.checkoutLabel } : {}),
       ...(buf.pinned ? { pinned: true } : {}),
       ...(explicitSourceEncoding(buf.encoding) ? { decodeAs: explicitSourceEncoding(buf.encoding) } : {}),
       ...(buf.preview ? { preview: true } : {}) }];
@@ -46,7 +49,7 @@ function snapshotProject(projectId: string): DenFilesHotExitProject | null {
     : buffers.findIndex(
       (row) => active?.documentId
         ? row.documentId === active.documentId
-        : row.rootId === active?.rootId && row.path === active.path,
+        : row.rootId === active?.rootId && row.path === active.path && (row.branchId ?? "") === (active?.branchId ?? ""),
     );
   return { buffers, ...(activeIndex >= 0 ? { activeIndex } : {}) };
 }
@@ -136,12 +139,13 @@ export function restoreFilesHotExitForProject(projectId: string, roots: ProjectR
     const key = openFilesBuffer(projectId, { rootId: row.rootId, rootLabel: root?.label ?? row.rootLabel ?? row.rootId,
       path: row.path, intent: row.preview ? "transient" : "permanent",
       documentId: row.documentId, kind: row.kind, decodeAs: row.decodeAs, pinned: row.pinned === true, preview: row.preview === true,
+      branchId: row.branchId, worktreeId: row.worktreeId, checkoutLabel: row.checkoutLabel,
       origin: "presentation" });
     if (entry.activeIndex === index) activeKey = key;
   }
   const firstOrderKey = projectFilesState(projectId).order[0];
   const first = entry.buffers[0];
-  if (!activeKey) activeKey = firstOrderKey ?? (first ? fileBufferKey(first.rootId, first.path) : null);
+  if (!activeKey) activeKey = firstOrderKey ?? (first ? fileBufferKey(first.rootId, first.path, undefined, undefined, first.branchId) : null);
   if (activeKey) setFilesActiveBuffer(projectId, activeKey, "presentation");
 }
 
@@ -169,6 +173,9 @@ function parseProject(value: unknown): DenFilesHotExitProject | null {
     buffers.push({ ...(typeof buf.documentId === "string" ? { documentId: buf.documentId } : {}),
       ...(typeof buf.clientId === "string" ? { clientId: buf.clientId } : {}), rootId: buf.rootId, path: buf.path, kind: buf.kind,
       ...(typeof buf.rootLabel === "string" ? { rootLabel: buf.rootLabel } : {}),
+      ...(typeof buf.branchId === "string" && buf.branchId ? { branchId: buf.branchId } : {}),
+      ...(typeof buf.worktreeId === "string" && buf.worktreeId ? { worktreeId: buf.worktreeId } : {}),
+      ...(typeof buf.checkoutLabel === "string" && buf.checkoutLabel ? { checkoutLabel: buf.checkoutLabel } : {}),
       ...(buf.decodeAs === "utf-16le" || buf.decodeAs === "utf-16be" ? { decodeAs: buf.decodeAs } : {}),
       ...(buf.pinned === true ? { pinned: true } : {}), ...(buf.preview === true ? { preview: true } : {}) });
   }
