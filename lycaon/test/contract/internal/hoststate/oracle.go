@@ -570,7 +570,7 @@ func CoordinatorHostFacts(state CoordinatorState, profiles []sandbox.ToolProfile
 		CommandExternalHidden: state.CommandExternalHidden,
 		SessionScratchDir:     state.SessionScratchDir,
 		SharedTempLocations:   state.SharedTempLocations,
-		AllowedAgents:         state.SpawnAllowlist,
+		AllowedAgents:         state.RunContext.AllowedAgents,
 		IsRepo:                rootRepoProbe(state.Roots),
 	})
 	if err != nil {
@@ -629,41 +629,6 @@ func assembleTurnAuthorityFromEntry(proj projectedTurnToolsEntry, reader prompts
 		Plan:            proj.plan,
 		ProgramReach:    proj.progReach,
 		ProgramTable:    proj.progTable,
-		Reach:           reach,
-		Reader:          reader,
-		Digest:          digest,
-	}
-}
-
-func assembleTurnAuthority(
-	metas []tools.ToolMeta,
-	offered []string,
-	plan toolsurface.Plan,
-	progReach toolreach.Programs,
-	progTable *toolreach.ProgramTable,
-	postLoadSchemas map[string]map[string]any,
-	reader prompts.Reader,
-) TurnAuthority {
-	schemas := make(map[string]map[string]any, len(metas))
-	for _, m := range metas {
-		schemas[m.Name] = m.ArgsSchema
-	}
-	mergedReachSchemas := make(map[string]map[string]any, len(postLoadSchemas)+len(schemas))
-	maps.Copy(mergedReachSchemas, postLoadSchemas)
-	maps.Copy(mergedReachSchemas, schemas)
-	reach := toolreach.Freeze(offered, plan).WithPrograms(progReach).WithSchemas(mergedReachSchemas)
-	if progTable != nil {
-		reach = toolreach.Freeze(offered, plan).WithProgramTable(progTable).WithSchemas(mergedReachSchemas)
-	}
-	digest := AuthorityDigest(offered, schemas, progReach, reader.Mints(), reader)
-	return TurnAuthority{
-		Metas:           metas,
-		Schemas:         schemas,
-		PostLoadSchemas: postLoadSchemas,
-		Offered:         offered,
-		Plan:            plan,
-		ProgramReach:    progReach,
-		ProgramTable:    progTable,
 		Reach:           reach,
 		Reader:          reader,
 		Digest:          digest,

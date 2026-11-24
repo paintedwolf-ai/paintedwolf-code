@@ -6,39 +6,29 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// renderReaderProbe renders body with the host's wired skill variables, which
-// come from the production skill reader for tctx.
-func renderReaderProbe(t *testing.T, h *Harness, tctx tools.ToolContext, body string) string {
+// requestReader projects sess's next request through the host.
+func requestReader(t *testing.T, h *Harness, sess *api.Session) prompts.Reader {
 	t.Helper()
-	out, err := h.Skills.RenderSkillBody(t.Context(), tctx, skills.Skill{Name: "reader-probe", Body: body})
-	testutil.FailErr(t, "render reader probe", err)
-	return out
-}
-
-func recipientToolContext(t *testing.T, h *Harness, sess *api.Session, agent string) tools.ToolContext {
-	t.Helper()
-	tctx, err := h.Sessions.Manager.ToolContext.Build(t.Context(), sess, agent, inject.Machine{})
-	testutil.FailErr(t, "build "+agent+" tool context", err)
-	return tctx
+	reader, err := h.Sessions.Manager.Coordinator.Context.NextRequestReader(t.Context(), sess, nil)
+	testutil.FailErr(t, "next request reader", err)
+	return reader
 }
 
 // Every registered approval posture resolves as itself for both recipients, and
-// each recipient's reader carries that posture's review rule.
+// each recipient's host facts and request Reader carry its review rule.
 func TestApprovalPostureReachesCoordinatorAndWorkerReaders(t *testing.T) {
 	h := BuildForTest(t)
 	ctx := context.Background()
@@ -62,15 +52,14 @@ func TestApprovalPostureReachesCoordinatorAndWorkerReaders(t *testing.T) {
 			if resolved != posture {
 				t.Fatalf("%s resolved posture %q with project posture %q", r.agent, resolved, posture)
 			}
-			want := "reviews:no"
-			if resolved.ReviewsConfinedWrites() {
-				want = "reviews:yes"
-			}
 			outcomes[resolved.ReviewsConfinedWrites()] = true
-			got := renderReaderProbe(t, h, recipientToolContext(t, h, r.sess, r.agent),
-				"reviews:{% if reviews_confined_writes %}yes{% else %}no{% endif %}")
-			if got != want {
-				t.Errorf("%s under %q rendered %q, want %q", r.agent, posture, got, want)
+			host, err := h.Sessions.Manager.ReaderFacts.HostFacts(ctx, r.sess)
+			testutil.FailErr(t, "host facts", err)
+			if host.ReviewsConfinedWrites != resolved.ReviewsConfinedWrites() {
+				t.Errorf("%s under %q: host facts review confined writes = %v", r.agent, posture, host.ReviewsConfinedWrites)
+			}
+			if got := requestReader(t, h, r.sess).Facts()["reviews_confined_writes"]; got != resolved.ReviewsConfinedWrites() {
+				t.Errorf("%s under %q: request Reader reviews_confined_writes = %v", r.agent, posture, got)
 			}
 		}
 	}
@@ -79,18 +68,17 @@ func TestApprovalPostureReachesCoordinatorAndWorkerReaders(t *testing.T) {
 	}
 }
 
-// The reader's primary and any-root Git facts follow the attached roots in
-// every feasible two-root membership.
-func TestMultiRootGitFactsReachTheSkillReader(t *testing.T) {
+// The primary and any-root Git facts follow the attached roots in every
+// feasible two-root membership.
+func TestMultiRootGitFactsReachTheRequestReader(t *testing.T) {
 	h := BuildForTest(t)
 	for _, tc := range []struct {
 		name, id              string
 		primaryGit, secondGit bool
-		want                  string
 	}{
-		{name: "neither", id: "neither", want: "git:no any:no multi:yes"},
-		{name: "secondary only", id: "secondary", secondGit: true, want: "git:no any:yes multi:yes"},
-		{name: "both", id: "both", primaryGit: true, secondGit: true, want: "git:yes any:yes multi:yes"},
+		{name: "neither", id: "neither"},
+		{name: "secondary only", id: "secondary", secondGit: true},
+		{name: "both", id: "both", primaryGit: true, secondGit: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			projectID := "multi-root-" + tc.id
@@ -105,14 +93,14 @@ func TestMultiRootGitFactsReachTheSkillReader(t *testing.T) {
 			testdbseed.InsertProjectRoot(t, h.DB, projectID, secondary)
 			sess, err := h.Store.Sessions.Create(t.Context(), api.CreateSessionRequest{ProjectID: projectID}, projectID)
 			testutil.FailErr(t, "create session", err)
-			tctx := recipientToolContext(t, h, sess, "coordinator")
-			if len(tctx.Source.Roots) != 2 {
-				t.Fatalf("tool context roots = %+v, want both attached roots", tctx.Source.Roots)
+			host, err := h.Sessions.Manager.ReaderFacts.HostFacts(t.Context(), sess)
+			testutil.FailErr(t, "host facts", err)
+			if host.RootCount != 2 || host.HasGit != tc.primaryGit || host.HasAnyGitRoot != (tc.primaryGit || tc.secondGit) {
+				t.Fatalf("host facts roots=%d git=%v any=%v", host.RootCount, host.HasGit, host.HasAnyGitRoot)
 			}
-			got := renderReaderProbe(t, h, tctx,
-				"git:{% if has_git %}yes{% else %}no{% endif %} any:{% if has_any_git_root %}yes{% else %}no{% endif %} multi:{% if multi_root %}yes{% else %}no{% endif %}")
-			if got != tc.want {
-				t.Fatalf("rendered %q, want %q", got, tc.want)
+			facts := requestReader(t, h, sess).Facts()
+			if facts["has_git"] != tc.primaryGit || facts["has_any_git_root"] != (tc.primaryGit || tc.secondGit) || facts["multi_root"] != true {
+				t.Fatalf("request Reader has_git=%v has_any_git_root=%v multi_root=%v", facts["has_git"], facts["has_any_git_root"], facts["multi_root"])
 			}
 		})
 	}

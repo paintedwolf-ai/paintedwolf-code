@@ -6,7 +6,6 @@ import (
 	"maps"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
@@ -554,23 +553,6 @@ func buildTurnExecutor(
 	exec.Metadata.SetToolSchemas(schemas)
 	exec.Metadata.SetCommandExternalHidden(externalHidden)
 	return narrowed, schemas, reg, exec, nil
-}
-
-func sortedMetaNames(metas []tools.ToolMeta) []string {
-	out := make([]string, len(metas))
-	for i, m := range metas {
-		out[i] = m.Name
-	}
-	sort.Strings(out)
-	return out
-}
-
-func metaSchemaMap(metas []tools.ToolMeta) map[string]map[string]any {
-	out := make(map[string]map[string]any, len(metas))
-	for _, m := range metas {
-		out[m.Name] = m.ArgsSchema
-	}
-	return out
 }
 
 func splitCommandWords(seg string) []string {

@@ -161,6 +161,8 @@ func WorkerHostFacts(state WorkerState, profiles []sandbox.ToolProfile, schemas 
 		WebSearch:             state.WebSearch,
 		ApprovalPosture:       state.ApprovalPosture,
 		CommandExternalHidden: state.CommandExternalHidden,
+		SessionScratchDir:     state.SessionScratchDir,
+		SharedTempLocations:   state.SharedTempLocations,
 		IsRepo:                func(path string) bool { return repos[path] },
 	}
 	if state.BranchView == BranchIsolatedWorker {

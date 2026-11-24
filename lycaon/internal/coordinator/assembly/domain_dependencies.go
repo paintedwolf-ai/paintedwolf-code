@@ -19,14 +19,12 @@ import (
 type promptSurfaceDeps struct {
 	Agents                  AgentProfileResolver
 	EffectivePromptSurface  func(ctx context.Context, sess *api.Session) prompts.AgentPromptSurface
-	OnWorkerBranch          func(ctx context.Context, sess *api.Session) (string, bool)
 	ImplementSessionState   func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
 	ModelVision             func(context.Context, *api.Session) bool
 	ExecutionModes          *surface.ExecutionModeStateStore
 	Selection               SelectionSource
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
-	PromptToolLister        PromptToolLister
 	TurnReader              TurnReaderSource
 	Prompts                 prompts.PromptTemplateEngine
 	RepoKnownEmpty          func(ctx context.Context, workspacePath string) bool
@@ -78,14 +76,12 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 	surfaceDeps := promptSurfaceDeps{
 		Agents:                  snapshot.Agents,
 		EffectivePromptSurface:  snapshot.EffectivePromptSurface,
-		OnWorkerBranch:          snapshot.Workers.Branch,
 		ImplementSessionState:   snapshot.ImplementSessionState,
 		Limits:                  snapshot.Limits,
 		ModelVision:             snapshot.ModelVision,
 		ExecutionModes:          snapshot.ExecutionModes,
 		Selection:               snapshot.Selection,
 		ProjectOverlayRootPaths: snapshot.ProjectOverlayRootPaths,
-		PromptToolLister:        snapshot.PromptToolLister,
 		TurnReader:              snapshot.TurnReader,
 		Prompts:                 snapshot.Prompts,
 		RepoKnownEmpty:          snapshot.RepoKnownEmpty,

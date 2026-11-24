@@ -54,10 +54,14 @@ type WorkerState struct {
 	HasGit         bool
 	HasAnyGitRoot  bool
 	OnWorkerBranch bool
-	Loaded         map[string]bool
-	Overlay        PackOverlay
-	Excluded       bool
-	ExcludedReason string
+	// SessionScratchDir and SharedTempLocations are the child session's
+	// observed temporary storage; generated states leave them empty.
+	SessionScratchDir   string
+	SharedTempLocations []string
+	Loaded              map[string]bool
+	Overlay             PackOverlay
+	Excluded            bool
+	ExcludedReason      string
 }
 
 // WorkerStates generates the deterministic worker matrix across catalog worker agents,
