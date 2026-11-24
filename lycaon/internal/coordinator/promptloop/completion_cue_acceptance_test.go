@@ -387,6 +387,7 @@ func TestCompletionCueAcceptanceRequestSequenceAndBaselineParity(t *testing.T) {
 			Session:   h.sess,
 			History:   intentHistory("u-intent-1", "Build feature"),
 			ProfileID: "coordinator",
+			ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID}},
 		})
 		testutil.FailErr(t, "loop.Run", err)
 		stored, err := h.st.Transcript.GetMessages(ctx, h.sess.ID)
@@ -477,6 +478,7 @@ func TestCompletionCueNestedProgramFailurePreservesCommittedProgress(t *testing.
 		Session:   h.sess,
 		History:   intentHistory("u-intent-prog", "Run program"),
 		ProfileID: "coordinator",
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 
@@ -543,6 +545,7 @@ func TestCompletionCueIneligibleEventsProduceNoCue(t *testing.T) {
 		Session:   h.sess,
 		History:   intentHistory("u-intent-inelig", "Check ineligible events"),
 		ProfileID: "coordinator",
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 
@@ -581,6 +584,7 @@ func TestCompletionCueOneItemPlanCheckVsInspectionOnly(t *testing.T) {
 	}
 	_, err := hA.loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: hA.sess.ID, Session: hA.sess, History: intentHistory("u-intent-one-a", "One item with check"), ProfileID: "coordinator",
+		ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: hA.sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run case A", err)
 	wantA := []string{"", "", completioncue.CodeFinalItemCoverage, ""}
@@ -611,6 +615,7 @@ func TestCompletionCueOneItemPlanCheckVsInspectionOnly(t *testing.T) {
 	}
 	_, err = hB.loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: hB.sess.ID, Session: hB.sess, History: intentHistory("u-intent-one-b", "One item inspection only"), ProfileID: "coordinator",
+		ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: hB.sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run case B", err)
 	for i, code := range cueCodesInRequests(hB.llm.requests) {
@@ -679,6 +684,7 @@ func TestCompletionCueRebuildStability(t *testing.T) {
 	h := newCompletionCueHarness(t, true, steps)
 	_, err := h.loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: h.sess.ID, Session: h.sess, History: intentHistory("u-intent-rebuild", "Rebuild stability"), ProfileID: "coordinator",
+		ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 
