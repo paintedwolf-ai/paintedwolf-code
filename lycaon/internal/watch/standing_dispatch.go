@@ -337,7 +337,8 @@ func settleStandingRunByID(ctx context.Context, e *StandingEngine, runID, sessio
 
 	pausedByFailures, completedOneShot, nextRev := false, false, sw.Revision
 	if swErr == nil {
-		if status == RunCompleted {
+		switch status {
+		case RunCompleted:
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE standing_watch_settings SET consecutive_failures = 0, last_outcome = 'completed',
 				 gate_baseline_json = COALESCE(NULLIF(?, ''), gate_baseline_json) WHERE watch_id = ?`,
@@ -357,7 +358,7 @@ func settleStandingRunByID(ctx context.Context, e *StandingEngine, runID, sessio
 					}
 				}
 			}
-		} else if status == RunFailed || status == RunFenced {
+		case RunFailed, RunFenced:
 			newFails := sw.ConsecutiveFailures + 1
 			if _, err := tx.ExecContext(ctx, `UPDATE standing_watch_settings SET consecutive_failures = ?, last_outcome = ? WHERE watch_id = ?`, newFails, string(status), run.WatchID); err != nil {
 				return err
@@ -369,10 +370,12 @@ func settleStandingRunByID(ctx context.Context, e *StandingEngine, runID, sessio
 				}
 				_, _ = cancelPendingAndQueuedRunsTx(ctx, tx, sw.WatchID, nowStr)
 			}
-		} else if status == RunCanceled {
+		case RunCanceled:
 			if _, err := tx.ExecContext(ctx, `UPDATE standing_watch_settings SET last_outcome = 'canceled' WHERE watch_id = ?`, run.WatchID); err != nil {
 				return err
 			}
+		case RunPending, RunQueued, RunRunning, RunWaitingForOwner,
+			RunSkippedOverlap, RunSkippedUnchanged, RunSkippedDailyCap, RunSkippedBusy, RunMissed:
 		}
 		publishWatchEventTx(ctx, e, tx, "watch_run.updated", run.ProjectID, sessionID, run.WatchID, runID, nextRev)
 		if pausedByFailures || completedOneShot {
