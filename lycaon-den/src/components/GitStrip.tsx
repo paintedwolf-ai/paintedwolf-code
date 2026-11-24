@@ -26,19 +26,13 @@ import type { GitWorkspaceStatus } from "../chat/actions/git-workspace-status.ts
 import type { ResolveProjectRoot } from "../api/project-path.ts";
 import type { AppStore } from "../store/app-state-model.ts";
 import { GitCheckout, type GitCheckoutActions } from "./GitCheckout.tsx";
+import { GitStripChangedFiles } from "./GitStripChangedFiles.tsx";
 import {
   gitReposChangeCount,
   nonRepoRootId,
   resolveScope,
   type GitScope,
 } from "./git-repo-scope.ts";
-import { SourcePathLink } from "./source/SourcePathLink.tsx";
-import {
-  gitChangeOpenTarget,
-  gitDiffSideOpenTarget,
-  openVerifiedFileTarget,
-} from "../files/source/file-open-target.ts";
-import { getLycaonClient } from "../platform/connection/app-connection.ts";
 import { createModalFocusTrap } from "../platform/interaction/modal-focus-trap.ts";
 import {
   type LoadState,
@@ -78,52 +72,6 @@ type Props = GitCheckoutActions & {
   onGroupCommit?: () => void;
 };
 
-function statusLabel(code: string): string {
-  const xy = code.trim();
-  if (xy === "??") return "new";
-  if (xy.startsWith("R")) return "renamed";
-  if (xy.startsWith("D") || xy.endsWith("D")) return "deleted";
-  if (xy.startsWith("A")) return "added";
-  return "modified";
-}
-
-function statusFileChange(code: string): "added" | "deleted" | undefined {
-  const label = statusLabel(code);
-  if (label === "deleted") return "deleted";
-  return label === "new" || label === "added" ? "added" : undefined;
-}
-
-async function openGitChangeDiff(
-  projectId: string,
-  repoId: string,
-  worktreeId: string | undefined,
-  file: GitFileEntry,
-  sessionId?: string,
-): Promise<void> {
-  const client = getLycaonClient();
-  if (!client || !repoId) return;
-  const isStagedOnly = file.status.length >= 2 && file.status[0] !== " " && file.status[0] !== "?" && file.status[1] === " ";
-  const stage = isStagedOnly ? "staged" : "unstaged";
-  const diff = await client.getGitDiff(projectId, repoId, {
-    ...(sessionId ? { session_id: sessionId } : {}),
-    ...(worktreeId ? { worktree_id: worktreeId } : {}),
-    mode: stage,
-    path: file.path,
-  });
-  const item = diff.files[0];
-  if (!item) return;
-  const target = gitDiffSideOpenTarget({
-    projectId,
-    repoId,
-    worktreeId: diff.worktree_id ?? worktreeId,
-    stage,
-    side: "after",
-    item,
-    headSha: diff.head_sha,
-  });
-  if (target) await openVerifiedFileTarget(target, { client, sessionId });
-}
-
 function entryChangeCount(entry: GitRepoEntry): number {
   return (entry.staged_count ?? 0) + (entry.unstaged_count ?? 0);
 }
@@ -143,16 +91,6 @@ function scopeLabel(scope: GitScope, repos: readonly GitRepoEntry[]): string {
     repos.find((r) => !r.available && r.root_ids.includes(scope.rootId))
       ?.label ?? "Root"
   );
-}
-
-function rootsForFile(
-  file: GitFileEntry,
-  rootRefs: readonly ResolveProjectRoot[] | undefined,
-): ResolveProjectRoot[] | undefined {
-  const rid = file.root_id?.trim();
-  if (!rid || !rootRefs?.length) return undefined;
-  const match = rootRefs.filter((r) => r.id === rid);
-  return match.length ? match : undefined;
 }
 
 export function GitStrip(props: Props) {
@@ -794,99 +732,14 @@ export function GitStrip(props: Props) {
         </Show>
 
         <Show when={filesOpen() && dirty()}>
-          <Scrollport
-            class="git-strip__files"
-            contentAs="ul"
-            contentClass="git-strip__files-content"
-            data-testid="git-files"
-          >
-            <For each={files()}>
-              {(f) => {
-                const attributed = () => (f.root_id ?? "").trim().length > 0;
-                return (
-                  <li class="git-strip__file">
-                    <span class="git-strip__file-status">
-                      {statusLabel(f.status)}
-                    </span>
-                    <Show
-                      when={attributed() && props.projectId?.trim()}
-                      fallback={
-                        <span
-                          class="den-source-path-plain den-source-path--truncate"
-                          data-testid="git-file-unlinked"
-                          data-file-change={statusFileChange(f.status)}
-                        >
-                          {f.path}
-                        </span>
-                      }
-                      keyed
-                    >
-                      {(pid) => {
-                        const navigationTarget = () => {
-                          const target = gitChangeOpenTarget({
-                            projectId: pid,
-                            repoId: worktreeRepoId(),
-                            worktreeId: status()?.worktree_id,
-                            file: f,
-                          });
-                          if (!target?.rootId) return undefined;
-                          return {
-                            project_id: pid,
-                            root_id: target.rootId,
-                            path: target.path,
-                            entry_kind: "file" as const,
-                            ...(target.repoId ? { repo_id: target.repoId } : {}),
-                            ...(target.worktreeId ? { worktree_id: target.worktreeId } : {}),
-                          };
-                        };
-                        return (
-                          <>
-                            <SourcePathLink
-                              truncate
-                              projectId={pid}
-                              path={f.root_relative_path || f.path}
-                              repoId={worktreeRepoId() || undefined}
-                              worktreeId={status()?.worktree_id}
-                              navigationTarget={navigationTarget()}
-                              change={statusFileChange(f.status)}
-                              rootRefs={rootsForFile(f, props.rootRefs)}
-                              chatDestination={
-                                props.sessionId?.trim()
-                                  ? {
-                                      projectId: pid,
-                                      sessionId: props.sessionId.trim(),
-                                    }
-                                  : null
-                              }
-                            />
-                            <Show when={worktreeRepoId()}>
-                              <button
-                                type="button"
-                                class="den-chat-content-link git-strip__file-diff"
-                                data-testid="git-file-diff"
-                                aria-label={`Open diff for ${f.path}`}
-                                onClick={() =>
-                                  void openGitChangeDiff(
-                                    pid,
-                                    worktreeRepoId(),
-                                    status()?.worktree_id,
-                                    f,
-                                    props.sessionId,
-                                  )
-                                }
-                              >
-                                Diff
-                              </button>
-                            </Show>
-                          </>
-                        );
-                      }}
-                    </Show>
-                  </li>
-                );
-              }}
-            </For>
-          </Scrollport>
+          <GitStripChangedFiles
+            files={files()}
+            projectId={props.projectId}
+            sessionId={props.sessionId}
+            repoId={worktreeRepoId()}
+            worktreeId={status()?.worktree_id}
+            rootRefs={props.rootRefs}
+          />
         </Show>
 
         <Show when={confirmDiscard()}>
