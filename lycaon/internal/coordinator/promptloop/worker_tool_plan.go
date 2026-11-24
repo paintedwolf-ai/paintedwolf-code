@@ -43,7 +43,7 @@ func (l *promptContext) compileWorkerToolPlan(ctx context.Context, sess *api.Ses
 			plan = plan.Promote(name)
 		}
 	}
-	for _, name := range toolcontract.Implied(l.liveResources(sess)) {
+	for _, name := range toolcontract.Implied(l.liveResources(ctx, sess)) {
 		if plan.Addressable(name) {
 			plan = plan.Promote(name)
 		}
@@ -153,7 +153,7 @@ func (l *promptContext) coordinatorToolsForTurn(
 	}
 	all = l.askEnabledMCPMetas(ctx, sess, all)
 	mcpPlan := l.mcpToolPlan(ctx, sess, all, activated)
-	plan = l.compileRuntimeToolPlanForSurface(plan, surfaceID, frame.RunContext, all, activated, mcpPlan, openWorld, sess)
+	plan = l.compileRuntimeToolPlanForSurface(ctx, plan, surfaceID, frame.RunContext, all, activated, mcpPlan, openWorld, sess)
 	plan = filterToolPlanForRootCount(plan, rootCount)
 	if ask {
 		plan = clampAskMode(plan, all)
@@ -213,6 +213,7 @@ func trimCoordinatorToolMetasForPlan(plan toolsurface.Plan, all []tools.ToolMeta
 }
 
 func (l *promptContext) compileRuntimeToolPlanForSurface(
+	ctx context.Context,
 	plan toolsurface.Plan,
 	surfaceID string,
 	runCtx api.CoordinatorRunContext,
@@ -228,7 +229,7 @@ func (l *promptContext) compileRuntimeToolPlanForSurface(
 	if !l.webSearchEnabled() {
 		plan = plan.Without(webresearch.SearchToolName, webresearch.FetchURLToolName)
 	}
-	resources := l.liveResources(sess)
+	resources := l.liveResources(ctx, sess)
 	nonWatchResources := resources
 	nonWatchResources.Watches = false
 	plan = plan.Promote(toolcontract.Implied(nonWatchResources)...)
@@ -332,11 +333,11 @@ func trimPromptToolMetas(metas []tools.ToolMeta) []tools.ToolMeta {
 	return out
 }
 
-func (l *promptContext) liveResources(sess *api.Session) toolcontract.ResourcePresence {
+func (l *promptContext) liveResources(ctx context.Context, sess *api.Session) toolcontract.ResourcePresence {
 	if l == nil || l.Deps.LiveResources == nil || sess == nil {
 		return toolcontract.ResourcePresence{}
 	}
-	return l.Deps.LiveResources(sess.ID)
+	return l.Deps.LiveResources(ctx, sess.ID)
 }
 
 func (l *promptContext) liveMCPMetas() []tools.ToolMeta {

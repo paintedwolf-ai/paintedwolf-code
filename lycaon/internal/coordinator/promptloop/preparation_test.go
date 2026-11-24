@@ -17,8 +17,10 @@ func TestPreparationProjectsCallableToolsFromTheLivePlan(t *testing.T) {
 	live := false
 	procedureProfile := ""
 	loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{
-		Policy:        registryTestPolicy{metas: []tools.ToolMeta{{Name: "command"}, {Name: "request_tools"}, {Name: "command_output", Deferred: true}}},
-		LiveResources: func(string) toolcontract.ResourcePresence { return toolcontract.ResourcePresence{CommandJobs: live} },
+		Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "command"}, {Name: "request_tools"}, {Name: "command_output", Deferred: true}}},
+		LiveResources: func(context.Context, string) toolcontract.ResourcePresence {
+			return toolcontract.ResourcePresence{CommandJobs: live}
+		},
 		ContextSurfaceDeps: ContextSurfaceDeps{
 			ToolProcedures: func(_ context.Context, _ *api.Session, profile string, _ []string) (string, error) {
 				procedureProfile = profile
