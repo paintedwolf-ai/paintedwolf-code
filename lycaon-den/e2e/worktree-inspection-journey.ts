@@ -124,9 +124,7 @@ export async function runWorktreeInspectionQualificationJourney(args: {
   writeFileSync(path.join(workerTwoDir, "src", "shared.ts"), "export const checkout = 'worker-two-edit';\n");
 
   const created = await apiCreateProjectWithRoot(request, repoAlpha, e2eUniqueLabel("Worktree qual"));
-  const withBeta = await apiAttachProjectRoot(request, created.id, repoBeta, "beta");
-  await apiAttachProjectRoot(request, withBeta.id, workerOneDir, "worker-one");
-  await apiAttachProjectRoot(request, withBeta.id, workerTwoDir, "worker-two");
+  await apiAttachProjectRoot(request, created.id, repoBeta, "beta");
 
   await seedAppState(page);
   await gotoShell(page);
@@ -137,10 +135,9 @@ export async function runWorktreeInspectionQualificationJourney(args: {
   await openGitPanel(page);
   // Select repo-alpha explicitly when multi-repo project starts on All repositories.
   const scopeTrigger = page.getByTestId("git-scope");
-  if (await scopeTrigger.isVisible().catch(() => false)) {
-    await scopeTrigger.click();
-    await page.getByTestId("git-scope-item").first().click();
-  }
+  await expect(scopeTrigger).toBeVisible({ timeout: 20_000 });
+  await scopeTrigger.click();
+  await page.getByTestId("git-scope-item").first().click();
 
   // Open Branch and checkout in Window 1: verify identical basename checkouts disambiguate and pin worker-one.
   await page.getByTestId("git-branch").click();
@@ -165,10 +162,9 @@ export async function runWorktreeInspectionQualificationJourney(args: {
     await openGitPanel(secondWindow);
 
     const scopeTrigger2 = secondWindow.getByTestId("git-scope");
-    if (await scopeTrigger2.isVisible().catch(() => false)) {
-      await scopeTrigger2.click();
-      await secondWindow.getByTestId("git-scope-item").first().click();
-    }
+    await expect(scopeTrigger2).toBeVisible({ timeout: 20_000 });
+    await scopeTrigger2.click();
+    await secondWindow.getByTestId("git-scope-item").first().click();
 
     // Window 2 starts following primary ("main"), proving Window 1's pin did not leak across windows.
     await expect(secondWindow.getByTestId("git-branch")).toContainText("main");

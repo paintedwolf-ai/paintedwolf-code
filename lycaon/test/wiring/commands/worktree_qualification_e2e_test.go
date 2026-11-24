@@ -228,7 +228,8 @@ func TestWorktreeQualificationNativeAgentAddCrossCheckoutEditAndNextCommandCwd(t
 		turn2Preview += chunk
 	}
 	testutil.FailErr(t, "close rows", rows.Close())
-	if !strings.Contains(turn2Preview, canonPrimary) || !strings.Contains(turn2Preview, "person primary edit") || strings.Contains(turn2Preview, "agent sibling") {
+	inPrimaryDir := strings.Contains(turn2Preview, canonPrimary) || strings.Contains(turn2Preview, filepath.Clean(s.dir))
+	if !inPrimaryDir || strings.Contains(turn2Preview, siblingDir) || !strings.Contains(turn2Preview, "person primary edit") || strings.Contains(turn2Preview, "agent sibling") {
 		t.Fatalf("next command inherited sibling cwd or lost person primary edit: %q", turn2Preview)
 	}
 
