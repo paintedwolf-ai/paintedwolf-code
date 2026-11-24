@@ -105,7 +105,12 @@ func TestContendedWaitRevalidatesAndRescreensChangedEvidence(t *testing.T) {
 	if len(provider.received) != 2 {
 		t.Fatalf("provider calls = %d, want 2", len(provider.received))
 	}
-	sentA := provider.received[1].Messages[len(provider.received[1].Messages)-1].Content
+	var sb strings.Builder
+	for _, m := range provider.received[1].Messages {
+		sb.WriteString(m.Content)
+		sb.WriteByte('\n')
+	}
+	sentA := sb.String()
 	exposure.Absent(t, sentA, rotatedSecret)
 	if !strings.Contains(sentA, "{{paintedwolf-secret:rotated-ref}}") {
 		t.Fatalf("expected substituted reference after rescreen, got %q", sentA)
@@ -123,7 +128,12 @@ func TestUnchangedContentionAvoidsRescreenAndPreservesForegroundAndFIFOOrder(t *
 		id:           "ollama",
 		singleFlight: true,
 		onCall: func(_ context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
-			msg := req.Messages[len(req.Messages)-1].Content
+			var sb strings.Builder
+			for _, m := range req.Messages {
+				sb.WriteString(m.Content)
+				sb.WriteByte('\n')
+			}
+			msg := sb.String()
 			for _, tag := range []string{"hold", "w1", "w2", "fg"} {
 				if strings.Contains(msg, "tag:"+tag) {
 					orderMu.Lock()
