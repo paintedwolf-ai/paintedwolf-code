@@ -43,3 +43,38 @@ func TestCommandFormToolOfResolvesAlias(t *testing.T) {
 		t.Fatalf("CommandFormToolOf(not-a-form) = %q, want empty", got)
 	}
 }
+
+func TestCommandLanguageReachableMixedModeAndMutatingForms(t *testing.T) {
+	readOnly := map[string]bool{"command": true}
+	mutating := map[string]bool{"command": true, ReachCommandMutation: true}
+	for _, form := range []string{"find", "sed", "yq"} {
+		if !CommandLanguageReachable(form, readOnly) {
+			t.Fatalf("%s has a read-only mode and must be reachable on read-only command surfaces", form)
+		}
+	}
+	for _, form := range []string{"edit", "replace-lines", "jq-edit", "rm", "mkdir"} {
+		if CommandLanguageReachable(form, readOnly) {
+			t.Fatalf("%s requires mutation and must not be reachable on read-only command surfaces", form)
+		}
+		if !CommandLanguageReachable(form, mutating) {
+			t.Fatalf("%s must be reachable when command mutation is held", form)
+		}
+	}
+
+	// Concrete mixed-mode invocations distinguish read-only examples from mutating flags.
+	readExamples := "Chain `find . -maxdepth 2 -type d`, `sed -n '1,20p' a.go`, `yq '.a.b' cfg.yaml`, `sort file.txt`, and `tar -tf archive.tar`."
+	if got := MutatingMixedModeInvocationsIn(readExamples); len(got) != 0 {
+		t.Fatalf("read-only mixed-mode examples flagged as mutating: %v", got)
+	}
+	mutatingExamples := "Avoid `sed -i 's/a/b/' a.go`, `find . -name '*.tmp' -delete`, `yq -i '.a = 1' cfg.yaml`, `sort -o out.txt in.txt`, and `tar -czf out.tgz .` on read-only surfaces."
+	wantMutating := []string{"find", "sed", "sort", "tar", "yq"}
+	gotMutating := MutatingMixedModeInvocationsIn(mutatingExamples)
+	if len(gotMutating) != len(wantMutating) {
+		t.Fatalf("MutatingMixedModeInvocationsIn = %v, want %v", gotMutating, wantMutating)
+	}
+	for i := range wantMutating {
+		if gotMutating[i] != wantMutating[i] {
+			t.Fatalf("MutatingMixedModeInvocationsIn[%d] = %q, want %q", i, gotMutating[i], wantMutating[i])
+		}
+	}
+}

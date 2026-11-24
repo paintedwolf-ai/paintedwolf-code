@@ -34,10 +34,17 @@ func resolveEffectiveModeSQL(ctx context.Context, q *db.Queries, id string) (Roo
 	}
 	mode := api.SessionMode(root.Mode.String)
 	if !root.RootSessionID.Valid || root.RootSessionID.String == "" || !validSessionMode(mode) ||
-		!root.Started.Valid || (root.Started.Int64 != 0 && root.Started.Int64 != 1) {
+		!root.Started.Valid || (root.Started.Int64 != 0 && root.Started.Int64 != 1) ||
+		!root.UpgradedFromAsk.Valid || root.UpgradedFromAsk.Int64 < 0 || root.UpgradedFromAsk.Int64 > 2 {
 		return RootAuthority{}, ErrSessionModeUnavailable
 	}
-	return RootAuthority{RootSessionID: root.RootSessionID.String, Mode: mode, Started: root.Started.Int64 == 1}, nil
+	return RootAuthority{
+		RootSessionID:        root.RootSessionID.String,
+		Mode:                 mode,
+		Started:              root.Started.Int64 == 1,
+		UpgradedFromAsk:      root.UpgradedFromAsk.Int64 >= 1,
+		AgentNoticeDelivered: root.UpgradedFromAsk.Int64 == 2,
+	}, nil
 }
 
 // WithModeAdmission serializes preparations that depend on the pre-start mode.
@@ -134,9 +141,13 @@ func (r sqlModeRecords) StoreAuthority(ctx context.Context, root RootAuthority) 
 
 func putRootAuthority(ctx context.Context, s *sqlCore, tx *sql.Tx, root RootAuthority) error {
 	q := s.queries.WithTx(tx)
+	now := timelayout.Format(time.Now().UTC())
 	if err := q.SetRootSessionMode(ctx, db.SetRootSessionModeParams{
-		ID: root.RootSessionID, Mode: db.NullString(string(root.Mode)),
-		Started: int64(boolToInt(root.Started)), UpdatedAt: timelayout.Format(time.Now().UTC()),
+		ID:              root.RootSessionID,
+		Mode:            db.NullString(string(root.Mode)),
+		Started:         int64(boolToInt(root.Started)),
+		UpgradedFromAsk: upgradedState(root),
+		UpdatedAt:       now,
 	}); err != nil {
 		return err
 	}

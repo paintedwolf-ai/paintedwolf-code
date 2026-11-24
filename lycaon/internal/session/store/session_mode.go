@@ -4,9 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+const agentModeEnabledSignalID = "session.mode.agent_enabled"
+
+// AgentEnabledMessageID returns the deterministic message identity for a root
+// session's one-time Ask-to-Agent transition notice.
+func AgentEnabledMessageID(sessionID string) string {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(agentModeEnabledSignalID+":"+strings.TrimSpace(sessionID))).String()
+}
 
 var (
 	ErrInvalidSessionMode     = errors.New("session mode must be agent or ask")
@@ -17,9 +27,21 @@ var (
 
 // RootAuthority is the mode and admission latch owned by a root session.
 type RootAuthority struct {
-	RootSessionID string
-	Mode          api.SessionMode
-	Started       bool
+	RootSessionID        string
+	Mode                 api.SessionMode
+	Started              bool
+	UpgradedFromAsk      bool
+	AgentNoticeDelivered bool
+}
+
+func upgradedState(root RootAuthority) int64 {
+	if root.AgentNoticeDelivered {
+		return 2
+	}
+	if root.UpgradedFromAsk {
+		return 1
+	}
+	return 0
 }
 
 // WithModeIntent validates a proposed transition without persisting it.
@@ -73,6 +95,9 @@ func applyModeIntent(ctx context.Context, records modeRecords, id string, intent
 	started := start || root.Started
 	if root.Mode == mode && root.Started == started {
 		return nil
+	}
+	if root.Started && root.Mode == api.SessionModeAsk && mode == api.SessionModeAgent {
+		root.UpgradedFromAsk = true
 	}
 	root.Mode, root.Started = mode, started
 	return records.StoreAuthority(ctx, root)

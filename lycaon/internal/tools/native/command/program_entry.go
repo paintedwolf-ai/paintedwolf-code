@@ -138,6 +138,7 @@ type programRun struct {
 	// envelope carries the call's launch capability requests to each launch.
 	envelope   map[string]any
 	window     *programWindow
+	sessions   SessionOwners
 	custody    programCustodyReader
 	provenance programProvenanceState
 }
@@ -146,6 +147,12 @@ type programRun struct {
 // freezes frame and surface, records the program, evaluates it under
 // supervision, settles it and returns the bounded owner projection.
 func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext) (string, error) {
+	if tc.Source.AskMode {
+		if reject := tools.AskModeCommandFieldReject(tool, args); reject != nil {
+			return "", reject
+		}
+		tc.Source.ReadOnly = true
+	}
 	ctx = sandbox.WithSessionID(ctx, tc.Identity.SessionID)
 	source, _ := args["command"].(string)
 	if source == "" {
@@ -221,6 +228,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		}
 	}
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
+	run.sessions = r.Sessions
 	run.custody = r.Provenance
 	run.externalHidden = r.ExternalHidden
 	run.publishDocument = owners.PublishDocument

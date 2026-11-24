@@ -97,6 +97,15 @@ var reasonFlags = map[string]string{
 	"opaque_overflow":     "paintedwolf.opaque_overflow",
 }
 
+var nextActionFlags = map[string]string{
+	"list_delete_targets": "paintedwolf.purpose_list_delete_targets",
+	"preview_stream":      "paintedwolf.purpose_preview_stream",
+	"preview_query":       "paintedwolf.purpose_preview_query",
+	"dry_run_preview":     "paintedwolf.purpose_dry_run_preview",
+	"check_patch":         "paintedwolf.purpose_check_patch",
+	"inspect_target":      "paintedwolf.purpose_inspect_target",
+}
+
 // FactsFromData rewrites occurrence keys onto declared fact names and
 // derives the boolean flags copy can test.
 func FactsFromData(data map[string]any) map[string]any {
@@ -134,6 +143,19 @@ func FactsFromData(data map[string]any) map[string]any {
 	}
 	if kind, ok := data["kind"].(string); ok && kind == "redirect" {
 		out["paintedwolf.redirect"] = true
+	}
+	if mode, ok := data["session_mode"].(string); ok && mode == "agent" {
+		out["paintedwolf.mode_denied"] = true
+	}
+	if execOutcome, ok := data["command_execution"].(string); ok && execOutcome != "" {
+		if _, exists := out["paintedwolf.execution_outcome"]; !exists {
+			out["paintedwolf.execution_outcome"] = execOutcome
+		}
+	}
+	if nextAction, _ := out["paintedwolf.next_action"].(string); nextAction != "" {
+		if flag, ok := nextActionFlags[nextAction]; ok {
+			out[flag] = true
+		}
 	}
 	if operation, _ := out["paintedwolf.native_operation"].(string); operation != "" {
 		if form := CommandFormOf(operation); form != "" {

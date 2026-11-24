@@ -30,13 +30,20 @@ JOIN session_mode_authority root ON root.session_id = s.id
 ORDER BY s.created_at;
 
 -- name: GetSessionModeAuthority :one
-SELECT root_session_id, mode, started
+SELECT root_session_id, mode, started, upgraded_from_ask
 FROM session_mode_authority WHERE session_id = ? AND mode IS NOT NULL;
 
 -- name: SetRootSessionMode :exec
 UPDATE sessions
-SET mode = sqlc.arg(mode), started = sqlc.arg(started), updated_at = sqlc.arg(updated_at)
+SET mode = sqlc.arg(mode), started = sqlc.arg(started),
+    upgraded_from_ask = MAX(upgraded_from_ask, sqlc.arg(upgraded_from_ask)),
+    updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id) AND parent_session_id IS NULL;
+
+-- name: MarkRootSessionAgentNoticeDelivered :exec
+UPDATE sessions
+SET upgraded_from_ask = 2
+WHERE id = ? AND parent_session_id IS NULL AND upgraded_from_ask = 1;
 
 -- Startup recovery reads ids without hydrating session projections. Each id
 -- leaves the filter once settled, so the order only needs to be stable.

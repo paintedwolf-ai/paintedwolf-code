@@ -5,7 +5,6 @@ tools:
   code_rewrite: true
   survey_repo: sticky
   summarize: sticky
-  inspect_source: sticky
   recall: sticky
   pack_board: sticky
   read_findings: sticky

@@ -86,10 +86,10 @@ func (s ProgramSurface) ValidateOperation(bound toolcontract.BoundOperation) err
 	}
 	facts := definition.ReadOnlyFacts()
 	if s.selection.identityDenied[facts.Identity] || bound.Publication() == toolcontract.NoPublication && s.selection.denied[facts.Identity][bound.Command()] {
-		return s.profileReject("COMMAND_OPERATION_NOT_ALLOWED", facts, invocation)
+		return s.boundEffectReject("COMMAND_OPERATION_NOT_ALLOWED", facts, invocation, bound)
 	}
 	if !s.allowed.Allows(bound.Effects()) {
-		return s.profileReject("COMMAND_EFFECT_NOT_ALLOWED", facts, invocation)
+		return s.boundEffectReject("COMMAND_EFFECT_NOT_ALLOWED", facts, invocation, bound)
 	}
 	return nil
 }
@@ -253,7 +253,12 @@ func (s ProgramSurface) ValidateBound(definition toolcontract.OperationDefinitio
 	}
 	facts := definition.ReadOnlyFacts()
 	if s.selection.denied[facts.Identity][command] {
-		return s.profileReject("COMMAND_OPERATION_NOT_ALLOWED", facts, invocation)
+		rejected := s.profileReject("COMMAND_OPERATION_NOT_ALLOWED", facts, invocation)
+		if command != "" {
+			rejected.Data["command"] = command
+			rejected.Data["native_command"] = command
+		}
+		return rejected
 	}
 	bound, err := toolcontract.BindOperation(definition, invocation, command, mode, child)
 	if err != nil {
@@ -264,7 +269,41 @@ func (s ProgramSurface) ValidateBound(definition toolcontract.OperationDefinitio
 	if s.allowed.Allows(bound.Effects()) {
 		return nil
 	}
-	return s.profileReject("COMMAND_EFFECT_NOT_ALLOWED", facts, invocation)
+	return s.boundEffectReject("COMMAND_EFFECT_NOT_ALLOWED", facts, invocation, bound)
+}
+
+func (s ProgramSurface) boundEffectReject(code string, facts toolcontract.OperationFacts, invocation toolcontract.OperationInvocation, bound toolcontract.BoundOperation) *toolrejection.ToolReject {
+	filtered := facts
+	if bound.Publication() == toolcontract.RedirectPublication {
+		filtered.Commands = nil
+	} else if cmd := bound.Command(); cmd != "" && len(facts.Commands) > 1 {
+		for _, spec := range facts.Commands {
+			if spec.Name == cmd {
+				filtered.Commands = []toolcontract.CommandSpecification{spec}
+				break
+			}
+		}
+	}
+	rejected := s.profileReject(code, filtered, invocation)
+	if mode := bound.Mode(); mode != "" {
+		rejected.Data["mode"] = mode
+	}
+	denied := bound.Effects() &^ s.allowed
+	if classes := denied.Classes(); len(classes) > 0 {
+		names := make([]string, len(classes))
+		for i, c := range classes {
+			names[i] = string(c)
+		}
+		rejected.Data["class"] = strings.Join(names, ", ")
+	}
+	if bound.Publication() == toolcontract.RedirectPublication {
+		rejected.Data["kind"] = "redirect"
+		rejected.Data["operator"] = bound.Command()
+	} else if cmd := bound.Command(); cmd != "" {
+		rejected.Data["command"] = cmd
+		rejected.Data["native_command"] = cmd
+	}
+	return rejected
 }
 
 func (s ProgramSurface) profileReject(code string, facts toolcontract.OperationFacts, invocation toolcontract.OperationInvocation) *toolrejection.ToolReject {

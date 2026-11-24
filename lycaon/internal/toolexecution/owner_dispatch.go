@@ -14,10 +14,16 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
+func turnReachKnown(tc tools.ToolContext) bool {
+	return len(tc.Turn.TurnOfferedToolNames) > 0 || tc.Turn.TurnToolPlan.Compiled() || tc.Turn.TurnPrograms != nil
+}
+
 func invocationContext(ctx context.Context, tc tools.ToolContext) context.Context {
 	ctx = people.WithoutCaller(ctx)
 	ctx = gitexec.AgentEntry(ctx)
-	ctx = toolreach.WithRequest(ctx, tools.TurnReach(tc))
+	if !toolreach.FromContext(ctx).Known() && turnReachKnown(tc) {
+		ctx = toolreach.WithRequest(ctx, tools.TurnReach(tc))
+	}
 	if tc.Invocation.ToolName != "" && tc.Invocation.Contract.Owner != "" {
 		ctx = tools.WithRecoveryContract(ctx, tc.Invocation.ToolName, tc.Invocation.Contract)
 	}

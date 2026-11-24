@@ -66,7 +66,7 @@ func runAskFirstAndResumedScenario(t *testing.T, oracle *reachOracle) {
 		Fallback: func(_ context.Context, _ llmtest.Snapshot) modelcall.Completion {
 			switch round.Add(1) {
 			case 1:
-				return askRoundToolCall("r1-read", "inspect_source", map[string]any{"operation": "read", "path": "note.txt"})
+				return askRoundToolCall("r1-read", "command", map[string]any{"command": "cat note.txt"})
 			case 2:
 				return askRoundToolCall("r2-write", "write", map[string]any{"path": "bad.txt", "content": "denied"})
 			case 3:
@@ -74,7 +74,7 @@ func runAskFirstAndResumedScenario(t *testing.T, oracle *reachOracle) {
 			case 4:
 				return modelcall.Completion{Content: "First Ask turn settled without mutations."}
 			case 5:
-				return askRoundToolCall("r5-read", "inspect_source", map[string]any{"operation": "read", "path": "note.txt"})
+				return askRoundToolCall("r5-read", "command", map[string]any{"command": "cat note.txt"})
 			default:
 				return modelcall.Completion{Content: "Resumed Ask turn settled cleanly."}
 			}
@@ -133,12 +133,12 @@ func runMidTurnAskUpgradeScenario(t *testing.T, oracle *reachOracle) {
 			}
 			switch round.Add(1) {
 			case 1:
-				return askRoundToolCall("ask-read", "inspect_source", map[string]any{"operation": "read", "path": "note.txt"})
+				return askRoundToolCall("ask-read", "command", map[string]any{"command": "cat note.txt"})
 			case 2:
 				if _, err := h.Sessions.Manager.Chats.SetMode(ctx, sessID, api.SessionModeAgent); err != nil {
 					t.Errorf("mid-turn SetMode(Agent): %v", err)
 				}
-				return askRoundToolCall("read-before-refresh", "inspect_source", map[string]any{"operation": "read", "path": "note.txt"})
+				return askRoundToolCall("read-before-refresh", "command", map[string]any{"command": "cat note.txt"})
 			case 3:
 				return askRoundToolCall("plan", "update_progress", h.ProgressUpdateArgs(t, ctx, sessID, "## Progress\n- [ ] write upgraded.txt\n"))
 			case 4:

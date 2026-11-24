@@ -133,7 +133,11 @@ func (c *SessionPromptCache) SetTurnSurfaceID(sessionID, surfaceID string) {
 		return
 	}
 	turn := c.LoadTurn(sessionID)
-	turn.SurfaceID = strings.TrimSpace(surfaceID)
+	next := strings.TrimSpace(surfaceID)
+	if turn.SurfaceID != next {
+		turn.Reader = prompts.Reader{}
+	}
+	turn.SurfaceID = next
 }
 
 // TurnSurfaceID returns the coordinator surface for the active prompt turn.

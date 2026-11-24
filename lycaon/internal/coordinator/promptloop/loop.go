@@ -147,8 +147,8 @@ loop:
 				return nil, err
 			}
 		}
-		if modeUpgraded {
-			st.history, err = l.appendAgentEnabledNudge(ctx, id, st)
+		if shouldDeliverAgentEnabledNudge(sess, previous, authority, st) || (modeUpgraded && !authority.AgentNoticeDelivered && !st.agentEnabledNoticeDelivered) {
+			st.history, err = l.appendAgentEnabledNudge(ctx, sess, id, st)
 			if err != nil {
 				return nil, err
 			}

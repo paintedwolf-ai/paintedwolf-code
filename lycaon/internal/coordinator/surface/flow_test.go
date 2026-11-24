@@ -273,7 +273,9 @@ func TestResolveAskTurnProfileUsesReadOnlyCatalog(t *testing.T) {
 	}
 	plan, err := CompileToolPlan(profile, 1)
 	testutil.FailErr(t, "compile Ask tool plan", err)
-	if !plan.Immediate("inspect_source") || plan.Addressable("command") || plan.Addressable("promote_overlay") {
+	if !plan.Immediate("command") || !plan.Immediate("summarize") || !plan.Immediate("survey_repo") ||
+		!plan.Addressable("command_output") || !plan.Addressable("command_stop") ||
+		plan.Addressable("verify") || plan.Addressable("code_rewrite") || plan.Addressable("promote_overlay") {
 		t.Fatalf("Ask tool plan = %v", plan.AddressableNames())
 	}
 }

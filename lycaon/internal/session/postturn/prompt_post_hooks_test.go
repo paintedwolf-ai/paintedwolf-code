@@ -100,7 +100,7 @@ func TestProgressMissingSkipsAskModeAndUnofferedTools(t *testing.T) {
 	agentCalls := &postTurnCalls{mode: api.SessionModeAgent}
 	agentSvc := New(agentCalls, agentCalls, agentCalls)
 	agentSvc.SetProgress(progresstest.New(t, "coordinator"))
-	ctx := toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"inspect_source", "update_progress"}))
+	ctx := toolreach.WithRequest(t.Context(), toolreach.Offered([]string{"summarize", "update_progress"}))
 	agentSvc.ProgressMissing(ctx, "coordinator", []string{"write"})
 	if agentCalls.emits != 0 {
 		t.Fatalf("unoffered tool emitted %d progress-missing nudges, want 0", agentCalls.emits)

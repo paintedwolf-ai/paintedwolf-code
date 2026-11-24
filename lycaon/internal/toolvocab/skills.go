@@ -113,6 +113,11 @@ func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []st
 		}
 		add(name)
 	}
+	if !reachable[toolcontract.ReachCommandMutation] {
+		for _, name := range toolcontract.MutatingMixedModeInvocationsIn(corpus) {
+			add(name)
+		}
+	}
 	for _, handle := range c.unmintableHandles(corpus, reachable) {
 		add(handle)
 	}

@@ -434,10 +434,10 @@
       "summary": "This exact command execution is already live ({{ paintedwolf.handles_text }})."
     },
     "COMMAND_EFFECT_NOT_ALLOWED": {
-      "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
+      "branch_instruction": "{% if paintedwolf.mode_denied %}Agent mode is now active for new calls; if the change is still needed, issue a fresh Agent-mode call under current permissions without replaying already completed statements.{% else %}{% if paintedwolf.session_mode %}Use the read-only observation or gathered evidence to answer, and explain that the user can switch to Agent mode if they want you to apply the change.{% else %}Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile{% if paintedwolf.worker_leg %} or report the required change to the coordinator{% endif %}. Do not retry through external execution or replay the whole program.{% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_effect_admission",
-      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside {% if paintedwolf.tool_profile %}profile **{{ paintedwolf.tool_profile }}**{% else %}the active permission profile{% endif %}."
+      "summary": "{% if paintedwolf.redirect %}Output redirect{% if paintedwolf.operator %} `{{ paintedwolf.operator }}`{% endif %}{% else %}{% if paintedwolf.command %}`{{ paintedwolf.command }}`{% if paintedwolf.mode %} (`{{ paintedwolf.mode }}`){% endif %}{% else %}This operation{% endif %}{% endif %}{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% if paintedwolf.mode_denied %} was refused under launch-time Ask authority{% else %}{% if paintedwolf.session_mode %} is unavailable in Ask mode{% else %} is outside {% if paintedwolf.tool_profile %}profile **{{ paintedwolf.tool_profile }}**{% else %}the active permission profile{% endif %}{% endif %}{% endif %}."
     },
     "COMMAND_EXEC_DENIED": {
       "category": "recoverable",
@@ -2758,12 +2758,12 @@
     "SESSION_ASK_MODE_ACTIVE": {
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "This operation is unavailable in Ask mode."
+      "summary": "{% if paintedwolf.rejection_field %}`{{ paintedwolf.rejection_field }}` on {{ tool }} is{% if paintedwolf.mode_denied %} refused under launch-time Ask authority{% else %} unavailable in Ask mode{% endif %}.{% else %}{% if paintedwolf.command %}External launch `{{ paintedwolf.command }}` inside {{ tool }} is{% if paintedwolf.mode_denied %} refused under launch-time Ask authority{% else %} unavailable in Ask mode{% endif %}.{% else %}{% if paintedwolf.response_type %}Secret collection via {{ tool }} is{% if paintedwolf.mode_denied %} refused under launch-time Ask authority{% else %} unavailable in Ask mode{% endif %}.{% else %}{% if paintedwolf.missing %}Connected tool `{{ tool }}` is{% if paintedwolf.mode_denied %} refused under launch-time Ask authority{% else %} unavailable in Ask mode{% endif %}.{% else %}{% if paintedwolf.ask_worker_writes %}{{ tool }} cannot dispatch or continue a write-capable worker{% if paintedwolf.mode_denied %} under launch-time Ask authority{% else %} in Ask mode{% endif %}.{% else %}{% if paintedwolf.profile_mutation_capable %}{{ tool }} cannot dispatch or continue a write-capable worker{% if paintedwolf.mode_denied %} under launch-time Ask authority{% else %} in Ask mode{% endif %}.{% else %}{% if paintedwolf.scope_mode %}{{ tool }} cannot use `{{ paintedwolf.scope_mode }}` worker scope{% if paintedwolf.mode_denied %} under launch-time Ask authority{% else %} in Ask mode{% endif %}.{% else %}`{{ tool }}` is{% if paintedwolf.mode_denied %} refused under launch-time Ask authority{% else %} unavailable in Ask mode{% endif %}.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}"
     },
     "SESSION_ASK_MODE_WORKFLOW_REQUIRES_AGENT": {
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "This workflow phase requires Agent mode."
+      "summary": "{% if paintedwolf.requested %}Workflow{% if paintedwolf.workflow_id %} `{{ paintedwolf.workflow_id }}`{% endif %} phase `{{ paintedwolf.requested }}` requires Agent mode.{% else %}Workflow{% if paintedwolf.workflow_id %} `{{ paintedwolf.workflow_id }}`{% endif %} requires Agent mode to advance via `{{ tool }}`.{% endif %}"
     },
     "SESSION_OUTPUT_UNAVAILABLE": {
       "branch_instruction": "Keep the delivered result until output storage is available",

@@ -15,24 +15,18 @@ hosts: [coordinator, worker]
 {% endif %}
 {% if profile_has_command %}
 - **Locate an unfamiliar area** → `ls` or `find . -maxdepth 2 -type d` in `command` (`.` walks every attached folder), then scope the next read.
-{% elif profile_has_inspect_source %}
-- **Locate an unfamiliar area** → `inspect_source` directory listing, then scope the next read.
 {% endif %}
 {% if profile_has_survey_repo %}
 - **Cannot name a destination** → `survey_repo`, then inspect the relevant destination.
 {% endif %}
 {% if profile_has_command %}
 - **Path in hand is JSON or YAML and you need fields** → `jq '.field' file` or `yq` in `command`; print raw lines only for a verbatim anchor.
-{% elif profile_has_inspect_source %}
-- **Path in hand is JSON or YAML and you need fields** → `inspect_source` with `query`; read raw lines only for a verbatim anchor.
 {% endif %}
 {% if profile_has_scan_drilldown %}
 {% if profile_has_scan_summary and profile_has_scan_query %}- **Board shows `Scan: complete`** and the question is those findings → **`scan_summary`** then **`scan_query`**.{% if profile_has_scan_list %} Do not start a threat-model from `scan_list`.{% endif %}
 {% endif %}{% endif %}
 {% if profile_has_command %}
 - **One named symbol or line range for an exact fact{% if profile_command_mutation != false %}, quote, or edit{% else %} or quote{% endif %}** → a bounded `grep -n`, `rg -n`, `cat -n FILE`, `nl`, or `sed -n 'A,Bp'` in `command`; `sed` prints no numbers to cite; one program can search then slice (`rg -n PAT FILE && sed -n 'A,Bp' FILE`). If existing evidence already answers the request, stop.
-{% elif profile_has_inspect_source %}
-- **One named symbol or file for an exact fact or quote** → `inspect_source` file read or pattern search. If existing evidence already answers the request, stop.
 {% endif %}
 
 Cite what a numbered read or drill tool returned; a summary or digest orients only.
