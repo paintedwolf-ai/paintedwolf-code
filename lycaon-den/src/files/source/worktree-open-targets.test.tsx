@@ -12,6 +12,9 @@ import { fileEditStepsFromPart, foldFileEdits } from "../../chat/file-edit/file-
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import { ActionLinks } from "../../components/action/ActionLinks.tsx";
 import { FileEditDiff } from "../../components/FileEditDiff.tsx";
+import { GitStrip } from "../../components/GitStrip.tsx";
+import { loaded } from "../../store/load-state.ts";
+import { gitWorkspaceStatus } from "../../test/git-status-fixture.ts";
 import {
   pinRepoWorktreeSelection,
   readCheckoutInspectionState,
@@ -587,7 +590,7 @@ describe("WT06 checkout and revision open targets", () => {
       stage: "working",
       side: "after",
       mode: "live",
-      item: { path: "src/a.ts", status: "M", root_id: ROOT_ID, root_relative_path: "src/a.ts" } as GitDiffStatItem,
+      item: { path: "src/a.ts", insertions: 1, deletions: 0, root_id: ROOT_ID, root_relative_path: "src/a.ts" },
     });
     expect(liveDiff).toMatchObject({ kind: "live", worktreeId: WORKER_WT, selectCheckout: true });
 
@@ -599,11 +602,12 @@ describe("WT06 checkout and revision open targets", () => {
       side: "after",
       item: {
         path: "src/a.ts",
-        status: "A",
+        insertions: 1,
+        deletions: 0,
         root_id: ROOT_ID,
         root_relative_path: "src/a.ts",
         after_blob_oid: "aaaa1111",
-      } as GitDiffStatItem,
+      },
     });
     expect(blobAfter).toMatchObject({ kind: "historical-diff", revision: "aaaa1111", binding: { kind: "git-blobs" } });
 
@@ -613,7 +617,7 @@ describe("WT06 checkout and revision open targets", () => {
       worktreeId: WORKER_WT,
       stage: "working",
       side: "after",
-      item: { path: "src/a.ts", status: "M", root_id: ROOT_ID, root_relative_path: "src/a.ts" } as GitDiffStatItem,
+      item: { path: "src/a.ts", insertions: 1, deletions: 0, root_id: ROOT_ID, root_relative_path: "src/a.ts" },
     });
     expect(uncapturedWorking).toMatchObject({ kind: "historical-diff", binding: { kind: "unavailable" } });
 
@@ -689,5 +693,104 @@ describe("WT06 checkout and revision open targets", () => {
         locations: [singleLoc],
       }),
     ).toMatchObject({ kind: "historical-diff", revision: "ver-1", binding: { kind: "version", versionId: "ver-1" } });
+  });
+
+  it("opens staged checkout diff from GitStrip file diff button", async () => {
+    const getGitDiff = vi.fn(async () => ({
+      repo_id: REPO_ID,
+      worktree_id: WORKER_WT,
+      head_sha: "head-1",
+      mode: "staged" as const,
+      patch: "@@ -1 +1 @@\n-old\n+new\n",
+      files: [{
+        path: "src/staged.ts",
+        insertions: 1,
+        deletions: 1,
+        root_id: ROOT_ID,
+        root_relative_path: "src/staged.ts",
+        before_blob_oid: "bbbb0001",
+        after_blob_oid: "bbbb0002",
+      }],
+    }));
+    const client = stubFilesClient({
+      getGitDiff,
+      ...sourceReaderFixture({
+        id: "cmp-gitstrip",
+        op: "write",
+        before: { content: "old\n" },
+        after: { content: "new\n" },
+      }),
+    });
+    setLycaonClientForTest(client);
+    registerOpenFilesSurfaceSink((req) => {
+      applyOpenFilesSurfaceRequest(req, ROOTS);
+    });
+
+    const noop = async () => "";
+    render(() => (
+      <GitStrip
+        projectId={PROJECT_ID}
+        sessionId="sess-1"
+        rootRefs={ROOTS}
+        repos={loaded([{
+          repo_id: REPO_ID,
+          label: "repo",
+          available: true,
+          root_ids: [ROOT_ID],
+          branch: "feat/worker",
+          head_short: "1111111",
+          ahead: 0,
+          behind: 0,
+          dirty: true,
+          staged_count: 1,
+          unstaged_count: 0,
+          changed_count: 1,
+        }])}
+        activeRepoId={REPO_ID}
+        status={loaded(gitWorkspaceStatus({
+          available: true,
+          repo_id: REPO_ID,
+          worktree_id: WORKER_WT,
+          branch: "feat/worker",
+          dirty: true,
+          staged_count: 1,
+          unstaged_count: 0,
+          changed_count: 1,
+          files: [{
+            path: "src/staged.ts",
+            status: "M ",
+            root_id: ROOT_ID,
+            root_relative_path: "src/staged.ts",
+          }],
+        }))}
+        worktree={undefined}
+        onScopePin={() => {}}
+        onSelectRepo={() => {}}
+        onInit={() => {}}
+        onCommit={async () => true}
+        onStash={() => {}}
+        onDraftMessage={noop}
+        onDiscard={() => {}}
+        onPush={() => {}}
+        onPull={() => {}}
+        onCreateWorktree={async () => true}
+        onCheckout={async () => true}
+        onListBranches={async () => []}
+        onLand={async () => ({ outcome: "fast_forwarded" })}
+        onRemoveWorktree={async () => true}
+      />
+    ));
+
+    fireEvent.click(screen.getByTestId("git-count"));
+    fireEvent.click(screen.getByTestId("git-file-diff"));
+
+    await waitFor(() => {
+      expect(getGitDiff).toHaveBeenCalledWith(
+        PROJECT_ID,
+        REPO_ID,
+        expect.objectContaining({ worktree_id: WORKER_WT, mode: "staged", path: "src/staged.ts" }),
+      );
+      expect(Object.keys(projectFilesState(PROJECT_ID).byKey).length).toBeGreaterThan(0);
+    });
   });
 });

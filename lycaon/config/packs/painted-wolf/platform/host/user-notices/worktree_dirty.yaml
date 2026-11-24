@@ -1,5 +1,14 @@
 surfaces: [http]
 notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - blocker
+    - changed_count
+    - document_id
+    - path
+    - repo_id
+    - root_id
+    - worktree_id
 title: Worktree has changes
 message: The worktree has uncommitted changes. Commit or discard them first.
 suggested_action: Commit or discard the worktree changes, then try again.

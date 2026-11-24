@@ -2,7 +2,7 @@ import { LycaonApiError } from "../../api/http.ts";
 import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
 import { workspaceMismatchId } from "./source-workspace-identity.ts";
 
-export const WORKSPACE_SYNC_RETRYING = "Editor sync is unavailable — retrying…";
+const WORKSPACE_SYNC_RETRYING = "Editor sync is unavailable — retrying…";
 
 export const WORKSPACE_FAULT_GENERIC = "The editor workspace could not be opened.";
 

@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 )
 
 type repoKey struct {
@@ -106,7 +110,44 @@ func (inv *Inventory) ScheduleRefresh(_ context.Context, spec RepoSpec) {
 	}
 	slot.mu.Unlock()
 	if startWorker {
-		go inv.runRefreshLoop(context.Background(), key, slot)
+		go inv.runRefreshLoop(inv.baseCtx, key, slot)
+	}
+}
+
+// ScheduleRepoRefreshForProject schedules background checkout reconciliation for projectID's repositories.
+func (inv *Inventory) ScheduleRepoRefreshForProject(ctx context.Context, projectID string) {
+	if inv == nil {
+		return
+	}
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return
+	}
+	roots, err := db.New(inv.database).ListProjectRoots(ctx, projectID)
+	if err != nil {
+		return
+	}
+	seen := make(map[string]struct{}, len(roots))
+	for _, root := range roots {
+		repo, ok := gitrepo.Discover(root.Path)
+		if !ok || repo.Root == "" {
+			continue
+		}
+		top := canonicalPath(repo.Root)
+		if top == "" {
+			continue
+		}
+		if _, dup := seen[top]; dup {
+			continue
+		}
+		seen[top] = struct{}{}
+		if repoID := git.DeriveRepoID(top); repoID != "" {
+			inv.ScheduleRefresh(ctx, RepoSpec{
+				ProjectID: projectID,
+				RepoID:    repoID,
+				Toplevel:  top,
+			})
+		}
 	}
 }
 
@@ -158,7 +199,7 @@ func (inv *Inventory) awaitGenerationLocked(ctx context.Context, key repoKey, sl
 
 	if startWorker {
 		// Host inventory reconciliation must not inherit caller launch leases.
-		go inv.runRefreshLoop(context.Background(), key, slot)
+		go inv.runRefreshLoop(inv.baseCtx, key, slot)
 	}
 
 	select {

@@ -338,7 +338,7 @@ func recordCommittedOutsideMutation(ctx context.Context, tc tools.ToolContext, m
 		return false
 	}
 	if tc.Source.CheckoutUsage != nil {
-		if resolved, ok := tc.Source.CheckoutUsage.ResolvePathCheckout(ctx, tc.Identity.ProjectID, mutation.AbsPath); ok && resolved.RootID != "" && resolved.RootRel != "" && resolved.RootRel != "." {
+		if resolved, ok := tc.Source.CheckoutUsage.ResolvePathCheckout(tc.Identity.ProjectID, mutation.AbsPath); ok && resolved.RootID != "" && resolved.RootRel != "" && resolved.RootRel != "." {
 			return false
 		}
 	}

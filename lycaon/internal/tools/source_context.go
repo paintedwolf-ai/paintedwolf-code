@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"context"
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/sourceref"
@@ -20,7 +19,7 @@ func (c ToolContext) enrichCheckoutTarget(target *api.NavigationTarget, absPath 
 	if c.Source.CheckoutUsage == nil || c.Source.WorkerBranchRoot != "" || absPath == "" {
 		return
 	}
-	resolved, ok := c.Source.CheckoutUsage.ResolvePathCheckout(context.Background(), c.Identity.ProjectID, absPath)
+	resolved, ok := c.Source.CheckoutUsage.ResolvePathCheckout(c.Identity.ProjectID, absPath)
 	if !ok {
 		return
 	}
@@ -65,7 +64,7 @@ func (c ToolContext) RecordSourcePath(value string, kind api.NavigationEntryKind
 		return
 	}
 	if c.Source.WorkerBranchRoot == "" && c.Source.CheckoutUsage != nil && filepath.IsAbs(value) {
-		if resolved, ok := c.Source.CheckoutUsage.ResolvePathCheckout(context.Background(), c.Identity.ProjectID, value); ok && resolved.RootID != "" && resolved.RootRel != "" && resolved.RootRel != "." {
+		if resolved, ok := c.Source.CheckoutUsage.ResolvePathCheckout(c.Identity.ProjectID, value); ok && resolved.RootID != "" && resolved.RootRel != "" && resolved.RootRel != "." {
 			c.RecordSourceLocation(api.NavigationTarget{
 				ProjectID:  c.Identity.ProjectID,
 				RepoID:     resolved.RepoID,

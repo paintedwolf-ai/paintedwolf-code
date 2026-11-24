@@ -2,9 +2,9 @@ import { createSignal } from "solid-js";
 import { produce } from "solid-js/store";
 import type { GitWorktreeEntry, SourceWorkspace, SourceWorkspaceRoot } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
-import { ensureProject, projectFilesState, setFilesStore, type FileBuffer } from "../documents/files-buffer-state.ts";
+import { ensureProject, setFilesStore, type FileBuffer } from "../documents/files-buffer-state.ts";
 
-export type WorkspaceRootCheckoutMeta = {
+type WorkspaceRootCheckoutMeta = {
   rootId: string;
   path: string;
   branchId: string;
@@ -12,7 +12,7 @@ export type WorkspaceRootCheckoutMeta = {
   worktreeId?: string;
 };
 
-export type KnownCheckoutEntrySummary = {
+type KnownCheckoutEntrySummary = {
   repoId: string;
   worktreeId: string;
   path: string;
@@ -81,7 +81,7 @@ export function activeProjectWorktreeIds(projectId: string): readonly string[] |
 }
 
 /** Records the checkout identity that resolved each root in the current workspace. */
-export function recordWorkspaceRootCheckouts(
+function recordWorkspaceRootCheckouts(
   projectId: string,
   roots: readonly SourceWorkspaceRoot[],
 ): Record<string, WorkspaceRootCheckoutMeta> {
@@ -138,11 +138,6 @@ export function knownCheckoutSummary(projectId: string, worktreeId: string | und
   const wid = worktreeId?.trim() ?? "";
   if (!pid || !wid) return undefined;
   return knownCheckoutsByProject.get(pid)?.get(wid);
-}
-
-export function knownProjectCheckouts(projectId: string): KnownCheckoutEntrySummary[] {
-  const byId = knownCheckoutsByProject.get(projectId.trim());
-  return byId ? [...byId.values()] : [];
 }
 
 /** Resolves the durable host branch_id for a checkout UUID, preserving "" for the trunk checkout. */
@@ -253,9 +248,4 @@ export function bufferCheckoutQualifier(buffer: Partial<Pick<FileBuffer, "branch
     return base ? `${base} (unavailable)` : "Unavailable checkout";
   }
   return base;
-}
-
-/** Returns current rootBranches for projectId. */
-export function currentRootBranch(projectId: string, rootId: string): string | undefined {
-  return projectFilesState(projectId).rootBranches[rootId];
 }

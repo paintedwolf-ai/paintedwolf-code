@@ -213,8 +213,26 @@ func TestWorktreeLifecycleRemovalBlockersTargetedStaleCleanupAndExternalRecovery
 		t.Fatalf("unrelated stale sibling registration was pruned by single-worktree removal: %v", err)
 	}
 
-	// Also test stale managed cleanup when the managed worktree directory was deleted externally:
-	// only the managed registration is removed, while staleAdminDir STILL survives!
+	verifyMissingManagedCleanupAndExternalDraftRecovery(
+		t, srv, docs, proj, rootID, repoID, primaryDir, staleAdminDir, externalRemovedDir, externalRecoveryID,
+	)
+}
+
+func verifyMissingManagedCleanupAndExternalDraftRecovery(
+	t *testing.T,
+	srv *hostapi.Server,
+	docs *editordoc.Service,
+	proj *project.Project,
+	rootID string,
+	repoID string,
+	primaryDir string,
+	staleAdminDir string,
+	externalRemovedDir string,
+	externalRecoveryID string,
+) {
+	t.Helper()
+
+	// Stale managed cleanup removes only the managed registration while unrelated staleAdminDir survives.
 	sess2 := contractfixture.CreateSessionForProject(t, srv, proj.ID)
 	bw2, bindView2 := contractfixture.BindWorktree(t, srv, sess2.ID, repoID, "session/managed-missing")
 	if bw2.Code != http.StatusOK || !bindView2.Bound {
@@ -232,7 +250,7 @@ func TestWorktreeLifecycleRemovalBlockersTargetedStaleCleanupAndExternalRecovery
 		t.Fatalf("unrelated stale sibling registration was pruned during missing-managed cleanup: %v", err)
 	}
 
-	// Verify native/external removal leaves editor draft recovery usable via OpenByID!
+	// Native removal leaves editor draft recovery usable via OpenByID.
 	extProjected, _, _, _, okExt := srv.Admin.Git.ResolveCheckoutProject(t.Context(), proj, externalRecoveryID)
 	if !okExt {
 		t.Fatal("resolve external checkout project")
@@ -250,7 +268,6 @@ func TestWorktreeLifecycleRemovalBlockersTargetedStaleCleanupAndExternalRecovery
 	})
 	testutil.FailErr(t, "edit external doc", err)
 
-	// Externally remove externalRemovedDir via native git worktree remove --force.
 	contractfixture.RunGitIn(t, primaryDir, "worktree", "remove", "--force", externalRemovedDir)
 
 	recovered, err := docs.OpenByID(t.Context(), proj.ID, extDoc.ID, "", "window-ext-reopen", nil)

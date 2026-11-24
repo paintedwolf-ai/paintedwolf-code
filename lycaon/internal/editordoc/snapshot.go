@@ -47,7 +47,7 @@ func (c savePublisher) pinCurrent(ctx context.Context, d *Document, pin *savePin
 	d.CRDTUpdate, d.StateVector, d.Epoch = snapshot.Checkpoint, snapshot.Vector, entry.head.Epoch
 	d.PublishedRevision = entry.head.PublishedRevision
 	s.projectWorkspacePresentation(ctx, d)
-	return s.withParticipants(d), nil
+	return s.withParticipants(ctx, d), nil
 }
 
 func (c savePublisher) pinnedDocument(ctx context.Context, current *Document, revision int64) (*Document, error) {
@@ -105,7 +105,7 @@ func (c *SnapshotService) PinSave(ctx context.Context, projectID, id, clientID, 
 			return nil, err
 		}
 		d.SaveRevision = existing.DraftRevision
-		return s.withParticipants(d), nil
+		return s.withParticipants(ctx, d), nil
 	}
 	if !errors.Is(err, ErrNotFound) {
 		return nil, err
