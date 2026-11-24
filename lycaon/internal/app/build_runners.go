@@ -68,14 +68,15 @@ func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 	if b.sessions != nil && b.sessions.Manager != nil && b.sessions.Manager.Coordinator.Runtime != nil {
 		if ws := b.sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Waits.Subscriptions.WatchStore(); ws != nil {
 			byName["watch-scheduler"] = registration{run: func(ctx context.Context) error {
-				ticker := time.NewTicker(time.Second)
-				defer ticker.Stop()
+				timer := time.NewTimer(ws.NextDueWait(time.Second))
+				defer timer.Stop()
 				for {
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
-					case <-ticker.C:
+					case <-timer.C:
 						_ = ws.AdvanceDue(ctx)
+						timer.Reset(ws.NextDueWait(time.Second))
 					}
 				}
 			}}

@@ -78,7 +78,7 @@ func (s *Store) RecordMatch(ctx context.Context, watchID string, input MatchInpu
 		return RecordedMatch{}, false, err
 	}
 	if reg.Lifecycle.State == StateTerminal {
-		s.heap.Remove(KindWatchExpiry, reg.WatchID)
+		s.retireWatchRuntime(reg.WatchID)
 	}
 	for _, woke := range wokeLeases {
 		s.heap.Remove(KindWaitDeadline, woke.lease.ID)
@@ -203,7 +203,7 @@ func (s *Store) recordAlreadyAdmittedMatch(ctx context.Context, watchID string, 
 		return RecordedMatch{}, false, err
 	}
 	if reg.Lifecycle.State == StateTerminal {
-		s.heap.Remove(KindWatchExpiry, reg.WatchID)
+		s.retireWatchRuntime(reg.WatchID)
 	}
 	return recorded, true, nil
 }

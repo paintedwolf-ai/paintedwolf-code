@@ -14,12 +14,14 @@ import (
 
 // SessionOutcomeBridge wakes the session loop after a worker completes or fails.
 type SessionOutcomeBridge struct {
-	Workers WorkerTerminalEvents
-	Loop    WorkerLegWakes
-	Results WorkerResultProjection
-	State   WorkerCycleWakeState
-	Closure ProgressClosureArm
-	Inner   OutcomeProjection
+	Workers               WorkerTerminalEvents
+	Loop                  WorkerLegWakes
+	Results               WorkerResultProjection
+	State                 WorkerCycleWakeState
+	Closure               ProgressClosureArm
+	Inner                 OutcomeProjection
+	OnJobRetired          func(ctx context.Context, childSessionID, jobID string)
+	OnWorkerWatchTerminal func(ctx context.Context, parentSessionID, jobID, status, summary string) bool
 }
 
 // OnWorkerComplete projects the result before waking its parent.
@@ -56,7 +58,16 @@ func (b *SessionOutcomeBridge) OnWorkerComplete(ctx context.Context, jobID strin
 	if len(errs) > 0 || !ok || parentID == "" {
 		return errors.Join(errs...)
 	}
-	b.scheduleParentWake(ctx, task, jobID, status)
+	if status != "needs_decision" && b.OnJobRetired != nil {
+		b.OnJobRetired(ctx, task.ChildSessionID, jobID)
+	}
+	watchClaimed := false
+	if b.OnWorkerWatchTerminal != nil {
+		watchClaimed = b.OnWorkerWatchTerminal(ctx, parentID, jobID, status, result.Summary)
+	}
+	if !watchClaimed || strings.TrimSpace(task.LegID) != "" || strings.TrimSpace(task.DelegationID) != "" {
+		b.scheduleParentWake(ctx, task, jobID, status)
+	}
 	return errors.Join(errs...)
 }
 
@@ -91,9 +102,22 @@ func (b *SessionOutcomeBridge) OnWorkerFailed(ctx context.Context, jobID string,
 	if len(errs) > 0 {
 		return errors.Join(errs...)
 	}
+	if b.OnJobRetired != nil {
+		b.OnJobRetired(ctx, task.ChildSessionID, jobID)
+	}
 	// Explicit cancellation does not wake the coordinator.
 	if !errors.Is(err, context.Canceled) {
-		b.scheduleParentWake(ctx, task, jobID, "failed")
+		summary := ""
+		if err != nil {
+			summary = err.Error()
+		}
+		watchClaimed := false
+		if b.OnWorkerWatchTerminal != nil {
+			watchClaimed = b.OnWorkerWatchTerminal(ctx, parentID, jobID, "failed", summary)
+		}
+		if !watchClaimed || strings.TrimSpace(task.LegID) != "" || strings.TrimSpace(task.DelegationID) != "" {
+			b.scheduleParentWake(ctx, task, jobID, "failed")
+		}
 	}
 	return errors.Join(errs...)
 }

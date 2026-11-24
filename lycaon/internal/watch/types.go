@@ -97,9 +97,12 @@ func (o Owner) Destination() string {
 
 // Authority captures workspace and capability scope frozen at registration.
 type Authority struct {
-	WorkspaceID   string   `json:"workspace_id,omitempty"`
-	RootPaths     []string `json:"root_paths,omitempty"`
-	LoopbackPorts []uint16 `json:"loopback_ports,omitempty"`
+	RootSessionID   string   `json:"root_session_id,omitempty"`
+	ProjectDir      string   `json:"project_dir,omitempty"`
+	WorkspaceID     string   `json:"workspace_id,omitempty"`
+	RootPaths       []string `json:"root_paths,omitempty"`
+	LoopbackGranted bool     `json:"loopback_granted,omitempty"`
+	LoopbackPorts   []uint16 `json:"loopback_ports,omitempty"`
 }
 
 // StandingDraft captures an agent-proposed standing watch attached to a session watch.

@@ -18,6 +18,6 @@
 | Host — dispatch/park | Tool call (`Code: COORDINATOR_HOST_TURN_REQUIRES_WAIT`) |
 | After `answer_decision`, when no other work is ready | **`wait(resume=true)`** — resume the interrupted wait |
 
-After dispatch, inspect receipts, repair rejected calls, and start remaining ready work within capacity. Resolve worker decisions and integrate available results. Use `wait` when the next useful action depends on a worker result.
+After dispatch, inspect receipts, repair rejected calls, and start remaining ready work within capacity. Resolve worker decisions and integrate available results. Use `wait` when the next useful action depends on a worker result.{% if profile_has_watch %} When independent coordination continues, use `watch` (`worker_decision_needed`, `worker_failed`, `next_worker_done`, `all_workers_idle`, `overlay_promote_pending`, `scan_done`, or `timer`) to collect observations quietly and pass its returned `watch_match` condition to `wait` once blocked.{% endif %}
 
 Prefer **`wait(resume=true)`** when the only expected wake is the worker you just answered — a new lease is for a new wait, not a decision resume.

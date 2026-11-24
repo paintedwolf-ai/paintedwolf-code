@@ -17,10 +17,12 @@ type ScanEvidenceRuns interface {
 	ActiveRunOwnsScanEvidence(context.Context, string) bool
 }
 type Scans struct {
-	Sessions ScanSessions
-	Runtime  *coordinator.Runtime
-	Wait     ScanWaitState
-	Evidence ScanEvidenceRuns
+	Sessions             ScanSessions
+	Runtime              *coordinator.Runtime
+	Wait                 ScanWaitState
+	Evidence             ScanEvidenceRuns
+	WatchSessions        func(ctx context.Context) ([]string, error)
+	OnWatchScanFinished  func(ctx context.Context, sessionID string, scan api.CodeScan) bool
 }
 
 const scanDeltaNoteLimit = 8
@@ -37,16 +39,28 @@ func (m *Scans) Finished(ctx context.Context, scan api.CodeScan) {
 		return
 	}
 	loop := m.Runtime.CoordinatorLoop()
+	wokeWait := map[string]bool{}
 	for _, sessionID := range loop.Waits.SessionsSleepingOn(loopwake.WaitTriggerScanDone) {
 		if !m.Wait.Requested(ctx, sessionID, scan.ID) {
 			continue
 		}
+		wokeWait[sessionID] = true
 		loop.Nudges.NudgeScanFinished(ctx, sessionID, scan.ID, anchor.Envelope{
 			ScanID:            scan.ID,
 			ScanStatus:        string(scan.Status),
 			ScanCategories:    scanCategoriesLabel(scan.Categories),
 			ScanFindingsCount: scan.FindingsCount,
 		})
+	}
+	if m.WatchSessions != nil && m.OnWatchScanFinished != nil {
+		if ids, err := m.WatchSessions(ctx); err == nil {
+			for _, sessionID := range ids {
+				if wokeWait[sessionID] || !m.Wait.Requested(ctx, sessionID, scan.ID) {
+					continue
+				}
+				m.OnWatchScanFinished(ctx, sessionID, scan)
+			}
+		}
 	}
 }
 func scanCategoriesLabel(categories []api.ScanCategory) string {

@@ -108,7 +108,7 @@ func (s *Store) ReconcileStoppedSessions(ctx context.Context, sessionIDs ...stri
 		return StopSummary{}, err
 	}
 	for _, wID := range expiredIDs {
-		s.heap.Remove(KindWatchExpiry, wID)
+		s.retireWatchRuntime(wID)
 	}
 	for _, lID := range leaseIDs {
 		s.heap.Remove(KindWaitDeadline, lID)

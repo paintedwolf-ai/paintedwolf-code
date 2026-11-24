@@ -15,6 +15,8 @@ import (
 // SQL persists decisions in the main database.
 type SQL struct {
 	queries *db.Queries
+	onPut   func(ctx context.Context, decision api.WorkerDecisionRequest)
+	onClear func(ctx context.Context, childSessionID string)
 }
 
 // NewSQL returns a durable decision store.
@@ -23,6 +25,15 @@ func NewSQL(database db.Handle) *SQL {
 		return &SQL{}
 	}
 	return &SQL{queries: db.New(database)}
+}
+
+// SetWatchHooks attaches post-commit observers for decision creation and clearance.
+func (s *SQL) SetWatchHooks(onPut func(ctx context.Context, decision api.WorkerDecisionRequest), onClear func(ctx context.Context, childSessionID string)) {
+	if s == nil {
+		return
+	}
+	s.onPut = onPut
+	s.onClear = onClear
 }
 
 func (s *SQL) Put(ctx context.Context, decision api.WorkerDecisionRequest) error {
@@ -37,10 +48,16 @@ func (s *SQL) Put(ctx context.Context, decision api.WorkerDecisionRequest) error
 	if err != nil {
 		return fmt.Errorf("encode decision: %w", err)
 	}
-	return s.queries.UpsertWorkerDecision(ctx, db.UpsertWorkerDecisionParams{
+	if err := s.queries.UpsertWorkerDecision(ctx, db.UpsertWorkerDecisionParams{
 		ChildSessionID: decision.ChildSessionID, JobID: decision.WorkerID,
 		DecisionJson: string(raw), CreatedAt: timelayout.Format(time.Now().UTC()),
-	})
+	}); err != nil {
+		return err
+	}
+	if s.onPut != nil {
+		s.onPut(ctx, decision)
+	}
+	return nil
 }
 
 func (s *SQL) Get(ctx context.Context, childSessionID string) (api.WorkerDecisionRequest, bool, error) {
@@ -75,7 +92,13 @@ func (s *SQL) Clear(ctx context.Context, childSessionID string) error {
 	if s == nil || s.queries == nil {
 		return fmt.Errorf("decision store not configured")
 	}
-	return s.queries.DeleteWorkerDecision(ctx, strings.TrimSpace(childSessionID))
+	if err := s.queries.DeleteWorkerDecision(ctx, strings.TrimSpace(childSessionID)); err != nil {
+		return err
+	}
+	if s.onClear != nil {
+		s.onClear(ctx, strings.TrimSpace(childSessionID))
+	}
+	return nil
 }
 
 func decodeStoredDecision(childSessionID, jobID, raw string) (api.WorkerDecisionRequest, bool, error) {

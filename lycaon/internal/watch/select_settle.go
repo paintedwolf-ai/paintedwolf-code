@@ -89,7 +89,15 @@ func (s *Store) SelectOrPark(ctx context.Context, req SelectRequest) (SelectResu
 		}
 		for _, reg := range regs {
 			if reg.Lifecycle.State == StateTerminal {
-				s.heap.Remove(KindWatchExpiry, reg.WatchID)
+				s.retireWatchRuntime(reg.WatchID)
+			}
+			if allowed, reason := s.checkWatchAuthority(ctx, reg); !allowed {
+				for idx := range immediate.Matches {
+					if immediate.Matches[idx].WatchID == reg.WatchID {
+						immediate.Matches[idx] = redactRecordedMatch(immediate.Matches[idx], reg.WatchID, reason)
+					}
+				}
+				immediate.Winner = buildWatchWinner(immediate.Matches, immediate.Terminal, immediate.ActiveHandles, immediate.DeliveryID, immediate.OverflowNotice)
 			}
 		}
 		return immediate, nil

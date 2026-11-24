@@ -30,6 +30,21 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	if err != nil {
 		return RegisterReceipt{}, err
 	}
+	if !normalized.Repeat && len(initialMatches) > 0 {
+		// One-shot already satisfied by initial process state.
+	} else {
+		coordMatches, coordCursors, cErr := collectInitialCoordinatorMatches(ctx, s, normalized)
+		if cErr != nil {
+			return RegisterReceipt{}, cErr
+		}
+		for k, v := range coordCursors {
+			normalized.Cursors[k] = v
+		}
+		initialMatches = append(initialMatches, coordMatches...)
+		if !normalized.Repeat && len(initialMatches) > 1 {
+			initialMatches = initialMatches[:1]
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RegisterReceipt{}, err
@@ -51,6 +66,8 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	}
 	if !replayed && reg.Lifecycle.State == StateLive {
 		s.heap.Upsert(KindWatchExpiry, reg.WatchID, reg.Lifecycle.ExpiresAt)
+		s.scheduleWatchTimer(reg)
+		s.subscribeWatchSampler(reg, now)
 	}
 	if !replayed && len(initialMatches) > 0 {
 		receipt = s.reconcileInitialProcessClaims(ctx, reg, receipt, initialMatches)
@@ -146,6 +163,9 @@ func normalizeRegisterRequest(req RegisterRequest, now time.Time) (RegisterReque
 	}
 	if req.Cursors == nil {
 		req.Cursors = map[string]string{}
+	}
+	if hasTimer && req.Cursors[timerAnchorCursorKey] == "" {
+		req.Cursors[timerAnchorCursorKey] = now.UTC().Format(time.RFC3339Nano)
 	}
 	if req.Standing != nil {
 		if raw, err := json.Marshal(req.Standing); err == nil {

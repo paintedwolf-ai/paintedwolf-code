@@ -37,10 +37,11 @@ type Condition struct {
 	Glob       string        `json:"glob,omitempty"`
 	IncludeOwn bool          `json:"include_own,omitempty"`
 	Ref        string        `json:"ref,omitempty"`
-	DelayMS    int64         `json:"delay_ms,omitempty"`
-	At         string        `json:"at,omitempty"`
-	TimeZone   string        `json:"time_zone,omitempty"`
-	Calendar   *CalendarSpec `json:"calendar,omitempty"`
+	DelayMS      int64         `json:"delay_ms,omitempty"`
+	EveryMinutes int64         `json:"every_minutes,omitempty"`
+	At           string        `json:"at,omitempty"`
+	TimeZone     string        `json:"time_zone,omitempty"`
+	Calendar     *CalendarSpec `json:"calendar,omitempty"`
 	// ProgramID names the command program a parked call waits on.
 	ProgramID string `json:"program_id,omitempty"`
 	// Report is the host's account of a settled wake: how a job or a parked

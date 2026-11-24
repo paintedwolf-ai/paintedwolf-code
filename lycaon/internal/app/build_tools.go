@@ -118,6 +118,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 		if b.execution.Host != nil && b.execution.Host.Commands != nil {
 			b.execution.Host.Commands.SetDerivedWatches(derivedCommandWatchAdapter{store: watchStore})
 		}
+		b.wireWatchProducers(watchStore)
 	}
 	workerKnownFn := waitWorkerKnown(b.boards.WorkerRecords, b.workerRuntime.Queue)
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
@@ -133,6 +134,13 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 		SecretMatcher:     b.security.Matcher,
 		WorkerKnown: func(sessionID, handle string) bool {
 			return workerKnownFn == nil || workerKnownFn(b.startup.ctx, sessionID, handle)
+		},
+		ProcessKnown: func(sessionID, handle string) bool {
+			if b.sessions == nil || b.sessions.Manager == nil || b.sessions.Manager.Processes == nil || b.sessions.Manager.Processes.Background == nil {
+				return true
+			}
+			known, _ := b.sessions.Manager.Processes.Background.State(sessionID, handle)
+			return known
 		},
 		ProjectChat: func(ctx context.Context, projectID string) bool {
 			if b.storage.Projects == nil || projectID == "" {

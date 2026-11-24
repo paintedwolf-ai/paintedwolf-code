@@ -43,7 +43,8 @@ type CancelService struct {
 	Reports       ChangeReportDeps
 	Reject        *guidance.StaticRejectFormatter
 	// Results names the worker and result a refused job belongs to.
-	Names JobNamer
+	Names        JobNamer
+	OnJobRetired func(ctx context.Context, childSessionID, jobID string)
 }
 
 // CancelJob is a person's stop from the worker pane: it fences at once with
@@ -224,6 +225,9 @@ func (s *CancelService) cancelImmediate(ctx context.Context, task *api.WorkerTas
 	report := *result.ChangeReport
 	if err := s.Queue.FinishCanceled(settleCtx, jobID, &result); err != nil {
 		return api.WorkerCancelResult{}, err
+	}
+	if s.OnJobRetired != nil {
+		s.OnJobRetired(settleCtx, task.ChildSessionID, jobID)
 	}
 	if s.Cancellations != nil && sessionID != "" {
 		if err := s.Cancellations.Append(settleCtx, sessionID, workeroutcomes.CancellationInput{
