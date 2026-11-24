@@ -44,7 +44,7 @@ func (l *modelTurn) appendCompletionCue(
 	sessionID, profileID string,
 	history, messages []api.Message,
 	callable []tools.ToolMeta,
-	toolUse modelcall.ToolUseMode,
+	toolUse modelcall.ToolUse,
 	st *promptLoopTurnState,
 ) []api.Message {
 	if l == nil || l.Context == nil || l.Context.Deps.CompletionCues == nil {
