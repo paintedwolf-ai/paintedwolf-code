@@ -303,7 +303,7 @@ describe("tool body find + collapsed reveal", () => {
       rows: 10,
     };
     const argRef = {
-      field: "tool_result_args" as const,
+      field: "tool_args" as const,
       tool_call_id: "direct-call",
       sha256: "blob-arg",
       size_bytes: 256,
@@ -311,11 +311,11 @@ describe("tool body find + collapsed reveal", () => {
       rows: 4,
     };
     const client = stubClient({
-      searchChatContent: vi.fn(async (_sid, req) => {
-        if (req.query === "DIRECT_OUT_NEEDLE" && req.field === "tool_output") {
+      searchChatContent: vi.fn(async (_sid: string, _mid: string, ref: { field?: string }, query: string) => {
+        if (query === "DIRECT_OUT_NEEDLE" && ref.field === "tool_output") {
           return { matches: [{ offset: 17, length: 6, preview: "DIRECT_OUT_NEEDLE" }] };
         }
-        if (req.query === "DIRECT_ARG_NEEDLE" && req.field === "tool_result_args") {
+        if (query === "DIRECT_ARG_NEEDLE" && ref.field === "tool_args") {
           return { matches: [{ offset: 9, length: 6, preview: "DIRECT_ARG_NEEDLE" }] };
         }
         return { matches: [] };
@@ -411,11 +411,14 @@ describe("tool body find + collapsed reveal", () => {
     };
     const fact = {
       id: "act-1",
-      label: "test",
+      label: "Run tests",
       subject: "go test ./...",
-      role: "automated_test" as const,
-      status: "completed" as const,
+      group: "Running commands",
+      phase: "execute" as const,
+      outcome: "Completed",
+      state: "completed" as const,
       execution_ids: [],
+      spans: [],
     };
     const cmdPart: ToolPartView = {
       ...subCall,
