@@ -193,7 +193,7 @@ func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin s
 			timeout = time.Until(*batchDeadline)
 			if timeout <= 0 {
 				return nil, &exec.TimeoutError{
-					Elapsed: limit, Deadline: limit, Cause: context.DeadlineExceeded, CommandDeadline: true,
+					Elapsed: limit - timeout, Deadline: *batchDeadline, Cause: context.DeadlineExceeded, CommandDeadline: true,
 				}
 			}
 		}
