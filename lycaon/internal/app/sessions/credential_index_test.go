@@ -88,7 +88,7 @@ func TestCredentialIndexRetainsRemovedBindings(t *testing.T) {
 	testutil.FailErr(t, "write first binding", os.WriteFile(path, []byte("DB_PASSWORD=first-value-4411"), 0600))
 	testutil.FailErr(t, "admit root", awaitCredentials(t.Context(), files))
 	testutil.FailErr(t, "rotate file binding", os.WriteFile(path, []byte("DB_PASSWORD=second-value-5533"), 0600))
-	files.index.changed(repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{".env"}})
+	files.index.changed(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{".env"}})
 	testutil.FailErr(t, "observe changed credential", awaitCredentials(t.Context(), files))
 	values := files.harvest.FileValues("proj-1")
 	retired, active := false, false
@@ -100,7 +100,7 @@ func TestCredentialIndexRetainsRemovedBindings(t *testing.T) {
 		t.Fatalf("rotation evidence = %+v", values)
 	}
 	testutil.FailErr(t, "delete credential fixture", os.Remove(path))
-	files.index.changed(repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{".env"}})
+	files.index.changed(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{".env"}})
 	testutil.FailErr(t, "observe deletion", awaitCredentials(t.Context(), files))
 	for _, value := range files.harvest.FileValues("proj-1") {
 		if !value.Retired {
@@ -117,7 +117,7 @@ func TestCredentialIndexWaitsForAnAppliedChange(t *testing.T) {
 	testutil.FailErr(t, "hold root access", err)
 	defer release()
 	testutil.FailErr(t, "write credential", os.WriteFile(filepath.Join(root, ".env"), []byte("DB_PASSWORD=held-value-7788"), 0600))
-	files.index.changed(repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{".env"}})
+	files.index.changed(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{".env"}})
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 	// The runner holds the change off the queue while it waits for access.
@@ -183,7 +183,7 @@ func TestCredentialIndexPartialEventCannotRepairFailedCapture(t *testing.T) {
 		t.Fatal("capture succeeded")
 	}
 	testutil.FailErr(t, "write another credential", os.WriteFile(filepath.Join(root, ".env.local"), []byte("TOKEN=another-value-4411"), 0600))
-	files.index.changed(repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{".env.local"}})
+	files.index.changed(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{".env.local"}})
 	if err := awaitCredentials(t.Context(), files); err == nil {
 		t.Fatal("failed root became ready")
 	}
@@ -196,7 +196,7 @@ func TestCredentialIndexReconcilesMissedGenerations(t *testing.T) {
 	testutil.FailErr(t, "write missed credential", os.WriteFile(filepath.Join(root, ".env"), []byte("TOKEN=missed-value-4411"), 0600))
 	repochange.Advance(root)
 	epoch := repochange.Advance(root)
-	files.index.changed(repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{"unrelated.txt"}, EpochBootID: epoch.BootID, WorktreeEpoch: epoch.Value})
+	files.index.changed(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{"unrelated.txt"}, EpochBootID: epoch.BootID, WorktreeEpoch: epoch.Value})
 	testutil.FailErr(t, "process later event", awaitCredentials(t.Context(), files))
 	values := files.harvest.FileValues("proj-1")
 	if len(values) != 1 || values[0].Secret() != "missed-value-4411" {
@@ -249,7 +249,7 @@ func TestCredentialIndexEpochOnlyEventsSkipWalks(t *testing.T) {
 	}
 	notify := func(kind repochange.Kind) {
 		epoch := repochange.Advance(root)
-		files.index.changed(repochange.Event{ProjectDir: root, Kind: kind, EpochBootID: epoch.BootID, WorktreeEpoch: epoch.Value})
+		files.index.changed(t.Context(), repochange.Event{ProjectDir: root, Kind: kind, EpochBootID: epoch.BootID, WorktreeEpoch: epoch.Value})
 		testutil.FailErr(t, "settle event", awaitCredentials(t.Context(), files))
 	}
 	notify(repochange.IndexChanged)

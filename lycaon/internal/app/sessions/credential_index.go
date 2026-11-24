@@ -99,7 +99,7 @@ func (c *credentialFiles) startCredentialIndex() {
 		return
 	}
 	i := c.index
-	i.stop = repochange.RegisterObserver(func(_ context.Context, event repochange.Event) { i.changed(event) })
+	i.stop = repochange.RegisterObserver(func(ctx context.Context, event repochange.Event) { i.changed(ctx, event) })
 }
 
 func (c *credentialFiles) closeCredentialIndex(ctx context.Context) error {
@@ -188,7 +188,7 @@ func (i *credentialIndex) admit(ctx context.Context, projectID string) ([]*crede
 		root := i.roots[key]
 		if root == nil || root.path != row.Path {
 			if root != nil {
-				i.withdraw(root)
+				i.withdraw(ctx, root)
 			}
 			root = newCredentialRoot(row)
 			i.roots[key] = root
@@ -198,11 +198,11 @@ func (i *credentialIndex) admit(ctx context.Context, projectID string) ([]*crede
 	}
 	for key, root := range i.roots {
 		if root.projectID == projectID && !attached[key] {
-			i.withdraw(root)
+			i.withdraw(ctx, root)
 		}
 	}
 	for _, root := range roots {
-		i.kick(root)
+		i.kick(ctx, root)
 	}
 	return roots, nil
 }
@@ -233,7 +233,7 @@ func (i *credentialIndex) await(ctx context.Context, root *credentialRoot, activ
 				return false, fmt.Errorf("credential-file index: %w", err)
 			}
 			kicked = true
-			i.kick(root)
+			i.kick(ctx, root)
 			i.mu.Unlock()
 			continue
 		}
@@ -262,20 +262,20 @@ func (r *credentialRoot) coverageExpired(coverage repochange.WatchCoverage, now 
 }
 
 // kick clears a failed pass and schedules a stale root. It requires i.mu.
-func (i *credentialIndex) kick(root *credentialRoot) {
+func (i *credentialIndex) kick(ctx context.Context, root *credentialRoot) {
 	if root.running || root.withdrawn || i.current(root) {
 		return
 	}
 	root.err = nil
-	i.schedule(root)
+	i.schedule(ctx, root)
 }
 
 // schedule starts the root's runner unless one is active. It requires i.mu.
-func (i *credentialIndex) schedule(root *credentialRoot) {
+func (i *credentialIndex) schedule(ctx context.Context, root *credentialRoot) {
 	if root.running || root.withdrawn {
 		return
 	}
-	ctx, finish, err := i.work.Begin(context.Background())
+	ctx, finish, err := i.work.Begin(context.WithoutCancel(ctx))
 	if err != nil {
 		root.err = err
 		i.signal(root)
@@ -396,7 +396,7 @@ func eventEpoch(event repochange.Event) repochange.Epoch {
 }
 
 // changed queues a watcher event for every admitted root it names.
-func (i *credentialIndex) changed(event repochange.Event) {
+func (i *credentialIndex) changed(ctx context.Context, event repochange.Event) {
 	dir := filepath.Clean(event.ProjectDir)
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -409,7 +409,7 @@ func (i *credentialIndex) changed(event repochange.Event) {
 			return compareUint(queued.WorktreeEpoch, value)
 		})
 		root.queue = slices.Insert(root.queue, at, event)
-		i.schedule(root)
+		i.schedule(ctx, root)
 	}
 }
 
@@ -425,9 +425,9 @@ func compareUint(a, b uint64) int {
 
 // withdraw stops a root's work and retires its bindings in the background. It
 // requires i.mu.
-func (i *credentialIndex) withdraw(root *credentialRoot) {
+func (i *credentialIndex) withdraw(ctx context.Context, root *credentialRoot) {
 	i.detach(root)
-	ctx, finish, err := i.work.Begin(context.Background())
+	ctx, finish, err := i.work.Begin(context.WithoutCancel(ctx))
 	if err != nil {
 		return
 	}
