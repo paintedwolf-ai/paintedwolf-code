@@ -37,20 +37,14 @@ func externalProgram(binary string, args ...string) string {
 }
 
 func TestProgramGitPreservesOwnEditorAndHookFailures(t *testing.T) {
-	realHome, err := os.UserHomeDir()
-	testutil.FailErr(t, "resolve user home", err)
-	//nolint:usetesting // Keeps HOME and XDG_CONFIG_HOME outside FloorSharedTemp.
-	isolatedRoot, err := os.MkdirTemp(realHome, ".pw-noninteractive-")
-	testutil.FailErr(t, "create isolated home root", err)
-	t.Cleanup(func() { _ = os.RemoveAll(isolatedRoot) })
-	homeDir := filepath.Join(isolatedRoot, "home")
-	xdgDir := filepath.Join(isolatedRoot, "xdg")
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	f := newProgramFixture(t)
+	homeDir := filepath.Join(f.ScratchDir, "home")
+	xdgDir := filepath.Join(f.ScratchDir, "xdg")
 	testutil.FailErr(t, "create home fixture", os.MkdirAll(homeDir, 0o700))
 	testutil.FailErr(t, "create xdg fixture", os.MkdirAll(xdgDir, 0o700))
-	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", homeDir)
 	t.Setenv("XDG_CONFIG_HOME", xdgDir)
-	f := newProgramFixture(t)
 	git := requiredExternal(t, "git")
 	opts, err := lycexec.AgentLaunchOptions(lycexec.HostLaunch("noninteractive fixture"), f.Dir, nil, nil)
 	testutil.FailErr(t, "build process environment", err)

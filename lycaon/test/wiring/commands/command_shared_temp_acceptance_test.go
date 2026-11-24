@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
+	confinefixture "github.com/lycaon/lycaon/internal/testsetup/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -284,7 +285,31 @@ func TestSharedTempOneDecisionDeclaredExchangeAndDirectionalReuse(t *testing.T) 
 
 	// Verify preflight holds launch before approval: 0 side effects while pending.
 	s.config.Responses[0].ToolCalls = []llm.MockToolCall{{ID: "ex-1", Name: "command", Args: declArgs}}
-	card, done := s.promptUntilApproval(t)
+	stream, unsub, err := s.h.Events.Subscribe(t.Context(), events.Subscription{Project: s.project, Viewer: testutil.HostOwner()})
+	testutil.FailErr(t, "subscribe to exchange checkpoints", err)
+	defer unsub()
+	done := make(chan error, 1)
+	go func() { done <- s.prompt(t.Context()) }()
+	var card wire.CheckpointEvent
+	for card.ID == "" {
+		select {
+		case err := <-done:
+			msgs, _ := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
+			rawMsgs, _ := json.Marshal(msgs)
+			t.Fatalf("prompt ended before an approval was announced: err=%v transcript=%s", err, rawMsgs)
+		case env := <-stream:
+			if env.Topic != wire.EventTopicCheckpoint {
+				continue
+			}
+			raw, err := json.Marshal(env.Data)
+			testutil.FailErr(t, "encode checkpoint event", err)
+			var candidate wire.CheckpointEvent
+			testutil.FailErr(t, "decode checkpoint event", json.Unmarshal(raw, &candidate))
+			if candidate.SessionID == s.session && candidate.Status == wire.CheckpointStatusPending && candidate.Kind == wire.CheckpointKindToolApproval {
+				card = candidate
+			}
+		}
+	}
 	if _, err := os.Stat(outFile); !os.IsNotExist(err) {
 		t.Fatalf("declared exchange wrote output before approval: %v", err)
 	}
@@ -438,6 +463,7 @@ func TestSharedTempExchangeSubdirectoryUnpredictableFilenamesAndWriteOnlyIsolati
 func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) {
 	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "on")
+	confinefixture.RequireRefusalReports(t)
 	shared := makeSharedTempDir(t, "pw-st-auto-")
 	internalInput := filepath.Join(shared, "internal-input.txt")
 	bgInput := filepath.Join(shared, "bg-input.txt")
@@ -503,8 +529,7 @@ func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) 
 	s.config.Responses[0].ToolCalls = []llm.MockToolCall{{
 		ID: "auto-bg-start", Name: "command",
 		Args: map[string]any{
-			"command": "external -- /bin/sh -c 'IFS= read -r _ < bg-release.fifo; exec \"" + probeBin + "\"'",
-			"wait_ms": float64(50),
+			"command": "external -- /bin/sh -c 'IFS= read -r _ < bg-release.fifo; exec \"" + probeBin + "\"' &",
 		},
 	}}
 	testutil.FailErr(t, "start background job", s.prompt(t.Context()))
@@ -517,16 +542,20 @@ func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) 
 	}()
 	var bgCard wire.CheckpointEvent
 	for bgCard.ID == "" {
-		env := <-stream
-		if env.Topic != wire.EventTopicCheckpoint {
-			continue
-		}
-		raw, err := json.Marshal(env.Data)
-		testutil.FailErr(t, "encode bg checkpoint", err)
-		var candidate wire.CheckpointEvent
-		testutil.FailErr(t, "decode bg checkpoint", json.Unmarshal(raw, &candidate))
-		if candidate.SessionID == s.session && candidate.Status == wire.CheckpointStatusPending && candidate.Kind == wire.CheckpointKindToolApproval {
-			bgCard = candidate
+		select {
+		case <-t.Context().Done():
+			t.Fatalf("timed out waiting for background checkpoint: %v", t.Context().Err())
+		case env := <-stream:
+			if env.Topic != wire.EventTopicCheckpoint {
+				continue
+			}
+			raw, err := json.Marshal(env.Data)
+			testutil.FailErr(t, "encode bg checkpoint", err)
+			var candidate wire.CheckpointEvent
+			testutil.FailErr(t, "decode bg checkpoint", json.Unmarshal(raw, &candidate))
+			if candidate.SessionID == s.session && candidate.Status == wire.CheckpointStatusPending && candidate.Kind == wire.CheckpointKindToolApproval {
+				bgCard = candidate
+			}
 		}
 	}
 	approveCard(t, s.commandProgramSession, bgCard)
