@@ -338,7 +338,7 @@ func TestAmbientWakeRollingHourlyBudgetAndRestartedCoalescedRetry(t *testing.T) 
 
 func findWatchBlock(msgs []api.Message) string {
 	for _, m := range msgs {
-		if strings.HasPrefix(m.Content, "Watch observations (receipt ") {
+		if strings.Contains(m.Content, "Watch observations (receipt ") {
 			return m.Content
 		}
 	}
