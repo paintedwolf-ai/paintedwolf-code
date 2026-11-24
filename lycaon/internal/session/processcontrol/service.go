@@ -25,6 +25,9 @@ type ToolPolicy interface {
 type Guidance interface {
 	Emit(context.Context, string, anchor.ID, anchor.Envelope)
 }
+type SubjectDropper interface {
+	DropSubject(sessionID string, id anchor.ID, subject string) bool
+}
 type Waits interface{ SessionSleepingOnProcess(string, string) bool }
 type Nudges interface {
 	NudgeProcessRefused(context.Context, string, string, anchor.Envelope)
@@ -56,6 +59,28 @@ func (s *Service) Observe(sessionID, handle string) {
 
 func (s *Service) SetLoop(waits Waits, nudges Nudges) { s.waits, s.nudges = waits, nudges }
 func (s *Service) SetWatches(watches *watch.Store)    { s.watches = watches }
+
+func (s *Service) HasActionableWatches(ctx context.Context, sessionID string) bool {
+	if s == nil || !s.watches.Configured() {
+		return false
+	}
+	sess, err := s.store.Get(ctx, sessionID)
+	if err != nil || sess == nil {
+		ok, _ := watch.HasActionableWatches(ctx, s.watches, watch.SessionOwner(sessionID))
+		return ok
+	}
+	if sess.IsWorkerChild() {
+		var count int
+		_ = s.watches.Database().QueryRowContext(ctx, `SELECT COUNT(*) FROM watch_registrations wr
+			WHERE wr.session_id = ? AND wr.owner_kind = 'job'
+			  AND (wr.state = 'live' OR EXISTS (
+			      SELECT 1 FROM watch_matches wm WHERE wm.watch_id = wr.watch_id AND wm.reservation_state = 'pending'
+			  ))`, sessionID).Scan(&count)
+		return count > 0
+	}
+	ok, _ := watch.HasActionableWatches(ctx, s.watches, watch.SessionOwner(sessionID))
+	return ok
+}
 func (s *Service) Run(ctx context.Context, spec heldcall.Spec, fn heldcall.Func) (heldcall.Outcome, error) {
 	if s.Held == nil {
 		settled := fn(ctx)

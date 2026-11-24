@@ -153,6 +153,32 @@ func (q *sessionKickQueue) dropKickID(kickID string) {
 	q.items = kept
 }
 
+func (q *sessionKickQueue) dropKickSubject(kickID, subject string) bool {
+	if kickID == "" || subject == "" {
+		return false
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	dropped := false
+	if q.staged != nil && q.staged.kickID == kickID && q.staged.subject == subject {
+		q.staged = nil
+		dropped = true
+	}
+	if len(q.items) == 0 {
+		return dropped
+	}
+	kept := q.items[:0]
+	for _, item := range q.items {
+		if item.kickID == kickID && item.subject == subject {
+			dropped = true
+			continue
+		}
+		kept = append(kept, item)
+	}
+	q.items = kept
+	return dropped
+}
+
 func (q *sessionKickQueue) dropForBatchSeq(seq int) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -281,15 +307,18 @@ func (q *sessionKickQueue) dropStaged(item *kickQueueItem) {
 	}
 }
 
-func (q *sessionKickQueue) ack(lease uint64) {
+func (q *sessionKickQueue) ack(lease uint64) string {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.staged != nil && q.staged.lease == lease {
+		subject := q.staged.subject
 		if observation := q.staged.meta.observation; observation != nil {
 			observation.Observe()
 		}
 		q.staged = nil
+		return subject
 	}
+	return ""
 }
 
 // latest returns the kick held under latestKey, staged or queued.

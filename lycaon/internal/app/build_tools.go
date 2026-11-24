@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
@@ -49,6 +50,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	waitStore := &awaitstore.Store{DB: b.storage.Database}
 	subscriptions := b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions
 	watchStore := newCoordinatorWatchStore(b.storage.Database, b.sessions, subscriptions, b.workerRuntime)
+	wireCoordinatorWatchDelivery(watchStore, b.storage.Database, b.sessions, b.server.Coordinator.CoordinatorLoop())
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
 		Store: waitStore, Watches: watchStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
@@ -105,6 +107,45 @@ func newCoordinatorWatchStore(
 		}
 	})
 	return watchStore
+}
+
+func wireCoordinatorWatchDelivery(
+	watchStore *watch.Store,
+	database *db.Store,
+	sessRuntime *sessions.Runtime,
+	coordLoop *loopwake.LoopEngine,
+) {
+	if watchStore == nil || database == nil || sessRuntime == nil || sessRuntime.Manager == nil {
+		return
+	}
+	mgr := sessRuntime.Manager
+	mgr.SetWatchDelivery(&watch.Delivery{
+		Store: watchStore,
+		WorkerJobID: func(ctx context.Context, childSessionID string) string {
+			var jobID string
+			_ = database.QueryRowContext(ctx,
+				`SELECT id FROM worker_jobs WHERE child_session_id = ? ORDER BY created_at DESC LIMIT 1`,
+				childSessionID).Scan(&jobID)
+			return jobID
+		},
+	})
+	if coordLoop != nil {
+		watchStore.SetAmbientWakeGate(watch.AmbientWakeGate{
+			SessionEligible: mgr.Submissions.AmbientWakeEligible,
+			WorkflowAdmit:   coordLoop.Admission.AdmitAmbientWatchWake,
+			DispatchTurn: func(ctx context.Context, sessionID, submissionID, text string, onAdmitted func() error) error {
+				_, err := mgr.Submissions.AmbientWatchWake(ctx, sessionID, submissionID, text, onAdmitted)
+				return err
+			},
+		})
+	}
+	if mgr.Coordinator.Guidance != nil {
+		mgr.Coordinator.Guidance.SetKickAdmittedObserver(func(ctx context.Context, sessionID, kickID, subject, receiptID string) {
+			if anchor.SameInform(kickID, anchor.ProcessFinished) && subject != "" {
+				_ = watch.MarkPresentationAdmittedByHandle(ctx, watchStore, sessionID, subject, receiptID)
+			}
+		})
+	}
 }
 
 func (b *serveBuilder) registerCoordinatorTools() error {

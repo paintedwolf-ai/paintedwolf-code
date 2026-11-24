@@ -3,6 +3,7 @@ package processcontrol
 import (
 	"context"
 	"encoding/json"
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/exec"
@@ -10,7 +11,11 @@ import (
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"strings"
@@ -23,6 +28,7 @@ type completionFixture struct {
 	wakes     []anchor.ID
 	emitted   []anchor.ID
 	envelopes []anchor.Envelope
+	dropped   []string
 	waiting   bool
 }
 
@@ -38,6 +44,25 @@ func (*completionFixture) AfterTool(_ context.Context, _ *api.Session, _ string,
 func (f *completionFixture) Emit(_ context.Context, _ string, id anchor.ID, env anchor.Envelope) {
 	f.emitted = append(f.emitted, id)
 	f.envelopes = append(f.envelopes, env)
+}
+func (f *completionFixture) DropSubject(_ string, _ anchor.ID, subject string) bool {
+	kept := f.envelopes[:0]
+	keptIDs := f.emitted[:0]
+	dropped := false
+	for i, env := range f.envelopes {
+		if env.Subject == subject && f.emitted[i] == anchor.ProcessFinished {
+			dropped = true
+			continue
+		}
+		kept = append(kept, env)
+		keptIDs = append(keptIDs, f.emitted[i])
+	}
+	f.envelopes = kept
+	f.emitted = keptIDs
+	if dropped {
+		f.dropped = append(f.dropped, subject)
+	}
+	return dropped
 }
 func (f *completionFixture) SessionSleepingOnProcess(_, handle string) bool {
 	return f.waiting && handle == "handle"
@@ -318,5 +343,100 @@ func stopAndWait(t *testing.T, bg *bgprocess.Registry, handle string, reason bgp
 	_, _ = bg.Lifecycle.Stop("s", handle, reason)
 	if _, _, err := bg.Lifecycle.Wait(context.Background(), "s", handle); err != nil {
 		t.Errorf("wait for background command %s: %v", handle, err)
+	}
+}
+
+func TestCommandCompletionPresentationClaimsAcrossWaitWatchAndKick(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	database := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertSession(t, database, "session", testdbseed.DefaultProjectID)
+	now := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
+	clock := testutil.NewFakeClock(now)
+	watches := watch.NewStore(database, clock)
+	owner := watch.Owner{ProjectID: testdbseed.DefaultProjectID, SessionID: "session"}
+
+	f := &completionFixture{}
+	service := New(f, f, f, f)
+	service.SetLoop(f, f)
+	service.SetWatches(watches)
+
+	// Explicit watch claims completion without enqueueing a fallback kick, while recording verification.
+	rec1, err := watches.Register(t.Context(), watch.RegisterRequest{
+		Owner:      owner,
+		Conditions: []awaitstore.Condition{{Kind: watch.ConditionProcessDone, Handles: []string{"cmd-watched"}}},
+	})
+	testutil.FailErr(t, "register watch", err)
+
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+		SessionID:  "session",
+		Handle:     "cmd-watched",
+		OriginTool: "verify",
+		RunID:      "occ-watched",
+		ToolCallID: "call-1",
+		Stages:     []hostcmd.StageResult{{Command: "go test ./..."}},
+		FinishedAt: now,
+	})
+	if len(f.captures) != 1 {
+		t.Fatalf("verification captures = %d, want 1", len(f.captures))
+	}
+	if _, ok := service.Report("session", "cmd-watched"); !ok {
+		t.Fatal("expected completion report published before presentation routing")
+	}
+	if len(f.emitted) != 0 || len(f.wakes) != 0 {
+		t.Fatalf("explicit watch completion leaked kick=%v wake=%v", f.emitted, f.wakes)
+	}
+	view1, err := watches.Inspect(t.Context(), owner, rec1.Handle)
+	testutil.FailErr(t, "inspect watched completion", err)
+	if view1.PendingMatches != 1 {
+		t.Fatalf("pending watch matches = %d, want 1", view1.PendingMatches)
+	}
+
+	// Uncovered completion queues one fallback kick; a later watch claim transfers and drops that queued kick.
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+		SessionID:  "session",
+		Handle:     "cmd-transfer",
+		OriginTool: "command",
+		RunID:      "occ-transfer",
+		Stages:     []hostcmd.StageResult{{Command: "echo transfer"}},
+		FinishedAt: now,
+	})
+	if len(f.emitted) != 1 || len(f.captures) != 2 {
+		t.Fatalf("fallback kick emitted=%d captures=%d, want 1 and 2", len(f.emitted), len(f.captures))
+	}
+	_, err = watches.Register(t.Context(), watch.RegisterRequest{
+		Owner:      owner,
+		Conditions: []awaitstore.Condition{{Kind: watch.ConditionProcessDone, Handles: []string{"cmd-transfer"}}},
+	})
+	testutil.FailErr(t, "register transfer watch", err)
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+		SessionID:  "session",
+		Handle:     "cmd-transfer",
+		OriginTool: "command",
+		RunID:      "occ-transfer",
+		FinishedAt: now,
+	})
+	if len(f.emitted) != 0 || len(f.dropped) != 1 || f.dropped[0] != "cmd-transfer" {
+		t.Fatalf("expected queued kick dropped on watch claim: emitted=%v dropped=%v", f.emitted, f.dropped)
+	}
+
+	// An already-admitted kick supplies its receipt ID without leaving a second pending notification.
+	_, err = watch.ClaimPresentation(t.Context(), watches, owner, "occ-admitted", watch.ClaimFallbackKick, true, "msg-kick-receipt-1")
+	testutil.FailErr(t, "seed admitted kick", err)
+	recAdmitted, err := watches.Register(t.Context(), watch.RegisterRequest{
+		Owner:      owner,
+		Conditions: []awaitstore.Condition{{Kind: watch.ConditionProcessDone, Handles: []string{"cmd-admitted"}}},
+	})
+	testutil.FailErr(t, "register post-admission watch", err)
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+		SessionID:  "session",
+		Handle:     "cmd-admitted",
+		OriginTool: "command",
+		RunID:      "occ-admitted",
+		FinishedAt: now,
+	})
+	viewAdmitted, err := watches.Inspect(t.Context(), owner, recAdmitted.Handle)
+	testutil.FailErr(t, "inspect post-admission watch", err)
+	if viewAdmitted.PendingMatches != 0 || len(viewAdmitted.RetainedRefs) != 1 || viewAdmitted.RetainedRefs[0] != "msg-kick-receipt-1" {
+		t.Fatalf("expected admitted receipt attached with 0 pending matches: %+v", viewAdmitted)
 	}
 }

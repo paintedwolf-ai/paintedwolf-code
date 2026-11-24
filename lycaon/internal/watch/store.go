@@ -37,6 +37,7 @@ type Store struct {
 	mu            sync.RWMutex
 	processLookup ProcessLookup
 	onLeaseWake   LeaseWakeFunc
+	wakeGate      AmbientWakeGate
 }
 
 func NewStore(database db.Handle, clock Clock) *Store {
@@ -71,6 +72,28 @@ func (s *Store) SetLeaseWakeHandler(fn LeaseWakeFunc) {
 	s.mu.Lock()
 	s.onLeaseWake = fn
 	s.mu.Unlock()
+}
+
+func (s *Store) SetAmbientWakeGate(gate AmbientWakeGate) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.wakeGate = gate
+	s.mu.Unlock()
+}
+
+func (s *Store) TriggerAmbientWake(ctx context.Context, sessionID string) (bool, error) {
+	if !s.Configured() {
+		return false, nil
+	}
+	s.mu.RLock()
+	gate := s.wakeGate
+	s.mu.RUnlock()
+	if gate.DispatchTurn == nil {
+		return false, nil
+	}
+	return TryScheduleAmbientWake(ctx, s, sessionID, gate)
 }
 
 func (s *Store) lookupProcess(ctx context.Context, sessionID, handle string) (ProcessCompletionFact, bool, error) {

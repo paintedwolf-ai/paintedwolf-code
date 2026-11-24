@@ -66,6 +66,7 @@ type Service struct {
 	renderer        *oar.Renderer
 	kicks           *kick.KickEngine
 	anchors         *anchor.Bus
+	onKickAdmitted  func(ctx context.Context, sessionID, kickID, subject, receiptID string)
 }
 
 func New(sessionStore Sessions, transcriptStore TranscriptStore, transcript Transcript, state CycleState, rounds RoundNotices, closure Closure) *Service {
@@ -74,6 +75,11 @@ func New(sessionStore Sessions, transcriptStore TranscriptStore, transcript Tran
 func (m *Service) Bind(kicks *kick.KickEngine, anchors *anchor.Bus) {
 	m.kicks = kicks
 	m.anchors = anchors
+}
+func (m *Service) SetKickAdmittedObserver(fn func(ctx context.Context, sessionID, kickID, subject, receiptID string)) {
+	if m != nil {
+		m.onKickAdmitted = fn
+	}
 }
 func (m *Service) SetWorkers(workers workeroutcomes.CycleLedger)     { m.workers = workers }
 func (m *Service) SetWorkflow(workflows *WorkflowDomains)            { m.workflows = workflows }

@@ -24,6 +24,11 @@ func SessionOwner(sessionID string) Owner {
 	return Owner{SessionID: sessionID}.Normalized()
 }
 
+// JobOwner returns the worker-job watch owner for sessionID and workerJobID.
+func JobOwner(sessionID, workerJobID string) Owner {
+	return Owner{SessionID: sessionID, WorkerJobID: workerJobID}.Normalized()
+}
+
 // PresentationDecision describes how one producer occurrence may be presented to a destination.
 type PresentationDecision struct {
 	Granted           bool
@@ -141,4 +146,36 @@ func ClaimPresentation(
 		ExistingClaimKind: PresentationKind(existingKind),
 		ExistingReceiptID: existingReceipt,
 	}, nil
+}
+
+// MarkPresentationAdmittedByHandle marks any queued fallback kick for handle admitted with receiptID.
+func MarkPresentationAdmittedByHandle(ctx context.Context, s *Store, sessionID, handle, receiptID string) error {
+	if !s.Configured() || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(handle) == "" {
+		return nil
+	}
+	prefix := "process_done:" + strings.TrimSpace(handle)
+	_, err := s.db.ExecContext(ctx, `UPDATE watch_presentation_claims
+		SET state = 'admitted', receipt_id = CASE WHEN ? != '' THEN ? ELSE receipt_id END
+		WHERE session_id = ? AND claim_kind = 'fallback_kick' AND state = 'queued'
+		  AND (producer_occurrence_id = ? OR producer_occurrence_id LIKE ?)`,
+		strings.TrimSpace(receiptID), strings.TrimSpace(receiptID),
+		strings.TrimSpace(sessionID), prefix, prefix+":%")
+	return err
+}
+
+// MarkPresentationAdmitted marks a queued claim admitted with its receipt ID.
+func MarkPresentationAdmitted(ctx context.Context, s *Store, owner Owner, occurrenceID, receiptID string) error {
+	if !s.Configured() {
+		return nil
+	}
+	owner = owner.Normalized()
+	scope := owner.Destination()
+	if owner.WorkerJobID != "" {
+		scope = "job:" + owner.WorkerJobID
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE watch_presentation_claims
+		SET state = 'admitted', receipt_id = CASE WHEN ? != '' THEN ? ELSE receipt_id END
+		WHERE session_id = ? AND destination_scope = ? AND producer_occurrence_id = ?`,
+		strings.TrimSpace(receiptID), strings.TrimSpace(receiptID), owner.SessionID, scope, strings.TrimSpace(occurrenceID))
+	return err
 }
