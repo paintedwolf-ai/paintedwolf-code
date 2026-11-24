@@ -5828,11 +5828,6 @@ type ProviderUsageQuota struct {
 	OverageNanoUSD *int64 `json:"overage_nano_usd,omitempty"`
 }
 
-// PutHomeStartRequest
-type PutHomeStartRequest struct {
-	Choices HomeStartChoices `json:"choices"`
-}
-
 // PutProjectSourceRequest In-app editor save of one project file (full replacement content).
 type PutProjectSourceRequest struct {
 	// Stable mutation identity; exact retries return the original result and conflicting reuse returns 409 idempotency_conflict.
@@ -5920,6 +5915,15 @@ type RedactedSpan struct {
 	RuleTitle string `json:"rule_title,omitempty"`
 }
 
+// ReissueHomeStartFirstPromptRequest
+type ReissueHomeStartFirstPromptRequest struct {
+	ExpectedRevision int64 `json:"expected_revision"`
+	// The first-prompt operation being replaced.
+	OperationID string `json:"operation_id"`
+	// Fresh operation the changed first prompt will use.
+	ReplacementOperationID string `json:"replacement_operation_id"`
+}
+
 // RenameProjectSourceRequest Same-root rename or move of one file or folder. Missing parent folders
 // on to are created. Cross-root moves are refused.
 type RenameProjectSourceRequest struct {
@@ -5960,15 +5964,6 @@ type ReplaceEditorDocumentRetentionRequest struct {
 	DocumentIds     []string `json:"document_ids"`
 }
 
-// ReplaceHomeStartFirstPromptRequest
-type ReplaceHomeStartFirstPromptRequest struct {
-	ExpectedRevision int64 `json:"expected_revision"`
-	// The first-prompt operation being replaced.
-	OperationID string `json:"operation_id"`
-	// Fresh operation the changed first prompt will use.
-	ReplacementOperationID string `json:"replacement_operation_id"`
-}
-
 // ReplaceManagedSecretValueRequest Puts new bytes behind an unchanged reference, or restores a capability whose stored value went missing. Supported agent tooling already holding the reference keeps working. Only Painted Wolf's protected copy changes: this does not modify a project file, rotate an external credential, revoke it, or activate the replacement at its provider. The replaced value is retired, not deleted: its bytes stay readable to provider screening so a credential the agent has already seen keeps being redacted, but a retired value never resolves again.
 type ReplaceManagedSecretValueRequest struct {
 	// The new credential. Never echoed back. Named so the host's own request-capture scrubber redacts it by name. It holds the same length floor as minting: a replacement the screen could not recognize would silently retire a protection that worked.
@@ -6005,6 +6000,11 @@ type RepoLayout struct {
 	Files []string `json:"files,omitempty"`
 	// Small/medium tier — top-level dirs (trailing /) and promoted root files.
 	TopLevel []string `json:"top_level,omitempty"`
+}
+
+// ReserveHomeStartRequest
+type ReserveHomeStartRequest struct {
+	Choices HomeStartChoices `json:"choices"`
 }
 
 // ResolveEditorDocumentRequest

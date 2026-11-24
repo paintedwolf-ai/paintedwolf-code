@@ -579,7 +579,6 @@ export const API_OPERATIONS = {
   pushGit: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/push", query: [
     {"name":"session_id","type":"string"},
   ] },
-  putHomeStart: { method: "PUT", path: "/v1/home-starts/{launch_id}" },
   queryCodeScan: { method: "POST", path: "/v1/projects/{id}/scans/{scan_id}/query" },
   queryProjectFindings: { method: "POST", path: "/v1/projects/{id}/findings/query", query: [
     {"name":"root_id","type":"string"},
@@ -595,6 +594,7 @@ export const API_OPERATIONS = {
   ] },
   refreshPricingSource: { method: "POST", path: "/v1/settings/pricing/sources/{source_id}/refresh" },
   refreshProviderModels: { method: "POST", path: "/v1/providers/{provider_id}/refresh" },
+  reissueHomeStartFirstPrompt: { method: "POST", path: "/v1/home-starts/{launch_id}/reissue-first-prompt" },
   releaseSourcePresentation: { method: "DELETE", path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}" },
   releaseSourceView: { method: "DELETE", path: "/v1/projects/{id}/source/views/{view_id}" },
   releaseSourceViewportInterest: { method: "DELETE", path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}" },
@@ -608,7 +608,6 @@ export const API_OPERATIONS = {
   repairLocalGeneration: { method: "POST", path: "/v1/providers/{provider_id}/repair" },
   replaceEditorDocument: { method: "PUT", path: "/v1/projects/{id}/editor-documents/{document_id}" },
   replaceEditorDocumentRetention: { method: "PUT", path: "/v1/projects/{id}/editor-documents/retention" },
-  replaceHomeStartFirstPrompt: { method: "POST", path: "/v1/home-starts/{launch_id}/replace-first-prompt" },
   replaceProjectManagedSecretValue: { method: "PUT", path: "/v1/projects/{id}/secrets/{secret_id}/value" },
   replaceProjectSource: { method: "PUT", path: "/v1/projects/{id}/source", query: [
     {"name":"session_id","type":"string"},
@@ -620,6 +619,7 @@ export const API_OPERATIONS = {
   replaceWebResearchCredential: { method: "PUT", path: "/v1/web-research/providers/{provider_id}/credential" },
   requestBriefing: { method: "POST", path: "/v1/projects/{id}/briefings" },
   requestFileBriefing: { method: "POST", path: "/v1/projects/{id}/source/file-briefings" },
+  reserveHomeStart: { method: "PUT", path: "/v1/home-starts/{launch_id}" },
   resetStore: { method: "POST", path: "/v1/store/reset" },
   resolveCheckpoint: { method: "POST", path: "/v1/sessions/{id}/checkpoints/{checkpoint_id}" },
   resolveContributionChoices: { method: "POST", path: "/v1/projects/{id}/commands/{command_id}/choices/{step_id}" },
@@ -1031,7 +1031,6 @@ export type OperationPathParameters = {
   publishEditorDocumentPresence: { id: string | number; document_id: string | number; };
   pullGit: { id: string | number; repo_id: string | number; };
   pushGit: { id: string | number; repo_id: string | number; };
-  putHomeStart: { launch_id: string | number; };
   queryCodeScan: { id: string | number; scan_id: string | number; };
   queryProjectFindings: { id: string | number; };
   readEditorDocumentStatuses: { id: string | number; };
@@ -1041,6 +1040,7 @@ export type OperationPathParameters = {
   refreshMcpProvider: { provider_id: string | number; };
   refreshPricingSource: { source_id: string | number; };
   refreshProviderModels: { provider_id: string | number; };
+  reissueHomeStartFirstPrompt: { launch_id: string | number; };
   releaseSourcePresentation: { id: string | number; view_id: string | number; presentation_id: string | number; };
   releaseSourceView: { id: string | number; view_id: string | number; };
   releaseSourceViewportInterest: { id: string | number; view_id: string | number; interest_id: string | number; };
@@ -1050,7 +1050,6 @@ export type OperationPathParameters = {
   repairLocalGeneration: { provider_id: string | number; };
   replaceEditorDocument: { id: string | number; document_id: string | number; };
   replaceEditorDocumentRetention: { id: string | number; };
-  replaceHomeStartFirstPrompt: { launch_id: string | number; };
   replaceProjectManagedSecretValue: { id: string | number; secret_id: string | number; };
   replaceProjectSource: { id: string | number; };
   replaceProjectView: { id: string | number; };
@@ -1060,6 +1059,7 @@ export type OperationPathParameters = {
   replaceWebResearchCredential: { provider_id: string | number; };
   requestBriefing: { id: string | number; };
   requestFileBriefing: { id: string | number; };
+  reserveHomeStart: { launch_id: string | number; };
   resetStore: Record<string, never>;
   resolveCheckpoint: { id: string | number; checkpoint_id: string | number; };
   resolveContributionChoices: { id: string | number; command_id: string | number; step_id: string | number; };

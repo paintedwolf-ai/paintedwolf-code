@@ -103,7 +103,7 @@ func (h *Handler) HandlePut(w http.ResponseWriter, r *http.Request) {
 		h.responses.Fail(w, wire.ApiErrorCodeForbidden, "no authenticated person")
 		return
 	}
-	var req wire.PutHomeStartRequest
+	var req wire.ReserveHomeStartRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		h.responses.DecodeError(w, r, err)
 		return
@@ -174,19 +174,19 @@ func (h *Handler) HandleStop(w http.ResponseWriter, r *http.Request) {
 	h.writeRecord(w, r, http.StatusOK, rec)
 }
 
-func (h *Handler) HandleReplaceFirstPrompt(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleReissueFirstPrompt(w http.ResponseWriter, r *http.Request) {
 	caller, ok := people.Caller(r.Context())
 	if !ok {
 		h.responses.Fail(w, wire.ApiErrorCodeForbidden, "no authenticated person")
 		return
 	}
-	var req wire.ReplaceHomeStartFirstPromptRequest
+	var req wire.ReissueHomeStartFirstPromptRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		h.responses.DecodeError(w, r, err)
 		return
 	}
 	unlock := h.deps.FirstTurns.LockOperation(strings.TrimSpace(req.OperationID))
-	rec, err := h.deps.Store.ReplaceFirstPrompt(r.Context(), chi.URLParam(r, "launch_id"), caller.ID,
+	rec, err := h.deps.Store.ReissueFirstPrompt(r.Context(), chi.URLParam(r, "launch_id"), caller.ID,
 		req.ExpectedRevision, req.OperationID, req.ReplacementOperationID)
 	unlock()
 	if err != nil {

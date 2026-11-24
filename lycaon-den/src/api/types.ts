@@ -94,7 +94,7 @@ export interface paths {
          * Reserve or resume a Home submission
          * @description Reserves the project, chat and first-prompt operation for a client launch id, then creates them in the background. A matching repeat returns the latest state and resumes unfinished work; different choices under the same id conflict.
          */
-        put: operations["putHomeStart"];
+        put: operations["reserveHomeStart"];
         post?: never;
         delete?: never;
         options?: never;
@@ -122,7 +122,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/home-starts/{launch_id}/replace-first-prompt": {
+    "/v1/home-starts/{launch_id}/reissue-first-prompt": {
         parameters: {
             query?: never;
             header?: never;
@@ -135,7 +135,7 @@ export interface paths {
          * Replace an unadmitted first-prompt operation
          * @description Retires the named first-prompt operation and binds a fresh one to the same chat, unless the old one was already admitted. A repeat with the same ids returns the recorded outcome.
          */
-        post: operations["replaceHomeStartFirstPrompt"];
+        post: operations["reissueHomeStartFirstPrompt"];
         delete?: never;
         options?: never;
         head?: never;
@@ -11113,10 +11113,10 @@ export interface components {
             first_prompt: components["schemas"]["HomeStartFirstPrompt"];
             failure?: components["schemas"]["HomeStartFailure"];
         };
-        PutHomeStartRequest: {
+        ReserveHomeStartRequest: {
             choices: components["schemas"]["HomeStartChoices"];
         };
-        ReplaceHomeStartFirstPromptRequest: {
+        ReissueHomeStartFirstPromptRequest: {
             /** Format: int64 */
             expected_revision: number;
             /**
@@ -18684,7 +18684,7 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
-    putHomeStart: {
+    reserveHomeStart: {
         parameters: {
             query?: never;
             header?: never;
@@ -18696,7 +18696,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PutHomeStartRequest"];
+                "application/json": components["schemas"]["ReserveHomeStartRequest"];
             };
         };
         responses: {
@@ -18754,7 +18754,7 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
-    replaceHomeStartFirstPrompt: {
+    reissueHomeStartFirstPrompt: {
         parameters: {
             query?: never;
             header?: never;
@@ -18766,7 +18766,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReplaceHomeStartFirstPromptRequest"];
+                "application/json": components["schemas"]["ReissueHomeStartFirstPromptRequest"];
             };
         };
         responses: {
@@ -32224,8 +32224,8 @@ export type HomeStartChoices = components["schemas"]["HomeStartChoices"];
 export type HomeStartFirstPrompt = components["schemas"]["HomeStartFirstPrompt"];
 export type HomeStartFailure = components["schemas"]["HomeStartFailure"];
 export type HomeStart = components["schemas"]["HomeStart"];
-export type PutHomeStartRequest = components["schemas"]["PutHomeStartRequest"];
-export type ReplaceHomeStartFirstPromptRequest = components["schemas"]["ReplaceHomeStartFirstPromptRequest"];
+export type ReserveHomeStartRequest = components["schemas"]["ReserveHomeStartRequest"];
+export type ReissueHomeStartFirstPromptRequest = components["schemas"]["ReissueHomeStartFirstPromptRequest"];
 export type PendingWorkflowStart = components["schemas"]["PendingWorkflowStart"];
 export type SessionBackgroundDirectStatus = components["schemas"]["SessionBackgroundDirectStatus"];
 export type SessionBackgroundDirectJob = components["schemas"]["SessionBackgroundDirectJob"];

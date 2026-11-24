@@ -355,6 +355,12 @@ SSE is the ordinary invalidation path. Polling is a disconnected fallback or an 
 
 Session creation commits the minimum durable identity and ambient workflow needed to accept a prompt. Naming, source warming, indexing, and other gifts run afterward; a slow optional subsystem must not hold the first durable turn open.
 
+### Home starts
+
+A Home submission reaches the host as a launch: a client UUID under `PUT /v1/home-starts/{launch_id}`, with immutable creation choices and no prompt text. The host reserves the draft project ID, chat ID and first-prompt operation (initially the launch ID) in one row before any filesystem work, then creates the project and the preparing chat under those IDs; each step's rows, its created event and the launch's progress commit together, so a step is absent or complete. A repeated PUT returns the latest state and resumes unfinished work; boot resumes it too. `GET` reads the caller's launch; the first prompt counts as admitted only when a prompt receipt for the current operation exists in the bound chat.
+
+The first prompt is an ordinary `POST /v1/sessions/{id}/prompts` with the reserved `operation_id`. Its receipt transaction admits a reserved operation only into its bound chat, from its owner, while the launch is active, so `POST …/stop` before admission fences the send and a Stop that arrives before its PUT records a stopped launch. After an uncertain send the client reads the launch before sending again; to change the text it calls `POST …/reissue-first-prompt`, which retires the old operation unless it was admitted. Deleting the project or chat retires the launch. `GET /v1/home-starts/capabilities` names the store and person a client binds its saved launches to; a client never replays a launch into another store or person.
+
 ---
 
 ## 11. API conventions
