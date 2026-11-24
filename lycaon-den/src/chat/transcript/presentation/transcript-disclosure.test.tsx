@@ -2,7 +2,7 @@ import { assertNamedControl } from "../../../test/controls.ts";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { applyWebEngineFact } from "../../../platform/desktop/webkit-atspi-workaround.ts";
 import { fireEvent, render } from "@solidjs/testing-library";
-import { createRoot, createSignal } from "solid-js";
+import { createRoot, createSignal, onCleanup } from "solid-js";
 import { bindScrollportMotion, scrollportMotionForHost, unbindScrollportMotion } from "../../../platform/scrolling/scrollport-motion.ts";
 import {
   TranscriptViewportProvider,
@@ -317,6 +317,69 @@ describe("transcript disclosure leases", () => {
       expect(disclosure.key).toBe(transcriptDisclosureKey.tool("initial"));
       setKey("updated");
       expect(disclosure.key).toBe(transcriptDisclosureKey.tool("updated"));
+      dispose();
+    });
+  });
+
+  it("defers panel child creation until open and disposes it when closed", () => {
+    const mounts = vi.fn();
+    const cleanups = vi.fn();
+    function Child() {
+      mounts();
+      onCleanup(() => cleanups());
+      return <span data-testid="child">Body</span>;
+    }
+
+    const view = render(() => {
+      const disclosure = useTranscriptDisclosure();
+      return (
+        <TranscriptDisclosureShell disclosure={disclosure} data-testid="shell">
+          <TranscriptDisclosureToggle disclosure={disclosure} data-testid="toggle">
+            Open
+          </TranscriptDisclosureToggle>
+          <TranscriptDisclosurePanel disclosure={disclosure} data-testid="panel">
+            <Child />
+          </TranscriptDisclosurePanel>
+        </TranscriptDisclosureShell>
+      );
+    });
+
+    const toggle = assertNamedControl(view.getByTestId("toggle"), "button");
+    const panel = view.getByTestId("panel");
+    expect(toggle.getAttribute("aria-controls")).toBe(panel.id);
+    expect(mounts).not.toHaveBeenCalled();
+    expect(view.queryByTestId("child")).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(mounts).toHaveBeenCalledTimes(1);
+    expect(view.getByTestId("child")).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(cleanups).toHaveBeenCalledTimes(1);
+    expect(view.queryByTestId("child")).toBeNull();
+    expect(toggle.getAttribute("aria-controls")).toBe(panel.id);
+  });
+
+  it("returns focus to the toggle when a focused descendant closes", async () => {
+    await createRoot(async (dispose) => {
+      const { disclosure, shell, animations, click } = manualDisclosure();
+      const inside = document.createElement("button");
+      inside.textContent = "Inside";
+      shell.querySelector('[data-testid="body"]')!.appendChild(inside);
+      shell.querySelector(".den-transcript-disclosure-toggle")?.classList.add("den-transcript-disclosure-toggle");
+
+      click();
+      animations[0]!.onfinish?.call(animations[0]!, new Event("finish") as AnimationPlaybackEvent);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+      inside.focus();
+      expect(document.activeElement).toBe(inside);
+
+      click();
+      animations[1]!.onfinish?.call(animations[1]!, new Event("finish") as AnimationPlaybackEvent);
+      expect(disclosure.open()).toBe(false);
+      expect(document.activeElement).toBe(shell.querySelector("button"));
+      shell.remove();
       dispose();
     });
   });

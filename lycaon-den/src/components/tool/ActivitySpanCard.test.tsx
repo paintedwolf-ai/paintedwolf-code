@@ -774,13 +774,57 @@ describe("ActivitySpanCard", () => {
       '[data-testid="activity-span-card"]',
     ) as HTMLElement;
     expect(span.getAttribute("data-count")).toBe("16");
-    span.setAttribute("open", "open");
+    expect(container.querySelectorAll(".den-activity-span-items .den-tool-part")).toHaveLength(0);
+    fireEvent.click(disclosureToggle(span));
 
     const renderedParts = container.querySelectorAll(
       ".den-activity-span-items .den-tool-part",
     );
     expect(renderedParts).toHaveLength(16);
     expect(container.querySelector('[data-testid="virtual-card-list"]')).toBeNull();
+  });
+
+  it("mounts zero detail rows while closed for 1, 100, and 101 actions and disposes on close", () => {
+    for (const total of [1, 100, 101]) {
+      const batch: ActivitySpanEntry[] = Array.from({ length: total }, (_, i) => ({
+        kind: "tool",
+        part: {
+          id: `lc02-tool-${total}-${i}`,
+          toolCallId: `lc02-call-${total}-${i}`,
+          assistantMessageId: "assistant-1",
+          messageId: `msg-${i}`,
+          tool: "read",
+          kind: "read",
+          status: "completed",
+          title: `file-${i}.ts`,
+          args: { path: `file-${i}.ts` },
+          output: `output-${i}`,
+          error: null,
+        },
+      }));
+      const view = render(() => (
+        <ActivitySpanCard
+          label="read"
+          entries={batch}
+          layout="chat"
+          sessionId={`s-${total}`}
+          entryKey={`span-${total}`}
+        />
+      ));
+      try {
+        const span = view.container.querySelector('[data-testid="activity-span-card"]') as HTMLElement;
+        expect(view.container.querySelectorAll(".den-activity-span-items .den-tool-part")).toHaveLength(0);
+        fireEvent.click(disclosureToggle(span));
+        const openedCount = view.container.querySelectorAll(".den-activity-span-items .den-tool-part").length;
+        if (total <= 100) expect(openedCount).toBe(total);
+        else expect(openedCount).toBeGreaterThan(0);
+
+        fireEvent.click(disclosureToggle(span));
+        expect(view.container.querySelectorAll(".den-activity-span-items .den-tool-part")).toHaveLength(0);
+      } finally {
+        view.unmount();
+      }
+    }
   });
 });
 

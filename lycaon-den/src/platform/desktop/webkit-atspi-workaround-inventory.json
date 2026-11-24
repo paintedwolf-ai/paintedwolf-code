@@ -6,8 +6,7 @@
       "sites": [
         "chat/transcript/presentation/transcript-disclosure.tsx",
         "components/nav/FocusedSessionList.tsx",
-        "styling/chrome/session-navigation.css",
-        "components/tool/ActivitySpanCard.tsx"
+        "styling/chrome/session-navigation.css"
       ]
     },
     "drawn-input-hint": {

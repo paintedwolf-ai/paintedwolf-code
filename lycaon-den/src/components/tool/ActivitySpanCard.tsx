@@ -27,8 +27,7 @@ import { TurnLoadCard } from "./TurnLoadCard.tsx";
 import { VirtualCardList } from "../primitives/VirtualCardList.tsx";
 import { searchToolPart, TOOL_CONTENT_REVEAL_EVENT, toolPartFindCorpus } from "../../chat/tool/tool-part-find.ts";
 import { findController } from "../../find/find-controller.ts";
-import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
-import type { VirtualListMatch } from "../../find/virtual-list-find.ts";
+import { bindVirtualListFind, type VirtualListMatch } from "../../find/virtual-list-find.ts";
 
 export type ActivitySpanCardProps = {
   label: string;
@@ -183,9 +182,23 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
     hostEl,
     isCollapsed: () => !open(),
     revealForFind: revealTemporarily,
-    // Under the WebKitGTK AT-SPI workaround a closed span mounts no cards, so it searches theirs from data.
-    collapsedCorpus: () => (webkitAtspiWorkaroundActive() ? collapsedToolCorpus() : ""),
+    collapsedCorpus: () => collapsedToolCorpus(),
     collapsedCorpusAnchor: hostEl,
+  });
+  // Retained output references are excluded from collapsedCorpus and searched via the host while closed.
+  bindVirtualListFind({
+    items: entries,
+    host: () => hostEl() ?? undefined,
+    enabled: () => !open(),
+    ownsCorpus: false,
+    search: (entry, query, sensitive, signal) =>
+      entry.kind === "tool"
+        ? searchToolPart(entry.part, props.sessionId, query, sensitive, signal, { referencesOnly: true })
+        : Promise.resolve([]),
+    reveal: (index, match) => {
+      const entry = entries()[index];
+      if (entry?.kind === "tool") revealTool(match.toolCallId ?? entry.part.toolCallId, match);
+    },
   });
   const count = () => entries().length;
   const [processRevision, setProcessRevision] = createSignal(0);

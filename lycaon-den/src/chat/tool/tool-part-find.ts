@@ -16,23 +16,33 @@ export function toolPartFindCorpus(part: ToolPartView): string {
 }
 
 /** Search card data without creating its body or downloading retained output. */
-export async function searchToolPart(part: ToolPartView, sessionId: string | undefined, query: string, sensitive: boolean, signal: AbortSignal): Promise<VirtualListMatch[]> {
+export async function searchToolPart(
+  part: ToolPartView,
+  sessionId: string | undefined,
+  query: string,
+  sensitive: boolean,
+  signal: AbortSignal,
+  options?: { referencesOnly?: boolean },
+): Promise<VirtualListMatch[]> {
+  const referencesOnly = options?.referencesOnly === true;
   const matches: VirtualListMatch[] = [];
   if (part.foldMembers?.length) {
     for (const member of [{ ...part, foldMembers: undefined }, ...part.foldMembers]) {
       if (signal.aborted || matches.length >= 10000) break;
-      const found = await searchToolPart(member, sessionId, query, sensitive, signal);
+      const found = await searchToolPart(member, sessionId, query, sensitive, signal, options);
       matches.push(...found.map(match => ({ ...match, toolCallId: match.toolCallId ?? member.toolCallId })));
     }
     return matches.slice(0, 10000);
   }
   if (part.commandActivity) {
-    const fact = part.commandActivity.fact;
-    const header = [fact.label, fact.subject, fact.outcome].join(" · ");
-    matches.push(...findLiteralOffsets(header, query, sensitive, 10000).map(match => ({ from: match.start, to: match.start + match.length, field: "title", toolCallId: part.toolCallId })));
+    if (!referencesOnly) {
+      const fact = part.commandActivity.fact;
+      const header = [fact.label, fact.subject, fact.outcome].join(" · ");
+      matches.push(...findLiteralOffsets(header, query, sensitive, 10000).map(match => ({ from: match.start, to: match.start + match.length, field: "title", toolCallId: part.toolCallId })));
+    }
     for (const call of part.commandActivity.calls) {
       if (signal.aborted || matches.length >= 10000) break;
-      const found = await searchToolPart(call, sessionId, query, sensitive, signal);
+      const found = await searchToolPart(call, sessionId, query, sensitive, signal, options);
       matches.push(...found.map(match => ({ ...match, toolCallId: call.toolCallId })));
     }
     return matches.slice(0, 10000);
@@ -45,7 +55,9 @@ export async function searchToolPart(part: ToolPartView, sessionId: string | und
     if (matches.length >= 10000 || signal.aborted) break;
     const client = reference ? getLycaonClient() : undefined;
     if (!reference || !client || !sessionId) {
-      matches.push(...findLiteralOffsets(text, query, sensitive, 10000-matches.length).map(match => ({ from: match.start, to: match.start+match.length, field })));
+      if (!referencesOnly) {
+        matches.push(...findLiteralOffsets(text, query, sensitive, 10000-matches.length).map(match => ({ from: match.start, to: match.start+match.length, field })));
+      }
       continue;
     }
     const collect = async () => {
