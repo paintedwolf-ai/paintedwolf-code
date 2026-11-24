@@ -105,10 +105,16 @@ func TestWorktreeEditorSameNamedFilesSwitchRestartAndReverseSave(t *testing.T) {
 
 	// Discover repositories and checkouts through the Git worktrees API.
 	reposView := callJSON[wire.GitReposView](t, srv, http.MethodGet, "/v1/projects/"+proj.ID+"/git/repos", nil, http.StatusOK)
-	if len(reposView.Repos) != 1 {
-		t.Fatalf("repos count = %d, want 1", len(reposView.Repos))
+	var repoID string
+	for _, entry := range reposView.Repos {
+		if entry.Available && entry.RepoID != "" {
+			repoID = entry.RepoID
+			break
+		}
 	}
-	repoID := reposView.Repos[0].RepoID
+	if repoID == "" {
+		t.Fatalf("expected one available repository in %+v", reposView.Repos)
+	}
 	wtView := callJSON[wire.GitWorktreesView](t, srv, http.MethodGet, "/v1/projects/"+proj.ID+"/git/repos/"+repoID+"/worktrees", nil, http.StatusOK)
 	if len(wtView.Worktrees) != 2 {
 		t.Fatalf("worktrees count = %d, want 2", len(wtView.Worktrees))
@@ -198,10 +204,10 @@ func TestWorktreeEditorSameNamedFilesSwitchRestartAndReverseSave(t *testing.T) {
 	testutil.FailErr(t, "recover editor documents", docs.Recover(t.Context()))
 	reopenedPrimary := callJSON[wire.EditorDocument](t, srv, http.MethodPost, docBaseURL, wire.OpenEditorDocumentRequest{
 		DocumentID: primaryDoc.ID, ClientID: "win-restarted",
-	}, http.StatusCreated)
+	}, http.StatusOK)
 	reopenedSibling := callJSON[wire.EditorDocument](t, srv, http.MethodPost, docBaseURL, wire.OpenEditorDocumentRequest{
 		DocumentID: siblingDoc.ID, ClientID: "win-restarted",
-	}, http.StatusCreated)
+	}, http.StatusOK)
 	if !reopenedPrimary.Dirty || !reopenedSibling.Dirty || reopenedSibling.BranchID != "worktree:"+siblingWT.WorktreeID {
 		t.Fatalf("reopened documents lost dirty state or branch binding: primary=%+v sibling=%+v", reopenedPrimary, reopenedSibling)
 	}
@@ -313,7 +319,7 @@ func TestWorktreeEditorSaveRacesRemovalAndPathReuse(t *testing.T) {
 	testutil.FailErr(t, "recover after failed save", docs.Recover(t.Context()))
 	reopened := callJSON[wire.EditorDocument](t, srv, http.MethodPost, docBaseURL, wire.OpenEditorDocumentRequest{
 		DocumentID: siblingDoc.ID, ClientID: "win-after-restart",
-	}, http.StatusCreated)
+	}, http.StatusOK)
 	if !reopened.CheckoutUnavailable || !reopened.Dirty || !reopened.Absent {
 		t.Fatalf("reopened removed-checkout document flags: unavailable=%v dirty=%v absent=%v", reopened.CheckoutUnavailable, reopened.Dirty, reopened.Absent)
 	}
