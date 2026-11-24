@@ -3,7 +3,6 @@ package llm
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/guidance"
