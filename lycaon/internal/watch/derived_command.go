@@ -99,11 +99,13 @@ func (s *Store) ReconcileShellJoin(ctx context.Context, owner Owner, commandHand
 		mJSON, _ := json.Marshal(matchIDs)
 		wJSON, _ := json.Marshal([]string{reg.WatchID})
 		pJSON, _ := json.Marshal(map[string]any{"joined_by": joinReceipt, "handle": reg.Handle})
-		_, _ = tx.ExecContext(ctx, `INSERT OR IGNORE INTO watch_deliveries
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO watch_deliveries
 			(delivery_id, session_id, worker_job_id, destination_kind, destination_id, match_ids_json, watch_ids_json, payload_json, state, created_at, committed_at)
 			VALUES (?, ?, NULLIF(?, ''), 'request', ?, ?, ?, ?, 'committed', ?, ?)`,
 			deliveryID, owner.SessionID, owner.WorkerJobID, joinReceipt,
-			string(mJSON), string(wJSON), string(pJSON), nowStr, nowStr)
+			string(mJSON), string(wJSON), string(pJSON), nowStr, nowStr); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE watch_registrations
 			SET state = 'terminal', terminal_outcome = 'completed', slot_released = 1,
 			    ended_at = COALESCE(ended_at, ?), revision = revision + 1, updated_at = ?

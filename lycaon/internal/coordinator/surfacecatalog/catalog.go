@@ -34,6 +34,8 @@ type Surface struct {
 	ProseFinish bool `yaml:"prose_finish"`
 	// PublishesMidTurnText publishes valid text accompanying tool calls as a note.
 	PublishesMidTurnText bool `yaml:"publishes_mid_turn_text"`
+	// WatchManagement permits live-watch resource promotion on this surface.
+	WatchManagement bool `yaml:"watch_management"`
 	// Floor is offered on every model call.
 	Floor []string `yaml:"floor"`
 	// Loadable names the tools the turn may add; whatever is not loaded stays
