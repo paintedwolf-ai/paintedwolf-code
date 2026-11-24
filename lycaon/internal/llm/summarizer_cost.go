@@ -72,6 +72,19 @@ func (r *RegistrySummarizer) utilityRequest(ctx context.Context, req modelcall.C
 	return req
 }
 
+func (r *RegistrySummarizer) newUtilityAdmission(p modelcall.Provider, class UtilityClass) *callAdmission {
+	adm := &callAdmission{
+		class:       class,
+		preemptable: class == UtilityClassBackground || class == UtilityClassGift,
+	}
+	if r != nil && p != nil {
+		adm.plane = r.Plane
+		adm.capacityKey = modelcall.CapacityKey(p)
+		adm.singleFlight = p.Profile().UtilitySingleFlight
+	}
+	return adm
+}
+
 // completeUtility stamps attribution and records one budgeted utility call.
 func (r *RegistrySummarizer) completeUtility(ctx context.Context, p modelcall.Provider, model string, req modelcall.CompletionRequest) (resp *modelcall.Completion, err error) {
 	defer func() { trainingcapture.ObserveUtility(ctx, r.Purpose, err) }()
@@ -81,18 +94,35 @@ func (r *RegistrySummarizer) completeUtility(ctx context.Context, p modelcall.Pr
 	if observe && r != nil && r.Plane != nil && !r.Plane.allowLite() {
 		return nil, ErrLiteUnavailable
 	}
-	callCtx, release, laneErr := r.planeAcquire(ctx, p, class)
-	if laneErr != nil {
-		return nil, laneErr
+	adm := r.newUtilityAdmission(p, class)
+	callCtx := ctx
+	if !isRegistryDecorated(p) {
+		var release func()
+		var laneErr error
+		callCtx, release, laneErr = r.planeAcquire(ctx, p, class)
+		if laneErr != nil {
+			return nil, laneErr
+		}
+		defer release()
+		adm.markDispatched()
 	}
-	defer release()
 	attempt := r.beginUtilityCall(callCtx, p, model)
+	attempt.ctx = withCallAdmission(attempt.ctx, adm)
 	defer attempt.close()
 	callID, occupy := r.beginLaneCall(ctx, attempt.callID, attempt.provider, model)
 	defer r.endLaneCall(ctx, occupy, callID, attempt.provider, model, &err)
 	resp, err = p.Complete(attempt.ctx, req) //nolint:contextcheck // attempt.ctx carries admission cancellation and the call budget.
+	if pErr := adm.PreemptErr(); pErr != nil {
+		err = pErr
+		attempt.void()
+		return nil, err
+	}
 	if callCtx.Err() != nil {
 		err = callCtx.Err()
+	}
+	if err != nil && !adm.Dispatched() {
+		attempt.void()
+		return nil, err
 	}
 	if err != nil && attempt.budget.Expired() && ctx.Err() == nil {
 		err = &utilityBudgetExceededError{cause: err}

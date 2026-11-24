@@ -82,7 +82,7 @@ func (r *RegistrySummarizer) summarize(ctx context.Context, systemPrompt, userPr
 	slog.WarnContext(ctx, "lite summarize failed",
 		"purpose", r.Purpose, "class", class, "provider", p.ID(), "model", model, "error", liteErr)
 	// Screened bytes stay held across provider and truncation fallbacks.
-	if SecretScreenBlocked(liteErr) {
+	if SecretScreenBlocked(liteErr) || ctx.Err() != nil {
 		return "", liteErr
 	}
 	if class.AllowsCoordinatorFallback() {
