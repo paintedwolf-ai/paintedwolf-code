@@ -49,7 +49,8 @@ position: relative;
   flex-direction: column;
   width: 100%;
   min-width: 0;
-  --den-transcript-card-width: min(100%, 32rem);
+  --den-transcript-card-max: 32rem;
+  --den-transcript-card-width: min(100%, var(--den-transcript-card-max));
 }
 
 /* Disclosure toggles take the header layout their utilities give them. */

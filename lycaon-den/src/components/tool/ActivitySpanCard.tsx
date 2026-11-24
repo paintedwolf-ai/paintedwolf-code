@@ -162,7 +162,7 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
     collapsedCorpusAnchor: hostEl,
   });
   const count = () => entries().length;
-  const countChip = () => formatActivityCountChip(entries(), props.waitCount ?? 0);
+  const countChip = () => formatActivityCountChip(entries(), props.waitCount ?? 0, asSection());
   const [processRevision, setProcessRevision] = createSignal(0);
   onCleanup(
     subscribeBackgroundProcessStore(
@@ -235,7 +235,7 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
               {props.sequence}
             </span>
           </Show>
-          <span class="den-tool-chicklet-caret" aria-hidden="true" />
+          <span class={asSection() ? "den-disclosure-chevron" : "den-tool-chicklet-caret"} aria-hidden="true" />
           <Show when={!asSection() && props.sequence !== undefined}>
             <span class="den-activity-span-hint" data-tip={props.sequence || undefined} data-tip-when-clipped="">
               {props.sequence}

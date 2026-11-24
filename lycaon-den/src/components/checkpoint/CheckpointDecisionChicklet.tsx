@@ -143,6 +143,8 @@ function RevokeButton(props: {
 export function CheckpointDecisionChicklet(props: Props) {
   const chrome = () => props.chrome ?? "card";
   const embedded = () => chrome() !== "card";
+  // A pending row inside a group shares its line with the review button.
+  const restingRequestOnly = () => embedded() && props.meta.status === "pending";
   const entryOpts = () =>
     props.entryKey
       ? { sessionId: props.sessionId ?? undefined, entryKey: props.entryKey, skipFade: embedded() }
@@ -272,11 +274,11 @@ export function CheckpointDecisionChicklet(props: Props) {
           >
             <DecisionChrome
               meta={props.meta}
-              tool={tool()}
+              tool={embedded() && subject() ? undefined : tool()}
               subject={subject()}
-              location={location()}
-              causing={causing()}
-              grant={grant()}
+              location={restingRequestOnly() ? undefined : location()}
+              causing={restingRequestOnly() ? undefined : causing()}
+              grant={restingRequestOnly() ? undefined : embedded() ? props.meta.grant_title?.trim() || undefined : grant()}
               truncateSubject
             />
           </TranscriptDisclosureToggle>
@@ -294,7 +296,7 @@ export function CheckpointDecisionChicklet(props: Props) {
           <Show when={revokeCtx()} keyed>
             {(ctx) => <RevokeButton grantIds={ctx.grantIds} client={ctx.client} onError={props.onError} />}
           </Show>
-          <span class="den-tool-chicklet-caret" aria-hidden="true" />
+          <span class={embedded() ? "den-disclosure-chevron" : "den-tool-chicklet-caret"} aria-hidden="true" />
         </TranscriptDisclosureSummary>
         <TranscriptDisclosurePanel
           disclosure={disclosure}

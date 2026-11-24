@@ -289,6 +289,70 @@ describe("ActivityGroupCard", () => {
     expect(shiftSpy).not.toHaveBeenCalled();
   });
 
+  it("holds a reader in the last section when the middle section resizes", () => {
+    const messages: Message[] = [
+      {
+        id: "a1",
+        ord: 1,
+        role: "assistant",
+        origin: "model",
+        authority: "none",
+        trust_tier: "trusted",
+        content: "",
+        tool_calls: [{ id: "c1", name: "write", args: { path: "a.go" } }],
+        created_at: "2026-11-23T00:00:00Z",
+      },
+      {
+        id: "r1",
+        ord: 2,
+        role: "tool",
+        origin: "tool",
+        authority: "none",
+        trust_tier: "untrusted",
+        content: "ok",
+        tool_result: {
+          assistant_message_id: "a1",
+          tool_call_id: "c1",
+          tool: "write",
+          content: "ok",
+          outcome: "completed",
+          checkpoint_decision: { checkpoint_id: "cp-mid", kind: "tool_approval", status: "approved", tool: "write", subject: "a.go", grant_title: "Allow once" },
+          file_edit_previews: [fileEditPreviewFixture({ path: "a.go", before: "old\n", after: "new\n" })],
+        },
+        created_at: "2026-11-23T00:00:01Z",
+      },
+    ];
+
+    const { container } = render(() => (
+      <SessionTranscript layout="chat" sessionId="s-intra-scroll-mid" messages={messages} />
+    ));
+
+    const controller = transcriptViewportForSession("s-intra-scroll-mid")!;
+    controller.stopFollowing();
+    const shiftSpy = vi.spyOn(controller, "shiftVirtualContent").mockImplementation((d) => d);
+
+    const stream = controller.stream()!;
+    const group = container.querySelector<HTMLElement>('[data-testid="activity-group-card"]')!;
+    const sections = [...group.querySelectorAll<HTMLElement>("[data-activity-group-section]")];
+    expect(sections).toHaveLength(3);
+    const [, middle, last] = sections as [HTMLElement, HTMLElement, HTMLElement];
+
+    stream.getBoundingClientRect = () => ({ top: 100, bottom: 500, left: 0, right: 600, width: 600, height: 400 } as DOMRect);
+    group.getBoundingClientRect = () => ({ top: 20, bottom: 380, left: 0, right: 600, width: 600, height: 360 } as DOMRect);
+
+    let lastOffsetTop = 72;
+    Object.defineProperty(middle, "offsetTop", { configurable: true, get: () => 36 });
+    Object.defineProperty(last, "offsetTop", { configurable: true, get: () => lastOffsetTop });
+
+    group.dispatchEvent(new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }));
+    shiftSpy.mockClear();
+
+    lastOffsetTop = 140;
+    group.dispatchEvent(new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }));
+    expect(shiftSpy).toHaveBeenCalledTimes(1);
+    expect(shiftSpy).toHaveBeenCalledWith(68, expect.any(Number));
+  });
+
   it("reveals and focuses a target toolCallId inside a closed >100-item Activities section without opening other sections", async () => {
     const calls = Array.from({ length: 120 }, (_, i) => ({
       id: `call-${i}`,

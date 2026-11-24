@@ -63,7 +63,8 @@ export function ActivityGroupCard(props: Props) {
       const lineY = scrollerRect.top + scroller.clientTop;
       const readingOffsetInCard = lineY - cardRect.top;
       if (readingOffsetInCard > 0 && cardRect.bottom > lineY) {
-        for (let idx = 1; idx < order.length; idx++) {
+        // The lowest section that starts above the reading line holds the reader.
+        for (let idx = order.length - 1; idx >= 1; idx--) {
           const section = order[idx];
           if (!section) continue;
           const before = prevOffsets.get(section);

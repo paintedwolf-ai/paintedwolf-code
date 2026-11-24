@@ -164,7 +164,13 @@ export function ActivityGroupApprovals(props: Props) {
                   tone="pending"
                   label={checkpointDecisionLabel(pending.meta)}
                   details={[
-                    { text: pending.meta.tool ?? "", testId: "approvals-pending-tool" },
+                    {
+                      text:
+                        pending.meta.subject && pending.meta.subject !== pending.meta.tool
+                          ? ""
+                          : (pending.meta.tool ?? ""),
+                      testId: "approvals-pending-tool",
+                    },
                     {
                       text:
                         pending.meta.subject && pending.meta.subject !== pending.meta.tool
@@ -199,7 +205,7 @@ export function ActivityGroupApprovals(props: Props) {
               Review in composer
             </button>
           </Show>
-          <span class="den-tool-chicklet-caret" aria-hidden="true" />
+          <span class="den-disclosure-chevron" aria-hidden="true" />
         </TranscriptDisclosureSummary>
         <TranscriptDisclosurePanel disclosure={disclosure} class="den-activity-group-approvals__list">
           <KeyedIndex each={props.approvals} keyOf={(approval) => approval.key}>

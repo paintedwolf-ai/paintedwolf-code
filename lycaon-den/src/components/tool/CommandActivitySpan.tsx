@@ -36,26 +36,35 @@ export function findMatchingActivityToolEntry(
   );
 }
 
+/** Counts in a group section name their unit; a standalone span keeps its multiplier. */
 export function formatActivityCountChip(
   entries: readonly ActivitySpanEntry[],
   waitCount: number,
+  namedUnits = false,
 ): string | null {
   const total = entries.length;
-  if (waitCount > 0) {
-    const nonWaits = entries.filter(
-      (entry) => !(entry.kind === "tool" && entry.part.tool.toLowerCase() === "wait"),
-    );
-    const waitText = waitCount === 1 ? "1 wait" : `${waitCount} waits`;
-    if (nonWaits.length === 0) return waitText;
-    const allCommands = nonWaits.every(
-      (entry) => entry.kind === "tool" && (entry.part.tool === "command" || Boolean(entry.part.commandActivity)),
-    );
-    const unit = allCommands
-      ? nonWaits.length === 1 ? "command" : "commands"
-      : nonWaits.length === 1 ? "action" : "actions";
-    return `${nonWaits.length} ${unit} · ${waitText}`;
+  if (waitCount === 0 && !namedUnits) return total > 1 ? `×${total}` : null;
+  const nonWaits = entries.filter(
+    (entry) => !(entry.kind === "tool" && entry.part.tool.toLowerCase() === "wait"),
+  );
+  const waitText = waitCount === 0 ? "" : waitCount === 1 ? "1 wait" : `${waitCount} waits`;
+  if (nonWaits.length === 0) return waitText || null;
+  const allCommands = nonWaits.every(
+    (entry) => entry.kind === "tool" && (entry.part.tool === "command" || Boolean(entry.part.commandActivity)),
+  );
+  // Rows fold and split command calls, so commands are counted by call.
+  const calls = new Set<string>();
+  if (allCommands) {
+    for (const entry of nonWaits) {
+      if (entry.kind !== "tool") continue;
+      const ids = entry.part.commandActivity?.calls.map((call) => call.toolCallId).filter(Boolean) ?? [];
+      for (const id of ids.length > 0 ? ids : [entry.part.toolCallId || entry.part.id]) calls.add(id);
+    }
   }
-  return total > 1 ? `×${total}` : null;
+  const count = allCommands ? calls.size : nonWaits.length;
+  if (count <= 1 && waitCount === 0) return null;
+  const unit = allCommands ? (count === 1 ? "command" : "commands") : count === 1 ? "action" : "actions";
+  return waitText ? `${count} ${unit} · ${waitText}` : `${count} ${unit}`;
 }
 
 export function CommandActivitySpan(props: ActivitySpanCardProps) {

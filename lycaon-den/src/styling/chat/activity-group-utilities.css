@@ -8,6 +8,8 @@
   border-radius: var(--den-radius);
   background: var(--den-surface);
   overflow: hidden;
+  /* Headers keep their controls at the resting card edge when an open section widens the card. */
+  --den-activity-group-header-slack: max(0px, calc(100% - (var(--den-transcript-card-max, 32rem) - 2px)));
 
   &:has([data-expanded="true"]:not([data-closing])) {
     align-self: stretch;
@@ -24,6 +26,27 @@
 
   & + & {
     border-top: 1px solid color-mix(in srgb, var(--den-line) 75%, transparent);
+  }
+
+  & > * > .den-transcript-disclosure-header {
+    font-size: var(--text-den-compact);
+  }
+
+  & .den-transcript-disclosure-header .den-disclosure-chevron {
+    font-size: var(--text-den-label);
+    margin-inline-start: auto;
+  }
+
+  & [data-expanded="true"]:not([data-closing]) > .den-transcript-disclosure-header .den-disclosure-chevron {
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+
+  & .den-decision__label,
+  & .den-transcript-link-summary-label {
+    font-size: var(--text-den-compact);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--den-text);
   }
 }
 
@@ -42,14 +65,6 @@
     height: var(--den-transcript-card-row-h);
     min-height: var(--den-transcript-card-row-h);
   }
-
-  &&[data-expanded="true"] > .den-transcript-disclosure-header .den-tool-chicklet-caret {
-    transform: rotate(90deg);
-  }
-
-  &&[data-closing] > .den-transcript-disclosure-header .den-tool-chicklet-caret {
-    transform: rotate(0);
-  }
 }
 
 @utility den-activity-span-chicklet--section {
@@ -64,6 +79,7 @@
     height: 100%;
     min-height: 0;
     padding: 0 var(--den-transcript-card-inset-x);
+    padding-inline-end: calc(var(--den-transcript-card-inset-x) + var(--den-activity-group-header-slack));
     overflow: hidden;
     white-space: nowrap;
   }
@@ -72,10 +88,6 @@
     flex: 0 1 auto;
   }
 
-  && > .den-tool-chicklet-caret {
-    flex: 0 0 auto;
-    margin-inline-start: auto;
-  }
 }
 
 @utility den-activity-span-hint--inline {
@@ -104,8 +116,10 @@
     height: var(--den-transcript-card-row-h);
     min-height: var(--den-transcript-card-row-h);
     padding: 0 var(--den-transcript-card-inset-x);
+    padding-inline-end: calc(var(--den-transcript-card-inset-x) + var(--den-activity-group-header-slack));
     overflow: hidden;
     white-space: nowrap;
+    transition: color var(--den-duration-drawer) var(--den-ease);
   }
 
   && > .den-transcript-link-summary .den-transcript-link-summary-label {
@@ -117,17 +131,9 @@
     flex: 0 0 auto;
   }
 
-  && > .den-transcript-link-summary .den-disclosure-chevron {
-    margin-inline-start: auto;
-  }
-
   &&[data-expanded="true"]:not([data-closing]) > .den-transcript-disclosure-header {
     border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
     color: var(--den-text);
-  }
-
-  &&[data-expanded="true"]:not([data-closing]) > .den-transcript-disclosure-header .den-disclosure-chevron {
-    transform: rotate(45deg) translate(-1px, -1px);
   }
 }
 
@@ -153,16 +159,13 @@
   && > .den-checkpoint-decision-chicklet__summary {
     height: var(--den-transcript-card-row-h);
     min-height: var(--den-transcript-card-row-h);
+    padding-inline-end: calc(var(--den-transcript-card-inset-x) + var(--den-activity-group-header-slack));
     overflow: hidden;
     white-space: nowrap;
   }
 
   && > .den-checkpoint-decision-chicklet__summary > .den-checkpoint-decision-chicklet__summary-main {
     height: 100%;
-  }
-
-  &&[data-expanded="true"] > .den-transcript-disclosure-header .den-tool-chicklet-caret {
-    transform: rotate(90deg);
   }
 }
 
@@ -188,10 +191,6 @@
   && > .den-checkpoint-decision-chicklet__summary > .den-checkpoint-decision-chicklet__summary-main {
     height: 100%;
   }
-
-  &&[data-expanded="true"] > .den-transcript-disclosure-header .den-tool-chicklet-caret {
-    transform: rotate(90deg);
-  }
 }
 
 @utility den-activity-group-approvals {
@@ -204,6 +203,7 @@
   && > .den-checkpoint-decision-chicklet__summary {
     height: var(--den-transcript-card-row-h);
     min-height: var(--den-transcript-card-row-h);
+    padding-inline-end: calc(var(--den-transcript-card-inset-x) + var(--den-activity-group-header-slack));
     overflow: hidden;
     white-space: nowrap;
   }
@@ -214,14 +214,6 @@
 
   &&[data-expanded="true"]:not([data-closing]) > .den-checkpoint-decision-chicklet__summary {
     border-bottom-color: color-mix(in srgb, var(--den-line) 55%, transparent);
-  }
-
-  &&[data-expanded="true"] > .den-transcript-disclosure-header .den-tool-chicklet-caret {
-    transform: rotate(90deg);
-  }
-
-  &&[data-closing] > .den-transcript-disclosure-header .den-tool-chicklet-caret {
-    transform: rotate(0);
   }
 }
 
