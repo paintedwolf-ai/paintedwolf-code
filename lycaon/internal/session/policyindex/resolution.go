@@ -31,9 +31,10 @@ const (
 
 // Delivery is assembled from current sources for one model request.
 type Delivery struct {
-	Messages []api.Message
-	Manifest agentpolicy.Manifest
-	Status   Status
+	Messages     []api.Message
+	Manifest     agentpolicy.Manifest
+	Status       Status
+	ActiveRootID string
 }
 
 // Resolve loads each applicable policy once across all resolved scopes.
@@ -54,6 +55,9 @@ func (m *Service) Resolve(ctx context.Context, sess *api.Session, scopes []agent
 	}
 	files, loadErr := m.resolveFiles(ctx, roots, scopes)
 	delivery := Delivery{Status: StatusNoPolicy}
+	if active, activeErr := projectroot.ActiveRoot(roots, sess.WorkspaceRootID); activeErr == nil {
+		delivery.ActiveRootID = active.ID
+	}
 	var represented [][]agentpolicy.Revision
 	var priorities []int
 	for _, file := range files {

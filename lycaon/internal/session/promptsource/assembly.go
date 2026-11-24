@@ -108,9 +108,9 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		ProjectOverlayRootPaths: m.Workspace.PromptRoots,
 		SessionView:             m.sessionView,
 		AgentsMDIndex:           m.PolicyIndex.Index,
-		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error) {
+		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) (assembly.AgentsMDPolicyDelivery, error) {
 			delivery, err := m.PolicyIndex.ResolveCurrent(ctx, sess, history)
-			return delivery.Messages, err
+			return assembly.AgentsMDPolicyDelivery{Messages: delivery.Messages, ActiveRootID: delivery.ActiveRootID}, err
 		},
 		WebSearchEnabled:  m.WebSearchEnabled,
 		SynthesisEvidence: m.Closeout,

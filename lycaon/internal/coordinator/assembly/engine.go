@@ -76,7 +76,7 @@ type SessionView func(ctx context.Context, sess *api.Session) *catalogview.View
 type AgentsMDIndexInjector func(ctx context.Context, sess *api.Session) (block api.Message, ok bool)
 
 // AgentsMDPoliciesInjector renders current guidance for resolved working scopes.
-type AgentsMDPoliciesInjector func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error)
+type AgentsMDPoliciesInjector func(ctx context.Context, sess *api.Session, history []api.Message) (AgentsMDPolicyDelivery, error)
 
 // SelectionSource exposes the session ledger's current prompt selection.
 type SelectionSource interface {
@@ -267,8 +267,18 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	out, prefixIdx := contextAssembler.appendPreHistorySystemInjects(ctx, sess, turn, out, 0)
 	lastStableIdx := prefixIdx
 
+	policyDelivery, err := contextAssembler.agentsMDChainInject(ctx, sess, history, turn)
+	if err != nil {
+		return nil, err
+	}
+	preHistoryPolicies, tailPolicies := splitPreHistoryAgentsMDPolicies(sess, policyDelivery)
+	if len(preHistoryPolicies) > 0 {
+		out = append(out, preHistoryPolicies...)
+		lastStableIdx = len(out) - 1
+	}
+
 	tailInjects, err := contextAssembler.buildTailSystemInjects(
-		ctx, sess, coordinatorSurface, frame, pendingKickIDs, history, turn,
+		ctx, sess, coordinatorSurface, frame, pendingKickIDs, history, turn, tailPolicies,
 	)
 	if err != nil {
 		return nil, err

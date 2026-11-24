@@ -107,13 +107,10 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 	pendingKickIDs []string,
 	history []api.Message,
 	turn *TurnAssemblyScratch,
+	policies []api.Message,
 ) ([]api.Message, error) {
 	var tail []api.Message
 
-	policies, err := e.agentsMDChainInject(ctx, sess, history, turn)
-	if err != nil {
-		return nil, err
-	}
 	tail = append(tail, policies...)
 
 	if coordinator {

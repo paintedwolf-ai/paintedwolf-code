@@ -46,9 +46,9 @@ func TestKnownPrefixDoesNotAdvanceTurnOrWorkflow(t *testing.T) {
 	deps.Board = advancingBoard{}
 	deps.BoardOrientReady = advancingOrientRecorder{source: source}
 	deps.ScanGuidance = forbiddenPreparationGuidance{t}
-	deps.AgentsMDPolicies = func(context.Context, *api.Session, []api.Message) ([]api.Message, error) {
+	deps.AgentsMDPolicies = func(context.Context, *api.Session, []api.Message) (AgentsMDPolicyDelivery, error) {
 		t.Fatal("preparation resolved turn policy delivery")
-		return nil, nil
+		return AgentsMDPolicyDelivery{}, nil
 	}
 	engine.SetDeps(deps)
 	engine.BeginPromptTurn(sess.ID, "pending")
