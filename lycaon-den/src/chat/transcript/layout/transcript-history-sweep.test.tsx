@@ -492,4 +492,38 @@ describe("transcript history sweep invariants (TH05)", () => {
       }
     },
   );
+
+  it("keeps a six-gesture local reversal bounded across 5,000 and 50,000 host messages", async () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      queueMicrotask(() => cb(0));
+      return 1;
+    });
+    try {
+      for (const total of [5_000, 50_000]) {
+        const harness = createSweepHarness(total, `sweep-reversal-${total}`);
+        try {
+          await flushSweepTurn();
+          harness.requestKeys.length = 0;
+          for (const direction of [-1, -1, -1, 1, 1, -1]) {
+            const extent = harness.virtualizer.residentExtent();
+            harness.wheelTo(
+              direction < 0 ? extent.startPx + 80 : extent.endPx - 400,
+              direction * 120,
+            );
+            await flushSweepTurn();
+          }
+          expect(harness.requestKeys.length).toBeLessThanOrEqual(6);
+          expect(new Set(harness.requestKeys).size).toBe(harness.requestKeys.length);
+          expect(harness.virtualizer.getVirtualItems().length).toBeLessThanOrEqual(52);
+          for (const { driftPx, rowHeightPx } of harness.anchorDriftsPx) {
+            expect(driftPx).toBeLessThanOrEqual(rowHeightPx);
+          }
+        } finally {
+          harness.dispose();
+        }
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
