@@ -57,7 +57,7 @@ func (s Snapshot) NextItemSeq() uint64 {
 }
 
 // Missing reports whether the snapshot has zero rows.
-func (s Snapshot) Missing() bool { return len(s.Rows) == 0 }
+func (s Snapshot) Missing() bool { return ProgressMissing(s.Rows) }
 
 // OpenStepCount returns remaining pending rows.
 func (s Snapshot) OpenStepCount() int { return OpenStepCount(s.Rows) }
@@ -103,19 +103,14 @@ func reconciliationEqual(a, b *Reconciliation) bool {
 }
 
 func snapshotFromDB(runID string, rows []Row, updatedAt string, docVersion, nextSeq uint64) Snapshot {
-	if rows == nil {
-		rows = []Row{}
-	}
 	if nextSeq < 1 {
 		nextSeq = 1
 	}
-	return Snapshot{
-		Rows:            rows,
-		RunID:           runID,
-		version:         updatedAt,
-		documentVersion: docVersion,
-		nextItemSeq:     nextSeq,
-	}
+	snap := NewSnapshot(runID, rows...)
+	snap.version = updatedAt
+	snap.documentVersion = docVersion
+	snap.nextItemSeq = nextSeq
+	return snap
 }
 
 // Transitions distinguish deliverable state changes from non-state edits.

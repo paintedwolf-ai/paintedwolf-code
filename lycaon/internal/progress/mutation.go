@@ -171,7 +171,7 @@ func ValidateMutation(m Mutation) error {
 		}
 	}
 	for i := range m.Replace {
-		if _, err := cleanAuthorLabel(m.Replace[i].Label); err != nil {
+		if err := validateAuthorLabel(m.Replace[i].Label); err != nil {
 			return err
 		}
 		state := strings.TrimSpace(m.Replace[i].State)
@@ -222,14 +222,14 @@ func ValidateMutation(m Mutation) error {
 			return fmt.Errorf("invalid update[%d].state %q", i, *u.State)
 		}
 		if u.Label != nil {
-			if _, err := cleanAuthorLabel(*u.Label); err != nil {
+			if err := validateAuthorLabel(*u.Label); err != nil {
 				return err
 			}
 		}
 		updated[u.ID] = struct{}{}
 	}
 	for i, a := range m.Add {
-		if _, err := cleanAuthorLabel(a.Label); err != nil {
+		if err := validateAuthorLabel(a.Label); err != nil {
 			return err
 		}
 		state := strings.TrimSpace(a.State)
@@ -260,15 +260,15 @@ func ValidateMutation(m Mutation) error {
 	return nil
 }
 
-func cleanAuthorLabel(raw string) (string, error) {
+func validateAuthorLabel(raw string) error {
 	label := strings.TrimSpace(raw)
 	if label == "" {
-		return "", fmt.Errorf("row label required")
+		return fmt.Errorf("row label required")
 	}
 	if utf8.RuneCountInString(label) > MaxAuthorLabelRunes {
-		return "", fmt.Errorf("row label exceeds %d characters", MaxAuthorLabelRunes)
+		return fmt.Errorf("row label exceeds %d characters", MaxAuthorLabelRunes)
 	}
-	return label, nil
+	return nil
 }
 
 func parseReplaceSpecs(raw any) ([]RowSpec, error) {
