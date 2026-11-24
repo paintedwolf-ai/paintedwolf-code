@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/cost"
@@ -44,26 +45,32 @@ func (b *serveBuilder) wireStandingWatchHost(watchStore *watch.Store) {
 		}
 	}
 
+	var wg sync.WaitGroup
 	engine.SetCallbacks(watch.StandingCallbacks{
 		ModelPriceCheck:    b.standingModelPriceCheck,
 		PersonAccessCheck:  b.standingPersonAccessCheck,
 		SessionTargetCheck: b.standingSessionTargetCheck,
 		ProjectDefaults:    b.standingProjectDefaults,
 		RunDispatcher: func(ctx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
-			return b.dispatchStandingWatchRun(ctx, engine, sw, run, promptText)
+			return b.dispatchStandingWatchRun(ctx, &wg, engine, sw, run, promptText)
 		},
 	})
 	if b.events != nil {
 		watchStore.SetEventOutbox(b.events.Outbox)
 	}
 
+	var stopCh chan struct{}
+	var unsub func()
 	if b.events != nil && b.events.Hub != nil {
-		ch, unsub, err := b.events.Hub.Subscribe(b.startup.ctx, events.Subscription{
+		ch, u, err := b.events.Hub.Subscribe(b.startup.ctx, events.Subscription{
 			Viewer: people.Person{ID: "standing-watch-host", Role: api.PersonRoleOwner},
 		})
 		if err == nil {
-			stopCh := make(chan struct{})
+			stopCh = make(chan struct{})
+			unsub = u
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				for {
 					select {
 					case <-stopCh:
@@ -76,14 +83,19 @@ func (b *serveBuilder) wireStandingWatchHost(watchStore *watch.Store) {
 					}
 				}
 			}()
-			if b.startup.resources != nil {
-				b.startup.resources.Track("standing-watch-events", 89, func(context.Context) error {
-					close(stopCh)
-					unsub()
-					return nil
-				})
-			}
 		}
+	}
+	if b.startup.resources != nil {
+		b.startup.resources.Track("standing-watch-events", 89, func(context.Context) error {
+			if stopCh != nil {
+				close(stopCh)
+			}
+			if unsub != nil {
+				unsub()
+			}
+			wg.Wait()
+			return nil
+		})
 	}
 }
 
@@ -219,6 +231,7 @@ func (b *serveBuilder) standingProjectDefaults(ctx context.Context, projectID st
 
 func (b *serveBuilder) dispatchStandingWatchRun(
 	ctx context.Context,
+	wg *sync.WaitGroup,
 	engine *watch.StandingEngine,
 	sw watch.StandingWatch,
 	run watch.WatchRun,
@@ -272,7 +285,9 @@ func (b *serveBuilder) dispatchStandingWatchRun(
 			TranscriptVisible: true,
 		},
 	}
+	wg.Add(1)
 	go func(sid string) {
+		defer wg.Done()
 		runCtx := people.WithoutCaller(context.Background())
 		resp, runErr := b.sessions.Manager.Submissions.HostTurnWithAdmission(runCtx, sid, sessionstore.PromptSubmissionOriginLoopWake, in, nil)
 		switch {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -124,13 +125,17 @@ func reconcileInitialProcessClaims(s *Store, ctx context.Context, reg Registrati
 			notifyProcessObserve(s, reg.Owner.SessionID, handle)
 		}
 		if decision.AlreadyAdmitted && decision.ExistingReceiptID != "" {
-			_, _ = s.db.ExecContext(ctx, `UPDATE watch_matches
+			if _, err := s.db.ExecContext(ctx, `UPDATE watch_matches
 				SET reservation_state = 'delivered', retained_ref = ?
 				WHERE watch_id = ? AND source_occurrence_id = ? AND reservation_state = 'pending'`,
-				decision.ExistingReceiptID, reg.WatchID, m.OccurrenceID)
-			_, _ = s.db.ExecContext(ctx, `UPDATE watch_registrations
+				decision.ExistingReceiptID, reg.WatchID, m.OccurrenceID); err != nil {
+				slog.WarnContext(ctx, "mark initial watch match delivered", "watch_id", reg.WatchID, "err", err)
+			}
+			if _, err := s.db.ExecContext(ctx, `UPDATE watch_registrations
 				SET slot_released = CASE WHEN state = 'terminal' THEN 1 ELSE slot_released END
-				WHERE watch_id = ?`, reg.WatchID)
+				WHERE watch_id = ?`, reg.WatchID); err != nil {
+				slog.WarnContext(ctx, "release terminal initial watch slot", "watch_id", reg.WatchID, "err", err)
+			}
 			if receipt.PendingMatches > 0 {
 				receipt.PendingMatches--
 			}

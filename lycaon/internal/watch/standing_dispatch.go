@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -178,11 +179,13 @@ func invokeStandingDispatcher(ctx context.Context, e *StandingEngine, sw Standin
 	}
 	out, err := dispatcher(ctx, sw, run, BuildStandingRunPrompt(sw, run))
 	if out.BusyRetry {
-		_, _ = e.store.db.ExecContext(ctx, `UPDATE watch_runs SET status = 'pending', started_at = NULL WHERE run_id = ? AND status = 'running'`, run.RunID)
-		return nil
+		_, rErr := e.store.db.ExecContext(ctx, `UPDATE watch_runs SET status = 'pending', started_at = NULL WHERE run_id = ? AND status = 'running'`, run.RunID)
+		return rErr
 	}
 	if out.SessionID != "" && out.SessionID != run.SessionID {
-		_, _ = e.store.db.ExecContext(ctx, `UPDATE watch_runs SET session_id = ? WHERE run_id = ?`, out.SessionID, run.RunID)
+		if _, uErr := e.store.db.ExecContext(ctx, `UPDATE watch_runs SET session_id = ? WHERE run_id = ?`, out.SessionID, run.RunID); uErr != nil {
+			slog.WarnContext(ctx, "record standing watch run session", "run_id", run.RunID, "err", uErr)
+		}
 	}
 	if out.ModelUnavailable || err != nil {
 		sid := out.SessionID
@@ -339,24 +342,34 @@ func settleStandingRunByID(ctx context.Context, e *StandingEngine, runID, sessio
 				return err
 			}
 			if sw.Target.Kind == "new_chat" && strings.TrimSpace(sessionID) != "" {
-				_, _ = tx.ExecContext(ctx, `UPDATE sessions SET seen_at = NULL WHERE id = ?`, strings.TrimSpace(sessionID))
+				if _, err := tx.ExecContext(ctx, `UPDATE sessions SET seen_at = NULL WHERE id = ?`, strings.TrimSpace(sessionID)); err != nil {
+					return err
+				}
 			}
 			if isAtOnlyStandingWatch(sw.Conditions) {
 				if next, _ := PreviewStandingSchedule(sw.Conditions, sw.TimeZone, sw.IntervalAnchor, now, 1); len(next) == 0 {
 					completedOneShot, nextRev = true, nextRev+1
-					_, _ = tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'completed', state_reason = NULL, ended_at = ?, revision = ?, updated_at = ? WHERE watch_id = ?`, nowStr, nextRev, nowStr, sw.WatchID)
+					if _, err := tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'completed', state_reason = NULL, ended_at = ?, revision = ?, updated_at = ? WHERE watch_id = ?`, nowStr, nextRev, nowStr, sw.WatchID); err != nil {
+						return err
+					}
 				}
 			}
 		case RunFailed, RunFenced:
 			newFails := sw.ConsecutiveFailures + 1
-			_, _ = tx.ExecContext(ctx, `UPDATE standing_watch_settings SET consecutive_failures = ?, last_outcome = ? WHERE watch_id = ?`, newFails, string(status), run.WatchID)
+			if _, err := tx.ExecContext(ctx, `UPDATE standing_watch_settings SET consecutive_failures = ?, last_outcome = ? WHERE watch_id = ?`, newFails, string(status), run.WatchID); err != nil {
+				return err
+			}
 			if newFails >= MaxConsecutiveFailures && sw.State == StateEnabled {
 				pausedByFailures, nextRev = true, nextRev+1
-				_, _ = tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'paused', state_reason = 'consecutive_failures', revision = ?, updated_at = ? WHERE watch_id = ?`, nextRev, nowStr, sw.WatchID)
+				if _, err := tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'paused', state_reason = 'consecutive_failures', revision = ?, updated_at = ? WHERE watch_id = ?`, nextRev, nowStr, sw.WatchID); err != nil {
+					return err
+				}
 				_, _ = cancelPendingAndQueuedRunsTx(ctx, tx, sw.WatchID, nowStr)
 			}
 		case RunCanceled:
-			_, _ = tx.ExecContext(ctx, `UPDATE standing_watch_settings SET last_outcome = 'canceled' WHERE watch_id = ?`, run.WatchID)
+			if _, err := tx.ExecContext(ctx, `UPDATE standing_watch_settings SET last_outcome = 'canceled' WHERE watch_id = ?`, run.WatchID); err != nil {
+				return err
+			}
 		}
 		publishWatchEventTx(ctx, e, tx, "watch_run.updated", run.ProjectID, sessionID, run.WatchID, runID, nextRev)
 		if pausedByFailures || completedOneShot {
@@ -409,7 +422,10 @@ func (e *StandingEngine) NotifySessionClosedOrDeleted(ctx context.Context, sessi
 			continue
 		}
 		nextRev := t.rev + 1
-		_, _ = tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'paused', state_reason = 'target_unavailable', revision = ?, updated_at = ? WHERE watch_id = ?`, nextRev, nowStr, t.watchID)
+		if _, err := tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'paused', state_reason = 'target_unavailable', revision = ?, updated_at = ? WHERE watch_id = ?`, nextRev, nowStr, t.watchID); err != nil {
+			_ = tx.Rollback()
+			continue
+		}
 		_, _ = cancelPendingAndQueuedRunsTx(ctx, tx, t.watchID, nowStr)
 		publishWatchEventTx(ctx, e, tx, "watch.updated", t.projectID, "", t.watchID, "", nextRev)
 		if commitStandingTx(e, tx) == nil {
@@ -442,9 +458,13 @@ func pauseStandingTargetUnavailableWithRun(ctx context.Context, e *StandingEngin
 	}
 	defer func() { _ = tx.Rollback() }()
 	nextRev := sw.Revision + 1
-	_, _ = tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'paused', state_reason = 'target_unavailable', revision = ?, updated_at = ? WHERE watch_id = ?`, nextRev, nowStr, sw.WatchID)
+	if _, err := tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'paused', state_reason = 'target_unavailable', revision = ?, updated_at = ? WHERE watch_id = ?`, nextRev, nowStr, sw.WatchID); err != nil {
+		return err
+	}
 	if runID != "" {
-		_, _ = tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'canceled', ended_at = ? WHERE run_id = ?`, nowStr, runID)
+		if _, err := tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'canceled', ended_at = ? WHERE run_id = ?`, nowStr, runID); err != nil {
+			return err
+		}
 		publishWatchEventTx(ctx, e, tx, "watch_run.updated", sw.ProjectID, "", sw.WatchID, runID, nextRev)
 	}
 	_, _ = cancelPendingAndQueuedRunsTx(ctx, tx, sw.WatchID, nowStr)
@@ -465,9 +485,13 @@ func disableWatchOnRevokedOwner(ctx context.Context, e *StandingEngine, sw Stand
 	}
 	defer func() { _ = tx.Rollback() }()
 	nextRev := sw.Revision + 1
-	_, _ = tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'disabled', state_reason = 'owner_access_revoked', revision = ?, updated_at = ? WHERE watch_id = ?`, nextRev, nowStr, sw.WatchID)
+	if _, err := tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'disabled', state_reason = 'owner_access_revoked', revision = ?, updated_at = ? WHERE watch_id = ?`, nextRev, nowStr, sw.WatchID); err != nil {
+		return err
+	}
 	if runID != "" {
-		_, _ = tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'canceled', ended_at = ? WHERE run_id = ?`, nowStr, runID)
+		if _, err := tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'canceled', ended_at = ? WHERE run_id = ?`, nowStr, runID); err != nil {
+			return err
+		}
 		publishWatchEventTx(ctx, e, tx, "watch_run.updated", sw.ProjectID, "", sw.WatchID, runID, nextRev)
 	}
 	_, _ = cancelPendingAndQueuedRunsTx(ctx, tx, sw.WatchID, nowStr)
@@ -492,7 +516,9 @@ func markStandingWatchCompleted(ctx context.Context, e *StandingEngine, watchID,
 		return err
 	}
 	nextRev := rev + 1
-	_, _ = tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'completed', state_reason = NULL, ended_at = ?, revision = ?, updated_at = ? WHERE watch_id = ?`, nowStr, nextRev, nowStr, watchID)
+	if _, err := tx.ExecContext(ctx, `UPDATE watch_registrations SET state = 'completed', state_reason = NULL, ended_at = ?, revision = ?, updated_at = ? WHERE watch_id = ?`, nowStr, nextRev, nowStr, watchID); err != nil {
+		return err
+	}
 	publishWatchEventTx(ctx, e, tx, "watch.updated", projectID, "", watchID, "", nextRev)
 	if err := commitStandingTx(e, tx); err != nil {
 		return err
