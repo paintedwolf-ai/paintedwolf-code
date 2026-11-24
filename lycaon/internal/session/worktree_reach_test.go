@@ -120,12 +120,27 @@ func sameReachPath(a, b string) bool {
 	if a == b {
 		return true
 	}
-	ra, errA := filepath.EvalSymlinks(a)
-	rb, errB := filepath.EvalSymlinks(b)
-	if errA != nil || errB != nil {
-		return false
+	return evalExistingReachAncestors(a) == evalExistingReachAncestors(b)
+}
+
+func evalExistingReachAncestors(p string) string {
+	cur := filepath.Clean(p)
+	var tail []string
+	for {
+		resolved, err := filepath.EvalSymlinks(cur)
+		if err == nil {
+			for i := len(tail) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, tail[i])
+			}
+			return filepath.Clean(resolved)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return filepath.Clean(p)
+		}
+		tail = append(tail, filepath.Base(cur))
+		cur = parent
 	}
-	return filepath.Clean(ra) == filepath.Clean(rb)
 }
 
 func writeBoundary(t *testing.T) *sandbox.Boundary {

@@ -21,7 +21,13 @@ import {
   resetEditorDocumentsForTests,
 } from "./editor-document.ts";
 import { createFileDocumentCommands } from "./file-document-commands.ts";
-import { filesBufferText, projectFilesState } from "./files-buffer-state.ts";
+import {
+  applyFilesBufferDocumentStatus,
+  filesBufferText,
+  markFilesBufferCheckoutUnavailable,
+  projectFilesState,
+} from "./files-buffer-state.ts";
+import { saveProjectFileDocument } from "./project-file-document-save.ts";
 import {
   flushFilesHotExitToDisk,
   restoreFilesHotExitForProject,
@@ -330,6 +336,13 @@ describe("multi-checkout Files buffers, hot exit, and unavailable checkout recov
     expect(commands.editable(buf)).toBe(true);
     expect(commands.saveable(buf)).toBe(false);
     expect(await commands.performSave(key)).toBe(false);
+    const directUnavailable = await saveProjectFileDocument({
+      projectId,
+      client,
+      key,
+    });
+    expect(directUnavailable.status).toBe("unavailable");
+    expect(directUnavailable).toMatchObject({ message: "That checkout is no longer available on disk." });
 
     const liveKey = await commands.saveToActiveCheckout(key, { worktreeId: primaryWorktreeId });
     expect(saveError).toBeNull();
@@ -345,5 +358,92 @@ describe("multi-checkout Files buffers, hot exit, and unavailable checkout recov
       undefined,
       primaryWorktreeId,
     );
+  });
+
+  it("marks buffers unavailable when save hits worktree_unavailable and updates cold tab checkout metadata", async () => {
+    const host = new DocumentFixture("export const live = 1;\n", {
+      id: "doc-save-vanish",
+      project_id: projectId,
+      workspace_id: "ws-sibling",
+      root_id: "root-repo",
+      path: "src/vanish.ts",
+      file_id: "file-vanish",
+      branch_id: `worktree:${siblingWorktreeId}`,
+    });
+
+    const observeEditorDocument = vi.fn(async () => ({
+      ...host.snapshot(),
+      absent: true,
+      checkout_unavailable: true,
+    }));
+    const client = stubClient({
+      openEditorDocument: vi.fn(async () => host.snapshot()),
+      syncEditorDocument: host.sync,
+      submitEditorDocumentUpdate: vi.fn(async (pid: string, docId: string, req: SubmitEditorDocumentUpdateRequest) => {
+        if (req.save) {
+          throw new LycaonApiError("That checkout is no longer available.", 409, "worktree_unavailable");
+        }
+        return host.submit(pid, docId, req);
+      }),
+      observeEditorDocument,
+      publishEditorDocumentPresence: vi.fn(async () => undefined),
+    });
+
+    cleanupConnection = configureEditorDocuments(
+      projectId,
+      () => client,
+      () => undefined,
+      {
+        get: (k) => projectFilesState(projectId).byKey[k],
+        all: () => Object.values(projectFilesState(projectId).byKey),
+      },
+      () => "ws-sibling",
+    );
+
+    adoptFilesWorkspaceRoots(projectId, makeWorkspace(siblingWorktreeId, `worktree:${siblingWorktreeId}`, "/work/sibling", "ws-sibling"));
+    let key = openFilesBuffer(projectId, {
+      rootId: "root-repo",
+      rootLabel: "repo",
+      path: "src/vanish.ts",
+      intent: "permanent",
+    });
+    const opened = await openFileBufferSource(client, projectId, projectFilesState(projectId).byKey[key]!);
+    const presented = presentOpenedDocument(opened.document, opened.retained);
+    const adopted = await receiveOpenedEditorDocument(projectId, client, opened.document!, presented?.confirmed, opened.reservation);
+    key = applyFilesBufferLoad(projectId, key, opened.source, presented?.loaded);
+    applyFilesBufferEditorDocument(projectId, key, adopted!);
+    opened.reservation?.release();
+
+    editorReplica(host.wire.id)!.replaceLocal("export const live = 2;\n");
+    const outcome = await saveProjectFileDocument({ projectId, client, key });
+    expect(outcome.status).toBe("unavailable");
+    expect(projectFilesState(projectId).byKey[key]?.checkoutUnavailable).toBe(true);
+    expect(observeEditorDocument).toHaveBeenCalledTimes(1);
+
+    markFilesBufferCheckoutUnavailable(projectId, key, false);
+    expect(projectFilesState(projectId).byKey[key]?.checkoutUnavailable).toBe(false);
+
+    // Cold restored tab receives branch_id, workspace_id, and checkout_unavailable from status reads.
+    const coldKey = openFilesBuffer(projectId, {
+      rootId: "root-repo",
+      rootLabel: "repo",
+      path: "src/cold.ts",
+      documentId: "doc-cold-wt",
+      intent: "permanent",
+    });
+    applyFilesBufferDocumentStatus(projectId, {
+      ...host.snapshot(),
+      id: "doc-cold-wt",
+      revision: 5,
+      branch_id: `worktree:${siblingWorktreeId}`,
+      workspace_id: "ws-orphan-cold",
+      checkout_unavailable: true,
+      absent: true,
+    });
+    const coldBuf = projectFilesState(projectId).byKey[coldKey]!;
+    expect(coldBuf.worktreeId).toBe(siblingWorktreeId);
+    expect(coldBuf.workspaceId).toBe("ws-orphan-cold");
+    expect(coldBuf.checkoutUnavailable).toBe(true);
+    expect(coldBuf.sourcePresent).toBe(false);
   });
 });

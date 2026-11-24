@@ -10,8 +10,15 @@ import type {
 } from "../../api/types.ts";
 import type { GitWorkspaceStatus } from "../../chat/actions/git-workspace-status.ts";
 import { resetEditorDocumentsForTests } from "../../files/documents/editor-document.ts";
-import { resetProjectFilesForTests } from "../../files/documents/project-files-buffer-lifecycle.ts";
+import {
+  openFilesBuffer,
+  resetProjectFilesForTests,
+} from "../../files/documents/project-files-buffer-lifecycle.ts";
 import { resetWorkspaceRootCheckoutsForTests } from "../../files/source/files-checkout-scope.ts";
+import {
+  registerOpenRunningStageSink,
+  resetOpenRunningForTests,
+} from "../../platform/navigation/open-running.ts";
 import {
   registerOpenSourceProjectLookup,
   registerOpenSourceSink,
@@ -24,6 +31,10 @@ import {
   readCheckoutInspectionState,
   reconcileRepoWorktreeSelection,
 } from "./git-worktree-inspection.ts";
+import {
+  flushCheckoutBuffersBeforeRemoval,
+  resolveWorktreeBlockerNavigation,
+} from "./worktree-lifecycle-blocker.ts";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const ROOT_ID = "22222222-2222-4222-8222-222222222222";
@@ -322,5 +333,73 @@ describe("WT07 worktree inspection and lifecycle independence", () => {
       expect(onUnbindWorktree).toHaveBeenCalledTimes(2);
       expect(screen.queryByTestId("git-worktree")).toBeNull();
     });
+  });
+
+  it("flushes matching checkout buffers before removal and routes dirty-worktree and active-work blockers", async () => {
+    const appStore = createAppStore();
+    const view = makeInventoryView();
+    reconcileRepoWorktreeSelection(appStore, PROJECT_ID, REPO_ID, view);
+
+    openFilesBuffer(PROJECT_ID, {
+      rootId: ROOT_ID,
+      rootLabel: "repo",
+      path: "bound.ts",
+      worktreeId: WT_BOUND_A,
+      documentId: "doc-flush-a",
+      intent: "permanent",
+    });
+    openFilesBuffer(PROJECT_ID, {
+      rootId: ROOT_ID,
+      rootLabel: "repo",
+      path: "other.ts",
+      worktreeId: WT_SIBLING_B,
+      intent: "permanent",
+    });
+    await flushCheckoutBuffersBeforeRemoval(PROJECT_ID, WT_BOUND_A);
+
+    const dismissed = vi.fn();
+    const selectedCallback = vi.fn();
+    const dirtyViaCallback = resolveWorktreeBlockerNavigation({
+      projectId: PROJECT_ID,
+      blocker: { message: "dirty", kind: "dirty_worktree", repoId: REPO_ID, worktreeId: WT_SIBLING_B },
+      onSelectWorktreeId: selectedCallback,
+      onDismissDialog: dismissed,
+    });
+    expect(dirtyViaCallback?.label).toBe("Inspect worktree changes");
+    dirtyViaCallback?.run();
+    expect(selectedCallback).toHaveBeenCalledWith(REPO_ID, WT_SIBLING_B);
+
+    const dirtyViaStore = resolveWorktreeBlockerNavigation({
+      projectId: PROJECT_ID,
+      appStore,
+      blocker: { message: "dirty", kind: "dirty_worktree", repoId: REPO_ID, worktreeId: WT_SIBLING_B },
+      onDismissDialog: dismissed,
+    });
+    dirtyViaStore?.run();
+    expect(readCheckoutInspectionState(appStore, PROJECT_ID, REPO_ID).inspectedWorktreeId).toBe(WT_SIBLING_B);
+
+    const runningOpened: unknown[] = [];
+    const disposeRunning = registerOpenRunningStageSink((req) => runningOpened.push(req));
+    try {
+      const activeWorkNav = resolveWorktreeBlockerNavigation({
+        projectId: PROJECT_ID,
+        blocker: { message: "running", kind: "active_work" },
+        onDismissDialog: dismissed,
+      });
+      expect(activeWorkNav?.label).toBe("Open in Running");
+      activeWorkNav?.run();
+      expect(runningOpened).toEqual([{ projectId: PROJECT_ID }]);
+    } finally {
+      disposeRunning();
+      resetOpenRunningForTests();
+    }
+
+    expect(
+      resolveWorktreeBlockerNavigation({
+        projectId: PROJECT_ID,
+        blocker: { message: "unmanaged", kind: "unmanaged_worktree" },
+        onDismissDialog: dismissed,
+      }),
+    ).toBeUndefined();
   });
 });
