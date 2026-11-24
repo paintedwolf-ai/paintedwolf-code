@@ -47,20 +47,31 @@ func (s *Projects) HandleCreateProject(w http.ResponseWriter, r *http.Request) {
 		s.responses.ProjectRegistryError(w, r, err)
 		return
 	}
+	s.PrepareCreatedProject(r.Context(), p)
+	s.PublishProjectCreated(r.Context(), p)
+	httpio.WriteJSON(w, http.StatusCreated, project.ToAPI(p))
+}
+
+// PrepareCreatedProject starts root observation, credential indexing, scan
+// baselines, verification detection and catalog warming for a new project.
+func (s *Projects) PrepareCreatedProject(ctx context.Context, p *project.Project) {
 	for _, root := range p.Roots {
 		if s.sourceWorkspace.SourceLedger != nil && s.sourceWorkspace.SourceLedger.Snapshots != nil {
-			if err := s.sourceWorkspace.SourceLedger.Snapshots.DiscardObservations(r.Context(), root.Path); err != nil {
-				slog.WarnContext(r.Context(), "discard stale source observations", "path", root.Path, "err", err)
+			if err := s.sourceWorkspace.SourceLedger.Snapshots.DiscardObservations(ctx, root.Path); err != nil {
+				slog.WarnContext(ctx, "discard stale source observations", "path", root.Path, "err", err)
 			}
 		}
-		s.Roots.afterRootAttached(r.Context(), p.ID, root.Path)
+		s.Roots.afterRootAttached(ctx, p.ID, root.Path)
 	}
-	s.Verification.detectVerifyAsync(r.Context(), p.ID)
+	s.Verification.detectVerifyAsync(ctx, p.ID)
 	// Contributions and workflows are read next, and both resolve this
 	// project's catalog for the first time.
-	s.Extensions.WarmEffectiveCatalog(context.WithoutCancel(r.Context()), p.ID)
-	s.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventCreated, p)
-	httpio.WriteJSON(w, http.StatusCreated, project.ToAPI(p))
+	s.Extensions.WarmEffectiveCatalog(context.WithoutCancel(ctx), p.ID)
+}
+
+// PublishProjectCreated announces a committed project to connected clients.
+func (s *Projects) PublishProjectCreated(ctx context.Context, p *project.Project) {
+	s.publishProjectLifecycleEvent(ctx, wire.ProjectEventCreated, p)
 }
 
 func (s *Projects) HandleGetProject(w http.ResponseWriter, r *http.Request) {

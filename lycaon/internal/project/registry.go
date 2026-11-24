@@ -3,6 +3,7 @@ package project
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
@@ -21,6 +22,10 @@ var (
 	ErrDraftRootImmutable = errors.New("draft workspace root is immutable")
 	ErrRootBusy           = errors.New("project root has active dependents")
 	ErrProjectBusy        = errors.New("project has active work")
+	// ErrReservedProjectShape refuses a reserved create that is not an empty draft.
+	ErrReservedProjectShape = errors.New("a reserved project must be an empty draft")
+	// ErrDraftWorkspaceOccupied reports unexpected content at a reserved draft path.
+	ErrDraftWorkspaceOccupied = errors.New("the reserved draft workspace already holds other content")
 )
 
 // RootKind distinguishes attached folders, the engine-managed draft workspace,
@@ -141,6 +146,7 @@ type PatchParams struct {
 type Registry interface {
 	MutationEventsOutboxed() bool
 	Create(ctx context.Context, params CreateParams) (*Project, error)
+	CreateReserved(ctx context.Context, id string, params CreateParams, commit func(context.Context, *sql.Tx) error) (*Project, error)
 	Get(ctx context.Context, id string) (*Project, error)
 	List(ctx context.Context) ([]Project, error)
 	Patch(ctx context.Context, id string, params PatchParams) (*Project, error)

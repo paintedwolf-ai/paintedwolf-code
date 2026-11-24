@@ -59,6 +59,9 @@ func putPromptSubmissionSQL(ctx context.Context, s *sqlCore, in PromptSubmission
 		return nil, false, &PromptSubmissionConflictError{ID: in.ID}
 	}
 	if rows == 1 {
+		if err := fenceHomeStartOperation(ctx, qtx, in, createdAt); err != nil {
+			return nil, false, err
+		}
 		if err := admitModeSQL(ctx, s, tx, in.SessionID, in.Mode, nil); err != nil {
 			return nil, false, err
 		}

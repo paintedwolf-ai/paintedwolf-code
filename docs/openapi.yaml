@@ -24,6 +24,8 @@ tags:
     description: Workflow catalogs, session composition, execution, and human transitions.
   - name: projects
     description: Project identity, roots, source access, and project-scoped history.
+  - name: home-starts
+    description: Home submissions that become a draft project, its first chat and first prompt.
   - name: blueprints
     description: Reusable project and workflow launch configurations.
   - name: workers
@@ -125,6 +127,153 @@ paths:
         '500':
           $ref: '#/components/responses/Error'
           description: Diagnostics export assembly failed (diagnostics_export_failed)
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/home-starts/capabilities:
+    get:
+      tags:
+        - home-starts
+      operationId: getHomeStartCapabilities
+      summary: Read the Home start protocol and host binding
+      responses:
+        '200':
+          description: Protocol version, store identity and acting person
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeStartCapabilities'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/home-starts/{launch_id}:
+    put:
+      tags:
+        - home-starts
+      operationId: putHomeStart
+      x-person-action: record
+      summary: Reserve or resume a Home submission
+      description: |
+        Reserves the project, chat and first-prompt operation for a client launch id, then creates them in the background. A matching repeat returns the latest state and resumes unfinished work; different choices under the same id conflict.
+      parameters:
+        - $ref: '#/components/parameters/LaunchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutHomeStartRequest'
+      responses:
+        '202':
+          description: The durable reservation and its current phase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeStart'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: Provider discovery failed while validating the model choice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+    get:
+      tags:
+        - home-starts
+      operationId: getHomeStart
+      summary: Read a Home submission
+      parameters:
+        - $ref: '#/components/parameters/LaunchId'
+      responses:
+        '200':
+          description: The caller's Home start
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeStart'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/home-starts/{launch_id}/stop:
+    post:
+      tags:
+        - home-starts
+      operationId: stopHomeStart
+      x-person-action: record
+      summary: Stop a Home submission
+      description: |
+        Before first-prompt admission, fences the start so it admits no prompt; a Stop that precedes its PUT reserves a stopped launch. After admission, stops only that first turn while it is still the chat's latest.
+      parameters:
+        - $ref: '#/components/parameters/LaunchId'
+      responses:
+        '200':
+          description: The Home start after the stop
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeStart'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/home-starts/{launch_id}/replace-first-prompt:
+    post:
+      tags:
+        - home-starts
+      operationId: replaceHomeStartFirstPrompt
+      x-person-action: record
+      summary: Replace an unadmitted first-prompt operation
+      description: |
+        Retires the named first-prompt operation and binds a fresh one to the same chat, unless the old one was already admitted. A repeat with the same ids returns the recorded outcome.
+      parameters:
+        - $ref: '#/components/parameters/LaunchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceHomeStartFirstPromptRequest'
+      responses:
+        '200':
+          description: The Home start bound to the replacement operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeStart'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
   /v1/sessions:
@@ -14860,6 +15009,14 @@ paths:
           $ref: '#/components/responses/Error'
 components:
   parameters:
+    LaunchId:
+      name: launch_id
+      in: path
+      required: true
+      description: Client-generated identity of one Home submission.
+      schema:
+        type: string
+        format: uuid
     SessionId:
       name: id
       in: path
@@ -15056,14 +15213,14 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-    BadRequest:
-      description: The request is malformed or names invalid values; `code` says which.
+    NotFound:
+      description: A resource the request addresses does not exist; `code` names the resource.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-    NotFound:
-      description: A resource the request addresses does not exist; `code` names the resource.
+    BadRequest:
+      description: The request is malformed or names invalid values; `code` says which.
       content:
         application/json:
           schema:
@@ -27868,6 +28025,10 @@ components:
         - invalid_path
         - blueprint_content_conflict
         - idempotency_conflict
+        - home_start_not_found
+        - home_start_conflict
+        - home_start_closed
+        - home_start_admitted
         - invalid_arguments
         - invalid_query
         - command_disabled
@@ -28409,6 +28570,169 @@ components:
             $ref: '#/components/schemas/PreflightProbe'
         attachment_capabilities:
           $ref: '#/components/schemas/AttachmentCapabilities'
+    HomeStartCapabilities:
+      x-go-generate: true
+      type: object
+      required:
+        - protocol_version
+        - store_id
+        - person_id
+      additionalProperties: false
+      description: What a client binds a Home submission to before replaying it. A changed store or person means saved launches belong to another host.
+      properties:
+        protocol_version:
+          type: integer
+          format: int32
+          enum:
+            - 1
+        store_id:
+          type: string
+          format: uuid
+          description: Durable identity of this host store; survives restarts.
+        person_id:
+          type: string
+          format: uuid
+          description: The acting person.
+    HomeStartChoices:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      description: Immutable creation choices of one Home submission. The prompt itself is sent separately through the session prompt endpoint.
+      dependentRequired:
+        provider_id:
+          - model
+        model:
+          - provider_id
+      properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Initial chat mode. Defaults to Agent.
+        provider_id:
+          type: string
+          pattern: ^[a-z0-9_-]{1,64}$
+          description: Explicit coordinator provider for the chat.
+        model:
+          type: string
+          minLength: 1
+          description: Explicit coordinator model for the chat.
+    HomeStartFirstPrompt:
+      x-go-generate: true
+      type: object
+      required:
+        - operation_id
+        - admitted
+      additionalProperties: false
+      properties:
+        operation_id:
+          type: string
+          format: uuid
+          description: The only operation that may admit this chat's first prompt.
+        admitted:
+          type: boolean
+          description: A durable prompt receipt exists for operation_id in the bound chat.
+        status:
+          type: string
+          description: The receipt status once admitted.
+          enum:
+            - queued
+            - running
+            - complete
+            - failed
+            - interrupted
+            - canceled
+    HomeStartFailure:
+      x-go-generate: true
+      type: object
+      required:
+        - code
+        - resumable
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum:
+            - project_create_failed
+            - session_create_failed
+            - draft_workspace_occupied
+        resumable:
+          type: boolean
+          description: The same PUT resumes the failed step.
+    HomeStart:
+      x-go-generate: true
+      type: object
+      required:
+        - launch_id
+        - phase
+        - revision
+        - first_prompt
+      additionalProperties: false
+      description: The caller's view of one Home submission. IDs appear once their rows are committed; revision increases with every change.
+      properties:
+        launch_id:
+          type: string
+          format: uuid
+        phase:
+          type: string
+          description: reserved, project_created and session_bound record creation progress. stopped and retired admit no further work; failed carries failure.
+          enum:
+            - reserved
+            - project_created
+            - session_bound
+            - stopped
+            - retired
+            - failed
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+        choices:
+          x-go-pointer: true
+          $ref: '#/components/schemas/HomeStartChoices'
+          description: Absent for a launch stopped before its PUT.
+        project_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        session_status:
+          $ref: '#/components/schemas/SessionStatus'
+        first_prompt:
+          $ref: '#/components/schemas/HomeStartFirstPrompt'
+        failure:
+          x-go-pointer: true
+          $ref: '#/components/schemas/HomeStartFailure'
+    PutHomeStartRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - choices
+      additionalProperties: false
+      properties:
+        choices:
+          $ref: '#/components/schemas/HomeStartChoices'
+    ReplaceHomeStartFirstPromptRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - expected_revision
+        - operation_id
+        - replacement_operation_id
+      additionalProperties: false
+      properties:
+        expected_revision:
+          type: integer
+          format: int64
+          minimum: 1
+        operation_id:
+          type: string
+          format: uuid
+          description: The first-prompt operation being replaced.
+        replacement_operation_id:
+          type: string
+          format: uuid
+          description: Fresh operation the changed first prompt will use.
     PendingWorkflowStart:
       x-go-generate: true
       x-go-field-order:

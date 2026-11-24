@@ -230,6 +230,8 @@ export const API_OPERATIONS = {
   getHistoryStorage: { method: "GET", path: "/v1/history-storage", query: [
     {"name":"project_id","type":"string"},
   ] },
+  getHomeStart: { method: "GET", path: "/v1/home-starts/{launch_id}" },
+  getHomeStartCapabilities: { method: "GET", path: "/v1/home-starts/capabilities" },
   getHost: { method: "GET", path: "/v1/host" },
   getHostResources: { method: "GET", path: "/v1/host-resources", query: [
     {"name":"project_id","type":"string"},
@@ -577,6 +579,7 @@ export const API_OPERATIONS = {
   pushGit: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/push", query: [
     {"name":"session_id","type":"string"},
   ] },
+  putHomeStart: { method: "PUT", path: "/v1/home-starts/{launch_id}" },
   queryCodeScan: { method: "POST", path: "/v1/projects/{id}/scans/{scan_id}/query" },
   queryProjectFindings: { method: "POST", path: "/v1/projects/{id}/findings/query", query: [
     {"name":"root_id","type":"string"},
@@ -605,6 +608,7 @@ export const API_OPERATIONS = {
   repairLocalGeneration: { method: "POST", path: "/v1/providers/{provider_id}/repair" },
   replaceEditorDocument: { method: "PUT", path: "/v1/projects/{id}/editor-documents/{document_id}" },
   replaceEditorDocumentRetention: { method: "PUT", path: "/v1/projects/{id}/editor-documents/retention" },
+  replaceHomeStartFirstPrompt: { method: "POST", path: "/v1/home-starts/{launch_id}/replace-first-prompt" },
   replaceProjectManagedSecretValue: { method: "PUT", path: "/v1/projects/{id}/secrets/{secret_id}/value" },
   replaceProjectSource: { method: "PUT", path: "/v1/projects/{id}/source", query: [
     {"name":"session_id","type":"string"},
@@ -701,6 +705,7 @@ export const API_OPERATIONS = {
     {"name":"session_id","type":"string"},
   ] },
   stopBackgroundProcess: { method: "POST", path: "/v1/sessions/{id}/background/{process_id}/stop" },
+  stopHomeStart: { method: "POST", path: "/v1/home-starts/{launch_id}/stop" },
   stopProjectBackgroundProcess: { method: "POST", path: "/v1/projects/{id}/background/{process_id}/stop" },
   streamSession: { method: "GET", path: "/v1/sessions/{id}/stream", query: [
     {"name":"message","type":"string"},
@@ -900,6 +905,8 @@ export type OperationPathParameters = {
   getGitWorktree: { id: string | number; };
   getHealth: Record<string, never>;
   getHistoryStorage: Record<string, never>;
+  getHomeStart: { launch_id: string | number; };
+  getHomeStartCapabilities: Record<string, never>;
   getHost: Record<string, never>;
   getHostResources: Record<string, never>;
   getLimitsSettings: Record<string, never>;
@@ -1024,6 +1031,7 @@ export type OperationPathParameters = {
   publishEditorDocumentPresence: { id: string | number; document_id: string | number; };
   pullGit: { id: string | number; repo_id: string | number; };
   pushGit: { id: string | number; repo_id: string | number; };
+  putHomeStart: { launch_id: string | number; };
   queryCodeScan: { id: string | number; scan_id: string | number; };
   queryProjectFindings: { id: string | number; };
   readEditorDocumentStatuses: { id: string | number; };
@@ -1042,6 +1050,7 @@ export type OperationPathParameters = {
   repairLocalGeneration: { provider_id: string | number; };
   replaceEditorDocument: { id: string | number; document_id: string | number; };
   replaceEditorDocumentRetention: { id: string | number; };
+  replaceHomeStartFirstPrompt: { launch_id: string | number; };
   replaceProjectManagedSecretValue: { id: string | number; secret_id: string | number; };
   replaceProjectSource: { id: string | number; };
   replaceProjectView: { id: string | number; };
@@ -1088,6 +1097,7 @@ export type OperationPathParameters = {
   startWorkflowRun: { id: string | number; };
   stashGit: { id: string | number; repo_id: string | number; };
   stopBackgroundProcess: { id: string | number; process_id: string | number; };
+  stopHomeStart: { launch_id: string | number; };
   stopProjectBackgroundProcess: { id: string | number; process_id: string | number; };
   streamSession: { id: string | number; };
   submitEditorDocumentUpdate: { id: string | number; document_id: string | number; };

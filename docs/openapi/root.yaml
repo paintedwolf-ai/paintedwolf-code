@@ -29,6 +29,8 @@ tags:
   description: Workflow catalogs, session composition, execution, and human transitions.
 - name: projects
   description: Project identity, roots, source access, and project-scoped history.
+- name: home-starts
+  description: Home submissions that become a draft project, its first chat and first prompt.
 - name: blueprints
   description: Reusable project and workflow launch configurations.
 - name: workers
@@ -93,6 +95,14 @@ paths:
     $ref: paths/preflight.yaml#/paths/~1v1~1preflight
   /v1/diagnostics/export:
     $ref: paths/diagnostics.yaml#/paths/~1v1~1diagnostics~1export
+  /v1/home-starts/capabilities:
+    $ref: paths/home-starts.yaml#/paths/~1v1~1home-starts~1capabilities
+  /v1/home-starts/{launch_id}:
+    $ref: paths/home-starts.yaml#/paths/~1v1~1home-starts~1{launch_id}
+  /v1/home-starts/{launch_id}/stop:
+    $ref: paths/home-starts.yaml#/paths/~1v1~1home-starts~1{launch_id}~1stop
+  /v1/home-starts/{launch_id}/replace-first-prompt:
+    $ref: paths/home-starts.yaml#/paths/~1v1~1home-starts~1{launch_id}~1replace-first-prompt
   /v1/sessions:
     $ref: paths/sessions/identity.yaml#/paths/~1v1~1sessions
   /v1/sessions/{id}:

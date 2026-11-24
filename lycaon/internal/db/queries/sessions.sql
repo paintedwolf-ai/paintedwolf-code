@@ -40,6 +40,12 @@ WHERE id = sqlc.arg(id) AND parent_session_id IS NULL;
 
 -- Startup recovery reads ids without hydrating session projections. Each id
 -- leaves the filter once settled, so the order only needs to be stable.
+-- name: ListPreparingSessionIDs :many
+SELECT id
+FROM sessions
+WHERE status = 'preparing'
+ORDER BY created_at, id;
+
 -- name: ListBusySessionIDs :many
 SELECT id
 FROM sessions

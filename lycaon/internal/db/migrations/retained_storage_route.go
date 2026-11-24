@@ -20,7 +20,8 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// worker record rewrites use their declared write estimates. Briefing
 	// and publication indexes start empty. Dropping live_model_outputs and
 	// replacing the version reclaim trigger do not rewrite rows. Workflow
-	// manifest storage adds an empty table and a constant-default column.
+	// manifest storage adds an empty table and a constant-default column, and
+	// Home starts add empty tables.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "02cc4ded97994fdd6c993f9ec200dc5875b72811f44496dc5d3a5638a635672b"
+		p.steps[0].Checksum == "5aa3616cf7de48fa19a0f745bf232954577dd8a7c6ac42c19f87369c259b0811"
 }

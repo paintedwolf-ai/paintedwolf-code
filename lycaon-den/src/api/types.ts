@@ -64,6 +64,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/home-starts/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the Home start protocol and host binding */
+        get: operations["getHomeStartCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/home-starts/{launch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a Home submission */
+        get: operations["getHomeStart"];
+        /**
+         * Reserve or resume a Home submission
+         * @description Reserves the project, chat and first-prompt operation for a client launch id, then creates them in the background. A matching repeat returns the latest state and resumes unfinished work; different choices under the same id conflict.
+         */
+        put: operations["putHomeStart"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/home-starts/{launch_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a Home submission
+         * @description Before first-prompt admission, fences the start so it admits no prompt; a Stop that precedes its PUT reserves a stopped launch. After admission, stops only that first turn while it is still the chat's latest.
+         */
+        post: operations["stopHomeStart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/home-starts/{launch_id}/replace-first-prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace an unadmitted first-prompt operation
+         * @description Retires the named first-prompt operation and binds a fresh one to the same chat, unless the old one was already admitted. A repeat with the same ids returns the recorded outcome.
+         */
+        post: operations["replaceHomeStartFirstPrompt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sessions": {
         parameters: {
             query?: never;
@@ -10850,7 +10928,7 @@ export interface components {
          * @description Closed machine-readable error identity emitted by the private Den-sidecar API.
          * @enum {string}
          */
-        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "project_not_draft" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_settings_need_repair" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_model_timeout" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_mode_locked" | "session_mode_unavailable" | "session_ask_mode_workflow_requires_agent" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
+        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "project_not_draft" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "home_start_not_found" | "home_start_conflict" | "home_start_closed" | "home_start_admitted" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_settings_need_repair" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_model_timeout" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_mode_locked" | "session_mode_unavailable" | "session_ask_mode_workflow_requires_agent" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
         /** @enum {string} */
         NoticeAction: "open_ai_providers" | "retry_contribution_frame" | "prompt_retry" | "prompt_keep_going" | "prompt_rewind_and_retry";
         /** @enum {string} */
@@ -10966,6 +11044,91 @@ export interface components {
             /** @description Probe results in registration order. */
             probes: components["schemas"]["PreflightProbe"][];
             attachment_capabilities: components["schemas"]["AttachmentCapabilities"];
+        };
+        /** @description What a client binds a Home submission to before replaying it. A changed store or person means saved launches belong to another host. */
+        HomeStartCapabilities: {
+            /**
+             * Format: int32
+             * @enum {integer}
+             */
+            protocol_version: 1;
+            /**
+             * Format: uuid
+             * @description Durable identity of this host store; survives restarts.
+             */
+            store_id: string;
+            /**
+             * Format: uuid
+             * @description The acting person.
+             */
+            person_id: string;
+        };
+        /** @description Immutable creation choices of one Home submission. The prompt itself is sent separately through the session prompt endpoint. */
+        HomeStartChoices: {
+            /** @description Initial chat mode. Defaults to Agent. */
+            mode?: components["schemas"]["SessionMode"];
+            /** @description Explicit coordinator provider for the chat. */
+            provider_id?: string;
+            /** @description Explicit coordinator model for the chat. */
+            model?: string;
+        };
+        HomeStartFirstPrompt: {
+            /**
+             * Format: uuid
+             * @description The only operation that may admit this chat's first prompt.
+             */
+            operation_id: string;
+            /** @description A durable prompt receipt exists for operation_id in the bound chat. */
+            admitted: boolean;
+            /**
+             * @description The receipt status once admitted.
+             * @enum {string}
+             */
+            status?: "queued" | "running" | "complete" | "failed" | "interrupted" | "canceled";
+        };
+        HomeStartFailure: {
+            /** @enum {string} */
+            code: "project_create_failed" | "session_create_failed" | "draft_workspace_occupied";
+            /** @description The same PUT resumes the failed step. */
+            resumable: boolean;
+        };
+        /** @description The caller's view of one Home submission. IDs appear once their rows are committed; revision increases with every change. */
+        HomeStart: {
+            /** Format: uuid */
+            launch_id: string;
+            /**
+             * @description reserved, project_created and session_bound record creation progress. stopped and retired admit no further work; failed carries failure.
+             * @enum {string}
+             */
+            phase: "reserved" | "project_created" | "session_bound" | "stopped" | "retired" | "failed";
+            /** Format: int64 */
+            revision: number;
+            /** @description Absent for a launch stopped before its PUT. */
+            choices?: components["schemas"]["HomeStartChoices"];
+            /** Format: uuid */
+            project_id?: string;
+            /** Format: uuid */
+            session_id?: string;
+            session_status?: components["schemas"]["SessionStatus"];
+            first_prompt: components["schemas"]["HomeStartFirstPrompt"];
+            failure?: components["schemas"]["HomeStartFailure"];
+        };
+        PutHomeStartRequest: {
+            choices: components["schemas"]["HomeStartChoices"];
+        };
+        ReplaceHomeStartFirstPromptRequest: {
+            /** Format: int64 */
+            expected_revision: number;
+            /**
+             * Format: uuid
+             * @description The first-prompt operation being replaced.
+             */
+            operation_id: string;
+            /**
+             * Format: uuid
+             * @description Fresh operation the changed first prompt will use.
+             */
+            replacement_operation_id: string;
         };
         PendingWorkflowStart: {
             workflow_id: string;
@@ -18246,8 +18409,8 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The request is malformed or names invalid values; `code` says which. */
-        BadRequest: {
+        /** @description A resource the request addresses does not exist; `code` names the resource. */
+        NotFound: {
             headers: {
                 [name: string]: unknown;
             };
@@ -18255,8 +18418,8 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description A resource the request addresses does not exist; `code` names the resource. */
-        NotFound: {
+        /** @description The request is malformed or names invalid values; `code` says which. */
+        BadRequest: {
             headers: {
                 [name: string]: unknown;
             };
@@ -18351,6 +18514,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Client-generated identity of one Home submission. */
+        LaunchId: string;
         SessionId: string;
         /** @description Ordered scopes of the document. A scope is a program id, for all of its executions, or program_id:activity_id, for the executions that host activity selects. A scope may not repeat, and a program may not appear both whole and by activity. */
         CommandReceiptScopes: string[];
@@ -18468,6 +18633,159 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             /** @description Diagnostics export assembly failed (diagnostics_export_failed) */
             500: components["responses"]["Error"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getHomeStartCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Protocol version, store identity and acting person */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeStartCapabilities"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getHomeStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Client-generated identity of one Home submission. */
+                launch_id: components["parameters"]["LaunchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's Home start */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeStart"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
+    putHomeStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Client-generated identity of one Home submission. */
+                launch_id: components["parameters"]["LaunchId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutHomeStartRequest"];
+            };
+        };
+        responses: {
+            /** @description The durable reservation and its current phase */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeStart"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
+            /** @description Provider discovery failed while validating the model choice */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    stopHomeStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Client-generated identity of one Home submission. */
+                launch_id: components["parameters"]["LaunchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Home start after the stop */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeStart"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    replaceHomeStartFirstPrompt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Client-generated identity of one Home submission. */
+                launch_id: components["parameters"]["LaunchId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceHomeStartFirstPromptRequest"];
+            };
+        };
+        responses: {
+            /** @description The Home start bound to the replacement operation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeStart"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
             default: components["responses"]["Error"];
         };
     };
@@ -31901,6 +32219,13 @@ export type CatastrophicDetail = components["schemas"]["CatastrophicDetail"];
 export type PreflightProbe = components["schemas"]["PreflightProbe"];
 export type AttachmentCapabilities = components["schemas"]["AttachmentCapabilities"];
 export type PreflightReport = components["schemas"]["PreflightReport"];
+export type HomeStartCapabilities = components["schemas"]["HomeStartCapabilities"];
+export type HomeStartChoices = components["schemas"]["HomeStartChoices"];
+export type HomeStartFirstPrompt = components["schemas"]["HomeStartFirstPrompt"];
+export type HomeStartFailure = components["schemas"]["HomeStartFailure"];
+export type HomeStart = components["schemas"]["HomeStart"];
+export type PutHomeStartRequest = components["schemas"]["PutHomeStartRequest"];
+export type ReplaceHomeStartFirstPromptRequest = components["schemas"]["ReplaceHomeStartFirstPromptRequest"];
 export type PendingWorkflowStart = components["schemas"]["PendingWorkflowStart"];
 export type SessionBackgroundDirectStatus = components["schemas"]["SessionBackgroundDirectStatus"];
 export type SessionBackgroundDirectJob = components["schemas"]["SessionBackgroundDirectJob"];

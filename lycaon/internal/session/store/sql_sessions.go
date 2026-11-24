@@ -28,7 +28,24 @@ func (s *sqlSessions) CreateWithStatus(ctx context.Context, req api.CreateSessio
 	if err != nil {
 		return nil, err
 	}
-	return createSession(ctx, s.core, owner.ID, req, projectID, "", "", status)
+	return createSession(ctx, s.core, sessionCreation{ID: uuid.NewString(), OwnerPersonID: owner.ID, Status: status}, req, projectID)
+}
+
+// CreateReserved stores a root session under an ID reserved before the call.
+// commit runs inside the creating transaction, after the session's created event.
+func (s *sqlSessions) CreateReserved(ctx context.Context, id string, req api.CreateSessionRequest, projectID string, status api.SessionStatus, commit func(context.Context, *sql.Tx) error) (*api.Session, error) {
+	if !api.IsInitialSessionStatus(status) {
+		return nil, &SessionStatusTransitionError{To: status}
+	}
+	parsed, err := uuid.Parse(strings.TrimSpace(id))
+	if err != nil {
+		return nil, fmt.Errorf("reserved session id: %w", err)
+	}
+	owner, err := people.Acting(ctx, s.core.peopleStore)
+	if err != nil {
+		return nil, err
+	}
+	return createSession(ctx, s.core, sessionCreation{ID: parsed.String(), OwnerPersonID: owner.ID, Status: status, Commit: commit}, req, projectID)
 }
 
 // CreateChild stores a child session.
@@ -53,10 +70,24 @@ func (s *sqlSessions) CreateChild(ctx context.Context, parent *api.Session, req 
 			WorkerID: strings.TrimSpace(req.WorkerJobID), CreatedAt: time.Now().UTC(),
 		})
 	}
-	return createSession(ctx, s.core, parent.OwnerPersonID, childReq, parent.ProjectID, parent.ID, req.AgentType, api.SessionStatusIdle, initialMessages...)
+	return createSession(ctx, s.core, sessionCreation{
+		ID: uuid.NewString(), OwnerPersonID: parent.OwnerPersonID, ParentID: parent.ID, AgentType: req.AgentType,
+		Status: api.SessionStatusIdle, InitialMessages: initialMessages,
+	}, childReq, parent.ProjectID)
 }
 
-func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req api.CreateSessionRequest, projectID, parentID, agentType string, status api.SessionStatus, initialMessages ...api.Message) (*api.Session, error) {
+type sessionCreation struct {
+	ID              string
+	OwnerPersonID   string
+	ParentID        string
+	AgentType       string
+	Status          api.SessionStatus
+	InitialMessages []api.Message
+	Commit          func(context.Context, *sql.Tx) error
+}
+
+func createSession(ctx context.Context, s *sqlCore, c sessionCreation, req api.CreateSessionRequest, projectID string) (*api.Session, error) {
+	ownerPersonID, parentID, agentType, status := c.OwnerPersonID, c.ParentID, c.AgentType, c.Status
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -88,7 +119,7 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 		return nil, err
 	}
 	sess := &api.Session{
-		ID:              uuid.NewString(),
+		ID:              c.ID,
 		ProjectID:       projectID,
 		OwnerPersonID:   ownerPersonID,
 		WorkspaceRootID: rootID,
@@ -150,8 +181,13 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 	if err := enqueueSessionEvent(ctx, s, tx, sess, api.SessionEventActionCreated); err != nil {
 		return nil, err
 	}
-	if len(initialMessages) > 0 {
-		if err := appendMessagesTx(ctx, s, tx, sess.ID, initialMessages...); err != nil {
+	if len(c.InitialMessages) > 0 {
+		if err := appendMessagesTx(ctx, s, tx, sess.ID, c.InitialMessages...); err != nil {
+			return nil, err
+		}
+	}
+	if c.Commit != nil {
+		if err := c.Commit(ctx, tx); err != nil {
 			return nil, err
 		}
 	}
@@ -251,6 +287,14 @@ func (s *sqlSessions) ListBusySessionIDs(ctx context.Context, limit int) ([]stri
 		return []string{}, nil
 	}
 	return s.core.queries.ListBusySessionIDs(ctx, int64(limit))
+}
+
+// ListPreparingSessionIDs returns chats whose workspace preparation has not finished.
+func (s *sqlSessions) ListPreparingSessionIDs(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return s.core.queries.ListPreparingSessionIDs(ctx)
 }
 
 // Delete removes a session tree atomically and enqueues its deleted events.

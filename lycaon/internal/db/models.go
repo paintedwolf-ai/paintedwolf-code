@@ -729,6 +729,30 @@ type HistoryStorageClock struct {
 	Generation int64 `json:"generation"`
 }
 
+type HomeStartOperations struct {
+	OperationID string `json:"operation_id"`
+	LaunchID    string `json:"launch_id"`
+	State       string `json:"state"`
+	ReplacedBy  string `json:"replaced_by"`
+}
+
+type HomeStarts struct {
+	LaunchID          string `json:"launch_id"`
+	PersonID          string `json:"person_id"`
+	ChoicesJson       string `json:"choices_json"`
+	ChoicesDigest     string `json:"choices_digest"`
+	ProjectID         string `json:"project_id"`
+	SessionID         string `json:"session_id"`
+	Progress          string `json:"progress"`
+	Disposition       string `json:"disposition"`
+	PromptOperationID string `json:"prompt_operation_id"`
+	Revision          int64  `json:"revision"`
+	FailureCode       string `json:"failure_code"`
+	FailureResumable  int64  `json:"failure_resumable"`
+	CreatedAt         string `json:"created_at"`
+	UpdatedAt         string `json:"updated_at"`
+}
+
 type InvocationProgramDefinitions struct {
 	ProgramID        string `json:"program_id"`
 	DefinitionDigest string `json:"definition_digest"`

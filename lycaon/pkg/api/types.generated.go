@@ -4106,6 +4106,57 @@ type HistoryStorageStatus struct {
 	Protections []HistoryProtection    `json:"protections"`
 }
 
+// HomeStart The caller's view of one Home submission. IDs appear once their rows are committed; revision increases with every change.
+type HomeStart struct {
+	LaunchID string `json:"launch_id"`
+	// reserved, project_created and session_bound record creation progress. stopped and retired admit no further work; failed carries failure.
+	Phase    string `json:"phase"`
+	Revision int64  `json:"revision"`
+	// Absent for a launch stopped before its PUT.
+	Choices       *HomeStartChoices    `json:"choices,omitempty"`
+	ProjectID     string               `json:"project_id,omitempty"`
+	SessionID     string               `json:"session_id,omitempty"`
+	SessionStatus SessionStatus        `json:"session_status,omitempty"`
+	FirstPrompt   HomeStartFirstPrompt `json:"first_prompt"`
+	Failure       *HomeStartFailure    `json:"failure,omitempty"`
+}
+
+// HomeStartCapabilities What a client binds a Home submission to before replaying it. A changed store or person means saved launches belong to another host.
+type HomeStartCapabilities struct {
+	ProtocolVersion int `json:"protocol_version"`
+	// Durable identity of this host store; survives restarts.
+	StoreID string `json:"store_id"`
+	// The acting person.
+	PersonID string `json:"person_id"`
+}
+
+// HomeStartChoices Immutable creation choices of one Home submission. The prompt itself is sent separately through the session prompt endpoint.
+type HomeStartChoices struct {
+	// Initial chat mode. Defaults to Agent.
+	Mode *SessionMode `json:"mode,omitempty"`
+	// Explicit coordinator provider for the chat.
+	ProviderID string `json:"provider_id,omitempty"`
+	// Explicit coordinator model for the chat.
+	Model string `json:"model,omitempty"`
+}
+
+// HomeStartFailure
+type HomeStartFailure struct {
+	Code string `json:"code"`
+	// The same PUT resumes the failed step.
+	Resumable bool `json:"resumable"`
+}
+
+// HomeStartFirstPrompt
+type HomeStartFirstPrompt struct {
+	// The only operation that may admit this chat's first prompt.
+	OperationID string `json:"operation_id"`
+	// A durable prompt receipt exists for operation_id in the bound chat.
+	Admitted bool `json:"admitted"`
+	// The receipt status once admitted.
+	Status string `json:"status,omitempty"`
+}
+
 // HostInfo The host a client is connected to, the contract it serves, and who the client is on it. A client reads this before relying on any other route.
 type HostInfo struct {
 	// Stable identity of this install, derived from its public key. It survives restarts and store resets, and changes only when the host key is replaced.
@@ -5777,6 +5828,11 @@ type ProviderUsageQuota struct {
 	OverageNanoUSD *int64 `json:"overage_nano_usd,omitempty"`
 }
 
+// PutHomeStartRequest
+type PutHomeStartRequest struct {
+	Choices HomeStartChoices `json:"choices"`
+}
+
 // PutProjectSourceRequest In-app editor save of one project file (full replacement content).
 type PutProjectSourceRequest struct {
 	// Stable mutation identity; exact retries return the original result and conflicting reuse returns 409 idempotency_conflict.
@@ -5902,6 +5958,15 @@ type ReplaceEditorDocumentRetentionRequest struct {
 	// Live client identities from the native window inventory or browser window locks. Must include client_id. Only orphan references in the calling client’s window or browser namespace are swept; omit until the inventory is ready.
 	RetainedClients []string `json:"retained_clients"`
 	DocumentIds     []string `json:"document_ids"`
+}
+
+// ReplaceHomeStartFirstPromptRequest
+type ReplaceHomeStartFirstPromptRequest struct {
+	ExpectedRevision int64 `json:"expected_revision"`
+	// The first-prompt operation being replaced.
+	OperationID string `json:"operation_id"`
+	// Fresh operation the changed first prompt will use.
+	ReplacementOperationID string `json:"replacement_operation_id"`
 }
 
 // ReplaceManagedSecretValueRequest Puts new bytes behind an unchanged reference, or restores a capability whose stored value went missing. Supported agent tooling already holding the reference keeps working. Only Painted Wolf's protected copy changes: this does not modify a project file, rotate an external credential, revoke it, or activate the replacement at its provider. The replaced value is retired, not deleted: its bytes stay readable to provider screening so a credential the agent has already seen keeps being redacted, but a retired value never resolves again.

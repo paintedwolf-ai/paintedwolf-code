@@ -74,6 +74,11 @@ func (m *Service) lockAdmission(sessionID string) func() {
 	return lock.Unlock
 }
 
+// HoldAdmission keeps new prompts out of the session until release.
+func (m *Service) HoldAdmission(sessionID string) func() {
+	return m.lockAdmission(sessionID)
+}
+
 // DispatchLock exposes the same ordering lane to deterministic contention probes.
 func (m *Service) DispatchLock(sessionID string) *promptstate.Lock {
 	return m.dispatch.Acquire(sessionID)

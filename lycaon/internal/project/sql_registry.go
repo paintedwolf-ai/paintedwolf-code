@@ -32,6 +32,30 @@ func NewSQLRegistry(database db.Handle) *SQLRegistry {
 }
 
 func (r *SQLRegistry) Create(ctx context.Context, params CreateParams) (*Project, error) {
+	return r.create(ctx, uuid.NewString(), params, ensureDraftScratchRoot, nil)
+}
+
+// CreateReserved creates a draft project under an ID reserved before the call.
+// commit runs inside the creating transaction. A scratch directory left by an
+// interrupted attempt is reused only while it is an empty directory.
+func (r *SQLRegistry) CreateReserved(ctx context.Context, id string, params CreateParams, commit func(context.Context, *sql.Tx) error) (*Project, error) {
+	parsed, err := uuid.Parse(strings.TrimSpace(id))
+	if err != nil {
+		return nil, fmt.Errorf("reserved project id: %w", err)
+	}
+	if !params.Draft || len(params.Roots) > 0 {
+		return nil, ErrReservedProjectShape
+	}
+	return r.create(ctx, parsed.String(), params, ensureReservedDraftScratchRoot, commit)
+}
+
+func (r *SQLRegistry) create(
+	ctx context.Context,
+	id string,
+	params CreateParams,
+	draftRoot func(context.Context, string, func(AttachRootParams) (Root, error)) error,
+	commit func(context.Context, *sql.Tx) error,
+) (*Project, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -39,7 +63,6 @@ func (r *SQLRegistry) Create(ctx context.Context, params CreateParams) (*Project
 		return nil, ErrDraftRootImmutable
 	}
 	now := time.Now().UTC()
-	id := uuid.NewString()
 	name := sql.NullString{}
 	if trimmed := DefaultNameForCreate(params); trimmed != "" {
 		name = db.NullString(trimmed)
@@ -78,7 +101,7 @@ func (r *SQLRegistry) Create(ctx context.Context, params CreateParams) (*Project
 		roots = append(roots, root)
 	}
 	if params.Draft && len(params.Roots) == 0 {
-		if err := ensureDraftScratchRoot(ctx, id, func(in AttachRootParams) (Root, error) {
+		if err := draftRoot(ctx, id, func(in AttachRootParams) (Root, error) {
 			return attachRootTx(ctx, q, id, nil, in, RootKindDraft)
 		}); err != nil {
 			return nil, err
@@ -90,6 +113,11 @@ func (r *SQLRegistry) Create(ctx context.Context, params CreateParams) (*Project
 	}
 	if err := r.enqueueProjectEventTx(ctx, tx, api.ProjectEventCreated, p); err != nil {
 		return nil, err
+	}
+	if commit != nil {
+		if err := commit(ctx, tx); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err

@@ -237,6 +237,19 @@ const (
 	// ApiErrorCodeIdempotencyConflict operation id was reused with different input
 	// (every operation_id-bearing endpoint)
 	ApiErrorCodeIdempotencyConflict ApiErrorCode = "idempotency_conflict"
+	// ApiErrorCodeHomeStartNotFound The caller has no Home start under this launch
+	// id.
+	ApiErrorCodeHomeStartNotFound ApiErrorCode = "home_start_not_found"
+	// ApiErrorCodeHomeStartConflict The launch id was reused with different
+	// choices, another person holds it, or a replacement named a stale revision or
+	// operation.
+	ApiErrorCodeHomeStartConflict ApiErrorCode = "home_start_conflict"
+	// ApiErrorCodeHomeStartClosed The Home start was stopped or retired, or its
+	// operation was replaced; it admits no further work.
+	ApiErrorCodeHomeStartClosed ApiErrorCode = "home_start_closed"
+	// ApiErrorCodeHomeStartAdmitted The first prompt was already admitted; a
+	// changed prompt is a follow-up turn.
+	ApiErrorCodeHomeStartAdmitted ApiErrorCode = "home_start_admitted"
 	// ApiErrorCodeInvalidArguments contribution command arguments failed
 	// validation
 	ApiErrorCodeInvalidArguments ApiErrorCode = "invalid_arguments"
@@ -1041,6 +1054,10 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeInvalidPath,
 	ApiErrorCodeBlueprintContentConflict,
 	ApiErrorCodeIdempotencyConflict,
+	ApiErrorCodeHomeStartNotFound,
+	ApiErrorCodeHomeStartConflict,
+	ApiErrorCodeHomeStartClosed,
+	ApiErrorCodeHomeStartAdmitted,
 	ApiErrorCodeInvalidArguments,
 	ApiErrorCodeInvalidQuery,
 	ApiErrorCodeCommandDisabled,
@@ -1401,6 +1418,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeFileBriefingNotFound,
 		ApiErrorCodeChoiceTransitionNotFound,
 		ApiErrorCodeGitRepoNotFound,
+		ApiErrorCodeHomeStartNotFound,
 		ApiErrorCodeChoiceSourceNotFound,
 		ApiErrorCodeSearchSourceNotFound,
 		ApiErrorCodeMessageNotFound,
@@ -1489,6 +1507,9 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeWorktreeLandBlocked,
 		ApiErrorCodeBlueprintContentConflict,
 		ApiErrorCodeIdempotencyConflict,
+		ApiErrorCodeHomeStartConflict,
+		ApiErrorCodeHomeStartClosed,
+		ApiErrorCodeHomeStartAdmitted,
 		ApiErrorCodeCommandDisabled,
 		ApiErrorCodeContributionSourceUnavailable,
 		ApiErrorCodeSourceMutationDiverged,

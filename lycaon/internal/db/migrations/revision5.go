@@ -23,9 +23,9 @@ type Part struct {
 func Revision5(target Baseline) Step {
 	return composeStep(Step{
 		ID:       "source-manifests-and-command-records",
-		Checksum: "02cc4ded97994fdd6c993f9ec200dc5875b72811f44496dc5d3a5638a635672b",
+		Checksum: "5aa3616cf7de48fa19a0f745bf232954577dd8a7c6ac42c19f87369c259b0811",
 		From:     manifestLayoutSource, To: target,
-	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), VersionReclaimProbe(), ProgramPublications(), WorkflowManifestStorage(), OutsideNamespace(), ChatLocations(), CommandWindowCoverage(), SessionMode())
+	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), VersionReclaimProbe(), ProgramPublications(), WorkflowManifestStorage(), OutsideNamespace(), ChatLocations(), CommandWindowCoverage(), SessionMode(), HomeStarts())
 }
 
 func composeStep(step Step, parts ...Part) Step {

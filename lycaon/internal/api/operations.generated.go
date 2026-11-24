@@ -130,6 +130,8 @@ var (
 	operationGetGitWorktree                     = generatedOperation{ID: "getGitWorktree", Method: "GET", Path: "/v1/sessions/{id}/git-worktree", Params: []string{"id"}}
 	operationGetHealth                          = generatedOperation{ID: "getHealth", Method: "GET", Path: "/health"}
 	operationGetHistoryStorage                  = generatedOperation{ID: "getHistoryStorage", Method: "GET", Path: "/v1/history-storage"}
+	operationGetHomeStart                       = generatedOperation{ID: "getHomeStart", Method: "GET", Path: "/v1/home-starts/{launch_id}", Params: []string{"launch_id"}}
+	operationGetHomeStartCapabilities           = generatedOperation{ID: "getHomeStartCapabilities", Method: "GET", Path: "/v1/home-starts/capabilities"}
 	operationGetHost                            = generatedOperation{ID: "getHost", Method: "GET", Path: "/v1/host"}
 	operationGetHostResources                   = generatedOperation{ID: "getHostResources", Method: "GET", Path: "/v1/host-resources"}
 	operationGetLimitsSettings                  = generatedOperation{ID: "getLimitsSettings", Method: "GET", Path: "/v1/settings/limits"}
@@ -254,6 +256,7 @@ var (
 	operationPublishEditorDocumentPresence      = generatedOperation{ID: "publishEditorDocumentPresence", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/presence", Params: []string{"id", "document_id"}}
 	operationPullGit                            = generatedOperation{ID: "pullGit", Method: "POST", Path: "/v1/projects/{id}/git/repos/{repo_id}/pull", Params: []string{"id", "repo_id"}, RecordsPersonAction: true}
 	operationPushGit                            = generatedOperation{ID: "pushGit", Method: "POST", Path: "/v1/projects/{id}/git/repos/{repo_id}/push", Params: []string{"id", "repo_id"}, RecordsPersonAction: true}
+	operationPutHomeStart                       = generatedOperation{ID: "putHomeStart", Method: "PUT", Path: "/v1/home-starts/{launch_id}", Params: []string{"launch_id"}, RecordsPersonAction: true}
 	operationQueryCodeScan                      = generatedOperation{ID: "queryCodeScan", Method: "POST", Path: "/v1/projects/{id}/scans/{scan_id}/query", Params: []string{"id", "scan_id"}}
 	operationQueryProjectFindings               = generatedOperation{ID: "queryProjectFindings", Method: "POST", Path: "/v1/projects/{id}/findings/query", Params: []string{"id"}}
 	operationReadEditorDocumentStatuses         = generatedOperation{ID: "readEditorDocumentStatuses", Method: "POST", Path: "/v1/projects/{id}/editor-documents/status", Params: []string{"id"}}
@@ -272,6 +275,7 @@ var (
 	operationRepairLocalGeneration              = generatedOperation{ID: "repairLocalGeneration", Method: "POST", Path: "/v1/providers/{provider_id}/repair", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationReplaceEditorDocument              = generatedOperation{ID: "replaceEditorDocument", Method: "PUT", Path: "/v1/projects/{id}/editor-documents/{document_id}", Params: []string{"id", "document_id"}}
 	operationReplaceEditorDocumentRetention     = generatedOperation{ID: "replaceEditorDocumentRetention", Method: "PUT", Path: "/v1/projects/{id}/editor-documents/retention", Params: []string{"id"}}
+	operationReplaceHomeStartFirstPrompt        = generatedOperation{ID: "replaceHomeStartFirstPrompt", Method: "POST", Path: "/v1/home-starts/{launch_id}/replace-first-prompt", Params: []string{"launch_id"}, RecordsPersonAction: true}
 	operationReplaceProjectManagedSecretValue   = generatedOperation{ID: "replaceProjectManagedSecretValue", Method: "PUT", Path: "/v1/projects/{id}/secrets/{secret_id}/value", Params: []string{"id", "secret_id"}, RecordsPersonAction: true}
 	operationReplaceProjectSource               = generatedOperation{ID: "replaceProjectSource", Method: "PUT", Path: "/v1/projects/{id}/source", Params: []string{"id"}, RecordsPersonAction: true}
 	operationReplaceProjectView                 = generatedOperation{ID: "replaceProjectView", Method: "PUT", Path: "/v1/projects/{id}/view", Params: []string{"id"}}
@@ -318,6 +322,7 @@ var (
 	operationStartWorkflowRun                   = generatedOperation{ID: "startWorkflowRun", Method: "POST", Path: "/v1/sessions/{id}/workflow-runs", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStashGit                           = generatedOperation{ID: "stashGit", Method: "POST", Path: "/v1/projects/{id}/git/repos/{repo_id}/stash", Params: []string{"id", "repo_id"}, RecordsPersonAction: true}
 	operationStopBackgroundProcess              = generatedOperation{ID: "stopBackgroundProcess", Method: "POST", Path: "/v1/sessions/{id}/background/{process_id}/stop", Params: []string{"id", "process_id"}, RecordsPersonAction: true}
+	operationStopHomeStart                      = generatedOperation{ID: "stopHomeStart", Method: "POST", Path: "/v1/home-starts/{launch_id}/stop", Params: []string{"launch_id"}, RecordsPersonAction: true}
 	operationStopProjectBackgroundProcess       = generatedOperation{ID: "stopProjectBackgroundProcess", Method: "POST", Path: "/v1/projects/{id}/background/{process_id}/stop", Params: []string{"id", "process_id"}, RecordsPersonAction: true}
 	operationStreamSession                      = generatedOperation{ID: "streamSession", Method: "GET", Path: "/v1/sessions/{id}/stream", Params: []string{"id"}}
 	operationSubmitEditorDocumentUpdate         = generatedOperation{ID: "submitEditorDocumentUpdate", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/updates", Params: []string{"id", "document_id"}}
@@ -478,6 +483,8 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetGitWorktree,
 	operationGetHealth,
 	operationGetHistoryStorage,
+	operationGetHomeStart,
+	operationGetHomeStartCapabilities,
 	operationGetHost,
 	operationGetHostResources,
 	operationGetLimitsSettings,
@@ -602,6 +609,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationPublishEditorDocumentPresence,
 	operationPullGit,
 	operationPushGit,
+	operationPutHomeStart,
 	operationQueryCodeScan,
 	operationQueryProjectFindings,
 	operationReadEditorDocumentStatuses,
@@ -620,6 +628,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationRepairLocalGeneration,
 	operationReplaceEditorDocument,
 	operationReplaceEditorDocumentRetention,
+	operationReplaceHomeStartFirstPrompt,
 	operationReplaceProjectManagedSecretValue,
 	operationReplaceProjectSource,
 	operationReplaceProjectView,
@@ -666,6 +675,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationStartWorkflowRun,
 	operationStashGit,
 	operationStopBackgroundProcess,
+	operationStopHomeStart,
 	operationStopProjectBackgroundProcess,
 	operationStreamSession,
 	operationSubmitEditorDocumentUpdate,
