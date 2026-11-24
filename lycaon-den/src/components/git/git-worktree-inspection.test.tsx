@@ -496,7 +496,7 @@ describe("WT05 worktree inspection UI across Git and Files", () => {
     if (!preserved) throw new Error("expected preserved buffer");
     expect(projectFilesState(projectId).order).toContain(trunkKey);
     expect(filesBufferText(preserved)).toBe("unsaved draft in trunk\n");
-    expect(preserved.dirty).toBe(true);
+    expect(editorReplica(trunkDoc.wire.id)?.dirty).toBe(true);
     expect(preserved.revealLine).toBe(4);
     expect(preserved.revealColumn).toBe(7);
   });
