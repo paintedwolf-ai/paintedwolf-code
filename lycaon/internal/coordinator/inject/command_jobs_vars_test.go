@@ -15,26 +15,30 @@ import (
 func TestCommandJobsFactsFollowEachLedgerState(t *testing.T) {
 	now := time.Now().UTC()
 	running := bgprocess.JobSnapshot{Handle: "server", Mode: bgprocess.JobModeBackground, OriginTool: "command", StartedAt: now.Add(-time.Minute)}
+	watched := bgprocess.JobSnapshot{Handle: "watched-build", WatchHandle: "watch-3", Mode: bgprocess.JobModeBackground, OriginTool: "command", StartedAt: now.Add(-time.Minute)}
 	exited := bgprocess.JobSnapshot{Handle: "crashed", OriginTool: "command", StartedAt: now.Add(-time.Minute), Exited: true, ExitCode: 1}
 	refused := exited
 	refused.Handle, refused.Refusals = "refused", 2
 	held := heldcall.Running{Handle: "held", Tool: "find", Elapsed: time.Minute}
 	for _, tc := range []struct {
-		name                     string
-		jobs                     []bgprocess.JobSnapshot
-		held                     []heldcall.Running
-		running, exits, waitable bool
+		name                                             string
+		jobs                                             []bgprocess.JobSnapshot
+		held                                             []heldcall.Running
+		running, exits, waitable, hasWatched, unwatchedW bool
 	}{
-		{"running only", []bgprocess.JobSnapshot{running}, nil, true, false, true},
-		{"exited only", []bgprocess.JobSnapshot{exited}, nil, false, true, false},
-		{"exited with refusals", []bgprocess.JobSnapshot{refused}, nil, false, true, false},
-		{"running and exited", []bgprocess.JobSnapshot{running, exited}, nil, true, true, true},
-		{"held only", nil, []heldcall.Running{held}, false, false, true},
-		{"held and exited", []bgprocess.JobSnapshot{exited}, []heldcall.Running{held}, false, true, true},
+		{"running only", []bgprocess.JobSnapshot{running}, nil, true, false, true, false, true},
+		{"watched only", []bgprocess.JobSnapshot{watched}, nil, true, false, true, true, false},
+		{"watched and unwatched", []bgprocess.JobSnapshot{watched, running}, nil, true, false, true, true, true},
+		{"exited only", []bgprocess.JobSnapshot{exited}, nil, false, true, false, false, false},
+		{"exited with refusals", []bgprocess.JobSnapshot{refused}, nil, false, true, false, false, false},
+		{"running and exited", []bgprocess.JobSnapshot{running, exited}, nil, true, true, true, false, true},
+		{"held only", nil, []heldcall.Running{held}, false, false, true, false, true},
+		{"held and exited", []bgprocess.JobSnapshot{exited}, []heldcall.Running{held}, false, true, true, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			vars := commandJobsVars(tc.jobs, tc.held, now)
-			if vars["has_running"] != tc.running || vars["has_exited"] != tc.exits || vars["can_wait"] != tc.waitable || vars["has_held"] != (len(tc.held) > 0) {
+			if vars["has_running"] != tc.running || vars["has_exited"] != tc.exits || vars["can_wait"] != tc.waitable ||
+				vars["has_held"] != (len(tc.held) > 0) || vars["has_watched"] != tc.hasWatched || vars["has_unwatched_wait"] != tc.unwatchedW {
 				t.Fatalf("facts = %+v", vars)
 			}
 			rows := vars["jobs"].([]map[string]any)

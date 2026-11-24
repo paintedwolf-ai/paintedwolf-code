@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -13,9 +14,12 @@ import (
 
 // RunningProgramResult identifies the original program; no statements are replayed.
 type RunningProgramResult struct {
-	ProgramID string `json:"program_id"`
-	State     string `json:"state"`
-	Handle    string `json:"handle"`
+	ProgramID     string                `json:"program_id"`
+	State         string                `json:"state"`
+	Handle        string                `json:"handle"`
+	WatchHandle   string                `json:"watch_handle,omitempty"`
+	WaitCondition *awaitstore.Condition `json:"wait_condition,omitempty"`
+	OutputCursor  int64                 `json:"output_cursor"`
 }
 
 func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluation, ending *programEnding, startedAt time.Time) (string, error) {
@@ -60,7 +64,21 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 		}
 	}
 	e.observeRunningConfinement()
-	result, err := surveyjson.Marshal(RunningProgramResult{ProgramID: run.root.Identity.ProgramID, State: "running", Handle: handle})
+	runningResult := RunningProgramResult{
+		ProgramID:    run.root.Identity.ProgramID,
+		State:        "running",
+		Handle:       handle,
+		OutputCursor: 0,
+	}
+	if r.DerivedWatches != nil {
+		if handoff, ok, hErr := r.DerivedWatches.HandoffCommand(context.WithoutCancel(ctx), e.callTC, handle, 0); hErr == nil && ok {
+			wc := handoff.WaitCondition
+			runningResult.WatchHandle = handoff.WatchHandle
+			runningResult.WaitCondition = &wc
+			runningResult.OutputCursor = handoff.OutputCursor
+		}
+	}
+	result, err := surveyjson.Marshal(runningResult)
 	return string(result), err
 }
 

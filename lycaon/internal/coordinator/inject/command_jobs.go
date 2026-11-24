@@ -43,7 +43,7 @@ func RenderCommandJobsBlock(
 // which kinds are present, so each sentence is conditioned on its own state.
 func commandJobsVars(jobs []bgprocess.JobSnapshot, held []heldcall.Running, now time.Time) map[string]any {
 	rows := make([]map[string]any, 0, len(jobs)+len(held))
-	running, exited := false, false
+	running, exited, watched, unwatchedWait := false, false, false, false
 	for _, job := range jobs {
 		row := map[string]any{"handle": job.Handle, "origin_tool": job.OriginTool, "exited": job.Exited}
 		if len(job.Stages) > 0 {
@@ -60,6 +60,12 @@ func commandJobsVars(jobs []bgprocess.JobSnapshot, held []heldcall.Running, now 
 		if job.Timeout > 0 {
 			row["deadline_in"] = max(job.StartedAt.Add(job.Timeout).Sub(now).Round(time.Second), 0).String()
 		}
+		if wh := strings.TrimSpace(job.WatchHandle); wh != "" {
+			row["watch_handle"] = wh
+			watched = true
+		} else {
+			unwatchedWait = true
+		}
 		rows = append(rows, row)
 	}
 	for _, call := range held {
@@ -67,9 +73,11 @@ func commandJobsVars(jobs []bgprocess.JobSnapshot, held []heldcall.Running, now 
 			"handle": call.Handle, "mode": "held", "origin_tool": call.Tool,
 			"elapsed": call.Elapsed.Round(time.Second).String(),
 		})
+		unwatchedWait = true
 	}
 	return map[string]any{
 		"jobs": rows, "has_running": running, "has_exited": exited, "has_held": len(held) > 0,
+		"has_watched": watched, "has_unwatched_wait": unwatchedWait,
 		"can_wait": running || len(held) > 0,
 	}
 }

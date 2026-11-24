@@ -52,7 +52,42 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	if !replayed && reg.Lifecycle.State == StateLive {
 		s.heap.Upsert(KindWatchExpiry, reg.WatchID, reg.Lifecycle.ExpiresAt)
 	}
+	if !replayed && len(initialMatches) > 0 {
+		receipt = s.reconcileInitialProcessClaims(ctx, reg, receipt, initialMatches)
+	}
 	return receipt, nil
+}
+
+func (s *Store) reconcileInitialProcessClaims(ctx context.Context, reg Registration, receipt RegisterReceipt, initial []MatchInput) RegisterReceipt {
+	for _, m := range initial {
+		if m.SourceKind != ConditionProcessDone {
+			continue
+		}
+		handle, _ := m.Evidence["handle"].(string)
+		decision, err := ClaimPresentation(ctx, s, reg.Owner, m.OccurrenceID, ClaimWatchEvidence, false, "")
+		if err != nil {
+			continue
+		}
+		if decision.TransferredKick && handle != "" {
+			s.notifyProcessKickTransfer(reg.Owner.SessionID, handle)
+		}
+		if handle != "" {
+			s.notifyProcessObserve(reg.Owner.SessionID, handle)
+		}
+		if decision.AlreadyAdmitted && decision.ExistingReceiptID != "" {
+			_, _ = s.db.ExecContext(ctx, `UPDATE watch_matches
+				SET reservation_state = 'delivered', retained_ref = ?
+				WHERE watch_id = ? AND source_occurrence_id = ? AND reservation_state = 'pending'`,
+				decision.ExistingReceiptID, reg.WatchID, m.OccurrenceID)
+			_, _ = s.db.ExecContext(ctx, `UPDATE watch_registrations
+				SET slot_released = CASE WHEN state = 'terminal' THEN 1 ELSE slot_released END
+				WHERE watch_id = ?`, reg.WatchID)
+			if receipt.PendingMatches > 0 {
+				receipt.PendingMatches--
+			}
+		}
+	}
+	return receipt
 }
 
 func normalizeRegisterRequest(req RegisterRequest, now time.Time) (RegisterRequest, error) {

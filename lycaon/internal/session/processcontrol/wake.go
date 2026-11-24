@@ -63,12 +63,22 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 			Confine: completion.Observation, IndexWatch: completion.IndexWatch,
 		})
 	}
-	m.processReports.publish(completion.SessionID, completion.Handle, processReport{digest: digest, exit: completion.ExitObservation})
 	handle := strings.TrimSpace(completion.Handle)
 	occID := strings.TrimSpace(completion.RunID)
 	if occID == "" {
 		occID = "process_done:" + handle + ":" + completion.FinishedAt.UTC().Format(time.RFC3339Nano)
 	}
+	outcome := "satisfied"
+	if completion.ExitCode != 0 || completion.Failure != nil || completion.BoundaryRefusal != "" {
+		outcome = "failed"
+	}
+	m.processReports.publish(completion.SessionID, completion.Handle, processReport{
+		occurrenceID: occID,
+		outcome:      outcome,
+		code:         completion.ProgramStop.Code,
+		digest:       digest,
+		exit:         completion.ExitObservation,
+	})
 	env := anchor.Envelope{
 		Subject:                 handle,
 		CommandCompletionDigest: digest,
@@ -90,10 +100,6 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 	}
 
 	if m.watches != nil {
-		outcome := "satisfied"
-		if completion.ExitCode != 0 || completion.Failure != nil || completion.BoundaryRefusal != "" {
-			outcome = "failed"
-		}
 		pres, _ := m.watches.RecordProcessCompletion(ctx, completion.SessionID, watch.ProcessCompletionFact{
 			OccurrenceID: occID,
 			Handle:       handle,
@@ -105,6 +111,7 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 			m.dropQueuedProcessKick(completion.SessionID, handle)
 		}
 		if pres.Claimed {
+			completion.ExitObservation.Observe()
 			return
 		}
 	}

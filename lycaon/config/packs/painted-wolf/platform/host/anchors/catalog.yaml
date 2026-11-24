@@ -638,6 +638,8 @@ anchors:
         has_running: { type: "bool", required: true }
         has_exited: { type: "bool", required: true }
         has_held: { type: "bool", required: true }
+        has_watched: { type: "bool", required: true }
+        has_unwatched_wait: { type: "bool", required: true }
 
   - id: inject.worker_messages
     title: Worker messages inject

@@ -8,5 +8,4 @@ tier: builtin
 invariants:
   trigger_class: wait_trigger
   fires_in:
-  - wait() process_done condition — a command/verify process reached terminal
-    status
+  - wait() process_done condition or uncovered command/verify terminal fallback when no watch claims presentation

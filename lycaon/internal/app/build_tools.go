@@ -26,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerlane"
@@ -113,6 +114,9 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 			if mgr.Runner != nil && mgr.Runner.Instructions != nil {
 				mgr.Runner.Instructions.SetWatchFenceClearer(watchStore.ClearSessionStopFence)
 			}
+		}
+		if b.execution.Host != nil && b.execution.Host.Commands != nil {
+			b.execution.Host.Commands.SetDerivedWatches(derivedCommandWatchAdapter{store: watchStore})
 		}
 	}
 	workerKnownFn := waitWorkerKnown(b.boards.WorkerRecords, b.workerRuntime.Queue)
@@ -424,4 +428,57 @@ func (a watchTreeStopAdapter) FenceWatches(ctx context.Context, sessionIDs []str
 func (a watchTreeStopAdapter) ReconcileStoppedWatches(ctx context.Context, sessionIDs []string) (int, error) {
 	summary, err := a.store.ReconcileStoppedSessions(ctx, sessionIDs...)
 	return summary.CanceledCount, err
+}
+
+type derivedCommandWatchAdapter struct {
+	store *watch.Store
+}
+
+func (a derivedCommandWatchAdapter) HandoffCommand(
+	ctx context.Context,
+	tc tools.ToolContext,
+	commandHandle string,
+	outputCursor int64,
+) (command.DerivedCommandHandoff, bool, error) {
+	if !a.store.Configured() {
+		return command.DerivedCommandHandoff{}, false, nil
+	}
+	owner := watch.Owner{
+		ProjectID:   tc.Identity.ProjectID,
+		SessionID:   tc.Identity.SessionID,
+		WorkerJobID: tc.Identity.WorkerJobID,
+	}.Normalized()
+	var rootPaths []string
+	for _, root := range tc.Source.Roots {
+		if root.Path != "" {
+			rootPaths = append(rootPaths, root.Path)
+		}
+	}
+	authority := watch.Authority{
+		WorkspaceID:   tc.Source.ActiveRootID,
+		RootPaths:     rootPaths,
+		LoopbackPorts: append([]uint16(nil), tc.Local.LoopbackConnectPorts...),
+	}
+	h, err := a.store.HandoffDerivedCommand(ctx, owner, authority, commandHandle, outputCursor)
+	if err != nil {
+		return command.DerivedCommandHandoff{}, false, err
+	}
+	return command.DerivedCommandHandoff{
+		Handle:        h.Handle,
+		WatchHandle:   h.WatchHandle,
+		WaitCondition: h.WaitCondition,
+		OutputCursor:  h.OutputCursor,
+	}, true, nil
+}
+
+func (a derivedCommandWatchAdapter) ReconcileShellJoin(ctx context.Context, tc tools.ToolContext, commandHandle string) error {
+	if !a.store.Configured() {
+		return nil
+	}
+	owner := watch.Owner{
+		ProjectID:   tc.Identity.ProjectID,
+		SessionID:   tc.Identity.SessionID,
+		WorkerJobID: tc.Identity.WorkerJobID,
+	}.Normalized()
+	return a.store.ReconcileShellJoin(ctx, owner, commandHandle)
 }

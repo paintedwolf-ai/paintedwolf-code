@@ -176,6 +176,13 @@ func (r *CommandServices) SetProgramEffects(effects tools.ProgramEffectSink) {
 	}
 }
 
+// SetDerivedWatches connects command job handoffs and shell joins to the watch store.
+func (r *CommandServices) SetDerivedWatches(registrar command.DerivedWatchRegistrar) {
+	if programs := r.programs(); programs != nil {
+		programs.SetDerivedWatches(registrar)
+	}
+}
+
 // ProgramReceiptResult reports a program the host no longer runs from its
 // durable receipts.
 func (r *CommandServices) ProgramReceiptResult(ctx context.Context, sessionID, programID string) (string, error) {

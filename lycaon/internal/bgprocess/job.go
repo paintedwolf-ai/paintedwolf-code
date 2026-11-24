@@ -125,12 +125,13 @@ type PipelineSpec struct {
 
 // JobSnapshot is the bounded command ledger exposed to coordinator assembly.
 type JobSnapshot struct {
-	Handle     string
-	Mode       JobMode
-	OriginTool string
-	StartedAt  time.Time
-	Timeout    time.Duration
-	Stages     []hostcmd.StageResult
+	Handle      string
+	WatchHandle string
+	Mode        JobMode
+	OriginTool  string
+	StartedAt   time.Time
+	Timeout     time.Duration
+	Stages      []hostcmd.StageResult
 	// Exited marks a job that ended on its own before the agent observed it.
 	Exited   bool
 	ExitCode int

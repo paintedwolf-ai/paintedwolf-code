@@ -58,7 +58,32 @@ func (s *Service) Observe(sessionID, handle string) {
 }
 
 func (s *Service) SetLoop(waits Waits, nudges Nudges) { s.waits, s.nudges = waits, nudges }
-func (s *Service) SetWatches(watches *watch.Store)    { s.watches = watches }
+func (s *Service) SetWatches(watches *watch.Store) {
+	s.watches = watches
+	if watches != nil {
+		watches.SetProcessKickTransfer(s.dropQueuedProcessKick)
+		watches.SetProcessObserver(s.Observe)
+	}
+}
+
+// LedgerJobs returns the session's command-job ledger annotated with any active watch handle.
+func (s *Service) LedgerJobs(sessionID string) []bgprocess.JobSnapshot {
+	if s == nil || s.Background == nil {
+		return nil
+	}
+	jobs := s.Background.LedgerJobs(sessionID)
+	if len(jobs) == 0 || !s.watches.Configured() {
+		return jobs
+	}
+	watched := s.watches.WatchedCommandHandles(context.Background(), sessionID)
+	if len(watched) == 0 {
+		return jobs
+	}
+	for i := range jobs {
+		jobs[i].WatchHandle = watched[jobs[i].Handle]
+	}
+	return jobs
+}
 
 func (s *Service) HasActionableWatches(ctx context.Context, sessionID string) bool {
 	if s == nil || !s.watches.Configured() {
