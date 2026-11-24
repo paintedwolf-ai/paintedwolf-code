@@ -113,7 +113,7 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 		return nil, err
 	}
 	var batchDeadline time.Time
-	parsed, err := o.scanTargetsWithDeadline(ctx, projectDir, bin, rulePaths, targets, excludes.Patterns(), gates.Analysis, runFiles, &batchDeadline)
+	parsed, err := o.scanTargets(ctx, projectDir, bin, rulePaths, targets, excludes.Patterns(), gates.Analysis, runFiles, &batchDeadline)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 	if len(origins) > 0 {
 		embeddedFiles := runFiles
 		embeddedFiles.jsonPath = filepath.Join(runFiles.dir(), "embedded.json")
-		extra, err := o.scanTargetsWithDeadline(ctx, projectDir, bin, rulePaths, []string{projectionDir}, nil, gates.Analysis, embeddedFiles, &batchDeadline)
+		extra, err := o.scanTargets(ctx, projectDir, bin, rulePaths, []string{projectionDir}, nil, gates.Analysis, embeddedFiles, &batchDeadline)
 		if err != nil {
 			return nil, err
 		}
@@ -152,12 +152,11 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 	return parsed, nil
 }
 
-func (o *OpenGrepScanner) scanTargets(ctx context.Context, projectDir, bin string, rulePaths, targets, excludes []string, analysis opengrep.Analysis, runFiles opengrepRunFiles) (*scanoutput.Result, error) {
-	var batchDeadline time.Time
-	return o.scanTargetsWithDeadline(ctx, projectDir, bin, rulePaths, targets, excludes, analysis, runFiles, &batchDeadline)
-}
-
-func (o *OpenGrepScanner) scanTargetsWithDeadline(ctx context.Context, projectDir, bin string, rulePaths, targets, excludes []string, analysis opengrep.Analysis, runFiles opengrepRunFiles, batchDeadline *time.Time) (*scanoutput.Result, error) {
+func (o *OpenGrepScanner) scanTargets(ctx context.Context, projectDir, bin string, rulePaths, targets, excludes []string, analysis opengrep.Analysis, runFiles opengrepRunFiles, batchDeadline *time.Time) (*scanoutput.Result, error) {
+	if batchDeadline == nil {
+		var local time.Time
+		batchDeadline = &local
+	}
 	return scanOpengrepTargetBatches(ctx, targets, func(batch []string) (*scanoutput.Result, error) {
 		return o.scanTargetBatch(ctx, projectDir, bin, rulePaths, batch, excludes, analysis, runFiles, batchDeadline)
 	})

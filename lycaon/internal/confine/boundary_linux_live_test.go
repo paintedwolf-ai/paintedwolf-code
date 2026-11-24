@@ -490,7 +490,7 @@ func TestLinuxTerminalInterruptReachesOnlyTheTarget(t *testing.T) {
 		testutil.FailErr(t, "write terminal input", err)
 	}
 	send("print('ready' + '-for-input')\n")
-	terminal.await(t, "ready-for-input")
+	terminal.await(t, "ready-for-input\r\n>>> ")
 	send("\x03")
 	terminal.await(t, "KeyboardInterrupt")
 	created := filepath.Join(root, "after-interrupt")
