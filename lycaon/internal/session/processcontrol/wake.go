@@ -77,30 +77,27 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		env.CommandExitObservation = completion.ExitObservation
 	}
 
+	outcome := "satisfied"
+	if completion.ExitCode != 0 || completion.Failure != nil || completion.BoundaryRefusal != "" {
+		outcome = "failed"
+	}
+	fact := watch.ProcessCompletionFact{
+		OccurrenceID: occID,
+		Handle:       handle,
+		Outcome:      outcome,
+		Code:         completion.ProgramStop.Code,
+		Report:       digest,
+	}
+
 	if m.waits != nil && m.nudges != nil && m.waits.SessionSleepingOnProcess(completion.SessionID, completion.Handle) {
-		if m.watches != nil {
-			dec, _ := watch.ClaimPresentation(ctx, m.watches, watch.SessionOwner(completion.SessionID), occID, watch.ClaimDirectWait, true, "direct_wait:"+handle)
-			if dec.TransferredKick {
-				m.dropQueuedProcessKick(completion.SessionID, handle)
-			}
-		}
+		m.claimDirectProcessWait(ctx, completion.SessionID, occID, handle, fact)
 		if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
 			return
 		}
 	}
 
 	if m.watches != nil {
-		outcome := "satisfied"
-		if completion.ExitCode != 0 || completion.Failure != nil || completion.BoundaryRefusal != "" {
-			outcome = "failed"
-		}
-		pres, _ := m.watches.RecordProcessCompletion(ctx, completion.SessionID, watch.ProcessCompletionFact{
-			OccurrenceID: occID,
-			Handle:       handle,
-			Outcome:      outcome,
-			Code:         completion.ProgramStop.Code,
-			Report:       digest,
-		})
+		pres, _ := m.watches.RecordProcessCompletion(ctx, completion.SessionID, fact)
 		if pres.TransferredKick {
 			m.dropQueuedProcessKick(completion.SessionID, handle)
 		}
@@ -122,6 +119,17 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		}
 		m.Guidance.Emit(ctx, completion.SessionID, anchor.ProcessFinished, env)
 	}
+}
+
+func (m *Service) claimDirectProcessWait(ctx context.Context, sessionID, occID, handle string, fact watch.ProcessCompletionFact) {
+	if m.watches == nil {
+		return
+	}
+	dec, _ := watch.ClaimPresentation(ctx, m.watches, watch.SessionOwner(sessionID), occID, watch.ClaimDirectWait, true, "direct_wait:"+handle)
+	if dec.TransferredKick {
+		m.dropQueuedProcessKick(sessionID, handle)
+	}
+	_, _ = m.watches.RecordProcessCompletion(ctx, sessionID, fact)
 }
 
 func (m *Service) dropQueuedProcessKick(sessionID, handle string) {
