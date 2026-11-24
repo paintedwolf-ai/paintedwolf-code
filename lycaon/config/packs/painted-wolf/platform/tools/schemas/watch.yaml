@@ -8,45 +8,45 @@ schema:
       minItems: 1
       maxItems: 8
       uniqueItems: true
-      description: 1-8 alternatives; first match qualifies. watch_match is not accepted here.
+      description: 1-8 alternatives; first match qualifies. Refuses watch_match.
       items:
         type: object
         properties:
           kind:
             type: string
             enum: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready, worker_decision_needed, worker_failed, process_output, file_change, git_ref, timer]
-            description: Role-admitted event, readiness probe, output cursor, source change, or timer.
+            description: Condition kind.
           handles:
             type: array
             minItems: 1
             maxItems: 8
             uniqueItems: true
             items: {type: string, minLength: 1}
-            description: process_done command handles, or next_worker_done / worker_decision_needed / worker_failed worker names.
+            description: process_done command handles or worker names.
           handle:
             type: string
             minLength: 1
-            description: process_output only; one owned command handle.
+            description: process_output command handle.
           cursor:
             type: integer
             minimum: 0
-            description: process_output only; optional screened output cursor from command_output.
-          url: {type: string, description: http_ready only; required absolute HTTP(S) health URL.}
-          method: {type: string, enum: [GET, HEAD], default: GET, description: http_ready only; probe method.}
-          status_min: {type: integer, minimum: 100, maximum: 599, default: 200, description: http_ready only; lowest satisfying status.}
-          status_max: {type: integer, minimum: 100, maximum: 599, default: 399, description: http_ready only; highest satisfying status.}
-          host: {type: string, default: localhost, description: port_ready only; loopback hostname or IP.}
-          port: {type: integer, minimum: 1, maximum: 65535, description: port_ready or optional explicit port for http_ready.}
-          root: {type: string, minLength: 1, description: file_change or git_ref only; authorized folder label.}
-          path: {type: string, minLength: 1, description: file_change only; root-relative file or directory.}
-          glob: {type: string, maxLength: 256, description: file_change only; optional root-relative pattern under a directory.}
-          include_own: {type: boolean, default: false, description: file_change only; include edits made by this caller.}
-          ref: {type: string, minLength: 5, description: git_ref only; full ref name beginning refs/.}
-          delay_ms: {type: integer, minimum: 1000, description: timer only; milliseconds before tick, within expires_at.}
-          at: {type: string, description: "timer only; local YYYY-MM-DDTHH:MM before expires_at (cannot repeat)."}
+            description: process_output start cursor from command_output.
+          url: {type: string, description: http_ready HTTP(S) URL.}
+          method: {type: string, enum: [GET, HEAD], default: GET, description: http_ready method.}
+          status_min: {type: integer, minimum: 100, maximum: 599, default: 200, description: http_ready min status.}
+          status_max: {type: integer, minimum: 100, maximum: 599, default: 399, description: http_ready max status.}
+          host: {type: string, default: localhost, description: port_ready loopback host.}
+          port: {type: integer, minimum: 1, maximum: 65535, description: port_ready or http_ready TCP port.}
+          root: {type: string, minLength: 1, description: file_change or git_ref folder label.}
+          path: {type: string, minLength: 1, description: file_change root-relative path.}
+          glob: {type: string, maxLength: 256, description: file_change optional glob under path.}
+          include_own: {type: boolean, default: false, description: file_change include own edits.}
+          ref: {type: string, minLength: 5, description: git_ref full refs/ name.}
+          delay_ms: {type: integer, minimum: 1000, description: timer delay in ms.}
+          at: {type: string, description: "timer local YYYY-MM-DDTHH:MM (non-repeating)."}
           calendar:
             type: object
-            description: timer only; local days and HH:MM times.
+            description: timer local schedule.
             properties:
               days:
                 type: array
@@ -56,54 +56,53 @@ schema:
                 items:
                   type: string
                   enum: [every_day, weekdays, monday, tuesday, wednesday, thursday, friday, saturday, sunday]
-                description: every_day, weekdays, or 1-7 named weekdays.
+                description: Day selector or weekdays.
               times:
                 type: array
                 minItems: 1
                 maxItems: 8
                 uniqueItems: true
                 items: {type: string, minLength: 5, maxLength: 5}
-                description: 1-8 local HH:MM values.
+                description: Local HH:MM values.
             required: [days, times]
             additionalProperties: false
-          time_zone: {type: string, description: timer at/calendar only; IANA zone name defaulting to device zone.}
+          time_zone: {type: string, description: timer IANA zone (defaults to device zone).}
         required: [kind]
         additionalProperties: false
     delivery:
       type: string
       enum: [collect, wake]
       default: collect
-      description: collect delivers on the next turn; wake schedules an eligible turn when idle.
+      description: collect delivers next turn; wake starts an idle turn.
     repeat:
       type: boolean
       default: false
-      description: Observe subsequent occurrences; rejected when all conditions are terminal one-shots.
+      description: Observe subsequent matches; rejected for terminal-only conditions.
     expires_at:
       type: string
-      description: Optional RFC 3339 timestamp 1 minute to 30 days ahead; defaults to 7 days.
+      description: RFC 3339 expiry 1m-30d ahead (default 7d).
     standing:
       type: object
-      description: Draft a person-owned standing watch (timer, git_ref, or file_change only; forces delivery collect).
+      description: Draft a person-owned standing watch (timer, git_ref, or file_change; forces collect).
       properties:
         name: {type: string, minLength: 1, maxLength: 80, description: Standing watch name.}
-        prompt: {type: string, minLength: 1, maxLength: 8000, description: Markdown prompt to run on match.}
-        replaces: {type: string, description: Optional UUID of an existing standing watch in this project to edit.}
+        prompt: {type: string, minLength: 1, maxLength: 8000, description: Prompt run on match.}
+        replaces: {type: string, description: Existing standing watch UUID to edit.}
       required: [name, prompt]
       additionalProperties: false
     capability_request:
       type: object
-      description: Exact loopback authority for http_ready or port_ready. Never needed for public HTTP(S).
+      description: Loopback port grant for http_ready or port_ready.
       properties:
         loopback_connect:
           type: object
-          description: Request loopback connection authority for exact ports.
           properties:
             ports:
               type: array
               minItems: 1
               maxItems: 8
               uniqueItems: true
-              description: Loopback TCP ports the readiness probe may connect to.
+              description: Loopback TCP ports to allow.
               items: {type: integer, minimum: 1, maximum: 65535}
           additionalProperties: false
       required: [loopback_connect]

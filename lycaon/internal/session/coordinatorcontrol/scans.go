@@ -17,12 +17,12 @@ type ScanEvidenceRuns interface {
 	ActiveRunOwnsScanEvidence(context.Context, string) bool
 }
 type Scans struct {
-	Sessions             ScanSessions
-	Runtime              *coordinator.Runtime
-	Wait                 ScanWaitState
-	Evidence             ScanEvidenceRuns
-	WatchSessions        func(ctx context.Context) ([]string, error)
-	OnWatchScanFinished  func(ctx context.Context, sessionID string, scan api.CodeScan) bool
+	Sessions            ScanSessions
+	Runtime             *coordinator.Runtime
+	Wait                ScanWaitState
+	Evidence            ScanEvidenceRuns
+	WatchSessions       func(ctx context.Context) ([]string, error)
+	OnWatchScanFinished func(ctx context.Context, sessionID string, scan api.CodeScan) bool
 }
 
 const scanDeltaNoteLimit = 8

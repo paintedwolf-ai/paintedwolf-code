@@ -10,24 +10,28 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (b *serveBuilder) wireWatchProducers(watchStore *watch.Store) {
-	if watchStore == nil {
+func wireWatchProducers(b *serveBuilder, watchStore *watch.Store) {
+	if b == nil || watchStore == nil {
 		return
 	}
-	watchStore.SetAuthorityChecker(b.checkWatchAuthority)
-	watchStore.SetCoordinatorStateLookup(b.lookupCoordinatorWatchState)
+	watchStore.SetAuthorityChecker(func(ctx context.Context, reg watch.Registration) (bool, string) {
+		return checkWatchAuthority(b, ctx, reg)
+	})
+	watchStore.SetCoordinatorStateLookup(func(ctx context.Context, sessionID string) (watch.WorkerWatchStateSnapshot, error) {
+		return lookupCoordinatorWatchState(b, ctx, sessionID)
+	})
 
 	if b.sessions != nil && b.sessions.Decisions != nil {
 		if sqlDec, ok := b.sessions.Decisions.(*sessiondecisions.SQL); ok && sqlDec != nil {
 			sqlDec.SetWatchHooks(
 				func(ctx context.Context, dec api.WorkerDecisionRequest) {
-					parentID, workerName := b.resolveWorkerParentAndName(ctx, dec.WorkerID, dec.ChildSessionID)
+					parentID, workerName := resolveWorkerParentAndName(b, ctx, dec.WorkerID, dec.ChildSessionID)
 					if parentID != "" {
 						_, _ = watchStore.RecordWorkerDecisionOpened(ctx, parentID, workerName, dec.WorkerID, dec)
 					}
 				},
 				func(ctx context.Context, childSessionID string) {
-					parentID, workerName, jobID := b.resolveChildWorkerIdentity(ctx, childSessionID)
+					parentID, workerName, jobID := resolveChildWorkerIdentity(b, ctx, childSessionID)
 					if parentID != "" {
 						_ = watchStore.RecordWorkerDecisionClosed(ctx, parentID, workerName, jobID, "closed")
 					}
@@ -38,7 +42,7 @@ func (b *serveBuilder) wireWatchProducers(watchStore *watch.Store) {
 	if b.boards != nil && b.boards.AnswerDecision != nil {
 		if sqlRes, ok := b.boards.AnswerDecision.Resolver.(*worker.SQLDecisionResolver); ok && sqlRes != nil {
 			sqlRes.SetOnResolved(func(ctx context.Context, dec api.WorkerDecisionRequest) {
-				parentID, workerName := b.resolveWorkerParentAndName(ctx, dec.WorkerID, dec.ChildSessionID)
+				parentID, workerName := resolveWorkerParentAndName(b, ctx, dec.WorkerID, dec.ChildSessionID)
 				if parentID != "" {
 					_ = watchStore.RecordWorkerDecisionClosed(ctx, parentID, workerName, dec.WorkerID, "closed")
 				}
@@ -49,7 +53,7 @@ func (b *serveBuilder) wireWatchProducers(watchStore *watch.Store) {
 		mgr := b.sessions.Manager
 		if mgr.Coordinator.Workers != nil {
 			mgr.Coordinator.Workers.OnWatchTerminal = func(ctx context.Context, parentID, _ string) {
-				idle, overlay := b.coordinatorLevelFacts(ctx, parentID)
+				idle, overlay := coordinatorLevelFacts(b, ctx, parentID)
 				_, _ = watchStore.RecordWorkerEvent(ctx, parentID, watch.WorkerWatchEvent{
 					Kind:                  "state",
 					AllWorkersIdle:        idle,
@@ -57,7 +61,7 @@ func (b *serveBuilder) wireWatchProducers(watchStore *watch.Store) {
 				})
 			}
 			mgr.Coordinator.Workers.OnWatchRunning = func(ctx context.Context, parentID, jobID, workerName, kind, outcome, occID, summary string) {
-				idle, overlay := b.coordinatorLevelFacts(ctx, parentID)
+				idle, overlay := coordinatorLevelFacts(b, ctx, parentID)
 				_, _ = watchStore.RecordWorkerEvent(ctx, parentID, watch.WorkerWatchEvent{
 					Kind:                  kind,
 					WorkerHandle:          workerName,
@@ -98,8 +102,8 @@ func (b *serveBuilder) wireWatchProducers(watchStore *watch.Store) {
 	}
 }
 
-func (b *serveBuilder) bindWorkerOutcomeWatches(bridge *worker.SessionOutcomeBridge) {
-	if bridge == nil || b.server.Coordinator == nil {
+func bindWorkerOutcomeWatches(b *serveBuilder, bridge *worker.SessionOutcomeBridge) {
+	if b == nil || bridge == nil || b.server.Coordinator == nil {
 		return
 	}
 	watchStore := b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions.WatchStore()
@@ -112,14 +116,15 @@ func (b *serveBuilder) bindWorkerOutcomeWatches(bridge *worker.SessionOutcomeBri
 		}
 	}
 	bridge.OnWorkerWatchTerminal = func(ctx context.Context, parentSessionID, jobID, status, summary string) bool {
-		_, workerName := b.resolveWorkerParentAndName(ctx, jobID, "")
+		_, workerName := resolveWorkerParentAndName(b, ctx, jobID, "")
 		outcome := "satisfied"
-		if status == "failed" {
+		switch status {
+		case "failed":
 			outcome = "failed"
-		} else if status == "needs_decision" {
+		case "needs_decision":
 			outcome = "needs_decision"
 		}
-		idle, overlay := b.coordinatorLevelFacts(ctx, parentSessionID)
+		idle, overlay := coordinatorLevelFacts(b, ctx, parentSessionID)
 		claimed, _ := watchStore.RecordWorkerEvent(ctx, parentSessionID, watch.WorkerWatchEvent{
 			Kind:                  "terminal",
 			WorkerHandle:          workerName,
@@ -135,7 +140,7 @@ func (b *serveBuilder) bindWorkerOutcomeWatches(bridge *worker.SessionOutcomeBri
 	}
 }
 
-func (b *serveBuilder) checkWatchAuthority(ctx context.Context, reg watch.Registration) (bool, string) {
+func checkWatchAuthority(b *serveBuilder, ctx context.Context, reg watch.Registration) (bool, string) {
 	if b.storage.Sessions == nil || b.storage.Sessions.Sessions == nil {
 		return true, ""
 	}
@@ -149,29 +154,18 @@ func (b *serveBuilder) checkWatchAuthority(ctx context.Context, reg watch.Regist
 	return true, ""
 }
 
-func (b *serveBuilder) lookupCoordinatorWatchState(ctx context.Context, sessionID string) (watch.WorkerWatchStateSnapshot, error) {
+func lookupCoordinatorWatchState(b *serveBuilder, ctx context.Context, sessionID string) (watch.WorkerWatchStateSnapshot, error) {
 	var snap watch.WorkerWatchStateSnapshot
-	idle, overlay := b.coordinatorLevelFacts(ctx, sessionID)
+	idle, overlay := coordinatorLevelFacts(b, ctx, sessionID)
 	snap.AllWorkersIdle = idle
 	snap.OverlayPromotePending = overlay
 
 	if b.storage.Database != nil {
-		rows, err := b.storage.Database.QueryContext(ctx,
-			`SELECT id, COALESCE(child_session_id, ''), status FROM worker_jobs WHERE parent_session_id = ? ORDER BY created_at DESC LIMIT 64`,
-			sessionID)
+		jobs, err := queryCoordinatorWorkerJobs(ctx, b, sessionID)
 		if err == nil {
-			type jobRow struct{ id, child, status string }
-			var jobs []jobRow
-			for rows.Next() {
-				var r jobRow
-				if rows.Scan(&r.id, &r.child, &r.status) == nil {
-					jobs = append(jobs, r)
-				}
-			}
-			_ = rows.Close()
 			snap.HasWorkerCycle = len(jobs) > 0
 			for _, j := range jobs {
-				_, workerName := b.resolveWorkerParentAndName(ctx, j.id, j.child)
+				_, workerName := resolveWorkerParentAndName(b, ctx, j.id, j.child)
 				if j.child != "" && b.sessions != nil && b.sessions.Decisions != nil {
 					if dec, ok, dErr := b.sessions.Decisions.Get(ctx, j.child); dErr == nil && ok && dec.WorkerID == j.id {
 						snap.OpenDecisions = append(snap.OpenDecisions, watch.OpenWorkerDecisionFact{
@@ -181,7 +175,8 @@ func (b *serveBuilder) lookupCoordinatorWatchState(ctx context.Context, sessionI
 						})
 					}
 				}
-				if j.status == "completed" || j.status == "complete" || j.status == "failed" || j.status == "partial" {
+				switch j.status {
+				case "completed", "complete", "failed", "partial":
 					st := j.status
 					if st == "completed" {
 						st = "complete"
@@ -218,7 +213,32 @@ func (b *serveBuilder) lookupCoordinatorWatchState(ctx context.Context, sessionI
 	return snap, nil
 }
 
-func (b *serveBuilder) coordinatorLevelFacts(ctx context.Context, sessionID string) (allIdle, overlayPending bool) {
+type coordinatorWorkerJobRow struct {
+	id, child, status string
+}
+
+func queryCoordinatorWorkerJobs(ctx context.Context, b *serveBuilder, sessionID string) ([]coordinatorWorkerJobRow, error) {
+	rows, err := b.storage.Database.QueryContext(ctx,
+		`SELECT id, COALESCE(child_session_id, ''), status FROM worker_jobs WHERE parent_session_id = ? ORDER BY created_at DESC LIMIT 64`,
+		sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var jobs []coordinatorWorkerJobRow
+	for rows.Next() {
+		var r coordinatorWorkerJobRow
+		if err := rows.Scan(&r.id, &r.child, &r.status); err == nil {
+			jobs = append(jobs, r)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return jobs, nil
+}
+
+func coordinatorLevelFacts(b *serveBuilder, ctx context.Context, sessionID string) (allIdle, overlayPending bool) {
 	if b.server.Coordinator == nil {
 		return false, false
 	}
@@ -228,7 +248,7 @@ func (b *serveBuilder) coordinatorLevelFacts(ctx context.Context, sessionID stri
 	return allIdle, overlayPending
 }
 
-func (b *serveBuilder) resolveWorkerParentAndName(ctx context.Context, jobID, childSessionID string) (string, string) {
+func resolveWorkerParentAndName(b *serveBuilder, ctx context.Context, jobID, childSessionID string) (string, string) {
 	var parentID, workerName string
 	if b.workerRuntime != nil && b.workerRuntime.Queue != nil && strings.TrimSpace(jobID) != "" {
 		if task, ok := b.workerRuntime.Queue.Lookup(ctx, jobID); ok && task != nil {
@@ -248,13 +268,13 @@ func (b *serveBuilder) resolveWorkerParentAndName(ctx context.Context, jobID, ch
 	return parentID, workerName
 }
 
-func (b *serveBuilder) resolveChildWorkerIdentity(ctx context.Context, childSessionID string) (string, string, string) {
+func resolveChildWorkerIdentity(b *serveBuilder, ctx context.Context, childSessionID string) (string, string, string) {
 	var jobID string
 	if b.storage.Database != nil && strings.TrimSpace(childSessionID) != "" {
 		_ = b.storage.Database.QueryRowContext(ctx,
 			`SELECT id FROM worker_jobs WHERE child_session_id = ? ORDER BY created_at DESC LIMIT 1`,
 			strings.TrimSpace(childSessionID)).Scan(&jobID)
 	}
-	parentID, workerName := b.resolveWorkerParentAndName(ctx, jobID, childSessionID)
+	parentID, workerName := resolveWorkerParentAndName(b, ctx, jobID, childSessionID)
 	return parentID, workerName, jobID
 }

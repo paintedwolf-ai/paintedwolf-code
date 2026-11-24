@@ -36,6 +36,7 @@ func TestResourceControlsAreOneFamilyWithoutTheirLauncher(t *testing.T) {
 		nativemanifest.ResourceFactTerminals:   {Terminals: true},
 		nativemanifest.ResourceFactPages:       {Pages: true},
 		nativemanifest.ResourceFactHeldCalls:   {HeldCalls: true},
+		nativemanifest.ResourceFactWatches:     {Watches: true},
 	}
 	for fact, want := range controls {
 		live := toolcontract.Implied(presence[fact])
@@ -50,7 +51,7 @@ func TestResourceControlsAreOneFamilyWithoutTheirLauncher(t *testing.T) {
 			}
 		}
 	}
-	for _, launcher := range []string{"command", "terminal_open", "page_open", "wait"} {
+	for _, launcher := range []string{"command", "terminal_open", "page_open", "wait", "watch"} {
 		if got := toolcontract.ExpandFamilies([]string{launcher}); !slices.Equal(got, []string{launcher}) {
 			t.Fatalf("%s expands to %v", launcher, got)
 		}
