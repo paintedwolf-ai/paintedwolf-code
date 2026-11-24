@@ -166,14 +166,14 @@ func applyWorktreeDiskRemoval(
 		return runGuardedWorktreeAdminOp(
 			s, w, r, mgr, b.Toplevel,
 			"repository config changed during worktree remove",
-			func() error { return mgr.RemoveWorktree(r.Context(), b.Toplevel, b.WorktreePath) },
+			func(ctx context.Context) error { return mgr.RemoveWorktree(ctx, b.Toplevel, b.WorktreePath) },
 		)
 	}
 	if !pathExists {
 		return runGuardedWorktreeAdminOp(
 			s, w, r, mgr, b.Toplevel,
 			"repository config changed during stale worktree registration cleanup",
-			func() error { return mgr.RemoveStaleWorktreeRegistration(r.Context(), b.Toplevel, b.WorktreePath) },
+			func(ctx context.Context) error { return mgr.RemoveStaleWorktreeRegistration(ctx, b.Toplevel, b.WorktreePath) },
 		)
 	}
 	s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "This chat's worktree is invalid. Repair or remove the checkout at the shown path before returning to the project folder.")
@@ -187,18 +187,19 @@ func runGuardedWorktreeAdminOp(
 	mgr *git.Manager,
 	toplevel string,
 	driftMsg string,
-	op func() error,
+	op func(context.Context) error,
 ) bool {
-	before, err := mgr.RepoConfigFingerprint(r.Context(), toplevel)
+	ctx := r.Context()
+	before, err := mgr.RepoConfigFingerprint(ctx, toplevel)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return false
 	}
-	if err := op(); err != nil {
+	if err := op(ctx); err != nil {
 		s.responses.InternalError(w, r, err)
 		return false
 	}
-	after, err := mgr.RepoConfigFingerprint(r.Context(), toplevel)
+	after, err := mgr.RepoConfigFingerprint(ctx, toplevel)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return false
