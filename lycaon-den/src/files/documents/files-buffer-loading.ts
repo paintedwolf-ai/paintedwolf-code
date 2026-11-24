@@ -87,7 +87,8 @@ export function createBufferLoading({ projectId, client, sourceSessionId, dropFi
           releaseOpened();
           throw new Error("Source read returned the wrong workspace kind.");
         }
-        if (!buf.jobId && !buf.worktreeId && buf.branchId === undefined && !buf.documentId && res.workspace_id !== filesWorkspaceId()) {
+        const linkedCheckout = Boolean(buf.worktreeId || (buf.branchId && buf.branchId !== ""));
+        if (!buf.jobId && !linkedCheckout && res.workspace_id !== filesWorkspaceId()) {
           refreshProjectWorkspace(res.workspace_id);
           releaseOpened();
           return;
@@ -231,7 +232,8 @@ export function createBufferLoading({ projectId, client, sourceSessionId, dropFi
         if (res.workspace_kind !== (buf.jobId ? "worker" : "project")) {
           throw new Error("Source read returned the wrong workspace kind.");
         }
-        if (!buf.jobId && !buf.worktreeId && buf.branchId === undefined && !buf.documentId && res.workspace_id !== filesWorkspaceId()) {
+        const linkedCheckout = Boolean(buf.worktreeId || (buf.branchId && buf.branchId !== ""));
+        if (!buf.jobId && !linkedCheckout && res.workspace_id !== filesWorkspaceId()) {
           refreshProjectWorkspace(res.workspace_id);
           return;
         }

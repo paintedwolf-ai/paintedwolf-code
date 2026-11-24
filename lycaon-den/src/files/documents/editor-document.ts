@@ -223,7 +223,8 @@ export async function resolveEditorDocument(projectId: string, buffer: EditorDra
   }
   const connection = connectionFor(projectId);
   const activeWorkspaceId = connection?.workspaceId?.() ?? "";
-  const workspaceId = buffer.workspaceId || activeWorkspaceId;
+  const linkedCheckout = Boolean(buffer.worktreeId || (buffer.branchId && buffer.branchId !== "") || buffer.checkoutUnavailable);
+  const workspaceId = linkedCheckout ? (buffer.workspaceId || activeWorkspaceId) : activeWorkspaceId;
   const key = [projectId, workspaceId, buffer.branchId ?? "", buffer.rootId, buffer.path, buffer.fileId, buffer.encoding].join("\0");
   const suppliedId = suppliedDocuments.get(key);
   const existing = editorReplica(buffer.documentId) ?? (suppliedId ? replicas.get(suppliedId) : undefined);
@@ -275,9 +276,11 @@ async function openReplica(projectId: string, buffer: EditorDraft, connection: C
   } else {
     document = await openByAddress();
   }
-  const explicitCheckout = Boolean(buffer.workspaceId || buffer.worktreeId || buffer.branchId !== undefined || buffer.documentId);
-  if (!explicitCheckout && workspaceId && document.workspace_id !== workspaceId) {
-    if (!document.workspace_id) throw new Error("The backend did not identify this file's workspace. Update and restart the backend, then retry editing.");
+  if (workspaceId && !document.workspace_id) {
+    throw new Error("The backend did not identify this file's workspace. Update and restart the backend, then retry editing.");
+  }
+  const linkedCheckout = Boolean(buffer.worktreeId || (buffer.branchId && buffer.branchId !== "") || buffer.checkoutUnavailable);
+  if (!linkedCheckout && workspaceId && document.workspace_id !== workspaceId) {
     throw new SourceWorkspaceMismatchError(workspaceId, document.workspace_id);
   }
   await reservation?.expand(documentAdmissionBytes(document.size_bytes, document.crdt_update.length));

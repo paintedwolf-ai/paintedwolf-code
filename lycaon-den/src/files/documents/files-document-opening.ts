@@ -21,7 +21,8 @@ function supportsDocument(buffer: FileBuffer): boolean {
 }
 
 function identity(buffer: FileBuffer, workspaceId: string): string {
-  return [buffer.workspaceId || workspaceId, buffer.branchId ?? "", buffer.rootId, buffer.path, buffer.fileId, buffer.encoding, buffer.baseSha256, buffer.editRevision].join("\0");
+  const linked = Boolean(buffer.worktreeId || (buffer.branchId && buffer.branchId !== "") || buffer.checkoutUnavailable);
+  return [linked ? (buffer.workspaceId || workspaceId) : workspaceId, buffer.branchId ?? "", buffer.rootId, buffer.path, buffer.fileId, buffer.encoding, buffer.baseSha256, buffer.editRevision].join("\0");
 }
 
 export function createFilesDocumentOpening(options: {
