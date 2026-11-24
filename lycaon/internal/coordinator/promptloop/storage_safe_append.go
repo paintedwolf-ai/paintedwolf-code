@@ -37,7 +37,6 @@ func (l *turnProjection) persistStorageSafeMessages(ctx context.Context, session
 				Tool:       m.ToolResult.Tool,
 				Phase:      "transcript_result_commit",
 				Outcome:    string(m.ToolResult.Outcome),
-				RecordedAt: m.Timestamp.UTC(),
 			})
 		}
 	}

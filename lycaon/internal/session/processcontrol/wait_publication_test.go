@@ -23,7 +23,7 @@ func TestHandlesRunningHoldsUntilTerminalReportPublishesAndEmitsValueFreePhase(t
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	service := New(f, f, f, f)
 	service.Background = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	service.Held = heldcall.NewRegistry()
+	service.Held = heldcall.New(nil, nil)
 	t.Cleanup(func() { _ = service.Background.Lifecycle.Close(context.Background()) })
 
 	var mu sync.Mutex
@@ -81,12 +81,12 @@ func TestHandlesRunningHoldsUntilTerminalReportPublishesAndEmitsValueFreePhase(t
 		return heldcall.Settled{Outcome: api.ToolResultOutcomeCompleted, Content: secretOutput}
 	})
 	testutil.FailErr(t, "run held call", err)
-	if outcome.ParkedHandle != "" {
+	if outcome.Handle != "" {
 		testutil.WaitFor(t, "held call settles", func() bool {
-			st, sErr := service.Held.Status("session", outcome.ParkedHandle)
+			st, sErr := service.Held.Status("session", outcome.Handle)
 			return sErr == nil && st.Settled != nil
 		})
-		service.HandleHeldCallSettled("session", outcome.ParkedHandle)
+		service.HandleHeldCallSettled("session", outcome.Handle)
 	}
 
 	mu.Lock()
