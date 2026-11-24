@@ -264,6 +264,9 @@ func (l *Waits) runtimeWaitSubscription(sessionID string) (waitSubscription, boo
 	state := value.(*sessionSleep)
 	state.mu.Lock()
 	defer state.mu.Unlock()
+	if len(state.watchHandles) > 0 {
+		return waitSubscription{}, false
+	}
 	if len(state.waitTriggers) == 0 {
 		return waitSubscription{}, false
 	}
