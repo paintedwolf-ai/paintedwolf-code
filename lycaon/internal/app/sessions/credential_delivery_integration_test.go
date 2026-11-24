@@ -32,7 +32,7 @@ func TestCredentialFileScreensCommandOutputWithoutRead(t *testing.T) {
 	testutil.FailErr(t, "seed command project", files.queries.CreateProject(t.Context(), db.CreateProjectParams{ID: testdbseed.DefaultProjectID, CreatedAt: "2026-01-01T00:00:00Z", LastOpenedAt: "2026-01-01T00:00:00Z"}))
 	testutil.FailErr(t, "attach command root", files.queries.CreateProjectRoot(t.Context(), db.CreateProjectRootParams{ID: "r1", ProjectID: testdbseed.DefaultProjectID, Path: root, Label: "root", IsPrimary: 1, AddedAt: "2026-01-01T00:00:00Z", Kind: "attached"}))
 	testutil.FailErr(t, "write credential file", os.WriteFile(filepath.Join(root, ".env"), []byte("DB_PASSWORD="+value), 0600))
-	testutil.FailErr(t, "admit attached root", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
+	testutil.FailErr(t, "admit attached root", files.Await(t.Context(), tools.CredentialWait{ProjectID: testdbseed.DefaultProjectID}))
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"command": true, "http_request": true}}})
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID, SessionID: "chat", RootSessionID: "chat", Agent: "implement"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: root, IsPrimary: true}}, ActiveRootID: "r1"}, Effects: tools.InvocationEffects{CredentialFiles: files}}
 	output, err := credentialCommandOutput(t, files, root)

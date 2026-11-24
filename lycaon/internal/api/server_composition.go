@@ -68,6 +68,11 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	s.Sources = sourceapi.New(&s.responses, &s.background, sourceOperations, sourceapi.Deps{Branches: deps.Workflow.Branches,
 		Git: &s.Admin.Git, MutationGate: deps.Core.MutationGate,
 		CatalogSnapshot: deps.Source.CatalogSnapshot, WatchNeedsSeed: deps.Source.WatchNeedsSeed,
+		StartCredentialIndex: func(projectID string) {
+			if files := deps.Core.Sessions.ToolContext.CredentialFiles; files != nil {
+				files.Start(projectID)
+			}
+		},
 		EditorClients: deps.Source.EditorClients, EditorDocuments: deps.Source.EditorDocuments, ProjectViews: deps.Source.ProjectViews, Events: deps.Host.Events,
 		Briefings: deps.Source.Briefings, FileOperations: deps.Source.FileOperations, ManagedSecrets: deps.Approvals.ManagedSecrets,
 		ProjectRegistry: deps.Core.Projects, ScanCadence: deps.Scans.ScanCadence,

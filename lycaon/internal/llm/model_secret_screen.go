@@ -176,6 +176,10 @@ func (s *ModelSecretScreen) ScreenWithBasis(
 		var err error
 		values, err = s.evidence(ctx, projectID, rootSessionID)
 		if err != nil {
+			// A caller that stops waiting cancels the request, not the screen.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return modelcall.CompletionRequest{}, screenBasis{}, ctxErr
+			}
 			return modelcall.CompletionRequest{}, screenBasis{}, &ModelRequestSecretScreenFaultError{
 				Stage: secretmatch.FaultStageManagedSecretStore,
 				Err:   err,

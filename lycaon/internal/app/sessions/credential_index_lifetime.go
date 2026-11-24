@@ -2,25 +2,39 @@ package sessions
 
 import "context"
 
-// begin serializes evidence transitions while allowing waiting providers,
-// tools, and observers to cancel. Every admitted operation joins shutdown.
-func (i *credentialIndex) begin(ctx context.Context) (context.Context, func(), error) {
+// ForgetProject removes the project's roots and its retained file evidence
+// after any in-flight pass has stopped publishing.
+func (c *credentialFiles) ForgetProject(ctx context.Context, project string) error {
+	if !c.indexing() {
+		return nil
+	}
+	i := c.index
 	ctx, finish, err := i.work.Begin(ctx)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	release, err := i.access.Acquire(ctx, "evidence")
-	if err != nil {
-		finish()
-		return nil, nil, err
+	defer finish()
+	i.mu.Lock()
+	var keys []string
+	for _, root := range i.roots {
+		if root.projectID == project {
+			keys = append(keys, root.key())
+			i.detach(root)
+		}
 	}
-	if err := ctx.Err(); err != nil {
-		release()
-		finish()
-		return nil, nil, err
+	i.mu.Unlock()
+	releases := make([]func(), 0, len(keys))
+	defer func() {
+		for _, release := range releases {
+			release()
+		}
+	}()
+	for _, key := range keys {
+		release, err := i.access.Acquire(ctx, key)
+		if err != nil {
+			return err
+		}
+		releases = append(releases, release)
 	}
-	return ctx, func() {
-		release()
-		finish()
-	}, nil
+	return c.harvest.ForgetProject(project)
 }

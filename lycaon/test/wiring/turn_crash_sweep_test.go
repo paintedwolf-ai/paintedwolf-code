@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -490,7 +491,9 @@ func runTurnChild(t *testing.T, dir, killAt string) {
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
 	testutil.FailErr(t, "record session", os.WriteFile(filepath.Join(dir, crashSession), []byte(sess.ID), 0o600))
-	testutil.FailErr(t, "admit project roots before arming", h.Sessions.Manager.ToolContext.CredentialFiles.EnsureProject(t.Context(), sess.ProjectID))
+	credentials := h.Sessions.Manager.ToolContext.CredentialFiles
+	credentials.Start(sess.ProjectID)
+	testutil.FailErr(t, "index project roots before arming", credentials.Await(t.Context(), tools.CredentialWait{ProjectID: sess.ProjectID}))
 	repochange.WaitQuiet(t.Context(), project, repochange.DefaultDebounce, 5*time.Second)
 	tracer.armed.Store(true)
 	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "Read the notes.")

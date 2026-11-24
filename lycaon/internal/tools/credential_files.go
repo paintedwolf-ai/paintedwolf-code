@@ -11,12 +11,21 @@ import (
 
 // CredentialFiles indexes credential bindings and records attributed delivery.
 type CredentialFiles interface {
-	EnsureProject(ctx context.Context, projectID string) error
+	// Start begins indexing the project's roots without waiting for them.
+	Start(projectID string)
+	// Await returns once every admitted root of the project is current.
+	Await(ctx context.Context, wait CredentialWait) error
 	ForgetProject(ctx context.Context, projectID string) error
 	// Delivered records the session's exposure to a credential file.
 	Delivered(ctx context.Context, read CredentialFileRead) error
 	// Authored records values the model already holds.
 	Authored(ctx context.Context, written AuthoredCredentialValues) error
+}
+
+// CredentialWait names the project a caller waits on and the session, when
+// there is one, that is shown the wait.
+type CredentialWait struct {
+	ProjectID, SessionID string
 }
 
 // CredentialFileRead is the text one read delivered from a credential file.

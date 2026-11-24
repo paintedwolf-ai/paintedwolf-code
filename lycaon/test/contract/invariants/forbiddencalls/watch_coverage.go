@@ -161,7 +161,8 @@ func namesEpoch(expr ast.Expr) bool {
 
 // epochTrustExemptions compare epochs that are not watch-observation freshness.
 var epochTrustExemptions = []invariants.Exemption{
-	{Key: "internal/app/sessions/credential_index.go:changed", Reason: "checks contiguous repochange.Event sequence to fall back to a full scan on any gap; EnsureProject consults repochange.Coverage"},
+	{Key: "internal/app/sessions/credential_index.go:current", Reason: "consults repochange.Coverage through the index's injected coverage func"},
+	{Key: "internal/app/sessions/credential_index.go:next", Reason: "consults repochange.Coverage through the index's injected coverage func"},
 	{Key: "internal/briefingstore/store.go:checkEpoch", Reason: "compares SQLite briefing cache_epoch invalidation counter, not filesystem watch state"},
 	{Key: "internal/briefingstore/targets.go:Resolve", Reason: "compares SQLite briefing cache_epoch invalidation counter, not filesystem watch state"},
 	{Key: "internal/browser/timeline_record.go:sampleRegions", Reason: "compares in-page DOM geometry counter, not filesystem watch state"},
