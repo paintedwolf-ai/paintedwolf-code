@@ -720,7 +720,6 @@ func TestSharedTempExchangeSettlementCombinesReadsAndWritesAndReopensOnExplicitP
 	broker := &WriteRootCheckpointBroker{
 		Runtime: writeRT, ReadRuntime: readRT, GrantedPaths: gpRT,
 		Checkpoints: cards, Posture: func(string) gate.Posture { return gate.PostureLight },
-		ApprovalsDisabled: func(string) bool { return true },
 	}
 	ask := command.SandboxWriteRootAsk{SessionID: "chat-ex", ToolName: "command", ToolCallID: "c1", Command: "transform"}
 	declined := broker.ReviewSharedTemp(t.Context(), ask, obs, true)

@@ -144,7 +144,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	if launches {
 		arguments = d.run.nativeArguments(arguments, definition.ReadOnlyFacts().Contract, nil)
 	}
-	child, err := d.prepareInvocation(ctx, definition, request.Invocation, spec.Name, arguments, nil)
+	child, err := d.prepareInvocation(ctx, definition, request.Invocation, spec.Name, arguments, review)
 	if err != nil {
 		return d.prepareChildFailure(streams, spec.Name, request, err)
 	}

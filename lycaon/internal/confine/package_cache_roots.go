@@ -156,7 +156,7 @@ func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
 	excluded := resolveEach(c.ReadDenyPaths)
 	var readSubpaths, readLiterals, reachable []string
 	if runtime.GOOS == "darwin" {
-		if ut := platformUserTemp(); ut != "" {
+		if ut := fspath.CanonicalPath(platformUserTemp()); ut != "" {
 			xcrun := filepath.Join(ut, "xcrun_db")
 			if !underAny(xcrun, excluded) {
 				readLiterals = append(readLiterals, xcrun)
@@ -287,7 +287,7 @@ func coversAnyTempLocation(g ProtectedPathGrant, sharedTemp []string) bool {
 func nonExcludedPaths(paths, excluded []string) []string {
 	var out []string
 	for _, path := range paths {
-		if !underAny(path, excluded) {
+		if !slices.Contains(excluded, path) {
 			out = append(out, path)
 		}
 	}

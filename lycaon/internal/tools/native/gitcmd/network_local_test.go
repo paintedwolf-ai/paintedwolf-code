@@ -53,6 +53,16 @@ func (h *harness) approveWrite(paths ...string) {
 
 func (h *harness) bareRemote(t *testing.T, name string) string {
 	t.Helper()
+	dir := h.unapprovedBareRemote(t, name)
+	h.tc.Files.ReadRoots = append(h.tc.Files.ReadRoots, dir)
+	bound, err := projectpaths.NewProgramPaths(t.Context(), h.owners.Boundary, h.tc, "")
+	testutil.FailErr(t, "bind readable local remote", err)
+	h.paths = bound
+	return dir
+}
+
+func (h *harness) unapprovedBareRemote(t *testing.T, name string) string {
+	t.Helper()
 	parent, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "eval remote parent", err)
 	dir := filepath.Join(parent, name)
@@ -60,6 +70,20 @@ func (h *harness) bareRemote(t *testing.T, name string) string {
 		t.Fatalf("init bare: %d %s %s", status, out, stderr)
 	}
 	return dir
+}
+
+func TestSharedTempLocalRemoteRefusesUnapprovedReadAndWrite(t *testing.T) {
+	h := newHarness(t)
+	h.git("reset", "--hard", "HEAD")
+	h.git("clean", "-fd")
+	origin := h.unapprovedBareRemote(t, "temp-origin.git")
+	h.git("remote", "add", "origin", origin)
+	h.exec("git", "fetch", "origin").refused(t, "unapproved temp remote read", "SURVEY_PATH_ESCAPE")
+	h.exec("git", "push", "origin", "main").refused(t, "unapproved temp remote write", "SURVEY_PATH_ESCAPE")
+	h.approveWrite(origin)
+	if push := h.exec("git", "push", "origin", "main"); push.err != nil || push.result.Status != 0 {
+		t.Fatalf("approved temp push: %+v %v %s", push.result, push.err, push.stderr)
+	}
 }
 
 // A local remote's launch carries every directory Git opens through it: the

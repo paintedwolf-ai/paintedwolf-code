@@ -23,6 +23,7 @@ type creationFloors struct {
 	readFiles      []string
 	writeOnlyRoots []string
 	writeOnlyFiles []string
+	hidden         []string
 	// protected are write- and read-floor locations, existing or not.
 	protected []string
 	// names are basenames protected at any depth below a directory.
@@ -41,6 +42,7 @@ func newCreationFloors(fs Filesystem) creationFloors {
 		readFiles:      fs.ReadFiles,
 		writeOnlyRoots: fs.WriteOnlyRoots,
 		writeOnlyFiles: fs.WriteOnlyFiles,
+		hidden:         fs.Hidden,
 		names:          fs.ReadOnlyNames,
 		sensitive:      map[string]bool{},
 	}
@@ -215,7 +217,7 @@ func (f creationFloors) enclosingSharedTemp(path string) string {
 
 func (f creationFloors) hiddenBelowTemp(path, tempRoot string) bool {
 	bestHidden := -1
-	for _, p := range f.protected {
+	for _, p := range f.hidden {
 		if len(p) > len(tempRoot) && atOrUnderFold(p, tempRoot) && atOrUnderFold(path, p) && len(p) > bestHidden {
 			bestHidden = len(p)
 		}

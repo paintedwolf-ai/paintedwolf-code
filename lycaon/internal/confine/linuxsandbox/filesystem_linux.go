@@ -83,7 +83,7 @@ func applyFilesystem(fs Filesystem) error {
 		}
 	}
 	for _, p := range fs.ReadOnly {
-		if exists(p) {
+		if !seen[p] && exists(p) {
 			ops = append(ops, mountOp{path: p, kind: opReadOnly})
 		}
 	}

@@ -6,10 +6,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // GlobFiles is pathname expansion's view of one invocation's logical paths.
@@ -108,6 +111,29 @@ func (g GlobFiles) rootParent(path string) bool {
 	}
 	_, ok := g.Paths.rootParents[filepath.Clean(filepath.FromSlash(path))]
 	return ok
+}
+
+// globReadableRoots lists every root a read glob may traverse toward.
+func globReadableRoots(tc tools.ToolContext) []string {
+	roots := append(actionRootPaths(tc), tc.Files.ReadRoots...)
+	roots = append(roots, tc.Files.SessionReadPaths...)
+	roots = append(roots, confine.DefaultReadRoots(tc.Identity.ProjectID)...)
+	for _, dir := range []string{tc.Host.SessionScratchDir, tc.Host.SessionOutputDir, tc.Host.HostDataDir} {
+		if strings.TrimSpace(dir) != "" {
+			roots = append(roots, dir)
+		}
+	}
+	for _, w := range tc.Files.GrantedWriteRoots {
+		if strings.TrimSpace(w) != "" && confine.SharedTempLocation(w) == "" {
+			roots = append(roots, w)
+		}
+	}
+	for _, access := range tc.Files.ApprovedFileAccess {
+		if strings.TrimSpace(access.Path) != "" && access.Permits(false) {
+			roots = append(roots, access.Path)
+		}
+	}
+	return roots
 }
 
 // rootParentChains resolves each root's parent chain once per invocation.

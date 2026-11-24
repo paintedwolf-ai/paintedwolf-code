@@ -198,6 +198,11 @@ func NativeReadRootForPath(projectID string, roots, readRoots, sessionReadPaths,
 				allowed = append(allowed, cp)
 			}
 		}
+		extra, err := explicitReadGrantRoots(sessionReadPaths, abs)
+		if err != nil {
+			return "", err
+		}
+		allowed = append(allowed, extra...)
 		return deepestCoveringRoot(allowed, abs), nil
 	}
 	allowed, err := explicitSharedTempReadRoots(roots, effectiveReadRoots, sessionReadPaths, sessionScratch, abs)
@@ -205,6 +210,46 @@ func NativeReadRootForPath(projectID string, roots, readRoots, sessionReadPaths,
 		return "", err
 	}
 	return deepestCoveringRoot(allowed, abs), nil
+}
+
+// DefaultReadRoots lists ambient non-temp roots admitted for native reads.
+func DefaultReadRoots(projectID string) []string {
+	var out []string
+	for _, raw := range append(osDefaultWriteRoots(), grantedWriteRoots(projectID)...) {
+		if strings.TrimSpace(raw) == "" {
+			continue
+		}
+		cp := fspath.CanonicalPath(raw)
+		if cp == "" || SharedTempLocation(cp) != "" || defaultRootContainsStateFolder(cp) {
+			continue
+		}
+		if !slices.Contains(out, cp) {
+			out = append(out, cp)
+		}
+	}
+	return out
+}
+
+func explicitReadGrantRoots(sessionReadPaths []string, abs string) ([]string, error) {
+	rawGrants := make([]ProtectedPathGrant, 0, len(sessionReadPaths))
+	for _, p := range sessionReadPaths {
+		if strings.TrimSpace(p) != "" {
+			rawGrants = append(rawGrants, NewProtectedPathGrant(p))
+		}
+	}
+	applied, _, err := validateProtectedPathGrants(normalizeProtectedPathGrants(rawGrants))
+	if err != nil {
+		return nil, err
+	}
+	var allowed []string
+	for _, g := range applied {
+		if g.Subtree && PathAtOrUnder(abs, g.ResolvedPath) {
+			allowed = append(allowed, g.ResolvedPath)
+		} else if !g.Subtree && PathEqual(abs, g.ResolvedPath) {
+			allowed = append(allowed, g.ResolvedPath)
+		}
+	}
+	return allowed, nil
 }
 
 func sharedTempScopedRoots(roots []string, abs string) []string {

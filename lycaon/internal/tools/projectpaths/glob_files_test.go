@@ -42,7 +42,9 @@ func TestGlobFilesMatchConfinedLogicalPaths(t *testing.T) {
 	tc, root := readSessionContext(t)
 	outside := outsideSharedTempDir(t)
 	ungrantedTemp := t.TempDir()
-	for _, file := range []string{filepath.Join(root, ".hidden.go"), filepath.Join(root, "pkg", "deep", "c.go"), filepath.Join(outside, "o.go"), filepath.Join(ungrantedTemp, "t.go")} {
+	approvedTemp := t.TempDir()
+	tc.Files.SessionReadPaths = []string{approvedTemp}
+	for _, file := range []string{filepath.Join(root, ".hidden.go"), filepath.Join(root, "pkg", "deep", "c.go"), filepath.Join(outside, "o.go"), filepath.Join(ungrantedTemp, "t.go"), filepath.Join(approvedTemp, "ok.go")} {
 		testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Dir(file), 0o755))
 		testutil.FailErr(t, "write", os.WriteFile(file, nil, 0o600))
 	}
@@ -67,8 +69,9 @@ func TestGlobFilesMatchConfinedLogicalPaths(t *testing.T) {
 		{"./p*/b.go", []string{"./pkg/b.go"}},
 		{filepath.ToSlash(root) + "/*.go", []string{filepath.ToSlash(root) + "/a.go"}},
 		// The walk applies the invocation's read authority: ordinary host reads
-		// remain visible while ungranted shared-temp trees stay closed.
+		// and approved temp directories match while ungranted temp trees stay closed.
 		{filepath.ToSlash(outside) + "/*.go", []string{filepath.ToSlash(outside) + "/o.go"}},
+		{filepath.ToSlash(approvedTemp) + "/*.go", []string{filepath.ToSlash(approvedTemp) + "/ok.go"}},
 		{filepath.ToSlash(ungrantedTemp) + "/*.go", nil},
 		{"@scratch/*", nil},
 		{"missing/*.go", nil},

@@ -48,7 +48,11 @@ func TestFailureDigestSurvivesTheCommandResultWindow(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := programtest.New(t, programtest.Options{})
 			f.Configure = func(tc2 *tools.ToolContext) { tc2.Host.ModelContextWindow = tc.contextTokens }
-			source := "external -- " + python + " -B " + script + " " + f.Dir
+			scriptBytes, err := os.ReadFile(script)
+			contractcheck.FailErr(t, "read failure digest fixture", err)
+			stagedScript := filepath.Join(f.Dir, "failure_digest_output.py")
+			contractcheck.FailErr(t, "stage failure digest fixture", os.WriteFile(stagedScript, scriptBytes, 0o600))
+			source := "external -- " + python + " -B " + stagedScript + " " + f.Dir
 			out, err := f.Call(t, t.Context(), source)
 			contractcheck.FailErr(t, "run failing verification", err)
 			var outcome command.ProgramOutcome

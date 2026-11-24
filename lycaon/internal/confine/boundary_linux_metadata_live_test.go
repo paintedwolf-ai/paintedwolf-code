@@ -283,7 +283,11 @@ with open(p,"rb") as f:
         try: op()
         except OSError as e: print(e.errno)
 `
-		refusals, out := refusalsOf(t, self, liveBoundaryRoots(project), "/usr/bin/python3", "-I", "-c", probe, target)
+		c := confine.Confinement{
+			Roots:               liveBoundaryRoots(project),
+			ProtectedReadGrants: []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(target)},
+		}
+		refusals, out := refusalsOfConfinement(t, self, c, "/usr/bin/python3", "-I", "-c", probe, target)
 		got := map[string]bool{}
 		for _, r := range refusals.Refusals {
 			if r.Target == target && r.Layer == confine.FloorSharedTemp && r.Recovery == confine.RecoverWriteRoot && r.Grant == root {

@@ -17,10 +17,17 @@ import (
 // refusalsOf collects kernel reports for one confined action.
 func refusalsOf(t *testing.T, self string, roots []string, name string, args ...string) (confine.SandboxRefusals, string) {
 	t.Helper()
-	c := &confine.Confinement{Roots: roots, Network: confine.NetworkDeny}
-	lease, err := confine.BindAction(c, confine.EgressCommand{SessionID: "refusal-live", ToolName: "command", CommandLine: name})
+	return refusalsOfConfinement(t, self, confine.Confinement{Roots: roots, Network: confine.NetworkDeny}, name, args...)
+}
+
+func refusalsOfConfinement(t *testing.T, self string, c confine.Confinement, name string, args ...string) (confine.SandboxRefusals, string) {
+	t.Helper()
+	if c.Network == "" {
+		c.Network = confine.NetworkDeny
+	}
+	lease, err := confine.BindAction(&c, confine.EgressCommand{SessionID: "refusal-live", ToolName: "command", CommandLine: name})
 	testutil.FailErr(t, "bind action", err)
-	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, *c)
+	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "build confined command", err)
 	out, _ := cmd.CombinedOutput()
 	cleanup()

@@ -346,11 +346,10 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 		}
 	}
 	for p := range pc.readOnly {
-		// A read restoration beneath a placeholder has nothing to cover until it
-		// is mounted, and the helper seals it unless a write grant reaches it.
+		// Restorations beneath a placeholder keep readOnly recorded while dropping direct write grants.
 		if pc.restored[p] && coveredBy(pc.hidden, p) {
 			pc.fs.WriteRoots = slices.DeleteFunc(pc.fs.WriteRoots, func(root string) bool { return root == p })
-			continue
+			pc.fs.WriteFiles = slices.DeleteFunc(pc.fs.WriteFiles, func(file string) bool { return file == p })
 		}
 		pc.fs.ReadOnly = append(pc.fs.ReadOnly, p)
 	}

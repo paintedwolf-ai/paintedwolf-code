@@ -247,7 +247,7 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 		}
 	}
 	if sharedTempSettled(raised.SharedTemp) {
-		reconcileSettledSharedTemp(gc)
+		reconcileSettledSharedTemp(gc, raised.SharedTemp)
 	}
 	res, err := m.Pipeline.EvaluateBlock(ctx, oar.AnchorToolPost, gc)
 	if err != nil {
@@ -268,14 +268,22 @@ func sharedTempSettled(st *guidance.SharedTempSettlement) bool {
 		(len(st.Allowed) > 0 || len(st.Declined) > 0 || len(st.Unanswered) > 0)
 }
 
-func reconcileSettledSharedTemp(gc *oar.GuardContext) {
-	if gc == nil {
+func reconcileSettledSharedTemp(gc *oar.GuardContext, st *guidance.SharedTempSettlement) {
+	if gc == nil || st == nil {
 		return
 	}
-	optional := gc.Refusals.OptionalReadPaths
-	gc.Refusals = oar.RefusalsFacts{OptionalReadPaths: optional}
+	gc.Refusals.RefusedWritePaths = append([]string(nil), gc.Refusals.OrdinaryWritePaths...)
+	gc.Refusals.RefusedWriteGrants = append([]string(nil), gc.Refusals.OrdinaryWriteGrants...)
+	gc.Refusals.RefusedReadPaths = append([]string(nil), gc.Refusals.OrdinaryReadPaths...)
+	gc.Refusals.RefusedReadGrants = append([]string(nil), gc.Refusals.OrdinaryReadGrants...)
+	gc.Refusals.RefusedMultipleReadGrants = len(gc.Refusals.OrdinaryReadGrants) > 1
+	if len(st.Allowed) > 0 {
+		// Suppress opportunistic host probes while retrying with the approved temp grant.
+		gc.Refusals.UnsandboxedRefusals = nil
+		gc.Refusals.RefusedCredentialStorePaths = nil
+	}
 	dest, _ := gc.RejectData[isolation.CodeBoundaryRefused]["destination"].(string)
-	if dest == "" {
+	if dest == "" && !hasRemainingNonTempRefusal(gc.Refusals) {
 		filtered := gc.Execution.ConfineSignals[:0]
 		for _, sig := range gc.Execution.ConfineSignals {
 			if sig != "boundary_refused" {
@@ -284,6 +292,19 @@ func reconcileSettledSharedTemp(gc *oar.GuardContext) {
 		}
 		gc.Execution.ConfineSignals = filtered
 	}
+}
+
+func hasRemainingNonTempRefusal(r oar.RefusalsFacts) bool {
+	return len(r.OrdinaryWriteGrants) > 0 ||
+		len(r.OrdinaryReadGrants) > 0 ||
+		len(r.RefusedSocketPaths) > 0 ||
+		len(r.RefusedConnectPorts) > 0 ||
+		len(r.RefusedListenPorts) > 0 ||
+		len(r.RefusedSignals) > 0 ||
+		len(r.RefusedCredentialStorePaths) > 0 ||
+		len(r.UnsandboxedRefusals) > 0 ||
+		len(r.RefusedTerminalReadPaths) > 0 ||
+		len(r.RefusedTerminalWritePaths) > 0
 }
 
 // fruitlessSearchRun reads question-specific counts without recording an attempt.

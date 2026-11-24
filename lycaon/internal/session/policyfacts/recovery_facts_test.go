@@ -1,10 +1,14 @@
 package policyfacts
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -121,8 +125,10 @@ func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
 		{Operation: "network-bind", Target: "local:127.0.0.1:5301", Recovery: confine.RecoverLocalListen},
 		{Operation: "network-outbound", Target: "remote:127.0.0.1:5302", Recovery: confine.RecoverOutboundPort},
 		{Operation: "file-read-data", Target: "/state/store", Layer: confine.FloorReadControlPlane, Recovery: confine.RecoverNone},
-		{Operation: "file-read-data", Target: "/tmp/in.csv", Layer: confine.FloorSharedTemp, Recovery: confine.RecoverReadPath, Grant: "/tmp/in.csv"},
+		{Operation: "file-read-data", Target: tempReadTarget(t), Layer: confine.FloorSharedTemp, Recovery: confine.RecoverReadPath, Grant: tempReadTarget(t)},
 	}
+	tempRead := items[11].Target
+	items[11].Grant = tempRead
 	for mask := 1; mask < 1<<len(items); mask++ {
 		var subset confine.SandboxRefusals
 		for i, item := range items {
@@ -159,13 +165,22 @@ func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
 			t.Fatalf("temp leaked into ordinary writes in subset %b", mask)
 		}
 		hasTempRead := mask&(1<<11) != 0
-		if slices.Contains(gc.Refusals.RefusedReadPaths, "/tmp/in.csv") != hasTempRead || slices.Contains(gc.Refusals.RefusedReadGrants, "/tmp/in.csv") != hasTempRead {
+		if slices.Contains(gc.Refusals.RefusedReadPaths, tempRead) != hasTempRead || slices.Contains(gc.Refusals.RefusedReadGrants, tempRead) != hasTempRead {
 			t.Fatalf("published read observation missing from subset %b", mask)
 		}
-		if slices.Contains(gc.Refusals.OrdinaryReadPaths, "/tmp/in.csv") || slices.Contains(gc.Refusals.OrdinaryReadGrants, "/tmp/in.csv") {
+		if slices.Contains(gc.Refusals.OrdinaryReadPaths, tempRead) || slices.Contains(gc.Refusals.OrdinaryReadGrants, tempRead) {
 			t.Fatalf("temp leaked into ordinary reads in subset %b", mask)
 		}
 	}
+}
+
+func tempReadTarget(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "in.csv")
+	if err := os.WriteFile(path, []byte("a,b\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return fspath.CanonicalPath(path)
 }
 
 func TestReconcileSettledSharedTempSuppressesCompetingEscalations(t *testing.T) {
@@ -180,7 +195,7 @@ func TestReconcileSettledSharedTempSuppressesCompetingEscalations(t *testing.T) 
 			},
 		},
 	})
-	reconcileSettledSharedTemp(gc)
+	reconcileSettledSharedTemp(gc, &guidance.SharedTempSettlement{Refused: []string{"/var/folders/xx/T"}, Allowed: []string{"/var/folders/xx/T"}})
 	if len(gc.Refusals.UnsandboxedRefusals) != 0 || len(gc.Refusals.RefusedWriteGrants) != 0 || slices.Contains(gc.Execution.ConfineSignals, "boundary_refused") {
 		t.Fatalf("settled shared-temp kept competing escalation facts: refusals=%+v signals=%v", gc.Refusals, gc.Execution.ConfineSignals)
 	}

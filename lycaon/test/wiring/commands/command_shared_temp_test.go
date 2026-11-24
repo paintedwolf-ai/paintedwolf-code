@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -59,7 +60,9 @@ func TestDeclaredSharedTempRedirectUsesTheRequestedNarrowGrant(t *testing.T) {
 	t.Setenv("TMPDIR", shared)
 	cards := runCommandWithApprovals(t, session, "recommended")
 	plan := cards[0].ToolApproval.Plan
-	if plan.Subject.Kind != wire.ApprovalSubjectKindWriteRootSet || len(plan.Subject.Targets) != 1 || plan.Subject.Targets[0].Label != target {
+	canonicalTarget := fspath.CanonicalPath(target)
+	wantLabel := "Create, change, and remove files in " + canonicalTarget
+	if plan.Subject.Kind != wire.ApprovalSubjectKindWriteRootSet || len(plan.Subject.Targets) != 1 || plan.Subject.Targets[0].Label != wantLabel || plan.Subject.Targets[0].Details["blocked_path"] != canonicalTarget {
 		t.Fatalf("exact target review = %+v", plan)
 	}
 	data, err := os.ReadFile(target)
