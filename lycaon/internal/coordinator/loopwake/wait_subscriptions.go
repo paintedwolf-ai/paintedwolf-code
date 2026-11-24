@@ -29,6 +29,7 @@ type WaitSubscriptions struct {
 	depsMu    sync.RWMutex
 	deps      WaitSubscriptionsDeps
 	waitStore *awaitstore.Store
+	clockVal  awaitstore.Clock
 	// parkedPrograms holds each session's parked command call.
 	parkedPrograms    sync.Map
 	lostProgramResult func(ctx context.Context, sessionID, programID string) (string, error)
@@ -59,6 +60,22 @@ func (l *WaitSubscriptions) SetWaitStore(store *awaitstore.Store) {
 	l.depsMu.Lock()
 	l.waitStore = store
 	l.depsMu.Unlock()
+}
+func (l *WaitSubscriptions) SetClock(c awaitstore.Clock) {
+	if l == nil {
+		return
+	}
+	l.depsMu.Lock()
+	l.clockVal = c
+	l.depsMu.Unlock()
+}
+func (l *WaitSubscriptions) clock() awaitstore.Clock {
+	if l == nil {
+		return awaitstore.Clock{}
+	}
+	l.depsMu.RLock()
+	defer l.depsMu.RUnlock()
+	return l.clockVal
 }
 func (l *WaitSubscriptions) durableWaitStore() *awaitstore.Store {
 	l.depsMu.RLock()
@@ -159,27 +176,45 @@ func (l *WaitSubscriptions) resolveSubscribedWorkerWait(ctx context.Context, ses
 }
 func (l *WaitSubscriptions) processConditionOutcome(sessionID string, condition awaitstore.Condition) (awaitstore.Condition, bool) {
 	deps := l.loopDeps()
+	now := l.clock().Now()
 	for _, handle := range condition.Handles {
 		known, running := false, false
 		if deps.ProcessState != nil {
 			known, running = deps.ProcessState(sessionID, handle)
 		}
 		if known && running {
+			awaitstore.EmitPhaseRecord(context.Background(), awaitstore.PhaseRecord{
+				SessionID: sessionID, Handle: handle, Tool: "wait", Phase: "exact_handle_outcome",
+				Outcome: "running", RecordedAt: now,
+			})
 			continue
 		}
-		condition.Handles = []string{handle}
 		if !known {
+			condition.Handles = []string{handle}
 			condition.Outcome = "unavailable"
+			awaitstore.EmitPhaseRecord(context.Background(), awaitstore.PhaseRecord{
+				SessionID: sessionID, Handle: handle, Tool: "wait", Phase: "exact_handle_outcome",
+				Outcome: "unavailable", RecordedAt: now,
+			})
 			return condition, true
 		}
 		if deps.ProcessReport != nil {
 			report, published := deps.ProcessReport(sessionID, handle)
 			if !published {
+				awaitstore.EmitPhaseRecord(context.Background(), awaitstore.PhaseRecord{
+					SessionID: sessionID, Handle: handle, Tool: "wait", Phase: "exact_handle_outcome",
+					Outcome: "unpublished", RecordedAt: now,
+				})
 				continue
 			}
 			condition.Report = report
 		}
+		condition.Handles = []string{handle}
 		condition.Outcome = "satisfied"
+		awaitstore.EmitPhaseRecord(context.Background(), awaitstore.PhaseRecord{
+			SessionID: sessionID, Handle: handle, Tool: "wait", Phase: "exact_handle_outcome",
+			Outcome: "satisfied", RecordedAt: now,
+		})
 		return condition, true
 	}
 	return awaitstore.Condition{}, false

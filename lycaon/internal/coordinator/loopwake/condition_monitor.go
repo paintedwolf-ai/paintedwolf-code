@@ -50,12 +50,12 @@ func monitorConditions(ctx context.Context, loop *WaitSubscriptions, store *awai
 		if !hasActiveCondition(lease.Conditions) {
 			delay = 30 * time.Second
 		}
-		timer := time.NewTimer(delay)
+		timerCh, stopTimer := loop.clock().Timer(delay)
 		select {
 		case <-ctx.Done():
-			timer.Stop()
+			stopTimer()
 			return
-		case <-timer.C:
+		case <-timerCh:
 		}
 		if delay < conditionProbeMax {
 			delay *= 2
@@ -76,7 +76,7 @@ func reconcileWaitConditions(ctx context.Context, loop *WaitSubscriptions, store
 	if err != nil {
 		return false
 	}
-	if !ok || active.ID != lease.ID || waitDeadlineExpired(lease) {
+	if !ok || active.ID != lease.ID || waitDeadlineExpired(loop, lease) {
 		return true
 	}
 	for _, condition := range lease.Conditions {
@@ -87,7 +87,7 @@ func reconcileWaitConditions(ctx context.Context, loop *WaitSubscriptions, store
 		if !terminal {
 			continue
 		}
-		if waitDeadlineExpired(lease) {
+		if waitDeadlineExpired(loop, lease) {
 			return true
 		}
 		_, err := loop.resolveLease(ctx, store, lease, winner)
@@ -96,8 +96,8 @@ func reconcileWaitConditions(ctx context.Context, loop *WaitSubscriptions, store
 	return false
 }
 
-func waitDeadlineExpired(lease awaitstore.Lease) bool {
-	return !lease.Deadline.IsZero() && !time.Now().UTC().Before(lease.Deadline)
+func waitDeadlineExpired(loop *WaitSubscriptions, lease awaitstore.Lease) bool {
+	return !lease.Deadline.IsZero() && !loop.clock().Now().Before(lease.Deadline)
 }
 
 func conditionOutcome(ctx context.Context, lease awaitstore.Lease, condition awaitstore.Condition) (awaitstore.Condition, bool) {

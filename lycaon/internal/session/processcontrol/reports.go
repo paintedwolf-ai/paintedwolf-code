@@ -2,6 +2,7 @@ package processcontrol
 
 import (
 	"sync"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 )
@@ -10,8 +11,9 @@ import (
 const maxProcessReports = 256
 
 type processReport struct {
-	digest string
-	exit   *bgprocess.ExitObservation
+	digest      string
+	exit        *bgprocess.ExitObservation
+	publishedAt time.Time
 }
 
 // processReports preserves completion digests for waits settled by reconciliation.
@@ -54,4 +56,13 @@ func (m *Service) Report(sessionID, handle string) (string, bool) {
 	}
 	report, ok := m.processReports.lookup(sessionID, handle)
 	return report.digest, ok
+}
+
+// ReportPublishedAt returns the publication timestamp for a published terminal report.
+func (m *Service) ReportPublishedAt(sessionID, handle string) (time.Time, bool) {
+	if m == nil {
+		return time.Time{}, false
+	}
+	report, ok := m.processReports.lookup(sessionID, handle)
+	return report.publishedAt, ok
 }
