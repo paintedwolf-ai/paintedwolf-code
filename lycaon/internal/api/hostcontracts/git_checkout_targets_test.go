@@ -400,3 +400,63 @@ func TestGitWorktreeSharedStashRemoteRefsAndBoundBranchProtection(t *testing.T) 
 		t.Fatalf("expected 200 switching branch in unbound sibling, got %d body=%s", allowedSiblingSwitchW.Code, allowedSiblingSwitchW.Body.String())
 	}
 }
+
+func TestGitWorktreeListCachedStatusUntrackedDiffAndValidation(t *testing.T) {
+	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
+	p, err := srv.Sources.Workspace.ProjectRegistry.Get(t.Context(), projectID)
+	testutil.FailErr(t, "get project", err)
+	primaryRoot := gitrepo.CanonicalDir(project.PrimaryRootPath(p))
+	repoID := contractfixture.WorktreeRepoID(t, srv, projectID)
+
+	sibling := filepath.Join(gitrepo.CanonicalDir(t.TempDir()), "wt-cached")
+	contractfixture.RunGitIn(t, primaryRoot, "worktree", "add", "-b", "feat/cached", sibling)
+	testutil.FailErr(t, "write untracked", os.WriteFile(filepath.Join(sibling, "newfile.txt"), []byte("hello-untracked\n"), 0o644))
+
+	_, err = srv.Admin.Git.Board.StatusCache.GetOrLoad(t.Context(), sibling, true)
+	testutil.FailErr(t, "warm sibling status cache", err)
+
+	wtView := getAuthedJSON[wire.GitWorktreesView](t, srv, fmt.Sprintf("/v1/projects/%s/git/repos/%s/worktrees", projectID, repoID), http.StatusOK)
+	var idSibling string
+	for _, entry := range wtView.Worktrees {
+		if filepath.Clean(entry.Path) == filepath.Clean(sibling) {
+			idSibling = entry.WorktreeID
+			if !entry.StatusCached || !entry.Dirty || entry.ChangedCount == 0 || entry.Branch != "feat/cached" {
+				t.Fatalf("expected cached dirty status on sibling entry, got %+v", entry)
+			}
+		}
+	}
+	if idSibling == "" {
+		t.Fatalf("missing sibling checkout entry in %+v", wtView)
+	}
+
+	unstagedDiff := getAuthedJSON[wire.GitDiffView](t, srv, fmt.Sprintf("/v1/projects/%s/git/repos/%s/diff?worktree_id=%s&mode=unstaged", projectID, repoID, idSibling), http.StatusOK)
+	commitDiff := getAuthedJSON[wire.GitDiffView](t, srv, fmt.Sprintf("/v1/projects/%s/git/repos/%s/diff?worktree_id=%s&mode=commit", projectID, repoID, idSibling), http.StatusOK)
+	if !strings.Contains(unstagedDiff.Patch, "+hello-untracked") || len(unstagedDiff.Files) != 1 || !unstagedDiff.Files[0].Untracked {
+		t.Fatalf("expected untracked file in unstaged diff, got %+v", unstagedDiff)
+	}
+	if !strings.Contains(commitDiff.Patch, "+hello-untracked") || len(commitDiff.Files) != 1 || !commitDiff.Files[0].Untracked {
+		t.Fatalf("expected untracked file in commit diff, got %+v", commitDiff)
+	}
+
+	badChecks := []struct {
+		url        string
+		wantStatus int
+	}{
+		{url: fmt.Sprintf("/v1/projects/%s/git/repos/%s/worktrees?session_id=missing-sess", projectID, repoID), wantStatus: http.StatusNotFound},
+		{url: fmt.Sprintf("/v1/projects/%s/git/repos/missing-repo/worktrees", projectID), wantStatus: http.StatusNotFound},
+		{url: fmt.Sprintf("/v1/projects/%s/git/repos/%s/status?worktree_id=not-a-uuid", projectID, repoID), wantStatus: http.StatusBadRequest},
+		{url: fmt.Sprintf("/v1/projects/%s/git/repos/%s/status?worktree_id=%s&session_id=missing-sess", projectID, repoID, idSibling), wantStatus: http.StatusNotFound},
+		{url: fmt.Sprintf("/v1/projects/%s/git/repos/missing-repo/status?worktree_id=%s", projectID, idSibling), wantStatus: http.StatusNotFound},
+		{url: fmt.Sprintf("/v1/projects/%s/git/repos/%s/diff?worktree_id=%s&mode=invalid", projectID, repoID, idSibling), wantStatus: http.StatusBadRequest},
+		{url: fmt.Sprintf("/v1/projects/%s/git/repos/%s/diff?worktree_id=%s&path=../escape", projectID, repoID, idSibling), wantStatus: http.StatusBadRequest},
+		{url: fmt.Sprintf("/v1/projects/%s/git/repos/%s/stashes?worktree_id=%s&limit=999", projectID, repoID, idSibling), wantStatus: http.StatusBadRequest},
+	}
+	for _, tc := range badChecks {
+		req := contractfixture.NewAuthedRequest(http.MethodGet, tc.url, nil)
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		if w.Code != tc.wantStatus {
+			t.Fatalf("GET %s = %d want %d body=%s", tc.url, w.Code, tc.wantStatus, w.Body.String())
+		}
+	}
+}
