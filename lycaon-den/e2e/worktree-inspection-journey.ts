@@ -78,6 +78,14 @@ async function openGitPanel(page: Page) {
   await dismissTips(page);
 }
 
+async function setBranchMenuOpen(page: Page, open: boolean) {
+  const trigger = page.getByTestId("git-branch");
+  await expect(trigger).toBeVisible({ timeout: 20_000 });
+  if (((await trigger.getAttribute("aria-expanded")) === "true") !== open) {
+    await trigger.click();
+  }
+}
+
 export async function runWorktreeInspectionQualificationJourney(args: {
   page: Page;
   context: BrowserContext;
@@ -140,8 +148,11 @@ export async function runWorktreeInspectionQualificationJourney(args: {
   await page.getByTestId("git-scope-item").first().click();
 
   // Open Branch and checkout in Window 1: verify identical basename checkouts disambiguate and pin worker-one.
-  await page.getByTestId("git-branch").click();
-  await expect(page.getByTestId("git-worktree-selector")).toBeVisible({ timeout: 20_000 });
+  await setBranchMenuOpen(page, true);
+  const selectorWin1 = page.getByTestId("git-worktree-selector");
+  await expect(selectorWin1).toBeVisible({ timeout: 20_000 });
+  await expect(selectorWin1).toContainText("slot-a/wt");
+  await expect(selectorWin1).toContainText("slot-b/wt");
   const optionsWin1 = page.getByTestId("git-worktree-option");
   await expect
     .poll(async () => optionsWin1.count(), { timeout: 20_000 })
@@ -149,6 +160,11 @@ export async function runWorktreeInspectionQualificationJourney(args: {
 
   await optionsWin1.filter({ hasText: "feat/worker-one" }).first().click();
   await expect(page.getByTestId("git-branch")).toContainText("feat/worker-one");
+  await setBranchMenuOpen(page, false);
+  await expect(page.getByTestId("git-count")).toContainText("1", { timeout: 20_000 });
+  if ((await page.getByTestId("git-count").getAttribute("aria-expanded")) !== "true") {
+    await page.getByTestId("git-count").click();
+  }
   await expect(page.getByTestId("git-files")).toContainText("shared.ts", { timeout: 20_000 });
 
   // Open Window 2 on the same project and select worker-two independently without disturbing Window 1.
@@ -168,31 +184,32 @@ export async function runWorktreeInspectionQualificationJourney(args: {
 
     // Window 2 starts following primary ("main"), proving Window 1's pin did not leak across windows.
     await expect(secondWindow.getByTestId("git-branch")).toContainText("main");
-    await secondWindow.getByTestId("git-branch").click();
+    await setBranchMenuOpen(secondWindow, true);
     await secondWindow.getByTestId("git-worktree-option").filter({ hasText: "feat/worker-two" }).first().click();
     await expect(secondWindow.getByTestId("git-branch")).toContainText("feat/worker-two");
+    await setBranchMenuOpen(secondWindow, false);
+    await expect(secondWindow.getByTestId("git-checkout-directory")).toContainText("slot-b/wt");
 
-    // Window 1 remains pinned to feat/worker-one.
+    // Window 1 remains pinned to feat/worker-one (slot-a/wt).
     await expect(page.getByTestId("git-branch")).toContainText("feat/worker-one");
+    await expect(page.getByTestId("git-checkout-directory")).toContainText("slot-a/wt");
 
     // Switch Window 1 to repo-beta and back: per-repository pin in repo-alpha is preserved.
-    if (await scopeTrigger.isVisible().catch(() => false)) {
-      await scopeTrigger.click();
-      await page.getByTestId("git-scope-item").nth(1).click();
-      await expect(page.getByTestId("git-branch")).toContainText("main");
-      await scopeTrigger.click();
-      await page.getByTestId("git-scope-item").first().click();
-      await expect(page.getByTestId("git-branch")).toContainText("feat/worker-one");
-    }
+    await scopeTrigger.click();
+    await page.getByTestId("git-scope-item").nth(1).click();
+    await expect(page.getByTestId("git-branch")).toContainText("main");
+    await scopeTrigger.click();
+    await page.getByTestId("git-scope-item").first().click();
+    await expect(page.getByTestId("git-branch")).toContainText("feat/worker-one");
 
     // Bind a managed chat worktree while inspecting feat/worker-one and verify removal blockers.
-    await page.getByTestId("git-branch").click();
+    await setBranchMenuOpen(page, true);
     await page.getByTestId("git-worktree-unpin").click();
     await expect(page.getByTestId("git-branch")).toContainText("main");
 
-    await page.getByTestId("git-branch").click();
+    await setBranchMenuOpen(page, true);
     await page.getByTestId("git-worktree-bind-open").click();
-    await page.getByLabel("New branch name").fill("session/e2e-managed");
+    await page.getByTestId("git-worktree-branch").fill("session/e2e-managed");
     await page.getByTestId("git-worktree-create").click();
 
     await expect
@@ -205,11 +222,13 @@ export async function runWorktreeInspectionQualificationJourney(args: {
     const managedPath = worktreePathForBranch(repoAlpha, "session/e2e-managed");
 
     // Pin inspection to feat/worker-one while session/e2e-managed is bound and dirty.
-    await page.getByTestId("git-branch").click();
+    await setBranchMenuOpen(page, true);
     await page.getByTestId("git-worktree-option").filter({ hasText: "feat/worker-one" }).first().click();
     await expect(page.getByTestId("git-branch")).toContainText("feat/worker-one");
+    await setBranchMenuOpen(page, false);
 
     writeFileSync(path.join(managedPath, "dirty-blocker.txt"), "uncommitted blocker\n");
+    await expect(page.getByTestId("git-worktree-unbind")).toBeVisible({ timeout: 20_000 });
     await page.getByTestId("git-worktree-unbind").click();
     const unbindModal = page.getByTestId("git-worktree-unbind-modal");
     await expect(unbindModal).toBeVisible();
