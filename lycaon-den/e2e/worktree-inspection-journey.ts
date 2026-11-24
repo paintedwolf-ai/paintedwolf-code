@@ -27,6 +27,7 @@ type GitWorktreeView = {
   worktree_id?: string;
   branch?: string;
   base_branch?: string;
+  state?: string;
 };
 
 function gitEnv(): NodeJS.ProcessEnv {
@@ -215,11 +216,18 @@ export async function runWorktreeInspectionQualificationJourney(args: {
     await page.getByTestId("git-worktree-bind-open").click();
     await page.getByTestId("git-worktree-branch").fill("session/e2e-managed");
     await page.getByTestId("git-worktree-create").click();
+    await expect(page.getByTestId("git-checkout-create-modal")).toHaveCount(0, { timeout: 30_000 });
 
     await expect
       .poll(
-        async () =>
-          (await apiJson<GitWorktreeView>(request, "GET", `/v1/sessions/${encodeURIComponent(sessionId)}/git-worktree`)).bound,
+        async () => {
+          const view = await apiJson<GitWorktreeView>(
+            request,
+            "GET",
+            `/v1/sessions/${encodeURIComponent(sessionId)}/git-worktree`,
+          );
+          return view.bound && view.state === "ready" && Boolean(view.worktree_id);
+        },
         { timeout: 30_000 },
       )
       .toBe(true);
