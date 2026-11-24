@@ -276,7 +276,6 @@ func reconcileSettledSharedTemp(gc *oar.GuardContext, st *guidance.SharedTempSet
 	gc.Refusals.RefusedWriteGrants = append([]string(nil), gc.Refusals.OrdinaryWriteGrants...)
 	gc.Refusals.RefusedReadPaths = append([]string(nil), gc.Refusals.OrdinaryReadPaths...)
 	gc.Refusals.RefusedReadGrants = append([]string(nil), gc.Refusals.OrdinaryReadGrants...)
-	gc.Refusals.RefusedMultipleReadGrants = len(gc.Refusals.OrdinaryReadGrants) > 1
 	if len(st.Allowed) > 0 {
 		// Suppress opportunistic host probes while retrying with the approved temp grant.
 		gc.Refusals.UnsandboxedRefusals = nil
