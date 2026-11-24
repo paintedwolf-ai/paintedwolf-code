@@ -811,7 +811,7 @@ describe("SW10 watches, proposals, transcript controls, and Activity", () => {
         .get(scopeKey)
         ?.find((n) => n.code === "standing_watch_disabled");
       expect(disabledNotice).toBeTruthy();
-      disabledNotice?.interaction?.actions?.[0]?.run();
+      disabledNotice?.interaction?.actions?.[0]?.run?.();
     });
     expect(openedTargets.length).toBe(1);
 
@@ -922,6 +922,8 @@ describe("SW10 watches, proposals, transcript controls, and Activity", () => {
                 process_id: "proc-bg-1",
                 project_id: PROJ_ID,
                 session_id: SESS_ID,
+                session_archived: true,
+                running: true,
                 command: "npm run dev",
                 working_dir: "/workspace/app",
                 ports: ["3000", "3001"],
