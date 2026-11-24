@@ -8,6 +8,7 @@ type SandboxWriteRootAsk struct {
 	ParentSessionID string
 	ProjectID       string
 	ToolCallID      string
+	ActionID        string
 	ProjectDir      string
 	// ToolName is the argv-running tool.
 	ToolName          string
@@ -40,6 +41,7 @@ type SandboxReadPathAsk struct {
 	ParentSessionID string
 	ProjectID       string
 	ToolCallID      string
+	ActionID        string
 	ProjectDir      string
 	// ToolName is the argv-running tool.
 	ToolName           string

@@ -201,6 +201,11 @@ func (b *WriteRootCheckpointBroker) reviewTempLocations(ctx context.Context, rev
 		action.Invocation.ActionID = in.ToolCallID
 		for i := range reviews {
 			reviews[i].Request.ToolCallID = in.ToolCallID
+			if reviews[i].Request.ProposedAction != nil {
+				copied := *reviews[i].Request.ProposedAction
+				copied.Invocation.ActionID = in.ToolCallID
+				reviews[i].Request.ProposedAction = &copied
+			}
 		}
 		action.Invocation.Args = map[string]any{"command": sandboxAskCommandSummary(in.Command)}
 		action.Presentation.Command = sandboxAskCommandSummary(in.Command)

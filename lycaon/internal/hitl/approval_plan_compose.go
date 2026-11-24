@@ -30,10 +30,18 @@ func ComposeCapabilityApprovals(action ProposedAction, reviews []*PreparedApprov
 	var reasonKeys []string
 	var held *HeldRelease
 	plans := make([]*ApprovalPlan, 0, len(reviews))
+	firstCallID := reviews[0].Request.ToolCallID
 	for _, review := range reviews {
 		req := review.Request
 		if req.ApprovalPlan == nil || req.Decision == nil || req.ProposedAction == nil || req.ProjectID != action.Scope.ProjectID ||
-			req.SessionID != action.Scope.SessionID || req.ToolCallID != action.Invocation.ActionID {
+			req.SessionID != action.Scope.SessionID || req.ToolCallID != firstCallID {
+			return nil, nil, fmt.Errorf("capability review has incomplete or foreign contributions")
+		}
+		reqActionID := req.ProposedAction.Invocation.ActionID
+		if reqActionID == "" {
+			reqActionID = req.ToolCallID
+		}
+		if reqActionID != action.Invocation.ActionID {
 			return nil, nil, fmt.Errorf("capability review has incomplete or foreign contributions")
 		}
 		plan := req.ApprovalPlan

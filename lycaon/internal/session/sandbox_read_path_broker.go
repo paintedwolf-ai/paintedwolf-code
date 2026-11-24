@@ -227,10 +227,15 @@ func (b *WriteRootCheckpointBroker) buildReadPathCard(
 	decision *gate.Decision,
 ) (sandboxAskCard, error) {
 	summary := sandboxAskCommandSummary(in.Command)
+	actionID := strings.TrimSpace(in.ActionID)
+	if actionID == "" {
+		actionID = strings.TrimSpace(in.ToolCallID)
+	}
 	grantAction := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
-			Tool: "read_path",
-			Args: map[string]any{"proposed_read_path": proposed},
+			Tool:     "read_path",
+			Args:     map[string]any{"proposed_read_path": proposed},
+			ActionID: actionID,
 		},
 		Scope: hitl.ActionScope{
 			ProjectID:     in.ProjectID,

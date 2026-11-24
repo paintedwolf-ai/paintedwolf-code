@@ -322,10 +322,15 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 	if b.Consequence != nil {
 		band, code = b.Consequence.WriteRoot(proposed)
 	}
+	actionID := strings.TrimSpace(in.ActionID)
+	if actionID == "" {
+		actionID = strings.TrimSpace(in.ToolCallID)
+	}
 	grantAction := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
-			Tool: "write_root",
-			Args: map[string]any{"proposed_write_root": proposed},
+			Tool:     "write_root",
+			Args:     map[string]any{"proposed_write_root": proposed},
+			ActionID: actionID,
 		},
 		Scope: hitl.ActionScope{
 			ProjectID:     in.ProjectID,
