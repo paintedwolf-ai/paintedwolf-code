@@ -117,9 +117,7 @@ func (s *Roots) afterRootAttached(ctx context.Context, projectID, workspacePath 
 		s.ScanCadence.RootAttached(workspacePath)
 	}
 	if files := s.Sessions.ToolContext.CredentialFiles; files != nil {
-		if err := files.EnsureProject(ctx, projectID); err != nil {
-			slog.WarnContext(ctx, "credential-file index unavailable", "project_id", projectID, "err", err)
-		}
+		files.Start(projectID)
 	}
 	var overlayPaths []string
 	var p *project.Project
