@@ -76,11 +76,8 @@ func TestSW06CoordinatorWorkAndParkAcrossWorkerDecisionAndFailure(t *testing.T) 
 	}
 
 	failWatch, err := store.Register(t.Context(), RegisterRequest{
-		Owner: owner,
-		Conditions: []awaitstore.Condition{
-			{Kind: "worker_failed", Handles: []string{"fixer"}},
-			{Kind: "next_worker_done", Handles: []string{"fixer"}},
-		},
+		Owner:      owner,
+		Conditions: []awaitstore.Condition{{Kind: "worker_failed", Handles: []string{"fixer"}}},
 	})
 	testutil.FailErr(t, "register failure watch", err)
 
@@ -294,9 +291,6 @@ func TestSW06SamplerDeduplicationDomainIsolationOwnerTeardownAndRevocation(t *te
 	owner2 := Owner{ProjectID: testdbseed.DefaultProjectID, SessionID: "session-2"}
 
 	// Seed a second project + session to prove zero probe sharing across authority domains.
-	_, err := database.ExecContext(t.Context(), `INSERT INTO projects (id, name, path, created_at, updated_at)
-		VALUES ('proj-other', 'Other', '/tmp/other', '2026-11-23T12:00:00Z', '2026-11-23T12:00:00Z')`)
-	testutil.FailErr(t, "seed other project", err)
 	testdbseed.InsertSession(t, database, "session-other", "proj-other")
 	otherOwner := Owner{ProjectID: "proj-other", SessionID: "session-other"}
 
