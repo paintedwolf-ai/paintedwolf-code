@@ -32,10 +32,14 @@ func TestWorkerRoundNoticeAndMessageNeedsReplyWakeWaitingCoordinator(t *testing.
 			}
 		},
 	})
+	var watchRunning []string
 	workers := &Workers{
 		Runtime: rt,
 		RoundProvenance: func(context.Context, string) (string, int64, string, int64, bool, error) {
 			return "fixer", 1, "", 3, true, nil
+		},
+		OnWatchRunning: func(_ context.Context, parentID, jobID, _, kind, _, _, _ string) {
+			watchRunning = append(watchRunning, parentID+":"+jobID+":"+kind)
 		},
 	}
 	loop := rt.CoordinatorLoop()
@@ -79,5 +83,8 @@ func TestWorkerRoundNoticeAndMessageNeedsReplyWakeWaitingCoordinator(t *testing.
 	workers.PrerequisiteBlocked(t.Context(), "parent-blocked", "job-c", "job-p", "failed")
 	if loop.Waits.IsSleeping("parent-blocked") {
 		t.Fatal("prerequisite blocked did not wake coordinator")
+	}
+	if len(watchRunning) != 3 {
+		t.Fatalf("OnWatchRunning calls = %v, want 3", watchRunning)
 	}
 }
