@@ -205,7 +205,7 @@ admit:
 	if err := ctx.Err(); err != nil {
 		return Snapshot{}, err
 	}
-	scopeKey := s.requestScopeKey(ctx, req)
+	scopeKey := requestScopeKey(ctx, s, req)
 	key := rootsKey(req.Roots) + "\x00" + string(req.Verify) + "\x00" + scopeKey
 	if req.Unwatched {
 		key += "\x00unwatched"
@@ -227,7 +227,7 @@ admit:
 			if req.Verify == VerifyContent && alreadyReading {
 				goto admit
 			}
-			if !s.jobResultFresh(ctx, req, scopeKey, existing) {
+			if !jobResultFresh(ctx, s, req, scopeKey, existing) {
 				goto admit
 			}
 			return existing.snapshot, nil
@@ -250,7 +250,7 @@ admit:
 	return job.snapshot, job.err
 }
 
-func (s *Store) requestScopeKey(ctx context.Context, req Request) string {
+func requestScopeKey(ctx context.Context, s *Store, req Request) string {
 	parts := make([]string, 0, len(req.Roots))
 	for _, root := range req.Roots {
 		parts = append(parts, root.Path+"\x00"+s.scopeFor(ctx, req, root).Identity())
@@ -259,8 +259,8 @@ func (s *Store) requestScopeKey(ctx context.Context, req Request) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-func (s *Store) jobResultFresh(ctx context.Context, req Request, expectedScopeKey string, finished *buildJob) bool {
-	if s.requestScopeKey(ctx, req) != expectedScopeKey {
+func jobResultFresh(ctx context.Context, s *Store, req Request, expectedScopeKey string, finished *buildJob) bool {
+	if requestScopeKey(ctx, s, req) != expectedScopeKey {
 		return false
 	}
 	if req.Unwatched {

@@ -3,7 +3,6 @@ package sourcecatalog
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/fspath"
