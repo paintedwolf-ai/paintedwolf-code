@@ -16,7 +16,7 @@ type recordedCredentialFiles struct {
 	authored []AuthoredCredentialValues
 }
 
-func (*recordedCredentialFiles) Start(string) {}
+func (*recordedCredentialFiles) Start(string)                                {}
 func (*recordedCredentialFiles) Await(context.Context, CredentialWait) error { return nil }
 
 func (r *recordedCredentialFiles) Delivered(_ context.Context, read CredentialFileRead) error {
