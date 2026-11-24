@@ -75,6 +75,20 @@ func doJSON[T any](t *testing.T, h *wiring.Harness, method, target string, body 
 	return out
 }
 
+func fetchSettledGitStatus(t *testing.T, h *wiring.Harness, target string) wire.GitStatusSummary {
+	t.Helper()
+	var out wire.GitStatusSummary
+	testutil.WaitFor(t, "settled git status "+target, func() bool {
+		res := doRaw(t, h, http.MethodGet, target, nil)
+		if res.Code != http.StatusOK && res.Code != http.StatusAccepted {
+			t.Fatalf("GET %s status = %d; body = %s", target, res.Code, res.Body.String())
+		}
+		testutil.FailErr(t, "decode git status", json.Unmarshal(res.Body.Bytes(), &out))
+		return res.Code == http.StatusOK && !out.Refreshing
+	})
+	return out
+}
+
 func submitPromptWithApprovals(t *testing.T, s *commandProgramSession, promptText string, answers ...string) {
 	t.Helper()
 	done := make(chan error, 1)
@@ -249,14 +263,14 @@ func TestWorktreeQualificationNativeAgentAddCrossCheckoutEditAndNextCommandCwd(t
 	}
 
 	// Same pathname holds independent staged and unstaged state across checkouts; explicit discard targets only sibling.
-	primaryStatus := doJSON[wire.GitStatusSummary](t, s.h, http.MethodGet, "/v1/projects/"+s.project+"/git/repos/"+repoID+"/status", nil, http.StatusOK)
-	siblingStatus := doJSON[wire.GitStatusSummary](t, s.h, http.MethodGet, "/v1/projects/"+s.project+"/git/repos/"+repoID+"/status?worktree_id="+siblingWT.WorktreeID, nil, http.StatusOK)
+	primaryStatus := fetchSettledGitStatus(t, s.h, "/v1/projects/"+s.project+"/git/repos/"+repoID+"/status")
+	siblingStatus := fetchSettledGitStatus(t, s.h, "/v1/projects/"+s.project+"/git/repos/"+repoID+"/status?worktree_id="+siblingWT.WorktreeID)
 	if siblingStatus.StagedCount != 1 || siblingStatus.UnstagedCount != 1 || primaryStatus.UnstagedCount != 1 {
 		t.Fatalf("independent status mismatch: primary=%+v sibling=%+v", primaryStatus, siblingStatus)
 	}
 
 	// Explicit discard targeting sibling leaves primary notes.txt untouched.
-	discardRes := doRaw(t, s.h, http.MethodPost, "/v1/projects/"+s.project+"/git/repos/"+repoID+"/discard?worktree_id="+siblingWT.WorktreeID, map[string]any{})
+	discardRes := doRaw(t, s.h, http.MethodPost, "/v1/projects/"+s.project+"/git/repos/"+repoID+"/discard?worktree_id="+siblingWT.WorktreeID, nil)
 	if discardRes.Code != http.StatusNoContent && discardRes.Code != http.StatusOK {
 		t.Fatalf("sibling discard = %d %s", discardRes.Code, discardRes.Body.String())
 	}
