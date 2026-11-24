@@ -39,6 +39,7 @@ import {
 import { createAppStore } from "../../store/app-state.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { stubFilesClient } from "../../test/source-client-fixture.ts";
+import { sourceReaderFixture } from "../../test/source-reader-fixture.ts";
 import {
   activityFileOpenTarget,
   fileOpenTarget,
@@ -387,44 +388,55 @@ describe("WT06 checkout and revision open targets", () => {
       throw new Error(`Historical diff must never read today's file (${diskFileToday})`);
     });
     const seenSelectors: SourceComparisonSelector[] = [];
-    const client = stubFilesClient({
-      getProjectSource,
-      createSourceView: vi.fn(async (_pid, req) => {
-        if (req.kind !== "comparison") throw new Error("unexpected tree view");
-        seenSelectors.push(req.source);
-        if (req.source.kind === "blob") {
-          return {
-            kind: "comparison" as const,
-            comparison: {
-              id: "view-blob",
-              state: "ready" as const,
-              intent_revision: "rev-1",
-              extent: { rows: 1, max_columns: 20 },
-              comparison: {
-                op: "rename" as const,
-                summary: { added: 2, removed: 1, changed_hunks: 1 },
-                before: { state: "content" as const, availability: "available" as const, size_bytes: 18, content: "old historical v1\n" },
-                after: { state: "content" as const, availability: "available" as const, size_bytes: 18, content: "new historical v2\n" },
-              },
-            },
-          };
-        }
+    const readerHost = sourceReaderFixture(async (_pid, source) => {
+      seenSelectors.push(source);
+      if (source.kind === "blob") {
         return {
-          kind: "comparison" as const,
-          comparison: {
-            id: "view-unstaged-reused",
-            state: "ready" as const,
-            intent_revision: "rev-1",
-            extent: { rows: 0, max_columns: 0 },
-            comparison: {
-              op: "write" as const,
-              summary: { added: 0, removed: 0, changed_hunks: 0 },
-              before: { state: "content" as const, availability: "available" as const, size_bytes: 14, content: "index v1\n" },
-              after: { state: "content" as const, availability: "unavailable" as const, reason: "content_unavailable", size_bytes: 0 },
-            },
+          in_range: true,
+          location_changed: true,
+          truncated: false,
+          op: "rename",
+          before: {
+            path: "src/old_name.ts",
+            state: "content",
+            availability: "available",
+            size_bytes: 18,
+            content: "old historical v1\n",
+          },
+          after: {
+            path: "src/new_name.ts",
+            state: "content",
+            availability: "available",
+            size_bytes: 18,
+            content: "new historical v2\n",
           },
         };
-      }),
+      }
+      return {
+        in_range: true,
+        location_changed: false,
+        truncated: false,
+        op: "write",
+        before: {
+          path: "src/reused.ts",
+          state: "content",
+          availability: "available",
+          size_bytes: 9,
+          content: "index v1\n",
+        },
+        after: {
+          path: "src/reused.ts",
+          state: "unresolved",
+          availability: "unavailable",
+          reason: "content_unavailable",
+          size_bytes: 0,
+          content: "",
+        },
+      };
+    });
+    const client = stubFilesClient({
+      ...readerHost.methods,
+      getProjectSource,
     });
 
     diskFileToday = "export const live = 'MOVED AND REUSED';\n";
