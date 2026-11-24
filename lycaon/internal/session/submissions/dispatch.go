@@ -60,16 +60,28 @@ func (m *Service) WaitResume(ctx context.Context, id string, delivery loopwake.W
 	return m.HostTurnWithAdmission(ctx, id, store.PromptSubmissionOriginLoopWake, promptinput.Input{
 		SubmissionID: strings.TrimSpace(delivery.LeaseID), Text: loopwake.WaitEndedText(delivery.Condition),
 		HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: string(anchor.LoopWake)},
-	}, m.waitObservation(id, delivery.Condition, delivery.Admitted))
+	}, m.waitObservation(id, strings.TrimSpace(delivery.LeaseID), delivery.Condition, delivery.Admitted))
 }
 
-func (m *Service) waitObservation(sessionID string, winner awaitstore.Condition, acknowledge func() error) func() error {
+func (m *Service) waitObservation(sessionID, leaseID string, winner awaitstore.Condition, acknowledge func() error) func() error {
 	return func() error {
 		if acknowledge != nil {
 			if err := acknowledge(); err != nil {
 				return err
 			}
 		}
+		var handle string
+		if len(winner.Handles) > 0 {
+			handle = winner.Handles[0]
+		}
+		awaitstore.EmitPhaseRecord(context.Background(), awaitstore.PhaseRecord{
+			SessionID: sessionID,
+			LeaseID:   leaseID,
+			Handle:    handle,
+			Tool:      "wait",
+			Phase:     "transcript_result_commit",
+			Outcome:   winner.Outcome,
+		})
 		loopwake.ObserveProcessWait(sessionID, winner, m.observeProcess)
 		return nil
 	}

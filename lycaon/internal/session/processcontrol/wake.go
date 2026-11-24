@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -62,7 +63,22 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 			Confine: completion.Observation, IndexWatch: completion.IndexWatch,
 		})
 	}
-	m.processReports.publish(completion.SessionID, completion.Handle, processReport{digest: digest, exit: completion.ExitObservation})
+	publishedAt := time.Now().UTC()
+	m.processReports.publish(completion.SessionID, completion.Handle, processReport{
+		digest:      digest,
+		exit:        completion.ExitObservation,
+		publishedAt: publishedAt,
+	})
+	awaitstore.EmitPhaseRecord(ctx, awaitstore.PhaseRecord{
+		SessionID:   completion.SessionID,
+		ToolCallID:  completion.ToolCallID,
+		Handle:      strings.TrimSpace(completion.Handle),
+		Tool:        completion.OriginTool,
+		Phase:       "process_report_published",
+		Outcome:     string(completion.TerminationReason),
+		RecordedAt:  publishedAt,
+		ReferenceAt: completion.FinishedAt.UTC(),
+	})
 	env := anchor.Envelope{
 		Subject:                 strings.TrimSpace(completion.Handle),
 		CommandCompletionDigest: digest,

@@ -27,19 +27,30 @@ func TestWaitAdmissionObservesOnlyDeliveredExits(t *testing.T) {
 	svc := &Service{}
 	svc.SetProcessObserver(registry.Observe)
 	winner := awaitstore.Condition{Kind: "process_done", Outcome: "satisfied", Handles: []string{handle}, Report: "exit_code=0"}
+	var committed int
+	unsub := awaitstore.RegisterPhaseObserver(func(rec awaitstore.PhaseRecord) {
+		if rec.Phase == "transcript_result_commit" && rec.LeaseID == "lease-1" && rec.Handle == handle {
+			committed++
+		}
+	})
+	defer unsub()
+
 	errAck := errors.New("failed acknowledgement")
-	deliver := svc.waitObservation(session, winner, func() error { return errAck })
+	deliver := svc.waitObservation(session, "lease-1", winner, func() error { return errAck })
 	if err := deliver(); !errors.Is(err, errAck) {
 		t.Fatalf("delivery error = %v, want %v", err, errAck)
 	}
 	refusal := winner
 	refusal.Outcome = "refused"
-	testutil.FailErr(t, "admit refusal", svc.waitObservation(session, refusal, nil)())
+	testutil.FailErr(t, "admit refusal", svc.waitObservation(session, "lease-1", refusal, nil)())
 	if rows := registry.LedgerJobs(session); len(rows) != 1 || rows[0].Handle != handle {
 		t.Fatalf("undelivered exit missing from ledger: %+v", rows)
 	}
-	testutil.FailErr(t, "admit completion", svc.waitObservation(session, winner, nil)())
+	testutil.FailErr(t, "admit completion", svc.waitObservation(session, "lease-1", winner, nil)())
 	if rows := registry.LedgerJobs(session); len(rows) != 0 {
 		t.Fatalf("delivered exit stayed in ledger: %+v", rows)
+	}
+	if committed != 2 {
+		t.Fatalf("committed phase events = %d, want 2", committed)
 	}
 }
