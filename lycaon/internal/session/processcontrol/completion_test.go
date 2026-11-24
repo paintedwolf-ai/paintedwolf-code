@@ -373,7 +373,7 @@ func TestCommandCompletionPresentationClaimsAcrossWaitWatchAndKick(t *testing.T)
 		OriginTool: "verify",
 		RunID:      "occ-watched",
 		ToolCallID: "call-1",
-		Stages:     []hostcmd.Stage{{Command: "go test ./..."}},
+		Stages:     []hostcmd.StageResult{{Command: "go test ./..."}},
 		FinishedAt: now,
 	})
 	if len(f.captures) != 1 {
@@ -397,7 +397,7 @@ func TestCommandCompletionPresentationClaimsAcrossWaitWatchAndKick(t *testing.T)
 		Handle:     "cmd-transfer",
 		OriginTool: "command",
 		RunID:      "occ-transfer",
-		Stages:     []hostcmd.Stage{{Command: "echo transfer"}},
+		Stages:     []hostcmd.StageResult{{Command: "echo transfer"}},
 		FinishedAt: now,
 	})
 	if len(f.emitted) != 1 || len(f.captures) != 2 {
