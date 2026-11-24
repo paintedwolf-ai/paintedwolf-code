@@ -149,3 +149,37 @@ it("refreshes on revision or client change, retries after failure, and evicts be
  expect(secondClient.getCommandProgramReceipt).toHaveBeenCalledTimes(1);
  secondView.unmount();
 });
+
+it("refuses to cache a stale receipt revision and retries on remount to recover", async () => {
+ let attempt = 0;
+ const get = vi.fn(async () => {
+  attempt += 1;
+  // First response lags at revision 9 despite program requesting revision 10.
+  const rev = attempt === 1 ? 9 : 10;
+  return {
+   program: { ...program, activity_revision: rev },
+   activities: rev === 10 ? [{ id: "done", label: "Run", subject: "ok", group: "Run", state: "completed", outcome: "ok", execution_ids: [], spans: [], steps: [] }] : [],
+   executions: [],
+   nodes: [],
+  };
+ });
+ vi.mocked(getLycaonClient).mockReturnValue(stubClient({ getCommandProgramReceipt: get }));
+
+ const first = render(() => {
+  const s = useCommandActivitySnapshots(() => [entry], () => "session");
+  return <span>{s(entry.part)?.activity_revision ?? ""}</span>;
+ });
+ await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+ // Stale revision 9 never downgrades the canonical revision 10.
+ expect(first.container.textContent).toBe("10");
+ first.unmount();
+
+ // Remount must re-fetch rather than serving stale revision 9 from cache.
+ const second = render(() => {
+  const s = useCommandActivitySnapshots(() => [entry], () => "session");
+  return <span>{`${s(entry.part)?.activity_revision}:${s(entry.part)?.activities?.length ?? 0}`}</span>;
+ });
+ await waitFor(() => expect(second.container.textContent).toBe("10:1"));
+ expect(get).toHaveBeenCalledTimes(2);
+ second.unmount();
+});

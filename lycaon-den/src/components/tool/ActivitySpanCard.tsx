@@ -135,6 +135,13 @@ function ActivityFailureChip(props: { failed: number }) {
   );
 }
 
+function partOwnsToolCallId(part: ToolPartView, toolCallId: string): boolean {
+  if (part.toolCallId === toolCallId) return true;
+  if (part.commandActivity?.calls.some((call) => partOwnsToolCallId(call, toolCallId))) return true;
+  if (part.foldMembers?.some((member) => partOwnsToolCallId(member, toolCallId))) return true;
+  return false;
+}
+
 export function ActivitySpanCard(props: ActivitySpanCardProps) {
   const entries = () => props.entries;
   const label = () => formatSentenceCase(props.label);
@@ -156,11 +163,21 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
   let revealRow: ((key: string) => void) | undefined;
   let restoreFind: (() => void) | undefined;
   const revealTool = (toolCallId: string, match: VirtualListMatch) => {
-    const entry = entries().find(entry => entry.kind === "tool" && (entry.part.toolCallId === toolCallId || entry.part.commandActivity?.calls.some(call => call.toolCallId === toolCallId)));
+    const entry = entries().find(
+      (candidate) => candidate.kind === "tool" && partOwnsToolCallId(candidate.part, toolCallId),
+    );
     if (entry?.kind !== "tool") return;
-    restoreFind?.(); restoreFind = revealTemporarily();
-    setFindToolKey(entry.part.id); revealRow?.(entry.part.id);
-    queueMicrotask(() => hostEl()?.querySelector(`[data-tool-part-id="${CSS.escape(entry.part.id)}"]`)?.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: match })));
+    restoreFind?.();
+    restoreFind = revealTemporarily();
+    setFindToolKey(entry.part.id);
+    revealRow?.(entry.part.id);
+    queueMicrotask(() =>
+      hostEl()
+        ?.querySelector(`[data-tool-part-id="${CSS.escape(entry.part.id)}"]`)
+        ?.dispatchEvent(
+          new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: { ...match, toolCallId } }),
+        ),
+    );
   };
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
   createEffect(() => {

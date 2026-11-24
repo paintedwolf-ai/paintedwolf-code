@@ -255,22 +255,35 @@ function compareWorkerRecency(a: WorkerTask, b: WorkerTask): number {
   return a.id.localeCompare(b.id);
 }
 
-function userTurnStartIndex(messages: readonly Message[]): number {
+export function findCurrentUserTurnStart(messages: readonly Message[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg?.role === "user" && !isInternalTranscriptUserMessage(msg)) {
       return i;
     }
   }
-  return 0;
+  return -1;
 }
 
-const resultIndexCache = new WeakMap<readonly Message[], Map<string, Map<string, Message>>>();
+function userTurnStartIndex(messages: readonly Message[]): number {
+  const idx = findCurrentUserTurnStart(messages);
+  return idx >= 0 ? idx : 0;
+}
 
-function resultIndexForMessages(messages: readonly Message[]): Map<string, Map<string, Message>> {
-  const cached = resultIndexCache.get(messages);
-  if (cached) return cached;
-  const byParent = new Map<string, Map<string, Message>>();
+type ToolResultIndex = Map<string, Map<string, Message>>;
+
+let toolScanCount = 0;
+
+export function thinkingLabelToolScanCount(): number {
+  return toolScanCount;
+}
+
+export function resetThinkingLabelToolScanCount(): void {
+  toolScanCount = 0;
+}
+
+function buildToolResultIndex(messages: readonly Message[]): ToolResultIndex {
+  const byParent: ToolResultIndex = new Map();
   for (let i = 0; i < messages.length; i++) {
     const row = messages[i];
     if (row?.role !== "tool") continue;
@@ -284,62 +297,26 @@ function resultIndexForMessages(messages: readonly Message[]): Map<string, Map<s
     }
     if (!calls.has(call)) calls.set(call, row);
   }
-  resultIndexCache.set(messages, byParent);
   return byParent;
 }
 
 function lookupIndexedResult(
-  index: Map<string, Map<string, Message>>,
+  index: ToolResultIndex,
   assistantMessageId: string,
   callId: string,
 ): Message | undefined {
   return index.get(assistantMessageId.trim())?.get(callId.trim());
 }
 
-/**
- * True when `next` only changed history before a verified current-turn boundary and
- * supplied no missing parent/result needed by an active host activity.
- */
-export function messagesShareCurrentTurnSuffix(
-  prev: readonly Message[],
-  next: readonly Message[],
-  activities: readonly ActivityEvent[] = [],
-): boolean {
-  if (prev.length === 0 || next.length === 0) return false;
-  const prevStart = userTurnStartIndex(prev);
-  const prevBoundary = prev[prevStart];
-  if (prevBoundary?.role !== "user" || isInternalTranscriptUserMessage(prevBoundary)) return false;
-  const nextStart = userTurnStartIndex(next);
-  const tailLen = prev.length - prevStart;
-  if (next.length - nextStart !== tailLen) return false;
-  for (let i = 0; i < tailLen; i++) {
-    const a = prev[prevStart + i];
-    const b = next[nextStart + i];
-    if (a !== b && (a?.id !== b?.id || (a?.seq ?? 0) !== (b?.seq ?? 0))) return false;
-  }
-  for (const activity of activities) {
-    if (activity.status !== "active") continue;
-    const callId = activity.tool_call_id?.trim();
-    const toolName = activity.tool_name?.trim().toLowerCase();
-    if (!callId || !toolName) continue;
-    const inCurrentTurn = prev.slice(prevStart).some(
-      (msg) =>
-        msg.role === "assistant" &&
-        msg.tool_calls?.some(
-          (call) => call.id.trim() === callId && call.name.trim().toLowerCase() === toolName,
-        ),
-    );
-    if (!inCurrentTurn) return false;
-  }
-  return true;
-}
-
 /** Latest running call in this turn, excluding parked and hidden tools. */
 export function findLatestRunningToolInTurn(
   messages: readonly Message[],
   activities: readonly ActivityEvent[] = [],
+  sharedResults?: ToolResultIndex,
 ): ToolPartView | undefined {
-  const results = resultIndexForMessages(messages);
+  if (messages.length === 0) return undefined;
+  toolScanCount += 1;
+  const results = sharedResults ?? buildToolResultIndex(messages);
   const turnStart = userTurnStartIndex(messages);
   let latest: ToolPartView | undefined;
 
@@ -374,8 +351,9 @@ export function findLatestRunningToolInTurn(
 function runningToolCandidate(
   messages: readonly Message[],
   activities: readonly ActivityEvent[] = [],
+  sharedResults?: ToolResultIndex,
 ): ActivityLabelCandidate | undefined {
-  const part = findLatestRunningToolInTurn(messages, activities);
+  const part = findLatestRunningToolInTurn(messages, activities, sharedResults);
   if (!part) return undefined;
   return {
     label: thinkingToolRunningLabel(part),
@@ -387,6 +365,7 @@ function runningToolCandidate(
 function toolPartForActivity(
   activity: ActivityEvent,
   messages: readonly Message[],
+  getResults: () => ToolResultIndex,
 ): ToolPartView | undefined {
   const callID = activity.tool_call_id?.trim();
   const toolName = activity.tool_name?.trim();
@@ -401,7 +380,7 @@ function toolPartForActivity(
     ) ?? -1;
     const call = index >= 0 ? msg.tool_calls?.[index] : undefined;
     if (call) {
-      const result = lookupIndexedResult(resultIndexForMessages(messages), msg.id, call.id);
+      const result = lookupIndexedResult(getResults(), msg.id, call.id);
       return toolPartFromCall(call, result, msg.id, undefined, {
         message: msg,
         index,
@@ -441,6 +420,7 @@ function decidingLabel(activity: ActivityEvent): string {
 function hostActivityCandidate(
   activities: readonly ActivityEvent[] | undefined,
   messages: readonly Message[],
+  getResults: () => ToolResultIndex,
 ): ActivityLabelCandidate | undefined {
   const activity = newestActivity(
     (activities ?? []).filter((candidate) => candidate.status === "active"),
@@ -470,7 +450,7 @@ function hostActivityCandidate(
   if (activity.kind === "awaiting_wake") {
     // Only the host arms program_done; it is not a wait-tool condition.
     const command = activity.tool_name === "command" && activity.wait_triggers?.includes("program_done");
-    const part = command ? toolPartForActivity(activity, messages) : undefined;
+    const part = command ? toolPartForActivity(activity, messages, getResults) : undefined;
     const reason = part?.completion?.state === "parked" ? part.completion.reason?.trim() : undefined;
     const named = command ? WAIT_CONDITION_LABELS.process_done : waitConditionsLabel(activity.wait_triggers ?? []);
     return {
@@ -492,7 +472,7 @@ function hostActivityCandidate(
         source: "host_activity",
       };
     }
-    const part = toolPartForActivity(activity, messages);
+    const part = toolPartForActivity(activity, messages, getResults);
     const fallback = activity.tool_name?.trim();
     return {
       label: part
@@ -703,10 +683,20 @@ export function collectThinkingActivityCandidates(
   );
   if (providerWait) candidates.push(providerWait);
 
-  const activity = hostActivityCandidate(input.activities, messages);
+  let sharedResults: ToolResultIndex | undefined;
+  const getResults = (): ToolResultIndex => {
+    sharedResults ??= buildToolResultIndex(messages);
+    return sharedResults;
+  };
+
+  const activity = hostActivityCandidate(input.activities, messages, getResults);
   if (activity) candidates.push(activity);
 
-  const tool = runningToolCandidate(messages, input.activities);
+  const tool = runningToolCandidate(
+    messages,
+    input.activities,
+    messages.length > 0 ? getResults() : undefined,
+  );
   if (tool) candidates.push(tool);
 
   const closeout = provisionalCloseoutCandidate(input);

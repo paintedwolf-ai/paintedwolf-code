@@ -56,14 +56,15 @@ function fetchSharedSummary(
     .getCommandProgramReceipt(session, program.id, { limit: 1 })
     .then((page) => {
       const receipt: CommandProgramReceipt = { ...page.program, activities: page.activities };
-      if (!commandProgramActive(receipt)) {
+      const requestedRev = program.activity_revision;
+      const returnedRev = receipt.activity_revision;
+      const staleForRequest =
+        requestedRev !== undefined && (returnedRev ?? 0) < requestedRev;
+      if (!commandProgramActive(receipt) && !staleForRequest) {
         const bytes = retainedValueBytes(receipt) + key.length * 2;
         cache.settled.set(key, receipt, bytes);
-        if (
-          receipt.activity_revision !== undefined &&
-          receipt.activity_revision !== program.activity_revision
-        ) {
-          const revKey = summaryCacheKey(session, program.id, receipt.activity_revision);
+        if (returnedRev !== undefined && returnedRev !== requestedRev) {
+          const revKey = summaryCacheKey(session, program.id, returnedRev);
           cache.settled.set(revKey, receipt, retainedValueBytes(receipt) + revKey.length * 2);
         }
       }
@@ -137,7 +138,12 @@ export function useCommandActivitySnapshots(entries: () => readonly ActivitySpan
     }
     if (snapshots.state === "errored") return { ...program, activities: undefined };
     const retained = snapshots.latest?.get(program.id);
-    if (retained) return retained;
+    if (retained) {
+      if (program.activity_revision !== undefined && (retained.activity_revision ?? 0) < program.activity_revision) {
+        return { ...program, activities: program.activities };
+      }
+      return retained;
+    }
     if (!requests()?.programs.some(value => value.id === program.id)) return undefined;
     // An unsettled program keeps its recorded rows until the receipt arrives.
     return commandProgramActive(program) ? program : { ...program, activities: [] };

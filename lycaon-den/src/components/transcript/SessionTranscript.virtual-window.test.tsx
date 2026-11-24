@@ -824,4 +824,55 @@ describe("SessionTranscript virtual window", () => {
     expect(container.querySelector(".den-enter-fade")).toBeNull();
     clearTranscriptEntryMemory("s-older");
   });
+
+  it("plays the arrival fade for a live upsertMessage on an already-mounted store subscriber", async () => {
+    const { createAppStore } = await import("../../store/app-state.ts");
+    const sid = "s-live-mounted-subscriber";
+    clearTranscriptEntryMemory(sid);
+    const store = createAppStore();
+    store.actions.installTranscriptBaseline(
+      sid,
+      [
+        {
+          id: "hist-1",
+          ord: 1,
+          seq: 1,
+          role: "user",
+          origin: "user",
+          authority: "user",
+          trust_tier: "trusted",
+          content: "hello",
+          created_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      1,
+    );
+
+    const view = render(() => (
+      <SessionTranscript layout="chat" sessionId={sid} messages={store.state.messages} />
+    ));
+    try {
+      expect(view.container.querySelector(".den-enter-fade")).toBeNull();
+
+      const applied = store.actions.upsertMessage({
+        id: "live-2",
+        ord: 2,
+        seq: 2,
+        role: "user",
+        origin: "user",
+        authority: "user",
+        trust_tier: "trusted",
+        content: "live arrival",
+        created_at: "2026-01-01T00:00:01Z",
+      });
+      expect(applied).toBe(true);
+
+      const liveRow = view.container.querySelector('[data-msg-id="live-2"]');
+      expect(liveRow).toBeTruthy();
+      expect(liveRow?.querySelector(".den-enter-fade") ?? (liveRow?.classList.contains("den-enter-fade") ? liveRow : null)).toBeTruthy();
+    } finally {
+      view.unmount();
+      clearTranscriptEntryMemory(sid);
+    }
+  });
 });

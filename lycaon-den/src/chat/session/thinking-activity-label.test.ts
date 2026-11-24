@@ -1041,4 +1041,41 @@ describe("thinking-activity-label", () => {
     // One indexing pass plus one turn pass: strictly linear, not quadratic in call count.
     expect(arrayReads).toBeLessThanOrEqual(raw.length * 3);
   });
+
+  it("refreshes the result index when a tool result is added or replaced in the same array", () => {
+    const messages: Message[] = [
+      {
+        id: "u1",
+        role: "user",
+        origin: "user",
+        authority: "user",
+        trust_tier: "trusted",
+        content: "go",
+        created_at: "t",
+      },
+      assistantWithTool("a1", "read", { path: "main.go" }),
+    ];
+    expect(resolveThinkingActivityLabel({ messages })).toBe("Reading · main.go...");
+
+    // Mutating the same array reference with a completed result clears the running state.
+    const callId = messages[1]!.tool_calls![0]!.id;
+    messages.push({
+      id: "res-1",
+      role: "tool",
+      origin: "tool",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "done",
+      created_at: "t",
+      tool_result: {
+        tool: "read",
+        assistant_message_id: "a1",
+        tool_call_id: callId,
+        content: "done",
+        outcome: "completed",
+      },
+    });
+    expect(findLatestRunningToolInTurn(messages)).toBeUndefined();
+    expect(resolveThinkingActivityLabel({ messages })).toBe("Thinking...");
+  });
 });

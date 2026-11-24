@@ -422,4 +422,47 @@ describe("createAppStore", () => {
     expect(store.state.transcript.pages["41:80"]).toBeUndefined();
     expect(store.state.transcript.pages["81:120"]).toHaveLength(40);
   });
+
+  it("refreshes contiguousWindowRows when upsertMessage patches an older row across a tail gap", async () => {
+    const { contiguousWindowRows } = await import("../chat/transcript/layout/transcript-window.ts");
+    const store = createAppStore();
+    const row = (ord: number, content = `m-${ord}`, seq = ord) => ({
+      id: `m-${ord}`,
+      ord,
+      seq,
+      role: "assistant" as const,
+      origin: "model" as const,
+      authority: "none" as const,
+      trust_tier: "trusted" as const,
+      content,
+      created_at: "t",
+    });
+    store.actions.installTranscriptBaseline(
+      "sess-gap-patch",
+      Array.from({ length: 50 }, (_, i) => row(701 + i)),
+      750,
+      { hasMoreBefore: true, hasMoreAfter: false, bounds: { firstOrd: 1, lastOrd: 750 } },
+    );
+    // Seek into older history to open a tail gap.
+    store.actions.loadTranscriptPage(
+      { edge: "seek", afterOrd: 100 },
+      {
+        messages: Array.from({ length: 20 }, (_, i) => row(101 + i)),
+        before_cursor: "older",
+        after_cursor: "newer",
+        watermark: 750,
+        turn_clocks: {},
+        turn_loads: {},
+      },
+    );
+    expect(store.state.transcript.hasTailGap).toBe(true);
+    expect(contiguousWindowRows(store.state.transcript).find((m) => m.id === "m-105")?.content).toBe(
+      "m-105",
+    );
+
+    expect(store.actions.upsertMessage(row(105, "updated-across-gap", 751))).toBe(true);
+    expect(contiguousWindowRows(store.state.transcript).find((m) => m.id === "m-105")?.content).toBe(
+      "updated-across-gap",
+    );
+  });
 });

@@ -56,7 +56,7 @@ export async function searchToolPart(
     const client = reference ? getLycaonClient() : undefined;
     if (!reference || !client || !sessionId) {
       if (!referencesOnly) {
-        matches.push(...findLiteralOffsets(text, query, sensitive, 10000-matches.length).map(match => ({ from: match.start, to: match.start+match.length, field })));
+        matches.push(...findLiteralOffsets(text, query, sensitive, 10000-matches.length).map(match => ({ from: match.start, to: match.start+match.length, field, toolCallId: part.toolCallId })));
       }
       continue;
     }
@@ -65,7 +65,7 @@ export async function searchToolPart(
       for (let cursor: string | undefined = undefined; matches.length + found.length < 10000; ) {
         const page = await client.searchChatContent(sessionId, messageId, reference, query, cursor, sensitive, signal);
         if (signal.aborted) return [];
-        found.push(...page.matches.map(match => ({ from: match.offset, to: match.offset+match.length, field })));
+        found.push(...page.matches.map(match => ({ from: match.offset, to: match.offset+match.length, field, toolCallId: part.toolCallId })));
         if (!page.next_cursor) break;
         cursor = page.next_cursor;
       }

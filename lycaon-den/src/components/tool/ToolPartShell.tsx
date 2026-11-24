@@ -159,8 +159,8 @@ export function ToolPartShell(props: Props) {
   });
   const outputAccess = contentAccess("output");
   const argsAccess = contentAccess("args");
-  bindChatContentFind({ access: outputAccess, host: hostEl, collapsed: () => !open(), expand: revealTemporarily, reveal: match => { if ("offset" in match) setOutputOffset(match.offset); } });
-  bindChatContentFind({ access: argsAccess, host: hostEl, collapsed: () => !open(), expand: revealTemporarily, reveal: match => { if ("offset" in match) setArgsOffset(match.offset); } });
+  bindChatContentFind({ access: outputAccess, host: hostEl, collapsed: () => !open(), expand: revealTemporarily, reveal: match => { if ("offset" in match) { setRevealedCallId(props.part.toolCallId); setOutputOffset(match.offset); } } });
+  bindChatContentFind({ access: argsAccess, host: hostEl, collapsed: () => !open(), expand: revealTemporarily, reveal: match => { if ("offset" in match) { setRevealedCallId(props.part.toolCallId); setArgsOffset(match.offset); } } });
 
   // Small unmounted bodies use the data corpus; retained bodies use host search.
   bindFindableView({

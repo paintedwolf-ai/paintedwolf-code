@@ -20,8 +20,11 @@ import { ActivitySpanCard } from "../components/tool/ActivitySpanCard.tsx";
 import type { ToolPartView } from "../chat/tool/tool-part-model.ts";
 import type { ActivitySpanEntry } from "../chat/transcript/projection/transcript-item-model.ts";
 import { clearTranscriptEntryMemory } from "../chat/transcript/presentation/transcript-entry.ts";
+import { setLycaonClientForTest } from "../platform/connection/app-connection.ts";
+import { stubClient } from "../test/client-fixture.ts";
 
 afterEach(() => {
+  setLycaonClientForTest(null);
   resetFindControllerForTests();
   resetOpenFilesSurfaceForTests();
   clearTranscriptEntryMemory();
@@ -194,5 +197,99 @@ describe("tool body find + collapsed reveal", () => {
       kind: "tool", sessionId: "s1", content: { kind: "inline", text: part().output },
     } });
   });
+
+  it.each(["chat", "worker"] as const)(
+    "reveals a folded member's retained output inside a closed span in %s layout and restores state",
+    async (layout) => {
+      const sink = vi.fn();
+      registerOpenFilesSurfaceSink(sink);
+      const retainedRef = {
+        content_id: "blob-member-2",
+        field: "tool_output" as const,
+        byte_len: 1024,
+        rune_len: 512,
+        line_count: 20,
+      };
+      const searchChatContent = vi.fn(async () => ({
+        matches: [{ offset: 42, length: 6, preview: "RETAINED_FOLD_NEEDLE" }],
+      }));
+      setLycaonClientForTest(stubClient({ searchChatContent }));
+
+      const foldedLead: ToolPartView = {
+        id: "lead-row",
+        toolCallId: "lead-call",
+        assistantMessageId: "a1",
+        messageId: "m-lead",
+        tool: "read",
+        kind: "read",
+        status: "completed",
+        args: { path: "first.go" },
+        output: "first body",
+        error: null,
+        foldMembers: [
+          {
+            id: "member-row",
+            toolCallId: "member-call",
+            assistantMessageId: "a2",
+            messageId: "m-member",
+            tool: "read",
+            kind: "read",
+            status: "completed",
+            args: { path: "second.go" },
+            output: "",
+            outputReference: retainedRef,
+            error: null,
+          },
+        ],
+      };
+      const entries: ActivitySpanEntry[] = [{ kind: "tool", part: foldedLead }];
+
+      render(() => (
+        <FindRoot>
+          <ActivitySpanCard
+            label="read"
+            entries={entries}
+            layout={layout}
+            sessionId="s-fold"
+            entryKey={`fold-${layout}`}
+            renderToolEntry={(toolPart) => (
+              <ToolPartCard part={toolPart()} layout={layout} sessionId="s-fold" projectId="proj-1" />
+            )}
+          />
+        </FindRoot>
+      ));
+
+      const span = (await screen.findByTestId("activity-span-card")) as HTMLElement;
+      expect(isDisclosureOpen(span)).toBe(false);
+      expect(screen.queryAllByTestId("action-card")).toHaveLength(0);
+
+      openFind();
+      setFindQuery("RETAINED_FOLD_NEEDLE");
+      await waitFor(() => expect(findController.totalCount()).toBe(1), { timeout: 2000 });
+      expect(searchChatContent).toHaveBeenCalledTimes(1);
+      expect(isDisclosureOpen(span)).toBe(false);
+
+      findNext();
+      await waitFor(() => expect(isDisclosureOpen(span)).toBe(true));
+      const card = screen.getByTestId("action-card");
+      await waitFor(() => expect(isDisclosureOpen(card)).toBe(true));
+      await waitFor(() => expect(sink).toHaveBeenCalled());
+      expect(sink.mock.lastCall?.[0]).toMatchObject({
+        kind: "chat-content",
+        projectId: "proj-1",
+        document: {
+          kind: "tool",
+          sessionId: "s-fold",
+          toolCallId: "member-call",
+          messageId: "m-member",
+          revealOffset: 42,
+          content: { kind: "retained", reference: retainedRef },
+        },
+      });
+
+      closeFind();
+      expect(isDisclosureOpen(span)).toBe(false);
+    },
+  );
 
 });

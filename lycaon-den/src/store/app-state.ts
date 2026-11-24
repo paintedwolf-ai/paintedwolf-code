@@ -444,6 +444,14 @@ export function createAppStore(
               observedRevisions.note(draft.transcriptSessionId, message);
               return;
             }
+            // Record live eligibility before publishing so mounted subscribers animate.
+            const sessionId = draft.transcriptSessionId?.trim();
+            if (sessionId) {
+              markTranscriptLiveEntries(
+                sessionId,
+                transcriptEntryKeysFromMessages([message], draft.turnLoads),
+              );
+            }
             // Keep the existing array slot.
             draft.messages[idx] = message;
             applied = true;
@@ -457,6 +465,12 @@ export function createAppStore(
             return;
           }
           const sessionId = draft.transcriptSessionId?.trim();
+          if (sessionId) {
+            markTranscriptLiveEntries(
+              sessionId,
+              transcriptEntryKeysFromMessages([message], draft.turnLoads),
+            );
+          }
           const evicted: TranscriptEvictedPage[] = [];
           draft.transcript = appendToTail(draft.transcript, message, { ...residencyPolicy(sessionId), evicted });
           traceTranscriptPageEvictions(evicted);
@@ -464,13 +478,6 @@ export function createAppStore(
           applied = true;
         }),
       );
-      const sessionId = state.transcriptSessionId?.trim();
-      if (applied && sessionId) {
-        markTranscriptLiveEntries(
-          sessionId,
-          transcriptEntryKeysFromMessages([message], state.turnLoads),
-        );
-      }
       return applied;
     },
     bufferHydrationMessageEvent(event) {

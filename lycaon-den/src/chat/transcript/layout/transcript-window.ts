@@ -124,7 +124,11 @@ export type TranscriptWindow = {
   hasMoreAfter: boolean;
   /** Session-wide ordinal span when known from the host or resident rows. */
   bounds?: TranscriptOrdSpan;
+  /** Incremented when a row is patched in place so derived views invalidate. */
+  revision?: number;
 };
+
+let nextWindowPatchRevision = 1;
 
 export function emptyTranscriptWindow(): TranscriptWindow {
   return {
@@ -161,10 +165,52 @@ function pageTouchesSpan(rows: readonly Message[], span: TranscriptOrdSpan | und
   return first <= span.lastOrd && last >= span.firstOrd;
 }
 
-/** Merge resident rows by Ord and deduplicate by id, sharing derived views per window state. */
-const materializedWindowCache = new WeakMap<TranscriptWindow, Message[]>();
-const contiguousWindowCache = new WeakMap<TranscriptWindow, Message[]>();
-const presentedSpanCache = new WeakMap<TranscriptWindow, TranscriptOrdSpan | undefined>();
+type CachedWindowDerivation<T> = {
+  revision: number;
+  tail: readonly Message[];
+  pages: Record<string, Message[]>;
+  hasTailGap: boolean;
+  value: T;
+};
+
+/** Merge resident rows by Ord and deduplicate by id, sharing derived views per window revision. */
+const materializedWindowCache = new WeakMap<TranscriptWindow, CachedWindowDerivation<Message[]>>();
+const contiguousWindowCache = new WeakMap<TranscriptWindow, CachedWindowDerivation<Message[]>>();
+const presentedSpanCache = new WeakMap<TranscriptWindow, CachedWindowDerivation<TranscriptOrdSpan | undefined>>();
+
+function readCachedWindowDerivation<T>(
+  cache: WeakMap<TranscriptWindow, CachedWindowDerivation<T>>,
+  tw: TranscriptWindow,
+): { hit: true; value: T } | { hit: false; revision: number } {
+  const revision = tw.revision ?? 0;
+  const cached = cache.get(tw);
+  if (
+    cached &&
+    cached.revision === revision &&
+    cached.tail === tw.tail &&
+    cached.pages === tw.pages &&
+    cached.hasTailGap === tw.hasTailGap
+  ) {
+    return { hit: true, value: cached.value };
+  }
+  return { hit: false, revision };
+}
+
+function writeCachedWindowDerivation<T>(
+  cache: WeakMap<TranscriptWindow, CachedWindowDerivation<T>>,
+  tw: TranscriptWindow,
+  revision: number,
+  value: T,
+): T {
+  cache.set(tw, {
+    revision,
+    tail: tw.tail,
+    pages: tw.pages,
+    hasTailGap: tw.hasTailGap,
+    value,
+  });
+  return value;
+}
 
 function computeMaterializedRows(tw: TranscriptWindow): Message[] {
   const byId = new Map<string, Message>();
@@ -194,11 +240,14 @@ function computeMaterializedRows(tw: TranscriptWindow): Message[] {
 }
 
 export function materializeTranscriptWindow(tw: TranscriptWindow): Message[] {
-  const cached = materializedWindowCache.get(tw);
-  if (cached) return cached;
-  const rows = computeMaterializedRows(tw);
-  materializedWindowCache.set(tw, rows);
-  return rows;
+  const lookup = readCachedWindowDerivation(materializedWindowCache, tw);
+  if (lookup.hit) return lookup.value;
+  return writeCachedWindowDerivation(
+    materializedWindowCache,
+    tw,
+    lookup.revision,
+    computeMaterializedRows(tw),
+  );
 }
 
 /** Oldest resident row across the tail and older pages. */
@@ -232,19 +281,26 @@ export function newestPageMessage(tw: TranscriptWindow): Message | undefined {
 /** Rows that read contiguously from the oldest resident row; a tail gap ends them before the tail. */
 export function contiguousWindowRows(tw: TranscriptWindow): Message[] {
   if (!tw.hasTailGap) return materializeTranscriptWindow(tw);
-  const cached = contiguousWindowCache.get(tw);
-  if (cached) return cached;
-  const rows = computeMaterializedRows({ ...tw, tail: [] });
-  contiguousWindowCache.set(tw, rows);
-  return rows;
+  const lookup = readCachedWindowDerivation(contiguousWindowCache, tw);
+  if (lookup.hit) return lookup.value;
+  return writeCachedWindowDerivation(
+    contiguousWindowCache,
+    tw,
+    lookup.revision,
+    computeMaterializedRows({ ...tw, tail: [] }),
+  );
 }
 
 /** Ordinal span of the presented contiguous resident rows. */
 export function presentedOrdSpan(tw: TranscriptWindow): TranscriptOrdSpan | undefined {
-  if (presentedSpanCache.has(tw)) return presentedSpanCache.get(tw);
-  const span = spanFromMessages(contiguousWindowRows(tw));
-  presentedSpanCache.set(tw, span);
-  return span;
+  const lookup = readCachedWindowDerivation(presentedSpanCache, tw);
+  if (lookup.hit) return lookup.value;
+  return writeCachedWindowDerivation(
+    presentedSpanCache,
+    tw,
+    lookup.revision,
+    spanFromMessages(contiguousWindowRows(tw)),
+  );
 }
 
 /** Unloaded ordinal counts before and after the presented resident window. */
@@ -800,6 +856,7 @@ export function patchRowInWindow(tw: TranscriptWindow, message: Message): boolea
     if (idx < 0) return false;
     if ((rows[idx]?.seq ?? 0) > (message.seq ?? 0)) return true;
     rows[idx] = message;
+    tw.revision = nextWindowPatchRevision++;
     return true;
   };
   if (tryPatch(tw.tail)) return true;

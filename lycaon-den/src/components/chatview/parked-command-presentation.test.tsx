@@ -1,6 +1,10 @@
 import { cleanup, render, screen } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActivityEvent, Message } from "../../api/types.ts";
+import {
+  resetThinkingLabelToolScanCount,
+  thinkingLabelToolScanCount,
+} from "../../chat/session/thinking-activity-label.ts";
 import { THINKING_LABEL_HOLD_MS } from "../../chat/session/thinking-label-hold.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createRecentsStore } from "../../store/recents-store.ts";
@@ -174,6 +178,7 @@ describe("parked command presentation", () => {
         });
       }
       const before = screen.queryByRole("status")?.textContent;
+      resetThinkingLabelToolScanCount();
       const ok = store.actions.loadTranscriptPage(
         { edge: "older", beforeMessageId: "user-turn" },
         {
@@ -190,7 +195,106 @@ describe("parked command presentation", () => {
         },
       );
       expect(ok).toBe(true);
+      expect(thinkingLabelToolScanCount()).toBe(0);
       expect(screen.queryByRole("status")?.textContent).toBe(before);
     },
   );
+
+  it("refreshes composer facts when an older page supplies a missing call for an active host activity", () => {
+    const userTurn: Message = {
+      id: "later-turn",
+      ord: 101,
+      role: "user",
+      origin: "user",
+      authority: "user",
+      trust_tier: "trusted",
+      content: "follow-up",
+      created_at: "2026-10-28T00:01:00Z",
+    };
+    const store = mountActivity([userTurn], {
+      hasMoreBefore: true,
+      hasMoreAfter: false,
+      bounds: { firstOrd: 1, lastOrd: 101 },
+    });
+    expect(screen.getByRole("status").textContent).toBe("Waiting for a command to finish...");
+
+    resetThinkingLabelToolScanCount();
+    const ok = store.actions.loadTranscriptPage(
+      { edge: "older", beforeMessageId: "later-turn" },
+      {
+        messages: [
+          { ...call, ord: 99 },
+          { ...parkedResult("sleep 120"), ord: 100 },
+        ],
+        before_cursor: "older",
+        after_cursor: "newer",
+        watermark: 101,
+        turn_clocks: {},
+        turn_loads: {},
+      },
+    );
+    expect(ok).toBe(true);
+    expect(thinkingLabelToolScanCount()).toBeGreaterThan(0);
+    vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
+    expect(screen.getByRole("status").textContent).toBe("Waiting · sleep 120...");
+  });
+
+  it("clears a running tool label when its result is updated in place in the store", () => {
+    const userTurn: Message = {
+      id: "u-live",
+      ord: 1,
+      seq: 1,
+      role: "user",
+      origin: "user",
+      authority: "user",
+      trust_tier: "trusted",
+      content: "read file",
+      created_at: "2026-10-28T00:00:00Z",
+    };
+    const runningCall: Message = {
+      ...call,
+      id: "a-read",
+      ord: 2,
+      seq: 2,
+      tool_calls: [{ id: "read-1", name: "read", args: { path: "main.go" } }],
+    };
+    const store = mountActivity([userTurn, runningCall]);
+    store.actions.setActivity({
+      ...park,
+      activity_id: "live-read",
+      kind: "running_tool",
+      tool_name: "read",
+      tool_call_id: "read-1",
+      wait_triggers: undefined,
+      progress: { phase: "executing", files_searched: 0, files_skipped: 0, matches: 0 },
+    });
+    expect(screen.getByRole("status").textContent).toBe("Reading · main.go...");
+
+    // Complete the tool result and mark host activity done; composer updates immediately.
+    store.actions.upsertMessage({
+      id: "r-read",
+      ord: 3,
+      seq: 3,
+      role: "tool",
+      origin: "tool",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "package main",
+      created_at: "2026-10-28T00:00:01Z",
+      tool_result: {
+        tool: "read",
+        assistant_message_id: "a-read",
+        tool_call_id: "read-1",
+        content: "package main",
+        outcome: "completed",
+      },
+    });
+    store.actions.setActivity({
+      ...park,
+      activity_id: "live-read",
+      kind: "running_tool",
+      status: "done",
+    });
+    expect(screen.queryByRole("status")).toBeNull();
+  });
 });

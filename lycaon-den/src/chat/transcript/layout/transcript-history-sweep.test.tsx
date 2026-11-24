@@ -526,4 +526,48 @@ describe("transcript history sweep invariants (TH05)", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("preserves reading anchor and residency bounds across an eviction-inducing sweep and reversal", async () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      queueMicrotask(() => cb(0));
+      return 1;
+    });
+    const harness = createSweepHarness(SWEEP_EVICT_SESSION_LENGTH, "lc06-evict-reversal");
+    try {
+      await flushSweepTurn();
+      // Sweep upward until older-page eviction opens a tail gap.
+      let guard = 0;
+      while (!harness.appStore.state.transcript.hasTailGap && guard < 40) {
+        guard += 1;
+        const extent = harness.virtualizer.residentExtent();
+        harness.wheelTo(Math.max(0, extent.startPx + 60), -180);
+        await flushSweepTurn();
+      }
+      expect(harness.appStore.state.transcript.hasTailGap).toBe(true);
+      expect(residentPageOrds(harness.appStore.state.transcript.pages)).toBeLessThanOrEqual(
+        TRANSCRIPT_RESIDENT_ORD_HARD_CAP,
+      );
+
+      // Reverse direction across the evicted gap and verify bounded work and anchor stability.
+      const reversalStartRequests = harness.requestKeys.length;
+      for (const direction of [1, 1, -1, 1]) {
+        const extent = harness.virtualizer.residentExtent();
+        harness.wheelTo(
+          direction < 0 ? Math.max(0, extent.startPx + 80) : Math.max(0, extent.endPx - 360),
+          direction * 160,
+        );
+        await flushSweepTurn();
+      }
+      const reversalRequests = harness.requestKeys.slice(reversalStartRequests);
+      expect(reversalRequests.length).toBeLessThanOrEqual(4);
+      expect(harness.virtualizer.getVirtualItems().length).toBeLessThanOrEqual(52);
+      expect(harness.stats().reachOverlappedVictim).toBe(false);
+      for (const { driftPx, rowHeightPx } of harness.anchorDriftsPx) {
+        expect(driftPx).toBeLessThanOrEqual(rowHeightPx);
+      }
+    } finally {
+      harness.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
 });

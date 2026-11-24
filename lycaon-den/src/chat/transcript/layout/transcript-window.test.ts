@@ -14,6 +14,7 @@ import {
   loadOlderWindow,
   materializeTranscriptWindow,
   mergeIntoTail,
+  patchRowInWindow,
   precedesLiveTail,
   presentedOrdSpan,
   refreshTailWindow,
@@ -434,5 +435,18 @@ describe("mergeIntoTail", () => {
     expect(gapped.hasTailGap).toBe(true);
     expect(contiguousWindowRows(gapped)).toBe(contiguousWindowRows(gapped));
     expect(presentedOrdSpan(gapped)).toEqual({ firstOrd: 101, lastOrd: 250 });
+
+    // In-place row patching invalidates cached derivations on both contiguous and gapped windows.
+    expect(
+      patchRowInWindow(tw, { ...rows(210, 210)[0]!, seq: 99, content: "patched-tail" }),
+    ).toBe(true);
+    expect(materializeTranscriptWindow(tw).find((m) => m.ord === 210)?.content).toBe("patched-tail");
+
+    expect(
+      patchRowInWindow(gapped, { ...rows(150, 150)[0]!, seq: 99, content: "patched-gap-page" }),
+    ).toBe(true);
+    expect(contiguousWindowRows(gapped).find((m) => m.ord === 150)?.content).toBe(
+      "patched-gap-page",
+    );
   });
 });
