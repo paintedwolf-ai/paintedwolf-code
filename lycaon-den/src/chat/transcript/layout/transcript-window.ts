@@ -161,8 +161,12 @@ function pageTouchesSpan(rows: readonly Message[], span: TranscriptOrdSpan | und
   return first <= span.lastOrd && last >= span.firstOrd;
 }
 
-/** Merge resident rows by Ord and deduplicate by id. */
-export function materializeTranscriptWindow(tw: TranscriptWindow): Message[] {
+/** Merge resident rows by Ord and deduplicate by id, sharing derived views per window state. */
+const materializedWindowCache = new WeakMap<TranscriptWindow, Message[]>();
+const contiguousWindowCache = new WeakMap<TranscriptWindow, Message[]>();
+const presentedSpanCache = new WeakMap<TranscriptWindow, TranscriptOrdSpan | undefined>();
+
+function computeMaterializedRows(tw: TranscriptWindow): Message[] {
   const byId = new Map<string, Message>();
   const ordered: Message[] = [];
   const pushAll = (rows: readonly Message[]) => {
@@ -187,6 +191,14 @@ export function materializeTranscriptWindow(tw: TranscriptWindow): Message[] {
   pushAll(tw.tail);
   ordered.sort((a, b) => (a.ord ?? 0) - (b.ord ?? 0));
   return ordered;
+}
+
+export function materializeTranscriptWindow(tw: TranscriptWindow): Message[] {
+  const cached = materializedWindowCache.get(tw);
+  if (cached) return cached;
+  const rows = computeMaterializedRows(tw);
+  materializedWindowCache.set(tw, rows);
+  return rows;
 }
 
 /** Oldest resident row across the tail and older pages. */
@@ -219,12 +231,20 @@ export function newestPageMessage(tw: TranscriptWindow): Message | undefined {
 
 /** Rows that read contiguously from the oldest resident row; a tail gap ends them before the tail. */
 export function contiguousWindowRows(tw: TranscriptWindow): Message[] {
-  return materializeTranscriptWindow(tw.hasTailGap ? { ...tw, tail: [] } : tw);
+  if (!tw.hasTailGap) return materializeTranscriptWindow(tw);
+  const cached = contiguousWindowCache.get(tw);
+  if (cached) return cached;
+  const rows = computeMaterializedRows({ ...tw, tail: [] });
+  contiguousWindowCache.set(tw, rows);
+  return rows;
 }
 
 /** Ordinal span of the presented contiguous resident rows. */
 export function presentedOrdSpan(tw: TranscriptWindow): TranscriptOrdSpan | undefined {
-  return spanFromMessages(contiguousWindowRows(tw));
+  if (presentedSpanCache.has(tw)) return presentedSpanCache.get(tw);
+  const span = spanFromMessages(contiguousWindowRows(tw));
+  presentedSpanCache.set(tw, span);
+  return span;
 }
 
 /** Unloaded ordinal counts before and after the presented resident window. */
@@ -594,16 +614,16 @@ function rollTailOverflowIntoPages(
   };
 }
 
-/** Evict oldest pages above the budget once they leave `policy.keepOrds`. */
+/** Evict pages above the budget once they leave `policy.keepOrds`, preferring `policy.preferEdge ?? "older"`. */
 export function trimOldestPages(
   tw: TranscriptWindow,
-  policy?: TranscriptResidencyPolicy,
+  policy?: TranscriptResidencyPolicy & { preferEdge?: "older" | "newer" },
 ): TranscriptWindow {
   if (residentPageOrds(tw.pages) <= TRANSCRIPT_RESIDENT_ORD_BUDGET) return tw;
   const pages = { ...tw.pages };
   const { evictedCount, evictedOlder, evictedNewer } = evictPagesBeyondBudget(
     pages,
-    "older",
+    policy?.preferEdge ?? "older",
     policy,
     undefined,
     true,

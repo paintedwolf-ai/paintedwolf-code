@@ -14,7 +14,11 @@ import { pendingFromEvent } from "../chat/checkpoint/checkpoint-model.ts";
 import { clearTranscriptEntryMemory, noteTranscriptEntryBaseline, transcriptEntryKeysFromMessages } from "../chat/transcript/presentation/transcript-entry.ts";
 import { clearVisualArtifactSessionMemory, noteVisualArtifactIntroBaseline } from "../chat/visual/visual-artifact-reveal.ts";
 import { mergeTranscriptBaseline } from "../chat/transcript/projection/transcript-baseline-merge.ts";
-import { transcriptReaderReach } from "../chat/transcript/history/transcript-reader-reach.ts";
+import {
+  publishAdmittedTranscriptReach,
+  releaseAdmittedTranscriptReach,
+  transcriptReaderReach,
+} from "../chat/transcript/history/transcript-reader-reach.ts";
 import { TranscriptObservedRevisions } from "../chat/transcript/layout/transcript-observed-revisions.ts";
 import { traceTranscriptPageEvictions } from "../chat/transcript/layout/transcript-paging-trace.ts";
 import { TRANSCRIPT_RESIDENT_ORD_BUDGET, appendToTail, applyTranscriptPage, copyTranscriptWindow, emptyTranscriptWindow, installTailWindow, materializeTranscriptWindow, mergeIntoTail, patchRowInWindow, precedesLiveTail, refreshTailWindow, resetOlderPages, residentPageOrds, transcriptWindowPage, trimOldestPages, type TranscriptEvictedPage } from "../chat/transcript/layout/transcript-window.ts";
@@ -377,6 +381,19 @@ export function createAppStore(
         }),
       );
       traceTranscriptPageEvictions(evicted);
+      if (applied && sessionId && messages.length > 0 && request.edge !== "start") {
+        let firstOrd = Infinity;
+        let lastOrd = -Infinity;
+        for (const msg of messages) {
+          if (typeof msg.ord === "number" && Number.isFinite(msg.ord) && msg.ord > 0) {
+            if (msg.ord < firstOrd) firstOrd = msg.ord;
+            if (msg.ord > lastOrd) lastOrd = msg.ord;
+          }
+        }
+        if (firstOrd <= lastOrd) {
+          publishAdmittedTranscriptReach(sessionId, { firstOrd, lastOrd }, request.edge);
+        }
+      }
       // Paged history enters the reveal baseline immediately.
       if (applied && sessionId && page.messages.length > 0) {
         noteTranscriptEntryBaseline(
@@ -386,13 +403,17 @@ export function createAppStore(
       }
       return applied;
     },
-    trimTranscriptPages() {
+    trimTranscriptPages(preferEdge) {
       const sessionId = state.transcriptSessionId?.trim();
       if (residentPageOrds(state.transcript.pages) <= TRANSCRIPT_RESIDENT_ORD_BUDGET) return;
       const evicted: TranscriptEvictedPage[] = [];
       setState(
         produce((draft) => {
-          const next = trimOldestPages(draft.transcript, { ...residencyPolicy(sessionId), evicted });
+          const next = trimOldestPages(draft.transcript, {
+            ...residencyPolicy(sessionId),
+            preferEdge,
+            evicted,
+          });
           if (next === draft.transcript) return;
           draft.transcript = next;
           draft.messages = materializeTranscriptWindow(next);
@@ -401,6 +422,8 @@ export function createAppStore(
       traceTranscriptPageEvictions(evicted);
     },
     resetOlderTranscriptPages() {
+      const sessionId = state.transcriptSessionId?.trim();
+      if (sessionId) releaseAdmittedTranscriptReach(sessionId);
       setState(
         produce((draft) => {
           draft.transcript = resetOlderPages(draft.transcript);

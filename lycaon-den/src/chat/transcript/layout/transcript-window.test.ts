@@ -423,4 +423,16 @@ describe("mergeIntoTail", () => {
     expect(tw.hasMoreBefore).toBe(false);
     expect(ids(tw)).toEqual(rows(1, 250).map((m) => m.ord));
   });
+
+  it("shares materialized rows and presented spans per immutable window instance", () => {
+    let tw = tailAt(201, 250);
+    tw = applyTranscriptPage(tw, transcriptPageRequest(tw, "older")!, page(rows(101, 200), true, true))!;
+    expect(contiguousWindowRows(tw)).toBe(materializeTranscriptWindow(tw));
+    expect(presentedOrdSpan(tw)).toEqual({ firstOrd: 101, lastOrd: 250 });
+
+    const gapped = mergeIntoTail(tw, page(rows(401, 500), true), 500);
+    expect(gapped.hasTailGap).toBe(true);
+    expect(contiguousWindowRows(gapped)).toBe(contiguousWindowRows(gapped));
+    expect(presentedOrdSpan(gapped)).toEqual({ firstOrd: 101, lastOrd: 250 });
+  });
 });

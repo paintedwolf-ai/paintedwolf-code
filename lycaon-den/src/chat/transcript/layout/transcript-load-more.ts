@@ -14,7 +14,11 @@ import {
 import type { TranscriptRevealAnchor } from "../presentation/transcript-reveal-target.ts";
 import type { DisplayTranscriptItem } from "../projection/transcript-item-model.ts";
 import { transcriptItemOrd } from "../projection/transcript-item-order.ts";
-import { publishTranscriptReaderReach } from "../history/transcript-reader-reach.ts";
+import {
+  markAdmittedTranscriptReachSettled,
+  publishTranscriptReaderReach,
+  releaseAdmittedTranscriptReach,
+} from "../history/transcript-reader-reach.ts";
 import {
   DEFAULT_TRANSCRIPT_ORD_DENSITY_PX,
   transcriptRunwayHeight,
@@ -121,7 +125,7 @@ async function fetchTranscriptRequest(
 ): Promise<boolean> {
   if (appStore.state.transcriptSessionId !== sessionId) return false;
   const epoch = appStore.state.sessionViewEpoch;
-  const prevSpan = presentedOrdSpan(appStore.state.transcript);
+  const prevSpan = request.edge === "seek" ? presentedOrdSpan(appStore.state.transcript) : undefined;
   const page = await client.listSessionMessages(sessionId, {
     limit: DEFAULT_TRANSCRIPT_PAGE_LIMIT,
     ...transcriptPageQuery(request),
@@ -310,7 +314,10 @@ export function createTranscriptPaging(
         sessionId,
         readerReachOrds(layout, top - reach, bottom + reach),
       );
-      opts.appStore.actions.trimTranscriptPages();
+      const dir = intent.currentDirection();
+      opts.appStore.actions.trimTranscriptPages(
+        dir === "older" ? "newer" : dir === "newer" ? "older" : undefined,
+      );
     }
     if (layout) {
       const inBeforeRunway = bottom < layout.residentStartPx - reach;
@@ -376,7 +383,10 @@ export function createTranscriptPaging(
         intent.advanced();
         if (stopped) return;
         // Continue after the reading anchor settles.
-        settleFrame = requestAnimationFrame(maybeLoad);
+        settleFrame = requestAnimationFrame(() => {
+          markAdmittedTranscriptReachSettled(sessionId);
+          maybeLoad();
+        });
       })
       .catch(() => intent.failed(key, performance.now()))
       .finally(() => {
@@ -385,9 +395,15 @@ export function createTranscriptPaging(
       });
   };
 
+  const noteReaderMovement = (edge: "older" | "newer") => {
+    intent.noteInput(edge);
+    const sessionId = opts.sessionId()?.trim();
+    if (sessionId) releaseAdmittedTranscriptReach(sessionId, edge);
+  };
+
   const stopCommits = motion?.subscribeCommits((source, position) => {
     if ((source === "thumb_drag" || source === "track_click") && position.top !== previousOffset) {
-      intent.noteInput(position.top < previousOffset ? "older" : "newer");
+      noteReaderMovement(position.top < previousOffset ? "older" : "newer");
       maybeLoad();
     }
     previousOffset = position.top;
@@ -395,7 +411,7 @@ export function createTranscriptPaging(
   const unsubscribe = subscribeStreamScroll(streamTarget, () => {
     const offset = streamTarget.scrollTop;
     if (motion?.input.isDirectInputActive() && Math.abs(offset - previousOffset) > 1) {
-      intent.noteInput(offset < previousOffset ? "older" : "newer");
+      noteReaderMovement(offset < previousOffset ? "older" : "newer");
     }
     previousOffset = offset;
     maybeLoad();
@@ -403,7 +419,7 @@ export function createTranscriptPaging(
   queueMicrotask(maybeLoad);
   return {
     readerInput: (direction) => {
-      intent.noteInput(direction === "up" ? "older" : "newer");
+      noteReaderMovement(direction === "up" ? "older" : "newer");
       maybeLoad();
     },
     dispose: () => {

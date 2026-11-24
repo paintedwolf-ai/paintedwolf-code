@@ -931,5 +931,85 @@ describe("createTranscriptPaging", () => {
       dispose();
     });
   });
+
+  it("protects a newly admitted older page through settlement without duplicate cursor-324 fetches", async () => {
+    const store = createAppStore();
+    const sid = "lc03-cursor-324";
+    const page = (from: number, to: number) => ({
+      messages: Array.from({ length: to - from + 1 }, (_, i) => row(from + i)),
+      before_cursor: "older",
+      after_cursor: "newer",
+      turn_clocks: {},
+      turn_loads: {},
+      watermark: 866,
+    });
+    store.actions.installTranscriptBaseline(
+      sid,
+      Array.from({ length: 43 }, (_, i) => row(824 + i)),
+      866,
+      { hasMoreBefore: true, hasMoreAfter: false, bounds: { firstOrd: 1, lastOrd: 866 } },
+    );
+    for (let end = 823; end >= 373; end -= 50) {
+      store.actions.loadTranscriptPage(
+        { edge: "older", beforeMessageId: row(end + 1).id },
+        page(end - 49, end),
+      );
+    }
+
+    let top = 6395;
+    const calls: string[] = [];
+    let frame: FrameRequestCallback | undefined;
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frame = cb;
+      return 1;
+    });
+    const host = document.createElement("div");
+    Object.defineProperties(host, {
+      clientHeight: { value: 824 },
+      scrollHeight: { value: 8550 },
+      scrollTop: { get: () => top },
+    });
+    const client = stubClient({
+      listSessionMessages: vi.fn(async (_sid, q) => {
+        calls.push(q!.beforeMessageId!);
+        if (calls.length === 1) return page(293, 323);
+        return new Promise(() => {});
+      }),
+    });
+
+    const controller = createTranscriptPaging(host, {
+      client: () => client,
+      appStore: store,
+      sessionId: () => sid,
+      geometry: () => {
+        const first = store.state.messages[0]?.ord ?? 324;
+        return {
+          residentStartPx: first === 293 ? 4696 : 5192,
+          residentEndPx: first === 293 ? 8553 : 8550,
+          residentSpan: { firstOrd: first, lastOrd: 866 },
+          unloaded: { before: first - 1, after: 0 },
+          prepareLanding: () => {},
+        };
+      },
+    });
+
+    try {
+      controller.readerInput("up");
+      for (let n = 0; n < 20; n++) await Promise.resolve();
+      expect(store.state.messages[0]?.ord).toBe(293);
+
+      top = 6635;
+      expect(frame).toBeTypeOf("function");
+      frame!(0);
+      expect(store.state.messages[0]?.ord).toBe(293);
+
+      controller.readerInput("up");
+      for (let n = 0; n < 10; n++) await Promise.resolve();
+      expect(calls).toEqual(["m-324", "m-293"]);
+    } finally {
+      controller.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
