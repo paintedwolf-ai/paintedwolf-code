@@ -55,6 +55,7 @@ type ServeApp struct {
 	AgentRegistry        *orchestration.MemoryAgentRegistry
 	ToolRegistry         *tools.DefaultRegistry
 	Commands             *toolhost.CommandServices
+	Skills               *toolhost.SkillServices
 	DB                   db.ReadHandle
 	Events               events.ReplayHub
 	ConfigRoot           string

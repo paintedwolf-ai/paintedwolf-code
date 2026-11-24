@@ -471,6 +471,7 @@ func (b *serveBuilder) serveApp() *ServeApp {
 		AgentRegistry:        b.agents.Registry,
 		ToolRegistry:         b.execution.Host.Registry,
 		Commands:             b.execution.Host.Commands,
+		Skills:               b.execution.Host.Skills,
 		DB:                   b.storage.Database,
 		Events:               b.events.Hub,
 		ConfigRoot:           b.catalog.ModuleRoot,
