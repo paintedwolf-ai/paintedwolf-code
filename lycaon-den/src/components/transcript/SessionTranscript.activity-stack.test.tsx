@@ -520,7 +520,7 @@ describe("SessionTranscript stacked activity groups", () => {
       el.textContent?.includes("late_from_115.go"),
     );
     expect(lateDiff).toBeTruthy();
-    fireEvent.click(lateDiff!.querySelector<HTMLButtonElement>("button.den-file-edit-header")!);
+    fireEvent.click(lateDiff!.querySelector<HTMLButtonElement>('[data-testid="file-edit-diff-toggle"]')!);
     const showActivityBtn = await waitFor(() => {
       const btn = lateDiff!.querySelector<HTMLButtonElement>('[data-testid="file-edit-show-activity"]');
       expect(btn).toBeTruthy();
