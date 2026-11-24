@@ -22,7 +22,9 @@ import (
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 )
 
+// encodeCoordinatorFuzzBytes encodes a coordinator case with web search on.
 func encodeCoordinatorFuzzBytes(
+	tb testing.TB,
 	d *hoststate.SeedDomains,
 	ovID string,
 	posture api.SessionPosture,
@@ -37,52 +39,33 @@ func encodeCoordinatorFuzzBytes(
 	family, itemSel, numChanges uint8,
 	ch1Axis, ch1Val, ch2Axis, ch2Val uint8,
 ) []byte {
-	ovIdx := max(0, slices.IndexFunc(d.Overlays, func(o hoststate.PackOverlay) bool { return o.ID == ovID }))
-	pIdx := 0
-	for i := range d.Postures {
-		if d.Postures[i].ID == posture {
-			pIdx = i
-			break
-		}
+	tb.Helper()
+	b, err := d.EncodeCoordinator(hoststate.CoordinatorSeed{
+		OverlayIndex:    overlayIndexByID(tb, d, ovID),
+		SessionMode:     mode,
+		Posture:         posture,
+		WorkflowState:   wf,
+		SurfaceID:       surfID,
+		RootTopology:    roots,
+		Loading:         loading,
+		WebSearch:       true,
+		ApprovalPosture: app,
+		TempState:       temp,
+		MCPState:        mcp,
+	}, hoststate.SeedTail{
+		Family: family, Item: uint16(itemSel), ChangeCount: numChanges,
+		Changes: [2]hoststate.SeedChange{{Axis: ch1Axis, Value: ch1Val}, {Axis: ch2Axis, Value: ch2Val}},
+	})
+	if err != nil {
+		tb.Fatalf("encode coordinator seed: %v", err)
 	}
-	mIdx := max(0, slices.Index(d.SessionModes, mode))
-	sIdx := 0
-	for i := range d.Surfaces {
-		if d.Surfaces[i].ID == surfID {
-			sIdx = i
-			break
-		}
-	}
-	rIdx := max(0, slices.Index(d.RootTopologies, roots))
-	lIdx := max(0, slices.Index(d.LoadingModes, loading))
-	wIdx := max(0, slices.Index(d.WorkflowStates, wf))
-	aIdx := max(0, slices.Index(d.ApprovalPostures, app))
-	tIdx := max(0, slices.Index(d.TempStates, temp))
-	mcpIdx := max(0, slices.Index(d.MCPStates, mcp))
-
-	return []byte{
-		fuzzDecoderVersion1,
-		0, // coordinator
-		uint8(ovIdx),
-		uint8(pIdx),
-		uint8(mIdx),
-		uint8(sIdx),
-		uint8(rIdx),
-		uint8(lIdx),
-		uint8(wIdx),
-		uint8(aIdx),
-		uint8(tIdx),
-		uint8(mcpIdx),
-		1, // WebSearch=true
-		family,
-		itemSel,
-		numChanges,
-		ch1Axis, ch1Val,
-		ch2Axis, ch2Val,
-	}
+	return b
 }
 
+// encodeWorkerFuzzBytes encodes a one-root worker case with balanced approval
+// and web search on.
 func encodeWorkerFuzzBytes(
+	tb testing.TB,
 	d *hoststate.SeedDomains,
 	ovID, agentID string,
 	posture api.SessionPosture,
@@ -91,51 +74,34 @@ func encodeWorkerFuzzBytes(
 	loading hoststate.WorkerLoadingMode,
 	family, itemSel, numChanges, ch1Axis, ch1Val uint8,
 ) []byte {
-	ovIdx := 0
-	for i := range d.Overlays {
-		if d.Overlays[i].ID == ovID {
-			ovIdx = i
-			break
-		}
+	tb.Helper()
+	b, err := d.EncodeWorker(hoststate.WorkerSeed{
+		OverlayIndex:      overlayIndexByID(tb, d, ovID),
+		AgentID:           agentID,
+		Posture:           posture,
+		BranchView:        branch,
+		RootCount:         1,
+		Loading:           loading,
+		ParentSessionMode: parentMode,
+		WebSearch:         true,
+		ApprovalPosture:   gate.PostureBalanced,
+	}, hoststate.SeedTail{
+		Family: family, Item: uint16(itemSel), ChangeCount: numChanges,
+		Changes: [2]hoststate.SeedChange{{Axis: ch1Axis, Value: ch1Val}},
+	})
+	if err != nil {
+		tb.Fatalf("encode worker seed: %v", err)
 	}
-	agIdx := 0
-	for i := range d.Overlays[ovIdx].WorkerAgents {
-		if d.Overlays[ovIdx].WorkerAgents[i].ID == agentID {
-			agIdx = i
-			break
-		}
-	}
-	pIdx := 0
-	for i := range d.Postures {
-		if d.Postures[i].ID == posture {
-			pIdx = i
-			break
-		}
-	}
-	mIdx := max(0, slices.Index(d.SessionModes, parentMode))
-	bIdx := max(0, slices.Index(d.WorkerBranches, branch))
-	lIdx := max(0, slices.Index(d.WorkerLoadings, loading))
+	return b
+}
 
-	return []byte{
-		fuzzDecoderVersion1,
-		1, // worker
-		uint8(ovIdx),
-		uint8(pIdx),
-		uint8(mIdx),
-		uint8(agIdx),
-		uint8(bIdx),
-		uint8(lIdx),
-		0, // RootCount=1
-		0, // Approval=Balanced
-		0, // ParentUpgraded=false
-		0,
-		1, // WebSearch=true
-		family,
-		itemSel,
-		numChanges,
-		ch1Axis, ch1Val,
-		0, 0,
+func overlayIndexByID(tb testing.TB, d *hoststate.SeedDomains, id string) int {
+	tb.Helper()
+	i := slices.IndexFunc(d.Overlays, func(o hoststate.PackOverlay) bool { return o.ID == id })
+	if i < 0 {
+		tb.Fatalf("no overlay %q", id)
 	}
+	return i
 }
 
 // FuzzRecipientGuidanceAcrossHostStates fuzzes recipient guidance over
@@ -149,34 +115,34 @@ func FuzzRecipientGuidanceAcrossHostStates(f *testing.F) {
 
 	// Reachable coordinator standing + live-job warm-cache control (0 changes).
 	f.Add(encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+		f, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
 		gate.PostureBalanced, hoststate.TempScratchAndShared, hoststate.MCPNone,
 		0, 0, 0, 0, 0, 0, 0,
 	))
 	// Reachable worker persona + live-job check.
 	f.Add(encodeWorkerFuzzBytes(
-		d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
+		f, d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
 		hoststate.BranchIsolatedWorker, hoststate.WorkerLoadingAllLoaded,
 		0, 0, 0, 0, 0,
 	))
 	// Coordinator two-turn transition changing projected capability (Ask -> Agent, axisSel=0).
 	f.Add(encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureBuild, api.SessionModeAsk, "implement_investigate",
+		f, d, "stock", api.SessionPostureBuild, api.SessionModeAsk, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingFloorOnly, hoststate.WorkflowActivePhase,
 		gate.PostureBalanced, hoststate.TempScratchOnly, hoststate.MCPNone,
 		0, 0, 1, 0, 0, 0, 0,
 	))
 	// Skill body render across loading transition (LoadingFloorOnly -> LoadingAllLoaded, axisSel=4, valSel=0).
 	f.Add(encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+		f, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingFloorOnly, hoststate.WorkflowActivePhase,
 		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone,
 		1, 0, 1, 4, 0, 0, 0,
 	))
 	// OAR tool.rejected recovery across posture transition (build -> spec).
 	f.Add(encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+		f, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
 		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone,
 		2, 0, 1, 1, 0, 0, 0,
@@ -205,7 +171,7 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 
 	// Verify coordinator, worker, and capability-transition seeds execute properties.
 	coordSeed := encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+		t, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
 		gate.PostureBalanced, hoststate.TempScratchAndShared, hoststate.MCPNone,
 		0, 0, 0, 0, 0, 0, 0,
@@ -228,7 +194,7 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 	}
 
 	workerSeed := encodeWorkerFuzzBytes(
-		d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
+		t, d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
 		hoststate.BranchIsolatedWorker, hoststate.WorkerLoadingAllLoaded,
 		0, 0, 0, 0, 0,
 	)
@@ -238,7 +204,7 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 	}
 
 	transSeed := encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureBuild, api.SessionModeAsk, "implement_investigate",
+		t, d, "stock", api.SessionPostureBuild, api.SessionModeAsk, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingFloorOnly, hoststate.WorkflowActivePhase,
 		gate.PostureBalanced, hoststate.TempScratchOnly, hoststate.MCPNone,
 		0, 0, 1, 0, 0, 0, 0,
@@ -300,17 +266,17 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 	// combined (Spec/Vet read-only posture + non-Git root) fails on fault-injected
 	// bundle and passes on corrected stock.
 	baseBytes := encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+		t, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowAmbientIdle,
 		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone, 0, 0, 0, 0, 0, 0, 0,
 	)
 	specGitBytes := encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureSpec, api.SessionModeAgent, "implement_investigate",
+		t, d, "stock", api.SessionPostureSpec, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowAmbientIdle,
 		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone, 0, 0, 0, 0, 0, 0, 0,
 	)
 	agentNonGitBytes := encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+		t, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleNonGit, hoststate.LoadingAllLoaded, hoststate.WorkflowAmbientIdle,
 		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone, 0, 0, 0, 0, 0, 0, 0,
 	)
@@ -324,7 +290,7 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 	}
 	singleNonGitIdx := uint8(slices.Index(d.RootTopologies, hoststate.RootsSingleNonGit))
 	combinedMaskedBytes := encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+		t, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowAmbientIdle,
 		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone,
 		0, 0, 2,
@@ -456,7 +422,7 @@ func verifyOARTwoTurnDeliveredRefusalControls(t *testing.T, env *fuzzWorkerEnv, 
 				t.Fatalf("rule index %d exceeds uint16 selector", i)
 			}
 			cSeed := withItemSel16(encodeCoordinatorFuzzBytes(
-				d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+				t, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 				hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
 				gate.PostureBalanced, hoststate.TempScratchOnly, hoststate.MCPNone,
 				2, 0, 1, 1, 0, 0, 0,
@@ -465,7 +431,7 @@ func verifyOARTwoTurnDeliveredRefusalControls(t *testing.T, env *fuzzWorkerEnv, 
 				t.Errorf("stock coordinator OAR fuzz failed on %s: rep=%+v err=%v", r.Qualified(), cRep, cErr)
 			}
 			wSeed := withItemSel16(encodeWorkerFuzzBytes(
-				d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
+				t, d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
 				hoststate.BranchIsolatedWorker, hoststate.WorkerLoadingAllLoaded,
 				2, 0, 0, 0, 0,
 			), uint16(i))
@@ -483,7 +449,7 @@ func verifyOARTwoTurnDeliveredRefusalControls(t *testing.T, env *fuzzWorkerEnv, 
 	httpIdx := ruleIndex("HTTP_REQUEST_FAILED")
 	stickyIdx := uint8(slices.Index(d.WorkerLoadings, hoststate.WorkerLoadingStickyOnly))
 	httpTransSeed := withItemSel16(encodeWorkerFuzzBytes(
-		d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
+		t, d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
 		hoststate.BranchIsolatedWorker, hoststate.WorkerLoadingAllLoaded,
 		2, 0, 1,
 		// Turn A offers fetch_url; Turn B sticky-only loading keeps command and withholds fetch_url.
@@ -567,7 +533,7 @@ func verifyOARTwoTurnDeliveredRefusalControls(t *testing.T, env *fuzzWorkerEnv, 
 	// 3. Verify 4-way distinction: normally omitted selected rule vs different matched rule vs fallback.
 	contentRejIdx := ruleIndex("CONTENT_APPLY_REJECTED")
 	omittedSeed := withItemSel16(encodeCoordinatorFuzzBytes(
-		d, "stock", api.SessionPostureSpec, api.SessionModeAgent, "implement_investigate",
+		t, d, "stock", api.SessionPostureSpec, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
 		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone,
 		2, 0, 0, 0, 0, 0, 0,

@@ -44,11 +44,6 @@ import (
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 )
 
-const (
-	fuzzDecoderVersion1  uint8 = 1
-	fuzzDecoderByteLimit int   = 21
-)
-
 type fuzzOverlayBundle struct {
 	overlay   hoststate.PackOverlay
 	stock     *promptrender.Stock
@@ -186,42 +181,6 @@ type FuzzCaseReport struct {
 	FailedProperty       string `json:"failed_property,omitempty"`
 }
 
-func byteAt(data []byte, idx int) uint8 {
-	if idx < 0 || idx >= fuzzDecoderByteLimit || idx >= len(data) {
-		return 0
-	}
-	return data[idx]
-}
-
-func decodeCoordinatorSeed(d *hoststate.SeedDomains, data []byte) hoststate.CoordinatorSeed {
-	ovIdx := int(byteAt(data, 2)) % len(d.Overlays)
-	posture := d.Postures[int(byteAt(data, 3))%len(d.Postures)].ID
-	mode := d.SessionModes[int(byteAt(data, 4))%len(d.SessionModes)]
-	surf := d.Surfaces[int(byteAt(data, 5))%len(d.Surfaces)].ID
-	roots := d.RootTopologies[int(byteAt(data, 6))%len(d.RootTopologies)]
-	loading := d.LoadingModes[int(byteAt(data, 7))%len(d.LoadingModes)]
-	wf := d.WorkflowStates[int(byteAt(data, 8))%len(d.WorkflowStates)]
-	app := d.ApprovalPostures[int(byteAt(data, 9))%len(d.ApprovalPostures)]
-	temp := d.TempStates[int(byteAt(data, 10))%len(d.TempStates)]
-	mcp := d.MCPStates[int(byteAt(data, 11))%len(d.MCPStates)]
-	flags := byteAt(data, 12)
-	return hoststate.CoordinatorSeed{
-		OverlayIndex:          ovIdx,
-		SessionMode:           mode,
-		Posture:               posture,
-		WorkflowState:         wf,
-		SurfaceID:             surf,
-		RootTopology:          roots,
-		Loading:               loading,
-		WebSearch:             flags&1 != 0,
-		Vision:                flags&2 != 0,
-		CommandExternalHidden: flags&4 != 0,
-		ApprovalPosture:       app,
-		TempState:             temp,
-		MCPState:              mcp,
-	}
-}
-
 func mutateCoordinatorSeed(d *hoststate.SeedDomains, s hoststate.CoordinatorSeed, axisSel, valSel uint8) hoststate.CoordinatorSeed {
 	out := s
 	switch axisSel % 9 {
@@ -247,32 +206,6 @@ func mutateCoordinatorSeed(d *hoststate.SeedDomains, s hoststate.CoordinatorSeed
 	return out
 }
 
-func decodeWorkerSeed(d *hoststate.SeedDomains, data []byte) hoststate.WorkerSeed {
-	ovIdx := int(byteAt(data, 2)) % len(d.Overlays)
-	ov := d.Overlays[ovIdx]
-	agentID := "implementer"
-	if len(ov.WorkerAgents) > 0 {
-		agentID = ov.WorkerAgents[int(byteAt(data, 5))%len(ov.WorkerAgents)].ID
-	}
-	flags := byteAt(data, 12)
-	rootCount := (int(byteAt(data, 8)) % 2) + 1
-	return hoststate.WorkerSeed{
-		OverlayIndex:             ovIdx,
-		AgentID:                  agentID,
-		Posture:                  d.Postures[int(byteAt(data, 3))%len(d.Postures)].ID,
-		BranchView:               d.WorkerBranches[int(byteAt(data, 6))%len(d.WorkerBranches)],
-		RootCount:                rootCount,
-		SecondaryRootGit:         rootCount == 2 && flags&8 != 0,
-		Loading:                  d.WorkerLoadings[int(byteAt(data, 7))%len(d.WorkerLoadings)],
-		ParentSessionMode:        d.SessionModes[int(byteAt(data, 4))%len(d.SessionModes)],
-		ParentUpgradedAskToAgent: byteAt(data, 10)%2 == 1,
-		WebSearch:                flags&1 != 0,
-		Vision:                   flags&2 != 0,
-		CommandExternalHidden:    flags&4 != 0,
-		ApprovalPosture:          d.ApprovalPostures[int(byteAt(data, 9))%len(d.ApprovalPostures)],
-	}
-}
-
 func mutateWorkerSeed(d *hoststate.SeedDomains, s hoststate.WorkerSeed, axisSel, valSel uint8) hoststate.WorkerSeed {
 	out := s
 	ov := d.Overlays[s.OverlayIndex]
@@ -289,6 +222,7 @@ func mutateWorkerSeed(d *hoststate.SeedDomains, s hoststate.WorkerSeed, axisSel,
 		out.Loading = d.WorkerLoadings[int(valSel)%len(d.WorkerLoadings)]
 	case 4:
 		out.ParentSessionMode = d.SessionModes[int(valSel)%len(d.SessionModes)]
+		out.ParentUpgradedAskToAgent = out.ParentUpgradedAskToAgent && out.ParentSessionMode == api.SessionModeAsk
 	case 5:
 		out.CommandExternalHidden = !s.CommandExternalHidden
 	case 6:
@@ -305,27 +239,30 @@ func mutateWorkerSeed(d *hoststate.SeedDomains, s hoststate.WorkerSeed, axisSel,
 // (with optional overrideStock for fault-sensitivity controls).
 func executeFuzzRecipientCase(ctx context.Context, env *fuzzWorkerEnv, data []byte, wsDir string, overrideBundle *fuzzOverlayBundle) (FuzzCaseReport, error) {
 	capped := data
-	if len(capped) > fuzzDecoderByteLimit {
-		capped = capped[:fuzzDecoderByteLimit]
+	if len(capped) > hoststate.SeedByteLength {
+		capped = capped[:hoststate.SeedByteLength]
 	}
 	rep := FuzzCaseReport{
 		CorpusHex:      hex.EncodeToString(capped),
-		DecoderVersion: fuzzDecoderVersion1,
+		DecoderVersion: hoststate.SeedCodecVersion,
 	}
-	isWorker := byteAt(data, 1)%2 == 1
-	numChanges := int(byteAt(data, 15)) % 3
-	familyIdx := int(byteAt(data, 13)) % 3
-	itemSel := int(byteAt(data, 14)) | (int(byteAt(data, 20)) << 8)
+	sc, err := env.domains.Decode(data)
+	if err != nil {
+		rep.FailedProperty = "decode_seed"
+		return rep, err
+	}
+	isWorker := sc.Worker
+	numChanges := int(sc.Tail.ChangeCount) % 3
+	familyIdx := int(sc.Tail.Family) % 3
+	itemSel := int(sc.Tail.Item)
+	changes := sc.Tail.Changes
 
 	if !isWorker {
 		rep.Recipient = "coordinator"
-		seedA := decodeCoordinatorSeed(env.domains, data)
+		seedA := sc.Coordinator
 		seedB := seedA
-		if numChanges >= 1 {
-			seedB = mutateCoordinatorSeed(env.domains, seedB, byteAt(data, 16), byteAt(data, 17))
-		}
-		if numChanges >= 2 {
-			seedB = mutateCoordinatorSeed(env.domains, seedB, byteAt(data, 18), byteAt(data, 19))
+		for _, ch := range changes[:numChanges] {
+			seedB = mutateCoordinatorSeed(env.domains, seedB, ch.Axis, ch.Value)
 		}
 		stA, err := hoststate.ResolveCoordinatorSeed(env.domains, seedA)
 		if err != nil {
@@ -361,13 +298,15 @@ func executeFuzzRecipientCase(ctx context.Context, env *fuzzWorkerEnv, data []by
 	}
 
 	rep.Recipient = "worker"
-	seedA := decodeWorkerSeed(env.domains, data)
-	seedB := seedA
-	if numChanges >= 1 {
-		seedB = mutateWorkerSeed(env.domains, seedB, byteAt(data, 16), byteAt(data, 17))
+	if !sc.WorkerRoute {
+		rep.Excluded = true
+		rep.ExcludedReason = "overlay_has_no_worker_agents"
+		return rep, nil
 	}
-	if numChanges >= 2 {
-		seedB = mutateWorkerSeed(env.domains, seedB, byteAt(data, 18), byteAt(data, 19))
+	seedA := sc.WorkerSeed
+	seedB := seedA
+	for _, ch := range changes[:numChanges] {
+		seedB = mutateWorkerSeed(env.domains, seedB, ch.Axis, ch.Value)
 	}
 	stA, err := hoststate.ResolveWorkerSeed(env.domains, seedA)
 	if err != nil {

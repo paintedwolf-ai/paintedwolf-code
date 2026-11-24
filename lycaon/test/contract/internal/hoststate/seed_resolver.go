@@ -123,7 +123,10 @@ func ResolveCoordinatorSeed(domains *SeedDomains, seed CoordinatorSeed) (Coordin
 	}
 	ovIdx := seed.OverlayIndex
 	if ovIdx < 0 || ovIdx >= len(domains.Overlays) {
-		ovIdx = 0
+		return CoordinatorState{}, fmt.Errorf("overlay index %d outside %d overlays", ovIdx, len(domains.Overlays))
+	}
+	if seed.SessionMode == "" || seed.ApprovalPosture == "" {
+		return CoordinatorState{}, fmt.Errorf("coordinator seed needs a session mode and approval posture")
 	}
 	internal := coordinatorSeed{
 		overlayIdx: ovIdx,
@@ -157,7 +160,10 @@ func ResolveWorkerSeed(domains *SeedDomains, seed WorkerSeed) (WorkerState, erro
 	}
 	ovIdx := seed.OverlayIndex
 	if ovIdx < 0 || ovIdx >= len(domains.Overlays) {
-		ovIdx = 0
+		return WorkerState{}, fmt.Errorf("overlay index %d outside %d overlays", ovIdx, len(domains.Overlays))
+	}
+	if seed.ParentSessionMode == "" || seed.ApprovalPosture == "" || seed.RootCount < 1 {
+		return WorkerState{}, fmt.Errorf("worker seed needs a parent mode, approval posture and root count")
 	}
 	overlay := domains.Overlays[ovIdx]
 	var target *WorkerAgent
@@ -183,23 +189,13 @@ func ResolveWorkerSeed(domains *SeedDomains, seed WorkerSeed) (WorkerState, erro
 			break
 		}
 	}
-	parentMode := seed.ParentSessionMode
-	if parentMode == "" {
-		parentMode = api.SessionModeAgent
-	}
-	upgraded := seed.ParentUpgradedAskToAgent && parentMode == api.SessionModeAsk
-	rootCount := seed.RootCount
-	if rootCount <= 0 {
-		rootCount = 1
-	}
-	approval := seed.ApprovalPosture
-	if approval == "" {
-		approval = gate.PostureBalanced
+	if seed.ParentUpgradedAskToAgent && seed.ParentSessionMode != api.SessionModeAsk {
+		return WorkerState{}, fmt.Errorf("only an Ask parent can upgrade to Agent")
 	}
 	return buildWorkerStateWithEnv(
 		context.Background(), overlay, *target, prof,
-		seed.Posture, seed.BranchView, rootCount, seed.SecondaryRootGit,
-		seed.Loading, parentMode, upgraded,
-		seed.WebSearch, seed.Vision, seed.CommandExternalHidden, approval,
+		seed.Posture, seed.BranchView, seed.RootCount, seed.SecondaryRootGit,
+		seed.Loading, seed.ParentSessionMode, seed.ParentUpgradedAskToAgent,
+		seed.WebSearch, seed.Vision, seed.CommandExternalHidden, seed.ApprovalPosture,
 	)
 }
