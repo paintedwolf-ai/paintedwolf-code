@@ -126,7 +126,7 @@ export function openFilesBuffer(
   const resolvedWorktreeId = !jobId && !composed
     ? args.worktreeId?.trim() || worktreeIdFromBranchId(resolvedBranchId) || (resolvedBranchId !== undefined && resolvedBranchId === rootMeta?.branchId ? rootMeta?.worktreeId : undefined)
     : undefined;
-  const keyBranchTag = resolvedBranchId ?? (args.documentId ? `doc:${args.documentId.trim()}` : undefined);
+  const keyBranchTag = resolvedBranchId;
   let key = args.kind === "chat" && args.chatContent ? chatContentDocumentKey(args.chatContent)
     : args.kind === "trust" ? `trust:${projectId}`
     : args.kind === "briefing" && args.briefingRecordId ? `briefing:${args.briefingRecordId}`
