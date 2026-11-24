@@ -51,6 +51,7 @@ type programEvaluation struct {
 	run            *programRun
 	call           *programCall
 	park           *programPark
+	untilComplete  bool
 	plan           commandsurface.ProgramSnapshot
 	ports          commandprogram.EvaluationPorts
 	dispatcher     *ProgramDispatcher
@@ -135,13 +136,24 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 			case <-ending.done:
 				waiting = false
 			default:
-				if callCtx.Err() == nil {
-					return r.continueProgram(callCtx, e, ending, startedAt)
+				if callCtx.Err() != nil {
+					expired = nil
+					continue
 				}
-				expired = nil
+				if e.untilComplete {
+					parked, ok, waitEnded := r.parkProgram(callCtx, e, ending, nil)
+					if ok {
+						return parked, nil
+					}
+					if waitEnded {
+						expired = nil
+						continue
+					}
+				}
+				return r.continueProgram(callCtx, e, ending, startedAt)
 			}
 		case blocked := <-e.park.parks:
-			if parked, ok := r.parkProgram(callCtx, e, ending, blocked); ok {
+			if parked, ok, _ := r.parkProgram(callCtx, e, ending, blocked); ok {
 				return parked, nil
 			}
 		}
@@ -171,31 +183,42 @@ func stateGitNoRepository(e *programEvaluation) {
 
 // parkProgram ends the call's turn on the session's wait lease. The program
 // keeps running under supervision; its end settles the lease. A wait that
-// ended before the park claimed it, or a session that cannot park, keeps the
-// program in the foreground.
-func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluation, ending *programEnding, blocked *blockedWait) (string, bool) {
+// ended before the park claimed it returns waitEnded=true so the caller can
+// collect the inline result; a session that cannot park keeps existing behavior.
+func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluation, ending *programEnding, blocked *blockedWait) (string, bool, bool) {
 	if r.Parking == nil || callCtx.Err() != nil {
-		return "", false
+		return "", false, false
 	}
 	select {
 	case <-ending.done:
-		// The wait ended before the park; the result belongs to the call.
-		return "", false
+		// The program ended before the park; the result belongs to the call.
+		return "", false, true
 	default:
 	}
-	run, state := e.run, blocked.state
+	run := e.run
 	programID := run.root.Identity.ProgramID
+	reason := run.source
+	var wakeUntil time.Time
+	claim := e.park.claimProgram
+	if blocked != nil {
+		reason = blocked.state.Statement
+		wakeUntil = blocked.state.Until
+		claim = func() bool { return e.park.claim(blocked) }
+	}
 	parked, err := r.Parking.ParkProgram(callCtx, e.callTC, tools.ProgramPark{
-		ProgramID: programID, Reason: state.Statement,
-		Claim:     func() bool { return e.park.claim(blocked) },
+		ProgramID: programID, Reason: reason,
+		Claim:     claim,
 		Interrupt: func(ctx context.Context) string { return r.interruptProgram(ctx, run, ending) },
 	})
 	if err != nil {
 		e.park.release()
-		if !errors.Is(err, tools.ErrParkUnavailable) && !errors.Is(err, tools.ErrWaitEnded) {
+		if errors.Is(err, tools.ErrWaitEnded) {
+			return "", false, true
+		}
+		if !errors.Is(err, tools.ErrParkUnavailable) {
 			slog.WarnContext(callCtx, "command program stays in the foreground", "program_id", programID, "error", err)
 		}
-		return "", false
+		return "", false, false
 	}
 	e.call.detach()
 	settleCtx := context.WithoutCancel(callCtx)
@@ -214,18 +237,18 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 	}
 	e.observeRunningConfinement()
 	stateGitNoRepository(e)
-	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
+	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: reason, LeaseID: parked.LeaseID()}
 	if run.tool == "verify" {
 		result.ResultVersion = 2
 	}
-	if !state.Until.IsZero() {
-		result.WakeAt = state.Until.UTC().Format(time.RFC3339)
+	if !wakeUntil.IsZero() {
+		result.WakeAt = wakeUntil.UTC().Format(time.RFC3339)
 	}
 	content, err := surveyjson.Marshal(result)
 	if err != nil {
-		return "", false
+		return "", false, false
 	}
-	return string(content), true
+	return string(content), true, false
 }
 
 // interruptProgram stops a parked program at its waiting statement and

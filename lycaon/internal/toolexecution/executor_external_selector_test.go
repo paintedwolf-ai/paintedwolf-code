@@ -220,3 +220,70 @@ func TestCommandMetaProjectionMatchesAdmittedEffects(t *testing.T) {
 		})
 	}
 }
+
+type parkProjectionPolicy struct {
+	allowWait      bool
+	waitConditions []string
+}
+
+func (p parkProjectionPolicy) Evaluate(_ context.Context, eval platform.PolicyContext) (*platform.PolicyDecision, error) {
+	if eval.ToolName == "wait" && !p.allowWait {
+		return &platform.PolicyDecision{Blocked: true}, nil
+	}
+	return &platform.PolicyDecision{Allowed: true}, nil
+}
+
+func (p parkProjectionPolicy) EvaluateForList(ctx context.Context, eval platform.PolicyContext) (*platform.PolicyDecision, error) {
+	return p.Evaluate(ctx, eval)
+}
+
+func (p parkProjectionPolicy) WaitConditions(string) []string {
+	return p.waitConditions
+}
+
+func TestCommandSchemaProjectsUntilCompleteByProfileParking(t *testing.T) {
+	schemas, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "LoadSchemaDirWithOperations", err)
+	cmdMeta, ok := schemas.ToolMeta("command")
+	if !ok {
+		t.Fatal("command schema missing")
+	}
+
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register command", reg.RegisterDerived(tools.ToolMeta{
+		Name:               cmdMeta.Name,
+		Description:        cmdMeta.Description,
+		DescriptionEffects: cmdMeta.DescriptionEffects,
+		ArgsSchema:         cmdMeta.ArgsSchema,
+	}, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "", nil
+	}))
+
+	hasUntilComplete := func(t *testing.T, policy platform.PolicyEngine) bool {
+		t.Helper()
+		exec := toolexecution.NewExecutor(policy, reg, "test-profile")
+		exec.Metadata.SetToolSchemas(schemas)
+		listed, err := exec.Metadata.List(t.Context(), platform.ToolFilter{ProfileID: "test-profile"})
+		testutil.FailErr(t, "Metadata.List", err)
+		for _, item := range listed {
+			if item.Name != "command" {
+				continue
+			}
+			props, _ := item.ArgsSchema["properties"].(map[string]any)
+			_, exists := props["until_complete"]
+			return exists
+		}
+		t.Fatal("command tool missing from Metadata.List")
+		return false
+	}
+
+	if !hasUntilComplete(t, parkProjectionPolicy{allowWait: true, waitConditions: []string{"process_done"}}) {
+		t.Fatal("expected until_complete for profile that can park")
+	}
+	if hasUntilComplete(t, parkProjectionPolicy{allowWait: false, waitConditions: []string{"process_done"}}) {
+		t.Fatal("expected until_complete to be pruned when wait is disallowed")
+	}
+	if hasUntilComplete(t, parkProjectionPolicy{allowWait: true, waitConditions: []string{"http_ready"}}) {
+		t.Fatal("expected until_complete to be pruned without process_done wait condition")
+	}
+}

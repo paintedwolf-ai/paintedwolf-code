@@ -128,6 +128,19 @@ func (p *programPark) claim(blocked *blockedWait) bool {
 	return true
 }
 
+// claimProgram takes the park when the foreground budget expires, unless the
+// program has already parked or settled.
+func (p *programPark) claimProgram() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.parked || p.settled {
+		return false
+	}
+	p.parked = true
+	p.stopTimerLocked()
+	return true
+}
+
 // release returns a claim whose park did not happen; later waits signal again.
 func (p *programPark) release() {
 	p.mu.Lock()
