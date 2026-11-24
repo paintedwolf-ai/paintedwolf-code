@@ -95,6 +95,30 @@ describe("transcript row withdrawal", () => {
     ]);
     expect(withdrawnRows(before, after, retained("m1", "m2"))).toEqual([]);
   });
+
+  it("flattens activity groups across entries, approvals, and file-edit folds", () => {
+    const group = {
+      kind: "activity_group",
+      key: "activity-group:m1:call_1",
+      entries: [toolRow("m1", "call_1")],
+      approvals: [
+        checkpointRow("c1", "m-approval"),
+        checkpointRow("c2", "m1"),
+      ],
+      folds: [
+        {
+          key: "fold:a",
+          steps: [{ key: "m-fold:call_edit" }, { key: "m1:call_1" }],
+        },
+      ],
+    } as unknown as TranscriptItem;
+    const map = continuity([group]);
+    expect(map.get("m1")).toBe("tool");
+    expect(map.get("checkpoint:c1")).toBe("checkpoint");
+    expect(map.get("m-approval")).toBe("checkpoint");
+    expect(map.get("checkpoint:c2")).toBe("checkpoint");
+    expect(map.get("m-fold")).toBe("file_edit");
+  });
 });
 
 describe("activity span row withdrawal", () => {
