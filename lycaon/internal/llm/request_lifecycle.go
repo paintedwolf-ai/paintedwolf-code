@@ -15,10 +15,11 @@ import (
 type requestLifecycleKey struct{}
 
 type requestLifecycle struct {
-	started  time.Time
-	attrs    []any
-	dispatch sync.Once
-	attempt  atomic.Int64
+	started    time.Time
+	attrs      []any
+	dispatch   sync.Once
+	dispatched atomic.Bool
+	attempt    atomic.Int64
 }
 
 func (t *requestLifecycle) record(ctx context.Context, phase string, attrs ...any) {
@@ -62,7 +63,7 @@ func (p *lifecycleProvider) start(ctx context.Context, req *modelcall.Completion
 func (p *lifecycleProvider) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
 	ctx, trace := p.start(ctx, &req)
 	out, err := p.Provider.Complete(ctx, req)
-	trace.record(ctx, "finished", "failed", err != nil)
+	trace.record(ctx, "finished", "dispatched", trace.dispatched.Load(), "failed", err != nil)
 	return out, err
 }
 
@@ -70,7 +71,7 @@ func (p *lifecycleProvider) Stream(ctx context.Context, req modelcall.Completion
 	ctx, trace := p.start(ctx, &req)
 	ch, err := p.Provider.Stream(ctx, req)
 	if err != nil {
-		trace.record(ctx, "finished", "failed", true)
+		trace.record(ctx, "finished", "dispatched", trace.dispatched.Load(), "failed", true)
 		return nil, err
 	}
 	out := make(chan modelcall.StreamChunk, 64)
@@ -93,7 +94,7 @@ func (p *lifecycleProvider) Stream(ctx context.Context, req modelcall.Completion
 				break
 			}
 		}
-		trace.record(ctx, "finished", "outcome", outcome, "failed", outcome != streamOutcomeCompleted)
+		trace.record(ctx, "finished", "outcome", outcome, "dispatched", trace.dispatched.Load(), "failed", outcome != streamOutcomeCompleted)
 	}()
 	return out, nil
 }
@@ -116,11 +117,13 @@ const (
 type dispatchProvider struct{ modelcall.Provider }
 
 func dispatchContext(ctx context.Context) context.Context {
+	callAdmissionFrom(ctx).markDispatched()
 	notifyDispatch(ctx)
 	trace := lifecycleFromContext(ctx)
 	if trace == nil {
 		return ctx
 	}
+	trace.dispatched.Store(true)
 	trace.dispatch.Do(func() { trace.record(ctx, "dispatch") })
 	return httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
 		GetConn:              func(string) { trace.record(ctx, "connection_wait", "http_attempt", trace.attempt.Add(1)) },
