@@ -378,7 +378,7 @@ func insertTerminalOutcomeMatchTx(ctx context.Context, tx *sql.Tx, watchID strin
 		input.Outcome, string(evBytes), input.RetainedRef, nowStr); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `UPDATE watch_registrations SET match_seq = ? WHERE watch_id = ?`, seq, watchID)
+	_, err = tx.ExecContext(ctx, `UPDATE watch_registrations SET match_seq = ? WHERE watch_id = ?`, seq, watchID)
 	return err
 }
 
