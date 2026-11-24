@@ -16,6 +16,7 @@ import (
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/watch"
 )
 
 func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
@@ -68,17 +69,7 @@ func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 	if b.sessions != nil && b.sessions.Manager != nil && b.sessions.Manager.Coordinator.Runtime != nil {
 		if ws := b.sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Waits.Subscriptions.WatchStore(); ws != nil {
 			byName["watch-scheduler"] = registration{run: func(ctx context.Context) error {
-				timer := time.NewTimer(ws.NextDueWait(time.Second))
-				defer timer.Stop()
-				for {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case <-timer.C:
-						_ = ws.AdvanceDue(ctx)
-						timer.Reset(ws.NextDueWait(time.Second))
-					}
-				}
+				return runWatchScheduler(ctx, ws, time.Second)
 			}}
 		}
 	}
@@ -225,4 +216,21 @@ func (b *serveBuilder) reportRecovery(report bootrecovery.Report, err error) err
 		}
 	}
 	return report.Err()
+}
+
+func runWatchScheduler(ctx context.Context, ws *watch.Store, maxIdle time.Duration) error {
+	if maxIdle <= 0 {
+		maxIdle = time.Second
+	}
+	timer := time.NewTimer(ws.NextDueWait(maxIdle))
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			_ = ws.AdvanceDue(ctx)
+			timer.Reset(ws.NextDueWait(maxIdle))
+		}
+	}
 }

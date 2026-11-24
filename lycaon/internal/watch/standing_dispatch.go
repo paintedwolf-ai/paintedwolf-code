@@ -27,12 +27,16 @@ func (e *StandingEngine) DispatchProjectRuns(ctx context.Context, projectID stri
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	var ids []string
 	for rows.Next() {
 		var id string
 		if rows.Scan(&id) == nil {
 			ids = append(ids, id)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	_ = rows.Close()
 	for _, runID := range ids {
@@ -333,8 +337,7 @@ func settleStandingRunByID(ctx context.Context, e *StandingEngine, runID, sessio
 
 	pausedByFailures, completedOneShot, nextRev := false, false, sw.Revision
 	if swErr == nil {
-		switch status {
-		case RunCompleted:
+		if status == RunCompleted {
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE standing_watch_settings SET consecutive_failures = 0, last_outcome = 'completed',
 				 gate_baseline_json = COALESCE(NULLIF(?, ''), gate_baseline_json) WHERE watch_id = ?`,
@@ -354,7 +357,7 @@ func settleStandingRunByID(ctx context.Context, e *StandingEngine, runID, sessio
 					}
 				}
 			}
-		case RunFailed, RunFenced:
+		} else if status == RunFailed || status == RunFenced {
 			newFails := sw.ConsecutiveFailures + 1
 			if _, err := tx.ExecContext(ctx, `UPDATE standing_watch_settings SET consecutive_failures = ?, last_outcome = ? WHERE watch_id = ?`, newFails, string(status), run.WatchID); err != nil {
 				return err
@@ -366,7 +369,7 @@ func settleStandingRunByID(ctx context.Context, e *StandingEngine, runID, sessio
 				}
 				_, _ = cancelPendingAndQueuedRunsTx(ctx, tx, sw.WatchID, nowStr)
 			}
-		case RunCanceled:
+		} else if status == RunCanceled {
 			if _, err := tx.ExecContext(ctx, `UPDATE standing_watch_settings SET last_outcome = 'canceled' WHERE watch_id = ?`, run.WatchID); err != nil {
 				return err
 			}
@@ -403,6 +406,7 @@ func (e *StandingEngine) NotifySessionClosedOrDeleted(ctx context.Context, sessi
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	type targetRow struct {
 		watchID, projectID, name string
 		rev                      int
@@ -413,6 +417,9 @@ func (e *StandingEngine) NotifySessionClosedOrDeleted(ctx context.Context, sessi
 		if rows.Scan(&r.watchID, &r.projectID, &r.name, &r.rev) == nil {
 			targets = append(targets, r)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	_ = rows.Close()
 	nowStr := e.store.clock.Now().UTC().Format(time.RFC3339Nano)
@@ -629,7 +636,10 @@ func reserveExistingChatHourlyBudgetTx(ctx context.Context, tx *sql.Tx, sessionI
 		return false, earliest.Add(time.Hour), nil
 	}
 	kept = append(kept, now.UTC().Format(time.RFC3339Nano))
-	encoded, _ := json.Marshal(kept)
+	encoded, err := json.Marshal(kept)
+	if err != nil {
+		return false, time.Time{}, err
+	}
 	_, err = tx.ExecContext(ctx, `UPDATE watch_session_state SET wake_admissions_json = ? WHERE session_id = ?`, string(encoded), sessionID)
 	return err == nil, time.Time{}, err
 }
@@ -653,12 +663,16 @@ func cancelPendingAndQueuedRunsTx(ctx context.Context, tx *sql.Tx, watchID, nowS
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	var ids []string
 	for rows.Next() {
 		var id string
 		if rows.Scan(&id) == nil {
 			ids = append(ids, id)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	_ = rows.Close()
 	if len(ids) > 0 {
@@ -756,25 +770,34 @@ func lookupProjectDefaults(ctx context.Context, e *StandingEngine, projectID str
 	if fn := e.callbacks().ProjectDefaults; fn != nil {
 		return fn(ctx, projectID)
 	}
-	var auth Authority
-	if rows, err := e.store.db.QueryContext(ctx, `SELECT id, label, path FROM project_roots WHERE project_id = ? ORDER BY created_at ASC`, strings.TrimSpace(projectID)); err == nil {
-		for rows.Next() {
-			var id, label, p string
-			if rows.Scan(&id, &label, &p) == nil {
-				cleanLabel := strings.TrimPrefix(strings.TrimSpace(label), "@")
-				if cleanLabel == "" {
-					cleanLabel = id
-				}
-				if auth.ProjectDir == "" {
-					auth.ProjectDir = p
-				}
-				auth.RootPaths = append(auth.RootPaths, p)
-				auth.Roots = append(auth.Roots, WatchRootGrant{Label: cleanLabel, RootID: id, Path: p})
-			}
-		}
-		_ = rows.Close()
+	return "", "", "UTC", queryFallbackProjectRoots(ctx, e.store, projectID)
+}
+
+func queryFallbackProjectRoots(ctx context.Context, s *Store, projectID string) Authority {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, label, path FROM project_roots WHERE project_id = ? ORDER BY created_at ASC`, strings.TrimSpace(projectID))
+	if err != nil {
+		return Authority{}
 	}
-	return "", "", "UTC", auth
+	defer func() { _ = rows.Close() }()
+	var auth Authority
+	for rows.Next() {
+		var id, label, p string
+		if rows.Scan(&id, &label, &p) == nil {
+			cleanLabel := strings.TrimPrefix(strings.TrimSpace(label), "@")
+			if cleanLabel == "" {
+				cleanLabel = id
+			}
+			if auth.ProjectDir == "" {
+				auth.ProjectDir = p
+			}
+			auth.RootPaths = append(auth.RootPaths, p)
+			auth.Roots = append(auth.Roots, WatchRootGrant{Label: cleanLabel, RootID: id, Path: p})
+		}
+	}
+	if rows.Err() != nil {
+		return Authority{}
+	}
+	return auth
 }
 
 func emitStandingNotice(ctx context.Context, e *StandingEngine, projectID, watchID, watchName, code, reason string, clear bool) {

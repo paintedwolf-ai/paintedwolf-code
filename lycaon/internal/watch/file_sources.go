@@ -212,12 +212,10 @@ type ledgerEffectRow struct {
 func reconcileFileChangeAlternative(s *Store, ctx context.Context, reg Registration, altIdx int, cond awaitstore.Condition) (bool, error) {
 	grant, ok := resolveWatchRootGrant(reg.Authority, cond.Root)
 	if !ok || grant.Path == "" {
-		markSourceWatchUnavailable(s, ctx, reg)
-		return true, nil
+		return true, markSourceWatchUnavailable(s, ctx, reg)
 	}
 	if _, statErr := os.Stat(grant.Path); statErr != nil {
-		markSourceWatchUnavailable(s, ctx, reg)
-		return true, nil
+		return true, markSourceWatchUnavailable(s, ctx, reg)
 	}
 
 	prevSnap, hasInMem := s.manifests.get(reg.WatchID, altIdx)
@@ -228,8 +226,7 @@ func reconcileFileChangeAlternative(s *Store, ctx context.Context, reg Registrat
 
 	curSnap, exceeded, gapReason, err := scanBoundedManifest(grant.Path, cond.Path, cond.Glob)
 	if err != nil {
-		markSourceWatchUnavailable(s, ctx, reg)
-		return true, nil
+		return true, markSourceWatchUnavailable(s, ctx, reg)
 	}
 	if exceeded {
 		if reg.Owner.Kind != OwnerPerson {
@@ -245,8 +242,7 @@ func reconcileFileChangeAlternative(s *Store, ctx context.Context, reg Registrat
 				},
 			}, nil)
 		}
-		markSourceWatchUnavailable(s, ctx, reg)
-		return true, nil
+		return true, markSourceWatchUnavailable(s, ctx, reg)
 	}
 
 	lastOrd, _ := strconv.ParseInt(reg.Cursors[fileLedgerOrdCursorKey()], 10, 64)
@@ -282,12 +278,39 @@ func reconcileFileChangeAlternative(s *Store, ctx context.Context, reg Registrat
 		return false, nil
 	}
 
+	return recordFileChangeEffectsAndDiffs(s, ctx, fileChangeReconcileInput{
+		reg:      reg,
+		altIdx:   altIdx,
+		cond:     cond,
+		grant:    grant,
+		prevSnap: prevSnap,
+		curSnap:  curSnap,
+		effects:  effects,
+		lastOrd:  lastOrd,
+		maxOrd:   maxOrd,
+	})
+}
+
+type fileChangeReconcileInput struct {
+	reg      Registration
+	altIdx   int
+	cond     awaitstore.Condition
+	grant    WatchRootGrant
+	prevSnap map[string]string
+	curSnap  map[string]string
+	effects  []ledgerEffectRow
+	lastOrd  int64
+	maxOrd   int64
+}
+
+func recordFileChangeEffectsAndDiffs(s *Store, ctx context.Context, in fileChangeReconcileInput) (bool, error) {
 	coveredPaths := map[string]bool{}
 	matchedAny := false
+	curEncoded := encodePersistedManifest(in.curSnap)
 
-	for _, eff := range effects {
-		matchesPath := selectorMatchesRelPath(eff.Path, cond.Path, cond.Glob)
-		matchesFrom := eff.FromPath != "" && selectorMatchesRelPath(eff.FromPath, cond.Path, cond.Glob)
+	for _, eff := range in.effects {
+		matchesPath := selectorMatchesRelPath(eff.Path, in.cond.Path, in.cond.Glob)
+		matchesFrom := eff.FromPath != "" && selectorMatchesRelPath(eff.FromPath, in.cond.Path, in.cond.Glob)
 		if !matchesPath && !matchesFrom {
 			continue
 		}
@@ -295,12 +318,12 @@ func reconcileFileChangeAlternative(s *Store, ctx context.Context, reg Registrat
 		if eff.FromPath != "" {
 			coveredPaths[eff.FromPath] = true
 		}
-		if !cond.IncludeOwn && eff.IsOwn {
+		if !in.cond.IncludeOwn && eff.IsOwn {
 			continue
 		}
 		ev := map[string]any{
 			"kind":        "file_change",
-			"root":        cond.Root,
+			"root":        in.cond.Root,
 			"path":        eff.Path,
 			"op":          eff.Op,
 			"effect_id":   eff.EffectID,
@@ -309,34 +332,34 @@ func reconcileFileChangeAlternative(s *Store, ctx context.Context, reg Registrat
 		if eff.FromPath != "" {
 			ev["from_path"] = eff.FromPath
 		}
-		ok, rErr := emitSourceWatchMatch(s, ctx, reg, MatchInput{
+		ok, rErr := emitSourceWatchMatch(s, ctx, in.reg, MatchInput{
 			SourceKind:   "file_change",
 			OccurrenceID: "file_effect:" + eff.EffectID,
 			Outcome:      "satisfied",
 			Evidence:     ev,
 		}, map[string]string{
-			fileLedgerOrdCursorKey():      strconv.FormatInt(eff.Ordinal, 10),
-			fileManifestCursorKey(altIdx): encodePersistedManifest(curSnap),
+			fileLedgerOrdCursorKey():         strconv.FormatInt(eff.Ordinal, 10),
+			fileManifestCursorKey(in.altIdx): curEncoded,
 		})
 		if rErr != nil {
 			return matchedAny, rErr
 		}
 		if ok {
 			matchedAny = true
-			if !reg.Lifecycle.Repeat && reg.Owner.Kind != OwnerPerson {
-				s.manifests.set(reg.WatchID, altIdx, curSnap)
+			if !in.reg.Lifecycle.Repeat && in.reg.Owner.Kind != OwnerPerson {
+				s.manifests.set(in.reg.WatchID, in.altIdx, in.curSnap)
 				return true, nil
 			}
 		}
 	}
 
-	diffs := diffManifests(prevSnap, curSnap)
+	diffs := diffManifests(in.prevSnap, in.curSnap)
 	for _, d := range diffs {
 		if coveredPaths[d.path] || (d.fromPath != "" && coveredPaths[d.fromPath]) {
 			continue
 		}
-		effectID, actorClass, isOwn := lookupLatestPathEffect(s, ctx, reg.WatchID, reg.Owner, grant, d.path, d.afterDigest)
-		if !cond.IncludeOwn && isOwn {
+		effectID, actorClass, isOwn := lookupLatestPathEffect(s, ctx, in.reg.WatchID, in.reg.Owner, in.grant, d.path, d.afterDigest)
+		if !in.cond.IncludeOwn && isOwn {
 			continue
 		}
 		if effectID == "" {
@@ -344,7 +367,7 @@ func reconcileFileChangeAlternative(s *Store, ctx context.Context, reg Registrat
 		}
 		ev := map[string]any{
 			"kind":        "file_change",
-			"root":        cond.Root,
+			"root":        in.cond.Root,
 			"path":        d.path,
 			"op":          d.op,
 			"actor_class": actorClass,
@@ -355,32 +378,32 @@ func reconcileFileChangeAlternative(s *Store, ctx context.Context, reg Registrat
 		if d.fromPath != "" {
 			ev["from_path"] = d.fromPath
 		}
-		occ := fmt.Sprintf("file_disk:%d:%s:%s:%s->%s", altIdx, d.op, d.path, d.beforeDigest, d.afterDigest)
-		ok, rErr := emitSourceWatchMatch(s, ctx, reg, MatchInput{
+		occ := fmt.Sprintf("file_disk:%d:%s:%s:%s->%s", in.altIdx, d.op, d.path, d.beforeDigest, d.afterDigest)
+		ok, rErr := emitSourceWatchMatch(s, ctx, in.reg, MatchInput{
 			SourceKind:   "file_change",
 			OccurrenceID: occ,
 			Outcome:      "satisfied",
 			Evidence:     ev,
 		}, map[string]string{
-			fileLedgerOrdCursorKey():      strconv.FormatInt(maxOrd, 10),
-			fileManifestCursorKey(altIdx): encodePersistedManifest(curSnap),
+			fileLedgerOrdCursorKey():         strconv.FormatInt(in.maxOrd, 10),
+			fileManifestCursorKey(in.altIdx): curEncoded,
 		})
 		if rErr != nil {
 			return matchedAny, rErr
 		}
 		if ok {
 			matchedAny = true
-			if !reg.Lifecycle.Repeat && reg.Owner.Kind != OwnerPerson {
-				s.manifests.set(reg.WatchID, altIdx, curSnap)
+			if !in.reg.Lifecycle.Repeat && in.reg.Owner.Kind != OwnerPerson {
+				s.manifests.set(in.reg.WatchID, in.altIdx, in.curSnap)
 				return true, nil
 			}
 		}
 	}
 
-	s.manifests.set(reg.WatchID, altIdx, curSnap)
-	if maxOrd > lastOrd || len(diffs) > 0 {
-		_ = updateWatchCursor(s, ctx, reg.WatchID, fileLedgerOrdCursorKey(), strconv.FormatInt(maxOrd, 10))
-		_ = updateWatchCursor(s, ctx, reg.WatchID, fileManifestCursorKey(altIdx), encodePersistedManifest(curSnap))
+	s.manifests.set(in.reg.WatchID, in.altIdx, in.curSnap)
+	if in.maxOrd > in.lastOrd || len(diffs) > 0 {
+		_ = updateWatchCursor(s, ctx, in.reg.WatchID, fileLedgerOrdCursorKey(), strconv.FormatInt(in.maxOrd, 10))
+		_ = updateWatchCursor(s, ctx, in.reg.WatchID, fileManifestCursorKey(in.altIdx), curEncoded)
 	}
 	return matchedAny, nil
 }
@@ -470,19 +493,22 @@ func queryNewLedgerEffects(s *Store, ctx context.Context, watchID string, owner 
 	if err != nil {
 		return nil, afterOrdinal, err
 	}
+	defer func() { _ = rows.Close() }()
 	var out []ledgerEffectRow
 	maxOrd := afterOrdinal
 	for rows.Next() {
 		var r ledgerEffectRow
 		if err := rows.Scan(&r.EffectID, &r.Ordinal, &r.RootID, &r.Path, &r.FromPath, &r.Op,
 			&r.AfterSHA, &r.Origin, &r.Cause, &r.SessionID, &r.JobID); err != nil {
-			_ = rows.Close()
 			return nil, maxOrd, err
 		}
 		if r.Ordinal > maxOrd {
 			maxOrd = r.Ordinal
 		}
 		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, maxOrd, err
 	}
 	_ = rows.Close()
 	for i := range out {
@@ -527,23 +553,32 @@ type effectContribRow struct {
 	jobID     string
 }
 
-func classifyEffectRow(s *Store, ctx context.Context, watchID string, owner Owner, row ledgerEffectRow) (actorClass string, isOwn bool) {
-	var contribs []effectContribRow
+func queryEffectContribs(s *Store, ctx context.Context, effectID string) []effectContribRow {
 	cRows, err := s.db.QueryContext(ctx, `SELECT o.origin, o.session_id, o.job_id
 		FROM source_version_contributions c
 		JOIN source_versions v ON v.id = c.author_version_id
 		JOIN source_operations o ON o.id = v.operation_id
 		JOIN source_effects e ON e.after_version_id = c.version_id
-		WHERE e.id = ?`, row.EffectID)
-	if err == nil {
-		for cRows.Next() {
-			var c effectContribRow
-			if cRows.Scan(&c.origin, &c.sessionID, &c.jobID) == nil {
-				contribs = append(contribs, c)
-			}
-		}
-		_ = cRows.Close()
+		WHERE e.id = ?`, effectID)
+	if err != nil {
+		return nil
 	}
+	defer func() { _ = cRows.Close() }()
+	var contribs []effectContribRow
+	for cRows.Next() {
+		var c effectContribRow
+		if cRows.Scan(&c.origin, &c.sessionID, &c.jobID) == nil {
+			contribs = append(contribs, c)
+		}
+	}
+	if cRows.Err() != nil {
+		return nil
+	}
+	return contribs
+}
+
+func classifyEffectRow(s *Store, ctx context.Context, watchID string, owner Owner, row ledgerEffectRow) (actorClass string, isOwn bool) {
+	contribs := queryEffectContribs(s, ctx, row.EffectID)
 	if len(contribs) == 0 {
 		contribs = []effectContribRow{{origin: row.Origin, sessionID: row.SessionID, jobID: row.JobID}}
 	}

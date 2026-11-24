@@ -25,9 +25,9 @@ type Workers struct {
 	Names workercompletion.WorkerNames
 	// RoundProvenance resolves a job's worker name, round ordinal, workflow
 	// work ID, and latest sent message seq in one lookup when set.
-	RoundProvenance  func(ctx context.Context, jobID string) (worker string, ordinal int64, workID string, latestSent int64, ok bool, err error)
-	OnWatchTerminal  func(ctx context.Context, parentID, completingJobID string)
-	OnWatchRunning   func(ctx context.Context, parentID, jobID, workerName, kind, outcome, occID, summary string)
+	RoundProvenance func(ctx context.Context, jobID string) (worker string, ordinal int64, workID string, latestSent int64, ok bool, err error)
+	OnWatchTerminal func(ctx context.Context, parentID, completingJobID string)
+	OnWatchRunning  func(ctx context.Context, parentID, jobID, workerName, kind, outcome, occID, summary string)
 }
 
 func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string) {

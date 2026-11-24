@@ -51,6 +51,10 @@ func (s *Store) NotifyWorkspaceChange(ctx context.Context, projectID, rootDir st
 	if !s.Configured() {
 		return nil
 	}
+	return notifyWorkspaceChange(s, ctx, projectID, rootDir)
+}
+
+func notifyWorkspaceChange(s *Store, ctx context.Context, projectID, rootDir string) error {
 	query := `SELECT ` + registrationColumns + ` FROM watch_registrations WHERE state IN ('live', 'enabled') AND (conditions_json LIKE '%file_change%' OR conditions_json LIKE '%git_ref%')`
 	var args []any
 	if strings.TrimSpace(projectID) != "" {
@@ -63,14 +67,17 @@ func (s *Store) NotifyWorkspaceChange(ctx context.Context, projectID, rootDir st
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	var regs []Registration
 	for rows.Next() {
 		reg, sErr := scanRegistration(rows)
 		if sErr != nil {
-			_ = rows.Close()
 			return sErr
 		}
 		regs = append(regs, reg)
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	_ = rows.Close()
 
@@ -140,12 +147,11 @@ func emitSourceWatchMatch(s *Store, ctx context.Context, reg Registration, match
 	return recorded, err
 }
 
-func markSourceWatchUnavailable(s *Store, ctx context.Context, reg Registration) {
+func markSourceWatchUnavailable(s *Store, ctx context.Context, reg Registration) error {
 	if reg.Owner.Kind == OwnerPerson {
-		_ = pauseStandingTargetUnavailable(ctx, s.Standing(), reg.WatchID)
-		return
+		return pauseStandingTargetUnavailable(ctx, s.Standing(), reg.WatchID)
 	}
-	_ = s.MarkSourceLost(ctx, reg.WatchID)
+	return s.MarkSourceLost(ctx, reg.WatchID)
 }
 
 func reconcileSourceWatch(s *Store, ctx context.Context, reg Registration) (bool, error) {
@@ -185,13 +191,11 @@ func reconcileSourceWatch(s *Store, ctx context.Context, reg Registration) (bool
 func reconcileGitRefAlternative(s *Store, ctx context.Context, reg Registration, altIdx int, cond awaitstore.Condition) (bool, error) {
 	grant, ok := resolveWatchRootGrant(reg.Authority, cond.Root)
 	if !ok || grant.Path == "" {
-		markSourceWatchUnavailable(s, ctx, reg)
-		return true, nil
+		return true, markSourceWatchUnavailable(s, ctx, reg)
 	}
 	oid, exists, err := git.ResolveFullRef(grant.Path, cond.Ref)
 	if err != nil {
-		markSourceWatchUnavailable(s, ctx, reg)
-		return true, nil
+		return true, markSourceWatchUnavailable(s, ctx, reg)
 	}
 	curState := formatGitRefState(oid, exists)
 	key := gitRefCursorKey(altIdx)

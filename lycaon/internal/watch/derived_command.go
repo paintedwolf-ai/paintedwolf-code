@@ -52,6 +52,10 @@ func (s *Store) HandoffDerivedCommand(
 // ReconcileShellJoin reconciles a shell wait join against presentation claims and any derived watch
 // on commandHandle so no duplicate fallback kick, collected frame, or ambient wake is delivered.
 func (s *Store) ReconcileShellJoin(ctx context.Context, owner Owner, commandHandle string) error {
+	return reconcileShellJoin(ctx, s, owner, commandHandle)
+}
+
+func reconcileShellJoin(ctx context.Context, s *Store, owner Owner, commandHandle string) error {
 	if !s.Configured() {
 		return nil
 	}
@@ -96,9 +100,21 @@ func (s *Store) ReconcileShellJoin(ctx context.Context, owner Owner, commandHand
 	}
 	if reg.Lifecycle.State == StateLive || len(matchIDs) > 0 {
 		deliveryID := uuid.NewString()
-		mJSON, _ := json.Marshal(matchIDs)
-		wJSON, _ := json.Marshal([]string{reg.WatchID})
-		pJSON, _ := json.Marshal(map[string]any{"joined_by": joinReceipt, "handle": reg.Handle})
+		mJSON, err := json.Marshal(matchIDs)
+		if err != nil {
+			return err
+		}
+		wJSON, err := json.Marshal([]string{reg.WatchID})
+		if err != nil {
+			return err
+		}
+		pJSON, err := json.Marshal(struct {
+			JoinedBy string `json:"joined_by"`
+			Handle   string `json:"handle"`
+		}{JoinedBy: joinReceipt, Handle: reg.Handle})
+		if err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO watch_deliveries
 			(delivery_id, session_id, worker_job_id, destination_kind, destination_id, match_ids_json, watch_ids_json, payload_json, state, created_at, committed_at)
 			VALUES (?, ?, NULLIF(?, ''), 'request', ?, ?, ?, ?, 'committed', ?, ?)`,
@@ -131,6 +147,10 @@ func (s *Store) ReconcileShellJoin(ctx context.Context, owner Owner, commandHand
 // WatchedCommandHandles returns a map from command handle to watch handle for active or undrained
 // process_done watches in sessionID.
 func (s *Store) WatchedCommandHandles(ctx context.Context, sessionID string) map[string]string {
+	return watchedCommandHandles(ctx, s, sessionID)
+}
+
+func watchedCommandHandles(ctx context.Context, s *Store, sessionID string) map[string]string {
 	if !s.Configured() || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}
@@ -170,6 +190,9 @@ func (s *Store) WatchedCommandHandles(ctx context.Context, sessionID string) map
 				}
 			}
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil
 	}
 	return out
 }

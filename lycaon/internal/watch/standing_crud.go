@@ -335,7 +335,10 @@ func finalizeKeptAgentWatchTx(ctx context.Context, tx *sql.Tx, liveAgent Registr
 		return CancelReceipt{}, nil, err
 	}
 	finalReceipt.StandingWatchID = standingID
-	rawFinal, _ := json.Marshal(finalReceipt)
+	rawFinal, err := json.Marshal(finalReceipt)
+	if err != nil {
+		return CancelReceipt{}, nil, err
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE watch_registrations SET final_receipt_json = ? WHERE watch_id = ?`, string(rawFinal), liveAgent.WatchID); err != nil {
 		return CancelReceipt{}, nil, err
 	}
@@ -358,7 +361,10 @@ func finalizeKeptAgentWatchTx(ctx context.Context, tx *sql.Tx, liveAgent Registr
 }
 
 func insertTerminalOutcomeMatchTx(ctx context.Context, tx *sql.Tx, watchID string, input MatchInput, now time.Time) error {
-	evBytes, _ := json.Marshal(input.Evidence)
+	evBytes, err := json.Marshal(input.Evidence)
+	if err != nil {
+		return err
+	}
 	nowStr := now.UTC().Format(time.RFC3339Nano)
 	var seq int
 	if err := tx.QueryRowContext(ctx, `SELECT match_seq + 1 FROM watch_registrations WHERE watch_id = ?`, watchID).Scan(&seq); err != nil {
@@ -582,12 +588,24 @@ func commitStandingUpdate(
 			return err
 		}
 	}
-	condBytes, _ := json.Marshal(prepared.Conditions)
-	cursorBytes, _ := json.Marshal(mergedCursors)
-	targetBytes, _ := json.Marshal(prepared.Target)
+	condBytes, err := json.Marshal(prepared.Conditions)
+	if err != nil {
+		return err
+	}
+	cursorBytes, err := json.Marshal(mergedCursors)
+	if err != nil {
+		return err
+	}
+	targetBytes, err := json.Marshal(prepared.Target)
+	if err != nil {
+		return err
+	}
 	var gateStr string
 	if prepared.Gate != nil {
-		gb, _ := json.Marshal(prepared.Gate)
+		gb, gErr := json.Marshal(prepared.Gate)
+		if gErr != nil {
+			return gErr
+		}
 		gateStr = string(gb)
 	}
 	nextRev := reg.Lifecycle.Revision + 1
