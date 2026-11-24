@@ -170,17 +170,17 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	f.executor.Boundary.SetWriteRootPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (toolexecution.PathPreflightResult, error) {
 		result, err := broker.Authorize(ctx, command.SandboxWriteRootAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedWriteRoot: path})
 		return toolexecution.PathPreflightResult{
-			Authorized: result.Authorized, Denied: result.Denied,
-			DenialCause: result.DenialCause,
-			DeniedRule:  result.DeniedRule, UserGuidance: result.UserGuidance,
+			Authorized: result.Authorized, DenialCause: result.DenialCause,
+			ApprovalResolvedBy: result.ApprovalResolvedBy,
+			DeniedRules:        result.DeniedRules, UserGuidance: result.UserGuidance,
 		}, err
 	})
 	f.executor.Boundary.SetReadPathPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (toolexecution.PathPreflightResult, error) {
 		result, err := broker.AuthorizeRead(ctx, command.SandboxReadPathAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: f.readPaths})
 		return toolexecution.PathPreflightResult{
-			Authorized: result.Authorized, Denied: result.Denied,
-			DenialCause: result.DenialCause,
-			DeniedRule:  result.DeniedRule, UserGuidance: result.UserGuidance,
+			Authorized: result.Authorized, DenialCause: result.DenialCause,
+			ApprovalResolvedBy: result.ApprovalResolvedBy,
+			DeniedRules:        result.DeniedRules, UserGuidance: result.UserGuidance,
 		}, err
 	})
 	f.executor.Boundary.SetSessionListenGrant(func(_ context.Context, session, _ string) (bool, []uint16) {

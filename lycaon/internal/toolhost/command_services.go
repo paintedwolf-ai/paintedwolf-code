@@ -3,6 +3,7 @@ package toolhost
 import (
 	"context"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/commandprogram"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -69,11 +70,11 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 				SessionOutputRoot:  tc.Host.SessionOutputDir,
 			})
 			return toolexecution.PathPreflightResult{
-				Authorized:   result.Authorized,
-				Denied:       result.Denied,
-				DenialCause:  result.DenialCause,
-				DeniedRule:   result.DeniedRule,
-				UserGuidance: result.UserGuidance,
+				Authorized:         result.Authorized,
+				DenialCause:        result.DenialCause,
+				ApprovalResolvedBy: result.ApprovalResolvedBy,
+				DeniedRules:        result.DeniedRules,
+				UserGuidance:       result.UserGuidance,
 			}, err
 		})
 		r.paths.SetSessionReadPathOverlay(writeRoot.SessionReadPaths)
@@ -87,11 +88,11 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 				SessionOutputRoot:  tc.Host.SessionOutputDir,
 			})
 			return toolexecution.PathPreflightResult{
-				Authorized:   result.Authorized,
-				Denied:       result.Denied,
-				DenialCause:  result.DenialCause,
-				DeniedRule:   result.DeniedRule,
-				UserGuidance: result.UserGuidance,
+				Authorized:         result.Authorized,
+				DenialCause:        result.DenialCause,
+				ApprovalResolvedBy: result.ApprovalResolvedBy,
+				DeniedRules:        result.DeniedRules,
+				UserGuidance:       result.UserGuidance,
 			}, err
 		})
 	}

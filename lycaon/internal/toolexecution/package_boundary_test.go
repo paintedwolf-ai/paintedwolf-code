@@ -62,7 +62,7 @@ func TestPackageReadAccessRequiresSuccessfulExplicitPreflight(t *testing.T) {
 						if !approved {
 							cause = isolation.PathDenialUserDeclined
 						}
-						return PathPreflightResult{Authorized: approved, Denied: !approved, DenialCause: cause}, nil
+						return PathPreflightResult{Authorized: approved, DenialCause: cause}, nil
 					}
 					return e
 				}()

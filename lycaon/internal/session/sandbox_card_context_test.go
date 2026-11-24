@@ -143,11 +143,11 @@ func assertBrokerRuleDenialAttribution(t *testing.T) {
 		SessionID: "sess-rule", ProposedWriteRoot: denyRoot, ToolName: "command",
 	})
 	testutil.FailErr(t, "Authorize rule-denied write root", err)
-	if wRes.Authorized || wRes.Raised || !wRes.Denied || wRes.DenialCause != isolation.PathDenialApprovalRule || wRes.DeniedRule == nil {
+	if wRes.Authorized || wRes.Raised || !wRes.Denied || wRes.DenialCause != isolation.PathDenialApprovalRule || len(wRes.DeniedRules) != 1 {
 		t.Fatalf("write-root rule denial = %+v", wRes)
 	}
-	if wRes.DeniedRule.Source.UnitID != denyWriteRule.Source.UnitID || wRes.DeniedRule.Source.PackID != denyWriteRule.Source.PackID {
-		t.Fatalf("write-root DeniedRule lost source metadata: %+v", wRes.DeniedRule)
+	if wRes.DeniedRules[0].UnitID != denyWriteRule.Source.UnitID || wRes.DeniedRules[0].PackID != denyWriteRule.Source.PackID {
+		t.Fatalf("write-root DeniedRules lost source metadata: %+v", wRes.DeniedRules)
 	}
 
 	pemDir := t.TempDir()
@@ -156,11 +156,11 @@ func assertBrokerRuleDenialAttribution(t *testing.T) {
 		SessionID: "sess-rule", ProposedReadPath: pemPath, ReadDenyPaths: []string{pemDir}, ToolName: "command",
 	})
 	testutil.FailErr(t, "AuthorizeRead rule-denied path", err)
-	if rRes.Authorized || rRes.Raised || !rRes.Denied || rRes.DenialCause != isolation.PathDenialApprovalRule || rRes.DeniedRule == nil {
+	if rRes.Authorized || rRes.Raised || !rRes.Denied || rRes.DenialCause != isolation.PathDenialApprovalRule || len(rRes.DeniedRules) == 0 {
 		t.Fatalf("read-path rule denial = %+v", rRes)
 	}
-	if rRes.DeniedRule.Source.UnitID != readRule.Source.UnitID || rRes.DeniedRule.Pattern != "*.pem" {
-		t.Fatalf("read-path DeniedRule lost source metadata: %+v", rRes.DeniedRule)
+	if rRes.DeniedRules[0].UnitID != readRule.Source.UnitID || rRes.DeniedRules[0].Pattern != "*.pem" {
+		t.Fatalf("read-path DeniedRules lost source metadata: %+v", rRes.DeniedRules)
 	}
 }
 

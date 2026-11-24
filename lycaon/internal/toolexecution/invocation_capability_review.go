@@ -5,10 +5,11 @@ import (
 
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"slices"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/commandsurface"
@@ -101,12 +102,8 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	if !hitl.CheckpointAuthorizes(final) {
 		denialCode, denialPath := capabilityReviewDenialCodeAndPath(plan)
 		var reject *toolrejection.ToolReject
-		if (denialCode == isolation.CodeWriteRootDenied || denialCode == isolation.CodeReadPathDenied) &&
-			final != nil && final.Status == hitl.DecisionStatusRejected && final.ResolvedBy != authzledger.ResolvedByHuman {
-			reject = &toolrejection.ToolReject{
-				Code: isolation.CodeApprovalUnavailable,
-				Data: map[string]any{"reason": "The approval request was rejected without a confirmed user decision."},
-			}
+		if final != nil && final.Status == hitl.DecisionStatusRejected && final.ResolvedBy != authzledger.ResolvedByHuman {
+			reject = approvalRefusalReject(denialCode, isolation.PathDenialNonHumanRejected, final.ResolvedBy, "")
 		} else {
 			reject = isolationCheckpointReject(denialCode, final)
 		}
