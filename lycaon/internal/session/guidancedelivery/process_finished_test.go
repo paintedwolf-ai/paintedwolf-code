@@ -75,3 +75,43 @@ func TestDeliverPendingObservesOneExitAndKeepsSeparateRefusals(t *testing.T) {
 		t.Fatalf("delivered exits stayed in the ledger: %+v", ledger)
 	}
 }
+
+func TestDropSubjectAndKickAdmittedObserver(t *testing.T) {
+	var nilSvc *Service
+	nilSvc.SetKickAdmittedObserver(func(context.Context, string, string, string, string) {})
+	if nilSvc.DropSubject("s1", anchor.ProcessFinished, "bg-1") {
+		t.Fatal("nil Service reported dropped subject")
+	}
+
+	kicks := &kick.KickEngine{}
+	kicks.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
+	var signals recordedSignals
+	svc := &Service{transcript: &signals}
+	svc.Bind(kicks, anchor.NewBus(kicks))
+	testutil.FailErr(t, "install anchor registry", svc.InstallAnchorRegistry())
+
+	var admitted []string
+	svc.SetKickAdmittedObserver(func(_ context.Context, sessionID, kickID, subject, receiptID string) {
+		if receiptID != "" {
+			admitted = append(admitted, sessionID+":"+kickID+":"+subject)
+		}
+	})
+
+	svc.Emit(t.Context(), "s1", anchor.ProcessFinished, anchor.Envelope{
+		Subject: "bg-drop", CommandCompletionDigest: "handle=bg-drop",
+	})
+	svc.Emit(t.Context(), "s1", anchor.ProcessFinished, anchor.Envelope{
+		Subject: "bg-keep", CommandCompletionDigest: "handle=bg-keep",
+	})
+	if !svc.DropSubject("s1", anchor.ProcessFinished, "bg-drop") {
+		t.Fatal("expected DropSubject to remove queued bg-drop")
+	}
+	if svc.DropSubject("s1", anchor.ID("custom-unmapped"), "bg-drop") {
+		t.Fatal("unexpected drop for unmapped anchor ID")
+	}
+
+	testutil.FailErr(t, "deliver kept kick", svc.DeliverPending(t.Context(), "s1"))
+	if len(admitted) != 1 || admitted[0] != "s1:coordinator-process-finished:bg-keep" {
+		t.Fatalf("admitted observer = %v, want [s1:coordinator-process-finished:bg-keep]", admitted)
+	}
+}
