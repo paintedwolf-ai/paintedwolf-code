@@ -65,18 +65,28 @@ func blockedCredentialWait(t *testing.T) (*credentialFiles, *recordedActivity, c
 
 func TestCredentialWaitShowsOneLeasePerRoot(t *testing.T) {
 	files, recorder, ticks, release := blockedCredentialWait(t)
+	armed := make(chan struct{}, 8)
+	baseAfter := files.index.after
+	files.index.after = func(d time.Duration) <-chan time.Time {
+		armed <- struct{}{}
+		return baseAfter(d)
+	}
 	result := make(chan error, 1)
 	go func() {
 		result <- files.Await(t.Context(), tools.CredentialWait{ProjectID: "proj-1", SessionID: "session-1"})
 	}()
+	<-armed
 	ticks <- time.Now()
 	active := recorder.next(t)
+	<-armed
 	if active.Kind != api.ActivityKindIndexingCredentials || active.Status != api.ActivityStatusActive || active.SessionID != "session-1" ||
 		active.Indexing == nil || active.Indexing.RootID != "r1" || active.Indexing.RootLabel != "root" {
 		t.Fatalf("active lease = %+v", active)
 	}
-	// Unchanged counts do not republish the lease.
+	// Unchanged counts do not republish the lease. Wait for the next timer arm
+	// so show() has finished reading the unchanged counts before release() advances them.
 	ticks <- time.Now()
+	<-armed
 	recorder.none(t)
 	release()
 	testutil.FailErr(t, "await credentials", <-result)
