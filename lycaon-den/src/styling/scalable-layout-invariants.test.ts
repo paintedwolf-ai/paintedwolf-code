@@ -230,7 +230,7 @@ describe("scalable layout chrome", () => {
       /\.den-transcript-visual--filmstrip\s*\{[^}]*container-name:\s*den-visual-filmstrip/,
     );
     expect(chat).toMatch(
-      /@container den-visual-filmstrip \(max-width:\s*26rem\)\s*\{\s*\.den-transcript-visual-filmstrip__stage\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\);/,
+      /@container den-visual-filmstrip \(max-width:\s*24rem\)\s*\{\s*\.den-transcript-visual-filmstrip__stage\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\);/,
     );
   });
 });

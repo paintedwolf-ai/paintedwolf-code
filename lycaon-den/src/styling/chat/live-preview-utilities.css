@@ -50,7 +50,7 @@
   align-items: stretch;
 }
 
-@container den-visual-filmstrip (max-width: 26rem) {
+@container den-visual-filmstrip (max-width: 24rem) {
   .den-transcript-visual-filmstrip__stage {
     grid-template-columns: minmax(0, 1fr);
   }
