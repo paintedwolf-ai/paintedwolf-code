@@ -428,15 +428,14 @@ describe("createTranscriptPaging", () => {
       id: "res-1",
       role: "tool",
       origin: "tool",
-      authority: "execution",
+      authority: "none",
       trust_tier: "untrusted",
       content: "patched",
       created_at: "2026-01-01T00:00:02Z",
       ord: 50,
       tool_result: {
         tool_call_id: "call_1",
-        name: "edit_file",
-        output: "patched",
+        content: "patched",
         assistant_message_id: "asst-1",
       },
     };
@@ -446,8 +445,7 @@ describe("createTranscriptPaging", () => {
       ord: 51,
       tool_result: {
         tool_call_id: "call_unparented",
-        name: "edit_file",
-        output: "patched",
+        content: "patched",
       },
     };
     appStore.actions.installTranscriptBaseline("s-tool-anchor", [orphanResult, unparentedResult], 52, {
@@ -458,12 +456,12 @@ describe("createTranscriptPaging", () => {
       id: "asst-1",
       role: "assistant",
       origin: "model",
-      authority: "untrusted",
-      trust_tier: "untrusted",
+      authority: "none",
+      trust_tier: "trusted",
       content: "",
       created_at: "2026-01-01T00:00:01Z",
       ord: 49,
-      tool_calls: [{ id: "call_1", name: "edit_file", input: { path: "a.ts" } }],
+      tool_calls: [{ id: "call_1", name: "edit_file", args: { path: "a.ts" } }],
     };
     const listSessionMessages = vi.fn().mockResolvedValue({
       messages: [parentAssistant],
