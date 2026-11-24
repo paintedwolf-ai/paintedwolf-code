@@ -41,7 +41,7 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 	resultPaths := migrations.ToolResultPaths()
 	steps := []migrations.Step{
 		migrations.SourceNamespace(), migrations.PresenceAuthenticators(resultPaths.From), resultPaths,
-		migrations.Revision5(current),
+		migrations.Revision5(migrations.Revision5Baseline), migrations.Revision6(current),
 	}
 	return migrations.New(current, released, steps)
 }

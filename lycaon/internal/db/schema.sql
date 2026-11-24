@@ -5034,6 +5034,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_home_starts_session
 CREATE INDEX IF NOT EXISTS idx_home_starts_unfinished
     ON home_starts(progress, disposition);
 
+CREATE INDEX IF NOT EXISTS idx_home_starts_person
+    ON home_starts(person_id);
+
 CREATE TABLE IF NOT EXISTS home_start_operations (
     operation_id TEXT PRIMARY KEY,
     launch_id TEXT NOT NULL REFERENCES home_starts(launch_id) ON DELETE CASCADE,
@@ -5044,6 +5047,9 @@ CREATE TABLE IF NOT EXISTS home_start_operations (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_home_start_operations_current
     ON home_start_operations(launch_id) WHERE state = 'current';
+
+CREATE INDEX IF NOT EXISTS idx_home_start_operations_launch
+    ON home_start_operations(launch_id);
 
 -- Deleting the created project or chat retires the start, so a late replay
 -- cannot recreate either.
