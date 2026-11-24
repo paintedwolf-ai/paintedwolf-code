@@ -12,7 +12,6 @@ import {
   discardAll,
   draftCommitMessage,
   listBranches,
-  listWorktrees,
   pullChanges,
   pushChanges,
   stashChanges,
@@ -138,7 +137,7 @@ describe("git checkout targets", () => {
       })),
     });
 
-    await listWorktrees(client, "proj-1", "repo-1", "sess-1");
+    await client.listGitWorktrees("proj-1", "repo-1", "sess-1");
     expect(client.listGitWorktrees).toHaveBeenCalledWith("proj-1", "repo-1", "sess-1");
 
     await client.getGitDiff("proj-1", "repo-1", { worktree_id: "wt-selected", mode: "staged" });
