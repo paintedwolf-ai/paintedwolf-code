@@ -10,10 +10,19 @@ const (
 	CheckoutUsageUsed    CheckoutUsageRelation = "used"
 )
 
+// ResolvedCheckoutPath carries verified repository, checkout, and mapped project-root coordinates for a host path.
+type ResolvedCheckoutPath struct {
+	RepoID     string
+	WorktreeID string
+	RootID     string
+	RootRel    string
+}
+
 // CheckoutUsageRecorder associates authorized tool and command execution with registered checkouts.
 type CheckoutUsageRecorder interface {
 	RecordCheckoutActivity(ctx context.Context, tc ToolContext, targetPath string, activityID string, relation CheckoutUsageRelation) string
 	NotifyCheckoutChange(ctx context.Context, tc ToolContext, repoPath string)
+	ResolvePathCheckout(projectID, targetPath string) (ResolvedCheckoutPath, bool)
 }
 
 // RecordCheckoutCreated records that an authorized command created a registered checkout.

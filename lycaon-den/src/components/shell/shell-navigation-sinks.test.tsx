@@ -1,6 +1,8 @@
 import { render } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { installShellNavigationSinks } from "./shell-navigation-sinks.ts";
+import { openSourceLocation } from "../../platform/navigation/open-source.ts";
+import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createShellStore } from "../../store/shell-store.ts";
 import type { registerComposerAttachmentSink } from "../../chat/composer/add-to-chat.ts";
@@ -40,6 +42,29 @@ describe("shell navigation sink lifetime", () => {
     expect(seams.attachment.sessionId()).toBe("session"); expect(seams.attachment.projectId()).toBe("project");
     expect(seams.attachment.projectRoots()).toEqual([{ id: "root" }]); expect(seams.attachment.blockReason()).toBeNull();
     seams.attachment.reveal(); expect(calls.setNav).toHaveBeenCalledWith("projects"); expect(calls.closeSearch).toHaveBeenCalledOnce();
+    const lookup = () => ({ roots: [{ id: "root", path: "/repo", label: "repo", is_primary: true }] });
+    await openSourceLocation({
+      projectId: "other-project",
+      rootId: "root",
+      path: "src/a.ts",
+      repoId: "repo-1",
+      worktreeId: "wt-1",
+      selectCheckout: true,
+      entryKind: "file",
+      intent: "permanent",
+    }, { lookup });
+    expect(appStore.state.gitWorktreeTargets["other-project\0repo-1"]).toBe("wt-1");
+    await openSourceLocation({
+      projectId: "project",
+      rootId: "root",
+      path: "src",
+      worktreeId: "wt-1",
+      entryKind: "folder",
+      action: "reveal",
+      intent: "permanent",
+    }, { lookup });
+    openFilesSurface({ kind: "stage", projectId: "project" });
+    expect(calls.openStageWithPlacement).toHaveBeenCalledWith("files", "routed");
     view.unmount(); expect(seams.status).toBeNull(); expect(seams.notice).toBeNull(); expect(seams.detach).toHaveBeenCalledOnce();
     const stopItems = vi.fn(); const stopWorkspace = vi.fn(); finishItems(stopItems); finishWorkspace(stopWorkspace);
     await Promise.resolve();

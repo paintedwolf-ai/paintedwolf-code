@@ -53,6 +53,7 @@ import {
 import { discardFilesBufferDraft } from "./project-files-buffer-io.ts";
 import { documentResidency, documentResourceKey } from "./document-residency.ts";
 import {
+  branchIdForWorktree,
   resetWorkspaceRootCheckoutsForTests,
   workspaceRootCheckout,
   worktreeIdFromBranchId,
@@ -120,7 +121,7 @@ export function openFilesBuffer(
   const composed = isComposedBufferKind(args.kind ?? "text");
   const rootMeta = !jobId && !composed ? workspaceRootCheckout(projectId, args.rootId) : undefined;
   const resolvedBranchId = !jobId && !composed
-    ? args.branchId ?? (args.worktreeId ? `worktree:${args.worktreeId.trim()}` : args.documentId ? undefined : currentState.rootBranches[args.rootId])
+    ? args.branchId ?? (args.worktreeId ? branchIdForWorktree(projectId, args.rootId, args.worktreeId) : args.documentId ? undefined : currentState.rootBranches[args.rootId])
     : undefined;
   const resolvedWorktreeId = !jobId && !composed
     ? args.worktreeId?.trim() || worktreeIdFromBranchId(resolvedBranchId) || (resolvedBranchId !== undefined && resolvedBranchId === rootMeta?.branchId ? rootMeta?.worktreeId : undefined)

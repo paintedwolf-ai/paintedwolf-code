@@ -1,6 +1,9 @@
-import type { NavigationTarget } from "../../api/types.ts";
+import type { NavigationReference, NavigationTarget } from "../../api/types.ts";
 import { Show, createMemo, createSignal, onCleanup } from "solid-js";
 import { openSourceLocation, sourceEntryKind, type OpenSourceLocationArgs } from "../../platform/navigation/open-source.ts";
+import { isAbsolutePath } from "../../platform/files/reveal-in-file-manager.ts";
+import { resolveLegacyLiveCandidates } from "../../files/source/file-open-target.ts";
+import { NavigationChooser } from "../transcript/NavigationChooser.tsx";
 import {
   resolveProjectFile,
   relativeUnderRoot,
@@ -49,6 +52,16 @@ export type SourcePathLinkProps = SourcePathVariant & {
   /** Host-verified openability; false renders plain text. */
   openable?: boolean;
   navigationTarget?: NavigationTarget;
+  /** Multiple candidate targets when an activity or legacy path is ambiguous. */
+  candidateTargets?: readonly NavigationTarget[];
+  /** Verified repository containing the checkout. */
+  repoId?: string;
+  /** Verified checkout containing the file. */
+  worktreeId?: string;
+  /** Selects the target checkout in window inspection state on open. */
+  selectCheckout?: boolean;
+  /** Probes registered checkouts when a legacy activity lacks recorded locations. */
+  legacyActivity?: boolean;
   /** Change colours apply only to plain labels (INV-SRC-12). */
   change?: ScopeChangeKind | null;
   /** Worker overlay; null selects the project tree. */
@@ -102,16 +115,35 @@ export function SourcePathLink(props: SourcePathLinkProps) {
     anchor: { x: number; y: number };
     items: ContextMenuItem[];
   } | null>(null);
+  const [chooser, setChooser] = createSignal<{
+    anchor: Element;
+    reference: NavigationReference;
+    busy: boolean;
+    error?: string;
+  } | null>(null);
+  let buttonEl: HTMLButtonElement | undefined;
   let menuGeneration = 0;
   onCleanup(() => { menuGeneration++; });
 
   const recordedTarget = () => props.navigationTarget?.project_id === projectId() ? props.navigationTarget : undefined;
+  const openArgsFromNavigationTarget = (target: NavigationTarget): OpenSourceLocationArgs => ({
+    intent: "permanent",
+    projectId: target.project_id,
+    rootId: target.root_id,
+    path: target.path,
+    fileId: target.file_id,
+    entryKind: target.entry_kind,
+    jobId: target.worker_id,
+    line: props.line,
+    endLine: props.endLine,
+    ...(target.repo_id ? { repoId: target.repo_id } : {}),
+    ...(target.worktree_id ? { worktreeId: target.worktree_id, selectCheckout: props.selectCheckout ?? true } : {}),
+  });
   const openTarget = (): OpenSourceLocationArgs => {
     const target = recordedTarget();
-    if (target) return {
-      intent: "permanent", projectId: target.project_id, rootId: target.root_id,
-      path: target.path, fileId: target.file_id, entryKind: target.entry_kind, jobId: target.worker_id,
-    };
+    if (target) return openArgsFromNavigationTarget(target);
+    const worktreeId = props.worktreeId?.trim() || undefined;
+    const repoId = props.repoId?.trim() || undefined;
     return {
       intent: "permanent",
       projectId: projectId(),
@@ -121,13 +153,91 @@ export function SourcePathLink(props: SourcePathLinkProps) {
       line: props.line,
       endLine: props.endLine,
       jobId: jobId(),
+      ...(repoId ? { repoId } : {}),
+      ...(worktreeId ? { worktreeId, selectCheckout: props.selectCheckout ?? true } : {}),
     };
   };
 
-  const open = () => {
+  const open = (anchorEl?: Element) => {
     const p = path();
-    if (!p || !projectId() || props.openable === false) return;
+    const pid = projectId();
+    if (!p || !pid || props.openable === false) return;
+    const targetAnchor = anchorEl ?? buttonEl;
+    const candidates = (props.candidateTargets ?? []).filter((c) => c.project_id === pid);
+    if (candidates.length > 1 && targetAnchor) {
+      beginSourceNavigation();
+      setChooser({
+        anchor: targetAnchor,
+        reference: {
+          id: "candidates",
+          syntax: "link",
+          mention: p,
+          status: "ambiguous",
+          explicit: true,
+          project_id: pid,
+          path: p,
+          candidates: [...candidates],
+        },
+        busy: false,
+      });
+      return;
+    }
+    if (props.legacyActivity && !recordedTarget() && !props.worktreeId && !props.rootId && !p.startsWith("@") && !isAbsolutePath(p)) {
+      const client = getLycaonClient();
+      const roots = rootRefs() ?? [];
+      if (client && "browseProjectSource" in client && roots.length > 0 && (roots.length > 1 || "listGitWorktrees" in client)) {
+        void (async () => {
+          try {
+            const ref = await resolveLegacyLiveCandidates({
+              client,
+              projectId: pid,
+              roots: roots.map((r) => ({ id: r.id, path: r.path })),
+              path: p,
+              sessionId: chatDestination()?.sessionId,
+            });
+            if (ref.status === "resolved" && ref.candidates?.[0]) {
+              await openTargetLocation(openArgsFromNavigationTarget(ref.candidates[0]));
+              return;
+            }
+            const resolvedAnchor = anchorEl ?? buttonEl;
+            if (ref.status === "ambiguous" && resolvedAnchor) {
+              beginSourceNavigation();
+              setChooser({ anchor: resolvedAnchor, reference: ref, busy: false });
+              return;
+            }
+            notices.reportError(new Error("This path is unavailable in the attached project folders."));
+          } catch (error) {
+            notices.reportError(error);
+          }
+        })();
+        return;
+      }
+    }
     if (!recordedTarget() && rootRefs()?.length && !resolvedPath()) {
+      if (resolutionError() === "ambiguous" && targetAnchor) {
+        beginSourceNavigation();
+        const rootCandidates: NavigationTarget[] = (rootRefs() ?? []).map((root) => ({
+          project_id: pid,
+          root_id: root.id,
+          path: p.replace(/^\/+/, ""),
+          entry_kind: entryKind() === "folder" ? "folder" : "file",
+        }));
+        setChooser({
+          anchor: targetAnchor,
+          reference: {
+            id: "roots",
+            syntax: "link",
+            mention: p,
+            status: "ambiguous",
+            explicit: true,
+            project_id: pid,
+            path: p,
+            candidates: rootCandidates,
+          },
+          busy: false,
+        });
+        return;
+      }
       beginSourceNavigation();
       notices.reportError(new Error(resolutionError() === "outside_roots"
         ? `${p} is outside the attached project folders. Attach its folder to this project to open it here.`
@@ -230,6 +340,7 @@ export function SourcePathLink(props: SourcePathLinkProps) {
         }
       >
         <button
+          ref={(el) => { buttonEl = el; }}
           type="button"
           class={cn("den-source-path-link", variantClass(props))}
           data-testid="source-path-link"
@@ -250,6 +361,7 @@ export function SourcePathLink(props: SourcePathLinkProps) {
               : undefined
           }
           data-root-id={recordedTarget()?.root_id ?? resolvedPath()?.rootId ?? props.rootId}
+          data-worktree-id={recordedTarget()?.worktree_id ?? props.worktreeId}
           draggable={chatRef() ? true : undefined}
           onDragStart={(event) => startChatAttachmentDrag(event, chatRef())}
           data-tip={props.truncate ? label() : undefined}
@@ -257,7 +369,7 @@ export function SourcePathLink(props: SourcePathLinkProps) {
           onClick={(e) => {
             e.stopPropagation();
             if (clickSelectedText(e, e.currentTarget)) return;
-            open();
+            open(e.currentTarget);
           }}
           onContextMenu={(e) => {
             const abs = absolutePath();
@@ -273,6 +385,26 @@ export function SourcePathLink(props: SourcePathLinkProps) {
       <Show when={menu()} keyed>
         {(state) => <ContextMenu anchor={state.anchor} items={state.items}
           onDismiss={() => { menuGeneration++; setMenu(null); }} />}
+      </Show>
+      <Show when={chooser()} keyed>
+        {(state) => (
+          <NavigationChooser
+            anchor={state.anchor}
+            reference={state.reference}
+            busy={state.busy}
+            error={state.error}
+            roots={rootRefs()}
+            onDismiss={() => setChooser(null)}
+            onRetry={() => {
+              setChooser(null);
+              open(state.anchor);
+            }}
+            onOpen={(target) => {
+              setChooser(null);
+              void openTargetLocation(openArgsFromNavigationTarget(target));
+            }}
+          />
+        )}
       </Show>
     </>
   );

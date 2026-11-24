@@ -18,6 +18,7 @@ import { registerOpenSourceSink, registerOpenSourceProjectLookup } from "../../p
 import { setProjectFilesRevealRequest } from "../../files/tree/project-files-reveal.ts";
 import { OUTSIDE_ROOT_LABEL } from "../../files/source/outside-namespace.ts";
 import { openSourceInFilesStage } from "../../files/components/project-files-open.ts";
+import { selectRepoWorktreeById } from "../git/git-worktree-inspection.ts";
 import { applyOpenFilesSurfaceRequest, registerOpenFilesSurfaceSink } from "../../platform/navigation/open-files-surface.ts";
 import { registerOpenFindingSink, setFindingFocusRequest } from "../../platform/navigation/open-finding.ts";
 import { registerOpenRunningStageSink } from "../../platform/navigation/open-running.ts";
@@ -140,8 +141,17 @@ export function installShellNavigationSinks({ shell, projects, appStore, openSta
     if (shell.state.activeProjectId !== req.projectId) {
       shell.beginStageSwitch({ projectId: req.projectId, kind: "cross-project" });
     }
+    if (req.selectCheckout && req.worktreeId) {
+      selectRepoWorktreeById(appStore, req.projectId, req.repoId, req.worktreeId, req.rootId);
+    }
     if ("action" in req) {
-      setProjectFilesRevealRequest({ projectId: req.projectId, rootId: req.rootId, path: req.path, isDir: req.entryKind === "folder" });
+      setProjectFilesRevealRequest({
+        projectId: req.projectId,
+        rootId: req.rootId,
+        path: req.path,
+        isDir: req.entryKind === "folder",
+        ...(req.worktreeId ? { worktreeId: req.worktreeId } : {}),
+      });
       openStageWithPlacement("files", "routed");
       return;
     }

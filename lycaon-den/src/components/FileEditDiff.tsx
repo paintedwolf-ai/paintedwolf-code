@@ -43,8 +43,12 @@ export function FileEditDiff(props: Props) {
     get rootRefs() { return props.rootRefs; },
     navigationTarget: (revision) => {
       const edit = shown(revision);
-      if (edit.deleted || edit.root_id || !isAbsolutePath(edit.path)) return undefined;
+      if (edit.deleted) return undefined;
       const target = (revision === null ? steps().at(-1) : steps()[revision])?.navigationTarget;
+      if (target?.worktree_id) {
+        return target.project_id === props.projectId ? target : null;
+      }
+      if (edit.root_id || !isAbsolutePath(edit.path)) return undefined;
       return target && target.project_id === props.projectId ? target : null;
     },
     get revisions() {

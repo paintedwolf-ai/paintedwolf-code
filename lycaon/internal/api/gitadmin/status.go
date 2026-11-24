@@ -154,8 +154,18 @@ func (s *Handler) gitChangesPage(
 	files := make([]wire.GitFileEntry, 0, end-offset)
 	for _, file := range cached.Status.Files[offset:end] {
 		rootID, rootRel := attributeChangedFile(repo.Toplevel, file.Path, roots)
+		var oldRootID, oldRootRel string
+		if file.OldPath != "" {
+			oldRootID, oldRootRel = attributeChangedFile(repo.Toplevel, file.OldPath, roots)
+		}
 		files = append(files, wire.GitFileEntry{
-			Path: file.Path, Status: file.Status, RootID: rootID, RootRelativePath: rootRel,
+			Path:                file.Path,
+			Status:              file.Status,
+			RootID:              rootID,
+			RootRelativePath:    rootRel,
+			OldPath:             file.OldPath,
+			OldRootID:           oldRootID,
+			OldRootRelativePath: oldRootRel,
 		})
 	}
 	empty.Files = files

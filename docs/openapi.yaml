@@ -24020,6 +24020,16 @@ components:
         root_relative_path:
           type: string
           description: Path relative to that project root; empty when root_id is empty.
+        old_path:
+          type: string
+          description: Previous repo-toplevel-relative path when renamed or copied.
+        old_root_id:
+          type: string
+          format: uuid
+          description: Project root containing old_path when renamed or copied.
+        old_root_relative_path:
+          type: string
+          description: Previous path relative to old_root_id when renamed or copied.
       required:
         - path
         - status
@@ -24548,6 +24558,22 @@ components:
           type: string
           format: uuid
         root_relative_path:
+          type: string
+        old_path:
+          type: string
+        old_root_id:
+          type: string
+          format: uuid
+        old_root_relative_path:
+          type: string
+        before_blob_oid:
+          x-go-name: BeforeBlobOID
+          type: string
+        after_blob_oid:
+          x-go-name: AfterBlobOID
+          type: string
+        after_sha256:
+          x-go-pointer: true
           type: string
       required:
         - path
@@ -31314,6 +31340,18 @@ components:
         worker_id:
           type: string
           format: uuid
+        repo_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_-]+$
+          description: Verified repository identifier when the target belongs to an attached Git repository.
+        worktree_id:
+          type: string
+          format: uuid
+          description: Verified registered checkout identifier when the target belongs to a Git checkout.
+        revision:
+          type: string
+          maxLength: 128
+          description: Captured revision or immutable Git object identifier for historical navigation.
     SourceContext:
       x-go-generate: true
       type: object
@@ -31391,6 +31429,15 @@ components:
         deleted:
           type: boolean
           description: The current address is absent and has retained deletion history. Availability is rechecked when opening.
+        repo_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_-]+$
+        worktree_id:
+          type: string
+          format: uuid
+        revision:
+          type: string
+          maxLength: 128
         worker_id:
           type: string
           format: uuid
@@ -43265,7 +43312,17 @@ components:
           type: string
           minLength: 1
           maxLength: 65536
+        before_path:
+          type: string
+          minLength: 1
+          maxLength: 65536
+        before_blob_oid:
+          x-go-name: BeforeBlobOID
+          type: string
         expected_head:
+          type: string
+          x-go-pointer: true
+        expected_after_sha256:
           type: string
           x-go-pointer: true
         worktree_id:

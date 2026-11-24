@@ -1,6 +1,6 @@
 import type { ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
 import { resolveProjectFile, relativeUnderRoot, type ResolveProjectRoot } from "../../api/project-path.ts";
-import { fileVersionFromSnapshot } from "../../files/history/file-version.ts";
+import { fileVersionFromSnapshot, type FileVersionView } from "../../files/history/file-version.ts";
 import { openFilesBuffer } from "../../files/documents/project-files-buffer-lifecycle.ts";
 import { previewDiffBufferJobId } from "../../files/review/review-model.ts";
 import { openReviewLens } from "../../files/review/review-pane.ts";
@@ -24,6 +24,17 @@ type OpenFilesChangePreviewRequest = {
   after: string | null;
 };
 
+type OpenFilesHistoricalDiffRequest = {
+  kind: "historical-diff";
+  projectId: string;
+  rootId: string;
+  path: string;
+  previewId?: string;
+  title?: string;
+  detail?: string;
+  version: FileVersionView;
+};
+
 type OpenFilesTrustReviewRequest = { kind: "trust-review"; projectId: string };
 
 type OpenFilesDiffsRequest = {
@@ -40,7 +51,8 @@ type OpenFilesSurfaceRequest =
   | OpenFilesTrustReviewRequest
   | OpenFilesDiffsRequest
   | OpenFilesStageRequest
-  | OpenFilesChangePreviewRequest;
+  | OpenFilesChangePreviewRequest
+  | OpenFilesHistoricalDiffRequest;
 
 type OpenFilesSurfaceSink = (req: OpenFilesSurfaceRequest) => void;
 
@@ -94,6 +106,23 @@ export function applyOpenFilesSurfaceRequest(
   if (req.kind === "trust-review") {
     openFilesBuffer(projectId, { kind: "trust", rootId: "", rootLabel: "", path: "",
       name: "Trust changes", intent: "permanent" });
+    return;
+  }
+  if (req.kind === "historical-diff") {
+    const root = roots.find((candidate) => candidate.id === req.rootId);
+    const rootLabel = root?.label ?? root?.path.split(/[\\/]/).filter(Boolean).pop() ?? "";
+    openFilesBuffer(projectId, {
+      intent: "transient",
+      rootId: req.rootId,
+      rootLabel,
+      path: req.path,
+      kind: "diff",
+      jobId: previewDiffBufferJobId(req.previewId ?? `${req.rootId}:${req.path}`),
+      diffPreview: {
+        version: req.version,
+        ...(req.title ? { title: req.title, detail: req.detail } : {}),
+      },
+    });
     return;
   }
   const resolved = resolveProjectFile(

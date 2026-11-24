@@ -1920,12 +1920,15 @@ type CommandUIEffect struct {
 
 // CommitComparisonSource
 type CommitComparisonSource struct {
-	Kind         string  `json:"kind"`
-	RootID       string  `json:"root_id"`
-	Path         string  `json:"path"`
-	ExpectedHead *string `json:"expected_head,omitempty"`
-	WorktreeID   string  `json:"worktree_id,omitempty"`
-	Stage        string  `json:"stage,omitempty"`
+	Kind                string  `json:"kind"`
+	RootID              string  `json:"root_id"`
+	Path                string  `json:"path"`
+	BeforePath          string  `json:"before_path,omitempty"`
+	BeforeBlobOID       string  `json:"before_blob_oid,omitempty"`
+	ExpectedHead        *string `json:"expected_head,omitempty"`
+	ExpectedAfterSHA256 *string `json:"expected_after_sha256,omitempty"`
+	WorktreeID          string  `json:"worktree_id,omitempty"`
+	Stage               string  `json:"stage,omitempty"`
 }
 
 // CompactedChunkMeta
@@ -3862,12 +3865,18 @@ type GitCommitRequest struct {
 
 // GitDiffStatItem
 type GitDiffStatItem struct {
-	Path             string `json:"path"`
-	Insertions       int    `json:"insertions"`
-	Deletions        int    `json:"deletions"`
-	Untracked        bool   `json:"untracked,omitempty"`
-	RootID           string `json:"root_id"`
-	RootRelativePath string `json:"root_relative_path"`
+	Path                string  `json:"path"`
+	Insertions          int     `json:"insertions"`
+	Deletions           int     `json:"deletions"`
+	Untracked           bool    `json:"untracked,omitempty"`
+	RootID              string  `json:"root_id"`
+	RootRelativePath    string  `json:"root_relative_path"`
+	OldPath             string  `json:"old_path,omitempty"`
+	OldRootID           string  `json:"old_root_id,omitempty"`
+	OldRootRelativePath string  `json:"old_root_relative_path,omitempty"`
+	BeforeBlobOID       string  `json:"before_blob_oid,omitempty"`
+	AfterBlobOID        string  `json:"after_blob_oid,omitempty"`
+	AfterSHA256         *string `json:"after_sha256,omitempty"`
 }
 
 // GitDiffView
@@ -3890,6 +3899,12 @@ type GitFileEntry struct {
 	RootID string `json:"root_id"`
 	// Path relative to that project root; empty when root_id is empty.
 	RootRelativePath string `json:"root_relative_path"`
+	// Previous repo-toplevel-relative path when renamed or copied.
+	OldPath string `json:"old_path,omitempty"`
+	// Project root containing old_path when renamed or copied.
+	OldRootID string `json:"old_root_id,omitempty"`
+	// Previous path relative to old_root_id when renamed or copied.
+	OldRootRelativePath string `json:"old_root_relative_path,omitempty"`
 }
 
 // GitInitRequest
@@ -4955,6 +4970,9 @@ type NavigationReference struct {
 	Explicit bool `json:"explicit"`
 	// The current address is absent and has retained deletion history. Availability is rechecked when opening.
 	Deleted    bool               `json:"deleted,omitempty"`
+	RepoID     string             `json:"repo_id,omitempty"`
+	WorktreeID string             `json:"worktree_id,omitempty"`
+	Revision   string             `json:"revision,omitempty"`
 	WorkerID   string             `json:"worker_id,omitempty"`
 	Line       int                `json:"line,omitempty"`
 	EndLine    int                `json:"end_line,omitempty"`
@@ -4970,6 +4988,12 @@ type NavigationTarget struct {
 	FileID    string              `json:"file_id,omitempty"`
 	EntryKind NavigationEntryKind `json:"entry_kind"`
 	WorkerID  string              `json:"worker_id,omitempty"`
+	// Verified repository identifier when the target belongs to an attached Git repository.
+	RepoID string `json:"repo_id,omitempty"`
+	// Verified registered checkout identifier when the target belongs to a Git checkout.
+	WorktreeID string `json:"worktree_id,omitempty"`
+	// Captured revision or immutable Git object identifier for historical navigation.
+	Revision string `json:"revision,omitempty"`
 }
 
 // NoticeCopy Rendered user-notice copy for the accompanying catalog code.

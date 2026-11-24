@@ -9,6 +9,7 @@ import { turnLoadRowSummary } from "../../chat/turnload/turn-load-rows.ts";
 import { useToolContent } from "../../chat/tool/tool-content.tsx";
 import { ToolContentLink } from "../tool/ToolContentLink.tsx";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
+import { activityFileOpenTarget } from "../../files/source/file-open-target.ts";
 import { SourcePathLink } from "../source/SourcePathLink.tsx";
 import { TOOL_PATH_ENTRY_KINDS } from "../../chat/tool/tool-presentation.generated.ts";
 import { chatRefForToolRaw } from "../../chat/composer/search-add-to-chat.ts";
@@ -123,13 +124,51 @@ function Opener(props: { opener: ActionOpener; part: ToolPartView; projectId?: s
       </button>
     }>
       <Match when={props.opener.kind === "file" && props.opener.path ? props.opener.path : undefined} keyed>
-        {(path) => (
-          <span class="den-action-card__opener" data-testid="action-opener">
-            {/* The path resolves against the project's roots, so @label/ paths and folders open where they live. */}
-            <SourcePathLink projectId={props.projectId ?? ""} path={path} line={props.opener.line} label={label()}
-              entryKind={TOOL_PATH_ENTRY_KINDS[props.part.tool.toLowerCase()] ?? "unknown"} rootRefs={props.rootRefs} />
-          </span>
-        )}
+        {(path) => {
+          const resolved = () =>
+            activityFileOpenTarget({
+              projectId: props.projectId ?? "",
+              mode: "live",
+              path,
+              line: props.opener.line,
+              locations: props.part.sourceLocations,
+              rootRefs: props.rootRefs,
+            });
+          const uniqueTarget = () => {
+            const target = resolved();
+            if (!target || target.kind !== "live" || !target.rootId) return undefined;
+            return {
+              project_id: target.projectId,
+              root_id: target.rootId,
+              path: target.path,
+              entry_kind: (target.entryKind === "folder" ? "folder" : "file") as "file" | "folder",
+              ...(target.fileId ? { file_id: target.fileId } : {}),
+              ...(target.workerId ? { worker_id: target.workerId } : {}),
+              ...(target.repoId ? { repo_id: target.repoId } : {}),
+              ...(target.worktreeId ? { worktree_id: target.worktreeId } : {}),
+            };
+          };
+          const ambiguousTargets = () => {
+            const target = resolved();
+            return target?.kind === "ambiguous" ? target.candidates : undefined;
+          };
+          return (
+            <span class="den-action-card__opener" data-testid="action-opener">
+              {/* The path resolves against the project's roots, so @label/ paths and folders open where they live. */}
+              <SourcePathLink
+                projectId={props.projectId ?? ""}
+                path={path}
+                line={props.opener.line}
+                label={label()}
+                navigationTarget={uniqueTarget()}
+                candidateTargets={ambiguousTargets()}
+                legacyActivity={!props.part.sourceLocations?.length}
+                entryKind={TOOL_PATH_ENTRY_KINDS[props.part.tool.toLowerCase()] ?? "unknown"}
+                rootRefs={props.rootRefs}
+              />
+            </span>
+          );
+        }}
       </Match>
       <Match when={props.opener.kind === "terminal" && props.opener.process_handle ? props.opener.process_handle : undefined} keyed>
         {(handle) => (

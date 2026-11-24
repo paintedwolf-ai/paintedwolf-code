@@ -9208,6 +9208,15 @@ export interface components {
             root_id: string;
             /** @description Path relative to that project root; empty when root_id is empty. */
             root_relative_path: string;
+            /** @description Previous repo-toplevel-relative path when renamed or copied. */
+            old_path?: string;
+            /**
+             * Format: uuid
+             * @description Project root containing old_path when renamed or copied.
+             */
+            old_root_id?: string;
+            /** @description Previous path relative to old_root_id when renamed or copied. */
+            old_root_relative_path?: string;
         };
         GitStatusSummary: {
             available: boolean;
@@ -9428,6 +9437,13 @@ export interface components {
             /** Format: uuid */
             root_id: string;
             root_relative_path: string;
+            old_path?: string;
+            /** Format: uuid */
+            old_root_id?: string;
+            old_root_relative_path?: string;
+            before_blob_oid?: string;
+            after_blob_oid?: string;
+            after_sha256?: string;
         };
         GitDiffView: {
             repo_id: string;
@@ -12084,6 +12100,15 @@ export interface components {
             entry_kind: components["schemas"]["NavigationEntryKind"];
             /** Format: uuid */
             worker_id?: string;
+            /** @description Verified repository identifier when the target belongs to an attached Git repository. */
+            repo_id?: string;
+            /**
+             * Format: uuid
+             * @description Verified registered checkout identifier when the target belongs to a Git checkout.
+             */
+            worktree_id?: string;
+            /** @description Captured revision or immutable Git object identifier for historical navigation. */
+            revision?: string;
         };
         /** @description Host-recorded source context supplied with this message; independent of evidence and filesystem inventory. */
         SourceContext: {
@@ -12116,6 +12141,10 @@ export interface components {
             explicit: boolean;
             /** @description The current address is absent and has retained deletion history. Availability is rechecked when opening. */
             deleted?: boolean;
+            repo_id?: string;
+            /** Format: uuid */
+            worktree_id?: string;
+            revision?: string;
             /** Format: uuid */
             worker_id?: string;
             line?: number;
@@ -17270,7 +17299,10 @@ export interface components {
             /** Format: uuid */
             root_id: string;
             path: string;
+            before_path?: string;
+            before_blob_oid?: string;
             expected_head?: string;
+            expected_after_sha256?: string;
             /** Format: uuid */
             worktree_id?: string;
             /** @enum {string} */
