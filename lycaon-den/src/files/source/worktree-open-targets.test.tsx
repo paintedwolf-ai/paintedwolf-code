@@ -638,7 +638,7 @@ describe("WT06 checkout and revision open targets", () => {
       activityFileOpenTarget({
         projectId: PROJECT_ID,
         mode: "live",
-        sourceLocations: [singleLoc],
+        locations: [singleLoc],
       }),
     ).toMatchObject({ kind: "live", path: "src/one.ts", worktreeId: WORKER_WT, selectCheckout: true });
 
@@ -647,7 +647,7 @@ describe("WT06 checkout and revision open targets", () => {
         projectId: PROJECT_ID,
         mode: "live",
         path: "src/two.ts",
-        sourceLocations: [singleLoc, otherLoc],
+        locations: [singleLoc, otherLoc],
       }),
     ).toMatchObject({ kind: "live", path: "src/two.ts", worktreeId: PRIMARY_WT, selectCheckout: true });
 
@@ -656,7 +656,7 @@ describe("WT06 checkout and revision open targets", () => {
         projectId: PROJECT_ID,
         mode: "live",
         path: "src/shared.ts",
-        sourceLocations: [
+        locations: [
           { ...singleLoc, path: "src/shared.ts" },
           { ...otherLoc, path: "src/shared.ts" },
         ],
@@ -677,7 +677,7 @@ describe("WT06 checkout and revision open targets", () => {
         projectId: PROJECT_ID,
         mode: "historical-diff",
         effectId: "eff-1",
-        sourceLocations: [singleLoc],
+        locations: [singleLoc],
       }),
     ).toMatchObject({ kind: "historical-diff", revision: "eff-1", binding: { kind: "effect", effectId: "eff-1" } });
 
@@ -686,7 +686,7 @@ describe("WT06 checkout and revision open targets", () => {
         projectId: PROJECT_ID,
         mode: "historical-diff",
         versionId: "ver-1",
-        sourceLocations: [singleLoc],
+        locations: [singleLoc],
       }),
     ).toMatchObject({ kind: "historical-diff", revision: "ver-1", binding: { kind: "version", versionId: "ver-1" } });
   });

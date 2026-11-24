@@ -414,7 +414,10 @@ describe("multi-checkout Files buffers, hot exit, and unavailable checkout recov
     applyFilesBufferEditorDocument(projectId, key, adopted!);
     opened.reservation?.release();
 
-    editorReplica(host.wire.id)!.replaceLocal("export const live = 2;\n");
+    const replica = editorReplica(host.wire.id)!;
+    replica.replaceLocal("export const live = 2;\n");
+    await replica.flush();
+    applyFilesBufferEditorDocument(projectId, key, replica.accepted);
     const outcome = await saveProjectFileDocument({ projectId, client, key });
     expect(outcome.status).toBe("unavailable");
     expect(projectFilesState(projectId).byKey[key]?.checkoutUnavailable).toBe(true);
