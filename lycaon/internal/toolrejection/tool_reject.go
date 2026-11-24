@@ -124,6 +124,10 @@ const EditorConfigMismatchCode = "EDITORCONFIG_MISMATCH"
 // on a worker branch with no repository. The program's own status stands.
 const GitNoRepositoryOnWriteLegCode = "GIT_NO_REPOSITORY_ON_WRITE_LEG"
 
+// GrepStoppedFilesCode is stated on a command whose multi-file grep stopped
+// one or more inputs on a record budget and searched every other input.
+const GrepStoppedFilesCode = "GREP_STOPPED_FILES"
+
 // HTTPRequestWebPageCode is stated on an http_request that delivered a remote
 // HTML document while fetch_url was on the turn's plan. The exchange stands.
 const HTTPRequestWebPageCode = "HTTP_REQUEST_WEB_PAGE"

@@ -220,7 +220,7 @@ type vmEngine struct {
 }
 
 func (e vmEngine) canUseLiteral(ctx context.Context, b []byte) (literalEngine, bool, int64) {
-	if e.literal == nil || int64(len(b)) > e.limits.WorkSteps || int64(len(b))*12+8 > e.limits.MemoryBytes {
+	if e.literal == nil || int64(len(b)) > e.limits.WorkSteps {
 		return literalEngine{}, false, 0
 	}
 	lit := *e.literal

@@ -26,6 +26,8 @@ func (r *grepRun) searchOperands() (finalErr error) {
 		operands, implicit = commandprogram.Fields{{Value: "."}}, true
 	}
 	multiple := len(operands) > 1
+	r.multiFile = multiple || r.recursive
+	defer r.reportStops()
 	if r.mode != modeFileList && (multiple || r.recursive) {
 		var err error
 		r.files, err = newGrepFiles(r, grepWorkerCount())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"io"
 	"io/fs"
 	"strings"
@@ -167,9 +168,12 @@ func patternRejection(err error) error {
 	}
 	var budget *textsearch.BudgetError
 	if errors.As(err, &budget) {
-		return errors.Join(err, &toolrejection.ToolReject{Code: textsearch.CodeMatchBudget, Data: map[string]any{
-			"limit_id": budget.Resource, "maximum": budget.Maximum, "observed": budget.Observed,
-		}})
+		data := map[string]any{"limit_id": budget.Resource, "maximum": budget.Maximum, "observed": budget.Observed}
+		var stop *grepRecordStop
+		if errors.As(err, &stop) {
+			maps.Copy(data, stop.facts())
+		}
+		return errors.Join(err, &toolrejection.ToolReject{Code: textsearch.CodeMatchBudget, Data: data})
 	}
 	return err
 }

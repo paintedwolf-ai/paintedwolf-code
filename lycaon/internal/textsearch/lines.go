@@ -125,6 +125,10 @@ func ScanReader(ctx context.Context, r io.Reader, maxBytes int64, onExceed func(
 		}
 		span, matched, err := sel.Select(ctx, line.Text)
 		if err != nil {
+			var budget *BudgetError
+			if errors.As(err, &budget) {
+				budget.Line, budget.RecordBytes = line.Number, int64(len(line.Text))
+			}
 			return s.selected, err
 		}
 		if matched == opts.Invert {
