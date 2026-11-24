@@ -190,6 +190,9 @@ func newCompletionCueHarness(t *testing.T, withFeature bool, steps []scriptedSte
 	deps := promptloop.StoreDeps(st)
 	deps.Model.LLM = h.llm
 	deps.Context.Tools = reg
+	deps.Context.LoadedTools = func(string) map[string]bool {
+		return map[string]bool{"verify": true}
+	}
 	deps.Context.Policy = completionCueToolPolicy{
 		tools: []tools.ToolMeta{
 			{Name: "update_progress"},
@@ -670,6 +673,52 @@ func (d *dynamicScriptLLM) Stream(ctx context.Context, req modelcall.CompletionR
 		d.beforeStep(d.inner.idx)
 	}
 	return d.inner.Stream(ctx, req)
+}
+
+func TestCompletionCueBackgroundAndWorkerChecks(t *testing.T) {
+	ctx := t.Context()
+	seedThree := "- [ ] Step 1\n- [ ] Step 2\n- [ ] Step 3"
+	steps := []scriptedStep{
+		{toolCalls: []api.ToolCall{{ID: "tc-seed", Name: "update_progress", Args: map[string]any{"content": seedThree}}}},
+		{content: "done"},
+	}
+	h := newCompletionCueHarness(t, true, steps)
+	hist := intentHistory("u-intent-bg", "Background check")
+
+	// Simulate a background check settling for the same intent before decision 1.
+	orig := h.llm
+	h.loop.Model.Deps.LLM = &dynamicScriptLLM{
+		inner: orig,
+		beforeStep: func(stepIdx int) {
+			if stepIdx == 1 {
+				// Worker-only check (different session) must not trigger coordinator cue.
+				h.tracker.RecordPassingCheck(completioncue.CheckFact{
+					CheckID: "chk-worker", SessionID: "worker-child-session", IntentID: "u-intent-bg",
+					SourceRevision: "rev-1", SourceRootDigest: "root-1",
+				})
+				// Late check from superseded intent must be dropped.
+				h.tracker.RecordPassingCheck(completioncue.CheckFact{
+					CheckID: "chk-late", SessionID: h.sess.ID, IntentID: "u-intent-old",
+					SourceRevision: "rev-1", SourceRootDigest: "root-1",
+				})
+				// Matching background check for coordinator's current intent triggers cue.
+				h.tracker.RecordPassingCheck(completioncue.CheckFact{
+					CheckID: "chk-bg", SessionID: h.sess.ID, IntentID: "u-intent-bg",
+					SourceRevision: "rev-1", SourceRootDigest: "root-1",
+				})
+			}
+		},
+	}
+
+	_, err := h.loop.Run(ctx, promptloop.PromptRunInput{
+		SessionID: h.sess.ID, Session: h.sess, History: hist, ProfileID: "coordinator",
+		ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID}},
+	})
+	testutil.FailErr(t, "loop.Run background check", err)
+	want := []string{"", completioncue.CodeOutcomeCoverage}
+	if got := cueCodesInRequests(h.llm.requests); !slices.Equal(got, want) {
+		t.Fatalf("background check cues = %v, want %v", got, want)
+	}
 }
 
 func TestCompletionCueRebuildStability(t *testing.T) {
