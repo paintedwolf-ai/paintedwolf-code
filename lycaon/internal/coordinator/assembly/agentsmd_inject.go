@@ -41,9 +41,9 @@ func (e *turnContextAssembler) agentsMDChainInject(ctx context.Context, sess *ap
 }
 
 // agentsMDRootInject projects active-root guidance for idle prefix preparation.
-func (e *turnContextAssembler) agentsMDRootInject(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) (AgentsMDPolicyDelivery, error) {
+func (e *turnContextAssembler) agentsMDRootInject(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) AgentsMDPolicyDelivery {
 	if e == nil || sess == nil || turn == nil || e.deps.AgentsMD.RootPolicies == nil {
-		return AgentsMDPolicyDelivery{}, nil
+		return AgentsMDPolicyDelivery{}
 	}
 	return e.deps.AgentsMD.RootPolicies(ctx, sess)
 }
