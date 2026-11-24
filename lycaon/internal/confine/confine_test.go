@@ -74,11 +74,21 @@ func confinedRun(t *testing.T, self string, c confine.Confinement, name string, 
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
+	setConfinedWorkingDir(cmd, c)
 	if scratch := c.Workspaces.SessionScratch; scratch != "" {
 		cmd.Env = append(cmd.Environ(), "TMPDIR="+scratch, "TMP="+scratch, "TEMP="+scratch)
 	}
 	out, _ := cmd.CombinedOutput()
 	return cmd.ProcessState.ExitCode(), string(out)
+}
+
+func setConfinedWorkingDir(cmd *exec.Cmd, c confine.Confinement) {
+	for _, root := range c.Roots {
+		if info, err := os.Stat(root); err == nil && info.IsDir() {
+			cmd.Dir = root
+			return
+		}
+	}
 }
 
 // confinedStdout is confinedRun with stdout kept apart from stderr, for probes
@@ -97,6 +107,7 @@ func confinedStdout(t *testing.T, self string, c confine.Confinement, name strin
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
+	setConfinedWorkingDir(cmd, c)
 	var errBuf strings.Builder
 	cmd.Stderr = &errBuf
 	out, _ := cmd.Output()
@@ -534,6 +545,7 @@ func TestBoundarySignalSameSandboxOnly(t *testing.T) {
 	}, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup2()
+	setConfinedWorkingDir(same, c)
 	same.WaitDelay = 10 * time.Second
 	out2, err := same.CombinedOutput()
 	if err != nil {

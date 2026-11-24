@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -136,6 +137,13 @@ func main() {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("compile probe: %v\n%s", err, out)
+	}
+	if runtime.GOOS == "darwin" {
+		// Ad-hoc signature adds the CMS wrapper macOS Sandbox.kext requires to log denials.
+		signOut, signErr := exec.CommandContext(t.Context(), "/usr/bin/codesign", "-f", "-s", "-", binPath).CombinedOutput()
+		if signErr != nil {
+			t.Fatalf("codesign probe: %v\n%s", signErr, signOut)
+		}
 	}
 	return binPath
 }
@@ -294,9 +302,7 @@ func TestSharedTempOneDecisionDeclaredExchangeAndDirectionalReuse(t *testing.T) 
 	for card.ID == "" {
 		select {
 		case err := <-done:
-			msgs, _ := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
-			rawMsgs, _ := json.Marshal(msgs)
-			t.Fatalf("prompt ended before an approval was announced: err=%v transcript=%s", err, rawMsgs)
+			t.Fatalf("prompt ended before an approval was announced: %v", err)
 		case env := <-stream:
 			if env.Topic != wire.EventTopicCheckpoint {
 				continue

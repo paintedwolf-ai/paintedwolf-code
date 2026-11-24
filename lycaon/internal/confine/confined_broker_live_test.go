@@ -59,6 +59,7 @@ func TestConfinedCommandReachesTheBrokerByLineage(t *testing.T) {
 		[]string{"-s", "-m", "10", "-o", "/dev/null", "-w", "%{http_code}", upstream.URL}, *c)
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
+	setConfinedWorkingDir(cmd, *c)
 	cmd.Env = confine.ProcessEnvironment(os.Environ(), *c)
 	out, _ := cmd.CombinedOutput()
 	if strings.TrimSpace(string(out)) != "200" {
