@@ -92,7 +92,7 @@ func ReserveCollectBatch(ctx context.Context, s *Store, owner Owner, requestKey 
 		if len(pending) == 0 {
 			continue
 		}
-		allowed, revokeReason := s.checkWatchAuthority(ctx, reg)
+		allowed, revokeReason := checkWatchAuthority(s, ctx, reg)
 		if overflow == nil && reg.Lifecycle.Overflow != nil {
 			cp := *reg.Lifecycle.Overflow
 			overflow = &cp

@@ -135,7 +135,7 @@ func probeGroupID(key ProbeKey) string {
 	return "probe:" + hex.EncodeToString(sum[:12])
 }
 
-func (s *Store) subscribeWatchSampler(reg Registration, now time.Time) {
+func subscribeWatchSampler(s *Store, reg Registration, now time.Time) {
 	if s == nil || s.sampler == nil || reg.Lifecycle.State != StateLive {
 		return
 	}
@@ -222,7 +222,7 @@ func (sm *Sampler) unsubscribeWatch(watchID string, heap *DeadlineHeap) {
 	}
 }
 
-func (s *Store) enqueueDueProbeGroups(groupIDs []string) {
+func enqueueDueProbeGroups(s *Store, groupIDs []string) {
 	if s == nil || s.sampler == nil || len(groupIDs) == 0 {
 		return
 	}
@@ -236,7 +236,7 @@ func (s *Store) enqueueDueProbeGroups(groupIDs []string) {
 	s.sampler.mu.Unlock()
 }
 
-func (s *Store) stepSamplerRoundRobin(ctx context.Context, now time.Time) error {
+func stepSamplerRoundRobin(s *Store, ctx context.Context, now time.Time) error {
 	if s == nil || s.sampler == nil {
 		return nil
 	}
@@ -285,14 +285,14 @@ func (s *Store) stepSamplerRoundRobin(ctx context.Context, now time.Time) error 
 	wg.Wait()
 
 	for _, item := range results {
-		if err := s.applyProbeGroupResult(ctx, item.grp, item.out, now); err != nil {
+		if err := applyProbeGroupResult(s, ctx, item.grp, item.out, now); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Store) applyProbeGroupResult(ctx context.Context, snapshot *probeGroup, out probeOutcome, now time.Time) error {
+func applyProbeGroupResult(s *Store, ctx context.Context, snapshot *probeGroup, out probeOutcome, now time.Time) error {
 	s.sampler.mu.Lock()
 	liveGrp, stillExists := s.sampler.groupsByID[snapshot.id]
 	if stillExists {
@@ -314,7 +314,7 @@ func (s *Store) applyProbeGroupResult(ctx context.Context, snapshot *probeGroup,
 
 	stateChanged := false
 	for _, sub := range subs {
-		changed, err := s.applySubscriberProbeOutcome(ctx, sub, snapshot.condition, out)
+		changed, err := applySubscriberProbeOutcome(s, ctx, sub, snapshot.condition, out)
 		if err != nil {
 			return err
 		}
@@ -348,7 +348,7 @@ func readinessCursorKeys(altIdx int) (armedKey, epKey string) {
 	return fmt.Sprintf("ready:armed:%d", altIdx), fmt.Sprintf("ready:ep:%d", altIdx)
 }
 
-func (s *Store) applySubscriberProbeOutcome(ctx context.Context, sub probeSubscriber, cond awaitstore.Condition, out probeOutcome) (bool, error) {
+func applySubscriberProbeOutcome(s *Store, ctx context.Context, sub probeSubscriber, cond awaitstore.Condition, out probeOutcome) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return false, err
@@ -366,11 +366,11 @@ func (s *Store) applySubscriberProbeOutcome(ctx context.Context, sub probeSubscr
 		return false, nil
 	}
 
-	if allowed, reason := s.checkWatchAuthority(ctx, reg); !allowed {
-		return true, s.revokeWatchAuthority(ctx, reg, cond.Kind, reason)
+	if allowed, reason := checkWatchAuthority(s, ctx, reg); !allowed {
+		return true, revokeWatchAuthority(s, ctx, reg, cond.Kind, reason)
 	}
 	if out.Denied {
-		return true, s.revokeWatchAuthority(ctx, reg, cond.Kind, out.Code)
+		return true, revokeWatchAuthority(s, ctx, reg, cond.Kind, out.Code)
 	}
 	// Unknown or inaccessible probe state neither proves readiness nor re-arms a level predicate.
 	if !out.Known {
@@ -382,7 +382,7 @@ func (s *Store) applySubscriberProbeOutcome(ctx context.Context, sub probeSubscr
 
 	if !out.Satisfied {
 		if !armed {
-			return true, s.updateWatchCursor(ctx, reg.WatchID, armedKey, "true")
+			return true, updateWatchCursor(s, ctx, reg.WatchID, armedKey, "true")
 		}
 		return false, nil
 	}
@@ -416,7 +416,7 @@ func (s *Store) applySubscriberProbeOutcome(ctx context.Context, sub probeSubscr
 	return true, err
 }
 
-func (s *Store) updateWatchCursor(ctx context.Context, watchID, key, val string) error {
+func updateWatchCursor(s *Store, ctx context.Context, watchID, key, val string) error {
 	nowStr := s.clock.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE watch_registrations SET cursors_json = json_set(cursors_json, ?, ?), updated_at = ? WHERE watch_id = ? AND state = 'live'`,
@@ -424,7 +424,7 @@ func (s *Store) updateWatchCursor(ctx context.Context, watchID, key, val string)
 	return err
 }
 
-func (s *Store) revokeWatchAuthority(ctx context.Context, reg Registration, sourceKind, code string) error {
+func revokeWatchAuthority(s *Store, ctx context.Context, reg Registration, sourceKind, code string) error {
 	ref := "restricted:" + reg.WatchID
 	if code == "" {
 		code = "AUTHORITY_REVOKED"

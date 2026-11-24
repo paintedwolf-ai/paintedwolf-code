@@ -15,6 +15,8 @@ import (
 	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -152,7 +154,7 @@ func TestSW06CoordinatorWorkAndParkAcrossWorkerDecisionAndFailure(t *testing.T) 
 	}
 	select {
 	case winner := <-wokeCh:
-		if winner.Kind != ConditionWatchMatch || winner.Outcome != "failed" {
+		if winner.Kind != ConditionWatchMatch || winner.Outcome != "matched" || !strings.Contains(winner.Report, `"outcome":"failed"`) {
 			t.Fatalf("unexpected wake winner: %+v", winner)
 		}
 	default:
@@ -288,6 +290,10 @@ func TestSW06AnchoredTimersCalendarDSTExpiryTieAndMissedCatchup(t *testing.T) {
 
 func TestSW06SamplerDeduplicationDomainIsolationOwnerTeardownAndRevocation(t *testing.T) {
 	store, clock, database, owner1 := openTestWatchStore(t)
+	confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
+		return true
+	})
+	t.Cleanup(func() { confine.SetEgressResolver(nil) })
 	owner2 := Owner{ProjectID: testdbseed.DefaultProjectID, SessionID: "session-2"}
 
 	// Seed a second project + session to prove zero probe sharing across authority domains.

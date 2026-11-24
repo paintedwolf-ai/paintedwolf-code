@@ -108,7 +108,7 @@ func (s *Store) ReconcileStoppedSessions(ctx context.Context, sessionIDs ...stri
 		return StopSummary{}, err
 	}
 	for _, wID := range expiredIDs {
-		s.retireWatchRuntime(wID)
+		retireWatchRuntime(s, wID)
 	}
 	for _, lID := range leaseIDs {
 		s.heap.Remove(KindWaitDeadline, lID)
@@ -143,7 +143,7 @@ func (s *Store) IsSessionStopped(ctx context.Context, sessionID string) (bool, e
 	if sessionID == "" {
 		return false, nil
 	}
-	if s.isTreeStopping(sessionID) {
+	if isTreeStopping(s, sessionID) {
 		return true, nil
 	}
 	var stoppedAt sql.NullString

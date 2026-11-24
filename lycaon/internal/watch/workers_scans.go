@@ -94,7 +94,7 @@ func collectInitialCoordinatorMatches(ctx context.Context, s *Store, req Registe
 	if !needsSnapshot {
 		return nil, nil, nil
 	}
-	snap, ok, err := s.lookupCoordinatorState(ctx, req.Owner.SessionID)
+	snap, ok, err := lookupCoordinatorState(s, ctx, req.Owner.SessionID)
 	if err != nil || !ok {
 		return nil, nil, err
 	}
@@ -239,7 +239,7 @@ func (s *Store) RecordWorkerDecisionOpened(ctx context.Context, parentSessionID,
 	if !s.Configured() || strings.TrimSpace(parentSessionID) == "" || strings.TrimSpace(jobID) == "" {
 		return false, nil
 	}
-	regs, err := s.liveSessionWatches(ctx, parentSessionID)
+	regs, err := liveSessionWatches(s, ctx, parentSessionID)
 	if err != nil || len(regs) == 0 {
 		return false, err
 	}
@@ -265,7 +265,7 @@ func (s *Store) RecordWorkerDecisionOpened(ctx context.Context, parentSessionID,
 			return claimedAny, cErr
 		}
 		if dec.AlreadyAdmitted {
-			_, _ = s.recordAlreadyAdmittedMatch(ctx, reg.WatchID, MatchInput{
+			_, _ = recordAlreadyAdmittedMatch(s, ctx, reg.WatchID, MatchInput{
 				SourceKind:   "worker_decision_needed",
 				OccurrenceID: occ,
 				Outcome:      "needs_decision",
@@ -355,7 +355,7 @@ func (s *Store) RecordWorkerDecisionClosed(ctx context.Context, parentSessionID,
 	_ = rows.Close()
 
 	for _, id := range targetIDs {
-		_ = s.updateWatchCursor(ctx, id, key, status)
+		_ = updateWatchCursor(s, ctx, id, key, status)
 	}
 	return nil
 }
@@ -365,7 +365,7 @@ func (s *Store) RecordWorkerEvent(ctx context.Context, parentSessionID string, e
 	if !s.Configured() || strings.TrimSpace(parentSessionID) == "" {
 		return false, nil
 	}
-	regs, err := s.liveSessionWatches(ctx, parentSessionID)
+	regs, err := liveSessionWatches(s, ctx, parentSessionID)
 	if err != nil || len(regs) == 0 {
 		return false, err
 	}
@@ -387,7 +387,7 @@ func (s *Store) RecordWorkerEvent(ctx context.Context, parentSessionID string, e
 					if outcome == "" {
 						outcome = "satisfied"
 					}
-					if ok, err := s.claimAndRecordSessionWatch(ctx, owner, reg.WatchID, occ, MatchInput{
+					if ok, err := claimAndRecordSessionWatch(s, ctx, owner, reg.WatchID, occ, MatchInput{
 						SourceKind:   "next_worker_done",
 						OccurrenceID: occ,
 						Outcome:      outcome,
@@ -412,7 +412,7 @@ func (s *Store) RecordWorkerEvent(ctx context.Context, parentSessionID string, e
 					if failOcc == "" {
 						failOcc = "worker_failed:" + ev.JobID
 					}
-					if ok, err := s.claimAndRecordSessionWatch(ctx, owner, reg.WatchID, failOcc, MatchInput{
+					if ok, err := claimAndRecordSessionWatch(s, ctx, owner, reg.WatchID, failOcc, MatchInput{
 						SourceKind:   "worker_failed",
 						OccurrenceID: failOcc,
 						Outcome:      "failed",
@@ -429,7 +429,7 @@ func (s *Store) RecordWorkerEvent(ctx context.Context, parentSessionID string, e
 					}
 				}
 			case "all_workers_idle":
-				ok, err := s.evaluateLevelCondition(ctx, reg, altIdx, "all_workers_idle", ev.AllWorkersIdle)
+				ok, err := evaluateLevelCondition(s, ctx, reg, altIdx, "all_workers_idle", ev.AllWorkersIdle)
 				if err != nil {
 					return claimed, err
 				}
@@ -437,7 +437,7 @@ func (s *Store) RecordWorkerEvent(ctx context.Context, parentSessionID string, e
 					claimed = true
 				}
 			case "overlay_promote_pending":
-				ok, err := s.evaluateLevelCondition(ctx, reg, altIdx, "overlay_promote_pending", ev.OverlayPromotePending)
+				ok, err := evaluateLevelCondition(s, ctx, reg, altIdx, "overlay_promote_pending", ev.OverlayPromotePending)
 				if err != nil {
 					return claimed, err
 				}
@@ -450,13 +450,13 @@ func (s *Store) RecordWorkerEvent(ctx context.Context, parentSessionID string, e
 	return claimed, nil
 }
 
-func (s *Store) evaluateLevelCondition(ctx context.Context, reg Registration, altIdx int, kind string, satisfied bool) (bool, error) {
+func evaluateLevelCondition(s *Store, ctx context.Context, reg Registration, altIdx int, kind string, satisfied bool) (bool, error) {
 	armedKey := levelArmedCursorKey(kind, altIdx)
 	epKey := levelEpisodeCursorKey(kind, altIdx)
 	armed := reg.Cursors[armedKey] != "false"
 	if !satisfied {
 		if !armed {
-			_ = s.updateWatchCursor(ctx, reg.WatchID, armedKey, "true")
+			_ = updateWatchCursor(s, ctx, reg.WatchID, armedKey, "true")
 		}
 		return false, nil
 	}
@@ -478,7 +478,7 @@ func (s *Store) evaluateLevelCondition(ctx context.Context, reg Registration, al
 	return ok, err
 }
 
-func (s *Store) claimAndRecordSessionWatch(ctx context.Context, owner Owner, watchID, occ string, input MatchInput) (bool, error) {
+func claimAndRecordSessionWatch(s *Store, ctx context.Context, owner Owner, watchID, occ string, input MatchInput) (bool, error) {
 	if occ != "" {
 		dec, err := ClaimPresentation(ctx, s, owner, occ, ClaimWatchEvidence, false, "")
 		if err != nil {
@@ -486,7 +486,7 @@ func (s *Store) claimAndRecordSessionWatch(ctx context.Context, owner Owner, wat
 		}
 		if dec.AlreadyAdmitted {
 			input.RetainedRef = dec.ExistingReceiptID
-			ok, rErr := s.recordAlreadyAdmittedMatch(ctx, watchID, input, nil, dec.ExistingReceiptID)
+			ok, rErr := recordAlreadyAdmittedMatch(s, ctx, watchID, input, nil, dec.ExistingReceiptID)
 			return ok, rErr
 		}
 		if !dec.Granted {
@@ -502,7 +502,7 @@ func (s *Store) RecordScanDone(ctx context.Context, sessionID string, scan ScanD
 	if !s.Configured() || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(scan.ScanID) == "" {
 		return false, nil
 	}
-	regs, err := s.liveSessionWatches(ctx, sessionID)
+	regs, err := liveSessionWatches(s, ctx, sessionID)
 	if err != nil || len(regs) == 0 {
 		return false, err
 	}
@@ -520,7 +520,7 @@ func (s *Store) RecordScanDone(ctx context.Context, sessionID string, scan ScanD
 		if !hasScan {
 			continue
 		}
-		ok, rErr := s.claimAndRecordSessionWatch(ctx, owner, reg.WatchID, occ, MatchInput{
+		ok, rErr := claimAndRecordSessionWatch(s, ctx, owner, reg.WatchID, occ, MatchInput{
 			SourceKind:   "scan_done",
 			OccurrenceID: occ,
 			Outcome:      "satisfied",
@@ -566,7 +566,7 @@ func (s *Store) LiveScanWatchSessions(ctx context.Context) ([]string, error) {
 	return ids, rows.Err()
 }
 
-func (s *Store) liveSessionWatches(ctx context.Context, sessionID string) ([]Registration, error) {
+func liveSessionWatches(s *Store, ctx context.Context, sessionID string) ([]Registration, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+registrationColumns+` FROM watch_registrations WHERE session_id = ? AND owner_kind = 'session' AND state = 'live' ORDER BY seq ASC`,
 		strings.TrimSpace(sessionID))
