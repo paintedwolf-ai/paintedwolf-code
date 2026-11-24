@@ -220,7 +220,7 @@ func loadStandingProjectAuthority(b *serveBuilder, ctx context.Context, projectI
 		return watch.Authority{}
 	}
 	rows, err := b.storage.Database.QueryContext(ctx,
-		`SELECT id, label, path FROM project_roots WHERE project_id = ? ORDER BY created_at ASC`,
+		`SELECT id, label, path FROM project_roots WHERE project_id = ? AND kind != 'outside' ORDER BY is_primary DESC, added_at ASC`,
 		strings.TrimSpace(projectID))
 	if err != nil {
 		return watch.Authority{}

@@ -3,7 +3,9 @@ package coordinatorcontrol
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/coordinator"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/settings"
 	setupanchor "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	"github.com/lycaon/lycaon/pkg/api"
 	"reflect"
@@ -59,7 +61,19 @@ func TestScanDeltaPagesRecipientsWithoutDuplicatingWorkflowEvidence(t *testing.T
 
 func TestScanFinishedNotifiesUnwokenWatchSessions(t *testing.T) {
 	setupanchor.Install()
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{
+		LoopWakeDeps: func() loopwake.LoopDeps {
+			return loopwake.LoopDeps{
+				GetSession: func(_ context.Context, id string) (*api.Session, error) {
+					return &api.Session{ID: id, Status: api.SessionStatusIdle}, nil
+				},
+				IsCoordinatorSession: func(context.Context, *api.Session) bool { return true },
+				Limits:               func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+				WorkerCycleIdle:      func(context.Context, *api.Session, string) (bool, error) { return true, nil },
+				QueueInform:          func(context.Context, string, anchor.ID, anchor.Envelope) {},
+			}
+		},
+	})
 	loop := rt.CoordinatorLoop()
 	loop.Waits.EnterSleep(
 		t.Context(),
