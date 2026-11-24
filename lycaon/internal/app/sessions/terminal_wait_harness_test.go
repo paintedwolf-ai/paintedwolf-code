@@ -10,6 +10,7 @@ import (
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
@@ -19,10 +20,11 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -130,7 +132,9 @@ func (h *terminalWaitHarness) Emit(_ context.Context, _ string, id anchor.ID, _ 
 func newTerminalWaitHarness(t *testing.T) *terminalWaitHarness {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	storage := storetest.New(t, testdbseed.DefaultProjectID)
+	database := testdbfixture.Open(t, "sessions.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	storage := store.NewSQL(database)
 	sess, err := storage.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -138,15 +142,18 @@ func newTerminalWaitHarness(t *testing.T) *terminalWaitHarness {
 		t:          t,
 		storage:    storage,
 		sess:       sess,
-		waitStore:  &awaitstore.Store{DB: storage.Database},
+		waitStore:  &awaitstore.Store{DB: database},
 		credGate:   &gatedCredentialFiles{},
 		now:        time.Date(2026, 11, 23, 17, 0, 39, 0, time.UTC),
 		resumeDone: make(chan awaitstore.Condition, 8),
 	}
 	completions := make(chan bgprocess.Completion, 16)
 	h.bg = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{
-		OnComplete: func(c bgprocess.Completion) { completions <- c },
+		Complete: func(_ context.Context, c bgprocess.Completion) { completions <- c },
 	})
+	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
+	testutil.FailErr(t, "build matcher", err)
+	h.bg.Output.SetCaptureProjector(captureprojection.New(matcher, nil))
 	t.Cleanup(func() { _ = h.bg.Lifecycle.Close(context.Background()) })
 
 	pol := &noopTurnPolicy{}
@@ -187,7 +194,7 @@ func (h *terminalWaitHarness) newLoopEngine() *loopwake.LoopEngine {
 	loop.SetDeps(loopwake.LoopDeps{
 		GetSession: h.storage.Sessions.Get,
 		Limits:     func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		PublishWaitLease: func(string, *api.SessionWait) {
+		PublishWaitLease: func(context.Context, string, loopwake.WaitLease) {
 			h.parkCalls.Add(1)
 		},
 		RunWaitResume: func(ctx context.Context, sessionID string, delivery loopwake.WaitDelivery) (*promptresult.Result, error) {
@@ -199,7 +206,7 @@ func (h *terminalWaitHarness) newLoopEngine() *loopwake.LoopEngine {
 				Role:      api.MessageRoleUser,
 				Kind:      api.MessageKindHostLoopWake,
 				Content:   loopwake.WaitEndedText(delivery.Condition),
-				Timestamp: time.Now().UTC(),
+				CreatedAt: time.Now().UTC(),
 			}
 			if err := h.storage.Transcript.AppendMessages(ctx, sessionID, msg); err != nil {
 				return nil, err
@@ -241,7 +248,8 @@ func (h *terminalWaitHarness) runAgentToolTurn(ctx context.Context, call api.Too
 		Context: promptloop.ContextDeps{
 			Limits:               func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 			Tools:                h.execReg,
-			Policy:               noopTurnPolicy{metas: h.execReg.List()},
+			Policy:               &noopTurnPolicy{metas: h.execReg.List()},
+			LoadedTools:          func(string) map[string]bool { return map[string]bool{"wait": true, "command_output": true} },
 			ResolveEffectiveMode: h.storage.ResolveEffectiveMode,
 			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return history, nil
