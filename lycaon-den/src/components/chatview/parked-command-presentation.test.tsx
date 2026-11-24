@@ -280,6 +280,8 @@ describe("terminal background command wait delivery presentation", () => {
       exit_code: 0,
       termination_reason: "exited",
     });
+    expect(screen.getByTestId("thinking-indicator").textContent).not.toContain(TERMINAL_WAIT_DELIVERY_LABEL);
+    vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
     expect(screen.getByTestId("thinking-indicator").textContent).toBe("Thinking...");
     const firstSpan = container.querySelector<HTMLElement>("[data-testid='activity-span-card']")!;
     expect(firstSpan.getAttribute("data-status")).toBe("done");
@@ -307,6 +309,7 @@ describe("terminal background command wait delivery presentation", () => {
     appStore.actions.upsertMessage(waitSettledResult("wait-after-exit", 6));
     appStore.actions.setActivity({ ...waitAct, status: "done" });
     expect(activeWaitSpan.getAttribute("data-status")).toBe("done");
+    expect(screen.getByTestId("thinking-indicator").textContent).toBe("Thinking...");
 
     // 3. Unrelated handle or foreign session exit never claims pending delivery handoff.
     appStore.actions.upsertMessage({
@@ -331,6 +334,8 @@ describe("terminal background command wait delivery presentation", () => {
       running: false,
       exit_code: 0,
     });
+    expect(screen.getByTestId("thinking-indicator").textContent).not.toContain(TERMINAL_WAIT_DELIVERY_LABEL);
+    vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
     expect(screen.getByTestId("thinking-indicator").textContent).toBe("Waiting...");
     appStore.actions.upsertMessage({
       ...waitSettledResult("wait-foreign", 9),

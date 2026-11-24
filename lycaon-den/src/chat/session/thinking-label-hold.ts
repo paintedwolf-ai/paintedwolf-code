@@ -100,9 +100,11 @@ export function createThinkingLabelHold(
     bump,
   );
 
+  let wasImmediate = false;
   createEffect(
     on(options.visible, (visible, prevVisible) => {
       if (visible === prevVisible) return;
+      if (!visible) wasImmediate = false;
       engine.handleVisibilityChange(visible);
     }),
   );
@@ -111,8 +113,15 @@ export function createThinkingLabelHold(
   return () => {
     // Reading the revision refreshes the label after each hold interval.
     revision();
-    if (!options.visible()) return undefined;
-    if (options.immediate?.()) return engine.syncImmediate();
+    if (!options.visible()) {
+      wasImmediate = false;
+      return undefined;
+    }
+    const immediate = options.immediate?.() === true;
+    if (immediate || wasImmediate) {
+      wasImmediate = immediate;
+      return engine.syncImmediate();
+    }
     return engine.read();
   };
 }
