@@ -1,12 +1,18 @@
 package commands
 
 import (
+	"archive/zip"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io"
+	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -48,10 +54,8 @@ func TestWorktreeQualificationRapidEventsWorkCountGate(t *testing.T) {
 	gittest.InitCommit(t, primaryDir, "seed")
 
 	const siblingCount = 12
-	siblingDirs := make([]string, siblingCount)
 	for i := range siblingCount {
 		dir := filepath.Join(baseDir, fmt.Sprintf("wt-idle-%02d", i))
-		siblingDirs[i] = dir
 		gittest.Run(t, primaryDir, "worktree", "add", "-b", fmt.Sprintf("feat/idle-%02d", i), dir, "HEAD")
 		testutil.FailErr(t, "dirty idle sibling", os.WriteFile(filepath.Join(dir, "src", "nested", "mod.go"), []byte(fmt.Sprintf("package nested // %d\n", i)), 0o644))
 	}
@@ -92,9 +96,15 @@ func TestWorktreeQualificationRapidEventsWorkCountGate(t *testing.T) {
 	}
 	wg.Wait()
 
-	testutil.WaitFor(t, "coalesced inventory build", func() bool {
-		items, listErr := inv.ListStored(t.Context(), proj.ID, spec.RepoID)
-		return listErr == nil && len(items) == siblingCount+1
+	items, err := inv.Read(t.Context(), spec)
+	testutil.FailErr(t, "read coalesced inventory", err)
+	if len(items) != siblingCount+1 {
+		t.Fatalf("inventory items = %d, want %d", len(items), siblingCount+1)
+	}
+
+	// Wait briefly for any trailing background pass already admitted before Read returned.
+	testutil.WaitFor(t, "inspector settles", func() bool {
+		return inspectorCalls.Load() == int64(siblingCount+1)*lister.listCalls.Load()
 	})
 
 	listCalls := lister.listCalls.Load()
@@ -107,11 +117,64 @@ func TestWorktreeQualificationRapidEventsWorkCountGate(t *testing.T) {
 	if got := lister.nonPrimaryCalls.Load(); got != 0 {
 		t.Fatalf("per-descendant or sibling git launches = %d, want 0", got)
 	}
-	if maxInspector := int64(siblingCount+1) * listCalls; inspectorCalls.Load() != maxInspector {
-		t.Fatalf("inspector calls = %d, want %d (scales linearly with registrations)", inspectorCalls.Load(), maxInspector)
-	}
 	t.Logf("work-count gate: siblings=%d events=%d list_builds=%d status_reads=%d non_primary_git=%d inspector_checks=%d",
 		siblingCount, duplicateEvents, listCalls, lister.statusCalls.Load(), lister.nonPrimaryCalls.Load(), inspectorCalls.Load())
+}
+
+func materializeUpgradeCorpusData(t *testing.T, corpusDir, targetDataDir, dbFileName string) {
+	t.Helper()
+	archive, err := zip.OpenReader(filepath.Join(corpusDir, "backup.zip"))
+	testutil.FailErr(t, "open corpus backup.zip", err)
+	defer func() { _ = archive.Close() }()
+
+	readArchiveEntry := func(name string) []byte {
+		f, openErr := archive.Reader.Open(name)
+		testutil.FailErr(t, "open zip entry "+name, openErr)
+		defer func() { _ = f.Close() }()
+		data, readErr := io.ReadAll(f)
+		testutil.FailErr(t, "read zip entry "+name, readErr)
+		return data
+	}
+
+	var manifest struct {
+		RetainedBranchTrees []string `json:"retained_branch_trees"`
+		Files               []struct {
+			RelPath string      `json:"rel_path"`
+			Kind    string      `json:"kind"`
+			Mode    fs.FileMode `json:"mode"`
+		} `json:"files"`
+	}
+	testutil.FailErr(t, "decode backup manifest", json.Unmarshal(readArchiveEntry("manifest.json"), &manifest))
+
+	safeJoin := func(rel string) string {
+		clean := path.Clean(rel)
+		if path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
+			t.Fatalf("unsafe corpus path %q", rel)
+		}
+		return filepath.Join(targetDataDir, filepath.FromSlash(clean))
+	}
+
+	for _, tree := range manifest.RetainedBranchTrees {
+		testutil.FailErr(t, "mkdir retained tree", os.MkdirAll(safeJoin(tree), 0o700))
+	}
+	for _, item := range manifest.Files {
+		dst := safeJoin(item.RelPath)
+		testutil.FailErr(t, "mkdir retained file parent", os.MkdirAll(filepath.Dir(dst), 0o700))
+		body := readArchiveEntry(item.RelPath)
+		if item.Kind == "symlink" {
+			testutil.FailErr(t, "symlink retained item", os.Symlink(string(body), dst))
+		} else {
+			mode := item.Mode.Perm()
+			if mode == 0 {
+				mode = 0o600
+			}
+			testutil.FailErr(t, "write retained item", os.WriteFile(dst, body, mode))
+		}
+	}
+
+	rawDB, err := os.ReadFile(filepath.Join(corpusDir, "store.db"))
+	testutil.FailErr(t, "read corpus store.db", err)
+	testutil.FailErr(t, "write target store", os.WriteFile(filepath.Join(targetDataDir, dbFileName), rawDB, 0o600))
 }
 
 func TestWorktreeQualificationPreFeatureStoreUpgradeAndRestart(t *testing.T) {
@@ -147,12 +210,9 @@ func TestWorktreeQualificationPreFeatureStoreUpgradeAndRestart(t *testing.T) {
 	}
 	repoID := repos[0].ID
 
-	// Copy the pre-revision-5 1.0.3-rc1 corpus database and bind it to real on-disk checkouts before migration.
-	corpusSrc := filepath.Join(configlayout.FindModuleRoot(), "testdata", "upgrade-corpus", "1.0.3-rc1", "store.db")
-	rawCorpus, err := os.ReadFile(corpusSrc)
-	testutil.FailErr(t, "read 1.0.3-rc1 corpus", err)
+	corpusSrc := filepath.Join(configlayout.FindModuleRoot(), "testdata", "upgrade-corpus", "1.0.3-rc1")
+	materializeUpgradeCorpusData(t, corpusSrc, testDir, "wiring-test.db")
 	dbPath := filepath.Join(testDir, "wiring-test.db")
-	testutil.FailErr(t, "write store copy", os.WriteFile(dbPath, rawCorpus, 0o600))
 
 	preDB, err := sql.Open("sqlite", dbPath)
 	testutil.FailErr(t, "open pre-upgrade db", err)
@@ -215,7 +275,7 @@ func TestWorktreeQualificationPreFeatureStoreUpgradeAndRestart(t *testing.T) {
 			ClientID: "upgrade-verify-win",
 			RootID:   corpusRootID,
 			Path:     "editor-fixture.txt",
-		}, http.StatusOK)
+		}, http.StatusCreated)
 		if dirtyDoc.ID != corpusDirtyDocID || dirtyDoc.FileID != corpusDirtyFileID || !dirtyDoc.Dirty || dirtyDoc.Revision < 4 {
 			t.Fatalf("migrated dirty editor document lost identity or draft: %+v", dirtyDoc)
 		}
@@ -224,7 +284,7 @@ func TestWorktreeQualificationPreFeatureStoreUpgradeAndRestart(t *testing.T) {
 			ClientID: "upgrade-verify-win",
 			RootID:   corpusRootID,
 			Path:     "README.md",
-		}, http.StatusOK)
+		}, http.StatusCreated)
 		if cleanDoc.ID != corpusCleanDocID || cleanDoc.Dirty {
 			t.Fatalf("migrated clean editor document mismatch: %+v", cleanDoc)
 		}
@@ -232,7 +292,7 @@ func TestWorktreeQualificationPreFeatureStoreUpgradeAndRestart(t *testing.T) {
 		outsideDoc := doJSON[wire.EditorDocument](t, h, http.MethodPost, "/v1/projects/"+corpusProjectID+"/editor-documents", wire.OpenEditorDocumentRequest{
 			ClientID: "upgrade-verify-win",
 			FileID:   capturedOutside.FileID,
-		}, http.StatusOK)
+		}, http.StatusCreated)
 		if outsideDoc.FileID != capturedOutside.FileID || outsideDoc.RootID != capturedOutside.RootID {
 			t.Fatalf("outside document after restart = %+v", outsideDoc)
 		}
@@ -241,7 +301,7 @@ func TestWorktreeQualificationPreFeatureStoreUpgradeAndRestart(t *testing.T) {
 			ClientID: "upgrade-verify-win",
 			RootID:   corpusRootID,
 			Path:     "editor-fixture.txt",
-		}, http.StatusOK)
+		}, http.StatusCreated)
 		if siblingDoc.ID == corpusDirtyDocID || siblingDoc.WorkspaceID != preWorktreeID || siblingDoc.Dirty {
 			t.Fatalf("sibling checkout document collided with primary draft: %+v", siblingDoc)
 		}

@@ -169,7 +169,7 @@ func TestWorktreeQualificationNativeAgentAddCrossCheckoutEditAndNextCommandCwd(t
 		ClientID: "person-window-1",
 		RootID:   primaryRootID,
 		Path:     "notes.txt",
-	}, http.StatusOK)
+	}, http.StatusCreated)
 	primaryDoc = doJSON[wire.EditorDocument](t, s.h, http.MethodPut, "/v1/projects/"+s.project+"/editor-documents/"+primaryDoc.ID, wire.ReplaceEditorDocumentRequest{
 		ClientID:         "person-window-1",
 		OperationID:      uuid.NewString(),
@@ -342,13 +342,13 @@ func TestWorktreeQualificationSaveBarrierExternalContinuityAndLifecycle(t *testi
 			ClientID: "win-1",
 			RootID:   uiRootID,
 			Path:     "view.ts",
-		}, http.StatusOK)
+		}, http.StatusCreated)
 		unauthRes := doRaw(t, h, http.MethodPost, "/v1/projects/"+projID+"/editor-documents?worktree_id="+partialWT.WorktreeID, wire.OpenEditorDocumentRequest{
 			ClientID: "win-1",
 			RootID:   primaryRootID,
 			Path:     "notes.txt",
 		})
-		if unauthRes.Code == http.StatusOK {
+		if unauthRes.Code == http.StatusOK || unauthRes.Code == http.StatusCreated {
 			t.Fatalf("partial root unexpectedly allowed ungranted parent file in sibling checkout")
 		}
 
@@ -357,13 +357,13 @@ func TestWorktreeQualificationSaveBarrierExternalContinuityAndLifecycle(t *testi
 			ClientID: "win-1",
 			RootID:   primaryRootID,
 			Path:     "notes.txt",
-		}, http.StatusOK)
+		}, http.StatusCreated)
 		barrierDocID = docWin1.ID
 		doJSON[wire.EditorDocument](t, h, http.MethodPost, "/v1/projects/"+projID+"/editor-documents?worktree_id="+barrierWT.WorktreeID, wire.OpenEditorDocumentRequest{
 			ClientID: "win-2",
 			RootID:   primaryRootID,
 			Path:     "notes.txt",
-		}, http.StatusOK)
+		}, http.StatusCreated)
 		docWin1 = doJSON[wire.EditorDocument](t, h, http.MethodPut, "/v1/projects/"+projID+"/editor-documents/"+barrierDocID, wire.ReplaceEditorDocumentRequest{
 			ClientID:         "win-1",
 			OperationID:      uuid.NewString(),
@@ -438,7 +438,7 @@ func TestWorktreeQualificationSaveBarrierExternalContinuityAndLifecycle(t *testi
 			ClientID: "win-2-reopen",
 			RootID:   primaryRootID,
 			Path:     "notes.txt",
-		}, http.StatusOK)
+		}, http.StatusCreated)
 		primarySaveTarget = doJSON[wire.EditorDocument](t, h, http.MethodPut, "/v1/projects/"+projID+"/editor-documents/"+primarySaveTarget.ID, wire.ReplaceEditorDocumentRequest{
 			ClientID:         "win-2-reopen",
 			OperationID:      uuid.NewString(),
