@@ -390,6 +390,7 @@ func buildUpdateParams(projectID, toplevel string, ex db.SourceWorktrees, obs ob
 		LockReason:       obs.entry.LockReason,
 		Prunable:         boolInt(obs.entry.Prunable),
 		PruneReason:      obs.entry.PruneReason,
+		UpdatedAt:        ex.UpdatedAt,
 		ProjectID:        projectID,
 		ID:               ex.ID,
 	}

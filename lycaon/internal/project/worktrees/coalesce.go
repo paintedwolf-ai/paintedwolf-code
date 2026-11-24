@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 )
 
 type repoKey struct {
@@ -91,6 +95,60 @@ func (inv *Inventory) NotifyChange(projectID, repoID string) uint64 {
 	return gen
 }
 
+// ScheduleRefresh marks the repository dirty and starts a background reconciliation
+// pass when none is running, returning immediately without blocking command delivery.
+func (inv *Inventory) ScheduleRefresh(_ context.Context, spec RepoSpec) {
+	key, slot, err := inv.slot(spec)
+	if err != nil {
+		return
+	}
+	slot.mu.Lock()
+	slot.desiredGen++
+	startWorker := !slot.running
+	if startWorker {
+		slot.running = true
+	}
+	slot.mu.Unlock()
+	if startWorker {
+		go inv.runRefreshLoop(inv.baseCtx, key, slot)
+	}
+}
+
+// ScheduleRepoRefreshForProject schedules background checkout reconciliation for projectID's repositories.
+func (inv *Inventory) ScheduleRepoRefreshForProject(ctx context.Context, projectID string) {
+	if inv == nil {
+		return
+	}
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return
+	}
+	roots, err := db.New(inv.database).ListProjectRoots(ctx, projectID)
+	if err != nil {
+		return
+	}
+	seen := make(map[string]struct{}, len(roots))
+	for _, root := range roots {
+		repo, ok := gitrepo.Discover(root.Path)
+		if !ok || repo.Root == "" {
+			continue
+		}
+		top := canonicalPath(repo.Root)
+		if top == "" {
+			continue
+		}
+		if _, dup := seen[top]; dup {
+			continue
+		}
+		seen[top] = struct{}{}
+		inv.ScheduleRefresh(ctx, RepoSpec{
+			ProjectID: projectID,
+			RepoID:    git.DeriveRepoID(top),
+			Toplevel:  top,
+		})
+	}
+}
+
 // Read returns the inventory covering the latest requested generation, coalescing concurrent callers.
 func (inv *Inventory) Read(ctx context.Context, spec RepoSpec) ([]Checkout, error) {
 	if err := ctx.Err(); err != nil {
@@ -139,7 +197,7 @@ func (inv *Inventory) awaitGenerationLocked(ctx context.Context, key repoKey, sl
 
 	if startWorker {
 		// Host inventory reconciliation must not inherit caller launch leases.
-		go inv.runRefreshLoop(context.Background(), key, slot)
+		go inv.runRefreshLoop(inv.baseCtx, key, slot)
 	}
 
 	select {

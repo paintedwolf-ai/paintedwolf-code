@@ -128,6 +128,9 @@ func (s *Watch) seedSourceWatch(ctx context.Context, p *project.Project) {
 // A window the watcher could not name needs the full inventory pass, which
 // runs on its own.
 func (s *Watch) observeWorkspaceChanges(ctx context.Context, p *project.Project, batch sourcefeed.ExternalBatch) {
+	if s.Git != nil && (batch.Resync || batch.HeadMoved) {
+		s.Git.ScheduleWorktreeRefresh(ctx, p.ID)
+	}
 	if batch.Resync || batch.HeadMoved || len(batch.Changes) == 0 {
 		s.scheduleWorkspaceInventory(ctx, p)
 	} else {
