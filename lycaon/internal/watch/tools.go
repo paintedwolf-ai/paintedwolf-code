@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"sort"
@@ -16,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
 // ToolDeps wires watch and watch_control handlers to store and session policy.
@@ -112,7 +112,7 @@ func executeWatchTool(ctx context.Context, deps ToolDeps, args map[string]any, t
 		delivery = DeliveryCollect
 	}
 	if deps.Store == nil || !deps.Store.Configured() {
-		return surveyjson.Encode(watchToolReceipt{
+		return encodeToolJSON(watchToolReceipt{
 			Handle:        "watch-1",
 			State:         "pending",
 			Delivery:      delivery,
@@ -156,7 +156,7 @@ func executeWatchTool(ctx context.Context, deps ToolDeps, args map[string]any, t
 		}
 		wire.OverlappingStanding = &overlaps
 	}
-	return surveyjson.Encode(wire)
+	return encodeToolJSON(wire)
 }
 
 func executeWatchControlTool(ctx context.Context, deps ToolDeps, args map[string]any, tctx tools.ToolContext) (string, error) {
@@ -187,13 +187,13 @@ func executeWatchControlTool(ctx context.Context, deps ToolDeps, args map[string
 		if err != nil {
 			return "", mapToolReject(err)
 		}
-		return surveyjson.Encode(view)
+		return encodeToolJSON(view)
 	case "cancel":
 		receipt, err := deps.Store.Cancel(ctx, owner, handle)
 		if err != nil {
 			return "", mapToolReject(err)
 		}
-		return surveyjson.Encode(receipt)
+		return encodeToolJSON(receipt)
 	default:
 		if !hasDelivery {
 			return "", mapToolReject(invalidField("delivery", "delivery is required with operation=set_delivery"))
@@ -214,8 +214,16 @@ func executeWatchControlTool(ctx context.Context, deps ToolDeps, args map[string
 		if err != nil {
 			return "", mapToolReject(err)
 		}
-		return surveyjson.Encode(map[string]any{"handle": handle, "delivery": updated})
+		return encodeToolJSON(map[string]any{"handle": handle, "delivery": updated})
 	}
+}
+
+func encodeToolJSON(v any) (string, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 func checkTopLevelKeys(args map[string]any, allowed ...string) error {
