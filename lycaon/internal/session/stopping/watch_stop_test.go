@@ -44,8 +44,7 @@ func TestStopSessionTreeFencesAndReconcilesWatches(t *testing.T) {
 
 	root, err := repos.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root session", err)
-	child, err := repos.Sessions.Create(t.Context(), api.CreateSessionRequest{ParentSessionID: root.ID}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create child session", err)
+	testdbseed.InsertChildSession(t, db, "child-stop-1", root.ID)
 
 	q := queue.New()
 	gate := lifecycle.New(repos.Sessions)
@@ -63,8 +62,8 @@ func TestStopSessionTreeFencesAndReconcilesWatches(t *testing.T) {
 	if len(ws.fenced) != 2 || len(ws.reconciled) != 1 {
 		t.Fatalf("watch stop calls fenced=%d reconciled=%d, want 2 and 1", len(ws.fenced), len(ws.reconciled))
 	}
-	if !slices.Contains(ws.reconciled[0], root.ID) || !slices.Contains(ws.reconciled[0], child.ID) {
-		t.Fatalf("reconciled IDs = %v, want root %q and child %q", ws.reconciled[0], root.ID, child.ID)
+	if !slices.Contains(ws.reconciled[0], root.ID) || !slices.Contains(ws.reconciled[0], "child-stop-1") {
+		t.Fatalf("reconciled IDs = %v, want root %q and child-stop-1", ws.reconciled[0], root.ID)
 	}
 	afterOK, err := repos.Sessions.Get(t.Context(), root.ID)
 	testutil.FailErr(t, "get root after stop", err)
