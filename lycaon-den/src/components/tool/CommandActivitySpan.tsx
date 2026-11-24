@@ -52,7 +52,7 @@ export function formatActivityCountChip(
   const allCommands = nonWaits.every(
     (entry) => entry.kind === "tool" && (entry.part.tool === "command" || Boolean(entry.part.commandActivity)),
   );
-  // Rows fold and split command calls, so commands are counted by call.
+  // Rows fold and split command calls; only rows that are one call each count as commands.
   const calls = new Set<string>();
   if (allCommands) {
     for (const entry of nonWaits) {
@@ -61,9 +61,10 @@ export function formatActivityCountChip(
       for (const id of ids.length > 0 ? ids : [entry.part.toolCallId || entry.part.id]) calls.add(id);
     }
   }
-  const count = allCommands ? calls.size : nonWaits.length;
+  const count = nonWaits.length;
   if (count <= 1 && waitCount === 0) return null;
-  const unit = allCommands ? (count === 1 ? "command" : "commands") : count === 1 ? "action" : "actions";
+  const commands = allCommands && calls.size === count;
+  const unit = commands ? (count === 1 ? "command" : "commands") : count === 1 ? "action" : "actions";
   return waitText ? `${count} ${unit} · ${waitText}` : `${count} ${unit}`;
 }
 
