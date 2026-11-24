@@ -25,7 +25,9 @@ func TestAskFinalPlanClampsLoadedAndImpliedCalls(t *testing.T) {
 		LoadedTools: func(string) map[string]bool {
 			return map[string]bool{"mcp_doc_lookup": true, "mcp_doc_update": true, "unknown_dynamic": true}
 		},
-		LiveResources: func(string) toolcontract.ResourcePresence { return toolcontract.ResourcePresence{CommandJobs: true} },
+		LiveResources: func(context.Context, string) toolcontract.ResourcePresence {
+			return toolcontract.ResourcePresence{CommandJobs: true}
+		},
 	}})
 	for _, posture := range []api.SessionPosture{api.SessionPostureSpec, api.SessionPostureBuild, api.SessionPostureOrchestrate, api.SessionPostureVet} {
 		sess := &api.Session{ID: "session", Mode: api.SessionModeAsk, Posture: posture, WorkspacePath: "/project", AgentType: "coordinator"}
