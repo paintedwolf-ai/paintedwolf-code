@@ -10,4 +10,5 @@ steps:
   - program: ["cat", "-n", "FILE"]
     say: "Read a resulting concrete file with {{ call }}."
   - program: ["sed", "-n", "A,Bp", "FILE"]
+    probe: ["sed", "-n", "1,2p", "FILE"]
     say: "Read a bounded line range with {{ call }}."

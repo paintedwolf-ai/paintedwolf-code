@@ -42,6 +42,9 @@ type NextStep struct {
 	// Program is a native program as words, each a copy template. The host quotes
 	// it and checks the program as well as the command tool.
 	Program []string `yaml:"program,omitempty"`
+	// Probe is the invocation the host checks for reach when Program shows the
+	// reader placeholder words such as a line range. It names the same program.
+	Probe []string `yaml:"probe,omitempty"`
 	// Pick maps dotted argument paths to list facts; the reader needs one entry.
 	Pick map[string]string `yaml:"pick,omitempty"`
 	// Complete says Args is the whole call rather than a shape to finish.
@@ -129,6 +132,9 @@ func (l *Loader) validateNextStep(step NextStep, known map[string]bool, selector
 		if !nativeProgramKnown(step.Program[0]) {
 			return fmt.Errorf("%s: %q is not a native program", where, step.Program[0])
 		}
+	}
+	if len(step.Probe) > 0 && (len(step.Program) == 0 || step.Probe[0] != step.Program[0]) {
+		return fmt.Errorf("%s: probe must check the step's own program", where)
 	}
 	if err := rejectDecisionNextSteps(where, "when", step.When); err != nil {
 		return err
@@ -259,6 +265,7 @@ func nextStepRefs(step NextStep) ([]string, error) {
 		}
 	}
 	templates := append([]string{step.Say, step.Otherwise}, step.Program...)
+	templates = append(templates, step.Probe...)
 	for _, value := range step.Args {
 		templates = collectArgTemplates(templates, value)
 	}
@@ -535,14 +542,18 @@ func sequenceText(sequence []toolreach.Call) string {
 // program missing a value, which the reader could not submit as written.
 func stepCall(step NextStep, gc *GuardContext, facts map[string]any) (toolreach.Call, bool) {
 	if len(step.Program) > 0 {
-		words := make([]string, len(step.Program))
-		for i, source := range step.Program {
-			words[i] = oarcore.RenderCopy(source, facts)
-			if words[i] == "" {
-				return toolreach.Call{}, false
-			}
+		words, ok := renderProgramWords(step.Program, facts)
+		if !ok {
+			return toolreach.Call{}, false
 		}
 		call := toolreach.ProgramCall(words...)
+		if len(step.Probe) > 0 {
+			probe, ok := renderProgramWords(step.Probe, facts)
+			if !ok {
+				return toolreach.Call{}, false
+			}
+			call = call.WithProbe(probe...)
+		}
 		call.Partial = !step.Complete
 		return call, true
 	}
@@ -573,6 +584,18 @@ func stepCall(step NextStep, gc *GuardContext, facts map[string]any) (toolreach.
 		call.Partial = true
 	}
 	return call, true
+}
+
+// renderProgramWords renders each word; a word that renders empty leaves no program.
+func renderProgramWords(sources []string, facts map[string]any) ([]string, bool) {
+	words := make([]string, len(sources))
+	for i, source := range sources {
+		words[i] = oarcore.RenderCopy(source, facts)
+		if words[i] == "" {
+			return nil, false
+		}
+	}
+	return words, true
 }
 
 // resolveStepArg keeps a whole-value binding's type and interpolates nested maps and slices.

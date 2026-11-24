@@ -1,3 +1,4 @@
 steps:
   - program: ["sed", "-n", "A,Bp", "FILE"]
+    probe: ["sed", "-n", "1,2p", "FILE"]
     say: "For files, inspect text with {{ call }} or a plain text search."

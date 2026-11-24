@@ -186,6 +186,14 @@ type Call struct {
 	// Program names the native program a command call runs.
 	Program string `json:"program,omitempty"`
 	words   []string
+	probe   []string
+}
+
+// WithProbe sets the invocation reach checks in place of the shown words, for a
+// call whose words carry placeholders the reader replaces.
+func (c Call) WithProbe(words ...string) Call {
+	c.probe = slices.Clone(words)
+	return c
 }
 
 // ProgramCall builds a command call that runs one native program invocation.
