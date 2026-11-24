@@ -212,18 +212,6 @@ func trimCoordinatorToolMetasForPlan(plan toolsurface.Plan, all []tools.ToolMeta
 	return out
 }
 
-func (l *promptContext) compileRuntimeToolPlan(
-	plan toolsurface.Plan,
-	runCtx api.CoordinatorRunContext,
-	metas []tools.ToolMeta,
-	activated map[string]bool,
-	mcpPlan tools.MCPToolPlan,
-	openWorld bool,
-	sess *api.Session,
-) toolsurface.Plan {
-	return l.compileRuntimeToolPlanForSurface(plan, toolcontract.SurfaceImplementInvestigate, runCtx, metas, activated, mcpPlan, openWorld, sess)
-}
-
 func (l *promptContext) compileRuntimeToolPlanForSurface(
 	plan toolsurface.Plan,
 	surfaceID string,

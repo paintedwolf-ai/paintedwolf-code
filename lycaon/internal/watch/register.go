@@ -122,6 +122,29 @@ func normalizeRegisterRequest(req RegisterRequest, now time.Time) (RegisterReque
 
 const standingDraftCursorKey = "_standing_draft"
 
+// DismissedStandingDraftHandle returns the handle of a dismissed standing-watch draft
+// in sessionID with identical normalized conditions, or "" when none matches.
+func (s *Store) DismissedStandingDraftHandle(ctx context.Context, sessionID string, conditions []awaitstore.Condition) (string, error) {
+	if !s.Configured() || strings.TrimSpace(sessionID) == "" || len(conditions) == 0 {
+		return "", nil
+	}
+	condBytes, err := json.Marshal(conditions)
+	if err != nil {
+		return "", err
+	}
+	var handle string
+	err = s.db.QueryRowContext(ctx, `SELECT handle FROM watch_registrations
+		WHERE session_id = ? AND terminal_outcome = 'dismissed'
+		  AND conditions_json = ?
+		  AND json_extract(cursors_json, '$._standing_draft') IS NOT NULL
+		ORDER BY seq DESC LIMIT 1`,
+		strings.TrimSpace(sessionID), string(condBytes)).Scan(&handle)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return handle, err
+}
+
 func isTerminalCondition(cond awaitstore.Condition) bool {
 	switch cond.Kind {
 	case ConditionProcessDone:

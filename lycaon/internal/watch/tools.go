@@ -110,6 +110,16 @@ func executeWatchTool(ctx context.Context, deps ToolDeps, args map[string]any, t
 	}
 	if standing != nil {
 		delivery = DeliveryCollect
+		if deps.Store != nil && deps.Store.Configured() {
+			if dismissedHandle, err := deps.Store.DismissedStandingDraftHandle(ctx, tctx.Identity.SessionID, conditions); err != nil {
+				return "", err
+			} else if dismissedHandle != "" {
+				return "", &toolrejection.ToolReject{
+					Code: "WATCH_DRAFT_DISMISSED",
+					Data: map[string]any{"handle": dismissedHandle},
+				}
+			}
+		}
 	}
 	if deps.Store == nil || !deps.Store.Configured() {
 		return encodeToolJSON(watchToolReceipt{
