@@ -15,6 +15,7 @@ schema:
           kind:
             type: string
             enum: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready, worker_decision_needed, worker_failed, process_output, file_change, git_ref, timer]
+            description: Condition kind.
           handles:
             type: array
             minItems: 1
@@ -31,9 +32,9 @@ schema:
             minimum: 0
             description: Start cursor.
           url: {type: string, description: HTTP(S) URL.}
-          method: {type: string, enum: [GET, HEAD], default: GET}
-          status_min: {type: integer, minimum: 100, maximum: 599, default: 200}
-          status_max: {type: integer, minimum: 100, maximum: 599, default: 399}
+          method: {type: string, enum: [GET, HEAD], default: GET, description: Probe method.}
+          status_min: {type: integer, minimum: 100, maximum: 599, default: 200, description: Min status.}
+          status_max: {type: integer, minimum: 100, maximum: 599, default: 399, description: Max status.}
           host: {type: string, default: localhost, description: Loopback host.}
           port: {type: integer, minimum: 1, maximum: 65535, description: TCP port.}
           root: {type: string, minLength: 1, description: Folder label.}
@@ -45,12 +46,14 @@ schema:
           at: {type: string, description: Local YYYY-MM-DDTHH:MM.}
           calendar:
             type: object
+            description: Calendar schedule.
             properties:
               days:
                 type: array
                 minItems: 1
                 maxItems: 7
                 uniqueItems: true
+                description: Schedule days.
                 items:
                   type: string
                   enum: [every_day, weekdays, monday, tuesday, wednesday, thursday, friday, saturday, sunday]
@@ -93,12 +96,14 @@ schema:
       properties:
         loopback_connect:
           type: object
+          description: Loopback port list.
           properties:
             ports:
               type: array
               minItems: 1
               maxItems: 8
               uniqueItems: true
+              description: Loopback TCP ports.
               items: {type: integer, minimum: 1, maximum: 65535}
           additionalProperties: false
       required: [loopback_connect]
