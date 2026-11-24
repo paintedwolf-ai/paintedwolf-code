@@ -269,7 +269,7 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		ProjectDir: unrelatedDir,
 		Kind:       repochange.WorktreeChanged,
 		Source:     repochange.SourceMutation,
-		Changes:    []repochange.WorktreeChange{{Path: ".env", Kind: repochange.WorktreeChangeModified}},
+		Paths:      []string{".env"},
 	})
 	aliasParent := t.TempDir()
 	primaryAlias := filepath.Join(aliasParent, "primary-alias")
