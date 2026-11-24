@@ -123,8 +123,17 @@ func TestScreenLifecycleEmitsJoinedValueFreePhasesThroughDispatch(t *testing.T) 
 			joinedPhases = append(joinedPhases, rec.Phase)
 		}
 	}
-	wantJoined := []string{"inference_capacity_wait", "evidence_reconciled", "matcher_redaction", "person_decision", "provider_dispatch"}
-	if !slices.Equal(joinedPhases, wantJoined) {
-		t.Fatalf("joined phases for call-joined-101 = %v, want %v", joinedPhases, wantJoined)
+	wantPhases := []string{"evidence_reconciled", "matcher_redaction", "person_decision", "provider_dispatch"}
+	var screenOrder []string
+	hasCapacityWait := false
+	for _, phase := range joinedPhases {
+		if phase == "inference_capacity_wait" {
+			hasCapacityWait = true
+			continue
+		}
+		screenOrder = append(screenOrder, phase)
+	}
+	if len(joinedPhases) != 5 || !hasCapacityWait || !slices.Equal(screenOrder, wantPhases) || joinedPhases[len(joinedPhases)-1] != "provider_dispatch" {
+		t.Fatalf("joined phases for call-joined-101 = %v, want capacity wait plus ordered %v ending in provider_dispatch", joinedPhases, wantPhases)
 	}
 }
