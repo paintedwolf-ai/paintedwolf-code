@@ -201,7 +201,7 @@ func TestWorkerProfilesWatchPruningAndIneligibleProfile(t *testing.T) {
 
 	workerSess := &api.Session{ID: "worker-sess", ParentSessionID: "root-sess", ProjectID: "proj-1"}
 
-	for _, profileID := range []string{"implement", "explore_readonly", "web_research"} {
+	for _, profileID := range []string{"implement", "explore_readonly", "worker_readonly"} {
 		activeWatches = false
 		idleMetas, _, _, err := loop.Context.coordinatorToolsForTurn(t.Context(), workerSess, profileID, nil, 0, 10, inject.CoordinatorTurnFrame{}, nil)
 		testutil.FailErr(t, "worker tools idle "+profileID, err)
