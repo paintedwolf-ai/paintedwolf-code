@@ -379,11 +379,10 @@ describe("multi-checkout Files buffers, hot exit, and unavailable checkout recov
     const client = stubClient({
       openEditorDocument: vi.fn(async () => host.snapshot()),
       syncEditorDocument: host.sync,
-      submitEditorDocumentUpdate: vi.fn(async (pid: string, docId: string, req: SubmitEditorDocumentUpdateRequest) => {
-        if (req.save) {
-          throw new LycaonApiError("That checkout is no longer available.", 409, "worktree_unavailable");
-        }
-        return host.submit(pid, docId, req);
+      submitEditorDocumentUpdate: host.submit,
+      createEditorDocumentSnapshot: vi.fn(async () => host.snapshot()),
+      saveEditorDocument: vi.fn(async () => {
+        throw new LycaonApiError("That checkout is no longer available.", 409, "worktree_unavailable");
       }),
       observeEditorDocument,
       publishEditorDocumentPresence: vi.fn(async () => undefined),
@@ -417,7 +416,7 @@ describe("multi-checkout Files buffers, hot exit, and unavailable checkout recov
     const replica = editorReplica(host.wire.id)!;
     replica.replaceLocal("export const live = 2;\n");
     await replica.flush();
-    applyFilesBufferEditorDocument(projectId, key, replica.accepted);
+    applyFilesBufferEditorDocument(projectId, key, { ...adopted!, dirty: true });
     const outcome = await saveProjectFileDocument({ projectId, client, key });
     expect(outcome.status).toBe("unavailable");
     expect(projectFilesState(projectId).byKey[key]?.checkoutUnavailable).toBe(true);
