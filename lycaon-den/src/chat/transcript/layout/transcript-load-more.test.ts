@@ -932,6 +932,17 @@ describe("createTranscriptPaging", () => {
   it("protects a newly admitted older page through settlement without duplicate cursor-324 fetches", async () => {
     const store = createAppStore();
     const sid = "lc03-cursor-324";
+    const row = (ord: number): Message => ({
+      id: `m-${ord}`,
+      ord,
+      seq: ord,
+      role: "user",
+      origin: "user",
+      authority: "user",
+      trust_tier: "trusted",
+      content: `msg ${ord}`,
+      created_at: "2026-01-01T00:00:00Z",
+    });
     const page = (from: number, to: number) => ({
       messages: Array.from({ length: to - from + 1 }, (_, i) => row(from + i)),
       before_cursor: "older",
