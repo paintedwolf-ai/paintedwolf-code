@@ -7,6 +7,8 @@ package contract
 import (
 	"go/ast"
 	"go/token"
+	"go/types"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -24,36 +26,50 @@ type toolRejectSite struct {
 	Line int
 }
 
+// unresolvedRejectSite is an emission whose code is neither a constant, a
+// forwarded parameter, nor a local variable assigned only constants.
+type unresolvedRejectSite struct {
+	Rel  string
+	Line int
+	Func string
+	Expr string
+}
+
+type toolRejectInventory struct {
+	Sites      []toolRejectSite
+	Unresolved []unresolvedRejectSite
+}
+
 type toolRejectScanCacheEntry struct {
-	once  sync.Once
-	sites []toolRejectSite
-	err   error
+	once sync.Once
+	inv  toolRejectInventory
+	err  error
 }
 
 var toolRejectScanCache sync.Map // abs lycaon root → *toolRejectScanCacheEntry
 
-// scanToolRejectCodes finds resolved Code values at reject emission sites under lycaon/internal.
-func scanToolRejectCodes(lycaonRoot string) ([]toolRejectSite, error) {
+// scanToolRejectEmission inventories reject emission sites under lycaon/internal.
+func scanToolRejectEmission(lycaonRoot string) (toolRejectInventory, error) {
 	abs, err := filepath.Abs(lycaonRoot)
 	if err != nil {
-		return nil, err
+		return toolRejectInventory{}, err
 	}
 	raw, _ := toolRejectScanCache.LoadOrStore(abs, &toolRejectScanCacheEntry{})
 	entry := raw.(*toolRejectScanCacheEntry)
 	entry.once.Do(func() {
-		entry.sites, entry.err = buildToolRejectCodes(abs)
+		entry.inv, entry.err = buildToolRejectInventory(abs)
 	})
-	return entry.sites, entry.err
+	return entry.inv, entry.err
 }
 
-func buildToolRejectCodes(lycaonRoot string) ([]toolRejectSite, error) {
+func buildToolRejectInventory(lycaonRoot string) (toolRejectInventory, error) {
 	consts, err := scanHintShapedStringConsts(lycaonRoot)
 	if err != nil {
-		return nil, err
+		return toolRejectInventory{}, err
 	}
 	corp, err := contractcheck.LoadGoASTCorpus(lycaonRoot)
 	if err != nil {
-		return nil, err
+		return toolRejectInventory{}, err
 	}
 	var production []testcorpus.GoFile
 	for _, gf := range corp.Files() {
@@ -63,34 +79,106 @@ func buildToolRejectCodes(lycaonRoot string) ([]toolRejectSite, error) {
 	}
 	carriers := rejectCarrierTypes(production)
 	forwarders := rejectForwarders(production, carriers)
-	var sites []toolRejectSite
+	var inv toolRejectInventory
 	for _, gf := range production {
-		ast.Inspect(gf.AST, func(n ast.Node) bool {
-			var code string
-			switch node := n.(type) {
-			case *ast.CompositeLit:
-				if !carriers[contractcheck.CompositeLitTypeName(node.Type)] {
+		dir := path.Dir(gf.Rel)
+		for _, decl := range gf.AST.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			_, isForwarder := forwarders[forwarderKey{dir: dir, name: fn.Name.Name}]
+			params := paramIndexes(fn.Type)
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				var codeExpr ast.Expr
+				switch node := n.(type) {
+				case *ast.CompositeLit:
+					if !carriers[contractcheck.CompositeLitTypeName(node.Type)] {
+						return true
+					}
+					codeExpr = literalCodeValue(node)
+				case *ast.CallExpr:
+					arg, ok := rejectCodeArg(node, gf, forwarders)
+					if !ok {
+						return true
+					}
+					codeExpr = arg
+				default:
 					return true
 				}
-				code = constantRejectCode(literalCodeValue(node), consts)
-			case *ast.CallExpr:
-				arg, ok := rejectCodeArg(node, gf, forwarders)
-				if !ok {
+				if codeExpr == nil {
 					return true
 				}
-				code = constantRejectCode(arg, consts)
-			default:
+				line := corp.Fset.Position(n.Pos()).Line
+				codes, resolved := resolveRejectCodes(codeExpr, fn.Body, consts)
+				if !resolved {
+					if id, ok := unwrapConversion(codeExpr).(*ast.Ident); ok && isForwarder {
+						if _, isParam := params[id.Name]; isParam {
+							return true
+						}
+					}
+					inv.Unresolved = append(inv.Unresolved, unresolvedRejectSite{Rel: gf.Rel, Line: line, Func: fn.Name.Name, Expr: types.ExprString(codeExpr)})
+					return true
+				}
+				for _, code := range codes {
+					if guidancescan.HintCodeShape.MatchString(code) {
+						inv.Sites = append(inv.Sites, toolRejectSite{Code: code, Rel: gf.Rel, Line: line})
+					}
+				}
 				return true
-			}
-			if code == "" || !guidancescan.HintCodeShape.MatchString(code) {
-				return true
-			}
-			pos := corp.Fset.Position(n.Pos())
-			sites = append(sites, toolRejectSite{Code: code, Rel: gf.Rel, Line: pos.Line})
-			return true
-		})
+			})
+		}
 	}
-	return sites, nil
+	return inv, nil
+}
+
+// resolveRejectCodes resolves a constant code, or a local variable whose every
+// assignment in body is a constant code.
+func resolveRejectCodes(expr ast.Expr, body *ast.BlockStmt, consts map[string]string) ([]string, bool) {
+	if code := constantRejectCode(expr, consts); code != "" {
+		return []string{code}, true
+	}
+	id, ok := unwrapConversion(expr).(*ast.Ident)
+	if !ok {
+		return nil, false
+	}
+	var codes []string
+	resolved := true
+	assigned := false
+	note := func(rhs ast.Expr) {
+		assigned = true
+		if code := constantRejectCode(rhs, consts); code != "" {
+			codes = append(codes, code)
+		} else {
+			resolved = false
+		}
+	}
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch st := n.(type) {
+		case *ast.AssignStmt:
+			for i, lhs := range st.Lhs {
+				if l, ok := lhs.(*ast.Ident); ok && l.Name == id.Name {
+					if len(st.Rhs) != len(st.Lhs) {
+						resolved = false
+						continue
+					}
+					note(st.Rhs[i])
+				}
+			}
+		case *ast.ValueSpec:
+			for i, name := range st.Names {
+				if name.Name == id.Name && i < len(st.Values) {
+					note(st.Values[i])
+				}
+			}
+		case *ast.RangeStmt:
+			if l, ok := st.Value.(*ast.Ident); ok && l.Name == id.Name {
+				resolved = false
+			}
+		}
+		return true
+	})
+	return codes, resolved && assigned
 }
 
 // isSafecmdRejectCall reports safecmd.Reject(...) or Reject(...) inside package safecmd.

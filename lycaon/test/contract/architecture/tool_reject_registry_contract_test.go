@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"fmt"
+
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"sort"
@@ -22,11 +24,9 @@ func TestToolRejectCodesRegisteredInHintRegistry(t *testing.T) {
 	cfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
 
-	sites, err := scanToolRejectCodes(lycaonRoot)
+	inv, err := scanToolRejectEmission(lycaonRoot)
 	contractcheck.FailErr(t, "scan ToolReject sites", err)
-	if len(sites) == 0 {
-		t.Fatal("scan found zero ToolReject sites — AST walker is broken")
-	}
+	sites := inv.Sites
 
 	missing := map[string][]string{}
 	for _, s := range sites {
@@ -55,6 +55,22 @@ func TestToolRejectCodesRegisteredInHintRegistry(t *testing.T) {
 	t.Fatal(b.String())
 }
 
+// Every reject emission names its code through a constant, a forwarded
+// parameter, or a local assigned only constants, so the registry and copy
+// checks see every code a handler can emit.
+func TestToolRejectEmissionCodesResolve(t *testing.T) {
+	t.Parallel()
+	inv, err := scanToolRejectEmission(filepath.Join(contractcheck.RepoRoot(t), "lycaon"))
+	contractcheck.FailErr(t, "scan ToolReject sites", err)
+	var b strings.Builder
+	for _, u := range inv.Unresolved {
+		fmt.Fprintf(&b, "  %s:%d in %s: code %s\n", u.Rel, u.Line, u.Func, u.Expr)
+	}
+	if b.Len() > 0 {
+		t.Fatalf("reject emissions with unresolved codes:\n%s", b.String())
+	}
+}
+
 // TestToolRejectCodesFormatAsStructuredRejectedBlocks checks rendered refusals.
 func TestToolRejectCodesFormatAsStructuredRejectedBlocks(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
@@ -64,8 +80,9 @@ func TestToolRejectCodesFormatAsStructuredRejectedBlocks(t *testing.T) {
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	formatter := guidance.NewStaticRejectFormatter(cfg)
 
-	sites, err := scanToolRejectCodes(lycaonRoot)
+	inv, err := scanToolRejectEmission(lycaonRoot)
 	contractcheck.FailErr(t, "scan ToolReject sites", err)
+	sites := inv.Sites
 
 	seen := map[string]bool{}
 	for _, s := range sites {
