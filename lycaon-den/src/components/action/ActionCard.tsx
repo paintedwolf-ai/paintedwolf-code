@@ -28,6 +28,7 @@ const RAN_FIELD = "ran.text";
 type Props = {
   part: ToolPartView;
   action: CardAction;
+  liveOutcome?: string;
   layout: TranscriptLayout;
   sessionId?: string;
   projectId?: string;
@@ -85,7 +86,7 @@ export function ActionCard(props: Props) {
       projectId={props.projectId}
       client={props.client}
       name={props.action.label}
-      outcome={presentation().outcome}
+      outcome={props.liveOutcome || presentation().outcome}
       status={presentation().status}
       testId="action-card"
     >

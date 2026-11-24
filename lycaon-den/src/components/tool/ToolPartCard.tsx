@@ -70,14 +70,21 @@ function DescribedToolPartCard(props: Props) {
   );
   const part = () => (props.part.commandProgram ? commandActivityPart(props.part) : props.part);
   const slots = props.slots ?? useActivityBriefingSlots({ part, sessionId: () => props.sessionId, projectId: () => props.projectId });
-  const action = createMemo(() => {
+  const waitOutcome = createMemo(() => {
     processRevision();
     const current = part();
-    const base = partAction(current) ?? pendingAction(current);
-    if (!isPendingWaitPart(current, props.activities)) return base;
+    if (!isPendingWaitPart(current, props.activities)) return undefined;
     const hostPhase = resolveBlockingHostPhaseLabel(props.activities, props.sessionId);
     const target = resolveWaitTargetLabel(current.args, props.sessionId, props.messages ?? []);
-    const liveTitle = hostPhase ?? (target.state !== "condition_default" ? target.label : base.ran.text);
+    return hostPhase ?? (target.state !== "condition_default" ? target.label : undefined);
+  });
+  const action = createMemo(() => {
+    const current = part();
+    const base = partAction(current) ?? pendingAction(current);
+    const liveTitle = waitOutcome();
+    if (!liveTitle) {
+      return isPendingWaitPart(current, props.activities) ? { ...base, status: "running" as const } : base;
+    }
     return {
       ...base,
       status: "running" as const,
@@ -85,7 +92,7 @@ function DescribedToolPartCard(props: Props) {
     };
   });
   return (
-    <ActionCard part={part()} action={action()} layout={props.layout} sessionId={props.sessionId}
+    <ActionCard part={part()} action={action()} liveOutcome={waitOutcome()} layout={props.layout} sessionId={props.sessionId}
       projectId={props.projectId} client={props.client} rootRefs={props.rootRefs} slots={slots} />
   );
 }

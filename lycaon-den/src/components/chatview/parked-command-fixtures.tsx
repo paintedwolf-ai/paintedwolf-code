@@ -14,7 +14,10 @@ export const INCIDENT_PROJECT = "project-incident-34";
 export const INCIDENT_HANDLE = "1f26f2b0-e3a7-4498-9b98-ff231be0d9be";
 
 export function mountCoordinatorChat(initialMessages: Message[]) {
-  setLycaonClientForTest(stubClient({ listSessionArtifacts: async () => ({ artifacts: [] }) }));
+  setLycaonClientForTest(stubClient({
+    listSessionArtifacts: async () => ({ artifacts: [] }),
+    getSessionBackgroundProcessOutput: async () => ({ running: false, exit_code: 0, chunks: [], end_offset: 0 }),
+  }));
   const appStore = createAppStore();
   appStore.actions.setSidecarStatus("connected");
   appStore.actions.setCurrentSession({
