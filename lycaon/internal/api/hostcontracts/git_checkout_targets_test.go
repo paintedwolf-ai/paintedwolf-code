@@ -368,7 +368,7 @@ func TestGitWorktreeSharedStashRemoteRefsAndBoundBranchProtection(t *testing.T) 
 		t.Fatalf("expected pulled feature.txt in primary, got %q", string(pulledBytes))
 	}
 
-	// 3. Bound session refuses branch switch on its bound checkout (legacy or explicit), but allows switching an unbound sibling.
+	// 3. Bound session refuses branch switch on its bound checkout, while allowing an unbound sibling.
 	boundSess, _, boundView := contractfixture.CreateBoundSession(t, srv, projectID)
 	refusedLegacyW := contractfixture.PostWorktreeJSON(t, srv, fmt.Sprintf("/v1/projects/%s/git/repos/%s/checkout?session_id=%s", projectID, repoID, boundSess.ID), map[string]any{
 		"branch": "feat/nope",

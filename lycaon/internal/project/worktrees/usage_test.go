@@ -125,7 +125,7 @@ func TestRecordUsageIdempotentReplayRetryAndExecutionBindingIndependence(t *test
 	externalWT := filepath.Join(base, "wt-external-shell")
 	runGitCmd(t, primary, "worktree", "add", "-q", "--detach", externalWT)
 
-	// On-demand Refresh reconciles missed/retried background discovery and discovers externalWT without fabricating a chat creator.
+	// Refresh reconciles missed background discovery and discovers externalWT without inventing a creator.
 	items, err := inv.Refresh(t.Context(), spec)
 	testutil.FailErr(t, "refresh inventory", err)
 	extCheckout, ok := findCheckoutByPath(items, externalWT)

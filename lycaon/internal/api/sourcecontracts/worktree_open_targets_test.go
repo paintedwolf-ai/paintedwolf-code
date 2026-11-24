@@ -147,7 +147,7 @@ func TestWorktreeOpenTargetsHistoricalDiffsRenamesAndSiblingProvenance(t *testin
 		t.Fatalf("unstaged diff item missing before_blob_oid or after_sha256: %+v", unstagedItem)
 	}
 
-	// Verify staged rename comparison (both before and after sides) via CommitComparisonSource with before_path and via BlobComparisonSource.
+	// Verify staged rename comparison sides via CommitComparisonSource and BlobComparisonSource.
 	stagedRenameCommitSel := wire.SourceComparisonSelector{
 		Commit: &wire.CommitComparisonSource{
 			Kind:       "commit",
@@ -164,7 +164,7 @@ func TestWorktreeOpenTargetsHistoricalDiffsRenamesAndSiblingProvenance(t *testin
 		t.Fatalf("staged rename sides mismatch: before=%q after=%q", renameBeforeText, renameAfterText)
 	}
 
-	// Verify unstaged comparison before mutations returns exact index (before) and working (after) bytes.
+	// Verify unstaged comparison before mutations returns exact index and working-tree bytes.
 	unstagedHistoricalSel := wire.SourceComparisonSelector{
 		Commit: &wire.CommitComparisonSource{
 			Kind:                "commit",
@@ -193,19 +193,19 @@ func TestWorktreeOpenTargetsHistoricalDiffsRenamesAndSiblingProvenance(t *testin
 		},
 	}
 
-	// Mutation 1: Branch switch + pathname reuse with completely different content in worker checkout.
+	// Mutation 1: Branch switch and pathname reuse with different content in worker checkout.
 	runGitCmd(t, workerDir, "checkout", "-f", "-b", "feat/other-branch", "HEAD")
 	testutil.FailErr(t, "reuse staged.go", os.WriteFile(filepath.Join(workerDir, "pkg", "staged.go"), []byte("package pkg\nconst staged = \"TODAY-UNRELATED\"\n"), 0o644))
 	testutil.FailErr(t, "reuse unstaged.go", os.WriteFile(filepath.Join(workerDir, "pkg", "unstaged.go"), []byte("package pkg\nconst unstaged = \"TODAY-UNRELATED\"\n"), 0o644))
 
-	// Staged historical diff via immutable Git blob OIDs still returns exact v1 -> worker-staged-v2 bytes!
+	// Staged historical diff via immutable Git blob OIDs retains v1 -> worker-staged-v2 bytes.
 	_, stagedBeforeAfterSwitch := readComparisonSideText(t, srv, proj.ID, stagedBlobSel, "before")
 	_, stagedAfterAfterSwitch := readComparisonSideText(t, srv, proj.ID, stagedBlobSel, "after")
 	if !strings.Contains(stagedBeforeAfterSwitch, `staged = "v1"`) || !strings.Contains(stagedAfterAfterSwitch, `staged = "worker-staged-v2"`) {
 		t.Fatalf("staged blob diff corrupted after branch switch and reuse: before=%q after=%q", stagedBeforeAfterSwitch, stagedAfterAfterSwitch)
 	}
 
-	// Unstaged historical diff after pathname reuse: before still reads exact index blob; after is explicitly unavailable (never today's file!).
+	// Unstaged historical diff after pathname reuse keeps before blob available and marks after unavailable.
 	reusedView := contractfixture.ComparisonViewForTest(t, srv, proj.ID, unstagedHistoricalSel, "changes")
 	if reusedView.Comparison == nil || reusedView.Comparison.After == nil {
 		t.Fatalf("missing comparison details after reuse: %+v", reusedView)
@@ -217,7 +217,7 @@ func TestWorktreeOpenTargetsHistoricalDiffsRenamesAndSiblingProvenance(t *testin
 		t.Fatalf("expected before blob to remain available from Git object store, got %+v", reusedView.Comparison.Before)
 	}
 
-	// Mutation 2: Delete pkg/unstaged.go on disk and verify it still reports unavailable (not absent/today's state).
+	// Mutation 2: Delete pkg/unstaged.go on disk and verify after stays unavailable.
 	testutil.FailErr(t, "delete unstaged.go", os.Remove(filepath.Join(workerDir, "pkg", "unstaged.go")))
 	deletedView := contractfixture.ComparisonViewForTest(t, srv, proj.ID, unstagedHistoricalSel, "changes")
 	if deletedView.Comparison == nil || deletedView.Comparison.After == nil || deletedView.Comparison.After.Availability != "unavailable" {
@@ -232,7 +232,7 @@ func TestWorktreeOpenTargetsHistoricalDiffsRenamesAndSiblingProvenance(t *testin
 	}
 	runGitCmd(t, primaryDir, "worktree", "remove", "--force", movedWorkerDir)
 
-	// Even after checkout removal, staged historical blob diff and unstaged before-blob remain readable while unstaged after is unavailable!
+	// After checkout removal, staged blob diff and unstaged before-blob stay readable while after is unavailable.
 	_, stagedAfterRemoval := readComparisonSideText(t, srv, proj.ID, stagedBlobSel, "after")
 	if !strings.Contains(stagedAfterRemoval, `staged = "worker-staged-v2"`) {
 		t.Fatalf("staged blob diff after checkout removal = %q", stagedAfterRemoval)
