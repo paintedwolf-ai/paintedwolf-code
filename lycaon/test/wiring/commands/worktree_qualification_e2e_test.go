@@ -231,17 +231,21 @@ func TestWorktreeQualificationNativeAgentAddCrossCheckoutEditAndNextCommandCwd(t
 		t.Fatalf("model calls after turn 2 = %d, want 4", got)
 	}
 
-	var turn2Preview string
-	rows, err := s.h.DB.QueryContext(t.Context(), `SELECT o.preview FROM invocation_program_outputs o
-		JOIN invocation_programs p ON p.id = o.program_id JOIN invocation_receipts r ON r.id = p.parent_receipt_id
-		WHERE r.session_id = ? AND r.tool_call_id = 'call-turn-2' AND o.stream = 'stdout' ORDER BY o.created_at, o.id`, s.session)
-	testutil.FailErr(t, "read turn 2 stdout", err)
-	for rows.Next() {
-		var chunk string
-		testutil.FailErr(t, "scan chunk", rows.Scan(&chunk))
-		turn2Preview += chunk
-	}
-	testutil.FailErr(t, "close rows", rows.Close())
+	turn2Preview := func() string {
+		rows, err := s.h.DB.QueryContext(t.Context(), `SELECT o.preview FROM invocation_program_outputs o
+			JOIN invocation_programs p ON p.id = o.program_id JOIN invocation_receipts r ON r.id = p.parent_receipt_id
+			WHERE r.session_id = ? AND r.tool_call_id = 'call-turn-2' AND o.stream = 'stdout' ORDER BY o.created_at, o.id`, s.session)
+		testutil.FailErr(t, "read turn 2 stdout", err)
+		defer func() { _ = rows.Close() }()
+		var out string
+		for rows.Next() {
+			var chunk string
+			testutil.FailErr(t, "scan chunk", rows.Scan(&chunk))
+			out += chunk
+		}
+		testutil.FailErr(t, "turn 2 stdout rows", rows.Err())
+		return out
+	}()
 	inPrimaryDir := strings.Contains(turn2Preview, canonPrimary) || strings.Contains(turn2Preview, filepath.Clean(s.dir))
 	if !inPrimaryDir || strings.Contains(turn2Preview, siblingDir) || !strings.Contains(turn2Preview, "person primary edit") || strings.Contains(turn2Preview, "agent sibling") {
 		t.Fatalf("next command inherited sibling cwd or lost person primary edit: %q", turn2Preview)

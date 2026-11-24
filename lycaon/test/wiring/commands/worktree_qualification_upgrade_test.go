@@ -128,7 +128,7 @@ func materializeUpgradeCorpusData(t *testing.T, corpusDir, targetDataDir, dbFile
 	defer func() { _ = archive.Close() }()
 
 	readArchiveEntry := func(name string) []byte {
-		f, openErr := archive.Reader.Open(name)
+		f, openErr := archive.Open(name)
 		testutil.FailErr(t, "open zip entry "+name, openErr)
 		defer func() { _ = f.Close() }()
 		data, readErr := io.ReadAll(f)
