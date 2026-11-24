@@ -140,3 +140,15 @@ values:
       Project-scoped, content-free retained source presentation invalidation.
       View owners refresh bounded state and rows; paths, queries, failures, and
       source content never appear in this event.
+  - id: watch.updated
+    go: WatchUpdated
+    payload: watches.yaml#/components/schemas/WatchEvent
+    comment: >-
+      Project-scoped watch lifecycle, delivery, draft, or revision change for an
+      agent watch or person-owned standing watch.
+  - id: watch_run.updated
+    go: WatchRunUpdated
+    payload: watches.yaml#/components/schemas/WatchRunEvent
+    comment: >-
+      Project-scoped standing-watch run creation, dispatch, hold, or terminal
+      settlement.

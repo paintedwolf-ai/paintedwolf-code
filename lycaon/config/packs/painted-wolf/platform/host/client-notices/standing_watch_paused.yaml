@@ -1,0 +1,6 @@
+scope: project
+title: Standing watch paused
+message: >-
+  A standing watch was paused automatically after repeated run failures or because its target chat is no longer available.
+suggested_action: >-
+  Open Activity to review the watch, update its target or settings if needed, and resume it.

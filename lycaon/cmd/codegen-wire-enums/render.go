@@ -375,10 +375,23 @@ func renderEventPayloadsTS(e EnumDef) ([]byte, error) {
 	b.WriteString("export type EventPayloadMap = {\n")
 	for _, topic := range e.Values {
 		name, _ := eventPayloadType(topic.Payload)
-		fmt.Fprintf(&b, "  %s: %s;\n", topic.ID, name)
+		fmt.Fprintf(&b, "  %s: %s;\n", tsPropertyKey(topic.ID), name)
 	}
 	b.WriteString("};\n")
 	return b.Bytes(), nil
+}
+
+func tsPropertyKey(id string) string {
+	if id == "" {
+		return `""`
+	}
+	for i, r := range id {
+		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_' || (i > 0 && r >= '0' && r <= '9')
+		if !ok {
+			return fmt.Sprintf("%q", id)
+		}
+	}
+	return id
 }
 
 func eventEnvelopeComponent(id string) string {
@@ -386,7 +399,7 @@ func eventEnvelopeComponent(id string) string {
 	b.WriteString("EventEnvelope")
 	upper := true
 	for _, r := range id {
-		if r == '_' || r == '-' {
+		if r == '_' || r == '-' || r == '.' {
 			upper = true
 			continue
 		}

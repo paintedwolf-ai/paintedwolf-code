@@ -41,6 +41,8 @@ export const ALL_EVENT_TOPICS = [
   "turn_load",
   "chat_vault",
   "source_view",
+  "watch.updated",
+  "watch_run.updated",
 ] as const satisfies readonly EventTopic[];
 
 const EVENT_TOPIC_SET: ReadonlySet<string> = new Set(ALL_EVENT_TOPICS);

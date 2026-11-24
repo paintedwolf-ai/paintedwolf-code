@@ -173,3 +173,19 @@ components:
         type: string
         format: uuid
       description: Optional session whose bound checkout supplies the project roots
+    WatchId:
+      name: watch_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Project watch UUID
+    WatchHandle:
+      name: watch_handle
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9:._-]+$'
+      description: Session or worker watch handle

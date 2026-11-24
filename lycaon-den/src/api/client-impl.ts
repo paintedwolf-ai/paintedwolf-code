@@ -17,6 +17,7 @@ import { createSettingsClient } from "./http-capabilities/settings.ts";
 import { createExtensionsClient } from "./http-capabilities/extensions.ts";
 import { createMcpClient } from "./http-capabilities/mcp.ts";
 import { createStorageClient } from "./http-capabilities/storage.ts";
+import { createWatchesClient } from "./http-capabilities/watches.ts";
 
 function abortReason(signal: AbortSignal): Error {
   return signal.reason instanceof Error
@@ -72,5 +73,6 @@ export function createLycaonClient(connection: BackendConnection): LycaonClient 
     ...createExtensionsClient(j, connection),
     ...createMcpClient(j),
     ...createStorageClient(j, connection),
+    ...createWatchesClient(j),
   } satisfies LycaonClient;
 }

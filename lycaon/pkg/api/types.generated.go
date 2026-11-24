@@ -335,6 +335,13 @@ type AgentSessionPresence struct {
 	WorkerDrafts []AgentWorkerDraft `json:"worker_drafts"`
 }
 
+// AgentStandingDraft
+type AgentStandingDraft struct {
+	Name     string `json:"name"`
+	Prompt   string `json:"prompt"`
+	Replaces string `json:"replaces,omitempty"`
+}
+
 // AgentTextRange One span of a document. Lines are 1-based and inclusive and describe the document at the revision the item was recorded against. Characters are UTF-16 offsets within their line and appear only for search matches and for empty ranges where lines go in. Anchor and head are CRDT relative positions in the item's editor document epoch; clients resolve them in their replica so a span follows later edits, and fall back to lines only when the item has no document.
 type AgentTextRange struct {
 	StartLine      int    `json:"start_line"`
@@ -343,6 +350,50 @@ type AgentTextRange struct {
 	EndCharacter   *int   `json:"end_character,omitempty"`
 	Anchor         []byte `json:"anchor,omitempty"`
 	Head           []byte `json:"head,omitempty"`
+}
+
+// AgentWatch
+type AgentWatch struct {
+	WatchID             string                     `json:"watch_id"`
+	Handle              string                     `json:"handle"`
+	OwnerKind           string                     `json:"owner_kind"`
+	ProjectID           string                     `json:"project_id"`
+	SessionID           string                     `json:"session_id"`
+	WorkerID            string                     `json:"worker_id,omitempty"`
+	SourceProcessID     string                     `json:"source_process_id,omitempty"`
+	Label               string                     `json:"label,omitempty"`
+	Conditions          []WatchCondition           `json:"conditions"`
+	ConditionSummary    string                     `json:"condition_summary"`
+	Delivery            string                     `json:"delivery"`
+	Repeat              bool                       `json:"repeat"`
+	Derived             bool                       `json:"derived"`
+	Keepable            bool                       `json:"keepable"`
+	State               string                     `json:"state"`
+	TerminalOutcome     string                     `json:"terminal_outcome,omitempty"`
+	StandingDraft       *AgentStandingDraft        `json:"standing_draft,omitempty"`
+	OverlappingStanding []OverlappingStandingWatch `json:"overlapping_standing,omitempty"`
+	FinalReceipt        *AgentWatchReceipt         `json:"final_receipt,omitempty"`
+	Revision            int                        `json:"revision"`
+	ExpiresAt           time.Time                  `json:"expires_at"`
+	CreatedAt           time.Time                  `json:"created_at"`
+	UpdatedAt           time.Time                  `json:"updated_at"`
+}
+
+// AgentWatchListResponse
+type AgentWatchListResponse struct {
+	Watches []AgentWatch `json:"watches"`
+}
+
+// AgentWatchReceipt
+type AgentWatchReceipt struct {
+	Handle          string         `json:"handle"`
+	State           string         `json:"state"`
+	TerminalOutcome string         `json:"terminal_outcome,omitempty"`
+	StandingWatchID string         `json:"standing_watch_id,omitempty"`
+	MatchedKind     string         `json:"matched_kind,omitempty"`
+	Occurrence      int64          `json:"occurrence,omitempty"`
+	Detail          map[string]any `json:"detail,omitempty"`
+	RecordedAt      time.Time      `json:"recorded_at,omitempty"`
 }
 
 // AgentWorkerDraft A worker job's pending change to one primary-tree file. Ranges are the changed lines of the current document and appear once the draft is ready.
@@ -1304,6 +1355,12 @@ type CLIOpenEvent struct {
 type CacheSavings struct {
 	EstimatedNanoUsd int64 `json:"estimated_nano_usd"`
 	UnpricedTokens   int   `json:"unpriced_tokens"`
+}
+
+// CancelWatchResponse
+type CancelWatchResponse struct {
+	Watch   AgentWatch        `json:"watch"`
+	Receipt AgentWatchReceipt `json:"receipt"`
 }
 
 // CatastrophicDetail Support-report facts for a catastrophic result, shown on the stop screen and copyable by the user.
@@ -2728,6 +2785,22 @@ type CreateSessionRequest struct {
 	ProviderID string `json:"provider_id,omitempty"`
 	// Optional coordinator model override for this session
 	Model string `json:"model,omitempty"`
+}
+
+// CreateStandingWatchRequest
+type CreateStandingWatchRequest struct {
+	Name                 string               `json:"name"`
+	Prompt               string               `json:"prompt"`
+	Conditions           []WatchCondition     `json:"conditions"`
+	Gate                 *WatchGate           `json:"gate,omitempty"`
+	MinGapMinutes        int                  `json:"min_gap_minutes,omitempty"`
+	Target               *StandingWatchTarget `json:"target,omitempty"`
+	WorkflowID           string               `json:"workflow_id,omitempty"`
+	ModelID              string               `json:"model_id,omitempty"`
+	RunSpendLimitNanoUsd int64                `json:"run_spend_limit_nano_usd,omitempty"`
+	AllowUnpriced        bool                 `json:"allow_unpriced,omitempty"`
+	DailyRunCap          int                  `json:"daily_run_cap,omitempty"`
+	TimeZone             string               `json:"time_zone,omitempty"`
 }
 
 // CurrentComparisonSource A read-only, immutable snapshot of the current on-disk file. Frames and search remain bounded for files above the editing limit.
@@ -4236,6 +4309,29 @@ type InvocationReceiptList struct {
 	NextCursor  string              `json:"next_cursor,omitempty"`
 }
 
+// KeepWatchRequest
+type KeepWatchRequest struct {
+	Name                 string               `json:"name,omitempty"`
+	Prompt               string               `json:"prompt,omitempty"`
+	Conditions           []WatchCondition     `json:"conditions,omitempty"`
+	Gate                 *WatchGate           `json:"gate,omitempty"`
+	MinGapMinutes        int                  `json:"min_gap_minutes,omitempty"`
+	Target               *StandingWatchTarget `json:"target,omitempty"`
+	WorkflowID           string               `json:"workflow_id,omitempty"`
+	ModelID              string               `json:"model_id,omitempty"`
+	RunSpendLimitNanoUsd int64                `json:"run_spend_limit_nano_usd,omitempty"`
+	AllowUnpriced        bool                 `json:"allow_unpriced,omitempty"`
+	DailyRunCap          int                  `json:"daily_run_cap,omitempty"`
+	TimeZone             string               `json:"time_zone,omitempty"`
+	Revision             int                  `json:"revision,omitempty"`
+}
+
+// KeepWatchResponse
+type KeepWatchResponse struct {
+	StandingWatch StandingWatch     `json:"standing_watch"`
+	Receipt       AgentWatchReceipt `json:"receipt"`
+}
+
 // LLMCallEvent
 type LLMCallEvent struct {
 	CallID string `json:"call_id"`
@@ -4931,6 +5027,14 @@ type OpenedOutsideFile struct {
 	Location SourceChatLocation `json:"location"`
 }
 
+// OverlappingStandingWatch
+type OverlappingStandingWatch struct {
+	WatchID          string `json:"watch_id"`
+	Name             string `json:"name"`
+	State            string `json:"state"`
+	ConditionSummary string `json:"condition_summary"`
+}
+
 // OverlayMergePlan
 type OverlayMergePlan struct {
 	PendingCount int `json:"pending_count"`
@@ -5558,6 +5662,26 @@ type ProjectTrustSurface struct {
 	Applying bool `json:"applying"`
 	// Whether the tree matches the version last read. An unseen surface still applies; reading does not change what the agent gets.
 	Seen bool `json:"seen"`
+}
+
+// ProjectWatch
+type ProjectWatch struct {
+	WatchID       string         `json:"watch_id"`
+	OwnerKind     string         `json:"owner_kind"`
+	ProjectID     string         `json:"project_id"`
+	SessionID     string         `json:"session_id,omitempty"`
+	Handle        string         `json:"handle,omitempty"`
+	Revision      int            `json:"revision"`
+	AgentWatch    *AgentWatch    `json:"agent_watch,omitempty"`
+	StandingWatch *StandingWatch `json:"standing_watch,omitempty"`
+}
+
+// ProjectWatchListResponse
+type ProjectWatchListResponse struct {
+	Watches                  []ProjectWatch `json:"watches"`
+	DailySpendCapNanoUsd     int64          `json:"daily_spend_cap_nano_usd"`
+	HasUnpricedStandingWatch bool           `json:"has_unpriced_standing_watch"`
+	EnabledStandingTotal     int            `json:"enabled_standing_total"`
 }
 
 // PromoteProjectRequest
@@ -6996,6 +7120,14 @@ type SessionProtectionState struct {
 	BackgroundExecution []SessionBackgroundExecutionJob `json:"background_execution,omitempty"`
 }
 
+// SessionStandingWatchOrigin
+type SessionStandingWatchOrigin struct {
+	WatchID   string `json:"watch_id"`
+	WatchName string `json:"watch_name"`
+	RunID     string `json:"run_id"`
+	Deleted   bool   `json:"deleted"`
+}
+
 // SessionSummary Metadata-only chat list row; worker child sessions are never listed
 type SessionSummary struct {
 	// Effective mode of the root chat.
@@ -7040,8 +7172,9 @@ type SessionTranscriptPage struct {
 
 // SessionUiState
 type SessionUiState struct {
-	PendingWorkflowStart *PendingWorkflowStart   `json:"pending_workflow_start,omitempty"`
-	Protection           *SessionProtectionState `json:"protection,omitempty"`
+	PendingWorkflowStart *PendingWorkflowStart       `json:"pending_workflow_start,omitempty"`
+	Protection           *SessionProtectionState     `json:"protection,omitempty"`
+	StandingWatch        *SessionStandingWatchOrigin `json:"standing_watch,omitempty"`
 }
 
 // SetProviderCredentialRequest
@@ -8641,6 +8774,53 @@ type SourceWorkspaceRoot struct {
 	Watch SourceWatchCoverage `json:"watch"`
 }
 
+// StandingWatch
+type StandingWatch struct {
+	WatchID              string               `json:"watch_id"`
+	ProjectID            string               `json:"project_id"`
+	OwnerPersonID        string               `json:"owner_person_id"`
+	Name                 string               `json:"name"`
+	Prompt               string               `json:"prompt"`
+	Conditions           []WatchCondition     `json:"conditions"`
+	ConditionSummary     string               `json:"condition_summary"`
+	Gate                 *WatchGate           `json:"gate,omitempty"`
+	MinGapMinutes        int                  `json:"min_gap_minutes"`
+	Target               StandingWatchTarget  `json:"target"`
+	WorkflowID           string               `json:"workflow_id"`
+	ModelID              string               `json:"model_id"`
+	RunSpendLimitNanoUsd int64                `json:"run_spend_limit_nano_usd"`
+	AllowUnpriced        bool                 `json:"allow_unpriced"`
+	DailyRunCap          int                  `json:"daily_run_cap"`
+	TimeZone             string               `json:"time_zone"`
+	State                string               `json:"state"`
+	StateReason          *string              `json:"state_reason,omitempty"`
+	KeptFrom             *StandingWatchOrigin `json:"kept_from,omitempty"`
+	NextRunAt            *time.Time           `json:"next_run_at,omitempty"`
+	LastOutcome          string               `json:"last_outcome,omitempty"`
+	ActiveRun            *WatchRun            `json:"active_run,omitempty"`
+	RecentRuns           []WatchRun           `json:"recent_runs,omitempty"`
+	Revision             int                  `json:"revision"`
+	CreatedAt            time.Time            `json:"created_at"`
+	UpdatedAt            time.Time            `json:"updated_at"`
+}
+
+// StandingWatchOrigin
+type StandingWatchOrigin struct {
+	SessionID string `json:"session_id"`
+	Handle    string `json:"handle"`
+}
+
+// StandingWatchRevisionRequest
+type StandingWatchRevisionRequest struct {
+	Revision int `json:"revision"`
+}
+
+// StandingWatchTarget
+type StandingWatchTarget struct {
+	Kind      string `json:"kind"`
+	SessionID string `json:"session_id,omitempty"`
+}
+
 // StartWorkflowRunRequest
 type StartWorkflowRunRequest struct {
 	// Bind or upgrade the session mode at admission.
@@ -9286,6 +9466,25 @@ type UpdateSourceChatLocationRequest struct {
 	Hidden *bool `json:"hidden,omitempty"`
 }
 
+// UpdateStandingWatchRequest
+type UpdateStandingWatchRequest struct {
+	Revision             int                  `json:"revision,omitempty"`
+	Name                 *string              `json:"name,omitempty"`
+	Prompt               *string              `json:"prompt,omitempty"`
+	Conditions           []WatchCondition     `json:"conditions,omitempty"`
+	Gate                 *WatchGate           `json:"gate,omitempty"`
+	ClearGate            bool                 `json:"clear_gate,omitempty"`
+	MinGapMinutes        *int                 `json:"min_gap_minutes,omitempty"`
+	Target               *StandingWatchTarget `json:"target,omitempty"`
+	WorkflowID           *string              `json:"workflow_id,omitempty"`
+	ModelID              *string              `json:"model_id,omitempty"`
+	RunSpendLimitNanoUsd *int64               `json:"run_spend_limit_nano_usd,omitempty"`
+	AllowUnpriced        *bool                `json:"allow_unpriced,omitempty"`
+	DailyRunCap          *int                 `json:"daily_run_cap,omitempty"`
+	TimeZone             *string              `json:"time_zone,omitempty"`
+	State                *string              `json:"state,omitempty"`
+}
+
 // UpdateTrustSettingsRequest
 type UpdateTrustSettingsRequest struct {
 	// Partial surface id to enabled; unnamed surfaces keep their value.
@@ -9295,6 +9494,11 @@ type UpdateTrustSettingsRequest struct {
 // UpdateVerifySettingsRequest
 type UpdateVerifySettingsRequest struct {
 	Test string `json:"test,omitempty"`
+}
+
+// UpdateWatchDeliveryRequest
+type UpdateWatchDeliveryRequest struct {
+	Delivery string `json:"delivery,omitempty"`
 }
 
 // UpdateWebResearchProviderRequest
@@ -9463,6 +9667,85 @@ type VisualArtifact struct {
 	ToolCallID string `json:"tool_call_id,omitempty"`
 	// Assistant transcript row that originated this artifact.
 	OriginMessageID string `json:"origin_message_id,omitempty"`
+}
+
+// WatchCalendarSchedule
+type WatchCalendarSchedule struct {
+	Days  []string `json:"days"`
+	Times []string `json:"times"`
+}
+
+// WatchCondition
+type WatchCondition struct {
+	Kind         string                 `json:"kind"`
+	ProcessID    string                 `json:"process_id,omitempty"`
+	Cursor       int64                  `json:"cursor,omitempty"`
+	URL          string                 `json:"url,omitempty"`
+	Host         string                 `json:"host,omitempty"`
+	Port         int                    `json:"port,omitempty"`
+	DelayMs      int64                  `json:"delay_ms,omitempty"`
+	At           string                 `json:"at,omitempty"`
+	EveryMinutes int64                  `json:"every_minutes,omitempty"`
+	Calendar     *WatchCalendarSchedule `json:"calendar,omitempty"`
+	RootID       string                 `json:"root_id,omitempty"`
+	Path         string                 `json:"path,omitempty"`
+	Glob         string                 `json:"glob,omitempty"`
+	IncludeOwn   bool                   `json:"include_own,omitempty"`
+	Ref          string                 `json:"ref,omitempty"`
+}
+
+// WatchEvent
+type WatchEvent struct {
+	Action    string        `json:"action"`
+	WatchID   string        `json:"watch_id"`
+	OwnerKind string        `json:"owner_kind"`
+	ProjectID string        `json:"project_id"`
+	SessionID string        `json:"session_id,omitempty"`
+	Handle    string        `json:"handle,omitempty"`
+	Revision  int           `json:"revision"`
+	Watch     *ProjectWatch `json:"watch,omitempty"`
+}
+
+// WatchGate
+type WatchGate struct {
+	Kind   string `json:"kind"`
+	RootID string `json:"root_id,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Glob   string `json:"glob,omitempty"`
+	Ref    string `json:"ref,omitempty"`
+}
+
+// WatchRun
+type WatchRun struct {
+	RunID             string         `json:"run_id"`
+	WatchID           string         `json:"watch_id"`
+	WatchName         string         `json:"watch_name"`
+	ProjectID         string         `json:"project_id"`
+	Status            string         `json:"status"`
+	ScheduledAt       time.Time      `json:"scheduled_at"`
+	SessionID         string         `json:"session_id,omitempty"`
+	MissedCount       int            `json:"missed_count"`
+	ConditionDetail   map[string]any `json:"condition_detail,omitempty"`
+	SpendLimitNanoUsd int64          `json:"spend_limit_nano_usd"`
+	AllowUnpriced     bool           `json:"allow_unpriced"`
+	CreatedAt         time.Time      `json:"created_at"`
+	StartedAt         *time.Time     `json:"started_at,omitempty"`
+	EndedAt           *time.Time     `json:"ended_at,omitempty"`
+}
+
+// WatchRunEvent
+type WatchRunEvent struct {
+	RunID     string   `json:"run_id"`
+	WatchID   string   `json:"watch_id"`
+	ProjectID string   `json:"project_id"`
+	Revision  int      `json:"revision"`
+	Run       WatchRun `json:"run"`
+}
+
+// WatchRunListResponse
+type WatchRunListResponse struct {
+	Runs       []WatchRun `json:"runs"`
+	NextCursor string     `json:"next_cursor,omitempty"`
 }
 
 // WebResearchDirectCardContent

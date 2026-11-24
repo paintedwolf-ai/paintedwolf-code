@@ -14,6 +14,7 @@ import type { SettingsClient } from "./http-capabilities/settings.ts";
 import type { ExtensionsClient } from "./http-capabilities/extensions.ts";
 import type { McpClient } from "./http-capabilities/mcp.ts";
 import type { StorageClient } from "./http-capabilities/storage.ts";
+import type { WatchesClient } from "./http-capabilities/watches.ts";
 import type { SourceViewsClient } from "./source-views-client.ts";
 
 export interface LycaonClient extends
@@ -32,4 +33,5 @@ export interface LycaonClient extends
   ExtensionsClient,
   McpClient,
   StorageClient,
+  WatchesClient,
   SourceViewsClient {}

@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Watch settings are invalid
+message: >-
+  The standing watch schedule, condition, gate, or limits did not pass validation.
+suggested_action: Check the condition fields, time zone, and spend limits, then try again.
+scenarios:
+  - id: default
+    vars: {}

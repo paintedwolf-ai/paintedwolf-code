@@ -126,7 +126,7 @@ func tryDispatchOneStandingRun(ctx context.Context, e *StandingEngine, projectID
 				return err
 			}
 			publishWatchEventTx(ctx, e, tx, "watch_run.updated", projectID, "", sw.WatchID, runID, sw.Revision)
-			return tx.Commit()
+			return commitStandingTx(e, tx)
 		}
 		return nil
 	}
@@ -139,7 +139,7 @@ func tryDispatchOneStandingRun(ctx context.Context, e *StandingEngine, projectID
 			return err
 		}
 		publishWatchEventTx(ctx, e, tx, "watch_run.updated", projectID, "", sw.WatchID, runID, sw.Revision)
-		return tx.Commit()
+		return commitStandingTx(e, tx)
 	}
 	if sw.Target.Kind == "existing_chat" {
 		okBudget, retryAt, bErr := reserveExistingChatHourlyBudgetTx(ctx, tx, sw.Target.SessionID, now)
@@ -166,7 +166,7 @@ func tryDispatchOneStandingRun(ctx context.Context, e *StandingEngine, projectID
 		return err
 	}
 	publishWatchEventTx(ctx, e, tx, "watch_run.updated", projectID, targetSession, sw.WatchID, runID, sw.Revision)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return err
 	}
 	dispatchedRun, err := getWatchRunByID(ctx, e.store, runID)
@@ -260,7 +260,7 @@ func (e *StandingEngine) MarkWaitingForOwner(ctx context.Context, sessionID stri
 		return err
 	}
 	publishWatchEventTx(ctx, e, tx, "watch_run.updated", projectID, sessionID, watchID, runID, 0)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return err
 	}
 	return e.DispatchProjectRuns(ctx, projectID)
@@ -289,7 +289,7 @@ func (e *StandingEngine) MarkResumed(ctx context.Context, sessionID string) erro
 		return err
 	}
 	publishWatchEventTx(ctx, e, tx, "watch_run.updated", projectID, sessionID, watchID, runID, 0)
-	return tx.Commit()
+	return commitStandingTx(e, tx)
 }
 
 func (e *StandingEngine) SettleRun(ctx context.Context, sessionID string, status WatchRunStatus) error {
@@ -382,7 +382,7 @@ func settleStandingRunByID(ctx context.Context, e *StandingEngine, runID, sessio
 			publishWatchEventTx(ctx, e, tx, "watch.updated", run.ProjectID, "", run.WatchID, "", nextRev)
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return err
 	}
 	if pausedByFailures {
@@ -438,7 +438,7 @@ func (e *StandingEngine) NotifySessionClosedOrDeleted(ctx context.Context, sessi
 		}
 		_, _ = cancelPendingAndQueuedRunsTx(ctx, tx, t.watchID, nowStr)
 		publishWatchEventTx(ctx, e, tx, "watch.updated", t.projectID, "", t.watchID, "", nextRev)
-		if tx.Commit() == nil {
+		if commitStandingTx(e, tx) == nil {
 			retireWatchRuntime(e.store, t.watchID)
 			emitStandingNotice(ctx, e, t.projectID, t.watchID, t.name, NoticeStandingWatchPaused, "target_unavailable", false)
 		} else {
@@ -479,7 +479,7 @@ func pauseStandingTargetUnavailableWithRun(ctx context.Context, e *StandingEngin
 	}
 	_, _ = cancelPendingAndQueuedRunsTx(ctx, tx, sw.WatchID, nowStr)
 	publishWatchEventTx(ctx, e, tx, "watch.updated", sw.ProjectID, "", sw.WatchID, "", nextRev)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return err
 	}
 	retireWatchRuntime(e.store, sw.WatchID)
@@ -506,7 +506,7 @@ func disableWatchOnRevokedOwner(ctx context.Context, e *StandingEngine, sw Stand
 	}
 	_, _ = cancelPendingAndQueuedRunsTx(ctx, tx, sw.WatchID, nowStr)
 	publishWatchEventTx(ctx, e, tx, "watch.updated", sw.ProjectID, "", sw.WatchID, "", nextRev)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return err
 	}
 	retireWatchRuntime(e.store, sw.WatchID)
@@ -530,7 +530,7 @@ func markStandingWatchCompleted(ctx context.Context, e *StandingEngine, watchID,
 		return err
 	}
 	publishWatchEventTx(ctx, e, tx, "watch.updated", projectID, "", watchID, "", nextRev)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return err
 	}
 	retireWatchRuntime(e.store, watchID)
@@ -813,4 +813,12 @@ func publishWatchEventTx(ctx context.Context, e *StandingEngine, tx *sql.Tx, top
 	if fn := e.callbacks().EventPublisher; fn != nil {
 		fn(ctx, tx, topic, projectID, sessionID, watchID, runID, revision)
 	}
+}
+
+func commitStandingTx(e *StandingEngine, tx *sql.Tx) error {
+	err := tx.Commit()
+	if err == nil && e != nil {
+		NotifyEvents(e.store)
+	}
+	return err
 }

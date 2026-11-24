@@ -63,6 +63,9 @@ func wireStandingWatchHost(b *serveBuilder, watchStore *watch.Store) {
 			return dispatchStandingWatchRun(b, ctx, &wg, engine, sw, run, promptText)
 		},
 	})
+	if b.events != nil {
+		watchStore.SetEventOutbox(b.events.Outbox)
+	}
 
 	var stopCh chan struct{}
 	var unsub func()

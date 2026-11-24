@@ -99,6 +99,7 @@ func (s *Store) ReconcileStoppedSessions(ctx context.Context, sessionIDs ...stri
 			if _, _, err := cancelRegistrationTx(ctx, tx, reg, OutcomeCanceled, now); err != nil {
 				return StopSummary{}, err
 			}
+			publishAgentWatchEventTx(ctx, s, tx, reg, reg.Lifecycle.Revision+1)
 			expiredIDs = append(expiredIDs, reg.WatchID)
 			summary.CanceledCount++
 			summary.CanceledHandles = append(summary.CanceledHandles, reg.Handle)
@@ -106,6 +107,9 @@ func (s *Store) ReconcileStoppedSessions(ctx context.Context, sessionIDs ...stri
 	}
 	if err := tx.Commit(); err != nil {
 		return StopSummary{}, err
+	}
+	if len(expiredIDs) > 0 {
+		NotifyEvents(s)
 	}
 	for _, wID := range expiredIDs {
 		retireWatchRuntime(s, wID)

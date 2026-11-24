@@ -154,6 +154,7 @@ func expireWatch(ctx context.Context, s *Store, watchID string, now time.Time) e
 	if err := transitionTerminalTx(ctx, tx, reg, OutcomeExpired, now); err != nil {
 		return err
 	}
+	publishAgentWatchEventTx(ctx, s, tx, reg, reg.Lifecycle.Revision+1)
 	woke, err := settleSelectedLeasesForWatchTx(ctx, tx, reg.WatchID, now)
 	if err != nil {
 		return err
@@ -161,6 +162,7 @@ func expireWatch(ctx context.Context, s *Store, watchID string, now time.Time) e
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	NotifyEvents(s)
 	retireWatchRuntime(s, reg.WatchID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)

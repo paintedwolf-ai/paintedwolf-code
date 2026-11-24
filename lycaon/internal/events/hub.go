@@ -49,7 +49,8 @@ func DebounceForTopic(topic api.EventTopic) time.Duration {
 	// Agent presence is too: a trailing window would drop a short call's start
 	// and hold delivery while calls keep arriving.
 	case api.EventTopicMessage, api.EventTopicActivity, api.EventTopicWorkflow, api.EventTopicGrounding,
-		api.EventTopicFindings, api.EventTopicProgress, api.EventTopicTurnClock, api.EventTopicAgentPresence:
+		api.EventTopicFindings, api.EventTopicProgress, api.EventTopicTurnClock, api.EventTopicAgentPresence,
+		api.EventTopicWatchUpdated, api.EventTopicWatchRunUpdated:
 		return DebounceImmediate
 	case api.EventTopicSourceChanged:
 		return DebounceSourceChanged

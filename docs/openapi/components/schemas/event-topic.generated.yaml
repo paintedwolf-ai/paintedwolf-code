@@ -41,3 +41,5 @@ components:
         - turn_load
         - chat_vault
         - source_view
+        - watch.updated
+        - watch_run.updated

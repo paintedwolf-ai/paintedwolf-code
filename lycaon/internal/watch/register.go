@@ -75,10 +75,14 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	if err != nil {
 		return RegisterReceipt{}, err
 	}
+	if !replayed {
+		publishAgentWatchEventTx(ctx, s, tx, reg, reg.Lifecycle.Revision)
+	}
 	if err := tx.Commit(); err != nil {
 		return RegisterReceipt{}, err
 	}
 	if !replayed {
+		NotifyEvents(s)
 		for altIdx, snap := range initialManifests {
 			s.manifests.set(reg.WatchID, altIdx, snap)
 		}

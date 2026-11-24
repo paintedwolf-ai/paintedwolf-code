@@ -176,7 +176,7 @@ func (e *StandingEngine) Create(ctx context.Context, actorPersonID string, in St
 		return StandingWatch{}, err
 	}
 	publishWatchEventTx(ctx, e, tx, "watch.updated", prepared.ProjectID, "", watchID, "", 1)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return StandingWatch{}, mapStandingSQLiteErr(err, prepared.Name)
 	}
 	for altIdx, snap := range initialManifests {
@@ -247,7 +247,7 @@ func (e *StandingEngine) KeepAgentWatch(ctx context.Context, actorPersonID, sess
 	}
 	publishWatchEventTx(ctx, e, tx, "watch.updated", liveAgent.Owner.ProjectID, liveAgent.Owner.SessionID, liveAgent.WatchID, "", liveAgent.Lifecycle.Revision+1)
 	publishWatchEventTx(ctx, e, tx, "watch.updated", prepared.ProjectID, "", standingID, "", standingRev)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return StandingWatch{}, CancelReceipt{}, mapStandingSQLiteErr(err, prepared.Name)
 	}
 	retireWatchRuntime(e.store, liveAgent.WatchID)
@@ -422,7 +422,7 @@ func (e *StandingEngine) CancelByPerson(ctx context.Context, sessionID, handle s
 	if wasLive {
 		publishWatchEventTx(ctx, e, tx, "watch.updated", reg.Owner.ProjectID, reg.Owner.SessionID, reg.WatchID, "", reg.Lifecycle.Revision+1)
 	}
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return CancelReceipt{}, err
 	}
 	retireWatchRuntime(e.store, reg.WatchID)
@@ -643,5 +643,5 @@ func commitStandingUpdate(
 		}
 	}
 	publishWatchEventTx(ctx, e, tx, "watch.updated", current.ProjectID, "", current.WatchID, "", nextRev)
-	return mapStandingSQLiteErr(tx.Commit(), prepared.Name)
+	return mapStandingSQLiteErr(commitStandingTx(e, tx), prepared.Name)
 }

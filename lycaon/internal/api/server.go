@@ -67,6 +67,7 @@ type routeHandlers struct {
 	HarnessProviders   *HarnessProviders
 	LocalData          *LocalData
 	Storage            *Storage
+	Watches            *Watches
 	Workers            *Workers
 }
 

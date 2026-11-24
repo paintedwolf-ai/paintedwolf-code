@@ -1,0 +1,9 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Watch name already used
+message: >-
+  Another standing watch in this project already uses that name.
+suggested_action: Choose a distinct name for this standing watch.
+scenarios:
+  - id: default
+    vars: {}

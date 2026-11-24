@@ -124,6 +124,8 @@ export const TOPIC_STORE_INVALIDATION: Readonly<
   // The handler folds the receipt into the transcript's turn loads.
   turn_load: [],
   preflight: ["readiness"],
+  "watch.updated": [],
+  "watch_run.updated": [],
 };
 
 export type EventHandler<T> = (event: T, scope: EventScope) => void;

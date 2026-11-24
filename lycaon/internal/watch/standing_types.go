@@ -188,6 +188,7 @@ type StandingCallbacks struct {
 	RunDispatcher      StandingRunDispatcher
 	NoticeEmitter      StandingNoticeEmitter
 	EventPublisher     WatchEventPublisher
+	EventCommitNotify  func()
 }
 
 // StandingEngine manages person-owned standing watches and their run lifecycle.

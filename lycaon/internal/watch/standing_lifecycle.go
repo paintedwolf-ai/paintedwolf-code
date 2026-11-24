@@ -53,7 +53,7 @@ func (e *StandingEngine) Pause(ctx context.Context, projectID, watchID string, b
 	for _, rID := range canceledIDs {
 		publishWatchEventTx(ctx, e, tx, "watch_run.updated", projectID, "", watchID, rID, nextRev)
 	}
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return StandingWatch{}, err
 	}
 	retireWatchRuntime(e.store, watchID)
@@ -111,7 +111,7 @@ func (e *StandingEngine) Resume(ctx context.Context, actorPersonID, projectID, w
 		return StandingWatch{}, err
 	}
 	publishWatchEventTx(ctx, e, tx, "watch.updated", projectID, "", watchID, "", nextRev)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return StandingWatch{}, err
 	}
 	emitStandingNotice(ctx, e, projectID, watchID, current.Name, NoticeStandingWatchPaused, "", true)
@@ -146,7 +146,7 @@ func (e *StandingEngine) Delete(ctx context.Context, projectID, watchID string) 
 		return &UnknownHandleError{Handle: watchID}
 	}
 	publishWatchEventTx(ctx, e, tx, "watch.updated", projectID, "", watchID, "", current.Revision+1)
-	if err := tx.Commit(); err != nil {
+	if err := commitStandingTx(e, tx); err != nil {
 		return err
 	}
 	retireWatchRuntime(e.store, watchID)
