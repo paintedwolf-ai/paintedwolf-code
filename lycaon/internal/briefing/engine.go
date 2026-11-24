@@ -7,9 +7,6 @@ import (
 	"log/slog"
 	"maps"
 	"strings"
-	"time"
-
-	"github.com/lycaon/lycaon/internal/observability"
 )
 
 // Engine resolves targets against stored results and generates only missing
@@ -191,11 +188,13 @@ func (e *Engine) request(ctx context.Context, r resolved) (Snapshot, error) {
 		Manual: request.Manual, Policy: request.Policy,
 		Run: func(ctx context.Context) { e.generate(ctx, run, attempt, stored) },
 		Expired: func(ctx context.Context) {
-			e.fail(ctx, run, attempt, Failure{Code: CodeQueueExpired, Message: ErrQueueExpired.Error()})
+			msg := formatAttemptStageFailure(run, StageQueue, FailureQueueExpired, ErrQueueExpired.Error(), ErrQueueExpired)
+			e.fail(ctx, run, attempt, Failure{Code: CodeQueueExpired, Message: msg})
 		},
 	}
 	if _, err := e.scheduler.Submit(ctx, job); err != nil {
-		e.fail(context.WithoutCancel(ctx), r, attempt, Failure{Code: CodeAdmissionRefused, Message: err.Error()})
+		msg := formatAttemptStageFailure(r, StageAdmission, FailureSlotBusy, "admission failed ("+err.Error()+")", err)
+		e.fail(context.WithoutCancel(ctx), r, attempt, Failure{Code: CodeAdmissionRefused, Message: msg})
 		return Snapshot{}, err
 	}
 	return snap, nil
@@ -263,80 +262,4 @@ func (r resolved) manifest(sectionID string) Manifest {
 		}
 	}
 	return Manifest{}
-}
-
-func (e *Engine) generate(ctx context.Context, r resolved, attempt string, stored map[string]Result) {
-	if limit := r.request.Policy.RunLimit; limit > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, limit)
-		defer cancel()
-	}
-	var failures []string
-	for _, i := range r.missing {
-		section := r.request.Sections[i]
-		hash := r.hashes[i].ManifestHash
-		result, err := e.flights.do(ctx, r.request.ProjectID+"\x00"+hash, func() (Result, error) {
-			return e.generateSection(ctx, r, section, hash)
-		})
-		if err != nil {
-			if errors.Is(ctx.Err(), context.Canceled) {
-				e.fail(context.WithoutCancel(ctx), r, attempt, Failure{Code: CodeCancelled})
-				return
-			}
-			failures = append(failures, section.ID+": "+err.Error())
-			continue
-		}
-		r.results[hash] = result
-	}
-	settleCtx := context.WithoutCancel(ctx)
-	// Any section left without text fails the attempt; generated sections stay
-	// stored, so a retry asks only for the rest.
-	if len(failures) > 0 {
-		e.fail(settleCtx, r, attempt, Failure{Code: CodeGenerationFailed, Message: strings.Join(failures, "; ")})
-		return
-	}
-	if _, err := e.settle(settleCtx, r, attempt, stored); err != nil && !errors.Is(err, errSuperseded) {
-		e.logger.WarnContext(settleCtx, "settle briefing", "profile", r.request.ProfileID, "target", r.request.TargetKey, "error", err)
-	}
-}
-
-func (e *Engine) generateSection(ctx context.Context, r resolved, section SectionPlan, hash string) (Result, error) {
-	request := r.request
-	// Another target may have finished this manifest since this one resolved.
-	if stored, err := e.store.GetResults(ctx, request.ProjectID, []string{hash}); err == nil {
-		if result, ok := stored[hash]; ok && result.Source == SourceSummarizer {
-			return result, nil
-		}
-	}
-	contract := section.Manifest.Contract
-	if e.generator != nil {
-		raw, provider, model, err := e.generator.Generate(ctx, Invocation{ProjectID: request.ProjectID, ProjectDir: request.ProjectDir, Purpose: request.ProfileID, Requested: request.Manual || request.Policy.Admission == Immediate, Prompt: section.Prompt})
-		if err == nil {
-			if text, parseErr := contract.Parse(observability.RedactCaptureText(raw)); parseErr == nil {
-				result := Result{Text: text, Source: SourceSummarizer, Provider: provider, Model: model, Quality: section.Quality, CreatedAt: time.Now().UTC()}
-				return result, e.store.PutResult(context.WithoutCancel(ctx), request.ProjectID, r.epoch, section.Manifest, hash, result)
-			}
-		} else if ctx.Err() != nil {
-			return Result{}, ctx.Err()
-		}
-	}
-	if section.Fallback == "" {
-		return Result{}, ErrNoText
-	}
-	result := Result{Text: section.Fallback, Source: SourceFallback, Quality: section.Quality, CreatedAt: time.Now().UTC()}
-	return result, e.store.PutResult(context.WithoutCancel(ctx), request.ProjectID, r.epoch, section.Manifest, hash, result)
-}
-
-func (e *Engine) fail(ctx context.Context, r resolved, attempt string, failure Failure) {
-	request := r.request
-	settled, err := e.store.FailAttempt(ctx, request, attempt, failure)
-	if err != nil {
-		e.logger.WarnContext(ctx, "fail briefing", "profile", request.ProfileID, "target", request.TargetKey, "error", err)
-		return
-	}
-	if settled.Applied && e.publisher != nil {
-		snap := Snapshot{ProfileID: request.ProfileID, TargetKey: request.TargetKey, Status: StatusFailed, AttemptID: attempt,
-			Epoch: r.epoch, Revision: settled.Revision, ErrorCode: failure.Code, Error: failure.Message}
-		e.publisher.PublishSnapshot(ctx, request.ProjectID, snap)
-	}
 }

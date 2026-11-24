@@ -3,7 +3,6 @@ package llm
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -31,40 +30,37 @@ func (r *RegistrySummarizer) SummarizeStreamOnce(ctx context.Context, systemProm
 }
 
 func (r *RegistrySummarizer) summarizeStream(ctx context.Context, systemPrompt, userPrompt string, maxTokens int, onDelta func(delta string), allowFallback bool) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	p, model, err := r.liteProvider(ctx)
 	if err != nil || p == nil {
-		if allowFallback {
+		if allowFallback && ctx.Err() == nil && !SecretScreenBlocked(err) {
 			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
 		}
 		if err != nil {
-			return "", err
+			return "", preserveCallerContextError(err, ctx.Err())
 		}
-		return "", fmt.Errorf("no configured provider")
+		return "", newUnconfiguredUtilityError("no configured provider")
 	}
 	if r.Plane != nil && !r.Plane.allowLite() {
-		if allowFallback {
+		if allowFallback && ctx.Err() == nil {
 			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
 		}
 		return "", ErrLiteUnavailable
 	}
-	callCtx, release, laneErr := r.planeAcquire(ctx, p, r.utilityClass())
-	if laneErr != nil {
-		if allowFallback {
-			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
-		}
-		return "", laneErr
-	}
-	out := r.streamLite(callCtx, p, model, systemPrompt, userPrompt, maxTokens, onDelta)
-	callErr := callCtx.Err()
-	release()
-	if callErr != nil {
-		return out.content, callErr
+	out := r.streamLite(ctx, p, model, systemPrompt, userPrompt, maxTokens, onDelta)
+	if out.preemptErr != nil {
+		return out.content, preserveCallerContextError(out.preemptErr, ctx.Err())
 	}
 	if out.setupErr != nil {
-		if allowFallback {
-			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
+		if ctx.Err() != nil || SecretScreenBlocked(out.setupErr) || !allowFallback {
+			return out.content, preserveCallerContextError(out.setupErr, ctx.Err())
 		}
-		return "", out.setupErr
+		return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
+	}
+	if ctx.Err() != nil {
+		return out.content, preserveCallerContextError(out.streamErr, ctx.Err())
 	}
 	if out.streamErr != nil {
 		return out.content, out.streamErr
@@ -73,9 +69,10 @@ func (r *RegistrySummarizer) summarizeStream(ctx context.Context, systemPrompt, 
 }
 
 type streamLiteResult struct {
-	content   string
-	setupErr  error
-	streamErr error
+	content    string
+	setupErr   error
+	streamErr  error
+	preemptErr error
 }
 
 func (r *RegistrySummarizer) streamLite(ctx context.Context, p modelcall.Provider, model, systemPrompt, userPrompt string, maxTokens int, onDelta func(delta string)) streamLiteResult {
@@ -95,18 +92,48 @@ func (r *RegistrySummarizer) streamLite(ctx context.Context, p modelcall.Provide
 		MaxTokens: r.answerTokens(ctx, p, model, maxTokens),
 	}
 	req = r.utilityRequest(ctx, req)
-	attempt := r.beginUtilityCall(ctx, p, model)
+	adm := r.newUtilityAdmission(p, r.utilityClass())
+	callCtx := ctx
+	var undecoratedRelease func()
+	if !isRegistryDecorated(p) {
+		var laneErr error
+		callCtx, undecoratedRelease, laneErr = r.planeAcquire(ctx, p, r.utilityClass())
+		if laneErr != nil {
+			return streamLiteResult{setupErr: laneErr}
+		}
+		adm.markDispatched()
+	}
+	attempt := r.beginUtilityCall(callCtx, p, model)
+	attempt.ctx = withCallAdmission(attempt.ctx, adm)
 	defer attempt.close()
 	callID, occupy := r.beginLaneCall(ctx, attempt.callID, attempt.provider, model)
-	chunks, err := p.Stream(attempt.ctx, req) //nolint:contextcheck // attempt.ctx is ctx plus this provider's budget
+	chunks, err := p.Stream(attempt.ctx, req) //nolint:contextcheck // attempt.ctx is ctx plus admission and this provider's budget
 	if err != nil {
-		if errors.Is(attempt.ctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
-			err = &utilityBudgetExceededError{cause: err}
+		if undecoratedRelease != nil {
+			undecoratedRelease()
 		}
 		attempt.void()
-		r.noteCallOutcome(observe, providerIDOf(p), model, err)
+		if pErr := adm.PreemptErr(); pErr != nil {
+			pErr = preserveCallerContextError(err, pErr)
+			r.endLaneCall(ctx, occupy, callID, attempt.provider, model, &pErr)
+			return streamLiteResult{preemptErr: pErr}
+		}
+		if callCtx.Err() != nil && ctx.Err() == nil {
+			callErr := preserveCallerContextError(err, callCtx.Err())
+			r.endLaneCall(ctx, occupy, callID, attempt.provider, model, &callErr)
+			return streamLiteResult{preemptErr: callErr}
+		}
+		if adm.Dispatched() {
+			if errors.Is(attempt.ctx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+				err = &utilityBudgetExceededError{cause: err}
+			}
+			r.noteCallOutcome(observe, providerIDOf(p), model, err)
+		}
 		r.endLaneCall(ctx, occupy, callID, attempt.provider, model, &err)
 		return streamLiteResult{setupErr: err}
+	}
+	if undecoratedRelease != nil {
+		chunks = releaseAfterStream(ctx, chunks, undecoratedRelease)
 	}
 	collected := &modelcall.Completion{}
 	var content []byte
@@ -133,6 +160,18 @@ func (r *RegistrySummarizer) streamLite(ctx context.Context, p modelcall.Provide
 		}
 	}
 	collected.Content = string(content)
+	if pErr := adm.PreemptErr(); pErr != nil {
+		pErr = preserveCallerContextError(streamErr, pErr)
+		attempt.finish(req, collected)
+		r.endLaneCall(ctx, occupy, callID, attempt.provider, model, &pErr)
+		return streamLiteResult{content: collected.Content, preemptErr: pErr}
+	}
+	if callCtx.Err() != nil && ctx.Err() == nil {
+		callErr := preserveCallerContextError(streamErr, callCtx.Err())
+		attempt.finish(req, collected)
+		r.endLaneCall(ctx, occupy, callID, attempt.provider, model, &callErr)
+		return streamLiteResult{content: collected.Content, preemptErr: callErr}
+	}
 	attempt.finish(req, collected)
 	if streamErr == nil {
 		streamErr = attempt.ctx.Err()

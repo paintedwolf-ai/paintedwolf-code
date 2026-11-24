@@ -164,5 +164,21 @@ describe("useActivityBriefingSlots", () => {
     });
     await waitFor(() => expect(view.container.querySelector('[data-section="outcome"]')?.textContent).toContain("Outcome: Outcome arrived first."));
 
+    applyBriefingEvent("p", {
+      kind: "snapshot",
+      snapshot: snapshot({
+        target_key: "k2",
+        revision: "5",
+        status: "failed",
+        error_code: "generation_failed",
+        error_message: "purpose [admission]: admission failed (utility slot busy); change [screening]: protected content withheld",
+      }),
+    });
+    await waitFor(() =>
+      expect(view.container.querySelector('[data-section="outcome"]')?.textContent).toContain(
+        "Outcome: Screening: protected content withheld.",
+      ),
+    );
+    expect(part().status).toBe("completed");
   });
 });
