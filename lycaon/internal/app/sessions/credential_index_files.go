@@ -10,7 +10,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/protectedpath"
@@ -22,23 +24,53 @@ import (
 
 const credentialFileBytes = 16 << 20
 
-func (i *credentialIndex) refresh(ctx context.Context, root *credentialRoot, paths []string) error {
+type credentialBuildStats struct {
+	buildID             string
+	directoriesListed   int
+	pathsClassified     int
+	credentialFilesRead int
+}
+
+func (i *credentialIndex) refresh(ctx context.Context, root *credentialRoot, paths []string) (credentialBuildStats, error) {
+	started := time.Now()
+	stats := credentialBuildStats{buildID: uuid.NewString()}
+	mode := "incremental"
+	if len(paths) == 1 && paths[0] == "." {
+		mode = "full"
+	}
 	capture := i.files.harvest.CaptureFiles(root.projectID)
 	staged := *root
 	staged.known = maps.Clone(root.known)
+	var err error
 	for _, path := range paths {
-		if err := i.scan(ctx, &staged, path, capture); err != nil {
-			return err
+		if err = i.scan(ctx, &staged, path, capture, &stats); err != nil {
+			break
 		}
 	}
-	if err := capture.Commit(); err != nil {
-		return err
+	if err == nil {
+		err = capture.Commit()
+	}
+	secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
+		CallID:              secretmatch.ScreenCallIDFrom(ctx),
+		ProjectID:           root.projectID,
+		BuildID:             stats.buildID,
+		RootID:              root.id,
+		Phase:               "credential_build",
+		Mode:                mode,
+		DurationMS:          time.Since(started).Milliseconds(),
+		DirectoriesListed:   stats.directoriesListed,
+		PathsClassified:     stats.pathsClassified,
+		CredentialFilesRead: stats.credentialFilesRead,
+		Failed:              err != nil,
+	})
+	if err != nil {
+		return stats, err
 	}
 	root.known = staged.known
-	return nil
+	return stats, nil
 }
 
-func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path string, capture *secretharvest.FileCapture) error {
+func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path string, capture *secretharvest.FileCapture, stats *credentialBuildStats) error {
 	path = filepath.ToSlash(filepath.Clean(path))
 	if filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") {
 		return errors.New("credential index path leaves root")
@@ -74,14 +106,26 @@ func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path s
 			if entry.Name() == ".git" || repochange.IsPrivatePath(abs) {
 				return filepath.SkipDir
 			}
+			if stats != nil {
+				stats.directoriesListed++
+			}
 			seeds = append(seeds, repochange.WatchDirectory{Path: abs})
 			if len(seeds) == 128 {
 				flush()
 			}
 			return nil
 		}
-		if !entry.Type().IsRegular() || entry.Type()&os.ModeSymlink != 0 || !protectedpath.IsCredentialFile(rel) || repochange.IsPrivatePath(abs) {
+		if !entry.Type().IsRegular() || entry.Type()&os.ModeSymlink != 0 {
 			return nil
+		}
+		if stats != nil {
+			stats.pathsClassified++
+		}
+		if !protectedpath.IsCredentialFile(rel) || repochange.IsPrivatePath(abs) {
+			return nil
+		}
+		if stats != nil {
+			stats.credentialFilesRead++
 		}
 		if err := i.read(ctx, root, rel, capture); err != nil {
 			return err

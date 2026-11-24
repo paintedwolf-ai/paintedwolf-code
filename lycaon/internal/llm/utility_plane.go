@@ -92,7 +92,10 @@ func (p *UtilityPlane) acquireLane(ctx context.Context, provider modelcall.Provi
 	if p == nil || provider == nil {
 		return func() {}, nil
 	}
-	return p.lanes.acquire(ctx, modelcall.CapacityKey(provider), provider.Profile().UtilitySingleFlight, class)
+	started := time.Now()
+	release, err := p.lanes.acquire(ctx, modelcall.CapacityKey(provider), provider.Profile().UtilitySingleFlight, class)
+	emitCapacityWait(ctx, "utility", started, err != nil)
+	return release, err
 }
 
 func (p *UtilityPlane) acquireForeground(ctx context.Context, provider modelcall.Provider) (func(), error) {

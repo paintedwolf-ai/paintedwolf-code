@@ -181,6 +181,10 @@ func (p *secretScreenedProvider) screenAndAdmit(ctx context.Context, req modelca
 	}
 
 	queueStart := time.Now()
+	mode := "utility"
+	if adm.foreground {
+		mode = "foreground"
+	}
 	release, waited, rescreened, admitErr := adm.plane.lanes.admitWithRevalidate(
 		waitCtx, adm.capacityKey, adm.singleFlight, adm.foreground, preemptCancel, checkFresh, rescreen,
 	)
@@ -191,10 +195,12 @@ func (p *secretScreenedProvider) screenAndAdmit(ctx context.Context, req modelca
 		if ctx.Err() == nil && !adm.foreground && adm.class == UtilityClassOverlay && waitCtx.Err() != nil {
 			admitErr = ErrLiteBusy
 		}
+		emitCapacityWait(ctx, mode, queueStart, true)
 		lifecycleFromContext(ctx).record(ctx, "admitted",
 			"queue_ms", time.Since(queueStart).Milliseconds(), "contended", waited, "rescreened", rescreened, "failed", true)
 		return nil, modelcall.CompletionRequest{}, nil, admitErr
 	}
+	emitCapacityWait(ctx, mode, queueStart, false)
 	lifecycleFromContext(ctx).record(ctx, "admitted",
 		"queue_ms", time.Since(queueStart).Milliseconds(), "contended", waited, "rescreened", rescreened, "failed", false)
 	fullRelease := release

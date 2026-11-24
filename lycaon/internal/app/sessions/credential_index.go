@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/keylock"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/workscope"
 )
 
@@ -78,6 +79,23 @@ func (c *credentialFiles) EnsureProject(ctx context.Context, projectID string) e
 		return err
 	}
 	attached := map[string]bool{}
+	var localTrace secretmatch.EvidenceTrace
+	emitReadiness := func(failed bool) {
+		snap := localTrace.Snapshot()
+		secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
+			CallID:              secretmatch.ScreenCallIDFrom(ctx),
+			ProjectID:           projectID,
+			Phase:               "root_readiness_wait",
+			DurationMS:          snap.ReadinessWaitMS,
+			RootsChecked:        snap.RootsChecked,
+			BuildsJoined:        snap.BuildsJoined,
+			BuildIDs:            snap.BuildIDs,
+			DirectoriesListed:   snap.DirectoriesListed,
+			PathsClassified:     snap.PathsClassified,
+			CredentialFilesRead: snap.CredentialFilesRead,
+			Failed:              failed,
+		})
+	}
 	for _, row := range rows {
 		// Agents cannot write in an editor-only root, so it needs no index.
 		if admitted, _ := (project.Root{Path: row.Path}).Admission(); !admitted {
@@ -89,6 +107,7 @@ func (c *credentialFiles) EnsureProject(ctx context.Context, projectID string) e
 		if root == nil || root.path != row.Path {
 			if root != nil {
 				if err := i.withdraw(root); err != nil {
+					emitReadiness(true)
 					return err
 				}
 			}
@@ -99,21 +118,36 @@ func (c *credentialFiles) EnsureProject(ctx context.Context, projectID string) e
 		coverageStale := root.coverageExpired(repochange.Coverage(root.path), time.Now())
 		if !root.ready || coverageStale || !repochange.EpochCurrent(root.path, root.epoch) {
 			epoch := repochange.CurrentEpoch(root.path)
-			if err := i.refresh(ctx, root, []string{"."}); err != nil {
+			started := time.Now()
+			stats, err := i.refresh(ctx, root, []string{"."})
+			waitMS := time.Since(started).Milliseconds()
+			localTrace.NoteRootWait(waitMS, stats.buildID, stats.directoriesListed, stats.pathsClassified, stats.credentialFilesRead)
+			if trace := secretmatch.EvidenceTraceFrom(ctx); trace != nil {
+				trace.NoteRootWait(waitMS, stats.buildID, stats.directoriesListed, stats.pathsClassified, stats.credentialFilesRead)
+			}
+			if err != nil {
 				root.ready = false
+				emitReadiness(true)
 				return fmt.Errorf("credential-file index: %w", err)
 			}
 			root.ready, root.epoch, root.validated = true, epoch, time.Now()
+		} else {
+			localTrace.NoteRootWait(0, "", 0, 0, 0)
+			if trace := secretmatch.EvidenceTraceFrom(ctx); trace != nil {
+				trace.NoteRootWait(0, "", 0, 0, 0)
+			}
 		}
 	}
 	for key, root := range i.roots {
 		if root.projectID == projectID && !attached[key] {
 			if err := i.withdraw(root); err != nil {
+				emitReadiness(true)
 				return err
 			}
 			delete(i.roots, key)
 		}
 	}
+	emitReadiness(false)
 	return nil
 }
 
@@ -146,7 +180,7 @@ func (i *credentialIndex) changed(ctx context.Context, event repochange.Event) e
 			paths = []string{"."}
 			epoch = repochange.CurrentEpoch(root.path)
 		}
-		if err := i.refresh(ctx, root, paths); err != nil {
+		if _, err := i.refresh(ctx, root, paths); err != nil {
 			root.ready = false
 			return err
 		}
