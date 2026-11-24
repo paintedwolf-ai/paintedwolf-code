@@ -87,7 +87,7 @@ func serveGitWorktrees(s *Handler, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	checkouts, err := s.Worktrees.Read(r.Context(), worktrees.RepoSpec{
+	checkouts, err := s.Worktrees.Refresh(r.Context(), worktrees.RepoSpec{
 		ProjectID: p.ID,
 		RepoID:    baseRepo.ID,
 		Toplevel:  canonicalGitPath(baseRepo.Toplevel),
