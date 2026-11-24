@@ -81,9 +81,9 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 			runID:         strings.TrimSpace(spec.RunID),
 			userIntentID:  strings.TrimSpace(spec.UserIntentID),
 			workflowRunID: strings.TrimSpace(spec.WorkflowRunID),
-			runKey:   runKey,
-			boundary: confine.BoundaryOf(req.Launch.Confinement),
-			facts:    spec.Facts,
+			runKey:        runKey,
+			boundary:      confine.BoundaryOf(req.Launch.Confinement),
+			facts:         spec.Facts,
 		},
 	}
 	if proc.RootSessionID == "" {

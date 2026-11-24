@@ -338,7 +338,7 @@ func TestCompletionCueAcceptanceRequestSequenceAndBaselineParity(t *testing.T) {
 			{toolCalls: []api.ToolCall{{ID: "tc-read2", Name: "read", Args: map[string]any{}}}},
 			// Decision 5 (unrelated decision): no cue. Close item 1 leaving 2 pending.
 			{},
-			// Decision 6 (after closing item 1 leaving 2 pending, outcome already delivered): no cue. Close item 2 leaving 1 pending.
+			// Decision 6: outcome already delivered (2 pending) -> no cue. Close item 2 leaving 1 pending.
 			{},
 			// Decision 7 (after closing item 2 leaving 1 pending): expects PLAN_FINAL_ITEM_COVERAGE.
 			{},
@@ -411,15 +411,15 @@ func TestCompletionCueAcceptanceRequestSequenceAndBaselineParity(t *testing.T) {
 
 	// Exact decision-index cue sequence.
 	wantCodes := []string{
-		"",                                 // 0: initial
-		"",                                 // 1: after seed
-		"",                                 // 2: after read
-		"",                                 // 3: after launch-only
-		completioncue.CodeOutcomeCoverage,  // 4: after passing check (3 pending)
-		"",                                 // 5: unrelated decision
-		"",                                 // 6: outcome already delivered (2 pending)
+		"",                                  // 0: initial
+		"",                                  // 1: after seed
+		"",                                  // 2: after read
+		"",                                  // 3: after launch-only
+		completioncue.CodeOutcomeCoverage,   // 4: after passing check (3 pending)
+		"",                                  // 5: unrelated decision
+		"",                                  // 6: outcome already delivered (2 pending)
 		completioncue.CodeFinalItemCoverage, // 7: closed to 1 pending
-		"",                                 // 8: closed to 0 pending
+		"",                                  // 8: closed to 0 pending
 	}
 	gotCodes := cueCodesInRequests(candidate.llm.requests)
 	if !slices.Equal(gotCodes, wantCodes) {
@@ -515,10 +515,10 @@ func TestCompletionCueIneligibleEventsProduceNoCue(t *testing.T) {
 		{toolCalls: []api.ToolCall{{ID: "tc-seed", Name: "update_progress", Args: map[string]any{"content": seedTwo}}}},
 		{}, // descope only
 		{}, // rename only
-		{toolCalls: []api.ToolCall{{ID: "tc-cmd", Name: "command", Args: map[string]any{}}}},                              // ordinary command (is_check=false)
-		{toolCalls: []api.ToolCall{{ID: "tc-fail", Name: "verify", Args: map[string]any{"fail": true}}}},                   // failed check
-		{toolCalls: []api.ToolCall{{ID: "tc-old", Name: "verify", Args: map[string]any{"intent_id": "other-intent"}}}},     // unrelated intent
-		{toolCalls: []api.ToolCall{{ID: "tc-stale", Name: "verify", Args: map[string]any{}}}},                              // stale source
+		{toolCalls: []api.ToolCall{{ID: "tc-cmd", Name: "command", Args: map[string]any{}}}},                           // ordinary command (is_check=false)
+		{toolCalls: []api.ToolCall{{ID: "tc-fail", Name: "verify", Args: map[string]any{"fail": true}}}},               // failed check
+		{toolCalls: []api.ToolCall{{ID: "tc-old", Name: "verify", Args: map[string]any{"intent_id": "other-intent"}}}}, // unrelated intent
+		{toolCalls: []api.ToolCall{{ID: "tc-stale", Name: "verify", Args: map[string]any{}}}},                          // stale source
 		{content: "done"},
 	}
 	h = newCompletionCueHarness(t, true, steps)

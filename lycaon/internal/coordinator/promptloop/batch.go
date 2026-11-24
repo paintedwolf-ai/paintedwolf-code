@@ -402,14 +402,14 @@ func (l *toolBatch) runConcurrentToolBatch(
 			tctx.Effects.Out = &tools.ToolInvocationOut{}
 			out := l.executeOneToolCall(ctx, sess, sessionID, userPrompt, history, call, tctx, taskAllowlist, assistantMessageID, runCtx, proseTurn)
 			outcomes[i] = toolCallOutcome{
-				index:          i,
-				advanced:       out.advanced,
-				toolName:       out.toolName,
-				toolArgs:       call.Args,
-				toolMsg:        out.toolMsg,
-				taskCommitted:  out.taskCommitted,
-				handleEligible: out.handleEligible,
-				deliveries:     out.deliveries,
+				index:             i,
+				advanced:          out.advanced,
+				toolName:          out.toolName,
+				toolArgs:          call.Args,
+				toolMsg:           out.toolMsg,
+				taskCommitted:     out.taskCommitted,
+				handleEligible:    out.handleEligible,
+				deliveries:        out.deliveries,
 				taskMessageID:     out.toolMsg.ID,
 				endTurn:           out.endTurn,
 				planItemCompleted: out.planItemCompleted,
