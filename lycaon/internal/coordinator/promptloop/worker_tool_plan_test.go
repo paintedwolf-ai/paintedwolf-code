@@ -1,6 +1,7 @@
 package promptloop
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -16,7 +17,7 @@ import (
 func TestWorkerPlanPromotesOnlyPermittedResourcesAndActivations(t *testing.T) {
 	loop := NewPromptLoop(PromptLoopDeps{
 		Context: ContextDeps{
-			LiveResources: func(string) toolcontract.ResourcePresence {
+			LiveResources: func(context.Context, string) toolcontract.ResourcePresence {
 				return toolcontract.ResourcePresence{Pages: true, CommandJobs: true, Terminals: true}
 			},
 		},

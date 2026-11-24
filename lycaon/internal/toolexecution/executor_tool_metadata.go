@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
@@ -84,6 +85,14 @@ func (e *Metadata) enrichToolMeta(ctx context.Context, meta tools.ToolMeta, filt
 		if source, ok := e.policy.(interface{ WaitConditions(string) []string }); ok {
 			meta.ArgsSchema = pruneWaitConditionSchema(meta.ArgsSchema, source.WaitConditions(profileID))
 		}
+	case "watch":
+		var allowed []string
+		if source, ok := e.policy.(interface{ WatchConditions(string) []string }); ok {
+			allowed = source.WatchConditions(profileID)
+		}
+		meta.ArgsSchema = pruneWatchSchema(meta.ArgsSchema, allowed, profileID, filter)
+	case "watch_control":
+		meta.ArgsSchema = pruneWatchControlSchema(meta.ArgsSchema, profileID)
 	case "command":
 		if len(meta.DescriptionEffects) == 0 {
 			if cfg := e.schemasFor(ctx, ""); cfg != nil {
@@ -113,6 +122,44 @@ func pruneWaitConditionSchema(schema map[string]any, allowed []string) map[strin
 		values = append(values, value)
 	}
 	kind["enum"] = values
+	return cloned
+}
+
+func pruneWatchSchema(schema map[string]any, allowed []string, profileID string, filter platform.ToolFilter) map[string]any {
+	if filter.Rootless {
+		filtered := make([]string, 0, len(allowed))
+		for _, value := range allowed {
+			if value == "file_change" || value == "git_ref" {
+				continue
+			}
+			filtered = append(filtered, value)
+		}
+		allowed = filtered
+	}
+	cloned := pruneWaitConditionSchema(schema, allowed)
+	properties, _ := cloned["properties"].(map[string]any)
+	isCoordinator := profileID == toolcontract.CoordinatorProfileID
+	if !isCoordinator {
+		if delivery, ok := properties["delivery"].(map[string]any); ok {
+			delivery["enum"] = []any{"collect"}
+		}
+		delete(properties, "standing")
+	}
+	if filter.OmitStandingDraft {
+		delete(properties, "standing")
+	}
+	return cloned
+}
+
+func pruneWatchControlSchema(schema map[string]any, profileID string) map[string]any {
+	if profileID == toolcontract.CoordinatorProfileID {
+		return schema
+	}
+	cloned := jsonvalue.CloneMap(schema)
+	properties, _ := cloned["properties"].(map[string]any)
+	if delivery, ok := properties["delivery"].(map[string]any); ok {
+		delivery["enum"] = []any{"collect"}
+	}
 	return cloned
 }
 

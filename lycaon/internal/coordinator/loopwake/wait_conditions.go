@@ -77,10 +77,8 @@ func resolveConditions(raw any) (waitSubscription, error) {
 		kind, _ := obj["kind"].(string)
 		trimmedKind := strings.TrimSpace(kind)
 		trigger := WaitTrigger(trimmedKind)
-		if trimmedKind != watch.ConditionWatchMatch {
-			if _, allowed := validWaitTriggers[trigger]; !allowed || trigger == WaitTriggerTimer {
-				return waitSubscription{}, fmt.Errorf("unsupported wait condition %q", kind)
-			}
+		if _, allowed := validWaitTriggers[trigger]; !allowed || trigger == WaitTriggerTimer {
+			return waitSubscription{}, fmt.Errorf("unsupported wait condition %q", kind)
 		}
 		if err := validateConditionShape(trigger, obj); err != nil {
 			return waitSubscription{}, err
@@ -96,27 +94,27 @@ func resolveConditions(raw any) (waitSubscription, error) {
 				handles = append(handles, parsed...)
 			}
 		}
-		if trimmedKind == watch.ConditionWatchMatch && (len(condition.Handles) == 0 || len(condition.Handles) > watch.MaxAlternatives) {
+		if trigger == WaitTriggerWatchMatch && (len(condition.Handles) == 0 || len(condition.Handles) > watch.MaxAlternatives) {
 			return waitSubscription{}, fmt.Errorf("watch_match requires 1 to 8 handles")
 		}
 		switch trigger {
 		case WaitTriggerHTTPReady:
-			parsed, err := parseHTTPReadyCondition(obj)
+			parsed, err := ParseHTTPReadyCondition(obj)
 			if err != nil {
 				return waitSubscription{}, err
 			}
 			condition = parsed
 		case WaitTriggerPortReady:
-			parsed, err := parsePortReadyCondition(obj)
+			parsed, err := ParsePortReadyCondition(obj)
 			if err != nil {
 				return waitSubscription{}, err
 			}
 			condition = parsed
 		case WaitTriggerTimer, WaitTriggerNextWorkerDone, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote,
-			WaitTriggerScanDone, WaitTriggerProcessDone, WaitTriggerProgramDone:
+			WaitTriggerScanDone, WaitTriggerProcessDone, WaitTriggerWatchMatch, WaitTriggerProgramDone:
 		}
 		conditions = append(conditions, condition)
-		if trimmedKind != watch.ConditionWatchMatch {
+		if trigger != WaitTriggerWatchMatch {
 			triggers = append(triggers, trigger)
 		}
 	}
@@ -130,11 +128,8 @@ func resolveConditions(raw any) (waitSubscription, error) {
 
 func validateConditionShape(trigger WaitTrigger, obj map[string]any) error {
 	allowed := map[string]bool{"kind": true}
-	if string(trigger) == watch.ConditionWatchMatch {
-		allowed["handles"] = true
-	}
 	switch trigger {
-	case WaitTriggerProcessDone, WaitTriggerNextWorkerDone:
+	case WaitTriggerProcessDone, WaitTriggerNextWorkerDone, WaitTriggerWatchMatch:
 		allowed["handles"] = true
 	case WaitTriggerHTTPReady:
 		for _, field := range []string{"url", "method", "status_min", "status_max", "port"} {
@@ -153,7 +148,8 @@ func validateConditionShape(trigger WaitTrigger, obj map[string]any) error {
 	return nil
 }
 
-func parseHTTPReadyCondition(obj map[string]any) (awaitstore.Condition, error) {
+// ParseHTTPReadyCondition validates and normalizes an http_ready condition.
+func ParseHTTPReadyCondition(obj map[string]any) (awaitstore.Condition, error) {
 	rawURL, _ := obj["url"].(string)
 	declared, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
@@ -196,7 +192,8 @@ func parseHTTPReadyCondition(obj map[string]any) (awaitstore.Condition, error) {
 	return awaitstore.Condition{Kind: "http_ready", URL: target.String(), Method: method, StatusMin: minimum, StatusMax: maximum}, nil
 }
 
-func parsePortReadyCondition(obj map[string]any) (awaitstore.Condition, error) {
+// ParsePortReadyCondition validates and normalizes a port_ready condition.
+func ParsePortReadyCondition(obj map[string]any) (awaitstore.Condition, error) {
 	host, _ := obj["host"].(string)
 	host = strings.TrimSpace(host)
 	if host == "" {
@@ -238,7 +235,7 @@ func conditionsFromTriggers(triggers []WaitTrigger, processHandles, workerHandle
 		case WaitTriggerNextWorkerDone:
 			condition.Handles = append([]string(nil), workerHandles...)
 		case WaitTriggerTimer, WaitTriggerAllWorkersIdle, WaitTriggerOverlayPromote, WaitTriggerScanDone,
-			WaitTriggerHTTPReady, WaitTriggerPortReady, WaitTriggerProgramDone:
+			WaitTriggerWatchMatch, WaitTriggerHTTPReady, WaitTriggerPortReady, WaitTriggerProgramDone:
 		}
 		out = append(out, condition)
 	}

@@ -554,6 +554,18 @@ tools:
     title_keys: [reason]
     running_label: "Waiting…"
     activity: {headline: "waiting", salience: incidental, role: coordination}
+  watch:
+    label: "Watch"
+    title_keys: []
+    title_fallback: "Watch conditions"
+    running_label: "Setting watch…"
+    activity: {headline: "setting watches", salience: incidental, role: coordination}
+  watch_control:
+    label: "Watch control"
+    title_keys: [handle]
+    title_fallback: "Watch"
+    running_label: "Updating watch…"
+    activity: {headline: "managing watches", salience: incidental, role: coordination}
   wc:
     label: "Count lines"
     running_label: "Counting lines…"

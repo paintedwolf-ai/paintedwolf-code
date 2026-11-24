@@ -1,0 +1,25 @@
+spec_version: "1.0"
+id: WATCH_WAKE_NOT_ALLOWED
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - watch
+    - watch_control
+requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
+when: paintedwolf.rejection_code == "WATCH_WAKE_NOT_ALLOWED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:watch
+message: Ambient wake delivery is not allowed for this watch
+what: '{{ tool }} cannot set delivery="wake" on this watch.'
+cause: '{{ paintedwolf.rejection_reason }}'
+why: Workers collect and explicitly wait within their job, repeating timers require a person-kept standing watch, and standing drafts always collect until kept.
+fix: Use delivery="collect" and pass the returned watch_match condition to wait when you need to block, or include a standing draft in a project chat when proposing a recurring schedule.
+instead: Do not request wake on worker watches, repeating timers, or standing drafts
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      reason: repeating timer watches cannot use ambient wake
+      tool: watch

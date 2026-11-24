@@ -58,6 +58,8 @@ var (
 		"view_image",
 		"view_video",
 		"wait",
+		"watch",
+		"watch_control",
 		"worker_cancel",
 		"worker_history",
 		"workflow_advance",

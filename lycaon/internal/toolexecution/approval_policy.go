@@ -34,6 +34,13 @@ func (p *ApprovalPolicyEngine) WaitConditions(profileID string) []string {
 	return p.profile.WaitConditions(profileID)
 }
 
+func (p *ApprovalPolicyEngine) WatchConditions(profileID string) []string {
+	if p == nil || p.profile == nil {
+		return nil
+	}
+	return p.profile.WatchConditions(profileID)
+}
+
 // CommandEffects delegates to the underlying profile policy engine.
 func (p *ApprovalPolicyEngine) CommandEffects(ctx context.Context, profileID string) (toolcontract.CommandEffects, error) {
 	if p == nil || p.profile == nil {

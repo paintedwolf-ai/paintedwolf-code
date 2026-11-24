@@ -39,6 +39,16 @@ func (p *ProfilePolicyEngine) WaitConditions(profileID string) []string {
 	return nil
 }
 
+func (p *ProfilePolicyEngine) WatchConditions(profileID string) []string {
+	if p == nil {
+		return nil
+	}
+	if source, ok := p.boundary.(interface{ WatchConditions(string) []string }); ok {
+		return source.WatchConditions(profileID)
+	}
+	return nil
+}
+
 // Evaluate checks whether a tool is allowed for the profile.
 func (p *ProfilePolicyEngine) Evaluate(ctx context.Context, eval platform.PolicyContext) (*platform.PolicyDecision, error) {
 	if denied, code := p.runtimeDenied(eval.ToolName); denied {

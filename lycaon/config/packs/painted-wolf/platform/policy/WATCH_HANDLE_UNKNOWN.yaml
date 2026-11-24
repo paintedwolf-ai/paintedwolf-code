@@ -5,20 +5,21 @@ on: tool.rejected
 selector:
   tools:
     - wait
+    - watch_control
 requires_facts: [paintedwolf.handle, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WATCH_HANDLE_UNKNOWN"
 effect: block
 x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:wait
+x-paintedwolf-emit: guard:watch
 message: Watch handle {{ paintedwolf.handle }} is unknown
 what: Handle {{ paintedwolf.handle }} does not name a watch owned by this session or worker job.
 cause: The handle was never issued here, belongs to another owner, or has aged out after terminal settlement.
 why: Watch handles are scoped to the exact session or worker job that registered them.
-fix: Pass an active watch handle owned by this session or worker job to wait.
+fix: Pass the watch handle returned by watch or a command job receipt in this scope, or register a new watch if needed.
 instead: Do not pass a command handle, PID, or worker name where a watch handle is required
 x-paintedwolf-scenarios:
   - id: default
     vars:
       handle: watch-99
       profile: coordinator
-      tool: wait
+      tool: watch_control

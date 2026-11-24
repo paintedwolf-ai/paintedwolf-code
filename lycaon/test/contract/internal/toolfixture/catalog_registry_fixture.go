@@ -49,6 +49,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/page"
 	reporttools "github.com/lycaon/lycaon/internal/tools/native/reporting"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/worker/workertest"
@@ -246,6 +247,11 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 		WorkerKnown: func(context.Context, string, string) bool { return true },
 	}); err != nil {
 		contractcheck.FailErr(t, "loopwake.RegisterWaitTool failed", err)
+	}
+	if err := watch.RegisterWatchTools(rt.Registry, watch.ToolDeps{
+		Store: watch.NewStore(sqlDB, nil),
+	}); err != nil {
+		contractcheck.FailErr(t, "watch.RegisterWatchTools failed", err)
 	}
 	renderBudgets, err := browser.LoadRenderBudgets()
 	contractcheck.FailErr(t, "browser.LoadRenderBudgets failed", err)

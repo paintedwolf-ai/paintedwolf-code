@@ -45,6 +45,7 @@ type EngineDeps struct {
 	BlockPlane       *toolfeedback.BlockPlane
 	PreInvoke        PreInvokeGuard
 	ProjectRootCount func(context.Context, *api.Session) int
+	ProjectChat      func(context.Context, *api.Session) bool
 	OverlayRootPaths func(context.Context, *api.Session) []string
 }
 
@@ -73,8 +74,17 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 	}
 	if roots, ok := coordinatorTurnFrameProjectRootCount(ctx); ok {
 		filter.ProjectRootCount = roots
+		filter.Rootless = roots == 0
 	} else if e.deps.ProjectRootCount != nil && sess != nil {
 		filter.ProjectRootCount = e.deps.ProjectRootCount(ctx, sess)
+		filter.Rootless = filter.ProjectRootCount == 0
+	}
+	if profileID != toolcontract.CoordinatorProfileID {
+		filter.OmitStandingDraft = true
+	} else if e.deps.ProjectChat != nil && sess != nil {
+		filter.OmitStandingDraft = !e.deps.ProjectChat(ctx, sess)
+	} else if sess != nil && strings.TrimSpace(sess.ProjectID) == "" {
+		filter.OmitStandingDraft = true
 	}
 	base := tools.ListToolsForProfile(ctx, e.deps.ToolLister, filter)
 	workerChild := sess.IsWorkerChild()

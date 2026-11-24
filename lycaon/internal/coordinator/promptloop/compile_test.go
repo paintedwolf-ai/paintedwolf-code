@@ -16,6 +16,18 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+func (l *promptContext) compileRuntimeToolPlan(
+	plan toolsurface.Plan,
+	runCtx api.CoordinatorRunContext,
+	metas []tools.ToolMeta,
+	activated map[string]bool,
+	mcpPlan tools.MCPToolPlan,
+	openWorld bool,
+	sess *api.Session,
+) toolsurface.Plan {
+	return l.compileRuntimeToolPlanForSurface(context.Background(), plan, toolcontract.SurfaceImplementInvestigate, runCtx, metas, activated, mcpPlan, openWorld, sess)
+}
+
 func TestCompiledSurfaceOffersCommandOnInvestigateFloor(t *testing.T) {
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
@@ -38,7 +50,7 @@ func TestCompiledSurfaceOffersCommandOnInvestigateFloor(t *testing.T) {
 func TestCompiledSurfaceLiveResourceAddsWaitOnInvestigate(t *testing.T) {
 	loop := NewPromptLoop(PromptLoopDeps{
 		Context: ContextDeps{
-			LiveResources: func(string) toolcontract.ResourcePresence {
+			LiveResources: func(context.Context, string) toolcontract.ResourcePresence {
 				return toolcontract.ResourcePresence{CommandJobs: true}
 			},
 		},
@@ -46,7 +58,7 @@ func TestCompiledSurfaceLiveResourceAddsWaitOnInvestigate(t *testing.T) {
 	sess := &api.Session{ID: "s1", WorkspacePath: "/tmp/repo"}
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
-	plan = loop.Context.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, nil, tools.MCPToolPlan{}, false, sess)
+	plan = loop.Context.compileRuntimeToolPlanForSurface(t.Context(), plan, toolcontract.SurfaceImplementInvestigate, api.CoordinatorRunContext{}, nil, nil, tools.MCPToolPlan{}, false, sess)
 	for _, name := range []string{"command_output", "command_stop", "wait"} {
 		if !plan.Immediate(name) {
 			t.Fatalf("investigate + live jobs missing immediate %s: %v", name, plan.ImmediateNames())
@@ -66,7 +78,7 @@ func TestCompiledTurnPlanAdmitsActivatedOpenWorld(t *testing.T) {
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_park"}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
 	active := loop.Context.activeDeferredTools(sess)
-	plan = loop.Context.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, active, tools.MCPToolPlan{}, false, sess)
+	plan = loop.Context.compileRuntimeToolPlanForSurface(t.Context(), plan, "implement_park", api.CoordinatorRunContext{}, nil, active, tools.MCPToolPlan{}, false, sess)
 	if !plan.Immediate("mcp_github_create_pr") {
 		t.Fatalf("activated MCP must bypass surface: %v", plan.ImmediateNames())
 	}
@@ -140,7 +152,7 @@ func TestCoordinatorToolsForTurnPutsLiveJobControlsOnTheWire(t *testing.T) {
 	live := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{
 			Policy: registryTestPolicy{metas: metas},
-			LiveResources: func(string) toolcontract.ResourcePresence {
+			LiveResources: func(context.Context, string) toolcontract.ResourcePresence {
 				return toolcontract.ResourcePresence{CommandJobs: true}
 			},
 		},

@@ -3441,11 +3441,59 @@
       "emit": "guard:wait",
       "summary": "A durable readiness probe cannot contain a detected secret."
     },
+    "WATCH_CAPACITY_REACHED": {
+      "branch_instruction": "Do not open duplicate watches for the same dependency",
+      "category": "recoverable",
+      "emit": "guard:watch",
+      "summary": "Cannot register another watch because the active or retained handle cap is full."
+    },
+    "WATCH_CONDITION_INVALID": {
+      "branch_instruction": "Do not guess field names or pass watch_match into watch",
+      "category": "recoverable",
+      "emit": "guard:watch",
+      "summary": "{{ tool }} rejected invalid field values: {{ paintedwolf.watch_invalid_fields }}."
+    },
+    "WATCH_DRAFT_DISMISSED": {
+      "branch_instruction": "Drop the proposal; do not retry with reworded name or prompt fields",
+      "category": "recoverable",
+      "emit": "guard:watch",
+      "summary": "A standing watch draft with these conditions was already dismissed in this chat ({{ paintedwolf.handle }})."
+    },
+    "WATCH_DRAFT_INVALID": {
+      "branch_instruction": "Do not attach standing drafts on worker turns, chats without a project, or session-bound condition kinds",
+      "category": "recoverable",
+      "emit": "guard:watch",
+      "summary": "Standing watch draft rejected ({{ paintedwolf.watch_invalid_fields }}): {{ paintedwolf.rejection_reason }}."
+    },
+    "WATCH_EXPIRY_INVALID": {
+      "branch_instruction": "Do not pass past, sub-minute, or \u003e30-day expiry timestamps",
+      "category": "recoverable",
+      "emit": "guard:watch",
+      "summary": "{{ paintedwolf.rejection_reason }}"
+    },
     "WATCH_HANDLE_UNKNOWN": {
       "branch_instruction": "Do not pass a command handle, PID, or worker name where a watch handle is required",
       "category": "recoverable",
-      "emit": "guard:wait",
+      "emit": "guard:watch",
       "summary": "Handle {{ paintedwolf.handle }} does not name a watch owned by this session or worker job."
+    },
+    "WATCH_REPEAT_UNSUPPORTED": {
+      "branch_instruction": "Do not mark one-shot completion conditions as repeating",
+      "category": "recoverable",
+      "emit": "guard:watch",
+      "summary": "Cannot set repeat=true when every condition alternative is terminal and cannot recur."
+    },
+    "WATCH_TERMINAL": {
+      "branch_instruction": "Do not call set_delivery on an ended watch",
+      "category": "recoverable",
+      "emit": "guard:watch",
+      "summary": "Cannot change delivery on {{ paintedwolf.handle }} because the watch is already in a terminal state."
+    },
+    "WATCH_WAKE_NOT_ALLOWED": {
+      "branch_instruction": "Do not request wake on worker watches, repeating timers, or standing drafts",
+      "category": "recoverable",
+      "emit": "guard:watch",
+      "summary": "{{ tool }} cannot set delivery=\"wake\" on this watch."
     },
     "WEAK_CREDENTIAL_LITERAL": {
       "branch_instruction": "Check whether this value is a credential. Use protected generation or input when needed; continue when the value is ordinary data or an intentionally weak fixture.",

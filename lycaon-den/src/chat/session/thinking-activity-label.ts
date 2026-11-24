@@ -88,6 +88,7 @@ const BATCH_PHASE_COMBINE_GAP = 12;
 
 const WAIT_CONDITION_PRIORITY = [
   "process_done",
+  "watch_match",
   "http_ready",
   "port_ready",
   "overlay_promote_pending",
@@ -98,6 +99,7 @@ const WAIT_CONDITION_PRIORITY = [
 
 const WAIT_CONDITION_LABELS: Record<(typeof WAIT_CONDITION_PRIORITY)[number] | "timer", string> = {
   process_done: "Waiting for a command to finish",
+  watch_match: "Waiting for a watch",
   http_ready: "Waiting for a service",
   port_ready: "Waiting for a port",
   next_worker_done: "Waiting for workers",

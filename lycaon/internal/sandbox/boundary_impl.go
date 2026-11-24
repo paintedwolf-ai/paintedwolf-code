@@ -259,6 +259,15 @@ func (b *Boundary) WaitConditions(profileID string) []string {
 	return append([]string(nil), prof.WaitConditions...)
 }
 
+// WatchConditions returns the profile's closed watch condition vocabulary.
+func (b *Boundary) WatchConditions(profileID string) []string {
+	prof, ok := b.lookupProfile(context.Background(), profileID)
+	if !ok {
+		return nil
+	}
+	return append([]string(nil), prof.WatchConditions...)
+}
+
 // ExecMode returns subprocess policy for a profile, read from the
 // session-effective profile so an overlay that grants or removes `command`
 // is honored — consistent with the tool-allow and write-scope checks.

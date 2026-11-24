@@ -70,7 +70,10 @@ func mapWatchReject(err error) error {
 	}
 	var invalid *watch.ValidationError
 	if errors.As(err, &invalid) {
-		return &toolrejection.ToolReject{Code: invalid.Code, Data: map[string]any{"field": invalid.Field, "reason": invalid.Message}}
+		return &toolrejection.ToolReject{
+			Code: invalid.Code,
+			Data: map[string]any{"field": invalid.Field, "reason": invalid.Message, "watch_invalid_fields": invalid.InvalidFields()},
+		}
 	}
 	return err
 }

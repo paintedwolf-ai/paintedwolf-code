@@ -17,6 +17,8 @@ tools:
   source_history: sticky
   skills_read: sticky
   wait: sticky
+  watch: sticky
+  watch_control: true
   held_result: true
   held_stop: true
 deny_tools:
@@ -37,4 +39,5 @@ deny_tools:
   - plan_from_blueprint
   - state_*
   - handoff_*
-wait_conditions: [process_done, http_ready, port_ready]
+wait_conditions: [process_done, watch_match, http_ready, port_ready]
+watch_conditions: [process_done, process_output, http_ready, port_ready, file_change, git_ref, timer]

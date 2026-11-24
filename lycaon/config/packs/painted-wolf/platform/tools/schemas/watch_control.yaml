@@ -1,0 +1,19 @@
+tags: [process, sync]
+description: "Inspect a watch without acknowledging matches, update its delivery mode, or cancel it and return its final receipt."
+schema:
+  type: object
+  properties:
+    handle:
+      type: string
+      minLength: 1
+      description: Watch handle owned by the calling session or worker job.
+    operation:
+      type: string
+      enum: [inspect, set_delivery, cancel]
+      description: Read-only inspect, delivery mode update, or idempotent cancel.
+    delivery:
+      type: string
+      enum: [collect, wake]
+      description: Required with set_delivery and refused with inspect or cancel.
+  required: [handle, operation]
+  additionalProperties: false

@@ -40,6 +40,8 @@ tools:
   scan_query: true
   scan_compare: true
   wait: sticky
+  watch: sticky
+  watch_control: true
   web_search: sticky
   fetch_url: sticky
   command: sticky
@@ -70,4 +72,5 @@ tools:
 deny_tools:
 read_scope: coordinator_product_read
 write_scope: coordinator_orchestration
-wait_conditions: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready]
+wait_conditions: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, watch_match, http_ready, port_ready]
+watch_conditions: [next_worker_done, all_workers_idle, overlay_promote_pending, worker_decision_needed, worker_failed, scan_done, process_done, process_output, http_ready, port_ready, file_change, git_ref, timer]

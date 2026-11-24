@@ -16,6 +16,8 @@ native:
     - secret_generate
     - secret_list
     - secret_revoke
+    - watch
+    - watch_control
   visual:
     - render_view
     - view_image
@@ -68,6 +70,8 @@ multi_root:
     - recall
     - task
     - wait
+    - watch
+    - watch_control
     # skills_read addresses a host resource through the selected skill.
     - skills_read
     - workflow_transition
@@ -203,6 +207,8 @@ execution_capabilities:
   restore_version: [file_change]
   wait:
     - loopback_connect
+  watch:
+    - loopback_connect
   # A url-mode page target is a local service with http_request's reach, so it
   # takes the same port-narrowed grant. project_dir captures open no socket.
   capture_page:
@@ -273,6 +279,8 @@ families:
     - page_act
     - page_snapshot
     - page_close
+  watch:
+    - watch_control
 
 resource_implied:
   command_jobs:
@@ -282,6 +290,9 @@ resource_implied:
   held_calls:
     - held_result
     - held_stop
+    - wait
+  watches:
+    - watch_control
     - wait
   terminals:
     - terminal_send
@@ -427,6 +438,8 @@ approval_reversibility:
   view_image: reversible
   view_video: reversible
   wait: reversible
+  watch: reversible
+  watch_control: reversible
   web_search: recoverable
   worker_cancel: reversible
   worker_history: reversible
@@ -511,6 +524,8 @@ owner:
   view_image: visual
   view_video: visual
   wait: loop_wake
+  watch: watches
+  watch_control: watches
   web_search: web_research
   worker_cancel: workers
   worker_history: workers
@@ -595,6 +610,8 @@ batch_policy:
   view_image: shared
   view_video: shared
   wait: serial
+  watch: serial
+  watch_control: serial
   web_search: same_tool
   worker_cancel: serial
   worker_history: shared
@@ -701,6 +718,8 @@ lifecycle:
   view_image: read_only
   view_video: read_only
   wait: db_transaction
+  watch: db_transaction
+  watch_control: db_transaction
   web_search: effect_attempt
   worker_cancel: effect_attempt
   worker_history: read_only
@@ -751,6 +770,8 @@ ask_allowed:
   - task
   - update_progress
   - wait
+  - watch
+  - watch_control
   - web_search
   - worker_cancel
   - worker_history
