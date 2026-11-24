@@ -43,7 +43,7 @@ func TestWatchProducersAuthorityAndStateLookup(t *testing.T) {
 
 	_, err = database.ExecContext(t.Context(), `INSERT INTO worker_jobs
 		(id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at)
-		VALUES ('job-p1', ?, ?, 'child-prod-1', 'implementer', 'completed', 'work', 'work', '2026-05-01T10:00:00Z')`,
+		VALUES ('job-p1', ?, ?, 'child-prod-1', 'implementer', 'complete', 'work', 'work', '2026-05-01T10:00:00Z')`,
 		testdbseed.DefaultProjectID, parent.ID)
 	testutil.FailErr(t, "insert worker job", err)
 
