@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
@@ -175,13 +174,10 @@ func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
 		if resolved := fspath.CanonicalPath(pinned); resolved != "" && underAny(resolved, r.sharedTemp) && !underAny(resolved, excluded) {
 			readLiterals = append(readLiterals, resolved)
 			reachable = append(reachable, resolved)
-		}
-	}
-	if engineRoot := fspath.CanonicalPath(configlayout.EngineRoot()); engineRoot != "" {
-		gitRoot := filepath.Join(engineRoot, "gitengine")
-		if info, err := os.Stat(gitRoot); err == nil && info.IsDir() && strictlyUnderAny(gitRoot, r.sharedTemp) && !underAny(gitRoot, excluded) {
-			readSubpaths = append(readSubpaths, gitRoot)
-			reachable = append(reachable, gitRoot)
+			if gitRoot := bundledGitRoot(resolved); gitRoot != "" && strictlyUnderAny(gitRoot, r.sharedTemp) && !underAny(gitRoot, excluded) {
+				readSubpaths = append(readSubpaths, gitRoot)
+				reachable = append(reachable, gitRoot)
+			}
 		}
 	}
 	for _, root := range append(nonExcludedPaths(resolveEach(c.Roots), excluded), nonExcludedPaths(resolveEach(c.ReadRoots), excluded)...) {
@@ -234,6 +230,16 @@ func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
 		}
 	}
 	return reachable
+}
+
+func bundledGitRoot(executable string) string {
+	parent := filepath.Dir(executable)
+	if filepath.Base(parent) == "bin" {
+		if root := filepath.Dir(parent); filepath.Base(root) == "gitengine" {
+			return root
+		}
+	}
+	return ""
 }
 
 func (c Confinement) socketMetadataLiterals() []string {
