@@ -29118,6 +29118,7 @@ components:
       properties:
         root_id:
           type: string
+          format: uuid
         root_label:
           type: string
         directories_visited:
