@@ -16,6 +16,9 @@ import (
 	"github.com/lycaon/lycaon/internal/socketref"
 )
 
+// SSHSocketEnv carries the per-invocation managed SSH service socket to Git's helper.
+const SSHSocketEnv = "LYCAON_GIT_SSH_SOCKET"
+
 // SetupDeadline bounds waiting for process binding and reading a helper request.
 const SetupDeadline = 10 * time.Second
 

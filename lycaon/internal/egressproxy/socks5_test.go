@@ -309,6 +309,52 @@ func TestCloseStopsAuthenticatedConnectionAwaitingRequest(t *testing.T) {
 	}
 }
 
+func TestDialAttributedTCPDispositionsAndSocksDialFailureReply(t *testing.T) {
+	ep := egressproxy.Endpoint{Host: "dial-target.test", Port: 22, Transport: egressproxy.TransportSocksTCP}
+	peer := egressproxy.Peer{Leased: true, Lineage: "tok"}
+	var nilBroker *egressproxy.Broker
+	if conn, disp, err := nilBroker.DialAttributedTCP(t.Context(), peer, ep); conn != nil || disp != egressproxy.TCPDialFailed || err == nil {
+		t.Fatalf("nil broker DialAttributedTCP = (%v, %v, %v), want nil, TCPDialFailed, err", conn, disp, err)
+	}
+
+	var dialErr error
+	p := brokerWith(func(context.Context, string, egressproxy.Endpoint) bool { return true }, leasedPeer("tok"))
+	addrs, err := p.Start(egressproxy.Options{
+		DialEndpoint: func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+			return nil, dialErr
+		},
+	})
+	testutil.FailErr(t, "Start", err)
+	defer func() { _ = p.Close() }()
+
+	dialErr = egressproxy.ErrLoopbackNotAuthorized
+	if conn, disp, err := p.DialAttributedTCP(t.Context(), peer, ep); conn != nil || disp != egressproxy.TCPDialEndpointDenied || !errors.Is(err, egressproxy.ErrLoopbackNotAuthorized) {
+		t.Fatalf("loopback unauthorized DialAttributedTCP = (%v, %v, %v)", conn, disp, err)
+	}
+
+	dialErr = errors.New("upstream unreachable")
+	if conn, disp, err := p.DialAttributedTCP(t.Context(), peer, ep); conn != nil || disp != egressproxy.TCPDialFailed || err == nil {
+		t.Fatalf("failed upstream DialAttributedTCP = (%v, %v, %v)", conn, disp, err)
+	}
+
+	socksConn, err := net.Dial("tcp", addrs.SOCKS)
+	testutil.FailErr(t, "dial socks", err)
+	defer func() { _ = socksConn.Close() }()
+	testutil.FailErr(t, "socks handshake", socksClientHandshake(socksConn))
+
+	req := []byte{0x05, 0x01, 0x00, 0x03, byte(len(ep.Host))}
+	req = append(req, ep.Host...)
+	req = append(req, 0x00, 22)
+	_, err = socksConn.Write(req)
+	testutil.FailErr(t, "write socks connect", err)
+	hdr := make([]byte, 10)
+	_, err = io.ReadFull(socksConn, hdr)
+	testutil.FailErr(t, "read socks reply", err)
+	if hdr[1] != 0x04 {
+		t.Fatalf("socks dial failure reply = 0x%02x, want 0x04 (host unreachable)", hdr[1])
+	}
+}
+
 func socksClientHandshake(conn net.Conn) error {
 	if _, err := conn.Write([]byte{0x05, 0x01, 0x00}); err != nil {
 		return err

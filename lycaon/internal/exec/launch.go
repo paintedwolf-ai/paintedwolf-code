@@ -28,8 +28,11 @@ type LaunchPlan struct {
 	Kind        LaunchKind
 	Subject     string
 	Confinement *confine.Confinement
+	ActionLease *confine.ActionLease
 	Environment EnvironmentMode
 	ExtraEnv    []string
+	// ManagedGitSSHSocket selects the per-launch SSH helper service in proxy-only Git launches.
+	ManagedGitSSHSocket string
 	// TrustedEnvironment is the program's host-built starting environment.
 	// AgentLaunchOptions uses it to distinguish host plumbing from exports.
 	TrustedEnvironment []string
@@ -96,6 +99,12 @@ func (p LaunchPlan) WithReducedEnvironment() LaunchPlan {
 // WithExtraEnv appends explicit environment variables to the launch plan.
 func (p LaunchPlan) WithExtraEnv(entries ...string) LaunchPlan {
 	p.ExtraEnv = append(append([]string(nil), p.ExtraEnv...), entries...)
+	return p
+}
+
+// WithManagedGitSSHSocket binds the final Git SSH overlay to a per-launch service socket.
+func (p LaunchPlan) WithManagedGitSSHSocket(socket string) LaunchPlan {
+	p.ManagedGitSSHSocket = strings.TrimSpace(socket)
 	return p
 }
 

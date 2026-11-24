@@ -15,6 +15,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/githelper"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 )
 
@@ -834,9 +835,25 @@ func EnvironmentBoundary(c Confinement) (Confinement, error) {
 	return c, nil
 }
 
-// GitSSHEnv returns mediated SSH environment variables.
+// GitSSHEnv returns mediated SSH environment variables using the shared SOCKS listener.
 func GitSSHEnv(c Confinement, selfPath, knownHosts string) []string {
-	if c.Network != NetworkProxyOnly || c.SocksProxyAddr == "" {
+	if c.SocksProxyAddr == "" {
+		return nil
+	}
+	return gitSSHEnv(c, selfPath, knownHosts, "LYCAON_SOCKS_PROXY="+c.SocksProxyAddr)
+}
+
+// ManagedGitSSHEnv returns mediated SSH environment variables bound to a per-launch service socket.
+func ManagedGitSSHEnv(c Confinement, selfPath, knownHosts, socketPath string) []string {
+	socketPath = strings.TrimSpace(socketPath)
+	if socketPath == "" {
+		return nil
+	}
+	return gitSSHEnv(c, selfPath, knownHosts, githelper.SSHSocketEnv+"="+socketPath)
+}
+
+func gitSSHEnv(c Confinement, selfPath, knownHosts, transportEntry string) []string {
+	if c.Network != NetworkProxyOnly || transportEntry == "" {
 		return nil
 	}
 	selfPath = strings.TrimSpace(selfPath)
@@ -860,7 +877,7 @@ func GitSSHEnv(c Confinement, selfPath, knownHosts string) []string {
 	}, " ")
 	return []string{
 		"GIT_SSH_COMMAND=" + sshCmd,
-		"LYCAON_SOCKS_PROXY=" + c.SocksProxyAddr,
+		transportEntry,
 		"LYCAON_SSH_KNOWN_HOSTS=" + knownHosts,
 	}
 }

@@ -64,7 +64,14 @@ func Command(
 	}
 	// ExtraFiles[0] lands on helperProfileFD in the child.
 	files := []*os.File{pr}
-	if marker := c.lineage.ChildFile(); marker != nil {
+	marker, err := c.lineage.SpawnFile()
+	if err != nil {
+		_ = pr.Close()
+		_ = pw.Close()
+		closeSockets()
+		return nil, func() {}, err
+	}
+	if marker != nil {
 		helperArgs = append(helperArgs, lineageFDFlag, strconv.Itoa(helperLineageFD))
 		files = append(files, marker)
 	}
@@ -79,6 +86,9 @@ func Command(
 	}
 	files, err = appendSocketCommandFiles(files, socketFiles)
 	if err != nil {
+		if marker != nil {
+			_ = marker.Close()
+		}
 		_ = pr.Close()
 		_ = pw.Close()
 		closeReports()
@@ -92,13 +102,15 @@ func Command(
 		defer func() { _ = pw.Close() }()
 		_, _ = io.WriteString(pw, profile)
 	}()
-	// Releasing the host's own end lets the marker report end-of-file once the
-	// last descendant exits.
+	// Releasing this launch's duplicate leaves the action lease holding the live
+	// lineage until ActionLease.Close retires it.
 	cleanup := func() {
 		closeSockets()
 		_ = pr.Close()
 		closeReports()
-		c.lineage.Started()
+		if marker != nil {
+			_ = marker.Close()
+		}
 	}
 	return cmd, cleanup, nil
 }

@@ -75,32 +75,20 @@ func (b *Broker) handleSOCKSConn(parent context.Context, conn net.Conn) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 
-	if refusal == "" && !b.stillLeased(peer.Lineage) {
-		refusal = RefusedLeaseEnded
-	}
 	if refusal != "" {
 		b.noteRefusal(peer, ep, refusal)
 		_ = writeSocksReply(conn, socksRepNotAllow, nil)
 		return
 	}
-	if !b.allowedEndpoint(ctx, peer.Lineage, ep) {
-		_ = writeSocksReply(conn, socksRepNotAllow, nil)
-		return
-	}
-	if !b.stillLeased(peer.Lineage) {
-		b.noteRefusal(peer, ep, RefusedLeaseEnded)
-		_ = writeSocksReply(conn, socksRepNotAllow, nil)
-		return
-	}
 
-	upstream, err := b.dialAuthorizedEndpoint(ctx, peer.Lineage, ep)
-	if err != nil {
-		rep := byte(socksRepHostUn)
-		// Authorization errors use the SOCKS policy-denial reply.
-		if errors.Is(err, errCommandAuthorizationRevoked) || errors.Is(err, ErrLoopbackNotAuthorized) {
-			rep = socksRepNotAllow
-		}
-		_ = writeSocksReply(conn, rep, nil)
+	upstream, disp, _ := b.DialAttributedTCP(ctx, peer, ep)
+	switch disp {
+	case TCPDialEstablished:
+	case TCPDialLeaseEnded, TCPDialEndpointDenied:
+		_ = writeSocksReply(conn, socksRepNotAllow, nil)
+		return
+	default:
+		_ = writeSocksReply(conn, socksRepHostUn, nil)
 		return
 	}
 	defer func() { _ = upstream.Close() }()
@@ -109,6 +97,47 @@ func (b *Broker) handleSOCKSConn(parent context.Context, conn net.Conn) {
 		return
 	}
 	relayHalfClose(ctx, conn, upstream)
+}
+
+// TCPDialDisposition classifies an attributed opaque TCP dial outcome.
+type TCPDialDisposition int
+
+const (
+	TCPDialEstablished TCPDialDisposition = iota
+	TCPDialLeaseEnded
+	TCPDialEndpointDenied
+	TCPDialFailed
+)
+
+// DialAttributedTCP checks lease liveness, authorizes ep, rechecks the lease after
+// any approval wait, and dials upstream with outcome recording.
+func (b *Broker) DialAttributedTCP(ctx context.Context, peer Peer, ep Endpoint) (net.Conn, TCPDialDisposition, error) {
+	if b == nil {
+		return nil, TCPDialFailed, errors.New("egress broker is unavailable")
+	}
+	if !peer.Leased || !b.stillLeased(peer.Lineage) {
+		b.noteRefusal(peer, ep, RefusedLeaseEnded)
+		return nil, TCPDialLeaseEnded, errCommandAuthorizationRevoked
+	}
+	if !b.allowedEndpoint(ctx, peer.Lineage, ep) {
+		return nil, TCPDialEndpointDenied, errors.New("endpoint denied")
+	}
+	if !b.stillLeased(peer.Lineage) {
+		b.noteRefusal(peer, ep, RefusedLeaseEnded)
+		return nil, TCPDialLeaseEnded, errCommandAuthorizationRevoked
+	}
+	upstream, err := b.dialAuthorizedEndpoint(ctx, peer.Lineage, ep)
+	if err != nil {
+		if errors.Is(err, errCommandAuthorizationRevoked) {
+			b.noteRefusal(peer, ep, RefusedLeaseEnded)
+			return nil, TCPDialLeaseEnded, err
+		}
+		if errors.Is(err, ErrLoopbackNotAuthorized) {
+			return nil, TCPDialEndpointDenied, err
+		}
+		return nil, TCPDialFailed, err
+	}
+	return upstream, TCPDialEstablished, nil
 }
 
 func (b *Broker) allowedEndpoint(ctx context.Context, lineage string, ep Endpoint) bool {

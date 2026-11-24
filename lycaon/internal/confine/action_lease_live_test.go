@@ -177,3 +177,49 @@ func TestSurvivorEgressFollowsProjectAccountability(t *testing.T) {
 		t.Fatalf("status with no live action = %s, want 403", status)
 	}
 }
+
+func TestActionLeaseDialManagedTCP(t *testing.T) {
+	ep, err := egressproxy.ParseTCPEndpoint("127.0.0.1", 22)
+	testutil.FailErr(t, "parse endpoint", err)
+
+	var nilLease *confine.ActionLease
+	if conn, disp, err := nilLease.DialManagedTCP(t.Context(), ep); conn != nil || disp != egressproxy.TCPDialLeaseEnded || err == nil {
+		t.Fatalf("nil lease DialManagedTCP = (%v, %v, %v)", conn, disp, err)
+	}
+
+	_ = liveBroker(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	testutil.FailErr(t, "listen upstream", err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		srv, acceptErr := ln.Accept()
+		if acceptErr == nil {
+			_, _ = srv.Write([]byte("ok"))
+			_ = srv.Close()
+		}
+	}()
+
+	confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
+		return true
+	})
+	t.Cleanup(func() { confine.SetEgressResolver(nil) })
+
+	_, lease := boundAction(t, confine.EgressCommand{ProjectID: "proj-tcp", SessionID: "s-tcp"})
+	liveEP, err := egressproxy.ParseTCPEndpoint("127.0.0.1", uint16(ln.Addr().(*net.TCPAddr).Port))
+	testutil.FailErr(t, "parse live endpoint", err)
+	conn, disp, err := lease.DialManagedTCP(t.Context(), liveEP)
+	testutil.FailErr(t, "DialManagedTCP live", err)
+	if disp != egressproxy.TCPDialEstablished || conn == nil {
+		t.Fatalf("live DialManagedTCP disp=%v conn=%v", disp, conn)
+	}
+	payload, _ := io.ReadAll(conn)
+	_ = conn.Close()
+	if string(payload) != "ok" {
+		t.Fatalf("payload = %q, want ok", payload)
+	}
+
+	lease.Close(t.Context())
+	if conn, disp, err := lease.DialManagedTCP(t.Context(), liveEP); conn != nil || disp != egressproxy.TCPDialLeaseEnded || err == nil {
+		t.Fatalf("closed lease DialManagedTCP = (%v, %v, %v)", conn, disp, err)
+	}
+}

@@ -2,9 +2,11 @@ package gitexec
 
 import (
 	"context"
+	"net"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/sshproxy"
 )
 
@@ -47,6 +49,23 @@ func (s *AgentSSH) HostService() confine.HostService { return s.hostService }
 
 // HasDialer reports whether the SSH service has an outbound dialer bound.
 func (s *AgentSSH) HasDialer() bool { return s.service.HasDialer() }
+
+// BindLease connects the service to the live broker lease before any helper is served.
+func (s *AgentSSH) BindLease(lease *confine.ActionLease) {
+	s.service.SetDial(func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, sshproxy.ReplyCode, error) {
+		conn, disp, err := lease.DialManagedTCP(ctx, ep)
+		switch disp {
+		case egressproxy.TCPDialEstablished:
+			return conn, sshproxy.ReplySuccess, nil
+		case egressproxy.TCPDialLeaseEnded:
+			return nil, sshproxy.ReplyLeaseEnded, err
+		case egressproxy.TCPDialEndpointDenied:
+			return nil, sshproxy.ReplyEndpointDenied, err
+		default:
+			return nil, sshproxy.ReplyDialFailed, err
+		}
+	})
+}
 
 // Bind records the started Git or supervisor PID once.
 func (s *AgentSSH) Bind(pid int) error { return s.service.Bind(pid) }

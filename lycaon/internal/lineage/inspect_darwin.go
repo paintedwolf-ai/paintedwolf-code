@@ -70,6 +70,29 @@ func pipePeerHandle(read *os.File) (uint64, error) {
 	return uint64(peer), nil
 }
 
+func dupChildFile(write *os.File) (*os.File, error) {
+	conn, err := write.SyscallConn()
+	if err != nil {
+		return nil, err
+	}
+	var dupFD int
+	var dupErr error
+	if err := conn.Control(func(fd uintptr) {
+		r1, _, errno := syscall.Syscall(syscall.SYS_FCNTL, fd, syscall.F_DUPFD_CLOEXEC, 0)
+		if errno != 0 {
+			dupErr = errno
+			return
+		}
+		dupFD = int(r1)
+	}); err != nil {
+		return nil, err
+	}
+	if dupErr != nil {
+		return nil, dupErr
+	}
+	return os.NewFile(uintptr(dupFD), "lineage-marker"), nil
+}
+
 // pipeHasWriters probes the read end without consuming the poller.
 func pipeHasWriters(read *os.File) bool {
 	conn, err := read.SyscallConn()

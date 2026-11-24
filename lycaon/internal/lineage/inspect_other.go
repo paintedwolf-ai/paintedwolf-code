@@ -9,6 +9,8 @@ import (
 
 func pipePeerHandle(*os.File) (uint64, error) { return 0, ErrUnsupported }
 
+func dupChildFile(*os.File) (*os.File, error) { return nil, ErrUnsupported }
+
 func pipeHasWriters(*os.File) bool { return false }
 
 func pipeHolders([]uint64) ([][]int, error) { return nil, ErrUnsupported }

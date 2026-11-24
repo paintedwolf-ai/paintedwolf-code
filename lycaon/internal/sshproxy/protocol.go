@@ -16,7 +16,7 @@ import (
 )
 
 // SocketEnv carries the per-invocation managed SSH service socket to Git's helper.
-const SocketEnv = "LYCAON_GIT_SSH_SOCKET"
+const SocketEnv = githelper.SSHSocketEnv
 
 const (
 	// ProtocolVersion identifies the managed Git SSH connect frame format.

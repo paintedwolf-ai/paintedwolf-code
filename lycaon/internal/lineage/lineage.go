@@ -24,10 +24,16 @@ var ErrUnsupported = errors.New("process lineage observation is unavailable on t
 // often than descendants appear.
 const memberTTL = 250 * time.Millisecond
 
-// scanGate coalesces concurrent walks. An unknown process always forces a fresh
-// walk, since each new process must be attributable on its first dial; callers
-// arriving together share that walk.
-var scanGate = make(chan struct{}, 1)
+// scanState coalesces concurrent walks so callers share a walk whose snapshot
+// began at or after their arrival.
+var scanState = struct {
+	mu        sync.Mutex
+	running   bool
+	started   uint64
+	completed uint64
+	lastErr   error
+	done      chan struct{}
+}{}
 
 // retainedRetired bounds how many ended lineages stay resolvable. Past it, the
 // oldest is released and its descendants become unattributable.
@@ -144,6 +150,20 @@ func (l *Lineage) ChildFile() *os.File {
 	return l.write
 }
 
+// SpawnFile duplicates the descendant marker for one child launch while this
+// lineage remains live, allowing multiple launches under one action lease.
+func (l *Lineage) SpawnFile() (*os.File, error) {
+	if l == nil {
+		return nil, nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.released || l.state != StateLive || l.write == nil {
+		return nil, nil
+	}
+	return dupChildFile(l.write)
+}
+
 // Started releases the engine's write end so the pipe reports end-of-file once
 // the last descendant exits. It is called after the process starts.
 func (l *Lineage) Started() {
@@ -195,17 +215,47 @@ func (l *Lineage) Survivors() ([]int, error) {
 	return append([]int(nil), l.members...), nil
 }
 
-// scanAll refreshes every lineage's members in one walk of the process table.
+// scanAll refreshes every lineage's members in a walk begun at or after this call.
 func scanAll() error {
-	select {
-	case scanGate <- struct{}{}:
-		defer func() { <-scanGate }()
-	default:
-		// A walk is already running; its result answers this caller too.
-		scanGate <- struct{}{}
-		<-scanGate
-		return nil
+	scanState.mu.Lock()
+	target := scanState.started + 1
+	for scanState.completed < target {
+		if !scanState.running {
+			scanState.running = true
+			scanState.started++
+			done := make(chan struct{})
+			scanState.done = done
+			scanState.mu.Unlock()
+
+			err := runScan()
+
+			scanState.mu.Lock()
+			scanState.running = false
+			scanState.completed = scanState.started
+			scanState.lastErr = err
+			close(done)
+			if err != nil {
+				scanState.mu.Unlock()
+				return err
+			}
+			continue
+		}
+		done := scanState.done
+		scanState.mu.Unlock()
+		<-done
+		scanState.mu.Lock()
+		if scanState.completed >= target && scanState.lastErr != nil {
+			err := scanState.lastErr
+			scanState.mu.Unlock()
+			return err
+		}
 	}
+	err := scanState.lastErr
+	scanState.mu.Unlock()
+	return err
+}
+
+func runScan() error {
 	registry.mu.Lock()
 	candidates := make([]*Lineage, 0, len(registry.live)+len(registry.retired))
 	for _, l := range registry.live {

@@ -306,6 +306,14 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 		_ = credentials.Close()
 		return ctx, networkLaunch{}, err
 	}
+	if sshService != nil {
+		if plan.Confinement != nil && plan.Confinement.Network == confine.NetworkProxyOnly && plan.ActionLease != nil {
+			sshService.BindLease(plan.ActionLease)
+		} else {
+			_ = sshService.Close()
+			sshService = nil
+		}
+	}
 	agent, hasAgent := grantedSSHAgent(ctx, tc)
 	if hasAgent {
 		// The launch dials the capability's endpoint, which differs from the
@@ -343,7 +351,10 @@ func withheldAgent(ctx context.Context, urls []string, hasAgent bool) []confine.
 
 func isSSHRemote(raw string) bool {
 	lower := strings.ToLower(strings.TrimSpace(raw))
-	return strings.HasPrefix(lower, "ssh://") || !strings.Contains(lower, "://") && remoteNetworkHost(raw) != ""
+	return strings.HasPrefix(lower, "ssh://") ||
+		strings.HasPrefix(lower, "git+ssh://") ||
+		strings.HasPrefix(lower, "ssh+git://") ||
+		!strings.Contains(lower, "://") && remoteNetworkHost(raw) != ""
 }
 
 // remoteHelperURL is Git's <transport>::<address> form, which runs the

@@ -3,6 +3,7 @@ package confine
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/netip"
 	"strings"
 	"sync"
@@ -245,6 +246,31 @@ func EgressBound(c *Confinement) bool {
 		return false
 	}
 	return egressBroker.leased(c.LineageID)
+}
+
+// DialManagedTCP dials an opaque TCP endpoint under this live action lease only.
+func (l *ActionLease) DialManagedTCP(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, egressproxy.TCPDialDisposition, error) {
+	if l == nil || l.closed.Load() || !l.mediated || l.line == nil || l.line.State() != lineage.StateLive {
+		return nil, egressproxy.TCPDialLeaseEnded, fmt.Errorf("launch action is not live")
+	}
+	id := l.LineageID()
+	if id == "" || !egressBroker.leased(id) {
+		return nil, egressproxy.TCPDialLeaseEnded, fmt.Errorf("launch egress lease is not live")
+	}
+	broker.mu.RLock()
+	live := broker.live
+	broker.mu.RUnlock()
+	if live == nil {
+		return nil, egressproxy.TCPDialFailed, fmt.Errorf("egress broker is not running")
+	}
+	ep.Transport = egressproxy.TransportSocksTCP
+	ep.Inherited = false
+	peer := egressproxy.Peer{
+		Lineage: id,
+		Leased:  true,
+		Owner:   l.line.Owner(),
+	}
+	return live.DialAttributedTCP(ctx, peer, ep)
 }
 
 func (b *egressBrokerT) leased(lineageID string) bool {

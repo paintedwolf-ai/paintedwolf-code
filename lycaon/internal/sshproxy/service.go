@@ -105,6 +105,19 @@ func (s *Service) OnClose(fn func()) {
 	}
 }
 
+// SetDial binds the host dial capability before the service is bound to its invocation.
+func (s *Service) SetDial(dial DialFunc) {
+	s.mu.Lock()
+	s.dial = dial
+	s.mu.Unlock()
+}
+
+func (s *Service) currentDial() DialFunc {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.dial
+}
+
 // Bind records the started Git or supervisor PID once and wakes pending handshakes.
 func (s *Service) Bind(pid int) error { return s.binding.Bind(pid) }
 
@@ -233,11 +246,12 @@ func (s *Service) handle(ctx context.Context, conn *net.UnixConn) {
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		return
 	}
-	if s.dial == nil {
+	dial := s.currentDial()
+	if dial == nil {
 		_ = writeReply(conn, ReplyDialFailed)
 		return
 	}
-	upstream, code, rest, clientClosed := s.dialWhileConnected(ctx, conn, reader.remaining(), ep)
+	upstream, code, rest, clientClosed := s.dialWhileConnected(ctx, conn, dial, reader.remaining(), ep)
 	if clientClosed {
 		if upstream != nil {
 			_ = upstream.Close()
@@ -268,7 +282,7 @@ func (s *Service) handle(ctx context.Context, conn *net.UnixConn) {
 	relayStreams(ctx, conn, rest, upstream)
 }
 
-func (s *Service) dialWhileConnected(ctx context.Context, conn *net.UnixConn, buffered []byte, ep egressproxy.Endpoint) (net.Conn, ReplyCode, []byte, bool) {
+func (s *Service) dialWhileConnected(ctx context.Context, conn *net.UnixConn, dial DialFunc, buffered []byte, ep egressproxy.Endpoint) (net.Conn, ReplyCode, []byte, bool) {
 	dialCtx, cancelDial := context.WithCancel(ctx)
 	defer cancelDial()
 
@@ -284,7 +298,7 @@ func (s *Service) dialWhileConnected(ctx context.Context, conn *net.UnixConn, bu
 		}
 	}()
 
-	upstream, code, err := s.dial(dialCtx, ep)
+	upstream, code, err := dial(dialCtx, ep)
 	_ = conn.SetReadDeadline(time.Now())
 	<-probeDone
 	_ = conn.SetReadDeadline(time.Time{})
