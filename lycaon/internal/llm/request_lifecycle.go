@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
 type requestLifecycleKey struct{}
@@ -45,11 +46,12 @@ type lifecycleProvider struct {
 func (p *lifecycleProvider) CapacityGroup() *modelcall.CapacityGroup { return p.capacity }
 
 func (p *lifecycleProvider) start(ctx context.Context, req *modelcall.CompletionRequest) (context.Context, *requestLifecycle) {
-	callID := req.Debug.CallID
+	callID := firstNonEmpty(req.Debug.CallID, secretmatch.ScreenCallIDFrom(ctx))
 	if callID == "" {
 		callID = uuid.NewString()
-		req.Debug.CallID = callID
 	}
+	req.Debug.CallID = callID
+	ctx = secretmatch.WithScreenCallID(ctx, callID)
 	trace := &requestLifecycle{started: time.Now(), attrs: []any{
 		"call_id", callID, "session_id", req.Debug.SessionID,
 		"provider_id", p.ID(), "model", req.Model, "purpose", req.Debug.Purpose,
@@ -119,9 +121,19 @@ func dispatchContext(ctx context.Context) context.Context {
 	notifyDispatch(ctx)
 	trace := lifecycleFromContext(ctx)
 	if trace == nil {
+		secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
+			CallID: secretmatch.ScreenCallIDFrom(ctx),
+			Phase:  "provider_dispatch",
+		})
 		return ctx
 	}
-	trace.dispatch.Do(func() { trace.record(ctx, "dispatch") })
+	trace.dispatch.Do(func() {
+		trace.record(ctx, "dispatch")
+		secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
+			CallID: secretmatch.ScreenCallIDFrom(ctx),
+			Phase:  "provider_dispatch",
+		})
+	})
 	return httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
 		GetConn:              func(string) { trace.record(ctx, "connection_wait", "http_attempt", trace.attempt.Add(1)) },
 		GotConn:              func(info httptrace.GotConnInfo) { trace.record(ctx, "connected", "reused", info.Reused) },
