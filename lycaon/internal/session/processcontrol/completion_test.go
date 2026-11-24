@@ -358,11 +358,20 @@ func TestBackgroundCommandCompletionSettlesSharedTempOnceWithHandle(t *testing.T
 		t.Fatalf("successful background run settlement = %+v (calls=%d)", f.lastFacts.SharedTemp, calls)
 	}
 	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
-		SessionID: "session", Handle: "bg-77", OriginTool: "command", ToolCallID: "call-bg",
+		SessionID: "session", Handle: "bg-78", OriginTool: "command", ToolCallID: "call-bg-2",
 		ExitCode: 1, FinishedAt: now, TerminationReason: bgprocess.TerminationExited,
 		Observation: confine.Observation{Applied: true, Refusals: refusals},
 	})
-	if calls != 2 || f.lastFacts.SharedTemp == nil || f.lastFacts.SharedTemp.JobHandle != "bg-77" || len(f.lastFacts.SharedTemp.Allowed) != 1 {
+	if calls != 2 || f.lastFacts.SharedTemp == nil || f.lastFacts.SharedTemp.JobHandle != "bg-78" || len(f.lastFacts.SharedTemp.Allowed) != 1 {
 		t.Fatalf("failed background run settlement = %+v (calls=%d)", f.lastFacts.SharedTemp, calls)
+	}
+	// Duplicate completion delivery for the same handle settles only once.
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+		SessionID: "session", Handle: "bg-78", OriginTool: "command", ToolCallID: "call-bg-2",
+		ExitCode: 1, FinishedAt: now, TerminationReason: bgprocess.TerminationExited,
+		Observation: confine.Observation{Applied: true, Refusals: refusals},
+	})
+	if calls != 2 {
+		t.Fatalf("duplicate background completion re-ran settlement: calls=%d, want 2", calls)
 	}
 }

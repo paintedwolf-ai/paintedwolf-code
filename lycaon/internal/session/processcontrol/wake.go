@@ -62,7 +62,7 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 			Confine: completion.Observation, IndexWatch: completion.IndexWatch,
 		}
 		if m.SharedTemp != nil && completion.Observation.Applied && completion.TerminationReason == bgprocess.TerminationExited {
-			if observed := completion.Observation.Refusals.SharedTempObservation(); !observed.Empty() {
+			if observed := completion.Observation.Refusals.SharedTempObservation(); !observed.Empty() && m.processReports.claimSharedTemp(completion.SessionID, strings.TrimSpace(completion.Handle)) {
 				failed := completion.ExitCode != 0 || len(completion.Observation.FailedStages) > 0
 				settled := m.SharedTemp(ctx, sess, completion, observed, failed)
 				settled.JobHandle = strings.TrimSpace(completion.Handle)
