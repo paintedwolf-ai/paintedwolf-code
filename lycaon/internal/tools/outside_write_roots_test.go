@@ -2,6 +2,7 @@ package tools
 
 import (
 	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -57,12 +58,15 @@ func TestOutsideWriteRootsAreTheProfilesGrantsACFL19(t *testing.T) {
 // A whole shared temp location is reported instead of compared; a folder
 // granted inside one is compared like any other.
 func TestSharedTempLocationIsNeverComparedWhole(t *testing.T) {
-	locations := confine.SharedTempLocations()
-	if len(locations) == 0 {
-		t.Fatal("no shared temp location on this host")
+	whole := fspath.CanonicalPath(t.TempDir())
+	t.Setenv("TMPDIR", whole)
+	if confine.SharedTempLocation(filepath.Join(whole, "x")) != whole {
+		t.Fatalf("%s is not a shared temp location", whole)
 	}
-	whole := locations[0]
-	narrow := fspath.CanonicalPath(t.TempDir())
+	narrow := filepath.Join(whole, "build")
+	if err := os.Mkdir(narrow, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	got, unobserved := outsideRootsContext(whole, narrow).OutsideWriteRoots()
 	if !slices.Equal(unobserved, []string{whole}) {
 		t.Fatalf("unobserved = %v, want %s", unobserved, whole)

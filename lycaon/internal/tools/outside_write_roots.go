@@ -31,6 +31,9 @@ func (tc ToolContext) OutsideWriteRoots() (roots []OutsideWriteRoot, unobserved 
 	if err != nil {
 		return nil, nil
 	}
+	if tc.Host.SessionScratchDir != "" {
+		profile = append(profile, tc.Host.SessionScratchDir)
+	}
 	temps := confine.SharedTempLocations()
 	var candidates []string
 	for _, root := range profile {
@@ -48,7 +51,9 @@ func (tc ToolContext) OutsideWriteRoots() (roots []OutsideWriteRoot, unobserved 
 			}
 			continue
 		}
-		candidates = append(candidates, canonical)
+		if !slices.Contains(candidates, canonical) {
+			candidates = append(candidates, canonical)
+		}
 	}
 	sort.Strings(candidates)
 	sort.Strings(unobserved)

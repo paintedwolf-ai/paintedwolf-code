@@ -1,10 +1,11 @@
 package native
 
 import (
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/enginepaths"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -40,7 +41,7 @@ func TestOutsideWritesRecordInTheOutsideNamespace(t *testing.T) {
 	}
 }
 
-func TestScratchAndProjectPathsStayOutOfTheOutsideNamespace(t *testing.T) {
+func TestProjectPathsAndProgramTempStayOutOfTheOutsideNamespace(t *testing.T) {
 	root := t.TempDir()
 	tctx := nativefixture.Context(root)
 	tctx.Identity.ProjectID = "proj-outside"
@@ -49,8 +50,12 @@ func TestScratchAndProjectPathsStayOutOfTheOutsideNamespace(t *testing.T) {
 	if in, _, ok := agentCommitInputs(tctx, agentMutation{Op: api.SourceChangeOpWrite, AbsPath: filepath.Join(root, "main.go")}); !ok || in.RootID == "outside-root" {
 		t.Fatalf("a project write recorded as %q (ok=%v)", in.RootID, ok)
 	}
-	if _, _, ok := agentCommitInputs(tctx, agentMutation{Op: api.SourceChangeOpWrite, AbsPath: filepath.Join(os.TempDir(), "pw-scratch.txt")}); ok {
-		t.Fatal("a scratch write entered source history")
+	tctx.Host.SessionScratchDir = t.TempDir()
+	if in, _, ok := agentCommitInputs(tctx, agentMutation{Op: api.SourceChangeOpWrite, AbsPath: filepath.Join(tctx.Host.SessionScratchDir, "notes.md")}); !ok || in.RootID != "outside-root" {
+		t.Fatalf("a scratch write recorded as %q (ok=%v)", in.RootID, ok)
+	}
+	if _, _, ok := agentCommitInputs(tctx, agentMutation{Op: api.SourceChangeOpWrite, AbsPath: filepath.Join(enginepaths.ProgramTempUnder(tctx.Host.SessionScratchDir), "a.o")}); ok {
+		t.Fatal("a program temp write entered source history")
 	}
 	tctx.Source.OutsideRoot = projectroot.RootRef{}
 	if _, _, ok := agentCommitInputs(tctx, agentMutation{Op: api.SourceChangeOpWrite, AbsPath: "/opt/pw-fixture/app.conf"}); ok {
