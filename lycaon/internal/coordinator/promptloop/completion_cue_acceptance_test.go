@@ -685,29 +685,25 @@ func TestCompletionCueBackgroundAndWorkerChecks(t *testing.T) {
 	h := newCompletionCueHarness(t, true, steps)
 	hist := intentHistory("u-intent-bg", "Background check")
 
-	// Simulate a background check settling for the same intent before decision 1.
-	orig := h.llm
-	h.loop.Model.Deps.LLM = &dynamicScriptLLM{
-		inner: orig,
-		beforeStep: func(stepIdx int) {
-			if stepIdx == 1 {
-				// Worker-only check (different session) must not trigger coordinator cue.
-				h.tracker.RecordPassingCheck(completioncue.CheckFact{
-					CheckID: "chk-worker", SessionID: "worker-child-session", IntentID: "u-intent-bg",
-					SourceRevision: "rev-1", SourceRootDigest: "root-1",
-				})
-				// Late check from superseded intent must be dropped.
-				h.tracker.RecordPassingCheck(completioncue.CheckFact{
-					CheckID: "chk-late", SessionID: h.sess.ID, IntentID: "u-intent-old",
-					SourceRevision: "rev-1", SourceRootDigest: "root-1",
-				})
-				// Matching background check for coordinator's current intent triggers cue.
-				h.tracker.RecordPassingCheck(completioncue.CheckFact{
-					CheckID: "chk-bg", SessionID: h.sess.ID, IntentID: "u-intent-bg",
-					SourceRevision: "rev-1", SourceRootDigest: "root-1",
-				})
-			}
-		},
+	// Simulate a background check settling during step 0's tool batch before decision 1 builds its request.
+	h.loop.Context.Deps.ToolObserved = func(_ context.Context, _ *api.Session, _ tools.ToolContext, tool string) {
+		if tool == "update_progress" {
+			// Worker-only check (different session) must not trigger coordinator cue.
+			h.tracker.RecordPassingCheck(completioncue.CheckFact{
+				CheckID: "chk-worker", SessionID: "worker-child-session", IntentID: "u-intent-bg",
+				SourceRevision: "rev-1", SourceRootDigest: "root-1",
+			})
+			// Late check from superseded intent must be dropped.
+			h.tracker.RecordPassingCheck(completioncue.CheckFact{
+				CheckID: "chk-late", SessionID: h.sess.ID, IntentID: "u-intent-old",
+				SourceRevision: "rev-1", SourceRootDigest: "root-1",
+			})
+			// Matching background check for coordinator's current intent triggers cue.
+			h.tracker.RecordPassingCheck(completioncue.CheckFact{
+				CheckID: "chk-bg", SessionID: h.sess.ID, IntentID: "u-intent-bg",
+				SourceRevision: "rev-1", SourceRootDigest: "root-1",
+			})
+		}
 	}
 
 	_, err := h.loop.Run(ctx, promptloop.PromptRunInput{
