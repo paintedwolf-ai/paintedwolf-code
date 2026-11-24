@@ -133,7 +133,7 @@ func (inv *invocation) capture(paths *projectpaths.ProgramPaths, operand command
 		inv.sed.pins = append(inv.sed.pins, captured.Revision)
 		return io.NopCloser(strings.NewReader(captured.Content)), &captured.Revision, nil
 	}
-	streamed, err := inv.owners.Revisions.OpenStream(inv.ctx, tc, bound.Resolved.Abs, 0)
+	streamed, err := inv.owners.Revisions.OpenNamedStream(inv.ctx, tc, bound.Resolved.Abs, 0)
 	if err != nil {
 		return nil, nil, err
 	}

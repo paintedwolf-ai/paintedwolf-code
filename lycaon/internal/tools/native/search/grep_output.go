@@ -130,7 +130,7 @@ func (r *grepRun) selectRecords(label string, reader io.Reader, maxBytes int64, 
 	n, err := textsearch.ScanReader(inv.ctx, reader, maxBytes, onExceed, r.matcher, scan, func(line textsearch.Line) error {
 		if line.Kind == textsearch.SelectedLine {
 			selectedHere++
-			r.selected = true
+			r.selected, r.hit = true, true
 			if r.mode == modeQuiet {
 				return errQuietMatch
 			}

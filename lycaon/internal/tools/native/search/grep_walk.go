@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 )
 
 var errQuietMatch = errors.New("quiet match")
@@ -266,5 +267,11 @@ func (r *grepRun) searchUnpruned(e entry, names, walked bool) error {
 			return nil
 		}
 	}
-	return r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
+	r.hit = false
+	err = r.searchStream(e.display, streamed.Reader, 0, int(streamed.Revision.ContentBytes), streamed.FirstNullOffset, pin, names)
+	// A named file was read; a walked one counts only once it matched.
+	if e.depth == 0 || r.hit {
+		sourceview.RecordOutsideRead(r.inv.ctx, r.inv.tc, e.bound.Resolved, streamed.Revision.DiskSHA256, streamed.Revision.ContentBytes)
+	}
+	return err
 }

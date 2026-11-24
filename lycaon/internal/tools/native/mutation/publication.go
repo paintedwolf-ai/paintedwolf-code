@@ -120,7 +120,7 @@ func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.
 	if bound.Null {
 		return commandprogram.NullInput(), nil
 	}
-	source, err := p.Owners.Revisions.OpenStream(ctx, p.Tools, bound.Resolved.Abs, 0)
+	source, err := p.Owners.Revisions.OpenNamedStream(ctx, p.Tools, bound.Resolved.Abs, 0)
 	if err != nil {
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}

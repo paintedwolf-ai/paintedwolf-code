@@ -49,6 +49,8 @@ type grepRun struct {
 	json     *rgJSON
 	index    grepContentIndex
 	selected bool
+	// hit reports a selected line in the file being searched.
+	hit      bool
 	stopped  bool
 	operands commandprogram.Fields
 	files    *grepFiles

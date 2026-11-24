@@ -96,7 +96,7 @@ func (inv *invocation) openField(field commandprogram.Field, whole bool) (*input
 		return &input{label: operand, data: []byte{}, bound: bound}, nil
 	}
 	if !whole {
-		streamed, err := inv.owners.Revisions.OpenStream(inv.ctx, inv.tc, bound.Resolved.Abs, 0)
+		streamed, err := inv.owners.Revisions.OpenNamedStream(inv.ctx, inv.tc, bound.Resolved.Abs, 0)
 		if err != nil {
 			return inv.ordinaryInput(operand, err)
 		}
