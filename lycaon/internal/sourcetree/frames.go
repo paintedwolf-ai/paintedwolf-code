@@ -17,6 +17,9 @@ type Frame struct {
 	ResolvedAnchor         Address
 	Target                 *int64
 	Prefix, RetainedPrefix *FramePrefix
+	// OutsideStart is the index of the first on-demand root's row, where
+	// locations outside the project begin; nil when the snapshot has none.
+	OutsideStart *int64
 }
 type FrameRequest struct {
 	Offset int64
@@ -160,6 +163,17 @@ func (s *snapshot) Close() {
 		}
 	}
 }
+func (s *snapshot) outsideStart() *int64 {
+	start := int64(0)
+	for _, root := range s.roots {
+		if root.root.OnDemand {
+			return &start
+		}
+		start += root.rows
+	}
+	return nil
+}
+
 func (s *snapshot) total() int64 {
 	var total int64
 	for _, root := range s.roots {
@@ -207,6 +221,7 @@ func (snapshot *snapshot) frame(ctx context.Context, request FrameRequest) (Fram
 	}
 	frame := Frame{Frame: pagedview.Frame[Row, Address]{Revision: snapshot.revision, Extent: pagedview.Extent{Rows: snapshot.total(), Complete: snapshot.complete}, Span: pagedview.Span{Start: offset}, Rows: []Row{}}}
 	frame.ResolvedAnchor, frame.Target = resolved, targetIndex
+	frame.OutsideStart = snapshot.outsideStart()
 	base := int64(0)
 	for _, root := range snapshot.roots {
 		if offset >= base+root.rows {
