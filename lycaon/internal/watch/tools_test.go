@@ -37,8 +37,8 @@ func newWatchToolsHarness(t *testing.T, standingExists map[string]bool) *watchTo
 	clock := watch.NewFakeClock(now)
 	store := watch.NewStore(sqlDB, clock)
 
-	schemas, err := toolschema.LoadBundled()
-	testutil.FailErr(t, "LoadBundled schemas", err)
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "LoadSchemaDir", err)
 	reg, err := tools.NewCatalogRegistry(schemas)
 	testutil.FailErr(t, "NewCatalogRegistry", err)
 
@@ -201,7 +201,7 @@ func TestWatchAndWatchControlRejectCodesAndOARFeedback(t *testing.T) {
 		}
 		facts := oarcopy.FactsFromData(data)
 		matched := false
-		for _, rule := range rs.Rules {
+		for _, rule := range rs.All() {
 			if rule.ID == wantCode {
 				matched = true
 				for _, reqFact := range rule.RequiresFacts {
