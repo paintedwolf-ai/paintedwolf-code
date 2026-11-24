@@ -324,12 +324,12 @@ func TestPromptRenderFailurePreservesCoordinatorKickForRetry(t *testing.T) {
 	ctx := context.Background()
 	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
+	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.GateBlocked, anchor.Envelope{})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err == nil {
 		t.Fatal("Prompt error = nil, want kick render failure")
 	}
-	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); !ok || !anchor.SameInform(id, anchor.ComposeDone) {
-		t.Fatalf("pending kick after render failure = (%q, %v), want compose-done", id, ok)
+	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); !ok || !anchor.SameInform(id, anchor.GateBlocked) {
+		t.Fatalf("pending kick after render failure = (%q, %v), want gate-blocked", id, ok)
 	}
 
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))

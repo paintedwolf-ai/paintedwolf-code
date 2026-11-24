@@ -4,6 +4,7 @@ selector:
   surface: coordinator
 effect: inform
 render: coordinator-compose-done
+hint_code: WORKFLOW_COMPOSE_SUCCEEDED
 tier: builtin
 invariants:
   trigger_class: workflow_event

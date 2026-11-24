@@ -190,7 +190,7 @@ loop:
 			}
 		}
 
-		landingCloseout, err := l.Closeout.applyLandingAdvisories(turnCtx, sess, id, profileID, step, maxIter, spend.Runway, spend.WindDown, st)
+		landingCloseout, err := l.Closeout.applyLandingAdvisories(turnCtx, sess, id, profileID, step, maxIter, spend, st)
 		if err != nil {
 			return nil, err
 		}

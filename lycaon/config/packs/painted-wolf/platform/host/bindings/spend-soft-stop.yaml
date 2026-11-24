@@ -4,6 +4,7 @@ selector:
   surface: coordinator
 effect: inform
 render: coordinator-spend-soft-stop
+hint_code: COORDINATOR_SPEND_WIND_DOWN
 tier: builtin
 invariants:
   trigger_class: host_api

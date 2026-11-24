@@ -239,6 +239,62 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 	}
 }
 
+func TestPromptLoopSoftStopMissingCopyEntersSafeProseCloseout(t *testing.T) {
+	ceilingErr := errors.New("ceiling reached")
+	client := &softStopSequenceLLM{completions: []*modelcall.Completion{
+		{ToolCalls: []api.ToolCall{{Name: "read", ID: "before", Args: map[string]any{"path": "a"}}}},
+		{Content: "Safe prose closeout without wind-down tool round."},
+	}}
+	messages := storetest.New(t, testdbseed.DefaultProjectID, "project")
+	deps := StoreDeps(messages)
+	deps.Model.LLM = client
+	deps.Context.Policy = softStopToolPolicy{}
+	deps.Context.Tools = toolstest.NewRegistry()
+	var checks int
+	deps.Nudges.CheckSpendCeiling = func(context.Context, string, *api.Session) (SpendCeilingCheck, error) {
+		checks++
+		if checks == 1 {
+			return SpendCeilingCheck{}, nil
+		}
+		return SpendCeilingCheck{SoftStop: true}, ceilingErr
+	}
+	deps.Nudges.IsSpendCeiling = func(err error) bool { return errors.Is(err, ceilingErr) }
+	// Empty nudge signals unavailable required wind-down copy (e.g. unregistered hint code).
+	deps.Nudges.SpendSoftStopNudge = func(context.Context, *api.Session) HostNudge {
+		return HostNudge{}
+	}
+	var closeoutCause TurnCloseoutCause
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
+		closeoutCause = cause
+		return HostNudge{Content: "Give the final prose closeout."}
+	}
+	loop := NewPromptLoopForTest(deps)
+	sess, err := messages.Sessions.Create(
+		context.Background(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project",
+	)
+	testutil.FailErr(t, "create session", err)
+	result, err := loop.Run(context.Background(), PromptRunInput{
+		TurnID: "turn", AttemptID: "attempt",
+		SessionID: sess.ID,
+		Session:   sess,
+		History:   []api.Message{{Role: api.MessageRoleUser, Content: "finish it"}},
+		ProfileID: "implement",
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
+	})
+	testutil.FailErr(t, "run prompt loop", err)
+	if checks != 2 || client.index != 2 {
+		t.Fatalf("checks=%d model turns=%d want 2/2 (no tool wind-down round)", checks, client.index)
+	}
+	if closeoutCause.Reason != TurnCloseoutSpendCeiling {
+		t.Fatalf("closeout cause = %+v, want %q", closeoutCause, TurnCloseoutSpendCeiling)
+	}
+	if result.LastAssistantContent != "Safe prose closeout without wind-down tool round." {
+		t.Fatalf("content = %q", result.LastAssistantContent)
+	}
+}
+
 func TestContextOverflow400TriggersCompactionAndOneRetry(t *testing.T) {
 	var attempts atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -130,14 +130,16 @@ label. Rows stored from the retired `read` and `summarize` tools stay as stored.
 
 ## Feedback channels
 
-Lifecycle anchors determine when feedback is emitted. One anchor catalog drives immediate guards, queued guidance, completion banners, and workflow notices: host code emits an anchor envelope, bindings select the template. A new sentence in Go or an ad hoc dispatch id would create a second timing system and is forbidden.
+Lifecycle anchors determine when feedback is emitted. One anchor catalog drives immediate guards, queued guidance, completion banners, and workflow notices: host code emits an anchor envelope, and bindings select either a template or a static OAR hint. A new sentence in Go or an ad hoc dispatch id would create a second timing system and is forbidden.
 
 | Channel | When | Delivery |
 |---|---|---|
 | Immediate rejection | the requested host transition cannot proceed | tool result with stable code and typed details |
 | Next-turn nudge | the completed coordinator turn violated a recoverable behavioral rule | structured user-role guidance before the next eligible prompt |
-| Informational anchor | a lifecycle event should teach or orient without rejecting | catalog block in the appropriate prompt surface |
+| Informational anchor | a lifecycle event should teach or orient without rejecting | catalog block or static OAR hint in the appropriate prompt surface |
 | Completion banner | asynchronous host work changed state | typed completion item and optional next-turn signal |
+
+An inform binding may declare an optional `hint_code` beside its `render` identity. `render` remains the stable delivery identity for queue keys, drop/replace, deduplication, and transcript history. When `hint_code` is set, delivery resolves the static `message` from the session pack's loaded OAR 1.0 `kind: hint` document (`policy/<CODE>.yaml`) through the same queued kick and immediate turn-nudge paths, carrying the selected target with queued work so workflow overrides retain their own template or hint binding. Dynamic or capability-dependent guidance continues to use ordinary template bindings. An unregistered raised hint code renders as the bare code (`OAR-HINT-4`); required wind-down delivery recognizes missing guidance and falls back to the safe prose closeout path rather than granting a tool round without instructions.
 
 The channel follows the event lifecycle. A tool argument error is immediate; a closeout-grounding failure discovered after the model stops is a next-turn nudge; a background scan completion is a completion item.
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oar"
 	"gopkg.in/yaml.v3"
@@ -24,6 +25,7 @@ type Registry struct {
 	renderToAnchor map[string]ID
 
 	loader *oar.Loader
+	rules  *oar.RuleSet
 }
 
 var (
@@ -36,6 +38,15 @@ func SetDefaultRegistry(r *Registry) {
 	defaultRegMu.Lock()
 	defaultReg = r
 	defaultRegMu.Unlock()
+	if r != nil {
+		kick.SetDefaultStemHintResolver(func(ctx context.Context, sessionID, stem string) (string, bool, bool) {
+			reg := RegistryFor(ctx, sessionID)
+			if reg == nil {
+				return "", false, false
+			}
+			return reg.RenderHintByStem(stem)
+		})
+	}
 }
 
 // DefaultRegistry returns the process-wide Binding registry.
@@ -72,6 +83,12 @@ func LoadRegistryFromConfigRoot() (*Registry, error) {
 
 // LoadRegistryFromConfigRootWithCatalog compiles captured binding units.
 func LoadRegistryFromConfigRootWithCatalog(catalog *extpacks.EffectiveCatalog) (*Registry, error) {
+	return LoadRegistryFromConfigRootWithCatalogAndRules(catalog, nil)
+}
+
+// LoadRegistryFromConfigRootWithCatalogAndRules compiles captured binding units
+// and binds OAR hint lookups to rules (loading effective policy from catalog when nil).
+func LoadRegistryFromConfigRootWithCatalogAndRules(catalog *extpacks.EffectiveCatalog, rules *oar.RuleSet) (*Registry, error) {
 	if catalog == nil {
 		return nil, fmt.Errorf("anchor registry: effective catalog required")
 	}
@@ -79,6 +96,11 @@ func LoadRegistryFromConfigRootWithCatalog(catalog *extpacks.EffectiveCatalog) (
 		return nil, err
 	}
 	schemaDir := configlayout.SchemasDir(configlayout.FindModuleRoot())
+	if rules == nil && catalogHasPolicyUnits(catalog) {
+		if err := oar.InstallEngineDeclarationBundled(schemaDir); err != nil {
+			return nil, err
+		}
+	}
 	loader, err := oar.NewLoader(schemaDir)
 	if err != nil {
 		return nil, err
@@ -88,7 +110,9 @@ func LoadRegistryFromConfigRootWithCatalog(catalog *extpacks.EffectiveCatalog) (
 		informPrimary:  make(map[ID]*Binding),
 		renderToAnchor: make(map[string]ID),
 		loader:         loader,
+		rules:          rules,
 	}
+	hasHintBinding := false
 	for _, id := range catalog.LoadedUnitIDs() {
 		content, _, ok := catalog.UnitContent(id)
 		if !ok {
@@ -104,6 +128,9 @@ func LoadRegistryFromConfigRootWithCatalog(catalog *extpacks.EffectiveCatalog) (
 			if err != nil {
 				return nil, fmt.Errorf("%s: %w", id, err)
 			}
+			if b.HintCode != "" {
+				hasHintBinding = true
+			}
 			r.add(b)
 		case workflowManifestUnit(id), archivedManifestUnit(id):
 			if err := r.loadWorkflowInjects(id, content); err != nil {
@@ -111,7 +138,47 @@ func LoadRegistryFromConfigRootWithCatalog(catalog *extpacks.EffectiveCatalog) (
 			}
 		}
 	}
+	if r.rules == nil && (hasHintBinding || catalogHasPolicyUnits(catalog)) {
+		loader.SetDetectors(oar.HostDetectors(nil))
+		if schemas, _, err := extpacks.LoadEffectiveToolSchemas(catalog); err == nil && schemas != nil {
+			loader.SetToolSchemas(schemas)
+		}
+		loaded, err := loader.LoadEffectivePolicyWithCatalog(catalog)
+		if err != nil {
+			return nil, fmt.Errorf("anchor registry policy: %w", err)
+		}
+		r.rules = loaded
+	}
+	if err := r.validateHintBindings(); err != nil {
+		return nil, err
+	}
 	return r, nil
+}
+
+func catalogHasPolicyUnits(catalog *extpacks.EffectiveCatalog) bool {
+	if catalog == nil {
+		return false
+	}
+	for _, id := range catalog.LoadedUnitIDs() {
+		if strings.HasPrefix(id, "policy/") {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Registry) validateHintBindings() error {
+	for _, list := range r.byAnchor {
+		for _, b := range list {
+			if b == nil || !b.IsInform() || b.HintCode == "" {
+				continue
+			}
+			if _, ok := r.HintMessage(b.HintCode); !ok {
+				return fmt.Errorf("binding on %s (%s): hint_code %q does not resolve to a loaded hint with message", b.On, b.Render, b.HintCode)
+			}
+		}
+	}
+	return nil
 }
 
 func workflowManifestUnit(id string) bool {
@@ -130,6 +197,7 @@ type bindingDoc struct {
 	Effect     string            `yaml:"effect"`
 	When       string            `yaml:"when"`
 	Render     string            `yaml:"render"`
+	HintCode   string            `yaml:"hint_code"`
 	Tier       string            `yaml:"tier"`
 	Invariants BindingInvariants `yaml:"invariants"`
 }
@@ -152,6 +220,7 @@ func (r *Registry) parseBindingDoc(doc bindingDoc) (*Binding, error) {
 		Effect:     effect,
 		When:       strings.TrimSpace(doc.When),
 		Render:     strings.TrimSpace(doc.Render),
+		HintCode:   strings.TrimSpace(doc.HintCode),
 		Tier:       strings.TrimSpace(doc.Tier),
 		Invariants: doc.Invariants,
 	}
@@ -160,6 +229,9 @@ func (r *Registry) parseBindingDoc(doc bindingDoc) (*Binding, error) {
 	}
 	if b.IsInform() && b.Render == "" {
 		return nil, fmt.Errorf("inform Binding requires render")
+	}
+	if !b.IsInform() && b.HintCode != "" {
+		return nil, fmt.Errorf("hint_code requires effect: inform")
 	}
 	if r.loader != nil && b.When != "" {
 		if err := r.loader.ValidateCondition(b.When); err != nil {
@@ -172,6 +244,15 @@ func (r *Registry) parseBindingDoc(doc bindingDoc) (*Binding, error) {
 func (r *Registry) add(b *Binding) {
 	if r == nil || b == nil {
 		return
+	}
+	if r.byAnchor == nil {
+		r.byAnchor = make(map[ID][]*Binding)
+	}
+	if r.informPrimary == nil {
+		r.informPrimary = make(map[ID]*Binding)
+	}
+	if r.renderToAnchor == nil {
+		r.renderToAnchor = make(map[string]ID)
 	}
 	r.byAnchor[b.On] = append(r.byAnchor[b.On], b)
 	if b.IsInform() {
@@ -383,4 +464,75 @@ func (r *Registry) AllInform() []*Binding {
 		out = append(out, b)
 	}
 	return out
+}
+
+// SetRules attaches the loaded OAR rule set used for hint resolution.
+func (r *Registry) SetRules(rules *oar.RuleSet) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.rules = rules
+	r.mu.Unlock()
+}
+
+// Rules returns the loaded OAR rule set attached to this registry.
+func (r *Registry) Rules() *oar.RuleSet {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.rules
+}
+
+// HintMessage returns the static message copy for code when loaded.
+func (r *Registry) HintMessage(code string) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	r.mu.RLock()
+	rules := r.rules
+	r.mu.RUnlock()
+	return rules.HintMessage(code)
+}
+
+// RenderHint resolves code to its static OAR hint message, or the bare code
+// when unregistered ([OAR-HINT-4]).
+func (r *Registry) RenderHint(code string) (string, bool) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "", false
+	}
+	if r == nil {
+		return code, false
+	}
+	r.mu.RLock()
+	rules := r.rules
+	r.mu.RUnlock()
+	return rules.RenderHint(code)
+}
+
+// RenderHintByStem resolves a stem-only queued stock kick when its primary
+// binding in this registry declares a hint_code.
+func (r *Registry) RenderHintByStem(stem string) (text string, isHint bool, found bool) {
+	stem = strings.TrimSpace(stem)
+	if r == nil || stem == "" {
+		return "", false, false
+	}
+	r.mu.RLock()
+	anchorID, ok := r.renderToAnchor[stem]
+	var hintCode string
+	if ok {
+		if b := r.informPrimary[anchorID]; b != nil && b.Render == stem {
+			hintCode = strings.TrimSpace(b.HintCode)
+		}
+	}
+	rules := r.rules
+	r.mu.RUnlock()
+	if hintCode == "" {
+		return "", false, false
+	}
+	text, found = rules.RenderHint(hintCode)
+	return text, true, found
 }

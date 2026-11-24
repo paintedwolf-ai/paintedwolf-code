@@ -1,6 +1,7 @@
 package reach_test
 
 import (
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -90,5 +91,32 @@ func TestLoadEmittersRefusesIncompleteDeclarations(t *testing.T) {
 		if _, err := reach.LoadEmitters(root, spec); err == nil {
 			t.Errorf("%s: loaded", name)
 		}
+	}
+}
+
+func TestLoadEmittersTracksHostBindingHintCodes(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, body string) {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		testutil.FailErr(t, "mkdir "+rel, os.MkdirAll(filepath.Dir(p), 0o755))
+		testutil.FailErr(t, "write "+rel, os.WriteFile(p, []byte(body), 0o600))
+	}
+	write("registry.json", `{"hint_codes":{"FIRED_HINT":{"summary":"ok"},"UNFIRED_HINT":{"summary":"ok"}}}`)
+	write("packs/platform/policy/FIRED_HINT.yaml", "spec_version: \"1.0\"\nid: FIRED_HINT\nkind: hint\nmessage: ok\n")
+	write("packs/platform/host/bindings/fired.yaml", "'on': anchor.fired\neffect: inform\nrender: coordinator-fired\nhint_code: FIRED_HINT\n")
+	write("packs/platform/host/bindings/unfired.yaml", "'on': anchor.unfired\neffect: inform\nrender: coordinator-unfired\nhint_code: UNFIRED_HINT\n")
+	write("packs/platform/host/bindings/template.yaml", "'on': anchor.fired\neffect: inform\nrender: coordinator-tpl\n")
+	write("facts.yaml", "host_facts:\n  - name: paintedwolf.f\n")
+	write("anchors.yaml", "anchors:\n  - id: anchor.fired\n  - id: anchor.unfired\n")
+
+	emitters, err := reach.LoadEmitters(dir, reach.EmitterSpec{
+		Registry: "registry.json",
+		Policies: "packs",
+		Facts:    "facts.yaml",
+		Anchors:  "anchors.yaml",
+	})
+	testutil.FailErr(t, "load emitters with host bindings", err)
+	if emitters == nil {
+		t.Fatal("expected non-nil emitters")
 	}
 }

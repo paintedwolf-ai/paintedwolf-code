@@ -100,7 +100,41 @@ func buildKickRenderData(meta kickMeta, live CoordinatorKickRenderContext, now t
 	return data
 }
 
-func (k *KickEngine) renderCoordinatorKick(ctx context.Context, kickID string, meta kickMeta, live CoordinatorKickRenderContext) (string, error) {
+func (k *KickEngine) resolveHintTarget(ctx context.Context, sessionID, kickID string, target kickRenderTarget) (string, bool, error) {
+	switch target.kind {
+	case renderTargetHint:
+		code := strings.TrimSpace(target.hintCode)
+		if code == "" {
+			return "", true, fmt.Errorf("kick %q: empty hint code", kickID)
+		}
+		if target.resolveHint == nil {
+			return code, true, nil
+		}
+		text, _ := target.resolveHint(code)
+		if strings.TrimSpace(text) == "" {
+			return code, true, nil
+		}
+		return strings.TrimSpace(text), true, nil
+	case renderTargetTemplate:
+		return "", false, nil
+	default:
+		fn := k.stemHints.Load()
+		if fn == nil || *fn == nil {
+			fn = defaultStemHints.Load()
+		}
+		if fn != nil && *fn != nil {
+			if text, isHint, _ := (*fn)(ctx, sessionID, strings.TrimSpace(kickID)); isHint {
+				return strings.TrimSpace(text), true, nil
+			}
+		}
+		return "", false, nil
+	}
+}
+
+func (k *KickEngine) renderCoordinatorKick(ctx context.Context, sessionID, kickID string, meta kickMeta, live CoordinatorKickRenderContext) (string, error) {
+	if text, handled, err := k.resolveHintTarget(ctx, sessionID, kickID, meta.renderTarget); handled {
+		return text, err
+	}
 	cfg := k.config()
 	if cfg.engine == nil {
 		return "", fmt.Errorf("kick %q: prompt engine not configured", kickID)

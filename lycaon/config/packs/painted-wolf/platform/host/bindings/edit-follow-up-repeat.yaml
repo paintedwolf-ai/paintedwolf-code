@@ -4,6 +4,7 @@ selector:
   surface: coordinator
 effect: inform
 render: coordinator-edit-follow-up-repeat
+hint_code: COORDINATOR_EDIT_FOLLOWUP_REPEATED
 tier: builtin
 invariants:
   trigger_class: observed_history

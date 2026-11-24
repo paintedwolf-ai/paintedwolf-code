@@ -103,7 +103,7 @@ func cloneRuleSet(rs *RuleSet) (*RuleSet, error) {
 		rules = append(rules, &clone)
 	}
 	cloned := NewRuleSet(rules)
-	cloned.hints = rs.hints
+	cloned.setHints(rs.hints)
 	bindErrorSubstitutes(cloned)
 	return cloned, nil
 }

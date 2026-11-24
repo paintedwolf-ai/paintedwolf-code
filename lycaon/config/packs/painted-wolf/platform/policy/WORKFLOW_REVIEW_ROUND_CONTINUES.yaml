@@ -1,0 +1,4 @@
+spec_version: "1.0"
+id: WORKFLOW_REVIEW_ROUND_CONTINUES
+kind: hint
+message: The review phase remains open. Continue its work and record the next verdict with `submit_verdict`.

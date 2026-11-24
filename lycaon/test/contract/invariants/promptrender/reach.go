@@ -87,18 +87,20 @@ func kickData() map[string]any {
 	return data
 }
 
-// informKicks lists the inform bindings' renders that start with prefix.
-func informKicks(r *invariants.Run, prefix string) []string {
+// informKickBindings lists the inform bindings whose render stem starts with prefix.
+func informKickBindings(r *invariants.Run, prefix string) (*anchor.Registry, []*anchor.Binding) {
 	reg, err := anchor.LoadRegistryFromConfigRoot()
 	r.Must(err)
-	var ids []string
+	seen := map[string]bool{}
+	var out []*anchor.Binding
 	for _, b := range reg.AllInform() {
-		if b != nil && b.IsInform() && strings.HasPrefix(b.Render, prefix) && !slices.Contains(ids, b.Render) {
-			ids = append(ids, b.Render)
+		if b != nil && b.IsInform() && strings.HasPrefix(b.Render, prefix) && !seen[b.Render] {
+			seen[b.Render] = true
+			out = append(out, b)
 		}
 	}
-	slices.Sort(ids)
-	return ids
+	slices.SortFunc(out, func(a, b *anchor.Binding) int { return strings.Compare(a.Render, b.Render) })
+	return reg, out
 }
 
 // A wake can reach any surface, so a coordinator kick names only what that
@@ -108,19 +110,30 @@ func coordinatorKicksNameOnlyOffered(r *invariants.Run) {
 	plans, err := surface.CompileToolPlans(1)
 	r.Must(err)
 	engine := s.Engine()
+	reg, bindings := informKickBindings(r, "coordinator-")
 	checked := 0
-	for _, kick := range informKicks(r, "coordinator-") {
+	for _, b := range bindings {
+		kick := b.Render
 		if slices.ContainsFunc(phaseKickPrefixes, func(p string) bool { return strings.HasPrefix(kick, p) }) {
 			continue
 		}
 		for _, id := range sortedKeys(plans) {
 			reader, err := CoordinatorReader(s, id, 1)
 			r.Must(err)
-			data := kickData()
-			delete(data, "tools")
-			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			text, err := engine.RenderKick(context.Background(), kick, data)
-			r.Must(err)
+			var text string
+			if b.HintCode != "" {
+				var ok bool
+				text, ok = reg.HintMessage(b.HintCode)
+				if !ok {
+					r.Fatalf("hint %s for kick %s missing message", b.HintCode, kick)
+				}
+			} else {
+				data := kickData()
+				delete(data, "tools")
+				prompts.MergeCoordinatorKickVarsForTools(data, reader)
+				text, err = engine.RenderKick(context.Background(), kick, data)
+				r.Must(err)
+			}
 			checked++
 			reportUnoffered(r, fmt.Sprintf("kick %s on %s", kick, id), text, reader.Held())
 		}
@@ -202,11 +215,22 @@ func workerKicksNameOnlyOffered(r *invariants.Run) {
 				continue
 			}
 			reader := workerReader(r, profile.ID, profiles)
-			for _, kick := range informKicks(r, "worker-") {
-				data, err := prompts.Vars(reader, kickData())
-				r.Must(err)
-				text, err := engine.RenderKick(context.Background(), kick, data)
-				r.Must(err)
+			reg, workerBindings := informKickBindings(r, "worker-")
+			for _, b := range workerBindings {
+				kick := b.Render
+				var text string
+				if b.HintCode != "" {
+					var ok bool
+					text, ok = reg.HintMessage(b.HintCode)
+					if !ok {
+						r.Fatalf("hint %s for kick %s missing message", b.HintCode, kick)
+					}
+				} else {
+					data, err := prompts.Vars(reader, kickData())
+					r.Must(err)
+					text, err = engine.RenderKick(context.Background(), kick, data)
+					r.Must(err)
+				}
 				checked++
 				reportUnoffered(r, fmt.Sprintf("kick %s for %s in %s", kick, profile.ID, posture), text, reader.Held())
 			}

@@ -34,9 +34,22 @@ func guidanceKickID(feedback api.ToolFeedback) string {
 	return "guidance:" + code + ":" + strings.TrimSpace(feedback.Subject.Kind) + ":" + strings.TrimSpace(feedback.Subject.ID)
 }
 
+var defaultStemHints atomic.Pointer[StemHintResolver]
+
+// SetDefaultStemHintResolver installs the process-wide fallback stem hint
+// resolver for KickEngine instances without an explicit bus binding.
+func SetDefaultStemHintResolver(fn StemHintResolver) {
+	if fn == nil {
+		defaultStemHints.Store(nil)
+		return
+	}
+	defaultStemHints.Store(&fn)
+}
+
 // KickEngine queues coordinator and worker nudges.
 type KickEngine struct {
 	cfg          atomic.Pointer[kickEngineConfig]
+	stemHints    atomic.Pointer[StemHintResolver]
 	kickQueues   sync.Map // sessionID -> *sessionKickQueue
 	policyQueues sync.Map // sessionID -> *policyQueue
 	nextLease    atomic.Uint64
@@ -48,6 +61,18 @@ func (k *KickEngine) SetPromptEngine(engine prompts.PromptTemplateEngine) {
 		return
 	}
 	k.cfg.Store(&kickEngineConfig{engine: engine})
+}
+
+// SetStemHintResolver installs the fallback hint resolver for stem-only queued kicks.
+func (k *KickEngine) SetStemHintResolver(fn StemHintResolver) {
+	if k == nil {
+		return
+	}
+	if fn == nil {
+		k.stemHints.Store(nil)
+		return
+	}
+	k.stemHints.Store(&fn)
 }
 
 // config returns the current rendering configuration.
@@ -211,9 +236,9 @@ func (k *KickEngine) RenderPendingNudge(ctx context.Context, sessionID string, l
 		var text string
 		var err error
 		if item.eager {
-			text, err = k.renderEagerKick(ctx, item.kickID, item.eagerData)
+			text, err = k.renderEagerKick(ctx, sessionID, item.kickID, item.meta, item.eagerData)
 		} else {
-			text, err = k.renderCoordinatorKick(ctx, item.kickID, item.meta, live)
+			text, err = k.renderCoordinatorKick(ctx, sessionID, item.kickID, item.meta, live)
 		}
 		if err != nil {
 			return "", 0, false, err
@@ -252,7 +277,7 @@ func (k *KickEngine) RenderLatest(ctx context.Context, sessionID, latestKey stri
 		queue.dropLatest(latestKey, item.lease)
 		return "", "", 0, false, nil
 	}
-	text, err = k.renderCoordinatorKick(ctx, item.kickID, item.meta, live)
+	text, err = k.renderCoordinatorKick(ctx, sessionID, item.kickID, item.meta, live)
 	if err != nil {
 		return "", "", 0, false, err
 	}
@@ -279,7 +304,7 @@ func (k *KickEngine) AckPendingNudge(sessionID string, lease uint64) {
 }
 
 // QueueEager stages worker-spawn data for rendering at the take boundary.
-func (k *KickEngine) QueueEager(sessionID, templateID string, data map[string]string) {
+func (k *KickEngine) QueueEager(sessionID, templateID string, data map[string]string, opts ...KickOption) {
 	if k == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}
@@ -287,17 +312,26 @@ func (k *KickEngine) QueueEager(sessionID, templateID string, data map[string]st
 	if templateID == "" {
 		return
 	}
+	var meta kickMeta
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&meta)
+		}
+	}
 	captured := make(map[string]string, len(data))
 	for key, v := range data {
 		captured[key] = v
 	}
 	item := kickQueueItem{
-		kickID: templateID, deferred: true, eager: true, eagerData: captured,
+		kickID: templateID, deferred: true, eager: true, eagerData: captured, meta: cloneKickMeta(meta),
 	}
 	k.sessionKickQueue(sessionID).stageEager(item, &k.nextLease)
 }
 
-func (k *KickEngine) renderEagerKick(ctx context.Context, templateID string, data map[string]string) (string, error) {
+func (k *KickEngine) renderEagerKick(ctx context.Context, sessionID, templateID string, meta kickMeta, data map[string]string) (string, error) {
+	if text, handled, err := k.resolveHintTarget(ctx, sessionID, templateID, meta.renderTarget); handled {
+		return text, err
+	}
 	cfg := k.config()
 	if cfg.engine == nil {
 		return "", fmt.Errorf("kick %q: prompt engine not configured", templateID)

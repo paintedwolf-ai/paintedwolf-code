@@ -164,8 +164,7 @@ func (l *turnCloseout) applyLandingAdvisories(
 	sess *api.Session,
 	sessionID, profileID string,
 	step, maxIter int,
-	spendRunway SpendRunway,
-	spendWindDown bool,
+	spend spendCeilingDecision,
 	st *promptLoopTurnState,
 ) (closeoutNudgeSent bool, err error) {
 	updated, err := l.maybeTurnCloseout(ctx, sess, sessionID, profileID, st.history, step, maxIter, st)
@@ -185,11 +184,11 @@ func (l *turnCloseout) applyLandingAdvisories(
 	if err != nil {
 		return closeoutNudgeSent, err
 	}
-	st.history, err = l.Nudges.maybeSpendRunwayNudge(ctx, sess, sessionID, st.history, spendRunway, st)
+	st.history, err = l.Nudges.maybeSpendRunwayNudge(ctx, sess, sessionID, st.history, spend.Runway, st)
 	if err != nil {
 		return closeoutNudgeSent, err
 	}
-	st.history, err = l.Nudges.maybeSpendSoftStopNudge(ctx, sess, sessionID, st.history, spendWindDown, st)
+	st.history, err = l.Nudges.maybeSpendSoftStopNudge(ctx, sess, sessionID, st.history, spend.WindDown, st, spend.WindDownNudge)
 	return closeoutNudgeSent, err
 }
 

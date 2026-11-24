@@ -116,6 +116,12 @@ var bindingClosure = []invariants.Invariant{{
 				}
 				return
 			}
+			if b.HintCode != "" {
+				if _, ok := reg.HintMessage(b.HintCode); !ok {
+					r.Report("%s binding on %s references missing or empty hint %s", kind, b.On, b.HintCode)
+				}
+				return
+			}
 			if _, err := catalogfixture.StockGuidancePath(b.Render); err != nil {
 				r.Report("%s binding on %s renders the missing template %s", kind, b.On, b.Render)
 			}
@@ -135,7 +141,7 @@ var bindingClosure = []invariants.Invariant{{
 		reg := bindings(r)
 		renders := map[string]bool{}
 		for _, b := range append(reg.AllInform(), reg.BindingsOn(anchor.PhaseEntered)...) {
-			if b != nil && b.Render != "" {
+			if b != nil && b.Render != "" && b.HintCode == "" {
 				renders[b.Render] = true
 			}
 		}

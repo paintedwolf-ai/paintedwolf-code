@@ -19,6 +19,16 @@ func (m *Service) Render(
 	id anchor.ID,
 	data map[string]any,
 ) promptloop.HostNudge {
+	return m.renderBinding(ctx, sess, id, data, false)
+}
+
+func (m *Service) renderBinding(
+	ctx context.Context,
+	sess *api.Session,
+	id anchor.ID,
+	data map[string]any,
+	requireFullCopy bool,
+) promptloop.HostNudge {
 	if m == nil || sess == nil {
 		return promptloop.HostNudge{}
 	}
@@ -26,9 +36,38 @@ func (m *Service) Render(
 	if sess.IsWorkerChild() {
 		surface = "worker"
 	}
-	stem := anchor.InformRenderFor(ctx, id, anchor.MatchContext{Surface: surface, SessionID: sess.ID})
+	resolved, ok := anchor.ResolveInformTarget(ctx, id, anchor.MatchContext{Surface: surface, SessionID: sess.ID})
+	if !ok || resolved.Binding == nil {
+		return promptloop.HostNudge{}
+	}
+	stem := strings.TrimSpace(resolved.Binding.Render)
 	if stem == "" {
 		return promptloop.HostNudge{}
+	}
+	if text, isHint, found := resolved.RenderHint(); isHint {
+		if requireFullCopy && !found {
+			return promptloop.HostNudge{}
+		}
+		hintRender := func(context.Context, string, map[string]any) (string, error) {
+			return text, nil
+		}
+		return promptloop.HostNudge{
+			Content:  workercloseout.RenderWorkerKick(ctx, hintRender, stem, data),
+			SignalID: string(id),
+		}
+	}
+	if requireFullCopy {
+		if m.prompts == nil {
+			return promptloop.HostNudge{}
+		}
+		rendered, err := m.renderKick(ctx, stem, data)
+		if err != nil || strings.TrimSpace(rendered) == "" {
+			return promptloop.HostNudge{}
+		}
+		return promptloop.HostNudge{
+			Content:  strings.TrimSpace(rendered),
+			SignalID: string(id),
+		}
 	}
 	return promptloop.HostNudge{
 		Content:  workercloseout.RenderWorkerKick(ctx, m.renderKick, stem, data),

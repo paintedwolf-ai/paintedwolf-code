@@ -34,9 +34,10 @@ type SpendSoftStopNudge func(ctx context.Context, sess *api.Session) HostNudge
 
 // spendCeilingDecision selects a warning, final tool round, or completed closeout.
 type spendCeilingDecision struct {
-	Runway   SpendRunway
-	WindDown bool
-	Finished *PromptRunResult
+	Runway        SpendRunway
+	WindDown      bool
+	WindDownNudge HostNudge
+	Finished      *PromptRunResult
 }
 
 // A spent coordinator may receive one final tool round before closeout; a
@@ -75,9 +76,19 @@ func (l *turnNudges) applySpendCeiling(
 		return out, err
 	}
 	if sess != nil && !st.spendSoftStopGranted && check.SoftStop {
-		st.spendSoftStopGranted = true
-		out.WindDown = true
-		return out, nil
+		if l.Deps.SpendSoftStopNudge == nil {
+			st.spendSoftStopGranted = true
+			out.WindDown = true
+			return out, nil
+		}
+		// Require full wind-down instructions before granting a tool-capable round;
+		// missing copy falls through to prose closeout.
+		if nudge := l.Deps.SpendSoftStopNudge(ctx, sess); !nudge.Empty() {
+			st.spendSoftStopGranted = true
+			out.WindDown = true
+			out.WindDownNudge = nudge
+			return out, nil
+		}
 	}
 	closedHistory, aid, content, cerr := l.Closeout.runEarlyTurnCloseout(
 		ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter,
@@ -108,11 +119,17 @@ func (l *turnNudges) maybeSpendSoftStopNudge(
 	history []api.Message,
 	windDown bool,
 	st *promptLoopTurnState,
+	preRendered ...HostNudge,
 ) ([]api.Message, error) {
-	if l == nil || l.Deps.SpendSoftStopNudge == nil || sess == nil || !windDown {
+	if l == nil || sess == nil || !windDown {
 		return history, nil
 	}
-	nudge := l.Deps.SpendSoftStopNudge(ctx, sess)
+	var nudge HostNudge
+	if len(preRendered) > 0 && !preRendered[0].Empty() {
+		nudge = preRendered[0]
+	} else if l.Deps.SpendSoftStopNudge != nil {
+		nudge = l.Deps.SpendSoftStopNudge(ctx, sess)
+	}
 	if nudge.Empty() {
 		return history, nil
 	}
