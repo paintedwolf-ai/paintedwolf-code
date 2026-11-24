@@ -501,7 +501,9 @@ describe("SessionTranscript stacked activity groups", () => {
     expect(cards[1]!.getAttribute("data-sections")).toBe("files,approvals,activities");
     expect(cards[2]!.getAttribute("data-sections")).toBe("activities");
 
-    expect(cards[1]!.querySelector('[data-testid="checkpoint-decision-verdict"]')?.textContent).toContain("Allowed");
+    const approvalChicklet = cards[1]!.querySelector('[data-testid="checkpoint-decision-chicklet"]');
+    expect(approvalChicklet?.getAttribute("data-status")).toBe("approved");
+    expect(approvalChicklet?.textContent).toContain("Allowed");
     fireEvent.click(cards[1]!.querySelector<HTMLButtonElement>('[data-testid="activity-span-card"] button')!);
     expect(cards[1]!.textContent).toContain("Refused");
 
