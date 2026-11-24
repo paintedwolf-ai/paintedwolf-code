@@ -51,6 +51,7 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 		return result, err
 	}
 	defer arguments.close()
+	parentOut := tc.Effects.Out
 	tc = freshProgramOwnerContext("update_progress", definition.Contract, p.identity.ExecutionID, p.identity.Scope.ProjectID, p.identity.SessionID, tc)
 	ctx = invocationContext(ctx, tc)
 	ctx, observation, releaseObservation, err := prepareProgramPolicyObservation(ctx, p.frame, p.admission, tc, nil)
@@ -137,5 +138,8 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	expected, _ := resolved["expected_revision"].(string)
 	token, _ := resolved["reconciliation_token"].(string)
 	result.Outcome, err = author.ExpectRevision(expected).ExpectItemIDsFromArgs(resolved).ExpectReconciliation(token).Apply(ctx, store, current.RootSessionID, reconciler)
+	if err == nil && parentOut != nil && len(result.Outcome.CompletedItemIDs) > 0 {
+		parentOut.MarkPlanItemCompleted()
+	}
 	return result, progressOwnerError(err)
 }

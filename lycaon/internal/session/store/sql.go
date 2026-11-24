@@ -76,8 +76,9 @@ type Repositories struct {
 	Sessions    SessionRepository
 	Transcript  TranscriptRepository
 	Compaction  CompactionRepository
-	Turns       TurnRepository
-	Submissions SubmissionRepository
+	Turns          TurnRepository
+	CompletionCues CompletionCueRepository
+	Submissions    SubmissionRepository
 	Attachments AttachmentRepository
 	Evidence    EvidenceRepository
 	Rewind      RewindRepository
@@ -151,8 +152,9 @@ func NewSQL(database db.ReadHandle) *Repositories {
 		Sessions:    &sqlSessions{core: core},
 		Transcript:  &sqlTranscript{core: core},
 		Compaction:  &sqlCompaction{core: core},
-		Turns:       &sqlTurns{core: core},
-		Submissions: &sqlSubmissions{core: core},
+		Turns:          &sqlTurns{core: core},
+		CompletionCues: &sqlCompletionCues{core: core},
+		Submissions:    &sqlSubmissions{core: core},
 		Attachments: &sqlAttachmentBlobs{core: core},
 		Evidence:    &sqlEvidence{core: core},
 		Rewind:      &sqlRewind{core: core},

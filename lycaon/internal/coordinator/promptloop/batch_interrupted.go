@@ -228,9 +228,10 @@ func (l *toolBatch) settleRejectedToolCall(
 		l.Projection.Deps.OnToolReject(ctx, sessionID, tc.ID, rejectCode, run.content, run.facts)
 	}
 	out := singleToolOutcome{
-		toolName:      tc.Name,
-		toolMsg:       l.Tools.toolRejectMessage(tc.Name, tc.ID, assistantMessageID, tc.Args, run.asReject()),
-		breakToolLoop: advance,
+		toolName:          tc.Name,
+		toolMsg:           l.Tools.toolRejectMessage(tc.Name, tc.ID, assistantMessageID, tc.Args, run.asReject()),
+		breakToolLoop:     advance,
+		planItemCompleted: run.captures.planItemCompleted,
 	}
 	if run.captures.commandProgram != nil {
 		run.facts = run.facts.WithOutcome(api.ToolResultOutcomeRejected)

@@ -93,8 +93,9 @@ func NewSnapshot(runID, content string, itemIDs ...string) Snapshot {
 
 // Transitions distinguish deliverable state changes from document edits.
 type Transitions struct {
-	Changed       bool
-	ClosedItemIDs []string
+	Changed          bool
+	ClosedItemIDs    []string
+	CompletedItemIDs []string
 }
 
 // ClassifyTransitions compares items sharing the same stable identity across snapshots.
@@ -123,6 +124,9 @@ func ClassifyTransitions(before, after Snapshot) Transitions {
 		result.Changed = true
 		if prev.State == ProgressStatePending && (next.State == ProgressStateDone || next.State == ProgressStateNA) {
 			result.ClosedItemIDs = append(result.ClosedItemIDs, next.ID)
+			if next.State == ProgressStateDone {
+				result.CompletedItemIDs = append(result.CompletedItemIDs, next.ID)
+			}
 		}
 	}
 	return result

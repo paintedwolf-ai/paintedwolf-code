@@ -50,6 +50,7 @@ type AuthorUpdateResult struct {
 	Updated              bool     `json:"document_changed"`
 	StateChanged         bool     `json:"state_changed"`
 	ClosedItemIDs        []string `json:"closed_item_ids"`
+	CompletedItemIDs     []string `json:"-"`
 	Snapshot             Snapshot `json:"snapshot"`
 }
 
@@ -190,6 +191,7 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string, recon
 	transitions := ClassifyTransitions(previous, snapshot)
 	result.StateChanged = transitions.Changed
 	result.ClosedItemIDs = transitions.ClosedItemIDs
+	result.CompletedItemIDs = transitions.CompletedItemIDs
 	if u.reconciliationToken != "" {
 		result.ReconciliationStatus = "changed"
 		if reconciler.Acknowledge(ctx, root, u.reconciliationToken) {

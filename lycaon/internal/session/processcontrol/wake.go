@@ -54,6 +54,7 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 			Command: hostcmd.CommandLine(completion.Stages), ExitCode: completion.ExitCode,
 			Verdict: verification.BackgroundOutcome(completion), Cwd: completion.Cwd,
 			SourceRevision: completion.SourceRevision, SourceRootDigest: completion.SourceRootDigest,
+			UserIntentID: completion.UserIntentID, WorkflowRunID: completion.WorkflowRunID,
 		}, completion.FinishedAt)
 	}
 	digest := CommandCompletionDigest(completion)

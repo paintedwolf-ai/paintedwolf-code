@@ -262,5 +262,6 @@ func StampSourceRun(tctx tools.ToolContext, res *hostcmd.Result, verdict string,
 		ExitCode:       res.ExitCode,
 		Verdict:        verdict,
 		SourceRevision: outcome.SourceRevision, SourceRootDigest: outcome.SourceRootDigest, Cwd: outcome.Cwd,
+		UserIntentID: tctx.Turn.UserIntentID, WorkflowRunID: tctx.Turn.WorkflowRunID,
 	}
 }

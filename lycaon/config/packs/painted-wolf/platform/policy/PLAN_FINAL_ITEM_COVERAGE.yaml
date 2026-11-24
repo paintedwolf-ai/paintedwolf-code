@@ -1,0 +1,4 @@
+spec_version: "1.0"
+id: PLAN_FINAL_ITEM_COVERAGE
+kind: hint
+message: After this last step, what part of the user’s request, if any, will still need work or verification?

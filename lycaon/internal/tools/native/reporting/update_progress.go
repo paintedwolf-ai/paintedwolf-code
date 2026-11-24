@@ -47,6 +47,9 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey, reconcilia
 		if tctx.Effects.Out != nil {
 			advanced := result.AdvancesWorkflow()
 			tctx.Effects.Out.Facts.WorkflowAdvanced = &advanced
+			if len(result.CompletedItemIDs) > 0 {
+				tctx.Effects.Out.MarkPlanItemCompleted()
+			}
 		}
 		status := "unchanged"
 		if result.Updated {

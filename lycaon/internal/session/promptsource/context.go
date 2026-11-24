@@ -9,11 +9,13 @@ import (
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
+	"github.com/lycaon/lycaon/internal/coordinator/completioncue"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
@@ -27,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
+	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -74,11 +77,13 @@ type Context struct {
 	Policy                *policyfacts.Service
 	Processes             *processcontrol.Service
 	Profiles              *profiles.Service
+	Progress              progress.Store
 	Prompts               prompts.PromptTemplateEngine
 	Runtime               *coordinator.Runtime
 	Sessions              Sessions
 	ToolContext           *toolcontext.Service
 	Tools                 tools.ToolRegistry
+	Verification          *verification.Service
 	WebResearch           *webresearch.ConfigStore
 	WorkerState           *workeroutcomes.State
 	Workspace             *sessionscope.Service
@@ -105,6 +110,27 @@ func (m *Context) Build() promptloop.ContextDeps {
 		ProjectRootCount: func(ctx context.Context, sess *api.Session) int {
 			_, count, _, _ := m.Workspace.PromptRootRows(ctx, sess)
 			return count
+		},
+		CompletionCues: rt.CompletionCues(),
+		PendingProgressCount: func(ctx context.Context, sess *api.Session) (int, bool) {
+			if m == nil || m.Progress == nil || sess == nil {
+				return 0, false
+			}
+			root := sessiontree.RootID(ctx, m.Sessions, sess.ID)
+			if strings.TrimSpace(root) == "" {
+				return 0, false
+			}
+			snap, err := m.Progress.Current(ctx, root)
+			if err != nil || len(snap.Items()) == 0 {
+				return 0, false
+			}
+			return progress.Summarize(snap.Content).Pending, true
+		},
+		ConfirmCheckCurrent: func(ctx context.Context, sess *api.Session, check completioncue.CheckFact) bool {
+			if m == nil || m.Verification == nil || sess == nil {
+				return false
+			}
+			return m.Verification.CheckMatchesCurrentSource(ctx, sess, check.CheckID, check.SourceRevision, check.SourceRootDigest)
 		},
 		WritableSharedTemp: m.Profiles.WritableSharedTemp,
 		LoadedTools:        m.Loading.LoadedTools,

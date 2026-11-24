@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
+	"github.com/lycaon/lycaon/internal/coordinator/completioncue"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/ingestion"
@@ -80,7 +81,9 @@ type toolCallOutcome struct {
 	// err is a failure that produced no durable result.
 	err error
 	// endTurn is a host fault that ends the turn once toolMsg is durable.
-	endTurn error
+	endTurn           error
+	planItemCompleted bool
+	passingCheck      *completioncue.CheckFact
 }
 
 func partitionToolBatchRuns(reg tools.ToolRegistry, calls []api.ToolCall) [][]api.ToolCall {
@@ -152,6 +155,8 @@ type toolBatchOutcome struct {
 	taskEnqueuedThisTurn int
 	breakToolLoop        bool
 	progress             batchProgressOutcome
+	planItemCompleted    bool
+	passingCheck         *completioncue.CheckFact
 }
 
 func (l *toolBatch) executeToolCallsInTurn(
@@ -190,12 +195,14 @@ func (l *toolBatch) executeToolCallsInTurn(
 		baseToolCtx.Source.EditorReadBases = tools.NewAgentReadBases(baseToolCtx.Source.EditorDocuments.FreezeAgentReads(baseToolCtx.Identity.ProjectID, baseToolCtx.Identity.SessionID))
 	}
 	baseToolCtx.Turn.TurnSurfaceID = strings.TrimSpace(turnSurfaceID)
+	baseToolCtx.Turn.UserIntentID = currentUserIntentID(history)
 	frame := inject.CoordinatorTurnFrame{}
 	machine := inject.Machine{}
 	if st != nil {
 		frame = st.coordinatorFrame
 		machine = st.machine
 	}
+	baseToolCtx.Turn.WorkflowRunID = strings.TrimSpace(frame.RunContext.RunID)
 	if st != nil {
 		baseToolCtx.Turn.TurnToolPlan = st.turnToolPlan
 		baseToolCtx.Turn.TurnPrograms = st.turnPrograms
@@ -245,6 +252,12 @@ func (l *toolBatch) executeToolCallsInTurn(
 			}
 			out := l.executeOneToolCall(ctx, sess, sessionID, userPrompt, result.history, run[0], tctx, taskAllowlist, assistantMessageID, frame.RunContext, st != nil && st.proseFinish)
 			result.progress.observe(out.advanced, out.toolMsg.ToolResult)
+			if out.planItemCompleted {
+				result.planItemCompleted = true
+			}
+			if out.passingCheck != nil {
+				result.passingCheck = out.passingCheck
+			}
 			var err error
 			result.history, err = l.persistClassifiedToolOutcome(
 				ctx, sessionID, sess, result.history, toolCallOutcome{
@@ -284,6 +297,12 @@ func (l *toolBatch) executeToolCallsInTurn(
 
 		for _, out := range outcomes {
 			result.progress.observe(out.advanced, out.toolMsg.ToolResult)
+			if out.planItemCompleted {
+				result.planItemCompleted = true
+			}
+			if out.passingCheck != nil {
+				result.passingCheck = out.passingCheck
+			}
 		}
 
 		var err error
@@ -389,8 +408,10 @@ func (l *toolBatch) runConcurrentToolBatch(
 				taskCommitted:  out.taskCommitted,
 				handleEligible: out.handleEligible,
 				deliveries:     out.deliveries,
-				taskMessageID:  out.toolMsg.ID,
-				endTurn:        out.endTurn,
+				taskMessageID:     out.toolMsg.ID,
+				endTurn:           out.endTurn,
+				planItemCompleted: out.planItemCompleted,
+				passingCheck:      out.passingCheck,
 			}
 			l.appendParallelResult(ctx, commit, &outcomes[i])
 		}(idx, tc)
@@ -472,7 +493,9 @@ type singleToolOutcome struct {
 	deliveries    []tools.SourceDeliveryTag
 	breakToolLoop bool
 	// endTurn is a host fault that ends the turn once toolMsg is durable.
-	endTurn error
+	endTurn           error
+	planItemCompleted bool
+	passingCheck      *completioncue.CheckFact
 }
 
 func (l *toolBatch) executeOneToolCall(
@@ -556,13 +579,15 @@ func (l *toolBatch) executeOneToolCall(
 		toolMsg.ToolResult.Invocation = run.receipt
 	}
 	return singleToolOutcome{
-		advanced:       toolWorkflowAdvanced(tc.Name, run.facts),
-		toolName:       tc.Name,
-		toolMsg:        toolMsg,
-		completion:     run.captures.completion,
-		taskCommitted:  taskSpawnCommitted(tc.Name, toolMsg.ToolResult, run.succeeded()),
-		handleEligible: sess != nil && toolEvidenceEligible(run, tc.Name, tc.Args),
-		deliveries:     run.captures.sourceDeliveries,
+		advanced:          toolWorkflowAdvanced(tc.Name, run.facts),
+		toolName:          tc.Name,
+		toolMsg:           toolMsg,
+		completion:        run.captures.completion,
+		taskCommitted:     taskSpawnCommitted(tc.Name, toolMsg.ToolResult, run.succeeded()),
+		handleEligible:    sess != nil && toolEvidenceEligible(run, tc.Name, tc.Args),
+		deliveries:        run.captures.sourceDeliveries,
+		planItemCompleted: run.captures.planItemCompleted,
+		passingCheck:      checkFactFromRun(sess, sessionID, tc.Name, run),
 	}
 }
 

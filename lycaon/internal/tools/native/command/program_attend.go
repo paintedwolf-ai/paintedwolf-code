@@ -442,7 +442,11 @@ func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resol
 	case outcome.Status != 0:
 		verdict = api.SourceVerdictFailed
 	}
-	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, ProgramID: outcome.ProgramID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
+	run := &tools.SourceRunCapture{
+		CheckID: tc.Identity.ToolCallID, ProgramID: outcome.ProgramID, IsCheck: tc.Execution.VerificationCheck,
+		Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath,
+		UserIntentID: tc.Turn.UserIntentID, WorkflowRunID: tc.Turn.WorkflowRunID,
+	}
 	run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
 	tc.Effects.Out.SourceRun = run
 	if tc.Execution.VerificationCheck && verdict == api.SourceVerdictUnverifiable {

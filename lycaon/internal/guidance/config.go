@@ -24,6 +24,23 @@ func (c *HintConfig) Clone() *HintConfig {
 	return &HintConfig{HintCodes: maps.Clone(c.HintCodes)}
 }
 
+// ResolveHintMessage returns the static message registered for a host-raised
+// hint code, or the bare code when unregistered (OAR-HINT-4).
+func (c *HintConfig) ResolveHintMessage(code string) string {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return ""
+	}
+	if c != nil {
+		if entry, ok := c.HintCodes[code]; ok {
+			if msg := strings.TrimSpace(entry.Message); msg != "" {
+				return msg
+			}
+		}
+	}
+	return code
+}
+
 // EvidenceCheckMeta returns a declared UI label and check id, or false when absent.
 func (c *HintConfig) EvidenceCheckMeta(code string) (label, id string, ok bool) {
 	if c == nil {

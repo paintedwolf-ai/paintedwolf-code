@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/coordinator/completioncue"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -67,6 +68,7 @@ type turnStreamState struct {
 	offeredToolNames      []string
 	offeredToolSchemas    map[string]map[string]any
 	coordinatorFrameReady bool
+	decisionCue           *completioncue.DecisionBinding
 }
 
 type turnBatchState struct {
@@ -303,6 +305,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		if err != nil {
 			return out, err
 		}
+		l.observeBatchCompletionCue(sess, sessionID, st, st.history, batchResult)
 		settleRetained(st.history, assistantMsg.ID)
 		batchTurnTools := batchResult.turnTools
 		taskEnqueuedThisTurn := batchResult.taskEnqueuedThisTurn

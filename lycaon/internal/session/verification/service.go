@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -59,6 +60,7 @@ type Service struct {
 	verifyConfig       VerifyConfigResolver
 	sourceObservations *sourceledger.Inventory
 	verificationSource func(context.Context, string) (string, string)
+	onSourceRun        func(ctx context.Context, sess *api.Session, producer string, run tools.SourceRunCapture)
 	dataDir            string
 }
 
@@ -77,6 +79,9 @@ func (m *Service) SetRevisionSource(source func(context.Context, string) (string
 	m.verificationSource = source
 }
 func (m *Service) SetWorkspaceTrackers(p WorkspaceTrackerProvider) { m.workspaceTrackers = p }
+func (m *Service) SetSourceRunObserver(fn func(ctx context.Context, sess *api.Session, producer string, run tools.SourceRunCapture)) {
+	m.onSourceRun = fn
+}
 func (m *Service) ReadSourceRecords(ctx context.Context, sess *api.Session) ([]evidence.Record, error) {
 	if m == nil || m.evidenceStore == nil || sess == nil {
 		return nil, nil

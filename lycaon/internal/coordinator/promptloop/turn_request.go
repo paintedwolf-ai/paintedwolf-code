@@ -85,6 +85,7 @@ func (l *modelTurn) buildTurnRequest(
 	if err != nil {
 		return coordinatorTurnRequest{}, err
 	}
+	messages = l.appendCompletionCue(ctx, sess, sessionID, profileID, history, messages, callable, toolUse, st)
 	if reject, blocked := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentInput, oar.ContentObservation{Segments: oarContentSegments(messages)}, "", nil); blocked {
 		return coordinatorTurnRequest{}, reject
 	}

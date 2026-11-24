@@ -282,6 +282,9 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		}
 		return history, "", "", err
 	}
+	if err := l.Model.commitCompletionCue(ctx, closeoutState); err != nil {
+		return history, "", "", err
+	}
 	closeoutState.turnsRanThisRun++
 	if st != nil {
 		st.proseFinishDelivered = true

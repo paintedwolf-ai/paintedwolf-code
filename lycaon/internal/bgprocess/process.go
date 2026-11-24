@@ -89,6 +89,8 @@ type processConfinementState struct {
 	sourceRootDigest string
 	cwd              string
 	runID            string
+	userIntentID     string
+	workflowRunID    string
 	runKey           string
 	boundary         confine.Boundary
 	facts            confine.SpawnFacts
