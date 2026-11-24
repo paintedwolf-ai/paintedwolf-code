@@ -157,7 +157,8 @@ func (t *CommandStopTool) Run(ctx context.Context, args map[string]any, tctx too
 	if err != nil {
 		return "", fmt.Errorf("command_stop encode: %w", err)
 	}
-	if out.ExitCode != nil {
+	// The job's completion still delivers refusals this result does not show.
+	if out.ExitCode != nil && t.Registry.Output.UnshownRefusals(tctx.Identity.SessionID, handle) == 0 {
 		t.Registry.Observe(tctx.Identity.SessionID, handle)
 	}
 	return string(encoded), nil

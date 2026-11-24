@@ -14,6 +14,33 @@ type ProgramStage struct {
 	Lease    *confine.ActionLease
 }
 
+// ProgramHistory is the confinement a program gathered before its job
+// existed: the first applied boundary and the stages that already settled.
+type ProgramHistory struct {
+	Boundary confine.Boundary
+	Report   confine.Report
+	Settled  confine.SandboxRefusals
+	Network  []confine.EgressHost
+}
+
+// Settle records one stage that settled before the job existed.
+func (h *ProgramHistory) Settle(stage ProgramStage, refusals confine.SandboxRefusals, network []confine.EgressHost) {
+	if !h.Boundary.Applied && stage.Boundary.Applied {
+		h.Boundary, h.Report = stage.Boundary, stage.Report
+	}
+	h.Settled = h.Settled.Merge(refusals)
+	h.Network = append(h.Network, network...)
+}
+
+// seed starts a program job from its history. The promoting call's result
+// already showed the settled refusals.
+func (proc *Process) seed(history ProgramHistory) {
+	proc.boundary, proc.facts.Report = history.Boundary, history.Report
+	proc.program.settled = history.Settled
+	proc.program.network = append([]confine.EgressHost(nil), history.Network...)
+	proc.refusalsShown = len(history.Settled.Refusals)
+}
+
 // programStages gathers a program job's stage confinement: live leases while
 // their processes run, then each stage's settled reports.
 type programStages struct {
@@ -96,6 +123,10 @@ func (r *Registry) AttachProgramStage(ctx context.Context, sessionID, handle str
 	proc.program.live = append(proc.program.live, stage.Lease)
 	r.jobs.mu.Unlock()
 	stage.Lease.OnRefusal(func() { r.Output.refusalObserved(ctx, proc) })
+	// Refusals can arrive before the subscription.
+	if len(stage.Lease.Refusals().Refusals) > 0 {
+		r.Output.refusalObserved(ctx, proc)
+	}
 	return func(refusals confine.SandboxRefusals, network []confine.EgressHost) {
 		r.jobs.mu.Lock()
 		defer r.jobs.mu.Unlock()

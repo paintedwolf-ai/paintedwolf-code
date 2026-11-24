@@ -193,6 +193,8 @@ type Completion struct {
 	GuidanceCodes []string
 	// Observation records the confinement boundary.
 	Observation confine.Observation
+	// UnshownRefusals counts the refusals no result or notice showed.
+	UnshownRefusals int
 	// IndexWatch is the Git index captured at spawn; the consumer releases it.
 	IndexWatch indexwatch.Snapshot
 }

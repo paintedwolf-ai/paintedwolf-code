@@ -61,7 +61,9 @@ type programEvaluation struct {
 	paths          *projectpaths.ProgramPaths
 	verification   *programVerificationSource
 	failureAttempt *commandFailureAttempt
-	release        func()
+	// stages carries the program's external stages into its job if it continues.
+	stages  *stageTracker
+	release func()
 	// callTC is the call's own tool context; evaluation writes its effects to
 	// run.tc's private outcome, which is merged into the call when it returns.
 	callTC tools.ToolContext
@@ -118,7 +120,8 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	defer budget.Close()
 	expired := budget.Expired()
 	e.waits = &programWaits{budget: budget}
-	e.ctx = hitl.WithHumanWaitObserver(e.ctx, e.waits)
+	e.stages = &stageTracker{}
+	e.ctx = withStageTracker(hitl.WithHumanWaitObserver(e.ctx, e.waits), e.stages)
 	//nolint:contextcheck // Detached evaluation outlives a parked call.
 	go func() {
 		ending.settlement, ending.err = r.finish(e)
