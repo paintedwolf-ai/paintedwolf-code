@@ -317,6 +317,10 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   const leadKeyBefore = `activity-group:${leadEntryKey}`;
   const leadKeyAfter = `activity-group:${base[56]!.id}:call-boundary-0`;
 
+  await apiSeedSessionTranscript(page.request, sessionId, rows);
+  await page.reload();
+  await expect(liveChatStage(page).getByText("Step 160.", { exact: true })).toBeVisible({ timeout: 30_000 });
+
   const olderPage = (url: URL) =>
     url.pathname.endsWith(`/v1/sessions/${sessionId}/messages`) && url.searchParams.has("before_message_id");
   let releaseOlder = () => {};
@@ -331,13 +335,12 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
     await route.continue();
   });
 
-  await apiSeedSessionTranscript(page.request, sessionId, rows);
-  await page.reload();
-  await expect(liveChatStage(page).getByText("Step 160.", { exact: true })).toBeVisible({ timeout: 30_000 });
-
   const spanRow = scroller(page).locator(`.transcript-viewport-row[data-msg-id="${leadKeyBefore}"]`);
   // Step inside viewport height so the top row enters view without a runway seek.
-  while (!(await spanRow.isVisible())) await wheelTranscript(page, -400);
+  for (let step = 0; step < 40 && !(await spanRow.isVisible()); step++) {
+    await wheelTranscript(page, -400);
+  }
+  await expect(spanRow).toBeVisible();
   await olderRequested;
   const spanCard = spanRow.getByTestId("activity-span-card");
   await spanCard.locator(":scope > .den-transcript-disclosure-header").click();

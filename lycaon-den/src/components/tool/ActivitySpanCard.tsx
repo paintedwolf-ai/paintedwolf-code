@@ -217,7 +217,7 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
           (props.waitCount ?? 0) > 0 ? `, ${props.waitCount} ${props.waitCount === 1 ? "wait" : "waits"}` : ""
         }${summary().failureCount > 0 ? `, ${summary().failureCount} failed` : ""}`}
       >
-        <span class={asSection() ? "den-activity-span-chicklet den-activity-span-chicklet--section" : "den-activity-span-chicklet"}>
+        <span class={asSection() ? "den-activity-span-chicklet--section" : "den-activity-span-chicklet"}>
           <span class="den-activity-span-chip">
             <span class="den-tool-part-status-dot" data-status={summary().status} aria-hidden="true" />
             <span class="den-activity-span-name">{label()}</span>
