@@ -83,7 +83,7 @@ func (l *LifecycleService) Workspace(ctx context.Context, p *project.Project, id
 	return resolved, nil
 }
 
-// ObserveByID reconciles an addressed document against its live checkout, or marks its checkout unavailable when removed.
+// ObserveByID reconciles an addressed document against its live checkout, or marks it unavailable.
 func (l *LifecycleService) ObserveByID(ctx context.Context, projectID, documentID, clientID string) (*Document, error) {
 	s := l.s
 	d, err := s.checked(ctx, documentID, projectID)

@@ -61,11 +61,11 @@ type DocumentState struct {
 	Absent              bool
 	CheckoutUnavailable bool `json:"-"`
 	Epoch               int64
-	PublishedRevision int64
-	SaveRevision      int64 `json:"-"`
-	StateVector       []byte
-	CRDTUpdate        []byte
-	ReplicaID         uint32
+	PublishedRevision   int64
+	SaveRevision        int64 `json:"-"`
+	StateVector         []byte
+	CRDTUpdate          []byte
+	ReplicaID           uint32
 	DocumentReplica
 }
 
