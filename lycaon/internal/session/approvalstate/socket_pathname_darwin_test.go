@@ -18,7 +18,6 @@ func TestKernelPathnameIntentCannotBecomeProcessBoundAuthority(t *testing.T) {
 	testutil.FailErr(t, "resolve saved socket intent", err)
 	for _, binding := range []socketref.Binding{{}, {Enforcement: socketref.KernelPathname}} {
 		runtime := NewSocketCapabilityRuntime()
-		defer runtime.Close()
 		saved := SocketChatGrant{ID: "saved-path", ApprovedPath: path, ResolvedPath: resolved, Binding: binding}
 		if !runtime.RestoreChatIntent("root", saved) {
 			t.Fatal("saved pathname intent was discarded")
