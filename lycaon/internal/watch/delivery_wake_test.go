@@ -35,9 +35,9 @@ func TestCollectCoordinatorAndWorkerAssemblyResourcePresenceAndFailedRender(t *t
 	workerJobID := "worker-job-1"
 	testdbseed.InsertChildSession(t, database, workerSessID, owner.SessionID)
 	_, err := database.ExecContext(t.Context(), `INSERT INTO worker_jobs
-		(id, project_id, parent_session_id, child_session_id, agent_type, status, task_prompt, spawn_reason, execution_target, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 'implement', 'running', 'implement feature', 'initial', 'local', '2026-11-23T12:00:00Z', '2026-11-23T12:00:00Z')`,
-		workerJobID, testdbseed.DefaultProjectID, owner.SessionID, workerSessID)
+		(id, project_id, child_session_id, agent_type, prompt, brief, created_at)
+		VALUES (?, ?, ?, 'implementer', 'implement feature', 'implement feature', '2026-11-23T12:00:00Z')`,
+		workerJobID, testdbseed.DefaultProjectID, workerSessID)
 	testutil.FailErr(t, "insert worker job", err)
 
 	rec, err := store.Register(t.Context(), RegisterRequest{
@@ -211,7 +211,7 @@ func TestAmbientWakeNoWorkflowActiveWorkflowHoldsAndWorkerExclusion(t *testing.T
 		Owner:      owner,
 		Delivery:   DeliveryWake,
 		Repeat:     true,
-		Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone, Handles: []string{"svc"}}},
+		Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone}},
 	})
 	testutil.FailErr(t, "register wake watch", err)
 
@@ -299,7 +299,7 @@ func TestAmbientWakeRollingHourlyBudgetAndRestartedCoalescedRetry(t *testing.T) 
 		Owner:      owner,
 		Delivery:   DeliveryWake,
 		Repeat:     true,
-		Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone, Handles: []string{"ticker"}}},
+		Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone}},
 	})
 	testutil.FailErr(t, "register repeating wake watch", err)
 

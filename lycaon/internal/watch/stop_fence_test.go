@@ -19,9 +19,9 @@ func TestSessionTreeStopFencesAndCancelsExplicitDerivedAndChildWatches(t *testin
 	workerJobID := "job-stop-1"
 	testdbseed.InsertChildSession(t, database, childSessID, owner.SessionID)
 	_, err := database.ExecContext(t.Context(), `INSERT INTO worker_jobs
-		(id, project_id, parent_session_id, child_session_id, agent_type, status, task_prompt, spawn_reason, execution_target, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 'implement', 'running', 'work', 'initial', 'local', '2026-11-23T12:00:00Z', '2026-11-23T12:00:00Z')`,
-		workerJobID, testdbseed.DefaultProjectID, owner.SessionID, childSessID)
+		(id, project_id, child_session_id, agent_type, prompt, brief, created_at)
+		VALUES (?, ?, ?, 'implementer', 'work', 'work', '2026-11-23T12:00:00Z')`,
+		workerJobID, testdbseed.DefaultProjectID, childSessID)
 	testutil.FailErr(t, "insert worker job", err)
 
 	var wakeAdmissions atomic.Int32
@@ -45,7 +45,7 @@ func TestSessionTreeStopFencesAndCancelsExplicitDerivedAndChildWatches(t *testin
 		Owner:      owner,
 		Delivery:   DeliveryCollect,
 		Repeat:     true,
-		Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone, Handles: []string{"early-cmd"}}},
+		Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone}},
 	})
 	testutil.FailErr(t, "register early watch", err)
 	_, _, err = store.RecordMatch(t.Context(), earlyRec.WatchID, MatchInput{
@@ -232,7 +232,7 @@ func TestHumanCancelSelectedWaitVsIdleWakeAndRestartStopReconcile(t *testing.T) 
 		Owner:      raceOwner,
 		Delivery:   DeliveryWake,
 		Repeat:     true,
-		Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone, Handles: []string{"race-cmd"}}},
+		Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone}},
 	})
 	testutil.FailErr(t, "register race watch", err)
 
