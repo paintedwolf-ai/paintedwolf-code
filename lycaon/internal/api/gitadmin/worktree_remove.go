@@ -81,7 +81,7 @@ func (s *Handler) HandleDeleteGitWorktree(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := s.SessionStore.DeleteWorktreeBinding(r.Context(), scope.sess.ID); err != nil {
+	if err := s.SessionStore.RetireWorktreeBinding(r.Context(), scope.sess.ID); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}

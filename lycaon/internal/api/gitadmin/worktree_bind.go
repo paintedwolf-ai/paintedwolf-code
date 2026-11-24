@@ -128,6 +128,9 @@ func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) 
 		s.responses.InternalError(w, r, err)
 		return
 	}
+	if stored, bound, err := s.SessionStore.GetWorktreeBinding(r.Context(), scope.sess.ID); err == nil && bound && stored != nil {
+		row = *stored
+	}
 	if err := mgr.AddWorktree(r.Context(), repo.Toplevel, path, branch, baseBranch); err != nil {
 		branchExists, branchErr := mgr.LocalBranchExists(r.Context(), repo.Toplevel, branch)
 		_, statErr := os.Stat(path)
@@ -145,6 +148,13 @@ func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) 
 	if err := os.Chmod(path, 0o700); err != nil { //nolint:gosec // Private checkout directory.
 		s.responses.InternalError(w, r, err)
 		return
+	}
+	if err := s.SessionStore.PutWorktreeBinding(r.Context(), row); err != nil {
+		s.responses.InternalError(w, r, err)
+		return
+	}
+	if stored, bound, err := s.SessionStore.GetWorktreeBinding(r.Context(), scope.sess.ID); err == nil && bound && stored != nil {
+		row = *stored
 	}
 	after, err := mgr.RepoConfigFingerprint(r.Context(), repo.Toplevel)
 	if err != nil || after != before {

@@ -18,23 +18,90 @@ func (q *Queries) DeleteSessionWorktree(ctx context.Context, sessionID string) e
 	return err
 }
 
+const getActiveSourceWorktreeByPath = `-- name: GetActiveSourceWorktreeByPath :one
+SELECT id, project_id, repo_id, toplevel, worktree_path, branch, base_branch, created_at,
+ state, kind, available, managed, common_dir, admin_dir, common_identity, admin_identity,
+ worktree_identity, head_sha, detached, locked, lock_reason, prunable, prune_reason,
+ updated_at, retired_at, superseded_by_id
+FROM source_worktrees
+WHERE project_id=? AND repo_id=? AND worktree_path=? AND state='active'
+`
+
+type GetActiveSourceWorktreeByPathParams struct {
+	ProjectID    string `json:"project_id"`
+	RepoID       string `json:"repo_id"`
+	WorktreePath string `json:"worktree_path"`
+}
+
+func (q *Queries) GetActiveSourceWorktreeByPath(ctx context.Context, arg GetActiveSourceWorktreeByPathParams) (SourceWorktrees, error) {
+	row := q.db.QueryRowContext(ctx, getActiveSourceWorktreeByPath, arg.ProjectID, arg.RepoID, arg.WorktreePath)
+	var i SourceWorktrees
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.RepoID,
+		&i.Toplevel,
+		&i.WorktreePath,
+		&i.Branch,
+		&i.BaseBranch,
+		&i.CreatedAt,
+		&i.State,
+		&i.Kind,
+		&i.Available,
+		&i.Managed,
+		&i.CommonDir,
+		&i.AdminDir,
+		&i.CommonIdentity,
+		&i.AdminIdentity,
+		&i.WorktreeIdentity,
+		&i.HeadSha,
+		&i.Detached,
+		&i.Locked,
+		&i.LockReason,
+		&i.Prunable,
+		&i.PruneReason,
+		&i.UpdatedAt,
+		&i.RetiredAt,
+		&i.SupersededByID,
+	)
+	return i, err
+}
+
 const getSessionWorktree = `-- name: GetSessionWorktree :one
 SELECT s.session_id, s.project_id, w.id AS worktree_id, w.repo_id, w.toplevel,
- w.worktree_path, w.branch, w.base_branch, s.created_at
-FROM session_worktrees s JOIN source_worktrees w ON w.id=s.worktree_id
+ w.worktree_path, w.branch, w.base_branch, w.state, w.kind, w.available, w.managed,
+ w.common_dir, w.admin_dir, w.common_identity, w.admin_identity, w.worktree_identity,
+ w.head_sha, w.detached, w.locked, w.lock_reason, w.prunable, w.prune_reason,
+ s.created_at
+FROM session_worktrees s JOIN source_worktrees w ON w.project_id=s.project_id AND w.id=s.worktree_id
 WHERE s.session_id=?
 `
 
 type GetSessionWorktreeRow struct {
-	SessionID    string `json:"session_id"`
-	ProjectID    string `json:"project_id"`
-	WorktreeID   string `json:"worktree_id"`
-	RepoID       string `json:"repo_id"`
-	Toplevel     string `json:"toplevel"`
-	WorktreePath string `json:"worktree_path"`
-	Branch       string `json:"branch"`
-	BaseBranch   string `json:"base_branch"`
-	CreatedAt    string `json:"created_at"`
+	SessionID        string `json:"session_id"`
+	ProjectID        string `json:"project_id"`
+	WorktreeID       string `json:"worktree_id"`
+	RepoID           string `json:"repo_id"`
+	Toplevel         string `json:"toplevel"`
+	WorktreePath     string `json:"worktree_path"`
+	Branch           string `json:"branch"`
+	BaseBranch       string `json:"base_branch"`
+	State            string `json:"state"`
+	Kind             string `json:"kind"`
+	Available        int64  `json:"available"`
+	Managed          int64  `json:"managed"`
+	CommonDir        string `json:"common_dir"`
+	AdminDir         string `json:"admin_dir"`
+	CommonIdentity   string `json:"common_identity"`
+	AdminIdentity    string `json:"admin_identity"`
+	WorktreeIdentity string `json:"worktree_identity"`
+	HeadSha          string `json:"head_sha"`
+	Detached         int64  `json:"detached"`
+	Locked           int64  `json:"locked"`
+	LockReason       string `json:"lock_reason"`
+	Prunable         int64  `json:"prunable"`
+	PruneReason      string `json:"prune_reason"`
+	CreatedAt        string `json:"created_at"`
 }
 
 func (q *Queries) GetSessionWorktree(ctx context.Context, sessionID string) (GetSessionWorktreeRow, error) {
@@ -49,9 +116,469 @@ func (q *Queries) GetSessionWorktree(ctx context.Context, sessionID string) (Get
 		&i.WorktreePath,
 		&i.Branch,
 		&i.BaseBranch,
+		&i.State,
+		&i.Kind,
+		&i.Available,
+		&i.Managed,
+		&i.CommonDir,
+		&i.AdminDir,
+		&i.CommonIdentity,
+		&i.AdminIdentity,
+		&i.WorktreeIdentity,
+		&i.HeadSha,
+		&i.Detached,
+		&i.Locked,
+		&i.LockReason,
+		&i.Prunable,
+		&i.PruneReason,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getSourceWorktreeByID = `-- name: GetSourceWorktreeByID :one
+SELECT id, project_id, repo_id, toplevel, worktree_path, branch, base_branch, created_at,
+ state, kind, available, managed, common_dir, admin_dir, common_identity, admin_identity,
+ worktree_identity, head_sha, detached, locked, lock_reason, prunable, prune_reason,
+ updated_at, retired_at, superseded_by_id
+FROM source_worktrees
+WHERE project_id=? AND id=?
+`
+
+type GetSourceWorktreeByIDParams struct {
+	ProjectID string `json:"project_id"`
+	ID        string `json:"id"`
+}
+
+func (q *Queries) GetSourceWorktreeByID(ctx context.Context, arg GetSourceWorktreeByIDParams) (SourceWorktrees, error) {
+	row := q.db.QueryRowContext(ctx, getSourceWorktreeByID, arg.ProjectID, arg.ID)
+	var i SourceWorktrees
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.RepoID,
+		&i.Toplevel,
+		&i.WorktreePath,
+		&i.Branch,
+		&i.BaseBranch,
+		&i.CreatedAt,
+		&i.State,
+		&i.Kind,
+		&i.Available,
+		&i.Managed,
+		&i.CommonDir,
+		&i.AdminDir,
+		&i.CommonIdentity,
+		&i.AdminIdentity,
+		&i.WorktreeIdentity,
+		&i.HeadSha,
+		&i.Detached,
+		&i.Locked,
+		&i.LockReason,
+		&i.Prunable,
+		&i.PruneReason,
+		&i.UpdatedAt,
+		&i.RetiredAt,
+		&i.SupersededByID,
+	)
+	return i, err
+}
+
+const insertSourceWorktree = `-- name: InsertSourceWorktree :exec
+INSERT INTO source_worktrees (
+ id, project_id, repo_id, toplevel, worktree_path, branch, base_branch, created_at,
+ state, kind, available, managed, common_dir, admin_dir, common_identity, admin_identity,
+ worktree_identity, head_sha, detached, locked, lock_reason, prunable, prune_reason,
+ updated_at, retired_at, superseded_by_id
+) VALUES (
+ ?, ?, ?, ?, ?, ?, ?, ?,
+ ?, ?, ?, ?, ?, ?, ?, ?,
+ ?, ?, ?, ?, ?, ?, ?,
+ ?, ?, ?
+)
+`
+
+type InsertSourceWorktreeParams struct {
+	ID               string `json:"id"`
+	ProjectID        string `json:"project_id"`
+	RepoID           string `json:"repo_id"`
+	Toplevel         string `json:"toplevel"`
+	WorktreePath     string `json:"worktree_path"`
+	Branch           string `json:"branch"`
+	BaseBranch       string `json:"base_branch"`
+	CreatedAt        string `json:"created_at"`
+	State            string `json:"state"`
+	Kind             string `json:"kind"`
+	Available        int64  `json:"available"`
+	Managed          int64  `json:"managed"`
+	CommonDir        string `json:"common_dir"`
+	AdminDir         string `json:"admin_dir"`
+	CommonIdentity   string `json:"common_identity"`
+	AdminIdentity    string `json:"admin_identity"`
+	WorktreeIdentity string `json:"worktree_identity"`
+	HeadSha          string `json:"head_sha"`
+	Detached         int64  `json:"detached"`
+	Locked           int64  `json:"locked"`
+	LockReason       string `json:"lock_reason"`
+	Prunable         int64  `json:"prunable"`
+	PruneReason      string `json:"prune_reason"`
+	UpdatedAt        string `json:"updated_at"`
+	RetiredAt        string `json:"retired_at"`
+	SupersededByID   string `json:"superseded_by_id"`
+}
+
+func (q *Queries) InsertSourceWorktree(ctx context.Context, arg InsertSourceWorktreeParams) error {
+	_, err := q.db.ExecContext(ctx, insertSourceWorktree,
+		arg.ID,
+		arg.ProjectID,
+		arg.RepoID,
+		arg.Toplevel,
+		arg.WorktreePath,
+		arg.Branch,
+		arg.BaseBranch,
+		arg.CreatedAt,
+		arg.State,
+		arg.Kind,
+		arg.Available,
+		arg.Managed,
+		arg.CommonDir,
+		arg.AdminDir,
+		arg.CommonIdentity,
+		arg.AdminIdentity,
+		arg.WorktreeIdentity,
+		arg.HeadSha,
+		arg.Detached,
+		arg.Locked,
+		arg.LockReason,
+		arg.Prunable,
+		arg.PruneReason,
+		arg.UpdatedAt,
+		arg.RetiredAt,
+		arg.SupersededByID,
+	)
+	return err
+}
+
+const listActiveSourceWorktreesByRepo = `-- name: ListActiveSourceWorktreesByRepo :many
+SELECT id, project_id, repo_id, toplevel, worktree_path, branch, base_branch, created_at,
+ state, kind, available, managed, common_dir, admin_dir, common_identity, admin_identity,
+ worktree_identity, head_sha, detached, locked, lock_reason, prunable, prune_reason,
+ updated_at, retired_at, superseded_by_id
+FROM source_worktrees
+WHERE project_id=? AND repo_id=? AND state='active'
+ORDER BY created_at, id
+`
+
+type ListActiveSourceWorktreesByRepoParams struct {
+	ProjectID string `json:"project_id"`
+	RepoID    string `json:"repo_id"`
+}
+
+func (q *Queries) ListActiveSourceWorktreesByRepo(ctx context.Context, arg ListActiveSourceWorktreesByRepoParams) ([]SourceWorktrees, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveSourceWorktreesByRepo, arg.ProjectID, arg.RepoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SourceWorktrees
+	for rows.Next() {
+		var i SourceWorktrees
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.RepoID,
+			&i.Toplevel,
+			&i.WorktreePath,
+			&i.Branch,
+			&i.BaseBranch,
+			&i.CreatedAt,
+			&i.State,
+			&i.Kind,
+			&i.Available,
+			&i.Managed,
+			&i.CommonDir,
+			&i.AdminDir,
+			&i.CommonIdentity,
+			&i.AdminIdentity,
+			&i.WorktreeIdentity,
+			&i.HeadSha,
+			&i.Detached,
+			&i.Locked,
+			&i.LockReason,
+			&i.Prunable,
+			&i.PruneReason,
+			&i.UpdatedAt,
+			&i.RetiredAt,
+			&i.SupersededByID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourceWorktreesByRepo = `-- name: ListSourceWorktreesByRepo :many
+SELECT id, project_id, repo_id, toplevel, worktree_path, branch, base_branch, created_at,
+ state, kind, available, managed, common_dir, admin_dir, common_identity, admin_identity,
+ worktree_identity, head_sha, detached, locked, lock_reason, prunable, prune_reason,
+ updated_at, retired_at, superseded_by_id
+FROM source_worktrees
+WHERE project_id=? AND repo_id=?
+ORDER BY created_at, id
+`
+
+type ListSourceWorktreesByRepoParams struct {
+	ProjectID string `json:"project_id"`
+	RepoID    string `json:"repo_id"`
+}
+
+func (q *Queries) ListSourceWorktreesByRepo(ctx context.Context, arg ListSourceWorktreesByRepoParams) ([]SourceWorktrees, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceWorktreesByRepo, arg.ProjectID, arg.RepoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SourceWorktrees
+	for rows.Next() {
+		var i SourceWorktrees
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.RepoID,
+			&i.Toplevel,
+			&i.WorktreePath,
+			&i.Branch,
+			&i.BaseBranch,
+			&i.CreatedAt,
+			&i.State,
+			&i.Kind,
+			&i.Available,
+			&i.Managed,
+			&i.CommonDir,
+			&i.AdminDir,
+			&i.CommonIdentity,
+			&i.AdminIdentity,
+			&i.WorktreeIdentity,
+			&i.HeadSha,
+			&i.Detached,
+			&i.Locked,
+			&i.LockReason,
+			&i.Prunable,
+			&i.PruneReason,
+			&i.UpdatedAt,
+			&i.RetiredAt,
+			&i.SupersededByID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSupersededSourceWorktrees = `-- name: ListSupersededSourceWorktrees :many
+SELECT id, project_id, repo_id, toplevel, worktree_path, branch, base_branch, created_at,
+ state, kind, available, managed, common_dir, admin_dir, common_identity, admin_identity,
+ worktree_identity, head_sha, detached, locked, lock_reason, prunable, prune_reason,
+ updated_at, retired_at, superseded_by_id
+FROM source_worktrees
+WHERE project_id=? AND repo_id=? AND state='retired' AND superseded_by_id=?
+ORDER BY retired_at DESC, id
+`
+
+type ListSupersededSourceWorktreesParams struct {
+	ProjectID      string `json:"project_id"`
+	RepoID         string `json:"repo_id"`
+	SupersededByID string `json:"superseded_by_id"`
+}
+
+func (q *Queries) ListSupersededSourceWorktrees(ctx context.Context, arg ListSupersededSourceWorktreesParams) ([]SourceWorktrees, error) {
+	rows, err := q.db.QueryContext(ctx, listSupersededSourceWorktrees, arg.ProjectID, arg.RepoID, arg.SupersededByID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SourceWorktrees
+	for rows.Next() {
+		var i SourceWorktrees
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.RepoID,
+			&i.Toplevel,
+			&i.WorktreePath,
+			&i.Branch,
+			&i.BaseBranch,
+			&i.CreatedAt,
+			&i.State,
+			&i.Kind,
+			&i.Available,
+			&i.Managed,
+			&i.CommonDir,
+			&i.AdminDir,
+			&i.CommonIdentity,
+			&i.AdminIdentity,
+			&i.WorktreeIdentity,
+			&i.HeadSha,
+			&i.Detached,
+			&i.Locked,
+			&i.LockReason,
+			&i.Prunable,
+			&i.PruneReason,
+			&i.UpdatedAt,
+			&i.RetiredAt,
+			&i.SupersededByID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const retireSourceWorktree = `-- name: RetireSourceWorktree :exec
+UPDATE source_worktrees
+SET state='retired', available=0, retired_at=?, updated_at=?, superseded_by_id=?
+WHERE project_id=? AND id=? AND state='active'
+`
+
+type RetireSourceWorktreeParams struct {
+	RetiredAt      string `json:"retired_at"`
+	UpdatedAt      string `json:"updated_at"`
+	SupersededByID string `json:"superseded_by_id"`
+	ProjectID      string `json:"project_id"`
+	ID             string `json:"id"`
+}
+
+func (q *Queries) RetireSourceWorktree(ctx context.Context, arg RetireSourceWorktreeParams) error {
+	_, err := q.db.ExecContext(ctx, retireSourceWorktree,
+		arg.RetiredAt,
+		arg.UpdatedAt,
+		arg.SupersededByID,
+		arg.ProjectID,
+		arg.ID,
+	)
+	return err
+}
+
+const updateSourceWorktreeBindingMeta = `-- name: UpdateSourceWorktreeBindingMeta :exec
+UPDATE source_worktrees
+SET repo_id=?, toplevel=?, worktree_path=?, branch=?, base_branch=?, managed=1,
+ common_dir=?, admin_dir=?, common_identity=?, admin_identity=?, worktree_identity=?,
+ updated_at=?
+WHERE project_id=? AND id=? AND state='active'
+`
+
+type UpdateSourceWorktreeBindingMetaParams struct {
+	RepoID           string `json:"repo_id"`
+	Toplevel         string `json:"toplevel"`
+	WorktreePath     string `json:"worktree_path"`
+	Branch           string `json:"branch"`
+	BaseBranch       string `json:"base_branch"`
+	CommonDir        string `json:"common_dir"`
+	AdminDir         string `json:"admin_dir"`
+	CommonIdentity   string `json:"common_identity"`
+	AdminIdentity    string `json:"admin_identity"`
+	WorktreeIdentity string `json:"worktree_identity"`
+	UpdatedAt        string `json:"updated_at"`
+	ProjectID        string `json:"project_id"`
+	ID               string `json:"id"`
+}
+
+func (q *Queries) UpdateSourceWorktreeBindingMeta(ctx context.Context, arg UpdateSourceWorktreeBindingMetaParams) error {
+	_, err := q.db.ExecContext(ctx, updateSourceWorktreeBindingMeta,
+		arg.RepoID,
+		arg.Toplevel,
+		arg.WorktreePath,
+		arg.Branch,
+		arg.BaseBranch,
+		arg.CommonDir,
+		arg.AdminDir,
+		arg.CommonIdentity,
+		arg.AdminIdentity,
+		arg.WorktreeIdentity,
+		arg.UpdatedAt,
+		arg.ProjectID,
+		arg.ID,
+	)
+	return err
+}
+
+const updateSourceWorktreeLive = `-- name: UpdateSourceWorktreeLive :exec
+UPDATE source_worktrees
+SET toplevel=?, worktree_path=?, branch=?, kind=?, available=?, managed=?,
+ common_dir=?, admin_dir=?, common_identity=?, admin_identity=?, worktree_identity=?,
+ head_sha=?, detached=?, locked=?, lock_reason=?, prunable=?, prune_reason=?,
+ updated_at=?
+WHERE project_id=? AND id=? AND state='active'
+`
+
+type UpdateSourceWorktreeLiveParams struct {
+	Toplevel         string `json:"toplevel"`
+	WorktreePath     string `json:"worktree_path"`
+	Branch           string `json:"branch"`
+	Kind             string `json:"kind"`
+	Available        int64  `json:"available"`
+	Managed          int64  `json:"managed"`
+	CommonDir        string `json:"common_dir"`
+	AdminDir         string `json:"admin_dir"`
+	CommonIdentity   string `json:"common_identity"`
+	AdminIdentity    string `json:"admin_identity"`
+	WorktreeIdentity string `json:"worktree_identity"`
+	HeadSha          string `json:"head_sha"`
+	Detached         int64  `json:"detached"`
+	Locked           int64  `json:"locked"`
+	LockReason       string `json:"lock_reason"`
+	Prunable         int64  `json:"prunable"`
+	PruneReason      string `json:"prune_reason"`
+	UpdatedAt        string `json:"updated_at"`
+	ProjectID        string `json:"project_id"`
+	ID               string `json:"id"`
+}
+
+func (q *Queries) UpdateSourceWorktreeLive(ctx context.Context, arg UpdateSourceWorktreeLiveParams) error {
+	_, err := q.db.ExecContext(ctx, updateSourceWorktreeLive,
+		arg.Toplevel,
+		arg.WorktreePath,
+		arg.Branch,
+		arg.Kind,
+		arg.Available,
+		arg.Managed,
+		arg.CommonDir,
+		arg.AdminDir,
+		arg.CommonIdentity,
+		arg.AdminIdentity,
+		arg.WorktreeIdentity,
+		arg.HeadSha,
+		arg.Detached,
+		arg.Locked,
+		arg.LockReason,
+		arg.Prunable,
+		arg.PruneReason,
+		arg.UpdatedAt,
+		arg.ProjectID,
+		arg.ID,
+	)
+	return err
 }
 
 const upsertSessionWorktree = `-- name: UpsertSessionWorktree :exec
@@ -75,39 +602,4 @@ func (q *Queries) UpsertSessionWorktree(ctx context.Context, arg UpsertSessionWo
 		arg.CreatedAt,
 	)
 	return err
-}
-
-const upsertSourceWorktree = `-- name: UpsertSourceWorktree :one
-INSERT INTO source_worktrees (id, project_id, repo_id, toplevel, worktree_path, branch, base_branch, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(project_id, worktree_path) DO UPDATE SET
- repo_id=excluded.repo_id, toplevel=excluded.toplevel, branch=excluded.branch, base_branch=excluded.base_branch
-RETURNING id
-`
-
-type UpsertSourceWorktreeParams struct {
-	ID           string `json:"id"`
-	ProjectID    string `json:"project_id"`
-	RepoID       string `json:"repo_id"`
-	Toplevel     string `json:"toplevel"`
-	WorktreePath string `json:"worktree_path"`
-	Branch       string `json:"branch"`
-	BaseBranch   string `json:"base_branch"`
-	CreatedAt    string `json:"created_at"`
-}
-
-func (q *Queries) UpsertSourceWorktree(ctx context.Context, arg UpsertSourceWorktreeParams) (string, error) {
-	row := q.db.QueryRowContext(ctx, upsertSourceWorktree,
-		arg.ID,
-		arg.ProjectID,
-		arg.RepoID,
-		arg.Toplevel,
-		arg.WorktreePath,
-		arg.Branch,
-		arg.BaseBranch,
-		arg.CreatedAt,
-	)
-	var id string
-	err := row.Scan(&id)
-	return id, err
 }

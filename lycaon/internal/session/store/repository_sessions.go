@@ -18,6 +18,7 @@ type SessionRepository interface {
 	CreateWithStatus(ctx context.Context, req api.CreateSessionRequest, projectID string, status api.SessionStatus) (*api.Session, error)
 	Delete(ctx context.Context, id string) error
 	DeleteWorktreeBinding(ctx context.Context, sessionID string) error
+	RetireWorktreeBinding(ctx context.Context, sessionID string) error
 	ExistingSessionIDs(ctx context.Context, ids []string) (map[string]bool, error)
 	Get(ctx context.Context, id string) (*api.Session, error)
 	GetWorktreeBinding(ctx context.Context, sessionID string) (*WorktreeBinding, bool, error)
