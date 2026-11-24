@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/promptstate"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/submissionstate"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -24,11 +25,12 @@ func TestAmbientWakeEligibleChecksGatesAndQueues(t *testing.T) {
 		t.Fatalf("nil AmbientWakeEligible = (%v, %v), want (false, false)", ok, retry)
 	}
 
-	st := openCompletionStore(t)
+	db := testdbfixture.Open(t, "ambient_wake.db")
+	testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, t.TempDir())
+	st := store.NewSQL(db)
 	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	child, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{ParentSessionID: sess.ID}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create worker session", err)
+	testdbseed.InsertChildSession(t, db, "child-1", sess.ID)
 
 	q := queue.New()
 	gate := lifecycle.New(st.Sessions)
@@ -53,7 +55,7 @@ func TestAmbientWakeEligibleChecksGatesAndQueues(t *testing.T) {
 	if ok, retry := svc.AmbientWakeEligible(t.Context(), "missing"); ok || retry {
 		t.Fatalf("missing session = (%v, %v), want (false, false)", ok, retry)
 	}
-	if ok, retry := svc.AmbientWakeEligible(t.Context(), child.ID); ok || retry {
+	if ok, retry := svc.AmbientWakeEligible(t.Context(), "child-1"); ok || retry {
 		t.Fatalf("worker child = (%v, %v), want (false, false)", ok, retry)
 	}
 
