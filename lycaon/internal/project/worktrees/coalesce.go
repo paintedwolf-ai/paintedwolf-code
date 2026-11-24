@@ -142,11 +142,13 @@ func (inv *Inventory) ScheduleRepoRefreshForProject(ctx context.Context, project
 			continue
 		}
 		seen[top] = struct{}{}
-		inv.ScheduleRefresh(ctx, RepoSpec{
-			ProjectID: projectID,
-			RepoID:    git.DeriveRepoID(top),
-			Toplevel:  top,
-		})
+		if repoID := git.DeriveRepoID(top); repoID != "" {
+			inv.ScheduleRefresh(ctx, RepoSpec{
+				ProjectID: projectID,
+				RepoID:    repoID,
+				Toplevel:  top,
+			})
+		}
 	}
 }
 

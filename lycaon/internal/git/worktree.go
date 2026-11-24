@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitargv"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitlease"
+	"github.com/lycaon/lycaon/internal/repochange"
 )
 
 // WorktreeEntry is one checkout registration reported by `git worktree list --porcelain -z`.
@@ -67,6 +68,7 @@ func (m *gitBranchManager) AddWorktree(ctx context.Context, toplevel, path, bran
 	if code != 0 {
 		return fmt.Errorf("git worktree add failed: %s", strings.TrimSpace(string(out)))
 	}
+	notifyRepoChange(ctx, dir, repochange.HeadMoved)
 	return nil
 }
 
@@ -121,6 +123,7 @@ func (m *gitBranchManager) RemoveWorktree(ctx context.Context, toplevel, path st
 	if code != 0 {
 		return fmt.Errorf("git worktree remove failed: %s", strings.TrimSpace(string(out)))
 	}
+	notifyRepoChange(ctx, dir, repochange.HeadMoved)
 	return nil
 }
 
@@ -215,6 +218,7 @@ func (m *gitBranchManager) PruneWorktrees(ctx context.Context, toplevel string) 
 	if code != 0 {
 		return fmt.Errorf("git worktree prune failed: %s", strings.TrimSpace(string(out)))
 	}
+	notifyRepoChange(ctx, dir, repochange.HeadMoved)
 	return nil
 }
 

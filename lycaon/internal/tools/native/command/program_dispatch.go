@@ -155,7 +155,11 @@ func (d *ProgramDispatcher) Launch(ctx context.Context, request commandprogram.O
 	if err := d.run.supervisor.AdmitChild(ctx); err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
-	return d.invokeExternal(ctx, request, streams)
+	result, err = d.invokeExternal(ctx, request, streams)
+	if err == nil && result.Status == 0 {
+		d.run.tc.RecordCheckoutUsed(context.WithoutCancel(ctx), d.paths.Cwd().Abs, request.Invocation.Identity.ExecutionID)
+	}
+	return result, err
 }
 
 // nativeRejection is the first typed owner refusal, kept for program feedback.
@@ -222,18 +226,24 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 	}
 	switch {
 	case !native || spec.Name == "external":
-		return d.invokeExternal(ctx, request, streams)
+		result, err = d.invokeExternal(ctx, request, streams)
 	case d.natives[spec.Name].Prepare != nil:
-		return d.invokeNative(ctx, spec, d.natives[spec.Name], request, streams)
+		result, err = d.invokeNative(ctx, spec, d.natives[spec.Name], request, streams)
 	case pathCommands[spec.Name]:
 		if spec.Name == "cd" || spec.Name == "realpath" || spec.Name == "readlink" || spec.Name == "native_path" {
-			return d.invokeNative(ctx, spec, d.pathOperation(spec), request, streams)
+			result, err = d.invokeNative(ctx, spec, d.pathOperation(spec), request, streams)
+		} else {
+			result, err = d.invokeBuiltin(ctx, spec, d.paths, request, streams)
 		}
-		return d.invokeBuiltin(ctx, spec, d.paths, request, streams)
 	case d.builtins[spec.Name] != nil:
-		return d.invokeBuiltin(ctx, spec, d.builtins[spec.Name], request, streams)
+		result, err = d.invokeBuiltin(ctx, spec, d.builtins[spec.Name], request, streams)
+	default:
+		return d.refuseUnimplemented(ctx, spec, request, streams)
 	}
-	return d.refuseUnimplemented(ctx, spec, request, streams)
+	if err == nil && result.Status == 0 {
+		d.run.tc.RecordCheckoutUsed(context.WithoutCancel(ctx), d.paths.Cwd().Abs, request.Invocation.Identity.ExecutionID)
+	}
+	return result, err
 }
 
 func (d *ProgramDispatcher) pathOperation(spec toolcontract.CommandSpecification) NativeOperation {

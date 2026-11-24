@@ -67,6 +67,21 @@ func finishAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation a
 	if effectErr == nil && !mutation.IsDir && !mutation.IsLink && mutation.Op != api.SourceChangeOpDelete {
 		tctx.RecordModelAuthoredCredentials(ctx, mutation.AbsPath, mutation.After)
 	}
+	if effectErr == nil {
+		activityID := tctx.Identity.ToolCallID
+		if journal != nil && journal.ID() != "" {
+			activityID = journal.ID()
+		}
+		bgCtx := context.WithoutCancel(ctx)
+		tctx.RecordCheckoutUsed(bgCtx, mutation.AbsPath, activityID)
+		if mutation.FromAbsPath != "" {
+			fromID := activityID
+			if fromID != "" {
+				fromID += ":from"
+			}
+			tctx.RecordCheckoutUsed(bgCtx, mutation.FromAbsPath, fromID)
+		}
+	}
 	if journal != nil {
 		err := journal.Finish(ctx, effectErr)
 		committed := recordCommittedOutsideMutation(context.WithoutCancel(ctx), tctx, mutation, journal.ID())

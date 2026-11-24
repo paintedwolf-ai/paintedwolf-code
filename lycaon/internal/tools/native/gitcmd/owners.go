@@ -116,6 +116,13 @@ func (p Prepared) commandLine() string {
 	return strings.Join(append([]string{"git"}, p.command.args...), " ")
 }
 
+func (p Prepared) activityID(tc tools.ToolContext) string {
+	if id := strings.TrimSpace(p.execution); id != "" {
+		return id
+	}
+	return strings.TrimSpace(tc.Identity.ToolCallID)
+}
+
 // grantedSSHAgent is this call's socket capability for the user's SSH agent,
 // which the call requests like any socket; its launch already carries it.
 func grantedSSHAgent(ctx context.Context, tc tools.ToolContext) (confine.SocketGrant, bool) {

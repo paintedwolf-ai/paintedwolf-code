@@ -55,7 +55,15 @@ func (w *refObserver) arm(register func(string) addOutcome) {
 		repo.GitDir,
 		filepath.Join(repo.GitDir, "logs"),
 		filepath.Join(repo.CommonDir, "refs", "heads"),
+		filepath.Join(repo.CommonDir, "worktrees"),
 	)
+	if entries, err := os.ReadDir(filepath.Join(repo.CommonDir, "worktrees")); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				dirs = append(dirs, filepath.Join(repo.CommonDir, "worktrees", entry.Name()))
+			}
+		}
+	}
 	w.mu.Lock()
 	if w.dirs == nil {
 		w.dirs = map[string]struct{}{}
@@ -113,9 +121,13 @@ func (w *refObserver) contains(name string) bool {
 	if _, ok := w.dirs[dir]; ok {
 		return true
 	}
-	// Parent coverage includes branch directories awaiting registration.
+	// Parent coverage includes branch and worktree administrative directories awaiting registration.
 	for watched := range w.dirs {
 		if strings.HasSuffix(watched, string(os.PathSeparator)+filepath.Join("refs", "heads")) &&
+			strings.HasPrefix(dir, watched+string(os.PathSeparator)) {
+			return true
+		}
+		if strings.HasSuffix(watched, string(os.PathSeparator)+"worktrees") &&
 			strings.HasPrefix(dir, watched+string(os.PathSeparator)) {
 			return true
 		}
@@ -135,22 +147,33 @@ func (w *refObserver) observe(ctx context.Context, ev fsnotify.Event, register f
 	}
 	base := strings.TrimSuffix(filepath.Base(ev.Name), ".lock")
 	dir := filepath.Dir(ev.Name)
+	inWorktrees := strings.HasSuffix(dir, string(os.PathSeparator)+"worktrees") ||
+		strings.Contains(dir, string(os.PathSeparator)+"worktrees"+string(os.PathSeparator))
+	worktreeMeta := inWorktrees && (base == "gitdir" || base == "commondir" || base == "HEAD" || base == "locked" || base == "worktrees" || strings.HasSuffix(dir, string(os.PathSeparator)+"worktrees"))
 	movement := base == "HEAD" || base == "packed-refs" ||
 		strings.Contains(dir, string(os.PathSeparator)+"logs") ||
-		strings.Contains(dir, filepath.Join("refs", "heads"))
+		strings.Contains(dir, filepath.Join("refs", "heads")) ||
+		base == "worktrees" || worktreeMeta
 	if !movement {
 		return
 	}
 	if ev.Op&fsnotify.Create != 0 {
 		if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
-			// A new refs/heads subdirectory (slashed branch name).
+			// A new refs/heads or worktrees subdirectory.
 			if register(ev.Name) == addRegistered {
 				w.mu.Lock()
 				w.dirs[ev.Name] = struct{}{}
 				w.mu.Unlock()
 			}
+			if inWorktrees || base == "worktrees" {
+				w.schedule(ctx)
+			}
 			return
 		}
+	}
+	if inWorktrees && ev.Op&(fsnotify.Remove|fsnotify.Rename) != 0 && strings.HasSuffix(dir, string(os.PathSeparator)+"worktrees") {
+		w.schedule(ctx)
+		return
 	}
 	if !w.refChanged(ev.Name) {
 		return
@@ -232,6 +255,24 @@ func refStateFiles(repo gitrepo.Repo, branchDir func(string)) []string {
 			}
 			return nil
 		})
+	}
+	worktreesRoot := filepath.Join(repo.CommonDir, "worktrees")
+	if entries, err := os.ReadDir(worktreesRoot); err == nil {
+		if branchDir != nil {
+			branchDir(worktreesRoot)
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			adminDir := filepath.Join(worktreesRoot, entry.Name())
+			if branchDir != nil {
+				branchDir(adminDir)
+			}
+			for _, meta := range []string{"gitdir", "commondir", "HEAD", "locked"} {
+				files = append(files, filepath.Join(adminDir, meta))
+			}
+		}
 	}
 	return files
 }
