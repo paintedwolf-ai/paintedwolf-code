@@ -89,7 +89,7 @@ func TestScanFinishedNotifiesUnwokenWatchSessions(t *testing.T) {
 	}
 	scans.Finished(t.Context(), api.CodeScan{
 		ID:            "scan-1",
-		Status:        api.CodeScanStatusCompleted,
+		Status:        api.CodeScanStatusComplete,
 		Categories:    []api.ScanCategory{"security"},
 		FindingsCount: 2,
 	})
