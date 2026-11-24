@@ -176,7 +176,7 @@ export async function runWorktreeInspectionQualificationJourney(args: {
     await secondWindow.getByTestId("git-worktree-option").filter({ hasText: "feat/worker-two" }).first().click();
     await expect(secondWindow.getByTestId("git-branch")).toContainText("feat/worker-two");
 
-    // Window 1 remains pinned to feat/worker-one!
+    // Window 1 remains pinned to feat/worker-one.
     await expect(page.getByTestId("git-branch")).toContainText("feat/worker-one");
 
     // Switch Window 1 to repo-beta and back: per-repository pin in repo-alpha is preserved.
@@ -189,7 +189,7 @@ export async function runWorktreeInspectionQualificationJourney(args: {
       await expect(page.getByTestId("git-branch")).toContainText("feat/worker-one");
     }
 
-    // Bind a managed chat worktree for sessionId, keep Window 1 inspecting feat/worker-one, and exercise Return & remove blocker + targeted cleanup.
+    // Bind a managed chat worktree while inspecting feat/worker-one and verify removal blockers.
     await page.getByTestId("git-branch").click();
     await page.getByTestId("git-worktree-unpin").click();
     await expect(page.getByTestId("git-branch")).toContainText("main");

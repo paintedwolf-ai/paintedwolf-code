@@ -225,7 +225,7 @@ func TestWorktreeQualificationNativeAgentAddCrossCheckoutEditAndNextCommandCwd(t
 		t.Fatalf("unexpected sibling inventory entry: %+v (all=%+v)", siblingWT, wtView.Worktrees)
 	}
 
-	// Row 5: Same pathname with different staged and unstaged contents across primary and sibling; explicit discard affects only sibling.
+	// Same pathname holds independent staged and unstaged state across checkouts; explicit discard targets only sibling.
 	primaryStatus := doJSON[wire.GitStatusSummary](t, s.h, http.MethodGet, "/v1/projects/"+s.project+"/git/repos/"+repoID+"/status", nil, http.StatusOK)
 	siblingStatus := doJSON[wire.GitStatusSummary](t, s.h, http.MethodGet, "/v1/projects/"+s.project+"/git/repos/"+repoID+"/status?worktree_id="+siblingWT.WorktreeID, nil, http.StatusOK)
 	if siblingStatus.StagedCount != 1 || siblingStatus.UnstagedCount != 1 || primaryStatus.UnstagedCount != 1 {
@@ -336,7 +336,7 @@ func TestWorktreeQualificationSaveBarrierExternalContinuityAndLifecycle(t *testi
 			t.Fatalf("missing expected checkouts in %+v", wtView.Worktrees)
 		}
 
-		// Row 3: Partial root grants packages/ui/view.ts in partialWT, but refuses root-level notes.txt outside the slice.
+		// Partial root grants packages/ui/view.ts in partialWT, while refusing root-level notes.txt outside the slice.
 		uiRootID := proj.Roots[1].ID
 		doJSON[wire.EditorDocument](t, h, http.MethodPost, "/v1/projects/"+projID+"/editor-documents?worktree_id="+partialWT.WorktreeID, wire.OpenEditorDocumentRequest{
 			ClientID: "win-1",
@@ -352,7 +352,7 @@ func TestWorktreeQualificationSaveBarrierExternalContinuityAndLifecycle(t *testi
 			t.Fatalf("partial root unexpectedly allowed ungranted parent file in sibling checkout")
 		}
 
-		// Row 8: Open barrierSiblingDir notes.txt in two windows, edit, replace directory during pending save commit.
+		// Open barrierSiblingDir notes.txt in two windows, edit, and replace directory during pending save commit.
 		docWin1 := doJSON[wire.EditorDocument](t, h, http.MethodPost, "/v1/projects/"+projID+"/editor-documents?worktree_id="+barrierWT.WorktreeID, wire.OpenEditorDocumentRequest{
 			ClientID: "win-1",
 			RootID:   primaryRootID,
@@ -387,7 +387,7 @@ func TestWorktreeQualificationSaveBarrierExternalContinuityAndLifecycle(t *testi
 			t.Fatalf("pending save overwrote replacement incarnation: %q", bystanderBytes)
 		}
 
-		// Row 6: Branch switch, detach, and git worktree move before host restart.
+		// Branch switch, detach, and git worktree move before host restart.
 		gittest.Run(t, extShellDir, "checkout", "-b", "feat/ext-switched")
 		gittest.Run(t, extShellDir, "checkout", "--detach")
 		gittest.Run(t, primaryDir, "worktree", "move", extShellDir, extMovedDir)
@@ -452,7 +452,7 @@ func TestWorktreeQualificationSaveBarrierExternalContinuityAndLifecycle(t *testi
 			ExpectedRevision: primarySaveTarget.Revision,
 		}, http.StatusOK)
 
-		// Row 10: Managed bind + return-and-remove while inspecting another checkout preserves unrelated stale registration.
+		// Managed bind and return-and-remove while inspecting another checkout preserve unrelated stale registrations.
 		discovered, ok := gitrepo.Discover(primaryDir)
 		if !ok {
 			t.Fatal("discover primary repo")
