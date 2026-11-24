@@ -193,20 +193,29 @@ func TestWorktreeOpenTargetsHistoricalDiffsRenamesAndSiblingProvenance(t *testin
 		},
 	}
 
+	verifyHistoricalDiffStabilityAcrossMutations(t, srv, proj.ID, primaryDir, workerDir, movedWorkerDir, stagedBlobSel, unstagedHistoricalSel)
+}
+
+func verifyHistoricalDiffStabilityAcrossMutations(
+	t *testing.T,
+	srv *hostapi.Server,
+	projectID, primaryDir, workerDir, movedWorkerDir string,
+	stagedBlobSel, unstagedHistoricalSel wire.SourceComparisonSelector,
+) {
+	t.Helper()
+
 	// Mutation 1: Branch switch and pathname reuse with different content in worker checkout.
 	runGitCmd(t, workerDir, "checkout", "-f", "-b", "feat/other-branch", "HEAD")
 	testutil.FailErr(t, "reuse staged.go", os.WriteFile(filepath.Join(workerDir, "pkg", "staged.go"), []byte("package pkg\nconst staged = \"TODAY-UNRELATED\"\n"), 0o644))
 	testutil.FailErr(t, "reuse unstaged.go", os.WriteFile(filepath.Join(workerDir, "pkg", "unstaged.go"), []byte("package pkg\nconst unstaged = \"TODAY-UNRELATED\"\n"), 0o644))
 
-	// Staged historical diff via immutable Git blob OIDs retains v1 -> worker-staged-v2 bytes.
-	_, stagedBeforeAfterSwitch := readComparisonSideText(t, srv, proj.ID, stagedBlobSel, "before")
-	_, stagedAfterAfterSwitch := readComparisonSideText(t, srv, proj.ID, stagedBlobSel, "after")
+	_, stagedBeforeAfterSwitch := readComparisonSideText(t, srv, projectID, stagedBlobSel, "before")
+	_, stagedAfterAfterSwitch := readComparisonSideText(t, srv, projectID, stagedBlobSel, "after")
 	if !strings.Contains(stagedBeforeAfterSwitch, `staged = "v1"`) || !strings.Contains(stagedAfterAfterSwitch, `staged = "worker-staged-v2"`) {
 		t.Fatalf("staged blob diff corrupted after branch switch and reuse: before=%q after=%q", stagedBeforeAfterSwitch, stagedAfterAfterSwitch)
 	}
 
-	// Unstaged historical diff after pathname reuse keeps before blob available and marks after unavailable.
-	reusedView := contractfixture.ComparisonViewForTest(t, srv, proj.ID, unstagedHistoricalSel, "changes")
+	reusedView := contractfixture.ComparisonViewForTest(t, srv, projectID, unstagedHistoricalSel, "changes")
 	if reusedView.Comparison == nil || reusedView.Comparison.After == nil {
 		t.Fatalf("missing comparison details after reuse: %+v", reusedView)
 	}
@@ -219,25 +228,24 @@ func TestWorktreeOpenTargetsHistoricalDiffsRenamesAndSiblingProvenance(t *testin
 
 	// Mutation 2: Delete pkg/unstaged.go on disk and verify after stays unavailable.
 	testutil.FailErr(t, "delete unstaged.go", os.Remove(filepath.Join(workerDir, "pkg", "unstaged.go")))
-	deletedView := contractfixture.ComparisonViewForTest(t, srv, proj.ID, unstagedHistoricalSel, "changes")
+	deletedView := contractfixture.ComparisonViewForTest(t, srv, projectID, unstagedHistoricalSel, "changes")
 	if deletedView.Comparison == nil || deletedView.Comparison.After == nil || deletedView.Comparison.After.Availability != "unavailable" {
 		t.Fatalf("after deletion, expected after availability=unavailable, got %+v", deletedView.Comparison)
 	}
 
 	// Mutation 3: Move the checkout directory, then remove the checkout entirely.
 	runGitCmd(t, primaryDir, "worktree", "move", workerDir, movedWorkerDir)
-	movedView := contractfixture.ComparisonViewForTest(t, srv, proj.ID, unstagedHistoricalSel, "changes")
+	movedView := contractfixture.ComparisonViewForTest(t, srv, projectID, unstagedHistoricalSel, "changes")
 	if movedView.Comparison == nil || movedView.Comparison.After == nil || movedView.Comparison.After.Availability != "unavailable" {
 		t.Fatalf("after checkout move, expected after availability=unavailable, got %+v", movedView.Comparison)
 	}
 	runGitCmd(t, primaryDir, "worktree", "remove", "--force", movedWorkerDir)
 
-	// After checkout removal, staged blob diff and unstaged before-blob stay readable while after is unavailable.
-	_, stagedAfterRemoval := readComparisonSideText(t, srv, proj.ID, stagedBlobSel, "after")
+	_, stagedAfterRemoval := readComparisonSideText(t, srv, projectID, stagedBlobSel, "after")
 	if !strings.Contains(stagedAfterRemoval, `staged = "worker-staged-v2"`) {
 		t.Fatalf("staged blob diff after checkout removal = %q", stagedAfterRemoval)
 	}
-	removedView := contractfixture.ComparisonViewForTest(t, srv, proj.ID, unstagedHistoricalSel, "changes")
+	removedView := contractfixture.ComparisonViewForTest(t, srv, projectID, unstagedHistoricalSel, "changes")
 	if removedView.Comparison == nil || removedView.Comparison.After == nil || removedView.Comparison.After.Availability != "unavailable" {
 		t.Fatalf("after checkout removal, expected after availability=unavailable, got %+v", removedView.Comparison)
 	}

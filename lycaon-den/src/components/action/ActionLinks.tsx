@@ -9,6 +9,7 @@ import { turnLoadRowSummary } from "../../chat/turnload/turn-load-rows.ts";
 import { useToolContent } from "../../chat/tool/tool-content.tsx";
 import { ToolContentLink } from "../tool/ToolContentLink.tsx";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
+import { activityFileOpenTarget } from "../../files/source/file-open-target.ts";
 import { SourcePathLink } from "../source/SourcePathLink.tsx";
 import { TOOL_PATH_ENTRY_KINDS } from "../../chat/tool/tool-presentation.generated.ts";
 import { chatRefForToolRaw } from "../../chat/composer/search-add-to-chat.ts";
@@ -124,28 +125,33 @@ function Opener(props: { opener: ActionOpener; part: ToolPartView; projectId?: s
     }>
       <Match when={props.opener.kind === "file" && props.opener.path ? props.opener.path : undefined} keyed>
         {(path) => {
-          const matchedLocations = () => {
-            const pid = props.projectId?.trim() ?? "";
-            const all = (props.part.sourceLocations ?? []).filter((loc) => loc.project_id === pid);
-            if (!all.length) return [];
-            const norm = path.replace(/\\/g, "/");
-            const exact = all.filter((loc) => {
-              if (loc.path === norm || norm.endsWith(`/${loc.path}`)) return true;
-              const rootLabel = props.rootRefs?.find((r) => r.id === loc.root_id)?.label;
-              return Boolean(rootLabel && norm === `@${rootLabel}/${loc.path}`);
-            });
-            return exact.length > 0 ? exact : all.length === 1 ? all : [];
-          };
+          const resolved = createMemo(() =>
+            activityFileOpenTarget({
+              projectId: props.projectId ?? "",
+              mode: "live",
+              path,
+              line: props.opener.line,
+              locations: props.part.sourceLocations,
+              rootRefs: props.rootRefs,
+            }),
+          );
           const uniqueTarget = () => {
-            const matched = matchedLocations();
-            return matched.length === 1 ? matched[0] : undefined;
+            const target = resolved();
+            if (!target || target.kind !== "live" || !target.rootId) return undefined;
+            return {
+              project_id: target.projectId,
+              root_id: target.rootId,
+              path: target.path,
+              entry_kind: target.entryKind ?? "file",
+              ...(target.fileId ? { file_id: target.fileId } : {}),
+              ...(target.workerId ? { worker_id: target.workerId } : {}),
+              ...(target.repoId ? { repo_id: target.repoId } : {}),
+              ...(target.worktreeId ? { worktree_id: target.worktreeId } : {}),
+            };
           };
           const ambiguousTargets = () => {
-            const matched = matchedLocations();
-            if (matched.length > 1) return matched;
-            const pid = props.projectId?.trim() ?? "";
-            const all = (props.part.sourceLocations ?? []).filter((loc) => loc.project_id === pid);
-            return matched.length === 0 && all.length > 1 ? all : undefined;
+            const target = resolved();
+            return target?.kind === "ambiguous" ? target.candidates : undefined;
           };
           return (
             <span class="den-action-card__opener" data-testid="action-opener">

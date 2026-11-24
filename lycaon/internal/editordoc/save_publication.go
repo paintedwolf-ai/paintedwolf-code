@@ -312,7 +312,7 @@ func (c saveCommitter) commit(ctx context.Context, p *project.Project, d *Docume
 		if err := s.store.UpdateCASTx(ctx, tx, &next, d.Revision); err != nil {
 			return err
 		}
-		response := s.withParticipants(&next)
+		response := s.withParticipants(ctx, &next)
 		responseJSON, err := json.Marshal(response)
 		if err != nil {
 			return err

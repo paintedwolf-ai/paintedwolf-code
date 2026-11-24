@@ -233,6 +233,6 @@ func (o documentOpener) changed(ctx context.Context, d *Document, contentChanged
 	s := o.s
 	if s.onChange != nil {
 		s.projectWorkspacePresentation(ctx, d)
-		s.onChange(ctx, Change{Document: s.withParticipants(d), ContentChanged: contentChanged})
+		s.onChange(ctx, Change{Document: s.withParticipants(ctx, d), ContentChanged: contentChanged})
 	}
 }

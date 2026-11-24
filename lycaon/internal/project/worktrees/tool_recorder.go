@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -72,10 +71,11 @@ func (r *ToolUsageRecorder) NotifyCheckoutChange(ctx context.Context, tc tools.T
 	r.Inventory.ScheduleRepoRefreshForPath(ctx, tc.Identity.ProjectID, repoPath)
 }
 
-func (r *ToolUsageRecorder) ResolvePathCheckout(ctx context.Context, projectID, targetPath string) (tools.ResolvedCheckoutPath, bool) {
+func (r *ToolUsageRecorder) ResolvePathCheckout(projectID, targetPath string) (tools.ResolvedCheckoutPath, bool) {
 	if r == nil || r.Inventory == nil {
 		return tools.ResolvedCheckoutPath{}, false
 	}
+	ctx := r.Inventory.baseCtx
 	projectID = strings.TrimSpace(projectID)
 	targetPath = strings.TrimSpace(targetPath)
 	if projectID == "" || targetPath == "" {
@@ -135,41 +135,4 @@ func (r *ToolUsageRecorder) ResolvePathCheckout(ctx context.Context, projectID, 
 	out.RootID = bestID
 	out.RootRel = bestRel
 	return out, true
-}
-
-// ScheduleRepoRefreshForProject schedules background checkout reconciliation for projectID's repositories.
-func (inv *Inventory) ScheduleRepoRefreshForProject(ctx context.Context, projectID string) {
-	if inv == nil {
-		return
-	}
-	projectID = strings.TrimSpace(projectID)
-	if projectID == "" {
-		return
-	}
-	roots, err := db.New(inv.database).ListProjectRoots(ctx, projectID)
-	if err != nil {
-		return
-	}
-	seen := make(map[string]struct{}, len(roots))
-	for _, root := range roots {
-		repo, ok := gitrepo.Discover(root.Path)
-		if !ok || repo.Root == "" {
-			continue
-		}
-		top := canonicalPath(repo.Root)
-		if top == "" {
-			continue
-		}
-		if _, dup := seen[top]; dup {
-			continue
-		}
-		seen[top] = struct{}{}
-		if repoID := git.DeriveRepoID(top); repoID != "" {
-			inv.ScheduleRefresh(ctx, RepoSpec{
-				ProjectID: projectID,
-				RepoID:    repoID,
-				Toplevel:  top,
-			})
-		}
-	}
 }

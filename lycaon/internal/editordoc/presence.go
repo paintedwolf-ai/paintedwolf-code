@@ -134,7 +134,7 @@ func (p *PresenceService) Join(ctx context.Context, id, projectID string, in Rep
 	if s.joinParticipant(ctx, id, clientID, incarnation) {
 		s.changed(ctx, d, false)
 	}
-	return s.withParticipants(d), nil
+	return s.withParticipants(ctx, d), nil
 }
 
 // A replica incarnation remains bound to its client and person.

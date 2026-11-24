@@ -132,46 +132,7 @@ func TestWorktreeEditorSameNamedFilesSwitchRestartAndReverseSave(t *testing.T) {
 	}
 
 	// Verify mixed roots & subdirectory projection on GET /source/workspace.
-	wsPrimary := callJSON[wire.SourceWorkspace](t, srv, http.MethodGet, "/v1/projects/"+proj.ID+"/source/workspace", nil, http.StatusOK)
-	wsSibling := callJSON[wire.SourceWorkspace](t, srv, http.MethodGet, "/v1/projects/"+proj.ID+"/source/workspace?worktree_id="+url.QueryEscape(siblingWT.WorktreeID), nil, http.StatusOK)
-	if wsPrimary.WorkspaceID == wsSibling.WorkspaceID {
-		t.Fatalf("primary and sibling workspaces collided: %s", wsPrimary.WorkspaceID)
-	}
-	byRoot := make(map[string]wire.SourceWorkspaceRoot, len(wsSibling.Roots))
-	for _, r := range wsSibling.Roots {
-		byRoot[r.ID] = r
-	}
-	if byRoot[primaryRootID].Path != siblingDir || byRoot[primaryRootID].BranchID != "worktree:"+siblingWT.WorktreeID || byRoot[primaryRootID].WorktreeID != siblingWT.WorktreeID {
-		t.Fatalf("primary root not projected onto sibling checkout: %+v", byRoot[primaryRootID])
-	}
-	if byRoot[subRoot.ID].Path != filepath.Join(siblingDir, "sub") || byRoot[subRoot.ID].BranchID != "worktree:"+siblingWT.WorktreeID {
-		t.Fatalf("subdirectory root not projected onto sibling sub-path: %+v", byRoot[subRoot.ID])
-	}
-	if byRoot[unrelatedRoot.ID].Path != docsDir || byRoot[unrelatedRoot.ID].BranchID != "" {
-		t.Fatalf("unrelated root mutated during repo checkout projection: %+v", byRoot[unrelatedRoot.ID])
-	}
-
-	// Conflicting worktree_id values for the same repository must reject with 400.
-	conflictReq := contractfixture.NewAuthedRequest(
-		http.MethodGet,
-		"/v1/projects/"+proj.ID+"/source/workspace?worktree_id="+primaryWT.WorktreeID+"&worktree_id="+siblingWT.WorktreeID,
-		nil,
-	)
-	conflictRes := httptest.NewRecorder()
-	srv.ServeHTTP(conflictRes, conflictReq)
-	if conflictRes.Code != http.StatusBadRequest {
-		t.Fatalf("conflicting same-repo worktree_ids status = %d, want 400", conflictRes.Code)
-	}
-
-	// Subdirectory root read on sibling checkout returns sibling sub/config.toml.
-	subRead := callJSON[wire.ProjectSourceReadResponse](
-		t, srv, http.MethodGet,
-		"/v1/projects/"+proj.ID+"/source?root_id="+url.QueryEscape(subRoot.ID)+"&path=config.toml&worktree_id="+url.QueryEscape(siblingWT.WorktreeID),
-		nil, http.StatusOK,
-	)
-	if subRead.Content != "mode = \"sibling\"\n" {
-		t.Fatalf("subdirectory sibling read = %q", subRead.Content)
-	}
+	verifyWorktreeWorkspaceProjection(t, srv, proj.ID, primaryRootID, subRoot.ID, unrelatedRoot.ID, siblingDir, docsDir, primaryWT.WorktreeID, siblingWT.WorktreeID)
 
 	// Open same-named pkg/app.go in both primary and sibling checkouts.
 	docBaseURL := "/v1/projects/" + proj.ID + "/editor-documents"
@@ -344,4 +305,50 @@ func TestWorktreeEditorSaveRacesRemovalAndPathReuse(t *testing.T) {
 		BaseSHA256:  primaryRead.SHA256,
 	}, http.StatusOK)
 	wantFiles(t, repoDir, map[string]string{"pkg/app.go": unsavedDraft})
+}
+
+func verifyWorktreeWorkspaceProjection(
+	t *testing.T,
+	srv *hostapi.Server,
+	projectID, primaryRootID, subRootID, unrelatedRootID, siblingDir, docsDir, primaryWTID, siblingWTID string,
+) {
+	t.Helper()
+	wsPrimary := callJSON[wire.SourceWorkspace](t, srv, http.MethodGet, "/v1/projects/"+projectID+"/source/workspace", nil, http.StatusOK)
+	wsSibling := callJSON[wire.SourceWorkspace](t, srv, http.MethodGet, "/v1/projects/"+projectID+"/source/workspace?worktree_id="+url.QueryEscape(siblingWTID), nil, http.StatusOK)
+	if wsPrimary.WorkspaceID == wsSibling.WorkspaceID {
+		t.Fatalf("primary and sibling workspaces collided: %s", wsPrimary.WorkspaceID)
+	}
+	byRoot := make(map[string]wire.SourceWorkspaceRoot, len(wsSibling.Roots))
+	for _, r := range wsSibling.Roots {
+		byRoot[r.ID] = r
+	}
+	if byRoot[primaryRootID].Path != siblingDir || byRoot[primaryRootID].BranchID != "worktree:"+siblingWTID || byRoot[primaryRootID].WorktreeID != siblingWTID {
+		t.Fatalf("primary root not projected onto sibling checkout: %+v", byRoot[primaryRootID])
+	}
+	if byRoot[subRootID].Path != filepath.Join(siblingDir, "sub") || byRoot[subRootID].BranchID != "worktree:"+siblingWTID {
+		t.Fatalf("subdirectory root not projected onto sibling sub-path: %+v", byRoot[subRootID])
+	}
+	if byRoot[unrelatedRootID].Path != docsDir || byRoot[unrelatedRootID].BranchID != "" {
+		t.Fatalf("unrelated root mutated during repo checkout projection: %+v", byRoot[unrelatedRootID])
+	}
+
+	conflictReq := contractfixture.NewAuthedRequest(
+		http.MethodGet,
+		"/v1/projects/"+projectID+"/source/workspace?worktree_id="+primaryWTID+"&worktree_id="+siblingWTID,
+		nil,
+	)
+	conflictRes := httptest.NewRecorder()
+	srv.ServeHTTP(conflictRes, conflictReq)
+	if conflictRes.Code != http.StatusBadRequest {
+		t.Fatalf("conflicting same-repo worktree_ids status = %d, want 400", conflictRes.Code)
+	}
+
+	subRead := callJSON[wire.ProjectSourceReadResponse](
+		t, srv, http.MethodGet,
+		"/v1/projects/"+projectID+"/source?root_id="+url.QueryEscape(subRootID)+"&path=config.toml&worktree_id="+url.QueryEscape(siblingWTID),
+		nil, http.StatusOK,
+	)
+	if subRead.Content != "mode = \"sibling\"\n" {
+		t.Fatalf("subdirectory sibling read = %q", subRead.Content)
+	}
 }

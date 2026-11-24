@@ -47,25 +47,6 @@ func ResolveWorkspaceRoot(p *Project, workspaceRootID string) (rootID, workspace
 	return "", "", fmt.Errorf("%w: workspace_root_id %s", ErrNotFound, want)
 }
 
-// WithRootRefs resolves a physical workspace without changing logical root IDs.
-func WithRootRefs(p *Project, roots []projectroot.RootRef) *Project {
-	if p == nil {
-		return nil
-	}
-	out := *p
-	out.Roots = append([]Root(nil), p.Roots...)
-	paths := make(map[string]string, len(roots))
-	for _, root := range roots {
-		paths[root.ID] = root.Path
-	}
-	for i := range out.Roots {
-		if path, ok := paths[out.Roots[i].ID]; ok {
-			out.Roots[i].Path = path
-		}
-	}
-	return &out
-}
-
 // WithWorktree applies one durable checkout binding to the current root set.
 func WithWorktree(p *Project, binding Binding) *Project {
 	if p == nil {

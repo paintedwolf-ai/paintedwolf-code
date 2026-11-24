@@ -27,7 +27,7 @@ import {
   reconcileRepoWorktreeSelection,
 } from "./git-worktree-inspection.ts";
 
-export type FilesCheckoutPickerProps = {
+type FilesCheckoutPickerProps = {
   projectId: string;
   client: LycaonClient | null;
   appStore: AppStore;

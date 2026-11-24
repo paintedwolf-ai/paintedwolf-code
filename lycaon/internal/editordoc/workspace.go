@@ -113,7 +113,7 @@ func (l *LifecycleService) ObserveByID(ctx context.Context, projectID, documentI
 	}
 	current.CheckoutUnavailable = true
 	current.WorkspaceID = unavailableBranchWorkspaceID(current.ProjectID, current.BranchID)
-	return s.withParticipants(current), nil
+	return s.withParticipants(ctx, current), nil
 }
 
 func (o documentOpener) projectWorkspacePresentation(ctx context.Context, d *Document) {
@@ -294,7 +294,7 @@ func (o documentOpener) admitDocument(ctx context.Context, d *Document, clientID
 	if options.join {
 		s.joinParticipant(ctx, d.ID, clientID, "")
 	}
-	return s.withParticipants(d), nil
+	return s.withParticipants(ctx, d), nil
 }
 
 func readDocumentSource(p *project.Project, d *Document) (*projectsource.SourceReadResult, error) {

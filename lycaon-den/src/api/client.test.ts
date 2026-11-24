@@ -384,8 +384,8 @@ describe("LycaonClient", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const client = createLycaonClient(connection);
-    await client.makeProjectSourceEditable("proj-1", { root_id: "r-1", path: "src/a.ts" }, "sess-1", "wt-9");
-    await client.resolveProjectSourceDefinition("proj-1", { root_id: "r-1", path: "src/a.ts", line: 1, character: 1 }, "sess-1", ["wt-9"]);
+    await client.makeProjectSourceEditable("proj-1", { root_id: "r-1", path: "src/a.ts", base_sha256: "a".repeat(64) }, "sess-1", "wt-9");
+    await client.resolveProjectSourceDefinition("proj-1", { root_id: "r-1", path: "src/a.ts", symbol: "example", line: 1 }, "sess-1", ["wt-9"]);
 
     expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
       "http://127.0.0.1:8787/v1/projects/proj-1/source/editable?session_id=sess-1&worktree_id=wt-9",
