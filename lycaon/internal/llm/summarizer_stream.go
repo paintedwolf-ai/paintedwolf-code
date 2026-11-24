@@ -31,45 +31,55 @@ func (r *RegistrySummarizer) SummarizeStreamOnce(ctx context.Context, systemProm
 }
 
 func (r *RegistrySummarizer) summarizeStream(ctx context.Context, systemPrompt, userPrompt string, maxTokens int, onDelta func(delta string), allowFallback bool) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	p, model, err := r.liteProvider(ctx)
 	if err != nil || p == nil {
-		if allowFallback {
+		if allowFallback && ctx.Err() == nil && !SecretScreenBlocked(err) {
 			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
 		}
 		if err != nil {
-			return "", err
+			return "", preserveCallerContextError(err, ctx.Err())
 		}
-		return "", fmt.Errorf("no configured provider")
+		return "", newUnconfiguredUtilityError("no configured provider")
 	}
 	if r.Plane != nil && !r.Plane.allowLite() {
-		if allowFallback {
+		if allowFallback && ctx.Err() == nil {
 			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
 		}
 		return "", ErrLiteUnavailable
 	}
 	callCtx, release, laneErr := r.planeAcquire(ctx, p, r.utilityClass())
 	if laneErr != nil {
-		if allowFallback {
+		if allowFallback && ctx.Err() == nil && !SecretScreenBlocked(laneErr) {
 			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
 		}
-		return "", laneErr
+		return "", preserveCallerContextError(laneErr, ctx.Err())
 	}
 	out := r.streamLite(callCtx, p, model, systemPrompt, userPrompt, maxTokens, onDelta)
 	callErr := callCtx.Err()
 	release()
-	if callErr != nil {
-		return out.content, callErr
-	}
 	if out.setupErr != nil {
-		if allowFallback {
-			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
+		if callErr != nil || ctx.Err() != nil || SecretScreenBlocked(out.setupErr) || !allowFallback {
+			return out.content, preserveCallerContextError(out.setupErr, firstNonNilErr(callErr, ctx.Err()))
 		}
-		return "", out.setupErr
+		return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
+	}
+	if callErr != nil {
+		return out.content, preserveCallerContextError(out.streamErr, callErr)
 	}
 	if out.streamErr != nil {
 		return out.content, out.streamErr
 	}
 	return out.content, nil
+}
+
+func firstNonNilErr(a, b error) error {
+	if a != nil {
+		return a
+	}
+	return b
 }
 
 type streamLiteResult struct {

@@ -45,6 +45,40 @@ function summaryPending(view: BriefingView): boolean {
     view.snapshot.pending_sections.some((id) => id === "purpose" || id === "change");
 }
 
+function formatFailureSentence(reason: string): string {
+  const trimmed = reason.trim();
+  if (!trimmed) return "";
+  const capitalized = trimmed[0]!.toUpperCase() + trimmed.slice(1);
+  return /[.!?]$/.test(capitalized) ? capitalized : `${capitalized}.`;
+}
+
+function sectionFailureDetails(snapshot: BriefingView["snapshot"]): { purposeError?: string; changeError?: string } {
+  if (!snapshot || snapshot.status !== "failed") return {};
+  const raw = snapshot.error_message.trim();
+  if (!raw) return {};
+  let purposeError: string | undefined;
+  let changeError: string | undefined;
+  let generalError: string | undefined;
+  for (const part of raw.split(";")) {
+    const entry = part.trim();
+    if (!entry) continue;
+    const match = /^([a-z0-9_]+)\s+\[([^\]]+)\]:\s*(.+)$/i.exec(entry);
+    if (match) {
+      const [, sectionId, stage, summary] = match;
+      const formatted = formatFailureSentence(`${stage}: ${summary}`);
+      if (sectionId === "purpose") purposeError = formatted;
+      else if (sectionId === "change") changeError = formatted;
+      else generalError ??= formatted;
+    } else {
+      generalError ??= formatFailureSentence(entry);
+    }
+  }
+  return {
+    purposeError: purposeError ?? generalError,
+    changeError: changeError ?? generalError,
+  };
+}
+
 /** Maps the host's answer, and text held from an earlier revision, to what the region shows. */
 function activitySummaryState(view: BriefingView, heldPurpose: ActivitySummaryText | undefined): ActivitySummaryState {
   const snapshot = view.snapshot;
@@ -53,10 +87,11 @@ function activitySummaryState(view: BriefingView, heldPurpose: ActivitySummaryTe
   // A settled answer with no summary text counts as not arrived.
   const ended = view.stalled || snapshot?.status === "failed" || snapshot?.status === "complete";
   const recordId = snapshot?.result?.evidence_ref.record_id;
+  const errors = sectionFailureDetails(snapshot);
   if ((purpose || change) && recordId && !summaryPending(view)) {
-    return { kind: "ready", purpose: purpose ?? heldPurpose, change, recordId };
+    return { kind: "ready", purpose: purpose ?? heldPurpose, change, ...errors, recordId };
   }
-  return ended ? { kind: "missing", purpose: heldPurpose } : { kind: "pending", purpose: heldPurpose };
+  return ended ? { kind: "missing", purpose: heldPurpose, ...errors } : { kind: "pending", purpose: heldPurpose };
 }
 
 type Args = {

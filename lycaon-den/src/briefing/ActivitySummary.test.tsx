@@ -52,6 +52,25 @@ describe("ActivitySummary", () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 
+  it("renders bounded section failure causes when provided", () => {
+    const view = render(() => (
+      <ActivitySummary
+        state={{
+          kind: "missing",
+          purpose: generated("Runs the tests."),
+          changeError: "Admission: admission failed (utility slot busy).",
+        }}
+        running={false}
+        onRetry={() => {}}
+      />
+    ));
+    const box = region(view.container);
+    expect(box.querySelector('[data-section="intent"]')?.textContent).toContain("Intent: Runs the tests.");
+    expect(box.querySelector('[data-section="outcome"]')?.textContent).toContain(
+      "Outcome: Admission: admission failed (utility slot busy).",
+    );
+  });
+
   it("says a running activity's result comes later, and a pending change is still being written", () => {
     const running = render(() => <ActivitySummary state={{ kind: "ready", purpose: generated("Starts the server."), recordId: "r2" }} running onRetry={() => {}} />);
     expect(region(running.container).textContent).toContain(briefingCopy.resultPending);

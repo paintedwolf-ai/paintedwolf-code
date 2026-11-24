@@ -9,8 +9,8 @@ export type ActivitySummaryText = Pick<BriefingSummarySection, "text" | "source"
 /** What an opened activity's summary region shows. */
 export type ActivitySummaryState =
   | { kind: "pending"; purpose?: ActivitySummaryText }
-  | { kind: "ready"; purpose?: ActivitySummaryText; change?: ActivitySummaryText; recordId: string }
-  | { kind: "missing"; purpose?: ActivitySummaryText };
+  | { kind: "ready"; purpose?: ActivitySummaryText; change?: ActivitySummaryText; purposeError?: string; changeError?: string; recordId: string }
+  | { kind: "missing"; purpose?: ActivitySummaryText; purposeError?: string; changeError?: string };
 
 type Props = {
   state: ActivitySummaryState;
@@ -24,6 +24,7 @@ function ActivitySummarySection(props: {
   id: "intent" | "outcome";
   label: string;
   summary?: ActivitySummaryText;
+  error?: string;
   waiting: string;
   missing: boolean;
   onRetry: () => void;
@@ -67,7 +68,7 @@ function ActivitySummarySection(props: {
           <strong class="den-briefing-summary__label">{props.label}:</strong>{" "}
           <Show when={props.summary?.text} keyed fallback={
             <span class="den-briefing-summary__waiting">
-              {props.missing ? briefingCopy.notArrived : props.waiting}
+              {props.missing ? (props.error || briefingCopy.notArrived) : props.waiting}
             </span>
           }>
             {(text) => <BriefingInline text={text} />}
@@ -99,12 +100,14 @@ export function ActivitySummary(props: Props) {
         <div class="den-activity-summary__sections" classList={{ [SUMMARY_FADE_CLASS]: fade() }}>
           <ActivitySummarySection
             id="intent" label="Intent" summary={props.state.purpose}
+            error={props.state.kind !== "pending" ? props.state.purposeError : undefined}
             waiting={briefingCopy.waiting}
             missing={props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.purpose)}
             onRetry={props.onRetry}
           />
           <ActivitySummarySection
             id="outcome" label="Outcome" summary={ready()?.change}
+            error={props.state.kind !== "pending" ? props.state.changeError : undefined}
             waiting={props.running ? briefingCopy.resultPending : briefingCopy.waiting}
             missing={!props.running && (props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.change))}
             onRetry={props.onRetry}

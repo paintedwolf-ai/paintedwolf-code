@@ -3,14 +3,12 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/cost"
-	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -64,9 +62,24 @@ func (r *RegistrySummarizer) utilityClass() UtilityClass {
 }
 
 func (r *RegistrySummarizer) summarize(ctx context.Context, systemPrompt, userPrompt string, maxTokens int, allowFallback bool) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	class := r.utilityClass()
 	p, model, err := r.liteProvider(ctx)
 	if err != nil || p == nil {
+		if ctx.Err() != nil || SecretScreenBlocked(err) {
+			return "", preserveCallerContextError(err, ctx.Err())
+		}
+		if class.AllowsCoordinatorFallback() {
+			if cp, cmodel, cerr := r.coordinatorProvider(ctx); cerr == nil && cp != nil {
+				content, coordErr := r.summarizeWith(ctx, cp, cmodel, systemPrompt, userPrompt, maxTokens)
+				if coordErr == nil {
+					return content, nil
+				}
+				err = newSummarizerFallbackError("", "", err, cp.ID(), cmodel, coordErr)
+			}
+		}
 		return r.degradeSummarize(ctx, systemPrompt, userPrompt, maxTokens, allowFallback, class, err)
 	}
 	var liteErr error
@@ -81,21 +94,26 @@ func (r *RegistrySummarizer) summarize(ctx context.Context, systemPrompt, userPr
 	}
 	slog.WarnContext(ctx, "lite summarize failed",
 		"purpose", r.Purpose, "class", class, "provider", p.ID(), "model", model, "error", liteErr)
-	// Screened bytes stay held across provider and truncation fallbacks.
-	if SecretScreenBlocked(liteErr) {
-		return "", liteErr
+	// Screened bytes and expired callers never advance to fallback providers or truncation.
+	if SecretScreenBlocked(liteErr) || ctx.Err() != nil {
+		return "", preserveCallerContextError(liteErr, ctx.Err())
 	}
+	cause := liteErr
 	if class.AllowsCoordinatorFallback() {
-		if cp, cmodel, cerr := r.coordinatorProvider(ctx); cerr == nil && cp != nil && (cp.ID() != p.ID() || cmodel != model) {
+		if cp, cmodel, cerr := r.coordinatorProvider(ctx); cerr == nil && cp != nil && (cp.ID() != p.ID() || cmodel != model) && ctx.Err() == nil {
 			content, coordErr := r.summarizeWith(ctx, cp, cmodel, systemPrompt, userPrompt, maxTokens)
 			if coordErr == nil {
 				return content, nil
 			}
 			slog.WarnContext(ctx, "coordinator summarize fallback failed",
 				"purpose", r.Purpose, "provider", cp.ID(), "model", cmodel, "error", coordErr)
+			cause = newSummarizerFallbackError(p.ID(), model, liteErr, cp.ID(), cmodel, coordErr)
+			if SecretScreenBlocked(coordErr) || ctx.Err() != nil {
+				return "", cause
+			}
 		}
 	}
-	return r.degradeSummarize(ctx, systemPrompt, userPrompt, maxTokens, allowFallback, class, liteErr)
+	return r.degradeSummarize(ctx, systemPrompt, userPrompt, maxTokens, allowFallback, class, cause)
 }
 
 func (r *RegistrySummarizer) degradeSummarize(ctx context.Context, systemPrompt, userPrompt string, maxTokens int, allowFallback bool, class UtilityClass, cause error) (string, error) {
@@ -103,9 +121,9 @@ func (r *RegistrySummarizer) degradeSummarize(ctx context.Context, systemPrompt,
 		if cause != nil {
 			return "", cause
 		}
-		return "", fmt.Errorf("no configured provider")
+		return "", newUnconfiguredUtilityError("no configured provider")
 	}
-	if class.ReturnsFailureToCaller() || !allowFallback {
+	if ctx.Err() != nil || SecretScreenBlocked(cause) || class.ReturnsFailureToCaller() || !allowFallback {
 		return fail()
 	}
 	if class.AllowsTruncateFallback() {
@@ -204,7 +222,7 @@ func (r *RegistrySummarizer) liteProvider(ctx context.Context) (modelcall.Provid
 // slotProvider advances past standing model refusals.
 func (r *RegistrySummarizer) slotProvider(ctx context.Context, pick func(ModelPolicy) ModelRef, missing string) (modelcall.Provider, string, error) {
 	if r.Policy == nil || r.Registry == nil {
-		return nil, "", fmt.Errorf("registry not configured")
+		return nil, "", newUnconfiguredUtilityError("registry not configured")
 	}
 	policy, err := r.modelPolicy(ctx)
 	if err != nil {
@@ -212,7 +230,7 @@ func (r *RegistrySummarizer) slotProvider(ctx context.Context, pick func(ModelPo
 	}
 	ref := pick(policy)
 	if ref.ProviderID == "" {
-		return nil, "", errors.New(missing)
+		return nil, "", newUnconfiguredUtilityError(missing)
 	}
 	p, err := r.Registry.Get(ref.ProviderID)
 	if err != nil {
@@ -241,46 +259,4 @@ func isTruncatingFallback(s compaction.Summarizer) bool {
 // Summarize calls the configured utility model.
 func (r *RegistrySummarizer) Summarize(ctx context.Context, systemPrompt, userPrompt string, maxTokens int) (string, error) {
 	return r.summarize(ctx, systemPrompt, userPrompt, maxTokens, true)
-}
-
-// SummaryRevision identifies the routed utility policy that plans summaries.
-func (r *RegistrySummarizer) SummaryRevision(ctx context.Context) (string, error) {
-	if r.Policy == nil {
-		return "local", nil
-	}
-	policy, err := r.modelPolicy(ctx)
-	if err != nil {
-		return "", err
-	}
-	return compaction.RevisionDigest(struct {
-		Policy  ModelPolicy
-		Class   UtilityClass
-		Purpose string
-	}{policy, r.utilityClass(), r.Purpose})
-}
-
-// SummaryBudget reserves utility output and framing inside the selected window.
-func (r *RegistrySummarizer) SummaryBudget(ctx context.Context) compaction.SummaryBudget {
-	provider, model, err := r.liteProvider(ctx)
-	if err != nil || provider == nil {
-		return compaction.SummaryBudget{}
-	}
-	window := r.Registry.ContextLength(provider.ID(), model)
-	if window <= 0 {
-		return compaction.SummaryBudget{}
-	}
-	output := min(1536, max(1, window/8))
-	return compaction.SummaryBudget{Input: max(1, window*3/4-output-summaryRequestHeadroom), Output: output}
-}
-
-// Explicit bindings take precedence over the invoking session's settings roots.
-func (r *RegistrySummarizer) modelPolicy(ctx context.Context) (ModelPolicy, error) {
-	if r.Scope != "" || r.ProjectDir != "" {
-		scope := r.Scope
-		if scope == "" {
-			scope = SettingsScopeProject
-		}
-		return r.Policy.Get(scope, r.ProjectDir)
-	}
-	return r.Policy.GetForProjectRoots(curationctx.SessionFrom(ctx).SettingsRoots)
 }

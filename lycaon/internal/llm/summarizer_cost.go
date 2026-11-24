@@ -92,7 +92,7 @@ func (r *RegistrySummarizer) completeUtility(ctx context.Context, p modelcall.Pr
 	defer r.endLaneCall(ctx, occupy, callID, attempt.provider, model, &err)
 	resp, err = p.Complete(attempt.ctx, req) //nolint:contextcheck // attempt.ctx carries admission cancellation and the call budget.
 	if callCtx.Err() != nil {
-		err = callCtx.Err()
+		err = preserveCallerContextError(err, callCtx.Err())
 	}
 	if err != nil && attempt.budget.Expired() && ctx.Err() == nil {
 		err = &utilityBudgetExceededError{cause: err}
