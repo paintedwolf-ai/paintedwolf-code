@@ -27,7 +27,7 @@ type WatchDelivery struct {
 
 func (e *turnContextAssembler) prepareWatchDelivery(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) error {
 	recorder := e.deps.Deliveries.Watches
-	if recorder == nil || sess == nil || turn == nil {
+	if recorder == nil || sess == nil || turn == nil || turn.PromptTurnSeq <= 0 {
 		return nil
 	}
 	if turn.PendingWatches.DeliveryID != "" {
