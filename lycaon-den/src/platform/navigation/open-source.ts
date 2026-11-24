@@ -1,6 +1,7 @@
 // Contract: docs/source-navigation.md
 
 import { outsideHostPath } from "../../files/source/outside-namespace.ts";
+import { resolveCheckoutRootPath } from "../../files/source/files-checkout-scope.ts";
 import {
   resolveProjectFile,
   relativeUnderRoot,
@@ -30,6 +31,12 @@ export type OpenSourceLocationArgs = {
   endLine?: number;
   /** Worker overlay containing the path. */
   jobId?: string;
+  /** Verified repository containing the checkout. */
+  repoId?: string;
+  /** Verified registered checkout containing the path. */
+  worktreeId?: string;
+  /** Selects the target checkout in window inspection state before opening. */
+  selectCheckout?: boolean;
   /** Buffer lifetime for internal opens. */
   intent: OpenSourceBufferIntent;
   /** Keyboard attention moves to the opened editor. */
@@ -46,12 +53,15 @@ export type OpenSourceRequest = {
   column?: number;
   endLine?: number;
   jobId?: string;
+  repoId?: string;
+  worktreeId?: string;
+  selectCheckout?: boolean;
   intent: OpenSourceBufferIntent;
   /** Keyboard attention moves to the opened editor. */
   focus?: boolean;
 };
 
-export type RevealSourceRequest = Pick<OpenSourceRequest, "projectId" | "rootId" | "path" | "absolutePath"> & {
+export type RevealSourceRequest = Pick<OpenSourceRequest, "projectId" | "rootId" | "path" | "absolutePath" | "repoId" | "worktreeId" | "selectCheckout"> & {
   action: "reveal";
   entryKind: "file" | "folder";
 };
@@ -106,7 +116,7 @@ function dispatchInApp(req: SourceNavigationRequest, current: () => boolean): vo
 export function resolveProjectPath(
   args: Pick<
     OpenSourceLocationArgs,
-    "projectId" | "rootId" | "path" | "activeRootId"
+    "projectId" | "rootId" | "path" | "activeRootId" | "worktreeId"
   >,
   lookup?: OpenSourceProjectLookup,
 ):
@@ -143,12 +153,20 @@ export function resolveProjectPath(
   if (!root) return { status: "noop", reason: "resolve_failed" };
   const relativePath = relativeUnderRoot(resolved.absolutePath, root.path);
   if (relativePath == null) return { status: "noop", reason: "resolve_failed" };
+  const checkoutRoot = args.worktreeId?.trim()
+    ? resolveCheckoutRootPath(projectId, resolved.rootId, args.worktreeId, root.path)
+    : undefined;
+  const absolutePath = checkoutRoot
+    ? relativePath === "."
+      ? checkoutRoot
+      : `${checkoutRoot.replace(/\/+$/, "")}/${relativePath}`
+    : resolved.absolutePath;
   return {
     status: "resolved",
     target: {
       projectId,
       path: relativePath,
-      absolutePath: resolved.absolutePath,
+      absolutePath,
       rootId: resolved.rootId,
     },
   };
@@ -172,6 +190,9 @@ export function resolveSourceRequest(
       ...(args.column != null ? { column: args.column } : {}),
       ...(args.endLine != null ? { endLine: args.endLine } : {}),
       ...(args.jobId?.trim() ? { jobId: args.jobId.trim() } : {}),
+      ...(args.repoId?.trim() ? { repoId: args.repoId.trim() } : {}),
+      ...(args.worktreeId?.trim() ? { worktreeId: args.worktreeId.trim() } : {}),
+      ...(args.selectCheckout ? { selectCheckout: true } : {}),
       ...(args.focus ? { focus: true } : {}),
     },
   };
@@ -179,7 +200,7 @@ export function resolveSourceRequest(
 
 /** Absent entries use file navigation to reach retained history. */
 export async function sourceEntryKind(
-  req: Pick<OpenSourceRequest, "projectId" | "rootId" | "path" | "jobId">,
+  req: Pick<OpenSourceRequest, "projectId" | "rootId" | "path" | "jobId" | "worktreeId">,
   client?: OpenSourceOptions["client"],
 ): Promise<"file" | "folder"> {
   if (req.path === ".") return "folder";
@@ -189,7 +210,9 @@ export async function sourceEntryKind(
   const slash = req.path.lastIndexOf("/");
   const dir = slash < 0 ? "." : req.path.slice(0, slash);
   const name = req.path.slice(slash + 1);
-  const listing = await client.browseProjectSource(req.projectId, { rootId: req.rootId, dir });
+  const listing = req.worktreeId
+    ? await client.browseProjectSource(req.projectId, { rootId: req.rootId, dir }, undefined, req.worktreeId)
+    : await client.browseProjectSource(req.projectId, { rootId: req.rootId, dir });
   return listing.entries.find((entry) => entry.name === name)?.is_dir ? "folder" : "file";
 }
 
@@ -238,8 +261,17 @@ export async function openSourceLocation(
 
   if (args.action === "reveal" || entryKind === "folder") {
     if (req.jobId) return { status: "rejected", reason: "This location belongs to a worker workspace, outside the project tree." };
-    dispatchInApp({ action: "reveal", projectId: req.projectId, rootId: req.rootId,
-      path: req.path, absolutePath: req.absolutePath, entryKind: entryKind === "folder" ? "folder" : "file" }, navigation.current);
+    dispatchInApp({
+      action: "reveal",
+      projectId: req.projectId,
+      rootId: req.rootId,
+      path: req.path,
+      absolutePath: req.absolutePath,
+      entryKind: entryKind === "folder" ? "folder" : "file",
+      ...(req.repoId ? { repoId: req.repoId } : {}),
+      ...(req.worktreeId ? { worktreeId: req.worktreeId } : {}),
+      ...(req.selectCheckout ? { selectCheckout: true } : {}),
+    }, navigation.current);
     return { status: "opened-in-app" };
   }
 

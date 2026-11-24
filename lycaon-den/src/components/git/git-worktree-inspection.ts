@@ -1,5 +1,11 @@
 import { createSignal } from "solid-js";
 import type { GitWorktreeEntry, GitWorktreesView } from "../../api/types.ts";
+import {
+  knownCheckoutSummary,
+  recordKnownCheckoutEntries,
+  selectedProjectWorktreeIds,
+  workspaceRootCheckout,
+} from "../../files/source/files-checkout-scope.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { gitWorktreeTargetKey, resolveGitWorktreeTarget } from "../../store/git-cache-actions.ts";
 
@@ -184,9 +190,41 @@ export function pinRepoWorktreeSelection(
   repoId: string,
   entry: GitWorktreeEntry,
 ): void {
+  recordKnownCheckoutEntries(projectId, repoId, [entry]);
   const key = gitWorktreeTargetKey(projectId, repoId);
   storeMap(appStore).set(key, summaryFromEntry(entry, true));
   appStore.actions.setGitWorktreeTarget(projectId, repoId, entry.worktree_id);
+  selectedProjectWorktreeIds(appStore, projectId);
+  setInspectionRevision((n) => n + 1);
+}
+
+/** Selects a checkout by verified ID in response to deliberate user navigation. */
+export function selectRepoWorktreeById(
+  appStore: AppStore,
+  projectId: string,
+  repoId: string | undefined,
+  worktreeId: string,
+  rootId?: string,
+): void {
+  const pid = projectId.trim();
+  const wid = worktreeId.trim();
+  if (!pid || !wid) return;
+  const known = knownCheckoutSummary(pid, wid);
+  const resolvedRepoId = (repoId?.trim() || known?.repoId || (rootId ? workspaceRootCheckout(pid, rootId)?.repoId : undefined) || appStore.state.gitActiveRepoId || appStore.state.gitRepos?.find((r) => r.available)?.repo_id || "").trim();
+  if (!resolvedRepoId) return;
+  const key = gitWorktreeTargetKey(pid, resolvedRepoId);
+  const existing = storeMap(appStore).get(key);
+  storeMap(appStore).set(key, {
+    worktreeId: wid,
+    pinned: true,
+    branch: known?.branch ?? (existing?.worktreeId === wid ? existing.branch : undefined),
+    headShort: known?.headShort ?? (existing?.worktreeId === wid ? existing.headShort : undefined),
+    detached: known?.detached ?? (existing?.worktreeId === wid ? existing.detached : undefined),
+    path: known?.path ?? (existing?.worktreeId === wid ? existing.path : undefined),
+    isProjectCheckout: known?.isProjectCheckout ?? (existing?.worktreeId === wid ? existing.isProjectCheckout : undefined),
+  });
+  appStore.actions.setGitWorktreeTarget(pid, resolvedRepoId, wid);
+  selectedProjectWorktreeIds(appStore, pid);
   setInspectionRevision((n) => n + 1);
 }
 
@@ -279,6 +317,7 @@ export function reconcileRepoWorktreeSelection(
   repoId: string,
   view: GitWorktreesView,
 ): ReconciledCheckoutSelection {
+  recordKnownCheckoutEntries(projectId, repoId, view.worktrees);
   const key = gitWorktreeTargetKey(projectId, repoId);
   const map = storeMap(appStore);
   const existing = map.get(key);

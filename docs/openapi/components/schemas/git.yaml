@@ -546,6 +546,9 @@ components:
         after_blob_oid:
           x-go-name: "AfterBlobOID"
           type: string
+        after_sha256:
+          x-go-pointer: true
+          type: string
       required:
         - path
         - insertions

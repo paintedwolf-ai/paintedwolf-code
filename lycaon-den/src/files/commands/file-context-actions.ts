@@ -111,17 +111,18 @@ export function createFileContextActions(options: FileContextDependencies) {
     explainFile: options.explainFileInReview,
     openInTarget: (target) => {
       const roots = options.filesRoots();
-      const outside = outsideRootId(options.projectId());
+      const pid = options.projectId();
+      const outside = outsideRootId(pid);
       if (target.surface === "tab") {
         const buffer = bufferForKey(target.bufferKey);
-        return buffer ? fileOpenTarget(buffer, roots, undefined, outside) : null;
+        return buffer ? fileOpenTarget(buffer, roots, undefined, outside, pid) : null;
       }
       if (target.surface === "editor" || target.surface === "gutter" || target.surface === "info-card" || target.surface === "image-viewer") {
         const buffer = options.activeBuffer();
-        const view = buffer ? getFilesEditorView(options.projectId(), buffer.key) : null;
+        const view = buffer ? getFilesEditorView(pid, buffer.key) : null;
         const line = target.surface === "gutter" ? target.line ?? undefined
           : view ? view.state.doc.lineAt(view.state.selection.main.head).number : undefined;
-        return buffer ? fileOpenTarget(buffer, roots, line, outside) : null;
+        return buffer ? fileOpenTarget(buffer, roots, line, outside, pid) : null;
       }
       if (target.surface === "tree-background") {
         const root = roots[0];

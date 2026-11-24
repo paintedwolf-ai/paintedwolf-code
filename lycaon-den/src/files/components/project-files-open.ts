@@ -9,6 +9,8 @@ import { leaveWalk } from "../walk/walk-store.ts";
 import { retargetOpenFilesUnderPath } from "../commands/project-files-retarget.ts";
 import { fileBufferKey } from "./project-files-model.ts";
 import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
+import { knownCheckoutSummary } from "../source/files-checkout-scope.ts";
+import { formatCheckoutBranchLabel } from "../../components/git/git-worktree-inspection.ts";
 
 /** Walk state outlives the stage, so opening a working file leaves Walk. */
 export function openSourceInFilesStage(args: {
@@ -23,13 +25,23 @@ export function openSourceInFilesStage(args: {
 
   const bufferKey = batch(() => {
     leaveWalk(projectId);
-    if (request.fileId && !jobId) {
+    if (request.fileId && !jobId && !request.worktreeId) {
       const key = fileBufferKey(request.rootId, request.path, undefined, request.fileId);
       const current = projectFilesState(projectId).byKey[key];
       if (current && (current.rootId !== request.rootId || current.path !== request.path)) {
         retargetOpenFilesUnderPath(projectId, current.rootId, current.path, request.path, request.rootId);
       }
     }
+    const checkoutSummary = request.worktreeId ? knownCheckoutSummary(projectId, request.worktreeId) : undefined;
+    const checkoutLabel = checkoutSummary
+      ? checkoutSummary.isProjectCheckout
+        ? "Project folder"
+        : formatCheckoutBranchLabel({
+            branch: checkoutSummary.branch,
+            detached: checkoutSummary.detached,
+            head_short: checkoutSummary.headShort,
+          })
+      : undefined;
     const key = openFilesBuffer(projectId, {
       rootId: request.rootId,
       fileId: request.fileId,
@@ -37,6 +49,8 @@ export function openSourceInFilesStage(args: {
       path: request.path,
       intent: request.intent,
       jobId,
+      worktreeId: request.worktreeId,
+      checkoutLabel,
       revealLine: request.line,
       revealColumn: request.column,
       revealEndLine: request.endLine,

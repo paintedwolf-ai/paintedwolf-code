@@ -3,6 +3,7 @@ type ProjectFilesRevealRequest = {
   rootId: string;
   path: string;
   isDir: boolean;
+  worktreeId?: string;
 };
 
 let pending: { request: ProjectFilesRevealRequest; current: () => boolean } | null = null;

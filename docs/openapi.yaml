@@ -24572,6 +24572,9 @@ components:
         after_blob_oid:
           x-go-name: AfterBlobOID
           type: string
+        after_sha256:
+          x-go-pointer: true
+          type: string
       required:
         - path
         - insertions
@@ -43312,7 +43315,13 @@ components:
           type: string
           minLength: 1
           maxLength: 65536
+        before_blob_oid:
+          x-go-name: BeforeBlobOID
+          type: string
         expected_head:
+          type: string
+          x-go-pointer: true
+        expected_after_sha256:
           type: string
           x-go-pointer: true
         worktree_id:

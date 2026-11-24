@@ -32,9 +32,14 @@ export type FileEditFold = {
   steps: FileEditStep[];
 };
 
-/** A file's identity within a turn: the same path in two roots is two files. */
-export function fileEditPathKey(snapshot: Pick<FileEditPreview, "root_id" | "path">): string {
-  return snapshot.root_id ? `${snapshot.root_id}\0${snapshot.path}` : snapshot.path;
+/** A file's identity within a turn: the same path in two roots or checkouts is two files. */
+export function fileEditPathKey(
+  snapshot: Pick<FileEditPreview, "root_id" | "path">,
+  navigationTarget?: Pick<NavigationTarget, "worktree_id">,
+): string {
+  const base = snapshot.root_id ? `${snapshot.root_id}\0${snapshot.path}` : snapshot.path;
+  const wt = navigationTarget?.worktree_id?.trim();
+  return wt ? `${wt}\0${base}` : base;
 }
 
 /** Group writes by path, first touch first, and compose each path's range. */
@@ -44,7 +49,7 @@ export function foldFileEdits(
   const order: string[] = [];
   const byPath = new Map<string, FileEditStep[]>();
   for (const step of steps) {
-    const path = fileEditPathKey(step.snapshot);
+    const path = fileEditPathKey(step.snapshot, step.navigationTarget);
     const existing = byPath.get(path);
     if (existing) {
       existing.push(step);
@@ -92,9 +97,24 @@ export function fileEditFoldFingerprint(fold: FileEditFold): string {
 /** One step per file the call edited; a call that edits several files anchors several folds. */
 export function fileEditStepsFromPart(part: ToolPartView): FileEditStep[] {
   return fileEditsFromPart(part).map((snapshot, index) => {
-    const targets = snapshot.root_id || snapshot.deleted ? [] : part.sourceLocations?.filter((target) =>
-      target.file_id && target.entry_kind === "file" && outsideHostPath(target.path) === snapshot.path,
-    );
+    const targets = snapshot.deleted
+      ? []
+      : snapshot.root_id
+        ? part.sourceLocations?.filter(
+            (target) =>
+              Boolean(target.worktree_id || target.worker_id) &&
+              target.entry_kind === "file" &&
+              target.root_id === snapshot.root_id &&
+              target.path === snapshot.path,
+          )
+        : part.sourceLocations?.filter(
+            (target) =>
+              target.entry_kind === "file" &&
+              ((Boolean(target.file_id) && outsideHostPath(target.path) === snapshot.path) ||
+                (Boolean(target.worktree_id) &&
+                  (snapshot.path === target.path ||
+                    snapshot.path.replace(/\\/g, "/").endsWith(`/${target.path}`)))),
+          );
     return {
       key: `${part.id}:${index}`,
       toolCallId: part.toolCallId,
@@ -143,7 +163,7 @@ export function collectSegmentFolds(
     if (omitted > 0) omittedByPartId.set(item.part.id, omitted);
     for (const step of fileEditStepsFromPart(item.part)) {
       steps.push(step);
-      const file = fileEditPathKey(step.snapshot);
+      const file = fileEditPathKey(step.snapshot, step.navigationTarget);
       if (seenFiles.has(file)) continue;
       seenFiles.add(file);
       const anchored = anchorFoldKeysByPartId.get(item.part.id);

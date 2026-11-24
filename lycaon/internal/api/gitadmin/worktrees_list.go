@@ -1,7 +1,9 @@
 package gitadmin
 
 import (
+	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/project/worktrees"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -277,6 +280,19 @@ func serveGitDiff(s *Handler, w http.ResponseWriter, r *http.Request) {
 		if st.OldPath != "" {
 			oldRootID, oldRootRel = attributeChangedFile(dir, st.OldPath, roots)
 		}
+		var afterSHA256 *string
+		if mode != "staged" && st.AfterBlobOID == "" && rootID != "" && rootRel != "" {
+			if obs, obsErr := projectsource.ObserveProjectSource(target.ProjectedProject, projectsource.SourceReadRequest{
+				RootID: rootID,
+				Path:   rootRel,
+			}); obsErr == nil {
+				sha := obs.Revision.SHA256
+				afterSHA256 = &sha
+			} else if errors.Is(obsErr, os.ErrNotExist) || errors.Is(obsErr, projectsource.ErrSourceNotFound) {
+				empty := ""
+				afterSHA256 = &empty
+			}
+		}
 		items = append(items, wire.GitDiffStatItem{
 			Path:                st.Path,
 			Insertions:          st.Insertions,
@@ -289,6 +305,7 @@ func serveGitDiff(s *Handler, w http.ResponseWriter, r *http.Request) {
 			OldRootRelativePath: oldRootRel,
 			BeforeBlobOID:       st.BeforeBlobOID,
 			AfterBlobOID:        st.AfterBlobOID,
+			AfterSHA256:         afterSHA256,
 		})
 	}
 

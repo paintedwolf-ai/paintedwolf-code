@@ -230,7 +230,7 @@ export function FilesInfoCard(props: Props) {
                     Open as UTF-16 BE
                   </DenButton>
                 </Show>
-                <OpenInButton target={fileOpenTarget(props.buffer, props.roots, undefined, props.projectId ? outsideRootId(props.projectId) : undefined)} onOpenChange={setOpenInMenuOpen} />
+                <OpenInButton target={fileOpenTarget(props.buffer, props.roots, undefined, props.projectId ? outsideRootId(props.projectId) : undefined, props.projectId)} onOpenChange={setOpenInMenuOpen} />
                 <Show when={variant() === "binary" && props.onReopenAsUTF16}>
                   <DenButton
                     variant="ghost"

@@ -1920,13 +1920,15 @@ type CommandUIEffect struct {
 
 // CommitComparisonSource
 type CommitComparisonSource struct {
-	Kind         string  `json:"kind"`
-	RootID       string  `json:"root_id"`
-	Path         string  `json:"path"`
-	BeforePath   string  `json:"before_path,omitempty"`
-	ExpectedHead *string `json:"expected_head,omitempty"`
-	WorktreeID   string  `json:"worktree_id,omitempty"`
-	Stage        string  `json:"stage,omitempty"`
+	Kind                string  `json:"kind"`
+	RootID              string  `json:"root_id"`
+	Path                string  `json:"path"`
+	BeforePath          string  `json:"before_path,omitempty"`
+	BeforeBlobOID       string  `json:"before_blob_oid,omitempty"`
+	ExpectedHead        *string `json:"expected_head,omitempty"`
+	ExpectedAfterSHA256 *string `json:"expected_after_sha256,omitempty"`
+	WorktreeID          string  `json:"worktree_id,omitempty"`
+	Stage               string  `json:"stage,omitempty"`
 }
 
 // CompactedChunkMeta
@@ -3863,17 +3865,18 @@ type GitCommitRequest struct {
 
 // GitDiffStatItem
 type GitDiffStatItem struct {
-	Path                string `json:"path"`
-	Insertions          int    `json:"insertions"`
-	Deletions           int    `json:"deletions"`
-	Untracked           bool   `json:"untracked,omitempty"`
-	RootID              string `json:"root_id"`
-	RootRelativePath    string `json:"root_relative_path"`
-	OldPath             string `json:"old_path,omitempty"`
-	OldRootID           string `json:"old_root_id,omitempty"`
-	OldRootRelativePath string `json:"old_root_relative_path,omitempty"`
-	BeforeBlobOID       string `json:"before_blob_oid,omitempty"`
-	AfterBlobOID        string `json:"after_blob_oid,omitempty"`
+	Path                string  `json:"path"`
+	Insertions          int     `json:"insertions"`
+	Deletions           int     `json:"deletions"`
+	Untracked           bool    `json:"untracked,omitempty"`
+	RootID              string  `json:"root_id"`
+	RootRelativePath    string  `json:"root_relative_path"`
+	OldPath             string  `json:"old_path,omitempty"`
+	OldRootID           string  `json:"old_root_id,omitempty"`
+	OldRootRelativePath string  `json:"old_root_relative_path,omitempty"`
+	BeforeBlobOID       string  `json:"before_blob_oid,omitempty"`
+	AfterBlobOID        string  `json:"after_blob_oid,omitempty"`
+	AfterSHA256         *string `json:"after_sha256,omitempty"`
 }
 
 // GitDiffView

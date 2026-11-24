@@ -115,6 +115,8 @@ func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Proje
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "A commit comparison stage must be working, staged, or unstaged."}
 	}
 	targetProject := p
+	var fallbackBeforeRootAbs string
+	checkoutUnavailable := false
 	if strings.TrimSpace(source.WorktreeID) != "" {
 		baseProject := p
 		if s.ProjectRegistry != nil {
@@ -132,26 +134,48 @@ func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Proje
 		}
 		projected, checkout, errCode, errMsg, resolved := s.Git.ResolveCheckoutProject(ctx, baseProject, source.WorktreeID)
 		if !resolved {
-			return sourceledger.Comparison{}, &comparisonFailure{errCode, errMsg}
-		}
-		if gitrepo.CanonicalDir(checkout.Toplevel) != gitrepo.CanonicalDir(baseRepo.Root) {
-			return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeWorktreeNotFound, "That checkout is not registered for this repository."}
-		}
-		rootRetained := false
-		for _, r := range projected.Roots {
-			if r.ID == source.RootID {
-				rootRetained = true
-				break
+			if source.ExpectedAfterSHA256 != nil && (errCode == wire.ApiErrorCodeWorktreeUnavailable || errCode == wire.ApiErrorCodeWorktreeNotFound) {
+				checkoutUnavailable = true
+				fallbackBeforeRootAbs = baseRootAbs
+			} else {
+				return sourceledger.Comparison{}, &comparisonFailure{errCode, errMsg}
+			}
+		} else {
+			if gitrepo.CanonicalDir(checkout.Toplevel) != gitrepo.CanonicalDir(baseRepo.Root) {
+				return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeWorktreeNotFound, "That checkout is not registered for this repository."}
+			}
+			rootRetained := false
+			for _, r := range projected.Roots {
+				if r.ID == source.RootID {
+					rootRetained = true
+					break
+				}
+			}
+			if !rootRetained {
+				if source.ExpectedAfterSHA256 != nil {
+					checkoutUnavailable = true
+					fallbackBeforeRootAbs = baseRootAbs
+				} else {
+					return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeWorktreeUnavailable, "That checkout is unavailable for this folder."}
+				}
+			} else {
+				targetProject = projected
+				trees = nil
 			}
 		}
-		if !rootRetained {
-			return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeWorktreeUnavailable, "That checkout is unavailable for this folder."}
+	}
+	mgr := s.Git.Manager()
+	if checkoutUnavailable {
+		beforePath := source.Path
+		if bp := strings.TrimSpace(source.BeforePath); bp != "" {
+			beforePath = bp
 		}
-		targetProject = projected
-		trees = nil
+		before := gitBlobComparisonSide(ctx, mgr, fallbackBeforeRootAbs, strings.TrimSpace(source.BeforeBlobOID))
+		before.RootID, before.Path = source.RootID, beforePath
+		after := unavailableWorkingSide(source.RootID, source.Path, source.ExpectedAfterSHA256)
+		return finalizeCommitComparison(before, after), nil
 	}
 	rootAbs, prefix, mapped := s.resolveRootRepoPosition(ctx, targetProject, source.RootID)
-	mgr := s.Git.Manager()
 	if !mapped {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeSourceVersionUnavailable, "Git is unavailable for this folder."}
 	}
@@ -159,7 +183,7 @@ func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Proje
 	if err != nil {
 		return sourceledger.Comparison{}, err
 	}
-	if source.ExpectedHead != nil && *source.ExpectedHead != head {
+	if source.ExpectedHead != nil && *source.ExpectedHead != head && source.ExpectedAfterSHA256 == nil {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeSourceHistoryChanged, "Git HEAD changed. Refresh the comparison."}
 	}
 
@@ -168,17 +192,21 @@ func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Proje
 
 	switch stage {
 	case "working":
-		oid, batched := trees.oid(source.RootID, head, source.Path)
-		if !batched {
-			read, err := commitPathOID(ctx, mgr, rootAbs, head, source.Path)
-			if err != nil {
-				return sourceledger.Comparison{}, err
+		oid := strings.TrimSpace(source.BeforeBlobOID)
+		if oid == "" {
+			var batched bool
+			oid, batched = trees.oid(source.RootID, head, source.Path)
+			if !batched {
+				read, err := commitPathOID(ctx, mgr, rootAbs, head, source.Path)
+				if err != nil {
+					return sourceledger.Comparison{}, err
+				}
+				oid = read
 			}
-			oid = read
 		}
 		before = gitBlobComparisonSide(ctx, mgr, rootAbs, oid)
 		before.RootID, before.Path = source.RootID, source.Path
-		after = readWorkingCommit(targetProject, source.RootID, rootAbs, source.Path).Side
+		after = verifyHistoricalWorkingSide(readWorkingCommit(targetProject, source.RootID, rootAbs, source.Path).Side, source.ExpectedAfterSHA256)
 	case "staged":
 		beforeLookupPath := source.Path
 		if bp := strings.TrimSpace(source.BeforePath); bp != "" {
@@ -187,9 +215,13 @@ func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Proje
 			}
 			beforeLookupPath = bp
 		}
-		headOID, err := commitPathOID(ctx, mgr, rootAbs, head, beforeLookupPath)
-		if err != nil {
-			return sourceledger.Comparison{}, err
+		headOID := strings.TrimSpace(source.BeforeBlobOID)
+		if headOID == "" {
+			var err error
+			headOID, err = commitPathOID(ctx, mgr, rootAbs, head, beforeLookupPath)
+			if err != nil {
+				return sourceledger.Comparison{}, err
+			}
 		}
 		concrete := s.Git.ConcreteManager()
 		if concrete == nil {
@@ -204,26 +236,76 @@ func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Proje
 		after = gitBlobComparisonSide(ctx, mgr, rootAbs, indexOID)
 		after.RootID, after.Path = source.RootID, source.Path
 	case "unstaged":
-		concrete := s.Git.ConcreteManager()
-		if concrete == nil {
-			return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeSourceVersionUnavailable, "Git index inspection is unavailable."}
+		beforePath := source.Path
+		if bp := strings.TrimSpace(source.BeforePath); bp != "" {
+			if !filepath.IsLocal(bp) || bp == "." {
+				return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "before_path must be a relative file path."}
+			}
+			beforePath = bp
 		}
-		indexOID, err := concrete.IndexBlobOID(ctx, rootAbs, relRepoPath)
-		if err != nil {
-			return sourceledger.Comparison{}, err
+		indexOID := strings.TrimSpace(source.BeforeBlobOID)
+		if indexOID == "" {
+			concrete := s.Git.ConcreteManager()
+			if concrete == nil {
+				return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeSourceVersionUnavailable, "Git index inspection is unavailable."}
+			}
+			var err error
+			indexOID, err = concrete.IndexBlobOID(ctx, rootAbs, relRepoPath)
+			if err != nil {
+				return sourceledger.Comparison{}, err
+			}
 		}
 		before = gitBlobComparisonSide(ctx, mgr, rootAbs, indexOID)
-		before.RootID, before.Path = source.RootID, source.Path
-		after = readWorkingCommit(targetProject, source.RootID, rootAbs, source.Path).Side
+		before.RootID, before.Path = source.RootID, beforePath
+		after = verifyHistoricalWorkingSide(readWorkingCommit(targetProject, source.RootID, rootAbs, source.Path).Side, source.ExpectedAfterSHA256)
 	}
 
+	return finalizeCommitComparison(before, after), nil
+}
+
+func unavailableWorkingSide(rootID, path string, expectedAfterSHA256 *string) sourceledger.ComparisonSide {
+	if expectedAfterSHA256 != nil && *expectedAfterSHA256 == "" {
+		return sourceledger.ComparisonSide{
+			RootID:       rootID,
+			Path:         path,
+			State:        "absent",
+			Availability: sourceledger.ContentAbsent,
+		}
+	}
+	return sourceledger.ComparisonSide{
+		RootID:       rootID,
+		Path:         path,
+		State:        "content",
+		Availability: sourceledger.ContentUnavailable,
+		Reason:       "content_unavailable",
+	}
+}
+
+func verifyHistoricalWorkingSide(side sourceledger.ComparisonSide, expectedAfterSHA256 *string) sourceledger.ComparisonSide {
+	if expectedAfterSHA256 == nil {
+		return side
+	}
+	want := strings.TrimSpace(*expectedAfterSHA256)
+	if want == "" {
+		if side.State == "absent" {
+			return side
+		}
+		return unavailableWorkingSide(side.RootID, side.Path, expectedAfterSHA256)
+	}
+	if side.State != "content" || side.SHA256 != want {
+		return unavailableWorkingSide(side.RootID, side.Path, expectedAfterSHA256)
+	}
+	return side
+}
+
+func finalizeCommitComparison(before, after sourceledger.ComparisonSide) sourceledger.Comparison {
 	op := wire.SourceChangeOpWrite
 	if after.State == "absent" {
 		op = wire.SourceChangeOpDelete
 	} else if before.State == "absent" {
 		op = wire.SourceChangeOpCreate
 	}
-	return sourceledger.Comparison{InRange: true, Op: op, Before: before, After: after}, nil
+	return sourceledger.Comparison{InRange: true, Op: op, Before: before, After: after}
 }
 
 func (s *Comparisons) loadBlobComparison(ctx context.Context, p *project.Project, source wire.BlobComparisonSource) (sourceledger.Comparison, error) {

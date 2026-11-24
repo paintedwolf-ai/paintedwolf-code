@@ -123,13 +123,47 @@ function Opener(props: { opener: ActionOpener; part: ToolPartView; projectId?: s
       </button>
     }>
       <Match when={props.opener.kind === "file" && props.opener.path ? props.opener.path : undefined} keyed>
-        {(path) => (
-          <span class="den-action-card__opener" data-testid="action-opener">
-            {/* The path resolves against the project's roots, so @label/ paths and folders open where they live. */}
-            <SourcePathLink projectId={props.projectId ?? ""} path={path} line={props.opener.line} label={label()}
-              entryKind={TOOL_PATH_ENTRY_KINDS[props.part.tool.toLowerCase()] ?? "unknown"} rootRefs={props.rootRefs} />
-          </span>
-        )}
+        {(path) => {
+          const matchedLocations = () => {
+            const pid = props.projectId?.trim() ?? "";
+            const all = (props.part.sourceLocations ?? []).filter((loc) => loc.project_id === pid);
+            if (!all.length) return [];
+            const norm = path.replace(/\\/g, "/");
+            const exact = all.filter((loc) => {
+              if (loc.path === norm || norm.endsWith(`/${loc.path}`)) return true;
+              const rootLabel = props.rootRefs?.find((r) => r.id === loc.root_id)?.label;
+              return Boolean(rootLabel && norm === `@${rootLabel}/${loc.path}`);
+            });
+            return exact.length > 0 ? exact : all.length === 1 ? all : [];
+          };
+          const uniqueTarget = () => {
+            const matched = matchedLocations();
+            return matched.length === 1 ? matched[0] : undefined;
+          };
+          const ambiguousTargets = () => {
+            const matched = matchedLocations();
+            if (matched.length > 1) return matched;
+            const pid = props.projectId?.trim() ?? "";
+            const all = (props.part.sourceLocations ?? []).filter((loc) => loc.project_id === pid);
+            return matched.length === 0 && all.length > 1 ? all : undefined;
+          };
+          return (
+            <span class="den-action-card__opener" data-testid="action-opener">
+              {/* The path resolves against the project's roots, so @label/ paths and folders open where they live. */}
+              <SourcePathLink
+                projectId={props.projectId ?? ""}
+                path={path}
+                line={props.opener.line}
+                label={label()}
+                navigationTarget={uniqueTarget()}
+                candidateTargets={ambiguousTargets()}
+                legacyActivity={!props.part.sourceLocations?.length}
+                entryKind={TOOL_PATH_ENTRY_KINDS[props.part.tool.toLowerCase()] ?? "unknown"}
+                rootRefs={props.rootRefs}
+              />
+            </span>
+          );
+        }}
       </Match>
       <Match when={props.opener.kind === "terminal" && props.opener.process_handle ? props.opener.process_handle : undefined} keyed>
         {(handle) => (

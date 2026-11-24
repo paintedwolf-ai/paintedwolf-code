@@ -9443,6 +9443,7 @@ export interface components {
             old_root_relative_path?: string;
             before_blob_oid?: string;
             after_blob_oid?: string;
+            after_sha256?: string;
         };
         GitDiffView: {
             repo_id: string;
@@ -17299,7 +17300,9 @@ export interface components {
             root_id: string;
             path: string;
             before_path?: string;
+            before_blob_oid?: string;
             expected_head?: string;
+            expected_after_sha256?: string;
             /** Format: uuid */
             worktree_id?: string;
             /** @enum {string} */

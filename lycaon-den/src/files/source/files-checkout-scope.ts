@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { produce } from "solid-js/store";
-import type { SourceWorkspace, SourceWorkspaceRoot } from "../../api/types.ts";
+import type { GitWorktreeEntry, SourceWorkspace, SourceWorkspaceRoot } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { ensureProject, projectFilesState, setFilesStore, type FileBuffer } from "../documents/files-buffer-state.ts";
 
@@ -12,8 +12,21 @@ export type WorkspaceRootCheckoutMeta = {
   worktreeId?: string;
 };
 
+export type KnownCheckoutEntrySummary = {
+  repoId: string;
+  worktreeId: string;
+  path: string;
+  branch?: string;
+  headShort?: string;
+  detached?: boolean;
+  isProjectCheckout?: boolean;
+  available: boolean;
+};
+
 const rootCheckoutsByProject = new Map<string, Record<string, WorkspaceRootCheckoutMeta>>();
 const trunkWorktreeByProjectRoot = new Map<string, string>();
+const checkoutRootPaths = new Map<string, string>();
+const knownCheckoutsByProject = new Map<string, Map<string, KnownCheckoutEntrySummary>>();
 const selectedWorktreesByProject = new Map<string, string[]>();
 const [checkoutScopeEpoch, setCheckoutScopeEpoch] = createSignal(0);
 
@@ -23,6 +36,10 @@ function bumpCheckoutScope(): void {
 
 function projectRootKey(projectId: string, rootId: string): string {
   return `${projectId.trim()}\0${rootId.trim()}`;
+}
+
+function checkoutRootKey(projectId: string, rootId: string, worktreeId: string): string {
+  return `${projectId.trim()}\0${rootId.trim()}\0${worktreeId.trim()}`;
 }
 
 /** Selected checkout UUIDs for a project from shared in-memory inspection state. */
@@ -76,12 +93,97 @@ export function recordWorkspaceRootCheckouts(
     const repoId = root.repo_id?.trim() || undefined;
     const worktreeId = root.worktree_id?.trim() || undefined;
     map[rootId] = { rootId, path: root.path, branchId, repoId, worktreeId };
+    if (worktreeId && root.path) {
+      checkoutRootPaths.set(checkoutRootKey(pid, rootId, worktreeId), root.path);
+    }
     if (branchId === "" && worktreeId) {
       trunkWorktreeByProjectRoot.set(projectRootKey(pid, rootId), worktreeId);
     }
   }
   rootCheckoutsByProject.set(pid, map);
   return map;
+}
+
+export function recordKnownCheckoutEntries(
+  projectId: string,
+  repoId: string,
+  entries: readonly GitWorktreeEntry[],
+): void {
+  const pid = projectId.trim();
+  const rid = repoId.trim();
+  if (!pid || !rid) return;
+  let byId = knownCheckoutsByProject.get(pid);
+  if (!byId) {
+    byId = new Map();
+    knownCheckoutsByProject.set(pid, byId);
+  }
+  for (const entry of entries) {
+    const wid = entry.worktree_id.trim();
+    if (!wid) continue;
+    byId.set(wid, {
+      repoId: rid,
+      worktreeId: wid,
+      path: entry.path,
+      branch: entry.branch,
+      headShort: entry.head_short,
+      detached: entry.detached,
+      isProjectCheckout: entry.is_project_checkout,
+      available: entry.available,
+    });
+  }
+}
+
+export function knownCheckoutSummary(projectId: string, worktreeId: string | undefined): KnownCheckoutEntrySummary | undefined {
+  const pid = projectId.trim();
+  const wid = worktreeId?.trim() ?? "";
+  if (!pid || !wid) return undefined;
+  return knownCheckoutsByProject.get(pid)?.get(wid);
+}
+
+export function knownProjectCheckouts(projectId: string): KnownCheckoutEntrySummary[] {
+  const byId = knownCheckoutsByProject.get(projectId.trim());
+  return byId ? [...byId.values()] : [];
+}
+
+/** Resolves the durable host branch_id for a checkout UUID, preserving "" for the trunk checkout. */
+export function branchIdForWorktree(
+  projectId: string,
+  rootId: string,
+  worktreeId: string | undefined,
+): string | undefined {
+  const wid = worktreeId?.trim() ?? "";
+  if (!wid) return undefined;
+  if (trunkWorktreeByProjectRoot.get(projectRootKey(projectId, rootId)) === wid) return "";
+  if (knownCheckoutSummary(projectId, wid)?.isProjectCheckout) return "";
+  return `worktree:${wid}`;
+}
+
+/** Resolves a checkout's mapped physical root path when known. */
+export function resolveCheckoutRootPath(
+  projectId: string,
+  rootId: string,
+  worktreeId: string | undefined,
+  fallbackRootPath?: string,
+): string | undefined {
+  const wid = worktreeId?.trim() ?? "";
+  if (!wid) return fallbackRootPath;
+  const direct = checkoutRootPaths.get(checkoutRootKey(projectId, rootId, wid));
+  if (direct) return direct;
+  const summary = knownCheckoutSummary(projectId, wid);
+  if (!summary?.path) return fallbackRootPath;
+  if (!fallbackRootPath) return summary.path;
+  const projectSummary = [...(knownCheckoutsByProject.get(projectId.trim())?.values() ?? [])].find(
+    (item) => item.repoId === summary.repoId && item.isProjectCheckout && item.path,
+  );
+  if (projectSummary?.path) {
+    const normRoot = fallbackRootPath.replace(/\\/g, "/").replace(/\/+$/, "");
+    const normTop = projectSummary.path.replace(/\\/g, "/").replace(/\/+$/, "");
+    if (normRoot === normTop) return summary.path;
+    if (normRoot.startsWith(`${normTop}/`)) {
+      return `${summary.path.replace(/\/+$/, "")}/${normRoot.slice(normTop.length + 1)}`;
+    }
+  }
+  return summary.path;
 }
 
 export function workspaceRootCheckout(projectId: string, rootId: string): WorkspaceRootCheckoutMeta | undefined {
@@ -91,6 +193,8 @@ export function workspaceRootCheckout(projectId: string, rootId: string): Worksp
 export function resetWorkspaceRootCheckoutsForTests(): void {
   rootCheckoutsByProject.clear();
   trunkWorktreeByProjectRoot.clear();
+  checkoutRootPaths.clear();
+  knownCheckoutsByProject.clear();
   selectedWorktreesByProject.clear();
 }
 

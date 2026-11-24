@@ -33,6 +33,7 @@ import {
   type GitScope,
 } from "./git-repo-scope.ts";
 import { SourcePathLink } from "./source/SourcePathLink.tsx";
+import { gitChangeNavigationTarget } from "../files/source/file-open-target.ts";
 import { createModalFocusTrap } from "../platform/interaction/modal-focus-trap.ts";
 import {
   type LoadState,
@@ -785,6 +786,16 @@ export function GitStrip(props: Props) {
                           truncate
                           projectId={pid}
                           path={f.root_relative_path || f.path}
+                          repoId={worktreeRepoId() || undefined}
+                          worktreeId={status()?.worktree_id}
+                          navigationTarget={
+                            gitChangeNavigationTarget({
+                              projectId: pid,
+                              repoId: worktreeRepoId(),
+                              worktreeId: status()?.worktree_id,
+                              file: f,
+                            }) ?? undefined
+                          }
                           change={statusFileChange(f.status)}
                           rootRefs={rootsForFile(f, props.rootRefs)}
                           chatDestination={
