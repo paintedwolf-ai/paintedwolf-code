@@ -13,9 +13,10 @@ const DefaultTailBytes = 8192
 
 // OutputChunk is one stdout/stderr slice with a monotonic cursor.
 type OutputChunk struct {
-	Cursor int64  `json:"cursor"`
-	Stream string `json:"stream"`
-	Text   string `json:"text"`
+	Cursor     int64  `json:"cursor"`
+	Stream     string `json:"stream"`
+	Text       string `json:"text"`
+	HostOrigin bool   `json:"-"`
 }
 
 // RingBuffer stores recent process output with a byte cap.
@@ -35,8 +36,13 @@ func NewRingBuffer(maxBytes int) *RingBuffer {
 	return &RingBuffer{maxBytes: maxBytes}
 }
 
-// Append records output for stream and returns the chunk start cursor.
+// Append records process-origin output for stream and returns the chunk start cursor.
 func (b *RingBuffer) Append(stream string, p []byte) int64 {
+	return b.AppendWithOrigin(stream, p, false)
+}
+
+// AppendWithOrigin records output tagged with whether the host generated it.
+func (b *RingBuffer) AppendWithOrigin(stream string, p []byte, hostOrigin bool) int64 {
 	if len(p) == 0 {
 		return b.nextCursor
 	}
@@ -48,9 +54,10 @@ func (b *RingBuffer) Append(stream string, p []byte) int64 {
 	start := b.nextCursor
 	b.nextCursor += int64(len(text))
 	b.chunks = append(b.chunks, OutputChunk{
-		Cursor: start,
-		Stream: stream,
-		Text:   text,
+		Cursor:     start,
+		Stream:     stream,
+		Text:       text,
+		HostOrigin: hostOrigin,
 	})
 	b.totalBytes += len(text)
 	return start

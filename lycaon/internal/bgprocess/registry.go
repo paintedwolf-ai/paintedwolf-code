@@ -81,6 +81,7 @@ type processTable struct {
 	maxBackground    int
 	maxAwaited       int
 	maxRecent        int
+	onHandleEvicted  func(ctx context.Context, sessionID, handle string)
 }
 
 // Terminal owns held PTY interaction and sealed captures.
@@ -103,6 +104,7 @@ type Output struct {
 	refused         RefusalPublisher
 	projector       *captureprojection.Projector
 	screenMemory    func() (*toolcontract.ProgramMemory, error)
+	watchOutput     func(ctx context.Context, sessionID, handle string)
 }
 
 // ProcessLifecycle owns settlement, termination, and resource release.
@@ -282,6 +284,9 @@ func (r *processTable) pruneCompletedLocked(sessionID string) {
 	for _, job := range completed[:len(completed)-r.maxRecent] {
 		delete(procs, job.handle)
 		r.cleanupHandleAuxLocked(sessionID, job.projectID, job.handle)
+		if fn := r.onHandleEvicted; fn != nil {
+			go fn(context.Background(), sessionID, job.handle)
+		}
 	}
 }
 

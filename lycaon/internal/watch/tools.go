@@ -302,10 +302,28 @@ func ownerFromToolContext(tctx tools.ToolContext) Owner {
 
 func authorityFromToolContext(tctx tools.ToolContext) Authority {
 	var paths []string
+	var grants []WatchRootGrant
+	privateBranch := strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" || string(tctx.Source.ProjectSourceBranch) != ""
 	for _, r := range nonOutsideRoots(tctx.Source.Roots) {
-		if p := strings.TrimSpace(r.Path); p != "" {
+		p := strings.TrimSpace(r.Path)
+		if p != "" {
 			paths = append(paths, p)
 		}
+		branchID := string(tctx.Source.ProjectSourceBranch)
+		if b, ok := tctx.Source.ProjectRootBranches[r.ID]; ok && string(b) != "" {
+			branchID = string(b)
+		}
+		label := strings.TrimPrefix(strings.TrimSpace(r.Label), "@")
+		if label == "" {
+			label = strings.TrimSpace(r.ID)
+		}
+		grants = append(grants, WatchRootGrant{
+			Label:         label,
+			RootID:        strings.TrimSpace(r.ID),
+			Path:          p,
+			BranchID:      branchID,
+			PrivateBranch: privateBranch || branchID != "",
+		})
 	}
 	var ports []uint16
 	if tctx.Local.LoopbackConnectGranted {
@@ -320,6 +338,7 @@ func authorityFromToolContext(tctx tools.ToolContext) Authority {
 		ProjectDir:      strings.TrimSpace(tctx.ActiveRootPath()),
 		WorkspaceID:     strings.TrimSpace(tctx.Source.ActiveRootID),
 		RootPaths:       paths,
+		Roots:           grants,
 		LoopbackGranted: tctx.Local.LoopbackConnectGranted,
 		LoopbackPorts:   ports,
 	}

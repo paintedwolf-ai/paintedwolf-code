@@ -132,6 +132,9 @@ func (r *Output) publishStream(ctx context.Context, proc *Process, stream string
 	if !silent && running {
 		r.sweeper.onOutputChunk() //nolint:contextcheck // The sweeper loop outlives this call and holds its own context.
 	}
+	if !silent {
+		r.notifyWatchOutput(ctx, proc.SessionID, proc.Handle)
+	}
 	if r.publish == nil {
 		return
 	}

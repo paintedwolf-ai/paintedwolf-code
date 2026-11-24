@@ -266,6 +266,7 @@ func (s *Store) Recover(ctx context.Context) error {
 	}
 	s.heap.Reset()
 	s.sampler = newSampler()
+	s.manifests = newManifestStore()
 
 	stoppedRows, err := s.db.QueryContext(ctx,
 		`SELECT session_id FROM watch_session_state WHERE stopped_at IS NOT NULL AND stopped_at != ''`)
@@ -310,6 +311,13 @@ func (s *Store) Recover(ctx context.Context) error {
 		return err
 	}
 	for _, reg := range liveRegs {
+		for altIdx, cond := range reg.Conditions {
+			if cond.Kind == "file_change" {
+				if snap, _ := decodePersistedManifest(reg.Cursors[fileManifestCursorKey(altIdx)]); snap != nil {
+					s.manifests.set(reg.WatchID, altIdx, snap)
+				}
+			}
+		}
 		s.heap.Upsert(KindWatchExpiry, reg.WatchID, reg.Lifecycle.ExpiresAt)
 		s.scheduleWatchTimer(reg)
 		s.subscribeWatchSampler(reg, now)

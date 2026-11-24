@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -125,6 +126,22 @@ func buildProbeKey(owner Owner, auth Authority, cond awaitstore.Condition) (Prob
 		}
 		target := fmt.Sprintf("%s:%d", host, cond.Port)
 		return ProbeKey{AuthorityDomain: domain, Kind: "port_ready", Target: target}, true
+	case "file_change":
+		grant, ok := resolveWatchRootGrant(auth, cond.Root)
+		if !ok || grant.Path == "" {
+			return ProbeKey{}, false
+		}
+		fDomain := fmt.Sprintf("%s|branch=%s|rootpath=%s", domain, grant.BranchID, filepath.Clean(grant.Path))
+		target := fmt.Sprintf("%s|%s|%s", cond.Root, cond.Path, cond.Glob)
+		return ProbeKey{AuthorityDomain: fDomain, Kind: "file_change", Target: target}, true
+	case "git_ref":
+		grant, ok := resolveWatchRootGrant(auth, cond.Root)
+		if !ok || grant.Path == "" {
+			return ProbeKey{}, false
+		}
+		gDomain := fmt.Sprintf("%s|branch=%s|rootpath=%s", domain, grant.BranchID, filepath.Clean(grant.Path))
+		target := fmt.Sprintf("%s|%s", cond.Root, cond.Ref)
+		return ProbeKey{AuthorityDomain: gDomain, Kind: "git_ref", Target: target}, true
 	default:
 		return ProbeKey{}, false
 	}
@@ -313,13 +330,30 @@ func (s *Store) applyProbeGroupResult(ctx context.Context, snapshot *probeGroup,
 	})
 
 	stateChanged := false
-	for _, sub := range subs {
-		changed, err := s.applySubscriberProbeOutcome(ctx, sub, snapshot.condition, out)
-		if err != nil {
-			return err
+	if snapshot.condition.Kind == "file_change" || snapshot.condition.Kind == "git_ref" {
+		seenWatch := map[string]bool{}
+		for _, sub := range subs {
+			if seenWatch[sub.watchID] {
+				continue
+			}
+			seenWatch[sub.watchID] = true
+			changed, err := s.reconcileSourceWatchByID(ctx, sub.watchID)
+			if err != nil {
+				return err
+			}
+			if changed {
+				stateChanged = true
+			}
 		}
-		if changed {
-			stateChanged = true
+	} else {
+		for _, sub := range subs {
+			changed, err := s.applySubscriberProbeOutcome(ctx, sub, snapshot.condition, out)
+			if err != nil {
+				return err
+			}
+			if changed {
+				stateChanged = true
+			}
 		}
 	}
 
