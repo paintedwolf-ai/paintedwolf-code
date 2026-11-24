@@ -39,12 +39,14 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitr
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	failed, exitCode := true, 128
-	defer func() { launch.done(exitCode, failed) }()
+	var diagnostics []byte
+	defer func() { launch.done(exitCode, failed, out.written > 0, diagnostics) }()
 	if launch.setupErr != nil {
 		writeLine(stderr, fmt.Sprintf("fatal: %s: managed SSH transport setup failed", p.command.spec.Name))
 		return toolcontract.ProducerResult{Status: 128, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 	}
-	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, p.command.args, out)
+	var code int
+	diagnostics, code, err = p.owners.Git.NetworkCommand(ctx, repo.Root, p.command.args, out)
 	if err == nil {
 		exitCode = code
 	}
@@ -91,7 +93,8 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitrepo
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	failed, exitCode := true, 128
-	defer func() { launch.done(exitCode, failed) }()
+	var diagnostics []byte
+	defer func() { launch.done(exitCode, failed, out.written > 0, diagnostics) }()
 	if launch.setupErr != nil {
 		writeLine(stderr, fmt.Sprintf("fatal: %s: managed SSH transport setup failed", p.command.spec.Name))
 		return toolcontract.ProducerResult{Status: 128, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
@@ -101,7 +104,8 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitrepo
 		fetchArgs = append(fetchArgs, "-q")
 	}
 	fetchArgs = append(fetchArgs, p.Argv.Operands().Values()...)
-	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, fetchArgs, out)
+	var code int
+	diagnostics, code, err = p.owners.Git.NetworkCommand(ctx, repo.Root, fetchArgs, out)
 	if err == nil {
 		exitCode = code
 	}
@@ -182,7 +186,8 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	failed, exitCode := true, 128
-	defer func() { launch.done(exitCode, failed) }()
+	var diagnostics []byte
+	defer func() { launch.done(exitCode, failed, out.written > 0, diagnostics) }()
 	if launch.setupErr != nil {
 		writeLine(stderr, fmt.Sprintf("fatal: %s: managed SSH transport setup failed", p.command.spec.Name))
 		return toolcontract.ProducerResult{Status: 128, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
@@ -204,7 +209,8 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 		flags = append(flags, "--single-branch")
 	}
 	resolvedURL := resolveLocalCloneSource(dir, rawURL)
-	diagnostics, code, err := git.CloneCommand(ctx, resolvedURL, boundDest.Resolved.Abs, flags, out)
+	var code int
+	diagnostics, code, err = git.CloneCommand(ctx, resolvedURL, boundDest.Resolved.Abs, flags, out)
 	if err == nil {
 		exitCode = code
 	}
@@ -270,7 +276,7 @@ func authorizeRepoNetwork(ctx context.Context, p Prepared, tc tools.ToolContext,
 // networkLaunch is one network command's bound launch: done settles it with
 // Git's exit status and whether the command failed.
 type networkLaunch struct {
-	done        func(exitCode int, failed bool)
+	done        func(exitCode int, failed, wroteStdout bool, diagnostics []byte)
 	setupErr    error
 	credentials *gitexec.AgentCredentials
 	ssh         *gitexec.AgentSSH
@@ -354,31 +360,48 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 		plan = plan.WithExtraEnv("SSH_AUTH_SOCK=" + reference)
 	}
 	credentials.Admit(admitted.urls...)
-	done := func(exitCode int, failed bool) {
+	done := func(exitCode int, failed, wroteStdout bool, diagnostics []byte) {
+		if sshService != nil {
+			_ = sshService.Close()
+		}
 		outcome := tools.AgentLaunchOutcome{Failed: failed}
-		preAuthFailed := false
+		var transportObs confine.GitTransportObservation
 		if hasSSHRemote && mediatedSSH {
-			var obs confine.GitTransportObservation
 			if sshSetupErr != nil {
-				obs = confine.SummarizeGitTransport(
+				transportObs = confine.SummarizeGitTransport(
 					p.execution, p.commandLine(), exitCode, failed,
 					"host_setup", "service_start_failed", primaryDest, primaryHost, primaryPort, nil,
 				)
 			} else if sshService != nil {
-				obs = sshService.Observation(p.execution, p.commandLine(), exitCode, failed, primaryDest, primaryHost, primaryPort)
+				transportObs = sshService.Observation(p.execution, p.commandLine(), exitCode, failed, primaryDest, primaryHost, primaryPort)
 			}
-			if obs.Cause != "" {
-				outcome.GitTransport = &obs
-				preAuthFailed = obs.Cause.PreAuthFailure()
+			if transportObs.Cause != "" {
+				outcome.GitTransport = &transportObs
 			}
 		}
-		if failed && !preAuthFailed {
-			outcome.Refusals = withheldAgent(ctx, admitted.urls, hasAgent)
+		if failed && hasSSHRemote {
+			settleCtx := context.WithoutCancel(ctx)
+			sshObs, refusals, suppress := evaluateGitSSHRecovery(settleCtx, gitSSHLaunchInput{
+				commandLine: p.commandLine(),
+				dest:        primaryDest,
+				host:        primaryHost,
+				port:        primaryPort,
+				mediated:    mediatedSSH,
+				confinement: plan.Confinement,
+				lease:       plan.ActionLease,
+				hasAgent:    hasAgent,
+				agentPath:   agent.ApprovedPath,
+				exitCode:    exitCode,
+				failed:      failed,
+				wroteStdout: wroteStdout,
+				diagnostics: diagnostics,
+				transport:   transportObs,
+			})
+			outcome.SSHRecovery = sshObs
+			outcome.Refusals = refusals
+			outcome.SuppressSSHSpeculation = suppress
 		}
 		release(context.WithoutCancel(ctx), outcome)
-		if sshService != nil {
-			_ = sshService.Close()
-		}
 		releaseService()
 		_ = credentials.Close()
 	}
@@ -410,16 +433,6 @@ func primarySSHDestination(urls []string) (dest, host string, port uint16) {
 		return net.JoinHostPort(h, strconv.Itoa(int(p))), h, p
 	}
 	return "", "", 0
-}
-
-// withheldAgent reads a failed SSH network command without the user's SSH
-// agent as the socket refusal its capability opens: confined ssh cannot read
-// the person's keys, so the agent is its only way to authenticate.
-func withheldAgent(ctx context.Context, urls []string, hasAgent bool) []confine.SandboxRefusal {
-	if agent := gitexec.HostSSHAgentSocket(ctx); agent != "" && !hasAgent && slices.ContainsFunc(urls, isSSHRemote) {
-		return []confine.SandboxRefusal{{Operation: "network-outbound", Target: agent, Process: "ssh", Count: 1, Recovery: confine.RecoverSocketPath, Grant: agent}}
-	}
-	return nil
 }
 
 func isSSHRemote(raw string) bool {

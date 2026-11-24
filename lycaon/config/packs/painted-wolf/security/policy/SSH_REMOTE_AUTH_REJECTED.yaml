@@ -1,0 +1,37 @@
+spec_version: "1.0"
+id: SSH_REMOTE_AUTH_REJECTED
+kind: policy
+on: tool.post_invoke
+selector:
+  tools:
+    - command
+    - verify
+    - command_output
+requires_facts: [paintedwolf.confine_applied, paintedwolf.ssh_destination, paintedwolf.ssh_failure_cause, paintedwolf.ssh_probed_paths, paintedwolf.ssh_stage]
+when: >-
+  paintedwolf.confine_applied && paintedwolf.ssh_failure_cause == "publickey_rejected"
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+message: remote SSH server rejected public-key authentication with the signing agent available
+what: The remote SSH server rejected public-key authentication{% if paintedwolf.ssh_stage %} in `{{ paintedwolf.ssh_stage }}`{% endif %}{% if paintedwolf.ssh_destination %} at `{{ paintedwolf.ssh_destination }}`{% endif %}.
+cause: Transport and host-key verification succeeded and the approved SSH signing agent was available, so the remote server rejected the offered public key or account access.{% if paintedwolf.ssh_probed_paths %} Default client probes of {{ paintedwolf.ssh_probed_paths }} were also withheld by the key-material floor.{% endif %}
+why: Re-requesting an SSH agent socket grant or exposing default private key files does not fix a remote authorization rejection when the signing agent is already bound.
+fix: Report that SSH public-key authentication was rejected by the remote server{% if paintedwolf.ssh_destination %} (`{{ paintedwolf.ssh_destination }}`){% endif %} even with the SSH signing agent available, so the user can check which key is loaded in their agent or authorized on the remote account.
+instead: Do not re-request the SSH agent socket grant or request default private-key path grants.
+x-paintedwolf-scenarios:
+  - id: agent_key_unauthorized
+    vars:
+      tool: command
+      confine_applied: true
+      ssh_failure_cause: publickey_rejected
+      ssh_stage: git ls-remote origin
+      ssh_destination: 127.0.0.1:2222
+  - id: direct_ssh_unauthorized
+    vars:
+      tool: command
+      confine_applied: true
+      ssh_failure_cause: publickey_rejected
+      ssh_stage: ssh -p 2222 git@127.0.0.1 uname -a
+      ssh_destination: 127.0.0.1:2222
+      ssh_probed_paths: [/Users/person/.ssh/id_ed25519]

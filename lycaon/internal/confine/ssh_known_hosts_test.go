@@ -137,3 +137,53 @@ func TestStampRefusalIgnoresInheritedProbesAndRetainsGitTransports(t *testing.T)
 		t.Fatalf("GitTransports lost during StampRefusal: %+v", stamped.Observation.GitTransports)
 	}
 }
+
+func TestSSHRecoveryMergeStampAndMediatedKnownHostsFiles(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	c := Confinement{Network: NetworkProxyOnly, ProjectID: "proj-kh"}
+	files := MediatedKnownHostsFiles(c)
+	if len(files) < 2 {
+		t.Fatalf("MediatedKnownHostsFiles = %v, want project and mirror paths", files)
+	}
+
+	succeeded := Observation{
+		Applied:         true,
+		SucceededStages: []string{"gh auth status"},
+		Refusals: SandboxRefusals{
+			Refusals: []SandboxRefusal{{Operation: "file-read-data", Target: "/noise", Count: 1}},
+		},
+		SSHRecoveries: []SSHRecoveryObservation{{
+			Stage:       "git fetch",
+			Cause:       SSHFailureHostKeyUnverified,
+			ProbedPaths: []string{"/a"},
+		}},
+	}
+	failed := Observation{
+		Applied:      true,
+		FailedStages: []string{"ssh git@example.com"},
+		Refusals: SandboxRefusals{
+			Refusals: []SandboxRefusal{{Operation: "network-outbound", Target: "/sock", Count: 1}},
+		},
+		SSHRecoveries: []SSHRecoveryObservation{{
+			Stage: "ssh git@example.com",
+			Cause: SSHFailureAgentRequired,
+		}},
+	}
+
+	m1 := succeeded.Merge(failed)
+	if len(m1.Refusals.Refusals) != 1 || m1.Refusals.Refusals[0].Target != "/sock" || len(m1.SSHRecoveries) != 2 {
+		t.Fatalf("succeeded.Merge(failed) = %+v", m1)
+	}
+	m2 := failed.Merge(succeeded)
+	if len(m2.Refusals.Refusals) != 1 || m2.Refusals.Refusals[0].Target != "/sock" || len(m2.SucceededStages) != 1 {
+		t.Fatalf("failed.Merge(succeeded) = %+v", m2)
+	}
+
+	stamped := StampRefusal("command", "sess-1", Boundary{Applied: true, Network: NetworkProxyOnly}, RefusalContext{
+		SucceededStages: []string{"gh auth status"},
+		SSHRecoveries:   []SSHRecoveryObservation{{Stage: "ssh git@example.com", Cause: SSHFailureAgentUnavailable}},
+	})
+	if len(stamped.Observation.SucceededStages) != 1 || len(stamped.Observation.SSHRecoveries) != 1 {
+		t.Fatalf("stamped SSHRecoveries/SucceededStages = %+v", stamped.Observation)
+	}
+}

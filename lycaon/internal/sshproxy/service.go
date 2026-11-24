@@ -40,16 +40,18 @@ const (
 
 // Attempt records one verified connect attempt in arrival order.
 type Attempt struct {
-	Ordinal      int
-	ExecutionID  string
-	Destination  string
-	Host         string
-	Port         uint16
-	Stage        string
-	Outcome      string
-	Reply        ReplyCode
-	PolicyReason string
-	ErrorClass   string
+	Ordinal         int
+	ExecutionID     string
+	Destination     string
+	Host            string
+	Port            uint16
+	Stage           string
+	Outcome         string
+	Reply           ReplyCode
+	PolicyReason    string
+	ErrorClass      string
+	SawServerBanner bool
+	ReachedUserAuth bool
 }
 
 // DialResult carries the upstream connection or typed refusal detail for a verified connect request.
@@ -172,13 +174,24 @@ func (s *Service) Attempts() []Attempt {
 	return slices.Clone(s.attempts)
 }
 
-func (s *Service) recordAttempt(attempt Attempt) {
+func (s *Service) recordAttempt(attempt Attempt) int {
 	s.mu.Lock()
-	attempt.Ordinal = len(s.attempts) + 1
+	idx := len(s.attempts)
+	attempt.Ordinal = idx + 1
 	if attempt.ExecutionID == "" {
 		attempt.ExecutionID = s.executionID
 	}
 	s.attempts = append(s.attempts, attempt)
+	s.mu.Unlock()
+	return idx
+}
+
+func (s *Service) updateAttemptHandshake(idx int, sawServerBanner, reachedUserAuth bool) {
+	s.mu.Lock()
+	if idx >= 0 && idx < len(s.attempts) {
+		s.attempts[idx].SawServerBanner = sawServerBanner
+		s.attempts[idx].ReachedUserAuth = reachedUserAuth
+	}
 	s.mu.Unlock()
 }
 
@@ -372,7 +385,7 @@ func (s *Service) handle(ctx context.Context, conn *net.UnixConn) {
 		s.untrackConn(res.Conn, false)
 		_ = res.Conn.Close()
 	}()
-	s.recordAttempt(Attempt{
+	attemptIdx := s.recordAttempt(Attempt{
 		Destination: dest,
 		Host:        ep.Host,
 		Port:        ep.Port,
@@ -383,7 +396,10 @@ func (s *Service) handle(ctx context.Context, conn *net.UnixConn) {
 	if err := writeReply(conn, ReplySuccess); err != nil {
 		return
 	}
-	relayStreams(ctx, conn, rest, res.Conn)
+	obs := &handshakeObserver{}
+	relayStreams(ctx, conn, rest, res.Conn, obs)
+	sawBanner, reachedAuth := obs.summary()
+	s.updateAttemptHandshake(attemptIdx, sawBanner, reachedAuth)
 }
 
 func defaultStage(stage string, code ReplyCode) string {
@@ -461,7 +477,7 @@ func writeReply(conn *net.UnixConn, code ReplyCode) error {
 	return err
 }
 
-func relayStreams(ctx context.Context, client *net.UnixConn, initial []byte, upstream net.Conn) {
+func relayStreams(ctx context.Context, client *net.UnixConn, initial []byte, upstream net.Conn, obs *handshakeObserver) {
 	touch := func() {
 		deadline := time.Now().Add(relayIdleTimeout)
 		_ = client.SetDeadline(deadline)
@@ -480,6 +496,9 @@ func relayStreams(ctx context.Context, client *net.UnixConn, initial []byte, ups
 		defer wg.Done()
 		if len(initial) > 0 {
 			touch()
+			if obs != nil {
+				obs.observeClient(initial)
+			}
 			if _, err := upstream.Write(initial); err != nil {
 				if cw, ok := upstream.(interface{ CloseWrite() error }); ok {
 					_ = cw.CloseWrite()
@@ -487,14 +506,22 @@ func relayStreams(ctx context.Context, client *net.UnixConn, initial []byte, ups
 				return
 			}
 		}
-		_, _ = io.Copy(touchWriter{w: upstream, touch: touch}, touchReader{r: client, touch: touch})
+		var onClient func([]byte)
+		if obs != nil {
+			onClient = obs.observeClient
+		}
+		_, _ = io.Copy(touchWriter{w: upstream, touch: touch}, touchReader{r: client, touch: touch, observe: onClient})
 		if cw, ok := upstream.(interface{ CloseWrite() error }); ok {
 			_ = cw.CloseWrite()
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		_, _ = io.Copy(touchWriter{w: client, touch: touch}, touchReader{r: upstream, touch: touch})
+		var onServer func([]byte)
+		if obs != nil {
+			onServer = obs.observeServer
+		}
+		_, _ = io.Copy(touchWriter{w: client, touch: touch}, touchReader{r: upstream, touch: touch, observe: onServer})
 		_ = client.CloseWrite()
 	}()
 	wg.Wait()
@@ -523,8 +550,9 @@ func (p *prefixedReader) remaining() []byte {
 }
 
 type touchReader struct {
-	r     io.Reader
-	touch func()
+	r       io.Reader
+	touch   func()
+	observe func([]byte)
 }
 
 func (t touchReader) Read(p []byte) (int, error) {
@@ -532,6 +560,9 @@ func (t touchReader) Read(p []byte) (int, error) {
 	n, err := t.r.Read(p)
 	if n > 0 {
 		t.touch()
+		if t.observe != nil {
+			t.observe(p[:n])
+		}
 	}
 	return n, err
 }

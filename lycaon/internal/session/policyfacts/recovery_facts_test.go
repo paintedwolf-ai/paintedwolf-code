@@ -147,11 +147,18 @@ func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
 	}
 }
 
-func TestObserveConfinePublishesGitTransportFacts(t *testing.T) {
+func TestObserveConfinePublishesSSHGitTransportAndGHCredentialStoreFacts(t *testing.T) {
 	gc := oar.NewGuardContext()
 	gc.Invocation.Tool = "command"
 	ObserveConfine(gc, confine.Observation{
-		Applied: true,
+		Applied:         true,
+		FailedStages:    []string{"GH_HOST=github.com external -- /usr/local/bin/gh api user"},
+		SucceededStages: []string{"git status"},
+		Refusals: confine.SandboxRefusals{
+			Refusals: []confine.SandboxRefusal{
+				{Operation: "file-read-data", Target: "/Users/person/Library/Keychains/login.keychain-db", Layer: confine.FloorReadCredentialStore, Recovery: confine.RecoverCredentialStore},
+			},
+		},
 		GitTransports: []confine.GitTransportObservation{
 			{ExitCode: 0, Cause: confine.GitTransportCauseEstablished},
 			{
@@ -166,12 +173,32 @@ func TestObserveConfinePublishesGitTransportFacts(t *testing.T) {
 				ErrorClass:   "denied",
 			},
 		},
+		SSHRecoveries: []confine.SSHRecoveryObservation{
+			{Cause: ""},
+			{
+				Cause:       confine.SSHFailureHostKeyChanged,
+				Stage:       "git fetch origin",
+				Client:      "git",
+				Destination: "github.com:22",
+				TrustPath:   "/Users/person/.ssh/known_hosts",
+				ProbedPaths: []string{"/Users/person/.ssh/id_ed25519"},
+			},
+		},
 	})
+	if !gc.Execution.GHCredentialStoreRefused {
+		t.Fatal("expected GHCredentialStoreRefused for failed gh stage with credential store refusal")
+	}
 	if !gc.Execution.GitTransportLoopbackRetryable || gc.Execution.GitTransportPort != "2222" {
 		t.Fatalf("git transport facts = %+v", gc.Execution)
 	}
-	data := gc.RejectData["GIT_SSH_TRANSPORT_DENIED"]
-	if data["git_transport_cause"] != string(confine.GitTransportCauseEndpointDenied) || data["git_transport_port"] != "2222" {
+	if gc.Execution.SSHFailureCause != string(confine.SSHFailureHostKeyChanged) || !gc.Execution.SSHClientIsNativeGit || gc.Execution.SSHTrustPath != "/Users/person/.ssh/known_hosts" {
+		t.Fatalf("ssh recovery facts = %+v", gc.Execution)
+	}
+	data := gc.RejectData[isolation.CodeSSHHostKeyChanged]
+	if data["gh_credential_store_refused"] != true || data["ssh_failure_cause"] != string(confine.SSHFailureHostKeyChanged) || data["git_transport_port"] != "2222" {
 		t.Fatalf("reject data = %+v", data)
+	}
+	if hasFailedExecutableStage([]string{"FOO=1 external -- /usr/bin/curl https://example.com"}, "gh") {
+		t.Fatal("non-gh stage matched gh")
 	}
 }

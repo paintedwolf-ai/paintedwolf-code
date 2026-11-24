@@ -161,6 +161,15 @@ func handleSSHGitSession(ch ssh.Channel, reqs <-chan *ssh.Request, gitBin, repoD
 				sub = "upload-pack"
 			case strings.Contains(execReq.Command, "receive-pack"):
 				sub = "receive-pack"
+			case strings.HasPrefix(strings.TrimSpace(execReq.Command), "echo "):
+				if req.WantReply {
+					_ = req.Reply(true, nil)
+				}
+				msg := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(execReq.Command), "echo "))
+				_, _ = fmt.Fprintln(ch, msg)
+				_ = ch.CloseWrite()
+				_, _ = ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{0}))
+				return
 			default:
 				if req.WantReply {
 					_ = req.Reply(false, nil)
@@ -307,9 +316,11 @@ func grantSSHAuthority(t *testing.T, s *commandProgramSession, agentSock string,
 
 func promptApprovingRecommended(t *testing.T, s *commandProgramSession, text string) {
 	t.Helper()
+	promptCtx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, text)
+		_, err := s.h.Sessions.Manager.Submissions.Prompt(promptCtx, s.session, text)
 		done <- err
 	}()
 	kind := wire.CheckpointKindToolApproval

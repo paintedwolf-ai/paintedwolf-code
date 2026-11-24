@@ -511,6 +511,30 @@ host_facts:
  - name: paintedwolf.git_transport_exit_code
    type: int
    observation: Exit code of the failing network Git execution.
+ - name: paintedwolf.completed_stages
+   type: list<string>
+   observation: Command lines of stages in this invocation that completed with exit code zero.
+ - name: paintedwolf.gh_credential_store_refused
+   type: bool
+   observation: True when a failed gh stage in this invocation encountered a host OS credential-store refusal.
+ - name: paintedwolf.ssh_failure_cause
+   type: string
+   observation: Host-evidenced SSH trust or signing failure cause for the failing SSH stage, or empty when none applies.
+ - name: paintedwolf.ssh_stage
+   type: string
+   observation: Command line of the failing SSH stage.
+ - name: paintedwolf.ssh_destination
+   type: string
+   observation: Normalized host and port of the failing SSH stage.
+ - name: paintedwolf.ssh_trust_path
+   type: string
+   observation: Single known_hosts file associated with the failing SSH stage.
+ - name: paintedwolf.ssh_probed_paths
+   type: list<string>
+   observation: Optional SSH config or default key paths probed by the client and withheld from capability grants.
+ - name: paintedwolf.ssh_client_is_native_git
+   type: bool
+   observation: True when the failing SSH stage ran through native Git rather than external ssh.
  - name: paintedwolf.syntax_check_overridden
    type: bool
  - name: paintedwolf.source_analysis_unavailable

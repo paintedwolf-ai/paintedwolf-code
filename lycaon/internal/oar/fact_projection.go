@@ -246,6 +246,14 @@ func executionActivation(gc *GuardContext) map[string]any {
 		"git_transport_error_class":        gc.Execution.GitTransportErrorClass,
 		"git_transport_command":            gc.Execution.GitTransportCommand,
 		"git_transport_exit_code":          gc.Execution.GitTransportExitCode,
+		"completed_stages":                 strList(gc.Execution.CompletedStages),
+		"gh_credential_store_refused":      gc.Execution.GHCredentialStoreRefused,
+		"ssh_failure_cause":                gc.Execution.SSHFailureCause,
+		"ssh_stage":                        gc.Execution.SSHStage,
+		"ssh_destination":                  gc.Execution.SSHDestination,
+		"ssh_trust_path":                   gc.Execution.SSHTrustPath,
+		"ssh_probed_paths":                 strList(gc.Execution.SSHProbedPaths),
+		"ssh_client_is_native_git":         gc.Execution.SSHClientIsNativeGit,
 	}
 }
 

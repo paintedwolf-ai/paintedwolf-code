@@ -63,6 +63,7 @@ type ActionInvocation struct {
 	ApprovedFileAccess []GrantedPathDelta `json:"-"`
 	// CurrentActionReview carries the exact reasons approved by a human checkpoint for this invocation.
 	CurrentActionReview *CurrentActionReview `json:"-"`
+	ToolCallID          string
 	ActionID            string
 }
 

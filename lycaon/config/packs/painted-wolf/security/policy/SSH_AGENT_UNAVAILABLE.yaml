@@ -1,0 +1,36 @@
+spec_version: "1.0"
+id: SSH_AGENT_UNAVAILABLE
+kind: policy
+on: tool.post_invoke
+selector:
+  tools:
+    - command
+    - verify
+    - command_output
+requires_facts: [paintedwolf.confine_applied, paintedwolf.ssh_destination, paintedwolf.ssh_failure_cause, paintedwolf.ssh_stage]
+when: >-
+  paintedwolf.confine_applied && paintedwolf.ssh_failure_cause == "agent_unavailable"
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+message: SSH public-key authentication failed with no host signing agent available
+what: SSH authentication failed{% if paintedwolf.ssh_stage %} in `{{ paintedwolf.ssh_stage }}`{% endif %}{% if paintedwolf.ssh_destination %} to `{{ paintedwolf.ssh_destination }}`{% endif %}.
+cause: Host-key verification completed, public-key authentication was required, and no active SSH signing agent socket (`SSH_AUTH_SOCK`) is available on the host.
+why: Confined SSH authenticates through an approved signing agent rather than reading unrequested private key files.
+fix: Report that no host SSH signing agent socket is available for `{{ tool }}`{% if paintedwolf.ssh_destination %} to authenticate to `{{ paintedwolf.ssh_destination }}`{% endif %}, or switch to an HTTPS remote if supported for the repository. Do not invent an agent socket grant or request default private-key files.
+instead: Distinguish an absent host SSH agent from a refused socket grant.
+x-paintedwolf-scenarios:
+  - id: native_git_no_agent
+    vars:
+      tool: command
+      confine_applied: true
+      ssh_failure_cause: agent_unavailable
+      ssh_stage: git fetch origin
+      ssh_destination: github.com:22
+  - id: direct_ssh_no_agent
+    vars:
+      tool: command
+      confine_applied: true
+      ssh_failure_cause: agent_unavailable
+      ssh_stage: ssh git@github.com
+      ssh_destination: github.com:22

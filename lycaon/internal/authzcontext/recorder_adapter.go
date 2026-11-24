@@ -324,9 +324,10 @@ func approvalRecordFromWire(rec authzledger.ApprovalDecisionRecord) RecordInput 
 	if tier == "" {
 		tier = settings.TierLabel(settings.ClassifyTier(hitl.ProposedAction{
 			Invocation: hitl.ActionInvocation{
-				Tool:  rec.Tool,
-				Args:  rec.Args,
-				Files: rec.Files,
+				Tool:       rec.Tool,
+				Args:       rec.Args,
+				Files:      rec.Files,
+				ToolCallID: rec.ToolCallID,
 			},
 			Scope: hitl.ActionScope{
 				ProjectDir: rec.ProjectDir,

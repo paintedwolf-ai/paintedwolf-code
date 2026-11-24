@@ -3,8 +3,10 @@ package policyfacts
 import (
 	"context"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -31,6 +33,10 @@ var sandboxPostInvokeCodes = []string{
 	"GIT_SSH_TRANSPORT_DENIED",
 	"GIT_SSH_TRANSPORT_LEASE_ENDED",
 	"GIT_SSH_TRANSPORT_DIAL_FAILED",
+	isolation.CodeSSHHostKeyChanged,
+	isolation.CodeSSHHostKeyUnverified,
+	isolation.CodeSSHAgentUnavailable,
+	isolation.CodeSSHRemoteAuthRejected,
 }
 
 // ObserveConfine publishes post-invoke boundary facts.
@@ -43,8 +49,10 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	gc.Execution.DenialSubject = obs.DenialSubject
 	gc.Execution.ConfineSignals = append([]string(nil), obs.Signals...)
 	gc.Execution.FailedStages = append([]string(nil), obs.FailedStages...)
+	gc.Execution.CompletedStages = append([]string(nil), obs.SucceededStages...)
 	gc.Execution.ProcessRunning = obs.Running
 	observeSandboxRefusals(gc, obs.Refusals)
+	gc.Execution.GHCredentialStoreRefused = len(gc.Refusals.RefusedCredentialStorePaths) > 0 && hasFailedExecutableStage(obs.FailedStages, "gh")
 	data := map[string]any{"tool": gc.Invocation.Tool}
 	if dest := obs.Destination; dest != "" {
 		data["destination"] = dest
@@ -52,10 +60,66 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	if obs.Port > 0 {
 		data["port"] = strconv.Itoa(obs.Port)
 	}
+	if len(obs.SucceededStages) > 0 {
+		data["completed_stages"] = append([]string(nil), obs.SucceededStages...)
+	}
+	if gc.Execution.GHCredentialStoreRefused {
+		data["gh_credential_store_refused"] = true
+	}
 	observeGitTransport(gc, obs.GitTransports, data)
+	observeSSHRecovery(gc, obs.SSHRecoveries, data)
 	for _, code := range sandboxPostInvokeCodes {
 		gc.PutRejectData(code, data)
 	}
+}
+
+func observeSSHRecovery(gc *oar.GuardContext, recoveries []confine.SSHRecoveryObservation, data map[string]any) {
+	for _, sr := range recoveries {
+		if sr.Cause == "" {
+			continue
+		}
+		gc.Execution.SSHFailureCause = string(sr.Cause)
+		gc.Execution.SSHStage = sr.Stage
+		gc.Execution.SSHDestination = sr.Destination
+		gc.Execution.SSHTrustPath = sr.TrustPath
+		gc.Execution.SSHProbedPaths = append([]string(nil), sr.ProbedPaths...)
+		gc.Execution.SSHClientIsNativeGit = sr.Client == "git"
+
+		data["ssh_failure_cause"] = gc.Execution.SSHFailureCause
+		data["ssh_client_is_native_git"] = gc.Execution.SSHClientIsNativeGit
+		if sr.Stage != "" {
+			data["ssh_stage"] = sr.Stage
+		}
+		if sr.Destination != "" {
+			data["ssh_destination"] = sr.Destination
+		}
+		if sr.TrustPath != "" {
+			data["ssh_trust_path"] = sr.TrustPath
+		}
+		if len(sr.ProbedPaths) > 0 {
+			data["ssh_probed_paths"] = append([]string(nil), sr.ProbedPaths...)
+		}
+		return
+	}
+}
+
+func hasFailedExecutableStage(stages []string, wantBase string) bool {
+	for _, stage := range stages {
+		fields := strings.Fields(stage)
+		for _, token := range fields {
+			if strings.Contains(token, "=") && !strings.HasPrefix(token, "/") && !strings.HasPrefix(token, "./") {
+				continue
+			}
+			if token == "external" || token == "--" {
+				continue
+			}
+			if strings.Trim(filepath.Base(token), `"'`) == wantBase {
+				return true
+			}
+			break
+		}
+	}
+	return false
 }
 
 func observeGitTransport(gc *oar.GuardContext, transports []confine.GitTransportObservation, data map[string]any) {

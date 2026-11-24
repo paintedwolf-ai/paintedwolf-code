@@ -370,6 +370,19 @@ func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, comma
 func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, boundary confine.Boundary, settleJob func(confine.SandboxRefusals, []confine.EgressHost, ...confine.GitTransportObservation), commandLine string, outcome tools.AgentLaunchOutcome) {
 	settleCtx := context.WithoutCancel(ctx)
 	refusals := bound.lease.SettledRefusals(settleCtx)
+	if outcome.SuppressSSHSpeculation {
+		keepSock := ""
+		if outcome.SSHRecovery != nil && outcome.SSHRecovery.Cause == confine.SSHFailureAgentRequired {
+			keepSock = outcome.SSHRecovery.AgentSocket
+		}
+		var probed []string
+		refusals, probed = filterSSHStageRefusals(refusals, boundary, nil, "", "", keepSock, nil)
+		if outcome.SSHRecovery != nil && len(outcome.SSHRecovery.ProbedPaths) == 0 && len(probed) > 0 {
+			cp := outcome.SSHRecovery.Clone()
+			cp.ProbedPaths = probed
+			outcome.SSHRecovery = &cp
+		}
+	}
 	if len(outcome.Refusals) > 0 {
 		refusals = refusals.Merge(confine.SandboxRefusals{Refusals: outcome.Refusals})
 	}
@@ -384,12 +397,23 @@ func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound comma
 	if !boundary.Applied || tctx.Effects.Out == nil {
 		return
 	}
-	var failed []string
+	var failed, succeeded []string
 	if outcome.Failed {
 		failed = []string{commandLine}
+	} else if ctx.Err() == nil && commandLine != "" {
+		succeeded = []string{commandLine}
+	}
+	var sshRecoveries []confine.SSHRecoveryObservation
+	if outcome.SSHRecovery != nil && outcome.SSHRecovery.Cause != "" {
+		sshRecoveries = []confine.SSHRecoveryObservation{outcome.SSHRecovery.Clone()}
 	}
 	stamped := confine.StampRefusal("command", tctx.Identity.SessionID, boundary, confine.RefusalContext{
-		MediatedNetwork: network, FailedStages: failed, Refusals: refusals, GitTransports: transports,
+		MediatedNetwork: network,
+		FailedStages:    failed,
+		SucceededStages: succeeded,
+		Refusals:        refusals,
+		GitTransports:   transports,
+		SSHRecoveries:   sshRecoveries,
 	})
 	tctx.Effects.Out.WithLock(func(out *tools.ToolInvocationOut) {
 		out.Facts = tools.ApplyRefusalFacts(out.Facts, stamped)

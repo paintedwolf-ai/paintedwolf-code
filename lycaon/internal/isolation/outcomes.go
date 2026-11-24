@@ -70,6 +70,10 @@ const (
 	CodeRemotePackageCapabilityDenied      = "REMOTE_PACKAGE_EXECUTION_CAPABILITY_DENIED"
 	CodeRemotePackageDestinationDenied     = "REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED"
 	CodeRemotePackageRequiresFreshBoundary = "REMOTE_PACKAGE_EXECUTION_REQUIRES_FRESH_BOUNDARY"
+	CodeSSHHostKeyChanged                  = "SSH_HOST_KEY_CHANGED"
+	CodeSSHHostKeyUnverified               = "SSH_HOST_KEY_UNVERIFIED"
+	CodeSSHAgentUnavailable                = "SSH_AGENT_UNAVAILABLE"
+	CodeSSHRemoteAuthRejected              = "SSH_REMOTE_AUTH_REJECTED"
 )
 
 var outcomes = [...]Outcome{
@@ -115,6 +119,10 @@ var outcomes = [...]Outcome{
 	{CodeRemotePackageCapabilityDenied, DispositionRetry},
 	{CodeRemotePackageDestinationDenied, DispositionRetry},
 	{CodeRemotePackageRequiresFreshBoundary, DispositionRetry},
+	{CodeSSHHostKeyChanged, DispositionRetry},
+	{CodeSSHHostKeyUnverified, DispositionRetry},
+	{CodeSSHAgentUnavailable, DispositionRetry},
+	{CodeSSHRemoteAuthRejected, DispositionRetry},
 }
 
 // Outcomes returns the closed isolation outcome inventory.

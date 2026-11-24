@@ -1,0 +1,30 @@
+spec_version: "1.0"
+id: SSH_HOST_KEY_UNVERIFIED
+kind: policy
+on: tool.post_invoke
+selector:
+  tools:
+    - command
+    - verify
+    - command_output
+requires_facts: [paintedwolf.confine_applied, paintedwolf.ssh_destination, paintedwolf.ssh_failure_cause, paintedwolf.ssh_stage, paintedwolf.ssh_trust_path]
+when: >-
+  paintedwolf.confine_applied && paintedwolf.ssh_failure_cause == "host_key_unverified"
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+message: SSH host key could not be verified from readable trust stores
+what: SSH host key verification failed{% if paintedwolf.ssh_stage %} in `{{ paintedwolf.ssh_stage }}`{% endif %}{% if paintedwolf.ssh_destination %} for `{{ paintedwolf.ssh_destination }}`{% endif %}.
+cause: No trusted host-key entry matched{% if paintedwolf.ssh_destination %} `{{ paintedwolf.ssh_destination }}`{% endif %} in the readable `known_hosts` configuration{% if paintedwolf.ssh_trust_path %} (`{{ paintedwolf.ssh_trust_path }}`){% endif %}.
+why: Non-interactive SSH preserves host-key verification and cannot prompt to trust an unknown server key.
+fix: Verify the expected host key from trusted configuration or ask the user how to supply a pinned `known_hosts` entry; do not disable `StrictHostKeyChecking` or request private-key reads.
+instead: Preserve host-key verification policy; do not bypass `known_hosts` with `StrictHostKeyChecking=no`.
+x-paintedwolf-scenarios:
+  - id: unknown_host_entry
+    vars:
+      tool: command
+      confine_applied: true
+      ssh_failure_cause: host_key_unverified
+      ssh_stage: ssh -p 2222 git@127.0.0.1 uname -a
+      ssh_destination: 127.0.0.1:2222
+      ssh_trust_path: /Users/person/.ssh/known_hosts

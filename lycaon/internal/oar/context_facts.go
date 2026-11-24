@@ -146,6 +146,14 @@ type ExecutionFacts struct {
 	GitTransportErrorClass        string
 	GitTransportCommand           string
 	GitTransportExitCode          int64
+	CompletedStages               []string
+	GHCredentialStoreRefused      bool
+	SSHFailureCause               string
+	SSHStage                      string
+	SSHDestination                string
+	SSHTrustPath                  string
+	SSHProbedPaths                []string
+	SSHClientIsNativeGit          bool
 }
 
 type RefusalsFacts struct {

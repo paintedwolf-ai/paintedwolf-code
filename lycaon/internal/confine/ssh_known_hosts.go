@@ -65,6 +65,21 @@ func PrepareSSHKnownHosts(c Confinement) (string, error) {
 	return path, f.Close()
 }
 
+// MediatedKnownHostsFiles returns the readable known_hosts files prepared for a mediated launch.
+func MediatedKnownHostsFiles(c Confinement) []string {
+	var out []string
+	if projectPath, err := sshKnownHostsPath(c); err == nil && projectPath != "" {
+		out = append(out, projectPath)
+	}
+	if state, err := configdir.Root(); err == nil && state != "" {
+		mirror := fspath.CanonicalPath(enginepaths.SSHKnownHostsMirrorUnder(state))
+		if mirror != "" {
+			out = append(out, mirror)
+		}
+	}
+	return out
+}
+
 func addSSHKnownHostsAccess(rules *FilesystemRules, c Confinement) error {
 	state, err := configdir.Root()
 	if err != nil {
