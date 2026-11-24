@@ -133,7 +133,9 @@ func TestProgramCompletionDisposition(t *testing.T) {
 		_, _, err := f.Background.Lifecycle.Wait(t.Context(), f.Session, running.Handle)
 		testutil.FailErr(t, "wait running handle", err)
 	})
+}
 
+func TestProgramCompletionDispositionOutcomesAndApproval(t *testing.T) {
 	t.Run("non-zero failure and refusal after expiry", func(t *testing.T) {
 		for _, tc := range []struct {
 			name        string
@@ -268,7 +270,9 @@ func TestProgramCompletionDisposition(t *testing.T) {
 			t.Fatalf("runs=%d, want 1", runs.Load())
 		}
 	})
+}
 
+func TestProgramCompletionDispositionInterruptAndFallback(t *testing.T) {
 	t.Run("stop while parked interrupts and delivers interrupted outcome", func(t *testing.T) {
 		clock := programtest.NewManualClock()
 		parking := newRecordingParking()
