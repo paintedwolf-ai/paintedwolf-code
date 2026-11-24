@@ -110,6 +110,7 @@ func (inv *Inventory) ScheduleRefresh(_ context.Context, spec RepoSpec) {
 	}
 	slot.mu.Unlock()
 	if startWorker {
+		//nolint:contextcheck // Detached reconciliation outlives caller launch leases.
 		go inv.runRefreshLoop(inv.baseCtx, key, slot)
 	}
 }
@@ -198,7 +199,7 @@ func (inv *Inventory) awaitGenerationLocked(ctx context.Context, key repoKey, sl
 	slot.mu.Unlock()
 
 	if startWorker {
-		// Host inventory reconciliation must not inherit caller launch leases.
+		//nolint:contextcheck // Detached reconciliation outlives caller launch leases.
 		go inv.runRefreshLoop(inv.baseCtx, key, slot)
 	}
 
