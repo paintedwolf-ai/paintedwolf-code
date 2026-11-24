@@ -48,6 +48,9 @@ export function providerIdIsDirectBundled(id: string): boolean {
 }
 
 export function providerStatusLabel(meta: WebResearchProviderMeta): string {
+  if (meta.credential_rejected) {
+    return WEB_RESEARCH_SETTINGS_COPY.statusKeyRejected;
+  }
   if (meta.configured) {
     return WEB_RESEARCH_SETTINGS_COPY.statusReady;
   }
@@ -76,7 +79,7 @@ export function providerStatusLabel(meta: WebResearchProviderMeta): string {
 }
 
 export function providerIsReady(meta: WebResearchProviderMeta): boolean {
-  return meta.configured;
+  return meta.configured && !meta.credential_rejected;
 }
 
 /** Enabled provider cards exclude rows bundled with Direct. */

@@ -68,6 +68,7 @@ export const WEB_RESEARCH_SETTINGS_COPY = {
   statusNeedsKey: "Needs API key",
   statusNeedsConfig: "Needs configuration",
   statusNeedsEndpoint: "Needs endpoint",
+  statusKeyRejected: "Key rejected",
   kindKeyed: "API key providers",
   kindKeyedExtra: "API key + extra fields",
   kindKeylessEndpoint: "Endpoint providers",

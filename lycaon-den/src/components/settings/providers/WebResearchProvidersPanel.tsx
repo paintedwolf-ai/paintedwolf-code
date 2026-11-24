@@ -312,6 +312,7 @@ export function WebResearchProvidersPanel(props: Props) {
     patchCard(meta.id, { testing: true, testMessage: undefined });
     try {
       const res = await props.client.testWebResearchProvider(meta.id);
+      await reload();
       patchCard(meta.id, {
         testing: false,
         testMessage: res.ok
@@ -335,6 +336,7 @@ export function WebResearchProvidersPanel(props: Props) {
       const res = await props.client.testWebResearchProvider(
         DIRECT_PROVIDER_ID,
       );
+      await reload();
       setDirectTestMessage(
         res.ok
           ? `OK${res.latency_ms != null ? ` (${res.latency_ms} ms)` : ""}`

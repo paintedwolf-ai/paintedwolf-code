@@ -11,6 +11,7 @@ import {
   groupAddProviderCandidates,
   groupWebResearchProvidersByKind,
   hasAddProviderCandidates,
+  providerIsReady,
   providerStatusLabel,
   resolveInitialEnabledProviderIds,
 } from "./web-research-providers-model.ts";
@@ -185,6 +186,35 @@ describe("web-research-providers-model", () => {
       credential_present: false,
     };
     expect(providerStatusLabel(keyless)).toBe("Ready");
+  });
+
+  it("a rejected credential outranks every ready state", () => {
+    const rejection = { code: "SUBSCRIPTION_TOKEN_INVALID", observed_at: "2026-11-23T00:00:00Z" };
+    const keyed: WebResearchProviderMeta = {
+      id: "brave",
+      kind: "keyed",
+      label: "Brave Search",
+      roles: ["results"],
+      configured: true,
+      credential_present: true,
+      credential_rejected: rejection,
+    };
+    expect(providerStatusLabel(keyed)).toBe("Key rejected");
+    expect(providerIsReady(keyed)).toBe(false);
+
+    const optional: WebResearchProviderMeta = {
+      id: "stackexchange",
+      kind: "keyless",
+      label: "Stack Overflow",
+      roles: ["results"],
+      configured: true,
+      credential_present: true,
+      credential_slot: "stackexchange",
+      credential_rejected: rejection,
+    };
+    expect(providerStatusLabel(optional)).toBe("Key rejected");
+    expect(providerIsReady(optional)).toBe(false);
+    expect(providerIsReady({ ...optional, credential_rejected: undefined })).toBe(true);
   });
 
   it("directStatusLabel reflects Direct enablement", () => {
