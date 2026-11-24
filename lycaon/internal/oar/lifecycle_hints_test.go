@@ -141,17 +141,18 @@ func TestLifecycleHintsDoNotChangeGuardDecisions(t *testing.T) {
 	}
 
 	gc := oar.NewGuardContext()
-	gc.Tool = "workflow_transition"
-	gc.Rejection.Code = "WORKFLOW_FEEDBACK_PENDING"
+	gc.Invocation.Tool = "workflow_transition"
+	gc.ObservedRejectCode = "WORKFLOW_FEEDBACK_PENDING"
 
-	dWith, err := pWith.Evaluate(oar.AnchorToolRejected, gc)
+	resWith, err := pWith.EvaluateBlock(ctx, oar.AnchorToolRejected, gc)
 	testutil.FailErr(t, "evaluate with hints", err)
-	dWithout, err := pWithout.Evaluate(oar.AnchorToolRejected, gc)
+	resWithout, err := pWithout.EvaluateBlock(ctx, oar.AnchorToolRejected, gc)
 	testutil.FailErr(t, "evaluate without hints", err)
-	if (dWith == nil) != (dWithout == nil) {
-		t.Fatalf("decision presence mismatch: with=%v without=%v", dWith, dWithout)
+	dWith, dWithout := resWith.Decision, resWithout.Decision
+	if dWith == nil || dWithout == nil {
+		t.Fatalf("expected WORKFLOW_FEEDBACK_PENDING block decision: with=%v without=%v", dWith, dWithout)
 	}
-	if dWith != nil && (dWith.Code != dWithout.Code || dWith.Effect != dWithout.Effect || dWith.Rule != dWithout.Rule) {
+	if dWith.Code != dWithout.Code || dWith.Effect != dWithout.Effect || dWith.Rule != dWithout.Rule {
 		t.Fatalf("decision mismatch: with=%+v without=%+v", dWith, dWithout)
 	}
 	if !slices.EqualFunc(view.Rules.All(), withoutHints.All(), func(a, b *oar.Rule) bool { return a.Qualified() == b.Qualified() }) {

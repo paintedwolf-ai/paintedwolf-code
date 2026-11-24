@@ -235,6 +235,15 @@ func (r *Registry) add(b *Binding) {
 	if r == nil || b == nil {
 		return
 	}
+	if r.byAnchor == nil {
+		r.byAnchor = make(map[ID][]*Binding)
+	}
+	if r.informPrimary == nil {
+		r.informPrimary = make(map[ID]*Binding)
+	}
+	if r.renderToAnchor == nil {
+		r.renderToAnchor = make(map[string]ID)
+	}
 	r.byAnchor[b.On] = append(r.byAnchor[b.On], b)
 	if b.IsInform() {
 		// The primary index contains device bindings only.

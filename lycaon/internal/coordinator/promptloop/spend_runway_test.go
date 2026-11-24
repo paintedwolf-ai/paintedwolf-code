@@ -263,7 +263,9 @@ func TestPromptLoopSoftStopMissingCopyEntersSafeProseCloseout(t *testing.T) {
 	deps.Nudges.SpendSoftStopNudge = func(context.Context, *api.Session) HostNudge {
 		return HostNudge{}
 	}
-	deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
+	var closeoutCause TurnCloseoutCause
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
+		closeoutCause = cause
 		return HostNudge{Content: "Give the final prose closeout."}
 	}
 	loop := NewPromptLoopForTest(deps)
@@ -285,8 +287,8 @@ func TestPromptLoopSoftStopMissingCopyEntersSafeProseCloseout(t *testing.T) {
 	if checks != 2 || client.index != 2 {
 		t.Fatalf("checks=%d model turns=%d want 2/2 (no tool wind-down round)", checks, client.index)
 	}
-	if len(client.requestTools) != 2 || len(client.requestTools[1]) != 0 {
-		t.Fatalf("prose closeout advertised tools = %v, want none on closeout", client.requestTools)
+	if closeoutCause.Reason != TurnCloseoutSpendCeiling {
+		t.Fatalf("closeout cause = %+v, want %q", closeoutCause, TurnCloseoutSpendCeiling)
 	}
 	if result.LastAssistantContent != "Safe prose closeout without wind-down tool round." {
 		t.Fatalf("content = %q", result.LastAssistantContent)
