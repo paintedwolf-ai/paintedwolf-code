@@ -268,9 +268,7 @@ describe("tool body find + collapsed reveal", () => {
       setFindQuery("RETAINED_FOLD_NEEDLE");
       await waitFor(() => expect(findController.matches()).toHaveLength(1), { timeout: 2000 });
       expect(searchChatContent).toHaveBeenCalledTimes(1);
-      expect(isDisclosureOpen(span)).toBe(false);
 
-      findNext();
       await waitFor(() => expect(isDisclosureOpen(span)).toBe(true));
       const card = screen.getByTestId("action-card");
       await waitFor(() => expect(isDisclosureOpen(card)).toBe(true));

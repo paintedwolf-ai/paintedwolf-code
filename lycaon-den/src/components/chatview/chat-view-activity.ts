@@ -62,20 +62,36 @@ export function createChatViewActivity(props: ChatViewProps) {
       const turnStart = findCurrentUserTurnStart(raw);
       if (turnStart >= 0) {
         const turnSlice = raw.slice(turnStart);
-        const needsOlderHistory = activities.some((act) => {
+        const olderSuppliesActiveFact = activities.some((act) => {
           if (act.status !== "active") return false;
           const callId = act.tool_call_id?.trim();
           const toolName = act.tool_name?.trim().toLowerCase();
           if (!callId || !toolName) return false;
-          return !turnSlice.some(
+          const inCurrentTurn = turnSlice.some(
             (msg) =>
               msg.role === "assistant" &&
               msg.tool_calls?.some(
                 (c) => c.id.trim() === callId && c.name.trim().toLowerCase() === toolName,
               ),
           );
+          if (inCurrentTurn) return false;
+          for (let i = 0; i < turnStart; i++) {
+            const msg = raw[i];
+            if (
+              msg?.role === "assistant" &&
+              msg.tool_calls?.some(
+                (c) => c.id.trim() === callId && c.name.trim().toLowerCase() === toolName,
+              )
+            ) {
+              return true;
+            }
+            if (msg?.role === "tool" && msg.tool_result?.tool_call_id?.trim() === callId) {
+              return true;
+            }
+          }
+          return false;
         });
-        if (!needsOlderHistory) {
+        if (!olderSuppliesActiveFact) {
           prevFullSnapshot = undefined;
           if (
             prevTurnSnapshot &&

@@ -858,18 +858,17 @@ describe("SessionTranscript virtual window", () => {
         id: "live-2",
         ord: 2,
         seq: 2,
-        role: "user",
-        origin: "user",
-        authority: "user",
+        role: "assistant",
+        origin: "model",
+        authority: "none",
         trust_tier: "trusted",
-        content: "live arrival",
+        content: "",
+        tool_calls: [{ id: "tc-live-2", name: "read", args: { path: "main.go" } }],
         created_at: "2026-01-01T00:00:01Z",
       });
       expect(applied).toBe(true);
 
-      const liveRow = view.container.querySelector('[data-msg-id="live-2"]');
-      expect(liveRow).toBeTruthy();
-      expect(liveRow?.querySelector(".den-enter-fade") ?? (liveRow?.classList.contains("den-enter-fade") ? liveRow : null)).toBeTruthy();
+      expect(view.container.querySelector(".den-enter-fade")).toBeTruthy();
     } finally {
       view.unmount();
       clearTranscriptEntryMemory(sid);

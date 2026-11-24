@@ -68,10 +68,12 @@ function fetchSharedSummary(
           cache.settled.set(revKey, receipt, retainedValueBytes(receipt) + revKey.length * 2);
         }
       }
+      cache.inFlight.delete(key);
       return receipt;
     })
-    .finally(() => {
+    .catch((err) => {
       cache.inFlight.delete(key);
+      throw err;
     });
 
   cache.inFlight.set(key, request);

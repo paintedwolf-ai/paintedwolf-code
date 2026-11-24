@@ -369,7 +369,8 @@ function toolPartForActivity(
 ): ToolPartView | undefined {
   const callID = activity.tool_call_id?.trim();
   const toolName = activity.tool_name?.trim();
-  if (!callID || !toolName) return undefined;
+  if (!callID || !toolName || messages.length === 0) return undefined;
+  toolScanCount += 1;
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg?.role !== "assistant") continue;

@@ -234,8 +234,8 @@ describe("parked command presentation", () => {
       },
     );
     expect(ok).toBe(true);
-    expect(thinkingLabelToolScanCount()).toBeGreaterThan(0);
     vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
+    expect(thinkingLabelToolScanCount()).toBeGreaterThan(0);
     expect(screen.getByRole("status").textContent).toBe("Waiting · sleep 120...");
   });
 
@@ -259,6 +259,7 @@ describe("parked command presentation", () => {
       tool_calls: [{ id: "read-1", name: "read", args: { path: "main.go" } }],
     };
     const store = mountActivity([userTurn, runningCall]);
+    store.actions.setActivity({ ...park, status: "done" });
     store.actions.setActivity({
       ...park,
       activity_id: "live-read",

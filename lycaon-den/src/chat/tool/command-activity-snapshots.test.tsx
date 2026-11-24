@@ -170,6 +170,7 @@ it("refuses to cache a stale receipt revision and retries on remount to recover"
   return <span>{s(entry.part)?.activity_revision ?? ""}</span>;
  });
  await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+ await new Promise((resolve) => setTimeout(resolve, 0));
  // Stale revision 9 never downgrades the canonical revision 10.
  expect(first.container.textContent).toBe("10");
  first.unmount();
