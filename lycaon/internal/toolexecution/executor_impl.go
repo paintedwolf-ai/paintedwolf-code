@@ -225,8 +225,7 @@ func stampAskModeRejectState(ctx context.Context, tc tools.ToolContext, reject *
 	chatMode, chatOK := hostctx.RoundMode(ctx, tc.ChatSessionID())
 	sessMode, sessOK := hostctx.RoundMode(ctx, tc.Identity.SessionID)
 	if (chatOK && chatMode == api.SessionModeAgent) || (sessOK && sessMode == api.SessionModeAgent) {
-		reject.Data["session_mode"] = string(api.SessionModeAgent)
-		reject.Data["mode_denied"] = true
+		reject.SetSessionMode(api.SessionModeAgent, true)
 	}
 }
 

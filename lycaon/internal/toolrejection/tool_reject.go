@@ -77,6 +77,46 @@ func (e *ToolReject) Error() string {
 	return e.Code
 }
 
+// SetSessionMode records OAR session_mode and optional mode_denied attribution on the reject.
+func (e *ToolReject) SetSessionMode(mode api.SessionMode, modeDenied bool) {
+	if e == nil || mode == "" {
+		return
+	}
+	if e.Data == nil {
+		e.Data = map[string]any{}
+	}
+	e.Data["session_mode"] = string(mode)
+	if modeDenied {
+		e.Data["mode_denied"] = true
+	}
+}
+
+// SetSessionModeIfMissing records a default OAR session_mode when unset.
+func (e *ToolReject) SetSessionModeIfMissing(mode api.SessionMode) {
+	if e == nil || mode == "" {
+		return
+	}
+	if e.Data == nil {
+		e.Data = map[string]any{}
+	}
+	if _, ok := e.Data["session_mode"]; !ok {
+		e.Data["session_mode"] = string(mode)
+	}
+}
+
+// NewAskWorkerScopeReject builds a structured Ask worker-scope rejection.
+func NewAskWorkerScopeReject(code, tool, reason string, profileMutationCapable bool, scopeMode api.TaskScopeMode) *ToolReject {
+	return &ToolReject{
+		Code: code,
+		Data: map[string]any{
+			"tool":                     tool,
+			"reason":                   reason,
+			"profile_mutation_capable": profileMutationCapable,
+			"scope_mode":               string(scopeMode),
+		},
+	}
+}
+
 // MachineErrorCode returns the declared reject Code for OAR mcp_error_code.
 func (e *ToolReject) MachineErrorCode() string {
 	if e == nil {

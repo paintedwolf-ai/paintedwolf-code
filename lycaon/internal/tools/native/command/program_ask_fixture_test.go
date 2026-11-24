@@ -109,6 +109,15 @@ func newAskComposedFixture(t *testing.T) *askComposedFixture {
 		if !af.noReach && len(tc.Turn.TurnOfferedToolNames) == 0 && !tc.Turn.TurnToolPlan.Compiled() && tc.Turn.TurnPrograms == nil {
 			tc.Turn.TurnOfferedToolNames = []string{"command"}
 			tc.Turn.TurnPrograms = toolreach.TableFromPrograms(func(string) bool { return true })
+			tc.Turn.TurnOfferedToolSchemas = map[string]map[string]any{
+				"command": {
+					"type": "object",
+					"properties": map[string]any{
+						"command": map[string]any{"type": "string"},
+						"cwd":     map[string]any{"type": "string"},
+					},
+				},
+			}
 		}
 	}
 	return af

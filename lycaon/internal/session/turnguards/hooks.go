@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -30,8 +31,12 @@ func (m *Service) BeforeTool(
 			return "", false, err
 		}
 	}
+	var askInstructionReject *toolrejection.ToolReject
+	if tool == "instruct_worker" && sess != nil && sess.Mode == api.SessionModeAsk && m != nil && m.checkAskInstruction != nil {
+		askInstructionReject = toolrejection.AsToolReject(m.checkAskInstruction(ctx, sess.ID, args))
+	}
 	if reject, blocked, err := m.ToolPolicy.Block(ctx, oar.AnchorSessionPreInvoke, sess, tool, args, func(gc *oar.GuardContext) error {
-		m.observeAskWorkerWrites(ctx, sess, tool, args, identity, gc)
+		observeAskWorkerWrites(sess, tool, identity, askInstructionReject, gc)
 		return nil
 	}); blocked || err != nil {
 		if reject != nil {

@@ -326,7 +326,7 @@ func TestConstrainCommandProfilesProjectsReadOnlyCommandSchema(t *testing.T) {
 			t.Fatalf("Ask projected command schema still includes %q", pruned)
 		}
 	}
-	for _, kept := range []string{"command", "cwd", "timeout_ms"} {
+	for _, kept := range []string{"command", "cwd"} {
 		if _, present := props[kept]; !present {
 			t.Fatalf("Ask projected command schema missing %q", kept)
 		}

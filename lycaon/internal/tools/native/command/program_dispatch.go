@@ -299,10 +299,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 				sessionID = d.run.tc.Identity.SessionID
 			}
 			if sess, err := d.run.sessions.Get(ctx, sessionID); err == nil && sess != nil && sess.Mode != "" {
-				reject.Data["session_mode"] = string(sess.Mode)
-				if sess.Mode == api.SessionModeAgent {
-					reject.Data["mode_denied"] = true
-				}
+				reject.SetSessionMode(sess.Mode, sess.Mode == api.SessionModeAgent)
 			}
 		}
 		d.writeStatementRefusal(streams, command, reject)

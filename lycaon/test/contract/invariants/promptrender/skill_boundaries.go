@@ -210,6 +210,9 @@ func skillBoundaryAuthorities(stock *Stock, coordPairs []coordRep, loaded []skil
 		{"container-cmd-no-socks-or-writeroot", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"command", "recall"}, nil, map[string]map[string]any{"command": narrowContainerCmd}, skillsByName("work-with-containers"), 1, true, false, false, ""},
 		{"task-without-instruct-worker", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"task", "recall", "update_progress"}, []string{"instruct_worker"}, nil, nil, 1, true, false, false, ""},
 		{"source-history-with-deferred-command", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"source_history", "request_tools", "recall"}, []string{"command"}, nil, nil, 1, true, false, false, ""},
+		{"readonly-non-git-command-without-source-history", "implement", api.SessionPostureSpec, roProfiles, []string{"command", "recall", "complete_leg"}, nil, map[string]map[string]any{"command": narrowRoCmd}, nil, 1, false, false, false, ""},
+		{"survey-repo-without-command", "worker_readonly", api.SessionPostureSpec, roProfiles, []string{"survey_repo", "summarize", "complete_leg"}, nil, nil, skillsByName("survey-a-threat-model"), 1, true, false, false, ""},
+		{"readonly-container-with-terminal-open", "implement", api.SessionPostureSpec, roProfiles, []string{"command", "terminal_open", "complete_leg"}, nil, map[string]map[string]any{"command": narrowRoCmd}, skillsByName("work-with-containers"), 1, true, false, false, ""},
 		{"deferred-command-git-and-verify", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"request_tools", "recall", "skills_read", "read", "grep", "glob"}, []string{"command"}, nil, skillsByName("commit-in-logical-groups", "hunt-a-regression-with-bisect", "diagnose-a-tls-failure"), 1, true, false, false, ""},
 	}
 	for _, sp := range specs {

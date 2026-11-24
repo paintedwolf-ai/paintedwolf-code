@@ -89,20 +89,14 @@ func (r *ProgramRuntime) feedback(ctx context.Context, run *programRun, dispatch
 
 	reject := toolrejection.AsToolReject(rejection.cause)
 	if run.tc.Source.AskMode && reject != nil {
-		if reject.Data == nil {
-			reject.Data = map[string]any{}
-		}
-		if _, ok := reject.Data["session_mode"]; !ok {
-			reject.Data["session_mode"] = string(api.SessionModeAsk)
-		}
+		reject.SetSessionModeIfMissing(api.SessionModeAsk)
 		if run.sessions != nil {
 			sessionID := run.tc.ChatSessionID()
 			if sessionID == "" {
 				sessionID = run.tc.Identity.SessionID
 			}
 			if sess, sessErr := run.sessions.Get(ctx, sessionID); sessErr == nil && sess != nil && sess.Mode == api.SessionModeAgent {
-				reject.Data["session_mode"] = string(api.SessionModeAgent)
-				reject.Data["mode_denied"] = true
+				reject.SetSessionMode(api.SessionModeAgent, true)
 			}
 		}
 	}

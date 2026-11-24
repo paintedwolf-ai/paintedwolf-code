@@ -40,14 +40,11 @@ func enrichNativeEffectRejection(ctx context.Context, surface ProgramSurface, ef
 		rejected.Data = map[string]any{}
 	}
 	if tc.Source.AskMode {
-		if _, ok := rejected.Data["session_mode"]; !ok {
-			rejected.Data["session_mode"] = string(api.SessionModeAsk)
-		}
+		rejected.SetSessionModeIfMissing(api.SessionModeAsk)
 		chatMode, chatOK := hostctx.RoundMode(ctx, tc.ChatSessionID())
 		sessMode, sessOK := hostctx.RoundMode(ctx, tc.Identity.SessionID)
 		if (chatOK && chatMode == api.SessionModeAgent) || (sessOK && sessMode == api.SessionModeAgent) {
-			rejected.Data["session_mode"] = string(api.SessionModeAgent)
-			rejected.Data["mode_denied"] = true
+			rejected.SetSessionMode(api.SessionModeAgent, true)
 		}
 	}
 	if tc.Identity.ParentSessionID != "" {

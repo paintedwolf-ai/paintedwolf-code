@@ -306,7 +306,8 @@ func TestNoDeclaredReaderFactAssignedOutsideReaderAndGeneratedFile(t *testing.T)
 				rel == "internal/prompts/reader_facts.go" ||
 				rel == "internal/prompts/reader_facts.generated.go" ||
 				strings.HasPrefix(rel, "internal/oar/") ||
-				rel == "internal/commandsurface/reject_vars.go" {
+				rel == "internal/commandsurface/reject_vars.go" ||
+				rel == "internal/toolrejection/tool_reject.go" {
 				return nil
 			}
 			file, err := parser.ParseFile(fset, path, nil, 0)

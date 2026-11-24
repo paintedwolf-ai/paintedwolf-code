@@ -57,7 +57,7 @@ func (m *Service) SetAskInstructionCheck(check func(context.Context, string, map
 	m.checkAskInstruction = check
 }
 
-func (m *Service) observeAskWorkerWrites(ctx context.Context, sess *api.Session, tool string, args map[string]any, identity workeradmission.TaskIdentity, gc *oar.GuardContext) {
+func observeAskWorkerWrites(sess *api.Session, tool string, identity workeradmission.TaskIdentity, instructionReject *toolrejection.ToolReject, gc *oar.GuardContext) {
 	if gc == nil || sess == nil || sess.Mode != api.SessionModeAsk {
 		return
 	}
@@ -69,9 +69,7 @@ func (m *Service) observeAskWorkerWrites(ctx context.Context, sess *api.Session,
 			reject.Data["agent_type"] = identity.AgentType
 		}
 	case "instruct_worker":
-		if m.checkAskInstruction != nil {
-			reject = toolrejection.AsToolReject(m.checkAskInstruction(ctx, sess.ID, args))
-		}
+		reject = instructionReject
 	}
 	if reject == nil || reject.Code != "SESSION_ASK_MODE_ACTIVE" {
 		return

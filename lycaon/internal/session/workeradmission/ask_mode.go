@@ -10,16 +10,10 @@ import (
 func RequireAskReadScope(tool string, mutationCapable, known bool, scope api.TaskScope) error {
 	scope = scope.Normalized()
 	if !known || mutationCapable {
-		return &toolrejection.ToolReject{
-			Code: tools.AskModeActiveCode,
-			Data: map[string]any{"tool": tool, "reason": "mutating_profile", "profile_mutation_capable": true, "scope_mode": string(scope.Mode)},
-		}
+		return toolrejection.NewAskWorkerScopeReject(tools.AskModeActiveCode, tool, "mutating_profile", true, scope.Mode)
 	}
 	if scope.Mode != api.TaskScopeModeRead || scope.BaseOverlayID != "" {
-		return &toolrejection.ToolReject{
-			Code: tools.AskModeActiveCode,
-			Data: map[string]any{"tool": tool, "reason": "write_scope", "profile_mutation_capable": false, "scope_mode": string(scope.Mode)},
-		}
+		return toolrejection.NewAskWorkerScopeReject(tools.AskModeActiveCode, tool, "write_scope", false, scope.Mode)
 	}
 	return nil
 }
