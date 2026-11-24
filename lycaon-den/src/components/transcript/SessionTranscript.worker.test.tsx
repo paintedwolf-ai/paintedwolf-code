@@ -207,6 +207,9 @@ describe("SessionTranscript worker layout", () => {
       />
     ));
     expect(container.textContent).not.toContain("Coordinator working");
+    container
+      .querySelectorAll<HTMLElement>(".den-activity-span > .den-transcript-disclosure-header")
+      .forEach((toggle) => toggle.click());
     expect(
       container.querySelectorAll('.den-tool-part[data-layout="worker"]').length,
     ).toBe(2);
@@ -242,6 +245,9 @@ describe("SessionTranscript worker layout", () => {
         ]}
       />
     ));
+    container
+      .querySelector<HTMLElement>(".den-activity-span > .den-transcript-disclosure-header")
+      ?.click();
     const readCard = container.querySelector(
       '.den-tool-part[data-layout="worker"][data-tool="read"]',
     );
@@ -340,6 +346,9 @@ describe("SessionTranscript worker layout", () => {
         ]}
       />
     ));
+    container
+      .querySelector<HTMLElement>(".den-activity-span > .den-transcript-disclosure-header")
+      ?.click();
     const writeCard = container.querySelector(
       '.den-tool-part[data-layout="worker"][data-tool="write"]',
     );
@@ -349,6 +358,9 @@ describe("SessionTranscript worker layout", () => {
         "data-files",
       ),
     ).toBe("1");
+    container
+      .querySelector<HTMLElement>('[data-testid="diff-group"] > .den-transcript-disclosure-header')
+      ?.click();
     expect(container.querySelector('[data-testid="file-edit-diff"]')).toBeTruthy();
   });
 });

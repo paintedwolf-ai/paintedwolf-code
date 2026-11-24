@@ -234,7 +234,7 @@ describe("useTranscriptEntry", () => {
     const el = document.createElement("div");
     bind(el, { sessionId: "s1", entryKey: "u-instant", skipFade: true });
     expect(el.classList.contains(FADE_CLASS)).toBe(false);
-    expect(hasTranscriptEntryMemory("s1", "u-instant")).toBe(false);
+    expect(hasTranscriptEntryMemory("s1", "u-instant")).toBe(true);
   });
 
   it("mounts rows entering through an active scroll without an arrival fade", () => {

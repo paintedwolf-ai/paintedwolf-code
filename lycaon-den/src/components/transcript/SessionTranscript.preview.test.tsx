@@ -91,6 +91,15 @@ describe("SessionTranscript preview and bubbles", () => {
       />
     ));
 
+    const spanToggle = document.querySelector<HTMLElement>(
+      '[data-testid="activity-span-card"] > .den-transcript-disclosure-header',
+    );
+    spanToggle?.click();
+    const cardToggle = document.querySelector<HTMLElement>(
+      '[data-testid="action-card"] > .den-transcript-disclosure-header',
+    );
+    cardToggle?.click();
+
     const finalFrame = screen.getByTestId("live-preview-pane");
     const synthesis = screen.getByText("Synthesis after capture");
     expect(finalFrame.compareDocumentPosition(synthesis) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);

@@ -258,7 +258,7 @@ function applyEnterFade(
   }
 
   const fresh = !key || !hasTranscriptEntryMemory(sessionId, key);
-  if (key && !skipFade && !enteringThroughScroll) rememberTranscriptEntry(sessionId, key);
+  if (key && !enteringThroughScroll) rememberTranscriptEntry(sessionId, key);
   if (!fresh || skipFade || enteringThroughScroll) return undefined;
   if (node.classList.contains(ENTER_FADE_CLASS)) return undefined;
   node.classList.add(ENTER_FADE_CLASS);
