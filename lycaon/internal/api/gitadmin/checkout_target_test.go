@@ -3,6 +3,7 @@ package gitadmin
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -29,7 +30,7 @@ func TestCheckoutAdmittedAndResolveValidation(t *testing.T) {
 }
 
 func TestWriteCheckoutMutationErrorMappings(t *testing.T) {
-	h := &Handler{responses: httpio.NewResponses(nil)}
+	h := &Handler{responses: &httpio.Responder{Logger: slog.Default()}}
 	cases := []struct {
 		err        error
 		wantStatus int
