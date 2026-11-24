@@ -142,7 +142,10 @@ func (e execution) run(ctx context.Context, projectDir string, args []string, op
 			env = append(env, gitcredential.SocketEnv+"="+agent.Credentials.Socket())
 		}
 		if agent.SSH != nil && agent.SSH.HasDialer() {
-			env = append(env, sshproxy.SocketEnv+"="+agent.SSH.Socket())
+			launch = launch.WithManagedGitSSHSocket(agent.SSH.Socket())
+			if launch.Confinement == nil {
+				env = append(env, sshproxy.SocketEnv+"="+agent.SSH.Socket())
+			}
 		}
 		// One network Git per command: a second launch cannot rebind the
 		// services, so its helper requests fail closed.

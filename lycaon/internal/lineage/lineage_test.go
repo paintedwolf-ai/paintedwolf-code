@@ -222,3 +222,51 @@ func TestSessionMembersNameOnlyTheSessionsDescendants(t *testing.T) {
 		t.Fatalf("an unnamed session owns %v (%v)", none, err)
 	}
 }
+
+func TestLineageSpawnFileSupportsMultipleLaunchesUntilRetire(t *testing.T) {
+	testutil.RequireLineage(t, lineage.Supported())
+	l, err := lineage.Open("command:multi", "session-multi")
+	testutil.FailErr(t, "open lineage", err)
+	t.Cleanup(func() { _ = l.Close() })
+
+	m1, err := l.SpawnFile()
+	testutil.FailErr(t, "first spawn file", err)
+	first := exec.Command("/bin/sh", "-c", "exit 0")
+	first.ExtraFiles = []*os.File{m1}
+	testutil.FailErr(t, "run first child", first.Run())
+	_ = m1.Close()
+
+	m2, err := l.SpawnFile()
+	testutil.FailErr(t, "second spawn file", err)
+	if m2 == nil {
+		t.Fatal("second spawn file returned nil while lineage is live")
+	}
+	second := exec.Command("/bin/sleep", "30")
+	second.ExtraFiles = []*os.File{m2}
+	testutil.FailErr(t, "start second child", second.Start())
+	_ = m2.Close()
+	t.Cleanup(func() {
+		_ = second.Process.Kill()
+		_ = second.Wait()
+	})
+
+	if owner, ok := lineage.Of(second.Process.Pid); !ok || owner.ID() != l.ID() {
+		t.Fatalf("Of(%d) = (%v, %v), want live lineage %s", second.Process.Pid, owner, ok, l.ID())
+	}
+
+	l.Retire()
+	if m3, err := l.SpawnFile(); err != nil || m3 != nil {
+		t.Fatalf("SpawnFile after Retire = (%v, %v), want (nil, nil)", m3, err)
+	}
+	if !l.Live() {
+		t.Fatal("retired lineage reports dead while second child still runs")
+	}
+	_ = second.Process.Kill()
+	_ = second.Wait()
+	for l.Live() && t.Context().Err() == nil {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if l.Live() {
+		t.Fatal("retired lineage still live after last child exited")
+	}
+}

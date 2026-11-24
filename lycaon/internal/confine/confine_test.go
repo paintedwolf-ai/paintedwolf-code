@@ -382,6 +382,14 @@ func TestGitSSHEnvQuotesAppBundleExecutablePath(t *testing.T) {
 	if !slices.Contains(args, "ProxyCommand='/Applications/Painted Wolf Code.app/Contents/MacOS/painted-wolf' ssh-proxy-command %h %p") {
 		t.Fatalf("outer shell split ProxyCommand executable: %q", args)
 	}
+
+	managed := confine.ManagedGitSSHEnv(c, "/Applications/Painted Wolf Code.app/Contents/MacOS/painted-wolf", "/tmp/known hosts", "/tmp/service/ssh")
+	if len(managed) != 3 || managed[0] != env[0] || managed[2] != env[2] || managed[1] != "LYCAON_GIT_SSH_SOCKET=/tmp/service/ssh" {
+		t.Fatalf("ManagedGitSSHEnv = %q, want identical GIT_SSH_COMMAND and LYCAON_SSH_KNOWN_HOSTS with LYCAON_GIT_SSH_SOCKET", managed)
+	}
+	if confine.ManagedGitSSHEnv(confine.Confinement{Network: confine.NetworkDirectIP}, "/bin/lycaon", "/tmp/k", "/tmp/s") != nil {
+		t.Fatal("ManagedGitSSHEnv only under proxy-only")
+	}
 }
 
 func TestProtectedPathCannotBeGrantedAsWriteRoot(t *testing.T) {

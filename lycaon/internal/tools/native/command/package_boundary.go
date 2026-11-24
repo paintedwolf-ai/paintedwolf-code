@@ -13,6 +13,7 @@ import (
 
 func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *confine.Confinement, lease *confine.ActionLease, commandLine string) lycexec.LaunchPlan {
 	launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, subject, confinement)
+	launch.ActionLease = lease
 	if confinement == nil && strings.TrimSpace(tctx.Host.SessionScratchDir) != "" {
 		scratch := strings.TrimSpace(tctx.Host.SessionScratchDir)
 		if c := fspath.CanonicalPath(scratch); c != "" {

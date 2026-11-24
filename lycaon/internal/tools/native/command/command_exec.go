@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -345,8 +346,20 @@ func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, comma
 	if err != nil {
 		return exec.LaunchPlan{}, nil, err
 	}
+	boundary := confine.BoundaryOf(bound.confinement)
+	report := CommandConfinementReport(boundary, "", tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution)
+	settleJob := attachJobStage(ctx, bgprocess.ProgramStage{Boundary: boundary, Report: report, Lease: bound.lease})
+	if bound.directIPApplied {
+		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
+	}
+	var releaseOnce sync.Once
 	release := func(ctx context.Context, outcome tools.AgentLaunchOutcome) {
-		observeAgentLaunch(ctx, tctx, bound, commandLine, outcome)
+		releaseOnce.Do(func() {
+			if bound.directIPApplied {
+				defer tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
+			}
+			observeAgentLaunch(ctx, tctx, bound, boundary, settleJob, commandLine, outcome)
+		})
 	}
 	return agentCommandLaunch(tctx, subject, bound.confinement, bound.lease, commandLine), release, nil
 }
@@ -354,14 +367,14 @@ func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, comma
 // observeAgentLaunch settles a native owner's confined launch into the
 // command's confinement facts, as an external stage's are: what the kernel
 // refused, what the host's own services declined, and whether it failed.
-func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, commandLine string, outcome tools.AgentLaunchOutcome) {
+func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, boundary confine.Boundary, settleJob func(confine.SandboxRefusals, []confine.EgressHost), commandLine string, outcome tools.AgentLaunchOutcome) {
 	settleCtx := context.WithoutCancel(ctx)
 	refusals := bound.lease.SettledRefusals(settleCtx)
 	if len(outcome.Refusals) > 0 {
 		refusals = refusals.Merge(confine.SandboxRefusals{Refusals: outcome.Refusals})
 	}
 	network := bound.close(settleCtx)
-	boundary := confine.BoundaryOf(bound.confinement)
+	settleJob(refusals, network)
 	if !boundary.Applied || tctx.Effects.Out == nil {
 		return
 	}
@@ -372,7 +385,9 @@ func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound comma
 	stamped := confine.StampRefusal("command", tctx.Identity.SessionID, boundary, confine.RefusalContext{
 		MediatedNetwork: network, FailedStages: failed, Refusals: refusals,
 	})
-	tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
+	tctx.Effects.Out.WithLock(func(out *tools.ToolInvocationOut) {
+		out.Facts = tools.ApplyRefusalFacts(out.Facts, stamped)
+	})
 }
 
 func bindCommandForegroundConfine(

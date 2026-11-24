@@ -79,7 +79,11 @@ func FinalProcessEnvironment(opts ExecOpts, stageEnv map[string]string) ([]strin
 			if err != nil {
 				return nil, fmt.Errorf("prepare SSH host keys: %w", err)
 			}
-			env = overlayProcessEnv(env, confine.GitSSHEnv(boundary, self, knownHosts))
+			if socket := strings.TrimSpace(opts.Launch.ManagedGitSSHSocket); socket != "" {
+				env = overlayProcessEnv(env, confine.ManagedGitSSHEnv(boundary, self, knownHosts, socket))
+			} else {
+				env = overlayProcessEnv(env, confine.GitSSHEnv(boundary, self, knownHosts))
+			}
 		}
 	}
 	return env, nil
