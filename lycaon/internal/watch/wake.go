@@ -156,7 +156,10 @@ func prepareAmbientWakeBatch(ctx context.Context, s *Store, sessionID string, no
 	}
 
 	pruned, retryAt := checkHourlyWakeBudget(admissionsJSON.String, now)
-	prunedBytes, _ := json.Marshal(pruned)
+	prunedBytes, err := json.Marshal(pruned)
+	if err != nil {
+		return CollectedBatch{}, time.Time{}, false, err
+	}
 	if !retryAt.IsZero() {
 		retryStr := retryAt.UTC().Format(time.RFC3339Nano)
 		if _, err := tx.ExecContext(ctx,
@@ -224,19 +227,19 @@ func reserveWakeMatchesTx(ctx context.Context, tx *sql.Tx, sessionID string, now
 	if err != nil {
 		return CollectedBatch{}, false, err
 	}
+	defer func() { _ = rows.Close() }()
 	var regs []Registration
 	for rows.Next() {
 		reg, err := scanRegistration(rows)
 		if err != nil {
-			_ = rows.Close()
 			return CollectedBatch{}, false, err
 		}
 		regs = append(regs, reg)
 	}
-	_ = rows.Close()
 	if err := rows.Err(); err != nil {
 		return CollectedBatch{}, false, err
 	}
+	_ = rows.Close()
 
 	var claimed []RecordedMatch
 	var matchIDs, watchIDs []string
@@ -289,9 +292,18 @@ func reserveWakeMatchesTx(ctx context.Context, tx *sql.Tx, sessionID string, now
 		Overflow:      overflow,
 		ActiveHandles: activeHandleNames(regs),
 	}
-	mJSON, _ := json.Marshal(matchIDs)
-	wJSON, _ := json.Marshal(watchIDs)
-	pJSON, _ := json.Marshal(batch)
+	mJSON, err := json.Marshal(matchIDs)
+	if err != nil {
+		return CollectedBatch{}, false, err
+	}
+	wJSON, err := json.Marshal(watchIDs)
+	if err != nil {
+		return CollectedBatch{}, false, err
+	}
+	pJSON, err := json.Marshal(batch)
+	if err != nil {
+		return CollectedBatch{}, false, err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO watch_deliveries
 		(delivery_id, session_id, destination_kind, destination_id, match_ids_json, watch_ids_json, payload_json, state, created_at)
 		VALUES (?, ?, 'ambient_wake', ?, ?, ?, ?, 'reserved', ?)`,
@@ -342,7 +354,10 @@ func commitAmbientWakeAdmission(ctx context.Context, s *Store, sessionID, delive
 		`SELECT wake_admissions_json FROM watch_session_state WHERE session_id = ?`, sessionID).Scan(&rawStamps)
 	kept, _ := checkHourlyWakeBudget(rawStamps, now)
 	kept = append(kept, nowStr)
-	stampsBytes, _ := json.Marshal(kept)
+	stampsBytes, err := json.Marshal(kept)
+	if err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE watch_session_state SET wake_admissions_json = ?, queued_wake_batch_id = CASE WHEN queued_wake_batch_id = ? THEN NULL ELSE queued_wake_batch_id END WHERE session_id = ?`,
 		string(stampsBytes), deliveryID, sessionID); err != nil {
