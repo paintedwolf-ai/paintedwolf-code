@@ -532,7 +532,7 @@ func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) 
 	}
 	approveCard(t, s.commandProgramSession, bgCard)
 	testutil.WaitFor(t, "background approval delivers completion guidance", func() bool {
-		_ = s.h.Sessions.Manager.Guidance.DeliverPending(t.Context(), s.session)
+		_ = s.h.Sessions.Manager.Coordinator.Guidance.DeliverPending(t.Context(), s.session)
 		msgs, err := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
 		if err != nil {
 			return false
