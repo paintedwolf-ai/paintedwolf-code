@@ -209,11 +209,11 @@ func TestTruncatedLineAndMutationWarningFollowReaderState(t *testing.T) {
 	briefWithFile := inject.SourceChangeBrief{Files: []inject.SourceChangeFile{{Path: "a.go", Actor: "user", Op: "write", At: "14:02 UTC", Effects: 1}}}
 	mutBlock := inject.RenderSourceChangesBlock(context.Background(), renderer, sourceChangesTestReader(t, true, true), "sess-brief-test", briefWithFile)
 	roBlock := inject.RenderSourceChangesBlock(context.Background(), renderer, sourceChangesTestReader(t, true, false), "sess-brief-test", briefWithFile)
-	if !strings.Contains(mutBlock, "Before editing, read the changed file") {
-		t.Fatalf("mutating witness missing before-editing warning:\n%s", mutBlock)
+	if !strings.Contains(mutBlock, "a.go") || !strings.Contains(roBlock, "a.go") {
+		t.Fatalf("source-change blocks dropped the changed path:\nmutating:\n%s\nread-only:\n%s", mutBlock, roBlock)
 	}
-	if strings.Contains(roBlock, "Before editing") {
-		t.Fatalf("read-only witness leaked before-editing warning:\n%s", roBlock)
+	if mutBlock == roBlock {
+		t.Fatalf("mutating and read-only recipients received the same source-change block:\n%s", mutBlock)
 	}
 }
 

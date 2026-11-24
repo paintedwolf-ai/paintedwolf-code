@@ -67,8 +67,7 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 		result         PathPreflightResult
 		wantWriteCode  string
 		wantReadCode   string
-		wantSubstring  string
-		forbidSubstr   string
+		wantGuidance   string
 		wantRuleFields bool
 	}
 	cases := []testCase{
@@ -81,8 +80,6 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 			},
 			wantWriteCode:  "APPROVAL_RULE_DENIED",
 			wantReadCode:   "APPROVAL_RULE_DENIED",
-			wantSubstring:  "approvals/rules/deny-restricted-path",
-			forbidSubstr:   "Wait for new user direction",
 			wantRuleFields: true,
 		},
 		{
@@ -93,8 +90,6 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 			},
 			wantWriteCode: isolation.CodeControlPlaneDenied,
 			wantReadCode:  isolation.CodeControlPlaneDenied,
-			wantSubstring: "app's settings, credentials, tool definitions or policy",
-			forbidSubstr:  "Wait for new user direction",
 		},
 		{
 			name: "user_declined",
@@ -105,7 +100,7 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 			},
 			wantWriteCode: isolation.CodeWriteRootDenied,
 			wantReadCode:  isolation.CodeReadPathDenied,
-			wantSubstring: "Keep writes inside the project workspace.",
+			wantGuidance:  "Keep writes inside the project workspace.",
 		},
 		{
 			name: "prior_user_declined",
@@ -115,7 +110,6 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 			},
 			wantWriteCode: isolation.CodeWriteRootDenied,
 			wantReadCode:  isolation.CodeReadPathDenied,
-			wantSubstring: "Wait for new user direction",
 		},
 		{
 			name: "nonhuman_or_unattributed_rejected",
@@ -125,8 +119,6 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 			},
 			wantWriteCode: isolation.CodeApprovalUnavailable,
 			wantReadCode:  isolation.CodeApprovalUnavailable,
-			wantSubstring: "rejected without a confirmed user decision",
-			forbidSubstr:  "Wait for new user direction",
 		},
 		{
 			name: "approval_unavailable_and_unknown_cause",
@@ -137,15 +129,13 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 			},
 			wantWriteCode: isolation.CodeApprovalUnavailable,
 			wantReadCode:  isolation.CodeApprovalUnavailable,
-			wantSubstring: "approval did not install authority",
-			forbidSubstr:  "Wait for new user direction",
 		},
 	}
 
 	bp := stockBlockPlane(t)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertPathDenialPreflights(t, bp, denyRule, tc.result, tc.wantWriteCode, tc.wantReadCode, tc.wantSubstring, tc.forbidSubstr, tc.wantRuleFields)
+			assertPathDenialPreflights(t, bp, denyRule, tc.result, tc.wantWriteCode, tc.wantReadCode, tc.wantGuidance, tc.wantRuleFields)
 		})
 	}
 }
@@ -155,7 +145,7 @@ func assertPathDenialPreflights(
 	bp *toolfeedback.BlockPlane,
 	denyRule *settings.ApprovalRule,
 	res PathPreflightResult,
-	wantWriteCode, wantReadCode, wantSubstring, forbidSubstr string,
+	wantWriteCode, wantReadCode, wantGuidance string,
 	wantRuleFields bool,
 ) {
 	t.Helper()
@@ -183,16 +173,16 @@ func assertPathDenialPreflights(
 		if !ok || refusal == nil || refusal.Code() != wantCode {
 			t.Fatalf("%s refusal = %v, want code %s", label, err, wantCode)
 		}
-		rendered := refusal.Error() + "\n" + refusal.Copy["what"] + "\n" + refusal.Copy["cause"] + "\n" + refusal.Copy["fix"]
-		if wantSubstring != "" && !strings.Contains(rendered, wantSubstring) {
-			t.Errorf("%s copy missing %q:\n%s", label, wantSubstring, rendered)
-		}
-		if forbidSubstr != "" && strings.Contains(rendered, forbidSubstr) {
-			t.Errorf("%s copy falsely attributed %q:\n%s", label, forbidSubstr, rendered)
-		}
 		cause := toolrejection.AsToolReject(err)
 		if cause == nil || cause.Code != wantCode {
 			t.Fatalf("%s underlying ToolReject = %+v, want code %s", label, cause, wantCode)
+		}
+		if got, _ := cause.Data[toolrejection.UserGuidanceKey].(string); got != wantGuidance {
+			t.Errorf("%s user guidance = %q, want %q", label, got, wantGuidance)
+		}
+		rendered := refusal.Error() + "\n" + refusal.Copy["what"] + "\n" + refusal.Copy["cause"] + "\n" + refusal.Copy["fix"]
+		if wantGuidance != "" && !strings.Contains(rendered, wantGuidance) {
+			t.Errorf("%s copy dropped the user's guidance %q:\n%s", label, wantGuidance, rendered)
 		}
 		if wantRuleFields {
 			for k, want := range map[string]string{

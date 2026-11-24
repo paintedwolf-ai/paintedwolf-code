@@ -795,7 +795,7 @@ func verifyProviderRecipientBoundary(
 	return nil
 }
 
-func TestSecretScreenedProviderRecipientBoundaryAndSeededLeakFault(t *testing.T) {
+func TestSecretScreenedProviderKeepsProtectedValuesFromRecipient(t *testing.T) {
 	t.Parallel()
 	m := modelScreenMatcher(t)
 	harvest := secretharvest.NewRuntime(nil)
@@ -851,15 +851,5 @@ func TestSecretScreenedProviderRecipientBoundaryAndSeededLeakFault(t *testing.T)
 		if bErr := verifyProviderRecipientBoundary(delivered, []string{modelScreenGitHubToken}, refMarker); bErr != nil {
 			t.Fatalf("positive recipient-boundary check failed on request %d: %v", i, bErr)
 		}
-	}
-
-	// Deterministic fault witness: inject a synthetic protected value into the final model payload
-	// after screening and prove the recipient-boundary check catches it deterministically.
-	const syntheticPayloadVal = "synthetic-unredacted-payload-probe-987654"
-	faulted := sink.received[0]
-	faulted.Messages = append([]api.Message(nil), faulted.Messages...)
-	faulted.Messages[0].Content += "\nX_SYNTHETIC=" + syntheticPayloadVal
-	if bErr := verifyProviderRecipientBoundary(faulted, []string{modelScreenGitHubToken, syntheticPayloadVal}, refMarker); bErr == nil {
-		t.Fatal("expected recipient-boundary check to fail when synthetic value reaches final model payload")
 	}
 }

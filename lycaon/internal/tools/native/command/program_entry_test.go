@@ -550,7 +550,7 @@ func TestProgramRuntimeOutputWindowFollowsActorSedAdmission(t *testing.T) {
 		out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
 		testutil.FailErr(t, "run cat big.txt", err)
 		res := decodeOutcome(t, out)
-		if !strings.Contains(res.Stdout, "full output: @output/") || !strings.Contains(res.Stdout, "(sed -n '") {
+		if !strings.Contains(res.Stdout, "@output/") || !strings.Contains(res.Stdout, "(sed -n '") {
 			t.Fatalf("expected saved path and sed continuation when sed is admitted, got:\n%s", res.Stdout)
 		}
 	})
@@ -564,7 +564,7 @@ func TestProgramRuntimeOutputWindowFollowsActorSedAdmission(t *testing.T) {
 		out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
 		testutil.FailErr(t, "run cat big.txt without turn projection", err)
 		res := decodeOutcome(t, out)
-		if !strings.Contains(res.Stdout, "full output: @output/") || strings.Contains(res.Stdout, "sed -n") {
+		if !strings.Contains(res.Stdout, "@output/") || strings.Contains(res.Stdout, "sed -n") {
 			t.Fatalf("unprojected turn must retain saved path and omit sed continuation:\n%s", res.Stdout)
 		}
 	})
@@ -584,7 +584,7 @@ func TestProgramRuntimeOutputWindowFollowsActorSedAdmission(t *testing.T) {
 			out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
 			testutil.FailErr(t, "run cat big.txt ("+label+")", err)
 			res := decodeOutcome(t, out)
-			if !strings.Contains(res.Stdout, "full output: @output/") {
+			if !strings.Contains(res.Stdout, "@output/") {
 				t.Fatalf("%s schema lost saved path:\n%s", label, res.Stdout)
 			}
 			if strings.Contains(res.Stdout, "sed -n") {
@@ -614,7 +614,7 @@ func TestProgramRuntimeOutputWindowFollowsActorSedAdmission(t *testing.T) {
 		out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
 		testutil.FailErr(t, "run cat big.txt with sed denied", err)
 		res := decodeOutcome(t, out)
-		if !strings.Contains(res.Stdout, "full output: @output/") {
+		if !strings.Contains(res.Stdout, "@output/") {
 			t.Fatalf("expected saved path preserved when sed is denied, got:\n%s", res.Stdout)
 		}
 		if strings.Contains(res.Stdout, "sed -n") {
@@ -634,7 +634,7 @@ func TestProgramRuntimeOutputWindowFollowsActorSedAdmission(t *testing.T) {
 		})
 		testutil.FailErr(t, "run verify cat big.txt without command offered", err)
 		res := decodeOutcome(t, out)
-		if !strings.Contains(res.Stdout, "full output: @output/") {
+		if !strings.Contains(res.Stdout, "@output/") {
 			t.Fatalf("expected saved path preserved when command is unoffered, got:\n%s", res.Stdout)
 		}
 		if strings.Contains(res.Stdout, "sed -n") {

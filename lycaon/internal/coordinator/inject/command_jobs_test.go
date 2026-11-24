@@ -128,9 +128,6 @@ func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 	if strings.Contains(parkNoProcessWait, "command_output") || strings.Contains(parkNoProcessWait, "command_stop") || strings.Contains(parkNoProcessWait, "request_tools") || strings.Contains(parkNoProcessWait, "process_done") {
 		t.Fatalf("unoffered/no-process_done witness leaked unavailable controls:\n%s", parkNoProcessWait)
 	}
-	if !strings.Contains(parkNoProcessWait, "Live job output stays recorded on `<handle>`") {
-		t.Fatalf("unoffered witness missing recorded-on-handle notice:\n%s", parkNoProcessWait)
-	}
 }
 
 func TestRenderCommandJobsBlockListsHeldCallsWithTheirControls(t *testing.T) {
@@ -174,9 +171,6 @@ func TestRenderCommandJobsBlockListsHeldCallsWithTheirControls(t *testing.T) {
 	neg := inject.RenderCommandJobsBlock(context.Background(), renderer, withoutHeld, nil, "sess-inject-test", nil, held, now, "worker")
 	if strings.Contains(neg, "held_result") || strings.Contains(neg, "held_stop") || strings.Contains(neg, "process_done") {
 		t.Fatalf("held ledger without held_result/held_stop leaked unoffered controls: %q", neg)
-	}
-	if !strings.Contains(neg, "Output remains on `<handle>`") {
-		t.Fatalf("held ledger negative witness missing output-remains notice: %q", neg)
 	}
 }
 

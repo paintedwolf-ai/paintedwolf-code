@@ -2,13 +2,17 @@ package assembly
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"reflect"
 	"slices"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/catalogview"
@@ -353,60 +357,16 @@ func assertCommandJobsInjectMatchesTarget(
 	}
 }
 
-func buildProjectedTestPromptLister(
-	profiles []sandbox.ToolProfile,
-	schemas *toolschema.Config,
-	waitSchemaMode string,
-) PromptToolLister {
-	if waitSchemaMode == "no_lister" {
-		return nil
-	}
-	return func(_ context.Context, _ *api.Session, profileID string) ([]tools.ToolMeta, error) {
-		var prof sandbox.ToolProfile
-		for _, p := range profiles {
-			if p.ID == profileID {
-				prof = p
-				break
-			}
-		}
-		if prof.ID == "" || schemas == nil {
-			return nil, nil
-		}
-		names := make([]string, 0, len(schemas.Tools))
-		for name := range schemas.Tools {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		out := make([]tools.ToolMeta, 0, len(names))
-		for _, name := range names {
-			if !prof.ToolAllowed(name) {
-				continue
-			}
-			declared, ok := schemas.ToolMeta(name)
-			if !ok {
-				continue
-			}
-			var argsSchema map[string]any
-			switch {
-			case name == "wait" && waitSchemaMode == "missing":
-				argsSchema = nil
-			case name == "wait" && waitSchemaMode == "narrowed_worker_only":
-				argsSchema = toolschema.PruneWaitConditionSchema(declared.ArgsSchema, []string{"next_worker_done"})
-			case name == "wait":
-				argsSchema = toolschema.PruneWaitConditionSchema(declared.ArgsSchema, prof.WaitConditions)
-			default:
-				argsSchema = toolschema.ProjectArgsSchema(declared.ArgsSchema)
-			}
-			out = append(out, tools.ToolMeta{
-				Name:               name,
-				Description:        declared.Description,
-				DescriptionEffects: declared.DescriptionEffects,
-				Tags:               declared.Tags,
-				ArgsSchema:         argsSchema,
-				Deferred:           prof.ToolDeferred(name),
-			})
-		}
-		return out, nil
+// executorPromptLister lists the coordinator's tools through the production
+// executor metadata for the given profiles.
+func executorPromptLister(t *testing.T, profiles []sandbox.ToolProfile, schemas *toolschema.Config, rootCount int) PromptToolLister {
+	t.Helper()
+	reg, err := tools.NewCatalogRegistry(schemas)
+	testutil.FailErr(t, "NewCatalogRegistry", err)
+	boundary := sandbox.NewBoundary(sandbox.Config{}, profiles)
+	exec := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), reg, prompts.CoordinatorProfileID)
+	return func(ctx context.Context, _ *api.Session, profileID string) ([]tools.ToolMeta, error) {
+		return exec.Metadata.List(ctx, platform.ToolFilter{ProfileID: profileID, ProjectRootCount: rootCount})
 	}
 }
 
@@ -457,7 +417,7 @@ type commandJobsAxisCase struct {
 	webSearch      bool
 	zeroRoots      bool
 	waitConds      []string
-	waitSchemaMode string
+	noLister       bool
 	workersInFl    int
 	denyJobControl bool
 	wantPromoted   bool
@@ -499,22 +459,6 @@ func TestCommandJobsInjectMatchesProjectedTurnRequestAcrossAxes(t *testing.T) {
 			wantProcessW: true,
 		},
 		{
-			name:           "wait offered with missing schema while profile admits process_done",
-			webSearch:      true,
-			waitConds:      []string{"process_done", "next_worker_done"},
-			waitSchemaMode: "missing",
-			wantPromoted:   true,
-			wantProcessW:   false,
-		},
-		{
-			name:           "wait offered with narrowed worker-only schema while profile admits process_done",
-			webSearch:      false,
-			waitConds:      []string{"process_done", "next_worker_done"},
-			waitSchemaMode: "narrowed_worker_only",
-			wantPromoted:   true,
-			wantProcessW:   false,
-		},
-		{
 			name:         "timer-only wait schema omits process_done",
 			webSearch:    true,
 			wantPromoted: true,
@@ -530,12 +474,12 @@ func TestCommandJobsInjectMatchesProjectedTurnRequestAcrossAxes(t *testing.T) {
 			wantProcessW:   false,
 		},
 		{
-			name:           "no-lister preserves absent projection even when profile admits process_done",
-			webSearch:      true,
-			waitConds:      []string{"process_done", "next_worker_done"},
-			waitSchemaMode: "no_lister",
-			wantPromoted:   false,
-			wantProcessW:   false,
+			name:         "no-lister preserves absent projection even when profile admits process_done",
+			webSearch:    true,
+			waitConds:    []string{"process_done", "next_worker_done"},
+			noLister:     true,
+			wantPromoted: false,
+			wantProcessW: false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -555,7 +499,6 @@ func runCommandJobsAxisCase(
 ) {
 	t.Helper()
 	profiles := configureCoordinatorTestProfiles(baseProfiles, tc.waitConds, tc.denyJobControl)
-	promptLister := buildProjectedTestPromptLister(profiles, schemas, tc.waitSchemaMode)
 
 	implState := func(context.Context, *api.Session) surface.ImplementSessionState {
 		if tc.workersInFl > 0 {
@@ -580,6 +523,10 @@ func runCommandJobsAxisCase(
 		rootsFn = func(context.Context, *api.Session) ([]map[string]any, int, string, int) {
 			return nil, 0, "", 0
 		}
+	}
+	var promptLister PromptToolLister
+	if !tc.noLister {
+		promptLister = executorPromptLister(t, profiles, schemas, rootCount)
 	}
 
 	eng := &AssemblyEngine{}

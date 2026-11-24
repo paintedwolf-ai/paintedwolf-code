@@ -3,6 +3,8 @@ package pongoplain
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -405,4 +407,16 @@ func TestVariableReferencesWalker(t *testing.T) {
 			}
 		})
 	}
+}
+
+type memTemplateLoader map[string]string
+
+func (memTemplateLoader) Abs(_, name string) string { return name }
+
+func (m memTemplateLoader) Get(path string) (io.Reader, error) {
+	src, ok := m[path]
+	if !ok {
+		return nil, fmt.Errorf("missing template %q", path)
+	}
+	return strings.NewReader(src), nil
 }

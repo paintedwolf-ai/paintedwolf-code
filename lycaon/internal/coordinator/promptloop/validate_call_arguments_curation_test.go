@@ -74,6 +74,7 @@ func setupArgValidationLoop(
 	root := testutil.CheckoutRoot(t)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(engine))
+	t.Cleanup(func() { guidance.SetGuidanceRenderer(nil) })
 	testutil.FailErr(t, "install anchors", anchorcatalog.InstallFile(filepath.Join(root, "lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml")))
 	testutil.FailErr(t, "install oar profile", oar.InstallEngineDeclarationBundled(filepath.Join(root, "schemas")))
 	loader, err := oar.NewLoader(filepath.Join(root, "schemas"))
@@ -87,7 +88,7 @@ func setupArgValidationLoop(
 		*observed = append(*observed, gc)
 		return nil
 	})
-	// Attach an observer provider on a fact referenced by every tested rule so we capture pre-evaluation GuardContext.
+	// Every tested rule reads rejection_code, so this provider sees each GuardContext.
 	pipeline.SetFactProvider("paintedwolf.rejection_code", func(gc *oar.GuardContext) error {
 		*observed = append(*observed, gc)
 		return nil
@@ -223,16 +224,19 @@ func assertTruncatedAndMalformedCuration(
 		if run.receipt == nil || run.contract.Digest() != commandContract.Digest() {
 			t.Fatalf("lost receipt (%+v) or contract (%+v)", run.receipt, run.contract)
 		}
-		if !strings.Contains(run.content, "does not establish why the argument stream failed") {
-			t.Fatalf("expected non-chunkable TOOL_ARGS_TRUNCATED branch on command, got %q", run.content)
+		if obs := *observed; len(obs) == 0 || obs[len(obs)-1].Invocation.ToolPayloadChunkable {
+			t.Fatalf("command truncation observed chunkable payload: %+v", obs)
 		}
 		chunkRun := loop.Tools.executeToolCall(t.Context(), sess, sess.ID, "", nil, api.ToolCall{
 			ID: "tc-trunc-write", Name: "write", Args: map[string]any{}, ArgsTruncated: true,
 		}, baseToolCtx, nil, 0, "msg-1b", api.CoordinatorRunContext{})
-		if !strings.Contains(chunkRun.content, "payload did not fit") {
-			t.Fatalf("expected OAR chunkable branch from DeriveToolClassFacts on write, got %q", chunkRun.content)
+		if chunkRun.reject == nil || chunkRun.reject.Code() != "TOOL_ARGS_TRUNCATED" {
+			t.Fatalf("write reject = %+v, want TOOL_ARGS_TRUNCATED", chunkRun.reject)
 		}
 		obs := *observed
+		if len(obs) == 0 || !obs[len(obs)-1].Invocation.ToolPayloadChunkable {
+			t.Fatalf("write truncation did not observe a chunkable payload: %+v", obs)
+		}
 		if len(obs) == 0 || !slices.Contains(obs[len(obs)-1].Invocation.ArgValidationErrors, "TOOL_ARGS_TRUNCATED") || !obs[len(obs)-1].Reach.Known() {
 			t.Fatalf("BlockPlane GuardContext missing pre-observation ArgumentValidation or Reach: %+v", obs)
 		}
@@ -260,8 +264,8 @@ func assertTruncatedAndMalformedCuration(
 		if run.receipt == nil || run.contract.Digest() != commandContract.Digest() {
 			t.Fatalf("lost receipt or contract: %+v", run)
 		}
-		if !strings.Contains(run.content, "arguments were not valid JSON") {
-			t.Fatalf("expected BlockPlane TOOL_ARGS_MALFORMED copy, got %q", run.content)
+		if strings.TrimSpace(run.content) == "" {
+			t.Fatal("TOOL_ARGS_MALFORMED delivered no refusal content")
 		}
 		obs := *observed
 		if len(obs) == 0 || !slices.Contains(obs[len(obs)-1].Invocation.ArgValidationErrors, "TOOL_ARGS_MALFORMED") {

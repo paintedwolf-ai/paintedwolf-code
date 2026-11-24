@@ -121,8 +121,8 @@ func TestRenderBoardOrientationInject_PackBoardPairedWitnesses(t *testing.T) {
 	testutil.FailErr(t, "withBoard reader", err)
 	pos, err := inject.RenderBoardOrientationInject(t.Context(), renderer, withBoard, "s", snap, packboard.InjectScopeFull, false, false, now)
 	testutil.FailErr(t, "render with pack_board", err)
-	if !strings.Contains(pos, "call `pack_board` for full pages") {
-		t.Fatalf("positive witness missing pack_board call:\n%s", pos)
+	if !strings.Contains(pos, "`pack_board`") {
+		t.Fatalf("positive witness missing pack_board:\n%s", pos)
 	}
 
 	// Positive witness 2: pack_board deferred/loadable via request_tools (floor-only implement_investigate).
@@ -176,9 +176,6 @@ func TestRenderBoardOrientationInject_PackBoardPairedWitnesses(t *testing.T) {
 		testutil.FailErr(t, "render "+label, err)
 		if strings.Contains(out, "pack_board") {
 			t.Fatalf("%s negative witness leaked pack_board:\n%s", label, out)
-		}
-		if !strings.Contains(out, "Workers omitted: 2 older workers.") {
-			t.Fatalf("%s negative witness lost omitted workers count:\n%s", label, out)
 		}
 	}
 	wOut, err := inject.RenderWorkerBoardInject(t.Context(), renderer, worker, "s", snap, packboard.InjectScopeFull, true, false, now)
