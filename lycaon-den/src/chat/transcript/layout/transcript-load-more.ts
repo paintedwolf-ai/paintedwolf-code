@@ -16,6 +16,7 @@ import type { DisplayTranscriptItem } from "../projection/transcript-item-model.
 import { transcriptItemOrd } from "../projection/transcript-item-order.ts";
 import {
   markAdmittedTranscriptReachSettled,
+  publishAdmittedTranscriptReach,
   publishTranscriptReaderReach,
   releaseAdmittedTranscriptReach,
 } from "../history/transcript-reader-reach.ts";
@@ -133,6 +134,19 @@ async function fetchTranscriptRequest(
   if (appStore.state.transcriptSessionId !== sessionId || appStore.state.sessionViewEpoch !== epoch) return false;
   const applied = appStore.actions.loadTranscriptPage(request, page);
   const loaded = applied && page.messages.length > 0;
+  if (loaded && request.edge !== "start") {
+    let firstOrd = Infinity;
+    let lastOrd = -Infinity;
+    for (const msg of page.messages) {
+      if (typeof msg.ord === "number" && Number.isFinite(msg.ord) && msg.ord > 0) {
+        if (msg.ord < firstOrd) firstOrd = msg.ord;
+        if (msg.ord > lastOrd) lastOrd = msg.ord;
+      }
+    }
+    if (firstOrd <= lastOrd) {
+      publishAdmittedTranscriptReach(sessionId, { firstOrd, lastOrd }, request.edge);
+    }
+  }
   let advanced = false;
   if (loaded) {
     if (request.edge === "seek") {
@@ -384,8 +398,8 @@ export function createTranscriptPaging(
         if (stopped) return;
         // Continue after the reading anchor settles.
         settleFrame = requestAnimationFrame(() => {
-          markAdmittedTranscriptReachSettled(sessionId);
           maybeLoad();
+          markAdmittedTranscriptReachSettled(sessionId);
         });
       })
       .catch(() => intent.failed(key, performance.now()))

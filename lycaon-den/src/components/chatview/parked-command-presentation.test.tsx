@@ -32,7 +32,10 @@ const park: ActivityEvent = {
   wait_triggers: ["timer", "program_done"],
 };
 
-function mountActivity(messages: Message[] = [call, parkedResult()]) {
+function mountActivity(
+  messages: Message[] = [call, parkedResult()],
+  paging?: { hasMoreBefore: boolean; hasMoreAfter: boolean; bounds?: { firstOrd: number; lastOrd: number } },
+) {
   const appStore = createAppStore();
   appStore.actions.setCurrentSession({
     mode: "agent" as const,
@@ -41,7 +44,7 @@ function mountActivity(messages: Message[] = [call, parkedResult()]) {
     id: "session", project_id: "project", owner_person_id: "person", workspace_path: "/workspace",
     posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
   });
-  appStore.actions.installTranscriptBaseline("session", messages, messages.length);
+  appStore.actions.installTranscriptBaseline("session", messages, messages.length, paging);
   appStore.actions.setActivity(park);
   render(() => {
     const activity = createChatViewActivity({
@@ -158,7 +161,7 @@ describe("parked command presentation", () => {
         userTurn,
         { ...call, ord: 102 },
         { ...parkedResult(), ord: 103 },
-      ]);
+      ], { hasMoreBefore: true, hasMoreAfter: false, bounds: { firstOrd: 1, lastOrd: 103 } });
       if (mode === "hidden") store.actions.setActivity({ ...park, status: "done" });
       if (mode === "immediate") {
         store.actions.setActivity({

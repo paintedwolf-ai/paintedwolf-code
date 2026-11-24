@@ -1013,7 +1013,7 @@ describe("createTranscriptPaging", () => {
 
       controller.readerInput("up");
       for (let n = 0; n < 10; n++) await Promise.resolve();
-      expect(calls).toEqual(["m-324", "m-293"]);
+      expect(calls).toEqual(["m-324"]);
     } finally {
       controller.dispose();
       vi.unstubAllGlobals();

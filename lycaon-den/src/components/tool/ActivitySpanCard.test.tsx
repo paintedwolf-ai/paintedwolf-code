@@ -171,12 +171,12 @@ describe("ActivitySpanCard", () => {
     const span = container.querySelector(
       '[data-testid="activity-span-card"]',
     ) as HTMLElement;
-    const tool = container.querySelector(
-      ".den-activity-span-items .den-tool-part",
-    ) as HTMLElement;
 
     fireEvent.click(disclosureToggle(span));
     expect(isDisclosureOpen(span)).toBe(true);
+    const tool = container.querySelector(
+      ".den-activity-span-items .den-tool-part",
+    ) as HTMLElement;
     await waitFor(() => expect(isDisclosureOpen(tool)).toBe(true));
   });
 
@@ -328,6 +328,7 @@ describe("ActivitySpanCard", () => {
         entryKey="r1"
       />
     ));
+    fireEvent.click(disclosureToggle(container.querySelector('[data-testid="activity-span-card"]')));
     const before = container.querySelector(
       '.den-activity-span-items .den-tool-part',
     ) as HTMLElement;
@@ -429,6 +430,7 @@ describe("ActivitySpanCard", () => {
         entryKey="r1"
       />
     ));
+    fireEvent.click(disclosureToggle(container.querySelector('[data-testid="activity-span-card"]')));
     const before = container.querySelector(
       ".den-activity-span-items .den-tool-part",
     ) as HTMLElement;
@@ -492,7 +494,7 @@ describe("ActivitySpanCard", () => {
     const span = container.querySelector('[data-testid="activity-span-card"]');
     expect(span?.getAttribute("data-tool")).toBe("web research");
     expect(span?.getAttribute("data-count")).toBe("2");
-    span?.setAttribute("open", "open");
+    fireEvent.click(disclosureToggle(span));
     expect(
       container.querySelector('[data-testid="index-warming-chicklet"]'),
     ).toBeTruthy();
@@ -506,6 +508,7 @@ describe("ActivitySpanCard", () => {
     const { container } = render(() => (
       <ActivitySpanCard label="web research" entries={webEntries} layout="chat" sessionId="s1" entryKey="iw-span" />
     ));
+    fireEvent.click(disclosureToggle(container.querySelector('[data-testid="activity-span-card"]')));
     const tool = container.querySelector<HTMLElement>(".den-activity-span-items [data-testid='action-card']")!;
     const warming = container.querySelector<HTMLElement>("[data-testid='index-warming-chicklet']")!;
     expect(warming.querySelector(".den-row-mark")).toBeTruthy();
@@ -527,7 +530,7 @@ describe("ActivitySpanCard", () => {
         />
       ));
       const span = container.querySelector(".den-activity-span");
-      span?.setAttribute("open", "open");
+      fireEvent.click(disclosureToggle(span));
       expect(
         container.querySelector(`.den-tool-part[data-layout="${layout}"]`),
       ).toBeTruthy();
@@ -547,6 +550,7 @@ describe("ActivitySpanCard", () => {
     );
     expect(caret).toBeTruthy();
     expect(caret?.parentElement?.className).toBe("den-activity-span-chicklet");
+    fireEvent.click(disclosureToggle(container.querySelector('[data-testid="activity-span-card"]')));
     const rows = container.querySelectorAll(".den-activity-span-items .den-tool-part");
     expect(rows).toHaveLength(2);
     for (const row of rows) {
@@ -565,6 +569,7 @@ describe("ActivitySpanCard", () => {
         entryKey="r1"
       />
     ));
+    fireEvent.click(disclosureToggle(container.querySelector('[data-testid="activity-span-card"]')));
     const rows = [
       ...container.querySelectorAll(".den-activity-span-items .den-tool-part"),
     ] as HTMLElement[];
@@ -630,7 +635,7 @@ describe("ActivitySpanCard", () => {
       '[data-testid="activity-span-card"]',
     ) as HTMLElement;
     expect(span.getAttribute("data-count")).toBe("4");
-    span.setAttribute("open", "open");
+    fireEvent.click(disclosureToggle(span));
 
     const rows = [
       ...container.querySelectorAll(".den-activity-span-items .den-tool-part"),
@@ -694,7 +699,7 @@ describe("ActivitySpanCard", () => {
       '[data-testid="activity-span-card"]',
     ) as HTMLElement;
     expect(span.getAttribute("data-tool")).toBe("editing");
-    span.setAttribute("open", "open");
+    fireEvent.click(disclosureToggle(span));
 
     expect(
       [...container.querySelectorAll(".den-activity-span-items .den-tool-part")].map(

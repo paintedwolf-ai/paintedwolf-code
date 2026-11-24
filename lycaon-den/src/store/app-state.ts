@@ -20,7 +20,6 @@ import {
 import { clearVisualArtifactSessionMemory, noteVisualArtifactIntroBaseline } from "../chat/visual/visual-artifact-reveal.ts";
 import { mergeTranscriptBaseline } from "../chat/transcript/projection/transcript-baseline-merge.ts";
 import {
-  publishAdmittedTranscriptReach,
   releaseAdmittedTranscriptReach,
   transcriptReaderReach,
 } from "../chat/transcript/history/transcript-reader-reach.ts";
@@ -383,19 +382,6 @@ export function createAppStore(
         }),
       );
       traceTranscriptPageEvictions(evicted);
-      if (applied && sessionId && messages.length > 0 && request.edge !== "start") {
-        let firstOrd = Infinity;
-        let lastOrd = -Infinity;
-        for (const msg of messages) {
-          if (typeof msg.ord === "number" && Number.isFinite(msg.ord) && msg.ord > 0) {
-            if (msg.ord < firstOrd) firstOrd = msg.ord;
-            if (msg.ord > lastOrd) lastOrd = msg.ord;
-          }
-        }
-        if (firstOrd <= lastOrd) {
-          publishAdmittedTranscriptReach(sessionId, { firstOrd, lastOrd }, request.edge);
-        }
-      }
       // Paged history enters quietly without per-row key retention.
       if (applied && sessionId) {
         markTranscriptSessionHydrated(sessionId);
