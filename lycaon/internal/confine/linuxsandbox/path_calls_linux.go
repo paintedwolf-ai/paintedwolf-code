@@ -90,6 +90,14 @@ func (s *supervisor) performPath(target *targetProcess, n seccompNotif) (int64, 
 			_ = unix.Close(fd)
 		}
 	}()
+	if errno == errNonDumpable {
+		// Read-only open and openat continue in the kernel, where mounts and Landlock
+		// enforce the read boundary; mutating calls fail closed.
+		if isReadOnlyOpenNotif(n, args) {
+			return 0, errMetadataContinue, true
+		}
+		return 0, unix.EACCES, false
+	}
 	if errno != 0 {
 		return 0, errno, true
 	}
@@ -116,6 +124,20 @@ func (s *supervisor) reportPerformed(result pathResult) {
 
 // errAnswered marks a call the kernel completed while installing its result.
 const errAnswered = unix.Errno(^uintptr(0) >> 1)
+
+// errNonDumpable marks a path whose process memory cannot be opened.
+const errNonDumpable = errAnswered - 2
+
+func isReadOnlyOpenNotif(n seccompNotif, a pathArgs) bool {
+	nr := uint32(n.Nr)
+	if nr != unix.SYS_OPENAT && (legacyOpen == 0 || nr != legacyOpen) {
+		return false
+	}
+	if a.flags == noArg {
+		return false
+	}
+	return uint32(n.Args[a.flags])&(openWriteFlags|oTmpfileBit) == 0
+}
 
 // readPathCall copies a call's paths and opens the directories they resolve
 // from, as they are at notification time.
@@ -224,6 +246,9 @@ func (t *targetProcess) readPath(addr uint64) (string, error) {
 		buf := make([]byte, chunk)
 		n, err := t.handles.readAt(t.pid, buf, int64(addr))
 		if n == 0 && err != nil {
+			if isNonDumpableOpen(err) {
+				return "", errNonDumpable
+			}
 			return "", unix.EFAULT
 		}
 		if i := indexByte(buf[:n], 0); i >= 0 {
