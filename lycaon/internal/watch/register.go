@@ -94,6 +94,13 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	if !replayed && len(initialMatches) > 0 {
 		receipt = reconcileInitialProcessClaims(s, ctx, reg, receipt, initialMatches)
 	}
+	if receipt.StandingDraft {
+		overlaps := s.Standing().Overlapping(ctx, normalized.Owner.ProjectID, normalized.Conditions)
+		if overlaps == nil {
+			overlaps = []OverlappingStandingWatch{}
+		}
+		receipt.OverlappingStanding = overlaps
+	}
 	return receipt, nil
 }
 
@@ -209,21 +216,26 @@ func (s *Store) DismissedStandingDraftHandle(ctx context.Context, sessionID stri
 	if !s.Configured() || strings.TrimSpace(sessionID) == "" || len(conditions) == 0 {
 		return "", nil
 	}
-	condBytes, err := json.Marshal(conditions)
+	rows, err := s.db.QueryContext(ctx, `SELECT handle, conditions_json FROM watch_registrations
+		WHERE session_id = ? AND terminal_outcome = 'dismissed'
+		  AND (standing_draft IS NOT NULL OR json_extract(cursors_json, '$._standing_draft') IS NOT NULL)
+		ORDER BY seq DESC`,
+		strings.TrimSpace(sessionID))
 	if err != nil {
 		return "", err
 	}
-	var handle string
-	err = s.db.QueryRowContext(ctx, `SELECT handle FROM watch_registrations
-		WHERE session_id = ? AND terminal_outcome = 'dismissed'
-		  AND conditions_json = ?
-		  AND json_extract(cursors_json, '$._standing_draft') IS NOT NULL
-		ORDER BY seq DESC LIMIT 1`,
-		strings.TrimSpace(sessionID), string(condBytes)).Scan(&handle)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var handle, condJSON string
+		if err := rows.Scan(&handle, &condJSON); err != nil {
+			return "", err
+		}
+		var stored []awaitstore.Condition
+		if json.Unmarshal([]byte(condJSON), &stored) == nil && StandingConditionsEqual(stored, conditions) {
+			return handle, nil
+		}
 	}
-	return handle, err
+	return "", rows.Err()
 }
 
 func isTerminalCondition(cond awaitstore.Condition) bool {
@@ -344,13 +356,22 @@ func registerWatchTx(ctx context.Context, tx *sql.Tx, req RegisterRequest, now t
 		repeatInt = 1
 	}
 
+	var standingJSON string
+	if req.Standing != nil {
+		rawDraft, dErr := json.Marshal(req.Standing)
+		if dErr != nil {
+			return RegisterReceipt{}, Registration{}, false, dErr
+		}
+		standingJSON = string(rawDraft)
+	}
+
 	if _, err := tx.ExecContext(ctx, `INSERT INTO watch_registrations (
 		watch_id, project_id, owner_kind, session_id, worker_job_id, handle, seq,
-		derived_command_handle, creating_invocation_id, conditions_json, authority_json,
+		derived_command_handle, creating_invocation_id, standing_draft, conditions_json, authority_json,
 		cursors_json, delivery, repeat, expires_at, state, created_at, updated_at
-	) VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?, ?, 'live', ?, ?)`,
+	) VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?, ?, 'live', ?, ?)`,
 		watchID, req.Owner.ProjectID, string(req.Owner.Kind), req.Owner.SessionID, req.Owner.WorkerJobID,
-		handle, seq, req.DerivedCommandHandle, req.InvocationID, string(condBytes), string(authBytes),
+		handle, seq, req.DerivedCommandHandle, req.InvocationID, standingJSON, string(condBytes), string(authBytes),
 		string(cursorBytes), string(req.Delivery), repeatInt, expStr, nowStr, nowStr,
 	); err != nil {
 		return RegisterReceipt{}, Registration{}, false, err
@@ -391,7 +412,7 @@ func buildRegisterReceipt(reg Registration, pending int) RegisterReceipt {
 		PendingMatches: pending,
 		Hint:           "When you need this result, pass this condition to wait.",
 	}
-	if reg.Cursors[standingDraftCursorKey] != "" {
+	if reg.Standing != nil || reg.Cursors[standingDraftCursorKey] != "" {
 		out.StandingDraft = true
 		out.OverlappingStanding = []OverlappingStandingWatch{}
 	}

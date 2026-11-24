@@ -153,7 +153,7 @@ func probeGroupID(key ProbeKey) string {
 }
 
 func subscribeWatchSampler(s *Store, reg Registration, now time.Time) {
-	if s == nil || s.sampler == nil || reg.Lifecycle.State != StateLive {
+	if s == nil || s.sampler == nil || (reg.Lifecycle.State != StateLive && reg.Lifecycle.State != StateEnabled) {
 		return
 	}
 	s.sampler.unsubscribeWatch(reg.WatchID, s.heap)
@@ -451,7 +451,7 @@ func applySubscriberProbeOutcome(s *Store, ctx context.Context, sub probeSubscri
 func updateWatchCursor(s *Store, ctx context.Context, watchID, key, val string) error {
 	nowStr := s.clock.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE watch_registrations SET cursors_json = json_set(cursors_json, ?, ?), updated_at = ? WHERE watch_id = ? AND state = 'live'`,
+		`UPDATE watch_registrations SET cursors_json = json_set(cursors_json, ?, ?), updated_at = ? WHERE watch_id = ? AND state IN ('live', 'enabled')`,
 		"$."+key, val, nowStr, watchID)
 	return err
 }

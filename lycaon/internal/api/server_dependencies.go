@@ -57,6 +57,7 @@ import (
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/viewstate"
 	"github.com/lycaon/lycaon/internal/visual"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/internal/webindex"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -91,6 +92,7 @@ type CoreDependencies struct {
 	UserNotices   *usernotice.Catalog
 	Invocations   invocation.Recorder
 	MutationGate  *project.MutationGate
+	Watches       *watch.Store
 }
 
 type ProvidersDependencies struct {

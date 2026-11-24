@@ -13,6 +13,7 @@ import (
 type CancelReceipt struct {
 	ReceiptID         string           `json:"receipt_id"`
 	WatchID           string           `json:"watch_id"`
+	StandingWatchID   string           `json:"standing_watch_id,omitempty"`
 	Handle            string           `json:"handle"`
 	State             State            `json:"state"`
 	Outcome           TerminalOutcome  `json:"outcome"`
@@ -248,6 +249,9 @@ func (s *Store) AdvanceDue(ctx context.Context) error {
 		case KindSamplerProbe:
 			dueProbeGroups = append(dueProbeGroups, entry.Key.ID)
 		case KindScheduleRun:
+			if err := handleStandingScheduleEntry(ctx, s.Standing(), entry.Key.ID, now); err != nil {
+				return err
+			}
 		}
 	}
 	if len(dueProbeGroups) > 0 {
@@ -281,6 +285,9 @@ func recoverStore(ctx context.Context, s *Store) error {
 		return err
 	}
 	if err := recoverWakeRetries(ctx, s); err != nil {
+		return err
+	}
+	if err := recoverStandingWatches(ctx, s.Standing(), s.clock.Now()); err != nil {
 		return err
 	}
 	return s.AdvanceDue(ctx)

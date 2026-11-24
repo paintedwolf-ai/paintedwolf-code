@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/localdata"
+	"github.com/lycaon/lycaon/internal/people/peoplestore"
 	"github.com/lycaon/lycaon/internal/preflight"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
@@ -37,6 +38,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/visual"
+	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/internal/webindex"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerops"
@@ -105,6 +107,8 @@ type HarnessControl struct {
 	sessionStore       sessionstore.SessionRepository
 	transcriptStore    sessionstore.TranscriptRepository
 	sessions           *session.Host
+	peopleStore        *peoplestore.Store
+	watches            *watch.Store
 	visualStore        visual.Store
 }
 
@@ -174,7 +178,7 @@ func composeDomains(s *Server, deps Dependencies) {
 		findingIgnores = deps.Scans.ScanCadence.Ignores
 	}
 	s.Routes.Findings = &Findings{Scan: &s.Admin.Scan, projectRegistry: deps.Core.Projects, responses: &s.responses, findingIgnores: findingIgnores}
-	s.Routes.HarnessControl = &HarnessControl{Workflow: deps.Workflow.Workflows, checkpoints: deps.Approvals.Checkpoints, eventPublisher: s.eventPublisher, harness: &s.harness, manualLLM: deps.Harness.ManualLLM, requireClientAuth: s.requireClientAuth, responses: &s.responses, router: s.router, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, sessions: s.sessions, visualStore: deps.Source.VisualStore}
+	s.Routes.HarnessControl = &HarnessControl{Workflow: deps.Workflow.Workflows, checkpoints: deps.Approvals.Checkpoints, eventPublisher: s.eventPublisher, harness: &s.harness, manualLLM: deps.Harness.ManualLLM, peopleStore: s.peopleStore, requireClientAuth: s.requireClientAuth, responses: &s.responses, router: s.router, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, sessions: s.sessions, watches: s.watches, visualStore: deps.Source.VisualStore}
 	s.Routes.HarnessPreparation = &HarnessPreparation{branches: deps.Workflow.Branches, Workflow: deps.Workflow.Workflows, dataDir: s.dataDir, database: deps.Core.Database, harness: &s.harness, harnessWorkers: deps.Harness.HarnessWorkers, llmSvc: deps.Providers.LLM, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, turnsStore: deps.Core.Store.Turns, evidenceStore: deps.Core.Store.Evidence, transcriptStore: deps.Core.Store.Transcript, sessions: s.sessions, workers: deps.Workflow.Workers}
 	s.Routes.HarnessProviders = &HarnessProviders{costTracker: deps.Providers.CostTracker, llmSvc: deps.Providers.LLM, responses: &s.responses}
 	s.Routes.LocalData = &LocalData{branches: deps.Workflow.Branches, extensionOwner: s.Admin.Extensions.Mutations.Owner, dataDir: s.dataDir, responses: &s.responses, sessions: s.sessions, sourceLedger: s.Sources.Workspace.SourceLedger, webIndex: deps.External.WebIndex, workerBranchRoot: s.workerBranchRoot, workers: deps.Workflow.Workers}

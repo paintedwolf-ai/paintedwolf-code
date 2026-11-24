@@ -40,6 +40,7 @@ func (s *HarnessControl) registerHarnessRoutes() {
 		r.Get("/ask_user/last_response", s.handleHarnessAskUserLastResponse)
 		r.Post("/visual_fixture", s.handleHarnessVisualFixture)
 		r.Post("/review_loop_verdict", s.handleHarnessReviewLoopVerdict)
+		r.Post("/standing_watches", s.handleHarnessStandingWatches)
 	})
 }
 

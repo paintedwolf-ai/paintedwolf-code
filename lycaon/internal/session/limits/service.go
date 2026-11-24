@@ -33,6 +33,7 @@ type Service struct {
 	policy   ModelPolicySource
 	windows  llm.ContextLengthLookup
 	fallback ConfigSource
+	runSpend func(ctx context.Context, sessionID string) (float64, bool)
 }
 
 func New(defaults settings.SessionLimits, roots Roots) *Service {
@@ -63,6 +64,11 @@ func (m *Service) SetFallback(config ConfigSource) {
 	defer m.mu.Unlock()
 	m.fallback = config
 }
+func (m *Service) SetRunSpendLookup(fn func(ctx context.Context, sessionID string) (float64, bool)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.runSpend = fn
+}
 func (m *Service) SetMaxIterations(n int) {
 	if n > 0 {
 		m.mu.Lock()
@@ -73,7 +79,7 @@ func (m *Service) SetMaxIterations(n int) {
 
 func (m *Service) Effective(ctx context.Context, sess *api.Session) settings.SessionLimits {
 	m.mu.RLock()
-	lim, provider, roots := m.defaults, m.provider, m.roots
+	lim, provider, roots, runSpend := m.defaults, m.provider, m.roots, m.runSpend
 	m.mu.RUnlock()
 	projectDir := ""
 	var rootPaths []string
@@ -85,7 +91,16 @@ func (m *Service) Effective(ctx context.Context, sess *api.Session) settings.Ses
 		lim = provider.SessionLimits(projectDir)
 	}
 	_, derived := m.ResolveRoots(rootPaths)
-	return settings.ApplyDerivedSessionLimits(lim, derived)
+	eff := settings.ApplyDerivedSessionLimits(lim, derived)
+	if runSpend != nil && sess != nil && sess.ID != "" {
+		if runCeiling, ok := runSpend(ctx, sess.ID); ok && runCeiling > 0 {
+			if !eff.SpendCeilingEnabled || eff.SessionSpendCeilingUSD <= 0 || runCeiling < eff.SessionSpendCeilingUSD {
+				eff.SpendCeilingEnabled = true
+				eff.SessionSpendCeilingUSD = runCeiling
+			}
+		}
+	}
+	return eff
 }
 
 func (m *Service) Compaction(ctx context.Context, sess *api.Session) compaction.CompactionConfig {

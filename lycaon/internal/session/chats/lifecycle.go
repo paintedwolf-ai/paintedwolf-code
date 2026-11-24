@@ -78,7 +78,7 @@ func sessionListScope(q store.SummaryQuery) string {
 
 // SetArchived changes session list membership.
 func (m *Service) SetArchived(ctx context.Context, id string, archived bool) (*wire.Session, error) {
-	return m.changeLifecycle(ctx, id, func(id string) error {
+	sess, err := m.changeLifecycle(ctx, id, func(id string) error {
 		return m.sessionStore.UpdateSession(ctx, id, func(sess *wire.Session) {
 			if !archived {
 				sess.ArchivedAt = nil
@@ -88,6 +88,10 @@ func (m *Service) SetArchived(ctx context.Context, id string, archived bool) (*w
 			}
 		})
 	})
+	if err == nil && archived && m.onUnavailable != nil {
+		m.onUnavailable(ctx, strings.TrimSpace(id))
+	}
+	return sess, err
 }
 
 // SetPinned adds a chat to the end of its project's pinned order, or removes it.
@@ -200,6 +204,9 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 	}
 	m.removeScratch(ctx, tree)
 	m.Gate.Forget(id)
+	if m.onUnavailable != nil {
+		m.onUnavailable(ctx, id)
+	}
 	m.publishSessionDeleted(ctx, sess)
 	if m.events != nil {
 		m.events.PublishAttention(ctx)

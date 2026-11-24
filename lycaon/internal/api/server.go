@@ -36,6 +36,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/session"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/watch"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -86,6 +87,7 @@ type Server struct {
 	peopleStore    *peoplestore.Store
 	personActions  *personactions.Store
 	sessions       *session.Host
+	watches        *watch.Store
 	fileBriefings  *filebriefing.Service
 	repoProvider   repoinfo.Provider
 	events         events.ReplayHub

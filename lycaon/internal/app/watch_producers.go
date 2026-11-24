@@ -169,6 +169,9 @@ func bindWorkerOutcomeWatches(b *serveBuilder, bridge *worker.SessionOutcomeBrid
 }
 
 func checkWatchAuthority(b *serveBuilder, ctx context.Context, reg watch.Registration) (bool, string) {
+	if reg.Owner.Kind == watch.OwnerPerson {
+		return true, ""
+	}
 	if b.storage.Sessions == nil || b.storage.Sessions.Sessions == nil {
 		return true, ""
 	}

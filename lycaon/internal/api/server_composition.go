@@ -42,6 +42,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		sessionStore: deps.Core.Store.Sessions, peopleStore: deps.Core.Store.People,
 		personActions:  deps.Core.PersonActions,
 		sessions:       deps.Core.Sessions,
+		watches:        deps.Core.Watches,
 		fileBriefings:  deps.Source.Briefings.Files,
 		repoProvider:   deps.Source.RepoProvider,
 		events:         deps.Host.Events,

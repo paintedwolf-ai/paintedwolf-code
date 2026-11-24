@@ -1,5 +1,5 @@
 tags: [process, sync]
-description: "Observe conditions asynchronously while continuing work. Returns a handle and watch_match condition for wait (call wait directly if blocked now)."
+description: "Observe conditions asynchronously; returns a handle and watch_match condition for wait (call wait directly if blocked now). One-off <=30d in this chat: omit standing and use delivery wake for idle turns. Recurring, new-chat, or >30d: set standing for the proposal card; never ask chat confirmation or poll."
 schema:
   type: object
   properties:
@@ -83,7 +83,7 @@ schema:
       description: RFC 3339 expiry (1m-30d).
     standing:
       type: object
-      description: Draft a person-owned standing watch (timer/git_ref/file_change; collect).
+      description: "Person-owned standing draft (timer/git_ref/file_change; collect). Unprompted: after requested work, <=1/turn; never re-propose WATCH_DRAFT_DISMISSED."
       properties:
         name: {type: string, minLength: 1, maxLength: 80, description: Watch name.}
         prompt: {type: string, minLength: 1, maxLength: 8000, description: Run prompt.}
