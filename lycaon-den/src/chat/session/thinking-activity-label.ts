@@ -445,7 +445,8 @@ function hostActivityCandidates(
   const ordered: ActivityEvent[] = [];
   const remaining = [...active];
   while (remaining.length > 0) {
-    const next = newestActivity(remaining)!;
+    const next = newestActivity(remaining);
+    if (!next) break;
     ordered.push(next);
     remaining.splice(remaining.indexOf(next), 1);
   }
