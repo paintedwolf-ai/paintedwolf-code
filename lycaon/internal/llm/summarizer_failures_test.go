@@ -206,8 +206,17 @@ func TestSummarizerPolicyAndUnconfiguredHelpers(t *testing.T) {
 	if rev == "" {
 		t.Fatal("empty summary revision")
 	}
-	if budget := r.SummaryBudget(t.Context()); budget.Input <= 0 || budget.Output <= 0 {
-		t.Fatalf("unexpected summary budget: %+v", budget)
+	if budget := r.SummaryBudget(t.Context()); budget.Input != 0 || budget.Output != 0 {
+		t.Fatalf("unexpected unconfigured-window summary budget: %+v", budget)
+	}
+	fedReg, _ := feedOnlyRegistry(t, 32768, "[]")
+	fedPolicy := newPolicyFixture(t, ModelPolicy{
+		Lite:        ModelRef{ProviderID: "hosted", Model: feedOnlyModel},
+		Coordinator: ModelRef{ProviderID: "hosted", Model: feedOnlyModel},
+	})
+	fedSummarizer := &RegistrySummarizer{Registry: fedReg, Policy: fedPolicy, Scope: SettingsScopeGlobal}
+	if budget := fedSummarizer.SummaryBudget(t.Context()); budget.Input <= 0 || budget.Output <= 0 {
+		t.Fatalf("unexpected configured-window summary budget: %+v", budget)
 	}
 	empty := &RegistrySummarizer{}
 	if _, err := empty.SummarizeRequired(t.Context(), "sys", "usr", 40); !IsUnavailableUtilityError(err) {
