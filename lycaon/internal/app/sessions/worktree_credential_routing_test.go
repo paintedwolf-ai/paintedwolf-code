@@ -96,16 +96,16 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		managed:  func(string) []secretmatch.Remembered { return nil },
 		exposure: func(context.Context, string, string) error { return nil },
 	}
-	files.index = newCredentialIndex(files)
+	files.index = newCredentialIndex(files, nil)
 	files.startCredentialIndex()
 	t.Cleanup(func() {
 		testutil.FailErr(t, "close credential index", files.closeCredentialIndex(context.Background()))
 	})
-	testutil.FailErr(t, "admit primary credentials", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
+	testutil.FailErr(t, "admit primary credentials", files.Await(t.Context(), tools.CredentialWait{ProjectID: testdbseed.DefaultProjectID}))
 
 	// Escaping paths remain rejected by credential scanning.
 	rootEntry := files.index.roots[testdbseed.DefaultProjectID+"\x00r1"]
-	if err := files.index.scan(t.Context(), rootEntry, "../sibling-wt/.env", files.harvest.CaptureFiles(testdbseed.DefaultProjectID)); err == nil || !strings.Contains(err.Error(), "leaves root") {
+	if err := files.index.scan(t.Context(), rootEntry, "../sibling-wt/.env", &credentialBatch{files: files, projectID: testdbseed.DefaultProjectID}, &credentialBuildStats{}); err == nil || !strings.Contains(err.Error(), "leaves root") {
 		t.Fatalf("expected escaping path rejection, got %v", err)
 	}
 
@@ -180,7 +180,7 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		Roots:     []sourceledger.RootSpec{{ID: "r1", Path: primary}},
 	}))
 	repochange.UseDebounce(t.Context(), repochange.DefaultDebounce)()
-	testutil.FailErr(t, "settle initial primary credentials", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
+	testutil.FailErr(t, "settle initial primary credentials", files.Await(t.Context(), tools.CredentialWait{ProjectID: testdbseed.DefaultProjectID}))
 
 	var scanMu sync.Mutex
 	var scannedPaths []string
@@ -215,7 +215,7 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 	testutil.FailErr(t, "write unrelated external file", err)
 	repochange.UseDebounce(t.Context(), repochange.DefaultDebounce)()
 
-	testutil.FailErr(t, "recheck primary credentials after sibling edit", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
+	testutil.FailErr(t, "recheck primary credentials after sibling edit", files.Await(t.Context(), tools.CredentialWait{ProjectID: testdbseed.DefaultProjectID}))
 	scanMu.Lock()
 	eventsMu.Lock()
 	if len(scannedPaths) != 0 || len(primaryEvents) != 0 || repochange.CurrentEpoch(primary) != primaryEpochBefore || len(files.index.roots) != 1 {
@@ -237,7 +237,7 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 	})
 	repochange.UseDebounce(t.Context(), repochange.DefaultDebounce)()
 
-	testutil.FailErr(t, "recheck primary credentials after external process", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
+	testutil.FailErr(t, "recheck primary credentials after external process", files.Await(t.Context(), tools.CredentialWait{ProjectID: testdbseed.DefaultProjectID}))
 	scanMu.Lock()
 	eventsMu.Lock()
 	if len(scannedPaths) != 0 || len(primaryEvents) != 0 {
@@ -284,6 +284,7 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 	}, writeTool.Run)
 	testutil.FailErr(t, "write in-root credential", err)
 	repochange.UseDebounce(t.Context(), repochange.DefaultDebounce)()
+	testutil.FailErr(t, "refresh in-root credential", files.Await(t.Context(), tools.CredentialWait{ProjectID: testdbseed.DefaultProjectID}))
 
 	scanMu.Lock()
 	wantScan := primary + ":.env.local"
