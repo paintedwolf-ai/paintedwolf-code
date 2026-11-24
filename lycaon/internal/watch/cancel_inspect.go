@@ -63,10 +63,13 @@ func (s *Store) Cancel(ctx context.Context, owner Owner, handle string) (CancelR
 		return CancelReceipt{}, err
 	}
 	s.heap.Remove(KindWatchExpiry, reg.WatchID)
-	_ = WithdrawAmbientWakeIfNoDemand(ctx, s, owner.SessionID)
+	_ = WithdrawAmbientWakeIfNoDemand(ctx, s, reg.Owner.SessionID)
+	stopped, _ := s.IsSessionStopped(ctx, reg.Owner.SessionID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
-		s.notifyLeaseWake(ctx, w.lease, w.winner)
+		if !stopped {
+			s.notifyLeaseWake(ctx, w.lease, w.winner)
+		}
 	}
 	return receipt, nil
 }
@@ -232,6 +235,9 @@ func (s *Store) Recover(ctx context.Context) error {
 
 func recoverStore(ctx context.Context, s *Store) error {
 	s.heap.Reset()
+	if err := recoverStoppedSessions(ctx, s); err != nil {
+		return err
+	}
 	if err := recoverLiveWatches(ctx, s); err != nil {
 		return err
 	}
@@ -242,6 +248,33 @@ func recoverStore(ctx context.Context, s *Store) error {
 		return err
 	}
 	return s.AdvanceDue(ctx)
+}
+
+func recoverStoppedSessions(ctx context.Context, s *Store) error {
+	stoppedRows, err := s.db.QueryContext(ctx,
+		`SELECT session_id FROM watch_session_state WHERE stopped_at IS NOT NULL AND stopped_at != ''`)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = stoppedRows.Close() }()
+	var stoppedIDs []string
+	for stoppedRows.Next() {
+		var id string
+		if err := stoppedRows.Scan(&id); err != nil {
+			return err
+		}
+		stoppedIDs = append(stoppedIDs, id)
+	}
+	if err := stoppedRows.Err(); err != nil {
+		return err
+	}
+	_ = stoppedRows.Close()
+	if len(stoppedIDs) > 0 {
+		if _, err := s.ReconcileStoppedSessions(ctx, stoppedIDs...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func recoverLiveWatches(ctx context.Context, s *Store) error {

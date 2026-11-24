@@ -29,6 +29,11 @@ type CheckpointStop interface {
 	CancelPendingForSession(ctx context.Context, sessionID, reason string) error
 }
 
+type WatchStop interface {
+	FenceWatches(ctx context.Context, sessionIDs []string) error
+	ReconcileStoppedWatches(ctx context.Context, sessionIDs []string) (int, error)
+}
+
 // SetWorkflowStop wires workflow teardown.
 func (m *Service) SetWorkflowStop(stop WorkflowStop) {
 	if m != nil {
@@ -40,6 +45,13 @@ func (m *Service) SetWorkflowStop(stop WorkflowStop) {
 func (m *Service) SetCheckpointStop(stop CheckpointStop) {
 	if m != nil {
 		m.checkpointStop = stop
+	}
+}
+
+// SetWatchStop wires durable watch stop fencing and reconciliation.
+func (m *Service) SetWatchStop(stop WatchStop) {
+	if m != nil {
+		m.watchStop = stop
 	}
 }
 
@@ -113,12 +125,15 @@ func (m *Service) stopSessionTree(ctx context.Context, rootID, reason string, op
 	if err != nil {
 		return err
 	}
+	var errs []error
+	if m.watchStop != nil {
+		errs = appendStopError(errs, "fence watches", rootID, m.watchStop.FenceWatches(ctx, treeSessionIDs(tree)))
+	}
 	m.cancelTreeTurns(ctx, tree)
 
 	workerCtx, cancelWorkers := m.workerReleaseContext(ctx)
 	defer cancelWorkers()
 
-	var errs []error
 	errs = m.stopTreeWorkers(workerCtx, tree, reason, errs)
 
 	// Include children admitted before stop began.
@@ -126,6 +141,9 @@ func (m *Service) stopSessionTree(ctx context.Context, rootID, reason string, op
 		errs = appendStopError(errs, "refresh session tree", rootID, refreshErr)
 	} else {
 		tree = refreshed
+		if m.watchStop != nil {
+			errs = appendStopError(errs, "fence refreshed watches", rootID, m.watchStop.FenceWatches(ctx, treeSessionIDs(tree)))
+		}
 		m.cancelTreeTurns(ctx, tree)
 	}
 
@@ -151,14 +169,31 @@ func (m *Service) stopSessionTree(ctx context.Context, rootID, reason string, op
 	}
 	// Catch workers admitted by turns already draining.
 	errs = m.stopTreeWorkers(workerCtx, tree, reason, errs)
-	for _, sess := range tree {
-		if err := m.sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle); err != nil {
-			errs = appendStopError(errs, "mark session idle", sess.ID, err)
+	watchReconcileFailed := false
+	if m.watchStop != nil {
+		if _, wErr := m.watchStop.ReconcileStoppedWatches(ctx, treeSessionIDs(tree)); wErr != nil {
+			watchReconcileFailed = true
+			errs = appendStopError(errs, "reconcile stopped watches", rootID, wErr)
 		}
 	}
-	m.status.PublishIdle(ctx, rootID, api.SessionIdleDispositionUserStopped)
+	if !watchReconcileFailed {
+		for _, sess := range tree {
+			if err := m.sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle); err != nil {
+				errs = appendStopError(errs, "mark session idle", sess.ID, err)
+			}
+		}
+		m.status.PublishIdle(ctx, rootID, api.SessionIdleDispositionUserStopped)
+	}
 	m.QueueChecklistReconcileNudge(ctx, rootID)
 	return errors.Join(errs...)
+}
+
+func treeSessionIDs(tree []store.SessionTreeMember) []string {
+	ids := make([]string, 0, len(tree))
+	for _, member := range tree {
+		ids = append(ids, member.ID)
+	}
+	return ids
 }
 
 func (m *Service) workerReleaseContext(ctx context.Context) (context.Context, context.CancelFunc) {

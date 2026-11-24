@@ -38,6 +38,7 @@ type Store struct {
 	processLookup ProcessLookup
 	onLeaseWake   LeaseWakeFunc
 	wakeGate      AmbientWakeGate
+	treeStopping  func(sessionID string) bool
 }
 
 func NewStore(database db.Handle, clock Clock) *Store {
@@ -81,6 +82,25 @@ func (s *Store) SetAmbientWakeGate(gate AmbientWakeGate) {
 	s.mu.Lock()
 	s.wakeGate = gate
 	s.mu.Unlock()
+}
+
+func (s *Store) SetTreeStoppingFunc(fn func(sessionID string) bool) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.treeStopping = fn
+	s.mu.Unlock()
+}
+
+func (s *Store) isTreeStopping(sessionID string) bool {
+	if s == nil || strings.TrimSpace(sessionID) == "" {
+		return false
+	}
+	s.mu.RLock()
+	fn := s.treeStopping
+	s.mu.RUnlock()
+	return fn != nil && fn(strings.TrimSpace(sessionID))
 }
 
 func (s *Store) TriggerAmbientWake(ctx context.Context, sessionID string) (bool, error) {

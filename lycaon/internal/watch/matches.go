@@ -48,6 +48,17 @@ func (s *Store) RecordMatch(ctx context.Context, watchID string, input MatchInpu
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	preReg, err := loadRegistrationByIDTx(ctx, tx, strings.TrimSpace(watchID))
+	if err != nil {
+		return RecordedMatch{}, false, err
+	}
+	if s.isTreeStopping(preReg.Owner.SessionID) {
+		return RecordedMatch{}, false, nil
+	}
+	if stopped, err := isStoppedTx(ctx, tx, preReg.Owner.SessionID); err != nil || stopped {
+		return RecordedMatch{}, false, err
+	}
+
 	recorded, inserted, err := insertMatchTx(ctx, tx, strings.TrimSpace(watchID), input, cursorUpdates, now)
 	if err != nil || !inserted {
 		if err != nil {
