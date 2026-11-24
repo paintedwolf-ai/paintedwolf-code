@@ -210,7 +210,7 @@ modelIndependentWebE2e(
     const reportDiff = card.getByTestId("file-edit-diff").filter({ hasText: "/external/report.txt" });
     await reportDiff.getByText("/external/report.txt", { exact: true }).click();
     await expect(reportDiff).toHaveAttribute("data-expanded", "true");
-    await reportDiff.getByTestId("source-diff-show-activity").click();
+    await reportDiff.getByTestId("file-edit-show-activity").click();
     await expect(card.getByTestId("activity-span-card")).toHaveAttribute("data-expanded", "true");
     await expect(card.locator(`[data-tool-call-id="${callWrite}"]`)).toBeVisible();
 

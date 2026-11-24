@@ -75,6 +75,12 @@ export function ActivityGroupApprovals(props: Props) {
     props.approvals.find((approval) => approval.meta.status === "pending"),
   );
   const resolvedHint = createMemo(() => resolvedApprovalsHint(props.approvals));
+  const approvalToolCallIds = createMemo(() => {
+    const ids = props.approvals
+      .map((approval) => (approval.toolCallId ?? approval.call?.toolCallId)?.trim())
+      .filter((id): id is string => Boolean(id));
+    return ids.length > 0 ? [...new Set(ids)].join(" ") : undefined;
+  });
 
   return (
     <Show
@@ -104,6 +110,7 @@ export function ActivityGroupApprovals(props: Props) {
         data-testid="activity-group-approvals"
         data-count={props.approvals.length}
         data-status={firstPending() ? "pending" : "settled"}
+        data-tool-call-ids={approvalToolCallIds()}
       >
         <Show when={firstPending()} keyed>
           {(pending) => (

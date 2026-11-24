@@ -122,11 +122,11 @@ describe("projectActivityGroups", () => {
     const messages: Message[] = [
       userMsg("u1", 300),
       assistantCallsMsg("a310", 310, [
-        { id: "call-prog", name: "update_progress", args: {} },
+        { id: "call-wait", name: "wait", args: { reason: "Waiting on build" } },
         { id: "call-cmd", name: "command", args: { command: "git status" } },
         { id: "call-write", name: "write", args: { path: "main.go" } },
       ]),
-      toolResultMsg("r311", 311, "a310", "call-prog", "update_progress", { ui_visibility: "benign" }),
+      toolResultMsg("r311", 311, "a310", "call-wait", "wait"),
       {
         id: "p312",
         ord: 312,
@@ -159,7 +159,7 @@ describe("projectActivityGroups", () => {
     const beforePlan = quietItems[1] as ActivityGroupItem;
     const afterPlan = quietItems[3] as ActivityGroupItem;
     expect(beforePlan.entries.map((e) => (e.kind === "tool" ? e.part.toolCallId : e.key))).toEqual([
-      "call-prog",
+      "call-wait",
       "call-cmd",
     ]);
     expect(afterPlan.entries.map((e) => (e.kind === "tool" ? e.part.toolCallId : e.key))).toEqual([

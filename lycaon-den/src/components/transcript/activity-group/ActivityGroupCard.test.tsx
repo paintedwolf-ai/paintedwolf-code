@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -260,7 +259,7 @@ describe("ActivityGroupCard", () => {
     const shiftSpy = vi.spyOn(controller, "shiftVirtualContent").mockImplementation((d) => d);
 
     const stream = controller.stream()!;
-    const group = container.querySelector<HTMLElement>('[data-testid="activity-group"]')!;
+    const group = container.querySelector<HTMLElement>('[data-testid="activity-group-card"]')!;
     const filesSection = group.querySelector<HTMLElement>('[data-activity-group-section="files"]')!;
 
     stream.getBoundingClientRect = () => ({ top: 100, bottom: 500, left: 0, right: 600, width: 600, height: 400 } as DOMRect);
@@ -331,6 +330,7 @@ describe("ActivityGroupCard", () => {
     const { container } = render(() => (
       <SessionTranscript layout="chat" sessionId="s-reveal-120" projectId="p1" messages={messages} />
     ));
+    await Promise.resolve();
     const stream = container.closest<HTMLElement>(".den-chat-stream") ?? container.querySelector<HTMLElement>(".den-chat-stream")!;
     const ok = await revealChicklet(stream, {
       sessionId: "s-reveal-120",
@@ -385,6 +385,7 @@ describe("ActivityGroupCard", () => {
     const { container } = render(() => (
       <SessionTranscript layout="chat" sessionId="s-show-act" projectId="project" messages={messages} />
     ));
+    await Promise.resolve();
 
     const filesShell = container.querySelector<HTMLElement>('[data-testid="diff-group"]')!;
     fireEvent.click(filesShell.querySelector<HTMLElement>("button.den-transcript-disclosure-toggle")!);
@@ -400,7 +401,7 @@ describe("ActivityGroupCard", () => {
     }
 
     const showActivityBtn = await waitFor(() => {
-      const btn = container.querySelector<HTMLButtonElement>('[data-testid="source-diff-show-activity"]');
+      const btn = container.querySelector<HTMLButtonElement>('[data-testid="file-edit-show-activity"]');
       expect(btn).toBeTruthy();
       return btn!;
     });

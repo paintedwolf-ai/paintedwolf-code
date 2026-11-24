@@ -59,7 +59,7 @@ export function measureActivityGroupMemberOffsetPx(
     }
   }
   const scope = groupRow ?? root;
-  const groupCard = scope.querySelector<HTMLElement>('[data-testid="activity-group"]') ?? groupRow;
+  const groupCard = scope.querySelector<HTMLElement>('[data-testid="activity-group-card"]') ?? groupRow;
   const seamPx = includeRowSeam && groupCard && groupRow && groupCard !== groupRow
     ? Math.max(0, groupCard.getBoundingClientRect().top - groupRow.getBoundingClientRect().top)
     : 0;

@@ -143,7 +143,6 @@ function buildMultiIntervalTurnFixture(baseOrd = 1297): Message[] {
       content: "",
       progress_update: {
         initial: true,
-        summary: "Generating patch",
         steps: [{ label: "Generate patch", state: "pending" }],
         changes: [],
       },
@@ -463,11 +462,12 @@ describe("SessionTranscript stacked activity groups", () => {
 
     // Tail merge, older-page prepend, and >500-ord eviction keep the identical tail groups.
     let merged = emptyTranscriptWindow();
-    for (const msg of turn) {
+    for (let idx = 0; idx < turn.length; idx++) {
+      const slice = turn.slice(Math.max(0, idx - 1), idx + 1);
       merged = mergeIntoTail(
         merged,
-        { messages: [msg], hasMoreBefore: true, hasMoreAfter: false },
-        msg.seq ?? 0,
+        { messages: slice, hasMoreBefore: true, hasMoreAfter: false },
+        turn[idx]!.seq ?? 0,
       );
     }
     expect(projectChat(materializeTranscriptWindow(merged)).map((i) => i.key)).toEqual(
@@ -518,7 +518,7 @@ describe("SessionTranscript stacked activity groups", () => {
     expect(lateDiff).toBeTruthy();
     fireEvent.click(lateDiff!.querySelector<HTMLButtonElement>("button.den-file-edit-header")!);
     const showActivityBtn = await waitFor(() => {
-      const btn = lateDiff!.querySelector<HTMLButtonElement>('[data-testid="source-diff-show-activity"]');
+      const btn = lateDiff!.querySelector<HTMLButtonElement>('[data-testid="file-edit-show-activity"]');
       expect(btn).toBeTruthy();
       return btn!;
     });

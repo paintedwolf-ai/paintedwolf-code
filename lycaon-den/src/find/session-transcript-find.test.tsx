@@ -90,7 +90,7 @@ describe("session transcript findable adapter", () => {
         trust_tier: "trusted",
         content: "",
         tool_calls: [
-          { id: "call-1", name: "command", args: { command: "run STACK_FIND_OMEGA" } },
+          { id: "call-1", name: "command", args: { command: "run gate-one" } },
           { id: "call-2", name: "command", args: { command: "check secondary" } },
         ],
         created_at: "2026-01-01T00:00:00Z",

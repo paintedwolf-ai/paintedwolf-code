@@ -1,7 +1,6 @@
-// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, waitFor } from "@solidjs/testing-library";
-import { createMemo, createSignal } from "solid-js";
+import { batch, createMemo, createSignal } from "solid-js";
 import type { Message } from "../../../api/types.ts";
 import { stubClient } from "../../../test/client-fixture.ts";
 import { approvalReviewTarget, consumeApprovalReview } from "../../../chat/checkpoint/approval-review.ts";
@@ -34,6 +33,7 @@ describe("ActivityGroupCard approvals section", () => {
         quiet: [],
       })),
       revokeApprovalGrants,
+      listSessionArtifacts: vi.fn(async () => ({ artifacts: [] })),
     });
     await loadApprovalGrantsCache(client);
 
@@ -203,35 +203,37 @@ describe("ActivityGroupCard approvals section", () => {
 
     // Resolving transitions the collapsed summary in place without remounting the group.
     const groupBefore = getByTestId("activity-group-card");
-    setPending([]);
-    setExtraMessages([
-      {
-        id: "r2",
-        ord: 3,
-        role: "tool",
-        origin: "tool",
-        authority: "none",
-        trust_tier: "untrusted",
-        content: "denied",
-        tool_result: {
-          assistant_message_id: "a1",
-          tool_call_id: "c-pend",
-          tool: "write",
+    batch(() => {
+      setPending([]);
+      setExtraMessages([
+        {
+          id: "r2",
+          ord: 3,
+          role: "tool",
+          origin: "tool",
+          authority: "none",
+          trust_tier: "untrusted",
           content: "denied",
-          outcome: "rejected",
-          checkpoint_decision: {
-            checkpoint_id: "cp-pend",
-            kind: "tool_approval",
-            status: "rejected",
+          tool_result: {
+            assistant_message_id: "a1",
+            tool_call_id: "c-pend",
             tool: "write",
+            content: "denied",
+            outcome: "rejected",
+            checkpoint_decision: {
+              checkpoint_id: "cp-pend",
+              kind: "tool_approval",
+              status: "rejected",
+              tool: "write",
+            },
           },
+          created_at: "2026-11-23T00:00:03Z",
         },
-        created_at: "2026-11-23T00:00:03Z",
-      },
-    ]);
+      ]);
+    });
     await waitFor(() => {
       expect(getByTestId("activity-group-card")).toBe(groupBefore);
-      expect(approvalsShell.getAttribute("data-status")).toBe("settled");
+      expect(getByTestId("activity-group-approvals").getAttribute("data-status")).toBe("settled");
       expect(getByTestId("approvals-count").textContent).toBe("2 approvals");
     });
   });
