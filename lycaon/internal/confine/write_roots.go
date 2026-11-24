@@ -177,11 +177,11 @@ func NativeFilesystemRootForPath(projectID string, roots, granted []string, sess
 }
 
 // UnrecordedRoots are the host folders whose changes source history never
-// records outside a project: temporary folders, caches, tool data and the
-// host's own state.
+// records outside a project: caches, tool data and the host's own state.
+// Shared temp is recorded, since writing there takes an approval.
 func UnrecordedRoots() []string {
 	roots := controlPlaneReadDenyRootsResolved()
-	for _, root := range append(osDefaultWriteRoots(), SharedTempLocations()...) {
+	for _, root := range osDefaultWriteRoots() {
 		if canonical := fspath.CanonicalPath(root); canonical != "" {
 			roots = append(roots, canonical)
 		}

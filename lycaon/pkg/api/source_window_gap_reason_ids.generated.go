@@ -23,6 +23,9 @@ const (
 	// SourceWindowGapTimeBudget The observation's time budget ran out before the
 	// folder was read.
 	SourceWindowGapTimeBudget SourceWindowGapReason = "time_budget"
+	// SourceWindowGapSharedTemp The folder is shared machine temp, which other
+	// programs also write, so it is not compared.
+	SourceWindowGapSharedTemp SourceWindowGapReason = "shared_temp"
 )
 
 var allSourceWindowGapReasonValues = []SourceWindowGapReason{
@@ -32,6 +35,7 @@ var allSourceWindowGapReasonValues = []SourceWindowGapReason{
 	SourceWindowGapIoError,
 	SourceWindowGapSettlementFailed,
 	SourceWindowGapTimeBudget,
+	SourceWindowGapSharedTemp,
 }
 
 // AllSourceWindowGapReasonValues returns every SourceWindowGapReason in vocab order.

@@ -9,7 +9,7 @@ func (p Plan) BoundedRetainedStorage() bool {
 
 func (p Plan) reviewedRetainedRoute() bool {
 	const sourceID = "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
-	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "616ca6576c84b4d055b6eb519b1748977b93b8bb4664ab30658141c6d4aa5f14"}) {
+	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "bf69242ebfafa38f522342c38b7d050c6e596f600e5b6148fbd064a994484401"}) {
 		return false
 	}
 	if p.Source != manifestLayoutSource || p.CopyPlan() == nil || len(p.steps) != 1 {
@@ -22,5 +22,5 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// replacing the version reclaim trigger do not rewrite rows. Workflow
 	// manifest storage adds an empty table and a constant-default column.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "02cc4ded97994fdd6c993f9ec200dc5875b72811f44496dc5d3a5638a635672b"
+		p.steps[0].Checksum == "d50f0419b69bb9dff3c873880c9051c97a716700f2f299063f6bd4bcb5829105"
 }

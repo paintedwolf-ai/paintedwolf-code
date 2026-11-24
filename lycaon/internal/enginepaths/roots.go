@@ -29,6 +29,9 @@ const (
 	VerifyDetectFileName      = "verify-detect.json"
 	ScratchDirName            = "scratch"
 	SessionOutputDirName      = "session-output"
+	// ProgramTempDirName is the folder inside session scratch that programs
+	// receive as TMPDIR.
+	ProgramTempDirName = ".tmp"
 )
 
 // SSHRootUnder returns host-managed SSH reference data.
@@ -147,6 +150,23 @@ func ScratchRootUnder(stateRoot string) string {
 // session, coordinator or worker, has its own folder directly under the root.
 func SessionScratchUnder(stateRoot, sessionID string) string {
 	return filepath.Join(ScratchRootUnder(stateRoot), strings.TrimSpace(sessionID))
+}
+
+// ProgramTempUnder returns the temporary folder programs receive inside one
+// session's scratch. Its files are throwaway and never enter source history.
+func ProgramTempUnder(sessionScratch string) string {
+	return filepath.Join(strings.TrimSpace(sessionScratch), ProgramTempDirName)
+}
+
+// SessionScratchOwner reports the session scratch folder holding path, if any.
+// Both paths are compared as given, so callers pass canonical forms.
+func SessionScratchOwner(stateRoot, path string) (scratch, sessionID string, ok bool) {
+	rel, err := filepath.Rel(ScratchRootUnder(stateRoot), filepath.Clean(path))
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", "", false
+	}
+	sessionID, _, _ = strings.Cut(rel, string(filepath.Separator))
+	return SessionScratchUnder(stateRoot, sessionID), sessionID, true
 }
 
 // SessionOutputRootUnder holds host-published command copies outside writable scratch.

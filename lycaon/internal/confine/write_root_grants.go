@@ -6,6 +6,9 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/enginepaths"
+
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
@@ -98,6 +101,16 @@ func ControlPlanePathDenied(path string, write bool, sessionScratch, sessionOutp
 		return ControlPlaneTree(path)
 	}
 	return ControlPlaneReadDenied(path)
+}
+
+// SessionScratchOwner names the session scratch folder holding path, if any,
+// under the host's current state root.
+func SessionScratchOwner(path string) (scratch, sessionID string, ok bool) {
+	state, err := configdir.Root()
+	if err != nil || strings.TrimSpace(state) == "" {
+		return "", "", false
+	}
+	return enginepaths.SessionScratchOwner(fspath.CanonicalPath(state), fspath.CanonicalPath(path))
 }
 
 // WithinSessionDirectory reports whether path lies in a session folder.

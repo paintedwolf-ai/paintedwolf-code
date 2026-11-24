@@ -14,3 +14,5 @@ values:
     comment: The folder was read but its changes could not be compared or recorded.
   - id: time_budget
     comment: The observation's time budget ran out before the folder was read.
+  - id: shared_temp
+    comment: The folder is shared machine temp, which other programs also write, so it is not compared.
