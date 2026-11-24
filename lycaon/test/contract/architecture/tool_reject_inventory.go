@@ -273,7 +273,7 @@ func (s *rejectScan) inventory() toolRejectInventory {
 			line := d.pkg.Fset.Position(n.Pos()).Line
 			codes, outcome := s.resolve(d.pkg, d.decl, arg, 0)
 			switch outcome {
-			case resolvedCodes:
+			case resolvedCodes, familyCode:
 				for _, code := range codes {
 					if guidancescan.HintCodeShape.MatchString(code) {
 						inv.Sites = append(inv.Sites, toolRejectSite{Code: code, Rel: rel, Line: line})
