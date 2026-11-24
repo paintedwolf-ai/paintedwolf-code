@@ -36,10 +36,8 @@ type promptSurfaceDeps struct {
 }
 
 type turnContextDeps struct {
-	AgentsMDPolicies  AgentsMDPoliciesInjector
-	AgentsMDIndex        AgentsMDIndexInjector
-	AgentsMDRootPolicies AgentsMDRootPoliciesInjector
-	Board                BoardPrependHook
+	AgentsMD          AgentsMD
+	Board             BoardPrependHook
 	BoardOrientReady  BoardOrientReadyRecorder
 	CommandJobs       func(sessionID string) []bgprocess.JobSnapshot
 	CoordinatorFrame  inject.CoordinatorTurnFrameSource
@@ -107,9 +105,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 	}
 	prompt := &promptSurface{deps: surfaceDeps, cache: cache}
 	turn := &turnContextAssembler{surface: prompt, deps: turnContextDeps{
-		AgentsMDPolicies:     snapshot.AgentsMDPolicies,
-		AgentsMDRootPolicies: snapshot.AgentsMDRootPolicies,
-		AgentsMDIndex:        snapshot.AgentsMDIndex,
+		AgentsMD:          snapshot.AgentsMD,
 		Board:             snapshot.Board,
 		BoardOrientReady:  snapshot.BoardOrientReady,
 		CommandJobs:       snapshot.CommandJobs,

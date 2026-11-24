@@ -88,7 +88,7 @@ func TestSplitPreHistoryAgentsMDPolicies(t *testing.T) {
 func TestBuildCompletionMessagesPlacesRootPolicyBeforeHistoryAndAfterStanding(t *testing.T) {
 	eng := prefixStabilityEngine(t)
 	deps := eng.deps()
-	deps.AgentsMDIndex = func(context.Context, *api.Session) (api.Message, bool) {
+	deps.AgentsMD.Index = func(context.Context, *api.Session) (api.Message, bool) {
 		return api.Message{
 			Role:      api.MessageRoleSystem,
 			Content:   "Available AGENTS.md files:\n- AGENTS.md",
@@ -100,7 +100,7 @@ func TestBuildCompletionMessagesPlacesRootPolicyBeforeHistoryAndAfterStanding(t 
 	rootPolicy := testPolicyMsg("r1", "AGENTS.md", "Root project policy: always run ./task.")
 	nestedPolicy := testPolicyMsg("r1", "sub/AGENTS.md", "Nested policy: check sub/.")
 	overlayPolicy := testPolicyMsg("r1", ".paintedwolf/AGENTS.md", "Overlay policy: override.")
-	deps.AgentsMDPolicies = func(context.Context, *api.Session, []api.Message) (AgentsMDPolicyDelivery, error) {
+	deps.AgentsMD.Policies = func(context.Context, *api.Session, []api.Message) (AgentsMDPolicyDelivery, error) {
 		return AgentsMDPolicyDelivery{
 			Messages:     []api.Message{rootPolicy, nestedPolicy, overlayPolicy},
 			ActiveRootID: "r1",
