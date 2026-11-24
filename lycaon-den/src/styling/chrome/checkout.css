@@ -214,3 +214,101 @@
 .den-recovery-updates > summary {
   cursor: pointer;
 }
+
+.git-checkout__directory {
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.git-worktrees {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--den-line);
+}
+
+.git-worktrees__header,
+.git-worktrees__header-actions,
+.git-worktrees__repos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.6rem;
+}
+
+.git-worktrees__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.git-worktrees__group + .git-worktrees__group {
+  margin-top: 0.45rem;
+}
+
+.git-worktrees__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.git-worktrees__row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.git-worktrees__option {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: baseline;
+}
+
+.git-worktrees__option--inspected {
+  background: var(--den-tint-1);
+}
+
+.git-worktrees__primary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.git-worktrees__branch {
+  font-weight: 500;
+}
+
+.git-worktrees__dir {
+  font-size: var(--text-den-micro);
+  color: var(--den-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.git-worktrees__badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.3rem;
+}
+
+.den-files-checkout-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-inline-size: 9rem;
+  padding-inline: 0.45rem;
+  font-size: var(--text-den-micro);
+}
+
+.den-files-checkout-trigger__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

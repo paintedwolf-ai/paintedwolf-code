@@ -24,6 +24,7 @@ import type {
 } from "../api/types.ts";
 import type { GitWorkspaceStatus } from "../chat/actions/git-workspace-status.ts";
 import type { ResolveProjectRoot } from "../api/project-path.ts";
+import type { AppStore } from "../store/app-state-model.ts";
 import { GitCheckout, type GitCheckoutActions } from "./GitCheckout.tsx";
 import {
   gitReposChangeCount,
@@ -42,6 +43,7 @@ import {
 import { isImeComposition } from "../platform/interaction/ime-composition.ts";
 
 type Props = GitCheckoutActions & {
+  appStore?: AppStore;
   status: LoadState<GitWorkspaceStatus>;
   repos?: readonly GitRepoEntry[];
   activeRepoId?: string;
@@ -124,6 +126,12 @@ export function GitStrip(props: Props) {
   const [scopeOpen, setScopeOpen] = createSignal(false);
   const [drafting, setDrafting] = createSignal(false);
   const [confirmDiscard, setConfirmDiscard] = createSignal(false);
+  const [checkoutUnavailable, setCheckoutUnavailable] = createSignal(false);
+  const [inspectedTarget, setInspectedTarget] = createSignal<{
+    branchLabel: string;
+    shortDir: string;
+    isProjectCheckout: boolean;
+  }>();
   let discardDialogRef: HTMLDivElement | undefined;
 
   createModalFocusTrap(confirmDiscard, () => discardDialogRef, {
@@ -176,7 +184,12 @@ export function GitStrip(props: Props) {
   const upstream = () => (status()?.upstream ?? "").trim().length > 0;
   const ahead = () => status()?.ahead ?? 0;
   const behind = () => status()?.behind ?? 0;
-  const canCommit = () => !busy() && dirty() && message().trim().length > 0;
+  const canMutateCheckout = () => !busy() && !checkoutUnavailable();
+  const canCommit = () => canMutateCheckout() && dirty() && message().trim().length > 0;
+  const linkedCommitTarget = () => {
+    const target = inspectedTarget();
+    return target && !target.isProjectCheckout ? target : undefined;
+  };
 
   const closeSiblingLists = () => {
     setBranchesOpen(false);
@@ -313,6 +326,7 @@ export function GitStrip(props: Props) {
 
   const checkout = (children?: import("solid-js").JSX.Element) => (
     <GitCheckout
+      appStore={props.appStore}
       projectId={props.projectId}
       sessionId={props.sessionId}
       repoId={worktreeRepoId()}
@@ -335,6 +349,12 @@ export function GitStrip(props: Props) {
       onBindWorktree={props.onBindWorktree}
       onLandWorktree={props.onLandWorktree}
       onUnbindWorktree={props.onUnbindWorktree}
+      onListWorktrees={props.onListWorktrees}
+      onSelectWorktree={props.onSelectWorktree}
+      onClearWorktreePin={props.onClearWorktreePin}
+      onOpenInFiles={props.onOpenInFiles}
+      onInspectionUnavailableChange={setCheckoutUnavailable}
+      onInspectedTargetChange={setInspectedTarget}
     >
       {children}
     </GitCheckout>
@@ -593,7 +613,7 @@ export function GitStrip(props: Props) {
                   type="button"
                   class="git-strip__sync-btn"
                   data-testid="git-pull"
-                  disabled={busy()}
+                  disabled={!canMutateCheckout()}
                   data-tip="Fetch and fast-forward from upstream"
                   onClick={() => props.onPull()}
                 >
@@ -603,7 +623,7 @@ export function GitStrip(props: Props) {
                   type="button"
                   class="git-strip__sync-btn"
                   data-testid="git-push"
-                  disabled={busy() || ahead() === 0}
+                  disabled={!canMutateCheckout() || ahead() === 0}
                   onClick={() => props.onPush()}
                 >
                   Push
@@ -647,7 +667,7 @@ export function GitStrip(props: Props) {
                   data-testid="git-message"
                   placeholder="Commit message… (⏎ commit · ⇧⏎ newline)"
                   value={message()}
-                  disabled={busy()}
+                  disabled={!canMutateCheckout()}
                   onInput={(e) => setMessage(e.currentTarget.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey && !isImeComposition(e)) {
@@ -663,7 +683,7 @@ export function GitStrip(props: Props) {
                     type="button"
                     class="git-strip__ai"
                     data-testid="git-ai"
-                    disabled={busy() || drafting()}
+                    disabled={!canMutateCheckout() || drafting()}
                     data-tip="Draft this commit message from the diff"
                     onClick={() => void draft()}
                   >
@@ -675,7 +695,7 @@ export function GitStrip(props: Props) {
                         type="button"
                         class="git-strip__ai"
                         data-testid="git-group-commit"
-                        disabled={busy()}
+                        disabled={!canMutateCheckout()}
                         data-tip="Let the agent commit all changes in logical groups"
                         onClick={() => onGroupCommit()}
                       >
@@ -684,6 +704,13 @@ export function GitStrip(props: Props) {
                     )}
                   </Show>
                 </div>
+                <Show when={linkedCommitTarget()}>
+                  {(target) => (
+                    <span class="git-checkout__hint" data-testid="git-commit-target">
+                      {target().branchLabel} · {target().shortDir}
+                    </span>
+                  )}
+                </Show>
                 <button
                   type="button"
                   class="git-strip__commit"
@@ -702,7 +729,7 @@ export function GitStrip(props: Props) {
                 type="button"
                 class="git-strip__stash"
                 data-testid="git-stash"
-                disabled={busy()}
+                disabled={!canMutateCheckout()}
                 data-tip="Stash all changes (including untracked)"
                 onClick={() => props.onStash()}
               >
@@ -712,7 +739,7 @@ export function GitStrip(props: Props) {
                 type="button"
                 class="git-strip__discard"
                 data-testid="git-discard"
-                disabled={busy()}
+                disabled={!canMutateCheckout()}
                 data-tip="Discard all changes (cannot be undone)"
                 onClick={() => {
                   discardTargetKey = currentDiscardTargetKey();
@@ -808,6 +835,13 @@ export function GitStrip(props: Props) {
                 <p class="den-dialog__hint">
                   This permanently discards every staged, unstaged, and
                   untracked change in the working tree. It cannot be undone.
+                  <Show when={inspectedTarget()}>
+                    {(target) => (
+                      <span data-testid="git-discard-target">
+                        {" "}Target: <strong>{target().branchLabel}</strong> (<code>{target().shortDir}</code>).
+                      </span>
+                    )}
+                  </Show>
                 </p>
                 <footer class="den-dialog__footer">
                   <DenButton

@@ -132,6 +132,7 @@ export function createSessionTabs(options: SessionTabsOptions): SessionTabs {
     <Show when={bindings()?.git} keyed>
       {(api) => (
         <GitStrip
+          appStore={appStore}
           status={appStore.state.gitStatus}
           repos={appStore.state.gitRepos}
           activeRepoId={appStore.state.gitActiveRepoId}
@@ -157,6 +158,10 @@ export function createSessionTabs(options: SessionTabsOptions): SessionTabs {
           onBindWorktree={api.onBindWorktree}
           onLandWorktree={api.onLandWorktree}
           onUnbindWorktree={api.onUnbindWorktree}
+          onListWorktrees={api.onListWorktrees}
+          onSelectWorktree={api.onSelectWorktree}
+          onClearWorktreePin={api.onClearWorktreePin}
+          onOpenInFiles={api.onOpenInFiles}
         />
       )}
     </Show>

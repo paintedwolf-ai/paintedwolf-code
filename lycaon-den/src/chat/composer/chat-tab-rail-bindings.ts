@@ -50,6 +50,18 @@ export type ChatTabGitBinding = {
     import("../../chat/actions/git-actions.ts").WorktreeLandOutcome
   >;
   onUnbindWorktree: () => Promise<void>;
+  onListWorktrees?: (
+    repoId: string,
+  ) => Promise<import("../../api/types.ts").GitWorktreesView | undefined>;
+  onSelectWorktree?: (
+    repoId: string,
+    entry: import("../../api/types.ts").GitWorktreeEntry,
+  ) => Promise<void>;
+  onClearWorktreePin?: (
+    repoId: string,
+    nextWorktreeId?: string,
+  ) => Promise<void>;
+  onOpenInFiles?: () => void;
 };
 
 export type ChatTabRailBindings = {
