@@ -16,6 +16,18 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+func (l *promptContext) compileRuntimeToolPlan(
+	plan toolsurface.Plan,
+	runCtx api.CoordinatorRunContext,
+	metas []tools.ToolMeta,
+	activated map[string]bool,
+	mcpPlan tools.MCPToolPlan,
+	openWorld bool,
+	sess *api.Session,
+) toolsurface.Plan {
+	return l.compileRuntimeToolPlanForSurface(plan, toolcontract.SurfaceImplementInvestigate, runCtx, metas, activated, mcpPlan, openWorld, sess)
+}
+
 func TestCompiledSurfaceOffersCommandOnInvestigateFloor(t *testing.T) {
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
