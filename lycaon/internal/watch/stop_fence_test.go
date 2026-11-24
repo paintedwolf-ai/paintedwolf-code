@@ -17,7 +17,7 @@ func TestSessionTreeStopFencesAndCancelsExplicitDerivedAndChildWatches(t *testin
 	store, _, database, owner := openTestWatchStore(t)
 	childSessID := "child-sess-stop"
 	workerJobID := "job-stop-1"
-	testdbseed.InsertChildSession(t, database, childSessID, testdbseed.DefaultProjectID, owner.SessionID)
+	testdbseed.InsertChildSession(t, database, childSessID, owner.SessionID)
 	_, err := database.ExecContext(t.Context(), `INSERT INTO worker_jobs
 		(id, project_id, parent_session_id, child_session_id, agent_type, status, task_prompt, spawn_reason, execution_target, created_at, updated_at)
 		VALUES (?, ?, ?, ?, 'implement', 'running', 'work', 'initial', 'local', '2026-11-23T12:00:00Z', '2026-11-23T12:00:00Z')`,
@@ -79,12 +79,15 @@ func TestSessionTreeStopFencesAndCancelsExplicitDerivedAndChildWatches(t *testin
 		Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone, Handles: []string{"selected-cmd"}}},
 	})
 	testutil.FailErr(t, "register selected watch", err)
-	_, err = store.SelectOrPark(t.Context(), SelectOrParkRequest{
-		Owner:           owner,
-		LeaseID:         "lease-during-stop",
-		SelectedHandles: []string{selectedRec.Handle},
-		DeadlineMode:    awaitstore.DeadlineDefault,
-		DeadlineAt:      store.Clock().Now().Add(time.Minute),
+	_, err = store.SelectOrPark(t.Context(), SelectRequest{
+		Owner:     owner,
+		Handles:   []string{selectedRec.Handle},
+		AllowPark: true,
+		ParkLease: awaitstore.Lease{
+			SessionID: owner.SessionID,
+			ProjectID: owner.ProjectID,
+			Deadline:  store.Clock().Now().Add(time.Minute),
+		},
 	})
 	testutil.FailErr(t, "park wait on selected watch", err)
 
@@ -179,19 +182,22 @@ func TestHumanCancelSelectedWaitVsIdleWakeAndRestartStopReconcile(t *testing.T) 
 		Conditions: []awaitstore.Condition{{Kind: ConditionProcessDone, Handles: []string{"parked-cmd"}}},
 	})
 	testutil.FailErr(t, "register selected watch", err)
-	_, err = store.SelectOrPark(t.Context(), SelectOrParkRequest{
-		Owner:           owner,
-		LeaseID:         "lease-human-cancel",
-		SelectedHandles: []string{selRec.Handle},
-		DeadlineMode:    awaitstore.DeadlineDefault,
-		DeadlineAt:      clock.Now().Add(time.Minute),
+	parkedRes, err := store.SelectOrPark(t.Context(), SelectRequest{
+		Owner:     owner,
+		Handles:   []string{selRec.Handle},
+		AllowPark: true,
+		ParkLease: awaitstore.Lease{
+			SessionID: owner.SessionID,
+			ProjectID: owner.ProjectID,
+			Deadline:  clock.Now().Add(time.Minute),
+		},
 	})
 	testutil.FailErr(t, "park wait", err)
 	_, err = store.Cancel(t.Context(), owner, selRec.Handle)
 	testutil.FailErr(t, "human cancel selected watch", err)
 	_, err = store.Cancel(t.Context(), owner, selRec.Handle)
 	testutil.FailErr(t, "idempotent repeat cancel", err)
-	if len(leaseWakes) != 1 || leaseWakes[0] != "lease-human-cancel" {
+	if len(leaseWakes) != 1 || leaseWakes[0] != parkedRes.Lease.ID {
 		t.Fatalf("expected parked wait settled exactly once, got %v", leaseWakes)
 	}
 
