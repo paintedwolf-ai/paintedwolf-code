@@ -256,6 +256,11 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 		exitHelper(code)
 	}
 	linuxsandbox.HoldSignals()
+	if !plan.Probe && helperPinnedCwdFDArg >= 0 {
+		if err := unix.Fchdir(helperPinnedCwdFDArg); err != nil {
+			return err
+		}
+	}
 	if err := linuxsandbox.Enter(plan); err != nil {
 		return err
 	}

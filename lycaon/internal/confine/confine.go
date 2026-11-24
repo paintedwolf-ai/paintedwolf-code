@@ -193,6 +193,8 @@ type Confinement struct {
 	// Process sets resource limits and signal dispositions the target
 	// starts with; they narrow the process, never the boundary.
 	Process ProcessAttributes
+	// PinnedExecutable is the resolved entry binary verified across handoff.
+	PinnedExecutable string
 }
 
 // DefaultConfinement builds the boundary for a valid rooted request.
@@ -433,7 +435,22 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		attachedTemp := attachedTempProjectRoots(c, rules.sharedTemp)
 		var subtrees, literals []string
 		for _, g := range c.ProtectedReadGrants {
-			if underAny(g.ResolvedPath, rules.sharedTemp) && !underAny(g.ResolvedPath, editableDeny) && !underAny(g.ResolvedPath, attachedTemp) {
+			if underAny(g.ResolvedPath, rules.sharedTemp) {
+				if underAny(g.ResolvedPath, editableDeny) || underAny(g.ResolvedPath, attachedTemp) {
+					if g.Subtree {
+						subtrees = append(subtrees, g.ResolvedPath)
+					} else {
+						literals = append(literals, g.ResolvedPath)
+					}
+					continue
+				}
+				if g.Subtree {
+					for _, ed := range editableDeny {
+						if PathAtOrUnder(ed, g.ResolvedPath) {
+							subtrees = append(subtrees, ed)
+						}
+					}
+				}
 				continue
 			}
 			if g.Subtree {

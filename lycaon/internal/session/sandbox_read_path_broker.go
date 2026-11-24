@@ -371,7 +371,7 @@ func sharedTempDirectoryReadOption(action hitl.ProposedAction, dir string, isTop
 	readGrant.ID = id + "_r"
 	readGrant.Predicate = hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryReadPath, Pattern: dir}
 	return hitl.GrantOption(hitl.ApprovalGrantOffer{
-		ID: id, DirectoryScope: dir, Rung: hitl.ApprovalRungChat, Scope: hitl.ApprovalGrantScopeChat,
+		ID: id, Group: hitl.GroupAlsoAllow, DirectoryScope: dir, Rung: hitl.ApprovalRungChat, Scope: hitl.ApprovalGrantScopeChat,
 		Title: grant.Title, Coverage: coverage, ExpiresWhen: hitl.ExpiresWhenChatDeleted,
 		ReaskWhen: hitl.ReaskWhenOutsideFolder, Subject: gate.ReusePredicate, Grant: grant,
 		Authority: []hitl.ApprovalAuthorityDelta{

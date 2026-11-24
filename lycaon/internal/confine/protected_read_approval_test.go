@@ -12,7 +12,7 @@ import (
 
 func TestBoundaryProtectedReadApprovalScope(t *testing.T) {
 	self := requireLiveBoundary(t)
-	parent := t.TempDir()
+	parent := outsideTemporaryWriteRoots(t)
 	configDir := filepath.Join(parent, "control")
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)
 	data := filepath.Join(parent, "data")

@@ -406,7 +406,13 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		options = append(options, hitl.ContinuingLeaseOption(offer, continuing))
 	}
 	if card.sharedTemp {
-		options = append(options, hitl.SharedTempExchangeFolderOption(grantAction, proposed, isSharedTempRoot(proposed)))
+		exchangeScope := proposed
+		if info, err := os.Lstat(proposed); err == nil && !info.IsDir() {
+			if parent := filepath.Dir(proposed); confine.SharedTempLocation(parent) != "" {
+				exchangeScope = parent
+			}
+		}
+		options = append(options, hitl.SharedTempExchangeFolderOption(grantAction, exchangeScope, isSharedTempRoot(exchangeScope)))
 	}
 	options = append(options, hitl.QuietOptions(grantAction, decision, nil, func(key string) bool {
 		if b.Authority == nil {

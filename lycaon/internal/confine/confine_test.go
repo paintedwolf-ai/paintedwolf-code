@@ -412,6 +412,7 @@ func TestBoundaryDraftWorkspaceVenvInterpreterExecutes(t *testing.T) {
 	draft, err := project.DraftWorkspaceDir("venv-probe")
 	testutil.FailErr(t, "project.DraftWorkspaceDir failed", err)
 	testutil.FailErr(t, "mkdir draft", os.MkdirAll(draft, 0o700))
+	t.Chdir(draft)
 	venv := filepath.Join(draft, ".venv")
 	scratch := outsideTemporaryWriteRoots(t)
 	confinement := confine.Confinement{Roots: []string{draft}, Workspaces: confine.WorkspaceRoots{SessionScratch: scratch}}

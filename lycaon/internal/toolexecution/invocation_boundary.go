@@ -218,10 +218,11 @@ func (e *Executor) applyPreInvokePolicy(
 	if len(tc.Files.PolicyWriteGrants) != 0 && (e.Approvals.approvalGate == nil || e.Approvals.checkpointMgr == nil) {
 		return nil, fmt.Errorf("agent policy write requires the approval gate")
 	}
-	if tc.Invocation.Contract.Supports(toolcontract.CapabilityFileChange) {
-		if decision.RequiresApproval && (e.Approvals.approvalGate == nil || e.Approvals.checkpointMgr == nil) {
-			return nil, fmt.Errorf("file change approval checkpoints not configured")
-		}
+	supportsFileChange := tc.Invocation.Contract.Supports(toolcontract.CapabilityFileChange)
+	if supportsFileChange && decision.RequiresApproval && (e.Approvals.approvalGate == nil || e.Approvals.checkpointMgr == nil) {
+		return nil, fmt.Errorf("file change approval checkpoints not configured")
+	}
+	if supportsFileChange && !hasUnapprovedReadAccess(decision.Approval) {
 		if decision.Approval != nil {
 			tc.Files.PreparedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
 		} else if !boundaryApprovalSatisfied {
@@ -233,7 +234,7 @@ func (e *Executor) applyPreInvokePolicy(
 	if tool == "process_list" || tool == "process_signal" {
 		return args, nil
 	}
-	for decision.RequiresApproval {
+	for decision.RequiresApproval && (!supportsFileChange || hasUnapprovedReadAccess(decision.Approval)) {
 		if e.Approvals.checkpointMgr == nil {
 			return nil, fmt.Errorf("tool approval checkpoints not configured")
 		}
@@ -263,5 +264,24 @@ func (e *Executor) applyPreInvokePolicy(
 			return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, toolprofiles.PolicyBlockReject(decision, tool, profileID))
 		}
 	}
+	if supportsFileChange {
+		if decision.Approval != nil {
+			tc.Files.PreparedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
+		} else if !boundaryApprovalSatisfied {
+			tc.Files.PreparedFileAccess = nil
+		}
+	}
 	return args, nil
+}
+
+func hasUnapprovedReadAccess(approval *hitl.ApprovalResult) bool {
+	if approval == nil {
+		return false
+	}
+	for _, access := range approval.FileAccess {
+		if !access.Write {
+			return true
+		}
+	}
+	return false
 }

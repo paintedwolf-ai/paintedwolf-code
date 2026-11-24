@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
@@ -168,6 +169,19 @@ func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
 		if resolved := fspath.CanonicalPath(exe); resolved != "" && underAny(resolved, r.sharedTemp) && !underAny(resolved, excluded) {
 			readLiterals = append(readLiterals, resolved)
 			reachable = append(reachable, resolved)
+		}
+	}
+	if pinned := strings.TrimSpace(c.PinnedExecutable); pinned != "" {
+		if resolved := fspath.CanonicalPath(pinned); resolved != "" && underAny(resolved, r.sharedTemp) && !underAny(resolved, excluded) {
+			readLiterals = append(readLiterals, resolved)
+			reachable = append(reachable, resolved)
+		}
+	}
+	if engineRoot := fspath.CanonicalPath(configlayout.EngineRoot()); engineRoot != "" {
+		gitRoot := filepath.Join(engineRoot, "gitengine")
+		if info, err := os.Stat(gitRoot); err == nil && info.IsDir() && strictlyUnderAny(gitRoot, r.sharedTemp) && !underAny(gitRoot, excluded) {
+			readSubpaths = append(readSubpaths, gitRoot)
+			reachable = append(reachable, gitRoot)
 		}
 	}
 	for _, root := range append(nonExcludedPaths(resolveEach(c.Roots), excluded), nonExcludedPaths(resolveEach(c.ReadRoots), excluded)...) {

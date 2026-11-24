@@ -132,6 +132,7 @@ func sharedTempGrantedPathOffers(action hitl.ProposedAction, target gate.FileTar
 		if _, pExists, pDir := probeTargetFolder(parentDir); pExists && pDir {
 			dirAccess := hitl.GrantedPathDelta{Path: parentDir, Write: false, Tree: true}
 			dirOffer := sharedTempSingleChatOffer(action, dirAccess, "Read and list "+parentDir+" for this chat", true)
+			dirOffer.Group = hitl.GroupAlsoAllow
 			dirOffer.DirectoryScope = parentDir
 			offers = append(offers, dirOffer, hitl.SharedTempExchangeFolderOffer(action, parentDir, isSharedTempTopRoot(parentDir)))
 		}

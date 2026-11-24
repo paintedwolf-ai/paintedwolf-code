@@ -35,8 +35,10 @@ func execNativeTarget(path string, argv []string) (err error) {
 		binary.LittleEndian.PutUint32(record[1:], uint32(errno))
 		_, _ = unix.Write(readyFD, record[:])
 	}()
-	if err := unix.Fchdir(helperPinnedCwdFDArg); err != nil {
-		return err
+	if !alreadyInPinnedCwd(helperPinnedCwdFDArg) {
+		if err := unix.Fchdir(helperPinnedCwdFDArg); err != nil {
+			return err
+		}
 	}
 	_ = unix.Close(helperPinnedCwdFDArg)
 	helperPinnedCwdFDArg = -1
@@ -72,6 +74,18 @@ func execNativeTarget(path string, argv []string) (err error) {
 	helperPinnedExecutableFDArg = -1
 	return unix.Exec(path, argv, os.Environ())
 }
+func alreadyInPinnedCwd(fd int) bool {
+	var pinned, current unix.Stat_t
+	if unix.Fstat(fd, &pinned) != nil || unix.Stat(".", &current) != nil {
+		return false
+	}
+	if pinned.Dev != current.Dev || pinned.Ino != current.Ino {
+		return false
+	}
+	_, err := os.Getwd()
+	return err == nil
+}
+
 func validateNativeEntry(path string, fd int) error {
 	var selected, current unix.Stat_t
 	if err := unix.Fstat(fd, &selected); err != nil {
