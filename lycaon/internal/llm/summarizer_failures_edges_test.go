@@ -16,9 +16,9 @@ type errOnlyProvider struct {
 	err error
 }
 
-func (p *errOnlyProvider) ID() string                         { return p.id }
-func (p *errOnlyProvider) Models() []modelcall.ModelInfo      { return []modelcall.ModelInfo{{ID: "m1"}} }
-func (p *errOnlyProvider) Profile() providerprofile.Profile   { return providerprofile.Profile{} }
+func (p *errOnlyProvider) ID() string                       { return p.id }
+func (p *errOnlyProvider) Models() []modelcall.ModelInfo    { return []modelcall.ModelInfo{{ID: "m1"}} }
+func (p *errOnlyProvider) Profile() providerprofile.Profile { return providerprofile.Profile{} }
 func (p *errOnlyProvider) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
 	return nil, p.err
 }
