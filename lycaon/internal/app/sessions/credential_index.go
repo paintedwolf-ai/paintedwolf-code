@@ -102,7 +102,7 @@ func (c *credentialFiles) startCredentialIndex() {
 		return
 	}
 	i := c.index
-	i.stop = repochange.RegisterObserver(func(_ context.Context, event repochange.Event) { i.changed(event) })
+	i.stop = repochange.RegisterObserver(func(ctx context.Context, event repochange.Event) { i.changed(ctx, event) })
 }
 
 func (c *credentialFiles) closeCredentialIndex(ctx context.Context) error {
@@ -185,6 +185,7 @@ func (i *credentialIndex) admitWithStarter(ctx context.Context, projectID, start
 		if ok, _ := (project.Root{Path: row.Path}).Admission(); ok {
 			admitted = append(admitted, row)
 			repochange.EnsureRoot(ctx, row.Path)
+			repochange.FlushDir(ctx, row.Path)
 		}
 	}
 	i.mu.Lock()
@@ -197,7 +198,7 @@ func (i *credentialIndex) admitWithStarter(ctx context.Context, projectID, start
 		root := i.roots[key]
 		if root == nil || root.path != row.Path {
 			if root != nil {
-				i.withdraw(root)
+				i.withdraw(ctx, root)
 			}
 			root = newCredentialRoot(row)
 			i.roots[key] = root
@@ -207,11 +208,11 @@ func (i *credentialIndex) admitWithStarter(ctx context.Context, projectID, start
 	}
 	for key, root := range i.roots {
 		if root.projectID == projectID && !attached[key] {
-			i.withdraw(root)
+			i.withdraw(ctx, root)
 		}
 	}
 	for _, root := range roots {
-		i.kick(root, starterID)
+		i.kick(ctx, root, starterID)
 	}
 	return roots, nil
 }
@@ -253,7 +254,7 @@ func (i *credentialIndex) await(
 				return false, fmt.Errorf("credential-file index: %w", err)
 			}
 			kicked = true
-			i.kick(root, callerID)
+			i.kick(ctx, root, callerID)
 			i.mu.Unlock()
 			continue
 		}

@@ -11,20 +11,20 @@ import (
 )
 
 // kick clears a failed pass and schedules a stale root. It requires i.mu.
-func (i *credentialIndex) kick(root *credentialRoot, starterID string) {
+func (i *credentialIndex) kick(ctx context.Context, root *credentialRoot, starterID string) {
 	if root.running || root.withdrawn || i.current(root) {
 		return
 	}
 	root.err = nil
-	i.schedule(root, starterID)
+	i.schedule(ctx, root, starterID)
 }
 
 // schedule starts the root's runner unless one is active. It requires i.mu.
-func (i *credentialIndex) schedule(root *credentialRoot, starterID string) {
+func (i *credentialIndex) schedule(ctx context.Context, root *credentialRoot, starterID string) {
 	if root.running || root.withdrawn {
 		return
 	}
-	ctx, finish, err := i.work.Begin(context.Background())
+	ctx, finish, err := i.work.Begin(context.WithoutCancel(ctx))
 	if err != nil {
 		root.err = err
 		i.signal(root)
@@ -47,9 +47,17 @@ func (i *credentialIndex) signal(root *credentialRoot) {
 }
 
 func (i *credentialIndex) run(ctx context.Context, root *credentialRoot, starterID string) {
+	flushed := false
 	for {
 		i.mu.Lock()
-		step, ok := i.next(root)
+		step, ok, needFlush := i.next(root, flushed)
+		if needFlush {
+			i.mu.Unlock()
+			repochange.FlushDir(ctx, root.path)
+			flushed = true
+			continue
+		}
+		flushed = false
 		if !ok {
 			root.running, root.cancel = false, nil
 			i.signal(root)
@@ -66,10 +74,10 @@ func (i *credentialIndex) run(ctx context.Context, root *credentialRoot, starter
 }
 
 // next chooses the root's next step. It requires i.mu.
-func (i *credentialIndex) next(root *credentialRoot) (credentialStep, bool) {
+func (i *credentialIndex) next(root *credentialRoot, flushed bool) (credentialStep, bool, bool) {
 	for {
 		if root.withdrawn || root.err != nil {
-			return credentialStep{}, false
+			return credentialStep{}, false, false
 		}
 		if !root.ready || root.full || root.coverageExpired(i.coverage(root.path), i.now()) {
 			root.full = false
@@ -77,11 +85,14 @@ func (i *credentialIndex) next(root *credentialRoot) (credentialStep, bool) {
 			root.queue = slices.DeleteFunc(root.queue, func(event repochange.Event) bool {
 				return eventEpoch(event).BootID == epoch.BootID && event.WorktreeEpoch <= epoch.Value
 			})
-			return credentialStep{epoch: epoch, full: true}, true
+			return credentialStep{epoch: epoch, full: true}, true, false
 		}
 		if len(root.queue) == 0 {
 			if repochange.EpochCurrent(root.path, root.epoch) {
-				return credentialStep{}, false
+				return credentialStep{}, false, false
+			}
+			if !flushed {
+				return credentialStep{}, false, true
 			}
 			root.full = true
 			continue
@@ -98,11 +109,11 @@ func (i *credentialIndex) next(root *credentialRoot) (credentialStep, bool) {
 		}
 		switch {
 		case event.Kind == repochange.IndexChanged:
-			return credentialStep{epoch: epoch}, true
+			return credentialStep{epoch: epoch}, true, false
 		case event.Kind == repochange.HeadMoved && i.coverage(root.path).Complete:
-			return credentialStep{epoch: epoch}, true
+			return credentialStep{epoch: epoch}, true, false
 		case event.Kind == repochange.WorktreeChanged && len(event.Paths) > 0:
-			return credentialStep{epoch: epoch, paths: event.Paths}, true
+			return credentialStep{epoch: epoch, paths: event.Paths}, true, false
 		}
 		root.full = true
 	}
@@ -148,7 +159,7 @@ func eventEpoch(event repochange.Event) repochange.Epoch {
 }
 
 // changed queues a watcher event for every admitted root it names.
-func (i *credentialIndex) changed(event repochange.Event) {
+func (i *credentialIndex) changed(ctx context.Context, event repochange.Event) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	for _, root := range i.roots {
@@ -159,7 +170,7 @@ func (i *credentialIndex) changed(event repochange.Event) {
 			return compareUint(queued.WorktreeEpoch, value)
 		})
 		root.queue = slices.Insert(root.queue, at, event)
-		i.schedule(root, "")
+		i.schedule(ctx, root, "")
 	}
 }
 
@@ -174,9 +185,9 @@ func compareUint(a, b uint64) int {
 }
 
 // withdraw stops a root's work and retires its bindings in the background. It requires i.mu.
-func (i *credentialIndex) withdraw(root *credentialRoot) {
+func (i *credentialIndex) withdraw(ctx context.Context, root *credentialRoot) {
 	i.detach(root)
-	ctx, finish, err := i.work.Begin(context.Background())
+	ctx, finish, err := i.work.Begin(context.WithoutCancel(ctx))
 	if err != nil {
 		return
 	}

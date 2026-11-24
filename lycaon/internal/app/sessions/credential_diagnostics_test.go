@@ -60,7 +60,7 @@ func TestCredentialIndexEmitsValueFreeBuildAndReadinessDiagnostics(t *testing.T)
 	const rotatedVal = "credential-rotated-secret-554433"
 	testutil.FailErr(t, "rotate env", os.WriteFile(filepath.Join(root, ".env"), []byte("API_TOKEN="+rotatedVal+"\n"), 0o600))
 	epoch := repochange.Advance(root)
-	files.index.changed(repochange.Event{
+	files.index.changed(t.Context(), repochange.Event{
 		ProjectDir:    root,
 		Kind:          repochange.WorktreeChanged,
 		Paths:         []string{".env"},

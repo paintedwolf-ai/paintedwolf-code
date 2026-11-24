@@ -119,6 +119,49 @@ func UseDebounce(ctx context.Context, delay time.Duration) (restore func()) {
 	return func() { set(previous) }
 }
 
+// FlushDir delivers any pending debounced burst for dir and waits for in-flight deliveries on dir.
+func FlushDir(ctx context.Context, dir string) {
+	processWatchers().debounce.flushDir(ctx, dir)
+}
+
+func (d *debouncer) flushDir(ctx context.Context, dir string) {
+	if d == nil {
+		return
+	}
+	key := physicalDir(dir)
+	if key == "" {
+		return
+	}
+	flushCtx := context.WithoutCancel(ctx)
+	for range flushPasses {
+		d.mu.Lock()
+		ent := d.pending[key]
+		if ent != nil && ent.timer != nil {
+			ent.timer.Stop()
+		}
+		var inflight []*debounceEntry
+		for active := range d.active {
+			if active.root == key && active != ent {
+				inflight = append(inflight, active)
+			}
+		}
+		d.mu.Unlock()
+		if ent != nil {
+			d.deliver(flushCtx, key, ent)
+		}
+		for _, active := range inflight {
+			select {
+			case <-active.done:
+			case <-ctx.Done():
+				return
+			}
+		}
+		if ent == nil && len(inflight) == 0 {
+			return
+		}
+	}
+}
+
 // flushPasses bounds work from continuous producers.
 const flushPasses = 8
 

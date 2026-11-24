@@ -184,7 +184,7 @@ func TestSharedCredentialBuildCoalescesCancelBoundaryAndRevalidation(t *testing.
 	// Known sibling checkout edit produces 0 attached-root builds.
 	siblingDir := t.TempDir()
 	sibEp := repochange.Advance(siblingDir)
-	files.index.changed(repochange.Event{
+	files.index.changed(t.Context(), repochange.Event{
 		ProjectDir: siblingDir, Kind: repochange.WorktreeChanged, Paths: []string{".env"},
 		EpochBootID: sibEp.BootID, WorktreeEpoch: sibEp.Value,
 	})
@@ -197,7 +197,7 @@ func TestSharedCredentialBuildCoalescesCancelBoundaryAndRevalidation(t *testing.
 	clearScreenPhases(&phaseMu, &phases)
 	testutil.FailErr(t, "rotate env", os.WriteFile(filepath.Join(root, "sub/.env"), []byte("API_KEY="+secretV2+"\n"), 0o600))
 	ep3 := repochange.Advance(root)
-	files.index.changed(repochange.Event{
+	files.index.changed(t.Context(), repochange.Event{
 		ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{"sub/.env"},
 		EpochBootID: ep3.BootID, WorktreeEpoch: ep3.Value,
 	})
@@ -215,7 +215,7 @@ func TestSharedCredentialBuildCoalescesCancelBoundaryAndRevalidation(t *testing.
 	// Empty-paths worktree event and coverage expiry reconcile with a full build.
 	clearScreenPhases(&phaseMu, &phases)
 	ep4 := repochange.Advance(root)
-	files.index.changed(repochange.Event{
+	files.index.changed(t.Context(), repochange.Event{
 		ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: nil,
 		EpochBootID: ep4.BootID, WorktreeEpoch: ep4.Value,
 	})
@@ -263,7 +263,7 @@ func TestSharedCredentialBuildCoalescesCancelBoundaryAndRevalidation(t *testing.
 	}
 	_ = repochange.Advance(root)
 	epGap := repochange.Advance(root)
-	files.index.changed(repochange.Event{
+	files.index.changed(t.Context(), repochange.Event{
 		ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{"sub/.env"},
 		EpochBootID: epGap.BootID, WorktreeEpoch: epGap.Value,
 	})

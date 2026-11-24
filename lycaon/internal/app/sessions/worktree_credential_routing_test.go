@@ -179,6 +179,9 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		ProjectID: testdbseed.DefaultProjectID,
 		Roots:     []sourceledger.RootSpec{{ID: "r1", Path: primary}},
 	}))
+	testutil.WaitFor(t, "primary watcher bound", func() bool {
+		return repochange.DirWatched(primary, ".")
+	})
 	repochange.UseDebounce(t.Context(), repochange.DefaultDebounce)()
 	testutil.FailErr(t, "settle initial primary credentials", files.Await(t.Context(), tools.CredentialWait{ProjectID: testdbseed.DefaultProjectID}))
 
