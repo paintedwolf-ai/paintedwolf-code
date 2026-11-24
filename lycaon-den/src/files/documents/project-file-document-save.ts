@@ -14,7 +14,7 @@ import {
 } from "../../components/source/editor/source-editor-model.ts";
 import { LycaonApiError } from "../../api/http.ts";
 import { applyFilesBufferSaved } from "./project-files-buffer-io.ts";
-import { projectFilesState, type FileBuffer } from "./files-buffer-state.ts";
+import { markFilesBufferCheckoutUnavailable, projectFilesState, type FileBuffer } from "./files-buffer-state.ts";
 import { flushFilesDraftSyncFor } from "./files-draft-sync.ts";
 import type { FileBufferKey } from "../components/project-files-model.ts";
 import {
@@ -74,6 +74,7 @@ async function saveResidentDocument(args: SaveArguments): Promise<ProjectFileDoc
     !encoding ||
     !buffer.documentId ||
     buffer.documentRevision == null ||
+    buffer.checkoutUnavailable ||
     !canEditLoadedSource({
       kind: buffer.kind,
       overLimit: buffer.overLimit,
@@ -85,7 +86,9 @@ async function saveResidentDocument(args: SaveArguments): Promise<ProjectFileDoc
   ) {
     return {
       status: "unavailable",
-      message: "This file cannot be saved from the in-app editor.",
+      message: buffer.checkoutUnavailable
+        ? "That checkout is no longer available on disk."
+        : "This file cannot be saved from the in-app editor.",
     };
   }
 
@@ -147,6 +150,14 @@ async function saveResidentDocument(args: SaveArguments): Promise<ProjectFileDoc
     };
   } catch (error: unknown) {
     const message = sourceSaveErrorMessage(error);
+    if (error instanceof LycaonApiError && (error.code === "worktree_unavailable" || error.code === "worktree_not_found")) {
+      markFilesBufferCheckoutUnavailable(args.projectId, args.key, true);
+      const current = projectFilesState(args.projectId).byKey[args.key];
+      if (current) {
+        await observeEditorDocument(args.projectId, current).catch(() => undefined);
+      }
+      return { status: "unavailable", message };
+    }
     if (isSourceWriteConflict(error)) {
       const current = projectFilesState(args.projectId).byKey[args.key];
       if (current) {

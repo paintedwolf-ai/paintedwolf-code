@@ -16,6 +16,10 @@ export type EditorDraft = {
   eol: EolKind;
   mixedEol: boolean;
   editRevision: number;
+  workspaceId?: string;
+  branchId?: string;
+  worktreeId?: string;
+  checkoutUnavailable?: boolean;
 };
 
 export type EditorDraftSource = {

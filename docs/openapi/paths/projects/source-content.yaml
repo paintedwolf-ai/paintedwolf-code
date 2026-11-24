@@ -32,6 +32,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       - name: file_id
         in: query
         description: Recorded file ID. Required for outside files. Use without path, root_id or worker_id.
@@ -141,6 +142,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       requestBody:
         required: true
         content:
@@ -222,6 +224,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       requestBody:
         required: true
         content:
@@ -301,6 +304,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       - name: path
         in: query
         required: true
@@ -401,6 +405,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       - name: file_id
         in: query
         description: Recorded file ID. Required for outside files. Use without path, root_id or worker_id.
@@ -523,6 +528,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       - name: path
         in: query
         required: true
@@ -589,6 +595,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       requestBody:
         required: true
         content:
@@ -665,6 +672,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceRootIdQuery
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceDirQuery
       responses:
@@ -722,6 +730,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       requestBody:
         required: true
         content:
@@ -799,6 +808,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       requestBody:
         required: true
         content:

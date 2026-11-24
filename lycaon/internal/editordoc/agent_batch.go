@@ -232,7 +232,7 @@ func (b agentBatchPlanner) commitAgentAcceptance(ctx context.Context, tx *sql.Tx
 func (b agentBatchPlanner) publishAgentAcceptance(ctx context.Context, item *agentAcceptance) *AgentEditResult {
 	s := b.s
 	d := item.document
-	result := &AgentEditResult{Document: s.withParticipants(d), Saved: !d.Dirty && !d.Diverged, HeldVersionID: d.HeldAgentVersionID}
+	result := &AgentEditResult{Document: s.withParticipants(ctx, d), Saved: !d.Dirty && !d.Diverged, HeldVersionID: d.HeldAgentVersionID}
 	if item.mutation == nil {
 		return result
 	}
@@ -250,7 +250,7 @@ func (b agentBatchPlanner) publishAgentAcceptance(ctx context.Context, item *age
 		result.PublicationError = errors.Join(err, projectionErr)
 		return result
 	}
-	result.Document, result.HeldVersionID = s.withParticipants(current), current.HeldAgentVersionID
+	result.Document, result.HeldVersionID = s.withParticipants(ctx, current), current.HeldAgentVersionID
 	if !errors.Is(err, projectsource.ErrSourceWriteConflict) || result.HeldVersionID == "" {
 		result.PublicationError = err
 	}

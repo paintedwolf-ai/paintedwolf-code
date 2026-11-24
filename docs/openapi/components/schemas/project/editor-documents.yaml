@@ -29,6 +29,8 @@ components:
         id: {type: string, format: uuid}
         project_id: {type: string, format: uuid}
         workspace_id: {type: string, pattern: '^ws_[0-9a-f]{32}$'}
+        branch_id: {type: string, pattern: '^[a-zA-Z0-9:._-]*$'}
+        checkout_unavailable: {type: boolean}
         file_id: {type: string, format: uuid}
         root_id: {type: string, format: uuid}
         path: {type: string}
@@ -96,6 +98,8 @@ components:
         id: {type: string, format: uuid}
         project_id: {type: string, format: uuid}
         workspace_id: {type: string, pattern: '^ws_[0-9a-f]{32}$'}
+        branch_id: {type: string, pattern: '^[a-zA-Z0-9:._-]*$'}
+        checkout_unavailable: {type: boolean}
         file_id: {type: string, format: uuid}
         root_id: {type: string, format: uuid}
         path: {type: string}
@@ -139,6 +143,10 @@ components:
       required: [client_id]
       description: Use file_id for an outside file, or root_id and path for an attached file.
       properties:
+        document_id:
+          type: string
+          format: uuid
+          description: Existing editor document UUID for reopening a retained checkout-bound draft across restarts.
         file_id:
           type: string
           format: uuid
@@ -463,6 +471,7 @@ components:
         root_id: {type: string, format: uuid}
         path: {type: string}
         branch_id: {type: string, pattern: '^[a-zA-Z0-9:._-]*$'}
+        checkout_unavailable: {type: boolean}
         revision: {type: integer, format: int64, minimum: 1}
         epoch: {type: integer, format: int64, minimum: 1}
         published_revision: {type: integer, format: int64, minimum: 1}

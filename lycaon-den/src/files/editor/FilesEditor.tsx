@@ -4,6 +4,7 @@ import type { CodeScanEvent, ProjectRoot, SourceDefinitionCandidate, SourceFileV
 import type { TranscriptRevealTarget } from "../../chat/transcript/presentation/transcript-reveal-target.ts";
 import { DenButton } from "../../components/primitives/DenButton.tsx";
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
+import { copyTextToClipboard } from "../../utils/clipboard.ts";
 import type { EolKind } from "../../components/source/editor/eol.ts";
 import type { SourceReaderHandle } from "../../components/source/reader/SourceReader.tsx";
 import { LAYOUT_BAND_SCALES, bindLayoutBand } from "../../layout/layout-bands.ts";
@@ -76,6 +77,7 @@ type FilesEditorProps = {
   cursor: { line: number; col: number };
   onCursor: (line: number, col: number) => void;
   onSave: () => void;
+  onSaveToActiveCheckout?: () => void;
   onDiscard: () => void;
   onRejectHunk?: (hunk: DiffLineHunk) => void;
   /** Restores the file the Git baseline still holds. */
@@ -227,6 +229,34 @@ export function FilesEditor(props: FilesEditorProps) {
         onRenameSymbol={props.onRenameSymbol}
       />
       <FilesSymbolMenu symbols={annotations.symbolNavigation} />
+      <Show when={!historicalActive() && props.buffer.checkoutUnavailable}>
+        <div class="den-files-editor__conflict" data-testid="files-editor-checkout-unavailable">
+          <span class="flex-1">
+            This checkout is no longer available on disk. Your unsaved draft is preserved.
+          </span>
+          <DenButton
+            variant="ghost"
+            compact
+            data-testid="files-editor-copy-unavailable-draft"
+            onClick={() => void copyTextToClipboard(cm.currentView()?.state.doc.toString() ?? filesBufferText(props.buffer))}
+          >
+            Copy contents
+          </DenButton>
+          <Show when={props.onSaveToActiveCheckout} keyed>
+            {(saveAs) => (
+              <DenButton
+                variant="primary"
+                compact
+                disabled={props.saving}
+                data-testid="files-editor-save-as-live"
+                onClick={() => saveAs()}
+              >
+                Save to active checkout
+              </DenButton>
+            )}
+          </Show>
+        </div>
+      </Show>
       <Show when={!historicalActive() && props.conflict}>
         <div class="den-files-editor__conflict" role="alert" data-testid="files-editor-conflict">
           <span class="flex-1">

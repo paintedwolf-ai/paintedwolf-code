@@ -173,3 +173,16 @@ components:
         type: string
         format: uuid
       description: Optional session whose bound checkout supplies the project roots
+    SourceWorktreeIdQuery:
+      name: worktree_id
+      in: query
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        maxItems: 64
+        items:
+          type: string
+          format: uuid
+      description: Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations

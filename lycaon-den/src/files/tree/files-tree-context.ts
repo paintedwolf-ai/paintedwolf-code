@@ -58,6 +58,7 @@ export type FilesTreeProps = {
   roots: ProjectRoot[];
   client: SourceViewsClient | null;
   sessionId?: string;
+  worktreeIds?: readonly string[];
   /** The chat whose locations outside the project the tree lists after the roots. */
   chatId?: string;
   approvalsRevision?: number;

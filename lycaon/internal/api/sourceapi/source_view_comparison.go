@@ -14,7 +14,11 @@ import (
 
 func (s *ComparisonViews) newComparisonView(scope pagedview.Scope, p *project.Project, request wire.SourceComparisonViewCreate) *sourceView {
 	ctx, cancel := context.WithCancel(s.background.Context())
-	view := &sourceView{scope: scope, clientID: request.ClientID, sessionID: request.SessionID, workspaceID: p.WorkspaceID(),
+	worktreeIDs := append([]string(nil), request.WorktreeIds...)
+	if len(worktreeIDs) == 0 && request.Source.Current != nil && request.Source.Current.WorktreeID != "" {
+		worktreeIDs = []string{request.Source.Current.WorktreeID}
+	}
+	view := &sourceView{scope: scope, clientID: request.ClientID, sessionID: request.SessionID, worktreeIDs: worktreeIDs, workspaceID: p.WorkspaceID(),
 		ctx: ctx, cancel: cancel, state: "preparing", commands: pagedview.NewCommands[string](&s.sourceViews.receipts), projectionRevision: uuid.NewString(), expires: time.Now().Add(sourceViewLifetime), comparisonData: sourceViewComparisonData{
 			comparisonBudget: s.sourceReaders.Budget(), comparisonIntent: request.Intent, comparisonSource: request.Source}}
 	view.notifier = pagedview.NewNotifier(250*time.Millisecond, func() { s.Views.publishSourceView(view) })

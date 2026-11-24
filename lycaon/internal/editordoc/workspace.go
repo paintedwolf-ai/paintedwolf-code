@@ -2,17 +2,31 @@ package editordoc
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
+
+func isCheckoutGone(err error) bool {
+	return errors.Is(err, worktrees.ErrCheckoutNotFound) ||
+		errors.Is(err, worktrees.ErrCheckoutRetired) ||
+		errors.Is(err, worktrees.ErrCheckoutUnavailable)
+}
+
+func unavailableBranchWorkspaceID(projectID string, branch sourcebranch.ID) string {
+	sum := sha256.Sum256([]byte("unavailable-branch\x00" + projectID + "\x00" + branch.String()))
+	return "ws_" + hex.EncodeToString(sum[:16])
+}
 
 func (o documentOpener) projectBranch(ctx context.Context, projectID string, branch sourcebranch.ID) (*project.Project, error) {
 	s := o.s
@@ -33,7 +47,24 @@ func checkWorkspace(p *project.Project, d *Document) error {
 	return nil
 }
 
-// Workspace resolves an addressed document independently of the focused chat.
+// LiveWorkspace resolves an addressed document's live checkout for disk reads and saves.
+func (l *LifecycleService) LiveWorkspace(ctx context.Context, p *project.Project, id string) (*project.Project, error) {
+	d, err := l.s.checked(ctx, id, p.ID)
+	if err != nil {
+		return nil, err
+	}
+	if p.BranchForRoot(d.RootID) == d.BranchID {
+		return p, nil
+	}
+	resolved, err := l.s.projectBranch(ctx, p.ID, d.BranchID)
+	if isCheckoutGone(err) {
+		return nil, worktrees.ErrCheckoutUnavailable
+	}
+	return resolved, err
+}
+
+// Workspace resolves an addressed document independently of the focused chat,
+// keeping durable draft operations available even after a checkout is removed.
 func (l *LifecycleService) Workspace(ctx context.Context, p *project.Project, id string) (*project.Project, error) {
 	d, err := l.s.checked(ctx, id, p.ID)
 	if err != nil {
@@ -42,13 +73,98 @@ func (l *LifecycleService) Workspace(ctx context.Context, p *project.Project, id
 	if p.BranchForRoot(d.RootID) == d.BranchID {
 		return p, nil
 	}
-	return l.s.projectBranch(ctx, p.ID, d.BranchID)
+	resolved, err := l.s.projectBranch(ctx, p.ID, d.BranchID)
+	if err != nil {
+		if _, isWT := d.BranchID.WorktreeID(); isWT && isCheckoutGone(err) {
+			return p, nil
+		}
+		return nil, err
+	}
+	return resolved, nil
+}
+
+// ObserveByID reconciles an addressed document against its live checkout, or marks it unavailable.
+func (l *LifecycleService) ObserveByID(ctx context.Context, projectID, documentID, clientID string) (*Document, error) {
+	s := l.s
+	d, err := s.checked(ctx, documentID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	liveP, branchErr := s.projectBranch(ctx, projectID, d.BranchID)
+	if branchErr == nil {
+		return l.ObserveDisk(ctx, liveP, documentID, clientID)
+	}
+	if _, isWT := d.BranchID.WorktreeID(); !isWT || !isCheckoutGone(branchErr) {
+		return nil, branchErr
+	}
+	s.ops.RLock()
+	defer s.ops.RUnlock()
+	unlock := s.docLocks.lock(documentLockKey(documentID))
+	defer unlock()
+	current, err := s.checked(ctx, documentID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.markAbsent(ctx, current); err != nil {
+		return nil, err
+	}
+	if err := s.replicaProjection(ctx, current, nil); err != nil {
+		return nil, err
+	}
+	current.CheckoutUnavailable = true
+	current.WorkspaceID = unavailableBranchWorkspaceID(current.ProjectID, current.BranchID)
+	return s.withParticipants(ctx, current), nil
 }
 
 func (o documentOpener) projectWorkspacePresentation(ctx context.Context, d *Document) {
 	if p, err := o.s.projectBranch(ctx, d.ProjectID, d.BranchID); err == nil {
 		d.WorkspaceID = p.WorkspaceID()
+		d.CheckoutUnavailable = false
+		return
+	} else if _, isWT := d.BranchID.WorktreeID(); isWT && isCheckoutGone(err) {
+		d.Absent = true
+		d.CheckoutUnavailable = true
+		d.WorkspaceID = unavailableBranchWorkspaceID(d.ProjectID, d.BranchID)
 	}
+}
+
+// OpenByID reopens a known document by identity across restarts, preserving unsent drafts when its checkout is gone.
+func (o documentOpener) OpenByID(ctx context.Context, projectID, documentID, decodeAs, clientID string, retained *Retained) (*Document, error) {
+	s := o.s
+	d, err := s.checked(ctx, documentID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	liveP, branchErr := s.projectBranch(ctx, projectID, d.BranchID)
+	if branchErr == nil {
+		return s.Open(ctx, liveP, d.Path, d.RootID, decodeAs, clientID, retained)
+	}
+	if _, isWT := d.BranchID.WorktreeID(); !isWT || !isCheckoutGone(branchErr) {
+		return nil, branchErr
+	}
+	s.ops.RLock()
+	defer s.ops.RUnlock()
+	unlockDoc := s.docLocks.lock(documentLockKey(d.ID))
+	defer unlockDoc()
+	current, err := s.checked(ctx, documentID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if !current.HoldsDraft() {
+		return nil, worktrees.ErrCheckoutUnavailable
+	}
+	if err := s.markAbsent(ctx, current); err != nil {
+		return nil, err
+	}
+	current.CheckoutUnavailable = true
+	current.WorkspaceID = unavailableBranchWorkspaceID(current.ProjectID, current.BranchID)
+	admitted, err := s.admitDocument(ctx, current, clientID, documentOpenOptions{join: true, retained: retained})
+	if err != nil {
+		return nil, err
+	}
+	admitted.CheckoutUnavailable = true
+	admitted.WorkspaceID = unavailableBranchWorkspaceID(admitted.ProjectID, admitted.BranchID)
+	return admitted, nil
 }
 
 func (o documentOpener) openAbsentDocument(ctx context.Context, p *project.Project, path, rootID, clientID string, options documentOpenOptions) (*Document, error) {
@@ -178,7 +294,7 @@ func (o documentOpener) admitDocument(ctx context.Context, d *Document, clientID
 	if options.join {
 		s.joinParticipant(ctx, d.ID, clientID, "")
 	}
-	return s.withParticipants(d), nil
+	return s.withParticipants(ctx, d), nil
 }
 
 func readDocumentSource(p *project.Project, d *Document) (*projectsource.SourceReadResult, error) {

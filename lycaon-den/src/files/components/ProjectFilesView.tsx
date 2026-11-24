@@ -19,6 +19,7 @@ import { ResizeHandle } from "../../components/primitives/ResizeHandle.tsx";
 import { ProjectLoadingStage } from "../../components/shell/ProjectLoadingStage.tsx";
 import { filesTreeClaimed, filesTreeCollapsed } from "../tree/files-tree-window-state.ts";
 import { createFilesWorkspace } from "../source/files-workspace.ts";
+import { selectedProjectWorktreeIds } from "../source/files-checkout-scope.ts";
 import { FilesStageDialogs } from "./FilesStageDialogs.tsx";
 import { getFilesStagePaneMode, subscribeFilesStagePaneMode } from "../review/review-pane.ts";
 import { useProjectFilesController } from "./useProjectFilesController.ts";
@@ -37,11 +38,12 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
   const sourceSessionId = () => untrack(chatSessionId);
   const workspace = createFilesWorkspace({
     projectId: props.projectId, roots: () => props.roots, client, chatSessionId,
+    worktreeIds: () => selectedProjectWorktreeIds(props.appStore, props.projectId),
     reachable: () => isBackendReachable(props.appStore.state.sidecarStatus),
     restoreHotExit: () => props.restoreHotExit !== false,
   });
   const {
-    filesWorkspaceId, filesSourceAddress, filesRoots, workspaceError, workspaceFault, workspaceSettled,
+    filesWorkspaceId, filesSourceAddress, filesWorktreeIds, filesRoots, workspaceError, workspaceFault, workspaceSettled,
     treeSettled, setTreeSettled, refreshProjectWorkspace, refreshWatchCoverage, observationNoticeFor,
     directoryEntries, confirmDirectoryChange, observeDirectory,
   } = workspace;
@@ -240,6 +242,7 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
                   }
                 }}
                 sessionId={filesSourceAddress()}
+                worktreeIds={filesWorktreeIds()}
                 chatId={chatSessionId()}
                 scopeMarksVersion={scopeMarksVersion()}
                 retainPresentation={!workspaceSettled() || !treeSettled()}

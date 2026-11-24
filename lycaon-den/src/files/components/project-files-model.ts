@@ -6,11 +6,13 @@ export function fileBufferKey(
   path: string,
   jobId?: string,
   fileId?: string,
+  branchId?: string,
 ): FileBufferKey {
   const overlay = jobId?.trim() ? `\u0000${jobId.trim()}` : "";
+  const branchTag = !fileId?.trim() && branchId?.trim() ? `\u0000@${branchId.trim()}` : "";
   const identity = fileId?.trim()
     ? `file:${fileId.trim()}`
-    : `path:${rootId}\u0000${path}`;
+    : `path:${rootId}\u0000${path}${branchTag}`;
   return `${identity}${overlay}`;
 }
 
@@ -36,8 +38,12 @@ export function parseFileBufferKey(key: FileBufferKey): ParsedFileBufferKey | nu
     return { kind: "file", fileId, ...(jobId ? { jobId } : {}) };
   }
   if (!key.startsWith("path:")) return null;
-  const [rootId, path, jobId] = key.slice("path:".length).split("\0", 3);
+  const parts = key.slice("path:".length).split("\0");
+  const rootId = parts[0];
+  const path = parts[1];
   if (!rootId || !path) return null;
+  const third = parts[2];
+  const jobId = third?.startsWith("@") ? parts[3] : third;
   return { kind: "path", rootId, path, ...(jobId ? { jobId } : {}) };
 }
 

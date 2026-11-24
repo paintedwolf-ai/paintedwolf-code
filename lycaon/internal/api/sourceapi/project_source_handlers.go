@@ -15,7 +15,10 @@ import (
 	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/filekind"
+	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/repomap"
@@ -148,21 +151,80 @@ func (s *Workspace) HandleGetSourceWorkspace(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer release()
-	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
+	baseProject, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
 	}
-	scoped, ok := requestscope.SessionProjectForRequest(s.SessionQueries, s.responses, w, r, p)
+	scoped, ok := requestscope.SessionProjectForRequest(s.SessionQueries, s.responses, w, r, baseProject)
 	if !ok {
 		return
 	}
-	p = scoped.Project
+	p := scoped.Project
 	inventory, err := s.Watch.sourceInventoryState(r.Context(), p)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	httpio.WriteJSON(w, http.StatusOK, SourceWorkspaceDTO(p, scoped.Binding != nil, mapSourceInventoryState(inventory, p.RootsGeneration)))
+	dto := SourceWorkspaceDTO(p, scoped.Binding != nil && len(scoped.Checkouts) == 0, mapSourceInventoryState(inventory, p.RootsGeneration))
+	s.annotateWorkspaceRootCheckouts(r.Context(), baseProject, p, scoped, &dto)
+	httpio.WriteJSON(w, http.StatusOK, dto)
+}
+
+func (s *Workspace) annotateWorkspaceRootCheckouts(ctx context.Context, baseProject, resolvedProject *project.Project, scoped requestscope.SessionProject, dto *wire.SourceWorkspace) {
+	if dto == nil || resolvedProject == nil {
+		return
+	}
+	baseByID := make(map[string]project.Root, len(baseProject.Roots))
+	for _, r := range baseProject.Roots {
+		baseByID[r.ID] = r
+	}
+	for i := range dto.Roots {
+		rootID := dto.Roots[i].ID
+		rootPath := dto.Roots[i].Path
+		reg, ok := gitrepo.ContainingRegisteredCheckout(rootPath)
+		if !ok {
+			continue
+		}
+		var repoID, toplevel string
+		for _, c := range scoped.Checkouts {
+			if gitrepo.CanonicalDir(c.WorktreePath) == reg.Root {
+				repoID = c.RepoID
+				toplevel = c.Toplevel
+				dto.Roots[i].RepoID = repoID
+				dto.Roots[i].WorktreeID = c.ID
+				break
+			}
+		}
+		if dto.Roots[i].WorktreeID != "" {
+			continue
+		}
+		if scoped.Binding != nil && gitrepo.CanonicalDir(scoped.Binding.WorktreePath) == reg.Root {
+			dto.Roots[i].RepoID = scoped.Binding.RepoID
+			dto.Roots[i].WorktreeID = scoped.Binding.WorktreeID
+			continue
+		}
+		if reg.Kind == gitrepo.CheckoutPrimary {
+			toplevel = reg.Root
+			repoID = git.DeriveRepoID(toplevel)
+		} else if baseRoot, hasBase := baseByID[rootID]; hasBase {
+			if baseReg, baseOK := gitrepo.ContainingRegisteredCheckout(baseRoot.Path); baseOK && baseReg.Kind == gitrepo.CheckoutPrimary {
+				toplevel = baseReg.Root
+				repoID = git.DeriveRepoID(toplevel)
+			}
+		}
+		if repoID != "" {
+			dto.Roots[i].RepoID = repoID
+		}
+		if s.Watch != nil && s.Watch.Git != nil && s.Watch.Git.Worktrees != nil && repoID != "" && toplevel != "" {
+			if checkout, _, err := s.Watch.Git.Worktrees.EnsureRegisteredCheckout(ctx, worktrees.RepoSpec{
+				ProjectID: resolvedProject.ID,
+				RepoID:    repoID,
+				Toplevel:  toplevel,
+			}, reg); err == nil {
+				dto.Roots[i].WorktreeID = checkout.ID
+			}
+		}
+	}
 }
 
 // SourceWorkspaceDTO sets sessionScoped when a chat's worktree, rather than the

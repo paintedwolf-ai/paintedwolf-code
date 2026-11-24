@@ -20,6 +20,7 @@ import {
   type InventoryFile,
 } from "../../files/tree/file-inventory.ts";
 import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
+import { activeProjectWorktreeIds, bufferCheckoutWorktreeId } from "../../files/source/files-checkout-scope.ts";
 import { fetchCachedSourceSymbols } from "../../files/source/source-symbols-cache.ts";
 import { searchCoverageNote } from "../../search/search-status.ts";
 import { createSourceSearchRefresh } from "../../search/source-search-refresh.ts";
@@ -240,13 +241,14 @@ export function useCrossbarDataSources(options: UseCrossbarDataSourcesOptions) {
     }
     const sourceQuery = options.query().trim();
     const sid = sessionId();
-    const scopeKey = JSON.stringify([pid, sid]);
+    const worktrees = activeProjectWorktreeIds(pid);
+    const scopeKey = JSON.stringify([pid, sid, worktrees]);
     if (scopeKey !== inventoryScopeKey) {
       inventoryScopeKey = scopeKey;
       setIndexError("");
       setIndexCoverage([]);
     }
-    const key = JSON.stringify([pid, sid, sourceQuery]);
+    const key = JSON.stringify([pid, sid, worktrees, sourceQuery]);
     if (key !== inventoryQueryKey) {
       inventoryQueryKey = key;
       inventoryHasResponse = false;
@@ -282,7 +284,7 @@ export function useCrossbarDataSources(options: UseCrossbarDataSourcesOptions) {
             setIndexing(false);
           });
         },
-        { sessionId: sid, signal: controller.signal },
+        { sessionId: sid, ...(worktrees ? { worktreeId: worktrees } : {}), signal: controller.signal },
       )
         .catch(() => {
           if (!controller.signal.aborted) {
@@ -324,10 +326,12 @@ export function useCrossbarDataSources(options: UseCrossbarDataSourcesOptions) {
     }
     let cancelled = false;
     const timer = setTimeout(() => {
+      const wt = bufferCheckoutWorktreeId(pid, buf, activeProjectWorktreeIds(pid));
       void fetchCachedSourceSymbols({
         client,
         projectId: pid,
         sessionId: sessionId(),
+        ...(wt ? { worktreeId: wt } : {}),
         rootId: buf.rootId,
         path: buf.path,
         sha256: buf.baseSha256,

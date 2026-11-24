@@ -6416,6 +6416,8 @@ export interface components {
             /** Format: uuid */
             project_id: string;
             workspace_id: string;
+            branch_id?: string;
+            checkout_unavailable?: boolean;
             /** Format: uuid */
             file_id: string;
             /** Format: uuid */
@@ -13586,6 +13588,13 @@ export interface components {
         SourceWorkspaceRoot: {
             /** @description Durable source branch for this root; omitted for the primary tree. Roots unaffected by a worktree binding retain their primary branch. */
             branch_id?: string;
+            /** @description Repository identifier when this root belongs to a Git repository. */
+            repo_id?: string;
+            /**
+             * Format: uuid
+             * @description Verified checkout UUID supplying this root when resolved from a Git repository.
+             */
+            worktree_id?: string;
             /**
              * Format: uuid
              * @description Stable attached-root identity.
@@ -13868,6 +13877,11 @@ export interface components {
         OpenEditorDocumentRequest: {
             /**
              * Format: uuid
+             * @description Existing editor document UUID for reopening a retained checkout-bound draft across restarts.
+             */
+            document_id?: string;
+            /**
+             * Format: uuid
              * @description Recorded project file identity for an outside tab.
              */
             file_id?: string;
@@ -13949,6 +13963,8 @@ export interface components {
             /** Format: uuid */
             project_id: string;
             workspace_id: string;
+            branch_id?: string;
+            checkout_unavailable?: boolean;
             /** Format: uuid */
             file_id: string;
             /** Format: uuid */
@@ -14030,6 +14046,7 @@ export interface components {
             root_id: string;
             path: string;
             branch_id: string;
+            checkout_unavailable?: boolean;
             /** Format: int64 */
             revision: number;
             /** Format: int64 */
@@ -14190,6 +14207,8 @@ export interface components {
             /** Format: uuid */
             project_id: string;
             workspace_id: string;
+            branch_id?: string;
+            checkout_unavailable?: boolean;
             /** Format: uuid */
             file_id: string;
             /** Format: uuid */
@@ -17165,6 +17184,8 @@ export interface components {
             client_id: string;
             /** Format: uuid */
             session_id?: string;
+            /** @description Person-selected checkout UUIDs overriding repository roots for this tree view. */
+            worktree_ids?: string[];
             workspace_id: string;
             intent: components["schemas"]["SourceTreeIntent"];
         };
@@ -17182,6 +17203,8 @@ export interface components {
             file_id?: string;
             /** Format: uuid */
             root_id?: string;
+            /** Format: uuid */
+            worktree_id?: string;
             path?: string;
             /** @enum {string} */
             decode_as?: "utf-16le" | "utf-16be";
@@ -17335,6 +17358,8 @@ export interface components {
             file_id?: string;
             /** Format: uuid */
             root_id?: string;
+            /** Format: uuid */
+            worktree_id?: string;
             path?: string;
         };
         SourceComparisonSelector: components["schemas"]["CurrentComparisonSource"] | components["schemas"]["EffectComparisonSource"] | components["schemas"]["VersionComparisonSource"] | components["schemas"]["ScopeComparisonSource"] | components["schemas"]["TurnComparisonSource"] | components["schemas"]["ReviewedComparisonSource"] | components["schemas"]["CommitComparisonSource"] | components["schemas"]["BlobComparisonSource"] | components["schemas"]["GitChangeComparisonSource"] | components["schemas"]["GitRangeComparisonSource"] | components["schemas"]["ChatComparisonSource"] | components["schemas"]["TextComparisonSource"] | components["schemas"]["RetainedComparisonSource"];
@@ -17359,6 +17384,7 @@ export interface components {
             client_id: string;
             /** Format: uuid */
             session_id?: string;
+            worktree_ids?: string[];
             source: components["schemas"]["SourceComparisonSelector"];
             intent: components["schemas"]["SourceComparisonIntent"];
         };
@@ -18512,6 +18538,8 @@ export interface components {
         /** @description Optional session whose bound checkout supplies the project roots */
         SourceSessionIdQuery: string;
         RootId: string;
+        /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+        SourceWorktreeIdQuery: string[];
         /** @description Attached root to browse; defaults to the primary root when omitted */
         SourceRootIdQuery: string;
         /** @description Root-relative, slash-separated directory; "." or omitted means the root folder */
@@ -21458,6 +21486,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
                 /** @description Recorded file ID. Required for outside files. Use without path, root_id or worker_id. */
                 file_id?: string;
                 /** @description Attached-root-relative path. Required when file_id is omitted. */
@@ -21553,6 +21583,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -21649,6 +21681,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -21738,6 +21772,8 @@ export interface operations {
             query: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
                 /** @description Root-relative path to move to Trash */
                 path: string;
                 /** @description Stable mutation identity; exact retries return the original result and conflicting reuse returns 409 idempotency_conflict. */
@@ -21838,6 +21874,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -22088,6 +22126,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -22564,6 +22604,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -22842,6 +22884,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -22933,6 +22977,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -23164,6 +23210,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
                 /** @description Recorded file ID. Required for outside files. Use without path, root_id or worker_id. */
                 file_id?: string;
                 /** @description Attached-root-relative path. Required when file_id is omitted. */
@@ -23253,6 +23301,8 @@ export interface operations {
             query: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
                 /** @description Repo-relative path (slash-separated) */
                 path: string;
                 /** @description Attached root that holds the path */
@@ -23314,6 +23364,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -23402,6 +23454,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
                 /** @description Attached root to browse; defaults to the primary root when omitted */
                 root_id?: components["parameters"]["SourceRootIdQuery"];
                 /** @description Root-relative, slash-separated directory; "." or omitted means the root folder */
@@ -23639,6 +23693,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -23728,6 +23784,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -23817,6 +23875,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -23875,6 +23935,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
                 /** @description Any portion of a file's full path, including the root folder's own path: a basename, a fuzzy root-relative path, or an absolute, `~/`, `./`, or `file://` path. A code host file link resolves in the root checked out from that repository, and a development server URL by its path. Surrounding quotes, backticks, shell escapes, and a location (`:12:3`, `:10-20`, `#L12`, `#L10-L20`, `(12,3)`) are read, not matched; a pasted compiler, test, or stack trace line contributes only its location. A path that matches nothing is retried without its leading directories. */
                 q?: string;
                 root_id?: string;
@@ -23923,6 +23985,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -23978,6 +24042,8 @@ export interface operations {
             query: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
                 /** @description Root-relative path */
                 path: string;
                 /** @description Pin the read to one attached root */
@@ -24314,6 +24380,8 @@ export interface operations {
             query: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
                 file_id: string;
                 limit?: number;
                 /** @description Opaque next_cursor from the preceding page. Omit for the newest page. */
@@ -24366,6 +24434,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {
@@ -24447,6 +24517,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
+                /** @description Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations */
+                worktree_id?: components["parameters"]["SourceWorktreeIdQuery"];
             };
             header?: never;
             path: {

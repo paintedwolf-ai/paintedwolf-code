@@ -4,6 +4,7 @@ import type { LycaonClient } from "../../../api/client.ts";
 import { rememberFormatConfigNames, type FormatSources } from "./format-settings.ts";
 import { setFilesBufferFormatSettings } from "../../../files/documents/project-files-buffer-io.ts";
 import { projectFilesState, type FileBuffer } from "../../../files/documents/files-buffer-state.ts";
+import { activeProjectWorktreeIds, bufferCheckoutWorktreeId } from "../../../files/source/files-checkout-scope.ts";
 import type { FileBufferKey } from "../../../files/components/project-files-model.ts";
 
 const refreshGeneration = new Map<string, number>();
@@ -14,6 +15,7 @@ type ResolveArgs = {
   rootId: string;
   path: string;
   sessionId?: string;
+  worktreeId?: string | readonly string[];
 };
 
 type Resolution = { ok: true; sources: FormatSources } | { ok: false };
@@ -21,12 +23,9 @@ type Resolution = { ok: true; sources: FormatSources } | { ok: false };
 /** A failed resolution is reported, not read as "nothing declared". */
 async function resolveFormatSettings(args: ResolveArgs): Promise<Resolution> {
   try {
-    const resolved = await args.client.getProjectSourceFormatSettings(
-      args.projectId,
-      args.path,
-      args.rootId,
-      args.sessionId,
-    );
+    const resolved = args.worktreeId
+      ? await args.client.getProjectSourceFormatSettings(args.projectId, args.path, args.rootId, args.sessionId, args.worktreeId)
+      : await args.client.getProjectSourceFormatSettings(args.projectId, args.path, args.rootId, args.sessionId);
     rememberFormatConfigNames(args.projectId, resolved.config_names);
     return { ok: true, sources: resolved.sources };
   } catch {
@@ -39,19 +38,21 @@ export async function loadFormatSettingsForBuffer(args: {
   client: LycaonClient;
   projectId: string;
   key: FileBufferKey;
-  buffer: Pick<FileBuffer, "rootId" | "path" | "kind" | "jobId">;
+  buffer: Pick<FileBuffer, "rootId" | "path" | "kind" | "jobId"> & Partial<Pick<FileBuffer, "worktreeId" | "branchId" | "checkoutUnavailable">>;
   sessionId?: string;
 }): Promise<void> {
-  if (args.buffer.kind !== "text" || args.buffer.jobId) {
+  if (args.buffer.kind !== "text" || args.buffer.jobId || args.buffer.checkoutUnavailable) {
     setFilesBufferFormatSettings(args.projectId, args.key, undefined);
     return;
   }
+  const worktreeId = bufferCheckoutWorktreeId(args.projectId, args.buffer, activeProjectWorktreeIds(args.projectId));
   const resolution = await resolveFormatSettings({
     client: args.client,
     projectId: args.projectId,
     rootId: args.buffer.rootId,
     path: args.buffer.path,
     sessionId: args.sessionId,
+    worktreeId,
   });
   // A failed resolution keeps the buffer's current settings.
   if (resolution.ok) setFilesBufferFormatSettings(args.projectId, args.key, resolution.sources);
@@ -78,12 +79,15 @@ export async function refreshOpenFormatSettings(args: {
           !row.buffer.jobId,
       );
     for (const { key, buffer } of buffers) {
+      if (buffer.checkoutUnavailable) continue;
+      const worktreeId = bufferCheckoutWorktreeId(args.projectId, buffer, activeProjectWorktreeIds(args.projectId));
       const resolution = await resolveFormatSettings({
         client: args.client,
         projectId: args.projectId,
         rootId: buffer.rootId,
         path: buffer.path,
         sessionId: args.sessionId,
+        worktreeId,
       });
       if (refreshGeneration.get(refreshKey) !== generation) return;
       if (!resolution.ok) continue;

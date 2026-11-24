@@ -27,7 +27,7 @@ export interface DocumentsClient {
   replaceEditorDocumentRetention(projectId: string, clientId: string, documentIds: string[], retainedClients?: string[]): Promise<void>;
   replaceProjectView(projectId: string, req: ReplaceProjectViewRequest): Promise<void>;
   readEditorDocumentStatuses(projectId: string, documentIds: string[]): Promise<import("../types.ts").EditorDocumentStatuses>;
-  openEditorDocument(projectId: string, req: OpenEditorDocumentRequest, sessionId?: string): Promise<EditorDocument>;
+  openEditorDocument(projectId: string, req: OpenEditorDocumentRequest, sessionId?: string, worktreeId?: string | readonly string[]): Promise<EditorDocument>;
   replaceEditorDocument(projectId: string, documentId: string, req: ReplaceEditorDocumentRequest): Promise<EditorDocument>;
   submitEditorDocumentUpdate(projectId: string, documentId: string, req: SubmitEditorDocumentUpdateRequest): Promise<EditorReplicaFrame>;
   publishEditorDocumentPresence(projectId: string, documentId: string, req: UpdateEditorDocumentPresenceRequest): Promise<void>;
@@ -64,8 +64,8 @@ export function createDocumentsClient(j: JsonRequester): DocumentsClient {
       j(operationPath("replaceProjectView", { id: projectId }), { ...jsonRequest("PUT", req), keepalive: true, signal: AbortSignal.timeout(30_000) }),
     readEditorDocumentStatuses: (projectId, documentIds) =>
       j(operationPath("readEditorDocumentStatuses", { id: projectId }), { ...jsonRequest("POST", { document_ids: documentIds }), signal: AbortSignal.timeout(30_000) }),
-    openEditorDocument: (projectId, req, sessionId) =>
-      j(`${operationPath("openEditorDocument", { id: projectId })}${formatQuery({ session_id: sessionId })}`, { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
+    openEditorDocument: (projectId, req, sessionId, worktreeId) =>
+      j(`${operationPath("openEditorDocument", { id: projectId })}${formatQuery({ session_id: sessionId, worktree_id: worktreeId })}`, { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
     replaceEditorDocument: (projectId, documentId, req) =>
       j(operationPath("replaceEditorDocument", { id: projectId, document_id: documentId }), { method: "PUT", body: JSON.stringify(req) }),
     submitEditorDocumentUpdate: (projectId, documentId, req) =>

@@ -24,7 +24,7 @@ export function applySourceChangesEvent(event: SourceChangesEvent): void {
   for (const change of event.changes) {
     // Branch and address select the matching buffer.
     if (!projectWorkspace || !event.resync) {
-      applyBufferSourceChanged(pid, event.workspace_kind, change);
+      applyBufferSourceChanged(pid, event.workspace_kind, change, event.workspace_id);
     }
     if (!projectWorkspace) continue;
     markFileBriefingSourceChanged(pid, change);

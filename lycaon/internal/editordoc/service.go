@@ -18,15 +18,16 @@ type Ledger interface {
 }
 
 type serviceCore struct {
-	replicas    replicaRuntime
-	store       *Store
-	ledger      Ledger
-	history     *sourceledger.History
-	sourcePaths *projectsource.SourcePaths
-	roots       RootSource
-	ops         sync.RWMutex
-	docLocks    keyedLocks
-	onChange    func(context.Context, Change)
+	replicas      replicaRuntime
+	store         *Store
+	ledger        Ledger
+	history       *sourceledger.History
+	sourcePaths   *projectsource.SourcePaths
+	roots         RootSource
+	ops           sync.RWMutex
+	docLocks      keyedLocks
+	onChange      func(context.Context, Change)
+	beforePublish func(context.Context, *Document, *Mutation)
 }
 
 type Service struct {
@@ -139,6 +140,11 @@ func New(store *Store, ledger Ledger, history *sourceledger.History, roots RootS
 
 func (l *LifecycleService) SetOnChange(fn func(context.Context, Change)) { l.s.onChange = fn }
 
+// SetBeforePublish installs an optional hook invoked immediately before a prepared save writes to disk.
+func (l *LifecycleService) SetBeforePublish(fn func(context.Context, *Document, *Mutation)) {
+	l.s.beforePublish = fn
+}
+
 // ForgetRemoved drops presence for deleted documents.
 func (s *Service) ForgetRemoved(documentIDs []string) {
 	if s == nil || len(documentIDs) == 0 {
@@ -193,7 +199,7 @@ func (s *Service) CurrentSnapshot(ctx context.Context, projectID, documentID str
 	}
 	copy := *d
 	s.projectWorkspacePresentation(ctx, &copy)
-	return s.withParticipants(&copy), nil
+	return s.withParticipants(ctx, &copy), nil
 }
 
 // Open admits an editable document with optional client replica state;
@@ -279,11 +285,16 @@ func (l *LifecycleService) ObserveDisk(ctx context.Context, p *project.Project, 
 	if err != nil {
 		return nil, err
 	}
+	if err := checkWorkspace(p, d); err != nil {
+		return nil, err
+	}
 	if err := s.reconcileDocumentDisk(ctx, p, d, clientID); err != nil {
 		return nil, err
 	}
 	if err := s.replicaProjection(ctx, d, nil); err != nil {
 		return nil, err
 	}
-	return s.withParticipants(d), nil
+	d.WorkspaceID = p.WorkspaceID()
+	d.CheckoutUnavailable = false
+	return s.withParticipants(ctx, d), nil
 }

@@ -58,13 +58,14 @@ type DocumentState struct {
 	UpdatedAt time.Time
 	Diverged  bool
 	// Absent says the path has no file on disk; the draft and saved base stay.
-	Absent            bool
-	Epoch             int64
-	PublishedRevision int64
-	SaveRevision      int64 `json:"-"`
-	StateVector       []byte
-	CRDTUpdate        []byte
-	ReplicaID         uint32
+	Absent              bool
+	CheckoutUnavailable bool `json:"-"`
+	Epoch               int64
+	PublishedRevision   int64
+	SaveRevision        int64 `json:"-"`
+	StateVector         []byte
+	CRDTUpdate          []byte
+	ReplicaID           uint32
 	DocumentReplica
 }
 

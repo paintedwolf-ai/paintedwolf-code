@@ -89,10 +89,21 @@ func (p *PresenceService) Join(ctx context.Context, id, projectID string, in Rep
 	}
 	proj, err := s.projectBranch(ctx, projectID, d.BranchID)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.reconcileDocumentDisk(ctx, proj, d, ""); err != nil {
-		return nil, err
+		if _, isWT := d.BranchID.WorktreeID(); isWT && isCheckoutGone(err) {
+			if markErr := s.markAbsent(ctx, d); markErr != nil {
+				return nil, markErr
+			}
+			d.CheckoutUnavailable = true
+			d.WorkspaceID = unavailableBranchWorkspaceID(d.ProjectID, d.BranchID)
+		} else {
+			return nil, err
+		}
+	} else {
+		if err := s.reconcileDocumentDisk(ctx, proj, d, ""); err != nil {
+			return nil, err
+		}
+		d.WorkspaceID = proj.WorkspaceID()
+		d.CheckoutUnavailable = false
 	}
 	clientID, incarnation, vector := in.ClientID, in.Incarnation, in.Vector
 	if strings.TrimSpace(clientID) == "" || incarnation == "" || len(clientID) > 256 || len(incarnation) > 256 {
@@ -123,7 +134,7 @@ func (p *PresenceService) Join(ctx context.Context, id, projectID string, in Rep
 	if s.joinParticipant(ctx, id, clientID, incarnation) {
 		s.changed(ctx, d, false)
 	}
-	return s.withParticipants(d), nil
+	return s.withParticipants(ctx, d), nil
 }
 
 // A replica incarnation remains bound to its client and person.

@@ -15,7 +15,7 @@ import (
 
 func (s *Trees) newTreeView(scope pagedview.Scope, p *project.Project, request wire.SourceTreeViewCreate, locations chatLocationProjection) *sourceView {
 	ctx, cancel := context.WithCancel(s.background.Context())
-	view := &sourceView{scope: scope, clientID: request.ClientID, sessionID: request.SessionID, workspaceID: p.WorkspaceID(),
+	view := &sourceView{scope: scope, clientID: request.ClientID, sessionID: request.SessionID, worktreeIDs: append([]string(nil), request.WorktreeIds...), workspaceID: p.WorkspaceID(),
 		ctx: ctx, cancel: cancel, state: "preparing", commands: pagedview.NewCommands[string](&s.sourceViews.receipts), expires: time.Now().Add(sourceViewLifetime), projectionRevision: uuid.NewString(), navigation: sourceViewNavigation{
 			treeIntent: request.Intent, roots: project.ToAPI(p).Roots}, filtering: sourceViewFiltering{
 			filterGeneration: uuid.NewString()}, reviewing: sourceViewReviewing{reviewGeneration: uuid.NewString(), reviewPreparing: true, reviewDirty: true}}

@@ -90,6 +90,14 @@ components:
         session_id:
           type: "string"
           format: "uuid"
+        worktree_ids:
+          type: "array"
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: "string"
+            format: "uuid"
+          description: "Person-selected checkout UUIDs overriding repository roots for this tree view."
         workspace_id:
           type: "string"
           pattern: '^ws_[0-9a-f]{32}$'

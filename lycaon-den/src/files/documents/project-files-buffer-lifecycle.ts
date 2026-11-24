@@ -30,7 +30,6 @@ import {
   scheduleEditorDocumentDraft,
   flushEditorDocumentDraft,
   forgetEditorDocument,
-  preserveEditorDocumentDraft,
   retainEditorDocument,
   editorReplica,
 } from "./editor-document.ts";
@@ -53,6 +52,11 @@ import {
 } from "./files-buffer-state.ts";
 import { discardFilesBufferDraft } from "./project-files-buffer-io.ts";
 import { documentResidency, documentResourceKey } from "./document-residency.ts";
+import {
+  resetWorkspaceRootCheckoutsForTests,
+  workspaceRootCheckout,
+  worktreeIdFromBranchId,
+} from "../source/files-checkout-scope.ts";
 
 /** A replaced preview keeps its document until nothing presents it and no tab has reopened it. */
 function releaseReplacedDocument(projectId: string, documentId: string | null | undefined): void {
@@ -103,20 +107,34 @@ export function openFilesBuffer(
     name?: string;
     /** Who is aiming; a reader unless the open follows a presentation. */
     origin?: AimOrigin;
+    branchId?: string;
+    worktreeId?: string;
+    workspaceId?: string;
+    checkoutLabel?: string;
   },
 ): FileBufferKey {
   const jobId = args.jobId?.trim() || undefined;
   const origin = args.origin ?? "reader";
+  ensureProject(projectId);
+  const currentState = projectFilesState(projectId);
+  const composed = isComposedBufferKind(args.kind ?? "text");
+  const rootMeta = !jobId && !composed ? workspaceRootCheckout(projectId, args.rootId) : undefined;
+  const resolvedBranchId = !jobId && !composed
+    ? args.branchId ?? (args.worktreeId ? `worktree:${args.worktreeId.trim()}` : args.documentId ? undefined : currentState.rootBranches[args.rootId])
+    : undefined;
+  const resolvedWorktreeId = !jobId && !composed
+    ? args.worktreeId?.trim() || worktreeIdFromBranchId(resolvedBranchId) || (resolvedBranchId !== undefined && resolvedBranchId === rootMeta?.branchId ? rootMeta?.worktreeId : undefined)
+    : undefined;
+  const keyBranchTag = resolvedBranchId;
   let key = args.kind === "chat" && args.chatContent ? chatContentDocumentKey(args.chatContent)
     : args.kind === "trust" ? `trust:${projectId}`
     : args.kind === "briefing" && args.briefingRecordId ? `briefing:${args.briefingRecordId}`
     : args.kind === "walk" && args.walkStep ? walkPageBufferKey(args.walkStep.key)
     : args.kind === "diffs" && args.diffs ? diffsBufferKey(diffsAddressKey(args.diffs))
-    : fileBufferKey(args.rootId, args.path, jobId, args.fileId);
-  ensureProject(projectId);
+    : fileBufferKey(args.rootId, args.path, jobId, args.fileId, keyBranchTag);
   setFilesStore(projectId, produce((state) => {
-    if (!isComposedBufferKind(args.kind ?? "text") && !args.fileId && !state.byKey[key]) {
-      const addressed = bufferKeyAtAddress(state, args.rootId, args.path, jobId);
+    if (!composed && !args.fileId && !args.documentId && !state.byKey[key]) {
+      const addressed = bufferKeyAtAddress(state, args.rootId, args.path, jobId, resolvedBranchId);
       if (addressed) key = addressed;
     }
     const existing = state.byKey[key];
@@ -182,6 +200,10 @@ export function openFilesBuffer(
       key, rootId: args.rootId, rootLabel: args.rootLabel, fileId: args.fileId?.trim() || null,
       path: args.path, name: args.name ?? fileDisplayName(args.path),
       documentId: args.documentId ?? null, documentRevision: null,
+      ...(args.workspaceId ? { workspaceId: args.workspaceId } : {}),
+      ...(resolvedBranchId !== undefined ? { branchId: resolvedBranchId } : {}),
+      ...(resolvedWorktreeId ? { worktreeId: resolvedWorktreeId } : {}),
+      ...(args.checkoutLabel ? { checkoutLabel: args.checkoutLabel } : {}),
       ...(jobId ? { jobId } : {}), loading: true, sourcePresent: false, loadError: null,
       content: { state: "unloaded" }, payloadGeneration: nextBufferPayloadGeneration(),
       eol: defaultEol(), baseEol: defaultEol(), mixedEol: false, baseMixedEol: false,
@@ -225,54 +247,6 @@ type ClosingBuffer = {
 };
 
 const closingBuffers = new Map<string, Set<ClosingBuffer>>();
-
-/** A checkout switch preserves replicas, then reopens only the substituted roots. */
-export async function switchFilesRootBranches(projectId: string, branches: Record<string, string>, current: () => boolean): Promise<boolean> {
-  ensureProject(projectId);
-  const state = projectFilesState(projectId);
-  const changed = new Set(Object.keys(branches).filter((root) => state.rootBranches[root] !== undefined && state.rootBranches[root] !== branches[root]));
-  const affected = state.order.flatMap((key) => {
-    const buffer = state.byKey[key];
-    if (!buffer || buffer.jobId || !changed.has(buffer.rootId)) return [];
-    flushFilesDraftSyncFor(projectId, key);
-    return [{ ...unwrap(buffer) }];
-  });
-  if (!affected.length) {
-    if (!current()) return false;
-    setFilesStore(projectId, produce((next) => { next.rootBranches = branches; }));
-    return true;
-  }
-  for (const buffer of affected) {
-    if (buffer.dirty && !(await preserveEditorDocumentDraft(buffer))) {
-      throw new Error(`Couldn't preserve the unsaved edits in ${buffer.path}.`);
-    }
-  }
-  if (!current()) return false;
-  for (const buffer of affected) {
-    if (!(await evictEditorDocument(buffer.documentId))) return false;
-  }
-  if (!current()) return false;
-  batch(() => {
-    const order = [...state.order], aimed = state.pendingKey ?? state.activeKey, origin = state.aimOrigin;
-    const replacements = new Map<string, string>();
-    setFilesStore(projectId, produce((next) => {
-      next.rootBranches = branches;
-      for (const buffer of affected) detachBuffer(next, buffer.key);
-      next.aimOrigin = "presentation";
-    }));
-    for (const buffer of affected) {
-      const key = openFilesBuffer(projectId, { rootId: buffer.rootId, rootLabel: buffer.rootLabel, path: buffer.path,
-        intent: buffer.preview ? "transient" : "permanent", pinned: buffer.pinned, origin: "presentation" });
-      replacements.set(buffer.key, key);
-    }
-    setFilesStore(projectId, produce((next) => {
-      next.order = order.map((key) => replacements.get(key) ?? key).filter((key) => next.byKey[key]);
-      if (aimed) focusBuffer(next, replacements.get(aimed) ?? aimed, "presentation");
-      next.aimOrigin = origin;
-    }));
-  });
-  return true;
-}
 
 /** Resolves the tabs affected by a close action. */
 export function filesCloseTargetKeys(
@@ -319,7 +293,7 @@ function restoreClosedBuffer(
     projectId,
     produce((state) => {
       if (state.byKey[buffer.key]) return;
-      if (bufferKeyAtAddress(state, buffer.rootId, buffer.path, buffer.jobId)) return;
+      if (bufferKeyAtAddress(state, buffer.rootId, buffer.path, buffer.jobId, buffer.branchId)) return;
       const suspended = buffer.content.state === "document" && !editorReplica(buffer.documentId);
       state.byKey[buffer.key] = {
         ...buffer,
@@ -551,6 +525,7 @@ export function dirtyFilesBuffersUnderPath(
 
 export function resetProjectFilesForTests(): void {
   resetFilesDraftSyncForTests();
+  resetWorkspaceRootCheckoutsForTests();
   closingBuffers.clear();
   setFilesStoreRaw(
     produce((all) => {

@@ -1,4 +1,5 @@
 import { outsideFileId } from "./outside-namespace.ts";
+import { activeProjectWorktreeIds, bufferCheckoutWorktreeId } from "./files-checkout-scope.ts";
 import { documentResidency, documentResourceKey, documentOpeningReservation, documentAdmissionBytes, type DocumentReservation, type ResidencyPriority } from "../documents/document-residency.ts";
 import { clientIdentity, prepareClientIdentity } from "../../platform/connection/client-identity.ts";
 import type { LycaonClient } from "../../api/client.ts";
@@ -19,17 +20,19 @@ export function explicitSourceEncoding(
 export async function readFileBufferSource(
   client: LycaonClient,
   projectId: string,
-  buffer: Pick<FileBuffer, "encoding" | "path" | "jobId" | "rootId"> & Partial<Pick<FileBuffer, "fileId">>,
+  buffer: Pick<FileBuffer, "encoding" | "path" | "jobId" | "rootId"> & Partial<Pick<FileBuffer, "fileId" | "worktreeId" | "branchId">>,
   sessionId?: string,
 ) {
   const decodeAs = explicitSourceEncoding(buffer.encoding);
   const { path, jobId, rootId } = buffer;
+  const worktreeId = jobId ? undefined : bufferCheckoutWorktreeId(projectId, buffer, activeProjectWorktreeIds(projectId));
   const read = (encoding?: "utf-16le" | "utf-16be") =>
     client.getProjectSource(projectId, path, {
       workerId: jobId,
       rootId: rootId || undefined,
       fileId: outsideFileId(projectId, buffer),
       sessionId,
+      ...(worktreeId ? { worktreeId } : {}),
       decodeAs: encoding,
       includeDeleted: Boolean(rootId),
     });
@@ -66,13 +69,22 @@ function documentSource(document: EditorDocument, writable: boolean): ProjectSou
   };
 }
 
-async function openSourceDocument(client: LycaonClient, projectId: string, request: OpenEditorDocumentRequest, sessionId?: string) {
-  const document = await client.openEditorDocument(projectId, request, sessionId);
-  return { source: documentSource(document, true), document };
+async function openSourceDocument(
+  client: LycaonClient,
+  projectId: string,
+  request: OpenEditorDocumentRequest,
+  sessionId?: string,
+  worktreeId?: string | readonly string[],
+) {
+  const document = worktreeId
+    ? await client.openEditorDocument(projectId, request, sessionId, worktreeId)
+    : await client.openEditorDocument(projectId, request, sessionId);
+  return { source: documentSource(document, !document.checkout_unavailable), document };
 }
 
-/** A document for a deleted path is the file only while it holds a draft. */
+/** A document for a deleted or unavailable path is the file only while it holds a draft. */
 function holdsDraft(document: EditorDocument): boolean {
+  if (document.checkout_unavailable) return document.dirty || !!document.held_agent_version_id;
   return !document.absent || document.dirty || !!document.held_agent_version_id;
 }
 
@@ -87,7 +99,7 @@ function isSourceOnly(error: unknown): boolean {
 
 /** One round trip opens an editable file's host document, requesting only missing state. */
 export async function openFileBufferSource(client: LycaonClient, projectId: string,
-  buffer: Pick<FileBuffer, "encoding" | "path" | "jobId" | "rootId"> & Partial<Pick<FileBuffer, "documentId" | "fileId" | "writable">>, sessionId?: string, priority: ResidencyPriority = "foreground", current = () => true): Promise<OpenedFileBufferSource> {
+  buffer: Pick<FileBuffer, "encoding" | "path" | "jobId" | "rootId"> & Partial<Pick<FileBuffer, "documentId" | "fileId" | "writable" | "worktreeId" | "branchId" | "workspaceId">>, sessionId?: string, priority: ResidencyPriority = "foreground", current = () => true): Promise<OpenedFileBufferSource> {
   const reservation = await documentResidency.acquire(documentResourceKey(projectId, buffer), documentOpeningReservation(), priority, current);
   if (!reservation) throw new DOMException("File opening was superseded.", "AbortError");
   try {
@@ -99,17 +111,29 @@ export async function openFileBufferSource(client: LycaonClient, projectId: stri
 }
 
 async function readOpenedFileBuffer(client: LycaonClient, projectId: string,
-  buffer: Pick<FileBuffer, "encoding" | "path" | "jobId" | "rootId"> & Partial<Pick<FileBuffer, "documentId" | "fileId" | "writable">>, reservation: DocumentReservation, sessionId?: string): Promise<OpenedFileBufferSource> {
+  buffer: Pick<FileBuffer, "encoding" | "path" | "jobId" | "rootId"> & Partial<Pick<FileBuffer, "documentId" | "fileId" | "writable" | "worktreeId" | "branchId" | "workspaceId">>, reservation: DocumentReservation, sessionId?: string): Promise<OpenedFileBufferSource> {
   if (buffer.jobId || !buffer.rootId) return { source: await readFileBufferSource(client, projectId, buffer, sessionId) };
   await prepareClientIdentity();
-  const retained = await retainedOpening(projectId, { rootId: buffer.rootId, path: buffer.path, documentId: buffer.documentId }, reservation);
+  const retained = await retainedOpening(projectId, { rootId: buffer.rootId, path: buffer.path, documentId: buffer.documentId, branchId: buffer.branchId, workspaceId: buffer.workspaceId }, reservation);
   const fileId = outsideFileId(projectId, buffer);
+  const worktreeId = bufferCheckoutWorktreeId(projectId, buffer, activeProjectWorktreeIds(projectId));
   const read = async (decode_as?: "utf-16le" | "utf-16be"): Promise<OpenedFileBufferSource> => {
+    const openReq = (byDocumentId: boolean): OpenEditorDocumentRequest => ({
+      ...(byDocumentId && buffer.documentId ? { document_id: buffer.documentId } : {}),
+      ...(fileId ? { file_id: fileId } : { path: buffer.path, root_id: buffer.rootId }),
+      client_id: clientIdentity(), ...(decode_as ? { decode_as } : {}), ...(retained?.replica ? { replica: retained.replica } : {}),
+    });
     try {
-      const opened = await openSourceDocument(client, projectId, {
-        ...(fileId ? { file_id: fileId } : { path: buffer.path, root_id: buffer.rootId }),
-        client_id: clientIdentity(), ...(decode_as ? { decode_as } : {}), ...(retained?.replica ? { replica: retained.replica } : {}),
-      }, sessionId);
+      let opened: Awaited<ReturnType<typeof openSourceDocument>>;
+      try {
+        opened = await openSourceDocument(client, projectId, openReq(true), sessionId, buffer.documentId ? undefined : worktreeId);
+      } catch (inner) {
+        if (buffer.documentId && inner instanceof LycaonApiError && inner.code === "editor_document_not_found") {
+          opened = await openSourceDocument(client, projectId, openReq(false), sessionId, worktreeId);
+        } else {
+          throw inner;
+        }
+      }
       if (!holdsDraft(opened.document)) {
         void releaseUnclaimedEditorDocument(projectId, opened.document).catch(() => undefined);
         return { source: await readFileBufferSource(client, projectId, buffer, sessionId) };

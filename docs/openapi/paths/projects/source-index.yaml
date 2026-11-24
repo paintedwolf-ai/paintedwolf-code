@@ -16,6 +16,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       requestBody:
         required: true
         content:
@@ -71,6 +72,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       - name: path
         in: query
         required: true
@@ -134,6 +136,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       responses:
         '200':
           description: Ready source index summary (possibly refreshing)
@@ -183,6 +186,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       - name: q
         in: query
         required: false

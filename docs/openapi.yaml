@@ -3337,6 +3337,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: file_id
           in: query
           description: Recorded file ID. Required for outside files. Use without path, root_id or worker_id.
@@ -3448,6 +3449,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
       requestBody:
         required: true
         content:
@@ -3529,6 +3531,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
       requestBody:
         required: true
         content:
@@ -3611,6 +3614,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: path
           in: query
           required: true
@@ -3706,6 +3710,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
       responses:
         '200':
           description: Physical workspace identity and resolved roots
@@ -3935,6 +3940,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
       requestBody:
         required: true
         content:
@@ -4459,6 +4465,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: document_id
           in: path
           required: true
@@ -4758,6 +4765,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: document_id
           in: path
           required: true
@@ -4861,6 +4869,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: document_id
           in: path
           required: true
@@ -5106,6 +5115,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: file_id
           in: query
           description: Recorded file ID. Required for outside files. Use without path, root_id or worker_id.
@@ -5228,6 +5238,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: path
           in: query
           required: true
@@ -5294,6 +5305,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
       requestBody:
         required: true
         content:
@@ -5370,6 +5382,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - $ref: '#/components/parameters/SourceRootIdQuery'
         - $ref: '#/components/parameters/SourceDirQuery'
       responses:
@@ -5583,6 +5596,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
       requestBody:
         required: true
         content:
@@ -5660,6 +5674,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
       requestBody:
         required: true
         content:
@@ -5730,6 +5745,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
       responses:
         '200':
           description: Ready source index summary (possibly refreshing)
@@ -5781,6 +5797,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: q
           in: query
           required: false
@@ -5853,6 +5870,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
       requestBody:
         required: true
         content:
@@ -5908,6 +5926,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: path
           in: query
           required: true
@@ -6376,6 +6395,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: file_id
           in: query
           required: true
@@ -6450,6 +6470,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: version_id
           in: path
           required: true
@@ -6529,6 +6550,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - $ref: '#/components/parameters/SourceWorktreeIdQuery'
         - name: commit_sha
           in: path
           required: true
@@ -15207,6 +15229,19 @@ components:
       schema:
         type: string
         format: uuid
+    SourceWorktreeIdQuery:
+      name: worktree_id
+      in: query
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        maxItems: 64
+        items:
+          type: string
+          format: uuid
+      description: Optional person-selected checkout UUIDs supplying repository roots for inspection and file operations
     SourceRootIdQuery:
       name: root_id
       in: query
@@ -17249,6 +17284,11 @@ components:
         workspace_id:
           type: string
           pattern: ^ws_[0-9a-f]{32}$
+        branch_id:
+          type: string
+          pattern: ^[a-zA-Z0-9:._-]*$
+        checkout_unavailable:
+          type: boolean
         file_id:
           type: string
           format: uuid
@@ -34650,6 +34690,14 @@ components:
           type: string
           pattern: ^[a-zA-Z0-9:._-]+$
           description: Durable source branch for this root; omitted for the primary tree. Roots unaffected by a worktree binding retain their primary branch.
+        repo_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_-]+$
+          description: Repository identifier when this root belongs to a Git repository.
+        worktree_id:
+          type: string
+          format: uuid
+          description: Verified checkout UUID supplying this root when resolved from a Git repository.
         id:
           type: string
           format: uuid
@@ -35256,6 +35304,10 @@ components:
         - client_id
       description: Use file_id for an outside file, or root_id and path for an attached file.
       properties:
+        document_id:
+          type: string
+          format: uuid
+          description: Existing editor document UUID for reopening a retained checkout-bound draft across restarts.
         file_id:
           type: string
           format: uuid
@@ -35442,6 +35494,11 @@ components:
         workspace_id:
           type: string
           pattern: ^ws_[0-9a-f]{32}$
+        branch_id:
+          type: string
+          pattern: ^[a-zA-Z0-9:._-]*$
+        checkout_unavailable:
+          type: boolean
         file_id:
           type: string
           format: uuid
@@ -35672,6 +35729,8 @@ components:
         branch_id:
           type: string
           pattern: ^[a-zA-Z0-9:._-]*$
+        checkout_unavailable:
+          type: boolean
         revision:
           type: integer
           format: int64
@@ -36036,6 +36095,11 @@ components:
         workspace_id:
           type: string
           pattern: ^ws_[0-9a-f]{32}$
+        branch_id:
+          type: string
+          pattern: ^[a-zA-Z0-9:._-]*$
+        checkout_unavailable:
+          type: boolean
         file_id:
           type: string
           format: uuid
@@ -43044,6 +43108,14 @@ components:
         session_id:
           type: string
           format: uuid
+        worktree_ids:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+          description: Person-selected checkout UUIDs overriding repository roots for this tree view.
         workspace_id:
           type: string
           pattern: ^ws_[0-9a-f]{32}$
@@ -43067,6 +43139,9 @@ components:
           format: uuid
           description: The recorded outside file ID. Use without root_id or path.
         root_id:
+          type: string
+          format: uuid
+        worktree_id:
           type: string
           format: uuid
         path:
@@ -43364,6 +43439,9 @@ components:
         root_id:
           type: string
           format: uuid
+        worktree_id:
+          type: string
+          format: uuid
         path:
           type: string
           minLength: 1
@@ -43460,6 +43538,13 @@ components:
         session_id:
           type: string
           format: uuid
+        worktree_ids:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
         source:
           $ref: '#/components/schemas/SourceComparisonSelector'
         intent:

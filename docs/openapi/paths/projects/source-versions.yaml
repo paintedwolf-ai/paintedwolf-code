@@ -28,6 +28,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       - name: file_id
         in: query
         required: true
@@ -91,6 +92,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       - name: commit_sha
         in: path
         required: true
@@ -171,6 +173,7 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - $ref: ../../components/parameters.yaml#/components/parameters/SourceWorktreeIdQuery
       - name: version_id
         in: path
         required: true

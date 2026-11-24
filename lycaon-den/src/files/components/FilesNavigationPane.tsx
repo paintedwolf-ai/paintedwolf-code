@@ -14,7 +14,7 @@ import { OUTSIDE_ROOT_LABEL, outsideRootId } from "../source/outside-namespace.t
 
 type Props = Omit<ComponentProps<typeof FilesTreePane>, "tree" | "review"> &
   Pick<FilesTreeProps,
-    "workspaceId" | "roots" | "sessionId" | "retainPresentation" |
+    "workspaceId" | "roots" | "sessionId" | "worktreeIds" | "retainPresentation" |
     "navigationRevision" | "navigationOrigin" | "onRevealMotionStart" |
     "selectedEntry" | "onSelectEntry" | "agentPresenceForPath" | "onOpenFile" |
     "onRevertFile" | "createEntry" | "filterQuery" | "onFilterQueryChange" |
@@ -103,6 +103,7 @@ export function FilesNavigationPane(props: Props) {
             onInitialLoadSettled={props.onInitialLoadSettled}
             client={props.client}
             sessionId={props.sessionId}
+            worktreeIds={props.worktreeIds}
             chatId={props.chatId}
             approvalsRevision={props.appStore.state.approvalsRevision}
             reviewScope={reviewScope()}

@@ -43,13 +43,16 @@ function reactsTo(
   buf: FileBuffer,
   workspaceKind: SourceWorkspaceKind,
   jobId: string,
+  workspaceId?: string,
 ): boolean {
-  if (buf.loading) return false;
+  if (buf.loading || buf.checkoutUnavailable) return false;
   if (workspaceKind === "worker") {
     if (!jobId) return false;
     return (buf.jobId ?? "") === jobId;
   }
-  return !buf.jobId;
+  if (buf.jobId) return false;
+  if (workspaceId && buf.workspaceId && buf.workspaceId !== workspaceId) return false;
+  return true;
 }
 
 function underPath(
@@ -58,12 +61,13 @@ function underPath(
   path: string,
   workspaceKind: SourceWorkspaceKind,
   jobId: string,
+  workspaceId?: string,
 ): FileBuffer[] {
   const state = projectFilesState(projectId);
   const out: FileBuffer[] = [];
   for (const key of state.order) {
     const buf = state.byKey[key];
-    if (!buf || buf.rootId !== rootId || !reactsTo(buf, workspaceKind, jobId)) continue;
+    if (!buf || buf.rootId !== rootId || !reactsTo(buf, workspaceKind, jobId, workspaceId)) continue;
     if (path === "." || buf.path === path || buf.path.startsWith(`${path}/`)) {
       out.push(buf);
     }
@@ -100,12 +104,14 @@ export function applyBufferSourceChanged(
   projectId: string,
   workspaceKind: SourceWorkspaceKind,
   event: SourceChange,
+  workspaceId?: string,
 ): void {
   const pid = projectId.trim();
   if (!pid) return;
   const rootId = event.root_id?.trim() || "";
   if (!rootId) return;
   const jobId = event.worker_id?.trim() || "";
+  const wsId = workspaceId?.trim() || undefined;
   const handlers = handlersByProject.get(pid);
   if (
     workspaceKind === "project" &&
@@ -129,7 +135,9 @@ export function applyBufferSourceChanged(
     const to = event.path?.trim() || "";
     if (from && to) {
       if (workspaceKind === "project") {
-        retargetOpenFilesUnderPath(pid, fromRootId, from, to, rootId);
+        if (!wsId || underPath(pid, fromRootId, from, workspaceKind, jobId, wsId).length > 0) {
+          retargetOpenFilesUnderPath(pid, fromRootId, from, to, rootId);
+        }
       }
     }
     return;
@@ -138,7 +146,7 @@ export function applyBufferSourceChanged(
   if (event.op === "delete") {
     const path = event.path?.trim() || "";
     if (!path) return;
-    const bufs = underPath(pid, rootId, path, workspaceKind, jobId);
+    const bufs = underPath(pid, rootId, path, workspaceKind, jobId, wsId);
     const dirty = bufs.filter((b) => b.dirty);
     if (dirty.length > 0 && handlers) {
       handlers.onForeignDeleteDirty(dirty, event);
@@ -152,7 +160,7 @@ export function applyBufferSourceChanged(
   const path = event.path?.trim() || "";
   if (!path) return;
 
-  for (const buf of underPath(pid, rootId, path, workspaceKind, jobId)) {
+  for (const buf of underPath(pid, rootId, path, workspaceKind, jobId, wsId)) {
     if (filesBufferNeedsBody(buf)) continue;
     if (buf.dirty) {
       handlers?.onDirtyDiskChange(buf);

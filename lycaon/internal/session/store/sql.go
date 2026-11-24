@@ -167,6 +167,13 @@ func (s *Repositories) DB() db.Handle {
 	return s.core.db
 }
 
+func (s *sqlSessions) DB() db.Handle {
+	if s == nil || s.core == nil {
+		return nil
+	}
+	return s.core.db
+}
+
 // AppendMessages appends messages to the session transcript.
 func (s *Repositories) AppendMessages(ctx context.Context, id string, msgs ...api.Message) error {
 	return s.Transcript.AppendMessages(ctx, id, msgs...)

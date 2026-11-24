@@ -294,6 +294,7 @@ export function FilesPaneDeck(props: {
                         onCursor={(line, col) => { if (props.activePane === paneKey) props.onCursor({ line, col }); }}
                         cursor={props.cursor}
                         onSave={() => void props.documents.performSave(key)}
+                        onSaveToActiveCheckout={props.client ? () => void props.documents.saveToActiveCheckout(key) : undefined}
                         onDiscard={() => props.confirmations.requestDiscard(key)}
                         onRejectHunk={(hunk) => void props.restoration.runEditorHunkReject(hunk)}
                         onRevertFile={() => void props.restoration.runFileRevert(buf.rootId, buf.path)}

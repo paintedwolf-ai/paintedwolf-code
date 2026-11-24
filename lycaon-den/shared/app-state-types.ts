@@ -448,6 +448,9 @@ export type DenFilesHotExitBuffer = {
   path: string;
   kind: "text" | "image" | "info";
   rootLabel?: string;
+  branchId?: string;
+  checkoutId?: string;
+  checkoutLabel?: string;
   pinned?: boolean;
   preview?: boolean;
   decodeAs?: "utf-16le" | "utf-16be";

@@ -26,6 +26,7 @@ export const API_OPERATIONS = {
     {"name":"dir","type":"string"},
     {"name":"root_id","type":"string"},
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   cancelLocalModelTransfer: { method: "POST", path: "/v1/providers/{provider_id}/local-model/cancel" },
   cancelMcpOAuth: { method: "POST", path: "/v1/mcp/providers/{provider_id}/oauth/cancel", query: [
@@ -63,6 +64,7 @@ export const API_OPERATIONS = {
   ] },
   copyProjectSource: { method: "POST", path: "/v1/projects/{id}/source/copy", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   createApprovalGrant: { method: "POST", path: "/v1/approval-grants" },
   createBlueprint: { method: "POST", path: "/v1/projects/{id}/blueprints" },
@@ -82,6 +84,7 @@ export const API_OPERATIONS = {
   createProjectSecretIgnore: { method: "POST", path: "/v1/projects/{id}/secret-ignores" },
   createProjectSourceEntry: { method: "POST", path: "/v1/projects/{id}/source", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   createProjectSourcePin: { method: "POST", path: "/v1/projects/{id}/source/pins" },
   createProvider: { method: "POST", path: "/v1/providers" },
@@ -124,6 +127,7 @@ export const API_OPERATIONS = {
     {"name":"recursive","type":"boolean"},
     {"name":"root_id","type":"string"},
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   deleteProjectSourcePin: { method: "DELETE", path: "/v1/projects/{id}/source/pins/{pin_id}" },
   deleteProvider: { method: "DELETE", path: "/v1/providers/{provider_id}" },
@@ -283,6 +287,7 @@ export const API_OPERATIONS = {
     {"name":"root_id","type":"string"},
     {"name":"session_id","type":"string"},
     {"name":"worker_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   getProjectSourceAttribution: { method: "GET", path: "/v1/projects/{id}/source/attribution", query: [
     {"name":"path","type":"string","required":true},
@@ -314,6 +319,7 @@ export const API_OPERATIONS = {
     {"name":"path","type":"string","required":true,"minLength":1},
     {"name":"root_id","type":"string","required":true},
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   getProjectSourceGitReview: { method: "GET", path: "/v1/projects/{id}/source/git-changes/{git_change_id}/review", query: [
     {"name":"cursor","type":"string"},
@@ -325,6 +331,7 @@ export const API_OPERATIONS = {
   getProjectSourceHistory: { method: "GET", path: "/v1/projects/{id}/source/history" },
   getProjectSourceIndex: { method: "GET", path: "/v1/projects/{id}/source/index", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   getProjectSourceRaw: { method: "GET", path: "/v1/projects/{id}/source/raw", query: [
     {"name":"file_id","type":"string"},
@@ -332,6 +339,7 @@ export const API_OPERATIONS = {
     {"name":"root_id","type":"string"},
     {"name":"session_id","type":"string"},
     {"name":"worker_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   getProjectSourceRevisionReview: { method: "GET", path: "/v1/projects/{id}/source/revisions/review", query: [
     {"name":"cursor","type":"string"},
@@ -371,6 +379,7 @@ export const API_OPERATIONS = {
   ] },
   getSourceWorkspace: { method: "GET", path: "/v1/projects/{id}/source/workspace", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   getTrustSettings: { method: "GET", path: "/v1/settings/project-trust" },
   getVerifySettings: { method: "GET", path: "/v1/settings/verify", query: [
@@ -502,6 +511,7 @@ export const API_OPERATIONS = {
     {"name":"path","type":"string","required":true},
     {"name":"root_id","type":"string"},
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   listProjectSourceVersions: { method: "GET", path: "/v1/projects/{id}/source/versions", query: [
     {"name":"cursor","type":"string"},
@@ -509,6 +519,7 @@ export const API_OPERATIONS = {
     {"name":"lane","type":"string","enum":["all","retained","git"]},
     {"name":"limit","type":"integer","minimum":1,"maximum":500},
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   listProjectSourceWalk: { method: "GET", path: "/v1/projects/{id}/source/walk", query: [
     {"name":"baseline","type":"string"},
@@ -577,6 +588,7 @@ export const API_OPERATIONS = {
   lockVault: { method: "POST", path: "/v1/vault/lock" },
   makeProjectSourceEditable: { method: "POST", path: "/v1/projects/{id}/source/editable", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   markEditorSecret: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/secret-spans/mark" },
   markSessionSeen: { method: "POST", path: "/v1/sessions/{id}/seen" },
@@ -584,6 +596,7 @@ export const API_OPERATIONS = {
   openChatLocationFile: { method: "POST", path: "/v1/projects/{id}/source/outside-locations/{location_id}/files" },
   openEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   openOutsideFile: { method: "POST", path: "/v1/projects/{id}/source/outside-files" },
   openProjectTrustReview: { method: "POST", path: "/v1/projects/{id}/trust/review" },
@@ -628,10 +641,12 @@ export const API_OPERATIONS = {
   releaseSourceViewportInterest: { method: "DELETE", path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}" },
   reloadEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/reload", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   reloadExtensionPack: { method: "POST", path: "/v1/extensions/packs/{pack_id}/reload" },
   renameProjectSource: { method: "POST", path: "/v1/projects/{id}/source/rename", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   repairLocalGeneration: { method: "POST", path: "/v1/providers/{provider_id}/repair" },
   replaceEditorDocument: { method: "PUT", path: "/v1/projects/{id}/editor-documents/{document_id}" },
@@ -639,6 +654,7 @@ export const API_OPERATIONS = {
   replaceProjectManagedSecretValue: { method: "PUT", path: "/v1/projects/{id}/secrets/{secret_id}/value" },
   replaceProjectSource: { method: "PUT", path: "/v1/projects/{id}/source", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   replaceProjectView: { method: "PUT", path: "/v1/projects/{id}/view" },
   replaceProviderCredential: { method: "PUT", path: "/v1/providers/{provider_id}/credential" },
@@ -652,10 +668,12 @@ export const API_OPERATIONS = {
   resolveContributionChoices: { method: "POST", path: "/v1/projects/{id}/commands/{command_id}/choices/{step_id}" },
   resolveEditorDocumentConflict: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/resolve", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   resolveMessageNavigation: { method: "POST", path: "/v1/sessions/{id}/navigation" },
   resolveProjectSourceDefinition: { method: "POST", path: "/v1/projects/{id}/source/definition", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   resolveProjectSourceRevisions: { method: "GET", path: "/v1/projects/{id}/source/revisions", query: [
     {"name":"root_id","type":"string"},
@@ -669,9 +687,11 @@ export const API_OPERATIONS = {
   restoreBackup: { method: "POST", path: "/v1/backup/restore" },
   restoreProjectSourceCommitState: { method: "POST", path: "/v1/projects/{id}/source/commits/{commit_sha}/restore", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   restoreProjectSourceVersion: { method: "POST", path: "/v1/projects/{id}/source/versions/{version_id}/restore", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   restoreRecoverySnapshot: { method: "POST", path: "/v1/backup/restore/recovery-snapshot" },
   resumeWorkflowRun: { method: "POST", path: "/v1/workflow-runs/{id}/resume" },
@@ -686,6 +706,7 @@ export const API_OPERATIONS = {
   rewindSession: { method: "POST", path: "/v1/sessions/{id}/rewind" },
   saveEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/save", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   search: { method: "POST", path: "/v1/search" },
   searchChatContent: { method: "GET", path: "/v1/sessions/{id}/messages/{message_id}/content/search", query: [
@@ -712,6 +733,7 @@ export const API_OPERATIONS = {
     {"name":"q","type":"string"},
     {"name":"root_id","type":"string"},
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string","repeatable":true,"maxItems":64},
   ] },
   searchSourceView: { method: "GET", path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search", query: [
     {"name":"case_sensitive","type":"boolean"},

@@ -62,6 +62,7 @@ type sourceView struct {
 	scope          pagedview.Scope
 	clientID       string
 	sessionID      string
+	worktreeIDs    []string
 	workspaceID    string
 	ctx            context.Context
 	cancel         context.CancelFunc

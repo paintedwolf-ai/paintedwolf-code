@@ -11,6 +11,7 @@ import type { FileDocumentOpening } from "./file-document-opening.ts";
 import { flushFilesDraftSyncFor, cancelFilesDraftSyncFor } from "./files-draft-sync.ts";
 import { getFilesEditorViewDoc, invalidateFilesEditorViewDoc } from "../editor/files-editor-host.ts";
 import { retainEditorDocument, editorReplica } from "./editor-document.ts";
+import { worktreeIdFromBranchId } from "../source/files-checkout-scope.ts";
 import type { EditorEditingBlock } from "./editor-draft.ts";
 import {
   type FileBuffer,
@@ -32,6 +33,9 @@ type EditorDocumentStatus = {
   refusal?: string | null;
   participants?: number;
   synchronization?: "preserving" | "pending" | "accepted" | "error";
+  workspaceId?: string;
+  branchId?: string;
+  checkoutUnavailable?: boolean;
   fileId: string;
   documentId: string;
   revision: number;
@@ -141,9 +145,19 @@ export function applyFilesBufferLoad(
       buf.loading = false;
       settleBufferPresentation(state, key);
       buf.fileId = fileId || null;
+      if (document?.workspaceId || res.workspace_id) {
+        buf.workspaceId = document?.workspaceId || res.workspace_id || buf.workspaceId;
+      }
+      if (document?.branchId !== undefined) {
+        buf.branchId = document.branchId;
+        buf.worktreeId = worktreeIdFromBranchId(document.branchId) ?? buf.worktreeId;
+      }
+      if (document?.checkoutUnavailable !== undefined) {
+        buf.checkoutUnavailable = document.checkoutUnavailable;
+      }
       buf.deleted = res.deleted;
       buf.absent = document?.absent === true;
-      buf.sourcePresent = res.deleted == null && !buf.absent;
+      buf.sourcePresent = res.deleted == null && !buf.absent && !buf.checkoutUnavailable;
       if (res.deleted || kind !== "text") {
         buf.documentId = null;
         buf.documentRevision = null;
@@ -311,9 +325,17 @@ export function applyFilesBufferEditorDocument(
     buf.editorSynchronization = document.synchronization;
     buf.documentId = document.documentId;
     buf.documentRevision = document.revision;
+    if (document.workspaceId) buf.workspaceId = document.workspaceId;
+    if (document.branchId !== undefined) {
+      buf.branchId = document.branchId;
+      buf.worktreeId = worktreeIdFromBranchId(document.branchId) ?? buf.worktreeId;
+    }
+    if (document.checkoutUnavailable !== undefined) {
+      buf.checkoutUnavailable = document.checkoutUnavailable;
+    }
     buf.diverged = document.diverged;
     buf.absent = document.absent;
-    buf.sourcePresent = !document.absent;
+    buf.sourcePresent = !document.absent && !buf.checkoutUnavailable;
     buf.heldAgentVersionId = document.heldAgentVersionId;
     buf.content = { state: "document", generation: document.localGeneration };
     buf.baseSha256 = document.baseSha256;

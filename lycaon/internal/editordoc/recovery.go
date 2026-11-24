@@ -25,6 +25,14 @@ func (c saveCommitter) Recover(ctx context.Context) error {
 	for _, mutation := range mutations {
 		p, err := s.projectBranch(ctx, mutation.ProjectID, mutation.BranchID)
 		if err != nil {
+			if mutation.Status == "prepared" && isCheckoutGone(err) {
+				document, getErr := s.store.Get(ctx, mutation.DocumentID)
+				if getErr == nil {
+					if settleErr := s.settlePublicationFailure(ctx, document, mutation, "failed", err); settleErr == nil {
+						continue
+					}
+				}
+			}
 			failures = append(failures, fmt.Errorf("editor save %s: %w", mutation.ID, err))
 			continue
 		}
