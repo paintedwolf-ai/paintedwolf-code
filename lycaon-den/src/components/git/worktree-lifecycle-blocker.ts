@@ -12,7 +12,7 @@ import type { AppStore } from "../../store/app-state-model.ts";
 import { isRecord } from "../../utils/type-guards.ts";
 import { selectRepoWorktreeById } from "./git-worktree-inspection.ts";
 
-export type WorktreeBlockerKind =
+type WorktreeBlockerKind =
   | "dirty_worktree"
   | "unsaved_editor"
   | "pending_save"

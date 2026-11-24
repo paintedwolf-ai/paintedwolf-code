@@ -12,7 +12,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitrepo"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -104,105 +106,14 @@ func deleteSessionWorktree(s *Handler, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if blocker, found, err := findCheckoutEditorBlocker(r.Context(), s, scope.project.ID, b.RepoID, checkoutIDs); err != nil {
+	if handled, err := writeCheckoutEditorBlocker(r.Context(), s, w, scope.project.ID, b.RepoID, checkoutIDs); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
-	} else if found {
-		s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeDirty, blocker.details, blocker.message)
+	} else if handled {
 		return
 	}
 
-	_, statErr := os.Lstat(b.WorktreePath)
-	pathExists := statErr == nil
-	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-		s.responses.InternalError(w, r, statErr)
-		return
-	}
-
-	if pathExists && s.Worktrees != nil && strings.TrimSpace(b.WorktreeID) != "" {
-		if _, _, errCode, _, okLive := resolveCheckoutProject(s, r.Context(), scope.project, b.WorktreeID); !okLive &&
-			(errCode == wire.ApiErrorCodeWorktreeUnavailable || errCode == wire.ApiErrorCodeWorktreeNotFound) {
-			s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeStale, map[string]any{
-				"blocker":     "incarnation_mismatch",
-				"repo_id":     b.RepoID,
-				"worktree_id": b.WorktreeID,
-				"path":        b.WorktreePath,
-			}, "The directory at this worktree path was replaced outside Painted Wolf Code and will not be deleted automatically.")
-			return
-		}
-	}
-
-	ready := pathExists && mgr.ValidateWorktree(r.Context(), b.Toplevel, b.WorktreePath, b.Branch) == nil
-	if ready {
-		st, err := mgr.Status(r.Context(), b.WorktreePath)
-		if err != nil {
-			s.responses.InternalError(w, r, err)
-			return
-		}
-		if st.Dirty {
-			details := map[string]any{
-				"blocker":       "dirty_worktree",
-				"repo_id":       b.RepoID,
-				"worktree_id":   primaryCheckoutID,
-				"changed_count": len(st.Files),
-			}
-			if len(st.Files) > 0 {
-				roots := scope.project.SourceRoots()
-				if s.Worktrees != nil && primaryCheckoutID != "" {
-					if projected, _, _, _, okProj := s.ResolveCheckoutProject(r.Context(), scope.project, primaryCheckoutID); okProj {
-						roots = projected.SourceRoots()
-					}
-				}
-				rootID, rootRel := attributeChangedFile(b.WorktreePath, st.Files[0].Path, roots)
-				if rootID != "" {
-					details["root_id"] = rootID
-					details["path"] = rootRel
-				} else {
-					details["path"] = st.Files[0].Path
-				}
-			}
-			s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeDirty, details, "The worktree has uncommitted changes. Commit or discard them first.")
-			return
-		}
-		before, err := mgr.RepoConfigFingerprint(r.Context(), b.Toplevel)
-		if err != nil {
-			s.responses.InternalError(w, r, err)
-			return
-		}
-		if err := mgr.RemoveWorktree(r.Context(), b.Toplevel, b.WorktreePath); err != nil {
-			s.responses.InternalError(w, r, err)
-			return
-		}
-		after, err := mgr.RepoConfigFingerprint(r.Context(), b.Toplevel)
-		if err != nil {
-			s.responses.InternalError(w, r, err)
-			return
-		}
-		if after != before {
-			s.responses.InternalError(w, r, errors.New("repository config changed during worktree remove"))
-			return
-		}
-	} else if !pathExists {
-		before, err := mgr.RepoConfigFingerprint(r.Context(), b.Toplevel)
-		if err != nil {
-			s.responses.InternalError(w, r, err)
-			return
-		}
-		if err := mgr.RemoveStaleWorktreeRegistration(r.Context(), b.Toplevel, b.WorktreePath); err != nil {
-			s.responses.InternalError(w, r, err)
-			return
-		}
-		after, err := mgr.RepoConfigFingerprint(r.Context(), b.Toplevel)
-		if err != nil {
-			s.responses.InternalError(w, r, err)
-			return
-		}
-		if after != before {
-			s.responses.InternalError(w, r, errors.New("repository config changed during stale worktree registration cleanup"))
-			return
-		}
-	} else {
-		s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "This chat's worktree is invalid. Repair or remove the checkout at the shown path before returning to the project folder.")
+	if !applyWorktreeDiskRemoval(s, w, r, mgr, scope.project, b, primaryCheckoutID) {
 		return
 	}
 
@@ -218,6 +129,139 @@ func deleteSessionWorktree(s *Handler, w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func applyWorktreeDiskRemoval(
+	s *Handler,
+	w http.ResponseWriter,
+	r *http.Request,
+	mgr git.Manager,
+	proj *project.Project,
+	b *store.WorktreeBinding,
+	primaryCheckoutID string,
+) bool {
+	_, statErr := os.Lstat(b.WorktreePath)
+	pathExists := statErr == nil
+	if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+		s.responses.InternalError(w, r, statErr)
+		return false
+	}
+
+	if pathExists && s.Worktrees != nil && strings.TrimSpace(b.WorktreeID) != "" {
+		if _, _, errCode, _, okLive := resolveCheckoutProject(s, r.Context(), proj, b.WorktreeID); !okLive &&
+			(errCode == wire.ApiErrorCodeWorktreeUnavailable || errCode == wire.ApiErrorCodeWorktreeNotFound) {
+			s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeStale, map[string]any{
+				"blocker":     "incarnation_mismatch",
+				"repo_id":     b.RepoID,
+				"worktree_id": b.WorktreeID,
+				"path":        b.WorktreePath,
+			}, "The directory at this worktree path was replaced outside Painted Wolf Code and will not be deleted automatically.")
+			return false
+		}
+	}
+
+	ready := pathExists && mgr.ValidateWorktree(r.Context(), b.Toplevel, b.WorktreePath, b.Branch) == nil
+	if ready {
+		st, err := mgr.Status(r.Context(), b.WorktreePath)
+		if err != nil {
+			s.responses.InternalError(w, r, err)
+			return false
+		}
+		if st.Dirty {
+			failDirtyWorktree(s, w, r.Context(), proj, b, primaryCheckoutID, st.Files)
+			return false
+		}
+		return runGuardedWorktreeAdminOp(
+			s, w, r, mgr, b.Toplevel,
+			"repository config changed during worktree remove",
+			func() error { return mgr.RemoveWorktree(r.Context(), b.Toplevel, b.WorktreePath) },
+		)
+	}
+	if !pathExists {
+		return runGuardedWorktreeAdminOp(
+			s, w, r, mgr, b.Toplevel,
+			"repository config changed during stale worktree registration cleanup",
+			func() error { return mgr.RemoveStaleWorktreeRegistration(r.Context(), b.Toplevel, b.WorktreePath) },
+		)
+	}
+	s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "This chat's worktree is invalid. Repair or remove the checkout at the shown path before returning to the project folder.")
+	return false
+}
+
+func runGuardedWorktreeAdminOp(
+	s *Handler,
+	w http.ResponseWriter,
+	r *http.Request,
+	mgr git.Manager,
+	toplevel string,
+	driftMsg string,
+	op func() error,
+) bool {
+	before, err := mgr.RepoConfigFingerprint(r.Context(), toplevel)
+	if err != nil {
+		s.responses.InternalError(w, r, err)
+		return false
+	}
+	if err := op(); err != nil {
+		s.responses.InternalError(w, r, err)
+		return false
+	}
+	after, err := mgr.RepoConfigFingerprint(r.Context(), toplevel)
+	if err != nil {
+		s.responses.InternalError(w, r, err)
+		return false
+	}
+	if after != before {
+		s.responses.InternalError(w, r, errors.New(driftMsg))
+		return false
+	}
+	return true
+}
+
+func failDirtyWorktree(
+	s *Handler,
+	w http.ResponseWriter,
+	ctx context.Context,
+	proj *project.Project,
+	b *store.WorktreeBinding,
+	primaryCheckoutID string,
+	files []git.FileStatus,
+) {
+	const msg = "The worktree has uncommitted changes. Commit or discard them first."
+	if len(files) == 0 {
+		s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeDirty, map[string]any{
+			"blocker":       "dirty_worktree",
+			"repo_id":       b.RepoID,
+			"worktree_id":   primaryCheckoutID,
+			"changed_count": 0,
+		}, msg)
+		return
+	}
+	roots := proj.SourceRoots()
+	if s.Worktrees != nil && primaryCheckoutID != "" {
+		if projected, _, _, _, okProj := s.ResolveCheckoutProject(ctx, proj, primaryCheckoutID); okProj {
+			roots = projected.SourceRoots()
+		}
+	}
+	rootID, rootRel := attributeChangedFile(b.WorktreePath, files[0].Path, roots)
+	if rootID != "" {
+		s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeDirty, map[string]any{
+			"blocker":       "dirty_worktree",
+			"repo_id":       b.RepoID,
+			"worktree_id":   primaryCheckoutID,
+			"changed_count": len(files),
+			"root_id":       rootID,
+			"path":          rootRel,
+		}, msg)
+		return
+	}
+	s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeDirty, map[string]any{
+		"blocker":       "dirty_worktree",
+		"repo_id":       b.RepoID,
+		"worktree_id":   primaryCheckoutID,
+		"changed_count": len(files),
+		"path":          files[0].Path,
+	}, msg)
 }
 
 func isManagedSessionWorktreePath(dataRoot, worktreePath string) bool {
@@ -277,18 +321,30 @@ func collectBindingCheckoutIDs(ctx context.Context, s *Handler, projectID string
 		}
 	}
 	if s.Database != nil {
-		rows, err := s.Database.QueryContext(ctx,
-			`SELECT id FROM source_worktrees WHERE project_id = ? AND repo_id = ? AND worktree_path = ?`,
-			projectID, b.RepoID, filepath.Clean(b.WorktreePath))
-		if err == nil {
-			defer func() { _ = rows.Close() }()
-			for rows.Next() {
-				var id string
-				if scanErr := rows.Scan(&id); scanErr == nil {
-					add(id)
-				}
-			}
+		for _, id := range queryWorktreeIDsByPath(ctx, s.Database, projectID, b.RepoID, filepath.Clean(b.WorktreePath)) {
+			add(id)
 		}
+	}
+	return ids
+}
+
+func queryWorktreeIDsByPath(ctx context.Context, db *sql.DB, projectID, repoID, cleanPath string) []string {
+	rows, err := db.QueryContext(ctx,
+		`SELECT id FROM source_worktrees WHERE project_id = ? AND repo_id = ? AND worktree_path = ?`,
+		projectID, repoID, cleanPath)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil
 	}
 	return ids
 }
@@ -317,34 +373,12 @@ func acquireRelatedCheckoutSessionLocks(
 		related = append(related, id)
 	}
 
-	descRows, err := s.Database.QueryContext(ctx, `
-		WITH RECURSIVE descendants(id) AS (
-			SELECT id FROM sessions WHERE parent_session_id = ?
-			UNION ALL
-			SELECT child.id FROM sessions child JOIN descendants d ON child.parent_session_id = d.id
-		)
-		SELECT id FROM descendants`, rootSessionID)
-	if err == nil {
-		for descRows.Next() {
-			var id string
-			if descRows.Scan(&id) == nil {
-				add(id)
-			}
-		}
-		_ = descRows.Close()
+	for _, id := range querySessionDescendants(ctx, s.Database, rootSessionID) {
+		add(id)
 	}
-
 	for _, wid := range checkoutIDs {
-		uRows, uErr := s.Database.QueryContext(ctx,
-			`SELECT DISTINCT actor_session_id FROM source_worktree_usages WHERE worktree_id = ?`, wid)
-		if uErr == nil {
-			for uRows.Next() {
-				var id string
-				if uRows.Scan(&id) == nil {
-					add(id)
-				}
-			}
-			_ = uRows.Close()
+		for _, id := range queryCheckoutUsageActors(ctx, s.Database, wid) {
+			add(id)
 		}
 	}
 
@@ -371,6 +405,51 @@ func acquireRelatedCheckoutSessionLocks(
 	return releaseAll, "", ""
 }
 
+func querySessionDescendants(ctx context.Context, db *sql.DB, rootSessionID string) []string {
+	rows, err := db.QueryContext(ctx, `
+		WITH RECURSIVE descendants(id) AS (
+			SELECT id FROM sessions WHERE parent_session_id = ?
+			UNION ALL
+			SELECT child.id FROM sessions child JOIN descendants d ON child.parent_session_id = d.id
+		)
+		SELECT id FROM descendants`, rootSessionID)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
+	return ids
+}
+
+func queryCheckoutUsageActors(ctx context.Context, db *sql.DB, worktreeID string) []string {
+	rows, err := db.QueryContext(ctx,
+		`SELECT DISTINCT actor_session_id FROM source_worktree_usages WHERE worktree_id = ?`, worktreeID)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
+	return ids
+}
+
 func findOtherBoundSession(ctx context.Context, s *Handler, currentSessionID string, checkoutIDs []string) string {
 	if s.Database == nil || len(checkoutIDs) == 0 {
 		return ""
@@ -387,14 +466,16 @@ func findOtherBoundSession(ctx context.Context, s *Handler, currentSessionID str
 	return ""
 }
 
-type checkoutEditorBlocker struct {
-	details map[string]any
-	message string
-}
-
-func findCheckoutEditorBlocker(ctx context.Context, s *Handler, projectID, repoID string, checkoutIDs []string) (checkoutEditorBlocker, bool, error) {
+func writeCheckoutEditorBlocker(
+	ctx context.Context,
+	s *Handler,
+	w http.ResponseWriter,
+	projectID string,
+	repoID string,
+	checkoutIDs []string,
+) (bool, error) {
 	if s.Database == nil || len(checkoutIDs) == 0 {
-		return checkoutEditorBlocker{}, false, nil
+		return false, nil
 	}
 	for _, wid := range checkoutIDs {
 		branchID := "worktree:" + wid
@@ -405,24 +486,22 @@ func findCheckoutEditorBlocker(ctx context.Context, s *Handler, projectID, repoI
 			WHERE project_id = ? AND branch_id = ? AND status IN ('prepared', 'file_applied', 'conflict')
 			ORDER BY created_at ASC LIMIT 1`, projectID, branchID).Scan(&mutDocID, &mutRootID, &mutPath, &mutStatus)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return checkoutEditorBlocker{}, false, err
+			return false, err
 		}
 		if err == nil {
 			msg := "A file save is still finishing in this worktree (" + mutPath + "). Wait for it to finish before returning to the project folder."
 			if mutStatus == "conflict" {
 				msg = "A file save in " + mutPath + " has an unresolved conflict. Open the file in Files to resolve it before returning to the project folder."
 			}
-			return checkoutEditorBlocker{
-				details: map[string]any{
-					"blocker":     "pending_save",
-					"repo_id":     repoID,
-					"worktree_id": wid,
-					"root_id":     mutRootID,
-					"path":        mutPath,
-					"document_id": mutDocID,
-				},
-				message: msg,
-			}, true, nil
+			s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeDirty, map[string]any{
+				"blocker":     "pending_save",
+				"repo_id":     repoID,
+				"worktree_id": wid,
+				"root_id":     mutRootID,
+				"path":        mutPath,
+				"document_id": mutDocID,
+			}, msg)
+			return true, nil
 		}
 
 		var docID, docRootID, docPath string
@@ -432,21 +511,19 @@ func findCheckoutEditorBlocker(ctx context.Context, s *Handler, projectID, repoI
 			WHERE project_id = ? AND branch_id = ? AND (dirty = 1 OR diverged = 1 OR held_agent_version_id != '')
 			ORDER BY path ASC, id ASC LIMIT 1`, projectID, branchID).Scan(&docID, &docRootID, &docPath)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return checkoutEditorBlocker{}, false, err
+			return false, err
 		}
 		if err == nil {
-			return checkoutEditorBlocker{
-				details: map[string]any{
-					"blocker":     "unsaved_editor",
-					"repo_id":     repoID,
-					"worktree_id": wid,
-					"root_id":     docRootID,
-					"path":        docPath,
-					"document_id": docID,
-				},
-				message: "Save or discard unsaved editor changes in " + docPath + " before returning to the project folder.",
-			}, true, nil
+			s.responses.FailDetails(w, wire.ApiErrorCodeWorktreeDirty, map[string]any{
+				"blocker":     "unsaved_editor",
+				"repo_id":     repoID,
+				"worktree_id": wid,
+				"root_id":     docRootID,
+				"path":        docPath,
+				"document_id": docID,
+			}, "Save or discard unsaved editor changes in "+docPath+" before returning to the project folder.")
+			return true, nil
 		}
 	}
-	return checkoutEditorBlocker{}, false, nil
+	return false, nil
 }

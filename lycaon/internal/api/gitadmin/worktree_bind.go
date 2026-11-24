@@ -154,13 +154,37 @@ func bindSessionWorktree(s *Handler, w http.ResponseWriter, r *http.Request) {
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	if err := os.Chmod(path, 0o700); err != nil { //nolint:gosec // Private checkout directory.
+	if !finalizeWorktreeBind(s, w, r, mgr, scope.project.ID, repo, before, path, baseBranch, &row) {
+		return
+	}
+
+	view, err := s.buildWorktreeView(r.Context(), mgr, &row, scope.repos)
+	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
+	httpio.WriteJSON(w, http.StatusOK, view)
+}
+
+func finalizeWorktreeBind(
+	s *Handler,
+	w http.ResponseWriter,
+	r *http.Request,
+	mgr git.Manager,
+	projectID string,
+	repo git.RepoRef,
+	before string,
+	path string,
+	baseBranch string,
+	row *store.WorktreeBinding,
+) bool {
+	if err := os.Chmod(path, 0o700); err != nil { //nolint:gosec // Private checkout directory.
+		s.responses.InternalError(w, r, err)
+		return false
+	}
 	if s.Worktrees != nil {
 		if items, refreshErr := s.Worktrees.Refresh(r.Context(), worktrees.RepoSpec{
-			ProjectID: scope.project.ID,
+			ProjectID: projectID,
 			RepoID:    repo.ID,
 			Toplevel:  repo.Toplevel,
 		}); refreshErr == nil {
@@ -174,27 +198,21 @@ func bindSessionWorktree(s *Handler, w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if err := s.SessionStore.PutWorktreeBinding(r.Context(), row); err != nil {
+	if err := s.SessionStore.PutWorktreeBinding(r.Context(), *row); err != nil {
 		s.responses.InternalError(w, r, err)
-		return
+		return false
 	}
-	if stored, bound, err := s.SessionStore.GetWorktreeBinding(r.Context(), scope.sess.ID); err == nil && bound && stored != nil {
-		row = *stored
+	if stored, bound, err := s.SessionStore.GetWorktreeBinding(r.Context(), row.SessionID); err == nil && bound && stored != nil {
+		*row = *stored
 	}
 	after, err := mgr.RepoConfigFingerprint(r.Context(), repo.Toplevel)
-	if err != nil || after != before {
-		if err != nil {
-			s.responses.InternalError(w, r, err)
-			return
-		}
-		s.responses.InternalError(w, r, errors.New("repository config changed during worktree create"))
-		return
-	}
-
-	view, err := s.buildWorktreeView(r.Context(), mgr, &row, scope.repos)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
-		return
+		return false
 	}
-	httpio.WriteJSON(w, http.StatusOK, view)
+	if after != before {
+		s.responses.InternalError(w, r, errors.New("repository config changed during worktree create"))
+		return false
+	}
+	return true
 }
