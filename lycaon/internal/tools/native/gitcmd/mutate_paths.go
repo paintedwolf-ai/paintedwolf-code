@@ -227,23 +227,40 @@ func matchesDirPrefix(path, dirRel string) bool {
 }
 
 func withRepoRoot(tc tools.ToolContext, repoRoot string) tools.ToolContext {
-	if filepath.Clean(tc.ActiveRootPath()) == filepath.Clean(repoRoot) {
+	cleanRepo := filepath.Clean(repoRoot)
+	if filepath.Clean(tc.ActiveRootPath()) == cleanRepo {
 		return tc
 	}
 	roots := append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	updated := false
+	// Scope mutations to the attached root containing repoRoot so policy checks address that root.
+	matchIdx := -1
+	matchLen := -1
 	for i := range roots {
-		if roots[i].ID == tc.Source.ActiveRootID || (tc.Source.ActiveRootID == "" && roots[i].IsPrimary) {
-			roots[i].Path = repoRoot
-			updated = true
+		rootClean := filepath.Clean(roots[i].Path)
+		rel, err := filepath.Rel(rootClean, cleanRepo)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && len(rootClean) > matchLen {
+			matchIdx = i
+			matchLen = len(rootClean)
 		}
 	}
-	if !updated && len(roots) > 0 {
-		roots[0].Path = repoRoot
+	if matchIdx >= 0 {
+		roots[matchIdx].Path = cleanRepo
+		tc.Source.ActiveRootID = roots[matchIdx].ID
+	} else {
+		updated := false
+		for i := range roots {
+			if roots[i].ID == tc.Source.ActiveRootID || (tc.Source.ActiveRootID == "" && roots[i].IsPrimary) {
+				roots[i].Path = cleanRepo
+				updated = true
+			}
+		}
+		if !updated && len(roots) > 0 {
+			roots[0].Path = cleanRepo
+		}
 	}
 	tc.Source.Roots = roots
 	if tc.Source.WorkerBranchRoot != "" {
-		tc.Source.WorkerBranchRoot = repoRoot
+		tc.Source.WorkerBranchRoot = cleanRepo
 	}
 	return tc
 }
