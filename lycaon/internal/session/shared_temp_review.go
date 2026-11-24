@@ -75,8 +75,9 @@ func (b *WriteRootCheckpointBroker) ReviewSharedTemp(ctx context.Context, in com
 	if b.ReadRuntime != nil {
 		readAsk := command.SandboxReadPathAsk{
 			SessionID: in.SessionID, ParentSessionID: in.ParentSessionID, ProjectID: in.ProjectID,
-			ToolCallID: in.ToolCallID, ProjectDir: in.ProjectDir, ToolName: in.ToolName, Command: in.Command,
-			ReadDenyPaths: in.ReadDenyPaths, SessionScratchRoot: in.SessionScratchRoot, SessionOutputRoot: in.SessionOutputRoot,
+			ToolCallID: in.ToolCallID, ActionID: in.ActionID, ProjectDir: in.ProjectDir, ToolName: in.ToolName,
+			Command: in.Command, ReadDenyPaths: in.ReadDenyPaths, SessionScratchRoot: in.SessionScratchRoot,
+			SessionOutputRoot: in.SessionOutputRoot,
 		}
 		for _, path := range observed.Reads {
 			if confine.SharedTempLocation(path) == "" {

@@ -220,7 +220,7 @@ func runDirsFromRows(rows []procRow) []string {
 				continue
 			}
 			dir := filepath.Dir(fields[i+1])
-			if strings.Contains(filepath.Base(dir), "paintedwolf-opengrep-") {
+			if filepath.Base(filepath.Dir(dir)) == "action-work" && strings.HasPrefix(filepath.Base(dir), "action-") {
 				seen[dir] = true
 			}
 		}
