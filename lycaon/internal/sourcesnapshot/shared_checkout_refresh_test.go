@@ -17,8 +17,8 @@ func TestMilestoneSharedPhysicalBaseline(t *testing.T) {
 	store := openSnapshotStore(t)
 	shared, a, b := t.TempDir(), t.TempDir(), t.TempDir()
 	for _, r := range []string{shared, a, b} {
-		coverRoot(t, r)
 		writeSource(t, r, "main.go", "package a\n")
+		coverRoot(t, r)
 	}
 	var sharedSurveys int
 	store.onSurvey = func(r string) {
@@ -79,8 +79,8 @@ func TestMilestoneConcurrentRescope(t *testing.T) {
 	store := openSnapshotStore(t)
 	shared, a, b := t.TempDir(), t.TempDir(), t.TempDir()
 	for _, r := range []string{shared, a, b} {
-		coverRoot(t, r)
 		writeSource(t, r, "keep.go", "package keep\n")
+		coverRoot(t, r)
 	}
 	request := func(roots ...string) Request {
 		req := Request{}
@@ -167,7 +167,7 @@ func TestDuplicateDemandDuringRepairIncompleteWatcherAndVerifyContent(t *testing
 	writeSource(t, unwatched, "alpha.go", "package alpha\n")
 
 	before := store.Metrics()
-	snap1, err := store.Ensure(t.Context(), Request{Roots: []Root{{Path: unwatched}}})
+	snap1, err := store.Ensure(t.Context(), Request{Roots: []Root{{Path: unwatched}}, Unwatched: true})
 	testutil.FailErr(t, "unwatched first ensure", err)
 	after1 := store.Metrics()
 	if after1.ConfirmRuns <= before.ConfirmRuns {
@@ -175,7 +175,7 @@ func TestDuplicateDemandDuringRepairIncompleteWatcherAndVerifyContent(t *testing
 	}
 
 	// Equal snapshot IDs without watcher coverage still require survey + confirmation.
-	snap2, err := store.Ensure(t.Context(), Request{Roots: []Root{{Path: unwatched}}})
+	snap2, err := store.Ensure(t.Context(), Request{Roots: []Root{{Path: unwatched}}, Unwatched: true})
 	testutil.FailErr(t, "unwatched second ensure", err)
 	if snap2.ID != snap1.ID {
 		t.Fatalf("snapshot ID changed on unchanged tree: %s vs %s", snap1.ID, snap2.ID)

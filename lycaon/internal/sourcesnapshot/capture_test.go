@@ -33,10 +33,10 @@ func notifyChange(root string, paths ...string) {
 func TestSecondGenerationCostsOnlyWhatChanged(t *testing.T) {
 	store := openSnapshotStore(t)
 	root := t.TempDir()
-	coverRoot(t, root)
 	for _, name := range []string{"a.go", "b.go", "deep/c.go"} {
 		writeSource(t, root, name, "package x // "+name+"\n")
 	}
+	coverRoot(t, root)
 	request := Request{Roots: []Root{{Path: root}}}
 	first, err := store.Ensure(t.Context(), request)
 	testutil.FailErr(t, "publish first generation", err)
@@ -175,10 +175,10 @@ func TestChangesDuringACaptureArePickedUpBeforePublishing(t *testing.T) {
 func TestIgnoredChurnDoesNotMoveTheGeneration(t *testing.T) {
 	store := openSnapshotStore(t)
 	root := t.TempDir()
-	coverRoot(t, root)
 	writeSource(t, root, ".gitignore", "build/\n")
 	writeSource(t, root, "src/a.go", "package a\n")
 	writeSource(t, root, "build/out.o", "x")
+	coverRoot(t, root)
 	request := Request{Roots: []Root{{Path: root}}}
 	first, err := store.Ensure(t.Context(), request)
 	testutil.FailErr(t, "publish first generation", err)
