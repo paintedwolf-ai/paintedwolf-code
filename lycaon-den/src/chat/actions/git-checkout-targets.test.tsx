@@ -20,7 +20,7 @@ import {
   stashChanges,
 } from "./git-actions.ts";
 import type { GitStatusSummary } from "../../api/types.ts";
-import type { GitWorkspaceStatus } from "./git-workspace-status.ts";
+import { loadGitWorkspaceStatus, type GitWorkspaceStatus } from "./git-workspace-status.ts";
 import { GitStrip } from "../../components/GitStrip.tsx";
 
 describe("git checkout targets", () => {
@@ -231,5 +231,55 @@ describe("git checkout targets", () => {
 
     expect(screen.queryByTestId("git-discard-modal")).toBeNull();
     expect(onDiscard).not.toHaveBeenCalled();
+  });
+
+  it("waits for lazy sibling checkout first-read refresh beyond initial primary probes", async () => {
+    let calls = 0;
+    const getGitStatus = vi.fn(async () => {
+      calls += 1;
+      if (calls < 5) {
+        return {
+          available: true,
+          repo_id: "repo-1",
+          worktree_id: "wt-cold",
+          root_ids: ["root-1"],
+          revision: 0,
+          refreshing: true,
+          ahead: 0,
+          behind: 0,
+          dirty: false,
+          staged_count: 0,
+          unstaged_count: 0,
+          changed_count: 0,
+        };
+      }
+      return {
+        available: true,
+        repo_id: "repo-1",
+        worktree_id: "wt-cold",
+        root_ids: ["root-1"],
+        revision: 1,
+        refreshing: false,
+        branch: "feat/cold",
+        ahead: 0,
+        behind: 0,
+        dirty: true,
+        staged_count: 0,
+        unstaged_count: 1,
+        changed_count: 1,
+      };
+    });
+    const listGitChanges = vi.fn(async () => ({
+      repo_id: "repo-1",
+      worktree_id: "wt-cold",
+      revision: 1,
+      refreshing: false,
+      files: [{ path: "cold.ts", status: " M", root_id: "root-1", root_relative_path: "cold.ts" }],
+    }));
+
+    const status = await loadGitWorkspaceStatus({ getGitStatus, listGitChanges }, "proj-1", "repo-1", "sess-1", "wt-cold");
+    expect(calls).toBe(5);
+    expect(status.branch).toBe("feat/cold");
+    expect(status.files[0]?.path).toBe("cold.ts");
   });
 });
