@@ -864,13 +864,51 @@ describe("SessionTranscript virtual window", () => {
         authority: "none",
         trust_tier: "trusted",
         content: "",
-        tool_calls: [{ id: "tc-live-2", name: "task", args: { agent_type: "researcher", description: "Check files" } }],
+        tool_calls: [{ id: "tc-live-2", name: "instruct_worker", args: { worker_id: "w-1", message: "Check files" } }],
         created_at: "2026-01-01T00:00:01Z",
       });
       expect(applied).toBe(true);
       await Promise.resolve();
 
       expect(view.container.querySelector(".den-enter-fade")).toBeTruthy();
+
+      expect(
+        store.actions.upsertMessage({
+          id: "live-3",
+          ord: 3,
+          seq: 3,
+          role: "assistant",
+          origin: "model",
+          authority: "none",
+          trust_tier: "trusted",
+          content: "",
+          tool_calls: [{ id: "tc-live-3", name: "task", args: { agent_type: "researcher", description: "Audit module" } }],
+          created_at: "2026-01-01T00:00:02Z",
+        }),
+      ).toBe(true);
+      expect(
+        store.actions.upsertMessage({
+          id: "live-4",
+          ord: 4,
+          seq: 4,
+          role: "tool",
+          origin: "tool",
+          authority: "none",
+          trust_tier: "untrusted",
+          content: "done",
+          tool_result: {
+            assistant_message_id: "live-3",
+            tool_call_id: "tc-live-3",
+            tool: "task",
+            content: "done",
+          },
+          created_at: "2026-01-01T00:00:03Z",
+        }),
+      ).toBe(true);
+      await Promise.resolve();
+
+      expect(view.container.querySelector('[data-testid="worker-group-card"].den-enter-fade')).toBeTruthy();
+      expect(view.container.querySelector('[data-testid="task-card"].den-enter-fade')).toBeTruthy();
     } finally {
       view.unmount();
       clearTranscriptEntryMemory(sid);

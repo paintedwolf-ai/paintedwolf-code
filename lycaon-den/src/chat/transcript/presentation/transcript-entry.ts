@@ -1,5 +1,6 @@
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import type { Message, TurnLoad } from "../../../api/types.ts";
+import { verboseModePref } from "../../../settings/system/debug-prefs.ts";
 import { partHasFileEdits } from "../../file-edit/file-edit-model.ts";
 import { citationGroundingHadTraceableWork } from "../../grounding/citation-grounding-model.ts";
 import { activitySpanToolParts } from "../../tool/activity-span-model.ts";
@@ -195,10 +196,17 @@ function collectMessageBackedEntryKeys(
 export function transcriptEntryKeysFromMessages(
   messages: readonly Message[],
   turnLoads?: Readonly<Record<string, readonly TurnLoad[]>>,
+  sessionId?: string,
 ): string[] {
+  const verboseMode = untrack(() => verboseModePref());
   const items = finalizeTranscriptItems(
-    messagesToTranscriptItems(messages, { layout: "chat", turnLoads }),
-    { layout: "chat" },
+    messagesToTranscriptItems(messages, {
+      layout: "chat",
+      turnLoads,
+      sessionId,
+      verboseMode,
+    }),
+    { layout: "chat", verboseMode },
   );
   const keys = new Set<string>();
   for (const item of items) collectTranscriptEntryKeys(item, keys);

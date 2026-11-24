@@ -447,9 +447,15 @@ export function createAppStore(
             // Record live eligibility before publishing so mounted subscribers animate.
             const sessionId = draft.transcriptSessionId?.trim();
             if (sessionId) {
+              const parentId = message.role === "tool" ? message.tool_result?.assistant_message_id?.trim() : undefined;
+              const parent = parentId ? draft.messages.find((m) => m.id === parentId) : undefined;
               markTranscriptLiveEntries(
                 sessionId,
-                transcriptEntryKeysFromMessages([message], draft.turnLoads),
+                transcriptEntryKeysFromMessages(
+                  parent ? [parent, message] : [message],
+                  draft.turnLoads,
+                  sessionId,
+                ),
               );
             }
             // Keep the existing array slot.
@@ -466,9 +472,15 @@ export function createAppStore(
           }
           const sessionId = draft.transcriptSessionId?.trim();
           if (sessionId) {
+            const parentId = message.role === "tool" ? message.tool_result?.assistant_message_id?.trim() : undefined;
+            const parent = parentId ? draft.messages.find((m) => m.id === parentId) : undefined;
             markTranscriptLiveEntries(
               sessionId,
-              transcriptEntryKeysFromMessages([message], draft.turnLoads),
+              transcriptEntryKeysFromMessages(
+                parent ? [parent, message] : [message],
+                draft.turnLoads,
+                sessionId,
+              ),
             );
           }
           const evicted: TranscriptEvictedPage[] = [];
