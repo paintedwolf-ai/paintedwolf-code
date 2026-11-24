@@ -64,31 +64,35 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		})
 	}
 	m.processReports.publish(completion.SessionID, completion.Handle, processReport{digest: digest, exit: completion.ExitObservation})
+	handle := strings.TrimSpace(completion.Handle)
+	occID := strings.TrimSpace(completion.RunID)
+	if occID == "" {
+		occID = "process_done:" + handle
+	}
 	if m.watches != nil {
 		outcome := "satisfied"
 		if completion.ExitCode != 0 || completion.Failure != nil || completion.BoundaryRefusal != "" {
 			outcome = "failed"
 		}
-		occID := strings.TrimSpace(completion.RunID)
-		if occID == "" {
-			occID = "process_done:" + strings.TrimSpace(completion.Handle)
-		}
 		_, _ = m.watches.RecordProcessDone(ctx, completion.SessionID, watch.ProcessCompletionFact{
 			OccurrenceID: occID,
-			Handle:       strings.TrimSpace(completion.Handle),
+			Handle:       handle,
 			Outcome:      outcome,
 			Code:         completion.ProgramStop.Code,
 			Report:       digest,
 		})
 	}
 	env := anchor.Envelope{
-		Subject:                 strings.TrimSpace(completion.Handle),
+		Subject:                 handle,
 		CommandCompletionDigest: digest,
 	}
 	if completion.ExitObservation != nil {
 		env.CommandExitObservation = completion.ExitObservation
 	}
 	if m.nudgeProcessWait(ctx, completion.SessionID, completion.Handle, anchor.ProcessFinished, env) {
+		if m.watches != nil {
+			_, _ = watch.ClaimPresentation(ctx, m.watches, watch.SessionOwner(completion.SessionID), occID, watch.ClaimDirectWait, true, "direct_wait:"+handle)
+		}
 		return
 	}
 	if completion.TerminationReason == bgprocess.TerminationStoppedByAgent ||
@@ -96,6 +100,12 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 		return
 	}
 	if sess == nil || !sess.IsWorkerChild() {
+		if m.watches != nil {
+			dec, err := watch.ClaimPresentation(ctx, m.watches, watch.SessionOwner(completion.SessionID), occID, watch.ClaimFallbackKick, false, "")
+			if err == nil && !dec.Granted {
+				return
+			}
+		}
 		m.Guidance.Emit(ctx, completion.SessionID, anchor.ProcessFinished, env)
 	}
 }
