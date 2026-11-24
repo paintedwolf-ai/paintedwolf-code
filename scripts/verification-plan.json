@@ -1720,7 +1720,7 @@
         "FuzzArchiveExtractionStaysInDestination": 300
       },
       "./test/contract/invariants/promptrender": {
-        "FuzzRecipientGuidanceAcrossHostStates": 30
+        "FuzzRecipientGuidanceAcrossHostStates": 300
       },
       "./test/wiring/conformance": {
         "FuzzCatalogBinderSafetyAndTypedRefusals": 30,
