@@ -31,10 +31,11 @@ const (
 
 // Delivery is assembled from current sources for one model request.
 type Delivery struct {
-	Messages     []api.Message
-	Manifest     agentpolicy.Manifest
-	Status       Status
-	ActiveRootID string
+	Messages            []api.Message
+	Manifest            agentpolicy.Manifest
+	Status              Status
+	ActiveRootID        string
+	ActiveRootHasNested bool
 }
 
 // Resolve loads each applicable policy once across all resolved scopes.

@@ -78,6 +78,9 @@ type AgentsMDIndexInjector func(ctx context.Context, sess *api.Session) (block a
 // AgentsMDPoliciesInjector renders current guidance for resolved working scopes.
 type AgentsMDPoliciesInjector func(ctx context.Context, sess *api.Session, history []api.Message) (AgentsMDPolicyDelivery, error)
 
+// AgentsMDRootPoliciesInjector projects active-root guidance without turn side effects.
+type AgentsMDRootPoliciesInjector func(ctx context.Context, sess *api.Session) (AgentsMDPolicyDelivery, error)
+
 // SelectionSource exposes the session ledger's current prompt selection.
 type SelectionSource interface {
 	LoadedTools(string) map[string]bool
@@ -111,6 +114,7 @@ type AssemblyDeps struct {
 	SessionView             SessionView
 	AgentsMDIndex           AgentsMDIndexInjector
 	AgentsMDPolicies        AgentsMDPoliciesInjector
+	AgentsMDRootPolicies    AgentsMDRootPoliciesInjector
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
 	Agents                  AgentProfileResolver
 	Workflows               WorkflowManifestSource

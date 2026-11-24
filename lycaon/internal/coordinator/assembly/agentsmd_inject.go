@@ -8,10 +8,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// AgentsMDPolicyDelivery carries resolved policy messages and the active root ID.
+// AgentsMDPolicyDelivery carries resolved policy messages and active-root layout facts.
 type AgentsMDPolicyDelivery struct {
-	Messages     []api.Message
-	ActiveRootID string
+	Messages            []api.Message
+	ActiveRootID        string
+	ActiveRootHasNested bool
 }
 
 // agentsMDIndexInject keeps the session index in every standing prompt prefix.
@@ -39,6 +40,14 @@ func (e *turnContextAssembler) agentsMDChainInject(ctx context.Context, sess *ap
 	return e.deps.AgentsMDPolicies(ctx, sess, history)
 }
 
+// agentsMDRootInject projects active-root guidance for idle prefix preparation.
+func (e *turnContextAssembler) agentsMDRootInject(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) (AgentsMDPolicyDelivery, error) {
+	if e == nil || sess == nil || turn == nil || e.deps.AgentsMDRootPolicies == nil {
+		return AgentsMDPolicyDelivery{}, nil
+	}
+	return e.deps.AgentsMDRootPolicies(ctx, sess)
+}
+
 // splitPreHistoryAgentsMDPolicies lifts the active root's stable policy blocks
 // before history when doing so preserves jurisdiction and nested/overlay order.
 func splitPreHistoryAgentsMDPolicies(sess *api.Session, delivery AgentsMDPolicyDelivery) (preHistory, tail []api.Message) {
@@ -50,12 +59,14 @@ func splitPreHistoryAgentsMDPolicies(sess *api.Session, delivery AgentsMDPolicyD
 		return nil, delivery.Messages
 	}
 	overlayRel := settingsoverlay.Rel("AGENTS.md")
-	hasNestedForActiveRoot := false
-	for _, msg := range delivery.Messages {
-		rootID, path, ok := projectPolicyLocation(msg)
-		if ok && rootID == activeRootID && path != "AGENTS.md" && path != overlayRel {
-			hasNestedForActiveRoot = true
-			break
+	hasNestedForActiveRoot := delivery.ActiveRootHasNested
+	if !hasNestedForActiveRoot {
+		for _, msg := range delivery.Messages {
+			rootID, path, ok := projectPolicyLocation(msg)
+			if ok && rootID == activeRootID && path != "AGENTS.md" && path != overlayRel {
+				hasNestedForActiveRoot = true
+				break
+			}
 		}
 	}
 	for _, msg := range delivery.Messages {

@@ -77,7 +77,19 @@ func prefixAssemblyEngine(t *testing.T, m *Service) *assembly.AssemblyEngine {
 		AgentsMDIndex:    m.Index,
 		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) (assembly.AgentsMDPolicyDelivery, error) {
 			delivery, err := m.ResolveCurrent(ctx, sess, history)
-			return assembly.AgentsMDPolicyDelivery{Messages: delivery.Messages, ActiveRootID: delivery.ActiveRootID}, err
+			return assembly.AgentsMDPolicyDelivery{
+				Messages:            delivery.Messages,
+				ActiveRootID:        delivery.ActiveRootID,
+				ActiveRootHasNested: delivery.ActiveRootHasNested,
+			}, err
+		},
+		AgentsMDRootPolicies: func(ctx context.Context, sess *api.Session) (assembly.AgentsMDPolicyDelivery, error) {
+			delivery, err := m.ProjectRoot(ctx, sess)
+			return assembly.AgentsMDPolicyDelivery{
+				Messages:            delivery.Messages,
+				ActiveRootID:        delivery.ActiveRootID,
+				ActiveRootHasNested: delivery.ActiveRootHasNested,
+			}, err
 		},
 	})
 	return eng
@@ -319,5 +331,26 @@ func TestCoordinatorPolicyLifecycleTransitions(t *testing.T) {
 	_, fittedWire := projectAnthropicWire(t, fitted.Messages)
 	if strings.Index(fittedWire, "ROOT_V2") >= strings.Index(fittedWire, "Compacted earlier work") {
 		t.Fatalf("root policy must precede compacted history")
+	}
+
+	// 6. Idle preparation BuildKnownPrefix shares the exact pre-history root block without mutating observed scopes.
+	m.Forget(sess.ID)
+	knownFrame, err := prefixCoordCtx{}.BuildCoordinatorTurnFrame(t.Context(), sess.ID, sess)
+	testutil.FailErr(t, "build frame", err)
+	knownPrefix, err := eng.BuildKnownPrefix(t.Context(), sess, []api.Message{intent, subRead}, knownFrame)
+	testutil.FailErr(t, "BuildKnownPrefix", err)
+	if _, mutated := m.observed.Load(sess.ID); mutated {
+		t.Fatal("ProjectRoot mutated observed scope memory during idle preparation")
+	}
+	eng.BeginPromptTurn(sess.ID)
+	liveFull, err := eng.BuildCompletionMessages(t.Context(), sess, []api.Message{intent, subRead}, &knownFrame)
+	testutil.FailErr(t, "BuildCompletionMessages", err)
+	if len(knownPrefix) < 4 || len(liveFull) < len(knownPrefix) {
+		t.Fatalf("unexpected prefix lengths: known=%d full=%d", len(knownPrefix), len(liveFull))
+	}
+	for i := range knownPrefix {
+		if knownPrefix[i].Role != liveFull[i].Role || knownPrefix[i].Content != liveFull[i].Content || knownPrefix[i].PromptCacheBreakpoint != liveFull[i].PromptCacheBreakpoint {
+			t.Fatalf("known prefix diverged from live completion at %d:\nknown=%+v\nlive=%+v", i, knownPrefix[i], liveFull[i])
+		}
 	}
 }
