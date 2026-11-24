@@ -142,7 +142,7 @@ function Opener(props: { opener: ActionOpener; part: ToolPartView; projectId?: s
               project_id: target.projectId,
               root_id: target.rootId,
               path: target.path,
-              entry_kind: target.entryKind ?? "file",
+              entry_kind: target.entryKind === "folder" ? "folder" : "file",
               ...(target.fileId ? { file_id: target.fileId } : {}),
               ...(target.workerId ? { worker_id: target.workerId } : {}),
               ...(target.repoId ? { repo_id: target.repoId } : {}),

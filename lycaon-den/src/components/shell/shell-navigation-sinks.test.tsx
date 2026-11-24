@@ -60,6 +60,7 @@ describe("shell navigation sink lifetime", () => {
       worktreeId: "wt-1",
       entryKind: "folder",
       action: "reveal",
+      intent: "permanent",
     });
     openFilesSurface({ kind: "stage", projectId: "project" });
     expect(calls.openStageWithPlacement).toHaveBeenCalledWith("files", "routed");

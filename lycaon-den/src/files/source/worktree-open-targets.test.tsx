@@ -712,14 +712,29 @@ describe("WT06 checkout and revision open targets", () => {
         after_blob_oid: "bbbb0002",
       }],
     }));
+    const readerHost = sourceReaderFixture(async () => ({
+      in_range: true,
+      location_changed: false,
+      truncated: false,
+      op: "write",
+      before: {
+        path: "src/staged.ts",
+        state: "content",
+        availability: "available",
+        size_bytes: 4,
+        content: "old\n",
+      },
+      after: {
+        path: "src/staged.ts",
+        state: "content",
+        availability: "available",
+        size_bytes: 4,
+        content: "new\n",
+      },
+    }));
     const client = stubFilesClient({
+      ...readerHost.methods,
       getGitDiff,
-      ...sourceReaderFixture({
-        id: "cmp-gitstrip",
-        op: "write",
-        before: { content: "old\n" },
-        after: { content: "new\n" },
-      }),
     });
     setLycaonClientForTest(client);
     registerOpenFilesSurfaceSink((req) => {
@@ -732,7 +747,7 @@ describe("WT06 checkout and revision open targets", () => {
         projectId={PROJECT_ID}
         sessionId="sess-1"
         rootRefs={ROOTS}
-        repos={loaded([{
+        repos={[{
           repo_id: REPO_ID,
           label: "repo",
           available: true,
@@ -745,7 +760,7 @@ describe("WT06 checkout and revision open targets", () => {
           staged_count: 1,
           unstaged_count: 0,
           changed_count: 1,
-        }])}
+        }]}
         activeRepoId={REPO_ID}
         status={loaded(gitWorkspaceStatus({
           available: true,
@@ -774,7 +789,7 @@ describe("WT06 checkout and revision open targets", () => {
         onPush={() => {}}
         onPull={() => {}}
         onCreateWorktree={async () => true}
-        onCheckout={async () => true}
+        onCheckout={async () => {}}
         onListBranches={async () => []}
         onLand={async () => ({ outcome: "fast_forwarded" })}
         onRemoveWorktree={async () => true}
