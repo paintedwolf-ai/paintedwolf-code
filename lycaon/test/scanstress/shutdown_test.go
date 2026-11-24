@@ -27,26 +27,12 @@ const envVictim = "SCANSTRESS_VICTIM"
 // envVictimHandler makes the victim install the sidecar's signal handler.
 const envVictimHandler = "SCANSTRESS_VICTIM_HANDLER"
 
-// envVictimReaper marks the victim's reaper companion.
-const envVictimReaper = "SCANSTRESS_VICTIM_REAPER"
-
-// TestShutdownVictimReaper plays the role the sidecar binary takes under
-// exec.ReaperCommand. It runs only as a victim's companion.
-func TestShutdownVictimReaper(t *testing.T) {
-	if os.Getenv(envVictimReaper) == "" {
-		t.Skip("reaper runs only as a shutdown victim's companion")
-	}
-	os.Exit(lycaonexec.RunReaper(os.Stdin))
-}
-
 // startVictimReaper starts the companion as the sidecar does before serving.
 func startVictimReaper(t *testing.T) {
 	t.Helper()
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate test binary", err)
-	// The companion inherits this environment and so takes the reaper role.
-	t.Setenv(envVictimReaper, "1")
-	testutil.FailErr(t, "start reaper", lycaonexec.StartReaper(self, "-test.run=^TestShutdownVictimReaper$", "-test.v=false"))
+	testutil.FailErr(t, "start reaper", lycaonexec.StartReaper(self, lycaonexec.ReaperCommand))
 }
 
 // TestShutdownVictimScan is the host under test in the shutdown cases. It runs

@@ -104,6 +104,18 @@ func applyLandlock(fs Filesystem, abi int) error {
 	if err != nil {
 		return err
 	}
+	// Keep the helper binary executable for startPerformer when a harness runs an external build.
+	if selfFD, err := unix.Open("/proc/self/exe", unix.O_PATH|unix.O_CLOEXEC, 0); err == nil {
+		beneath := unix.LandlockPathBeneathAttr{
+			Allowed_access: (unix.LANDLOCK_ACCESS_FS_EXECUTE | unix.LANDLOCK_ACCESS_FS_READ_FILE) & attr.Handled_access_fs,
+			Parent_fd:      int32(selfFD),
+		}
+		err = landlockAddPathRule(ruleset, &beneath)
+		_ = unix.Close(selfFD)
+		if err != nil && !errors.Is(err, unix.EBADFD) {
+			return fmt.Errorf("landlock rule /proc/self/exe: %w", err)
+		}
+	}
 	for _, rule := range rules {
 		fd, err := unix.Open(rule.path, unix.O_PATH|unix.O_CLOEXEC, 0)
 		if err != nil {

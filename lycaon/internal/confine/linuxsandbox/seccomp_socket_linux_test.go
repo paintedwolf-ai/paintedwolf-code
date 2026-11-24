@@ -105,7 +105,6 @@ func TestObservedOpenFilterDeliversZeroNotificationsPerFDRead(t *testing.T) {
 			os.Exit(4)
 		}
 		_ = unix.Close(listener)
-		_ = unix.Close(3)
 		const opens = 4
 		buf := make([]byte, 16)
 		for range opens {
@@ -125,6 +124,12 @@ func TestObservedOpenFilterDeliversZeroNotificationsPerFDRead(t *testing.T) {
 			}
 			_ = unix.Close(fd)
 		}
+		if _, err := unix.Write(3, []byte{2}); err != nil {
+			os.Exit(8)
+		}
+		var ack [1]byte
+		_, _ = unix.Read(3, ack[:])
+		_ = unix.Close(3)
 		os.Exit(0)
 	}
 
@@ -186,14 +191,22 @@ func TestObservedOpenFilterDeliversZeroNotificationsPerFDRead(t *testing.T) {
 		}
 	}()
 
+	var finish [1]byte
+	if n, err := unix.Read(pair[0], finish[:]); err != nil || n != 1 || finish[0] != 2 {
+		t.Fatalf("await child workload completion: n=%d byte=%d err=%v", n, finish[0], err)
+	}
+	gotOpen := openNotifs.Load()
+	gotOther := otherNotifs.Load()
+	_, _ = unix.Write(pair[0], []byte{3})
+
 	if err := cmd.Wait(); err != nil {
 		t.Fatalf("child failed: %v", err)
 	}
 	<-done
-	if got := openNotifs.Load(); got != 4 {
-		t.Fatalf("open notifications = %d, want 4 across 4 O_RDONLY opens, 4 O_PATH opens, and 1000 pread calls", got)
+	if gotOpen != 4 {
+		t.Fatalf("open notifications = %d, want 4 across 4 O_RDONLY opens, 4 O_PATH opens, and 1000 pread calls", gotOpen)
 	}
-	if got := otherNotifs.Load(); got != 0 {
-		t.Fatalf("unexpected non-open notifications = %d", got)
+	if gotOther != 0 {
+		t.Fatalf("unexpected non-open notifications = %d", gotOther)
 	}
 }

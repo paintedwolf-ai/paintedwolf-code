@@ -231,7 +231,7 @@ func assertEngineDeathReapsOwnedGroup(t *testing.T, role string) {
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate test binary", err)
 	engine := exec.Command(self, "-test.run=^TestReaperHelperProcess$", "-test.v=false")
-	engine.Env = append(os.Environ(), reaperRoleEnv+"="+role+":"+dir)
+	engine.Env = append(os.Environ(), "LYCAON_CONFIG_DIR="+filepath.Join(dir, "config"), reaperRoleEnv+"="+role+":"+dir)
 	engine.Stdout, engine.Stderr = io.Discard, io.Discard
 	testutil.FailErr(t, "start engine helper", engine.Start())
 	t.Cleanup(func() { _ = engine.Process.Kill(); _ = engine.Wait() })
@@ -240,22 +240,26 @@ func assertEngineDeathReapsOwnedGroup(t *testing.T, role string) {
 	descendant := waitForPIDFile(t, filepath.Join(dir, "descendant.pid"))
 	t.Cleanup(func() { _ = syscall.Kill(-leader, syscall.SIGKILL) })
 	waitForPIDFile(t, filepath.Join(dir, "tracked.pid"))
+	actionDirBytes, err := os.ReadFile(filepath.Join(dir, "action.dir"))
+	testutil.FailErr(t, "read tracked action dir", err)
+	actionDir := strings.TrimSpace(string(actionDirBytes))
 
 	testutil.FailErr(t, "SIGKILL engine helper", engine.Process.Kill())
 	_ = engine.Wait()
 	for _, pid := range []int{leader, descendant} {
 		waitForProcessGone(t, pid)
 	}
-	scratch := filepath.Join(dir, "scratch")
-	for {
-		_, err := os.Stat(scratch)
-		if errors.Is(err, os.ErrNotExist) {
-			break
+	for _, tracked := range []string{filepath.Join(dir, "scratch"), actionDir} {
+		for {
+			_, err := os.Stat(tracked)
+			if errors.Is(err, os.ErrNotExist) {
+				break
+			}
+			if t.Context().Err() != nil {
+				t.Fatalf("tracked directory %q outlived a SIGKILLed engine: stat err=%v", tracked, err)
+			}
+			time.Sleep(20 * time.Millisecond)
 		}
-		if t.Context().Err() != nil {
-			t.Fatalf("tracked directory outlived a SIGKILLed engine: stat err=%v", err)
-		}
-		time.Sleep(20 * time.Millisecond)
 	}
 }
 
@@ -299,6 +303,14 @@ func TestReaperHelperProcess(t *testing.T) {
 		os.Exit(1)
 	}
 	TrackScratchDir(scratch)
+	work, err := confine.NewActionWorkspace()
+	if err != nil {
+		os.Exit(1)
+	}
+	TrackScratchDir(work.Path())
+	if err := os.WriteFile(filepath.Join(dir, "action.dir"), []byte(work.Path()), 0o600); err != nil {
+		os.Exit(1)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "tracked.pid"), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
 		os.Exit(1)
 	}
