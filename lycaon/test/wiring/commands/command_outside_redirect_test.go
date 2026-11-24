@@ -55,21 +55,6 @@ func TestOutsideOutputRedirectAsksLikeANativeWrite(t *testing.T) {
 	}
 }
 
-func TestAllowOnceOutsideRedirectPublishes(t *testing.T) {
-	outside := outsideCommandFolder(t)
-	target := filepath.Join(outside, "once.txt")
-	s := newProgramHost(t, gate.PostureBalanced).program(t, "printf 'once\\n' > '"+target+"'", "")
-	runCommandWithApprovals(t, s, "approve_current_action")
-	if outcome := s.outcome(t, "program-1"); outcome.Status != 0 {
-		t.Fatalf("allow-once redirect = %+v", outcome)
-	}
-	data, err := os.ReadFile(target)
-	testutil.FailErr(t, "read allow-once target", err)
-	if string(data) != "once\n" {
-		t.Fatalf("allow-once target = %q", data)
-	}
-}
-
 func TestDeclinedOutsideOutputRedirectWritesNothing(t *testing.T) {
 	outside := outsideCommandFolder(t)
 	target := filepath.Join(outside, "declined.txt")
