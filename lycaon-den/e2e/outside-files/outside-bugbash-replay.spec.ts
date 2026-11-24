@@ -1,5 +1,5 @@
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import path from "node:path";
 import { expect, type APIRequestContext } from "@playwright/test";
 import type { CheckpointListResponse, SessionTranscriptPage, SourceWalkResponse, ToolResult } from "../../src/api/types.ts";
@@ -54,7 +54,7 @@ webE2e("home and shared temp redirects reach Files and Review", async ({ page, r
     ? e2eTempDir(request, "bugbash-home")
     : mkdtempSync(path.join(process.env.PW_TEST_HOST_HOME ?? homedir(), "pw-e2e-outside-")));
   const home = path.join(folder, "a.txt");
-  const shared = path.join(realpathSync(tmpdir()), `pw-e2e-${path.basename(folder)}.txt`);
+  const shared = path.join(realpathSync("/tmp"), `pw-e2e-${path.basename(folder)}.txt`);
   try {
     const { project, sessionId, driver } = await manualSession(page, request, "Bug bash redirects", "Create a test file in my home dir, then one in /tmp.");
     try {
