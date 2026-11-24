@@ -112,6 +112,26 @@ func classifyGenerationError(sectionID string, genErr, callerErr error) *Section
 		cause = fallbackErr.Selected
 	}
 
+	var evidenceWait *llm.ModelEvidenceWaitError
+	if errors.As(cause, &evidenceWait) && evidenceWait.Stage == secretmatch.FaultStageManagedSecretStore {
+		if errors.Is(evidenceWait.Err, context.DeadlineExceeded) || errors.Is(callerErr, context.DeadlineExceeded) {
+			return &SectionFailureError{
+				SectionID: sectionID,
+				Stage:     StageEvidenceReconciliation,
+				Kind:      FailureDeadlineExceeded,
+				Summary:   "credential evidence check timed out",
+				Cause:     genErr,
+			}
+		}
+		return &SectionFailureError{
+			SectionID: sectionID,
+			Stage:     StageEvidenceReconciliation,
+			Kind:      FailureCanceled,
+			Summary:   "credential evidence check canceled",
+			Cause:     genErr,
+		}
+	}
+
 	var screenFault *llm.ModelRequestSecretScreenFaultError
 	if errors.As(cause, &screenFault) {
 		if screenFault.Stage == secretmatch.FaultStageManagedSecretStore {

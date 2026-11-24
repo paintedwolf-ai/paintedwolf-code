@@ -67,11 +67,19 @@ func TestClassifySectionFailuresSeparatesGeneratorAndParserStages(t *testing.T) 
 		},
 		{
 			name:      "evidence deadline",
-			err:       &llm.ModelRequestSecretScreenFaultError{Stage: secretmatch.FaultStageManagedSecretStore, Err: context.DeadlineExceeded},
+			err:       &llm.ModelEvidenceWaitError{Stage: secretmatch.FaultStageManagedSecretStore, Err: context.DeadlineExceeded},
 			callerErr: context.DeadlineExceeded,
 			wantStage: StageEvidenceReconciliation,
 			wantKind:  FailureDeadlineExceeded,
 			wantSub:   "credential evidence check timed out",
+		},
+		{
+			name:      "evidence canceled",
+			err:       &llm.ModelEvidenceWaitError{Stage: secretmatch.FaultStageManagedSecretStore, Err: context.Canceled},
+			callerErr: context.Canceled,
+			wantStage: StageEvidenceReconciliation,
+			wantKind:  FailureCanceled,
+			wantSub:   "credential evidence check canceled",
 		},
 		{
 			name:      "provider failure hides raw body and path",

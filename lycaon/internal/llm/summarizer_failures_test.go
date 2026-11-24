@@ -182,18 +182,33 @@ func TestEvidenceDeadlineRetainsPhaseAndCancellationIdentity(t *testing.T) {
 			} else {
 				_, err = r.SummarizeRequired(ctx, "sys", "usr", 80)
 			}
-			var fault *ModelRequestSecretScreenFaultError
-			if !errors.As(err, &fault) || fault.Stage != secretmatch.FaultStageManagedSecretStore {
-				t.Fatalf("lost evidence fault phase: %v", err)
+			var waitErr *ModelEvidenceWaitError
+			if !errors.As(err, &waitErr) || waitErr.Stage != secretmatch.FaultStageManagedSecretStore {
+				t.Fatalf("lost evidence reconciliation phase: %v", err)
 			}
-			if !errors.Is(err, context.DeadlineExceeded) {
-				t.Fatalf("lost deadline identity: %v", err)
+			if SecretScreenBlocked(err) {
+				t.Fatalf("caller cancellation misclassified as screen fault: %v", err)
+			}
+			if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, context.Canceled) {
+				t.Fatalf("lost deadline or cancellation identity: %v", err)
 			}
 			if inner.completeCalls.Load() != 0 || inner.streamCalls.Load() != 0 || coord.completeCalls.Load() != 0 {
 				t.Fatalf("dispatched after evidence deadline: innerComplete=%d innerStream=%d coord=%d",
 					inner.completeCalls.Load(), inner.streamCalls.Load(), coord.completeCalls.Load())
 			}
 		})
+	}
+
+	prepCtx, prepCancel := context.WithCancel(t.Context())
+	prepScreen := NewModelSecretScreen(&secretmatch.Matcher{}, nil)
+	prepScreen.SetManagedSecretEvidence(func(context.Context, string, string) ([]secretmatch.Remembered, error) {
+		prepCancel()
+		return nil, context.DeadlineExceeded
+	})
+	_, prepErr := prepScreen.ScreenPreparation(prepCtx, modelcall.CompletionRequest{Debug: modelcall.RequestDebug{ProjectID: "proj-1"}})
+	var prepWait *ModelEvidenceWaitError
+	if !errors.As(prepErr, &prepWait) || prepWait.Stage != secretmatch.FaultStageManagedSecretStore || !errors.Is(prepErr, context.DeadlineExceeded) || !errors.Is(prepErr, context.Canceled) {
+		t.Fatalf("ScreenPreparation lost phase or cancellation identity: %v", prepErr)
 	}
 }
 

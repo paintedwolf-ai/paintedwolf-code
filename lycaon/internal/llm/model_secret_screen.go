@@ -23,6 +23,27 @@ var ErrModelRequestSecretWithheld = errors.New("model request not sent: user dec
 // ErrModelRequestSecretScreenFailed means the approval could not be presented.
 var ErrModelRequestSecretScreenFailed = errors.New("model request not sent: credential screen could not ask")
 
+// ModelEvidenceWaitError records caller cancellation or deadline expiry during
+// secret-evidence reconciliation without reporting a screen fault.
+type ModelEvidenceWaitError struct {
+	Stage string
+	Err   error
+}
+
+func (e *ModelEvidenceWaitError) Error() string {
+	if e == nil || e.Err == nil {
+		return ""
+	}
+	return e.Err.Error()
+}
+
+func (e *ModelEvidenceWaitError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
 // ModelRequestSecretScreenFaultError names the host step that failed.
 type ModelRequestSecretScreenFaultError struct {
 	Stage string
@@ -178,7 +199,10 @@ func (s *ModelSecretScreen) ScreenWithBasis(
 		if err != nil {
 			// A caller that stops waiting cancels the request, not the screen.
 			if ctxErr := ctx.Err(); ctxErr != nil {
-				return modelcall.CompletionRequest{}, screenBasis{}, ctxErr
+				return modelcall.CompletionRequest{}, screenBasis{}, &ModelEvidenceWaitError{
+					Stage: secretmatch.FaultStageManagedSecretStore,
+					Err:   preserveCallerContextError(err, ctxErr),
+				}
 			}
 			return modelcall.CompletionRequest{}, screenBasis{}, &ModelRequestSecretScreenFaultError{
 				Stage: secretmatch.FaultStageManagedSecretStore,
