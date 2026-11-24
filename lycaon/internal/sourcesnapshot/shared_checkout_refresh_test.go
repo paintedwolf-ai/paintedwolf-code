@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -150,6 +151,7 @@ func TestMilestoneConcurrentRescope(t *testing.T) {
 }
 
 func TestDuplicateDemandDuringRepairIncompleteWatcherAndVerifyContent(t *testing.T) {
+	repochangetest.Acquire(t)
 	store := openSnapshotStore(t)
 	var eventsMu sync.Mutex
 	var events []SurveyEvent
@@ -161,6 +163,7 @@ func TestDuplicateDemandDuringRepairIncompleteWatcherAndVerifyContent(t *testing
 	defer stopObserve()
 
 	unwatched := t.TempDir()
+	t.Cleanup(func() { repochange.CloseRoot(unwatched) })
 	writeSource(t, unwatched, "alpha.go", "package alpha\n")
 
 	before := store.Metrics()

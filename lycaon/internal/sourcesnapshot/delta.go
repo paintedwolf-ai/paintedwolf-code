@@ -339,12 +339,39 @@ func deltaRel(root, raw string) (string, bool) {
 	}
 	rel = filepath.ToSlash(rel)
 	if rel == ".." || strings.HasPrefix(rel, "../") {
-		return "", false
+		cRoot, cAbs := canonicalExistingPrefix(root), canonicalExistingPrefix(abs)
+		rel, err = filepath.Rel(cRoot, cAbs)
+		if err != nil {
+			return "", false
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == ".." || strings.HasPrefix(rel, "../") {
+			return "", false
+		}
 	}
 	if rel == "" {
 		rel = "."
 	}
 	return rel, true
+}
+
+func canonicalExistingPrefix(p string) string {
+	cur := filepath.Clean(p)
+	var suffix []string
+	for {
+		if resolved, err := filepath.EvalSymlinks(cur); err == nil {
+			for i := len(suffix) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, suffix[i])
+			}
+			return resolved
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return filepath.Clean(p)
+		}
+		suffix = append(suffix, filepath.Base(cur))
+		cur = parent
+	}
 }
 
 func ignoreFileDomain(rel string) (string, bool) {
