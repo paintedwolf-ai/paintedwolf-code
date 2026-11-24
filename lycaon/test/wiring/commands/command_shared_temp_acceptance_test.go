@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/events"
@@ -64,11 +63,10 @@ func makeSharedTempDir(t *testing.T, prefix string) string {
 	return fspath.CanonicalPath(dir)
 }
 
-func sessionScratchMarker(t *testing.T, sessionID string) string {
+func sessionScratchMarker(t *testing.T, s *replaySession) string {
 	t.Helper()
-	root, err := configdir.Root()
-	testutil.FailErr(t, "config root", err)
-	return filepath.Join(enginepaths.SessionScratchUnder(root, sessionID), "effect.marker")
+	stateRoot := fspath.CanonicalPath(s.h.Sessions.Manager.Workspace.DataDir)
+	return filepath.Join(enginepaths.SessionScratchUnder(stateRoot, s.session), "effect.marker")
 }
 
 func buildInternalTempProbe(t *testing.T) string {
@@ -286,7 +284,7 @@ func TestSharedTempOneDecisionDeclaredExchangeAndDirectionalReuse(t *testing.T) 
 		filepath.Join(s.dir, "probe.cfg"),
 		[]byte("exchange\n"+inFile+"\n"+outFile+"\n"), 0o600,
 	))
-	markerPath := sessionScratchMarker(t, s.session)
+	markerPath := sessionScratchMarker(t, s)
 	declArgs := map[string]any{
 		"command": "external -- '" + probeBin + "'",
 		"capability_request": map[string]any{
@@ -504,7 +502,7 @@ func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) 
 
 	// Automatic foreground trigger: no argv path, no capability_request; side effect recorded once, no auto-replay.
 	testutil.FailErr(t, "write auto read cfg", os.WriteFile(filepath.Join(s.dir, "probe.cfg"), []byte("read\n"+internalInput+"\n"), 0o600))
-	markerPath := sessionScratchMarker(t, s.session)
+	markerPath := sessionScratchMarker(t, s)
 	_ = os.Remove(markerPath)
 	fgCards := runTurnDeciding(t, s, "auto-fg-1", "command", map[string]any{
 		"command": "external -- '" + probeBin + "'",
