@@ -57,12 +57,12 @@ type Service struct {
 	Rewinds    *checkpointcontrol.Rewinds
 	Drafts     *draftqueue.Service
 
-	sessionStore Sessions
-	policy       Policy
-	prompt       *promptstate.MutexRegistry
-	queue        *queue.Store
-	resources    *resourcelifecycle.Registry
-	workers      Workers
+	sessionStore  Sessions
+	policy        Policy
+	prompt        *promptstate.MutexRegistry
+	queue         *queue.Store
+	resources     *resourcelifecycle.Registry
+	workers       Workers
 	scratch       *scratch.Folders
 	events        *events.Publisher
 	processes     *bgprocess.Registry

@@ -329,13 +329,28 @@ func insertStandingWatchTx(
 		return "", err
 	}
 	watchID := uuid.NewString()
-	condBytes, _ := json.Marshal(in.Conditions)
-	authBytes, _ := json.Marshal(in.Authority)
-	cursorBytes, _ := json.Marshal(cursors)
-	targetBytes, _ := json.Marshal(in.Target)
+	condBytes, err := json.Marshal(in.Conditions)
+	if err != nil {
+		return "", err
+	}
+	authBytes, err := json.Marshal(in.Authority)
+	if err != nil {
+		return "", err
+	}
+	cursorBytes, err := json.Marshal(cursors)
+	if err != nil {
+		return "", err
+	}
+	targetBytes, err := json.Marshal(in.Target)
+	if err != nil {
+		return "", err
+	}
 	var gateStr, keptSess, keptHandle string
 	if in.Gate != nil {
-		gb, _ := json.Marshal(in.Gate)
+		gb, gErr := json.Marshal(in.Gate)
+		if gErr != nil {
+			return "", gErr
+		}
 		gateStr = string(gb)
 	}
 	if keptFrom != nil {
@@ -399,12 +414,24 @@ func applyReplacesKeepTx(
 		return 0, err
 	}
 
-	condBytes, _ := json.Marshal(in.Conditions)
-	cursorBytes, _ := json.Marshal(cursors)
-	targetBytes, _ := json.Marshal(in.Target)
+	condBytes, err := json.Marshal(in.Conditions)
+	if err != nil {
+		return 0, err
+	}
+	cursorBytes, err := json.Marshal(cursors)
+	if err != nil {
+		return 0, err
+	}
+	targetBytes, err := json.Marshal(in.Target)
+	if err != nil {
+		return 0, err
+	}
 	var gateStr string
 	if in.Gate != nil {
-		gb, _ := json.Marshal(in.Gate)
+		gb, gErr := json.Marshal(in.Gate)
+		if gErr != nil {
+			return 0, gErr
+		}
 		gateStr = string(gb)
 	}
 	nowStr := now.UTC().Format(time.RFC3339Nano)

@@ -37,7 +37,7 @@ func (r *ProgramRuntime) handoffBackgroundJobs(ctx context.Context, e *programEv
 		return
 	}
 	jobs := r.Supervisor.Jobs(e.callTC.Identity.SessionID, e.callTC.Identity.ProjectID)
-	unjoined := jobs.UnjoinedFromCall(e.ctx)
+	unjoined := jobs.UnjoinedFromCall(e.ctx) //nolint:contextcheck // Identifies the evaluated call's bare-wait set.
 	if len(unjoined) == 0 || r.DerivedWatches == nil {
 		return
 	}

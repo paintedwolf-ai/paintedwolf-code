@@ -388,6 +388,7 @@ func compactBufferedMatchesTx(ctx context.Context, tx *sql.Tx, reg Registration,
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	type pendingRow struct {
 		id      string
 		seq     int
@@ -397,15 +398,14 @@ func compactBufferedMatchesTx(ctx context.Context, tx *sql.Tx, reg Registration,
 	for rows.Next() {
 		var r pendingRow
 		if err := rows.Scan(&r.id, &r.seq, &r.outcome); err != nil {
-			_ = rows.Close()
 			return err
 		}
 		pending = append(pending, r)
 	}
-	_ = rows.Close()
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	_ = rows.Close()
 	if len(pending) <= MaxBufferedMatches {
 		return nil
 	}

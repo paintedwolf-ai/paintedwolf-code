@@ -33,6 +33,13 @@ func (s *Store) SetEventOutbox(outbox *eventoutbox.Outbox) {
 	s.standing.cb.EventCommitNotify = outbox.Notify
 }
 
+func nonNegativeUint64(n int) uint64 {
+	if n <= 0 {
+		return 0
+	}
+	return uint64(n)
+}
+
 func enqueueWatchOutboxTx(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -52,7 +59,7 @@ func enqueueWatchOutboxTx(
 			Project:        projectID,
 			Session:        strings.TrimSpace(ev.SessionID),
 			Facet:          ev.WatchID,
-			EntityRevision: uint64(ev.Revision),
+			EntityRevision: nonNegativeUint64(ev.Revision),
 		}
 		_ = outbox.EnqueueTx(ctx, tx, wire.EventTopicWatchUpdated, key, ev)
 	case string(wire.EventTopicWatchRunUpdated):
@@ -75,7 +82,7 @@ func enqueueWatchOutboxTx(
 			Project:        wr.ProjectID,
 			Session:        strings.TrimSpace(wr.SessionID),
 			Facet:          wr.RunID,
-			EntityRevision: uint64(revision),
+			EntityRevision: nonNegativeUint64(revision),
 		}
 		_ = outbox.EnqueueTx(ctx, tx, wire.EventTopicWatchRunUpdated, key, ev)
 	}
@@ -537,7 +544,7 @@ func BuildWatchEventTx(ctx context.Context, s *Store, tx *sql.Tx, projectID, ses
 		}
 	}
 	if err == nil && reg != nil {
-		aw := AgentWatchToWireTx(tx, *reg)
+		aw := AgentWatchToWireTx(ctx, tx, *reg)
 		pw := wire.ProjectWatch{
 			WatchID:    reg.WatchID,
 			OwnerKind:  string(reg.Owner.Kind),
@@ -573,7 +580,7 @@ func BuildWatchEventTx(ctx context.Context, s *Store, tx *sql.Tx, projectID, ses
 }
 
 // AgentWatchToWireTx projects an agent watch inside tx so uncommitted final receipts are included.
-func AgentWatchToWireTx(tx *sql.Tx, reg Registration) wire.AgentWatch {
+func AgentWatchToWireTx(ctx context.Context, tx *sql.Tx, reg Registration) wire.AgentWatch {
 	conds := make([]wire.WatchCondition, len(reg.Conditions))
 	for i, c := range reg.Conditions {
 		conds[i] = ConditionToWire(c)
@@ -592,7 +599,7 @@ func AgentWatchToWireTx(tx *sql.Tx, reg Registration) wire.AgentWatch {
 	}
 	var finalRec *wire.AgentWatchReceipt
 	if tx != nil {
-		if cRec, mRec, recAt, err := LoadFinalReceipt(context.Background(), tx, reg.WatchID); err == nil {
+		if cRec, mRec, recAt, err := LoadFinalReceipt(ctx, tx, reg.WatchID); err == nil {
 			finalRec = ReceiptToWire(reg, cRec, mRec, recAt)
 		}
 	}
@@ -601,26 +608,26 @@ func AgentWatchToWireTx(tx *sql.Tx, reg Registration) wire.AgentWatch {
 		rev = 1
 	}
 	return wire.AgentWatch{
-		WatchID:         reg.WatchID,
-		Handle:          reg.Handle,
-		OwnerKind:       string(reg.Owner.Kind),
-		ProjectID:       reg.Owner.ProjectID,
-		SessionID:       reg.Owner.SessionID,
-		WorkerID:        reg.Owner.WorkerJobID,
-		SourceProcessID: reg.DerivedCommandHandle,
-		Conditions:      conds,
+		WatchID:          reg.WatchID,
+		Handle:           reg.Handle,
+		OwnerKind:        string(reg.Owner.Kind),
+		ProjectID:        reg.Owner.ProjectID,
+		SessionID:        reg.Owner.SessionID,
+		WorkerID:         reg.Owner.WorkerJobID,
+		SourceProcessID:  reg.DerivedCommandHandle,
+		Conditions:       conds,
 		ConditionSummary: SummarizeConditions(reg.Conditions, tz),
-		Delivery:        string(reg.Lifecycle.Delivery),
-		Repeat:          reg.Lifecycle.Repeat,
-		Derived:         reg.DerivedCommandHandle != "",
-		Keepable:        IsAgentWatchKeepable(reg),
-		State:           string(reg.Lifecycle.State),
-		TerminalOutcome: string(reg.Lifecycle.Outcome),
-		StandingDraft:   draft,
-		FinalReceipt:    finalRec,
-		Revision:        rev,
-		ExpiresAt:       reg.Lifecycle.ExpiresAt.UTC(),
-		CreatedAt:       reg.CreatedAt.UTC(),
-		UpdatedAt:       reg.UpdatedAt.UTC(),
+		Delivery:         string(reg.Lifecycle.Delivery),
+		Repeat:           reg.Lifecycle.Repeat,
+		Derived:          reg.DerivedCommandHandle != "",
+		Keepable:         IsAgentWatchKeepable(reg),
+		State:            string(reg.Lifecycle.State),
+		TerminalOutcome:  string(reg.Lifecycle.Outcome),
+		StandingDraft:    draft,
+		FinalReceipt:     finalRec,
+		Revision:         rev,
+		ExpiresAt:        reg.Lifecycle.ExpiresAt.UTC(),
+		CreatedAt:        reg.CreatedAt.UTC(),
+		UpdatedAt:        reg.UpdatedAt.UTC(),
 	}
 }

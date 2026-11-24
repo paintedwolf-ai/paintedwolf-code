@@ -2444,6 +2444,44 @@
       "command_forms": []
     },
     {
+      "tool": "watch",
+      "owner": "watches",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "db_transaction",
+      "reuse": "Native watch registration over durable session, job, source, readiness, and timer conditions; returns a watch_match wait condition and standing-watch draft metadata.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/watch.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
+      "selected_disposition": "Retain domain capability",
+      "behavior_change_or_retention": "Asynchronous host observation over owned jobs, workers, readiness probes, source paths, Git refs, and timers; unjoined Bash background jobs also emit derived one-shot watch handoffs.",
+      "existing_semantic_difference": "Host-owned durable watch state, delivery modes, and standing drafts",
+      "implementing_issues": [
+        "SW04"
+      ],
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": []
+    },
+    {
+      "tool": "watch_control",
+      "owner": "watches",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "db_transaction",
+      "reuse": "Resource-implied control over live or pending owned watches for non-consuming inspect, delivery mode updates, and idempotent cancellation.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/watch_control.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a resource-implied structured control tool; the name keeps its meaning in receipts and history.",
+      "selected_disposition": "Retain domain capability",
+      "behavior_change_or_retention": "Implied by live or pending session/job watches on management-permitted surfaces.",
+      "existing_semantic_difference": "Host-owned watch handle lifecycle and final receipts",
+      "implementing_issues": [
+        "SW04"
+      ],
+      "existing_rejection_code": "USE_NATIVE_TOOL",
+      "command_forms": []
+    },
+    {
       "tool": "wc",
       "owner": "filesystem",
       "disposition": "replace-routine-schema",

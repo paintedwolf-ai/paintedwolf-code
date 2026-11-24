@@ -34,7 +34,7 @@ func TestSW07ProcessOutputCursorCatchupBurstCoalescingHostTrailerAndTruncation(t
 	store.SetProcessOutputLookup(func(ctx context.Context, sessionID, handle string, since int64) (bgprocess.ProcessOutputState, error) {
 		return reg.Output.InspectProcessOutput(ctx, sessionID, handle, since)
 	})
-	reg.Output.SetWatchOutputHook(func(ctx context.Context, sessionID, handle string) {
+	reg.Output.SetWatchOutputHook(t.Context(), func(ctx context.Context, sessionID, handle string) {
 		_ = store.NotifyProcessOutput(ctx, sessionID, handle)
 	})
 
@@ -140,14 +140,12 @@ func TestSW07ProcessOutputCursorCatchupBurstCoalescingHostTrailerAndTruncation(t
 	})
 }
 
-func TestSW07FileChangeOwnExclusionActorsSymlinkBudgetAndGitRef(t *testing.T) {
+func TestSW07FileChangeOwnExclusionActorsAndSymlinkBudget(t *testing.T) {
 	store, clock, database, owner := openTestWatchStore(t)
 
 	trunkDir := t.TempDir()
-	initTestGitRepo(t, trunkDir)
 	testutil.FailErr(t, "write initial file", os.WriteFile(filepath.Join(trunkDir, "app.ts"), []byte("v1\n"), 0o644))
 
-	// Seed project root & ledger for causal effect attribution.
 	rootID := testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-main", trunkDir)
 	ownerPersonID := testdbseed.OwnerID(t, database)
 	ledger := sourceledger.New(database, t.TempDir(), sourceledger.Timing{})
@@ -167,7 +165,6 @@ func TestSW07FileChangeOwnExclusionActorsSymlinkBudgetAndGitRef(t *testing.T) {
 		Roots:      []WatchRootGrant{{Label: "workspace", RootID: rootID, Path: trunkDir}},
 	}
 
-	// Symlink pointing outside root is refused at registration.
 	outsideFile := filepath.Join(t.TempDir(), "secret.txt")
 	_ = os.WriteFile(outsideFile, []byte("secret"), 0o644)
 	_ = os.Symlink(outsideFile, filepath.Join(trunkDir, "escape-link"))
@@ -179,7 +176,6 @@ func TestSW07FileChangeOwnExclusionActorsSymlinkBudgetAndGitRef(t *testing.T) {
 		t.Fatal("expected symlink escape selector to be rejected")
 	}
 
-	// Register default file_change watch (include_own=false) and include_own=true watch.
 	wDefault, err := store.Register(t.Context(), RegisterRequest{
 		Owner:      owner,
 		Authority:  trunkAuth,
@@ -195,7 +191,6 @@ func TestSW07FileChangeOwnExclusionActorsSymlinkBudgetAndGitRef(t *testing.T) {
 	})
 	testutil.FailErr(t, "register include_own file watch", err)
 
-	// 1. Own agent write-door edit: skipped on wDefault, matched on wIncludeOwn with actor_class="you".
 	testutil.FailErr(t, "write v2", os.WriteFile(filepath.Join(trunkDir, "app.ts"), []byte("v2\n"), 0o644))
 	effOwn := recordAndFetchLatestEffectID(t, database, ledger, sourceledger.RecordInput{
 		ProjectID:      testdbseed.DefaultProjectID,
@@ -219,52 +214,8 @@ func TestSW07FileChangeOwnExclusionActorsSymlinkBudgetAndGitRef(t *testing.T) {
 		t.Fatalf("include_own watch missed own edit or attribution: %+v", vOwn)
 	}
 
-	// 2. Program drift, merged overlay, human edit, and unattributed write all match wDefault.
-	testutil.FailErr(t, "write bundler v3", os.WriteFile(filepath.Join(trunkDir, "app.ts"), []byte("v3-bundled\n"), 0o644))
-	effBundler := recordAndFetchLatestEffectID(t, database, ledger, sourceledger.RecordInput{
-		ProjectID:      testdbseed.DefaultProjectID,
-		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "app.ts"},
-		Op:             api.SourceChangeOpWrite,
-		Origin:         api.SourceChangeOriginExternal,
-		SessionID:      owner.SessionID,
-		Cause:          sourceledger.CauseCommandWindow,
-		CaptureQuality: "observed",
-		Before:         []byte("v2\n"),
-		After:          []byte("v3-bundled\n"),
-	})
-	testutil.FailErr(t, "reconcile bundler edit", store.NotifyWorkspaceChange(t.Context(), testdbseed.DefaultProjectID, trunkDir))
+	effBundler, effHuman, effOverlay := recordNonOwnLedgerEdits(t, store, database, ledger, trunkDir, rootID, owner.SessionID, ownerPersonID)
 
-	testutil.FailErr(t, "write human v4", os.WriteFile(filepath.Join(trunkDir, "app.ts"), []byte("v4-human\n"), 0o644))
-	effHuman := recordAndFetchLatestEffectID(t, database, ledger, sourceledger.RecordInput{
-		ProjectID:      testdbseed.DefaultProjectID,
-		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "app.ts"},
-		Op:             api.SourceChangeOpWrite,
-		Origin:         api.SourceChangeOriginUser,
-		PersonID:       ownerPersonID,
-		Cause:          "user_save",
-		CaptureQuality: "exact",
-		Before:         []byte("v3-bundled\n"),
-		After:          []byte("v4-human\n"),
-	})
-	testutil.FailErr(t, "reconcile human edit", store.NotifyWorkspaceChange(t.Context(), testdbseed.DefaultProjectID, trunkDir))
-
-	testutil.FailErr(t, "write overlay v5", os.WriteFile(filepath.Join(trunkDir, "app.ts"), []byte("v5-overlay\n"), 0o644))
-	effOverlay := recordAndFetchLatestEffectID(t, database, ledger, sourceledger.RecordInput{
-		ProjectID:      testdbseed.DefaultProjectID,
-		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "app.ts"},
-		Op:             api.SourceChangeOpWrite,
-		Origin:         api.SourceChangeOriginAgent,
-		SessionID:      owner.SessionID,
-		JobID:          "worker-job-9",
-		Turn:           2,
-		Cause:          sourceledger.CauseOverlayPromote,
-		CaptureQuality: "exact",
-		Before:         []byte("v4-human\n"),
-		After:          []byte("v5-overlay\n"),
-	})
-	testutil.FailErr(t, "reconcile overlay promote", store.NotifyWorkspaceChange(t.Context(), testdbseed.DefaultProjectID, trunkDir))
-
-	// Unattributed external write + rename via sampler reconciliation:
 	testutil.FailErr(t, "write raw unattributed", os.WriteFile(filepath.Join(trunkDir, "raw.ts"), []byte("raw-content\n"), 0o644))
 	clock.Advance(SamplerMinInterval)
 	testutil.FailErr(t, "advance sampler for raw create", store.AdvanceDue(t.Context()))
@@ -293,8 +244,73 @@ func TestSW07FileChangeOwnExclusionActorsSymlinkBudgetAndGitRef(t *testing.T) {
 			t.Fatalf("missing %q in collected file_change evidence:\n%s", want, joinedEv)
 		}
 	}
+}
 
-	// 3. Initial git_ref baseline stays silent; loose, packed-refs, worktree, and delete transitions match.
+func recordNonOwnLedgerEdits(
+	t *testing.T,
+	store *Store,
+	database db.Handle,
+	ledger *sourceledger.Store,
+	trunkDir, rootID, sessionID, ownerPersonID string,
+) (effBundler, effHuman, effOverlay string) {
+	t.Helper()
+	testutil.FailErr(t, "write bundler v3", os.WriteFile(filepath.Join(trunkDir, "app.ts"), []byte("v3-bundled\n"), 0o644))
+	effBundler = recordAndFetchLatestEffectID(t, database, ledger, sourceledger.RecordInput{
+		ProjectID:      testdbseed.DefaultProjectID,
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "app.ts"},
+		Op:             api.SourceChangeOpWrite,
+		Origin:         api.SourceChangeOriginExternal,
+		SessionID:      sessionID,
+		Cause:          sourceledger.CauseCommandWindow,
+		CaptureQuality: "observed",
+		Before:         []byte("v2\n"),
+		After:          []byte("v3-bundled\n"),
+	})
+	testutil.FailErr(t, "reconcile bundler edit", store.NotifyWorkspaceChange(t.Context(), testdbseed.DefaultProjectID, trunkDir))
+
+	testutil.FailErr(t, "write human v4", os.WriteFile(filepath.Join(trunkDir, "app.ts"), []byte("v4-human\n"), 0o644))
+	effHuman = recordAndFetchLatestEffectID(t, database, ledger, sourceledger.RecordInput{
+		ProjectID:      testdbseed.DefaultProjectID,
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "app.ts"},
+		Op:             api.SourceChangeOpWrite,
+		Origin:         api.SourceChangeOriginUser,
+		PersonID:       ownerPersonID,
+		Cause:          "user_save",
+		CaptureQuality: "exact",
+		Before:         []byte("v3-bundled\n"),
+		After:          []byte("v4-human\n"),
+	})
+	testutil.FailErr(t, "reconcile human edit", store.NotifyWorkspaceChange(t.Context(), testdbseed.DefaultProjectID, trunkDir))
+
+	testutil.FailErr(t, "write overlay v5", os.WriteFile(filepath.Join(trunkDir, "app.ts"), []byte("v5-overlay\n"), 0o644))
+	effOverlay = recordAndFetchLatestEffectID(t, database, ledger, sourceledger.RecordInput{
+		ProjectID:      testdbseed.DefaultProjectID,
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "app.ts"},
+		Op:             api.SourceChangeOpWrite,
+		Origin:         api.SourceChangeOriginAgent,
+		SessionID:      sessionID,
+		JobID:          "worker-job-9",
+		Turn:           2,
+		Cause:          sourceledger.CauseOverlayPromote,
+		CaptureQuality: "exact",
+		Before:         []byte("v4-human\n"),
+		After:          []byte("v5-overlay\n"),
+	})
+	testutil.FailErr(t, "reconcile overlay promote", store.NotifyWorkspaceChange(t.Context(), testdbseed.DefaultProjectID, trunkDir))
+	return effBundler, effHuman, effOverlay
+}
+
+func TestSW07GitRefLoosePackedWorktreeAndDeletion(t *testing.T) {
+	store, clock, database, owner := openTestWatchStore(t)
+
+	trunkDir := t.TempDir()
+	initTestGitRepo(t, trunkDir)
+	rootID := testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-git", trunkDir)
+	trunkAuth := Authority{
+		ProjectDir: trunkDir,
+		Roots:      []WatchRootGrant{{Label: "workspace", RootID: rootID, Path: trunkDir}},
+	}
+
 	wGit, err := store.Register(t.Context(), RegisterRequest{
 		Owner:     owner,
 		Authority: trunkAuth,
@@ -309,14 +325,12 @@ func TestSW07FileChangeOwnExclusionActorsSymlinkBudgetAndGitRef(t *testing.T) {
 		t.Fatalf("initial git_ref baseline must not match: %+v", wGit)
 	}
 
-	// Packed-refs update + loose ref removal:
 	oid2 := "2222222222222222222222222222222222222222"
 	_ = os.Remove(filepath.Join(trunkDir, ".git", "refs", "heads", "main"))
 	testutil.FailErr(t, "write packed-refs", os.WriteFile(filepath.Join(trunkDir, ".git", "packed-refs"), []byte("# pack-refs with: peeled fully-peeled sorted\n"+oid2+" refs/heads/main\n"), 0o644))
 	clock.Advance(SamplerMinInterval)
 	testutil.FailErr(t, "advance sampler for packed-refs", store.AdvanceDue(t.Context()))
 
-	// Worktree-local ref creation + packed-refs deletion:
 	testutil.FailErr(t, "mkdir refs/worktree", os.MkdirAll(filepath.Join(trunkDir, ".git", "refs", "worktree"), 0o755))
 	oidWT := "3333333333333333333333333333333333333333"
 	testutil.FailErr(t, "write worktree ref", os.WriteFile(filepath.Join(trunkDir, ".git", "refs", "worktree", "bisect-mark"), []byte(oidWT+"\n"), 0o644))

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createSignal } from "solid-js";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_APP_STATE_V1 } from "../../../shared/app-state-types.ts";
@@ -7,6 +8,7 @@ import type {
   ActionDescriptor,
   AgentWatch,
   StandingWatch,
+  WatchCondition,
   WatchRun,
 } from "../../api/types.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
@@ -27,6 +29,13 @@ import { createAppStore } from "../../store/app-state.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { mountStandingWatchNotices } from "../../watches/mount-standing-watch-notices.ts";
 import {
+  deleteProjectStandingWatchAction,
+  resumeProjectStandingWatchAction,
+  runProjectStandingWatchNowAction,
+  setSessionWatchDeliveryAction,
+  updateProjectStandingWatchAction,
+} from "../../watches/watches-actions.ts";
+import {
   applyWatchUpdatedEvent,
   invalidateWatchesForReconnect,
   projectWatchesFor,
@@ -35,12 +44,15 @@ import {
   retainProjectWatchesProject,
   sessionWatchesFor,
   upsertAgentWatchInStore,
+  upsertStandingWatchInStore,
 } from "../../watches/watches-store.ts";
 import { ActionCard } from "../action/ActionCard.tsx";
 import { ChatTabRail } from "../nav/ChatTabRail.tsx";
 import { ChatTopChromeStack } from "../nav/ChatTopChromeStack.tsx";
 import { ProjectContextZone } from "../nav/ProjectContextZone.tsx";
 import { ProjectRunningView } from "../project/ProjectRunningView.tsx";
+import { ActivityLiveSection } from "./ActivityLiveSection.tsx";
+import { StandingWatchConditionFields } from "./StandingWatchConditionFields.tsx";
 import { createWatchProposalSlot } from "./WatchProposalStack.tsx";
 
 const PROJ_ID = "00000000-0000-4000-8000-000000000001";
@@ -661,5 +673,323 @@ describe("SW10 watches, proposals, transcript controls, and Activity", () => {
     expect(screen.getByTestId("standing-watch-editor")).toBeTruthy();
 
     stopNotices();
+  });
+
+  it("covers condition field editors, disabled notices, watch actions, and live section rows", async () => {
+    const [conds, setConds] = createSignal<WatchCondition[]>([
+      { kind: "timer", every_minutes: 60 },
+    ]);
+    render(() => (
+      <StandingWatchConditionFields
+        conditions={conds()}
+        highlighted={true}
+        onChange={setConds}
+      />
+    ));
+
+    fireEvent.click(screen.getByTestId("standing-watch-add-condition"));
+    expect(conds().length).toBe(2);
+
+    // Switch condition 1 timer mode -> calendar -> edit days + times -> at -> edit at -> interval.
+    fireEvent.click(screen.getByLabelText("Condition 1 timer mode"));
+    fireEvent.click(screen.getByRole("option", { name: "Calendar" }));
+    fireEvent.click(screen.getByLabelText("Condition 1 calendar days"));
+    fireEvent.click(screen.getByRole("option", { name: "Every day" }));
+    fireEvent.input(screen.getByLabelText("Condition 1 calendar times"), {
+      target: { value: "08:30, 17:30" },
+    });
+    expect(conds()[0]?.calendar).toEqual({
+      days: ["every_day"],
+      times: ["08:30", "17:30"],
+    });
+
+    fireEvent.click(screen.getByLabelText("Condition 1 timer mode"));
+    fireEvent.click(screen.getByRole("option", { name: "One-time date" }));
+    fireEvent.input(screen.getByLabelText("Condition 1 at time"), {
+      target: { value: "2027-06-01T10:00" },
+    });
+    expect(conds()[0]?.at).toBe("2027-06-01T10:00");
+
+    // Switch condition 1 kind -> git_ref and edit ref + root; then file_change and edit path + glob.
+    fireEvent.click(screen.getByLabelText("Condition 1 kind"));
+    fireEvent.click(screen.getByRole("option", { name: "Git ref" }));
+    fireEvent.input(screen.getByLabelText("Condition 1 git ref"), {
+      target: { value: "refs/heads/release" },
+    });
+    fireEvent.input(screen.getByLabelText("Condition 1 root"), {
+      target: { value: "repo" },
+    });
+    expect(conds()[0]).toEqual({
+      kind: "git_ref",
+      ref: "refs/heads/release",
+      root_id: "repo",
+    });
+
+    fireEvent.click(screen.getByLabelText("Condition 1 kind"));
+    fireEvent.click(screen.getByRole("option", { name: "File change" }));
+    fireEvent.input(screen.getByLabelText("Condition 1 file path"), {
+      target: { value: "packages/ui" },
+    });
+    fireEvent.input(screen.getByLabelText("Condition 1 glob"), {
+      target: { value: "**/*.tsx" },
+    });
+    expect(conds()[0]).toEqual({
+      kind: "file_change",
+      path: "packages/ui",
+      glob: "**/*.tsx",
+    });
+
+    fireEvent.click(screen.getAllByText("Remove")[0]!);
+    expect(conds().length).toBe(1);
+
+    // Exercise watch actions + disabled standing watch notice and action callback.
+    const openedTargets: unknown[] = [];
+    const unregisterSink = registerOpenRunningStageSink((target) => {
+      openedTargets.push(target);
+    });
+    const noticeStore = createNoticeStore();
+    const disabledSW = makeStandingWatch({
+      state: "disabled",
+      state_reason: "owner_access_revoked",
+      revision: 3,
+    });
+    upsertStandingWatchInStore(disabledSW);
+
+    const actionClient = stubClient({
+      listProjectWatches: vi.fn(async () => ({
+        watches: [
+          {
+            watch_id: disabledSW.watch_id,
+            owner_kind: "person" as const,
+            project_id: PROJ_ID,
+            revision: disabledSW.revision,
+            standing_watch: disabledSW,
+          },
+        ],
+        daily_spend_cap_nano_usd: 0,
+        has_unpriced_standing_watch: false,
+        enabled_standing_total: 0,
+      })),
+      updateWatchDelivery: vi.fn(async (_sid, handle, req) =>
+        makeAgentWatch({ handle, delivery: req.delivery, revision: 2 }),
+      ),
+      updateStandingWatch: vi.fn(async () => ({
+        ...disabledSW,
+        state: "enabled" as const,
+        revision: 4,
+      })),
+      resumeStandingWatch: vi.fn(async () => ({
+        ...disabledSW,
+        state: "enabled" as const,
+        revision: 5,
+      })),
+      runStandingWatchNow: vi.fn(async () => ({
+        run_id: "00000000-0000-4000-8000-000000000401",
+        watch_id: disabledSW.watch_id,
+        watch_name: disabledSW.name,
+        project_id: PROJ_ID,
+        status: "running" as const,
+        scheduled_at: "2026-04-20T12:00:00Z",
+        missed_count: 0,
+        spend_limit_nano_usd: 2_000_000_000,
+        allow_unpriced: false,
+        created_at: "2026-04-20T12:00:00Z",
+      })),
+      deleteStandingWatch: vi.fn(async () => undefined),
+    });
+
+    const stopDisabledNotices = mountStandingWatchNotices({
+      notices: noticeStore,
+      activeProjectId: () => PROJ_ID,
+      getClient: () => actionClient,
+    });
+
+    const scopeKey = noticeScopeKey(projectScope(PROJ_ID));
+    await waitFor(() => {
+      const disabledNotice = noticeStore
+        .index()
+        .get(scopeKey)
+        ?.find((n) => n.code === "standing_watch_disabled");
+      expect(disabledNotice).toBeTruthy();
+      disabledNotice?.interaction?.actions?.[0]?.run();
+    });
+    expect(openedTargets.length).toBe(1);
+
+    await setSessionWatchDeliveryAction(actionClient, SESS_ID, "watch-9", "wake");
+    await updateProjectStandingWatchAction(
+      actionClient,
+      PROJ_ID,
+      disabledSW.watch_id,
+      { revision: 3, state: "enabled" },
+    );
+    await resumeProjectStandingWatchAction(
+      actionClient,
+      PROJ_ID,
+      disabledSW.watch_id,
+      4,
+    );
+    await runProjectStandingWatchNowAction(
+      actionClient,
+      PROJ_ID,
+      disabledSW.watch_id,
+    );
+    await deleteProjectStandingWatchAction(
+      actionClient,
+      PROJ_ID,
+      disabledSW.watch_id,
+    );
+
+    stopDisabledNotices();
+    unregisterSink();
+
+    // Exercise ActivityLiveSection directly with background processes, derived watches, active runs, and actions.
+    const liveStanding = makeStandingWatch({ name: "Deploy check", revision: 2 });
+    const activeRun: WatchRun = {
+      run_id: "00000000-0000-4000-8000-000000000501",
+      watch_id: liveStanding.watch_id,
+      watch_name: liveStanding.name,
+      project_id: PROJ_ID,
+      session_id: "sess-run",
+      status: "running",
+      scheduled_at: "2026-04-20T12:00:00Z",
+      missed_count: 0,
+      spend_limit_nano_usd: 2_000_000_000,
+      allow_unpriced: false,
+      created_at: "2026-04-20T12:00:00Z",
+    };
+    const derivedWatch = makeAgentWatch({
+      handle: "watch-derived",
+      derived: true,
+      keepable: false,
+      source_process_id: "proc-bg-1",
+    });
+    const plainKeepable = makeAgentWatch({
+      handle: "watch-keepable",
+      keepable: true,
+    });
+    const proposalReplace = makeAgentWatch({
+      handle: "watch-prop-live",
+      standing_draft: {
+        name: "Deploy check",
+        prompt: "Updated deploy check",
+        replaces: liveStanding.watch_id,
+      },
+    });
+
+    const liveCancelWatch = vi.fn(async (_sid: string, handle: string) => {
+      if (handle === "watch-keepable") {
+        throw new Error("cancel failed");
+      }
+      return {
+        watch: { ...proposalReplace, state: "terminal" as const },
+        receipt: {
+          receipt_id: "rec-dismiss",
+          handle,
+          terminal_outcome: "dismissed" as const,
+          recorded_at: "2026-04-20T12:01:00Z",
+        },
+      };
+    });
+    const liveKeepWatch = vi.fn(async () => ({
+      standing_watch: liveStanding,
+      receipt: {
+        receipt_id: "rec-kept",
+        handle: "watch-prop-live",
+        terminal_outcome: "kept" as const,
+        standing_watch_id: liveStanding.watch_id,
+        recorded_at: "2026-04-20T12:01:00Z",
+      },
+    }));
+
+    const liveClient = stubClient({
+      cancelWatch: liveCancelWatch,
+      keepWatch: liveKeepWatch,
+    });
+    const onStopProc = vi.fn();
+    const onOpenChat = vi.fn();
+    const onSelectSW = vi.fn();
+    const onPrefill = vi.fn();
+
+    render(() => (
+      <ActivityLiveSection
+        runningGroups={[
+          {
+            sessionId: SESS_ID,
+            sessionTitle: "Build session",
+            sessionArchived: true,
+            processes: [
+              {
+                process_id: "proc-bg-1",
+                project_id: PROJ_ID,
+                session_id: SESS_ID,
+                command: "npm run dev",
+                working_dir: "/workspace/app",
+                ports: ["3000", "3001"],
+                started_at: "2026-04-20T12:00:00Z",
+              },
+            ],
+          },
+        ]}
+        liveAgentWatches={[derivedWatch, plainKeepable, proposalReplace]}
+        activeRunBySession={
+          new Map([["sess-run", { watch: liveStanding, run: activeRun }]])
+        }
+        standingById={new Map([[liveStanding.watch_id, liveStanding]])}
+        queuedRuns={[]}
+        highlightedSessionId={SESS_ID}
+        isDisconnected={false}
+        isStopping={() => false}
+        stopError={(pid) => (pid === "proc-bg-1" ? "SIGTERM timed out" : null)}
+        client={() => liveClient}
+        onStopProcess={onStopProc}
+        onOpenSession={onOpenChat}
+        onSelectStandingWatch={onSelectSW}
+        onPrefillFromAgentWatch={onPrefill}
+      />
+    ));
+
+    expect(screen.getByTestId("project-running-ports-proc-bg-1").textContent).toBe(
+      "Ports 3000, 3001",
+    );
+    expect(
+      screen.getByTestId("project-running-stop-error-proc-bg-1").textContent,
+    ).toBe("SIGTERM timed out");
+
+    fireEvent.click(screen.getByTestId("project-running-open-chat-proc-bg-1"));
+    expect(onOpenChat).toHaveBeenCalledWith(SESS_ID);
+    fireEvent.click(screen.getByTestId("project-running-stop-proc-bg-1"));
+    expect(onStopProc).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId("activity-live-run-watch-sess-run"));
+    expect(onSelectSW).toHaveBeenCalledWith(liveStanding.watch_id);
+
+    fireEvent.click(screen.getByTestId("activity-watch-keep-watch-keepable"));
+    expect(onPrefill).toHaveBeenCalledWith(plainKeepable);
+
+    fireEvent.click(screen.getByTestId("activity-watch-cancel-watch-keepable"));
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("activity-watch-error-watch-keepable").textContent,
+      ).toBe("cancel failed");
+    });
+
+    fireEvent.click(screen.getByTestId("activity-proposal-edit-watch-prop-live"));
+    expect(onPrefill).toHaveBeenCalledWith(proposalReplace);
+
+    fireEvent.click(screen.getByTestId("activity-proposal-keep-watch-prop-live"));
+    await waitFor(() => {
+      expect(liveKeepWatch).toHaveBeenCalledWith(
+        SESS_ID,
+        "watch-prop-live",
+        { revision: 2 },
+      );
+    });
+
+    fireEvent.click(
+      screen.getByTestId("activity-proposal-dismiss-watch-prop-live"),
+    );
+    await waitFor(() => {
+      expect(liveCancelWatch).toHaveBeenCalledWith(SESS_ID, "watch-prop-live");
+    });
   });
 });

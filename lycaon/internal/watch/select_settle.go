@@ -342,6 +342,7 @@ func settleSelectedLeasesForWatchTx(ctx context.Context, tx *sql.Tx, watchID str
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	type candidate struct {
 		leaseID, sessionID, workerJobID, projectID string
 	}
@@ -349,15 +350,14 @@ func settleSelectedLeasesForWatchTx(ctx context.Context, tx *sql.Tx, watchID str
 	for rows.Next() {
 		var c candidate
 		if err := rows.Scan(&c.leaseID, &c.sessionID, &c.workerJobID, &c.projectID); err != nil {
-			_ = rows.Close()
 			return nil, err
 		}
 		candidates = append(candidates, c)
 	}
-	_ = rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	_ = rows.Close()
 
 	var woke []wokeLease
 	nowStr := now.UTC().Format(time.RFC3339Nano)
@@ -413,6 +413,14 @@ func loadLeaseSelectedRegsTx(ctx context.Context, tx *sql.Tx, leaseID string) ([
 	return out, rows.Err()
 }
 
+type watchWinnerReport struct {
+	DeliveryID    string             `json:"delivery_id"`
+	ActiveHandles []string           `json:"active_handles"`
+	Matches       []RecordedMatch    `json:"matches,omitempty"`
+	Terminal      *TerminalSelection `json:"terminal,omitempty"`
+	Overflow      *OverflowSummary   `json:"overflow,omitempty"`
+}
+
 func buildWatchWinner(matches []RecordedMatch, term *TerminalSelection, active []string, receiptID string, overflow *OverflowSummary) awaitstore.Condition {
 	handles := make([]string, 0, len(matches)+1)
 	seen := map[string]bool{}
@@ -427,20 +435,16 @@ func buildWatchWinner(matches []RecordedMatch, term *TerminalSelection, active [
 			handles = append(handles, m.Handle)
 		}
 	}
-	reportObj := map[string]any{
-		"delivery_id":    receiptID,
-		"active_handles": active,
+	reportBytes, err := json.Marshal(watchWinnerReport{
+		DeliveryID:    receiptID,
+		ActiveHandles: active,
+		Matches:       matches,
+		Terminal:      term,
+		Overflow:      overflow,
+	})
+	if err != nil {
+		reportBytes = []byte("{}")
 	}
-	if len(matches) > 0 {
-		reportObj["matches"] = matches
-	}
-	if term != nil {
-		reportObj["terminal"] = term
-	}
-	if overflow != nil {
-		reportObj["overflow"] = overflow
-	}
-	reportBytes, _ := json.Marshal(reportObj)
 	return awaitstore.Condition{
 		Kind:    ConditionWatchMatch,
 		Outcome: outcome,

@@ -20,13 +20,19 @@ type ProcessOutputState struct {
 
 // SetWatchOutputHook registers a callback invoked whenever screened output advances,
 // a handle exits, or a handle is evicted/disposed.
-func (r *Output) SetWatchOutputHook(fn func(ctx context.Context, sessionID, handle string)) {
+func (r *Output) SetWatchOutputHook(evictCtx context.Context, fn func(ctx context.Context, sessionID, handle string)) {
 	if r == nil {
 		return
 	}
 	r.jobs.mu.Lock()
 	r.watchOutput = fn
-	r.jobs.onHandleEvicted = fn
+	if fn == nil {
+		r.jobs.onHandleEvicted = nil
+	} else {
+		r.jobs.onHandleEvicted = func(sessionID, handle string) {
+			fn(evictCtx, sessionID, handle)
+		}
+	}
 	r.jobs.mu.Unlock()
 }
 

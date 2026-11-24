@@ -22,21 +22,29 @@ type CollectedBatch struct {
 	DecisionStatus map[string]map[string]string `json:"decision_status,omitempty"`
 }
 
+type redactedMatchEvidence struct {
+	Kind        string `json:"kind"`
+	Outcome     string `json:"outcome"`
+	Restricted  bool   `json:"restricted"`
+	RetainedRef string `json:"retained_ref"`
+	Reason      string `json:"reason,omitempty"`
+}
+
 func redactRecordedMatch(m RecordedMatch, watchID, reason string) RecordedMatch {
 	ref := strings.TrimSpace(m.RetainedRef)
 	if ref == "" {
 		ref = "restricted:" + strings.TrimSpace(watchID)
 	}
-	payload := map[string]any{
-		"kind":         m.SourceKind,
-		"outcome":      "redacted",
-		"restricted":   true,
-		"retained_ref": ref,
+	raw, err := json.Marshal(redactedMatchEvidence{
+		Kind:        m.SourceKind,
+		Outcome:     "redacted",
+		Restricted:  true,
+		RetainedRef: ref,
+		Reason:      strings.TrimSpace(reason),
+	})
+	if err != nil {
+		raw = []byte(`{"outcome":"redacted","restricted":true}`)
 	}
-	if strings.TrimSpace(reason) != "" {
-		payload["reason"] = strings.TrimSpace(reason)
-	}
-	raw, _ := json.Marshal(payload)
 	m.Outcome = "revoked"
 	m.Restricted = true
 	m.RetainedRef = ref
@@ -142,8 +150,14 @@ func ReserveCollectBatch(ctx context.Context, s *Store, owner Owner, requestKey 
 		ActiveHandles:  activeHandleNames(regs),
 		DecisionStatus: decisionStatus,
 	}
-	mJSON, _ := json.Marshal(matchIDs)
-	wJSON, _ := json.Marshal(watchIDs)
+	mJSON, err := json.Marshal(matchIDs)
+	if err != nil {
+		return CollectedBatch{}, false, err
+	}
+	wJSON, err := json.Marshal(watchIDs)
+	if err != nil {
+		return CollectedBatch{}, false, err
+	}
 	pJSON, err := json.Marshal(batch)
 	if err != nil {
 		return CollectedBatch{}, false, err
@@ -301,8 +315,9 @@ func FormatCollectedBatch(batch CollectedBatch) string {
 			strings.Join(batch.Overflow.Outcomes, ","), batch.Overflow.HadFailure, batch.Overflow.HadRecovery)
 	}
 	if len(batch.DecisionStatus) > 0 {
-		rawStatus, _ := json.Marshal(batch.DecisionStatus)
-		fmt.Fprintf(&b, "\n- decision_status: %s", string(rawStatus))
+		if rawStatus, err := json.Marshal(batch.DecisionStatus); err == nil {
+			fmt.Fprintf(&b, "\n- decision_status: %s", string(rawStatus))
+		}
 	}
 	return b.String()
 }
