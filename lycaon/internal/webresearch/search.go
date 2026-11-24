@@ -211,6 +211,7 @@ func finalizeSearchResult(q string, maxResults int, outcomes []providerOutcome, 
 				result.credentialRejected = append(result.credentialRejected, o.providerID)
 			case ErrorRequestRejected:
 				result.queryRetryable = true
+			case ErrorQuotaExhausted, ErrorRateLimited, ErrorUnavailable:
 			}
 		}
 		result.OK = false
