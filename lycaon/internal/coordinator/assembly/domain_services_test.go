@@ -22,19 +22,19 @@ func TestCompletionKeepsOneWiringSnapshot(t *testing.T) {
 	engine := &AssemblyEngine{}
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)})
 	oldReads, newReads := 0, 0
-	replacement := AssemblyDeps{Prompts: pe, AgentsMDIndex: func(context.Context, *api.Session) (api.Message, bool) {
+	replacement := AssemblyDeps{Prompts: pe, AgentsMD: AgentsMD{Index: func(context.Context, *api.Session) (api.Message, bool) {
 		newReads++
 		return api.Message{Content: "replacement wiring"}, true
-	}}
+	}}}
 	engine.SetDeps(AssemblyDeps{Prompts: pe,
 		WorkspaceRoots: func(context.Context, *api.Session) ([]map[string]any, int, string, int) {
 			engine.SetDeps(replacement)
 			return nil, 0, "", 0
 		},
-		AgentsMDIndex: func(context.Context, *api.Session) (api.Message, bool) {
+		AgentsMD: AgentsMD{Index: func(context.Context, *api.Session) (api.Message, bool) {
 			oldReads++
 			return api.Message{Content: "captured wiring"}, true
-		},
+		}},
 	})
 	session := &api.Session{ID: "snapshot", ParentSessionID: "parent", AgentType: "repo-researcher", WorkspacePath: t.TempDir()}
 	engine.BeginPromptTurn(session.ID)

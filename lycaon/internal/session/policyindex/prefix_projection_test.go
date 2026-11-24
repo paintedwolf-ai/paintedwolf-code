@@ -74,22 +74,24 @@ func prefixAssemblyEngine(t *testing.T, m *Service) *assembly.AssemblyEngine {
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: prefixCoordCtx{},
 		PromptToolLister: prompttest.CoordinatorTools,
-		AgentsMDIndex:    m.Index,
-		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) (assembly.AgentsMDPolicyDelivery, error) {
-			delivery, err := m.ResolveCurrent(ctx, sess, history)
-			return assembly.AgentsMDPolicyDelivery{
-				Messages:            delivery.Messages,
-				ActiveRootID:        delivery.ActiveRootID,
-				ActiveRootHasNested: delivery.ActiveRootHasNested,
-			}, err
-		},
-		AgentsMDRootPolicies: func(ctx context.Context, sess *api.Session) (assembly.AgentsMDPolicyDelivery, error) {
-			delivery, err := m.ProjectRoot(ctx, sess)
-			return assembly.AgentsMDPolicyDelivery{
-				Messages:            delivery.Messages,
-				ActiveRootID:        delivery.ActiveRootID,
-				ActiveRootHasNested: delivery.ActiveRootHasNested,
-			}, err
+		AgentsMD: assembly.AgentsMD{
+			Index: m.Index,
+			Policies: func(ctx context.Context, sess *api.Session, history []api.Message) (assembly.AgentsMDPolicyDelivery, error) {
+				delivery, err := m.ResolveCurrent(ctx, sess, history)
+				return assembly.AgentsMDPolicyDelivery{
+					Messages:            delivery.Messages,
+					ActiveRootID:        delivery.ActiveRootID,
+					ActiveRootHasNested: delivery.ActiveRootHasNested,
+				}, err
+			},
+			RootPolicies: func(ctx context.Context, sess *api.Session) (assembly.AgentsMDPolicyDelivery, error) {
+				delivery, err := m.ProjectRoot(ctx, sess)
+				return assembly.AgentsMDPolicyDelivery{
+					Messages:            delivery.Messages,
+					ActiveRootID:        delivery.ActiveRootID,
+					ActiveRootHasNested: delivery.ActiveRootHasNested,
+				}, err
+			},
 		},
 	})
 	return eng

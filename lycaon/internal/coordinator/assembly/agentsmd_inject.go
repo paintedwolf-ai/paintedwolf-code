@@ -21,10 +21,10 @@ func (e *turnContextAssembler) agentsMDIndexInject(ctx context.Context, sess *ap
 		return nil
 	}
 	deps := e.deps
-	if deps.AgentsMDIndex == nil {
+	if deps.AgentsMD.Index == nil {
 		return nil
 	}
-	block, ok := deps.AgentsMDIndex(ctx, sess)
+	block, ok := deps.AgentsMD.Index(ctx, sess)
 	if !ok || strings.TrimSpace(block.Content) == "" {
 		return nil
 	}
@@ -34,18 +34,18 @@ func (e *turnContextAssembler) agentsMDIndexInject(ctx context.Context, sess *ap
 
 // agentsMDChainInject loads current working guidance for resolved scopes.
 func (e *turnContextAssembler) agentsMDChainInject(ctx context.Context, sess *api.Session, history []api.Message, turn *TurnAssemblyScratch) (AgentsMDPolicyDelivery, error) {
-	if e == nil || sess == nil || turn == nil || e.deps.AgentsMDPolicies == nil {
+	if e == nil || sess == nil || turn == nil || e.deps.AgentsMD.Policies == nil {
 		return AgentsMDPolicyDelivery{}, nil
 	}
-	return e.deps.AgentsMDPolicies(ctx, sess, history)
+	return e.deps.AgentsMD.Policies(ctx, sess, history)
 }
 
 // agentsMDRootInject projects active-root guidance for idle prefix preparation.
 func (e *turnContextAssembler) agentsMDRootInject(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) (AgentsMDPolicyDelivery, error) {
-	if e == nil || sess == nil || turn == nil || e.deps.AgentsMDRootPolicies == nil {
+	if e == nil || sess == nil || turn == nil || e.deps.AgentsMD.RootPolicies == nil {
 		return AgentsMDPolicyDelivery{}, nil
 	}
-	return e.deps.AgentsMDRootPolicies(ctx, sess)
+	return e.deps.AgentsMD.RootPolicies(ctx, sess)
 }
 
 // splitPreHistoryAgentsMDPolicies lifts the active root's stable policy blocks

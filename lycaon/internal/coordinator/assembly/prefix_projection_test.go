@@ -47,7 +47,7 @@ func TestKnownPrefixDoesNotAdvanceTurnOrWorkflow(t *testing.T) {
 	deps.Board = advancingBoard{}
 	deps.BoardOrientReady = advancingOrientRecorder{source: source}
 	deps.ScanGuidance = forbiddenPreparationGuidance{t}
-	deps.AgentsMDPolicies = func(context.Context, *api.Session, []api.Message) (AgentsMDPolicyDelivery, error) {
+	deps.AgentsMD.Policies = func(context.Context, *api.Session, []api.Message) (AgentsMDPolicyDelivery, error) {
 		t.Fatal("preparation resolved turn policy delivery")
 		return AgentsMDPolicyDelivery{}, nil
 	}
@@ -69,28 +69,30 @@ func TestKnownPrefixMatchesCompletionWithRootPolicyEnabled(t *testing.T) {
 	rootPolicy := testPolicyMsg("r1", "AGENTS.md", "Root policy: run ./task.")
 	nestedPolicy := testPolicyMsg("r1", "sub/AGENTS.md", "Nested policy: sub/.")
 	overlayPolicy := testPolicyMsg("r1", ".paintedwolf/AGENTS.md", "Overlay policy.")
-	deps.AgentsMDIndex = func(context.Context, *api.Session) (api.Message, bool) {
-		return api.Message{
-			Role:      api.MessageRoleSystem,
-			Content:   "Available AGENTS.md files:\n- AGENTS.md\n- sub/AGENTS.md",
-			Origin:    api.MessageOriginProject,
-			Authority: api.ContentAuthorityDeveloper,
-			TrustTier: api.ContentTrustTierTrusted,
-		}, true
-	}
-	deps.AgentsMDRootPolicies = func(context.Context, *api.Session) (AgentsMDPolicyDelivery, error) {
-		return AgentsMDPolicyDelivery{
-			Messages:            []api.Message{rootPolicy, overlayPolicy},
-			ActiveRootID:        "r1",
-			ActiveRootHasNested: true,
-		}, nil
-	}
-	deps.AgentsMDPolicies = func(context.Context, *api.Session, []api.Message) (AgentsMDPolicyDelivery, error) {
-		return AgentsMDPolicyDelivery{
-			Messages:            []api.Message{rootPolicy, nestedPolicy, overlayPolicy},
-			ActiveRootID:        "r1",
-			ActiveRootHasNested: true,
-		}, nil
+	deps.AgentsMD = AgentsMD{
+		Index: func(context.Context, *api.Session) (api.Message, bool) {
+			return api.Message{
+				Role:      api.MessageRoleSystem,
+				Content:   "Available AGENTS.md files:\n- AGENTS.md\n- sub/AGENTS.md",
+				Origin:    api.MessageOriginProject,
+				Authority: api.ContentAuthorityDeveloper,
+				TrustTier: api.ContentTrustTierTrusted,
+			}, true
+		},
+		RootPolicies: func(context.Context, *api.Session) (AgentsMDPolicyDelivery, error) {
+			return AgentsMDPolicyDelivery{
+				Messages:            []api.Message{rootPolicy, overlayPolicy},
+				ActiveRootID:        "r1",
+				ActiveRootHasNested: true,
+			}, nil
+		},
+		Policies: func(context.Context, *api.Session, []api.Message) (AgentsMDPolicyDelivery, error) {
+			return AgentsMDPolicyDelivery{
+				Messages:            []api.Message{rootPolicy, nestedPolicy, overlayPolicy},
+				ActiveRootID:        "r1",
+				ActiveRootHasNested: true,
+			}, nil
+		},
 	}
 	engine.SetDeps(deps)
 
