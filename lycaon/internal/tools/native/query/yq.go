@@ -178,7 +178,11 @@ func yqImplicitFile(ctx context.Context, paths *projectpaths.ProgramPaths, argv 
 // that resolves beyond them is a file for admission to review, never statted.
 func regularYqFile(ctx context.Context, paths *projectpaths.ProgramPaths, operand string) bool {
 	bound, err := paths.Bind(ctx, operand, false)
-	if err != nil || bound.Null {
+	if err != nil {
+		reject := toolrejection.AsToolReject(err)
+		return reject != nil && reject.Code == "SURVEY_PATH_ESCAPE"
+	}
+	if bound.Null {
 		return false
 	}
 	if bound.Resolved.External {

@@ -227,7 +227,7 @@ type GrantedPathDelta struct {
 	// Write distinguishes mutation authority from read authority.
 	Write bool `json:"write,omitempty" yaml:"write,omitempty"`
 	// WriteOnly keeps a write grant from permitting reads or directory listing.
-	WriteOnly bool `json:"write_only,omitempty" yaml:"write_only,omitempty"`
+	WriteOnly bool `json:"write_only,omitzero" yaml:"write_only,omitempty"`
 	// Tree covers Path and every descendant. Exact grants cover Path only.
 	Tree bool `json:"tree,omitempty" yaml:"tree,omitempty"`
 }

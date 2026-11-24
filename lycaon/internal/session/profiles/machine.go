@@ -114,6 +114,7 @@ func (m *Service) promptSurface(ctx context.Context, sess *api.Session, loaded [
 		return out
 	}
 	out.SharedTempLocations = m.WritableSharedTemp(ctx, sess)
+	out.SharedTempReadLocations = m.ReadableSharedTemp(ctx, sess)
 	out.Skills = agentSkillViews(loaded)
 	ambient := hostresources.ProjectAmbient(hostresources.AmbientInput{
 		Snapshot:        snapshot,
@@ -167,6 +168,13 @@ func (m *Service) WritableSharedTemp(ctx context.Context, sess *api.Session) []s
 		grants = m.SessionWriteRoots(ctx, sess.ID, sess.ParentSessionID)
 	}
 	return confine.WritableSharedTempLocations(sess.ProjectID, grants)
+}
+
+func (m *Service) ReadableSharedTemp(ctx context.Context, sess *api.Session) []string {
+	if m == nil || sess == nil || m.SessionReadPaths == nil {
+		return nil
+	}
+	return confine.ReadableSharedTempLocations(m.SessionReadPaths(ctx, sess.ID, sess.ParentSessionID))
 }
 
 func agentSkillViews(loaded []skills.Skill) []prompts.AgentSkillView {

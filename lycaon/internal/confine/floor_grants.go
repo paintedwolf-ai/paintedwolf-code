@@ -40,6 +40,11 @@ func (s SandboxRefusals) Grants(access FilesystemAccess) []string {
 		if path.Grant == "" || path.Layer == FloorReadCredentialStore {
 			continue
 		}
+		if access == AccessWrite && path.Layer == FloorOutsideWriteRoots {
+			if refused, _ := GrantedWriteRootRefused(path.Grant); refused {
+				continue
+			}
+		}
 		if access == AccessRead && metadataOnly(path.Operations) && hasGrantableDescendant(paths, i) {
 			continue
 		}

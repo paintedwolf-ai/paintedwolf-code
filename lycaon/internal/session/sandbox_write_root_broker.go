@@ -93,16 +93,6 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	if proposed == "" {
 		return out, nil
 	}
-	if confine.SharedTempLocation(proposed) != "" {
-		if cp := fspath.CanonicalPath(proposed); cp != "" {
-			proposed = cp
-		}
-		// External write grants apply at directory granularity; never advertise
-		// a directory mount as an exact existing file.
-		if info, err := os.Lstat(proposed); err == nil && !info.IsDir() {
-			proposed = confine.FloorSharedTemp.RecoveryFor(confine.AccessWrite).GrantPath(proposed)
-		}
-	}
 	// Control-plane writes are denied without prompting.
 	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot, in.SessionOutputRoot) {
 		out.Denied = confine.SharedTempLocation(proposed) != ""
@@ -113,6 +103,26 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 		return command.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
 	}
 	subject := confine.ClassifyBlockedWrite(proposed)
+	if subject.Kind == confine.WriteSubjectOrdinary && confine.SharedTempLocation(proposed) != "" {
+		if cp := fspath.CanonicalPath(proposed); cp != "" {
+			proposed = cp
+		}
+		if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot, in.SessionOutputRoot) {
+			out.Denied = true
+			return out, nil
+		}
+		if confine.WithinSessionDirectory(proposed, in.SessionScratchRoot) {
+			return command.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
+		}
+		subject = confine.ClassifyBlockedWrite(proposed)
+		if subject.Kind == confine.WriteSubjectOrdinary {
+			// External write grants apply at directory granularity; never advertise
+			// a directory mount as an exact existing file.
+			if info, err := os.Lstat(proposed); err == nil && !info.IsDir() {
+				proposed = confine.FloorSharedTemp.RecoveryFor(confine.AccessWrite).GrantPath(proposed)
+			}
+		}
+	}
 	if subject.Kind == confine.WriteSubjectCredentialStore {
 		// Credential stores grant only the declared file.
 		proposed = subject.GrantPath

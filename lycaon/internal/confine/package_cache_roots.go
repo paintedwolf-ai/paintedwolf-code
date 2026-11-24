@@ -155,6 +155,21 @@ func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
 	r.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(withDarwinAliases(r.sharedTemp), "")})
 	excluded := resolveEach(c.ReadDenyPaths)
 	var readSubpaths, readLiterals, reachable []string
+	if runtime.GOOS == "darwin" {
+		if ut := platformUserTemp(); ut != "" {
+			xcrun := filepath.Join(ut, "xcrun_db")
+			if !underAny(xcrun, excluded) {
+				readLiterals = append(readLiterals, xcrun)
+				reachable = append(reachable, xcrun)
+			}
+		}
+	}
+	if exe, err := os.Executable(); err == nil {
+		if resolved := fspath.CanonicalPath(exe); resolved != "" && underAny(resolved, r.sharedTemp) && !underAny(resolved, excluded) {
+			readLiterals = append(readLiterals, resolved)
+			reachable = append(reachable, resolved)
+		}
+	}
 	for _, root := range append(nonExcludedPaths(resolveEach(c.Roots), excluded), nonExcludedPaths(resolveEach(c.ReadRoots), excluded)...) {
 		if underAny(root, r.sharedTemp) {
 			readSubpaths = append(readSubpaths, root)
@@ -191,12 +206,50 @@ func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
 	writeOnly := r.writeOnlySharedTempRoots(c, readSubpaths)
 	r.add(fsRule{op: opReadMetadata, allow: true, matches: subpathMatches(withDarwinAliases(writeOnly), "")})
 	reachable = append(reachable, writeOnly...)
+	var socketLiterals []string
+	for _, sock := range c.socketMetadataLiterals() {
+		if underAny(sock, r.sharedTemp) {
+			socketLiterals = append(socketLiterals, sock)
+			reachable = append(reachable, sock)
+		}
+	}
+	r.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(withDarwinAliases(socketLiterals), "")})
 	for _, g := range append(slices.Clone(c.ProtectedWriteGrants), c.PolicyWriteGrants...) {
 		if underAny(g.ResolvedPath, r.sharedTemp) {
 			reachable = append(reachable, g.ResolvedPath)
 		}
 	}
 	return reachable
+}
+
+func (c Confinement) socketMetadataLiterals() []string {
+	var out []string
+	add := func(p string) {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return
+		}
+		if clean := filepath.Clean(p); filepath.IsAbs(clean) && !slices.Contains(out, clean) {
+			out = append(out, clean)
+		}
+		if canon := fspath.CanonicalPath(p); canon != "" && filepath.IsAbs(canon) && !slices.Contains(out, canon) {
+			out = append(out, canon)
+		}
+	}
+	for _, ep := range c.socketEndpoints {
+		add(ep)
+	}
+	for _, hp := range c.HostServicePaths {
+		add(hp)
+	}
+	if len(c.socketEndpoints) == 0 {
+		for _, g := range c.SocketGrants {
+			add(g.ApprovedPath)
+			add(g.ResolvedPath)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 func (r *FilesystemRules) writeOnlySharedTempRoots(c Confinement, readSubpaths []string) []string {

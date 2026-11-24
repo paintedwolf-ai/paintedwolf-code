@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -433,11 +435,11 @@ func denyOutsideRead(t *testing.T, path string) (string, *guidance.Refusal, *hit
 // while the human cards differ.
 func TestDeniedMissingOutsidePathMatchesExistingPathByteForByte(t *testing.T) {
 	t.Parallel()
-	// The fixture lives under the user home: a path under the OS temp dir is
-	// ordinary scratch access and would never reach the outside-root gate.
-	home, err := os.UserHomeDir()
-	contractcheck.FailErr(t, "resolve user home", err)
-	base, err := os.MkdirTemp(home, "wr11-contract-fixture-") //nolint:usetesting // Fixture must be outside the temp scratch roots.
+	// The fixture lives under the account home directory so outside-root
+	// approval is exercised rather than shared-temp chat-only rules.
+	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
+	contractcheck.FailErr(t, "resolve user account", err)
+	base, err := os.MkdirTemp(account.HomeDir, "wr11-contract-fixture-") //nolint:usetesting // Fixture must live outside shared temp.
 	contractcheck.FailErr(t, "create outside fixture folder", err)
 	t.Cleanup(func() { os.RemoveAll(base) })
 	existing := filepath.Join(base, "release.go")

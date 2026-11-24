@@ -186,6 +186,7 @@ func TestSharedTempPolicyLayersNestedRootsAndWriteOnlyLeases(t *testing.T) {
 	}
 
 	// Durable write-only leases remain write-only at native entry points.
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(outside, "config"))
 	SetGrantedWriteRootsSource(func(projectID string) []string {
 		if projectID == "proj-old-lease" {
 			return []string{temp}

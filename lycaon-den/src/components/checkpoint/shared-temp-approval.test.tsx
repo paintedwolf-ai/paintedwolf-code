@@ -29,7 +29,8 @@ it("renders directional targets and explicit exchange folder option on one card"
     />
   ));
 
-  expect(view.container.textContent).toContain("Allow this chat to exchange files in system temp?");
+  expect(view.container.textContent).toContain("System temp access");
   expect(view.container.textContent).toContain("Read /private/tmp/incoming.csv");
   expect(view.container.textContent).toContain("Create, change, and remove files in /private/tmp/export");
+  expect(view.container.textContent).toContain("Allow this chat to read and write the selected system temp paths.");
 });

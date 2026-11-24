@@ -44,8 +44,10 @@ func CommandGuidanceFactKeys() []string {
 		"runner_socket_tools",
 		"runner_write_root_tools",
 		"session_scratch_dir",
-		"shared_temp_writable",
 		"shared_temp_locations",
+		"shared_temp_read_locations",
+		"shared_temp_readable",
+		"shared_temp_writable",
 		"tool_profile",
 		"workspace_roots",
 	}
@@ -74,10 +76,11 @@ type CommandGuidanceSnapshotInput struct {
 	DeferredTools         []string
 	RootCount             int
 	ProjectDir            string
-	SessionScratchDir     string
-	SharedTempLocations   []string
-	Posture               gate.Posture
-	CommandExternalHidden bool
+	SessionScratchDir       string
+	SharedTempLocations     []string
+	SharedTempReadLocations []string
+	Posture                 gate.Posture
+	CommandExternalHidden   bool
 }
 
 // BuildCommandGuidanceSnapshot computes the rendered command-guidance
@@ -117,10 +120,11 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	// The snapshot holds the variables a render would receive; without a
 	// reader it records the surface variables alone.
 	vars := AgentPromptSurfaceTemplateVars(AgentPromptSurface{
-		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
-		Posture:               in.Posture,
-		SharedTempLocations:   in.SharedTempLocations,
-		CommandExternalHidden: in.CommandExternalHidden,
+		SessionScratchDir:       strings.TrimSpace(in.SessionScratchDir),
+		Posture:                 in.Posture,
+		SharedTempLocations:     in.SharedTempLocations,
+		SharedTempReadLocations: in.SharedTempReadLocations,
+		CommandExternalHidden:   in.CommandExternalHidden,
 	})
 	vars["platform_os"] = runtime.GOOS
 	vars["project_dir"] = strings.TrimSpace(in.ProjectDir)

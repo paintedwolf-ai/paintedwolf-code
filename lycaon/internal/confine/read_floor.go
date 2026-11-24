@@ -39,11 +39,19 @@ func addControlPlaneReadFloor(rules *FilesystemRules, c Confinement) {
 			matches = append(matches, fsMatch{literal: g.ResolvedPath})
 		}
 	}
+	var socketLiterals []string
+	for _, sock := range c.socketMetadataLiterals() {
+		if underAny(sock, denied) {
+			socketLiterals = append(socketLiterals, sock)
+			reachable = append(reachable, sock)
+		}
+	}
 	rules.add(fsRule{op: opRead, allow: true, matches: matches})
+	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(withDarwinAliases(socketLiterals), "")})
 	if len(reachable) == 0 {
 		return
 	}
-	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(traversalAncestors(denied, reachable), "")})
+	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(withDarwinAliases(traversalAncestors(denied, reachable)), "")})
 }
 
 // addManagedReadRoots reopens managed read roots beneath a read denial. They

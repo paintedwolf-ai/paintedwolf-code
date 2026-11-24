@@ -372,7 +372,7 @@ func TestWriteRootAndReadPathBrokerResults(t *testing.T) {
 	broker.Rule = nil
 	broker.ApprovalsDisabled = func(string) bool { return true }
 	readRes, err := broker.AuthorizeRead(ctx, command.SandboxReadPathAsk{
-		SessionID: "sess", ProjectDir: projectDir, ProposedReadPath: filepath.Join(t.TempDir(), "read_any"),
+		SessionID: "sess", ProjectDir: projectDir, ProposedReadPath: "/opt/paintedwolf-broker-test-nonexistent/read_any",
 	})
 	testutil.FailErr(t, "AuthorizeRead", err)
 	if !readRes.Authorized {

@@ -55,17 +55,21 @@ func (b *WriteRootCheckpointBroker) authorizeReadPath(ctx context.Context, in co
 	if proposed == "" {
 		return out, nil
 	}
-	if confine.SharedTempLocation(proposed) != "" {
-		if cp := fspath.CanonicalPath(proposed); cp != "" {
-			proposed = cp
-		}
-	}
 	// Control-plane reads are denied without prompting.
 	if confine.ControlPlanePathDenied(proposed, false, in.SessionScratchRoot, in.SessionOutputRoot) {
 		return command.SandboxReadPathResult{Denied: true, ProposedReadPath: proposed}, nil
 	}
 	strongerFloor := b.strongerReadFloor(proposed, in.ReadDenyPaths)
-	shared := overlapsSharedTemp(proposed) && !b.explicitTempReadAllowed(in, proposed)
+	if !strongerFloor && confine.SharedTempLocation(proposed) != "" {
+		if cp := fspath.CanonicalPath(proposed); cp != "" {
+			proposed = cp
+		}
+		if confine.ControlPlanePathDenied(proposed, false, in.SessionScratchRoot, in.SessionOutputRoot) {
+			return command.SandboxReadPathResult{Denied: true, ProposedReadPath: proposed}, nil
+		}
+		strongerFloor = b.strongerReadFloor(proposed, in.ReadDenyPaths)
+	}
+	shared := !strongerFloor && overlapsSharedTemp(proposed) && !b.explicitTempReadAllowed(in, proposed)
 	if confine.PathAtOrUnder(proposed, in.SessionScratchRoot) || (!strongerFloor && !shared) {
 		// Nothing denies this read; the declaration needs no grant.
 		return command.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil

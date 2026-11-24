@@ -40,6 +40,7 @@ type Service struct {
 	externalObserver      func(context.Context, string, gate.Posture, bool)
 	commandExternalHidden func() bool
 	SessionWriteRoots     func(context.Context, string, string) []string
+	SessionReadPaths      func(context.Context, string, string) []string
 	coordinatorProfile    func(context.Context, string) string
 }
 

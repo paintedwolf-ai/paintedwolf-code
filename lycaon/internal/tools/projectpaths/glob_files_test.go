@@ -26,9 +26,15 @@ func outsideSharedTempDir(t *testing.T) string {
 	t.Helper()
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
 	testutil.FailErr(t, "look up account home", err)
-	dir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-glob-test-") //nolint:usetesting // Ordinary host path outside shared temp.
+	home, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-glob-test-") //nolint:usetesting // Ambient cache fixture outside shared temp.
 	testutil.FailErr(t, "create outside glob fixture", err)
-	t.Cleanup(func() { testutil.FailErr(t, "remove outside glob fixture", os.RemoveAll(dir)) })
+	t.Cleanup(func() { testutil.FailErr(t, "remove outside glob fixture", os.RemoveAll(home)) })
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	cacheDir, err := os.UserCacheDir()
+	testutil.FailErr(t, "resolve user cache dir", err)
+	dir := filepath.Join(cacheDir, "glob-outside")
+	testutil.FailErr(t, "create outside cache dir", os.MkdirAll(dir, 0o755))
 	return dir
 }
 

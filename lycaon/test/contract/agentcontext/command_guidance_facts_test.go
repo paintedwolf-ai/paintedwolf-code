@@ -83,15 +83,17 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var shared []string
+			var shared, sharedRead []string
 			if tc.platformOS == "darwin" && len(tc.roots) > 1 {
 				shared = []string{"/private/tmp"}
+				sharedRead = []string{"/private/tmp"}
 			}
 			vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
-				SharedTempLocations:   shared,
-				SessionScratchDir:     "/scratch/sess-1",
-				Posture:               tc.posture,
-				CommandExternalHidden: tc.externalHidden,
+				SharedTempLocations:     shared,
+				SharedTempReadLocations: sharedRead,
+				SessionScratchDir:       "/scratch/sess-1",
+				Posture:                 tc.posture,
+				CommandExternalHidden:   tc.externalHidden,
 			})
 			activeRootID := ""
 			if len(tc.roots) > 0 {
@@ -141,6 +143,7 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 
 			facts := prompts.ExtractCommandGuidanceFacts(vars)
 			for key, want := range map[string]bool{
+				"shared_temp_readable":     len(sharedRead) > 0,
 				"shared_temp_writable":     len(shared) > 0,
 				"profile_command_mutation": !tc.readOnly,
 				"command_output_files":     true,

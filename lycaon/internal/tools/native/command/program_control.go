@@ -141,13 +141,6 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 		return ownerFailure(err), err
 	}
 	arguments := map[string]any{"argv": request.Argv.Values(), "source_unit_id": request.Invocation.SourceUnitID, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte}
-	if review != nil {
-		for k, v := range review.Arguments() {
-			if k == "path_targets" {
-				arguments[k] = v
-			}
-		}
-	}
 	if launches {
 		arguments = d.run.nativeArguments(arguments, definition.ReadOnlyFacts().Contract, nil)
 	}

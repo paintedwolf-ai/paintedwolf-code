@@ -849,8 +849,8 @@ anchors:
         tool: { type: string }
 
   - id: sandbox.shared_temp
-    title: Shared temporary directory write
-    description: A command encountered a refused write to a shared temporary directory.
+    title: Shared temporary directory access
+    description: A command encountered a refused read or write in a shared temporary directory.
     trigger_class: post_tool
     surface: coordinator
     planes: [block]

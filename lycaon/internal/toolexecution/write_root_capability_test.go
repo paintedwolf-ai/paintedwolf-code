@@ -114,7 +114,10 @@ func TestSharedTempPreflightCoalescesWriteRootArrayAndAliasesIntoOnePlan(t *test
 	e.Boundary.writeRootPreflight = func(ctx context.Context, _ string, _ map[string]any, _ tools.ToolContext, gotRoot string) (bool, bool, string, error) {
 		writeCalls = append(writeCalls, fspath.CanonicalPath(gotRoot))
 		action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "command"}, Scope: hitl.ActionScope{SessionID: "chat-p"}}
-		decision := &gate.Decision{Primary: api.GateOutsideRootsWrite}
+		decision := &gate.Decision{
+			Primary:  api.GateOutsideRootsWrite,
+			Evidence: []gate.Evidence{{Producer: gate.ProducerFilePath, Gate: api.GateOutsideRootsWrite, Key: "path", Value: exportDir, Source: "action"}},
+		}
 		primary, cited, reasons := hitl.PresentDecision(decision)
 		grant := hitl.ApprovalGrant{
 			ID: "g_write", Scope: hitl.ApprovalGrantScopeChat,
@@ -140,7 +143,10 @@ func TestSharedTempPreflightCoalescesWriteRootArrayAndAliasesIntoOnePlan(t *test
 	e.Boundary.readPathPreflight = func(ctx context.Context, _ string, _ map[string]any, _ tools.ToolContext, gotPath string) (bool, bool, string, error) {
 		readCalls = append(readCalls, fspath.CanonicalPath(gotPath))
 		action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "command"}, Scope: hitl.ActionScope{SessionID: "chat-p"}}
-		decision := &gate.Decision{Primary: api.GateOutsideRootsRead}
+		decision := &gate.Decision{
+			Primary:  api.GateOutsideRootsRead,
+			Evidence: []gate.Evidence{{Producer: gate.ProducerFilePath, Gate: api.GateOutsideRootsRead, Key: "path", Value: inputFile, Source: "action"}},
+		}
 		primary, cited, reasons := hitl.PresentDecision(decision)
 		grant := hitl.ApprovalGrant{
 			ID: "g_read", Scope: hitl.ApprovalGrantScopeChat,

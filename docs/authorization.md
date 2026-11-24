@@ -191,7 +191,7 @@ Advanced Off disables eligible prompted asks and allows the effect when enforcem
 | Shape | Root tree | Exact path or approved tree according to subject |
 | Review surface | Project folders | Approval card and Saved approvals |
 
-Approving access does not edit the person's project definition. Native tools resolve changes under attached folders, session scratch, and reviewed paths. Native reads also admit the operating system’s temporary, cache, and tool data folders. Strict reviews writes in scratch. Sensitive-location and protected-path rules still apply.
+Approving access does not edit the person's project definition. Native tools resolve changes under attached folders, session scratch, and reviewed paths. Native reads also admit session output and the operating system’s cache and tool data folders; shared system temp (`/tmp`, `/var/tmp`, and Darwin’s user temp folder) requires chat-scoped approval with directional read, write-only, or read-and-write options and never offers durable project or device leases. Strict reviews writes in scratch. Sensitive-location and protected-path rules still apply.
 
 Applied read-only confinement roots, including the current session’s command output, satisfy read scope without granting writes. Other sessions and paths reached through escaping symlinks remain outside that authority.
 

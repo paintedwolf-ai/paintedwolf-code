@@ -159,6 +159,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		}
 	}
 	r.Manager.Profiles.SessionWriteRoots = writeBroker.SessionWriteRoots
+	r.Manager.Profiles.SessionReadPaths = writeBroker.SessionReadPaths
 	deps.Execution.Host.Authority.SetSandboxListenGate(&session.ListenCheckpointBroker{
 		Checkpoints:       r.Checkpoints,
 		Store:             deps.Sessions.Sessions,

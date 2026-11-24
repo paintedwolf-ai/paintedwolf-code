@@ -217,10 +217,11 @@ func (l *modelTurn) buildCommandGuidanceDebug(
 		DeferredTools:         deferred,
 		RootCount:             rootCount,
 		ProjectDir:            projectDir,
-		SessionScratchDir:     frame.Machine.Surface.SessionScratchDir,
-		Posture:               frame.Machine.Surface.Posture,
-		SharedTempLocations:   frame.Machine.Surface.SharedTempLocations,
-		CommandExternalHidden: frame.Machine.Surface.CommandExternalHidden,
+		SessionScratchDir:       frame.Machine.Surface.SessionScratchDir,
+		Posture:                 frame.Machine.Surface.Posture,
+		SharedTempLocations:     frame.Machine.Surface.SharedTempLocations,
+		SharedTempReadLocations: frame.Machine.Surface.SharedTempReadLocations,
+		CommandExternalHidden:   frame.Machine.Surface.CommandExternalHidden,
 	})
 	if len(templates) == 0 && len(facts) == 0 {
 		return nil

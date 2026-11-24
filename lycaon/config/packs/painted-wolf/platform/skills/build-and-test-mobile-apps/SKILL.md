@@ -9,7 +9,7 @@ metadata:
 
 Run the toolchain in `command` and declare its id (`android-sdk`, `flutter`, or `xcode`) in `capability_request.host_resources` on that call.
 
-{% if session_scratch_dir %}For an isolated Xcode build, pass `-derivedDataPath @scratch/DerivedData`.{% endif %} If a developer shim fails after a shared-temp refusal, follow the host’s reported review outcome.
+{% if session_scratch_dir %}For an isolated Xcode build, pass `-derivedDataPath @scratch/DerivedData`.{% endif %} If a developer shim encounters a shared-temp refusal, follow the host’s single reconciled review outcome rather than escalating to `host_execution`.
 
 ## Rules for every platform
 

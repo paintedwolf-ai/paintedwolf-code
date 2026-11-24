@@ -236,21 +236,52 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 	if raised.Succeeded() {
 		m.ObserveMintedCredential(ctx, sess, tool, args, output)
 	}
+	if raised.SharedTemp == nil && raised.Confine.Applied && raised.Confine.Running {
+		obs := raised.Confine.Refusals.SharedTempObservation()
+		raised.SharedTemp = &guidance.SharedTempSettlement{
+			Refused: raised.Confine.Refusals.SharedTempRoots(),
+			Reads:   obs.Reads,
+			Writes:  obs.Writes,
+			Running: true,
+		}
+	}
+	if sharedTempSettled(raised.SharedTemp) {
+		reconcileSettledSharedTemp(gc)
+	}
 	res, err := m.Pipeline.EvaluateBlock(ctx, oar.AnchorToolPost, gc)
 	if err != nil {
 		facts.ContentReplaced = true
 		return "", facts.WithOutcome(api.ToolResultOutcomeError)
 	}
 	delivered, facts = m.feedback.DeliverPostToolResult(ctx, oar.AnchorToolPost, output, res)
-	if raised.SharedTemp == nil && raised.Confine.Applied && raised.Confine.Running {
-		raised.SharedTemp = &guidance.SharedTempSettlement{Refused: raised.Confine.Refusals.SharedTempRoots(), Running: true}
-	}
 	if !facts.ContentReplaced && raised.SharedTemp != nil && len(raised.SharedTemp.Refused) > 0 && m.Pipeline.AnchorEnforced(oar.AnchorSharedTemp) {
 		var contribution guidance.ToolResultFacts
 		delivered, contribution = m.sharedTempResult(ctx, sess, tool, args, delivered, *raised.SharedTemp)
 		facts = facts.Merge(contribution)
 	}
 	return delivered, facts
+}
+
+func sharedTempSettled(st *guidance.SharedTempSettlement) bool {
+	return st != nil && !st.Tolerated && !st.Running &&
+		(len(st.Allowed) > 0 || len(st.Declined) > 0 || len(st.Unanswered) > 0)
+}
+
+func reconcileSettledSharedTemp(gc *oar.GuardContext) {
+	if gc == nil {
+		return
+	}
+	optional := gc.Refusals.OptionalReadPaths
+	gc.Refusals = oar.RefusalsFacts{OptionalReadPaths: optional}
+	if gc.Execution.Destination == "" {
+		filtered := gc.Execution.ConfineSignals[:0]
+		for _, sig := range gc.Execution.ConfineSignals {
+			if sig != "boundary_refused" {
+				filtered = append(filtered, sig)
+			}
+		}
+		gc.Execution.ConfineSignals = filtered
+	}
 }
 
 // fruitlessSearchRun reads question-specific counts without recording an attempt.

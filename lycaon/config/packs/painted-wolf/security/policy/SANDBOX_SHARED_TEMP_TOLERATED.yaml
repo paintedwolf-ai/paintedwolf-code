@@ -9,8 +9,8 @@ when: size(paintedwolf.refused_shared_temp) > 0 && paintedwolf.shared_temp_toler
 effect: warn
 x-paintedwolf-category: informational
 x-paintedwolf-emit: guard:sandbox
-message: a program tolerated a refused temporary file write
-what: 'The program exited successfully after the sandbox refused a write under {{ paintedwolf.refused_shared_temp }}.'
+message: a program tolerated a refused shared system temp access
+what: 'The program exited successfully after the sandbox refused access under {{ paintedwolf.refused_shared_temp }}.'
 cause: ''
 why: ''
 fix: ''

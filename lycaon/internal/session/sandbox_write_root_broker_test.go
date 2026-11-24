@@ -38,7 +38,7 @@ func TestWriteRootPlanBindsProjectIDOnDurableGrants(t *testing.T) {
 	}
 	projectID := "proj-write-root"
 	projectDir := t.TempDir()
-	proposed := filepath.Join(t.TempDir(), "buildx")
+	proposed := "/opt/lycaon-broker-test-nonexistent/buildx"
 	_, decision := gate.Evaluate(gate.Facts{
 		Stage: gate.StagePreSpawn,
 		Ran:   gate.ProducerFilePath | gate.ProducerLease,
@@ -331,7 +331,7 @@ func TestReadPathAuthorizeNoopForOrdinaryPaths(t *testing.T) {
 		ReadRuntime: approvalstate.NewSandboxPathGrantRuntime(),
 	}
 	got, err := broker.AuthorizeRead(t.Context(), command.SandboxReadPathAsk{
-		SessionID: "sess", ProposedReadPath: filepath.Join(t.TempDir(), "notes.txt"),
+		SessionID: "sess", ProposedReadPath: "/opt/lycaon-broker-test-nonexistent/notes.txt",
 	})
 	testutil.FailErr(t, "AuthorizeRead ordinary", err)
 	if !got.Authorized || got.Raised {
@@ -700,9 +700,9 @@ func TestSharedTempExchangeSettlementCombinesReadsAndWritesAndReopensOnExplicitP
 
 	refusals := confine.SandboxRefusals{
 		Refusals: []confine.SandboxRefusal{
-			{Operation: "file-read-data", Target: inputFile},
-			{Operation: "file-read-data", Target: speculativeMissing},
-			{Operation: "file-write-create", Target: exportFile},
+			{Operation: "file-read-data", Target: inputFile, Layer: confine.FloorSharedTemp, Grant: confine.GrantExactPath},
+			{Operation: "file-read-data", Target: speculativeMissing, Layer: confine.FloorSharedTemp, Grant: confine.GrantExactPath},
+			{Operation: "file-write-create", Target: exportFile, Layer: confine.FloorSharedTemp, Grant: confine.GrantSharedTempWrite},
 		},
 	}
 	obs := refusals.SharedTempObservation()
