@@ -47,7 +47,8 @@ export function buildPagedTreeModel(roots: readonly TreeRoot[], count: number,
     frame.rows.forEach((row, offset) => source.set(frame.span.start + offset, row));
   }
   if (roots.length === 1 && source.get(0)?.address.path === ".") ends.set(0, count);
-  return buildTreeRowsModel(roots, count, source, ends, drafts);
+  const outsideStart = frames.find(frame => frame.outside_start !== undefined)?.outside_start;
+  return buildTreeRowsModel(roots, count, source, ends, drafts, outsideStart);
 }
 
 /** Root metadata remains navigable before a host connection is available. */
@@ -58,7 +59,7 @@ export function buildKnownRootsModel(roots: readonly TreeRoot[]): PagedTreeModel
 }
 
 function buildTreeRowsModel(roots: readonly TreeRoot[], count: number, source: Map<number, SourceTreeRow>,
-  ends: Map<number, number>, drafts: readonly TreeDraft[]): PagedTreeModel {
+  ends: Map<number, number>, drafts: readonly TreeDraft[], outsideStart?: number): PagedTreeModel {
   const labels = new Map(roots.map(root => [root.id, root.label]));
   const addresses = new Map<string, number>();
   for (const [index, row] of source) {
@@ -76,6 +77,10 @@ function buildTreeRowsModel(roots: readonly TreeRoot[], count: number, source: M
       rootLabel: entry.rootLabel, dir: draft.dir, depth: entry.depth, entryKind: draft.naming });
     if (draft.createError) rows.push({ kind: "create-error", key: `${entry.key}:create-error`, depth: entry.depth + 1, message: draft.createError });
     if (rows.length) inserted.push({ at: parent + 1, rows });
+  }
+  // The section heads the chat's locations, after any draft row of the last project folder.
+  if (outsideStart !== undefined && outsideStart <= count) {
+    inserted.push({ at: outsideStart, rows: [{ kind: "outside-section", key: "outside-section", depth: 0 }] });
   }
   inserted.sort((a, b) => a.at - b.at);
   const displayIndex = (index: number) => index + inserted.reduce((sum, item) => sum + (item.at <= index ? item.rows.length : 0), 0);
@@ -129,6 +134,7 @@ function buildTreeRowsModel(roots: readonly TreeRoot[], count: number, source: M
   };
   const chains = new Map<string, StickyAncestor[]>();
   const chainAt = (index: number): StickyAncestor[] => {
+    if (rows.get(index)?.kind === "outside-section") return [];
     const sourceAt = sourceIndex(index);
     const sourceRow = source.get(sourceAt);
     if (!sourceRow) {

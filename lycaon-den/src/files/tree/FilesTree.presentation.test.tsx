@@ -327,7 +327,7 @@ it("switches outside locations without replacing the project rows", async () => 
   const original = await findFileRow("README.md");
   original.focus();
   setChat("chat-b");
-  await screen.findByTestId("files-tree-outside-tag");
+  await screen.findByTestId("files-tree-outside-section");
   expect(screen.getByText("chat-b")).toBeTruthy();
   expect(getFileRow("README.md")).toBe(original);
   expect(document.activeElement).toBe(original);

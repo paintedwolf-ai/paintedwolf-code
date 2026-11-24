@@ -36,6 +36,11 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
   type Generation = { state: SourceTreeView; revision: string; rows: SourceTreeRow[]; total: number; rowAt: (index: number) => SourceTreeRow; rank?: (path: string) => number };
   // Captured generations remain immutable.
   const retained = new Map<string, Generation>();
+  const outsideStart = (answering: { state: SourceTreeView; rows: SourceTreeRow[] }) => {
+    const ids = new Set(answering.state.outside_locations.map(location => location.id));
+    const index = ids.size ? answering.rows.findIndex(row => ids.has(row.address.root_id)) : -1;
+    return index < 0 ? {} : { outside_start: index };
+  };
   const state = (): SourceTreeView => ({ kind: "tree", id, workspace_id: workspace, roots: TREE_ROOTS, outside_locations: outside,
     intent_revision: `intent-${intentRevision}`, projection_revision: `projection-${revision}`,
     state: failure ? "failed" : complete ? "ready" : "preparing", extent: { rows: total, complete },
@@ -105,7 +110,8 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
         target, extent: { rows: answering.total, complete: true }, span: { start, end }, anchor: answering.rowAt(start)?.address ?? { root_id: "r1", path: "." },
         rows: Array.from({ length: end - start }, (_, i) => {
           const row = answering.rowAt(start + i); knownRows.set(row.address.path, start + i); return row;
-        }), ancestors: start > 0 ? [{ index: 0, end: answering.total, row: answering.rowAt(0) }] : [] } as T;
+        }), ancestors: start > 0 ? [{ index: 0, end: answering.total, row: answering.rowAt(0) }] : [],
+        ...outsideStart(answering) } as T;
     }
     if (method === "POST" && url.pathname.endsWith("/apply")) {
       const request = body as SourceTreeViewUpdate;

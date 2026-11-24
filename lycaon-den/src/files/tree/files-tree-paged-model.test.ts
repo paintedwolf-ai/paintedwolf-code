@@ -82,3 +82,22 @@ it("keeps known sticky ancestors through a page gap and honors subtree boundarie
   expect(model.chainAt(900_000).map(item => item.entry.path)).toEqual(["."]);
   expect(model.chainAt(50).map(item => item.entry.path)).toEqual(["."]);
 });
+it("heads the chat's locations with one section row at the host's outside start", () => {
+  const location = (path: string, depth: number, kind: SourceTreeRow["kind"] = "directory"): SourceTreeRow => ({
+    address: { root_id: "location", path }, name: path === "." ? "notes" : path.split("/").at(-1)!, depth, kind, expanded: kind === "directory",
+  });
+  const rows = [row(".", 0), row("a.ts", 1, "file"), location(".", 0), location("b.txt", 1, "file")];
+  const outsideFrame: SourceTreeFrame = { ...frame(0, rows), extent: { rows: 4, complete: true }, ancestors: [], outside_start: 2 };
+  const model = buildPagedTreeModel([...roots, { id: "location", label: "notes" }], 4, [outsideFrame],
+    [{ rootId: "root", dir: ".", naming: "file", createError: null }]);
+  const kinds = Array.from({ length: model.length }, (_, index) => model.rowAt(index)?.kind);
+  expect(kinds).toEqual(["entry", "naming", "entry", "outside-section", "entry", "entry"]);
+  expect(model.indexOfEntry("location", ".")).toBe(4);
+  expect(model.nextEntryIndex(2, 1)).toBe(4);
+  expect(model.nextEntryIndex(4, -1)).toBe(2);
+  expect(model.chainAt(3)).toEqual([]);
+  expect(model.chainAt(5).map(item => item.displayIndex)).toEqual([4]);
+
+  const none = buildPagedTreeModel(roots, 2, [{ ...frame(0, rows.slice(0, 2)), extent: { rows: 2, complete: true }, ancestors: [] }]);
+  expect(Array.from({ length: none.length }, (_, index) => none.rowAt(index)?.kind)).not.toContain("outside-section");
+});
