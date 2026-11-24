@@ -137,7 +137,7 @@ export function TranscriptVisualTimeline(props: Props) {
   const markerLabel = (marker: TimelineMarker) => `${marker.label} at ${timelineClock(marker.atMs)}`;
 
   return (
-    <div ref={bindTranscriptEntry} data-artifact-path={artifactFetchPath(sessionId(), artifactId())}>
+    <div ref={bindTranscriptEntry} class="den-transcript-visual-host" data-artifact-path={artifactFetchPath(sessionId(), artifactId())}>
       <figure
         class="den-transcript-visual den-transcript-visual--timeline"
         classList={{

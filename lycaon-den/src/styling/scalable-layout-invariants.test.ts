@@ -200,5 +200,38 @@ describe("scalable layout chrome", () => {
     expect(radioWidth).toMatch(/max\(1\.7143rem/);
     expect(tw).toMatch(/@utility den-input[\s\S]*?min-height:\s*max\(24px/);
   });
+
+  it("constrains activity detail grids and filmstrips to their card box", () => {
+    const tools = read("tool-utilities.css");
+    const chat = read("chat-utilities.css");
+
+    // Single-column grids need minmax(0, 1fr) so wide children cannot widen sibling rows past the card.
+    for (const util of [
+      "den-action-card",
+      "den-action-card__observation",
+      "den-action-card__preview",
+      "den-activity-summary__sections",
+      "den-activity-summary__body",
+      "den-briefing-summary",
+    ]) {
+      expect(tools, util).toMatch(
+        new RegExp(`@utility ${util}\\s*\\{[^}]*grid-template-columns:\\s*minmax\\(0,\\s*1fr\\)`),
+      );
+    }
+
+    for (const util of ["den-tool-part-body", "den-tool-part-card-body"]) {
+      expect(tools, util).toMatch(
+        new RegExp(`@utility ${util}\\s*\\{[^}]*min-width:\\s*0`),
+      );
+    }
+
+    // Filmstrip stages stack against their own card width rather than the window width.
+    expect(chat).toMatch(
+      /\.den-transcript-visual--filmstrip\s*\{[^}]*container-name:\s*den-visual-filmstrip/,
+    );
+    expect(chat).toMatch(
+      /@container den-visual-filmstrip \(max-width:\s*26rem\)\s*\{\s*\.den-transcript-visual-filmstrip__stage\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\);/,
+    );
+  });
 });
 

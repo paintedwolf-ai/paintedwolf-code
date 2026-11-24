@@ -314,7 +314,7 @@ function TranscriptVisualRaster(props: Props) {
     </figure>
   );
   return (
-    <div ref={bindTranscriptEntry} data-artifact-path={artifactFetchPath(sessionId(), artifactId())}>
+    <div ref={bindTranscriptEntry} class="den-transcript-visual-host" data-artifact-path={artifactFetchPath(sessionId(), artifactId())}>
       {card}
     </div>
   );
