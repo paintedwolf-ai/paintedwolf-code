@@ -1861,6 +1861,12 @@
       "emit": "guard:coordinator",
       "summary": "`{{ tool }}` cannot start workers while a question, workflow feedback request, or decision is still open."
     },
+    "PLAN_FINAL_ITEM_COVERAGE": {
+      "summary": "After this last step, what part of the user’s request, if any, will still need work or verification?"
+    },
+    "PLAN_OUTCOME_COVERAGE": {
+      "summary": "Which planned outcomes does the evidence so far support?"
+    },
     "POLICY_CONTEXT_CHANGED": {
       "branch_instruction": "Continue read-only investigation, then propose only the remaining effects after fresh guidance is delivered.",
       "category": "recoverable",

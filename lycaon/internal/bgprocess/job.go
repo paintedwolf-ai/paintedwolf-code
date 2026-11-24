@@ -118,6 +118,8 @@ type PipelineSpec struct {
 	OriginTool      string
 	ToolCallID      string
 	RunID           string
+	UserIntentID    string
+	WorkflowRunID   string
 	Timeout         time.Duration
 	AllowConcurrent bool
 	Facts           confine.SpawnFacts
@@ -176,6 +178,8 @@ type Completion struct {
 	OriginTool       string
 	ToolCallID       string
 	RunID            string
+	UserIntentID     string
+	WorkflowRunID    string
 	Mode             JobMode
 	StartedAt        time.Time
 	FinishedAt       time.Time

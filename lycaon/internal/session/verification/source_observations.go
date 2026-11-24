@@ -106,6 +106,19 @@ func sourceCheckObservations(records []evidence.Record, boundary time.Time, revi
 	return out
 }
 
+// CheckMatchesCurrentSource reports whether a recorded source check matches
+// the session's current source revision and observation freshness.
+func (m *Service) CheckMatchesCurrentSource(ctx context.Context, sess *api.Session, checkID, sourceRevision, sourceRootDigest string) bool {
+	if m == nil || sess == nil {
+		return false
+	}
+	revision, root := m.Revision(ctx, m.SourceEvidenceRoot(ctx, sess))
+	if sourceMatch(sourceRevision, sourceRootDigest, revision, root) != SourceCurrent {
+		return false
+	}
+	return !checkStaleByObservation(m, ctx, sess, checkID)
+}
+
 func sourceMatch(recordedRevision, recordedRoot, currentRevision, currentRoot string) SourceMatch {
 	if recordedRevision == "" || recordedRoot == "" || currentRevision == "" || currentRoot == "" {
 		return SourceUnknown

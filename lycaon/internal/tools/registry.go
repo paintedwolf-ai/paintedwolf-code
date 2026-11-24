@@ -57,6 +57,8 @@ type SourceRunCapture struct {
 	SourceRevision   string
 	SourceRootDigest string
 	Cwd              string
+	UserIntentID     string
+	WorkflowRunID    string
 }
 
 // ToolInvocationOut collects host-side invocation outputs.
@@ -96,6 +98,7 @@ type ToolInvocationOut struct {
 	CommandProgram           *api.CommandProgramReceipt
 	ProgramRefusal           *ProgramRefusalVisibility
 	programProgressPublished atomic.Bool
+	planItemCompleted        atomic.Bool
 	// CommandStarted records whether any operation started in the program.
 	CommandStarted bool
 	// CommandDeliveryReject records a refused output delivery after evaluation.
@@ -252,6 +255,8 @@ type InvocationSource struct {
 type InvocationTurn struct {
 	ToolAccess    sandbox.ToolAccess
 	TurnSurfaceID string
+	UserIntentID  string
+	WorkflowRunID string
 	// TurnOfferedToolNames binds execution to the schemas on this model request.
 	// Nil leaves non-model callers unconstrained; empty permits no tools.
 	TurnOfferedToolNames []string

@@ -112,6 +112,9 @@ func (m *Service) RecordSourceRunTerminal(
 	}
 	rec.Artifacts["source_revision"] = run.SourceRevision
 	rec.Artifacts["source_root_digest"] = run.SourceRootDigest
+	if intentID := strings.TrimSpace(run.UserIntentID); intentID != "" {
+		rec.Artifacts["user_intent_id"] = intentID
+	}
 	root := m.EvidenceRootFor(sess)
 	if root != "" {
 		if err := m.evidenceStore.Append(ctx, root, rec); err != nil {
@@ -120,6 +123,9 @@ func (m *Service) RecordSourceRunTerminal(
 	}
 	if verifyVerdict(run.Verdict) == evidence.GateVerdictPassed {
 		autoBindPassingRun(m, ctx, sess, run.CheckID, run.SourceRevision)
+	}
+	if m.onSourceRun != nil {
+		m.onSourceRun(ctx, sess, producer, run)
 	}
 }
 

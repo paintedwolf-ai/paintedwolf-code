@@ -2,8 +2,10 @@ package session
 
 import (
 	"context"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator"
+	"github.com/lycaon/lycaon/internal/coordinator/completioncue"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -12,8 +14,10 @@ import (
 	"github.com/lycaon/lycaon/internal/session/promptsource"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/toolpresentation"
+	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/webresearch"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func (m *Host) SetWebResearchConfig(cfg *webresearch.ConfigStore) {
@@ -32,7 +36,7 @@ func acquireCoordinatorSources(m *Host, store *sessionstore.Repositories, client
 		return scanWait.InFlight != nil && scanWait.InFlight(ctx, id)
 	}
 	m.Coordinator.PolicyIndex.SetWorkspaceRoots(m.Workers.Workspaces.BoardRoots)
-	m.Coordinator.Context = &promptsource.Context{PolicyIndex: m.Coordinator.PolicyIndex, Frame: nil, Guards: m.Coordinator.Guards, Limits: m.Limits, Loading: m.Coordinator.Loading, Pages: nil, Policy: m.ToolPolicy, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Runtime: nil, Sessions: store.Sessions, ToolContext: m.ToolContext, Tools: registry, WebResearch: nil, WorkerState: m.Workers.State, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces}
+	m.Coordinator.Context = &promptsource.Context{PolicyIndex: m.Coordinator.PolicyIndex, Frame: nil, Guards: m.Coordinator.Guards, Limits: m.Limits, Loading: m.Coordinator.Loading, Pages: nil, Policy: m.ToolPolicy, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Runtime: nil, Sessions: store.Sessions, ToolContext: m.ToolContext, Tools: registry, Verification: m.Verification, WebResearch: nil, WorkerState: m.Workers.State, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces}
 	m.Coordinator.Tools = &promptsource.Tools{
 		Results: &promptsource.ToolResults{Batch: m.Coordinator.Batch, Guards: m.Coordinator.Guards,
 			Guidance: m.Coordinator.Guidance, Policy: m.ToolPolicy, WorkerState: m.Workers.State},
@@ -56,6 +60,34 @@ func acquireCoordinatorSources(m *Host, store *sessionstore.Repositories, client
 // bindCoordinatorRuntime connects the acquired session peers to one coordinator loop.
 func bindCoordinatorRuntime(m *Host, store *sessionstore.Repositories) {
 	runtime := coordinator.NewRuntime(m.Coordinator.RuntimeDependencies())
+	if store != nil && store.CompletionCues != nil {
+		runtime.CompletionCues().SetStore(completionCueStoreAdapter{repo: store.CompletionCues})
+	}
+	if m.Verification != nil {
+		cues := runtime.CompletionCues()
+		m.Verification.SetSourceRunObserver(func(_ context.Context, sess *api.Session, producer string, run tools.SourceRunCapture) {
+			if sess == nil || sess.IsWorkerChild() {
+				return
+			}
+			if producer != sessionverification.ProducerVerify && producer != sessionverification.ProducerCommand {
+				return
+			}
+			if !run.IsCheck || strings.TrimSpace(run.CheckID) == "" || run.Verdict != api.SourceVerdictPassed {
+				return
+			}
+			if strings.TrimSpace(run.UserIntentID) == "" {
+				return
+			}
+			cues.RecordPassingCheck(completioncue.CheckFact{
+				CheckID:          strings.TrimSpace(run.CheckID),
+				SessionID:        strings.TrimSpace(sess.ID),
+				WorkflowRunID:    strings.TrimSpace(run.WorkflowRunID),
+				IntentID:         strings.TrimSpace(run.UserIntentID),
+				SourceRevision:   run.SourceRevision,
+				SourceRootDigest: run.SourceRootDigest,
+			})
+		})
+	}
 	m.Coordinator.Runtime = runtime
 	m.Stops.SetCoordinator(runtime)
 	m.Coordinator.Guidance.Bind(runtime.Kicks(), runtime.Anchors())
@@ -85,4 +117,28 @@ func bindCoordinatorRuntime(m *Host, store *sessionstore.Repositories) {
 
 	m.Coordinator.Profiles = m.Profiles
 	m.Coordinator.ToolPolicy = m.ToolPolicy
+}
+
+type completionCueStoreAdapter struct {
+	repo sessionstore.CompletionCueRepository
+}
+
+func (a completionCueStoreAdapter) GetCompletionCueState(ctx context.Context, sessionID string) (completioncue.DeliveredState, error) {
+	st, err := a.repo.GetCompletionCueState(ctx, sessionID)
+	if err != nil {
+		return completioncue.DeliveredState{}, err
+	}
+	return completioncue.DeliveredState{
+		IntentID:           st.IntentID,
+		OutcomeDelivered:   st.OutcomeDelivered,
+		FinalItemDelivered: st.FinalItemDelivered,
+	}, nil
+}
+
+func (a completionCueStoreAdapter) SaveCompletionCueState(ctx context.Context, sessionID string, state completioncue.DeliveredState) error {
+	return a.repo.SaveCompletionCueState(ctx, sessionID, sessionstore.CompletionCueState{
+		IntentID:           state.IntentID,
+		OutcomeDelivered:   state.OutcomeDelivered,
+		FinalItemDelivered: state.FinalItemDelivered,
+	})
 }

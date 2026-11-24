@@ -222,6 +222,9 @@ loop:
 				return nil, err
 			}
 		}
+		if err := l.Model.commitCompletionCue(turnCtx, st); err != nil {
+			return nil, err
+		}
 		// Persist worker progress at round boundaries.
 		completed = step + 1
 		st.turnsRanThisRun++

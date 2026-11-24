@@ -23,6 +23,18 @@ func (o *ToolInvocationOut) ProgramProgressPublished() bool {
 	return o != nil && o.programProgressPublished.Load()
 }
 
+// MarkPlanItemCompleted records a committed pending-to-done checklist transition.
+func (o *ToolInvocationOut) MarkPlanItemCompleted() {
+	if o != nil {
+		o.planItemCompleted.Store(true)
+	}
+}
+
+// PlanItemCompleted reports whether this invocation committed a pending-to-done checklist transition.
+func (o *ToolInvocationOut) PlanItemCompleted() bool {
+	return o != nil && o.planItemCompleted.Load()
+}
+
 // MergeScope names the seam a child's outputs cross.
 type MergeScope int
 
@@ -72,6 +84,9 @@ func (o *ToolInvocationOut) MergeChild(child *ToolInvocationOut, scope MergeScop
 	if child.ExternalAccess != nil {
 		o.ExternalAccess = child.ExternalAccess
 	}
+	if child.PlanItemCompleted() {
+		o.MarkPlanItemCompleted()
+	}
 	switch scope {
 	case MergeStageOK:
 		for _, item := range child.Facts.Feedback {
@@ -104,6 +119,9 @@ func (o *ToolInvocationOut) TakeCommitted() *ToolInvocationOut {
 	taken.SourceDeliveries, o.SourceDeliveries = o.SourceDeliveries, nil
 	taken.Listener, o.Listener = o.Listener, nil
 	taken.ExternalAccess, o.ExternalAccess = o.ExternalAccess, nil
+	if o.planItemCompleted.Swap(false) {
+		taken.MarkPlanItemCompleted()
+	}
 	return taken
 }
 

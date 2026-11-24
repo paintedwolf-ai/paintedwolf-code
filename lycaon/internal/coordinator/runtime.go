@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
+	"github.com/lycaon/lycaon/internal/coordinator/completioncue"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
@@ -42,6 +43,8 @@ type Runtime struct {
 	coordLoop          *loopwake.LoopEngine
 	loopWakeDeps       func() loopwake.LoopDeps
 	executionModeStore *surface.ExecutionModeStateStore
+	completionCuesOnce sync.Once
+	completionCues     *completioncue.Tracker
 }
 
 // NewRuntime constructs a Runtime. deps refresh on each RunPrompt call.
@@ -58,6 +61,7 @@ func NewRuntime(deps RuntimeDeps) *Runtime {
 		coordLoop:          loopwake.NewLoopEngine(),
 		loopWakeDeps:       deps.LoopWakeDeps,
 		executionModeStore: surface.NewExecutionModeStateStore(),
+		completionCues:     completioncue.NewTracker(nil),
 	}
 }
 
@@ -212,6 +216,19 @@ func (r *Runtime) ReleaseSession(ctx context.Context, sessionID string) {
 	r.Kicks().ClearPending(sessionID)
 }
 
+// CompletionCues returns the coordinator mid-work completion cue tracker.
+func (r *Runtime) CompletionCues() *completioncue.Tracker {
+	if r == nil {
+		return completioncue.NewTracker(nil)
+	}
+	r.completionCuesOnce.Do(func() {
+		if r.completionCues == nil {
+			r.completionCues = completioncue.NewTracker(nil)
+		}
+	})
+	return r.completionCues
+}
+
 // ForgetSession releases coordinator runtime state for a deleted session.
 func (r *Runtime) ForgetSession(ctx context.Context, sessionID string) {
 	if r == nil {
@@ -222,6 +239,9 @@ func (r *Runtime) ForgetSession(ctx context.Context, sessionID string) {
 	r.depsMu.Unlock()
 	if loop != nil {
 		loop.ForgetSession(ctx, sessionID)
+	}
+	if cues := r.CompletionCues(); cues != nil {
+		cues.ForgetSession(sessionID)
 	}
 	r.Kicks().ForgetSession(sessionID)
 }

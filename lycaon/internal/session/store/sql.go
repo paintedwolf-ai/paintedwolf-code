@@ -71,16 +71,17 @@ type sqlRewind struct{ core *sqlCore }
 
 // Repositories shares database transactions and session mutation serialization.
 type Repositories struct {
-	core        *sqlCore
-	People      *peoplestore.Store
-	Sessions    SessionRepository
-	Transcript  TranscriptRepository
-	Compaction  CompactionRepository
-	Turns       TurnRepository
-	Submissions SubmissionRepository
-	Attachments AttachmentRepository
-	Evidence    EvidenceRepository
-	Rewind      RewindRepository
+	core           *sqlCore
+	People         *peoplestore.Store
+	Sessions       SessionRepository
+	Transcript     TranscriptRepository
+	Compaction     CompactionRepository
+	Turns          TurnRepository
+	CompletionCues CompletionCueRepository
+	Submissions    SubmissionRepository
+	Attachments    AttachmentRepository
+	Evidence       EvidenceRepository
+	Rewind         RewindRepository
 }
 
 func mutationShard(id string) uint {
@@ -148,14 +149,15 @@ func NewSQL(database db.ReadHandle) *Repositories {
 	}
 	return &Repositories{
 		core: core, People: core.peopleStore,
-		Sessions:    &sqlSessions{core: core},
-		Transcript:  &sqlTranscript{core: core},
-		Compaction:  &sqlCompaction{core: core},
-		Turns:       &sqlTurns{core: core},
-		Submissions: &sqlSubmissions{core: core},
-		Attachments: &sqlAttachmentBlobs{core: core},
-		Evidence:    &sqlEvidence{core: core},
-		Rewind:      &sqlRewind{core: core},
+		Sessions:       &sqlSessions{core: core},
+		Transcript:     &sqlTranscript{core: core},
+		Compaction:     &sqlCompaction{core: core},
+		Turns:          &sqlTurns{core: core},
+		CompletionCues: &sqlCompletionCues{core: core},
+		Submissions:    &sqlSubmissions{core: core},
+		Attachments:    &sqlAttachmentBlobs{core: core},
+		Evidence:       &sqlEvidence{core: core},
+		Rewind:         &sqlRewind{core: core},
 	}
 }
 

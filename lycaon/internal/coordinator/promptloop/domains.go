@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
+	"github.com/lycaon/lycaon/internal/coordinator/completioncue"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/cost"
@@ -46,6 +47,9 @@ type ContextDeps struct {
 	LoadedTools           func(sessionID string) map[string]bool
 	LiveResources         func(sessionID string) toolcontract.ResourcePresence
 	ProjectRootCount      func(ctx context.Context, sess *api.Session) int
+	CompletionCues        *completioncue.Tracker
+	PendingProgressCount  func(ctx context.Context, sess *api.Session) (int, bool)
+	ConfirmCheckCurrent   func(ctx context.Context, sess *api.Session, check completioncue.CheckFact) bool
 	ContextSurfaceDeps
 }
 

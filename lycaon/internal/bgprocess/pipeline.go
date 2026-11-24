@@ -76,12 +76,14 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 			toolCallID: strings.TrimSpace(spec.ToolCallID),
 		},
 		processConfinementState: processConfinementState{
-			isCheck:  spec.IsCheck,
-			cwd:      spec.Cwd,
-			runID:    strings.TrimSpace(spec.RunID),
-			runKey:   runKey,
-			boundary: confine.BoundaryOf(req.Launch.Confinement),
-			facts:    spec.Facts,
+			isCheck:       spec.IsCheck,
+			cwd:           spec.Cwd,
+			runID:         strings.TrimSpace(spec.RunID),
+			userIntentID:  strings.TrimSpace(spec.UserIntentID),
+			workflowRunID: strings.TrimSpace(spec.WorkflowRunID),
+			runKey:        runKey,
+			boundary:      confine.BoundaryOf(req.Launch.Confinement),
+			facts:         spec.Facts,
 		},
 	}
 	if proc.RootSessionID == "" {

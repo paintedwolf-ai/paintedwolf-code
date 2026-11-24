@@ -40,6 +40,7 @@ func warnLedgerUnwired() {
 type toolCaptures struct {
 	programRefusal           *tools.ProgramRefusalVisibility
 	programProgressPublished bool
+	planItemCompleted        bool
 	sourceContext            *api.SourceContext
 	overlayPromotion         *api.OverlayPromotion
 	ownerRef                 string
@@ -440,6 +441,7 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 	return toolCaptures{
 		programRefusal:           out.ProgramRefusal,
 		programProgressPublished: out.ProgramProgressPublished(),
+		planItemCompleted:        out.PlanItemCompleted(),
 		workerReport:             out.WorkerReport,
 		displaySubject:           out.DisplaySubject,
 		overlayPromotion:         out.OverlayPromotion,

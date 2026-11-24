@@ -394,6 +394,13 @@ type ContentBlobReclaimQueue struct {
 	Sha256    string `json:"sha256"`
 }
 
+type CoordinatorCompletionCues struct {
+	SessionID          string `json:"session_id"`
+	IntentID           string `json:"intent_id"`
+	OutcomeDelivered   int64  `json:"outcome_delivered"`
+	FinalItemDelivered int64  `json:"final_item_delivered"`
+}
+
 type CredentialAuthoredValues struct {
 	ProjectID        string `json:"project_id"`
 	RootID           string `json:"root_id"`

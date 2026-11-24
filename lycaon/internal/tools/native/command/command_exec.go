@@ -227,6 +227,7 @@ func runCommandForeground(
 		Runner: runner,
 		Mode:   bgprocess.JobModeAwaited, OriginTool: toolName,
 		ToolCallID: tctx.Identity.ToolCallID, RunID: commandRunID(tctx),
+		UserIntentID: tctx.Turn.UserIntentID, WorkflowRunID: tctx.Turn.WorkflowRunID,
 		AllowConcurrent: allowConcurrent(args),
 		Facts:           spawnFacts,
 	})

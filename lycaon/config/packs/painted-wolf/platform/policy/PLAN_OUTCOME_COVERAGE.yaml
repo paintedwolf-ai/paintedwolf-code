@@ -1,0 +1,4 @@
+spec_version: "1.0"
+id: PLAN_OUTCOME_COVERAGE
+kind: hint
+message: Which planned outcomes does the evidence so far support?
