@@ -31,6 +31,8 @@ describe("client + store suite", () => {
         topic === "turn_load" ||
         topic === "agent_presence" ||
         topic === "chat_vault" ||
+        topic === "watch.updated" ||
+        topic === "watch_run.updated" ||
         // Settings invalidates by facet.
         topic === "settings"
       ) {

@@ -33,6 +33,7 @@ import { applyTurnOutcome } from "../chat/recovery/turn-outcome.ts";
 import { invalidateApprovalGrantsCache } from "../settings/security/approval-grants-cache.ts";
 import { LycaonApiError } from "./http.ts";
 import { resetSessionSnapshotReads, sessionSnapshotReadFence } from "./session-snapshot-refresh.ts";
+import { invalidateWatchesForReconnect } from "../watches/watches-store.ts";
 import {
   forgetSessionRevisions,
   sessionModeRevisionWatermarks,
@@ -45,6 +46,7 @@ export function resetSessionEventRevisions(storeActions: AppStoreActions): void 
   forgetSessionRevisions(storeActions);
   rebaseSessionModeIntents(storeActions);
   resetSessionSnapshotReads(storeActions);
+  invalidateWatchesForReconnect();
 }
 
 /** Idle stream heartbeat. */

@@ -4,6 +4,8 @@ import { gitStatusRefreshPending } from "../../chat/actions/git-status-reads.ts"
 import { useChatTabChrome } from "../../chat/composer/chat-tab-chrome.tsx";
 import type { OpenWorkerOptions } from "../../chat/worker/workers-model.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+import { openRunningStage } from "../../platform/navigation/open-running.ts";
+import { projectWatchesFor } from "../../watches/watches-store.ts";
 import { sessionExportOverflowItems, messagesHaveExportableTranscript } from "../../session/session-export-menu.ts";
 import { exportSessionTranscript } from "../../settings/storage/data-backup-actions.ts";
 import { usePresentationParticipant } from "../../ui/presentation-context.tsx";
@@ -144,6 +146,51 @@ export function ChatTabRail(props: ChatTabRailProps) {
     />
   );
 
+  const standingWatchOrigin = createMemo(() => {
+    const sess = props.appStore.state.currentSession;
+    if (!sess || sess.id !== props.sessionId) return null;
+    const origin = sess.ui?.standing_watch;
+    if (!origin) return null;
+    const projectId = sess.project_id ?? "";
+    const view = projectId ? projectWatchesFor(projectId) : null;
+    const deleted =
+      origin.deleted === true ||
+      (view?.hydrated === true && !view.standingById.has(origin.watch_id));
+    return { ...origin, projectId, deleted };
+  });
+
+  const standingWatchBadge = () => (
+    <Show when={standingWatchOrigin()} keyed>
+      {(origin) => (
+        <Show
+          when={!origin.deleted}
+          fallback={
+            <span
+              class="px-den-2 text-den-caption text-den-text-muted truncate max-w-52"
+              data-testid="chat-header-standing-watch-deleted"
+            >
+              Deleted standing watch · {origin.watch_name}
+            </span>
+          }
+        >
+          <button
+            type="button"
+            class="den-chat-content-link px-den-2 text-den-caption truncate max-w-52"
+            data-testid="chat-header-standing-watch-link"
+            onClick={() =>
+              openRunningStage({
+                projectId: origin.projectId || undefined,
+                watchId: origin.watch_id,
+              })
+            }
+          >
+            {origin.watch_name}
+          </button>
+        </Show>
+      )}
+    </Show>
+  );
+
   return (
     <TabBar
       open={chrome.openTab()}
@@ -164,6 +211,7 @@ export function ChatTabRail(props: ChatTabRailProps) {
       }
       trailing={
         <>
+          {standingWatchBadge()}
           <Show when={!seamAt("trailing")}>{exportMenu()}</Show>
           <Show when={seamAt("trailing")}>{seamControls()}</Show>
           <Show when={props.navCollapsed && navOnRight()}>{navExpand()}</Show>

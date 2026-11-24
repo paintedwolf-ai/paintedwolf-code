@@ -15,6 +15,7 @@ import { ToolPartShell } from "../tool/ToolPartShell.tsx";
 import { ActionLinks } from "./ActionLinks.tsx";
 import { liveToolProcess } from "../../chat/tool/tool-part-model.ts";
 import { ActionProcess } from "./ActionProcess.tsx";
+import { ActionWatchControls } from "./ActionWatchControls.tsx";
 import { visualFromPart } from "../../chat/visual/visual-artifact-model.ts";
 import { visualProducerEntryKey } from "../../chat/visual/visual-artifact-canonical.ts";
 import { TranscriptVisualSlot } from "../transcript/TranscriptVisualSlot.tsx";
@@ -77,6 +78,13 @@ export function ActionCard(props: Props) {
         <Show when={process()} keyed>
           {(live) => <ActionProcess sessionId={live.sessionId} processId={live.handle.handle} initialRunning={live.handle.running} terminationReason={live.handle.termination_reason} port={port()} />}
         </Show>
+        <ActionWatchControls
+          part={props.part}
+          sessionId={props.sessionId}
+          projectId={props.projectId}
+          processId={process()?.handle.handle}
+          client={props.client}
+        />
         <Show when={props.action.preview} keyed>
           {(preview) => <ActionPreview preview={preview} action={props.action} part={props.part} sessionId={props.sessionId} client={props.client} />}
         </Show>

@@ -286,7 +286,7 @@ export const STAGE_REGISTRY: Record<ContextNavItemId, StageDefinition> = {
   },
   running: {
     id: "running",
-    label: "Running",
+    label: "Activity",
     navTestId: "project-running-entry",
     icon: StageRunningIcon,
     backPlacement: "stage",
