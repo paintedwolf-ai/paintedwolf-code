@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -101,5 +102,74 @@ func TestCurrentSnapshotCarriesItsWorkspace(t *testing.T) {
 	testutil.FailErr(t, "read current document", err)
 	if current.WorkspaceID == "" || current.WorkspaceID != opened.WorkspaceID {
 		t.Fatalf("current snapshot workspace = %q, opened = %q", current.WorkspaceID, opened.WorkspaceID)
+	}
+}
+
+func TestOrphanedCheckoutDocumentLifecycleAndStatuses(t *testing.T) {
+	f, _ := newLedgerAgentFixture(t, map[string]string{"a.txt": "base\n"})
+	trunkDoc := f.open(t, "a.txt")
+	if liveP, err := f.service.LiveWorkspace(t.Context(), f.project, trunkDoc.ID); err != nil || liveP.ID != f.project.ID {
+		t.Fatalf("trunk LiveWorkspace = %v, %v", liveP, err)
+	}
+	if wsP, err := f.service.Workspace(t.Context(), f.project, trunkDoc.ID); err != nil || wsP.ID != f.project.ID {
+		t.Fatalf("trunk Workspace = %v, %v", wsP, err)
+	}
+	if reopenedTrunk, err := f.service.OpenByID(t.Context(), f.project.ID, trunkDoc.ID, "", "window-1", nil); err != nil || reopenedTrunk.ID != trunkDoc.ID {
+		t.Fatalf("trunk OpenByID = %v, %v", reopenedTrunk, err)
+	}
+
+	wtRoot := t.TempDir()
+	testutil.FailErr(t, "write wt file", os.WriteFile(filepath.Join(wtRoot, "a.txt"), []byte("wt base\n"), 0o600))
+	wtProj := project.WithRootRefs(f.project, []projectroot.RootRef{{ID: f.rootID, Path: wtRoot}})
+	wtProj.SourceBranch = sourcebranch.ForWorktree(uuid.NewString())
+	wtDoc, err := f.service.Open(t.Context(), wtProj, "a.txt", f.rootID, "", "window-1", nil)
+	testutil.FailErr(t, "open wt doc", err)
+
+	if _, err := f.service.LiveWorkspace(t.Context(), f.project, wtDoc.ID); !errors.Is(err, worktrees.ErrCheckoutUnavailable) {
+		t.Fatalf("orphaned LiveWorkspace err = %v", err)
+	}
+	if fallbackP, err := f.service.Workspace(t.Context(), f.project, wtDoc.ID); err != nil || fallbackP.ID != f.project.ID {
+		t.Fatalf("orphaned Workspace fallback = %v, %v", fallbackP, err)
+	}
+	if _, err := f.service.OpenByID(t.Context(), f.project.ID, wtDoc.ID, "", "window-2", nil); !errors.Is(err, worktrees.ErrCheckoutUnavailable) {
+		t.Fatalf("clean orphaned OpenByID err = %v", err)
+	}
+
+	statuses, err := f.service.Statuses(t.Context(), f.project.ID, []string{trunkDoc.ID, wtDoc.ID})
+	testutil.FailErr(t, "statuses", err)
+	var sawWTStatus bool
+	for _, st := range statuses.Documents {
+		if st.ID == wtDoc.ID {
+			sawWTStatus = st.CheckoutUnavailable && st.Absent
+		}
+	}
+	if !sawWTStatus {
+		t.Fatalf("statuses missing unavailable checkout flag: %+v", statuses.Documents)
+	}
+
+	observed, err := f.service.ObserveByID(t.Context(), f.project.ID, wtDoc.ID, "window-1")
+	testutil.FailErr(t, "ObserveByID orphaned", err)
+	if !observed.CheckoutUnavailable || !observed.Absent {
+		t.Fatalf("observed = %+v", observed)
+	}
+
+	edited, err := f.service.ReplaceSnapshot(t.Context(), wtDoc.ID, f.project.ID, SnapshotReplacement{
+		DocumentCommand: DocumentCommand{ClientID: "window-1", OperationID: uuid.NewString(), ExpectedRevision: observed.Revision},
+		Content:         "orphaned draft\n", EOL: "lf",
+	})
+	testutil.FailErr(t, "edit orphaned draft", err)
+
+	reopened, err := f.service.OpenByID(t.Context(), f.project.ID, edited.ID, "", "window-2", nil)
+	testutil.FailErr(t, "OpenByID orphaned draft", err)
+	if !reopened.CheckoutUnavailable || reopened.Draft != "orphaned draft\n" {
+		t.Fatalf("reopened = %+v", reopened)
+	}
+
+	joined, err := f.service.Join(t.Context(), edited.ID, f.project.ID, ReplicaJoin{
+		ClientID: "window-3", Incarnation: "inc-3",
+	})
+	testutil.FailErr(t, "Join orphaned draft", err)
+	if !joined.CheckoutUnavailable {
+		t.Fatalf("joined = %+v", joined)
 	}
 }

@@ -6,8 +6,9 @@ import { gitStatusRefreshPending } from "../../chat/actions/git-status-reads.ts"
 import { maybeRefreshGitAfterBoard } from "../../chat/actions/board-actions.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { setLycaonClientForTest } from "../../platform/connection/app-connection.ts";
+import { registerOpenFilesSurfaceSink } from "../../platform/navigation/open-files-surface.ts";
 import { stubClient } from "../../test/client-fixture.ts";
-import type { BoardView, GitMutationResult, GitRepoEntry, GitReposView, GitStatusSummary, Project } from "../../api/types.ts";
+import type { BoardView, GitMutationResult, GitRepoEntry, GitReposView, GitStatusSummary, GitWorktreeEntry, Project } from "../../api/types.ts";
 import type { createProjectsStore } from "../../store/projects-store.ts";
 
 const REPO_ID = "repo-1";
@@ -362,5 +363,89 @@ describe("chat Git binding", () => {
       expect(reportError).not.toHaveBeenCalled();
       dispose();
     });
+  });
+
+  it("threads selected checkout worktree_id through onDraftMessage and onListBranches", async () => {
+    const draftErr = new Error("draft failed");
+    let failDraft = false;
+    const client = stubClient({
+      draftGitCommitMessage: vi.fn(async () => {
+        if (failDraft) throw draftErr;
+        return { worktree_id: "wt-pin", message: "feat: drafted" };
+      }),
+      listGitBranches: vi.fn(async () => ({
+        worktree_id: "wt-pin",
+        branches: [{ name: "feat/pin", current: true }],
+      })),
+    });
+    setLycaonClientForTest(client);
+    const appStore = createAppStore();
+    appStore.actions.setGitRepos([repo], REPO_ID);
+    appStore.actions.setGitWorktreeTarget(project.id, REPO_ID, "wt-pin");
+    const reportError = vi.fn();
+
+    await createRoot(async (dispose) => {
+      const binding = bindingFor(client, appStore, reportError);
+      await expect(binding.onDraftMessage()).resolves.toBe("feat: drafted");
+      expect(client.draftGitCommitMessage).toHaveBeenCalledWith(project.id, REPO_ID, "session-1", "wt-pin");
+
+      const branches = await binding.onListBranches();
+      expect(branches).toHaveLength(1);
+      expect(client.listGitBranches).toHaveBeenCalledWith(project.id, REPO_ID, "session-1", "wt-pin");
+
+      failDraft = true;
+      await expect(binding.onDraftMessage()).resolves.toBe("");
+      expect(reportError).toHaveBeenCalledWith(draftErr);
+      dispose();
+    });
+  });
+
+  it("wires worktree listing, checkout selection/unpinning, and Open in Files stage navigation", async () => {
+    const statusErr = new Error("status refresh failed");
+    let failStatus = false;
+    const client = stubClient({
+      listGitWorktrees: vi.fn(async () => ({
+        repo_id: REPO_ID,
+        project_checkout_id: "wt-prim",
+        worktrees: [],
+      })),
+      getGitStatus: vi.fn(async (_p, _r, _s, wt) => {
+        if (failStatus) throw statusErr;
+        return summaryOf({ worktree_id: wt, dirty: false, changed_count: 0, unstaged_count: 0 });
+      }),
+    });
+    setLycaonClientForTest(client);
+    const appStore = createAppStore();
+    appStore.actions.setGitRepos([repo], REPO_ID);
+    const reportError = vi.fn();
+    const openedSurface: unknown[] = [];
+    const disposeSurface = registerOpenFilesSurfaceSink((req) => openedSurface.push(req));
+
+    try {
+      await createRoot(async (dispose) => {
+        const binding = bindingFor(client, appStore, reportError);
+        const listed = await binding.onListWorktrees?.(REPO_ID);
+        expect(listed?.project_checkout_id).toBe("wt-prim");
+        expect(client.listGitWorktrees).toHaveBeenCalledWith(project.id, REPO_ID, "session-1");
+
+        const entry = { worktree_id: "wt-sib", path: "/work/sib" } as GitWorktreeEntry;
+        await binding.onSelectWorktree?.(REPO_ID, entry);
+        expect(client.getGitStatus).toHaveBeenCalledWith(project.id, REPO_ID, "session-1", "wt-sib");
+
+        await binding.onClearWorktreePin?.(REPO_ID, "wt-prim");
+        expect(client.getGitStatus).toHaveBeenCalledWith(project.id, REPO_ID, "session-1", "wt-prim");
+
+        failStatus = true;
+        await binding.onSelectWorktree?.(REPO_ID, entry);
+        await binding.onClearWorktreePin?.(REPO_ID, "wt-prim");
+        expect(reportError).toHaveBeenCalledWith(statusErr);
+
+        binding.onOpenInFiles?.();
+        expect(openedSurface).toEqual([{ kind: "stage", projectId: project.id }]);
+        dispose();
+      });
+    } finally {
+      disposeSurface();
+    }
   });
 });
