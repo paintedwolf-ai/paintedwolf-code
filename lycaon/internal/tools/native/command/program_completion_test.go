@@ -248,10 +248,16 @@ func TestProgramCompletionDisposition(t *testing.T) {
 		}()
 		<-entered
 		clock.Advance(toolcontract.ProgramInlineWait)
+		programID := <-parking.entering
 		// Complete the program before ParkProgram claims it.
 		close(release)
-		// Wait until finish() has settled the program, then open the park gate.
-		time.Sleep(10 * time.Millisecond)
+		for {
+			proj, err := f.Runtime.Recorder.ProjectProgram(t.Context(), f.Session, programID, 1)
+			if err == nil && proj.Program.State == "completed" {
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
 		close(parking.gate)
 		res := <-done
 		testutil.FailErr(t, "raced inline result", res.err)
