@@ -78,9 +78,11 @@ func assertRetainedStorageFallback(t *testing.T, plan Plan) {
 }
 
 func retainedStorageContractPlan() Plan {
-	target := Baseline{Revision: 5, Shape: "616ca6576c84b4d055b6eb519b1748977b93b8bb4664ab30658141c6d4aa5f14"}
-	step := Revision5(target)
-	return Plan{Source: step.From, Target: target, steps: []Step{step}}
+	rev5 := Baseline{Revision: 5, Shape: "616ca6576c84b4d055b6eb519b1748977b93b8bb4664ab30658141c6d4aa5f14"}
+	target := Baseline{Revision: 6, Shape: "07cc74938f41fb3fe50631365c934282818fd83918131196aa6932633c8451e9"}
+	step5 := Revision5(rev5)
+	step6 := Revision6(rev5, target)
+	return Plan{Source: step5.From, Target: target, steps: []Step{step5, step6}}
 }
 
 func TestRetainedSorterBudgetCoversMergeFanoutBoundaries(t *testing.T) {

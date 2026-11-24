@@ -40,7 +40,7 @@ func TestPlanCompletionHintsLoadThroughOARPackLoader(t *testing.T) {
 		if got := cfg.ResolveHintMessage(code); got != entry.Message {
 			t.Fatalf("ResolveHintMessage(%s) = %q, want %q", code, got, entry.Message)
 		}
-		for _, rule := range ruleSetWithHints.Rules {
+		for _, rule := range ruleSetWithHints.All() {
 			if rule.ID == code {
 				t.Fatalf("hint %s must never load as an evaluated OAR rule (OAR-HINT-1/6)", code)
 			}

@@ -254,6 +254,14 @@ func stateToStore(state completioncue.DeliveredState) store.CompletionCueState {
 	}
 }
 
+func intentHistory(id, content string) []api.Message {
+	return []api.Message{{
+		ID:      id,
+		Role:    api.MessageRoleUser,
+		Content: content,
+	}}
+}
+
 func findCueMessage(messages []api.Message) (api.Message, bool) {
 	for _, msg := range messages {
 		if msg.ID == "host-plan-completion-cue" {
@@ -346,7 +354,7 @@ func TestCompletionCueAcceptanceRequestSequenceAndBaselineParity(t *testing.T) {
 		h.loop.Model.Deps.LLM = dynamicLLM
 
 		// Verify preparation has no cue.
-		prepReq, err := h.loop.ProjectPreparation(ctx, h.sess, userHistory("Build feature"), []api.Message{{
+		prepReq, err := h.loop.ProjectPreparation(ctx, h.sess, intentHistory("u-intent-1", "Build feature"), []api.Message{{
 			ID: "sys-standing", Role: api.MessageRoleSystem, Content: "standing system preamble",
 			Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,
 		}}, inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: "coordinator"}})
@@ -358,7 +366,7 @@ func TestCompletionCueAcceptanceRequestSequenceAndBaselineParity(t *testing.T) {
 		_, err = h.loop.Run(ctx, promptloop.PromptRunInput{
 			SessionID: h.sess.ID,
 			Session:   h.sess,
-			History:   userHistory("Build feature"),
+			History:   intentHistory("u-intent-1", "Build feature"),
 			ProfileID: "coordinator",
 		})
 		testutil.FailErr(t, "loop.Run", err)
@@ -448,7 +456,7 @@ func TestCompletionCueNestedProgramFailurePreservesCommittedProgress(t *testing.
 	_, err := h.loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: h.sess.ID,
 		Session:   h.sess,
-		History:   userHistory("Run program"),
+		History:   intentHistory("u-intent-prog", "Run program"),
 		ProfileID: "coordinator",
 	})
 	testutil.FailErr(t, "loop.Run", err)
@@ -514,7 +522,7 @@ func TestCompletionCueIneligibleEventsProduceNoCue(t *testing.T) {
 	_, err := h.loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: h.sess.ID,
 		Session:   h.sess,
-		History:   userHistory("Check ineligible events"),
+		History:   intentHistory("u-intent-inelig", "Check ineligible events"),
 		ProfileID: "coordinator",
 	})
 	testutil.FailErr(t, "loop.Run", err)
@@ -553,7 +561,7 @@ func TestCompletionCueOneItemPlanCheckVsInspectionOnly(t *testing.T) {
 		},
 	}
 	_, err := hA.loop.Run(ctx, promptloop.PromptRunInput{
-		SessionID: hA.sess.ID, Session: hA.sess, History: userHistory("One item with check"), ProfileID: "coordinator",
+		SessionID: hA.sess.ID, Session: hA.sess, History: intentHistory("u-intent-one-a", "One item with check"), ProfileID: "coordinator",
 	})
 	testutil.FailErr(t, "loop.Run case A", err)
 	wantA := []string{"", "", completioncue.CodeFinalItemCoverage, ""}
@@ -583,7 +591,7 @@ func TestCompletionCueOneItemPlanCheckVsInspectionOnly(t *testing.T) {
 		},
 	}
 	_, err = hB.loop.Run(ctx, promptloop.PromptRunInput{
-		SessionID: hB.sess.ID, Session: hB.sess, History: userHistory("One item inspection only"), ProfileID: "coordinator",
+		SessionID: hB.sess.ID, Session: hB.sess, History: intentHistory("u-intent-one-b", "One item inspection only"), ProfileID: "coordinator",
 	})
 	testutil.FailErr(t, "loop.Run case B", err)
 	for i, code := range cueCodesInRequests(hB.llm.requests) {
@@ -602,7 +610,7 @@ func TestCompletionCueProseFinishForcedCloseoutSuppressesCue(t *testing.T) {
 		return progress.Document{Content: "- [ ] Step 1\n- [ ] Step 2"}, nil
 	})
 	testutil.FailErr(t, "seed progress", err)
-	hist := userHistory("Forced closeout")
+	hist := intentHistory("u-intent-forced", "Forced closeout")
 	h.tracker.RecordPlanItemCompleted(h.sess.ID, "", hist[0].ID)
 
 	_, err = h.loop.Run(ctx, promptloop.PromptRunInput{
@@ -651,7 +659,7 @@ func TestCompletionCueRebuildStability(t *testing.T) {
 	}
 	h := newCompletionCueHarness(t, true, steps)
 	_, err := h.loop.Run(ctx, promptloop.PromptRunInput{
-		SessionID: h.sess.ID, Session: h.sess, History: userHistory("Rebuild stability"), ProfileID: "coordinator",
+		SessionID: h.sess.ID, Session: h.sess, History: intentHistory("u-intent-rebuild", "Rebuild stability"), ProfileID: "coordinator",
 	})
 	testutil.FailErr(t, "loop.Run", err)
 
