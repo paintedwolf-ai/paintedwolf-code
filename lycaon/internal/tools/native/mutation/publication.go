@@ -107,7 +107,7 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 		_ = admission.Abandon(ctx, err)
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
-	return &fileStage{owners: p.Owners, target: target, admission: admission, operator: destination.Redirect.Operator, field: destination.Target,
+	return &fileStage{owners: p.Owners, target: target, admission: admission, operator: destination.Redirect.Operator, field: destination.Target, reviewed: tc.Files.GrantedWriteRoots,
 		spool: spool, ctx: ctx, maximum: maximum, releases: make([]func(), 0, int(slots)), releaseState: releaseState}, nil
 }
 
@@ -254,6 +254,9 @@ type fileStage struct {
 	operator  string
 	field     commandprogram.Field
 	admission tools.CommandOutputWrite
+	// reviewed are the write roots in force when the destination was bound,
+	// including one the redirect's own review approved for this action alone.
+	reviewed []string
 
 	mu           sync.Mutex
 	spool        *scratch.ByteSpool
@@ -306,6 +309,7 @@ func (s *fileStage) Publish(ctx context.Context) (commandprogram.OutputPublished
 		return commandprogram.OutputPublished{}, errors.Join(err, s.admission.Abandon(ctx, err))
 	}
 	published, err := s.admission.Publish(ctx, func(ctx context.Context, tc tools.ToolContext) (commandprogram.OutputPublished, error) {
+		tc.Files.GrantedWriteRoots = unionRoots(tc.Files.GrantedWriteRoots, s.reviewed)
 		appendBytes := s.target.append && s.target.pin.Mode != toolcontract.AbsentRevision
 		result, err := s.owners.Operations.Write.Apply(ctx, native.WriteInput{Path: s.target.abs, Exact: true, Source: reader, SourceBytes: s.size,
 			Append: appendBytes, Memory: s.owners.Revisions.Memory, Admission: native.WriteExecutionPinned, Destination: s.target.pin}, tc)

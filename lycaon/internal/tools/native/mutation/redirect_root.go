@@ -3,6 +3,7 @@ package mutation
 import (
 	"context"
 	"path/filepath"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
@@ -104,4 +105,14 @@ func redirectWriteRoot(path, requested string) (string, bool) {
 func grantable(root string) bool {
 	refused, _ := confine.GrantedWriteRootRefused(root)
 	return !refused
+}
+
+func unionRoots(roots, more []string) []string {
+	out := slices.Clone(roots)
+	for _, root := range more {
+		if !slices.Contains(out, root) {
+			out = append(out, root)
+		}
+	}
+	return out
 }
