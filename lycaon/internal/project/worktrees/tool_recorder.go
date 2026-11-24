@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// ToolUsageRecorder adapts Inventory to tools.CheckoutUsageRecorder without failing tool calls on background discovery errors.
+// ToolUsageRecorder adapts Inventory to tools.CheckoutUsageRecorder without failing on discovery errors.
 type ToolUsageRecorder struct {
 	Inventory *Inventory
 }
@@ -137,7 +137,7 @@ func (r *ToolUsageRecorder) ResolvePathCheckout(ctx context.Context, projectID, 
 	return out, true
 }
 
-// ScheduleRepoRefreshForProject schedules asynchronous checkout reconciliation for every attached Git repository of projectID.
+// ScheduleRepoRefreshForProject schedules background checkout reconciliation for projectID's repositories.
 func (inv *Inventory) ScheduleRepoRefreshForProject(ctx context.Context, projectID string) {
 	if inv == nil {
 		return

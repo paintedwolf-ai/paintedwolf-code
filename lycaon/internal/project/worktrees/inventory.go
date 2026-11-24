@@ -104,10 +104,10 @@ type Inventory struct {
 	inspector Inspector
 	now       func() time.Time
 
-	mu         sync.Mutex
-	slots      map[repoKey]*repoSlot
-	witnesses  map[repoKey]map[string]liveWitness
-	moves      map[repoKey][]MoveReceipt
+	mu        sync.Mutex
+	slots     map[repoKey]*repoSlot
+	witnesses map[repoKey]map[string]liveWitness
+	moves     map[repoKey][]MoveReceipt
 }
 
 type liveWitness struct {

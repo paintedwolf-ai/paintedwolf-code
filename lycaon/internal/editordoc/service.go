@@ -18,10 +18,10 @@ type Ledger interface {
 }
 
 type serviceCore struct {
-	replicas    replicaRuntime
-	store       *Store
-	ledger      Ledger
-	history     *sourceledger.History
+	replicas      replicaRuntime
+	store         *Store
+	ledger        Ledger
+	history       *sourceledger.History
 	sourcePaths   *projectsource.SourcePaths
 	roots         RootSource
 	ops           sync.RWMutex
