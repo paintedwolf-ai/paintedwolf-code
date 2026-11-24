@@ -11036,6 +11036,7 @@ export interface components {
         };
         /** @description One attached root's credential-file pass that a session waits on. Counts cover the current pass and are observations, not a completion estimate. */
         CredentialIndexingProgress: {
+            /** Format: uuid */
             root_id: string;
             root_label: string;
             directories_visited: number;
