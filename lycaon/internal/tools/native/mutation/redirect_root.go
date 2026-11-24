@@ -74,7 +74,8 @@ func (p *Publication) rebind(ctx context.Context, tc tools.ToolContext, path str
 // redirectWriteRoot is the root an outside redirect asks for: exact files for
 // credential stores and key material, the temp location for shared temp, and
 // otherwise the enclosing repository or folder. A declared write_root that
-// covers the path replaces it when a grant there could be installed.
+// covers the path replaces it when a grant there could be installed. A path no
+// grant could cover is not reviewed.
 func redirectWriteRoot(path, requested string) (string, bool) {
 	subject := confine.ClassifyBlockedWrite(path)
 	switch subject.Kind {
@@ -93,10 +94,14 @@ func redirectWriteRoot(path, requested string) (string, bool) {
 		}
 		return temp, true
 	}
-	if declared {
-		if refused, _ := confine.GrantedWriteRootRefused(requested); !refused {
-			return requested, true
-		}
+	if declared && grantable(requested) {
+		return requested, true
 	}
-	return confine.FloorRecovery{Grant: confine.GrantRepositoryTree}.GrantPath(path), true
+	root := confine.FloorRecovery{Grant: confine.GrantRepositoryTree}.GrantPath(path)
+	return root, grantable(root)
+}
+
+func grantable(root string) bool {
+	refused, _ := confine.GrantedWriteRootRefused(root)
+	return !refused
 }

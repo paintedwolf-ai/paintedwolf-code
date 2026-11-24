@@ -86,3 +86,10 @@ func TestRedirectWriteRootAsksForTheSmallestUsefulGrant(t *testing.T) {
 		})
 	}
 }
+
+func TestRedirectAtTheFilesystemRootIsNotReviewed(t *testing.T) {
+	root := string(filepath.Separator)
+	if got, ok := redirectWriteRoot(filepath.Join(root, "escape.txt"), ""); ok {
+		t.Fatalf("redirectWriteRoot proposed %q for a file in %s", got, root)
+	}
+}
