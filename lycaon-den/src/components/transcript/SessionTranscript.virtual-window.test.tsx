@@ -849,7 +849,7 @@ describe("SessionTranscript virtual window", () => {
     );
 
     const view = render(() => (
-      <SessionTranscript layout="chat" verboseMode={true} sessionId={sid} messages={store.state.messages} />
+      <SessionTranscript layout="chat" sessionId={sid} messages={store.state.messages} />
     ));
     try {
       await Promise.resolve();
@@ -864,7 +864,7 @@ describe("SessionTranscript virtual window", () => {
         authority: "none",
         trust_tier: "trusted",
         content: "",
-        tool_calls: [{ id: "tc-live-2", name: "read", args: { path: "main.go" } }],
+        tool_calls: [{ id: "tc-live-2", name: "task", args: { agent_type: "researcher", description: "Check files" } }],
         created_at: "2026-01-01T00:00:01Z",
       });
       expect(applied).toBe(true);

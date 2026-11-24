@@ -260,7 +260,15 @@ describe("parked command presentation", () => {
     };
     const store = mountActivity([userTurn, runningCall]);
     store.actions.setActivity({ ...park, status: "done" });
-    store.actions.setLlmTurn("session", { status: "active" });
+    store.actions.setActivity({
+      ...park,
+      activity_id: "bg",
+      kind: "preparing_context",
+      tool_name: undefined,
+      tool_call_id: undefined,
+      wait_triggers: undefined,
+      status: "active",
+    });
     vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
     expect(screen.getByRole("status").textContent).toBe("Reading · main.go...");
 
@@ -301,9 +309,9 @@ describe("parked command presentation", () => {
       },
     });
     vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
-    expect(screen.getByRole("status").textContent).toBe("Thinking...");
+    expect(screen.getByRole("status").textContent).toBe("Preparing context...");
 
-    store.actions.clearLlmTurn("session");
+    store.actions.setActivity({ ...park, activity_id: "bg", kind: "preparing_context", status: "done" });
     await Promise.resolve();
     expect(screen.queryByTestId("thinking-indicator")).toBeNull();
   });
