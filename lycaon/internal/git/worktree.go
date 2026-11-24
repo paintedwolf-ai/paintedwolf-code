@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitargv"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitlease"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/repochange"
 )
 
@@ -198,6 +199,90 @@ func validateWorktree(ctx context.Context, m *Manager, toplevel, path, branch st
 		return nil
 	}
 	return fmt.Errorf("worktree is not registered: %s", path)
+}
+
+// RemoveStaleWorktreeRegistration removes only the administrative registration for a missing checkout path,
+// leaving all other sibling registrations (including unrelated stale ones) untouched.
+func (m *gitBranchManager) RemoveStaleWorktreeRegistration(ctx context.Context, toplevel, targetWorktreePath string) error {
+	dir, err := absProjectDir(toplevel)
+	if err != nil {
+		return err
+	}
+	targetClean := filepath.Clean(strings.TrimSpace(targetWorktreePath))
+	if targetClean == "" || targetClean == "." || !filepath.IsAbs(targetClean) {
+		return fmt.Errorf("worktree path must be absolute")
+	}
+	release, err := gitlease.Repository(ctx, dir)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	if _, statErr := os.Lstat(targetClean); statErr == nil {
+		return fmt.Errorf("worktree path still exists: %s", targetClean)
+	} else if !os.IsNotExist(statErr) {
+		return fmt.Errorf("stat worktree path: %w", statErr)
+	}
+
+	repo, ok := gitrepo.Discover(dir)
+	if !ok || repo.CommonDir == "" {
+		return fmt.Errorf("%w: %s", ErrNotRepository, dir)
+	}
+	worktreesAdminRoot := filepath.Join(repo.CommonDir, "worktrees")
+	entries, err := os.ReadDir(worktreesAdminRoot)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read git worktrees directory: %w", err)
+	}
+
+	targetComparable := comparableMissingWorktreePath(targetClean)
+	removed := false
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		adminDir := filepath.Join(worktreesAdminRoot, entry.Name())
+		rawGitdir, readErr := os.ReadFile(filepath.Join(adminDir, "gitdir"))
+		if readErr != nil {
+			continue
+		}
+		gitdirPath := strings.TrimSpace(string(rawGitdir))
+		if gitdirPath == "" {
+			continue
+		}
+		if !filepath.IsAbs(gitdirPath) {
+			gitdirPath = filepath.Join(adminDir, gitdirPath)
+		}
+		candidatePath := filepath.Clean(filepath.Dir(gitdirPath))
+		if candidatePath != targetClean && comparableMissingWorktreePath(candidatePath) != targetComparable {
+			continue
+		}
+		if _, lockErr := os.Lstat(filepath.Join(adminDir, "locked")); lockErr == nil {
+			return fmt.Errorf("worktree registration is locked: %s", targetClean)
+		}
+		if _, statErr := os.Lstat(candidatePath); statErr == nil {
+			return fmt.Errorf("worktree path still exists: %s", candidatePath)
+		}
+		if rmErr := os.RemoveAll(adminDir); rmErr != nil {
+			return fmt.Errorf("remove stale worktree registration: %w", rmErr)
+		}
+		removed = true
+	}
+	if removed {
+		notifyRepoChange(ctx, dir, repochange.HeadMoved)
+	}
+	return nil
+}
+
+func comparableMissingWorktreePath(p string) string {
+	parent := filepath.Dir(p)
+	base := filepath.Base(p)
+	if canonParent := gitrepo.CanonicalDir(parent); canonParent != "" {
+		return filepath.Join(canonParent, base)
+	}
+	return filepath.Clean(p)
 }
 
 // PruneWorktrees removes stale worktree records.

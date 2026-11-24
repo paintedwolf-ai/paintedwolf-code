@@ -1,5 +1,10 @@
 surfaces: [http]
 notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - blocker
+    - repo_id
+    - worktree_id
 title: Project is still working
 message: A chat, worker, or root-bound operation is still using this project.
 suggested_action: Let the work finish or stop it, then try again.

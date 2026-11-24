@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,12 +13,18 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitargv"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) {
+	bindSessionWorktree(s, w, r)
+}
+
+func bindSessionWorktree(s *Handler, w http.ResponseWriter, r *http.Request) {
 	sessionID := strings.TrimSpace(chi.URLParam(r, "id"))
 	var req wire.GitWorktreeBindRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -109,10 +116,12 @@ func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) 
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	if err := os.MkdirAll(enginepaths.ProjectWorktreeDir(worktreeRoot, projectDir), 0o700); err != nil {
+	projectWorktreeDir := enginepaths.ProjectWorktreeDir(worktreeRoot, projectDir)
+	if err := os.MkdirAll(projectWorktreeDir, 0o700); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
+	path = filepath.Join(gitrepo.CanonicalDir(projectWorktreeDir), filepath.Base(path))
 	row := store.WorktreeBinding{
 		SessionID:    scope.sess.ID,
 		ProjectID:    scope.project.ID,
@@ -145,24 +154,7 @@ func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) 
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	if err := os.Chmod(path, 0o700); err != nil { //nolint:gosec // Private checkout directory.
-		s.responses.InternalError(w, r, err)
-		return
-	}
-	if err := s.SessionStore.PutWorktreeBinding(r.Context(), row); err != nil {
-		s.responses.InternalError(w, r, err)
-		return
-	}
-	if stored, bound, err := s.SessionStore.GetWorktreeBinding(r.Context(), scope.sess.ID); err == nil && bound && stored != nil {
-		row = *stored
-	}
-	after, err := mgr.RepoConfigFingerprint(r.Context(), repo.Toplevel)
-	if err != nil || after != before {
-		if err != nil {
-			s.responses.InternalError(w, r, err)
-			return
-		}
-		s.responses.InternalError(w, r, errors.New("repository config changed during worktree create"))
+	if !finalizeWorktreeBind(s, w, r, mgr, scope.project.ID, repo, before, path, baseBranch, &row) {
 		return
 	}
 
@@ -172,4 +164,55 @@ func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, view)
+}
+
+func finalizeWorktreeBind(
+	s *Handler,
+	w http.ResponseWriter,
+	r *http.Request,
+	mgr *git.Manager,
+	projectID string,
+	repo git.RepoRef,
+	before string,
+	path string,
+	baseBranch string,
+	row *store.WorktreeBinding,
+) bool {
+	if err := os.Chmod(path, 0o700); err != nil { //nolint:gosec // Private checkout directory.
+		s.responses.InternalError(w, r, err)
+		return false
+	}
+	if s.Worktrees != nil {
+		if items, refreshErr := s.Worktrees.Refresh(r.Context(), worktrees.RepoSpec{
+			ProjectID: projectID,
+			RepoID:    repo.ID,
+			Toplevel:  repo.Toplevel,
+		}); refreshErr == nil {
+			wantPath := gitrepo.CanonicalDir(path)
+			for _, item := range items {
+				if gitrepo.CanonicalDir(item.WorktreePath) == wantPath && item.ID != "" {
+					row.WorktreeID = item.ID
+					_ = s.Worktrees.MarkManaged(r.Context(), item.ID, baseBranch)
+					break
+				}
+			}
+		}
+	}
+	if err := s.SessionStore.PutWorktreeBinding(r.Context(), *row); err != nil {
+		s.responses.InternalError(w, r, err)
+		return false
+	}
+	if stored, bound, err := s.SessionStore.GetWorktreeBinding(r.Context(), row.SessionID); err == nil && bound && stored != nil {
+		*row = *stored
+	}
+	after, err := mgr.RepoConfigFingerprint(r.Context(), repo.Toplevel)
+	if err != nil {
+		s.responses.InternalError(w, r, err)
+		return false
+	}
+	if after != before {
+		s.responses.InternalError(w, r, errors.New("repository config changed during worktree create"))
+		return false
+	}
+	return true
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/project/worktrees"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -53,6 +54,13 @@ func (s *Handler) HandleGitWorktreeLand(w http.ResponseWriter, r *http.Request) 
 		}
 		s.responses.InternalError(w, r, err)
 		return
+	}
+	if s.Worktrees != nil {
+		_, _ = s.Worktrees.Refresh(r.Context(), worktrees.RepoSpec{
+			ProjectID: scope.project.ID,
+			RepoID:    b.RepoID,
+			Toplevel:  b.Toplevel,
+		})
 	}
 	if ahead == 0 {
 		httpio.WriteJSON(w, http.StatusOK, wire.GitWorktreeLandResult{

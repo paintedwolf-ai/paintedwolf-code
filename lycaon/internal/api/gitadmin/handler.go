@@ -26,6 +26,7 @@ type Deps struct {
 	CommitDrafter   compaction.Summarizer
 	Database        db.Handle
 	LLMService      *llm.Service
+	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
 	RepoSetCache    *git.RepoSetCache
 	SessionStore    *sessionstore.Repositories
@@ -39,6 +40,7 @@ type Handler struct {
 	CommitDrafter   compaction.Summarizer
 	Database        db.Handle
 	LLMService      *llm.Service
+	MutationGate    *project.MutationGate
 	ProjectRegistry project.Registry
 	RepoSetCache    *git.RepoSetCache
 	SessionStore    sessionstore.SessionRepository
@@ -72,7 +74,7 @@ func New(responses *httpio.Responder, deps Deps) Handler {
 	}
 	return Handler{
 		Board: deps.Board, CommitDrafter: deps.CommitDrafter, Database: deps.Database, LLMService: deps.LLMService,
-		ProjectRegistry: deps.ProjectRegistry, RepoSetCache: deps.RepoSetCache,
+		MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, RepoSetCache: deps.RepoSetCache,
 		SessionStore: deps.SessionStore.Sessions, Sessions: deps.Sessions, Worktrees: wt, DataDir: deps.DataDir,
 		git: manager, responses: responses,
 	}

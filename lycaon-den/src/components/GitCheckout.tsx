@@ -1,4 +1,3 @@
-import { ChromeDragSurface } from "./shell/ChromeDragSurface.tsx";
 import {
   For,
   Show,
@@ -10,7 +9,6 @@ import {
   onCleanup,
   type JSX,
 } from "solid-js";
-import { ResidentPortal } from "./primitives/ResidentPortal.tsx";
 import { Scrollport } from "./primitives/Scrollport.tsx";
 import type {
   GitBranchEntry,
@@ -23,13 +21,18 @@ import type { WorktreeLandOutcome } from "../chat/actions/git-actions.ts";
 import type { AppStore } from "../store/app-state-model.ts";
 import {
   createAnchoredPopoverFocus,
-  createModalFocusTrap,
 } from "../platform/interaction/modal-focus-trap.ts";
-import { chromeProps } from "../styling/ui-chrome.ts";
 import { DenButton } from "./primitives/DenButton.tsx";
 import { formatWorktreeLandResult } from "./git-worktree-result.ts";
+import { GitCheckoutModal, type GitCheckoutDialogKind } from "./git/GitCheckoutModal.tsx";
 import { GitWorktreeSelector } from "./git/GitWorktreeSelector.tsx";
 import { useGitCheckoutWorktrees } from "./git/useGitCheckoutWorktrees.ts";
+import {
+  flushCheckoutBuffersBeforeRemoval,
+  parseWorktreeRemovalBlocker,
+  resolveWorktreeBlockerNavigation,
+  type WorktreeRemovalBlocker,
+} from "./git/worktree-lifecycle-blocker.ts";
 
 export type GitCheckoutActions = {
   onListBranches: () => Promise<GitBranchEntry[]>;
@@ -66,7 +69,7 @@ type Props = GitCheckoutActions & {
   children?: JSX.Element;
 };
 
-type Dialog = "branch" | "worktree" | "merge" | "remove";
+type Dialog = GitCheckoutDialogKind;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error
@@ -86,12 +89,12 @@ export function GitCheckout(props: Props) {
   const [dialog, setDialog] = createSignal<Dialog>();
   const [name, setName] = createSignal("");
   const [actionError, setActionError] = createSignal<string>();
+  const [actionBlocker, setActionBlocker] = createSignal<WorktreeRemovalBlocker>();
   const [pending, setPending] = createSignal(false);
   const [result, setResult] =
     createSignal<ReturnType<typeof formatWorktreeLandResult>>();
   let trigger: HTMLButtonElement | undefined;
   let panel: HTMLDivElement | undefined;
-  const [modal, setModal] = createSignal<HTMLDivElement | undefined>();
   let container: HTMLDivElement | undefined;
   let viewVersion = 0;
   let branchVersion = 0;
@@ -104,8 +107,6 @@ export function GitCheckout(props: Props) {
   const stale = () => scopedWorktree() && worktree()?.state === "stale";
   const busy = () => props.busy || pending();
   const checkoutKnown = () => !hasWorktreeSupport() || worktree() !== undefined;
-  // Stays focusable while unavailable so dialogs can restore focus to it.
-  const triggerUnavailable = () => busy() || !checkoutKnown() || !!loadError();
   const boundBranch = () => worktree()?.branch;
   const inspection = useGitCheckoutWorktrees({
     appStore: props.appStore,
@@ -122,9 +123,18 @@ export function GitCheckout(props: Props) {
     onInspectionUnavailableChange: props.onInspectionUnavailableChange,
     onInspectedTargetChange: props.onInspectedTargetChange,
   });
+  // Inspection stays available during running turns while mutations stay gated by busy().
+  const triggerUnavailable = () =>
+    (inspection.enabled() ? pending() : busy()) || !checkoutKnown() || !!loadError();
   const inspectedLinked = () => {
     const row = inspection.inspectedRow();
     return Boolean(row && !row.entry.is_project_checkout);
+  };
+  const inspectingOtherCheckout = () => {
+    const wid = worktree()?.worktree_id?.trim();
+    const row = inspection.inspectedRow();
+    if (!scopedWorktree() || !row) return false;
+    return wid ? row.entry.worktree_id !== wid : !row.entry.bound_to_session;
   };
   const branch = () =>
     scopedWorktree() ? boundBranch() : props.status?.branch;
@@ -199,6 +209,7 @@ export function GitCheckout(props: Props) {
       setDialog(undefined);
       setName("");
       setActionError(undefined);
+      setActionBlocker(undefined);
       setResult(undefined);
       props.onMenuOpenChange(false);
       void refresh();
@@ -282,22 +293,15 @@ export function GitCheckout(props: Props) {
     if (pending()) return;
     setDialog(undefined);
     setActionError(undefined);
-    setModal(undefined);
+    setActionBlocker(undefined);
   };
-  createModalFocusTrap(
-    () => dialog() !== undefined,
-    modal,
-    {
-      onEscape: closeDialog,
-    },
-  );
 
   const openDialog = (next: Dialog) => {
     props.onMenuOpenChange(false);
     setName("");
     setActionError(undefined);
+    setActionBlocker(undefined);
     setResult(undefined);
-    setModal(undefined);
     setDialog(next);
   };
 
@@ -306,6 +310,7 @@ export function GitCheckout(props: Props) {
     const version = contextVersion;
     setPending(true);
     setActionError(undefined);
+    setActionBlocker(undefined);
     viewVersion++;
     try {
       await action();
@@ -315,7 +320,11 @@ export function GitCheckout(props: Props) {
         props.onMenuOpenChange(false);
       }
     } catch (error) {
-      if (version === contextVersion) setActionError(errorMessage(error));
+      if (version === contextVersion) {
+        const parsed = parseWorktreeRemovalBlocker(error);
+        setActionError(parsed.message);
+        setActionBlocker(parsed);
+      }
     } finally {
       if (version === contextVersion) {
         setPending(false);
@@ -323,6 +332,13 @@ export function GitCheckout(props: Props) {
       }
     }
   };
+  const blockerNav = () =>
+    resolveWorktreeBlockerNavigation({
+      projectId: props.projectId,
+      appStore: props.appStore,
+      blocker: actionBlocker(),
+      onDismissDialog: closeDialog,
+    });
   const switchBranch = (next: string) => {
     if (!canChangeBranch() || next === branch()) return;
     void perform(() => props.onCheckout(next, false));
@@ -341,6 +357,7 @@ export function GitCheckout(props: Props) {
         if (!bind) throw new Error("Worktree creation is unavailable.");
         const view = await bind(props.repoId, next);
         if (version === contextVersion) setWorktree(view);
+        void inspection.refreshList();
       }
       if (mode === "merge") {
         const merge = props.onLandWorktree;
@@ -350,11 +367,14 @@ export function GitCheckout(props: Props) {
           setResult(
             formatWorktreeLandResult(outcome, branch() ?? "this branch"),
           );
+        void inspection.refreshList();
       }
       if (mode === "remove" && props.onUnbindWorktree) {
+        await flushCheckoutBuffersBeforeRemoval(props.projectId, worktree()?.worktree_id);
         await props.onUnbindWorktree();
         const view = await props.onRefreshWorktree?.();
         if (version === contextVersion) setWorktree(view);
+        void inspection.refreshList();
       }
     });
   };
@@ -435,11 +455,18 @@ export function GitCheckout(props: Props) {
               </>
             }
           >
-            <p>
+            <p data-testid="git-worktree-bound-summary">
+              <Show when={inspectingOtherCheckout()}>
+                Chat bound to <strong>{boundBranch()}</strong> ·{" "}
+              </Show>
               Based on <strong>{worktree()?.base_branch}</strong> ·{" "}
               {commitLabel()} ahead · {worktree()?.behind_base ?? 0} behind
             </p>
-            <p>Changes and commits here belong to this chat's worktree.</p>
+            <p>
+              {inspectingOtherCheckout()
+                ? "Inspecting another checkout above leaves this chat's bound worktree unchanged."
+                : "Changes and commits here belong to this chat's worktree."}
+            </p>
           </Show>
           <div class="git-checkout__actions">
             <Show when={!stale()}>
@@ -651,242 +678,33 @@ export function GitCheckout(props: Props) {
           </DenButton>
         </div>
       </Show>
-      <Show when={dialog()}>
-        <ResidentPortal>
-          <div
-            class="den-dialog-backdrop"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) closeDialog();
+      <Show when={dialog()} keyed>
+        {(activeDialog) => (
+          <GitCheckoutModal
+            idPrefix={id}
+            dialog={activeDialog}
+            heading={heading()}
+            creating={creating()}
+            pending={pending()}
+            busy={busy()}
+            name={name()}
+            branch={branch()}
+            commitLabel={commitLabel()}
+            repoLabel={props.repoLabel}
+            repositoryCount={props.repositoryCount}
+            status={props.status}
+            worktree={worktree()}
+            actionError={actionError()}
+            blockerNav={blockerNav()}
+            onNameInput={(val) => {
+              setName(val);
+              setActionError(undefined);
+              setActionBlocker(undefined);
             }}
-          >
-            <ChromeDragSurface class="den-dialog-backdrop__chrome-drag" />
-            <div
-              ref={(el) => {
-                setModal(el);
-                onCleanup(() => setModal(undefined));
-              }}
-              class="den-dialog git-checkout-dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={`${id}-title`}
-              aria-describedby={`${id}-description`}
-              data-testid={
-                dialog() === "merge"
-                  ? "git-worktree-land-modal"
-                  : dialog() === "remove"
-                    ? "git-worktree-unbind-modal"
-                    : "git-checkout-create-modal"
-              }
-            >
-              <header class="den-dialog__header" {...chromeProps()}>
-                <h2 id={`${id}-title`}>{heading()}</h2>
-              </header>
-              <form
-                class="git-checkout-dialog__form"
-                aria-busy={pending()}
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  submit();
-                }}
-              >
-                <Scrollport
-                  class="git-checkout-dialog__body"
-                  contentClass="git-checkout-dialog__body-content"
-                >
-                  <Show
-                    when={creating()}
-                    fallback={
-                      <p
-                        id={`${id}-description`}
-                        data-testid={
-                          dialog() === "merge"
-                            ? "git-worktree-land-description"
-                            : "git-worktree-unbind-description"
-                        }
-                      >
-                        <Show
-                          when={dialog() === "merge"}
-                          fallback={
-                            <>
-                              This chat will resume in the project folder. The
-                              separate checkout will be removed; branch{" "}
-                              <strong>{branch()}</strong> and its commits will
-                              be kept.
-                            </>
-                          }
-                        >
-                          Merge {commitLabel()} from <strong>{branch()}</strong>{" "}
-                          into <strong>{worktree()?.base_branch}</strong> in the
-                          project folder. This chat will stay in its worktree.
-                        </Show>
-                      </p>
-                    }
-                  >
-                    <p id={`${id}-description`}>
-                      {dialog() === "worktree"
-                        ? "Give this chat a separate checkout on a new branch."
-                        : "Create and switch to a new branch in the project folder."}
-                    </p>
-                    <dl
-                      class="git-checkout-dialog__facts"
-                      data-testid="git-checkout-facts"
-                    >
-                      <Show when={props.repoLabel}>
-                        <div>
-                          <dt>Repository</dt>
-                          <dd>{props.repoLabel}</dd>
-                        </div>
-                      </Show>
-                      <div>
-                        <dt>Starting point</dt>
-                        <dd>
-                          {props.status?.branch ||
-                            props.status?.head_short ||
-                            "Current checkout"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Location</dt>
-                        <dd>
-                          {dialog() === "worktree"
-                            ? "New chat worktree"
-                            : "Current project folder"}
-                        </dd>
-                      </div>
-                    </dl>
-                    <label class="git-checkout__label" for={`${id}-name`}>
-                      New branch name
-                    </label>
-                    <input
-                      id={`${id}-name`}
-                      class="git-checkout__input"
-                      data-testid={
-                        dialog() === "worktree"
-                          ? "git-worktree-branch"
-                          : "git-new-branch"
-                      }
-                      value={name()}
-                      required
-                      autocomplete="off"
-                      spellcheck={false}
-                      placeholder="feature/your-change"
-                      disabled={busy()}
-                      onInput={(e) => {
-                        setName(e.currentTarget.value);
-                        setActionError(undefined);
-                      }}
-                    />
-                    <div
-                      class="git-checkout-dialog__notice"
-                      data-testid={
-                        dialog() === "worktree"
-                          ? "git-worktree-notice"
-                          : "git-new-branch-notice"
-                      }
-                    >
-                      <Show
-                        when={dialog() === "worktree"}
-                        fallback={
-                          <>
-                            <p>
-                              Your uncommitted changes stay in this folder on
-                              the new branch.
-                            </p>
-                            <p>
-                              Other chats using the project folder see the
-                              branch change too.
-                            </p>
-                          </>
-                        }
-                      >
-                        <p>
-                          The worktree starts from the latest commit on{" "}
-                          <strong>{props.status?.branch}</strong>.
-                        </p>
-                        <p>
-                          {props.status?.dirty
-                            ? `${props.status.changed_count} changed ${props.status.changed_count === 1 ? "file stays" : "files stay"}`
-                            : "Uncommitted changes stay"}{" "}
-                          in the project folder and{" "}
-                          {props.status?.dirty &&
-                          props.status.changed_count === 1
-                            ? "is"
-                            : "are"}{" "}
-                          not copied.
-                        </p>
-                        <Show when={props.repositoryCount > 1}>
-                          <p>
-                            Other attached repositories continue using their
-                            project folders.
-                          </p>
-                        </Show>
-                      </Show>
-                    </div>
-                  </Show>
-                  <Show when={!creating()}>
-                    <p
-                      class="git-checkout-dialog__notice"
-                      data-testid={
-                        dialog() === "merge"
-                          ? "git-worktree-land-notice"
-                          : "git-worktree-unbind-notice"
-                      }
-                    >
-                      {dialog() === "merge"
-                        ? "Both checkouts must have their changes committed or stashed before merging."
-                        : "Commit or stash any worktree changes before returning. Unmerged commits remain on the branch."}
-                    </p>
-                  </Show>
-                  <Show when={actionError()}>
-                    <p class="git-checkout__error" role="alert">
-                      {actionError()}
-                    </p>
-                  </Show>
-                </Scrollport>
-                <footer class="den-dialog__footer">
-                  <DenButton
-                    variant="ghost"
-                    data-testid={
-                      dialog() === "merge"
-                        ? "git-worktree-land-cancel"
-                        : dialog() === "remove"
-                          ? "git-worktree-unbind-cancel"
-                          : "git-checkout-cancel"
-                    }
-                    disabled={pending()}
-                    onClick={closeDialog}
-                  >
-                    Cancel
-                  </DenButton>
-                  <DenButton
-                    variant={dialog() === "remove" ? "danger" : "primary"}
-                    type="submit"
-                    disabled={busy() || (creating() && !name().trim())}
-                    data-testid={
-                      dialog() === "worktree"
-                        ? "git-worktree-create"
-                        : dialog() === "branch"
-                          ? "git-create-branch"
-                          : dialog() === "merge"
-                            ? "git-worktree-land-confirm"
-                            : "git-worktree-unbind-confirm"
-                    }
-                  >
-                    {pending()
-                      ? "Working…"
-                      : dialog() === "worktree"
-                        ? "Create worktree"
-                        : dialog() === "branch"
-                          ? "Create branch"
-                          : dialog() === "merge"
-                            ? "Merge"
-                            : "Return and remove worktree"}
-                  </DenButton>
-                </footer>
-              </form>
-            </div>
-          </div>
-        </ResidentPortal>
+            onClose={closeDialog}
+            onSubmit={submit}
+          />
+        )}
       </Show>
     </div>
   );

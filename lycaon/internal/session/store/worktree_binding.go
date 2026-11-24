@@ -95,6 +95,9 @@ func (s *sqlSessions) PutWorktreeBinding(ctx context.Context, b WorktreeBinding)
 		if verified, verifiedOK := gitrepo.VerifyRegisteredCheckout(commonDir, worktreePath); verifiedOK {
 			reg = verified
 			hasLiveEvidence = true
+			if verified.Root != "" {
+				worktreePath = verified.Root
+			}
 		}
 	}
 
