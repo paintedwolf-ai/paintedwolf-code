@@ -25,41 +25,22 @@ type WatchDelivery struct {
 	Block      string
 }
 
-type previewOnlyContextKey struct{}
-
-// WithPreviewOnly marks ctx as a non-admitting preview or observer render.
-func WithPreviewOnly(ctx context.Context) context.Context {
-	return context.WithValue(ctx, previewOnlyContextKey{}, true)
-}
-
-// IsPreviewOnly reports whether ctx is a non-admitting preview render.
-func IsPreviewOnly(ctx context.Context) bool {
-	v, _ := ctx.Value(previewOnlyContextKey{}).(bool)
-	return v
-}
-
 func (e *turnContextAssembler) prepareWatchDelivery(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) error {
 	recorder := e.deps.Deliveries.Watches
-	if recorder == nil || sess == nil || IsPreviewOnly(ctx) {
+	if recorder == nil || sess == nil || turn == nil {
 		return nil
 	}
-	seq := 0
-	reqSeq := 0
-	if turn != nil {
-		if turn.PendingWatches.DeliveryID != "" {
-			return nil
-		}
-		seq = turn.PromptTurnSeq
-		reqSeq = turn.WatchRequestSeq
+	if turn.PendingWatches.DeliveryID != "" {
+		return nil
 	}
+	seq := turn.PromptTurnSeq
+	reqSeq := turn.WatchRequestSeq
 	requestKey := fmt.Sprintf("req:%s:%d:%d", strings.TrimSpace(sess.ID), seq, reqSeq)
 	delivery, err := recorder.PrepareWatches(ctx, sess, requestKey)
 	if err != nil {
 		return err
 	}
-	if turn != nil {
-		turn.PendingWatches = delivery
-	}
+	turn.PendingWatches = delivery
 	return nil
 }
 
