@@ -206,6 +206,14 @@ func (w streamWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (w streamWriter) WriteHost(p []byte) (int, error) {
+	cursor := w.proc.buffer.AppendWithOrigin(w.stream, p, true)
+	if w.publish != nil && len(p) > 0 {
+		w.publish(context.Background(), w.proc, w.stream, cursor)
+	}
+	return len(p), nil
+}
+
 func (r *Registry) waitProcess(ctx context.Context, proc *Process, stages []exec.Stage) {
 	if proc == nil || proc.async == nil {
 		return

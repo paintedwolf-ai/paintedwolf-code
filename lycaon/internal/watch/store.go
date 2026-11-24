@@ -11,6 +11,7 @@ import (
 	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/db"
 )
 
@@ -35,8 +36,10 @@ type Store struct {
 	clock                 Clock
 	heap                  *DeadlineHeap
 	sampler               *Sampler
+	manifests             *manifestStore
 	mu                    sync.RWMutex
 	processLookup         ProcessLookup
+	processOutputLookup   ProcessOutputLookup
 	coordinatorLookup     CoordinatorStateLookup
 	authorityChecker      AuthorityChecker
 	onLeaseWake           LeaseWakeFunc
@@ -51,10 +54,11 @@ func NewStore(database db.Handle, clock Clock) *Store {
 		clock = RealClock{}
 	}
 	return &Store{
-		db:      database,
-		clock:   clock,
-		heap:    NewDeadlineHeap(),
-		sampler: newSampler(),
+		db:        database,
+		clock:     clock,
+		heap:      NewDeadlineHeap(),
+		sampler:   newSampler(),
+		manifests: newManifestStore(),
 	}
 }
 
@@ -70,6 +74,26 @@ func (s *Store) SetProcessLookup(fn ProcessLookup) {
 	s.mu.Lock()
 	s.processLookup = fn
 	s.mu.Unlock()
+}
+
+func (s *Store) SetProcessOutputLookup(fn ProcessOutputLookup) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.processOutputLookup = fn
+	s.mu.Unlock()
+}
+
+func lookupProcessOutput(s *Store, ctx context.Context, sessionID, handle string, since int64) (bgprocess.ProcessOutputState, bool, error) {
+	s.mu.RLock()
+	fn := s.processOutputLookup
+	s.mu.RUnlock()
+	if fn == nil {
+		return bgprocess.ProcessOutputState{}, false, nil
+	}
+	st, err := fn(ctx, sessionID, handle, since)
+	return st, true, err
 }
 
 func (s *Store) SetCoordinatorStateLookup(fn CoordinatorStateLookup) {
@@ -119,6 +143,9 @@ func retireWatchRuntime(s *Store, watchID string) {
 	s.heap.Remove(KindTimerTick, watchTimerPrefix+watchID)
 	if s.sampler != nil {
 		s.sampler.unsubscribeWatch(watchID, s.heap)
+	}
+	if s.manifests != nil {
+		s.manifests.removeWatch(watchID)
 	}
 }
 

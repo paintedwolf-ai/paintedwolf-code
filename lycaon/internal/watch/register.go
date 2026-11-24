@@ -31,9 +31,14 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	if err != nil {
 		return RegisterReceipt{}, err
 	}
-	if !normalized.Repeat && len(initialMatches) > 0 {
-		// One-shot already satisfied by initial process state.
-	} else {
+	if normalized.Repeat || len(initialMatches) == 0 {
+		outMatches, oErr := collectInitialProcessOutputMatches(ctx, s, &normalized)
+		if oErr != nil {
+			return RegisterReceipt{}, oErr
+		}
+		initialMatches = append(initialMatches, outMatches...)
+	}
+	if normalized.Repeat || len(initialMatches) == 0 {
 		coordMatches, coordCursors, cErr := collectInitialCoordinatorMatches(ctx, s, normalized)
 		if cErr != nil {
 			return RegisterReceipt{}, cErr
@@ -42,10 +47,18 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 			normalized.Cursors[k] = v
 		}
 		initialMatches = append(initialMatches, coordMatches...)
-		if !normalized.Repeat && len(initialMatches) > 1 {
-			initialMatches = initialMatches[:1]
-		}
 	}
+	initialManifests, gapMatch, sourceLostOnInit, bErr := initFileAndGitBaselines(ctx, s, &normalized)
+	if bErr != nil {
+		return RegisterReceipt{}, bErr
+	}
+	if gapMatch != nil {
+		initialMatches = append(initialMatches, *gapMatch)
+	}
+	if !normalized.Repeat && len(initialMatches) > 1 {
+		initialMatches = initialMatches[:1]
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return RegisterReceipt{}, err
@@ -65,10 +78,18 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	if err := tx.Commit(); err != nil {
 		return RegisterReceipt{}, err
 	}
-	if !replayed && reg.Lifecycle.State == StateLive {
-		s.heap.Upsert(KindWatchExpiry, reg.WatchID, reg.Lifecycle.ExpiresAt)
-		scheduleWatchTimer(s, reg)
-		subscribeWatchSampler(s, reg, now)
+	if !replayed {
+		for altIdx, snap := range initialManifests {
+			s.manifests.set(reg.WatchID, altIdx, snap)
+		}
+		if sourceLostOnInit {
+			_ = s.MarkSourceLost(ctx, reg.WatchID)
+			receipt.State = string(StateTerminal)
+		} else if reg.Lifecycle.State == StateLive {
+			s.heap.Upsert(KindWatchExpiry, reg.WatchID, reg.Lifecycle.ExpiresAt)
+			scheduleWatchTimer(s, reg)
+			subscribeWatchSampler(s, reg, now)
+		}
 	}
 	if !replayed && len(initialMatches) > 0 {
 		receipt = reconcileInitialProcessClaims(s, ctx, reg, receipt, initialMatches)

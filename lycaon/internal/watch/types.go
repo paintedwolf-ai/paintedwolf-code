@@ -95,14 +95,24 @@ func (o Owner) Destination() string {
 	return "session"
 }
 
+// WatchRootGrant captures one authorized root mapping frozen at registration.
+type WatchRootGrant struct {
+	Label         string `json:"label"`
+	RootID        string `json:"root_id,omitempty"`
+	Path          string `json:"path"`
+	BranchID      string `json:"branch_id,omitempty"`
+	PrivateBranch bool   `json:"private_branch,omitempty"`
+}
+
 // Authority captures workspace and capability scope frozen at registration.
 type Authority struct {
-	RootSessionID   string   `json:"root_session_id,omitempty"`
-	ProjectDir      string   `json:"project_dir,omitempty"`
-	WorkspaceID     string   `json:"workspace_id,omitempty"`
-	RootPaths       []string `json:"root_paths,omitempty"`
-	LoopbackGranted bool     `json:"loopback_granted,omitempty"`
-	LoopbackPorts   []uint16 `json:"loopback_ports,omitempty"`
+	RootSessionID   string           `json:"root_session_id,omitempty"`
+	ProjectDir      string           `json:"project_dir,omitempty"`
+	WorkspaceID     string           `json:"workspace_id,omitempty"`
+	RootPaths       []string         `json:"root_paths,omitempty"`
+	Roots           []WatchRootGrant `json:"roots,omitempty"`
+	LoopbackGranted bool             `json:"loopback_granted,omitempty"`
+	LoopbackPorts   []uint16         `json:"loopback_ports,omitempty"`
 }
 
 // StandingDraft captures an agent-proposed standing watch attached to a session watch.

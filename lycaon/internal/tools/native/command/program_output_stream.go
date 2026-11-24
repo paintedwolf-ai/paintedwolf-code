@@ -14,6 +14,12 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
+type hostOriginSpan struct{ start, end int64 }
+
+type hostOriginWriter interface {
+	WriteHost([]byte) (int, error)
+}
+
 // programStream stages a top-level stream privately until its screened snapshot
 // enters the existing output retention lifecycle. Pipe bytes never enter it.
 type programStream struct {
@@ -28,6 +34,7 @@ type programStream struct {
 	ctx       context.Context
 	truncated bool
 	mappings  *sourceMappingBuffer
+	hostSpans []hostOriginSpan
 }
 
 func newProgramStream(ctx context.Context, limit int64, admission tooloutput.SpillAdmission, memory *toolcontract.ProgramMemory) *programStream {
@@ -46,11 +53,20 @@ func (r *ProgramRuntime) newProgramStreams(ctx context.Context, run *programRun)
 }
 
 func (s *programStream) Write(p []byte) (int, error) {
-	n, _, err := s.writeLocated(p)
+	n, _, err := s.writeLocatedWithOrigin(p, false)
+	return n, err
+}
+
+func (s *programStream) WriteHost(p []byte) (int, error) {
+	n, _, err := s.writeLocatedWithOrigin(p, true)
 	return n, err
 }
 
 func (s *programStream) writeLocated(p []byte) (int, int64, error) {
+	return s.writeLocatedWithOrigin(p, false)
+}
+
+func (s *programStream) writeLocatedWithOrigin(p []byte, hostOrigin bool) (int, int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(p) == 0 {
@@ -90,8 +106,20 @@ func (s *programStream) writeLocated(p []byte) (int, int64, error) {
 	start := s.size
 	n, err := s.spool.Write(p)
 	s.size += int64(n)
+	if hostOrigin && n > 0 {
+		s.hostSpans = append(s.hostSpans, hostOriginSpan{start: start, end: start + int64(n)})
+	}
 	if s.follower != nil && n > 0 {
-		_, followErr := s.follower.Write(p[:n])
+		var followErr error
+		if hostOrigin {
+			if hw, ok := s.follower.(hostOriginWriter); ok {
+				_, followErr = hw.WriteHost(p[:n])
+			} else {
+				_, followErr = s.follower.Write(p[:n])
+			}
+		} else {
+			_, followErr = s.follower.Write(p[:n])
+		}
 		err = errors.Join(err, followErr)
 	}
 	if err != nil {

@@ -4,7 +4,10 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/repochange"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/watch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -20,6 +23,31 @@ func wireWatchProducers(b *serveBuilder, watchStore *watch.Store) {
 	watchStore.SetCoordinatorStateLookup(func(ctx context.Context, sessionID string) (watch.WorkerWatchStateSnapshot, error) {
 		return lookupCoordinatorWatchState(b, ctx, sessionID)
 	})
+
+	if b.sessions != nil && b.sessions.Manager != nil && b.sessions.Manager.Processes != nil && b.sessions.Manager.Processes.Background != nil {
+		bg := b.sessions.Manager.Processes.Background
+		watchStore.SetProcessOutputLookup(func(ctx context.Context, sessionID, handle string, since int64) (bgprocess.ProcessOutputState, error) {
+			return bg.Output.InspectProcessOutput(ctx, sessionID, handle, since)
+		})
+		bg.Output.SetWatchOutputHook(b.startup.ctx, func(ctx context.Context, sessionID, handle string) {
+			_ = watchStore.NotifyProcessOutput(ctx, sessionID, handle)
+		})
+	}
+	unsubRepo := repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
+		if ev.Kind == repochange.HeadMoved || ev.Kind == repochange.WorktreeChanged {
+			_ = watchStore.NotifyWorkspaceChange(ctx, "", ev.ProjectDir)
+		}
+	})
+	unsubSource := sourcefeed.SubscribeAll(func(projectID, _ string, _ sourcefeed.Notice) {
+		_ = watchStore.NotifyWorkspaceChange(b.startup.ctx, projectID, "")
+	})
+	if b.startup.resources != nil {
+		b.startup.resources.Track("watch-source-observers", 90, func(context.Context) error {
+			unsubRepo()
+			unsubSource()
+			return nil
+		})
+	}
 
 	if b.sessions != nil && b.sessions.Decisions != nil {
 		if sqlDec, ok := b.sessions.Decisions.(*sessiondecisions.SQL); ok && sqlDec != nil {

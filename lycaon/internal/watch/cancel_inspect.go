@@ -270,6 +270,7 @@ func (s *Store) Recover(ctx context.Context) error {
 func recoverStore(ctx context.Context, s *Store) error {
 	s.heap.Reset()
 	s.sampler = newSampler()
+	s.manifests = newManifestStore()
 	if err := recoverStoppedSessions(ctx, s); err != nil {
 		return err
 	}
@@ -332,6 +333,13 @@ func recoverLiveWatches(ctx context.Context, s *Store) error {
 	}
 	_ = rows.Close()
 	for _, reg := range liveRegs {
+		for altIdx, cond := range reg.Conditions {
+			if cond.Kind == "file_change" {
+				if snap, _ := decodePersistedManifest(reg.Cursors[fileManifestCursorKey(altIdx)]); snap != nil {
+					s.manifests.set(reg.WatchID, altIdx, snap)
+				}
+			}
+		}
 		s.heap.Upsert(KindWatchExpiry, reg.WatchID, reg.Lifecycle.ExpiresAt)
 		scheduleWatchTimer(s, reg)
 		subscribeWatchSampler(s, reg, now)

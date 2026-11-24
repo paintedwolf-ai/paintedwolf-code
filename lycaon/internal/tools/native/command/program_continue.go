@@ -111,8 +111,36 @@ func (s *programStream) follow(writer io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(writer, io.LimitReader(reader, s.size)); err != nil {
-			return err
+		hw, hasHW := writer.(hostOriginWriter)
+		if !hasHW || len(s.hostSpans) == 0 {
+			if _, err := io.Copy(writer, io.LimitReader(reader, s.size)); err != nil {
+				return err
+			}
+		} else {
+			cur := int64(0)
+			for _, span := range s.hostSpans {
+				if span.start > cur {
+					if _, err := io.Copy(writer, io.LimitReader(reader, span.start-cur)); err != nil {
+						return err
+					}
+					cur = span.start
+				}
+				if span.end > cur {
+					buf, err := io.ReadAll(io.LimitReader(reader, span.end-cur))
+					if err != nil {
+						return err
+					}
+					if _, err := hw.WriteHost(buf); err != nil {
+						return err
+					}
+					cur = span.end
+				}
+			}
+			if s.size > cur {
+				if _, err := io.Copy(writer, io.LimitReader(reader, s.size-cur)); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	s.follower = writer

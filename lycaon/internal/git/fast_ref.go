@@ -3,6 +3,7 @@ package git
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,6 +30,23 @@ func ReadHeadSHA(projectDir string) (string, error) {
 		return head, nil
 	}
 	return "", fmt.Errorf("unrecognized HEAD: %q", head)
+}
+
+// ResolveFullRef resolves a full refs/... reference in projectDir across worktree-local,
+// loose, symref, and packed-refs storage without spawning git. Missing refs return ("", false, nil).
+func ResolveFullRef(projectDir, ref string) (string, bool, error) {
+	repo, err := discoverRepo(projectDir)
+	if err != nil {
+		return "", false, err
+	}
+	oid, err := resolveRef(repo, ref)
+	if err != nil {
+		if strings.Contains(err.Error(), "ref not found") || errors.Is(err, os.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return oid, true, nil
 }
 
 // ReadBranch returns the current branch name from HEAD, or "" when detached.
