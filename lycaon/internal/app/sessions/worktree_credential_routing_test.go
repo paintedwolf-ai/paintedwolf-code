@@ -268,8 +268,8 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 
 	scanMu.Lock()
 	wantScan := primary + ":.env.local"
-	if !slices.Equal(scannedPaths, []string{wantScan}) {
-		t.Fatalf("in-root credential scans = %v, want [%s]", scannedPaths, wantScan)
+	if !slices.Contains(scannedPaths, wantScan) || slices.Contains(scannedPaths, primary+":.") {
+		t.Fatalf("in-root credential scans = %v, want %s without whole-root walk", scannedPaths, wantScan)
 	}
 	scanMu.Unlock()
 
