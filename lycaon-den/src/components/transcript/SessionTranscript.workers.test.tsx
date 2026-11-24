@@ -298,6 +298,9 @@ describe("SessionTranscript workers and synthesis", () => {
       ).length,
     ).toBe(1);
     expect(screen.getByTestId("citation-evidence-chicklet")).toBeTruthy();
+    container
+      .querySelector<HTMLElement>('[data-testid="activity-span-card"] > .den-transcript-disclosure-header')
+      ?.click();
     expect(container.querySelector('[data-testid="action-card"]')).toBeTruthy();
 
     const kinds = messagesToTranscriptItems(messages, {
@@ -391,9 +394,7 @@ describe("SessionTranscript workers and synthesis", () => {
     expect(
       container.querySelector('[data-testid="synthesis-evidence-section"]'),
     ).toBeNull();
-    const panel = container.querySelector('[data-testid="citation-grounding-panel"]');
-    expect(panel).toBeTruthy();
-    expect(panel!.closest(".den-citation-evidence-chicklet-body")).toBeTruthy();
+    expect(container.querySelector('[data-testid="citation-grounding-panel"]')).toBeNull();
 
     disclosureToggle(chicklet).dispatchEvent(
       new MouseEvent("click", { bubbles: true }),
@@ -545,11 +546,7 @@ describe("SessionTranscript workers and synthesis", () => {
     expect(
       container.querySelector('[data-testid="synthesis-evidence-section"]'),
     ).toBeNull();
-    expect(
-      chicklet.querySelector('[data-testid="citation-grounding-panel"]')?.closest(
-        ".den-citation-evidence-chicklet-body",
-      ),
-    ).toBeTruthy();
+    expect(chicklet.querySelector('[data-testid="citation-grounding-panel"]')).toBeNull();
     fireEvent.click(disclosureToggle(chicklet));
     expect(container.textContent).toContain("Leg evidence handles");
     const citations = chicklet.querySelector(".den-citation-grounding-citations");

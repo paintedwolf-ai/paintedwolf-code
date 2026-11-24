@@ -3,7 +3,11 @@ import { softPauseWorkerHint } from "../../chat/composer/composer-rules.ts";
 import { subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
 import { isBackendReachable } from "../../platform/connection/sidecar-status.ts";
 import { isPromptStarting, isChatActivityLive, llmTurnFor, sessionActivityFor } from "../../chat/session/session-activity.ts";
-import { resolveThinkingActivityLabel } from "../../chat/session/thinking-activity-label.ts";
+import type { Message } from "../../api/types.ts";
+import {
+  findCurrentUserTurnStart,
+  resolveThinkingActivityLabel,
+} from "../../chat/session/thinking-activity-label.ts";
 import { createThinkingLabelHold } from "../../chat/session/thinking-label-hold.ts";
 import { sameSessionWorkers, sessionWorkers } from "../../chat/actions/chat-actions.ts";
 import { plainMessageRows } from "../../chat/transcript/projection/plain-message-rows.ts";
@@ -39,12 +43,87 @@ export function createChatViewActivity(props: ChatViewProps) {
     sessionActivityFor(props.appStore, props.sessionId).stopping === true;
   const llmTurn = () => llmTurnFor(props.appStore, props.sessionId);
 
+  let prevTurnSnapshot: Message[] | undefined;
+  let prevFullSnapshot: Message[] | undefined;
+  const composerMessages = createMemo<readonly Message[]>(() => {
+    const raw = props.appStore.state.messages;
+    const len = raw.length;
+    const transcript = props.appStore.state.transcript;
+    const activities = Object.values(
+      sessionActivityFor(props.appStore, props.sessionId).activities ?? {},
+    );
+    if (len === 0) {
+      prevTurnSnapshot = undefined;
+      if (prevFullSnapshot?.length === 0) return prevFullSnapshot;
+      prevFullSnapshot = [];
+      return prevFullSnapshot;
+    }
+    if (!transcript.hasTailGap) {
+      const turnStart = findCurrentUserTurnStart(raw);
+      if (turnStart >= 0) {
+        const turnSlice = raw.slice(turnStart);
+        const olderSuppliesActiveFact = activities.some((act) => {
+          if (act.status !== "active") return false;
+          const callId = act.tool_call_id?.trim();
+          const toolName = act.tool_name?.trim().toLowerCase();
+          if (!callId || !toolName) return false;
+          const inCurrentTurn = turnSlice.some(
+            (msg) =>
+              msg.role === "assistant" &&
+              msg.tool_calls?.some(
+                (c) => c.id.trim() === callId && c.name.trim().toLowerCase() === toolName,
+              ),
+          );
+          if (inCurrentTurn) return false;
+          for (let i = 0; i < turnStart; i++) {
+            const msg = raw[i];
+            if (
+              msg?.role === "assistant" &&
+              msg.tool_calls?.some(
+                (c) => c.id.trim() === callId && c.name.trim().toLowerCase() === toolName,
+              )
+            ) {
+              return true;
+            }
+            if (msg?.role === "tool" && msg.tool_result?.tool_call_id?.trim() === callId) {
+              return true;
+            }
+          }
+          return false;
+        });
+        if (!olderSuppliesActiveFact) {
+          prevFullSnapshot = undefined;
+          if (
+            prevTurnSnapshot &&
+            prevTurnSnapshot.length === turnSlice.length &&
+            prevTurnSnapshot.every((m, idx) => m === turnSlice[idx])
+          ) {
+            return prevTurnSnapshot;
+          }
+          prevTurnSnapshot = turnSlice;
+          return turnSlice;
+        }
+      }
+    }
+    prevTurnSnapshot = undefined;
+    const fullSlice = raw.slice();
+    if (
+      prevFullSnapshot &&
+      prevFullSnapshot.length === fullSlice.length &&
+      prevFullSnapshot.every((m, idx) => m === fullSlice[idx])
+    ) {
+      return prevFullSnapshot;
+    }
+    prevFullSnapshot = fullSlice;
+    return fullSlice;
+  });
+
   const resolvedThinkingLabel = () => {
     backgroundProcessRevision();
     const sessionActivity = sessionActivityFor(props.appStore, props.sessionId);
     return resolveThinkingActivityLabel({
       sessionId: props.sessionId,
-      messages: props.appStore.state.messages,
+      messages: composerMessages(),
       activities: Object.values(sessionActivity.activities ?? {}),
       coordinatorLoop: props.appStore.state.coordinatorLoopProgress,
       progressSteps: props.appStore.state.progress?.steps,

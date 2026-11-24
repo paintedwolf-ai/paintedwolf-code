@@ -60,4 +60,23 @@ describe("transcript scale bounds", () => {
     expect(mounted).toBeLessThan(messages.length);
     expect(container.querySelector("[data-deferred]")).toBeNull();
   });
+
+  it("keeps resident and mounted rows bounded across 5,000 and 50,000 host messages", () => {
+    const max = uniformWindowRowBound(900, 72);
+    for (const total of [5_000, 50_000]) {
+      const rows = materializeTranscriptWindow(sparseWindowForSessionLength(total));
+      expect(rows.length).toBeLessThanOrEqual(TRANSCRIPT_RESIDENT_MESSAGE_BUDGET);
+
+      const view = render(() => (
+        <SessionTranscript layout="chat" sessionId={`scale-${total}`} messages={rows} />
+      ));
+      try {
+        const mounted = view.container.querySelectorAll(".transcript-viewport-row").length;
+        expect(mounted).toBeGreaterThan(0);
+        expect(mounted).toBeLessThanOrEqual(max);
+      } finally {
+        view.unmount();
+      }
+    }
+  });
 });

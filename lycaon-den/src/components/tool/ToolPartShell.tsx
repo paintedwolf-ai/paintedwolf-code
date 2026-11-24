@@ -159,8 +159,8 @@ export function ToolPartShell(props: Props) {
   });
   const outputAccess = contentAccess("output");
   const argsAccess = contentAccess("args");
-  bindChatContentFind({ access: outputAccess, host: hostEl, collapsed: () => !open(), expand: revealTemporarily, reveal: match => { if ("offset" in match) setOutputOffset(match.offset); } });
-  bindChatContentFind({ access: argsAccess, host: hostEl, collapsed: () => !open(), expand: revealTemporarily, reveal: match => { if ("offset" in match) setArgsOffset(match.offset); } });
+  bindChatContentFind({ access: outputAccess, host: hostEl, collapsed: () => !open(), expand: revealTemporarily, reveal: match => { if ("offset" in match) { setRevealedCallId(props.part.toolCallId); setOutputOffset(match.offset); } } });
+  bindChatContentFind({ access: argsAccess, host: hostEl, collapsed: () => !open(), expand: revealTemporarily, reveal: match => { if ("offset" in match) { setRevealedCallId(props.part.toolCallId); setArgsOffset(match.offset); } } });
 
   // Small unmounted bodies use the data corpus; retained bodies use host search.
   bindFindableView({
@@ -185,7 +185,7 @@ export function ToolPartShell(props: Props) {
   bindVirtualListFind({
     items: () => [props.part], host: () => hostEl() ?? undefined,
     enabled: () => !!props.part.commandActivity,
-    search: (part, query, sensitive, signal) => searchToolPart(part, props.sessionId, query, sensitive, signal),
+    search: (part, query, sensitive, signal) => searchToolPart(part, props.sessionId, query, sensitive, signal, { client: props.client }),
     reveal: (_index, match) => hostEl()?.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: match })),
   });
 

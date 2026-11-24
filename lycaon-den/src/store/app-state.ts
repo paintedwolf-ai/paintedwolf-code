@@ -11,10 +11,18 @@ import { WorkerTranscriptRetention } from "../chat/worker/worker-transcript.ts";
 import { loadFailed, loaded, unloaded, valueOf } from "./load-state.ts";
 import { reconcilePendingOnQueueDraft } from "../chat/send/pending-sends.ts";
 import { pendingFromEvent } from "../chat/checkpoint/checkpoint-model.ts";
-import { clearTranscriptEntryMemory, noteTranscriptEntryBaseline, transcriptEntryKeysFromMessages } from "../chat/transcript/presentation/transcript-entry.ts";
+import {
+  clearTranscriptEntryMemory,
+  markTranscriptLiveEntries,
+  markTranscriptSessionHydrated,
+  transcriptEntryKeysFromMessages,
+} from "../chat/transcript/presentation/transcript-entry.ts";
 import { clearVisualArtifactSessionMemory, noteVisualArtifactIntroBaseline } from "../chat/visual/visual-artifact-reveal.ts";
 import { mergeTranscriptBaseline } from "../chat/transcript/projection/transcript-baseline-merge.ts";
-import { transcriptReaderReach } from "../chat/transcript/history/transcript-reader-reach.ts";
+import {
+  releaseAdmittedTranscriptReach,
+  transcriptReaderReach,
+} from "../chat/transcript/history/transcript-reader-reach.ts";
 import { TranscriptObservedRevisions } from "../chat/transcript/layout/transcript-observed-revisions.ts";
 import { traceTranscriptPageEvictions } from "../chat/transcript/layout/transcript-paging-trace.ts";
 import { TRANSCRIPT_RESIDENT_ORD_BUDGET, appendToTail, applyTranscriptPage, copyTranscriptWindow, emptyTranscriptWindow, installTailWindow, materializeTranscriptWindow, mergeIntoTail, patchRowInWindow, precedesLiveTail, refreshTailWindow, resetOlderPages, residentPageOrds, transcriptWindowPage, trimOldestPages, type TranscriptEvictedPage } from "../chat/transcript/layout/transcript-window.ts";
@@ -346,10 +354,7 @@ export function createAppStore(
       traceTranscriptPageEvictions(evicted);
       // Reconciliation preserves the live reveal baseline.
       if (isFreshHydration) {
-        noteTranscriptEntryBaseline(
-          sessionId,
-          transcriptEntryKeysFromMessages(merged.messages, nextTurnLoads),
-        );
+        markTranscriptSessionHydrated(sessionId);
         noteVisualArtifactIntroBaseline(merged.messages);
       }
     },
@@ -377,22 +382,23 @@ export function createAppStore(
         }),
       );
       traceTranscriptPageEvictions(evicted);
-      // Paged history enters the reveal baseline immediately.
-      if (applied && sessionId && page.messages.length > 0) {
-        noteTranscriptEntryBaseline(
-          sessionId,
-          transcriptEntryKeysFromMessages(page.messages, state.turnLoads),
-        );
+      // Paged history enters quietly without per-row key retention.
+      if (applied && sessionId) {
+        markTranscriptSessionHydrated(sessionId);
       }
       return applied;
     },
-    trimTranscriptPages() {
+    trimTranscriptPages(preferEdge) {
       const sessionId = state.transcriptSessionId?.trim();
       if (residentPageOrds(state.transcript.pages) <= TRANSCRIPT_RESIDENT_ORD_BUDGET) return;
       const evicted: TranscriptEvictedPage[] = [];
       setState(
         produce((draft) => {
-          const next = trimOldestPages(draft.transcript, { ...residencyPolicy(sessionId), evicted });
+          const next = trimOldestPages(draft.transcript, {
+            ...residencyPolicy(sessionId),
+            preferEdge,
+            evicted,
+          });
           if (next === draft.transcript) return;
           draft.transcript = next;
           draft.messages = materializeTranscriptWindow(next);
@@ -401,6 +407,8 @@ export function createAppStore(
       traceTranscriptPageEvictions(evicted);
     },
     resetOlderTranscriptPages() {
+      const sessionId = state.transcriptSessionId?.trim();
+      if (sessionId) releaseAdmittedTranscriptReach(sessionId);
       setState(
         produce((draft) => {
           draft.transcript = resetOlderPages(draft.transcript);
@@ -436,6 +444,20 @@ export function createAppStore(
               observedRevisions.note(draft.transcriptSessionId, message);
               return;
             }
+            // Record live eligibility before publishing so mounted subscribers animate.
+            const sessionId = draft.transcriptSessionId?.trim();
+            if (sessionId) {
+              const parentId = message.role === "tool" ? message.tool_result?.assistant_message_id?.trim() : undefined;
+              const parent = parentId ? draft.messages.find((m) => m.id === parentId) : undefined;
+              markTranscriptLiveEntries(
+                sessionId,
+                transcriptEntryKeysFromMessages(
+                  parent ? [parent, message] : [message],
+                  draft.turnLoads,
+                  sessionId,
+                ),
+              );
+            }
             // Keep the existing array slot.
             draft.messages[idx] = message;
             applied = true;
@@ -449,6 +471,18 @@ export function createAppStore(
             return;
           }
           const sessionId = draft.transcriptSessionId?.trim();
+          if (sessionId) {
+            const parentId = message.role === "tool" ? message.tool_result?.assistant_message_id?.trim() : undefined;
+            const parent = parentId ? draft.messages.find((m) => m.id === parentId) : undefined;
+            markTranscriptLiveEntries(
+              sessionId,
+              transcriptEntryKeysFromMessages(
+                parent ? [parent, message] : [message],
+                draft.turnLoads,
+                sessionId,
+              ),
+            );
+          }
           const evicted: TranscriptEvictedPage[] = [];
           draft.transcript = appendToTail(draft.transcript, message, { ...residencyPolicy(sessionId), evicted });
           traceTranscriptPageEvictions(evicted);
@@ -824,10 +858,7 @@ export function createAppStore(
       const sessionId = snapshot.scope.sessionId.trim();
       const transcript = copyTranscriptWindow(snapshot.transcript);
       const messages = materializeTranscriptWindow(transcript);
-      noteTranscriptEntryBaseline(
-        sessionId,
-        transcriptEntryKeysFromMessages(messages, mergeTurnLoads({}, snapshot.turnLoads)),
-      );
+      markTranscriptSessionHydrated(sessionId);
       noteVisualArtifactIntroBaseline(messages);
       setState(
         produce((draft) => {

@@ -200,7 +200,7 @@ export type AppStoreActions = {
   /** Extend the resident range with a fetched page; false when the request is stale. */
   loadTranscriptPage: (request: TranscriptPageRequest, page: SessionTranscriptPage) => boolean;
   /** Reclaim older pages above the budget once they leave the reader's reach. */
-  trimTranscriptPages: () => void;
+  trimTranscriptPages: (preferEdge?: "older" | "newer") => void;
   /** Records the seen stamp the host returned for the current session. */
   noteSessionSeen: (session: Session) => void;
   /** Drops older pages so the resident range reads contiguously from the live tail. */

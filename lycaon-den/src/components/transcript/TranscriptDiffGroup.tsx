@@ -123,10 +123,10 @@ export function TranscriptDiffGroup(props: Props) {
     const host = hostEl();
     const expanding = host ? heightToggleDirectionFor(host, open()) === "open" : !open();
     const fold = props.folds[0];
+    onToggleClick(event);
     if (expanding && props.folds.length === 1 && fold) {
       accordion.open(fold.key);
     }
-    onToggleClick(event);
   };
 
   return (

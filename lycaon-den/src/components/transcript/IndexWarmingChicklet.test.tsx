@@ -68,6 +68,7 @@ describe("IndexWarmingChicklet", () => {
     expect(title).toContain("1 host");
     expect(title).not.toContain("hourly seed cap");
     expect(title).not.toContain("tailwind dark mode");
+    fireEvent.click(disclosureToggle(card));
     expect(container.textContent).toContain(
       indexWarmingSkipNote("hourly seed cap"),
     );
@@ -98,9 +99,9 @@ describe("IndexWarmingChicklet", () => {
         }}
       />
     ));
-    container
-      .querySelector('[data-testid="index-warming-chicklet"]')
-      ?.setAttribute("open", "open");
+    fireEvent.click(
+      disclosureToggle(container.querySelector('[data-testid="index-warming-chicklet"]')),
+    );
     expect(container.textContent).toContain(indexWarmingTriggerDetail("declared_url"));
     expect(container.textContent).toContain(
       indexWarmingTopicNote("widget frobnicator", "declared_url"),
@@ -119,9 +120,9 @@ describe("IndexWarmingChicklet", () => {
         }}
       />
     ));
-    container
-      .querySelector('[data-testid="index-warming-chicklet"]')
-      ?.setAttribute("open", "open");
+    fireEvent.click(
+      disclosureToggle(container.querySelector('[data-testid="index-warming-chicklet"]')),
+    );
     expect(container.textContent).toContain(indexWarmingTriggerDetail("fetch"));
   });
 });

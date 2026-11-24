@@ -20,8 +20,11 @@ import { ActivitySpanCard } from "../components/tool/ActivitySpanCard.tsx";
 import type { ToolPartView } from "../chat/tool/tool-part-model.ts";
 import type { ActivitySpanEntry } from "../chat/transcript/projection/transcript-item-model.ts";
 import { clearTranscriptEntryMemory } from "../chat/transcript/presentation/transcript-entry.ts";
+import { setLycaonClientForTest } from "../platform/connection/app-connection.ts";
+import { stubClient } from "../test/client-fixture.ts";
 
 afterEach(() => {
+  setLycaonClientForTest(null);
   resetFindControllerForTests();
   resetOpenFilesSurfaceForTests();
   clearTranscriptEntryMemory();
@@ -159,8 +162,7 @@ describe("tool body find + collapsed reveal", () => {
     )) as HTMLElement;
     const cards = () => screen.queryAllByTestId("action-card");
     expect(isDisclosureOpen(span)).toBe(false);
-    // The workaround mounts a closed span's cards only once it opens.
-    expect(cards()).toHaveLength(workaround ? 0 : 2);
+    expect(cards()).toHaveLength(0);
     expect(cards().every((c) => !isDisclosureOpen(c))).toBe(true);
 
     openFind();
@@ -194,6 +196,269 @@ describe("tool body find + collapsed reveal", () => {
     expect(request).toMatchObject({ kind: "chat-content", projectId: "project", document: {
       kind: "tool", sessionId: "s1", content: { kind: "inline", text: part().output },
     } });
+  });
+
+  it.each(["chat", "worker"] as const)(
+    "reveals a folded member's retained output inside a closed span in %s layout and restores state",
+    async (layout) => {
+      const sink = vi.fn();
+      registerOpenFilesSurfaceSink(sink);
+      const retainedRef = {
+        field: "tool_output" as const,
+        tool_call_id: "member-call",
+        sha256: "blob-member-2",
+        size_bytes: 1024,
+        total_runes: 512,
+        rows: 20,
+      };
+      const searchChatContent = vi.fn(async () => ({
+        matches: [{ offset: 42, length: 6, preview: "RETAINED_FOLD_NEEDLE" }],
+      }));
+      setLycaonClientForTest(stubClient({ searchChatContent }));
+
+      const foldedLead: ToolPartView = {
+        id: "lead-row",
+        toolCallId: "lead-call",
+        assistantMessageId: "a1",
+        messageId: "m-lead",
+        tool: "read",
+        kind: "read",
+        status: "completed",
+        args: { path: "first.go" },
+        output: "first body",
+        error: null,
+        foldMembers: [
+          {
+            id: "member-row",
+            toolCallId: "member-call",
+            assistantMessageId: "a2",
+            messageId: "m-member",
+            tool: "read",
+            kind: "read",
+            status: "completed",
+            args: { path: "second.go" },
+            output: "",
+            outputReference: retainedRef,
+            error: null,
+          },
+        ],
+      };
+      const entries: ActivitySpanEntry[] = [{ kind: "tool", part: foldedLead }];
+
+      render(() => (
+        <FindRoot>
+          <ActivitySpanCard
+            label="read"
+            entries={entries}
+            layout={layout}
+            sessionId="s-fold"
+            entryKey={`fold-${layout}`}
+            renderToolEntry={(toolPart) => (
+              <ToolPartCard part={toolPart()} layout={layout} sessionId="s-fold" projectId="proj-1" />
+            )}
+          />
+        </FindRoot>
+      ));
+
+      const span = (await screen.findByTestId("activity-span-card")) as HTMLElement;
+      expect(isDisclosureOpen(span)).toBe(false);
+      expect(screen.queryAllByTestId("action-card")).toHaveLength(0);
+
+      openFind();
+      setFindQuery("RETAINED_FOLD_NEEDLE");
+      await waitFor(() => expect(findController.matches()).toHaveLength(1), { timeout: 2000 });
+      expect(searchChatContent).toHaveBeenCalledTimes(1);
+
+      await waitFor(() => expect(isDisclosureOpen(span)).toBe(true));
+      const card = screen.getByTestId("action-card");
+      await waitFor(() => expect(isDisclosureOpen(card)).toBe(true));
+      await waitFor(() => expect(sink).toHaveBeenCalled());
+      expect(sink.mock.lastCall?.[0]).toMatchObject({
+        kind: "chat-content",
+        projectId: "proj-1",
+        document: {
+          kind: "tool",
+          sessionId: "s-fold",
+          toolCallId: "member-call",
+          messageId: "m-member",
+          revealOffset: 42,
+          content: { kind: "retained", reference: retainedRef },
+        },
+      });
+
+      closeFind();
+      expect(isDisclosureOpen(span)).toBe(false);
+    },
+  );
+
+  it("reveals retained output and retained args on a standalone closed action card", async () => {
+    const sink = vi.fn();
+    registerOpenFilesSurfaceSink(sink);
+    const outRef = {
+      field: "tool_output" as const,
+      tool_call_id: "direct-call",
+      sha256: "blob-out",
+      size_bytes: 512,
+      total_runes: 256,
+      rows: 10,
+    };
+    const argRef = {
+      field: "tool_args" as const,
+      tool_call_id: "direct-call",
+      sha256: "blob-arg",
+      size_bytes: 256,
+      total_runes: 128,
+      rows: 4,
+    };
+    const client = stubClient({
+      searchChatContent: vi.fn(async (_sid: string, _mid: string, ref: { field?: string }, query: string) => {
+        if (query === "DIRECT_OUT_NEEDLE" && ref.field === "tool_output") {
+          return { matches: [{ offset: 17, length: 6, preview: "DIRECT_OUT_NEEDLE" }] };
+        }
+        if (query === "DIRECT_ARG_NEEDLE" && ref.field === "tool_args") {
+          return { matches: [{ offset: 9, length: 6, preview: "DIRECT_ARG_NEEDLE" }] };
+        }
+        return { matches: [] };
+      }),
+    });
+
+    const directPart: ToolPartView = {
+      id: "a1:direct-call",
+      toolCallId: "direct-call",
+      assistantMessageId: "a1",
+      messageId: "m-direct",
+      tool: "read",
+      kind: "read",
+      status: "completed",
+      args: { path: "direct.go" },
+      output: "",
+      outputReference: outRef,
+      argsReference: argRef,
+      error: null,
+    };
+
+    render(() => (
+      <FindRoot>
+        <ToolPartCard
+          part={directPart}
+          layout="chat"
+          sessionId="s-direct"
+          projectId="proj-1"
+          client={client}
+        />
+      </FindRoot>
+    ));
+
+    openFind();
+    setFindQuery("DIRECT_OUT_NEEDLE");
+    await waitFor(() => expect(sink).toHaveBeenCalled());
+    expect(sink.mock.lastCall?.[0]).toMatchObject({
+      kind: "chat-content",
+      projectId: "proj-1",
+      document: {
+        sessionId: "s-direct",
+        toolCallId: "direct-call",
+        revealOffset: 17,
+        content: { kind: "retained", reference: outRef },
+      },
+    });
+
+    sink.mockClear();
+    closeFind();
+    openFind();
+    setFindQuery("DIRECT_ARG_NEEDLE");
+    await waitFor(() => expect(sink).toHaveBeenCalled());
+    expect(sink.mock.lastCall?.[0]).toMatchObject({
+      kind: "chat-content",
+      projectId: "proj-1",
+      document: {
+        sessionId: "s-direct",
+        toolCallId: "direct-call",
+        revealOffset: 9,
+        content: { kind: "retained", reference: argRef },
+      },
+    });
+  });
+
+  it("forwards an explicit client when searching a standalone command-activity card", async () => {
+    const sink = vi.fn();
+    registerOpenFilesSurfaceSink(sink);
+    const cmdRef = {
+      field: "tool_output" as const,
+      tool_call_id: "cmd-subcall",
+      sha256: "blob-cmd",
+      size_bytes: 640,
+      total_runes: 320,
+      rows: 12,
+    };
+    const searchChatContent = vi.fn(async () => ({
+      matches: [{ offset: 23, length: 6, preview: "CMD_CLIENT_NEEDLE" }],
+    }));
+    const client = stubClient({ searchChatContent });
+
+    const subCall: ToolPartView = {
+      id: "a1:cmd-subcall",
+      toolCallId: "cmd-subcall",
+      assistantMessageId: "a1",
+      messageId: "m-cmd",
+      tool: "command",
+      kind: "command",
+      status: "completed",
+      args: { command: "go test ./..." },
+      output: "",
+      outputReference: cmdRef,
+      error: null,
+    };
+    const fact = {
+      id: "act-1",
+      label: "Run tests",
+      subject: "go test ./...",
+      group: "Running commands",
+      phase: "execute" as const,
+      outcome: "Completed",
+      state: "completed" as const,
+      execution_ids: [],
+      spans: [],
+    };
+    const cmdPart: ToolPartView = {
+      ...subCall,
+      id: "a1:cmd-host",
+      toolCallId: "cmd-host",
+      commandActivity: {
+        fact,
+        calls: [subCall],
+        members: [fact],
+        receiptScopes: [],
+      },
+    };
+
+    render(() => (
+      <FindRoot>
+        <ToolPartCard
+          part={cmdPart}
+          layout="chat"
+          sessionId="s-cmd"
+          projectId="proj-1"
+          client={client}
+        />
+      </FindRoot>
+    ));
+
+    openFind();
+    setFindQuery("CMD_CLIENT_NEEDLE");
+    await waitFor(() => expect(findController.matches()).toHaveLength(1), { timeout: 2000 });
+    expect(searchChatContent).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(sink).toHaveBeenCalled());
+    expect(sink.mock.lastCall?.[0]).toMatchObject({
+      kind: "chat-content",
+      projectId: "proj-1",
+      document: {
+        sessionId: "s-cmd",
+        toolCallId: "cmd-subcall",
+        revealOffset: 23,
+        content: { kind: "retained", reference: cmdRef },
+      },
+    });
   });
 
 });

@@ -6,8 +6,7 @@ import {
 
 import {
   clearTranscriptEntryMemory,
-  hasTranscriptEntryMemory,
-  transcriptEntryKeysFromMessages,
+  transcriptEntryMemoryCount,
 } from "../chat/transcript/presentation/transcript-entry.ts";
 import { publishTranscriptReaderReach } from "../chat/transcript/history/transcript-reader-reach.ts";
 import { residentPageOrds } from "../chat/transcript/layout/transcript-window.ts";
@@ -96,7 +95,7 @@ describe("createAppStore", () => {
     expect(store.state.chatHydrationLock).toBeUndefined();
   });
 
-  it("installTranscriptBaseline baselines entry fade only on fresh hydration", () => {
+  it("installTranscriptBaseline marks the session hydrated with zero historical key retention", () => {
     const sessionId = "sess-fade";
     clearTranscriptEntryMemory(sessionId);
     const store = createAppStore();
@@ -104,26 +103,24 @@ describe("createAppStore", () => {
     const history = [
       { id: "m1", role: "user" as const, origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "hi", created_at: "t", seq: 1 },
     ];
-    // Loaded history has already entered the transcript.
     store.actions.installTranscriptBaseline(sessionId, history, 1);
-    for (const key of transcriptEntryKeysFromMessages(history)) {
-      expect(hasTranscriptEntryMemory(sessionId, key)).toBe(true);
-    }
+    expect(transcriptEntryMemoryCount(sessionId)).toBe(0);
 
-    // Newly discovered tail rows retain their entry fade.
-    const withTail = [
-      ...history,
-      { id: "a1", role: "assistant" as const, origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const, content: "reply", created_at: "t", seq: 2 },
-    ];
-    store.actions.installTranscriptBaseline(sessionId, withTail, 2);
-    const historyKeys = new Set(transcriptEntryKeysFromMessages(history));
-    const tailKeys = transcriptEntryKeysFromMessages(withTail).filter(
-      (key) => !historyKeys.has(key),
-    );
-    expect(tailKeys.length).toBeGreaterThan(0);
-    for (const key of tailKeys) {
-      expect(hasTranscriptEntryMemory(sessionId, key)).toBe(false);
-    }
+    // Live arrivals above the watermark mark only their own transient keys.
+    store.actions.upsertMessage({
+      id: "a1",
+      role: "assistant" as const,
+      origin: "model" as const,
+      authority: "none" as const,
+      trust_tier: "trusted" as const,
+      content: "reply",
+      created_at: "t",
+      seq: 2,
+      ord: 2,
+    });
+    expect(transcriptEntryMemoryCount(sessionId)).toBeGreaterThan(0);
+    clearTranscriptEntryMemory(sessionId);
+    expect(transcriptEntryMemoryCount(sessionId)).toBe(0);
   });
 
   it("resetChatForSessionSwitch clears record-typed session slices", () => {
@@ -424,5 +421,48 @@ describe("createAppStore", () => {
     expect(residentPageOrds(store.state.transcript.pages)).toBe(480);
     expect(store.state.transcript.pages["41:80"]).toBeUndefined();
     expect(store.state.transcript.pages["81:120"]).toHaveLength(40);
+  });
+
+  it("refreshes contiguousWindowRows when upsertMessage patches an older row across a tail gap", async () => {
+    const { contiguousWindowRows } = await import("../chat/transcript/layout/transcript-window.ts");
+    const store = createAppStore();
+    const row = (ord: number, content = `m-${ord}`, seq = ord) => ({
+      id: `m-${ord}`,
+      ord,
+      seq,
+      role: "assistant" as const,
+      origin: "model" as const,
+      authority: "none" as const,
+      trust_tier: "trusted" as const,
+      content,
+      created_at: "t",
+    });
+    store.actions.installTranscriptBaseline(
+      "sess-gap-patch",
+      Array.from({ length: 50 }, (_, i) => row(701 + i)),
+      750,
+      { hasMoreBefore: true, hasMoreAfter: false, bounds: { firstOrd: 1, lastOrd: 750 } },
+    );
+    // Seek into older history to open a tail gap.
+    store.actions.loadTranscriptPage(
+      { edge: "seek", afterOrd: 100 },
+      {
+        messages: Array.from({ length: 20 }, (_, i) => row(101 + i)),
+        before_cursor: "older",
+        after_cursor: "newer",
+        watermark: 750,
+        turn_clocks: {},
+        turn_loads: {},
+      },
+    );
+    expect(store.state.transcript.hasTailGap).toBe(true);
+    expect(contiguousWindowRows(store.state.transcript).find((m) => m.id === "m-105")?.content).toBe(
+      "m-105",
+    );
+
+    expect(store.actions.upsertMessage(row(105, "updated-across-gap", 751))).toBe(true);
+    expect(contiguousWindowRows(store.state.transcript).find((m) => m.id === "m-105")?.content).toBe(
+      "updated-across-gap",
+    );
   });
 });

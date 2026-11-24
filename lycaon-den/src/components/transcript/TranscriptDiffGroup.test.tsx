@@ -131,10 +131,11 @@ describe("TranscriptDiffGroup", () => {
     expect(disclosureToggle(group)?.getAttribute("aria-label")).toBe(
       "1 file changed, 1 added, 1 removed, 1 write",
     );
-    expect(screen.getAllByTestId("file-edit-diff")).toHaveLength(1);
+    expect(screen.queryAllByTestId("file-edit-diff")).toHaveLength(0);
 
     disclosureToggle(group).click();
     expect(isDisclosureOpen(group)).toBe(true);
+    expect(screen.getAllByTestId("file-edit-diff")).toHaveLength(1);
     expect(screen.getByTestId("file-edit-diff").getAttribute("data-expanded")).toBe(
       "true",
     );
@@ -175,6 +176,7 @@ describe("TranscriptDiffGroup", () => {
 
   it("lists files in first-touch order, one row each", () => {
     renderGroup();
+    disclosureToggle(screen.getByTestId("diff-group")).click();
     const paths = screen
       .getAllByTestId("file-edit-diff")
       .map((row) => row.getAttribute("data-path"));
@@ -183,6 +185,7 @@ describe("TranscriptDiffGroup", () => {
 
   it("gives every row the manifest chrome, closed and unopened", () => {
     renderGroup();
+    disclosureToggle(screen.getByTestId("diff-group")).click();
     for (const row of screen.getAllByTestId("file-edit-diff")) {
       expect(row.getAttribute("data-chrome")).toBe("row");
       expect(row.getAttribute("data-expanded")).toBe("false");
@@ -192,6 +195,7 @@ describe("TranscriptDiffGroup", () => {
 
   it("keeps every disclosure on the right — group caret and row marks alike", () => {
     renderGroup();
+    disclosureToggle(screen.getByTestId("diff-group")).click();
     const summary = screen
       .getByTestId("diff-group")
       .querySelector(":scope > .den-transcript-disclosure-header")!;
@@ -206,6 +210,7 @@ describe("TranscriptDiffGroup", () => {
 
   it("opens one diff at a time", () => {
     renderGroup();
+    disclosureToggle(screen.getByTestId("diff-group")).click();
     const rows = () => screen.getAllByTestId("file-edit-diff");
     const openState = () =>
       rows().map((row) => row.getAttribute("data-expanded"));
@@ -232,6 +237,7 @@ describe("TranscriptDiffGroup", () => {
       />
     ));
     expect(screen.queryAllByTestId("source-path-link")).toEqual([]);
+    disclosureToggle(screen.getByTestId("diff-group")).click();
     const opened = ["src/pipeline.py", "src/cli.py", "tests/test_cli.py"].map((path) => {
       diffToggle(path).click();
       const link = screen.getByTestId("source-path-link");
@@ -246,6 +252,7 @@ describe("TranscriptDiffGroup", () => {
 
   it("toggles a diff from its path either way", () => {
     renderGroup();
+    disclosureToggle(screen.getByTestId("diff-group")).click();
     const row = screen.getAllByTestId("file-edit-diff")[0]!;
     const path = row.querySelector<HTMLElement>(".den-file-edit-diff-header .den-source-path-plain")!;
     expect(path.textContent).toContain("pipeline.py");
@@ -257,6 +264,7 @@ describe("TranscriptDiffGroup", () => {
 
   it("toggles from anywhere else on the row", () => {
     renderGroup();
+    disclosureToggle(screen.getByTestId("diff-group")).click();
     const row = screen.getAllByTestId("file-edit-diff")[1]!;
     row.querySelector<HTMLElement>(".den-file-edit-diff-header")!.click();
     expect(row.getAttribute("data-expanded")).toBe("true");

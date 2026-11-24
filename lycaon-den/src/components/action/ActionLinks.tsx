@@ -29,13 +29,29 @@ type Props = {
   evidence?: JSX.Element;
 };
 
+function findMemberByCallId(part: ToolPartView, toolCallId: string | undefined): ToolPartView | undefined {
+  if (!toolCallId) return undefined;
+  if (part.toolCallId === toolCallId) return part;
+  for (const call of part.commandActivity?.calls ?? []) {
+    const found = findMemberByCallId(call, toolCallId);
+    if (found) return found;
+  }
+  for (const member of part.foldMembers ?? []) {
+    const found = findMemberByCallId(member, toolCallId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 /** Dragging the records attaches the call's output to chat. */
 export function ActionLinks(props: Props) {
   const content = useToolContent();
+  const revealedPart = () => findMemberByCallId(props.part, content?.revealedCallId?.());
+  const targetPart = () => revealedPart() ?? props.part;
   // A Find match inside this call's input or output opens its document at the match.
   const revealOffset = (kind: ActionLink["kind"]) => {
-    if (content?.revealedCallId?.() !== props.part.toolCallId) return undefined;
-    return kind === "input" ? content.argsOffset() : kind === "output" ? content.outputOffset() : undefined;
+    if (!revealedPart()) return undefined;
+    return kind === "input" ? content?.argsOffset() : kind === "output" ? content?.outputOffset() : undefined;
   };
   const links = (): readonly ActionLink[] => {
     const links = props.action.links;
@@ -55,17 +71,21 @@ export function ActionLinks(props: Props) {
       <Index each={links()}>
         {(link) => {
           // Descriptors arrive as new objects on every update; a link stays mounted while it opens the same record.
-          const document = createMemo(() => linkContent(link(), props.part), undefined, { equals: sameShape });
+          const document = createMemo(
+            () => linkContent(link(), targetPart(), targetPart() === props.part),
+            undefined,
+            { equals: sameShape },
+          );
           return (
             <Show when={document()} keyed>
               {(shown) => {
                 const kind = link().kind;
-                const messageId = kind === "input" ? props.part.argsMessageId ?? props.part.assistantMessageId : props.part.messageId;
                 const language = kind === "receipt" ? "jsonl" : undefined;
                 return (
                   <ToolContentLink short label={LINK_LABELS[kind]} testId={`action-link-${kind}`} projectId={props.projectId}
-                    pane={`action:${props.part.id}:${kind}`} content={shown} language={language}
-                    messageId={messageId} toolCallId={props.part.toolCallId} revealOffset={revealOffset(kind)} />
+                    pane={`action:${targetPart().id}:${kind}`} content={shown} language={language}
+                    messageId={kind === "input" ? targetPart().argsMessageId ?? targetPart().assistantMessageId : targetPart().messageId}
+                    toolCallId={targetPart().toolCallId} revealOffset={revealOffset(kind)} />
                 );
               }}
             </Show>
@@ -96,14 +116,16 @@ function hostDecisions(part: ToolPartView): string | undefined {
   }).join("\n");
 }
 
-function linkContent(link: ActionLink, part: ToolPartView): ChatContentDocument["content"] | undefined {
+function linkContent(link: ActionLink, part: ToolPartView, useActionLink = true): ChatContentDocument["content"] | undefined {
   switch (link.kind) {
     case "input":
-      if (link.content_ref) return { kind: "retained", reference: link.content_ref };
+      if (useActionLink && link.content_ref) return { kind: "retained", reference: link.content_ref };
+      if (part.argsReference) return { kind: "retained", reference: part.argsReference };
       return { kind: "inline", text: JSON.stringify(part.args ?? {}), redaction: part.argsRedaction?.meta };
     case "output":
-      if (link.process_handle) return { kind: "process", handle: link.process_handle };
-      if (link.content_ref) return { kind: "retained", reference: link.content_ref };
+      if (useActionLink && link.process_handle) return { kind: "process", handle: link.process_handle };
+      if (useActionLink && link.content_ref) return { kind: "retained", reference: link.content_ref };
+      if (part.outputReference) return { kind: "retained", reference: part.outputReference };
       return part.output ? { kind: "inline", text: part.output, redaction: part.redaction ?? undefined } : undefined;
     case "receipt": {
       const scopes = part.commandActivity?.receiptScopes.length

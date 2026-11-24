@@ -1,6 +1,10 @@
 import { cleanup, render, screen } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActivityEvent, Message } from "../../api/types.ts";
+import {
+  resetThinkingLabelToolScanCount,
+  thinkingLabelToolScanCount,
+} from "../../chat/session/thinking-activity-label.ts";
 import { THINKING_LABEL_HOLD_MS } from "../../chat/session/thinking-label-hold.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createRecentsStore } from "../../store/recents-store.ts";
@@ -32,7 +36,10 @@ const park: ActivityEvent = {
   wait_triggers: ["timer", "program_done"],
 };
 
-function mountActivity(messages: Message[] = [call, parkedResult()]) {
+function mountActivity(
+  messages: Message[] = [call, parkedResult()],
+  paging?: { hasMoreBefore: boolean; hasMoreAfter: boolean; bounds?: { firstOrd: number; lastOrd: number } },
+) {
   const appStore = createAppStore();
   appStore.actions.setCurrentSession({
     mode: "agent" as const,
@@ -41,7 +48,7 @@ function mountActivity(messages: Message[] = [call, parkedResult()]) {
     id: "session", project_id: "project", owner_person_id: "person", workspace_path: "/workspace",
     posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
   });
-  appStore.actions.installTranscriptBaseline("session", messages, messages.length);
+  appStore.actions.installTranscriptBaseline("session", messages, messages.length, paging);
   appStore.actions.setActivity(park);
   render(() => {
     const activity = createChatViewActivity({
@@ -137,6 +144,174 @@ describe("parked command presentation", () => {
   it("removes an interrupted wait while its historical parked result remains", async () => {
     const store = mountActivity();
     store.actions.setActivity({ ...park, status: "done" });
+    await Promise.resolve();
+    expect(screen.queryByTestId("thinking-indicator")).toBeNull();
+  });
+
+  it.each(["held", "immediate", "hidden"] as const)(
+    "keeps older history prepends from recomputing the live composer label in %s mode",
+    (mode) => {
+      const userTurn: Message = {
+        id: "user-turn",
+        ord: 101,
+        role: "user",
+        origin: "user",
+        authority: "user",
+        trust_tier: "trusted",
+        content: "start",
+        created_at: "2026-10-28T00:00:00Z",
+      };
+      const store = mountActivity([
+        userTurn,
+        { ...call, ord: 102 },
+        { ...parkedResult(), ord: 103 },
+      ], { hasMoreBefore: true, hasMoreAfter: false, bounds: { firstOrd: 1, lastOrd: 103 } });
+      if (mode === "hidden") store.actions.setActivity({ ...park, status: "done" });
+      if (mode === "immediate") {
+        store.actions.setActivity({
+          ...park,
+          activity_id: "live",
+          kind: "running_tool",
+          tool_name: "read",
+          tool_call_id: "other",
+          progress: { phase: "executing", files_searched: 0, files_skipped: 0, matches: 0 },
+        });
+      }
+      const before = screen.queryByRole("status")?.textContent;
+      resetThinkingLabelToolScanCount();
+      const ok = store.actions.loadTranscriptPage(
+        { edge: "older", beforeMessageId: "user-turn" },
+        {
+          messages: Array.from({ length: 10 }, (_, i) => ({
+            ...userTurn,
+            id: `old-${i}`,
+            ord: 91 + i,
+          })),
+          before_cursor: "older",
+          after_cursor: "newer",
+          watermark: 103,
+          turn_clocks: {},
+          turn_loads: {},
+        },
+      );
+      expect(ok).toBe(true);
+      expect(thinkingLabelToolScanCount()).toBe(0);
+      expect(screen.queryByRole("status")?.textContent).toBe(before);
+    },
+  );
+
+  it("refreshes composer facts when an older page supplies a missing call for an active host activity", () => {
+    const userTurn: Message = {
+      id: "later-turn",
+      ord: 101,
+      role: "user",
+      origin: "user",
+      authority: "user",
+      trust_tier: "trusted",
+      content: "follow-up",
+      created_at: "2026-10-28T00:01:00Z",
+    };
+    const store = mountActivity([userTurn], {
+      hasMoreBefore: true,
+      hasMoreAfter: false,
+      bounds: { firstOrd: 1, lastOrd: 101 },
+    });
+    expect(screen.getByRole("status").textContent).toBe("Waiting for a command to finish...");
+
+    resetThinkingLabelToolScanCount();
+    const ok = store.actions.loadTranscriptPage(
+      { edge: "older", beforeMessageId: "later-turn" },
+      {
+        messages: [
+          { ...call, ord: 99 },
+          { ...parkedResult("sleep 120"), ord: 100 },
+        ],
+        before_cursor: "older",
+        after_cursor: "newer",
+        watermark: 101,
+        turn_clocks: {},
+        turn_loads: {},
+      },
+    );
+    expect(ok).toBe(true);
+    vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
+    expect(thinkingLabelToolScanCount()).toBeGreaterThan(0);
+    expect(screen.getByRole("status").textContent).toBe("Waiting · sleep 120...");
+  });
+
+  it("clears a running tool label when its result is updated in place in the store", async () => {
+    const userTurn: Message = {
+      id: "u-live",
+      ord: 1,
+      seq: 1,
+      role: "user",
+      origin: "user",
+      authority: "user",
+      trust_tier: "trusted",
+      content: "read file",
+      created_at: "2026-10-28T00:00:00Z",
+    };
+    const runningCall: Message = {
+      ...call,
+      id: "a-read",
+      ord: 2,
+      seq: 2,
+      tool_calls: [{ id: "read-1", name: "read", args: { path: "main.go" } }],
+    };
+    const store = mountActivity([userTurn, runningCall]);
+    store.actions.setActivity({ ...park, status: "done" });
+    store.actions.setActivity({
+      ...park,
+      activity_id: "bg",
+      kind: "preparing_context",
+      tool_name: undefined,
+      tool_call_id: undefined,
+      wait_triggers: undefined,
+      status: "active",
+    });
+    vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
+    expect(screen.getByRole("status").textContent).toBe("Reading · main.go...");
+
+    // Append initial incomplete result, then replace that same array slot in place with completed.
+    store.actions.upsertMessage({
+      id: "r-read",
+      ord: 3,
+      seq: 3,
+      role: "tool",
+      origin: "tool",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "",
+      created_at: "2026-10-28T00:00:01Z",
+      tool_result: {
+        tool: "read",
+        assistant_message_id: "a-read",
+        tool_call_id: "read-1",
+        content: "",
+      },
+    });
+    store.actions.upsertMessage({
+      id: "r-read",
+      ord: 3,
+      seq: 4,
+      role: "tool",
+      origin: "tool",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "package main",
+      created_at: "2026-10-28T00:00:02Z",
+      tool_result: {
+        tool: "read",
+        assistant_message_id: "a-read",
+        tool_call_id: "read-1",
+        content: "package main",
+        outcome: "completed",
+      },
+    });
+    vi.advanceTimersByTime(THINKING_LABEL_HOLD_MS);
+    expect(screen.getByRole("status").textContent).toBe("Preparing context...");
+
+    store.actions.setActivity({ ...park, activity_id: "bg", kind: "preparing_context", status: "done" });
     await Promise.resolve();
     expect(screen.queryByTestId("thinking-indicator")).toBeNull();
   });

@@ -23,7 +23,6 @@ import {
   type ToolPartView,
 } from "../tool/tool-part-model.ts";
 import {
-  findToolResult,
   isInternalTranscriptUserMessage,
 } from "../transcript/projection/message-transcript.ts";
 import { isWorkerTaskActive } from "./session-activity.ts";
@@ -256,21 +255,68 @@ function compareWorkerRecency(a: WorkerTask, b: WorkerTask): number {
   return a.id.localeCompare(b.id);
 }
 
-function userTurnStartIndex(messages: readonly Message[]): number {
+export function findCurrentUserTurnStart(messages: readonly Message[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg?.role === "user" && !isInternalTranscriptUserMessage(msg)) {
       return i;
     }
   }
-  return 0;
+  return -1;
+}
+
+function userTurnStartIndex(messages: readonly Message[]): number {
+  const idx = findCurrentUserTurnStart(messages);
+  return idx >= 0 ? idx : 0;
+}
+
+type ToolResultIndex = Map<string, Map<string, Message>>;
+
+let toolScanCount = 0;
+
+export function thinkingLabelToolScanCount(): number {
+  return toolScanCount;
+}
+
+export function resetThinkingLabelToolScanCount(): void {
+  toolScanCount = 0;
+}
+
+function buildToolResultIndex(messages: readonly Message[]): ToolResultIndex {
+  const byParent: ToolResultIndex = new Map();
+  for (let i = 0; i < messages.length; i++) {
+    const row = messages[i];
+    if (row?.role !== "tool") continue;
+    const parent = row.tool_result?.assistant_message_id?.trim();
+    const call = row.tool_result?.tool_call_id?.trim();
+    if (!parent || !call) continue;
+    let calls = byParent.get(parent);
+    if (!calls) {
+      calls = new Map();
+      byParent.set(parent, calls);
+    }
+    if (!calls.has(call)) calls.set(call, row);
+  }
+  return byParent;
+}
+
+function lookupIndexedResult(
+  index: ToolResultIndex,
+  assistantMessageId: string,
+  callId: string,
+): Message | undefined {
+  return index.get(assistantMessageId.trim())?.get(callId.trim());
 }
 
 /** Latest running call in this turn, excluding parked and hidden tools. */
 export function findLatestRunningToolInTurn(
   messages: readonly Message[],
   activities: readonly ActivityEvent[] = [],
+  sharedResults?: ToolResultIndex,
 ): ToolPartView | undefined {
+  if (messages.length === 0) return undefined;
+  toolScanCount += 1;
+  const results = sharedResults ?? buildToolResultIndex(messages);
   const turnStart = userTurnStartIndex(messages);
   let latest: ToolPartView | undefined;
 
@@ -288,7 +334,7 @@ export function findLatestRunningToolInTurn(
         activity.tool_name?.trim().toLowerCase() === toolName.toLowerCase()
       )) continue;
 
-      const result = findToolResult(messages, msg.id, call.id);
+      const result = lookupIndexedResult(results, msg.id, call.id);
       const part = toolPartFromCall(call, result, msg.id, undefined, {
         message: msg,
         index: callIndex,
@@ -305,8 +351,9 @@ export function findLatestRunningToolInTurn(
 function runningToolCandidate(
   messages: readonly Message[],
   activities: readonly ActivityEvent[] = [],
+  sharedResults?: ToolResultIndex,
 ): ActivityLabelCandidate | undefined {
-  const part = findLatestRunningToolInTurn(messages, activities);
+  const part = findLatestRunningToolInTurn(messages, activities, sharedResults);
   if (!part) return undefined;
   return {
     label: thinkingToolRunningLabel(part),
@@ -318,10 +365,12 @@ function runningToolCandidate(
 function toolPartForActivity(
   activity: ActivityEvent,
   messages: readonly Message[],
+  getResults: () => ToolResultIndex,
 ): ToolPartView | undefined {
   const callID = activity.tool_call_id?.trim();
   const toolName = activity.tool_name?.trim();
-  if (!callID || !toolName) return undefined;
+  if (!callID || !toolName || messages.length === 0) return undefined;
+  toolScanCount += 1;
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg?.role !== "assistant") continue;
@@ -332,7 +381,8 @@ function toolPartForActivity(
     ) ?? -1;
     const call = index >= 0 ? msg.tool_calls?.[index] : undefined;
     if (call) {
-      return toolPartFromCall(call, findToolResult(messages, msg.id, call.id), msg.id, undefined, {
+      const result = lookupIndexedResult(getResults(), msg.id, call.id);
+      return toolPartFromCall(call, result, msg.id, undefined, {
         message: msg,
         index,
       });
@@ -371,6 +421,7 @@ function decidingLabel(activity: ActivityEvent): string {
 function hostActivityCandidate(
   activities: readonly ActivityEvent[] | undefined,
   messages: readonly Message[],
+  getResults: () => ToolResultIndex,
 ): ActivityLabelCandidate | undefined {
   const activity = newestActivity(
     (activities ?? []).filter((candidate) => candidate.status === "active"),
@@ -400,7 +451,7 @@ function hostActivityCandidate(
   if (activity.kind === "awaiting_wake") {
     // Only the host arms program_done; it is not a wait-tool condition.
     const command = activity.tool_name === "command" && activity.wait_triggers?.includes("program_done");
-    const part = command ? toolPartForActivity(activity, messages) : undefined;
+    const part = command ? toolPartForActivity(activity, messages, getResults) : undefined;
     const reason = part?.completion?.state === "parked" ? part.completion.reason?.trim() : undefined;
     const named = command ? WAIT_CONDITION_LABELS.process_done : waitConditionsLabel(activity.wait_triggers ?? []);
     return {
@@ -422,7 +473,7 @@ function hostActivityCandidate(
         source: "host_activity",
       };
     }
-    const part = toolPartForActivity(activity, messages);
+    const part = toolPartForActivity(activity, messages, getResults);
     const fallback = activity.tool_name?.trim();
     return {
       label: part
@@ -633,10 +684,20 @@ export function collectThinkingActivityCandidates(
   );
   if (providerWait) candidates.push(providerWait);
 
-  const activity = hostActivityCandidate(input.activities, messages);
+  let sharedResults: ToolResultIndex | undefined;
+  const getResults = (): ToolResultIndex => {
+    sharedResults ??= buildToolResultIndex(messages);
+    return sharedResults;
+  };
+
+  const activity = hostActivityCandidate(input.activities, messages, getResults);
   if (activity) candidates.push(activity);
 
-  const tool = runningToolCandidate(messages, input.activities);
+  const tool = runningToolCandidate(
+    messages,
+    input.activities,
+    messages.length > 0 ? getResults() : undefined,
+  );
   if (tool) candidates.push(tool);
 
   const closeout = provisionalCloseoutCandidate(input);

@@ -64,7 +64,16 @@ export function animateDisclosureHeight(
       applyOpen(true);
     },
     hideBody: () => setBodiesHidden(shell, header, true),
-    closeBody: () => applyOpen(false),
+    closeBody: () => {
+      const active = shell.ownerDocument.activeElement;
+      if (active instanceof HTMLElement && shell.contains(active) && !header.contains(active)) {
+        const toggle = header.matches("button")
+          ? header
+          : header.querySelector<HTMLElement>(".den-transcript-disclosure-toggle");
+        toggle?.focus({ preventScroll: true });
+      }
+      applyOpen(false);
+    },
     resetBodyVisibility: () => setBodiesHidden(shell, header, false),
     collapsedHeight: () => header.getBoundingClientRect().height,
     bodyStillOpen: () => isTranscriptDisclosureOpen(shell),
@@ -240,7 +249,7 @@ export function TranscriptDisclosurePanel(props: PanelProps) {
       when={webkitAtspiWorkaroundActive()}
       fallback={
         <div {...rest} id={local.disclosure.panelId} hidden={!local.disclosure.open()}>
-          {local.children}
+          <Show when={local.disclosure.open()}>{local.children}</Show>
         </div>
       }
     >

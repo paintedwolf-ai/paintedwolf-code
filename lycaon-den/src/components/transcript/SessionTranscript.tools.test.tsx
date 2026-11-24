@@ -418,6 +418,10 @@ describe("SessionTranscript tools and progress", () => {
       />
     ));
     expect(container.querySelectorAll('[data-testid="task-card"]').length).toBe(1);
+    const spanToggle = container.querySelector<HTMLElement>(
+      '[data-testid="activity-span-card"] > .den-transcript-disclosure-header',
+    );
+    spanToggle?.click();
     expect(container.querySelectorAll('[data-testid="action-card"]').length).toBe(1);
     expect(container.textContent).toContain("Worker · web-researcher");
     expect(container.textContent).toContain(

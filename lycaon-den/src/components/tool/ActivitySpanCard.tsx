@@ -10,6 +10,7 @@ import {
   useTranscriptDisclosure,
 } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
+import type { LycaonClient } from "../../api/client.ts";
 import { subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import {
@@ -27,8 +28,7 @@ import { TurnLoadCard } from "./TurnLoadCard.tsx";
 import { VirtualCardList } from "../primitives/VirtualCardList.tsx";
 import { searchToolPart, TOOL_CONTENT_REVEAL_EVENT, toolPartFindCorpus } from "../../chat/tool/tool-part-find.ts";
 import { findController } from "../../find/find-controller.ts";
-import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
-import type { VirtualListMatch } from "../../find/virtual-list-find.ts";
+import { bindVirtualListFind, type VirtualListMatch } from "../../find/virtual-list-find.ts";
 
 export type ActivitySpanCardProps = {
   label: string;
@@ -36,6 +36,7 @@ export type ActivitySpanCardProps = {
   entries: readonly ActivitySpanEntry[];
   layout: TranscriptLayout;
   sessionId?: string;
+  client?: LycaonClient | null;
   entryKey?: string;
   running?: boolean;
   renderToolEntry: (part: () => ToolPartView) => JSX.Element;
@@ -136,6 +137,13 @@ function ActivityFailureChip(props: { failed: number }) {
   );
 }
 
+function partOwnsToolCallId(part: ToolPartView, toolCallId: string): boolean {
+  if (part.toolCallId === toolCallId) return true;
+  if (part.commandActivity?.calls.some((call) => partOwnsToolCallId(call, toolCallId))) return true;
+  if (part.foldMembers?.some((member) => partOwnsToolCallId(member, toolCallId))) return true;
+  return false;
+}
+
 export function ActivitySpanCard(props: ActivitySpanCardProps) {
   const entries = () => props.entries;
   const label = () => formatSentenceCase(props.label);
@@ -157,11 +165,21 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
   let revealRow: ((key: string) => void) | undefined;
   let restoreFind: (() => void) | undefined;
   const revealTool = (toolCallId: string, match: VirtualListMatch) => {
-    const entry = entries().find(entry => entry.kind === "tool" && (entry.part.toolCallId === toolCallId || entry.part.commandActivity?.calls.some(call => call.toolCallId === toolCallId)));
+    const entry = entries().find(
+      (candidate) => candidate.kind === "tool" && partOwnsToolCallId(candidate.part, toolCallId),
+    );
     if (entry?.kind !== "tool") return;
-    restoreFind?.(); restoreFind = revealTemporarily();
-    setFindToolKey(entry.part.id); revealRow?.(entry.part.id);
-    queueMicrotask(() => hostEl()?.querySelector(`[data-tool-part-id="${CSS.escape(entry.part.id)}"]`)?.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: match })));
+    restoreFind?.();
+    restoreFind = revealTemporarily();
+    setFindToolKey(entry.part.id);
+    revealRow?.(entry.part.id);
+    queueMicrotask(() =>
+      hostEl()
+        ?.querySelector(`[data-tool-part-id="${CSS.escape(entry.part.id)}"]`)
+        ?.dispatchEvent(
+          new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: { ...match, toolCallId } }),
+        ),
+    );
   };
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
   createEffect(() => {
@@ -183,9 +201,26 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
     hostEl,
     isCollapsed: () => !open(),
     revealForFind: revealTemporarily,
-    // Under the WebKitGTK AT-SPI workaround a closed span mounts no cards, so it searches theirs from data.
-    collapsedCorpus: () => (webkitAtspiWorkaroundActive() ? collapsedToolCorpus() : ""),
+    collapsedCorpus: () => collapsedToolCorpus(),
     collapsedCorpusAnchor: hostEl,
+  });
+  // Retained output references are excluded from collapsedCorpus and searched via the host while closed.
+  bindVirtualListFind({
+    items: entries,
+    host: () => hostEl() ?? undefined,
+    enabled: () => !open(),
+    ownsCorpus: false,
+    search: (entry, query, sensitive, signal) =>
+      entry.kind === "tool"
+        ? searchToolPart(entry.part, props.sessionId, query, sensitive, signal, {
+            referencesOnly: true,
+            client: props.client,
+          })
+        : Promise.resolve([]),
+    reveal: (index, match) => {
+      const entry = entries()[index];
+      if (entry?.kind === "tool") revealTool(match.toolCallId ?? entry.part.toolCallId, match);
+    },
   });
   const count = () => entries().length;
   const [processRevision, setProcessRevision] = createSignal(0);
@@ -263,7 +298,11 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
           <VirtualCardList threshold={100} scroll="ancestor" items={entries()} keyOf={activitySpanEntryKey} label="Actions"
             pinnedKeys={[accordion.activeKey(), findToolKey()].filter((key): key is string => !!key)}
             onReveal={value => { revealRow = value; }}
-            search={(entry, query, sensitive, signal) => entry.kind === "tool" ? searchToolPart(entry.part, props.sessionId, query, sensitive, signal) : Promise.resolve([])}
+            search={(entry, query, sensitive, signal) =>
+              entry.kind === "tool"
+                ? searchToolPart(entry.part, props.sessionId, query, sensitive, signal, { client: props.client })
+                : Promise.resolve([])
+            }
             onFindReveal={(entry, match) => {
               if (entry.kind !== "tool") return;
               revealTool(match.toolCallId ?? entry.part.toolCallId, match);
