@@ -75,7 +75,7 @@ func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
 		Context: ContextDeps{
 			Policy:           policyEngine,
 			ProjectRootCount: func(context.Context, *api.Session) int { return rootCount },
-			LiveResources: func(string) toolcontract.ResourcePresence {
+			LiveResources: func(context.Context, string) toolcontract.ResourcePresence {
 				return toolcontract.ResourcePresence{Watches: activeWatches > 0}
 			},
 		},
@@ -97,7 +97,7 @@ func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
 
 			listCtx := toolpolicy.WithCoordinatorSurface(t.Context(), surfaceID)
 			all := policyEngine.ListForPrompt(listCtx, sess, prompts.CoordinatorProfileID)
-			compiled := loop.Context.compileRuntimeToolPlanForSurface(basePlan, surfaceID, api.CoordinatorRunContext{}, all, nil, tools.MCPToolPlan{}, basePlan.Immediate("request_tools"), sess)
+			compiled := loop.Context.compileRuntimeToolPlanForSurface(listCtx, basePlan, surfaceID, api.CoordinatorRunContext{}, all, nil, tools.MCPToolPlan{}, basePlan.Immediate("request_tools"), sess)
 			compiled = filterToolPlanForRootCount(compiled, rootCount)
 			offered := trimCoordinatorToolMetasForPlan(compiled, all, nil, nil)
 
@@ -150,7 +150,7 @@ func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
 	basePlan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_investigate"}, 0)
 	testutil.FailErr(t, "CompileToolPlan rootless", err)
 	all := policyEngine.ListForPrompt(toolpolicy.WithCoordinatorSurface(t.Context(), "implement_investigate"), sess, prompts.CoordinatorProfileID)
-	compiled := filterToolPlanForRootCount(loop.Context.compileRuntimeToolPlanForSurface(basePlan, "implement_investigate", api.CoordinatorRunContext{}, all, nil, tools.MCPToolPlan{}, true, sess), 0)
+	compiled := filterToolPlanForRootCount(loop.Context.compileRuntimeToolPlanForSurface(t.Context(), basePlan, "implement_investigate", api.CoordinatorRunContext{}, all, nil, tools.MCPToolPlan{}, true, sess), 0)
 	offered := trimCoordinatorToolMetasForPlan(compiled, all, nil, nil)
 
 	var watchMeta *tools.ToolMeta
@@ -193,7 +193,7 @@ func TestWorkerProfilesWatchPruningAndIneligibleProfile(t *testing.T) {
 	loop := NewPromptLoop(PromptLoopDeps{
 		Context: ContextDeps{
 			Policy: policyEngine,
-			LiveResources: func(string) toolcontract.ResourcePresence {
+			LiveResources: func(context.Context, string) toolcontract.ResourcePresence {
 				return toolcontract.ResourcePresence{Watches: activeWatches}
 			},
 		},
