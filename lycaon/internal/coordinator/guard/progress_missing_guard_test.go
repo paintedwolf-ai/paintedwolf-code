@@ -19,7 +19,7 @@ import (
 func TestObserveProgressMissingBeforeDispatch_blocksTaskWithoutPlan(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	gc := oar.NewGuardContext()
-	ObserveProgressMissingBeforeDispatch(sess, "", "task", false, gc)
+	ObserveProgressMissingBeforeDispatch(sess, true, "task", false, gc)
 	if !hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatalf("want %s in %v", ProgressMissingCode, gc.Invocation.ArgValidationErrors)
 	}
@@ -29,7 +29,7 @@ func TestObserveProgressMissingBeforeDispatch_blocksWriteWithoutChecklist(t *tes
 	sess := &api.Session{ID: "root-1"}
 	for _, tool := range []string{"write", "edit", "replace_lines"} {
 		gc := oar.NewGuardContext()
-		ObserveProgressMissingBeforeDispatch(sess, "", tool, false, gc)
+		ObserveProgressMissingBeforeDispatch(sess, true, tool, false, gc)
 		if !hasRejectCode(t, gc, ProgressMissingCode) {
 			t.Fatalf("%s: want %s in %v", tool, ProgressMissingCode, gc.Invocation.ArgValidationErrors)
 		}
@@ -39,7 +39,7 @@ func TestObserveProgressMissingBeforeDispatch_blocksWriteWithoutChecklist(t *tes
 func TestObserveProgressMissingBeforeDispatch_allowsWithPlan(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	gc := oar.NewGuardContext()
-	ObserveProgressMissingBeforeDispatch(sess, "- [ ] Research libraries", "task", false, gc)
+	ObserveProgressMissingBeforeDispatch(sess, false, "task", false, gc)
 	if hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatal("checklist present must not observe reject")
 	}
@@ -48,7 +48,7 @@ func TestObserveProgressMissingBeforeDispatch_allowsWithPlan(t *testing.T) {
 func TestObserveProgressMissingBeforeDispatch_allowsWriteWithChecklist(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	gc := oar.NewGuardContext()
-	ObserveProgressMissingBeforeDispatch(sess, "- [ ] Ship feature", "write", false, gc)
+	ObserveProgressMissingBeforeDispatch(sess, false, "write", false, gc)
 	if hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatal("checklist present must not observe reject")
 	}
@@ -57,7 +57,7 @@ func TestObserveProgressMissingBeforeDispatch_allowsWriteWithChecklist(t *testin
 func TestObserveProgressMissingBeforeDispatch_allowsWebSearchWithoutPlan(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	gc := oar.NewGuardContext()
-	ObserveProgressMissingBeforeDispatch(sess, "", "web_search", false, gc)
+	ObserveProgressMissingBeforeDispatch(sess, true, "web_search", false, gc)
 	if hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatal("web_search must not observe reject")
 	}
@@ -66,7 +66,7 @@ func TestObserveProgressMissingBeforeDispatch_allowsWebSearchWithoutPlan(t *test
 func TestObserveProgressMissingBeforeDispatch_skipsWorkerChild(t *testing.T) {
 	sess := &api.Session{ID: "child-1", ParentSessionID: "root-1"}
 	gc := oar.NewGuardContext()
-	ObserveProgressMissingBeforeDispatch(sess, "", "task", false, gc)
+	ObserveProgressMissingBeforeDispatch(sess, true, "task", false, gc)
 	if hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatal("worker child must not observe reject")
 	}
@@ -75,7 +75,7 @@ func TestObserveProgressMissingBeforeDispatch_skipsWorkerChild(t *testing.T) {
 func TestObserveProgressMissingBeforeDispatch_allowsOnReviewLoop(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	gc := oar.NewGuardContext()
-	ObserveProgressMissingBeforeDispatch(sess, "", "task", true, gc)
+	ObserveProgressMissingBeforeDispatch(sess, true, "task", true, gc)
 	if hasRejectCode(t, gc, ProgressMissingCode) {
 		t.Fatal("review loop must not observe reject")
 	}
@@ -111,7 +111,7 @@ func TestProgressMissingRetainsBoundedRejectedCallOnProjection(t *testing.T) {
 			gc.Session.SessionPosture = "build"
 			gc.Session.Role = "coordinator"
 			gc.ObserveToolCall(tc.tool, args)
-			ObserveProgressMissingBeforeDispatch(&api.Session{ID: t.Name()}, "", tc.tool, false, gc)
+			ObserveProgressMissingBeforeDispatch(&api.Session{ID: t.Name()}, true, tc.tool, false, gc)
 			res, err := oartest.NewCoordinatorGuardPipeline(t).EvaluateBlock(t.Context(), oar.AnchorCoordinatorPreInvoke, gc)
 			testutil.FailErr(t, "evaluate progress prerequisite", err)
 			service := policyfeedback.New()

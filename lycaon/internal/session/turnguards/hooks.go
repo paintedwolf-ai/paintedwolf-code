@@ -41,8 +41,8 @@ func (m *Service) BeforeTool(
 	}
 	implState := m.state.ForSession(ctx, sess)
 	surfaceID := m.surface.PromptTurnSurfaceID(sess.ID)
-	progressState := m.progressPrerequisites(ctx, sess)
-	root, currentProgress, reviewLoopActive := progressState.RootSessionID, progressState.Content, progressState.ReviewLoopActive
+	progressState, currentProgress := m.progressPrerequisitesWithSnapshot(ctx, sess)
+	root, reviewLoopActive := progressState.RootSessionID, progressState.ReviewLoopActive
 	closureBaseline, closureArmed := m.ProgressClosure.Baseline(root)
 	closureArmed = closureArmed && !m.accountsLatchedResult(ctx, sess, tool, args, closureBaseline)
 	guardDeps := m.WorkerAdmission()
@@ -58,8 +58,8 @@ func (m *Service) BeforeTool(
 		}
 		guard.ObserveTaskWhilePendingUserInput(sess, implState, tool, gc)
 		guard.ObserveCoordinatorWorkerBranchPath(sess, tool, args, gc)
-		guard.ObserveProgressMissingBeforeDispatch(sess, currentProgress, tool, reviewLoopActive, gc)
-		guard.ObserveProgressReconciliationBeforeDispatch(sess, currentProgress, tool, closureBaseline, closureArmed, gc)
+		guard.ObserveProgressMissingBeforeDispatch(sess, progressState.Missing, tool, reviewLoopActive, gc)
+		guard.ObserveProgressReconciliationBeforeDispatch(sess, progressState.OpenSteps, tool, closureBaseline, closureArmed, gc)
 		guard.ObserveCoordinatorBatchPhaseTool(sess, tool, implState, m.Batch.TurnGuard(sess.ID), gc)
 		guard.ObserveCoordinatorSynthesisWrapupTool(surfaceID, tool, tools.ToolOffered(ctx, tool), gc)
 		guard.ObserveVerifyCommandUndeclared(tool, declaredVerify, args, gc)

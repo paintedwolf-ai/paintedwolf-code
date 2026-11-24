@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/progressclosure"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,22 +26,37 @@ func (p *progressSessions) Get(_ context.Context, id string) (*api.Session, erro
 	}
 	return &api.Session{ID: id, ParentSessionID: parent}, nil
 }
+
 func (p *progressSessions) GetMessages(context.Context, string) ([]api.Message, error) {
 	return nil, p.historyErr
 }
 
+type staticJobNames map[string]workerrecords.JobNames
+
+func (s staticJobNames) NamesByJob(_ context.Context, jobID string) (workerrecords.JobNames, bool, error) {
+	names, ok := s[jobID]
+	return names, ok, nil
+}
+
 func TestCurrentProgressSnapshotUsesRootStoreIndependentlyOfHistory(t *testing.T) {
 	store := progresstest.New(t, "root", "child")
-	testutil.FailErr(t, "seed root checklist", store.Set("root", "- [ ] Deliver\n- [ ] Verify"))
-	testutil.FailErr(t, "seed unrelated child state", store.Set("child", "- [ ] Wrong scope"))
+	progresstest.SeedRows(t, store, "root",
+		progress.RowSpec{Label: "Deliver"},
+		progress.RowSpec{Label: "Verify"},
+	)
+	progresstest.SeedRows(t, store, "child", progress.RowSpec{Label: "Wrong scope"})
+
 	closure := progressclosure.New()
 	closure.SetProgress(store)
+	closure.SetNames(staticJobNames{"worker-one": {Worker: "scout", Handle: "scout#1"}})
 	closure.Arm(t.Context(), "root", "worker-one")
+
 	sessions := &progressSessions{}
 	state := workeroutcomes.NewState(workeroutcomes.StatePorts{SessionStore: sessions, TranscriptStore: sessions})
 	state.SetProgress(store)
 	state.SetProgressReconciliation(closure)
-	var previousRevision string
+
+	var previousLabel string
 	for _, historyErr := range []error{nil, errors.New("transcript unavailable")} {
 		sessions.historyErr = historyErr
 		current := state.ForSession(t.Context(), &api.Session{ID: "child", ParentSessionID: "root"})
@@ -47,17 +64,19 @@ func TestCurrentProgressSnapshotUsesRootStoreIndependentlyOfHistory(t *testing.T
 		testutil.FailErr(t, "decode authoritative snapshot", json.Unmarshal([]byte(current.ProgressSnapshot), &snapshot))
 		expected, err := store.Snapshot(t.Context(), "root")
 		testutil.FailErr(t, "read stored snapshot", err)
-		if snapshot.ScopeSessionID != "root" || snapshot.InitializationRequired || snapshot.Content != expected.Content || snapshot.Revision != expected.Revision || current.ProgressOpenCount != 2 || current.ProgressMissing {
+		if snapshot.ScopeSessionID != "root" || snapshot.InitializationRequired || !slices.Equal(snapshot.Rows, expected.Rows) || current.ProgressOpenCount != 2 || current.ProgressMissing {
 			t.Fatalf("stored facts were lost: %+v / %+v", snapshot, current)
 		}
-		if snapshot.Reconciliation == nil || snapshot.Reconciliation.Token != closure.Reconciliation("root").Token || strings.Contains(current.ProgressSnapshot, "worker-one") {
+		if len(snapshot.UnaccountedResults) != 1 || snapshot.UnaccountedResults[0].Handle != "scout#1" || strings.Contains(current.ProgressSnapshot, "worker-one") {
 			t.Fatalf("wrong root finish set: %+v", snapshot)
 		}
-		if previousRevision != "" && previousRevision == snapshot.Revision {
+		if previousLabel != "" && previousLabel == snapshot.Rows[0].Label {
 			t.Fatal("current snapshot reused older transcript state")
 		}
-		previousRevision = snapshot.Revision
-		testutil.FailErr(t, "publish current label change", store.Set("root", "- [ ] Deliver revised\n- [ ] Verify"))
+		previousLabel = snapshot.Rows[0].Label
+		progresstest.UpdateRows(t, store, "root", progress.UpdateRowSpec{
+			ID: "p1", Label: progresstest.Label("Deliver revised"),
+		})
 	}
 	if state.ForSession(t.Context(), nil).ProgressSnapshot != "" {
 		t.Fatal("nil session exposed progress state")
@@ -65,17 +84,19 @@ func TestCurrentProgressSnapshotUsesRootStoreIndependentlyOfHistory(t *testing.T
 }
 
 func TestEmptyProgressExplicitlyRequiresInitialization(t *testing.T) {
-	state := workeroutcomes.NewState(workeroutcomes.StatePorts{SessionStore: &progressSessions{}, TranscriptStore: &progressSessions{}, Progress: progresstest.New(t, "root", "child")})
+	state := workeroutcomes.NewState(workeroutcomes.StatePorts{
+		SessionStore:    &progressSessions{},
+		TranscriptStore: &progressSessions{},
+		Progress:        progresstest.New(t, "root", "child"),
+	})
 	current := state.ForSession(t.Context(), &api.Session{ID: "child", ParentSessionID: "root"})
 	var snapshot progress.RequestSnapshot
 	testutil.FailErr(t, "decode empty checklist", json.Unmarshal([]byte(current.ProgressSnapshot), &snapshot))
-	if snapshot.ScopeSessionID != "root" || !snapshot.InitializationRequired || !current.ProgressMissing || snapshot.Revision == "" {
+	if snapshot.ScopeSessionID != "root" || !snapshot.InitializationRequired || !current.ProgressMissing || len(snapshot.Rows) != 0 {
 		t.Fatalf("empty current checklist was ambiguous: %+v / %+v", snapshot, current)
 	}
 }
 
-// Surface selection reads the delivered worker count; a failed count leaves it
-// at zero.
 func TestSessionStateCountsDeliveredWorkers(t *testing.T) {
 	for _, tc := range []struct {
 		n    int

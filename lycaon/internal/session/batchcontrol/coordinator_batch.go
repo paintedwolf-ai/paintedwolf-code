@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
@@ -85,12 +86,12 @@ func (m *Service) Reconcile(ctx context.Context, sessionID string) {
 	if state.WorkersInFlight > 0 {
 		return
 	}
-	progressContent := ""
+	var progressSnapshot progress.Snapshot
 	if m.progress != nil {
-		progressContent = m.progress.Get(ctx, sessiontree.RootID(ctx, m.sessionStore, sess.ID))
+		progressSnapshot, _ = m.progress.Snapshot(ctx, sessiontree.RootID(ctx, m.sessionStore, sess.ID))
 	}
 	verifyRequired, verifyPassed, _, verifyUnverified := m.verification.WorkflowGateState(ctx, sess, msgs)
-	if !workeroutcomes.BatchReadyForSynthesis(state, msgs, progressContent, verifyRequired, verifyPassed || verifyUnverified) {
+	if !workeroutcomes.BatchReadyForSynthesis(state, msgs, progressSnapshot, verifyRequired, verifyPassed || verifyUnverified) {
 		return
 	}
 

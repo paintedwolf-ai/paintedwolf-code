@@ -41,3 +41,32 @@ func TestAccountJobsSetBriefAndOperationLookup(t *testing.T) {
 	_, _, _, err = f.store.Operation(t.Context(), f.other, "brief-1")
 	wantErr(t, "foreign session operation lookup", err, workerrecords.ErrOperationConflict)
 }
+
+func TestResolveResultForAckTxCoversOpenClosedAndForeignWorkers(t *testing.T) {
+	f := newFixture(t)
+	w, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
+	f.insertResult(t, "fixer#1", "job-1")
+	f.settle(t, "job-1", "")
+
+	ref, err := f.store.ResolveResultForAckTx(t.Context(), nil, f.coord, "fixer#1")
+	testutil.FailErr(t, "resolve open worker result", err)
+	if ref.ResultID != "fixer#1" || ref.JobID != "job-1" || ref.WorkerID != w.WorkerID {
+		t.Fatalf("open result ref = %+v", ref)
+	}
+
+	_, err = f.store.ResolveResultForAckTx(t.Context(), nil, f.other, "fixer#1")
+	wantErr(t, "foreign session result lookup", err, workerrecords.ErrResultNotFound)
+
+	_, err = f.store.ResolveResultForAckTx(t.Context(), nil, workerrecords.Actor{SessionID: coordSession}, "fixer#1")
+	wantErr(t, "unauthenticated actor lookup", err, workerrecords.ErrInvalidActor)
+
+	testutil.FailErr(t, "account jobs", f.store.AccountJobs(t.Context(), []string{"job-1"}))
+	_, err = f.store.Close(t.Context(), f.coord, op("close-fixer"), w.WorkerID, "settled")
+	testutil.FailErr(t, "close worker", err)
+
+	closedRef, err := f.store.ResolveResultForAckTx(t.Context(), nil, f.coord, "fixer#1")
+	testutil.FailErr(t, "resolve closed worker result", err)
+	if closedRef.JobID != "job-1" {
+		t.Fatalf("closed result ref = %+v", closedRef)
+	}
+}

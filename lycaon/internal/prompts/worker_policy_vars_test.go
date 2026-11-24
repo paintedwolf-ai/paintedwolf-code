@@ -24,8 +24,8 @@ func TestMergeWorkerPolicyTemplateVars(t *testing.T) {
 	if vars["worker_summary_max_chars"] != limits.DefaultWorkerSummaryMaxChars {
 		t.Fatalf("worker_summary_max_chars = %v want %d", vars["worker_summary_max_chars"], limits.DefaultWorkerSummaryMaxChars)
 	}
-	if vars["max_author_progress_lines"] != progress.MaxAuthorProgressLines {
-		t.Fatalf("max_author_progress_lines = %v want %d", vars["max_author_progress_lines"], progress.MaxAuthorProgressLines)
+	if vars["max_author_progress_rows"] != progress.MaxAuthorProgressRows {
+		t.Fatalf("max_author_progress_rows = %v want %d", vars["max_author_progress_rows"], progress.MaxAuthorProgressRows)
 	}
 	if vars["max_progress_label_chars"] != progress.MaxLabelRunes {
 		t.Fatalf("max_progress_label_chars = %v want %d", vars["max_progress_label_chars"], progress.MaxLabelRunes)

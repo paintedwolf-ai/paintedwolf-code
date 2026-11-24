@@ -240,17 +240,43 @@ func (s *Store) Result(ctx context.Context, actor Actor, resultID string) (Resul
 	return ref, nil
 }
 
-// AccountJobs records that the coordinator accounted for the results of the
-// named jobs' rounds, as a checklist acknowledgement does. Jobs that run no
-// worker round are skipped, and a result already accounted for keeps its
-// first accounting.
-func (s *Store) AccountJobs(ctx context.Context, jobIDs []string) error {
-	tx, err := s.handle.BeginTx(ctx, nil)
-	if err != nil {
-		return err
+// ResolveResultForAckTx resolves a settled result handle for its coordinator
+// across both open and closed workers within tx.
+func (s *Store) ResolveResultForAckTx(ctx context.Context, tx *sql.Tx, actor Actor, resultID string) (ResultRef, error) {
+	if err := actor.check(); err != nil {
+		return ResultRef{}, err
 	}
-	defer func() { _ = tx.Rollback() }()
-	q := s.q.WithTx(tx)
+	q := s.q
+	if tx != nil {
+		q = s.q.WithTx(tx)
+	}
+	owner, err := q.GetWorkerResultOwner(ctx, strings.TrimSpace(resultID))
+	if db.IsNoRows(err) {
+		return ResultRef{}, ErrResultNotFound
+	}
+	if err != nil {
+		return ResultRef{}, err
+	}
+	w, err := coordinatorWorkerAnyState(ctx, q, actor, owner.WorkerID)
+	if errors.Is(err, ErrWorkerNotFound) || errors.Is(err, ErrCoordinatorOnly) {
+		return ResultRef{}, ErrResultNotFound
+	}
+	if err != nil {
+		return ResultRef{}, err
+	}
+	return ResultRef{
+		ResultID: strings.TrimSpace(resultID),
+		WorkerID: w.ID,
+		JobID:    owner.WorkerJobID,
+	}, nil
+}
+
+// AccountJobsTx records durable result accounting for jobIDs inside tx.
+func (s *Store) AccountJobsTx(ctx context.Context, tx *sql.Tx, jobIDs []string) error {
+	q := s.q
+	if tx != nil {
+		q = s.q.WithTx(tx)
+	}
 	now := s.stamp()
 	for _, id := range jobIDs {
 		id = strings.TrimSpace(id)
@@ -258,10 +284,27 @@ func (s *Store) AccountJobs(ctx context.Context, jobIDs []string) error {
 			continue
 		}
 		if _, err := q.AccountWorkerResultsByJob(ctx, db.AccountWorkerResultsByJobParams{
-			OperationID: "progress_acknowledgement:" + id, AccountedAt: nullString(now), JobID: id,
+			OperationID: "progress_acknowledgement:" + id,
+			AccountedAt: nullString(now),
+			JobID:       id,
 		}); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// AccountJobs records that the coordinator accounted for the results of the
+// named jobs' rounds. Jobs without a worker round are skipped, and a result
+// already accounted for keeps its first accounting.
+func (s *Store) AccountJobs(ctx context.Context, jobIDs []string) error {
+	tx, err := s.handle.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := s.AccountJobsTx(ctx, tx, jobIDs); err != nil {
+		return err
 	}
 	return tx.Commit()
 }

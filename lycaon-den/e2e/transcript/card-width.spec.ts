@@ -35,7 +35,7 @@ webE2e("a progress box is as wide as an activity group in single and split view"
     expect(prompt.ok(), await prompt.text()).toBe(true);
     const driver = manualHarnessTools(request, sessionId);
     await driver.loadTools("update_progress");
-    await driver.completed(await driver.invoke("update_progress", { content: "## Progress\n- [ ] List the files\n" }));
+    await driver.completed(await driver.invoke("update_progress", { replace: [{ label: "List the files" }] }));
     await driver.completed(await driver.invoke("command", { command: "ls" }));
 
     const chat = liveChatStage(page);

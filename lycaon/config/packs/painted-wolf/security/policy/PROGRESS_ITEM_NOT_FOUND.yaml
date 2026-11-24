@@ -1,0 +1,24 @@
+spec_version: "1.0"
+id: PROGRESS_ITEM_NOT_FOUND
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - update_progress
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.unknown_ids]
+when: paintedwolf.rejection_code == "PROGRESS_ITEM_NOT_FOUND"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+message: Progress update references unknown row IDs
+what: 'update_progress referenced unknown row IDs: {{ paintedwolf.unknown_ids }}.'
+cause: An update, remove, or add.after_id entry named a row ID that is not in the current progress snapshot (or came from before a rewind or replace).
+why: Row mutations apply only to IDs present in the current progress plan.
+fix: '{{ paintedwolf.next_steps }} Inspect the returned snapshot rows, map your intended changes onto the current row IDs, and retry.'
+instead: Branch on Code; use row IDs from the current snapshot and retry update_progress
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: update_progress
+      profile: coordinator
+      unknown_ids: [p9]

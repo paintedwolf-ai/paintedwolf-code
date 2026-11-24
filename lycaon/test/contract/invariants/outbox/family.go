@@ -31,7 +31,7 @@ var silentMutators = []invariants.Exemption{
 	{Key: "internal/workerrecords/workers.go:Close", Reason: "closes a worker; the roster drops it on the next request"},
 	{Key: "internal/workerrecords/workers.go:Discard", Reason: "rolls back a roundless worker and its create receipt when task admission fails before a job starts; no event announced the worker"},
 	{Key: "internal/workerrecords/messages.go:AppendMessage", Reason: "stores a message and advances its worker's sequence; recipients read their page on their next request"},
-	{Key: "internal/workerrecords/dispositions.go:AccountJobs", Reason: "marks results accounted for a job list; the roster reads dispositions on each request and no event payload carries one"},
+	{Key: "internal/workerrecords/dispositions.go:AccountJobsTx", Reason: "marks results accounted inside the caller's transaction; the roster reads dispositions on each request and no event payload carries one"},
 	{Key: "internal/workerrecords/dispositions.go:AccountResult", Reason: "marks one result accounted; the roster reads dispositions on each request and no event payload carries one"},
 	{Key: "internal/workerrecords/dispositions.go:SetChange", Reason: "records a result's change state; the roster reads dispositions on each request and no event payload carries one"},
 
@@ -48,7 +48,8 @@ var silentMutators = []invariants.Exemption{
 
 	// The session plan is published through progress write observers.
 
-	{Key: "internal/progress/sql_transition.go:writeTransition", Reason: "runs inside AppendMessagesWith; its returned transition rows enqueue message events in the same transaction, and post-commit observers invalidate the progress projection"},
+	{Key: "internal/progress/sql_transition.go:writeRowsTransition", Reason: "runs inside AppendMessagesWith; its returned transition rows enqueue message events in the same transaction, and post-commit observers invalidate the progress projection"},
+	{Key: "internal/progress/sql_transition.go:Clear", Reason: "clears visible rows while preserving next_item_seq; rewind announces through commitRewindSQL and post-commit observers invalidate the progress projection"},
 
 	// Security scan bookkeeping; the scans announce through emitScanTx.
 	{Key: "internal/scan/authority_store.go:EnsureAssessment", Reason: "records the assessment a scan joins; the scans that join it announce through emitScanTx, which refreshes the assessment rollup"},

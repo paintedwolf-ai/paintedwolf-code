@@ -171,8 +171,7 @@ func ValidateMutation(m Mutation) error {
 		}
 	}
 	for i := range m.Replace {
-		label, err := cleanAuthorLabel(m.Replace[i].Label)
-		if err != nil {
+		if _, err := cleanAuthorLabel(m.Replace[i].Label); err != nil {
 			return err
 		}
 		state := strings.TrimSpace(m.Replace[i].State)

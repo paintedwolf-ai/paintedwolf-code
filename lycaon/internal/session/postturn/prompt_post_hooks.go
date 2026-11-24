@@ -82,7 +82,7 @@ func (m *Service) ProgressMissing(ctx context.Context, sessionID string, turnToo
 	if turnCalledUpdateProgress(turnTools) || !progress.TurnHasProgressGatedTool(turnTools) {
 		return
 	}
-	if !progress.ProgressMissing(m.progress.Get(ctx, sessionID)) {
+	if snapshot, err := m.progress.Snapshot(ctx, sessionID); err != nil || !snapshot.Missing() {
 		return
 	}
 	m.guidance.Emit(ctx, sessionID, anchor.ProgressMissing, anchor.Envelope{Vars: map[string]any{

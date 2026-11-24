@@ -17,7 +17,13 @@ export function titleArgument(value: unknown): string | undefined {
     } else if (entry && typeof entry === "object") {
       const from = typeof entry.from === "string" ? displayLine(entry.from) : undefined;
       const to = typeof entry.to === "string" ? displayLine(entry.to) : undefined;
+      const id = typeof entry.id === "string" ? displayLine(entry.id) : undefined;
+      const state = typeof entry.state === "string" ? displayLine(entry.state) : undefined;
+      const label = typeof entry.label === "string" ? displayLine(entry.label) : undefined;
       if (from) labels.push(to ? `${from} → ${to}` : from);
+      else if (id && state) labels.push(`${id} → ${state}`);
+      else if (id && label) labels.push(`${id} · ${label}`);
+      else if (label) labels.push(label);
     }
   }
   const first = labels[0];

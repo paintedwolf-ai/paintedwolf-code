@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -55,8 +56,8 @@ func TestProgramPublicationRespectsCurrentEffectAuthority(t *testing.T) {
 				return []sandbox.ToolProfile{{ID: "fixture", CommandEffects: effects}}
 			})
 			if c.missingProgress {
-				store := progress.NewSQLStore(f.Database)
-				testutil.FailErr(t, "clear progress for the fixture", store.Set(f.Session, ""))
+				testutil.FailErr(t, "clear progress", f.ClearProgress())
+				store := progress.NewSQLStore(f.Database, sessionstore.NewSQL(f.Database))
 				f.Runtime.Progress = publicationProgressFacts{store: store}
 			}
 			reviewCalls := 0
@@ -162,7 +163,16 @@ func TestProgramPublicationSettlesBeforeRedirectCapture(t *testing.T) {
 type publicationProgressFacts struct{ store progress.Store }
 
 func (p publicationProgressFacts) ProgramProgressState(ctx context.Context, session string) (progress.PrerequisiteState, error) {
-	return progress.PrerequisiteState{SessionID: session, RootSessionID: session, Content: p.store.Get(ctx, session)}, nil
+	snap, err := p.store.Snapshot(ctx, session)
+	if err != nil {
+		return progress.PrerequisiteState{}, err
+	}
+	return progress.PrerequisiteState{
+		SessionID:     session,
+		RootSessionID: session,
+		Missing:       snap.Missing(),
+		OpenSteps:     snap.OpenStepCount(),
+	}, nil
 }
 
 func TestProgramPublicationRedirectRequiresCurrentWriteProgress(t *testing.T) {
@@ -171,8 +181,8 @@ func TestProgramPublicationRedirectRequiresCurrentWriteProgress(t *testing.T) {
 			f, _, _ := documentProgram(t)
 			path := filepath.Join(f.Dir, "existing.txt")
 			testutil.FailErr(t, "existing", os.WriteFile(path, []byte("saved\n"), 0o644))
-			store := progress.NewSQLStore(f.Database)
-			testutil.FailErr(t, "clear progress for the fixture", store.Set(f.Session, ""))
+			store := progress.NewSQLStore(f.Database, sessionstore.NewSQL(f.Database))
+			testutil.FailErr(t, "clear progress for the fixture", f.ClearProgress())
 			f.Runtime.Progress = publicationProgressFacts{store: store}
 			pure := callDocumentProgram(t, f, ":")
 			if pure.Status != 0 || pure.StopCode != "" {

@@ -9,8 +9,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ProgramProgressState supplies current checklist and workflow facts to reached
-// native children that the retained coordinator gate uses before tool dispatch.
+// ProgramProgressState supplies current progress and workflow facts to reached operations.
 func (m *Service) ProgramProgressState(ctx context.Context, sessionID string) (progress.PrerequisiteState, error) {
 	if err := ctx.Err(); err != nil {
 		return progress.PrerequisiteState{}, err
@@ -25,18 +24,26 @@ func (m *Service) ProgramProgressState(ctx context.Context, sessionID string) (p
 	if sess == nil || sess.ID != sessionID {
 		return progress.PrerequisiteState{}, fmt.Errorf("session progress identity unavailable")
 	}
-	state := m.progressPrerequisites(ctx, sess)
+	state, _ := m.progressPrerequisitesWithSnapshot(ctx, sess)
 	return state, ctx.Err()
 }
 
-func (m *Service) progressPrerequisites(ctx context.Context, sess *api.Session) progress.PrerequisiteState {
-	state := progress.PrerequisiteState{SessionID: sess.ID, RootSessionID: sessiontree.RootID(ctx, m.store, sess.ID), WorkerChild: sess.IsWorkerChild()}
+func (m *Service) progressPrerequisitesWithSnapshot(ctx context.Context, sess *api.Session) (progress.PrerequisiteState, progress.Snapshot) {
+	root := sessiontree.RootID(ctx, m.store, sess.ID)
+	var snapshot progress.Snapshot
 	if m.progress != nil {
-		state.Content = m.progress.Get(ctx, state.RootSessionID)
+		snapshot, _ = m.progress.Snapshot(ctx, root)
+	}
+	state := progress.PrerequisiteState{
+		SessionID:        sess.ID,
+		RootSessionID:    root,
+		Missing:          snapshot.Missing(),
+		OpenSteps:        snapshot.OpenStepCount(),
+		WorkerChild:      sess.IsWorkerChild(),
+		ReviewLoopActive: m.workflows != nil && m.workflows.Policy != nil && m.workflows.Policy.ActivePhaseHasReviewLoop(ctx, sess.ID),
 	}
 	if m.ProgressClosure != nil {
-		state.Reconciliation = m.ProgressClosure.Reconciliation(state.RootSessionID)
+		state.Reconciliation = m.ProgressClosure.Reconciliation(root)
 	}
-	state.ReviewLoopActive = m.workflows != nil && m.workflows.Policy != nil && m.workflows.Policy.ActivePhaseHasReviewLoop(ctx, sess.ID)
-	return state
+	return state, snapshot
 }

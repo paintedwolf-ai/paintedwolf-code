@@ -4,88 +4,118 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// progressRecovery retains only a host-issued basis from a typed rejection.
+// progressRecovery retains structured host snapshot remedies from a progress rejection.
 type progressRecovery struct {
-	revision       string
-	token          string
-	itemIDs        map[string]struct{}
-	reconciliation bool
+	code         string
+	validRowIDs  map[string]struct{}
+	validHandles map[string]struct{}
 }
 
 func progressRecoveryFromFailure(failure *api.InvocationFailure) progressRecovery {
-	if failure == nil {
+	if failure == nil || failure.Details == nil {
 		return progressRecovery{}
 	}
 	switch failure.Code {
-	case "PROGRESS_REVISION_REQUIRED", "PROGRESS_REVISION_CHANGED", "PROGRESS_RECONCILIATION_CHANGED":
+	case "PROGRESS_ITEM_NOT_FOUND", "PROGRESS_STALE_BASIS", "PROGRESS_RESULT_HANDLE_UNKNOWN":
 	default:
 		return progressRecovery{}
 	}
-	raw, err := json.Marshal(failure.Details["snapshot"])
+	rawSnap, present := failure.Details["snapshot"]
+	if !present || rawSnap == nil {
+		return progressRecovery{}
+	}
+	encoded, err := json.Marshal(rawSnap)
 	if err != nil {
 		return progressRecovery{}
 	}
-	var snapshot progress.Snapshot
-	if err := json.Unmarshal(raw, &snapshot); err != nil {
+	var decoded struct {
+		Rows               []progress.Row               `json:"rows"`
+		UnaccountedResults []progress.UnaccountedResult `json:"unaccounted_results"`
+		Reconciliation     *progress.Reconciliation     `json:"reconciliation"`
+	}
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		return progressRecovery{}
 	}
-	var itemIDs map[string]struct{}
-	if len(snapshot.ItemIDs) > 0 {
-		itemIDs = make(map[string]struct{}, len(snapshot.ItemIDs))
-		for _, id := range snapshot.ItemIDs {
-			if id != "" {
-				itemIDs[id] = struct{}{}
+	// Reject scalar/non-object snapshot payloads.
+	var obj map[string]any
+	if err := json.Unmarshal(encoded, &obj); err != nil || obj == nil {
+		return progressRecovery{}
+	}
+	rowIDs := make(map[string]struct{}, len(decoded.Rows))
+	for _, r := range decoded.Rows {
+		if id := strings.TrimSpace(r.ID); id != "" {
+			rowIDs[id] = struct{}{}
+		}
+	}
+	handles := make(map[string]struct{})
+	for _, u := range decoded.UnaccountedResults {
+		if h := strings.TrimSpace(u.Handle); h != "" {
+			handles[h] = struct{}{}
+		}
+	}
+	if decoded.Reconciliation != nil {
+		for _, u := range decoded.Reconciliation.Unaccounted {
+			if h := strings.TrimSpace(u.Handle); h != "" {
+				handles[h] = struct{}{}
 			}
 		}
 	}
-	recovery := progressRecovery{revision: snapshot.Revision, itemIDs: itemIDs, reconciliation: failure.Code == "PROGRESS_RECONCILIATION_CHANGED"}
-	if snapshot.Reconciliation != nil {
-		recovery.token = snapshot.Reconciliation.Token
+	return progressRecovery{
+		code:         failure.Code,
+		validRowIDs:  rowIDs,
+		validHandles: handles,
 	}
-	return recovery
 }
 
 func (r progressRecovery) matches(args map[string]any) bool {
-	revision, _ := args["expected_revision"].(string)
-	if r.revision == "" || revision != r.revision {
+	if r.code == "" {
 		return false
 	}
-	if len(r.itemIDs) > 0 && !recoveryItemIDsMatch(args["item_ids"], r.itemIDs) {
+	m, err := progress.PrepareMutation(args)
+	if err != nil {
 		return false
 	}
-	token, _ := args["reconciliation_token"].(string)
-	return !r.reconciliation || token == r.token
-}
-
-func recoveryItemIDsMatch(raw any, allowed map[string]struct{}) bool {
-	switch v := raw.(type) {
-	case []string:
-		for _, id := range v {
-			if id == "" {
-				continue
-			}
-			if _, ok := allowed[id]; !ok {
+	switch r.code {
+	case "PROGRESS_ITEM_NOT_FOUND", "PROGRESS_STALE_BASIS":
+		if !m.HasRowEdits() {
+			return false
+		}
+		if len(m.Replace) > 0 {
+			return true
+		}
+		for _, id := range m.Remove {
+			if _, ok := r.validRowIDs[id]; !ok {
 				return false
 			}
 		}
-		return true
-	case []any:
-		for _, item := range v {
-			switch s := item.(type) {
-			case nil:
-			case string:
-				if s == "" {
-					continue
-				}
-				if _, ok := allowed[s]; !ok {
+		for _, u := range m.Update {
+			if _, ok := r.validRowIDs[u.ID]; !ok {
+				return false
+			}
+		}
+		for _, a := range m.Add {
+			if a.AfterID != "" && a.AfterID != "start" {
+				if _, ok := r.validRowIDs[a.AfterID]; !ok {
 					return false
 				}
-			default:
+			}
+		}
+		return true
+	case "PROGRESS_RESULT_HANDLE_UNKNOWN":
+		if len(r.validHandles) == 0 {
+			return len(m.AcknowledgeResults) == 0
+		}
+		if len(m.AcknowledgeResults) == 0 {
+			return false
+		}
+		for _, h := range m.AcknowledgeResults {
+			if _, ok := r.validHandles[h]; !ok {
 				return false
 			}
 		}
@@ -124,7 +154,7 @@ func (g *MemoryDoomLoopGuard) resolvedProgressPrerequisite(ctx context.Context, 
 	resolved := false
 	switch code {
 	case "PROGRESS_MISSING":
-		resolved = !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive)
+		resolved = !progress.PrerequisiteMissing(state.Missing, state.WorkerChild, state.ReviewLoopActive)
 	case "PROGRESS_RECONCILIATION_REQUIRED":
 		resolved = state.WorkerChild || state.Reconciliation == nil
 	}

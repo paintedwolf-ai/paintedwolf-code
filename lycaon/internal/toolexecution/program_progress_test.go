@@ -20,7 +20,7 @@ func (f fixedMutationProgress) ProgramProgressState(context.Context, string) (pr
 func TestReachedMutationProgressUsesResolvedProjectTarget(t *testing.T) {
 	invocation, _ := frameFixture(t)
 	definition := nativeDefinition(t, "write")
-	state := progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: invocation.SessionID}
+	state := progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: invocation.SessionID, Missing: true}
 	provider := fixedMutationProgress{state}
 	testutil.FailErr(t, "scratch write", CheckReachedMutationProgress(t.Context(), provider, definition, invocation, "", "/tmp/output"))
 	err := CheckReachedMutationProgress(t.Context(), provider, definition, invocation, "r1", "/project/config.json")
@@ -28,7 +28,8 @@ func TestReachedMutationProgressUsesResolvedProjectTarget(t *testing.T) {
 	if !errors.As(err, &refusal) || refusal.Code != "PROGRESS_MISSING" || refusal.Data["path"] != "/project/config.json" {
 		t.Fatalf("project write refusal = %v", err)
 	}
-	provider.state.Content = "- [ ] Update config"
+	provider.state.Missing = false
+	provider.state.OpenSteps = 1
 	testutil.FailErr(t, "planned project write", CheckReachedMutationProgress(t.Context(), provider, definition, invocation, "r1", "/project/config.json"))
 }
 
@@ -40,7 +41,7 @@ func TestOperationProgressUsesMetadataAndExistingExemptions(t *testing.T) {
 		facts.ProgressGate = policy
 		definition, err := toolcontract.NewOperationDefinition(facts)
 		testutil.FailErr(t, "freeze progress metadata", err)
-		err = CheckOperationProgress(definition, invocation, "", false, false)
+		err = CheckOperationProgress(definition, invocation, true, false, false)
 		var refusal *toolrejection.ToolReject
 		if policy != toolcontract.ProgressNotRequired {
 			if !errors.As(err, &refusal) || refusal.Code != "PROGRESS_MISSING" || refusal.OwnerRef != facts.Contract.Owner || refusal.Data["source_line"] != 1 {
@@ -50,12 +51,12 @@ func TestOperationProgressUsesMetadataAndExistingExemptions(t *testing.T) {
 			t.Fatalf("ungated operation refused: %v", err)
 		}
 		for _, exemption := range []struct{ worker, review bool }{{true, false}, {false, true}} {
-			testutil.FailErr(t, "existing workflow exemption", CheckOperationProgress(definition, invocation, "", exemption.worker, exemption.review))
+			testutil.FailErr(t, "existing workflow exemption", CheckOperationProgress(definition, invocation, true, exemption.worker, exemption.review))
 		}
-		testutil.FailErr(t, "existing valid progress", CheckOperationProgress(definition, invocation, "- [ ] Inspect source", false, false))
+		testutil.FailErr(t, "existing valid progress", CheckOperationProgress(definition, invocation, false, false, false))
 	}
-	testutil.FailErr(t, "read-only operation has no broad command gate", CheckOperationProgress(nativeDefinition(t, "read"), invocation, "", false, false))
-	if CheckOperationProgress(toolcontract.OperationDefinition{}, invocation, "", false, false) == nil {
+	testutil.FailErr(t, "read-only operation has no broad command gate", CheckOperationProgress(nativeDefinition(t, "read"), invocation, true, false, false))
+	if CheckOperationProgress(toolcontract.OperationDefinition{}, invocation, true, false, false) == nil {
 		t.Fatal("missing operation metadata admitted")
 	}
 }
@@ -63,7 +64,7 @@ func TestOperationProgressUsesMetadataAndExistingExemptions(t *testing.T) {
 func TestOperationProgressRejectsCrossSessionState(t *testing.T) {
 	invocation, _ := frameFixture(t)
 	definition := nativeDefinition(t, "write")
-	state := progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: "root-session", Content: "- [ ] Actual task"}
+	state := progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: "root-session", OpenSteps: 1}
 	testutil.FailErr(t, "matching actual state", CheckOperationProgressState(definition, invocation, state))
 	state.SessionID = "foreign-session"
 	if CheckOperationProgressState(definition, invocation, state) == nil {
@@ -78,9 +79,9 @@ func TestOperationProgressRejectsCrossSessionState(t *testing.T) {
 func TestReachedProgressGateRefreshesFinishObligationsBeforeMutation(t *testing.T) {
 	invocation, _ := frameFixture(t)
 	definition := nativeDefinition(t, "write")
-	provider := fixedMutationProgress{progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: invocation.SessionID, Content: "- [ ] Deliver"}}
+	provider := fixedMutationProgress{progress.PrerequisiteState{SessionID: invocation.SessionID, RootSessionID: invocation.SessionID, OpenSteps: 1}}
 	testutil.FailErr(t, "admit planned operation", CheckOperationProgressState(definition, invocation, provider.state))
-	provider.state.Reconciliation = &progress.Reconciliation{Token: "new-finish", Jobs: []string{"worker-one"}}
+	provider.state.Reconciliation = &progress.Reconciliation{Unaccounted: []progress.UnaccountedResult{{Handle: "fixer#1"}}}
 	err := CheckReachedMutationProgress(t.Context(), provider, definition, invocation, "project-root", "/project/result.txt")
 	var refused *toolrejection.ToolReject
 	if !errors.As(err, &refused) || refused.Code != "PROGRESS_RECONCILIATION_REQUIRED" {

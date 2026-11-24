@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/programtest"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -54,7 +55,7 @@ func TestCommandRecoveryPreservesUnitAndPriorEffects(t *testing.T) {
 		})
 	}
 	f := newRecoveryFixture(t)
-	testutil.FailErr(t, "set write progress", f.SetProgress("- [ ] Retain the write before inspecting source admission"))
+	testutil.FailErr(t, "set write progress", f.ReplaceProgress(progress.RowSpec{Label: "Retain the write before inspecting source admission"}))
 	out, err := f.call(t, t.Context(), `printf before | tee retained; eval 'if'`)
 	testutil.FailErr(t, "run captured invalid source", err)
 	got := decodeOutcome(t, out)
@@ -120,7 +121,7 @@ func TestReachedRecoveryTravelsFromLedgerToModel(t *testing.T) {
 		parentID, callID = tc.Invocation.ID, tc.Identity.ToolCallID
 		tc.Effects.Out = observed
 	}
-	testutil.FailErr(t, "establish write progress", f.SetProgress("- [ ] Preserve output and repair the source"))
+	testutil.FailErr(t, "establish write progress", f.ReplaceProgress(progress.RowSpec{Label: "Preserve output and repair the source"}))
 	body, err := f.call(t, t.Context(), `printf before | tee retained; eval 'if'`)
 	testutil.FailErr(t, "run reached refusal", err)
 	receipt, err := f.Recorder.Settle(t.Context(), parentID, invocation.Settlement{Status: api.InvocationStatusCompleted, Invoked: true, EvidenceKind: "program", SourceVerdict: api.SourceVerdictFailed})

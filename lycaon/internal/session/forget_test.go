@@ -60,7 +60,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 
 	const sid = "sess-1"
 	progressStore := progresstest.New(t, sid)
-	progressStore.Set(sid, "- [ ] task")
+	progresstest.SeedRows(t, progressStore, sid, progress.RowSpec{Label: "task"})
 	m.SetProgressStore(progressStore)
 	m.Coordinator.ProgressClosure.Arm(t.Context(), sid, "job-closure")
 	m.Runner.Closeouts.RecordGroundingFriction(t.Context(), sid)

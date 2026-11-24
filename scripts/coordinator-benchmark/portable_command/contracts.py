@@ -98,8 +98,12 @@ def validate_case(case):
             raise ValueError('missing invocation terminal outcome')
         if not isinstance(turn['program'], str) or not turn['program']:
             raise ValueError('empty fixture program')
-        if 'progress_update' in turn and set(turn['progress_update']) != {'content'}:
-            raise ValueError('progress must reuse update_progress content schema')
+        if 'progress_update' in turn:
+            pu = turn['progress_update']
+            allowed = {'replace', 'add', 'update', 'remove', 'acknowledge_results'}
+            if (not isinstance(pu, dict) or not pu or not set(pu) <= allowed
+                    or ('replace' in pu and set(pu) - {'replace', 'acknowledge_results'})):
+                raise ValueError('progress_update must match update_progress DML schema')
     if type(expected['status']) is not int or expected['host_stop'] not in STOPS:
         raise ValueError('invalid expected status/host stop')
     if type(expected['complete']) is not bool:

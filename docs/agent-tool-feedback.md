@@ -444,57 +444,48 @@ Matched results explain how to recover their public records when no body is pres
 
 ### Progress reconciliation
 
-`update_progress` returns the current bounded document snapshot, an opaque revision,
-`document_changed`, `state_changed`, `closed_item_ids`, and `reconciliation_status`.
-The snapshot summary counts pending, completed, not-pursued and optional rows.
-`all_required_items_terminal` allows explicit not-pursued decisions;
-`all_required_items_completed` does not. These describe authored checklist state,
-not independent proof of the work. Closed IDs identify transitions in this update.
-The revision includes the bound workflow run and persisted last-write identity;
-copy it into `expected_revision` when replacing the document. First creation
-may omit it; replacements without a revision return `PROGRESS_REVISION_REQUIRED`
-and the current snapshot without writing. A stale replacement
-returns `PROGRESS_REVISION_CHANGED` with the current state and writes nothing.
-Document replacement is atomic with its revision check. These are additive
-`agent-public` tool arguments and results; the stored Markdown and database shape
-are unchanged.
+`update_progress` mutates normalized deliverable rows (`session_progress` and
+`session_progress_items`) via row-keyed DML (`replace`, `add`, `update`,
+`remove`) and acknowledges settled worker rounds via `acknowledge_results`. The
+host mints monotonic session-scoped row IDs (`p1`, `p2`, …) from
+`session_progress.next_item_seq`; session rewind clears visible rows while
+preserving `next_item_seq` and advancing `document_version`, so stale pre-rewind
+IDs never collide with post-rewind deliverables (`PROGRESS_ITEM_NOT_FOUND`).
+Each call returns `status`, `added_item_ids`, `closed_item_ids`,
+`removed_item_ids`, `acknowledged_results`, `reconciliation_status`, and the
+current `snapshot` (`rows`, `summary`, and `unaccounted_results`). The summary
+counts `pending`, `done`, `na`, and `optional` rows.
 
-Establish a checklist once before the first governed mutation. Pending rows permit
-continued implementation without another progress call. Identical submissions
-create no document revision or progress event and do not count as workflow
-advancement. The progress handler supplies typed advancement facts directly to
-invocation and batch settlement; transcript text does not determine them.
-Rewording labels is a document change, not a deliverable transition.
-Unrelated mutations do not erase the repetition history of a pending-checklist
-no-op. Material progress or a new user-request boundary renews that context.
-All-terminal checklists share a rewording-resistant bucket; an intervening world
-effect permits recording newly completed work without an invented pending update.
-Explicit finish tokens retain distinct operation identities. A typed revision or
-reconciliation rejection records its host-issued remedy, so a corrected retry
-reaches the progress handler even after repeated stale attempts. Diagnostic rejection totals
-remain intact; the handler revalidates the supplied basis before any write.
-Current root-session checklist, workflow and finish facts also release prior
-prerequisite refusals after resolution, without counting checklist establishment
-as deliverable advancement.
+Seed deliverable rows with `replace` before the first governed mutation. Pending
+rows permit continued implementation without another progress call. Identical
+no-op submissions emit `status: "unchanged"` without advancing `document_version`
+or counting as workflow advancement. Rewording labels updates row text without
+counting as deliverable closure. Conflicting or incomplete row edits return
+`PROGRESS_CONFLICTING_OPERATIONS`; exceeding the 48-row ceiling returns
+`PROGRESS_TOO_MANY_ROWS`; unknown row IDs return `PROGRESS_ITEM_NOT_FOUND`; and
+held program envelopes whose targeted row label or plan basis changed while
+waiting return `PROGRESS_STALE_BASIS`. Diagnostic rejection totals remain
+intact, and corrected retries using IDs or handles from the returned `snapshot`
+reach the handler cleanly.
 
 `PROGRESS_RECONCILIATION_REQUIRED` names the explicit finish-acknowledgement
 prerequisite. `PROGRESS_ITEM_NOT_CLOSED` remains deprecated with its original
-checklist-change predicate and names the successor. The new rule overrides the
-legacy rule for matching occurrences; stored historical codes are unchanged.
+predicate and names the successor.
 
-Successful worker finishes publish a reconciliation token and unaccounted result
-handles in the current snapshot. Submit `reconciliation_token` with `expected_revision`
-to acknowledge those finishes without closing unfinished rows or rewriting labels.
-Document transitions never consume worker-finish obligations; only the exact
-current token does. A stale token returns `PROGRESS_RECONCILIATION_CHANGED` and the current snapshot before a write.
-If finishes change during the document write, the result preserves the document's
-outcome and returns the new pending reconciliation state. Acknowledgement never
-creates a document revision by itself.
+Settled worker rounds appear in `snapshot.unaccounted_results` with their
+`result_handle`. Passing those handles in `acknowledge_results` (with or without
+row edits) records durable disposition accounting inside the same SQLite
+transaction as row mutations and transcript emission, releasing the in-memory
+closure latch only after commit. Handles belonging to open or already-closed
+workers in the root session resolve idempotently; unknown or foreign-session
+handles return `PROGRESS_RESULT_HANDLE_UNKNOWN` before any row is written.
 
-Each request has its own checklist. Completed progress remains in the transcript as
-`progress_complete` and does not cover a follow-up request. Establishing a new
-checklist requires at least one pending deliverable. A tool-free response ends
-the turn, so continuing progress updates are text alongside the next tool call.
+Each request has its own plan. Completed progress remains in the transcript as
+`progress_complete` and does not cover a follow-up request. Seeding a new plan
+requires at least one `pending` deliverable (`PROGRESS_NO_OPEN_STEP`), and
+`pending` rows must precede `optional` rows (`PROGRESS_PENDING_AFTER_OPTIONAL`).
+A tool-free response ends the turn, so continuing progress updates are text
+alongside the next tool call.
 
 ### Rejected source candidates
 

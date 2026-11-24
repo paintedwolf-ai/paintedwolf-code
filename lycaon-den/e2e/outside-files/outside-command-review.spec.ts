@@ -87,7 +87,10 @@ webE2e("outside command changes reach chat Files and Review with explicit covera
     const driver = manualHarnessTools(request, sessionId);
     await driver.loadTools("command", "update_progress");
     await driver.completed(await driver.invoke("update_progress", {
-      content: "## Progress\n- [ ] Copy the project note\n- [ ] Check observation of the second folder\n",
+      replace: [
+        { label: "Copy the project note" },
+        { label: "Check observation of the second folder" },
+      ],
     }));
     const copy = await driver.invoke("command", {
       command: `external -- cp ${file} ${quotePath(changedPath)}`,

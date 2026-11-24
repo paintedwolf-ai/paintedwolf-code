@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -192,7 +193,16 @@ func (fixtureSessions) Get(_ context.Context, id string) (*api.Session, error) {
 type progressFacts struct{ store progress.Store }
 
 func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
-	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
+	snap, err := p.store.Snapshot(ctx, id)
+	if err != nil {
+		return progress.PrerequisiteState{}, err
+	}
+	return progress.PrerequisiteState{
+		SessionID:     id,
+		RootSessionID: id,
+		Missing:       snap.Missing(),
+		OpenSteps:     snap.OpenStepCount(),
+	}, nil
 }
 
 type programFixture struct {
@@ -217,8 +227,8 @@ func newProgramFixture(t *testing.T) *programFixture {
 	testutil.FailErr(t, "compile profile effects", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "fixture")
-	owner := progress.NewSQLStore(database)
-	testutil.FailErr(t, "set actual progress", owner.Set(session, "- [ ] Run the fixture program"))
+	owner := progress.NewSQLStore(database, store.NewSQL(database))
+	progresstest.SeedRows(t, owner, session, progress.RowSpec{Label: "Run the fixture program"})
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })
 	evidenceStore := store.NewSQL(database).Evidence

@@ -92,7 +92,11 @@
         {
           "program": "printf 'created\\n' > ./result.txt",
           "progress_update": {
-            "content": "- [ ] Create result.txt"
+            "replace": [
+              {
+                "label": "Create result.txt"
+              }
+            ]
           },
           "expected_outcome": "completed"
         }
@@ -2547,7 +2551,11 @@
         {
           "program": "touch ./never; if",
           "progress_update": {
-            "content": "- [ ] Create never"
+            "replace": [
+              {
+                "label": "Create never"
+              }
+            ]
           },
           "expected_outcome": "rejected"
         }
@@ -2605,7 +2613,11 @@
         {
           "program": "touch ./denied.txt",
           "progress_update": {
-            "content": "- [ ] Create denied.txt"
+            "replace": [
+              {
+                "label": "Create denied.txt"
+              }
+            ]
           },
           "expected_outcome": "rejected"
         }

@@ -1024,8 +1024,8 @@ host_facts:
    type: string
  - name: paintedwolf.line
    type: string
- - name: paintedwolf.line_count
-   type: string
+ - name: paintedwolf.row_count
+   type: int
  - name: paintedwolf.listed
    type: bool
  - name: paintedwolf.locators
@@ -1050,8 +1050,16 @@ host_facts:
    type: string
  - name: paintedwolf.max_len
    type: string
- - name: paintedwolf.max_lines
-   type: string
+ - name: paintedwolf.max_rows
+   type: int
+ - name: paintedwolf.unknown_ids
+   type: list<string>
+ - name: paintedwolf.unknown_handles
+   type: list<string>
+ - name: paintedwolf.changed_ids
+   type: list<string>
+ - name: paintedwolf.unaccounted_handles
+   type: list<string>
  - name: paintedwolf.max_pages
    type: string
  - name: paintedwolf.max_path_bytes

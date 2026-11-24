@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
@@ -20,7 +19,7 @@ const progressOpenBeforeCloseoutCode = "PROGRESS_OPEN_BEFORE_CLOSEOUT"
 
 const synthesisDelayMaxPerPrompt = 2
 
-// Synthesis skips progress-repair retries; other surfaces need tool access.
+// OpenProgress checks whether open progress rows block closeout on non-synthesis surfaces.
 func (m *Service) OpenProgress(ctx context.Context, sess *api.Session, history []api.Message, surfaceID string, workersIdle bool, implState surface.ImplementSessionState, invokeAllowed bool) (*guidance.Refusal, bool) {
 	reject, block, _ := m.openProgressWithWaiver(ctx, sess, history, surfaceID, workersIdle, implState, invokeAllowed)
 	return reject, block
@@ -38,15 +37,18 @@ func (m *Service) openProgressWithWaiver(ctx context.Context, sess *api.Session,
 		return nil, false, false
 	}
 	root := sessiontree.RootID(ctx, m.store, sess.ID)
-	content := m.progress.Get(ctx, root)
+	snapshot, err := m.progress.Snapshot(ctx, root)
+	if err != nil {
+		return nil, false, false
+	}
 	var verifyRequired, verifyPassed, verifyUnverified bool
 	if m.Verification != nil {
 		verifyRequired, verifyPassed, _, verifyUnverified = m.Verification.WorkflowGateState(ctx, sess, history)
 	}
-	batchReady := workeroutcomes.SynthesisBlockedOnlyByOpenProgress(implState, history, content, verifyRequired, verifyPassed || verifyUnverified)
-	_, pending, _ := progress.CloseCounts(content)
+	batchReady := workeroutcomes.SynthesisBlockedOnlyByOpenProgress(implState, history, snapshot, verifyRequired, verifyPassed || verifyUnverified)
+	pending := snapshot.OpenStepCount()
 	eligible := workersIdle && batchReady && pending > 0
-	if eligible && m.closeouts != nil && m.closeouts.ProgressWaived(root, content) {
+	if eligible && m.closeouts != nil && m.closeouts.ProgressWaived(root, snapshot.DocumentVersion()) {
 		return nil, false, true
 	}
 	delayCount, delayed := m.closeouts.Delay(sess.ID, root, closeouts.ProgressDelay, eligible, synthesisDelayMaxPerPrompt)
@@ -68,5 +70,7 @@ func (m *Service) waiveOpenProgress(ctx context.Context, sess *api.Session) {
 		return
 	}
 	root := sessiontree.RootID(ctx, m.store, sess.ID)
-	m.closeouts.WaiveProgress(root, m.progress.Get(ctx, root))
+	if snapshot, err := m.progress.Snapshot(ctx, root); err == nil {
+		m.closeouts.WaiveProgress(root, snapshot.DocumentVersion())
+	}
 }

@@ -2,62 +2,119 @@ package progressclosure
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
+	"database/sql"
+	"errors"
 	"slices"
+	"strings"
 
-	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 )
 
-func reconciliation(root string, baseline guard.ProgressClosureBaseline) *progress.Reconciliation {
-	jobs := slices.Clone(baseline.JobIDs)
-	slices.Sort(jobs)
-	raw, _ := json.Marshal(struct { //nolint:errchkjson // Strings always encode.
-		Root, Revision string
-		Jobs           []string
-	}{root, baseline.Revision, jobs})
-	digest := sha256.Sum256(raw)
-	return &progress.Reconciliation{Token: hex.EncodeToString(digest[:]), Jobs: jobs, Settled: baseline.SettledWork()}
-}
-
-// Reconciliation exposes the exact worker finishes awaiting acknowledgement.
+// Reconciliation exposes the settled worker finishes awaiting acknowledgement.
 func (m *Service) Reconciliation(root string) *progress.Reconciliation {
 	if m == nil {
 		return nil
 	}
+	root = strings.TrimSpace(root)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	baseline, armed := m.baselines.Load(root)
 	if !armed {
 		return nil
 	}
-	return reconciliation(root, baseline)
+	jobs := slices.Clone(baseline.JobIDs)
+	slices.Sort(jobs)
+	unaccounted := slices.Clone(baseline.Unaccounted)
+	if unaccounted == nil {
+		unaccounted = []progress.UnaccountedResult{}
+	}
+	return &progress.Reconciliation{
+		Jobs:        jobs,
+		Settled:     baseline.SettledWork(),
+		Unaccounted: unaccounted,
+	}
 }
 
-// Acknowledge clears only the worker-finish set identified by token, after
-// recording each listed result as accounted for. A failed record leaves the
-// set armed, so the checklist update can acknowledge it again.
-func (m *Service) Acknowledge(ctx context.Context, root, token string) bool {
-	if m == nil || token == "" {
-		return false
+// UnaccountedResults returns the model-facing result handles awaiting acknowledgement.
+func (m *Service) UnaccountedResults(root string) []progress.UnaccountedResult {
+	rec := m.Reconciliation(root)
+	if rec == nil || len(rec.Unaccounted) == 0 {
+		return []progress.UnaccountedResult{}
+	}
+	return slices.Clone(rec.Unaccounted)
+}
+
+// AcknowledgeTx resolves result handles in coordinator history and records durable
+// accounting inside tx. In-memory latches remain armed until Release runs post-commit.
+func (m *Service) AcknowledgeTx(ctx context.Context, tx *sql.Tx, root, principalID string, handles []string) (progress.AckOutcome, error) {
+	if m == nil || len(handles) == 0 {
+		return progress.AckOutcome{}, nil
+	}
+	root = strings.TrimSpace(root)
+	principalID = strings.TrimSpace(principalID)
+	if principalID == "" {
+		principalID = root
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	accounts := m.accounts
 	baseline, armed := m.baselines.Load(root)
+	m.mu.Unlock()
+
+	if accounts != nil {
+		actor := workerrecords.Actor{
+			SessionID:   root,
+			Role:        workerrecords.RoleCoordinator,
+			PrincipalID: principalID,
+		}
+		var jobIDs []string
+		var unknown []string
+		for _, h := range handles {
+			h = strings.TrimSpace(h)
+			ref, err := accounts.ResolveResultForAckTx(ctx, tx, actor, h)
+			if errors.Is(err, workerrecords.ErrResultNotFound) || errors.Is(err, workerrecords.ErrCoordinatorOnly) {
+				unknown = append(unknown, h)
+				continue
+			}
+			if err != nil {
+				return progress.AckOutcome{}, err
+			}
+			if !slices.Contains(jobIDs, ref.JobID) {
+				jobIDs = append(jobIDs, ref.JobID)
+			}
+		}
+		if len(unknown) > 0 {
+			return progress.AckOutcome{UnknownHandles: unknown}, nil
+		}
+		if err := accounts.AccountJobsTx(ctx, tx, jobIDs); err != nil {
+			return progress.AckOutcome{}, err
+		}
+		return progress.AckOutcome{AccountedJobIDs: jobIDs}, nil
+	}
+
 	if !armed {
-		return false
+		return progress.AckOutcome{UnknownHandles: slices.Clone(handles)}, nil
 	}
-	rec := reconciliation(root, baseline)
-	if rec.Token != token {
-		return false
-	}
-	if m.accounts != nil {
-		if err := m.accounts.AccountJobs(ctx, rec.Jobs); err != nil {
-			return false
+	var jobIDs []string
+	var unknown []string
+	for _, h := range handles {
+		h = strings.TrimSpace(h)
+		matched := false
+		for i, u := range baseline.Unaccounted {
+			if u.Handle == h && i < len(baseline.JobIDs) {
+				matched = true
+				if !slices.Contains(jobIDs, baseline.JobIDs[i]) {
+					jobIDs = append(jobIDs, baseline.JobIDs[i])
+				}
+				break
+			}
+		}
+		if !matched {
+			unknown = append(unknown, h)
 		}
 	}
-	m.baselines.Delete(root)
-	return true
+	if len(unknown) > 0 {
+		return progress.AckOutcome{UnknownHandles: unknown}, nil
+	}
+	return progress.AckOutcome{AccountedJobIDs: jobIDs}, nil
 }

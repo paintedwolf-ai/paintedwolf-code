@@ -16,5 +16,6 @@ func (m *Host) SetProgressStore(store progress.Store) {
 	m.Stops.SetProgress(store)
 	m.Workers.State.SetProgress(store)
 	m.Workers.State.SetProgressReconciliation(m.Coordinator.ProgressClosure)
+	m.Coordinator.Closeout.SetProgress(store)
 	m.Runner.Instructions.SetProgress(store)
 }

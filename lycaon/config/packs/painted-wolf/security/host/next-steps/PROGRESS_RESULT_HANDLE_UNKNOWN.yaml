@@ -1,0 +1,3 @@
+steps:
+  - tool: "update_progress"
+    say: "Inspect `unaccounted_results` in the returned snapshot and call {{ call }} with only valid `result_handle` entries in `acknowledge_results`."

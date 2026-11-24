@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -48,7 +49,11 @@ func (f *reconcileFixture) DisarmTimerBackstop(context.Context, string) { f.disa
 
 type completedProgress struct{}
 
-func (completedProgress) Get(context.Context, string) string { return "- [x] work" }
+func (completedProgress) Snapshot(context.Context, string) (progress.Snapshot, error) {
+	return progress.Snapshot{
+		Rows: []progress.Row{{ID: "p1", State: progress.ProgressStateDone, Label: "work"}},
+	}, nil
+}
 
 func TestReconcileHonorsPendingOverlaysAndInFlightWorkers(t *testing.T) {
 	f := &reconcileFixture{t: t, state: surface.ImplementSessionState{BatchSeq: 7, BatchPhase: batch.PhaseIntegrate, PendingOverlayIDs: []string{"overlay"}}}

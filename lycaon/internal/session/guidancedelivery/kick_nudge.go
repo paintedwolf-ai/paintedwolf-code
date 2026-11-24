@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
-	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
@@ -231,8 +230,11 @@ func (m *Service) closureState(ctx context.Context, sessionID string) (open int,
 	if _, armed = m.closure.Baseline(root); !armed {
 		return 0, false
 	}
-	_, pending, _ := progress.CloseCounts(m.progress.Get(ctx, root))
-	return pending, true
+	snapshot, err := m.progress.Snapshot(ctx, root)
+	if err != nil {
+		return 0, true
+	}
+	return snapshot.OpenStepCount(), true
 }
 
 // Only the active phase contributes open workflow obligations.

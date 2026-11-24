@@ -1,288 +1,311 @@
 package progressclosure_test
 
 import (
-	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
-	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/session/progressclosure"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/reporting"
 	"github.com/lycaon/lycaon/internal/workerrecords"
+	"time"
 )
 
+type ackFixture struct {
+	sqlDB   *db.Store
+	records *workerrecords.Store
+	store   *progress.SQLStore
+	closure *progressclosure.Service
+	coord   workerrecords.Actor
+}
+
+func newAckFixture(t *testing.T) *ackFixture {
+	t.Helper()
+	sqlDB := testdbfixture.Open(t, "progressclosure.db")
+	testdbseed.InsertSession(t, sqlDB, "session", testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "foreign", testdbseed.DefaultProjectID)
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run-session", "session", testdbseed.DefaultProjectID)
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run-foreign", "foreign", testdbseed.DefaultProjectID)
+
+	records := workerrecords.New(sqlDB)
+	repos := sessionstore.NewSQL(sqlDB)
+	store := progress.NewSQLStore(sqlDB, repos)
+	closure := progressclosure.New()
+	closure.SetProgress(store)
+	closure.SetAccounts(records)
+	closure.SetNames(records)
+
+	return &ackFixture{
+		sqlDB:   sqlDB,
+		records: records,
+		store:   store,
+		closure: closure,
+		coord:   workerrecords.Actor{SessionID: "session", Role: workerrecords.RoleCoordinator, PrincipalID: "session"},
+	}
+}
+
+func (f *ackFixture) seedWorkerResult(t *testing.T, rootSession, name, childSession, jobID string) (string, string) {
+	t.Helper()
+	now := timelayout.Format(time.Now().UTC())
+	_, err := f.sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (
+			id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id
+		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?, ?, ?)`,
+		childSession, testdbseed.DefaultProjectID, rootSession, now, now, now, rootSession)
+	testutil.FailErr(t, "insert child session "+childSession, err)
+
+	actor := workerrecords.Actor{SessionID: rootSession, Role: workerrecords.RoleCoordinator, PrincipalID: rootSession}
+	w, err := f.records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "create-" + jobID}, workerrecords.WorkerSpec{
+		Name: name, AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite, ChildSessionID: childSession,
+	})
+	testutil.FailErr(t, "create worker "+name, err)
+
+	_, err = f.sqlDB.ExecContext(t.Context(), `INSERT INTO worker_jobs (
+			id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at
+		) VALUES (?, ?, ?, ?, 'implementer', 'running', 'prompt', 'brief', ?)`,
+		jobID, testdbseed.DefaultProjectID, rootSession, childSession, now)
+	testutil.FailErr(t, "insert job "+jobID, err)
+
+	round, err := f.records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "admit-" + jobID}, w.WorkerID, workerrecords.RoundSpec{
+		JobID: jobID, ExecutionTarget: "local",
+	})
+	testutil.FailErr(t, "admit round "+jobID, err)
+
+	handle := fmt.Sprintf("%s#%d", name, round.Ordinal)
+	_, err = f.sqlDB.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`,
+		handle, jobID, now)
+	testutil.FailErr(t, "insert result "+handle, err)
+
+	_, err = db.New(f.sqlDB).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+		SettledAt: db.NullString(now), CheckpointID: "", JobID: jobID,
+	})
+	testutil.FailErr(t, "settle round "+jobID, err)
+	return w.WorkerID, handle
+}
+
+type updateProgressReply struct {
+	Status              string                   `json:"status"`
+	DocumentChanged     bool                     `json:"document_changed"`
+	StateChanged        bool                     `json:"state_changed"`
+	ClosedItemIDs       []string                 `json:"closed_item_ids"`
+	AcknowledgedResults []string                 `json:"acknowledged_results"`
+	Snapshot            progress.RequestSnapshot `json:"snapshot"`
+}
+
+func unaccountedHandles(closure *progressclosure.Service, session string) []string {
+	items := closure.UnaccountedResults(session)
+	out := make([]string, len(items))
+	for i, item := range items {
+		out[i] = item.Handle
+	}
+	return out
+}
+
+func (f *ackFixture) seedRows(t *testing.T, specs ...progress.RowSpec) progress.Snapshot {
+	t.Helper()
+	out, err := f.store.Apply(t.Context(), "session", progress.Mutation{Replace: specs}, progress.ApplyOptions{})
+	testutil.FailErr(t, "apply seed", err)
+	return out.Snapshot
+}
+
 func TestWorkerAcknowledgementDoesNotRequireClosingUnfinishedRows(t *testing.T) {
-	store := progresstest.New(t, "session")
-	testutil.FailErr(t, "seed checklist", store.Set("session", "- [x] Survey\n- [ ] Implement\n- [ ] Verify"))
-	closure := progressclosure.New()
-	closure.SetProgress(store)
-	closure.Arm(t.Context(), "session", "worker-one")
-	before, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read checklist", err)
-	view := closure.Reconciliation("session")
-	handler := reporting.ProgressHandler(store, func(_ctx context.Context, session string) string { return session }, closure)
-	_, err = handler(t.Context(), map[string]any{"content": before.Content, "reconciliation_token": view.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
-	var missingRevision *toolrejection.ToolReject
-	if !errors.As(err, &missingRevision) || missingRevision.Code != "PROGRESS_REVISION_REQUIRED" || closure.Reconciliation("session") == nil {
-		t.Fatalf("acknowledgement bypassed revision requirement: %v", err)
-	}
+	f := newAckFixture(t)
+	f.seedRows(t,
+		progress.RowSpec{Label: "Survey", State: "done"},
+		progress.RowSpec{Label: "Implement"},
+		progress.RowSpec{Label: "Verify"},
+	)
+	_, handle := f.seedWorkerResult(t, "session", "scout", "child-1", "job-1")
+	f.closure.Arm(t.Context(), "session", "job-1")
+
+	handler := reporting.ProgressHandler(f.store, func(_ context.Context, s string) string { return s }, f.closure)
 	out := &tools.ToolInvocationOut{}
-	body, err := handler(t.Context(), map[string]any{"content": before.Content, "expected_revision": before.Revision, "item_ids": before.ItemIDs, "reconciliation_token": view.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Effects: tools.InvocationEffects{Out: out}})
-	testutil.FailErr(t, "acknowledge represented finish", err)
+	body, err := handler(t.Context(), map[string]any{
+		"acknowledge_results": []any{handle},
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "session"},
+		Effects:  tools.InvocationEffects{Out: out},
+	})
+	testutil.FailErr(t, "acknowledge result", err)
 	if out.Facts.WorkflowAdvanced == nil || !*out.Facts.WorkflowAdvanced {
-		t.Fatal("finish acknowledgement did not publish typed advancement")
+		t.Fatal("result acknowledgement did not publish workflow advancement")
 	}
-	var result struct {
-		Status, ReconciliationStatus string
-		Snapshot                     progress.Snapshot
+
+	var result updateProgressReply
+	testutil.FailErr(t, "decode result", json.Unmarshal([]byte(body), &result))
+	if result.Status != "unchanged" || !slices.Equal(result.AcknowledgedResults, []string{handle}) || len(result.Snapshot.Rows) != 3 {
+		t.Fatalf("acknowledgement result = %+v", result)
 	}
-	var fields map[string]json.RawMessage
-	testutil.FailErr(t, "decode acknowledgement", json.Unmarshal([]byte(body), &fields))
-	testutil.FailErr(t, "decode status", json.Unmarshal(fields["status"], &result.Status))
-	testutil.FailErr(t, "decode reconciliation", json.Unmarshal(fields["reconciliation_status"], &result.ReconciliationStatus))
-	testutil.FailErr(t, "decode snapshot", json.Unmarshal(fields["snapshot"], &result.Snapshot))
-	if result.Status != "unchanged" || result.ReconciliationStatus != "acknowledged" || result.Snapshot.Revision != before.Revision {
-		t.Fatalf("acknowledgement outcome: %s", body)
-	}
-	if closure.Reconciliation("session") != nil || store.Get(t.Context(), "session") != before.Content {
-		t.Fatal("acknowledgement changed unfinished deliverables")
+	if len(unaccountedHandles(f.closure, "session")) != 0 {
+		t.Fatalf("unaccounted handles remained: %v", unaccountedHandles(f.closure, "session"))
 	}
 }
 
-func TestStaleWorkerAcknowledgementRetainsNewFinishes(t *testing.T) {
-	store := progresstest.New(t, "session")
-	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver"))
-	closure := progressclosure.New()
-	closure.SetProgress(store)
-	closure.Arm(t.Context(), "session", "worker-one")
-	old := closure.Reconciliation("session")
-	closure.Arm(t.Context(), "session", "worker-two")
-	if closure.Acknowledge(t.Context(), "session", old.Token) {
-		t.Fatal("stale token acknowledged a new finish")
+func TestAcknowledgeResultsResolvesOpenClosedAndRejectsForeign(t *testing.T) {
+	f := newAckFixture(t)
+	f.seedRows(t, progress.RowSpec{Label: "Deliver"})
+	workerID, handle := f.seedWorkerResult(t, "session", "fixer", "child-1", "job-1")
+	_, foreignHandle := f.seedWorkerResult(t, "foreign", "foreigner", "child-foreign", "job-foreign")
+	f.closure.Arm(t.Context(), "session", "job-1")
+
+	handler := reporting.ProgressHandler(f.store, func(_ context.Context, s string) string { return s }, f.closure)
+	_, err := handler(t.Context(), map[string]any{
+		"acknowledge_results": []any{foreignHandle},
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "PROGRESS_RESULT_HANDLE_UNKNOWN" {
+		t.Fatalf("foreign handle err = %v, want PROGRESS_RESULT_HANDLE_UNKNOWN", err)
 	}
-	before, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read checklist", err)
-	handler := reporting.ProgressHandler(store, func(_ctx context.Context, session string) string { return session }, closure)
-	_, err = handler(t.Context(), map[string]any{"content": "- [x] Deliver", "expected_revision": before.Revision, "item_ids": before.ItemIDs, "reconciliation_token": old.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
-	var rejection *toolrejection.ToolReject
-	if !errors.As(err, &rejection) || rejection.Code != "PROGRESS_RECONCILIATION_CHANGED" {
-		t.Fatalf("stale token result: %v", err)
-	}
-	if store.Get(t.Context(), "session") != before.Content || len(closure.Reconciliation("session").Jobs) != 2 {
-		t.Fatal("stale acknowledgement changed reconciliation state")
+
+	_, err = handler(t.Context(), map[string]any{
+		"acknowledge_results": []any{handle},
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	testutil.FailErr(t, "acknowledge open worker", err)
+
+	_, err = f.records.Close(t.Context(), f.coord, workerrecords.Op{ID: "close-fixer"}, workerID, "settled")
+	testutil.FailErr(t, "close worker", err)
+
+	// Idempotent retry after the worker closes still resolves and succeeds.
+	body, err := handler(t.Context(), map[string]any{
+		"acknowledge_results": []any{handle},
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	testutil.FailErr(t, "idempotent acknowledge after close", err)
+	var result updateProgressReply
+	testutil.FailErr(t, "decode idempotent result", json.Unmarshal([]byte(body), &result))
+	if !slices.Equal(result.AcknowledgedResults, []string{handle}) {
+		t.Fatalf("acknowledged_results after close = %v, want [%s]", result.AcknowledgedResults, handle)
 	}
 }
 
-func TestReconciliationServiceRejectsTokensWithoutPendingFinishes(t *testing.T) {
-	closure := progressclosure.New()
-	if closure.Acknowledge(t.Context(), "session", "invented") {
-		t.Fatal("empty reconciliation state accepted an arbitrary token")
+func TestPartialAcknowledgementKeepsUnacknowledgedSiblingLatched(t *testing.T) {
+	f := newAckFixture(t)
+	before := f.seedRows(t, progress.RowSpec{Label: "Deliver"}, progress.RowSpec{Label: "Verify"})
+	_, h1 := f.seedWorkerResult(t, "session", "fixer", "child-1", "job-1")
+	_, h2 := f.seedWorkerResult(t, "session", "verifier", "child-2", "job-2")
+	f.closure.Arm(t.Context(), "session", "job-1")
+	f.closure.Arm(t.Context(), "session", "job-2")
+
+	handler := reporting.ProgressHandler(f.store, func(_ context.Context, s string) string { return s }, f.closure)
+	body, err := handler(t.Context(), map[string]any{
+		"update":              []any{map[string]any{"id": before.Rows[0].ID, "state": "done"}},
+		"acknowledge_results": []any{h1},
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	testutil.FailErr(t, "close one deliverable and ack one handle", err)
+
+	var result updateProgressReply
+	testutil.FailErr(t, "decode result", json.Unmarshal([]byte(body), &result))
+	if result.Status != "updated" || !slices.Equal(result.ClosedItemIDs, []string{"p1"}) || !slices.Equal(result.AcknowledgedResults, []string{h1}) {
+		t.Fatalf("result = %+v", result)
+	}
+	if got := unaccountedHandles(f.closure, "session"); !slices.Equal(got, []string{h2}) {
+		t.Fatalf("remaining unaccounted handles = %v, want [%s]", got, h2)
 	}
 }
 
-func TestDocumentTransitionAndWorkerAcknowledgementRemainDistinct(t *testing.T) {
-	store := progresstest.New(t, "session")
-	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver\n- [ ] Verify"))
-	closure := progressclosure.New()
-	closure.SetProgress(store)
-	closure.Arm(t.Context(), "session", "worker-one")
-	view := closure.Reconciliation("session")
-	before, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read current progress", err)
-	handler := reporting.ProgressHandler(store, func(_ context.Context, id string) string { return id }, closure)
-	body, err := handler(t.Context(), map[string]any{"content": "- [x] Deliver\n- [ ] Verify", "expected_revision": before.Revision, "item_ids": before.ItemIDs, "reconciliation_token": view.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
-	testutil.FailErr(t, "record terminal deliverable and finish", err)
-	var result struct {
-		Status        string                   `json:"status"`
-		ClosedItemIDs []string                 `json:"closed_item_ids"`
-		Ack           string                   `json:"reconciliation_status"`
-		Snapshot      progress.RequestSnapshot `json:"snapshot"`
+type failingAccounts struct {
+	inner progressclosure.Accounts
+	err   error
+}
+
+func (a *failingAccounts) ResolveResultForAckTx(ctx context.Context, tx *sql.Tx, actor workerrecords.Actor, resultID string) (workerrecords.ResultRef, error) {
+	return a.inner.ResolveResultForAckTx(ctx, tx, actor, resultID)
+}
+
+func (a *failingAccounts) AccountJobsTx(ctx context.Context, tx *sql.Tx, jobIDs []string) error {
+	if a.err != nil {
+		return a.err
 	}
-	testutil.FailErr(t, "decode distinct outcomes", json.Unmarshal([]byte(body), &result))
-	if result.Status != "updated" || len(result.ClosedItemIDs) != 1 || result.ClosedItemIDs[0] != before.ItemIDs[0] || result.Snapshot.Summary.Pending != 1 || result.Snapshot.Summary.AllRequiredItemsTerminal || result.Ack != "acknowledged" || closure.Reconciliation("session") != nil {
-		t.Fatalf("transition acknowledgement: %s", body)
+	return a.inner.AccountJobsTx(ctx, tx, jobIDs)
+}
+
+func TestSingleTxRollbackAcrossRowsTranscriptAndWorkerDisposition(t *testing.T) {
+	f := newAckFixture(t)
+	before := f.seedRows(t, progress.RowSpec{Label: "Deliver"})
+	workerID, handle := f.seedWorkerResult(t, "session", "fixer", "child-1", "job-1")
+	f.closure.Arm(t.Context(), "session", "job-1")
+
+	fault := &failingAccounts{inner: f.records, err: errors.New("injected accounting failure")}
+	f.closure.SetAccounts(fault)
+
+	var beforeTranscript int
+	testutil.FailErr(t, "count transcript before", f.sqlDB.QueryRowContext(t.Context(),
+		`SELECT COUNT(*) FROM messages WHERE session_id = 'session'`).Scan(&beforeTranscript))
+
+	handler := reporting.ProgressHandler(f.store, func(_ context.Context, s string) string { return s }, f.closure)
+	_, err := handler(t.Context(), map[string]any{
+		"add":                 []any{map[string]any{"label": "Follow-up"}},
+		"acknowledge_results": []any{handle},
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	if err == nil {
+		t.Fatal("expected injected accounting error")
+	}
+
+	after, err := f.store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "snapshot after failed commit", err)
+	if len(after.Rows) != 1 || after.DocumentVersion() != before.DocumentVersion() {
+		t.Fatalf("rows half-committed on accounting failure: %+v", after)
+	}
+	var afterTranscript int
+	testutil.FailErr(t, "count transcript after", f.sqlDB.QueryRowContext(t.Context(),
+		`SELECT COUNT(*) FROM messages WHERE session_id = 'session'`).Scan(&afterTranscript))
+	if afterTranscript != beforeTranscript {
+		t.Fatalf("transcript rows = %d, want %d", afterTranscript, beforeTranscript)
+	}
+	disps, err := f.records.Dispositions(t.Context(), f.coord, workerID)
+	testutil.FailErr(t, "dispositions after rollback", err)
+	if len(disps) != 0 {
+		t.Fatalf("dispositions after rollback = %+v, want empty", disps)
+	}
+	if got := unaccountedHandles(f.closure, "session"); !slices.Equal(got, []string{handle}) {
+		t.Fatalf("latch cleared despite rollback: %v", got)
+	}
+
+	// Clearing the fault lets the exact retry commit cleanly without duplicating the added row.
+	fault.err = nil
+	_, err = handler(t.Context(), map[string]any{
+		"add":                 []any{map[string]any{"label": "Follow-up"}},
+		"acknowledge_results": []any{handle},
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	testutil.FailErr(t, "retry after rollback", err)
+
+	committed, err := f.store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "snapshot after retry", err)
+	if len(committed.Rows) != 2 || committed.Rows[1].ID != "p2" {
+		t.Fatalf("rows after retry = %+v, want [p1 p2]", committed.Rows)
+	}
+	if got := unaccountedHandles(f.closure, "session"); len(got) != 0 {
+		t.Fatalf("unaccounted handles after retry = %v, want empty", got)
 	}
 }
 
-type interleavingProgressStore struct {
-	progress.Store
-	before func()
-}
-
-func (s interleavingProgressStore) Update(ctx context.Context, id string, change func(progress.Snapshot) (progress.Document, error)) (progress.Snapshot, error) {
-	s.before()
-	return s.Store.Update(ctx, id, change)
-}
-
-func TestNewWorkerFinishDuringDocumentCommitRemainsUnacknowledged(t *testing.T) {
-	store := progresstest.New(t, "session")
-	testutil.FailErr(t, "seed pending work", store.Set("session", "- [ ] Deliver\n- [ ] Verify"))
-	closure := progressclosure.New()
-	closure.SetProgress(store)
-	closure.Arm(t.Context(), "session", "worker-one")
-	observed := closure.Reconciliation("session")
-	before, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "observe progress", err)
-	writer := interleavingProgressStore{Store: store, before: func() { closure.Arm(t.Context(), "session", "worker-two") }}
-	publications := 0
-	release := progress.RegisterWriteObserver(func(_ context.Context, event progress.WriteEvent) {
-		if event.SessionID == "session" {
-			publications++
-		}
-	})
-	defer release()
-	handler := reporting.ProgressHandler(writer, func(_ context.Context, id string) string { return id }, closure)
-	body, err := handler(t.Context(), map[string]any{"content": "- [x] Deliver\n- [ ] Verify", "expected_revision": before.Revision, "item_ids": before.ItemIDs, "reconciliation_token": observed.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
-	testutil.FailErr(t, "publish document with concurrent finish", err)
-	var result struct {
-		Changed  bool              `json:"document_changed"`
-		Status   string            `json:"reconciliation_status"`
-		Snapshot progress.Snapshot `json:"snapshot"`
-	}
-	testutil.FailErr(t, "decode independent outcomes", json.Unmarshal([]byte(body), &result))
-	if !result.Changed || result.Status != "changed" || publications != 1 || store.Get(t.Context(), "session") != "- [x] Deliver\n- [ ] Verify" {
-		t.Fatalf("document outcome was lost: %s events=%d", body, publications)
-	}
-	pending := closure.Reconciliation("session")
-	if pending == nil || len(pending.Jobs) != 2 || pending.Token == observed.Token || result.Snapshot.Reconciliation == nil || result.Snapshot.Reconciliation.Token != pending.Token {
-		t.Fatalf("new finish was consumed by old token: %s", body)
-	}
-}
-
-func TestFinishAfterCommitSurvivesAnOlderAcknowledgement(t *testing.T) {
-	store := progresstest.New(t, "session")
-	testutil.FailErr(t, "seed deliverable", store.Set("session", "- [ ] Deliver"))
-	closure := progressclosure.New()
-	closure.SetProgress(store)
-	closure.Arm(t.Context(), "session", "worker-one")
-	observed := closure.Reconciliation("session")
-	before, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "observe plan", err)
-	release := progress.RegisterWriteObserver(func(ctx context.Context, event progress.WriteEvent) {
-		if event.SessionID == "session" {
-			closure.Arm(ctx, "session", "worker-two")
-		}
-	})
-	defer release()
-	update, err := progress.PrepareAuthorUpdate("- [x] Deliver")
-	testutil.FailErr(t, "prepare terminal document", err)
-	result, err := update.ExpectRevision(before.Revision).ExpectItemIDs(before.ItemIDs...).ExpectReconciliation(observed.Token).Apply(t.Context(), store, "session", closure)
-	testutil.FailErr(t, "commit document before new finish", err)
-	if !result.Updated || result.ReconciliationStatus != "changed" || result.Snapshot.Reconciliation == nil || len(result.Snapshot.Reconciliation.Jobs) != 2 || !progress.AllTerminal(result.Snapshot.Content) {
-		t.Fatalf("postcommit finish was consumed: %+v", result)
-	}
-}
-
-func TestReconciliationTokenBindsTheExactBaselineRevision(t *testing.T) {
-	store := progresstest.New(t, "session")
-	testutil.FailErr(t, "seed pending document", store.Set("session", "- [ ] Deliver"))
-	closure := progressclosure.New()
-	closure.SetProgress(store)
-	closure.Arm(t.Context(), "session", "worker-one")
-	first := closure.Reconciliation("session")
-	if !closure.Acknowledge(t.Context(), "session", first.Token) {
-		t.Fatal("current token rejected")
-	}
-	testutil.FailErr(t, "publish identical bytes in a new revision", store.Set("session", "- [ ] Deliver"))
-	closure.Arm(t.Context(), "session", "worker-one")
-	second := closure.Reconciliation("session")
-	if first.Token == second.Token || closure.Acknowledge(t.Context(), "session", first.Token) {
-		t.Fatal("old revision token acknowledged a newer baseline")
-	}
-	if !closure.Acknowledge(t.Context(), "session", second.Token) {
-		t.Fatal("new baseline token rejected")
-	}
-}
-
-type recordedAccounts struct {
-	jobs [][]string
-	err  error
-}
-
-func (r *recordedAccounts) AccountJobs(_ context.Context, jobs []string) error {
-	r.jobs = append(r.jobs, jobs)
-	return r.err
-}
-
-// Acknowledgement accounts for exactly the listed finishes; a failed record
-// keeps the set armed so the next update can acknowledge it.
-func TestAcknowledgementAccountsForTheListedResults(t *testing.T) {
-	store := progresstest.New(t, "session")
-	testutil.FailErr(t, "seed pending document", store.Set("session", "- [ ] Deliver"))
-	accounts := &recordedAccounts{err: errors.New("database busy")}
-	closure := progressclosure.New()
-	closure.SetProgress(store)
-	closure.SetAccounts(accounts)
-	closure.Arm(t.Context(), "session", "worker-b")
-	closure.Arm(t.Context(), "session", "worker-a")
-	rec := closure.Reconciliation("session")
-	if closure.Acknowledge(t.Context(), "session", rec.Token) || closure.Reconciliation("session") == nil {
-		t.Fatal("failed accounting cleared the set")
-	}
-	accounts.err = nil
-	if !closure.Acknowledge(t.Context(), "session", rec.Token) || closure.Reconciliation("session") != nil {
-		t.Fatal("acknowledgement kept the set")
-	}
-	if len(accounts.jobs) != 2 || !slices.Equal(accounts.jobs[1], []string{"worker-a", "worker-b"}) {
-		t.Fatalf("accounted %v", accounts.jobs)
-	}
-}
-
-// An operation that accounts for one finish releases only that finish; the
-// latch clears with the last one.
 func TestReleaseDropsAccountedFinishes(t *testing.T) {
-	store := progresstest.New(t, "session")
-	testutil.FailErr(t, "seed pending document", store.Set("session", "- [ ] Deliver"))
-	closure := progressclosure.New()
-	closure.SetProgress(store)
-	closure.Arm(t.Context(), "session", "worker-a")
-	closure.Arm(t.Context(), "session", "worker-b")
-	closure.Release("session", []string{"worker-a"})
-	rec := closure.Reconciliation("session")
-	if rec == nil || !slices.Equal(rec.Jobs, []string{"worker-b"}) {
-		t.Fatalf("after one release = %+v", rec)
+	f := newAckFixture(t)
+	f.seedRows(t, progress.RowSpec{Label: "Deliver"})
+	_, h1 := f.seedWorkerResult(t, "session", "fixer", "child-1", "job-1")
+	_, h2 := f.seedWorkerResult(t, "session", "docs", "child-2", "job-2")
+	f.closure.Arm(t.Context(), "session", "job-1")
+	f.closure.Arm(t.Context(), "session", "job-2")
+	if got := unaccountedHandles(f.closure, "session"); !slices.Equal(got, []string{h2, h1}) && !slices.Equal(got, []string{h1, h2}) {
+		t.Fatalf("initial unaccounted = %v", got)
 	}
-	closure.Release("session", []string{"worker-b"})
-	if closure.Reconciliation("session") != nil {
-		t.Fatal("latch kept after its last finish was accounted for")
+	f.closure.Release("session", []string{"job-1"})
+	if got := unaccountedHandles(f.closure, "session"); !slices.Equal(got, []string{h2}) {
+		t.Fatalf("after release = %v, want [%s]", got, h2)
 	}
-}
-
-type finishNames map[string]string
-
-func (n finishNames) NamesByJob(_ context.Context, jobID string) (workerrecords.JobNames, bool, error) {
-	name, ok := n[jobID]
-	return workerrecords.JobNames{Worker: name}, ok, nil
-}
-
-// The reconciliation the coordinator reads names each finish by its worker;
-// the jobs behind the token stay host identity, and a release keeps the
-// remaining finishes named.
-func TestReconciliationNamesFinishesByWorker(t *testing.T) {
-	store := progresstest.New(t, "session")
-	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Implement"))
-	closure := progressclosure.New()
-	closure.SetProgress(store)
-	closure.SetNames(finishNames{"job-fixer": "fixer", "job-docs": "docs"})
-	closure.Arm(t.Context(), "session", "job-fixer")
-	closure.Arm(t.Context(), "session", "job-docs")
-	raw, err := json.Marshal(closure.Reconciliation("session"))
-	testutil.FailErr(t, "marshal", err)
-	var view map[string]any
-	testutil.FailErr(t, "decode", json.Unmarshal(raw, &view))
-	if bytes.Contains(raw, []byte("job-")) || len(view["settled_work"].([]any)) != 2 {
-		t.Fatalf("reconciliation = %s", raw)
-	}
-	closure.Release("session", []string{"job-fixer"})
-	if got := closure.Reconciliation("session").Settled; len(got) != 1 || !strings.Contains(got[0], "docs") {
-		t.Fatalf("after release = %v", got)
+	f.closure.Release("session", []string{"job-2"})
+	if got := unaccountedHandles(f.closure, "session"); len(got) != 0 {
+		t.Fatalf("latch kept after last release: %v", got)
 	}
 }

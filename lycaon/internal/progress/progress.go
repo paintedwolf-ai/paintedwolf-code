@@ -15,6 +15,8 @@ const (
 	MaxProgressCap = 48
 	// MaxAuthorProgressRows bounds total rows per session plan.
 	MaxAuthorProgressRows = 48
+	// MaxAcknowledgeHandles bounds result handles acknowledged per call.
+	MaxAcknowledgeHandles = 32
 	// MaxAuthorLabelRunes bounds coordinator-authored row labels.
 	MaxAuthorLabelRunes = 240
 	// MaxDetailedProgressUpdateRows bounds enumerated changes in transcript rows.

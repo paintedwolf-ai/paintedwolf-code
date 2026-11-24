@@ -112,7 +112,7 @@ x-paintedwolf-scenarios:
   - id: missing-required-arguments
     vars:
       tool: update_progress
-      missing_required_arguments: '{"missing_required":["content"],"expected_types":{"content":"string"},"received_keys":[]}'
+      missing_required_arguments: '{"missing_required":["replace"],"expected_types":{"replace":"array","add":"array","update":"array","remove":"array","acknowledge_results":"array"},"received_keys":[]}'
       argument_schema_tool: update_progress
 
   - id: missing-required-path

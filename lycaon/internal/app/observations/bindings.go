@@ -38,7 +38,7 @@ func Bind(publisher *events.Publisher, repository RepositoryChanges, service *ll
 		if strings.TrimSpace(ev.SessionID) == "" {
 			return
 		}
-		publisher.PublishProgress(ctx, ev.SessionID, progress.BumpRevision(ev.SessionID))
+		publisher.PublishProgress(ctx, ev.SessionID, ev.After.DocumentVersion())
 	}))
 	return func(ctx context.Context) error {
 		work.Stop()

@@ -152,7 +152,7 @@ Worker orientation is refreshed for every model request from the same branch roo
 
 The coordinator reconciles progress after worker completion. A worker envelope may prove that work is done, blocked, or no longer applicable, but the root checklist remains the single human-visible execution account.
 
-Completed output latches the checklist: until the coordinator accounts for a completed result, `task`, `instruct_worker`, and source mutations are gated by `PROGRESS_RECONCILIATION_REQUIRED`, naming the unaccounted result handles. Accounting is satisfied by updating `update_progress` with the result's token, or by acting on the result through `promote_overlay`, `promote_sequence`, `reject_overlay`, `shelve_overlay`, `instruct_worker` on that worker, or `task(review_of: ...)`.
+Completed output latches progress: until the coordinator accounts for a completed result, `task`, `instruct_worker`, and source mutations are gated by `PROGRESS_RECONCILIATION_REQUIRED`, naming the unaccounted result handles. Accounting is satisfied in a single SQLite transaction by passing settled `result_handle`s in `update_progress(acknowledge_results=[...])`, or by acting on the result through `promote_overlay`, `promote_sequence`, `reject_overlay`, `shelve_overlay`, `instruct_worker` on that worker, or `task(review_of: ...)`.
 
 ---
 

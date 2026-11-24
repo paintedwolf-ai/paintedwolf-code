@@ -27,7 +27,7 @@ func (r *Runtime) OnWorkflowPhaseEnter(ctx context.Context, rc *workflowphases.R
 	// Bind progress before checklist writes on this phase.
 	if r.deps.Progress != nil {
 		if pStore := r.deps.Progress(); pStore != nil {
-			if _, err := progress.AdoptActiveRun(ctx, pStore, rc.SessionID, rc.RunID, ""); err != nil {
+			if _, err := progress.AdoptActiveRun(ctx, pStore, rc.SessionID, rc.RunID); err != nil {
 				return err
 			}
 		}

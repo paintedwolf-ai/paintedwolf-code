@@ -15,7 +15,8 @@ const ProgressMissingCode = "PROGRESS_MISSING"
 // ObserveProgressMissingBeforeDispatch publishes progress-missing facts.
 func ObserveProgressMissingBeforeDispatch(
 	sess *api.Session,
-	progressContent, tool string,
+	missing bool,
+	tool string,
 	reviewLoopActive bool,
 	gc *oar.GuardContext,
 ) {
@@ -26,8 +27,8 @@ func ObserveProgressMissingBeforeDispatch(
 	gc.Invocation.Tool = strings.TrimSpace(tool)
 	gc.DeriveToolClassFacts()
 	gc.Progress.ProgressGatedTool = progress.IsProgressGatedTool(tool)
-	gc.Progress.ProgressMissing = progress.ProgressMissing(progressContent)
-	if gc.Progress.ProgressGatedTool && progress.PrerequisiteMissing(progressContent, sess.IsWorkerChild(), reviewLoopActive) {
+	gc.Progress.ProgressMissing = missing
+	if gc.Progress.ProgressGatedTool && progress.PrerequisiteMissing(missing, sess.IsWorkerChild(), reviewLoopActive) {
 		data := map[string]any{"tool": strings.TrimSpace(tool)}
 		if call := rejectedProgressCall(gc.Invocation.Tool, gc.Invocation.ToolArgs); call != nil {
 			data["rejected_call"] = call

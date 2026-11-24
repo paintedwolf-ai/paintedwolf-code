@@ -163,7 +163,9 @@ func TestTaskAdmissionUsesTheExecutedIdentity(t *testing.T) {
 			call.Source.Roots[0].ID = call.Source.ActiveRootID
 			sess.WorkspaceRootID = call.Source.ActiveRootID
 			wiring.AttachDefaultAmbient(t, h, ctx, sess.ID)
-			_, err = h.ToolRegistry.Run(ctx, "update_progress", map[string]any{"content": "## Progress\n- [ ] Complete assigned work"}, call)
+			_, err = h.ToolRegistry.Run(ctx, "update_progress", map[string]any{
+				"replace": []any{map[string]any{"label": "Complete assigned work", "state": "pending"}},
+			}, call)
 			testutil.FailErr(t, "record progress", err)
 			scope := api.TaskScope{Mode: api.TaskScopeMode(tc.mode), Paths: []string{"src/**"}}
 			args := map[string]any{"agent_type": tc.agent, "scope": map[string]any{"mode": tc.mode, "paths": []any{"src/**"}}, "brief": map[string]any{"goal": "Continue assigned work", "done_when": []any{"Return grounded results"}}}

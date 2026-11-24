@@ -50,7 +50,7 @@ func toolSummary(name string, args json.RawMessage, result string) (summary stri
 	case "jq_edit":
 		return "wrote " + orDash(argStr(a, "dest", "path")), false
 	case "update_progress":
-		return progressSummary(argStr(a, "content")), false
+		return progressSummary(a, r), false
 	case "web_search":
 		return quoteArg(a, "query") + dimDot(anyCountLabel(r, "results", "matches")), false
 	case "fetch_url":
@@ -192,21 +192,35 @@ func scanSummary(r map[string]any) string {
 	return "scan"
 }
 
-// progressSummary renders an update_progress checklist as "done/total steps".
-func progressSummary(content string) string {
+// progressSummary renders an update_progress snapshot or replace batch as "done/total steps".
+func progressSummary(a, r map[string]any) string {
+	rows := progressRows(r, a)
 	done, total := 0, 0
-	for _, line := range strings.Split(content, "\n") {
-		l := strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(l, "- [x]") || strings.HasPrefix(l, "- [~]"):
+	for _, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		total++
+		state, _ := row["state"].(string)
+		if state == "done" || state == "na" {
 			done++
-			total++
-		case strings.HasPrefix(l, "- [ ]"):
-			total++
 		}
 	}
 	if total == 0 {
 		return "progress"
 	}
 	return fmt.Sprintf("progress %d/%d steps", done, total)
+}
+
+func progressRows(r, a map[string]any) []any {
+	if snap, ok := r["snapshot"].(map[string]any); ok {
+		if rows, ok := snap["rows"].([]any); ok {
+			return rows
+		}
+	}
+	if rows, ok := a["replace"].([]any); ok {
+		return rows
+	}
+	return nil
 }

@@ -187,16 +187,20 @@ func (f *workerFlow) lane(name string) workerrecords.PreparationRecord {
 	return prep
 }
 
-// account updates the checklist with the host's reconciliation token, which
-// accounts for every worker finish the coordinator has been shown.
+// account updates the checklist with the unaccounted worker result handles,
+// which accounts for every worker finish the coordinator has been shown.
 func (f *workerFlow) account(item string) {
 	f.t.Helper()
-	pending := f.h.Sessions.Manager.Coordinator.ProgressClosure.Reconciliation(f.sess.ID)
-	if pending == nil {
+	unaccounted := f.h.Sessions.Manager.Coordinator.ProgressClosure.UnaccountedResults(f.sess.ID)
+	if len(unaccounted) == 0 {
 		f.t.Fatal("no worker finish awaits acknowledgement")
 	}
 	args := f.h.ProgressUpdateArgs(f.t, f.ctx, f.sess.ID, "## Progress\n- [x] "+item+"\n")
-	args["reconciliation_token"] = pending.Token
+	rawHandles := make([]any, len(unaccounted))
+	for i, u := range unaccounted {
+		rawHandles[i] = u.Handle
+	}
+	args["acknowledge_results"] = rawHandles
 	f.run("update_progress", args)
 }
 

@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -25,7 +26,7 @@ type Workflow interface {
 	ApplyCoordinatorBatchEvent(ctx context.Context, sessionID string, ev batch.Event, eventSeq int) error
 }
 type Progress interface {
-	Get(context.Context, string) string
+	Snapshot(context.Context, string) (progress.Snapshot, error)
 }
 type Verification interface {
 	WorkflowGateState(context.Context, *api.Session, []api.Message) (bool, bool, bool, bool)

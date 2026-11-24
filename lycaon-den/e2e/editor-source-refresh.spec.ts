@@ -111,7 +111,7 @@ webE2e("a process the agent launches reads the person's unsaved text", async ({ 
     const driver = manualHarnessTools(request, sessionId);
     await driver.loadTools("update_progress");
     await driver.completed(await driver.invoke("update_progress", {
-      content: "## Progress\n- [ ] Report what changed in shared.txt\n",
+      replace: [{ label: "Report what changed in shared.txt" }],
     }));
     const run = async (command: string) => {
       const content = await driver.completed(await driver.invoke("command", { command }));

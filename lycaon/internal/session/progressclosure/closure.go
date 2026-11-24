@@ -2,12 +2,15 @@ package progressclosure
 
 import (
 	"context"
+	"database/sql"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -16,9 +19,22 @@ import (
 type Progress interface {
 	Snapshot(context.Context, string) (progress.Snapshot, error)
 }
+
 type Tasks interface {
 	Get(string) (*api.WorkerTask, bool)
 }
+
+// Names resolves the worker name and result handle for a job.
+type Names interface {
+	NamesByJob(ctx context.Context, jobID string) (workerrecords.JobNames, bool, error)
+}
+
+// Accounts resolves and records acknowledged worker results inside a SQLite transaction.
+type Accounts interface {
+	ResolveResultForAckTx(ctx context.Context, tx *sql.Tx, actor workerrecords.Actor, resultID string) (workerrecords.ResultRef, error)
+	AccountJobsTx(ctx context.Context, tx *sql.Tx, jobIDs []string) error
+}
+
 type Service struct {
 	mu        sync.Mutex
 	progress  Progress
@@ -28,30 +44,21 @@ type Service struct {
 	baselines scopedstore.LRU[guard.ProgressClosureBaseline]
 }
 
-// Names gives the worker that ran a job.
-type Names interface {
-	NamesByJob(ctx context.Context, jobID string) (workerrecords.JobNames, bool, error)
-}
-
-// SetNames wires the worker names finishes are reported by.
-func (m *Service) SetNames(n Names) { m.names = n }
-
-// Accounts records that the coordinator accounted for the results of the
-// acknowledged worker finishes.
-type Accounts interface {
-	AccountJobs(ctx context.Context, jobIDs []string) error
-}
+var _ progress.TxReconciler = (*Service)(nil)
 
 func New() *Service                       { return &Service{} }
 func (m *Service) SetProgress(p Progress) { m.progress = p }
 func (m *Service) SetTasks(p Tasks)       { m.tasks = p }
-
-// SetAccounts wires durable accounting of acknowledged results.
+func (m *Service) SetNames(n Names)       { m.names = n }
 func (m *Service) SetAccounts(a Accounts) { m.accounts = a }
-func (m *Service) Forget(id string)       { m.mu.Lock(); defer m.mu.Unlock(); m.baselines.Delete(id) }
 
-// Arm records a successful worker finish against the current checklist.
-// Later finishes join the same set until explicit acknowledgement.
+func (m *Service) Forget(id string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.baselines.Delete(id)
+}
+
+// Arm latches a completed worker job until its result is accounted for.
 func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	if m == nil || m.progress == nil {
 		return
@@ -66,27 +73,23 @@ func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	if err != nil {
 		return
 	}
-	content := snapshot.Content
-	_, pending, _ := progress.CloseCounts(content)
+	pending := snapshot.OpenStepCount()
 	baseline, armed := m.baselines.Load(rootID)
 	if pending == 0 && !armed {
 		return
 	}
-	if !armed {
-		baseline = guard.ProgressClosureBaseline{Revision: snapshot.Revision}
-	}
 	if jobID != "" && !slices.Contains(baseline.JobIDs, jobID) {
+		settled, unaccounted := m.describeFinish(ctx, jobID, len(baseline.JobIDs)+1)
 		baseline.JobIDs = append(slices.Clone(baseline.JobIDs), jobID)
-		baseline.Settled = append(slices.Clone(baseline.Settled), m.settledWorkEntry(ctx, jobID))
+		baseline.Settled = append(slices.Clone(baseline.Settled), settled)
+		baseline.Unaccounted = append(slices.Clone(baseline.Unaccounted), unaccounted)
 	}
 	m.baselines.Store(rootID, baseline)
 }
 
-// Release removes finishes from the latch once an operation accounted for
-// their results on the record: an instruction to the worker that delivered
-// it, a rejection or a shelving. The latch clears with its last finish.
+// Release removes accounted jobs from the latch, clearing the baseline when none remain.
 func (m *Service) Release(rootID string, jobIDs []string) {
-	if m == nil {
+	if m == nil || len(jobIDs) == 0 {
 		return
 	}
 	rootID = strings.TrimSpace(rootID)
@@ -98,36 +101,55 @@ func (m *Service) Release(rootID string, jobIDs []string) {
 	}
 	kept := make([]string, 0, len(baseline.JobIDs))
 	settled := make([]string, 0, len(baseline.JobIDs))
+	unaccounted := make([]progress.UnaccountedResult, 0, len(baseline.JobIDs))
 	for i, id := range baseline.JobIDs {
-		if !slices.Contains(jobIDs, id) {
-			kept = append(kept, id)
-			if i < len(baseline.Settled) {
-				settled = append(settled, baseline.Settled[i])
-			} else {
-				settled = append(settled, "")
-			}
+		if slices.Contains(jobIDs, id) {
+			continue
+		}
+		kept = append(kept, id)
+		if i < len(baseline.Settled) {
+			settled = append(settled, baseline.Settled[i])
+		} else {
+			settled = append(settled, "")
+		}
+		if i < len(baseline.Unaccounted) {
+			unaccounted = append(unaccounted, baseline.Unaccounted[i])
 		}
 	}
 	if len(kept) == 0 {
 		m.baselines.Delete(rootID)
 		return
 	}
-	baseline.JobIDs, baseline.Settled = kept, settled
+	baseline.JobIDs = kept
+	baseline.Settled = settled
+	baseline.Unaccounted = unaccounted
 	m.baselines.Store(rootID, baseline)
 }
 
-// settledWorkEntry names a finished job's worker for the reconciliation
-// reject; the coordinator never addresses the job itself.
-func (m *Service) settledWorkEntry(ctx context.Context, jobID string) string {
-	var name, agent, brief string
+func (m *Service) describeFinish(ctx context.Context, jobID string, seq int) (string, progress.UnaccountedResult) {
+	var name, handle, agent, brief, summary string
 	if m.names != nil {
 		if names, ok, err := m.names.NamesByJob(ctx, jobID); err == nil && ok {
-			name = names.Worker
+			name = strings.TrimSpace(names.Worker)
+			handle = strings.TrimSpace(names.Handle)
 		}
 	}
 	if m.tasks != nil {
 		if task, ok := m.tasks.Get(jobID); ok && task != nil {
-			agent, brief = strings.TrimSpace(task.AgentType), strings.TrimSpace(task.Brief)
+			agent = strings.TrimSpace(task.AgentType)
+			brief = strings.TrimSpace(task.Brief)
+			if task.Result != nil && strings.TrimSpace(task.Result.Summary) != "" {
+				summary = strings.TrimSpace(task.Result.Summary)
+			} else {
+				summary = brief
+			}
+		}
+	}
+	if handle == "" {
+		if name != "" {
+			handle = name + "#1"
+		} else {
+			handle = "result#" + strconv.Itoa(seq)
 		}
 	}
 	entry := agent
@@ -139,11 +161,16 @@ func (m *Service) settledWorkEntry(ctx context.Context, jobID string) string {
 	}
 	if brief != "" {
 		if entry == "" {
-			return brief
+			entry = brief
+		} else {
+			entry += ": " + brief
 		}
-		entry += ": " + brief
 	}
-	return entry
+	return entry, progress.UnaccountedResult{
+		Handle:  handle,
+		Worker:  name,
+		Summary: runeclamp.Clamp(summary, 160),
+	}
 }
 
 // Baseline returns the armed checklist baseline for rootID.

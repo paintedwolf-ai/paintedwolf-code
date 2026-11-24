@@ -15,7 +15,7 @@ what: Coordinator {{ tool }} on {{ paintedwolf.path }} targets a parallel progre
 cause: Progress lives in `session_progress`; blueprints live under `${overlay_dir}/blueprints/**`.
 why: Parallel board files diverge from host progress state.
 fix: '{{ paintedwolf.next_steps }}'
-instead: 'Keep the checklist in the progress record.'
+instead: 'Keep progress rows in the host progress record.'
 x-paintedwolf-scenarios:
   - id: plans_board
     vars:

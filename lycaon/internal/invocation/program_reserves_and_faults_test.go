@@ -62,7 +62,7 @@ func TestProgramTraceReservesProtectTerminalSettlementUnderExhaustion(t *testing
 		RootSessionID: f.session,
 		Scope:         toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope},
 	}
-	progressReview, releaseProgress, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"content": "- [ ] reserve"})
+	progressReview, releaseProgress, err := toolcontract.NewReviewedOperationInputs(t.Context(), progressMemory(t), map[string]any{"replace": []any{map[string]any{"label": "reserve"}}})
 	testutil.FailErr(t, "freeze progress review", err)
 	defer releaseProgress()
 	observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: f.capture(t)}

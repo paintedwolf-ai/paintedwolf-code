@@ -181,7 +181,10 @@ func TestSQLDeleteRemovesSessionTreeAndPreservesReviewHistory(t *testing.T) {
 		INSERT INTO findings (session_id, summary, created_at) VALUES ('parent', 'finding', ?);
 	`, now)
 	seed("progress", `
-		INSERT INTO session_progress (session_id, content, updated_at) VALUES ('child', 'progress', ?);
+		INSERT INTO session_progress (session_id, workflow_run_id, updated_at, document_version, next_item_seq)
+		VALUES ('child', '', ?, 1, 2);
+		INSERT INTO session_progress_items (session_id, item_id, ord, state, label)
+		VALUES ('child', 'p1', 0, 'pending', 'progress');
 	`, now)
 	seed("source content", `
 		INSERT INTO source_blob_objects (sha256, size, stored_size, storage_relpath, git_oid_sha1, git_oid_sha256) VALUES

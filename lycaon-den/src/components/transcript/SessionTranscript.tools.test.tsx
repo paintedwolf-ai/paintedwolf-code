@@ -180,7 +180,7 @@ describe("SessionTranscript tools and progress", () => {
             id: "functions.update_progress:8",
             name: "update_progress",
             args: {
-              content: `## Plan\n- [ ] ${planLabel}\n- [ ] Verify build`,
+              replace: [{ label: planLabel }, { label: "Verify build" }],
             },
           },
         ],

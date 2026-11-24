@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -17,18 +18,18 @@ func (s programSessions) Get(_ context.Context, id string) (*api.Session, error)
 func TestProgramProgressUsesLiveRootStoreAndWorkerFacts(t *testing.T) {
 	store := programSessions{"parent": {ID: "parent"}, "child": {ID: "child", ParentSessionID: "parent"}}
 	owner := progresstest.New(t, "parent", "child")
-	testutil.FailErr(t, "set root progress", owner.Set("parent", "- [ ] Root task"))
-	testutil.FailErr(t, "set distinct child progress", owner.Set("child", "- [ ] Child-only task"))
+	progresstest.SeedRows(t, owner, "parent", progress.RowSpec{Label: "Root task"})
+	progresstest.SeedRows(t, owner, "child", progress.RowSpec{Label: "Child-only task"})
 	svc := &Service{store: store, progress: owner}
 	state, err := svc.ProgramProgressState(t.Context(), "child")
 	testutil.FailErr(t, "read actual root facts", err)
-	if state.SessionID != "child" || state.RootSessionID != "parent" || state.Content != "- [ ] Root task" || !state.WorkerChild || state.ReviewLoopActive {
+	if state.SessionID != "child" || state.RootSessionID != "parent" || state.Missing || state.OpenSteps != 1 || !state.WorkerChild || state.ReviewLoopActive {
 		t.Fatalf("incorrect root/session facts: %+v", state)
 	}
-	testutil.FailErr(t, "replace root progress", owner.Set("parent", "- [x] Root task"))
+	progresstest.UpdateRows(t, owner, "parent", progress.UpdateRowSpec{ID: "p1", State: progresstest.State(progress.ProgressStateDone)})
 	state, err = svc.ProgramProgressState(t.Context(), "parent")
 	testutil.FailErr(t, "read current root facts", err)
-	if state.Content != "- [x] Root task" || state.WorkerChild {
+	if state.Missing || state.OpenSteps != 0 || state.WorkerChild {
 		t.Fatalf("stale or invented session facts: %+v", state)
 	}
 }

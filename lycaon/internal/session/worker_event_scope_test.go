@@ -21,6 +21,8 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
@@ -286,7 +288,7 @@ func TestTaskPolicyRejectsPendingPhaseObligation(t *testing.T) {
 func TestBeforeToolResolvesTaskIdentityAndRendersRejects(t *testing.T) {
 	ctx := context.Background()
 	mgr, sess, _ := newSynthesisDelayManager(t)
-	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] active item")
+	progresstest.SeedRows(t, mgr.RewindRuntime.Progress, sess.ID, progress.RowSpec{Label: "active item"})
 
 	resolver := workeradmission.TaskIdentityResolver{
 		WorkflowWork: func(_ context.Context, _, workID string) (spawn.WorkflowWork, bool, error) {

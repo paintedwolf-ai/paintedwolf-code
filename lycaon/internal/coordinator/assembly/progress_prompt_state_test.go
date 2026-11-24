@@ -46,7 +46,7 @@ func TestProgressPromptTracksChecklistWithinTurn(t *testing.T) {
 		}
 		tailContains := false
 		for _, m := range msgs[1:] {
-			if strings.Contains(m.Content, "No checklist is stored") {
+			if strings.Contains(m.Content, "No progress rows are stored") {
 				tailContains = true
 				break
 			}

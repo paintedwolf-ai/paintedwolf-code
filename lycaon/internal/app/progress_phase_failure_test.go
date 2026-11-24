@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/sessions"
 	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -23,7 +24,8 @@ func TestPhaseEntryStopsWhenProgressCannotCommit(t *testing.T) {
 	testdbseed.InsertWorkflowRun(t, database, "parent", "session", testdbseed.DefaultProjectID)
 	records := store.NewSQL(database)
 	plans := progress.NewSQLStore(database, records)
-	testutil.FailErr(t, "seed parent plan", plans.Set("session", "- [ ] Retain"))
+	progresstest.SeedRows(t, plans, "session", progress.RowSpec{Label: "Retain"})
+
 	_, err := database.ExecContext(t.Context(), `INSERT INTO workflow_runs(id,session_id,project_id,workflow_id,workflow_version,status,current_phase,parent_run_id,created_at,updated_at) SELECT 'child',session_id,project_id,workflow_id,workflow_version,status,current_phase,id,created_at,updated_at FROM workflow_runs WHERE id='parent'`)
 	testutil.FailErr(t, "insert child run", err)
 	_, err = database.ExecContext(t.Context(), `CREATE TRIGGER refuse_phase_plan BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT,'unavailable'); END`)
@@ -39,7 +41,7 @@ func TestPhaseEntryStopsWhenProgressCannotCommit(t *testing.T) {
 	testutil.FailErr(t, "read retained parent plan", err)
 	rows, err := records.GetMessages(t.Context(), "session")
 	testutil.FailErr(t, "read retained parent transcript", err)
-	if snapshot.RunID != "parent" || snapshot.Content != "- [ ] Retain" || len(rows) != 1 {
+	if snapshot.RunID != "parent" || len(snapshot.Rows) != 1 || snapshot.Rows[0].Label != "Retain" || len(rows) != 1 {
 		t.Fatalf("partial phase plan: %+v rows=%d", snapshot, len(rows))
 	}
 }

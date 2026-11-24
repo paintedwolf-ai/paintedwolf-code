@@ -16,32 +16,42 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/reporting"
 )
 
-func TestUpdateProgress_rejectsTooManyLines(t *testing.T) {
-	assertUpdateProgressReject(t,
-		"PROGRESS_TOO_MANY_LINES",
-		"## Progress\n"+strings.Repeat("- [ ] step\n", progress.MaxAuthorProgressLines+1),
-	)
-}
-
-func TestUpdateProgress_rejectsNestedLine(t *testing.T) {
-	assertUpdateProgressReject(t,
-		"PROGRESS_NESTED_LINE",
-		"## Progress\n- [ ] top\n  - [ ] nested\n",
-	)
+func TestUpdateProgress_rejectsTooManyRows(t *testing.T) {
+	rows := make([]any, progress.MaxAuthorProgressRows+1)
+	for i := range rows {
+		rows[i] = map[string]any{"label": "step"}
+	}
+	assertUpdateProgressReject(t, "PROGRESS_TOO_MANY_ROWS", map[string]any{"replace": rows})
 }
 
 func TestUpdateProgress_rejectsPendingAfterOptional(t *testing.T) {
-	assertUpdateProgressReject(t,
-		"PROGRESS_PENDING_AFTER_OPTIONAL",
-		"## Progress\n- [>] Synthesize report\n- [ ] Verify rollout\n",
-	)
+	assertUpdateProgressReject(t, "PROGRESS_PENDING_AFTER_OPTIONAL", map[string]any{
+		"replace": []any{
+			map[string]any{"label": "Synthesize report", "state": "optional"},
+			map[string]any{"label": "Verify rollout", "state": "pending"},
+		},
+	})
 }
 
 func TestUpdateProgress_rejectsNoOpenStepInitial(t *testing.T) {
-	assertUpdateProgressReject(t,
-		"PROGRESS_NO_OPEN_STEP",
-		"## Progress\n- [x] already finished\n",
-	)
+	assertUpdateProgressReject(t, "PROGRESS_NO_OPEN_STEP", map[string]any{
+		"replace": []any{
+			map[string]any{"label": "already finished", "state": "done"},
+		},
+	})
+}
+
+func TestUpdateProgress_rejectsItemNotFound(t *testing.T) {
+	assertUpdateProgressReject(t, "PROGRESS_ITEM_NOT_FOUND", map[string]any{
+		"update": []any{map[string]any{"id": "p99", "state": "done"}},
+	})
+}
+
+func TestUpdateProgress_rejectsConflictingOperations(t *testing.T) {
+	assertUpdateProgressReject(t, "PROGRESS_CONFLICTING_OPERATIONS", map[string]any{
+		"replace": []any{map[string]any{"label": "Plan"}},
+		"add":     []any{map[string]any{"label": "Extra"}},
+	})
 }
 
 func TestUpdateProgress_acceptsAllTerminalWhenPrevHasRows(t *testing.T) {
@@ -50,48 +60,59 @@ func TestUpdateProgress_acceptsAllTerminalWhenPrevHasRows(t *testing.T) {
 	scope := func(_ context.Context, id string) string { return id }
 	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
 
-	store.Set("sess-1", "## Progress\n- [ ] open step\n")
-	observed, err := store.Snapshot(t.Context(), "sess-1")
-	testutil.FailErr(t, "observe existing plan", err)
+	progresstest.SeedRows(t, store, "sess-1", progress.RowSpec{Label: "open step"})
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
-	_, err = exec.Invoke(context.Background(), "update_progress", map[string]any{
-		"content": "## Progress\n- [x] open step\n", "expected_revision": observed.Revision, "item_ids": observed.ItemIDs,
+	_, err := exec.Invoke(context.Background(), "update_progress", map[string]any{
+		"update": []any{map[string]any{"id": "p1", "state": "done"}},
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
 	testutil.FailErr(t, "update_progress all terminal with prior rows", err)
-	if !strings.Contains(store.Get(t.Context(), "sess-1"), "- [x] open step") {
-		t.Fatal("expected updated plan to be stored")
+	snap, err := store.Snapshot(t.Context(), "sess-1")
+	testutil.FailErr(t, "snapshot", err)
+	if len(snap.Rows) != 1 || snap.Rows[0].State != progress.ProgressStateDone {
+		t.Fatalf("expected closed row, got %+v", snap.Rows)
 	}
 }
 
-func TestUpdateProgress_acceptsOverlongLabel(t *testing.T) {
+func TestUpdateProgress_clampsOverlongLabel(t *testing.T) {
 	store := progresstest.New(t, "sess-1")
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
 	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
 
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
-	long := strings.Repeat("x", progress.MaxLabelRunes+3)
+	displayLong := strings.Repeat("x", progress.MaxLabelRunes+10)
 	_, err := exec.Invoke(context.Background(), "update_progress", map[string]any{
-		"content": "## Progress\n- [ ] " + long,
+		"replace": []any{map[string]any{"label": displayLong}},
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
-	testutil.FailErr(t, "update_progress overlong label", err)
-	if store.Get(t.Context(), "sess-1") == "" {
-		t.Fatal("expected over-long plan to be stored, not rejected")
+	testutil.FailErr(t, "update_progress display-clamped label", err)
+	snap, err := store.Snapshot(t.Context(), "sess-1")
+	testutil.FailErr(t, "snapshot", err)
+	if len(snap.Rows) != 1 || snap.Rows[0].Label != displayLong {
+		t.Fatalf("expected stored label preserved up to 240 runes, got %+v", snap.Rows)
+	}
+	wantClamped := strings.Repeat("x", progress.MaxLabelRunes) + "…"
+	if steps := snap.VisibleSteps(); len(steps) != 1 || steps[0].Label != wantClamped {
+		t.Fatalf("expected visible step %q, got %+v", wantClamped, steps)
+	}
+	overCap := strings.Repeat("x", progress.MaxAuthorLabelRunes+1)
+	if _, err := exec.Invoke(context.Background(), "update_progress", map[string]any{
+		"replace": []any{map[string]any{"label": overCap}},
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"}}); err == nil || !strings.Contains(err.Error(), "TOOL_ARGS_INVALID") {
+		t.Fatalf("expected TOOL_ARGS_INVALID above %d runes, got %v", progress.MaxAuthorLabelRunes, err)
 	}
 }
 
-func TestUpdateProgress_unchangedContentNoops(t *testing.T) {
+func TestUpdateProgress_unchangedUpdateNoops(t *testing.T) {
 	store := progresstest.New(t, "sess-1")
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
 	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
 
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
-	content := "## Progress\n- [ ] Ship feature\n"
 	writes := 0
 	unregister := progress.RegisterWriteObserver(func(_ context.Context, evt progress.WriteEvent) {
 		if evt.SessionID == "sess-1" {
@@ -100,33 +121,33 @@ func TestUpdateProgress_unchangedContentNoops(t *testing.T) {
 	})
 	t.Cleanup(unregister)
 
-	first, err := exec.Invoke(context.Background(), "update_progress", map[string]any{"content": content}, tools.ToolContext{
+	first, err := exec.Invoke(context.Background(), "update_progress", map[string]any{
+		"replace": []any{map[string]any{"label": "Ship feature"}},
+	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
 	testutil.FailErr(t, "update_progress first write", err)
-	if !strings.Contains(first, "updated") {
+	if !strings.Contains(first, `"status":"updated"`) {
 		t.Fatalf("first write status = %q want updated", first)
 	}
 
-	observed, err := store.Snapshot(t.Context(), "sess-1")
-	testutil.FailErr(t, "observe replay revision", err)
-	second, err := exec.Invoke(context.Background(), "update_progress", map[string]any{"content": content, "expected_revision": observed.Revision, "item_ids": observed.ItemIDs}, tools.ToolContext{
+	second, err := exec.Invoke(context.Background(), "update_progress", map[string]any{
+		"update": []any{map[string]any{"id": "p1", "state": "pending", "label": "Ship feature"}},
+	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
-	testutil.FailErr(t, "update_progress replay", err)
-	var result map[string]any
+	testutil.FailErr(t, "update_progress noop replay", err)
+	var result struct {
+		Status          string `json:"status"`
+		DocumentChanged bool   `json:"document_changed"`
+		StateChanged    bool   `json:"state_changed"`
+	}
 	testutil.FailErr(t, "decode replay result", json.Unmarshal([]byte(second), &result))
-	if result["status"] != "unchanged" || result["document_changed"] != false || result["state_changed"] != false {
-		t.Fatalf("replay must retain its no-op outcome: %v", result)
+	if result.Status != "unchanged" || result.DocumentChanged || result.StateChanged {
+		t.Fatalf("replay must retain its no-op outcome: %+v", result)
 	}
 	if writes != 1 {
 		t.Fatalf("write notifications = %d want 1", writes)
-	}
-	if !strings.Contains(second, "unchanged") {
-		t.Fatalf("replay status = %q want unchanged", second)
-	}
-	if got := store.Get(t.Context(), "sess-1"); strings.TrimSpace(got) != strings.TrimSpace(content) {
-		t.Fatalf("store mutated on noop replay: %q", got)
 	}
 }
 
@@ -138,20 +159,28 @@ func TestUpdateProgress_acceptsValidPlan(t *testing.T) {
 
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	label := strings.Repeat("x", progress.MaxLabelRunes)
-	content := strings.Repeat("- [ ] "+label+"\n", progress.MaxAuthorProgressLines-2) +
-		"- [x] done\n- [>] Synthesize report\n"
+	rows := make([]any, 0, progress.MaxAuthorProgressRows)
+	for range progress.MaxAuthorProgressRows - 2 {
+		rows = append(rows, map[string]any{"label": label})
+	}
+	rows = append(rows,
+		map[string]any{"label": "done", "state": "done"},
+		map[string]any{"label": "Synthesize report", "state": "optional"},
+	)
 	_, err := exec.Invoke(context.Background(), "update_progress", map[string]any{
-		"content": "## Progress\n" + content,
+		"replace": rows,
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
 	testutil.FailErr(t, "update_progress valid plan", err)
-	if !strings.Contains(store.Get(t.Context(), "sess-1"), "- [>] Synthesize report") {
-		t.Fatal("expected plan to be stored")
+	snap, err := store.Snapshot(t.Context(), "sess-1")
+	testutil.FailErr(t, "snapshot", err)
+	if len(snap.Rows) != progress.MaxAuthorProgressRows {
+		t.Fatalf("stored rows = %d, want %d", len(snap.Rows), progress.MaxAuthorProgressRows)
 	}
 }
 
-func assertUpdateProgressReject(t *testing.T, code, content string) {
+func assertUpdateProgressReject(t *testing.T, code string, args map[string]any) {
 	t.Helper()
 	store := progresstest.New(t, "sess-1")
 	reg := tools.NewDefaultRegistry()
@@ -159,10 +188,7 @@ func assertUpdateProgressReject(t *testing.T, code, content string) {
 	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
 
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
-
-	_, err := exec.Invoke(context.Background(), "update_progress", map[string]any{
-		"content": content,
-	}, tools.ToolContext{
+	_, err := exec.Invoke(context.Background(), "update_progress", args, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
 	if err == nil {
@@ -175,28 +201,10 @@ func assertUpdateProgressReject(t *testing.T, code, content string) {
 	if toolrejection.AsToolReject(err) == nil {
 		t.Fatalf("expected ToolReject observation for %s, got:\n%s", code, msg)
 	}
-	if store.Get(t.Context(), "sess-1") != "" {
+	snap, snapErr := store.Snapshot(t.Context(), "sess-1")
+	testutil.FailErr(t, "snapshot", snapErr)
+	if len(snap.Rows) != 0 {
 		t.Fatal("rejected write must not land in the progress store")
-	}
-}
-
-func TestUpdateProgressRequiresObservedRevisionForExistingChecklist(t *testing.T) {
-	store := progresstest.New(t, "session")
-	testutil.FailErr(t, "seed current checklist", store.Set("session", "- [ ] Preserve"))
-	before, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "observe current checklist", err)
-	handler := reporting.ProgressHandler(store, func(_ context.Context, id string) string { return id }, nil)
-	_, err = handler(t.Context(), map[string]any{"content": "- [x] Preserve"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
-	rejection := toolrejection.AsToolReject(err)
-	if rejection == nil || rejection.Code != "PROGRESS_REVISION_REQUIRED" {
-		t.Fatalf("missing revision outcome: %v", err)
-	}
-	snapshot, ok := rejection.Data["snapshot"].(progress.RequestSnapshot)
-	if !ok || snapshot.ScopeSessionID != "session" || snapshot.InitializationRequired || snapshot.Revision != before.Revision || snapshot.Content != before.Content {
-		t.Fatalf("missing recovery snapshot: %+v", rejection.Data)
-	}
-	if store.Get(t.Context(), "session") != before.Content {
-		t.Fatal("blind replacement changed current state")
 	}
 }
 
@@ -204,21 +212,27 @@ func TestProgressHandlerPublishesAdvancementFromTheCommittedResult(t *testing.T)
 	store := progresstest.New(t, "session")
 	handler := reporting.ProgressHandler(store, func(_ context.Context, id string) string { return id }, nil)
 	for _, tc := range []struct {
-		content  string
+		args     map[string]any
 		advanced bool
-	}{{"- [ ] Deliver", false}, {"- [ ] Deliver", false}, {"- [ ] Deliver revised", false}, {"- [x] Deliver revised", true}} {
-		before, err := store.Snapshot(t.Context(), "session")
-		testutil.FailErr(t, "observe current checklist", err)
+	}{
+		{map[string]any{"replace": []any{map[string]any{"label": "Deliver"}}}, false},
+		{map[string]any{"update": []any{map[string]any{"id": "p1", "label": "Deliver"}}}, false},
+		{map[string]any{"update": []any{map[string]any{"id": "p1", "label": "Deliver revised"}}}, false},
+		{map[string]any{"update": []any{map[string]any{"id": "p1", "state": "done"}}}, true},
+	} {
 		out := &tools.ToolInvocationOut{}
-		args := map[string]any{"content": tc.content, "expected_revision": before.Revision}
-		if len(before.ItemIDs) > 0 {
-			args["item_ids"] = before.ItemIDs
-		}
-		body, err := handler(t.Context(), args, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Effects: tools.InvocationEffects{Out: out}})
+		body, err := handler(t.Context(), tc.args, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "session"},
+			Effects:  tools.InvocationEffects{Out: out},
+		})
 		testutil.FailErr(t, "publish checklist", err)
-		var result progress.AuthorUpdateResult
+		var result struct {
+			StateChanged        bool     `json:"state_changed"`
+			AcknowledgedResults []string `json:"acknowledged_results"`
+		}
 		testutil.FailErr(t, "decode display for comparison", json.Unmarshal([]byte(body), &result))
-		if out.Facts.WorkflowAdvanced == nil || *out.Facts.WorkflowAdvanced != tc.advanced || result.AdvancesWorkflow() != tc.advanced {
+		wantAdvanced := result.StateChanged || len(result.AcknowledgedResults) > 0
+		if out.Facts.WorkflowAdvanced == nil || *out.Facts.WorkflowAdvanced != tc.advanced || wantAdvanced != tc.advanced {
 			t.Fatalf("typed/display result mismatch: %+v / %s", out.Facts, body)
 		}
 	}

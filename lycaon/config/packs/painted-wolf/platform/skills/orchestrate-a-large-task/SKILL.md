@@ -14,10 +14,10 @@ You are a worker for this procedure: apply decomposition, dependency, and verifi
 
 1. **Investigate until you can name** the deliverables, stable interfaces, constraints, likely paths, and open decisions.
 2. **Classify each open fact as blocking or supplemental.** Finish blocking research before dependent builders start.
-3. **Write the progress checklist**{% if profile_has_task %} before the first dispatch{% endif %}, one row per deliverable. Rows track outcomes, not worker counts.
-4. **Choose the topology from the shape of the work**, not from available capacity. The host runs at most **{{ max_in_flight }}** workers at once.{% if profile_has_task %}
-5. **Pick `agent_type` from the spawn roster in your prompt**, matching the worker's effect (read, product edit, test edit, review, run). An id not on the roster is rejected.
-6. **Give each `task()` one focus and a self-contained `brief`**: goal, material facts, decided constraints, concrete `done_when`.{% if profile_has_instruct_worker %} Reuse an idle worker that already knows the area with `instruct_worker` for related follow-up work.{% endif %} Workers cannot read this conversation or each other's files.{% else %}
+3. **Seed deliverables**{% if profile_has_update_progress %} via `update_progress(replace=[…])`{% endif %}{% if profile_has_task %} before first dispatch{% endif %} (one pending row per outcome){% if profile_has_update_progress %}; close rows via `update` and `acknowledge_results`{% endif %}.
+4. **Choose topology from the work's shape**, not capacity. At most **{{ max_in_flight }}** workers run at once.{% if profile_has_task %}
+5. **Pick `agent_type` from the prompt's spawn roster**, matching effect (read, edit, test, review, run). Unlisted ids fail.
+6. **Give each `task()` one focus and a self-contained `brief`**: goal, facts, constraints, concrete `done_when`.{% if profile_has_instruct_worker %} Reuse an idle worker in that area via `instruct_worker` for follow-ups.{% endif %} Workers share neither this chat nor sibling files.{% else %}
 5. **Verify your own assignment against its `done_when` before reporting.**
 6. **Hand back evidence, not prose**: integrated overlays, explicit rejections, or a named blocker.{% endif %}
 7. **Keep dependent stages sequential.**{% if profile_has_record_finding %} `record_finding` shares short grounded findings; it is not a prerequisite channel.{% endif %}

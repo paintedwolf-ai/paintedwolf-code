@@ -369,8 +369,13 @@ func displayableTitleKey(prop map[string]any) (described string, printable bool)
 			itemProps, _ := items["properties"].(map[string]any)
 			_, hasFrom := itemProps["from"]
 			_, hasTo := itemProps["to"]
+			_, hasLabel := itemProps["label"]
+			_, hasID := itemProps["id"]
 			if hasFrom && hasTo {
 				return "an array of {from,to}", true
+			}
+			if hasLabel || hasID {
+				return "an array of {label} or {id}", true
 			}
 			return "an array of objects without from/to", false
 		default:

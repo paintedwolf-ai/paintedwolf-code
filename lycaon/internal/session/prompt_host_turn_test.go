@@ -283,7 +283,7 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 	testutil.FailErr(t, "CreateChild", err)
 	mgr.Coordinator.Context.Sessions = sessionStore.Sessions
 	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
-	mgr.SetProgressStore(progress.NewSQLStore(sessionStore.DB()))
+	mgr.SetProgressStore(progress.NewSQLStore(sessionStore.DB(), sessionStore))
 
 	mgr.Runner.PostTurn.ProgressMissing(ctx, child.ID, []string{"task"})
 	if pendingProgressMissingNudge(mgr, child.ID) {
@@ -304,7 +304,7 @@ func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 	testutil.FailErr(t, "Create session", err)
 	mgr.Coordinator.Context.Sessions = sessionStore.Sessions
 	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
-	mgr.SetProgressStore(progress.NewSQLStore(sessionStore.DB()))
+	mgr.SetProgressStore(progress.NewSQLStore(sessionStore.DB(), sessionStore))
 
 	mgr.Runner.PostTurn.ProgressMissing(t.Context(), sess.ID, []string{"write"})
 	if pendingProgressMissingNudge(mgr, sess.ID) {

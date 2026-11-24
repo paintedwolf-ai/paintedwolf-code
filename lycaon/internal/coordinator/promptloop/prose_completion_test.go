@@ -160,7 +160,7 @@ func TestProseCompletionRecoversFromBookkeepingToolCallAttempt(t *testing.T) {
 	client := &sequentialLLMClient{completions: []*modelcall.Completion{
 		{
 			Content:   "",
-			ToolCalls: []api.ToolCall{{ID: "up-1", Name: "update_progress", Args: map[string]any{"content": "- [x] Done"}}},
+			ToolCalls: []api.ToolCall{{ID: "up-1", Name: "update_progress", Args: map[string]any{"update": []any{map[string]any{"id": "p1", "state": "done"}}}}},
 		},
 		{
 			Content: "Final summary after forced closeout.",

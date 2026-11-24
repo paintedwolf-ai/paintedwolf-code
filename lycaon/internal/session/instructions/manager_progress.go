@@ -29,7 +29,7 @@ func (m *Service) BootstrapProgress(ctx context.Context, sessionID string, msg a
 	if run == nil {
 		return nil
 	}
-	_, err = progress.EnsureBootstrap(ctx, m.progress, sessionID, run.ID, msg.Content)
+	_, err = progress.EnsureBootstrap(ctx, m.progress, sessionID, run.ID)
 	return err
 }
 

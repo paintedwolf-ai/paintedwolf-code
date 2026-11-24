@@ -475,7 +475,7 @@ func TestCommandProgramTeeAndRedirectShareTheProgressGate(t *testing.T) {
 			s := p.programWithoutProgress(t, c.program, "")
 			state, err := s.h.Sessions.Manager.Coordinator.Guards.ProgramProgressState(t.Context(), s.session)
 			testutil.FailErr(t, "progress state", err)
-			if !progress.PrerequisiteMissing(state.Content, state.WorkerChild, state.ReviewLoopActive) {
+			if !progress.PrerequisiteMissing(state.Missing, state.WorkerChild, state.ReviewLoopActive) {
 				t.Fatal("expected root session to start without progress")
 			}
 			testutil.FailErr(t, "prompt", s.prompt(t.Context()))

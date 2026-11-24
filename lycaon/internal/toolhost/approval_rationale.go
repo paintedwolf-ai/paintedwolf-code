@@ -22,9 +22,9 @@ type WorkerTaskLoader interface {
 	Get(jobID string) (*api.WorkerTask, bool)
 }
 
-// ProgressContentLoader returns the root-session checklist markdown.
-type ProgressContentLoader interface {
-	Get(ctx context.Context, sessionID string) string
+// ProgressSnapshotLoader reads the root-session progress snapshot.
+type ProgressSnapshotLoader interface {
+	Snapshot(ctx context.Context, sessionID string) (progress.Snapshot, error)
 }
 
 // RootSessionResolver walks parent_session_id to the coordinator root.
@@ -42,7 +42,7 @@ type CheckpointPins interface {
 type ApprovalRationaleDeps struct {
 	Cause       briefing.CausalReader
 	Workers     WorkerTaskLoader
-	Progress    ProgressContentLoader
+	Progress    ProgressSnapshotLoader
 	Root        RootSessionResolver
 	Engine      *briefing.Engine
 	Router      *briefing.Router
@@ -171,9 +171,10 @@ func (a *approvalRationaleAttacher) evidence(ctx context.Context, req toolapprov
 			briefing.ApplyCause(&ev, read)
 		}
 		if a.deps.Progress != nil && a.deps.Root != nil {
-			content := a.deps.Progress.Get(ctx, a.deps.Root.RootSessionID(ctx, identity.SessionID))
-			for _, step := range progress.DeriveProgress(content, progress.DefaultProgressCap).Items {
-				ev.Plan.Steps = append(ev.Plan.Steps, briefing.PlanStep{Label: step.Label, State: step.State})
+			if snapshot, err := a.deps.Progress.Snapshot(ctx, a.deps.Root.RootSessionID(ctx, identity.SessionID)); err == nil {
+				for _, step := range snapshot.Derive(progress.DefaultProgressCap).Items {
+					ev.Plan.Steps = append(ev.Plan.Steps, briefing.PlanStep{Label: step.Label, State: step.State})
+				}
 			}
 		}
 	}

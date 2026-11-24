@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -109,14 +110,16 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	mgr.Coordinator.Guards.SetToolMetadata(exec.Metadata)
 	wirePromptApprovalRejectFmt(t, mgr, root)
 	mgr.Profiles.SetPostureRegistry(postureRegistry)
-	prog := progress.NewSQLStore(sqlDB)
+	prog := progress.NewSQLStore(sqlDB, store)
 	mgr.SetProgressStore(prog)
 	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run-"+sess.ID, sess.ID, testdbseed.DefaultProjectID)
 	recordRequestedLoad(t, store, sess.ID, "command")
 	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	// Keep progress terminal so the write runs once.
-	prog.Set(sess.ID, "## Progress\n- [x] write blueprint stub\n")
+	seeded := progresstest.SeedRows(t, prog, sess.ID, progress.RowSpec{Label: "write blueprint stub"})
+	progresstest.UpdateRows(t, prog, sess.ID, progress.UpdateRowSpec{ID: seeded.Rows[0].ID, State: progresstest.State("done")})
 
 	done := make(chan error, 1)
 	go func() {
@@ -232,14 +235,16 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	mgr.Coordinator.Guards.SetToolMetadata(exec.Metadata)
 	wirePromptApprovalRejectFmt(t, mgr, root)
 	mgr.Profiles.SetPostureRegistry(postureRegistry)
-	prog := progress.NewSQLStore(sqlDB)
+	prog := progress.NewSQLStore(sqlDB, store)
 	mgr.SetProgressStore(prog)
 	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run-"+sess.ID, sess.ID, testdbseed.DefaultProjectID)
 	recordRequestedLoad(t, store, sess.ID, "command")
 	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	// Keep progress terminal so the write runs once.
-	prog.Set(sess.ID, "## Progress\n- [x] write blueprint stub\n")
+	seeded := progresstest.SeedRows(t, prog, sess.ID, progress.RowSpec{Label: "write blueprint stub"})
+	progresstest.UpdateRows(t, prog, sess.ID, progress.UpdateRowSpec{ID: seeded.Rows[0].ID, State: progresstest.State("done")})
 
 	done := make(chan error, 1)
 	go func() {

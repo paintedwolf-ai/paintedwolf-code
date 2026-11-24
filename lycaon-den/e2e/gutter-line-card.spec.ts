@@ -178,7 +178,7 @@ webE2e("Review expands and focuses the exact pending approval", async ({ page, r
     expect(prompt.ok(), await prompt.text()).toBe(true);
     const driver = manualHarnessTools(request, sessionId);
     await driver.loadTools("update_progress");
-    await driver.completed(await driver.invoke("update_progress", { content: "## Progress\n- [ ] Update the example instruction\n" }));
+    await driver.completed(await driver.invoke("update_progress", { replace: [{ label: "Update the example instruction" }] }));
     await driver.completed(await driver.invoke("command", { command: "cat AGENTS.md" }));
     await driver.invoke("command", { command: "edit --path AGENTS.md --old-string 'Keep examples short.' --new-string 'Keep examples clear.'" });
     const approval = page.getByTestId("tool-approval-card").filter({ visible: true });

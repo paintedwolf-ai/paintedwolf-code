@@ -555,7 +555,13 @@
       "paintedwolf.git_conflict_paths": {
         "content_contract": "paintedwolf.git_conflict_paths",
         "version": 1
-      }
+      },
+      "paintedwolf.line_count": [
+        "paintedwolf.row_count"
+      ],
+      "paintedwolf.max_lines": [
+        "paintedwolf.max_rows"
+      ]
     },
     "rejection_codes": {
       "COMMAND_PROGRAMS_DISABLED": [
@@ -751,7 +757,13 @@
       "HTTP_REQUEST_RESPONSE_PATH_DENIED": {
         "content_contract": "paintedwolf.http_request_response_path_denied",
         "version": 1
-      }
+      },
+      "PROGRESS_NESTED_LINE": [
+        "TOOL_ARGS_INVALID"
+      ],
+      "PROGRESS_TOO_MANY_LINES": [
+        "PROGRESS_TOO_MANY_ROWS"
+      ]
     },
     "tools": {
       "chmod": [

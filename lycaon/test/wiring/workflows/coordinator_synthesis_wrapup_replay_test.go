@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -87,14 +88,14 @@ func TestCoordinatorSynthesisWrapupReplay(t *testing.T) {
 	}
 }
 
-func wrapupStateFromSnapshot(snap dealfinder.SnapshotState, history []api.Message, progress string, verifyPassed, verifyFailed bool) surface.ImplementSessionState {
+func wrapupStateFromSnapshot(snap dealfinder.SnapshotState, history []api.Message, progressSnap progress.Snapshot, verifyPassed, verifyFailed bool) surface.ImplementSessionState {
 	state := surface.ImplementSessionState{
 		WorkersInFlight:   snap.WorkersInFlight,
 		PendingOverlayIDs: snap.PendingOverlayIDs,
 		BatchPhase:        snap.BatchPhase,
 		WrapupGatesLoaded: true,
 	}
-	state.BatchReadyForSynthesis = workeroutcomes.BatchReadyForSynthesis(state, history, progress, true, verifyPassed)
+	state.BatchReadyForSynthesis = workeroutcomes.BatchReadyForSynthesis(state, history, progressSnap, true, verifyPassed)
 	state.OpenRepairSinceUserIntent = workeroutcomes.OpenRepairSinceUserIntent(history, verifyFailed)
 	return state
 }

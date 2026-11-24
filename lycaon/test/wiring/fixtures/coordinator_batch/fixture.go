@@ -26,7 +26,7 @@ type IncidentReplayFixture struct {
 		WorkersInFlight   int      `json:"workers_in_flight"`
 		PendingOverlayIDs []string `json:"pending_overlay_ids"`
 	} `json:"loop_wake_state"`
-	ProgressContent string `json:"progress_content"`
+	ProgressRows []progress.Row `json:"progress_rows"`
 }
 
 type incidentReplayJSON struct {
@@ -35,7 +35,7 @@ type incidentReplayJSON struct {
 	Description     string          `json:"description"`
 	History         []api.Message   `json:"history"`
 	LoopWakeState   json.RawMessage `json:"loop_wake_state"`
-	ProgressContent string          `json:"progress_content"`
+	ProgressRows    []progress.Row  `json:"progress_rows"`
 }
 
 // Load reads the incident replay fixture from disk.
@@ -53,7 +53,7 @@ func Load(t *testing.T) IncidentReplayFixture {
 	out.ParentSessionID = wire.ParentSessionID
 	out.Description = wire.Description
 	out.History = wire.History
-	out.ProgressContent = wire.ProgressContent
+	out.ProgressRows = wire.ProgressRows
 	testutil.FailErr(t, "unmarshal loop_wake_state", json.Unmarshal(wire.LoopWakeState, &out.LoopWakeState))
 	return out
 }
@@ -66,10 +66,12 @@ func (f IncidentReplayFixture) ImplementSessionState() surface.ImplementSessionS
 		WorkersInFlight:   f.LoopWakeState.WorkersInFlight,
 		PendingOverlayIDs: append([]string(nil), f.LoopWakeState.PendingOverlayIDs...),
 	}
+	snapshot := progress.NewSnapshot("", f.ProgressRows...)
 	state.WrapupGatesLoaded = true
-	state.BatchReadyForSynthesis = workeroutcomes.BatchReadyForSynthesis(state, f.History, f.ProgressContent, true, true)
+	state.BatchReadyForSynthesis = workeroutcomes.BatchReadyForSynthesis(state, f.History, snapshot, true, true)
 	state.OpenRepairSinceUserIntent = workeroutcomes.OpenRepairSinceUserIntent(f.History, false)
-	state.ProgressMissing = progress.ProgressMissing(f.ProgressContent)
+	state.ProgressOpenCount = snapshot.OpenStepCount()
+	state.ProgressMissing = snapshot.Missing()
 	return state
 }
 

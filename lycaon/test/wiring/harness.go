@@ -34,7 +34,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workertopology"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -290,41 +289,75 @@ func (h *Harness) SeedProgress(t *testing.T, ctx context.Context, sessionID stri
 	}
 	_, err := h.Workflows.Manager.Ambient.EnsureSessionWorkflow(ctx, sessionID)
 	testutil.FailErr(t, "bind session workflow", err)
-	args := map[string]any{"content": "## Progress\n- [ ] wiring test plan\n"}
-	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID}}
-	_, err = h.ToolRegistry.Run(ctx, "update_progress", args, tc)
-	if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "PROGRESS_REVISION_REQUIRED" {
-		// Workflow setup may already hold a checklist; replace it at its revision.
-		current, ok := reject.Data["snapshot"].(progress.Snapshot)
-		if !ok {
-			t.Fatalf("SeedProgress: rejection carries no snapshot: %v", err)
-		}
-		args["expected_revision"], args["item_ids"] = current.Revision, []any{nil}
-		_, err = h.ToolRegistry.Run(ctx, "update_progress", args, tc)
+	args := map[string]any{
+		"replace": []any{map[string]any{"label": "wiring test plan", "state": "pending"}},
 	}
-	if err != nil {
+	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID}}
+	if _, err := h.ToolRegistry.Run(ctx, "update_progress", args, tc); err != nil {
 		t.Fatalf("SeedProgress: %v", err)
 	}
 }
 
-// ProgressUpdateArgs builds update_progress arguments at the session's current revision,
-// keeping each existing row's identity and leaving added rows to the host.
+// ProgressUpdateArgs builds row-DML update_progress arguments from checklist lines,
+// updating existing row IDs in place and appending or removing rows as needed.
 func (h *Harness) ProgressUpdateArgs(t *testing.T, ctx context.Context, sessionID, content string) map[string]any {
 	t.Helper()
 	current, err := progress.NewSQLStore(h.DB, store.NewSQL(h.DB)).Snapshot(ctx, sessionID)
 	testutil.FailErr(t, "read progress snapshot", err)
-	args := map[string]any{"content": content}
-	if current.Content == "" {
-		return args
+	desired := parseHarnessProgressLines(content)
+	if len(current.Rows) == 0 {
+		rows := make([]any, len(desired))
+		for i, r := range desired {
+			rows[i] = map[string]any{"label": r.Label, "state": r.State}
+		}
+		return map[string]any{"replace": rows}
 	}
-	ids := make([]any, len(progress.ChecklistItems(content)))
-	for i := range ids {
-		if i < len(current.ItemIDs) {
-			ids[i] = current.ItemIDs[i]
+	args := map[string]any{}
+	shared := min(len(current.Rows), len(desired))
+	if shared > 0 {
+		updates := make([]any, 0, shared)
+		for i := range shared {
+			updates = append(updates, map[string]any{
+				"id":    current.Rows[i].ID,
+				"state": desired[i].State,
+				"label": desired[i].Label,
+			})
+		}
+		args["update"] = updates
+	}
+	if len(desired) > len(current.Rows) {
+		adds := make([]any, 0, len(desired)-len(current.Rows))
+		for _, r := range desired[len(current.Rows):] {
+			adds = append(adds, map[string]any{"label": r.Label, "state": r.State})
+		}
+		args["add"] = adds
+	}
+	if len(current.Rows) > len(desired) {
+		removes := make([]any, 0, len(current.Rows)-len(desired))
+		for _, r := range current.Rows[len(desired):] {
+			removes = append(removes, r.ID)
+		}
+		args["remove"] = removes
+	}
+	return args
+}
+
+func parseHarnessProgressLines(content string) []progress.RowSpec {
+	var out []progress.RowSpec
+	for _, raw := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(raw)
+		switch {
+		case strings.HasPrefix(line, "- [ ] "):
+			out = append(out, progress.RowSpec{State: "pending", Label: strings.TrimSpace(line[6:])})
+		case strings.HasPrefix(line, "- [x] "), strings.HasPrefix(line, "- [X] "):
+			out = append(out, progress.RowSpec{State: "done", Label: strings.TrimSpace(line[6:])})
+		case strings.HasPrefix(line, "- [~] "):
+			out = append(out, progress.RowSpec{State: "na", Label: strings.TrimSpace(line[6:])})
+		case strings.HasPrefix(line, "- [>] "):
+			out = append(out, progress.RowSpec{State: "optional", Label: strings.TrimSpace(line[6:])})
 		}
 	}
-	args["expected_revision"], args["item_ids"] = current.Revision, ids
-	return args
+	return out
 }
 
 // MemoryHub returns the event hub when backed by MemoryHub, unwrapping publishers.

@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/briefingstore"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolapproval"
@@ -34,9 +35,11 @@ type memWorkers struct{ task *api.WorkerTask }
 
 func (m memWorkers) Get(string) (*api.WorkerTask, bool) { return m.task, m.task != nil }
 
-type memProgress struct{ content string }
+type memProgress struct{ rows []progress.Row }
 
-func (m memProgress) Get(context.Context, string) string { return m.content }
+func (m memProgress) Snapshot(_ context.Context, _ string) (progress.Snapshot, error) {
+	return progress.Snapshot{Rows: m.rows}, nil
+}
 
 type rootID struct{}
 
@@ -183,7 +186,7 @@ func TestApprovalRationalePatchesOneSentenceFromLiveEvidence(t *testing.T) {
 	generator := &scriptedGenerator{out: "Pushes the branch the user asked to ship. This advances the goal."}
 	h := newHarness(t, generator)
 	h.deps.Cause = memCause{read: cause(), refs: refs}
-	h.deps.Workers, h.deps.Progress, h.deps.Root = memWorkers{task: &api.WorkerTask{Brief: "SUPPLIED_BRIEF"}}, memProgress{content: "- [ ] SUPPLIED_STEP\n"}, rootID{}
+	h.deps.Workers, h.deps.Progress, h.deps.Root = memWorkers{task: &api.WorkerTask{Brief: "SUPPLIED_BRIEF"}}, memProgress{rows: []progress.Row{{ID: "p1", State: progress.ProgressStatePending, Label: "SUPPLIED_STEP"}}}, rootID{}
 	toolhost.NewApprovalRationaleAttacher(h.deps).AttachAsync(context.Background(), attachRequest("chk"))
 	if got := h.caps.next(t).text; got != "Pushes the branch the user asked to ship." {
 		t.Fatalf("patched %q", got)

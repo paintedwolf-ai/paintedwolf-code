@@ -1,3 +1,0 @@
-- [x] Add tests for app.py
-- [x] Add tests for scraper.py
-- [x] Verify (command-verifier)

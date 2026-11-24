@@ -35,7 +35,7 @@ func TestComposedCommandRefusalsFollowRecordedAdmission(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newComposedProgramFixture(t)
 			if tc.needsChecklist {
-				testutil.FailErr(t, "clear progress", f.SetProgress(""))
+				testutil.FailErr(t, "clear progress", f.ClearProgress())
 			}
 			out := &tools.ToolInvocationOut{}
 			var progress []api.CommandProgramReceipt
@@ -101,7 +101,7 @@ func TestComposedCommandRefusalsFollowRecordedAdmission(t *testing.T) {
 
 func TestScratchRedirectDoesNotRequireProjectChecklist(t *testing.T) {
 	f := newComposedProgramFixture(t)
-	testutil.FailErr(t, "clear progress", f.SetProgress(""))
+	testutil.FailErr(t, "clear progress", f.ClearProgress())
 	outcome := callComposedProgram(t, f, "printf '%s' fixture > @scratch/target")
 	if outcome.Status != 0 || outcome.Refusal != nil {
 		t.Fatalf("scratch redirect = %+v, refusal=%+v", outcome, outcome.Refusal)

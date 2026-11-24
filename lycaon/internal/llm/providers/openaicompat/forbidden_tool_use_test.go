@@ -53,7 +53,7 @@ func TestForbiddenToolUseOmitsDefinitionsOnLocalInferenceProfiles(t *testing.T) 
 					{Role: api.MessageRoleUser, Content: "build game"},
 					{
 						Role:      api.MessageRoleAssistant,
-						ToolCalls: []api.ToolCall{{ID: "call_1", Name: "update_progress", Args: map[string]any{"content": "- [ ] build"}}},
+						ToolCalls: []api.ToolCall{{ID: "call_1", Name: "update_progress", Args: map[string]any{"replace": []any{map[string]any{"label": "build"}}}}},
 					},
 					{
 						Role:       api.MessageRoleTool,

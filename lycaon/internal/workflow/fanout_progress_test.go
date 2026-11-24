@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
@@ -20,20 +19,25 @@ func TestFanoutPlanSeedsAnEmptyChecklistOnly(t *testing.T) {
 	store := progresstest.New(t, "sess")
 	plan := runstate.FanoutPlan{Legs: []runstate.FanoutPlanLeg{{ID: "leg-1", Subject: "Auth boundary"}, {ID: "leg-2", Subject: "Parser"}}}
 	testutil.FailErr(t, "seed plan", seedFanoutProgress(t.Context(), store, "sess", "run-sess", plan))
-	content := store.Get(t.Context(), "sess")
-	if _, pending, _ := progress.CloseCounts(content); pending != 2 || !strings.Contains(content, "- [ ] leg-1 Auth boundary") {
-		t.Fatalf("seeded checklist = %q", content)
-	}
 	snapshot, err := store.Snapshot(t.Context(), "sess")
 	testutil.FailErr(t, "read seeded run", err)
+	if snapshot.OpenStepCount() != 2 || snapshot.Rows[0].Label != "leg-1 Auth boundary" {
+		t.Fatalf("seeded checklist = %+v", snapshot.Rows)
+	}
 	if snapshot.RunID != "run-sess" {
 		t.Fatal("seeding left the document unbound")
 	}
-	authored := "# Goal\n\nOwn plan\n\n## Progress\n- [x] done already\n"
-	testutil.FailErr(t, "author checklist", store.Set("sess", authored))
-	testutil.FailErr(t, "seed plan", seedFanoutProgress(t.Context(), store, "sess", "run-sess", plan))
-	if strings.TrimSpace(store.Get(t.Context(), "sess")) != strings.TrimSpace(authored) {
-		t.Fatal("an authored checklist was overwritten")
+
+	authored := progresstest.SeedRows(t, store, "sess", progress.RowSpec{Label: "Own plan"})
+	progresstest.UpdateRows(t, store, "sess", progress.UpdateRowSpec{
+		ID: authored.Rows[0].ID, State: progresstest.State("done"),
+	})
+
+	testutil.FailErr(t, "seed plan over authored", seedFanoutProgress(t.Context(), store, "sess", "run-sess", plan))
+	after, err := store.Snapshot(t.Context(), "sess")
+	testutil.FailErr(t, "snapshot after second seed", err)
+	if len(after.Rows) != 1 || after.Rows[0].Label != "Own plan" || after.Rows[0].State != progress.ProgressStateDone {
+		t.Fatalf("an authored checklist was overwritten: %+v", after.Rows)
 	}
 }
 
@@ -48,7 +52,9 @@ func TestFanoutSeedingRollsBackAndRetriesWithItsTranscript(t *testing.T) {
 	if err := seedFanoutProgress(t.Context(), plans, "session", "run", plan); err == nil {
 		t.Fatal("failed seeding reported success")
 	}
-	if plans.Get(t.Context(), "session") != "" {
+	failedSnap, err := plans.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "snapshot after failed seed", err)
+	if len(failedSnap.Rows) != 0 {
 		t.Fatal("failed seeding retained plan")
 	}
 	_, err = database.ExecContext(t.Context(), `DROP TRIGGER refuse_plan`)
@@ -101,7 +107,9 @@ func TestFanoutPlanReplayRepairsFailedProgressCommit(t *testing.T) {
 		if !ok || replay.ID != run.ID {
 			t.Fatal("fanout command was not committed before seeding")
 		}
-		if mgr.Fanout.Progress.Get(t.Context(), "sess-1") != "" {
+		snap, snapErr := mgr.Fanout.Progress.Snapshot(t.Context(), "sess-1")
+		testutil.FailErr(t, "snapshot", snapErr)
+		if len(snap.Rows) != 0 {
 			t.Fatal("failed seed retained progress")
 		}
 	}

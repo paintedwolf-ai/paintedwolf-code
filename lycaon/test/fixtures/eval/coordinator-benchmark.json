@@ -135,7 +135,15 @@
           "id": "existing-progress",
           "tool": "update_progress",
           "args": {
-            "content": "## Progress\n- [x] Read status requirements\n- [ ] Apply status labels"
+            "replace": [
+              {
+                "label": "Read status requirements",
+                "state": "done"
+              },
+              {
+                "label": "Apply status labels"
+              }
+            ]
           },
           "outcome": "completed",
           "json": {
@@ -460,7 +468,18 @@
           "id": "existing-progress",
           "tool": "update_progress",
           "args": {
-            "content": "## Progress\n- [x] Read status requirements\n- [ ] Apply status labels\n- [ ] Export status report"
+            "replace": [
+              {
+                "label": "Read status requirements",
+                "state": "done"
+              },
+              {
+                "label": "Apply status labels"
+              },
+              {
+                "label": "Export status report"
+              }
+            ]
           },
           "outcome": "completed",
           "json": {
@@ -675,7 +694,18 @@
           "id": "existing-progress",
           "tool": "update_progress",
           "args": {
-            "content": "## Progress\n- [x] Read catalog requirements\n- [ ] Integrate prefix filtering\n- [ ] Integrate worker pagination\n"
+            "replace": [
+              {
+                "label": "Read catalog requirements",
+                "state": "done"
+              },
+              {
+                "label": "Integrate prefix filtering"
+              },
+              {
+                "label": "Integrate worker pagination"
+              }
+            ]
           },
           "outcome": "completed",
           "json": {
@@ -757,7 +787,18 @@
           "id": "existing-progress",
           "tool": "update_progress",
           "args": {
-            "content": "## Progress\n- [x] Read status requirements\n- [ ] Apply status labels\n- [ ] Apply prefix filtering"
+            "replace": [
+              {
+                "label": "Read status requirements",
+                "state": "done"
+              },
+              {
+                "label": "Apply status labels"
+              },
+              {
+                "label": "Apply prefix filtering"
+              }
+            ]
           },
           "outcome": "completed",
           "json": {
@@ -780,7 +821,14 @@
           "id": "existing-progress",
           "tool": "update_progress",
           "args": {
-            "content": "## Progress\n- [ ] Public receipt\n- [ ] Private receipt\n"
+            "replace": [
+              {
+                "label": "Public receipt"
+              },
+              {
+                "label": "Private receipt"
+              }
+            ]
           },
           "outcome": "completed",
           "json": {
@@ -899,7 +947,17 @@
           "id": "existing-progress",
           "tool": "update_progress",
           "args": {
-            "content": "## Progress\n- [ ] Change default limit\n- [ ] Run local tests\n- [ ] Run required network check\n"
+            "replace": [
+              {
+                "label": "Change default limit"
+              },
+              {
+                "label": "Run local tests"
+              },
+              {
+                "label": "Run required network check"
+              }
+            ]
           },
           "outcome": "completed",
           "json": {
@@ -1057,7 +1115,18 @@
           "id": "existing-progress",
           "tool": "update_progress",
           "args": {
-            "content": "## Progress\n- [x] Read status requirements\n- [ ] Finish status labels\n- [ ] Verify integrated status labels\n"
+            "replace": [
+              {
+                "label": "Read status requirements",
+                "state": "done"
+              },
+              {
+                "label": "Finish status labels"
+              },
+              {
+                "label": "Verify integrated status labels"
+              }
+            ]
           },
           "outcome": "completed",
           "json": {

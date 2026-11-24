@@ -14,13 +14,14 @@ class PortableCommandContracts(unittest.TestCase):
         self.assertTrue(all('expected_outcome' in t for c in suite['cases'] for t in c['turns']))
 
     def test_refuse_missing_duplicate_unbounded_and_nonbyte_contracts(self):
-        for mutation in ('missing', 'duplicate', 'profile', 'generator', 'bytes'):
+        for mutation in ('missing', 'duplicate', 'profile', 'generator', 'bytes', 'progress_legacy'):
             altered = copy.deepcopy(load_suite())
             if mutation == 'missing': altered['cases'].pop()
             if mutation == 'duplicate': altered['cases'].append(altered['cases'][0])
             if mutation == 'profile': altered['cases'][0]['profile'] = 'unconfined'
             if mutation == 'generator': altered['cases'][0]['setup']['generators'] = [{'kind':'numbered-files','count':100000000,'directory':'tree'}]
             if mutation == 'bytes': altered['cases'][0]['expected']['stdout'] = {'base64':'!!'}
+            if mutation == 'progress_legacy': altered['cases'][0]['turns'][0]['progress_update'] = {'content': '- [ ] legacy'}
             with self.subTest(mutation=mutation), self.assertRaises(ValueError): validate_suite(altered)
         for name in ('../escape', '/synthetic/absolute', '.', 'x\\y', None):
             with self.subTest(name=name), self.assertRaises(ValueError): fixture_path(name)

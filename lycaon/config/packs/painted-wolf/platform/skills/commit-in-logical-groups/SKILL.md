@@ -16,7 +16,7 @@ description: When the user asks to commit, split the working tree into coherent 
 
 ## Workflow
 
-1. **Survey once, before staging anything.**{% if can_git_read %} The inventory is `git status --short`, `git diff --stat`, and bounded `git log` in `command`.{% else %} The inventory is this worker's own change record — the files it wrote or edited.{% endif %} Write the groups, one line each{% if profile_has_update_progress %} in `update_progress`{% endif %}, before reading any hunk, then read hunks in one batch, only where a group is ambiguous.
+1. **Survey once, before staging.**{% if can_git_read %} Inventory with `git status --short`, `git diff --stat`, and bounded `git log` in `command`.{% else %} Inventory this worker's own change record — the files it wrote or edited.{% endif %} Record commit groups, one pending row each{% if profile_has_update_progress %} in `update_progress` (updating each row to `"done"` as its commit lands){% endif %}, before reading any hunk; read hunks in one batch only where a group is ambiguous.
 2. **Leave what is not yours.** Work you did not write and the user has not claimed is left out of your groups: not reverted, not stashed, not finished for them. A repository-wide stash empties every concurrent worker's tree; never use one for a clean view.
 3. **Leave live work alone even when it is yours.** A file still being changed belongs in a later commit.
 4. **Group by the change, not by the directory.** One commit is one reason: a feature with its tests, a fix with its regression, a rename across every file it touched. Generated output travels with its source. State each group in one line; if you cannot, it is more than one commit. A group that needs a hunk to describe gets that hunk read, not the tree.

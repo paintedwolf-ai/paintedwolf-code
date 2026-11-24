@@ -1,0 +1,23 @@
+spec_version: "1.0"
+id: PROGRESS_CONFLICTING_OPERATIONS
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - update_progress
+requires_facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "PROGRESS_CONFLICTING_OPERATIONS"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+message: Conflicting or incomplete row operations in update_progress
+what: update_progress combined incompatible row edits in one call.
+cause: Either replace was combined with add, update, or remove; the same row ID appeared more than once across update and remove; add.after_id referenced a row ID also listed in remove; or an update entry omitted both state and label.
+why: Row edits in one call must have an unambiguous target and insertion anchor.
+fix: Submit replace on its own (optionally with acknowledge_results), or submit disjoint update, remove, and add operations where every update sets state or label and every add.after_id survives removal.
+instead: Branch on Code; separate replace from incremental edits, deduplicate target IDs, and retry update_progress
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: update_progress
+      profile: coordinator

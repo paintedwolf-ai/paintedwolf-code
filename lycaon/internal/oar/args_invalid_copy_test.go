@@ -27,9 +27,9 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 		wantFix   string
 	}{
 		{
-			name: "missing required argument", tool: "update_progress",
-			data:     map[string]any{"reason": "missing content", "missing_required_arguments": `{"missing_required":["content"],"expected_types":{"content":"string"},"received_keys":[]}`},
-			wantWhat: "missing content", wantCause: "missing content", wantFix: `"content":"string"`,
+			name: "missing required argument", tool: "read",
+			data:     map[string]any{"reason": "missing path", "missing_required_arguments": `{"missing_required":["path"],"expected_types":{"path":"string"},"received_keys":[]}`},
+			wantWhat: "missing path", wantCause: "missing path", wantFix: `"path":"string"`,
 		},
 		{
 			name: "inapplicable workflow field", tool: "task",

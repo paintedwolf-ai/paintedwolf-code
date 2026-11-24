@@ -5,12 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
@@ -20,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/report"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
@@ -44,8 +43,18 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		mu.Unlock()
 		if jobID == "" {
 			if turn == 1 {
-				content := progress.NewSQLStore(h.DB, sessionstore.NewSQL(h.DB)).Get(ctx, parentID)
-				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "update_progress", Args: h.ProgressUpdateArgs(t, ctx, parentID, strings.ReplaceAll(content, "[ ]", "[x]"))}}}
+				snap, snapErr := progress.NewSQLStore(h.DB, sessionstore.NewSQL(h.DB)).Snapshot(ctx, parentID)
+				if snapErr != nil {
+					t.Errorf("snapshot: %v", snapErr)
+					return modelcall.Completion{}
+				}
+				updates := make([]any, 0, len(snap.Rows))
+				for _, r := range snap.Rows {
+					if r.State == progress.ProgressStatePending {
+						updates = append(updates, map[string]any{"id": r.ID, "state": "done"})
+					}
+				}
+				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "update_progress", Args: map[string]any{"update": updates}}}}
 			}
 			return modelcall.Completion{Content: body}
 		}

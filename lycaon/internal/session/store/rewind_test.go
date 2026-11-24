@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -112,5 +113,44 @@ func TestCheckpointAnchorIDsRequireAnArrayOfIdentities(t *testing.T) {
 				t.Fatalf("anchor %d = %q, want %q", i, decoded[i], ids[i])
 			}
 		}
+	}
+}
+
+func TestCommitRewindClearsProgressItemsAndPreservesNextItemSeq(t *testing.T) {
+	ctx := t.Context()
+	st := openTurnSQLStore(t)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testdbseed.InsertWorkflowRun(t, st.DB(), "run-"+sess.ID, sess.ID, testdbseed.DefaultProjectID)
+	anchor := api.Message{
+		ID: "anchor-1", Role: api.MessageRoleUser, Content: "hi",
+		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
+		TrustTier: api.ContentTrustTierTrusted,
+	}
+	testutil.FailErr(t, "append anchor", st.Transcript.AppendMessages(ctx, sess.ID, anchor))
+
+	q := db.New(st.DB())
+	testutil.FailErr(t, "seed progress meta", q.UpsertSessionProgressHeader(ctx, db.UpsertSessionProgressHeaderParams{
+		SessionID: sess.ID, WorkflowRunID: "run-" + sess.ID,
+		UpdatedAt: "2026-06-01T00:00:00Z", NextItemSeq: 3,
+	}))
+	testutil.FailErr(t, "bump progress version", q.BumpSessionProgressOnClear(ctx, db.BumpSessionProgressOnClearParams{
+		SessionID: sess.ID, UpdatedAt: "2026-06-01T00:00:01Z",
+	}))
+	testutil.FailErr(t, "seed progress item", q.InsertSessionProgressItem(ctx, db.InsertSessionProgressItemParams{
+		SessionID: sess.ID, ItemID: "p1", Ord: 0, State: "pending", Label: "First",
+	}))
+
+	commitFixtureRewind(t, ctx, st, sess.ID, anchor.ID)
+
+	items, err := q.ListSessionProgressItems(ctx, sess.ID)
+	testutil.FailErr(t, "list items", err)
+	if len(items) != 0 {
+		t.Fatalf("items after rewind = %+v, want empty", items)
+	}
+	meta, err := q.GetSessionProgressHeader(ctx, sess.ID)
+	testutil.FailErr(t, "get progress meta", err)
+	if meta.NextItemSeq != 3 || meta.DocumentVersion != 3 {
+		t.Fatalf("meta after rewind = %+v, want NextItemSeq=3 DocumentVersion=3", meta)
 	}
 }

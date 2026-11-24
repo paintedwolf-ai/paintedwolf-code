@@ -1,4 +1,4 @@
 steps:
   - tool: "update_progress"
-    say: "Judge the result from its report and account for it on the checklist with {{ call }}."
+    say: 'Judge the result from its report and account for its handle in progress with {{ call }} (`acknowledge_results`).'
     otherwise: "Judge the result from its report."

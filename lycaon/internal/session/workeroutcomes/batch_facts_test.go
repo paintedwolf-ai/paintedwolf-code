@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -36,8 +37,11 @@ func idleBatchReadyState() surface.ImplementSessionState {
 	}
 }
 
-func allTerminalProgress() string {
-	return "- [x] implement\n- [x] verify"
+func allTerminalProgress() progress.Snapshot {
+	return progress.Snapshot{Rows: []progress.Row{
+		{ID: "p1", State: progress.ProgressStateDone, Label: "implement"},
+		{ID: "p2", State: progress.ProgressStateDone, Label: "verify"},
+	}}
 }
 
 func inlineEditHistory() []api.Message {
@@ -93,8 +97,11 @@ func TestOpenRepair_verifyFailed(t *testing.T) {
 func TestBatchReady_allTerminalPreVerifyInlineEdit(t *testing.T) {
 	history := inlineEditHistory()
 	state := idleBatchReadyState()
-	progress := "- [x] implement\n- [ ] verify"
-	if workeroutcomes.BatchReadyForSynthesis(state, history, progress, true, false) {
+	snap := progress.Snapshot{Rows: []progress.Row{
+		{ID: "p1", State: progress.ProgressStateDone, Label: "implement"},
+		{ID: "p2", State: progress.ProgressStatePending, Label: "verify"},
+	}}
+	if workeroutcomes.BatchReadyForSynthesis(state, history, snap, true, false) {
 		t.Fatal("AllTerminal pre-verify with inline edit must block synthesis")
 	}
 }
@@ -105,7 +112,7 @@ func TestBatchReady_planMissingReadOnlyQA(t *testing.T) {
 		{Role: api.MessageRoleAssistant, Content: "It is a coding agent."},
 	}
 	state := idleBatchReadyState()
-	if workeroutcomes.BatchReadyForSynthesis(state, history, "", false, false) {
+	if workeroutcomes.BatchReadyForSynthesis(state, history, progress.Snapshot{}, false, false) {
 		t.Fatal("BatchReady must be false without a terminal plan")
 	}
 }

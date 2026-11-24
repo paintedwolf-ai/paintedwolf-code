@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -95,22 +96,31 @@ func TestSynthesisAssemblyPreservesRetainedDigestWhenTranscriptIsEmpty(t *testin
 }
 
 func TestExecutionObservationsKeepChecklistSeparateFromSourceProof(t *testing.T) {
-	checklist := func(content string) api.Message {
-		return api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "update_progress", Outcome: "completed", ToolArgs: map[string]any{"content": content}}}
+	checklist := func(label string) api.Message {
+		body, _ := json.Marshal(map[string]any{
+			"snapshot": map[string]any{
+				"rows": []progress.Row{{ID: "p1", State: progress.ProgressStateDone, Label: label}},
+			},
+		})
+		return api.Message{
+			Role:       api.MessageRoleTool,
+			Content:    string(body),
+			ToolResult: &api.ToolResult{Tool: "update_progress", Outcome: "completed"},
+		}
 	}
-	messages := []api.Message{checklist("old"), {Role: api.MessageRoleUser, Content: "new request"}, checklist("- [x] Tests pass"), {Role: api.MessageRoleAssistant, Content: "Verified"}}
+	messages := []api.Message{checklist("old"), {Role: api.MessageRoleUser, Content: "new request"}, checklist("Tests pass"), {Role: api.MessageRoleAssistant, Content: "Verified"}}
 	checks := &verification.SourceCheckObservations{Checks: []verification.SourceCheckObservation{{Verdict: "passed", Match: verification.SourceChanged, PriorIntent: true}}}
 	var out executionObservations
-	testutil.FailErr(t, "decode observations", json.Unmarshal([]byte(executionObservationJSON(messages, checks)), &out))
+	testutil.FailErr(t, "decode observations", json.Unmarshal([]byte(executionObservationJSON(messages, checks, nil)), &out))
 	if out.ModelChecklist != "- [x] Tests pass" || out.SourceChecks.Checks[0].Match != verification.SourceChanged {
 		t.Fatalf("checklist overrode source facts: %+v", out)
 	}
-	if got := executionObservationJSON(messages, nil); got != "" {
+	if got := executionObservationJSON(messages, nil, nil); got != "" {
 		t.Fatalf("checklist invented execution evidence: %s", got)
 	}
 	messages = append(messages, api.Message{Role: api.MessageRoleUser, Content: "another task"})
 	var later executionObservations
-	testutil.FailErr(t, "decode fresh later observations", json.Unmarshal([]byte(executionObservationJSON(messages, checks)), &later))
+	testutil.FailErr(t, "decode fresh later observations", json.Unmarshal([]byte(executionObservationJSON(messages, checks, nil)), &later))
 	if later.ModelChecklist != "" || !later.SourceChecks.Checks[0].PriorIntent {
 		t.Fatalf("lost historical distinction: %+v", later)
 	}

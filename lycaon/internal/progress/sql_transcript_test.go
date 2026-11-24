@@ -43,56 +43,67 @@ func (f progressFixture) messages(t *testing.T) []api.Message {
 	return rows
 }
 
-func applyPlan(t *testing.T, store progress.Store, content string) progress.Snapshot {
+func replacePlan(t *testing.T, store progress.Store, specs ...progress.RowSpec) progress.Snapshot {
 	t.Helper()
-	before, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read predecessor", err)
-	update, err := progress.PrepareAuthorUpdate(content)
-	testutil.FailErr(t, "prepare plan", err)
-	update = update.ExpectRevision(before.Revision)
-	if len(before.ItemIDs) > 0 {
-		update = update.ExpectItemIDs(before.ItemIDs...)
-	}
-	result, err := update.Apply(t.Context(), store, "session", nil)
-	testutil.FailErr(t, "commit plan", err)
-	return result.Snapshot
+	res, err := store.Apply(t.Context(), "session", progress.Mutation{Replace: specs}, progress.ApplyOptions{})
+	testutil.FailErr(t, "replace plan", err)
+	return res.Snapshot
+}
+
+func updatePlan(t *testing.T, store progress.Store, updates ...progress.UpdateRowSpec) progress.Snapshot {
+	t.Helper()
+	res, err := store.Apply(t.Context(), "session", progress.Mutation{Update: updates}, progress.ApplyOptions{})
+	testutil.FailErr(t, "update plan", err)
+	return res.Snapshot
 }
 
 func TestPlanRowsCommitWithTransitionsAndSurviveRestart(t *testing.T) {
 	f := newProgressFixture(t)
 	testutil.FailErr(t, "append assistant", f.sessions.AppendMessages(t.Context(), "session", api.Message{ID: "assistant", Role: api.MessageRoleAssistant, Content: "Working", Visibility: api.MessageVisibilityTranscript}))
-	for i, content := range []string{"- [ ] Deliver", "- [x] Deliver", "- [ ] Deliver", "- [x] Deliver", "- [x] Renamed"} {
-		snapshot := applyPlan(t, f.plans, content)
+
+	replacePlan(t, f.plans, progress.RowSpec{Label: "Deliver", State: progress.ProgressStatePending})
+	done := progress.ProgressStateDone
+	pending := progress.ProgressStatePending
+	renamed := "Renamed"
+	steps := []struct {
+		update progress.UpdateRowSpec
+		kind   api.MessageKind
+	}{
+		{progress.UpdateRowSpec{ID: "p1", State: &done}, api.MessageKindProgressComplete},
+		{progress.UpdateRowSpec{ID: "p1", State: &pending}, api.MessageKindProgressUpdate},
+		{progress.UpdateRowSpec{ID: "p1", State: &done}, api.MessageKindProgressComplete},
+		{progress.UpdateRowSpec{ID: "p1", Label: &renamed}, api.MessageKindProgressUpdate},
+	}
+	for i, step := range steps {
+		updatePlan(t, f.plans, step.update)
 		rows := f.messages(t)
-		if len(rows) != i+2 {
+		if len(rows) != i+3 {
 			t.Fatalf("transition %d rows=%d", i, len(rows))
 		}
 		row := rows[len(rows)-1]
-		expected := api.MessageKindProgressUpdate
-		if i == 1 || i == 3 {
-			expected = api.MessageKindProgressComplete
-		}
-		if row.Kind != expected || row.WorkflowRunID != "run" || row.Ord != int64(i+2) || row.Seq <= 0 {
+		if row.Kind != step.kind || row.WorkflowRunID != "run" || row.Ord != int64(i+3) || row.Seq <= 0 {
 			t.Fatalf("transition %d row=%+v", i, row)
 		}
-		applyPlan(t, f.plans, snapshot.Content)
+		// Repeating the exact patch is a no-op.
+		updatePlan(t, f.plans, step.update)
 		if len(f.messages(t)) != len(rows) {
 			t.Fatal("no-op duplicated a row")
 		}
 	}
+
 	testutil.FailErr(t, "close committed store", f.database.Close())
 	reopened := testdbfixture.OpenPath(t, f.path)
 	sessions := sessionstore.NewSQL(reopened)
 	plans := progress.NewSQLStore(reopened, sessions)
-	snapshot, err := plans.Snapshot(t.Context(), "session")
+	_, err := plans.Snapshot(t.Context(), "session")
 	testutil.FailErr(t, "reopen plan", err)
-	applyPlan(t, plans, snapshot.Content)
+	updatePlan(t, plans, progress.UpdateRowSpec{ID: "p1", Label: &renamed})
 	rows, err := sessions.GetMessages(t.Context(), "session")
 	testutil.FailErr(t, "reopen transcript", err)
 	if len(rows) != 6 {
 		t.Fatalf("reopen rows=%d", len(rows))
 	}
-	// Delivery starts after reopening, without the original post-commit wake.
+
 	hub := events.NewMemoryHub()
 	stream, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: testdbseed.DefaultProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe after restart", err)
@@ -124,13 +135,14 @@ func TestPlanRowsCommitWithTransitionsAndSurviveRestart(t *testing.T) {
 
 func TestPendingPlanCompletesAfterRestart(t *testing.T) {
 	f := newProgressFixture(t)
-	applyPlan(t, f.plans, "- [ ] Deliver")
+	replacePlan(t, f.plans, progress.RowSpec{Label: "Deliver", State: progress.ProgressStatePending})
 	testutil.FailErr(t, "close pending plan", f.database.Close())
 	reopened := testdbfixture.OpenPath(t, f.path)
 	sessions := sessionstore.NewSQL(reopened)
 	plans := progress.NewSQLStore(reopened, sessions)
-	applyPlan(t, plans, "- [x] Deliver")
-	applyPlan(t, plans, "- [x] Deliver")
+	done := progress.ProgressStateDone
+	updatePlan(t, plans, progress.UpdateRowSpec{ID: "p1", State: &done})
+	updatePlan(t, plans, progress.UpdateRowSpec{ID: "p1", State: &done})
 	rows, err := sessions.GetMessages(t.Context(), "session")
 	testutil.FailErr(t, "read completed plan history", err)
 	if len(rows) != 2 || rows[1].Kind != api.MessageKindProgressComplete || rows[1].WorkflowRunID != "run" || rows[1].Ord != 2 {
@@ -151,11 +163,16 @@ func TestDelayedNotificationsCannotReorderOrRelabelPlanRows(t *testing.T) {
 		}
 	})
 	defer detach()
-	done := make(chan error, 1)
-	go func() { done <- f.plans.Set("session", "- [ ] First") }()
+	doneCh := make(chan error, 1)
+	go func() {
+		_, err := f.plans.Apply(t.Context(), "session", progress.Mutation{
+			Replace: []progress.RowSpec{{Label: "First", State: progress.ProgressStatePending}},
+		}, progress.ApplyOptions{})
+		doneCh <- err
+	}()
 	select {
 	case <-entered:
-	case err := <-done:
+	case err := <-doneCh:
 		t.Fatalf("initial write failed: %v", err)
 	}
 	first := f.messages(t)
@@ -163,11 +180,11 @@ func TestDelayedNotificationsCannotReorderOrRelabelPlanRows(t *testing.T) {
 		t.Fatalf("committed row missing before notification: %+v", first)
 	}
 	testutil.FailErr(t, "intervening append", f.sessions.AppendMessages(t.Context(), "session", api.Message{ID: "intervening", Role: api.MessageRoleAssistant, Content: "Next", Visibility: api.MessageVisibilityTranscript}))
-	// The first operation has not returned; a later commit still keeps its own place.
-	applyPlan(t, f.plans, "- [x] First")
+	done := progress.ProgressStateDone
+	updatePlan(t, f.plans, progress.UpdateRowSpec{ID: "p1", State: &done})
 	_, err := f.database.ExecContext(t.Context(), `INSERT INTO workflow_runs (id,session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at,parent_run_id) SELECT 'child',session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at,id FROM workflow_runs WHERE id='run'`)
 	testutil.FailErr(t, "insert child run", err)
-	_, err = progress.AdoptActiveRun(t.Context(), f.plans, "session", "child", "Next task")
+	_, err = progress.AdoptActiveRun(t.Context(), f.plans, "session", "child")
 	testutil.FailErr(t, "adopt child run", err)
 	rows := f.messages(t)
 	if len(rows) != 4 || rows[0].WorkflowRunID != "run" || rows[2].Kind != api.MessageKindProgressComplete || rows[2].WorkflowRunID != "run" || rows[3].WorkflowRunID != "child" {
@@ -179,7 +196,7 @@ func TestDelayedNotificationsCannotReorderOrRelabelPlanRows(t *testing.T) {
 		}
 	}
 	releaseObserver()
-	testutil.FailErr(t, "finish delayed notification", <-done)
+	testutil.FailErr(t, "finish delayed notification", <-doneCh)
 	if len(f.messages(t)) != len(rows) {
 		t.Fatal("notification duplicated history")
 	}
@@ -187,15 +204,18 @@ func TestDelayedNotificationsCannotReorderOrRelabelPlanRows(t *testing.T) {
 
 func TestConcurrentPlanWritersUseEachCommittedPredecessor(t *testing.T) {
 	f := newProgressFixture(t)
+	replacePlan(t, f.plans, progress.RowSpec{Label: "Initial", State: progress.ProgressStatePending})
 	const writers = 12
 	start := make(chan struct{})
 	results := make(chan error, writers)
 	for i := 0; i < writers; i++ {
+		idx := i + 1
 		go func() {
 			<-start
-			_, err := f.plans.Update(t.Context(), "session", func(before progress.Snapshot) (progress.Document, error) {
-				return progress.Document{Content: fmt.Sprintf("- [ ] Revision %d", before.DocumentVersion()+1), ItemIDs: before.ItemIDs}, nil
-			})
+			label := fmt.Sprintf("Revision %d", idx)
+			_, err := f.plans.Apply(t.Context(), "session", progress.Mutation{
+				Update: []progress.UpdateRowSpec{{ID: "p1", Label: &label}},
+			}, progress.ApplyOptions{})
 			results <- err
 		}()
 	}
@@ -204,23 +224,16 @@ func TestConcurrentPlanWritersUseEachCommittedPredecessor(t *testing.T) {
 		testutil.FailErr(t, "concurrent transition", <-results)
 	}
 	rows := f.messages(t)
-	if len(rows) != writers {
+	if len(rows) != writers+1 {
 		t.Fatalf("concurrent rows=%d", len(rows))
 	}
-	for i, row := range rows {
-		if row.Ord != int64(i+1) || row.ProgressUpdate == nil {
-			t.Fatalf("row %d=%+v", i, row)
+	prevLabel := "Initial"
+	for i := 1; i < len(rows); i++ {
+		changes := rows[i].ProgressUpdate.Changes
+		if len(changes) != 1 || changes[0].PrevLabel != prevLabel {
+			t.Fatalf("transition %d lost predecessor: got %+v, want prev=%q", i, changes, prevLabel)
 		}
-		if i == 0 {
-			if !row.ProgressUpdate.Initial || row.ProgressUpdate.Steps[0].Label != "Revision 1" {
-				t.Fatalf("initial row=%+v", row)
-			}
-		} else {
-			changes := row.ProgressUpdate.Changes
-			if len(changes) != 1 || changes[0].PrevLabel != fmt.Sprintf("Revision %d", i) || changes[0].Label != fmt.Sprintf("Revision %d", i+1) {
-				t.Fatalf("transition %d lost predecessor: %+v", i, changes)
-			}
-		}
+		prevLabel = changes[0].Label
 	}
 }
 
@@ -234,11 +247,11 @@ func TestCancellationAfterCommitRetainsThePlanAndRow(t *testing.T) {
 		}
 	})
 	defer release()
-	snapshot, err := f.plans.Update(ctx, "session", func(progress.Snapshot) (progress.Document, error) {
-		return progress.Document{Content: "- [ ] Committed"}, nil
-	})
+	out, err := f.plans.Apply(ctx, "session", progress.Mutation{
+		Replace: []progress.RowSpec{{Label: "Committed", State: progress.ProgressStatePending}},
+	}, progress.ApplyOptions{})
 	testutil.FailErr(t, "return committed transition", err)
-	if ctx.Err() == nil || snapshot.Content != "- [ ] Committed" || len(f.messages(t)) != 1 {
+	if ctx.Err() == nil || len(out.Snapshot.Rows) != 1 || out.Snapshot.Rows[0].Label != "Committed" || len(f.messages(t)) != 1 {
 		t.Fatal("post-commit cancellation changed the outcome")
 	}
 }

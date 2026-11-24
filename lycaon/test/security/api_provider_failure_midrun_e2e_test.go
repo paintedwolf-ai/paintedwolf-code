@@ -102,7 +102,7 @@ func TestProviderFailureMidRunIsRecoverable(t *testing.T) {
 				on(tc.marker,
 					toolStep("Reading the tree.",
 						call("f1", "update_progress", map[string]any{
-							"content": "## Progress\n- [>] mid-run fault rehearsal\n",
+							"replace": []any{map[string]any{"label": "mid-run fault rehearsal", "state": "pending"}},
 						})),
 					fault,
 				).

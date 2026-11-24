@@ -151,7 +151,7 @@ func TestTemplateProvidersFoldPostToolSystemInjectsWithoutTrailingUser(t *testin
 		{Role: api.MessageRoleUser, Content: "Implement the feature."},
 		{
 			Role:           api.MessageRoleAssistant,
-			ToolCalls:      []api.ToolCall{{ID: "call-1", WireID: "call-1", Name: "update_progress", Args: map[string]any{"content": "- [ ] step"}}},
+			ToolCalls:      []api.ToolCall{{ID: "call-1", WireID: "call-1", Name: "update_progress", Args: map[string]any{"replace": []any{map[string]any{"label": "step"}}}}},
 			ModelReasoning: &api.ModelReasoning{ProviderID: "ollama", Model: "qwen3-coder", Text: "plan first"},
 		},
 		{Role: api.MessageRoleTool, Content: `{"status":"updated"}`, ToolResult: toolResult, PromptCacheBreakpoint: api.PromptCacheTierHistory},

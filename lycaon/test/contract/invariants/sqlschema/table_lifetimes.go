@@ -180,6 +180,7 @@ var tableLifetimes = map[string]tableLifetime{
 	"session_entries":                 cascadeOwnedBy("sessions"),
 	"session_model_limits":            cascadeOwnedBy("sessions"),
 	"session_progress":                cascadeOwnedBy("sessions"),
+	"session_progress_items":          cascadeOwnedBy("session_progress"),
 	"session_scan_bindings":           cascadeOwnedBy("sessions"),
 	"session_source_turns":            cascadeOwnedBy("sessions"),
 	"session_turn_heads":              cascadeOwnedBy("sessions"),

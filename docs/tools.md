@@ -806,14 +806,18 @@ progress update remains separate from program success and is never inferred
 from utility output.
 
 `PrepareProgramEnvelope` requires the actual parsed program's live validated
-identity before admitting the optional payload through the existing
-`update_progress` schema and author validation. `ApplyProgramProgress` uses the
-existing policy, secret screens, review and progress store, checking the held
-program identity and current root again before application. Its host envelope
-execution id has no invented shell node or source span. The progress recorder
-marker and `AuthorUpdateResult` remain separate from program-child settlement;
-a committed checklist is preserved after a later denied operation. These typed
-ports do not activate the replacement command entry.
+identity before admitting the optional payload through `update_progress` DML
+validation and capturing a `PreparedProgressBasis` (`BaseVersion`,
+`WasEmpty`, and targeted `RowLabels`) from the current store snapshot.
+`ApplyProgramProgress` uses the existing policy, secret screens, review and
+progress store, checking the held program identity, current root, and
+`PreparedProgressBasis` before application (`PROGRESS_STALE_BASIS` rejects a
+held edit when a targeted row was relabeled or a held `replace` when the plan
+changed meanwhile). Its host envelope execution id has no invented shell node
+or source span. The progress recorder marker and `MutationResult` remain
+separate from program-child settlement; committed progress rows are preserved
+after a later denied operation. These typed ports do not activate the
+replacement command entry.
 
 A listen request alone grants no connection. Automatic paired loopback access
 requires narrowed per-action conditional admission, current policy, and a fresh

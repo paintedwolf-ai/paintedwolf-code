@@ -1,0 +1,24 @@
+spec_version: "1.0"
+id: PROGRESS_RESULT_HANDLE_UNKNOWN
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - update_progress
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.unknown_handles]
+when: paintedwolf.rejection_code == "PROGRESS_RESULT_HANDLE_UNKNOWN"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+message: Unknown worker result handle in acknowledge_results
+what: 'acknowledge_results named unknown or unsettled result handles: {{ paintedwolf.unknown_handles }}.'
+cause: A handle in acknowledge_results does not belong to a settled worker round in this root session.
+why: Result acknowledgement records durable review of settled worker outputs in the current session.
+fix: '{{ paintedwolf.next_steps }} Pass only settled result_handle values listed in the current snapshot unaccounted_results or worker completion notices.'
+instead: Branch on Code; pass settled result_handle values from this session and retry update_progress
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: update_progress
+      profile: coordinator
+      unknown_handles: [res-unknown]

@@ -458,7 +458,22 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
       scope_hash: "9f2c1a",
     },
   }),
-  update_progress: JSON.stringify({ status: "updated" }),
+  update_progress: JSON.stringify({
+    status: "updated",
+    added_item_ids: ["p1", "p2"],
+    closed_item_ids: [],
+    removed_item_ids: [],
+    acknowledged_results: [],
+    reconciliation_status: "none",
+    snapshot: {
+      rows: [
+        { id: "p1", state: "pending", label: "Wire login form" },
+        { id: "p2", state: "pending", label: "Verify login flow" },
+      ],
+      summary: { pending: 2, done: 0, na: 0, optional: 0 },
+      unaccounted_results: [],
+    },
+  }),
   pack_board: "| Phase | Status |\n| --- | --- |\n| build | active |",
   render_view: JSON.stringify({
     mime: "image/png",

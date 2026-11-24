@@ -229,8 +229,9 @@ func (g *MemoryDoomLoopGuard) RecordAttempt(
 	}
 	st := sess[key]
 	if st == nil {
-		content, _ := args["content"].(string)
-		st = &doomLoopState{pendingProgress: strings.EqualFold(strings.TrimSpace(tool), "update_progress") && !progress.AllTerminal(content)}
+		m, parseErr := progress.PrepareMutation(args)
+		terminal := parseErr == nil && mutationAllTerminal(m)
+		st = &doomLoopState{pendingProgress: strings.EqualFold(strings.TrimSpace(tool), "update_progress") && !terminal}
 		sess[key] = st
 	}
 	g.states.Store(sessionID, sess)

@@ -89,26 +89,46 @@ func doomLoopFingerprintArgs(tool string, args map[string]any) map[string]any {
 	}
 }
 
-// Progress fingerprints ignore revision bookkeeping and normalize closed labels.
+// doomLoopUpdateProgressArgs normalizes terminal label edits while keeping row IDs and handles distinct.
 func doomLoopUpdateProgressArgs(args map[string]any) map[string]any {
 	if args == nil {
 		return map[string]any{}
 	}
-	content, _ := args["content"].(string)
-	if progress.AllTerminal(content) {
+	m, err := progress.PrepareMutation(args)
+	if err != nil {
+		return args
+	}
+	if mutationAllTerminal(m) {
 		fingerprint := map[string]any{"all_terminal": true}
-		if token, _ := args["reconciliation_token"].(string); token != "" {
-			fingerprint["reconciliation_token"] = token
+		if len(m.AcknowledgeResults) > 0 {
+			fingerprint["acknowledge_results"] = m.AcknowledgeResults
 		}
 		return fingerprint
 	}
-	fingerprint := make(map[string]any, len(args))
-	for key, value := range args {
-		if key != "expected_revision" {
-			fingerprint[key] = value
-		}
+	return args
+}
+
+func mutationAllTerminal(m progress.Mutation) bool {
+	if len(m.Add) > 0 || len(m.Remove) > 0 {
+		return false
 	}
-	return fingerprint
+	if len(m.Replace) > 0 {
+		for _, r := range m.Replace {
+			if r.State == "" || r.State == progress.ProgressStatePending {
+				return false
+			}
+		}
+		return true
+	}
+	if len(m.Update) > 0 {
+		for _, u := range m.Update {
+			if u.State == nil || *u.State == progress.ProgressStatePending {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // doomLoopPageTargetArg groups reopened pages by target, using ids for unresolved handles.

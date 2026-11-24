@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,7 +26,7 @@ type Guidance interface {
 	TakePolicy(context.Context, string) ([]api.Message, error)
 }
 type Progress interface {
-	Get(context.Context, string) string
+	Snapshot(context.Context, string) (progress.Snapshot, error)
 }
 type Service struct {
 	sessionStore     Sessions
