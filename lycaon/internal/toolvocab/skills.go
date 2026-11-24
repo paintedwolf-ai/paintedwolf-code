@@ -225,9 +225,9 @@ type skillRenderMemo struct {
 }
 
 var (
-	skillRenderCache           = scopedstore.New[skillRenderMemo](32768)
-	readerSkillVarsCache       = scopedstore.New[map[string]any](2048)
-	skillOfferedForReaderCache = scopedstore.New[bool](65536)
+	skillRenderCache           = scopedstore.New[skillRenderMemo](1024)
+	readerSkillVarsCache       = scopedstore.New[map[string]any](256)
+	skillOfferedForReaderCache = scopedstore.New[bool](4096)
 )
 
 func varsDigestKey(vars map[string]any) string {
@@ -237,7 +237,8 @@ func varsDigestKey(vars map[string]any) string {
 }
 
 func renderSkillTextCached(varsKey, text string, vars map[string]any) (string, error) {
-	key := varsKey + "\x00" + text
+	textSum := sha256.Sum256([]byte(text))
+	key := varsKey + "\x00" + string(textSum[:])
 	if hit, ok := skillRenderCache.Load(key); ok {
 		return hit.out, hit.err
 	}
@@ -574,7 +575,19 @@ func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
 	fp := reader.Fingerprint()
 	var memoKey string
 	if fp != "" {
-		memoKey = fp + "\x00" + sk.Name + "\x00" + sk.Description + "\x00" + sk.Metadata["host_resources"] + "\x00" + sk.Metadata["any_of_tools"] + "\x00" + sk.Body
+		h := sha256.New()
+		h.Write([]byte(fp))
+		h.Write([]byte{0})
+		h.Write([]byte(sk.Name))
+		h.Write([]byte{0})
+		h.Write([]byte(sk.Description))
+		h.Write([]byte{0})
+		h.Write([]byte(sk.Metadata["host_resources"]))
+		h.Write([]byte{0})
+		h.Write([]byte(sk.Metadata["any_of_tools"]))
+		h.Write([]byte{0})
+		h.Write([]byte(sk.Body))
+		memoKey = string(h.Sum(nil))
 		if cached, ok := skillOfferedForReaderCache.Load(memoKey); ok {
 			return cached
 		}
