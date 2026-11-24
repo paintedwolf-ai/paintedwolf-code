@@ -31,6 +31,7 @@ func Inspect(source string, profile Profile) (Analysis, error) {
 	}
 
 	var analysis Analysis
+	lines := newLineCursor(source)
 	forDepth := 0
 	tagCount := 0
 	opaqueEnd := ""
@@ -70,7 +71,7 @@ func Inspect(source string, profile Profile) (Analysis, error) {
 			offset = end + 2
 			continue
 		}
-		if err := applyInspectedTag(&analysis, source, profile, tag, rest, kwOffset, &forDepth, &opaqueEnd); err != nil {
+		if err := applyInspectedTag(&analysis, lines, profile, tag, rest, kwOffset, &forDepth, &opaqueEnd); err != nil {
 			return Analysis{}, err
 		}
 		offset = end + 2
@@ -121,7 +122,7 @@ func parseTagHeader(rawInner string, baseOffset int) (kwOffset int, tag, rest st
 
 func applyInspectedTag(
 	analysis *Analysis,
-	source string,
+	lines *lineCursor,
 	profile Profile,
 	tag, rest string,
 	kwOffset int,
@@ -129,7 +130,7 @@ func applyInspectedTag(
 	opaqueEnd *string,
 ) error {
 	appendBranch := func(kind BranchKind, expr string) {
-		line, col := lineColAt(source, kwOffset)
+		line, col := lines.at(kwOffset)
 		analysis.Branches = append(analysis.Branches, BranchSpec{
 			Index:      len(analysis.Branches),
 			Line:       line,
@@ -176,20 +177,29 @@ func applyInspectedTag(
 	return nil
 }
 
-func lineColAt(source string, offset int) (line, col int) {
-	if offset < 0 {
-		offset = 0
+// lineCursor maps nondecreasing byte offsets to 1-based line and column,
+// scanning each byte of the source at most once.
+type lineCursor struct {
+	source    string
+	offset    int
+	line      int
+	lineStart int
+}
+
+func newLineCursor(source string) *lineCursor { return &lineCursor{source: source, line: 1} }
+
+func (c *lineCursor) at(offset int) (line, col int) {
+	offset = min(max(offset, 0), len(c.source))
+	if offset < c.offset {
+		c.offset, c.line, c.lineStart = 0, 1, 0
 	}
-	if offset > len(source) {
-		offset = len(source)
+	segment := c.source[c.offset:offset]
+	if newlines := strings.Count(segment, "\n"); newlines > 0 {
+		c.line += newlines
+		c.lineStart = c.offset + strings.LastIndexByte(segment, '\n') + 1
 	}
-	prefix := source[:offset]
-	line = 1 + strings.Count(prefix, "\n")
-	lastNL := strings.LastIndexByte(prefix, '\n')
-	if lastNL < 0 {
-		return line, 1 + offset
-	}
-	return line, 1 + (offset - lastNL - 1)
+	c.offset = offset
+	return c.line, 1 + offset - c.lineStart
 }
 
 func quotedDependency(rest string) (string, bool) {
