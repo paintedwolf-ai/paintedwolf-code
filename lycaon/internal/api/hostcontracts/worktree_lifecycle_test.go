@@ -47,32 +47,7 @@ func TestWorktreeLifecycleRemovalBlockersTargetedStaleCleanupAndExternalRecovery
 	)
 	t.Cleanup(func() { _ = docs.Close(context.Background()) })
 
-	baseDir := gitrepo.CanonicalDir(t.TempDir())
-	primaryDir := filepath.Join(baseDir, "primary")
-	liveSiblingDir := filepath.Join(baseDir, "wt-live-sibling")
-	staleSiblingDir := filepath.Join(baseDir, "wt-stale-sibling")
-	externalRemovedDir := filepath.Join(baseDir, "wt-external-removed")
-	testutil.FailErr(t, "mkdir primary", os.MkdirAll(primaryDir, 0o755))
-
-	contractfixture.RunGitIn(t, primaryDir, "init", "-b", "main")
-	testutil.FailErr(t, "seed app.go", os.WriteFile(filepath.Join(primaryDir, "app.go"), []byte("package main\n"), 0o644))
-	contractfixture.RunGitIn(t, primaryDir, "add", "app.go")
-	contractfixture.RunGitIn(t, primaryDir, "commit", "-m", "initial")
-
-	// Create one live external sibling worktree and one separate stale external sibling registration.
-	contractfixture.RunGitIn(t, primaryDir, "worktree", "add", "-b", "feat/live-sibling", liveSiblingDir, "HEAD")
-	contractfixture.RunGitIn(t, primaryDir, "worktree", "add", "-b", "feat/stale-sibling", staleSiblingDir, "HEAD")
-	contractfixture.RunGitIn(t, primaryDir, "worktree", "add", "-b", "feat/ext-recovery", externalRemovedDir, "HEAD")
-	testutil.FailErr(t, "delete stale sibling dir to leave stale registration", os.RemoveAll(staleSiblingDir))
-
-	repoDiscovered, ok := gitrepo.Discover(primaryDir)
-	if !ok {
-		t.Fatal("discover primary repo")
-	}
-	staleAdminDir := filepath.Join(repoDiscovered.CommonDir, "worktrees", "wt-stale-sibling")
-	if _, err := os.Stat(filepath.Join(staleAdminDir, "gitdir")); err != nil {
-		t.Fatalf("expected stale sibling admin dir before test: %v", err)
-	}
+	primaryDir, liveSiblingDir, staleAdminDir, externalRemovedDir := seedLifecycleRepos(t)
 
 	proj, err := srv.Sources.Workspace.ProjectRegistry.Create(t.Context(), project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: primaryDir, Label: "repo"}},
@@ -94,30 +69,7 @@ func TestWorktreeLifecycleRemovalBlockersTargetedStaleCleanupAndExternalRecovery
 		t.Fatal("expected bound worktree")
 	}
 
-	// Verify managed=true on bound checkout and managed=false on external checkouts in GET /worktrees.
-	wtReq := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+proj.ID+"/git/repos/"+repoID+"/worktrees?session_id="+sess.ID, nil)
-	wtRes := httptest.NewRecorder()
-	srv.ServeHTTP(wtRes, wtReq)
-	if wtRes.Code != http.StatusOK {
-		t.Fatalf("list worktrees status=%d body=%s", wtRes.Code, wtRes.Body.String())
-	}
-	var wtList wire.GitWorktreesView
-	testutil.FailErr(t, "decode worktrees", json.Unmarshal(wtRes.Body.Bytes(), &wtList))
-	var externalRecoveryID string
-	for _, entry := range wtList.Worktrees {
-		if entry.WorktreeID == bindView.WorktreeID && !entry.Managed {
-			t.Fatalf("expected bound checkout %s to be marked managed=true: %+v", bindView.WorktreeID, entry)
-		}
-		if entry.Branch == "feat/ext-recovery" {
-			externalRecoveryID = entry.WorktreeID
-			if entry.Managed {
-				t.Fatalf("external checkout must not be marked managed: %+v", entry)
-			}
-		}
-	}
-	if externalRecoveryID == "" {
-		t.Fatalf("missing external recovery checkout in %+v", wtList.Worktrees)
-	}
+	externalRecoveryID := verifyManagedFlagOnListedWorktrees(t, srv, proj.ID, repoID, sess.ID, bindView.WorktreeID)
 
 	// Blocker 1: Dirty working tree refuses removal with concrete dirty_worktree blocker details.
 	testutil.FailErr(t, "dirty managed checkout", os.WriteFile(filepath.Join(binding.WorktreePath, "app.go"), []byte("package main // dirty\n"), 0o644))
@@ -275,4 +227,69 @@ func verifyMissingManagedCleanupAndExternalDraftRecovery(
 	if !recovered.Dirty || recovered.Draft != "package main // recoverable external draft\n" {
 		t.Fatalf("recovered external draft lost content: %+v", recovered)
 	}
+}
+
+func seedLifecycleRepos(t *testing.T) (primaryDir, liveSiblingDir, staleAdminDir, externalRemovedDir string) {
+	t.Helper()
+	baseDir := gitrepo.CanonicalDir(t.TempDir())
+	primaryDir = filepath.Join(baseDir, "primary")
+	liveSiblingDir = filepath.Join(baseDir, "wt-live-sibling")
+	staleSiblingDir := filepath.Join(baseDir, "wt-stale-sibling")
+	externalRemovedDir = filepath.Join(baseDir, "wt-external-removed")
+	testutil.FailErr(t, "mkdir primary", os.MkdirAll(primaryDir, 0o755))
+
+	contractfixture.RunGitIn(t, primaryDir, "init", "-b", "main")
+	testutil.FailErr(t, "seed app.go", os.WriteFile(filepath.Join(primaryDir, "app.go"), []byte("package main\n"), 0o644))
+	contractfixture.RunGitIn(t, primaryDir, "add", "app.go")
+	contractfixture.RunGitIn(t, primaryDir, "commit", "-m", "initial")
+
+	contractfixture.RunGitIn(t, primaryDir, "worktree", "add", "-b", "feat/live-sibling", liveSiblingDir, "HEAD")
+	contractfixture.RunGitIn(t, primaryDir, "worktree", "add", "-b", "feat/stale-sibling", staleSiblingDir, "HEAD")
+	contractfixture.RunGitIn(t, primaryDir, "worktree", "add", "-b", "feat/ext-recovery", externalRemovedDir, "HEAD")
+	testutil.FailErr(t, "delete stale sibling dir to leave stale registration", os.RemoveAll(staleSiblingDir))
+
+	repoDiscovered, ok := gitrepo.Discover(primaryDir)
+	if !ok {
+		t.Fatal("discover primary repo")
+	}
+	staleAdminDir = filepath.Join(repoDiscovered.CommonDir, "worktrees", "wt-stale-sibling")
+	if _, err := os.Stat(filepath.Join(staleAdminDir, "gitdir")); err != nil {
+		t.Fatalf("expected stale sibling admin dir before test: %v", err)
+	}
+	return primaryDir, liveSiblingDir, staleAdminDir, externalRemovedDir
+}
+
+func verifyManagedFlagOnListedWorktrees(
+	t *testing.T,
+	srv *hostapi.Server,
+	projectID string,
+	repoID string,
+	sessionID string,
+	boundWorktreeID string,
+) string {
+	t.Helper()
+	wtReq := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+projectID+"/git/repos/"+repoID+"/worktrees?session_id="+sessionID, nil)
+	wtRes := httptest.NewRecorder()
+	srv.ServeHTTP(wtRes, wtReq)
+	if wtRes.Code != http.StatusOK {
+		t.Fatalf("list worktrees status=%d body=%s", wtRes.Code, wtRes.Body.String())
+	}
+	var wtList wire.GitWorktreesView
+	testutil.FailErr(t, "decode worktrees", json.Unmarshal(wtRes.Body.Bytes(), &wtList))
+	var externalRecoveryID string
+	for _, entry := range wtList.Worktrees {
+		if entry.WorktreeID == boundWorktreeID && !entry.Managed {
+			t.Fatalf("expected bound checkout %s to be marked managed=true: %+v", boundWorktreeID, entry)
+		}
+		if entry.Branch == "feat/ext-recovery" {
+			externalRecoveryID = entry.WorktreeID
+			if entry.Managed {
+				t.Fatalf("external checkout must not be marked managed: %+v", entry)
+			}
+		}
+	}
+	if externalRecoveryID == "" {
+		t.Fatalf("missing external recovery checkout in %+v", wtList.Worktrees)
+	}
+	return externalRecoveryID
 }
