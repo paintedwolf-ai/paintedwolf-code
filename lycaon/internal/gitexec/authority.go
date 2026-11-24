@@ -28,6 +28,8 @@ type AgentLaunch struct {
 	Workspace confine.ActionWorkspace
 	// Credentials serves a network command's Git; nil leaves it without any.
 	Credentials *AgentCredentials
+	// SSH serves mediated SSH connections for a network command's Git; nil leaves SSH on its default path.
+	SSH *AgentSSH
 }
 
 // AgentEntry marks ctx as an agent's tool call. Git launched under it runs

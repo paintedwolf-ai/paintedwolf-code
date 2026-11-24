@@ -249,6 +249,7 @@ func authorizeRepoNetwork(ctx context.Context, p Prepared, tc tools.ToolContext,
 type networkLaunch struct {
 	done        func(failed bool)
 	credentials *gitexec.AgentCredentials
+	ssh         *gitexec.AgentSSH
 }
 
 // refusal is the typed refusal a failed command settles with when Git asked
@@ -282,11 +283,25 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 		_ = credentials.Close()
 		return ctx, networkLaunch{}, err
 	}
+	services := []confine.HostService{service}
+	var sshService *gitexec.AgentSSH
+	if slices.ContainsFunc(admitted.urls, isSSHRemote) {
+		sshService, err = gitexec.StartAgentSSH(ctx, nil)
+		if err != nil {
+			releaseService()
+			_ = credentials.Close()
+			return ctx, networkLaunch{}, err
+		}
+		services = append(services, sshService.HostService())
+	}
 	launchTC := tc
 	launchTC.Files.SessionReadPaths = append(slices.Clone(tc.Files.SessionReadPaths), admitted.reads...)
 	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), admitted.writes...)
-	plan, release, err := p.bindLaunch(ctx, launchTC, []confine.HostService{service})
+	plan, release, err := p.bindLaunch(ctx, launchTC, services)
 	if err != nil {
+		if sshService != nil {
+			_ = sshService.Close()
+		}
 		releaseService()
 		_ = credentials.Close()
 		return ctx, networkLaunch{}, err
@@ -305,10 +320,15 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 			outcome.Refusals = withheldAgent(ctx, admitted.urls, hasAgent)
 		}
 		release(context.WithoutCancel(ctx), outcome)
+		if sshService != nil {
+			_ = sshService.Close()
+		}
 		releaseService()
 		_ = credentials.Close()
 	}
-	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Workspace: tc.Host.ActionWorkspace, Credentials: credentials}), networkLaunch{done: done, credentials: credentials}, nil
+	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{
+		Plan: plan, Workspace: tc.Host.ActionWorkspace, Credentials: credentials, SSH: sshService,
+	}), networkLaunch{done: done, credentials: credentials, ssh: sshService}, nil
 }
 
 // withheldAgent reads a failed SSH network command without the user's SSH
