@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"io"
 	"io/fs"
+	"maps"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
