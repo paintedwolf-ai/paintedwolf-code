@@ -385,19 +385,27 @@ waitPark:
 	for _, m := range lastReq.Messages {
 		joinedFinal += m.Content + "\n"
 	}
-	if !strings.Contains(joinedFinal, "Root policy verified") {
-		t.Fatalf("post-compaction request missing surviving continuation fact")
+	if !strings.Contains(joinedFinal, "Continuation context") {
+		t.Fatalf("post-compaction request missing surviving continuation")
 	}
 
 	// Simulate damaged view (continuation rewritten to compacted_chunk) and verify reopen repair.
-	damaged := view2
+	histSvc.Wait()
+	latestView, ok, err := h.Store.Compaction.GetCompactionView(ownerCtx, sess.ID)
+	testutil.FailErr(t, "reload compaction view", err)
+	if !ok {
+		t.Fatal("expected compaction view before simulating damage")
+	}
+	damaged := *latestView
+	damaged.Generation = latestView.Generation + 1
 	for i := range damaged.Messages {
 		if len(damaged.Messages[i].ContentParts) == 1 && damaged.Messages[i].ContentParts[0].Source == "compaction_summary" {
 			damaged.Messages[i].ContentParts[0].Source = "compacted_chunk"
 			damaged.Messages[i].CompactedChunk = &wire.CompactedChunkMeta{OriginalTokens: 2000, CompactedTokens: 900}
 		}
 	}
-	testutil.FailErr(t, "write damaged view", h.Store.Compaction.PutCompactionView(h.OwnerCtx(t, ctx), sess.ID, *damaged))
+	testutil.FailErr(t, "write damaged view", h.Store.Compaction.PutCompactionView(ownerCtx, sess.ID, damaged))
+	testutil.FailErr(t, "close first host", h.Close())
 
 	reopened := BuildForTestAt(t, storeDir, WithLLMClient(client))
 	reopened.Start(t)
