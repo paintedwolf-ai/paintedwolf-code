@@ -33,8 +33,8 @@ func TestReaderHeldMatchesMetadataProgramReachAcrossHostStates(t *testing.T) {
 	contractcheck.FailErr(t, "CoordinatorSurfaceIDs", err)
 	lang, err := toolcontract.ReadOnlyLanguageV1()
 	contractcheck.FailErr(t, "ReadOnlyLanguageV1", err)
-	if len(lang.Commands) != 176 {
-		t.Fatalf("len(ReadOnlyLanguageV1().Commands) = %d, want 176", len(lang.Commands))
+	if len(lang.Commands) == 0 || len(lang.Commands) != len(lang.Language.RequiredCommands) {
+		t.Fatalf("len(ReadOnlyLanguageV1().Commands) = %d, want non-empty match with RequiredCommands (%d)", len(lang.Commands), len(lang.Language.RequiredCommands))
 	}
 
 	checkedTuples := 0
