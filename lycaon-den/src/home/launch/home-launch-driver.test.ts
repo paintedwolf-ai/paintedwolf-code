@@ -45,7 +45,7 @@ class FakeHost {
   client(): LycaonClient {
     return stubClient({
       getHomeStartCapabilities: vi.fn(async () => ({ protocol_version: 1, store_id: "store-1", person_id: "person-1" })),
-      putHomeStart: vi.fn(async (launchId: string) => {
+      reserveHomeStart: vi.fn(async (launchId: string) => {
         this.puts++;
         if (!this.reserved && this.phase !== "stopped") {
           this.reserved = true;
@@ -65,7 +65,7 @@ class FakeHost {
         if (!this.admitted) { this.phase = "stopped"; this.revision++; }
         return this.view(launchId);
       }),
-      replaceHomeStartFirstPrompt: vi.fn(async (launchId: string, req: { operation_id: string; replacement_operation_id: string }) => {
+      reissueHomeStartFirstPrompt: vi.fn(async (launchId: string, req: { operation_id: string; replacement_operation_id: string }) => {
         if (this.admitted) throw new LycaonApiError("admitted", 409, "home_start_admitted");
         if (req.operation_id !== this.operation) throw new LycaonApiError("stale", 409, "home_start_conflict");
         this.operation = req.replacement_operation_id;
@@ -190,12 +190,12 @@ describe("home launch driver", () => {
   it("leaves the idea in chat when the engine predates Home starts", async () => {
     client = stubClient({
       getHomeStartCapabilities: vi.fn(async () => { throw new LycaonApiError("missing", 404, "not_found"); }),
-      putHomeStart: vi.fn(),
+      reserveHomeStart: vi.fn(),
     }) as LycaonClient;
     const id = launch("Old engine");
     driveLaunch(id);
     await vi.waitFor(() => expect(homeLaunches.runtime(id)?.blocker?.code).toBe("host_outdated"));
-    expect(vi.mocked(client.putHomeStart)).not.toHaveBeenCalled();
+    expect(vi.mocked(client.reserveHomeStart)).not.toHaveBeenCalled();
   });
 
   it("never replays into another host without an explicit send", async () => {

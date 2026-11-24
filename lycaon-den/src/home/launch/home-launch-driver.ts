@@ -183,7 +183,7 @@ async function runLaunch(
       const hostState = record()?.hostState;
       if (!hostState || (hostState.phase === "failed" && hostState.failure?.resumable && current.localRevision > 0 && !current.sendAttempted && needsResume(current))) {
         setLaunchRuntime(launchId, { step: "creating" });
-        const reserved = await request((c) => c.putHomeStart(launchId, { choices: { mode: current.mode } }));
+        const reserved = await request((c) => c.reserveHomeStart(launchId, { choices: { mode: current.mode } }));
         applyHostState(launchId, reserved);
       }
       const reserved = record()?.hostState;
@@ -326,7 +326,7 @@ async function replaceFirstPrompt(
   if (!record?.hostState || record.proposedText === undefined) return;
   const replacement = crypto.randomUUID();
   try {
-    const replaced = await request((c) => c.replaceHomeStartFirstPrompt(launchId, {
+    const replaced = await request((c) => c.reissueHomeStartFirstPrompt(launchId, {
       expected_revision: record.hostState!.revision,
       operation_id: record.promptOperationId,
       replacement_operation_id: replacement,
