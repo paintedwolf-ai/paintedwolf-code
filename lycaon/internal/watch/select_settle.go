@@ -524,7 +524,8 @@ func insertCommittedDeliveryTx(ctx context.Context, tx *sql.Tx, deliveryID strin
 func latestDeliveryForWatchTx(ctx context.Context, tx *sql.Tx, watchID string) (string, error) {
 	var id string
 	err := tx.QueryRowContext(ctx, `SELECT delivery_id FROM watch_deliveries
-		WHERE state = 'committed' AND EXISTS (SELECT 1 FROM json_each(watch_ids_json) WHERE value = ?)
+		WHERE state = 'committed' AND destination_kind != 'final_receipt'
+		  AND EXISTS (SELECT 1 FROM json_each(watch_ids_json) WHERE value = ?)
 		ORDER BY created_at DESC, delivery_id DESC LIMIT 1`, watchID).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
