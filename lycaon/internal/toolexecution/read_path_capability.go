@@ -1,14 +1,13 @@
 package toolexecution
 
 import (
-	"github.com/lycaon/lycaon/internal/capabilityrequest"
-
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func (e *Boundary) preflightReadPath(ctx context.Context, tool string, args map[string]any, tc *tools.ToolContext) error {
@@ -31,6 +30,20 @@ func (e *Boundary) preflightReadPath(ctx context.Context, tool string, args map[
 		tc.Files.PackageExecution.ApprovedReadPaths = request.ReadPaths
 	}
 	return nil
+}
+
+// ReviewRedirectRead reviews an input redirect or sourced script before it opens.
+func (e *Boundary) ReviewRedirectRead(ctx context.Context, tc tools.ToolContext, operator, path string) (tools.ToolContext, error) {
+	args := map[string]any{"command": operator + " " + path}
+	if err := e.authorizeReadPath(ctx, "command", args, &tc, path); err != nil {
+		return tc, err
+	}
+	if e.sessionReadOverlay != nil {
+		tc.Files.SessionReadPaths = append([]string(nil), e.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)
+	}
+	// A single-use approval installs no session grant but covers this open.
+	tc.Files.SessionReadPaths = append(tc.Files.SessionReadPaths, path)
+	return tc, nil
 }
 
 func (e *Boundary) authorizeReadPath(ctx context.Context, tool string, args map[string]any, tc *tools.ToolContext, path string) error {

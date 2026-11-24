@@ -152,6 +152,7 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	if programs.Executor != nil {
 		programs.Executor.Metadata.SetCommandExternalHidden(services.ExternalHidden)
 		r.owners.reviewRoot = programs.Executor.Boundary.ReviewRedirectRoot
+		r.owners.reviewRead = programs.Executor.Boundary.ReviewRedirectRead
 	}
 	owners, err := r.owners.compose(services.Recorder)
 	if err != nil {
