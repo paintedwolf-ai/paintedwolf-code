@@ -12,8 +12,8 @@ import (
 )
 
 // supervisedRefusalReports is true on Linux: no system stream exists, and
-// each launch's supervising helper reports the socket calls it refused on a
-// pipe of its own.
+// each launch's supervising helper reports refused socket and filesystem calls
+// on a pipe of its own.
 func supervisedRefusalReports() bool { return true }
 
 func newRefusalSource(string, ProcessTracker) refusalSource { return nil }
