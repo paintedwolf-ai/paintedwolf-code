@@ -125,7 +125,7 @@ function Opener(props: { opener: ActionOpener; part: ToolPartView; projectId?: s
     }>
       <Match when={props.opener.kind === "file" && props.opener.path ? props.opener.path : undefined} keyed>
         {(path) => {
-          const resolved = createMemo(() =>
+          const resolved = () =>
             activityFileOpenTarget({
               projectId: props.projectId ?? "",
               mode: "live",
@@ -133,8 +133,7 @@ function Opener(props: { opener: ActionOpener; part: ToolPartView; projectId?: s
               line: props.opener.line,
               locations: props.part.sourceLocations,
               rootRefs: props.rootRefs,
-            }),
-          );
+            });
           const uniqueTarget = () => {
             const target = resolved();
             if (!target || target.kind !== "live" || !target.rootId) return undefined;
