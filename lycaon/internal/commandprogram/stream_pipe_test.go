@@ -17,7 +17,7 @@ func fixturePipe(t *testing.T, ctx context.Context, maximum int64) *BytePipe {
 	t.Helper()
 	budget, err := NewByteBudget("stream_bytes", maximum)
 	testutil.FailErr(t, "create ingress budget", err)
-	p, err := NewBytePipe(ctx, budget)
+	p, err := NewBytePipe(ctx, budget, nil)
 	testutil.FailErr(t, "create byte pipe", err)
 	t.Cleanup(func() { _ = p.CloseConsumer() })
 	return p

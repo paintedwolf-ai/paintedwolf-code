@@ -8,6 +8,8 @@ import (
 	"hash"
 	"io"
 	"sync"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // ErrConsumerClosed distinguishes a deliberate downstream stop from producer
@@ -48,14 +50,29 @@ type BytePipe struct {
 	digest        hash.Hash
 	completion    StreamCompletion
 	terminalError error
+	mapping       pipeMappings
 }
 
-func NewBytePipe(ctx context.Context, budget *ByteBudget) (*BytePipe, error) {
+// pipeMappings holds the producer's source mappings in stream coordinates.
+// They are final once the producer settles; nil memory keeps none.
+type pipeMappings struct {
+	ctx      context.Context
+	memory   *toolcontract.ProgramMemory
+	records  []toolcontract.StreamSourceMapping
+	releases []func()
+	disabled bool
+	settled  chan struct{}
+	once     sync.Once
+}
+
+// NewBytePipe connects one producer to one consumer. With memory, the pipe
+// also keeps the producer's source mappings for MappedInput consumers.
+func NewBytePipe(ctx context.Context, budget *ByteBudget, memory *toolcontract.ProgramMemory) (*BytePipe, error) {
 	if ctx == nil || budget == nil {
 		return nil, errors.New("byte pipe requires context and ingress budget")
 	}
 	stream := newPipeRendezvous(ctx)
-	p := &BytePipe{identity: &consumerEndpointIdentity{marker: 1}, stream: stream, budget: budget, done: make(chan struct{}), digest: sha256.New(), completion: StreamCompletion{Termination: StreamOpen}}
+	p := &BytePipe{identity: &consumerEndpointIdentity{marker: 1}, stream: stream, budget: budget, done: make(chan struct{}), digest: sha256.New(), completion: StreamCompletion{Termination: StreamOpen}, mapping: pipeMappings{ctx: ctx, memory: memory, settled: make(chan struct{})}}
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -90,28 +107,34 @@ func (p *BytePipe) pipeError(err error) error {
 // Write charges all attempted ingress before any byte can reach the consumer.
 // The caller must screen bytes before this boundary; raw secrets are never
 // supplied here for retrospective redaction.
-func (p *BytePipe) Write(b []byte) (int, error) { return p.write(b, nil) }
+func (p *BytePipe) Write(b []byte) (int, error) {
+	n, _, err := p.write(b, nil)
+	return n, err
+}
 
-func (p *BytePipe) write(b []byte, activity *ExecutionWait) (int, error) {
+// WriteLocated is Write that also reports the stream offset of b.
+func (p *BytePipe) WriteLocated(b []byte) (int, int64, error) { return p.write(b, nil) }
+
+func (p *BytePipe) write(b []byte, activity *ExecutionWait) (int, int64, error) {
 	if err := p.stream.acquireWriter(activity); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer p.stream.releaseWriter()
 	p.mu.Lock()
-	terminal, terminalErr := p.completion.Termination, p.terminalError
+	terminal, terminalErr, start := p.completion.Termination, p.terminalError, p.completion.EmittedBytes
 	p.mu.Unlock()
 	if terminal != StreamOpen {
 		if terminalErr == nil {
 			terminalErr = io.ErrClosedPipe
 		}
-		return 0, terminalErr
+		return 0, start, terminalErr
 	}
 	if len(b) == 0 {
-		return 0, nil
+		return 0, start, nil
 	}
 	if err := p.budget.Charge(int64(len(b))); err != nil {
 		p.finish(StreamBudgetExceeded, err)
-		return 0, err
+		return 0, start, err
 	}
 	p.mu.Lock()
 	p.completion.InputBytes += int64(len(b))
@@ -121,13 +144,73 @@ func (p *BytePipe) write(b []byte, activity *ExecutionWait) (int, error) {
 	_, _ = p.digest.Write(b[:n])
 	p.completion.EmittedBytes += int64(n)
 	p.mu.Unlock()
-	return n, p.pipeError(err)
+	return n, start, p.pipeError(err)
+}
+
+// RecordSourceMapping keeps one mapping of emitted bytes. Mappings are
+// provenance only: when memory runs out the pipe drops all of them rather
+// than failing the producer.
+func (p *BytePipe) RecordSourceMapping(m toolcontract.StreamSourceMapping) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	keep := &p.mapping
+	if keep.memory == nil || keep.disabled {
+		return nil
+	}
+	if m.OutputStartByte < 0 || m.OutputEndByte <= m.OutputStartByte || m.OutputEndByte > p.completion.EmittedBytes {
+		return nil
+	}
+	charge := 256 + int64(len(m.Source.SourceID)+len(m.Source.Revision)+len(m.Source.SHA256))
+	release, err := keep.memory.ReserveProgramState(keep.ctx, charge)
+	if err != nil {
+		keep.dropLocked()
+		keep.disabled = true
+		return nil
+	}
+	keep.records = append(keep.records, m)
+	keep.releases = append(keep.releases, release)
+	return nil
+}
+
+// MappingAdmission is the memory that nested writers charge their span tables to.
+func (p *BytePipe) MappingAdmission() (context.Context, *toolcontract.ProgramMemory) {
+	return p.mapping.ctx, p.mapping.memory
+}
+
+// ReleaseMappings frees retained mappings after every stage has settled.
+func (p *BytePipe) ReleaseMappings() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mapping.dropLocked()
+	p.mapping.disabled = true
+}
+
+func (m *pipeMappings) dropLocked() {
+	for _, release := range m.releases {
+		release()
+	}
+	m.records, m.releases = nil, nil
+}
+
+func (p *BytePipe) settledMappings(ctx context.Context) ([]toolcontract.StreamSourceMapping, error) {
+	if err := p.CloseConsumer(); err != nil {
+		return nil, err
+	}
+	select {
+	case <-p.mapping.settled:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.mapping.records[:len(p.mapping.records):len(p.mapping.records)], nil
 }
 
 // CloseProducer records EOF only when the producing operation reports a
 // complete stream. Utility exit status and publication eligibility remain in
 // ProducerResult; neither is inferred from this close.
 func (p *BytePipe) CloseProducer(err error) error {
+	defer p.mapping.once.Do(func() { close(p.mapping.settled) })
 	if waitErr := p.stream.acquireWriter(nil); waitErr != nil {
 		return waitErr
 	}
@@ -173,6 +256,11 @@ func (c pipeConsumer) InputReady() bool {
 	return len(p.data) > 0 || p.closed
 }
 func (c pipeConsumer) Close() error { return c.pipe.CloseConsumer() }
+
+// SettledSourceMappings implements MappedInput.
+func (c pipeConsumer) SettledSourceMappings(ctx context.Context) ([]toolcontract.StreamSourceMapping, error) {
+	return c.pipe.settledMappings(ctx)
+}
 
 func (p *BytePipe) finish(termination StreamTermination, err error) {
 	p.once.Do(func() {

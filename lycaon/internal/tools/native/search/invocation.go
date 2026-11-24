@@ -281,7 +281,8 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 
 // output meters stdout against stream_throughput_bytes before each write and, when the
 // endpoint retains them, records exact source mappings for bytes copied from
-// a pinned capture. Prefixes, separators and replacements carry none.
+// a pinned capture or a mapped stdin. Prefixes, separators and replacements
+// carry none.
 type output struct {
 	ctx              context.Context
 	w                io.Writer
@@ -291,13 +292,15 @@ type output struct {
 	maximum, written int64
 	// printedLine is the number just printed for the next literal bytes.
 	printedLine int64
-	buffered    bool
 	buffer      []byte
-	failure     error
+	// held are mappings of bytes still in buffer; a sink maps only bytes it has.
+	held       []toolcontract.StreamSourceMapping
+	projection *commandprogram.InputProjection
+	failure    error
 }
 
-// outputBufferBytes bounds the output held for a sink without source mappings.
-// One pipe rendezvous per record would otherwise cost a writer and reader wakeup.
+// outputBufferBytes bounds held output. One pipe rendezvous per record would
+// otherwise cost a writer and reader wakeup.
 const outputBufferBytes = 64 << 10
 
 func newOutput(ctx context.Context, w io.Writer, maximum int64) *output {
@@ -306,12 +309,12 @@ func newOutput(ctx context.Context, w io.Writer, maximum int64) *output {
 	}
 	o := &output{ctx: ctx, w: w, maximum: maximum}
 	o.mappings, _ = w.(commandprogram.SourceMappingRecorder)
-	o.buffered = o.mappings == nil
 	return o
 }
 
-// literal writes bytes taken verbatim from a capture at offset and maps them.
-// Adjacent ranges of one capture coalesce into one mapping.
+// literal writes bytes taken verbatim from a capture at offset and maps them;
+// with no pin, offset is in the mapped stdin. Adjacent ranges of one capture
+// coalesce into one mapping.
 func (o *output) literal(pin *toolcontract.SourcePin, p []byte, offset int64) error {
 	if len(p) == 0 {
 		return nil
@@ -321,6 +324,9 @@ func (o *output) literal(pin *toolcontract.SourcePin, p []byte, offset int64) er
 		return err
 	}
 	if o.mappings == nil || pin == nil {
+		if o.mappings != nil {
+			o.projection.Copied(offset, outStart, int64(len(p)))
+		}
 		o.printedLine = 0
 		return nil
 	}
@@ -344,7 +350,36 @@ func (o *output) flush() error {
 	}
 	pending := *o.pending
 	o.pending = nil
-	return o.mappings.RecordSourceMapping(pending)
+	return o.record(pending)
+}
+
+// record maps output bytes once the sink has them.
+func (o *output) record(m toolcontract.StreamSourceMapping) error {
+	if len(o.buffer) > 0 {
+		o.held = append(o.held, m)
+		return nil
+	}
+	return o.mappings.RecordSourceMapping(m)
+}
+
+// mapStdin carries mapped stdin through the search that run performs.
+func (o *output) mapStdin(ctx context.Context, input io.Reader, memory *toolcontract.ProgramMemory, run func() error) error {
+	if o.mappings == nil {
+		return run()
+	}
+	o.projection = commandprogram.NewInputProjection(ctx, input, memory)
+	defer func() { o.projection = nil }()
+	err := run()
+	if err == nil {
+		err = o.drain()
+	}
+	if err == nil {
+		err = o.flush()
+	}
+	if err == nil {
+		err = o.projection.Record(o.mappings)
+	}
+	return err
 }
 
 func (o *output) Write(p []byte) (int, error) {
@@ -353,7 +388,7 @@ func (o *output) Write(p []byte) (int, error) {
 			return 0, err
 		}
 	}
-	if !o.buffered || len(p) >= outputBufferBytes {
+	if len(p) >= outputBufferBytes {
 		if err := o.drain(); err != nil {
 			return 0, err
 		}
@@ -392,6 +427,14 @@ func (o *output) drain() error {
 	var sent int64
 	_, o.failure = nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", 0, &sent, o.buffer)
 	o.buffer = o.buffer[:0]
+	held := o.held
+	o.held = o.held[:0]
+	for _, m := range held {
+		if o.failure != nil {
+			break
+		}
+		o.failure = o.mappings.RecordSourceMapping(m)
+	}
 	return o.failure
 }
 
@@ -416,7 +459,7 @@ func (o *output) text(parts ...string) error {
 
 // WriteString keeps a buffered record's prefix and terminator from allocating.
 func (o *output) WriteString(s string) (int, error) {
-	if !o.buffered || len(s) >= outputBufferBytes {
+	if len(s) >= outputBufferBytes {
 		return o.Write([]byte(s))
 	}
 	if len(s) > 0 && o.beforeWrite != nil {
@@ -437,6 +480,15 @@ func (o *output) WriteString(s string) (int, error) {
 type drainingInput struct {
 	input io.Reader
 	out   *output
+}
+
+// SettledSourceMappings keeps the wrapped stdin's mappings visible.
+func (i drainingInput) SettledSourceMappings(ctx context.Context) ([]toolcontract.StreamSourceMapping, error) {
+	mapped, ok := i.input.(commandprogram.MappedInput)
+	if !ok {
+		return nil, nil
+	}
+	return mapped.SettledSourceMappings(ctx)
 }
 
 func (i drainingInput) Read(p []byte) (int, error) {

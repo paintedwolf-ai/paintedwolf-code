@@ -122,7 +122,7 @@ func (p *grepFiles) apply(event grepFileEvent, base int64) error {
 		mapping := *event.mapping
 		mapping.OutputStartByte += base
 		mapping.OutputEndByte += base
-		return inv.out.mappings.RecordSourceMapping(mapping)
+		return inv.out.record(mapping)
 	}
 	if event.stderr {
 		if err := inv.out.drain(); err != nil {

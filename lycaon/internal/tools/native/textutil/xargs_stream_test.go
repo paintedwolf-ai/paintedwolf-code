@@ -69,7 +69,7 @@ func TestXargsParallelPreservesStoppedChildAndJoinedFailure(t *testing.T) {
 	h := newHarness(t)
 	budget, err := commandprogram.NewByteBudget("fixture", 1024)
 	testutil.FailErr(t, "admit child byte stream", err)
-	pipe, err := commandprogram.NewBytePipe(t.Context(), budget)
+	pipe, err := commandprogram.NewBytePipe(t.Context(), budget, nil)
 	testutil.FailErr(t, "open child byte stream", err)
 	testutil.FailErr(t, "close satisfied child consumer", pipe.CloseConsumer())
 	_, closed := pipe.Write([]byte("unconsumed"))

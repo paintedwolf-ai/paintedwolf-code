@@ -46,11 +46,15 @@ func (r *ProgramRuntime) newProgramStreams(ctx context.Context, run *programRun)
 }
 
 func (s *programStream) Write(p []byte) (int, error) {
-	n, _, err := s.writeLocated(p)
+	n, _, err := s.WriteLocated(p)
 	return n, err
 }
 
-func (s *programStream) writeLocated(p []byte) (int, int64, error) {
+func (s *programStream) MappingAdmission() (context.Context, *toolcontract.ProgramMemory) {
+	return s.ctx, s.mappings.memory
+}
+
+func (s *programStream) WriteLocated(p []byte) (int, int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(p) == 0 {
