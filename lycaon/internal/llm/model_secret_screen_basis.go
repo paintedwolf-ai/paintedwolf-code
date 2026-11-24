@@ -127,7 +127,9 @@ func requestScreenDigest(req modelcall.CompletionRequest) [32]byte {
 	writeStr(string(req.Think))
 	writeStr(string(req.Composition))
 	if req.ThinkingOverride != nil {
-		writeStr("override:" + string(*req.ThinkingOverride))
+		if raw, err := json.Marshal(req.ThinkingOverride); err == nil {
+			writeStr("override:" + string(raw))
+		}
 	}
 	if req.ResponseFormat != nil {
 		if raw, err := json.Marshal(req.ResponseFormat); err == nil {
