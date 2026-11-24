@@ -778,7 +778,6 @@ describe("WT06 checkout and revision open targets", () => {
             root_relative_path: "src/staged.ts",
           }],
         }))}
-        worktree={undefined}
         onScopePin={() => {}}
         onSelectRepo={() => {}}
         onInit={() => {}}
