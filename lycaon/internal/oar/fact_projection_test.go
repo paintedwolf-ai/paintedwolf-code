@@ -89,12 +89,16 @@ func TestSocketReferencesFollowTheRefusedSockets(t *testing.T) {
 	}
 }
 
-func TestPublishedWriteRefusalsPreserveSharedTempObservations(t *testing.T) {
+func TestPublishedRefusalsPreserveSharedTempObservations(t *testing.T) {
 	gc := NewGuardContext()
 	gc.Refusals.RefusedWritePaths = []string{"/data/output", "/tmp/result"}
 	gc.Refusals.RefusedWriteGrants = []string{"/data", "/tmp"}
 	gc.Refusals.OrdinaryWritePaths = []string{"/data/output"}
 	gc.Refusals.OrdinaryWriteGrants = []string{"/data"}
+	gc.Refusals.RefusedReadPaths = []string{"/Users/person/.ssh/id_ed25519", "/tmp/input.csv"}
+	gc.Refusals.RefusedReadGrants = []string{"/Users/person/.ssh/id_ed25519", "/tmp/input.csv"}
+	gc.Refusals.OrdinaryReadPaths = []string{"/Users/person/.ssh/id_ed25519"}
+	gc.Refusals.OrdinaryReadGrants = []string{"/Users/person/.ssh/id_ed25519"}
 
 	facts := activation(gc)
 	for name, want := range map[string][]string{
@@ -102,6 +106,10 @@ func TestPublishedWriteRefusalsPreserveSharedTempObservations(t *testing.T) {
 		"paintedwolf.refused_write_grants":  {"/data", "/tmp"},
 		"paintedwolf.ordinary_write_paths":  {"/data/output"},
 		"paintedwolf.ordinary_write_grants": {"/data"},
+		"paintedwolf.refused_read_paths":    {"/Users/person/.ssh/id_ed25519", "/tmp/input.csv"},
+		"paintedwolf.refused_read_grants":   {"/Users/person/.ssh/id_ed25519", "/tmp/input.csv"},
+		"paintedwolf.ordinary_read_paths":   {"/Users/person/.ssh/id_ed25519"},
+		"paintedwolf.ordinary_read_grants":  {"/Users/person/.ssh/id_ed25519"},
 	} {
 		got, ok := facts[name].([]string)
 		if !ok || !slices.Equal(got, want) {
