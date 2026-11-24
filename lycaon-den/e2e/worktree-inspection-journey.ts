@@ -145,7 +145,8 @@ export async function runWorktreeInspectionQualificationJourney(args: {
   const scopeTrigger = page.getByTestId("git-scope");
   await expect(scopeTrigger).toBeVisible({ timeout: 20_000 });
   await scopeTrigger.click();
-  await page.getByTestId("git-scope-item").first().click();
+  await page.getByTestId("git-scope-item").filter({ hasText: "repo-alpha" }).first().click();
+  await expect(scopeTrigger).toContainText("repo-alpha");
 
   // Open Branch and checkout in Window 1: verify identical basename checkouts disambiguate and pin worker-one.
   await setBranchMenuOpen(page, true);
@@ -180,7 +181,8 @@ export async function runWorktreeInspectionQualificationJourney(args: {
     const scopeTrigger2 = secondWindow.getByTestId("git-scope");
     await expect(scopeTrigger2).toBeVisible({ timeout: 20_000 });
     await scopeTrigger2.click();
-    await secondWindow.getByTestId("git-scope-item").first().click();
+    await secondWindow.getByTestId("git-scope-item").filter({ hasText: "repo-alpha" }).first().click();
+    await expect(scopeTrigger2).toContainText("repo-alpha");
 
     // Window 2 starts following primary ("main"), proving Window 1's pin did not leak across windows.
     await expect(secondWindow.getByTestId("git-branch")).toContainText("main");
@@ -196,10 +198,12 @@ export async function runWorktreeInspectionQualificationJourney(args: {
 
     // Switch Window 1 to repo-beta and back: per-repository pin in repo-alpha is preserved.
     await scopeTrigger.click();
-    await page.getByTestId("git-scope-item").nth(1).click();
+    await page.getByTestId("git-scope-item").filter({ hasText: "beta" }).first().click();
+    await expect(scopeTrigger).toContainText("beta");
     await expect(page.getByTestId("git-branch")).toContainText("main");
     await scopeTrigger.click();
-    await page.getByTestId("git-scope-item").first().click();
+    await page.getByTestId("git-scope-item").filter({ hasText: "repo-alpha" }).first().click();
+    await expect(scopeTrigger).toContainText("repo-alpha");
     await expect(page.getByTestId("git-branch")).toContainText("feat/worker-one");
 
     // Bind a managed chat worktree while inspecting feat/worker-one and verify removal blockers.
