@@ -14,6 +14,8 @@ import type { ShellScope } from "./shell-scope.ts";
 
 type ResidencyDependencies = Pick<ShellScope, "activeProjectId" | "nav"> & {
   showHome: () => boolean;
+  /** The foreground Home launch's surface, while one is shown. */
+  launchSurface: () => string | null;
   placeableStageId: () => ContextNavItemId | null;
   stageColumn: () => ReturnType<typeof resolveStageColumn>;
   showChatTabRail: () => boolean;
@@ -22,7 +24,7 @@ type ResidencyDependencies = Pick<ShellScope, "activeProjectId" | "nav"> & {
   projectPresentation: () => ProjectPresentation;
 };
 
-export function createShellResidency({ activeProjectId, nav, showHome, placeableStageId,
+export function createShellResidency({ activeProjectId, nav, showHome, launchSurface, placeableStageId,
   stageColumn, showChatTabRail, presentedChat, workspaceMounted, projectPresentation }: ResidencyDependencies) {
   const splitLive = () => stageColumn().splitLive;
   const stageColumnStageId = () => stageColumn().stageId;
@@ -35,6 +37,8 @@ export function createShellResidency({ activeProjectId, nav, showHome, placeable
       return projectConfigSurfaceKey(projectId);
     }
     if (nav() === "chats" && projectId) return chatsSurfaceKey(projectId);
+    const launch = launchSurface();
+    if (launch) return launch;
     if (showHome()) return SURFACE_HOME;
     return null;
   };
@@ -110,6 +114,8 @@ export function createShellResidency({ activeProjectId, nav, showHome, placeable
       return projectConfigSurfaceKey(projectId);
     }
     if (nav() === "chats" && projectId) return chatsSurfaceKey(projectId);
+    const launch = launchSurface();
+    if (launch) return launch;
     if (showHome()) return SURFACE_HOME;
     return null;
   };

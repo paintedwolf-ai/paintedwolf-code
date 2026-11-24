@@ -3,7 +3,6 @@ import type { ProjectSummary } from "../project/project-summary.ts";
 import {
   draftCount,
   projectsForSection,
-  retainedHomeSummaries,
   sortProjectSummaries,
 } from "./home-model.ts";
 
@@ -55,25 +54,6 @@ describe("projectsForSection", () => {
       "draft",
       "starred-draft",
     ]);
-  });
-});
-
-describe("retainedHomeSummaries", () => {
-  it("keeps the shown rows while a submitted idea materializes", () => {
-    const shown = [summary({ id: "saved" })];
-    const withDraft = [...shown, summary({ id: "fresh-draft", isDraft: true })];
-    expect(retainedHomeSummaries(shown, withDraft, true)).toBe(shown);
-  });
-
-  it("follows the registry once the shell is not materializing", () => {
-    const shown = [summary({ id: "saved" })];
-    const withDraft = [...shown, summary({ id: "fresh-draft", isDraft: true })];
-    expect(retainedHomeSummaries(shown, withDraft, false)).toBe(withDraft);
-  });
-
-  it("paints the first rows even while materializing", () => {
-    const first = [summary({ id: "saved" })];
-    expect(retainedHomeSummaries(undefined, first, true)).toBe(first);
   });
 });
 

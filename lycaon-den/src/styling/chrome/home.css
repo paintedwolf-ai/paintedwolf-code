@@ -42,11 +42,6 @@
 .home-view__idea .den-composer-chip-rail {
   margin: 0;
 }
-.home-view__idea-error {
-  margin: 0;
-  font-size: var(--text-den-caption);
-  color: var(--den-danger);
-}
 .recent-switcher-backdrop {
   position: fixed;
   inset: 0;

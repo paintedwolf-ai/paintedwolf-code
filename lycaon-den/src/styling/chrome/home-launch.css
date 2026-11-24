@@ -1,0 +1,125 @@
+/* A submitted Home idea, shown as its chat until the first turn is admitted. */
+.den-launch {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  outline: none;
+}
+.den-launch__scroll {
+  flex: 1;
+  min-height: 0;
+}
+.den-launch__stream {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--den-stage-inset-y) 26px 24px;
+}
+.den-launch__status {
+  min-height: 1.4em;
+  margin: 0;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+}
+.den-launch__chips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.den-launch__chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+}
+.den-launch__chip-glyph {
+  color: var(--den-warning-text);
+}
+.den-launch__chip-name {
+  font-weight: 600;
+}
+.den-launch__chip-reason {
+  flex: 1;
+  min-width: 12em;
+  color: var(--den-text-muted);
+}
+.den-launch__chip-actions {
+  display: flex;
+  gap: 6px;
+}
+.den-launch-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+}
+.den-launch-notice[data-tone="warning"] {
+  border-color: var(--den-warning);
+}
+.den-launch-notice[data-tone="danger"] {
+  border-color: var(--den-danger);
+}
+.den-launch-notice__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 14em;
+}
+.den-launch-notice__title {
+  font-weight: 600;
+}
+.den-launch-notice__body {
+  color: var(--den-text-muted);
+}
+.den-launch-notice__actions {
+  display: flex;
+  gap: 8px;
+}
+.den-launch__edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.den-launch__edit-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 6em;
+  padding: 8px 10px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-sm);
+  background: var(--den-background);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+.den-launch__edit-actions,
+.den-launch__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.den-launch__footer {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 8px 26px 16px;
+}

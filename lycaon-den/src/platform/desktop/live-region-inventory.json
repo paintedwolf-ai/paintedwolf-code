@@ -16,7 +16,7 @@
   "components/EngineStartupStage.tsx": 6,
   "components/GitCheckout.tsx": 7,
   "components/GitStrip.tsx": 1,
-  "components/home/HomeView.tsx": 1,
+  "components/home/LaunchConversation.tsx": 1,
   "components/list/TablePager.tsx": 1,
   "components/model/ModelsEditor.tsx": 1,
   "components/model/ThinkingOverrideRow.tsx": 2,

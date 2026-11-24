@@ -33,8 +33,11 @@ import { type SettingsStore } from "../../store/settings-store.ts";
 import {
   SURFACE_HOME,
   SURFACE_SETTINGS,
+  parseLaunchSurfaceKey,
   parseStageSurfaceKey,
 } from "../../ui/resident-surfaces.ts";
+import { LaunchConversation } from "../home/LaunchConversation.tsx";
+import type { HomeLaunchController } from "./home-launch-controller.ts";
 import { HomeView } from "../home/HomeView.tsx";
 import {
   clearFilesHotExitSuppress,
@@ -86,6 +89,7 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "projects" | "recents" | "a
   workspaceContext: Pick<ReturnType<typeof createShellWorkspaceContext>, "backFor" | "stageBack">;
   providerGap: ReturnType<typeof createShellOnboarding>["providerGap"];
   showConversation: () => Promise<unknown>;
+  homeLaunch: HomeLaunchController;
   focusComposer: () => void;
   startOpenFolder: () => Promise<unknown>;
   openCloneDialog: () => void;
@@ -256,15 +260,12 @@ export function WorkspaceStage(props: Props) {
         providerGap={providerGap()}
         onOpenProviders={openProvidersSettings}
         onOpenDiagnostics={() => openSettings("debug", { advanced: "diagnostics" })}
-        onSubmitIdea={async (draft) => {
-          if (!props.shell.beginDraftMaterialization()) return false;
+        onSubmitIdea={(draft) => {
+          props.homeLaunch.submit(draft);
           void showConversation();
-          return (await startEmptySession(
-            { kind: "new-project" },
-            { prompt: draft.text, ideaAttachments: draft.attachments, mode: draft.mode },
-          )) === true;
         }}
-        submitting={props.shell.state.materializingDraft}
+        restoredComposition={props.homeLaunch.restoredComposition}
+        onOpenLaunch={(launchId) => props.homeLaunch.open(launchId)}
         onOpenFolder={() => void startOpenFolder()}
         onCloneRepo={() => openCloneDialog()}
         onOpenProject={(projectId) => openProject(projectId)}
@@ -283,6 +284,16 @@ export function WorkspaceStage(props: Props) {
             sessionId: row.session_id,
           }).then(() => props.focusComposer())
         }
+      />
+    );
+  }
+  const launchId = parseLaunchSurfaceKey(key);
+  if (launchId) {
+    return (
+      <LaunchConversation
+        launchId={launchId}
+        controller={props.homeLaunch}
+        onOpenProviders={openProvidersSettings}
       />
     );
   }

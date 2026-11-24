@@ -22,12 +22,15 @@ export type WorkspaceOpening = {
   label: string;
 };
 
+/** A submitted Home idea shown as its chat before the host names one. */
+export type LaunchForeground = { launchId: string };
+
 export type ShellStoreState = {
   connection: SidecarConnectionStatus;
   activeProjectId: string | null;
   foreground: ShellForeground;
-  /** Home draft is being materialized into its first project/session. */
-  materializingDraft: boolean;
+  /** The foreground conversation is a Home launch that has not handed off yet. */
+  launch: LaunchForeground | null;
   /** The veil is up ahead of a project id; Home may not paint until the switch lands or the open is abandoned. */
   opening: WorkspaceOpening | null;
 };
@@ -41,7 +44,7 @@ export function createShellStore(initialConnection: SidecarConnectionStatus) {
     connection: initialConnection,
     activeProjectId: null,
     foreground: null,
-    materializingDraft: false,
+    launch: null,
     opening: null,
   });
   let openingTokens = 0;
@@ -50,7 +53,7 @@ export function createShellStore(initialConnection: SidecarConnectionStatus) {
     setState({
       activeProjectId: null,
       foreground: null,
-      materializingDraft: false,
+      launch: null,
       opening: null,
     });
     persistLastActiveProject(undefined);
@@ -66,13 +69,13 @@ export function createShellStore(initialConnection: SidecarConnectionStatus) {
         setState({
           activeProjectId: opts.projectId,
           foreground: null,
-          materializingDraft: false,
+          launch: null,
           opening: null,
         });
       } else {
         setState({
           activeProjectId: opts.projectId,
-          materializingDraft: false,
+          launch: null,
           opening: null,
         });
       }
@@ -86,7 +89,7 @@ export function createShellStore(initialConnection: SidecarConnectionStatus) {
       setState({
         activeProjectId: null,
         foreground: null,
-        materializingDraft: false,
+        launch: null,
         opening: { token, label: opts.label },
       });
       return token;
@@ -96,10 +99,19 @@ export function createShellStore(initialConnection: SidecarConnectionStatus) {
       if (state.opening?.token !== token) return;
       clearToHome();
     },
-    beginDraftMaterialization() {
-      if (state.materializingDraft) return false;
-      setState("materializingDraft", true);
-      return true;
+    /** Shows a Home launch as the foreground conversation. */
+    openLaunch(launchId: string) {
+      setState({
+        activeProjectId: null,
+        foreground: null,
+        launch: { launchId },
+        opening: null,
+      });
+    },
+    /** Leaves a launch for Home unless navigation already moved elsewhere. */
+    closeLaunch(launchId: string) {
+      if (state.launch?.launchId !== launchId) return;
+      setState("launch", null);
     },
     commitStageScope(opts: {
       projectId: string;
@@ -113,7 +125,7 @@ export function createShellStore(initialConnection: SidecarConnectionStatus) {
           sessionId: opts.sessionId,
           ...(opts.initialPrompt ? { initialPrompt: true } : {}),
         },
-        materializingDraft: false,
+        launch: null,
         opening: null,
       });
       persistLastActiveProject(opts.projectId);

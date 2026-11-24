@@ -1,6 +1,7 @@
 //! Device app-state slices and shared editing persistence.
 
 pub(crate) mod document_outbox;
+pub(crate) mod home_outbox;
 pub(crate) mod shared_composer_documents;
 pub(crate) mod views;
 

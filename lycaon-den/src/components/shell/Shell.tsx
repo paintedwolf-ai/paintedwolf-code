@@ -19,6 +19,7 @@ import { type ShellScope, type ShellProps } from "./shell-scope.ts";
 import { createShellChatActions } from "./shell-chat-actions.ts";
 import { createShellPeerWindows } from "./shell-peer-windows.ts";
 import { createShellContributions } from "./shell-contributions.ts";
+import { createHomeLaunchController } from "./home-launch-controller.ts";
 import { createSessionNavigation } from "./session-navigation.ts";
 import { createProjectLifecycle, createWorkspaceProjectRemoval } from "./project-lifecycle.ts";
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
@@ -172,6 +173,7 @@ export function Shell(props: ShellProps) {
     sidebarChatsPublished,
     railStatusProject,
     showHome,
+    launchSurface,
   } = createShellWorkspacePresentation(scope);
 
   const projectDirForChat = () =>
@@ -212,6 +214,12 @@ export function Shell(props: ShellProps) {
     startEmptySession,
     startNewChat,
   } = sessionNavigation;
+
+  const homeLaunch = createHomeLaunchController({
+    shell: props.shell, appStore: props.appStore, recents: props.recents,
+    showProjects: scope.showProjects, resumeSession: (row) => resumeSession(row),
+  });
+  void homeLaunch.load();
 
   const {
     sendPrompt,
@@ -308,7 +316,7 @@ export function Shell(props: ShellProps) {
   const { chatStack, stageStack, presentedChatCurrent, stageHandoff, stageOpeningOverChat,
     presentedSplitLive, showStageColumn,
     presentedStageColumn, markStageSurfaceReady, stageColDual, chatColDual } = createShellResidency({
-    ...scope, showHome, placeableStageId, stageColumn, showChatTabRail, presentedChat,
+    ...scope, showHome, launchSurface, placeableStageId, stageColumn, showChatTabRail, presentedChat,
     workspaceMounted, projectPresentation,
   });
   traceShellPresentation({ veiled: () => workspaceVeilKey() != null && !workspaceRevealed(),
@@ -600,7 +608,7 @@ export function Shell(props: ShellProps) {
               projectLifecycle={{ toggleStar, renameProject, openMoveDialog }}
               peerWindows={{ openFileInNewWindow, openFileWindow, beginFileWindowDrag, transferFileTab, detachStageToWindow }}
               workspaceContext={{ backFor, stageBack }} providerGap={providerGap}
-              showConversation={showConversation} focusComposer={() => setPendingRegionFocus("composer")}
+              showConversation={showConversation} homeLaunch={homeLaunch} focusComposer={() => setPendingRegionFocus("composer")}
               startOpenFolder={startOpenFolder} openCloneDialog={openCloneDialog}
               deleteProject={deleteProject} setFoldersPanelProjectId={setFoldersPanelProjectId}
               settingsProjectDir={settingsProjectDir} setSecurityScannersFeature={setSecurityScannersFeature}

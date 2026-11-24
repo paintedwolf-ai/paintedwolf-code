@@ -3,8 +3,9 @@ import { createEffect, type ComponentProps } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceStage } from "./WorkspaceStage.tsx";
 import { createShellStore } from "../../store/shell-store.ts";
-import { SURFACE_HOME, SURFACE_SETTINGS, stageSurfaceKey } from "../../ui/resident-surfaces.ts";
+import { SURFACE_HOME, SURFACE_SETTINGS, launchSurfaceKey, stageSurfaceKey } from "../../ui/resident-surfaces.ts";
 import type { HomeView } from "../home/HomeView.tsx";
+import type { LaunchConversation } from "../home/LaunchConversation.tsx";
 import type { SettingsView } from "../settings/SettingsView.tsx";
 import type { ProjectChatsView } from "../project/ProjectChatsView.tsx";
 import type { ProjectContextView } from "../project/ProjectContextView.tsx";
@@ -12,6 +13,7 @@ import type { StageRenderContext } from "../stage/stage-registry.tsx";
 
 const seams = vi.hoisted(() => ({
   home: null as unknown as ComponentProps<typeof HomeView>,
+  launch: null as unknown as ComponentProps<typeof LaunchConversation>,
   settings: null as unknown as ComponentProps<typeof SettingsView>,
   chats: null as unknown as ComponentProps<typeof ProjectChatsView>,
   context: null as unknown as ComponentProps<typeof ProjectContextView>,
@@ -20,6 +22,7 @@ const seams = vi.hoisted(() => ({
   record: vi.fn(async () => undefined),
 }));
 vi.mock("../home/HomeView.tsx", () => ({ HomeView: (p: typeof seams.home) => { createEffect(() => { seams.home = { ...p }; }); return null; } }));
+vi.mock("../home/LaunchConversation.tsx", () => ({ LaunchConversation: (p: typeof seams.launch) => { createEffect(() => { seams.launch = { ...p }; }); return null; } }));
 vi.mock("../settings/SettingsView.tsx", () => ({ SettingsView: (p: typeof seams.settings) => { createEffect(() => { seams.settings = { ...p }; }); return null; } }));
 vi.mock("../project/ProjectChatsView.tsx", () => ({ ProjectChatsView: (p: typeof seams.chats) => { createEffect(() => { seams.chats = { ...p }; }); return null; } }));
 vi.mock("../project/ProjectContextView.tsx", () => ({ ProjectContextView: (p: typeof seams.context) => { createEffect(() => { seams.context = { ...p }; }); return null; } }));
@@ -45,6 +48,7 @@ function mountStage(surfaceKey: string) {
     openFileWindow: vi.fn(), detachStageToWindow: vi.fn(async () => undefined), revealInTranscript: vi.fn(),
     focusComposer: vi.fn(),
   };
+  const homeLaunch = { submit: vi.fn(() => "launch-1"), restoredComposition: () => undefined };
   const project = { id: "project", name: "  Garden  ", roots: [{ id: "root", label: "Garden", path: "/garden" }], is_draft: false };
   const props = {
     shell, surfaceKey, appStore: {}, projects: { byId: (id: string) => id === "draft" ? { ...project, is_draft: true } : project,
@@ -56,15 +60,15 @@ function mountStage(surfaceKey: string) {
     sessionNavigation: { sessionRetirementDeps: () => ({ client: "host" }), ...callbacks }, projectLifecycle: callbacks,
     peerWindows: { beginFileWindowDrag: vi.fn(), transferFileTab: vi.fn(async () => "token"), ...callbacks }, workspaceContext: { backFor: vi.fn(), stageBack: vi.fn() },
     settingsProjectDir: () => "/garden", setSecurityScannersFeature: vi.fn(), openProjectTrustSettings: vi.fn(),
-    openExtensionsSettings: vi.fn(), searchArgs: () => ({ originProjectId: "project", seed: "needle", serial: 7 }), ...callbacks,
+    openExtensionsSettings: vi.fn(), searchArgs: () => ({ originProjectId: "project", seed: "needle", serial: 7 }), homeLaunch, ...callbacks,
   } as unknown as Props;
-  return { ...render(() => <WorkspaceStage {...props} />), props, callbacks, shell };
+  return { ...render(() => <WorkspaceStage {...props} />), props, callbacks, shell, homeLaunch };
 }
 
 beforeEach(() => vi.clearAllMocks());
 describe("workspace resident stage routing", () => {
   it("keeps Home project lifecycle and idea submission tied to the shell", async () => {
-    const { shell, callbacks } = mountStage(SURFACE_HOME);
+    const { callbacks, homeLaunch } = mountStage(SURFACE_HOME);
     seams.home.onShowAllProjects?.(); seams.home.onOpenProviders?.(); seams.home.onOpenDiagnostics?.();
     seams.home.onOpenProject("project"); seams.home.onOpenFolder(); seams.home.onCloneRepo();
     seams.home.onToggleStar("project", true); seams.home.onRename("project", "New name");
@@ -74,15 +78,23 @@ describe("workspace resident stage routing", () => {
     expect(callbacks.openSettings).toHaveBeenCalledWith("debug", { advanced: "diagnostics" });
     expect(callbacks.toggleStar).toHaveBeenCalledWith("project", true);
     expect(callbacks.renameProject).toHaveBeenCalledWith("project", "New name");
-    const draft = { text: "Build a garden", attachments: [], mode: "ask" as const };
-    expect(await seams.home.onSubmitIdea(draft)).toBe(true);
-    expect(callbacks.startEmptySession).toHaveBeenCalledWith({ kind: "new-project" }, { prompt: draft.text, ideaAttachments: [], mode: "ask" });
-    expect(await seams.home.onSubmitIdea(draft)).toBe(false);
-    expect(shell.state.materializingDraft).toBe(true);
+    const draft = { text: "Build a garden", attachments: [], mode: "ask" as const, compositionId: "c1", compositionRevision: 3 };
+    seams.home.onSubmitIdea(draft);
+    expect(homeLaunch.submit).toHaveBeenCalledWith(draft);
+    expect(callbacks.startEmptySession).not.toHaveBeenCalled();
+    expect(callbacks.showConversation).toHaveBeenCalledOnce();
     seams.home.onOpenAttention?.({ project_id: "project", session_id: "other" } as never);
     expect(callbacks.navigateFromSearch).toHaveBeenCalledWith({ projectId: "project", sessionId: "other" });
     expect(callbacks.focusComposer).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(callbacks.focusComposer).toHaveBeenCalledOnce());
+  });
+
+  it("renders a Home launch surface for its launch key", () => {
+    const { homeLaunch, callbacks } = mountStage(launchSurfaceKey("launch-1"));
+    expect(seams.launch.launchId).toBe("launch-1");
+    expect(seams.launch.controller).toBe(homeLaunch);
+    seams.launch.onOpenProviders();
+    expect(callbacks.openSettings).toHaveBeenCalledWith("providers");
   });
 
   it("uses the resident chat-list project for host archive, pin, and deletion", async () => {

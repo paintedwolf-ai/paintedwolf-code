@@ -22,9 +22,9 @@ Shell (user action)
 
 Lifecycle modules **do not** clear chat; session-switch controls transcript boundaries.
 
-**Two surfaces map the deps.** `sessionSwitchDeps` in `Shell.tsx` serves user navigation; `bootSessionSwitchDeps` in `platform/connection/app-boot.ts` serves boot, where there is no Shell yet. They are not interchangeable: Shell's `returnToHome` also resets nav and its `openSession` forwards `initialPrompt` for a Home idea submit, while boot's does neither. A change to the `SessionSwitchDeps` shape has to land in both.
+**Two surfaces map the deps.** `sessionSwitchDeps` in `Shell.tsx` serves user navigation; `bootSessionSwitchDeps` in `platform/connection/app-boot.ts` serves boot, where there is no Shell yet. They are not interchangeable: Shell's `returnToHome` also resets nav, while boot's does not. A change to the `SessionSwitchDeps` shape has to land in both.
 
-Neither is the final word at the call site. Shell's mapping is a base that each caller spreads and overrides: both callers supply `prepareProject`, and the Home draft path replaces `openSession` and `completeChatSessionHydration` to buffer the commit while the draft stays visible. Read the call site, not only the mapping, when asking what a given switch runs.
+Neither is the final word at the call site. Shell's mapping is a base that each caller spreads and overrides: both callers supply `prepareProject`. Read the call site, not only the mapping, when asking what a given switch runs.
 
 The three branches (create, same-project resume, cross-project resume) are listed step by step under [runCreateSession ordering](#runcreatesession-ordering) and [runResumeSession ordering](#runresumesession-ordering).
 
@@ -109,9 +109,9 @@ New session path (`session-switch.ts`):
 9. The caller admits the first prompt immediately; its pending-send row exists before the host becomes promptable
 10. Deferred **`enrich`** → `enrichCreatedSession` (bootstrap transcript merge, chrome, checkpoints; **no** `resumeProjectEventsAfter`), then `afterEnrich` (board). `onOpened` (recents) is independent
 
-Create never uses `beginSessionResumeSwitch`. Create never awaits enrich before unlock or before admitting the first prompt; a Home idea submit must not wait on board/git. Enrichment holds the workspace *reveal* ([Den](den.md#opening-a-workspace)); `afterEnrich` stays outside that hold. Bootstrap merge semantics preserve a pending prompt that arrives before enrichment completes.
+Create never uses `beginSessionResumeSwitch`. Create never awaits enrich before unlock or before admitting the first prompt. Enrichment holds the workspace *reveal* ([Den](den.md#opening-a-workspace)); `afterEnrich` stays outside that hold. Bootstrap merge semantics preserve a pending prompt that arrives before enrichment completes.
 
-For a Home idea submit, Shell buffers both `openSession` calls while the draft remains visible. It binds the create response in the app store, subscribes project events, unlocks hydration, then commits only the real scope. The pending sentinel is an internal create fence and never becomes a painted `StageScope`. Because `sendChatPrompt` installs its pending-send row synchronously before waiting for `preparing → idle`, the first chat paint includes the submitted intent. If materialization fails, Shell returns to Home without clearing the draft.
+A Home idea does not use create: it opens as a launch conversation and reaches its chat through resume once the first turn is admitted ([Den](den.md#submitting-an-idea-from-home)).
 
 **Create enrich must not restart SSE.** `resumeChatSession` calls `resumeProjectEventsAfter(bootstrap.event_cursor)`, which aborts the live stream. On create, `prepareProject` already subscribed; restarting from an early bootstrap cursor races the first prompt and can leave the client transcript stuck on the internal `workflow_boundary` (empty chat). `enrichCreatedSession` installs the bootstrap page with merge semantics and leaves the live stream alone.
 

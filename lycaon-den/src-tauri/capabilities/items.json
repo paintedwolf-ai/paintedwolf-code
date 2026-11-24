@@ -19,6 +19,7 @@
     "allow-read-app-state",
     "allow-patch-app-state",
     "allow-document-outbox",
+    "allow-home-outbox",
     "allow-app-exit",
     "allow-reveal-in-file-manager",
     "allow-file-manager-name",
