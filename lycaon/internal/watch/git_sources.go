@@ -51,6 +51,10 @@ func (s *Store) NotifyWorkspaceChange(ctx context.Context, projectID, rootDir st
 	if !s.Configured() {
 		return nil
 	}
+	return notifyWorkspaceChange(s, ctx, projectID, rootDir)
+}
+
+func notifyWorkspaceChange(s *Store, ctx context.Context, projectID, rootDir string) error {
 	query := `SELECT ` + registrationColumns + ` FROM watch_registrations WHERE state = 'live' AND (conditions_json LIKE '%file_change%' OR conditions_json LIKE '%git_ref%')`
 	var args []any
 	if strings.TrimSpace(projectID) != "" {
@@ -63,14 +67,17 @@ func (s *Store) NotifyWorkspaceChange(ctx context.Context, projectID, rootDir st
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	var regs []Registration
 	for rows.Next() {
 		reg, sErr := scanRegistration(rows)
 		if sErr != nil {
-			_ = rows.Close()
 			return sErr
 		}
 		regs = append(regs, reg)
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	_ = rows.Close()
 
@@ -169,13 +176,11 @@ func reconcileSourceWatch(s *Store, ctx context.Context, reg Registration) (bool
 func reconcileGitRefAlternative(s *Store, ctx context.Context, reg Registration, altIdx int, cond awaitstore.Condition) (bool, error) {
 	grant, ok := resolveWatchRootGrant(reg.Authority, cond.Root)
 	if !ok || grant.Path == "" {
-		_ = s.MarkSourceLost(ctx, reg.WatchID)
-		return true, nil
+		return true, s.MarkSourceLost(ctx, reg.WatchID)
 	}
 	oid, exists, err := git.ResolveFullRef(grant.Path, cond.Ref)
 	if err != nil {
-		_ = s.MarkSourceLost(ctx, reg.WatchID)
-		return true, nil
+		return true, s.MarkSourceLost(ctx, reg.WatchID)
 	}
 	curState := formatGitRefState(oid, exists)
 	key := gitRefCursorKey(altIdx)

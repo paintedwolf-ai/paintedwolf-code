@@ -274,9 +274,7 @@ func stepSamplerRoundRobin(s *Store, ctx context.Context, now time.Time) error {
 			selected = append(selected, &cp)
 		}
 	}
-	for _, gid := range s.sampler.rrQueue {
-		deferred = append(deferred, gid)
-	}
+	deferred = append(deferred, s.sampler.rrQueue...)
 	s.sampler.mu.Unlock()
 
 	for _, gid := range deferred {
