@@ -119,7 +119,8 @@ async function readOpenedFileBuffer(client: LycaonClient, projectId: string,
   const worktreeId = bufferCheckoutWorktreeId(projectId, buffer, activeProjectWorktreeIds(projectId));
   const read = async (decode_as?: "utf-16le" | "utf-16be"): Promise<OpenedFileBufferSource> => {
     const openReq = (byDocumentId: boolean): OpenEditorDocumentRequest => ({
-      ...(byDocumentId && buffer.documentId ? { document_id: buffer.documentId } : fileId ? { file_id: fileId } : { path: buffer.path, root_id: buffer.rootId }),
+      ...(byDocumentId && buffer.documentId ? { document_id: buffer.documentId } : {}),
+      ...(fileId ? { file_id: fileId } : { path: buffer.path, root_id: buffer.rootId }),
       client_id: clientIdentity(), ...(decode_as ? { decode_as } : {}), ...(retained?.replica ? { replica: retained.replica } : {}),
     });
     try {
