@@ -11,9 +11,7 @@ import {
   commitChanges,
   discardAll,
   draftCommitMessage,
-  getCheckoutDiff,
   listBranches,
-  listStashes,
   listWorktrees,
   pullChanges,
   pushChanges,
@@ -143,11 +141,11 @@ describe("git checkout targets", () => {
     await listWorktrees(client, "proj-1", "repo-1", "sess-1");
     expect(client.listGitWorktrees).toHaveBeenCalledWith("proj-1", "repo-1", "sess-1");
 
-    await getCheckoutDiff(client, "proj-1", "repo-1", { worktreeId: "wt-selected", mode: "staged" });
+    await client.getGitDiff("proj-1", "repo-1", { worktree_id: "wt-selected", mode: "staged" });
     expect(client.getGitDiff).toHaveBeenCalledWith("proj-1", "repo-1", expect.objectContaining({ worktree_id: "wt-selected", mode: "staged" }));
 
-    const stashes = await listStashes(client, "proj-1", "repo-1", "sess-1", "wt-selected");
-    expect(stashes).toHaveLength(1);
+    const stashView = await client.listGitStashes("proj-1", "repo-1", { session_id: "sess-1", worktree_id: "wt-selected" });
+    expect(stashView.stashes).toHaveLength(1);
 
     await listBranches(client, "proj-1", "repo-1", "sess-1", "wt-selected");
     expect(client.listGitBranches).toHaveBeenCalledWith("proj-1", "repo-1", "sess-1", "wt-selected");
