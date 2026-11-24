@@ -53,9 +53,9 @@ func ProjectCommandMeta(meta tools.ToolMeta, effects toolcontract.CommandEffects
 	}
 	meta.Description = strings.TrimSpace(strings.Join(chunks, " "))
 	meta.DescriptionParts = parts
-	if !effects.Allows(commandEffectExternalExec) {
-		meta.ArgsSchema = toolschema.PruneCommandReadOnlySchema(meta.ArgsSchema)
-	}
+	meta.ArgsSchema = toolschema.NarrowToolSchema("command", meta.ArgsSchema, toolschema.ProjectOptions{
+		CommandReadOnly: !effects.Allows(commandEffectExternalExec),
+	})
 	return meta
 }
 

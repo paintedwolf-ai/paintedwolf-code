@@ -420,8 +420,8 @@ host_facts:
    type: bool
    observation: True when task is callable on the frozen turn request.
  - name: paintedwolf.surface_snapshot_handles
-   type: string
-   observation: Conjunction of runtime surface snapshot handle kinds (page#, tui#, terminal_session#) mintable by tools callable on the frozen turn request, or empty when none is callable.
+   type: list<string>
+   observation: Runtime surface snapshot handle prefixes (page#, tui#, terminal_session#) that tools callable on the frozen turn request can mint; empty when none is callable.
  - name: paintedwolf.repo_known_empty
    type: bool
  - name: paintedwolf.last_audit_ungrounded

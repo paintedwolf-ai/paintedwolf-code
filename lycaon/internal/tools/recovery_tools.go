@@ -2,13 +2,13 @@ package tools
 
 import (
 	"context"
-	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type recoveryContractKey struct{ tool string }
@@ -40,81 +40,61 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 	if !gc.Workers.ProfileMutationCapable && (request.Program("edit") || request.Status("edit") == toolreach.Callable || request.Status("write") == toolreach.Callable || request.Status("code_rewrite") == toolreach.Callable) {
 		gc.Workers.ProfileMutationCapable = true
 	}
-	gc.RegisterProvider("paintedwolf.offered_tools", func(target *oar.GuardContext) error {
-		if target.ObservationData == nil {
-			target.ObservationData = map[string]any{}
-		}
-		target.ObservationData["offered_tools"] = request.OfferedNames()
-		return nil
-	})
+	putRecoveryFact(gc, "offered_tools", func(*oar.GuardContext) any { return request.OfferedNames() })
 	observeCommandOp := func(target *oar.GuardContext) error {
 		target.ObserveCommandOperationReach()
 		return nil
 	}
 	gc.RegisterProvider("paintedwolf.command_operation_reachable", observeCommandOp)
 	gc.RegisterProvider("paintedwolf.admitted_command_forms", observeCommandOp)
-	gc.RegisterProvider("paintedwolf.command_external_reachable", func(target *oar.GuardContext) error {
-		if target.ObservationData == nil {
-			target.ObservationData = map[string]any{}
-		}
-		target.ObservationData["command_external_reachable"] = request.Known() && request.ProgramMode("external", "dispatch")
-		return nil
+	putRecoveryFact(gc, "command_external_reachable", func(*oar.GuardContext) any {
+		return request.Known() && request.ProgramMode("external", "dispatch")
 	})
 	sessCtx := curationctx.SessionFrom(ctx)
-	gc.RegisterProvider("paintedwolf.ask_user_secret_allowed", func(target *oar.GuardContext) error {
-		if target.ObservationData == nil {
-			target.ObservationData = map[string]any{}
-		}
-		askMode := target.Session.SessionMode == "ask" || sessCtx.Mode == "ask"
-		target.ObservationData["ask_user_secret_allowed"] = !askMode && request.AcceptsEnumValue("ask_user", "response_type", "secret")
-		return nil
+	askMode := func(target *oar.GuardContext) bool {
+		return api.SessionMode(target.Session.SessionMode) == api.SessionModeAsk || api.SessionMode(sessCtx.Mode) == api.SessionModeAsk
+	}
+	putRecoveryFact(gc, "ask_user_secret_allowed", func(target *oar.GuardContext) any {
+		return !askMode(target) && request.AskUserAcceptsSecret()
 	})
-	gc.RegisterProvider("paintedwolf.ask_user_loadable_without_schema", func(target *oar.GuardContext) error {
-		if target.ObservationData == nil {
-			target.ObservationData = map[string]any{}
-		}
-		askMode := target.Session.SessionMode == "ask" || sessCtx.Mode == "ask"
+	putRecoveryFact(gc, "ask_user_loadable_without_schema", func(target *oar.GuardContext) any {
 		_, hasSchema := request.ToolSchema("ask_user")
-		target.ObservationData["ask_user_loadable_without_schema"] = !askMode && request.Status("ask_user") == toolreach.Loadable && !hasSchema
-		return nil
+		return !askMode(target) && request.Status("ask_user") == toolreach.Loadable && !hasSchema
 	})
-	gc.RegisterProvider("paintedwolf.task_callable", func(target *oar.GuardContext) error {
-		if target.ObservationData == nil {
-			target.ObservationData = map[string]any{}
-		}
-		target.ObservationData["task_callable"] = request.Status("task") == toolreach.Callable || slices.Contains(target.Session.TurnTools, "task")
-		return nil
-	})
-	gc.RegisterProvider("paintedwolf.surface_snapshot_handles", func(target *oar.GuardContext) error {
-		if target.ObservationData == nil {
-			target.ObservationData = map[string]any{}
-		}
-		target.ObservationData["surface_snapshot_handles"] = mintableSurfaceSnapshotHandles(request)
-		return nil
-	})
+	putRecoveryFact(gc, "task_callable", func(*oar.GuardContext) any { return request.Status("task") == toolreach.Callable })
+	putRecoveryFact(gc, "surface_snapshot_handles", func(*oar.GuardContext) any { return mintableSurfaceSnapshotHandles(request) })
 	registerCommandFormRecoveryFacts(gc, request)
 	for _, fact := range oar.CanCallFacts() {
 		tool := strings.TrimPrefix(fact, "can_")
-		gc.RegisterProvider("paintedwolf."+fact, func(target *oar.GuardContext) error {
-			if target.ObservationData == nil {
-				target.ObservationData = map[string]any{}
+		putRecoveryFact(gc, fact, func(*oar.GuardContext) any {
+			if request.Status(tool) == toolreach.Callable {
+				return true
 			}
-			callable := request.Status(tool) == toolreach.Callable
-			if !callable && toolcontract.IsCommandOperation(tool) {
-				if forms, ok := toolcontract.RetiredCommandForms(tool); ok && len(forms) > 0 {
-					callable = request.Program(forms[0])
-				} else {
-					callable = request.Program(tool)
-				}
+			if !toolcontract.IsCommandOperation(tool) {
+				return false
 			}
-			target.ObservationData[fact] = callable
-			return nil
+			if forms, ok := toolcontract.RetiredCommandForms(tool); ok && len(forms) > 0 {
+				return request.Program(forms[0])
+			}
+			return request.Program(tool)
 		})
 	}
 }
 
-func mintableSurfaceSnapshotHandles(request toolreach.Request) string {
-	var handles []string
+// putRecoveryFact registers a lazy provider that stores compute's value under the bare fact name.
+func putRecoveryFact(gc *oar.GuardContext, bare string, compute func(*oar.GuardContext) any) {
+	gc.RegisterProvider("paintedwolf."+bare, func(target *oar.GuardContext) error {
+		if target.ObservationData == nil {
+			target.ObservationData = map[string]any{}
+		}
+		target.ObservationData[bare] = compute(target)
+		return nil
+	})
+}
+
+// mintableSurfaceSnapshotHandles lists the snapshot handle prefixes tools callable on request can mint.
+func mintableSurfaceSnapshotHandles(request toolreach.Request) []string {
+	handles := []string{}
 	if request.Status("capture_page") == toolreach.Callable || request.Status("page_snapshot") == toolreach.Callable || request.Status("page_open") == toolreach.Callable {
 		handles = append(handles, "page#")
 	}
@@ -124,14 +104,5 @@ func mintableSurfaceSnapshotHandles(request toolreach.Request) string {
 	if request.Status("terminal_open") == toolreach.Callable || request.Status("terminal_read") == toolreach.Callable || request.Status("terminal_snapshot") == toolreach.Callable {
 		handles = append(handles, "terminal_session#")
 	}
-	switch len(handles) {
-	case 0:
-		return ""
-	case 1:
-		return handles[0]
-	case 2:
-		return handles[0] + " or " + handles[1]
-	default:
-		return strings.Join(handles[:len(handles)-1], ", ") + " or " + handles[len(handles)-1]
-	}
+	return handles
 }

@@ -232,7 +232,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"ask_user_secret_allowed":             false,
 		"ask_user_loadable_without_schema":    false,
 		"task_callable":                       false,
-		"surface_snapshot_handles":            "",
+		"surface_snapshot_handles":            []string{},
 		"repo_known_empty":                    gc.Grounding.RepoKnownEmpty,
 		"last_audit_ungrounded":               gc.Grounding.LastAuditUngrounded,
 		"grounding_escalated":                 gc.Grounding.GroundingEscalated,

@@ -261,10 +261,8 @@ func buildReaderFacts(
 	sharedTemp := slices.Clone(in.SharedTempLocations)
 
 	f := ReaderFacts{
-		CanAnyGitRead: canAnyGitRead,
-		CanAskUserSecret: offeredSet["ask_user"] &&
-			toolschema.SchemaAcceptsField(effectiveSchemas["ask_user"], "secret") &&
-			toolschema.SchemaAcceptsEnumValue(effectiveSchemas["ask_user"], "response_type", "secret"),
+		CanAnyGitRead:                 canAnyGitRead,
+		CanAskUserSecret:              offeredSet["ask_user"] && toolschema.AskUserAcceptsSecret(effectiveSchemas["ask_user"]),
 		CanCommandExternalSelector:    reachHeld[toolcontract.ReachCommandExternalExecSelector],
 		CanCommandVerify:              offeredSet["command"] && command.externalExec,
 		CanGitBisect:                  canGitBisect,
