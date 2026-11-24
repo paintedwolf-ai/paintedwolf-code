@@ -216,7 +216,7 @@ func (r *grepRun) searchFile(e entry, names, walked bool) error {
 		return r.searchFileLive(e, names, walked)
 	}
 	if r.mode != modeFileList && r.noMatchIsSilent() {
-		if r.index.canPrune(e) {
+		if r.index.canPrune(r.inv, e) {
 			return nil
 		}
 		return r.files.submit(e, names, walked, true)
@@ -240,7 +240,7 @@ func (r *grepRun) searchFileLive(e entry, names, walked bool) error {
 	if r.mode == modeFileList {
 		return r.inv.out.text(e.display, "\n")
 	}
-	if r.index.canPrune(e) {
+	if r.index.canPrune(r.inv, e) {
 		return r.searchNoMatch(e.display, names)
 	}
 	return r.searchUnpruned(e, names, walked)

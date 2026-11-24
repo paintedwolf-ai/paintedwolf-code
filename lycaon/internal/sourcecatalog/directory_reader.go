@@ -100,6 +100,9 @@ func (r *DirectoryReader) ReadDirectory(ctx context.Context, dir string, maximum
 	})
 	if err != nil {
 		r.discard()
+		if errors.Is(err, ErrDirectoryNamespace) {
+			return DirectoryListing{}, err
+		}
 		if ctx.Err() == nil && !errors.Is(err, os.ErrInvalid) && !errors.Is(err, errObservationChanged) && !errors.Is(err, backgroundwork.ErrSuperseded) {
 			err = errors.Join(err, r.store.recordObservationFailure(ctx, observation, err))
 		}

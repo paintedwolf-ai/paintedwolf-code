@@ -117,14 +117,40 @@ func (e ExecutionRevisions) OpenStream(ctx context.Context, tctx tools.ToolConte
 // OpenWalkedStream pins published disk bytes for an already-resolved path,
 // reusing root when non-nil to avoid re-opening the root directory per file.
 func (e ExecutionRevisions) OpenWalkedStream(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, root *fseffect.ReadRoot, maxBytes int64) (ExecutionStream, error) {
-	if err := tools.ObserveCommandFileRead(ctx, resolved.Root.ID, resolved.ScopeRel); err != nil {
-		return ExecutionStream{}, err
-	}
+	return e.openWalkedStream(ctx, tctx, resolved, nil, maxBytes, func() (*os.File, error) {
+		if root != nil {
+			return root.Open(resolved.EffectLocation().Rel)
+		}
+		return fseffect.OpenRead(resolved.EffectLocation())
+	})
+}
+
+// OpenBoundWalkedStream opens bound through root when present and records literal filter observations when eligible.
+func (e ExecutionRevisions) OpenBoundWalkedStream(ctx context.Context, tctx tools.ToolContext, bound projectpaths.BoundPath, root *fseffect.ReadRoot, catalog *CatalogObservation, maxBytes int64) (ExecutionStream, error) {
+	return e.openWalkedStream(ctx, tctx, bound.Resolved, catalog, maxBytes, func() (*os.File, error) {
+		return bound.OpenWithRoot(root)
+	})
+}
+
+func isProtectedStreamPath(tctx tools.ToolContext, resolved projectpaths.Resolved, catalog *CatalogObservation) bool {
 	classified := resolved.Abs
 	if _, rel, ok := tctx.SourceLocation(resolved.Abs); ok {
 		classified = rel
 	}
-	if tctx.Effects.CredentialFiles != nil && protectedpath.IsCredentialFile(classified) {
+	if protectedpath.IsCredentialFile(classified) {
+		return true
+	}
+	if resolved.ScopeRel != "" && protectedpath.IsCredentialFile(resolved.ScopeRel) {
+		return true
+	}
+	return catalog != nil && catalog.Rel != "" && protectedpath.IsCredentialFile(catalog.Rel)
+}
+
+func (e ExecutionRevisions) openWalkedStream(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, catalog *CatalogObservation, maxBytes int64, openFile func() (*os.File, error)) (ExecutionStream, error) {
+	if err := tools.ObserveCommandFileRead(ctx, resolved.Root.ID, resolved.ScopeRel); err != nil {
+		return ExecutionStream{}, err
+	}
+	if tctx.Effects.CredentialFiles != nil && isProtectedStreamPath(tctx, resolved, catalog) {
 		return e.captureStream(ctx, tctx, resolved, maxBytes)
 	}
 	if unsaved, err := sourceview.HoldsUnsavedText(ctx, tctx, resolved); err != nil || unsaved {
@@ -136,15 +162,7 @@ func (e ExecutionRevisions) OpenWalkedStream(ctx context.Context, tctx tools.Too
 	if resolved.Compressed {
 		return e.openCompressedStream(ctx, tctx, resolved)
 	}
-	var (
-		file *os.File
-		err  error
-	)
-	if root != nil {
-		file, err = root.Open(resolved.EffectLocation().Rel)
-	} else {
-		file, err = fseffect.OpenRead(resolved.EffectLocation())
-	}
+	file, err := openFile()
 	if err != nil {
 		if os.IsNotExist(err) || errors.Is(err, fs.ErrNotExist) {
 			return ExecutionStream{}, sourceview.PathNotFound("read", resolved.DisplayPath, resolved.Abs)
@@ -168,7 +186,7 @@ func (e ExecutionRevisions) OpenWalkedStream(ctx context.Context, tctx tools.Too
 		_ = file.Close()
 		return ExecutionStream{}, sourceview.AccessRead.SizeReject("read", resolved.DisplayPath, info.Size(), maxBytes)
 	}
-	captured, err := e.scanFile(ctx, resolved, file, info, true)
+	captured, err := e.scanFileAt(ctx, resolved, catalog, file, info, true)
 	if err != nil {
 		_ = file.Close()
 		return ExecutionStream{}, err

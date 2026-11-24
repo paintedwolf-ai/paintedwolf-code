@@ -16,6 +16,25 @@ type discoveryWork struct {
 	identityPeak, identityHeld            int64
 	reader                                *sourcecatalog.DirectoryReader
 	readerRoot                            string
+	restrictedChecked                     bool
+	restrictedRead                        bool
+}
+
+type directoryCollectionGate struct {
+	*projectpaths.BoundDir
+	allowCollect bool
+}
+
+func (g directoryCollectionGate) AllowDirectoryCollection() bool { return g.allowCollect }
+
+func (w *walker) hasRestrictedReadGlobs() bool {
+	if !w.work.restrictedChecked {
+		w.work.restrictedChecked = true
+		if boundary := w.inv.owners.Revisions.Boundary; boundary != nil {
+			w.work.restrictedRead = len(boundary.ReadGlobsForProfile(w.inv.ctx, w.inv.tc.ProfileID())) > 0
+		}
+	}
+	return w.work.restrictedRead
 }
 
 // Unknown kinds cannot authorize metadata, but policy can exclude both kinds.
@@ -36,13 +55,21 @@ func (w *walker) report() {
 	if w.work.reader != nil {
 		w.closeDirectoryReader()
 	}
+	var resolutions, matches int64
+	if w.worktrees != nil {
+		resolutions, matches = w.worktrees.resolutions, w.worktrees.matches
+	}
 
 	slog.InfoContext(w.inv.ctx, "command discovery completed",
 		"execution_id", w.inv.request.Invocation.Identity.ExecutionID,
 		"entries", w.visited, "entry_metadata_reads", w.work.metadata,
 		"directory_live_lists", w.work.listed, "directory_reuses", w.work.reused,
 		"directory_preparations", w.work.prepared, "shared_root_opens", w.work.roots,
-		"directory_handles", w.work.handles, "held_directory_peak", w.work.peak, "held_directory_remaining", w.held, "relative_descriptor_opens", w.work.opens, "identity_descriptor_peak", w.work.identityPeak, "identity_descriptor_remaining", w.work.identityHeld, "relative_child_stats", w.work.relative)
+		"directory_handles", w.work.handles, "held_directory_peak", w.work.peak,
+		"held_directory_remaining", w.held, "relative_descriptor_opens", w.work.opens,
+		"identity_descriptor_peak", w.work.identityPeak, "identity_descriptor_remaining", w.work.identityHeld,
+		"relative_child_stats", w.work.relative,
+		"worktree_resolutions", resolutions, "worktree_matches", matches)
 }
 
 func (w *walker) closeDirectoryReader() {
@@ -84,22 +111,36 @@ func (w *walker) inspect(e entry) (entry, error) {
 
 func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.BoundDir) ([]entry, bool, error) {
 	catalog := w.inv.owners.Catalog
-	if follow || dir.followed || dir.bound.Resolved.External || catalog == nil || catalog.Directories == nil {
+	if follow || dir.followed || catalog == nil || catalog.Directories == nil {
 		return nil, false, nil
 	}
-	root := dir.bound.Resolved.Root
+	restricted := w.hasRestrictedReadGlobs()
+	var catID, catPath, catRel string
+	if !dir.bound.Resolved.External {
+		root := dir.bound.Resolved.Root
+		if root.ID == "" || root.Path == "" {
+			return nil, false, nil
+		}
+		catID, catPath, catRel = root.ID, root.Path, dir.bound.Resolved.ScopeRel
+	} else {
+		if restricted || dir.catalog == nil || !dir.catalog.Valid() {
+			return nil, false, nil
+		}
+		catID, catPath, catRel = dir.catalog.RootID, dir.catalog.RootPath, dir.catalog.Rel
+	}
 	maximum := 0
 	if w.maximum > 0 {
 		maximum = int(max(1, w.maximum-w.visited))
 	}
-	if w.work.reader == nil || w.work.readerRoot != root.Path {
+	readerKey := catID + "\x00" + catPath
+	if w.work.reader == nil || w.work.readerRoot != readerKey {
 		w.closeDirectoryReader()
-		w.work.reader = catalog.Directories.NewDirectoryReader(w.inv.tc.Identity.ProjectID, sourcecatalog.Root{ID: root.ID, Path: root.Path})
-		w.work.readerRoot = root.Path
+		w.work.reader = catalog.Directories.NewDirectoryReader(w.inv.tc.Identity.ProjectID, sourcecatalog.Root{ID: catID, Path: catPath})
+		w.work.readerRoot = readerKey
 	}
 	reader := w.work.reader
 
-	listing, err := reader.ReadDirectory(w.inv.ctx, dir.bound.Resolved.ScopeRel, maximum, opened)
+	listing, err := reader.ReadDirectory(w.inv.ctx, catRel, maximum, directoryCollectionGate{BoundDir: opened, allowCollect: !restricted})
 	if listing.Prepared {
 		w.work.prepared++
 	}
@@ -130,7 +171,13 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 		if err := w.visit(); err != nil {
 			return nil, true, err
 		}
-		child := dir.bound.Child(item.Name)
+		child, bindErr := opened.BindChild(item.Name)
+		if bindErr != nil {
+			if _, ok := ordinary(bindErr); ok {
+				continue
+			}
+			return nil, true, bindErr
+		}
 		if !entryMayBeRead(filter, child.Resolved.ScopeRel) {
 			continue
 		}
@@ -157,6 +204,9 @@ func (w *walker) indexedChildren(dir entry, follow bool, opened *projectpaths.Bo
 				e.stat.Mode = fs.ModeSymlink
 			}
 			e.metadata = &entryMetadata{parent: opened}
+		}
+		if !e.link && !e.followed {
+			inheritChildCatalog(dir, &e)
 		}
 		e.display = child.Resolved.DisplayPath
 		if dir.display == "." || dir.display != dir.bound.Resolved.DisplayPath {

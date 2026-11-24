@@ -82,7 +82,7 @@ func (e ExecutionRevisions) readCapturedBytes(ctx context.Context, resolved proj
 		defer decoder.Close()
 		reader = decoder
 	}
-	observation = e.observeFile(resolved, info)
+	observation = e.observeFile(resolved, nil, info)
 	return e.readWholeInput(ctx, observation.Wrap(ctx, reader), maximum, resolved.DisplayPath)
 }
 

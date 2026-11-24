@@ -488,7 +488,34 @@ func treeChangesForRoot(eventRoot, indexRoot string, paths []string) ([]string, 
 	}
 	base, err := filepath.Rel(eventRoot, indexRoot)
 	if err != nil || base == ".." || hasParentPrefix(base) {
-		return nil, false
+		sub, subErr := filepath.Rel(indexRoot, eventRoot)
+		if subErr != nil || sub == "." || sub == ".." || hasParentPrefix(sub) {
+			return nil, false
+		}
+		if len(paths) == 0 {
+			return []string{filepath.ToSlash(sub)}, true
+		}
+		var mapped []string
+		for _, p := range paths {
+			rel := p
+			if filepath.IsAbs(rel) {
+				var relErr error
+				rel, relErr = filepath.Rel(eventRoot, rel)
+				if relErr != nil {
+					continue
+				}
+			}
+			rel = filepath.Clean(filepath.FromSlash(rel))
+			if rel == ".." || hasParentPrefix(rel) {
+				continue
+			}
+			if rel == "." {
+				mapped = append(mapped, filepath.ToSlash(sub))
+			} else {
+				mapped = append(mapped, filepath.ToSlash(filepath.Join(sub, rel)))
+			}
+		}
+		return mapped, len(mapped) > 0
 	}
 	if len(paths) == 0 {
 		return nil, true

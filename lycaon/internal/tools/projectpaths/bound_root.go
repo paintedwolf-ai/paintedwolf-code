@@ -6,8 +6,74 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
+
+// OpenSharedRoot validates and opens the held directory root for reuse across a walk.
+func (p BoundPath) OpenSharedRoot() (*fseffect.ReadRoot, error) {
+	if p.Null {
+		return nil, invalidOperand(p.Resolved.DisplayPath, "null device is not a directory entry")
+	}
+	return p.openRoot()
+}
+
+// AdmitPathRead rechecks read admission for actual under the bound authority.
+func (p BoundPath) AdmitPathRead(actual string) error {
+	if p.Null {
+		return invalidOperand(p.Resolved.DisplayPath, "null input is an empty stream, not a file")
+	}
+	if err := p.Validate(); err != nil {
+		return err
+	}
+	if p.admitRead != nil {
+		return PathOperationError(p.Resolved.DisplayPath, p.admitRead(actual))
+	}
+	return nil
+}
+
+// OpenWithRoot reads through shared when non-nil, rechecking bound identity and read admission.
+func (p BoundPath) OpenWithRoot(shared *fseffect.ReadRoot) (*os.File, error) {
+	if p.Null {
+		return nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Cause: errors.New("null input is an empty stream, not a file")}
+	}
+	if settingsoverlay.IsRecoveryRelPath(p.Resolved.ScopeRel) || settingsoverlay.HasRecoverySegment(p.Resolved.Abs) || settingsoverlay.IsRecoveryOnlyDir(p.Resolved.Abs) {
+		return nil, PathOperationError(p.Resolved.DisplayPath, &os.PathError{Op: "open", Path: p.Resolved.DisplayPath, Err: os.ErrNotExist})
+	}
+	root := shared
+	ownsRoot := false
+	if root != nil {
+		if err := p.Validate(); err != nil {
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
+		}
+	} else {
+		var err error
+		root, err = p.openRoot()
+		if err != nil {
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
+		}
+		ownsRoot = true
+	}
+	closeRoot := func() {
+		if ownsRoot {
+			_ = root.Close()
+		}
+	}
+	file, err := root.OpenExact(p.exactRelative)
+	if err != nil {
+		closeRoot()
+		return nil, PathOperationError(p.Resolved.DisplayPath, err)
+	}
+	if p.admitRead != nil {
+		if err := p.admitRead(file.Name()); err != nil {
+			_ = file.Close()
+			closeRoot()
+			return nil, PathOperationError(p.Resolved.DisplayPath, err)
+		}
+	}
+	closeRoot()
+	return file, nil
+}
 
 // openRoot checks the held directory, including replacement between path checks.
 func (p BoundPath) openRoot() (*fseffect.ReadRoot, error) {
