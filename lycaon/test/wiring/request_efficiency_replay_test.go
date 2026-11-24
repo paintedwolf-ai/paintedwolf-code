@@ -293,12 +293,10 @@ func TestRequestEfficiencyIntegratedReplay(t *testing.T) {
 		}
 	}
 
-	storeDir := t.TempDir()
-	h := BuildForTestAt(t, storeDir, WithLLMClient(client))
-	h.Start(t)
-
 	clock := programtest.NewManualClock()
-	h.Commands.SetProgramClock(clock)
+	storeDir := t.TempDir()
+	h := BuildForTestAt(t, storeDir, WithLLMClient(client), WithProgramClock(clock))
+	h.Start(t)
 
 	synth := &countingReplaySummarizer{}
 	histSvc := h.Sessions.Manager.Runner.History

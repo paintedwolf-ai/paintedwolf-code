@@ -82,6 +82,7 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 		WebResearchExchange:     o.webResearchExchange,
 		TestChangeDebounce:      o.changeDebounce,
 		TestFileOperationHold:   o.fileOperationHold,
+		TestProgramClock:        o.programClock,
 		TestStoreCommitObserver: o.storeCommitObserver,
 	}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()

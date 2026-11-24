@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
@@ -33,6 +34,7 @@ type options struct {
 	installedPackDirs       []string
 	changeDebounce          time.Duration
 	fileOperationHold       func(context.Context, fileops.Request)
+	programClock            commandprogram.Clock
 	storeCommitObserver     db.CommitObserver
 	globalApprovalPosture   gate.Posture
 	configRoot              *string
@@ -95,6 +97,11 @@ func WithSecretMatcher(m *secretmatch.Matcher) Option {
 // is still cancelable.
 func WithFileOperationHold(hold func(context.Context, fileops.Request)) Option {
 	return func(o *options) { o.fileOperationHold = hold }
+}
+
+// WithProgramClock overrides the clock used for program inline wait budgets.
+func WithProgramClock(clock commandprogram.Clock) Option {
+	return func(o *options) { o.programClock = clock }
 }
 
 // WithStoreCommitObserver hands each store write transaction to observe as it

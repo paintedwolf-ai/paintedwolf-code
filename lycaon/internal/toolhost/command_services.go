@@ -168,13 +168,6 @@ func (r *CommandServices) SetProgramParking(parking tools.ProgramParking) {
 	}
 }
 
-// SetProgramClock overrides the clock used for program inline wait budgets.
-func (r *CommandServices) SetProgramClock(clock commandprogram.Clock) {
-	if programs := r.programs(); programs != nil {
-		programs.Clock = clock
-	}
-}
-
 // SetProgramEffects records a detached program's later file edits on the
 // result of the call that started it.
 func (r *CommandServices) SetProgramEffects(effects tools.ProgramEffectSink) {
