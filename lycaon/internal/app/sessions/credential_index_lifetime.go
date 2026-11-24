@@ -23,12 +23,18 @@ func (c *credentialFiles) ForgetProject(ctx context.Context, project string) err
 		}
 	}
 	i.mu.Unlock()
+	releases := make([]func(), 0, len(keys))
+	defer func() {
+		for _, release := range releases {
+			release()
+		}
+	}()
 	for _, key := range keys {
 		release, err := i.access.Acquire(ctx, key)
 		if err != nil {
 			return err
 		}
-		defer release()
+		releases = append(releases, release)
 	}
 	return c.harvest.ForgetProject(project)
 }
