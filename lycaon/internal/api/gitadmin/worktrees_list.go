@@ -17,6 +17,20 @@ import (
 
 // HandleGitWorktrees lists verified registered checkouts for one project repository.
 func (s *Handler) HandleGitWorktrees(w http.ResponseWriter, r *http.Request) {
+	serveGitWorktrees(s, w, r)
+}
+
+// HandleGitDiff returns staged, unstaged, or commit-preview patches and stats for a checkout.
+func (s *Handler) HandleGitDiff(w http.ResponseWriter, r *http.Request) {
+	serveGitDiff(s, w, r)
+}
+
+// HandleGitStashes lists shared repository stashes.
+func (s *Handler) HandleGitStashes(w http.ResponseWriter, r *http.Request) {
+	serveGitStashes(s, w, r)
+}
+
+func serveGitWorktrees(s *Handler, w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -177,9 +191,8 @@ func (s *Handler) HandleGitWorktrees(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleGitDiff returns staged, unstaged, or commit-preview patches and stats for a checkout.
-func (s *Handler) HandleGitDiff(w http.ResponseWriter, r *http.Request) {
-	target, ok := s.requireGitCheckoutTarget(w, r)
+func serveGitDiff(s *Handler, w http.ResponseWriter, r *http.Request) {
+	target, ok := resolveGitCheckoutTarget(s, w, r)
 	if !ok {
 		return
 	}
@@ -229,7 +242,7 @@ func (s *Handler) HandleGitDiff(w http.ResponseWriter, r *http.Request) {
 		}
 		patchBuilder.WriteString(patch)
 		stats, _ = mgr.DiffStat(r.Context(), dir, opts)
-		s.appendUntrackedDiffAndStats(r, mgr, dir, paths, &patchBuilder, &stats)
+		appendUntrackedDiffAndStats(r, mgr, dir, paths, &patchBuilder, &stats)
 	case "commit":
 		opts := git.GitDiffOpts{Paths: paths}
 		if headSHA != "" {
@@ -253,7 +266,7 @@ func (s *Handler) HandleGitDiff(w http.ResponseWriter, r *http.Request) {
 			}
 			stats, _ = mgr.DiffStat(r.Context(), dir, git.GitDiffOpts{Staged: true, Paths: paths})
 		}
-		s.appendUntrackedDiffAndStats(r, mgr, dir, paths, &patchBuilder, &stats)
+		appendUntrackedDiffAndStats(r, mgr, dir, paths, &patchBuilder, &stats)
 	}
 
 	roots := target.ProjectedProject.SourceRoots()
@@ -280,7 +293,7 @@ func (s *Handler) HandleGitDiff(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Handler) appendUntrackedDiffAndStats(
+func appendUntrackedDiffAndStats(
 	r *http.Request,
 	mgr *git.Manager,
 	dir string,
@@ -311,9 +324,8 @@ func (s *Handler) appendUntrackedDiffAndStats(
 	}
 }
 
-// HandleGitStashes lists shared repository stashes.
-func (s *Handler) HandleGitStashes(w http.ResponseWriter, r *http.Request) {
-	target, ok := s.requireGitCheckoutTarget(w, r)
+func serveGitStashes(s *Handler, w http.ResponseWriter, r *http.Request) {
+	target, ok := resolveGitCheckoutTarget(s, w, r)
 	if !ok {
 		return
 	}

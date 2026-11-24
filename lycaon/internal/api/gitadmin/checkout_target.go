@@ -54,6 +54,38 @@ func (s *Handler) ResolveCheckoutProject(
 	baseProject *project.Project,
 	checkoutID string,
 ) (*project.Project, worktrees.Checkout, wire.ApiErrorCode, string, bool) {
+	return resolveCheckoutProject(s, ctx, baseProject, checkoutID)
+}
+
+func (s *Handler) requireGitCheckoutTarget(w http.ResponseWriter, r *http.Request) (CheckoutTarget, bool) {
+	return resolveGitCheckoutTarget(s, w, r)
+}
+
+func (s *Handler) lockedMutationContext(
+	ctx context.Context,
+	target CheckoutTarget,
+	expectedHead *string,
+	expectedRevision uint64,
+) context.Context {
+	return buildLockedMutationContext(s, ctx, target, expectedHead, expectedRevision)
+}
+
+func (s *Handler) writeMutationGuardOrCommandError(
+	w http.ResponseWriter,
+	r *http.Request,
+	fallbackCode wire.ApiErrorCode,
+	fallbackMessage string,
+	err error,
+) {
+	writeCheckoutMutationError(s, w, r, fallbackCode, fallbackMessage, err)
+}
+
+func resolveCheckoutProject(
+	s *Handler,
+	ctx context.Context,
+	baseProject *project.Project,
+	checkoutID string,
+) (*project.Project, worktrees.Checkout, wire.ApiErrorCode, string, bool) {
 	checkoutID = strings.TrimSpace(checkoutID)
 	if _, err := uuid.Parse(checkoutID); err != nil {
 		return nil, worktrees.Checkout{}, wire.ApiErrorCodeInvalidRequest, "worktree_id must be a valid UUID.", false
@@ -81,7 +113,7 @@ func (s *Handler) ResolveCheckoutProject(
 	return projected, checkout, "", "", true
 }
 
-func (s *Handler) requireGitCheckoutTarget(w http.ResponseWriter, r *http.Request) (CheckoutTarget, bool) {
+func resolveGitCheckoutTarget(s *Handler, w http.ResponseWriter, r *http.Request) (CheckoutTarget, bool) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return CheckoutTarget{}, false
@@ -90,7 +122,7 @@ func (s *Handler) requireGitCheckoutTarget(w http.ResponseWriter, r *http.Reques
 	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
 
 	if !r.URL.Query().Has("worktree_id") {
-		return s.resolveImplicitCheckoutTarget(w, r, p, repoID, sessionID)
+		return resolveImplicitCheckoutTarget(s, w, r, p, repoID, sessionID)
 	}
 
 	worktreeID := strings.TrimSpace(r.URL.Query().Get("worktree_id"))
@@ -134,7 +166,7 @@ func (s *Handler) requireGitCheckoutTarget(w http.ResponseWriter, r *http.Reques
 		return CheckoutTarget{}, false
 	}
 
-	projected, checkout, errCode, errMsg, ok := s.ResolveCheckoutProject(r.Context(), p, worktreeID)
+	projected, checkout, errCode, errMsg, ok := resolveCheckoutProject(s, r.Context(), p, worktreeID)
 	if !ok {
 		s.responses.Fail(w, errCode, errMsg)
 		return CheckoutTarget{}, false
@@ -184,7 +216,8 @@ func (s *Handler) requireGitCheckoutTarget(w http.ResponseWriter, r *http.Reques
 	}, true
 }
 
-func (s *Handler) resolveImplicitCheckoutTarget(
+func resolveImplicitCheckoutTarget(
+	s *Handler,
 	w http.ResponseWriter,
 	r *http.Request,
 	p *project.Project,
@@ -209,7 +242,7 @@ func (s *Handler) resolveImplicitCheckoutTarget(
 				baseRepo = repo
 			}
 			boundToSession := scope.Binding != nil && scope.Binding.RepoID == repoID
-			checkout := s.lookupImplicitCheckout(r.Context(), p.ID, baseRepo, repo.Toplevel, scope.Binding)
+			checkout := lookupImplicitCheckout(s, r.Context(), p.ID, baseRepo, repo.Toplevel, scope.Binding)
 			boundToAny := boundToSession
 			if !boundToAny && checkout.ID != "" && s.Worktrees != nil {
 				if anyBound, bErr := s.Worktrees.IsBoundToAnySession(r.Context(), p.ID, checkout.ID); bErr == nil {
@@ -233,7 +266,8 @@ func (s *Handler) resolveImplicitCheckoutTarget(
 	return CheckoutTarget{}, false
 }
 
-func (s *Handler) lookupImplicitCheckout(
+func lookupImplicitCheckout(
+	s *Handler,
 	ctx context.Context,
 	projectID string,
 	baseRepo git.RepoRef,
@@ -279,7 +313,8 @@ func (s *Handler) lookupImplicitCheckout(
 	return c
 }
 
-func (s *Handler) lockedMutationContext(
+func buildLockedMutationContext(
+	s *Handler,
 	ctx context.Context,
 	target CheckoutTarget,
 	expectedHead *string,
@@ -307,7 +342,8 @@ func (s *Handler) lockedMutationContext(
 	})
 }
 
-func (s *Handler) writeMutationGuardOrCommandError(
+func writeCheckoutMutationError(
+	s *Handler,
 	w http.ResponseWriter,
 	r *http.Request,
 	fallbackCode wire.ApiErrorCode,
