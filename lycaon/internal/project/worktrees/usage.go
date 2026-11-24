@@ -94,6 +94,7 @@ func (inv *Inventory) EnsureRegisteredCheckout(ctx context.Context, spec RepoSpe
 					Branch:           chooseNonEmpty(branch, row.Branch),
 					Kind:             string(reg.Kind),
 					Available:        1,
+					Managed:          row.Managed,
 					CommonDir:        reg.CommonDir,
 					AdminDir:         reg.AdminDir,
 					CommonIdentity:   reg.CommonIdentity,
