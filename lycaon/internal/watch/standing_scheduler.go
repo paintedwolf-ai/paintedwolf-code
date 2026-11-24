@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -169,8 +170,10 @@ func recoverStandingWatches(ctx context.Context, e *StandingEngine, now time.Tim
 	}
 
 	for pid := range projects {
-		_, _ = e.store.db.ExecContext(ctx,
-			`UPDATE watch_runs SET status = 'pending', started_at = NULL WHERE project_id = ? AND status = 'running' AND (session_id IS NULL OR session_id = '')`, pid)
+		if _, err := e.store.db.ExecContext(ctx,
+			`UPDATE watch_runs SET status = 'pending', started_at = NULL WHERE project_id = ? AND status = 'running' AND (session_id IS NULL OR session_id = '')`, pid); err != nil {
+			return err
+		}
 		if err := e.DispatchProjectRuns(ctx, pid); err != nil {
 			return err
 		}
@@ -364,7 +367,9 @@ func enqueueStandingTimerOccurrence(ctx context.Context, e *StandingEngine, sw S
 	nowStr, schedStr := now.UTC().Format(time.RFC3339Nano), scheduledFor.UTC().Format(time.RFC3339Nano)
 	detailBytes, _ := json.Marshal(detail)
 	if sw.Target.Kind == "existing_chat" {
-		_, _ = tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'skipped_busy', ended_at = ? WHERE watch_id = ? AND status = 'pending'`, nowStr, sw.WatchID)
+		if _, err := tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'skipped_busy', ended_at = ? WHERE watch_id = ? AND status = 'pending'`, nowStr, sw.WatchID); err != nil {
+			return err
+		}
 	}
 
 	status := RunPending
@@ -484,9 +489,11 @@ func flushPendingStandingChange(ctx context.Context, e *StandingEngine, watchID 
 	if json.Unmarshal([]byte(reg.Cursors[standingPendingChangeKey]), &pending) != nil {
 		return nil
 	}
-	_, _ = e.store.db.ExecContext(ctx,
+	if _, err := e.store.db.ExecContext(ctx,
 		`UPDATE watch_registrations SET cursors_json = json_remove(cursors_json, '$.standing:pending_change'), updated_at = ? WHERE watch_id = ?`,
-		now.UTC().Format(time.RFC3339Nano), watchID)
+		now.UTC().Format(time.RFC3339Nano), watchID); err != nil {
+		return err
+	}
 	if err := enqueueStandingChangeRun(ctx, e, sw, pending.OccurrenceID, pending.Evidence, now); err != nil {
 		return err
 	}
@@ -515,7 +522,9 @@ func enqueueStandingChangeRun(ctx context.Context, e *StandingEngine, sw Standin
 			return tx.Commit()
 		}
 		if sw.Target.Kind == "existing_chat" {
-			_, _ = tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'skipped_busy', ended_at = ? WHERE run_id = ?`, nowStr, pendingID)
+			if _, err := tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'skipped_busy', ended_at = ? WHERE run_id = ?`, nowStr, pendingID); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -653,7 +662,9 @@ func evaluateStandingGate(ctx context.Context, e *StandingEngine, sw StandingWat
 		}
 	}
 	if len(diffs) > 0 || cur.LedgerOrd > prev.LedgerOrd {
-		_, _ = e.store.db.ExecContext(ctx, `UPDATE standing_watch_settings SET gate_baseline_json = ? WHERE watch_id = ?`, string(curRaw), sw.WatchID)
+		if _, err := e.store.db.ExecContext(ctx, `UPDATE standing_watch_settings SET gate_baseline_json = ? WHERE watch_id = ?`, string(curRaw), sw.WatchID); err != nil {
+			slog.WarnContext(ctx, "advance standing watch gate baseline", "watch_id", sw.WatchID, "err", err)
+		}
 	}
 	return false, string(curRaw), nil
 }

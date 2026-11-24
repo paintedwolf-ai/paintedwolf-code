@@ -336,8 +336,12 @@ func finalizeKeptAgentWatchTx(ctx context.Context, tx *sql.Tx, liveAgent Registr
 	}
 	finalReceipt.StandingWatchID = standingID
 	rawFinal, _ := json.Marshal(finalReceipt)
-	_, _ = tx.ExecContext(ctx, `UPDATE watch_registrations SET final_receipt_json = ? WHERE watch_id = ?`, string(rawFinal), liveAgent.WatchID)
-	_, _ = tx.ExecContext(ctx, `UPDATE watch_deliveries SET payload_json = ? WHERE delivery_id = ?`, string(rawFinal), finalReceipt.ReceiptID)
+	if _, err := tx.ExecContext(ctx, `UPDATE watch_registrations SET final_receipt_json = ? WHERE watch_id = ?`, string(rawFinal), liveAgent.WatchID); err != nil {
+		return CancelReceipt{}, nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE watch_deliveries SET payload_json = ? WHERE delivery_id = ?`, string(rawFinal), finalReceipt.ReceiptID); err != nil {
+		return CancelReceipt{}, nil, err
+	}
 	if err := insertTerminalOutcomeMatchTx(ctx, tx, liveAgent.WatchID, MatchInput{
 		SourceKind:   "standing_keep",
 		OccurrenceID: "kept:" + standingID,
@@ -571,10 +575,12 @@ func commitStandingUpdate(
 	if timerChanged || takeover {
 		newAnchor = now.UTC()
 		mergedCursors[standingLastEvalCursorKey] = nowStr
-		_, _ = tx.ExecContext(ctx,
+		if _, err := tx.ExecContext(ctx,
 			`UPDATE watch_runs SET status = 'canceled', ended_at = ?
 			 WHERE watch_id = ? AND status = 'pending' AND run_key LIKE 'timer:%'`,
-			nowStr, current.WatchID)
+			nowStr, current.WatchID); err != nil {
+			return err
+		}
 	}
 	condBytes, _ := json.Marshal(prepared.Conditions)
 	cursorBytes, _ := json.Marshal(mergedCursors)

@@ -412,10 +412,12 @@ func applyReplacesKeepTx(
 	if curState == string(StateDisabled) {
 		nextState, ownerID = string(StateEnabled), actorPersonID
 	}
-	_, _ = tx.ExecContext(ctx,
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE watch_runs SET status = 'canceled', ended_at = ?
 		 WHERE watch_id = ? AND status = 'pending' AND run_key LIKE 'timer:%'`,
-		nowStr, replacesID)
+		nowStr, replacesID); err != nil {
+		return 0, err
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE watch_registrations
 		SET owner_person_id = ?, conditions_json = ?, cursors_json = ?, state = ?,
 		    state_reason = CASE WHEN ? = 'enabled' THEN NULL ELSE state_reason END,
