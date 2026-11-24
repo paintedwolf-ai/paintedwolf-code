@@ -133,6 +133,8 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 		return tools.ToolContext{}, err
 	}
 	refreshed.Turn.TurnSurfaceID = base.Turn.TurnSurfaceID
+	refreshed.Turn.UserIntentID = base.Turn.UserIntentID
+	refreshed.Turn.WorkflowRunID = base.Turn.WorkflowRunID
 	refreshed.Turn.TurnToolPlan = base.Turn.TurnToolPlan
 	refreshed.Turn.TurnPrograms = base.Turn.TurnPrograms
 	refreshed.Turn.TurnOfferedToolNames = slices.Clone(base.Turn.TurnOfferedToolNames)
