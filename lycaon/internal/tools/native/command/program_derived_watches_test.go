@@ -30,13 +30,23 @@ import (
 )
 
 type derivedWatchTestEnv struct {
-	mu      sync.Mutex
-	emitted []string
-	dropped []string
+	mu          sync.Mutex
+	workerChild bool
+	emitted     []string
+	dropped     []string
+}
+
+func (e *derivedWatchTestEnv) setWorkerChild(v bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.workerChild = v
 }
 
 func (e *derivedWatchTestEnv) Get(_ context.Context, id string) (*api.Session, error) {
-	if strings.HasPrefix(id, "worker-") {
+	e.mu.Lock()
+	isWorker := e.workerChild || strings.HasPrefix(id, "worker-")
+	e.mu.Unlock()
+	if isWorker {
 		return &api.Session{ID: id, ProjectID: testdbseed.DefaultProjectID, ParentSessionID: "parent-1", OwnerPersonID: "fixture-person"}, nil
 	}
 	return &api.Session{ID: id, ProjectID: testdbseed.DefaultProjectID, OwnerPersonID: "fixture-person"}, nil
@@ -273,6 +283,7 @@ func TestBashDerivedWatchesQuotaBypassCancelCoalescingContinuationAndWorkerColle
 		workerJobID, testdbseed.DefaultProjectID, f.Session)
 	testutil.FailErr(t, "seed worker job", err)
 
+	env.setWorkerChild(true)
 	f.Configure = func(tc *tools.ToolContext) {
 		tc.Identity.WorkerJobID = workerJobID
 	}
@@ -305,6 +316,7 @@ func TestBashDerivedWatchesQuotaBypassCancelCoalescingContinuationAndWorkerColle
 	if kicks := env.activeKicks(); len(kicks) != 0 {
 		t.Fatalf("worker job leaked ambient kicks: %v", kicks)
 	}
+	env.setWorkerChild(false)
 
 	// Promoted foreground program exposes watch_handle, watch_match, and output_cursor=0 while staying outside Bash jobs.
 	pClock := programtest.NewManualClock()
