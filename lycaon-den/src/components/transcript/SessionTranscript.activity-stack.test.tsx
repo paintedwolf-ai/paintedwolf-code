@@ -497,8 +497,8 @@ describe("SessionTranscript stacked activity groups", () => {
     const cards = [...container.querySelectorAll<HTMLElement>('[data-testid="activity-group-card"]')];
     expect(cards).toHaveLength(3);
     expect(cards[0]!.getAttribute("data-sections")).toBe("activities");
-    // Late diff from call-115 arrives at ord+17 before a-320 (approvals) and r-120 (activities).
-    expect(cards[1]!.getAttribute("data-sections")).toBe("files,approvals,activities");
+    // Late diff from call-115 arrives at ord+17 before r-120 (activities) and call-348 (approvals).
+    expect(cards[1]!.getAttribute("data-sections")).toBe("files,activities,approvals");
     expect(cards[2]!.getAttribute("data-sections")).toBe("activities");
 
     const approvalChicklet = cards[1]!.querySelector('[data-testid="checkpoint-decision-chicklet"]');

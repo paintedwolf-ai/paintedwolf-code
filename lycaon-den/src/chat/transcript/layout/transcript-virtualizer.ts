@@ -879,14 +879,14 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
     measuredBasis = basis;
     const changedRevisions = untrack(collectRevisionChanges);
     setOptions(next);
-    const anchorSurvived =
-      anchor !== null &&
-      (indexOfKey(virtualizer, anchor.key, anchor.index) >= 0 ||
-        Boolean(opts.resolveLostAnchor?.(String(anchor.key))));
-    if (!pendingLanding || anchorSurvived) {
-      pendingLanding = undefined;
+    const directlyPresent = anchor !== null && indexOfKey(virtualizer, anchor.key, anchor.index) >= 0;
+    const regrouped =
+      anchor !== null && !directlyPresent && Boolean(opts.resolveLostAnchor?.(String(anchor.key)));
+    if (regrouped) pendingLanding = undefined;
+    const anchorSurvived = directlyPresent || regrouped;
+    if (!pendingLanding) {
       carryRowChanges(anchor, countBefore, originBefore);
-    } else if (virtualizer.options.count > 0) {
+    } else if (!anchorSurvived && virtualizer.options.count > 0) {
       const landing = pendingLanding;
       pendingLanding = undefined;
       if (virtualizer.scrollOffset !== null) {
