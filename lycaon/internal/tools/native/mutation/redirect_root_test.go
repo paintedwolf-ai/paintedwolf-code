@@ -60,6 +60,9 @@ func TestRedirectWriteRootAsksForTheSmallestUsefulGrant(t *testing.T) {
 	t.Setenv("TMPDIR", shared)
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "home directory", err)
+	if hostHome := os.Getenv("PW_TEST_HOST_HOME"); hostHome != "" {
+		home = hostHome
+	}
 	//nolint:usetesting // Must reside under the home directory, outside shared temp.
 	outside, err := os.MkdirTemp(home, "paintedwolf-redirect-root-*")
 	testutil.FailErr(t, "outside folder", err)

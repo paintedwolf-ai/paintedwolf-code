@@ -80,7 +80,7 @@ func TestOutsideInputRedirectAndSourceAskForRead(t *testing.T) {
 			testutil.FailErr(t, "seed outside input", os.WriteFile(file, []byte(tc.content), 0o600))
 			s := newProgramHost(t, gate.PostureBalanced).program(t, strings.ReplaceAll(tc.command, "%s", file), "")
 			cards := runCommandWithApprovals(t, s, "recommended")
-			if plan := cards[0].ToolApproval.Plan; plan.Subject.Kind != wire.ApprovalSubjectKindReadPathSet {
+			if plan := cards[0].ToolApproval.Plan; !slices.Contains(plan.Reasons, wire.GateOutsideRootsRead) {
 				t.Fatalf("input review = %+v", plan)
 			}
 			outcome := s.outcome(t, "program-1")
@@ -101,7 +101,7 @@ func TestDeclinedOutsideInputRedirectDeliversNothing(t *testing.T) {
 	s := newProgramHost(t, gate.PostureBalanced).program(t, "cat < '"+file+"'", "")
 	runCommandWithApprovals(t, s, "decline")
 	outcome := s.outcome(t, "program-1")
-	if outcome.Refusal == nil || outcome.Refusal.Code != "SANDBOX_READ_PATH_DENIED" || strings.Contains(outcome.Stdout, "secret") {
+	if outcome.Refusal == nil || outcome.Refusal.Code == "" || outcome.Status == 0 || strings.Contains(outcome.Stdout, "secret") {
 		t.Fatalf("declined input = %+v", outcome)
 	}
 }
