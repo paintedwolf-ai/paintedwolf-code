@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/git"
@@ -79,29 +78,6 @@ func (s *Handler) populateGitRepoSummary(ctx context.Context, entry *wire.GitRep
 	entry.StagedCount = status.StagedCount
 	entry.UnstagedCount = status.UnstagedCount
 	entry.ChangedCount = len(status.Files)
-}
-
-// requireGitRepoQuery resolves the {id}/{repo_id} path, viewed through the
-// worktree of the chat the session_id lens query names.
-func (s *Handler) requireGitRepoQuery(w http.ResponseWriter, r *http.Request) (git.RepoRef, *project.Project, bool) {
-	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
-	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
-	if !ok {
-		return git.RepoRef{}, nil, false
-	}
-	repoID := strings.TrimSpace(chi.URLParam(r, "repo_id"))
-	scope, err := requestscope.ResolveSessionProject(s.SessionStore, r.Context(), p, sessionID)
-	if err != nil {
-		s.WriteGitReposLoadError(w, r, err)
-		return git.RepoRef{}, nil, false
-	}
-	for _, repo := range s.LoadOrderedRepos(r.Context(), p, scope.Project.SourceRoots(), "", scope.Binding) {
-		if repo.ID == repoID && repo.Available {
-			return repo, scope.Project, true
-		}
-	}
-	s.responses.Fail(w, wire.ApiErrorCodeGitRepoNotFound, GitRepoNotFoundMsg)
-	return git.RepoRef{}, nil, false
 }
 
 // LoadOrderedRepos orders the project's repositories over roots. A session's

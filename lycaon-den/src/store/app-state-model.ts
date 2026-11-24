@@ -130,6 +130,10 @@ export interface AppState {
   gitActiveRepoId?: string;
   /** Session-only Git scope pin. */
   gitScopePin?: GitScope | null;
+  /** Window-local selected checkout id per `${projectId}\u0000${repoId}` (never persisted). */
+  gitWorktreeTargets: Record<string, string>;
+  /** Monotonic generation incremented when a window checkout target changes. */
+  gitWorktreeEpoch: number;
   queueDraft?: QueueDraft;
   latestCodeScan?: CodeScanEvent;
   activeWorkflowRun?: WorkflowRun;
@@ -273,6 +277,8 @@ export type AppStoreActions = {
   setGitRepos: (repos: GitRepoEntry[], activeRepoId: string) => void;
   setGitScopePin: (pin: GitScope | null) => void;
   clearGitScopePin: () => void;
+  setGitWorktreeTarget: (projectId: string, repoId: string, worktreeId: string | null) => void;
+  clearGitWorktreeTargets: (projectId?: string) => void;
   setQueueDraft: (sessionId: string, epoch: number, draft: QueueDraft) => boolean;
   bumpVerifyDetectRevision: () => void;
   bumpExtensionsRevision: () => void;

@@ -53,6 +53,8 @@ export const INITIAL_APP_STATE: Readonly<AppState> = {
   sessionViewEpoch: 0,
   findings: unloaded(),
   gitStatus: unloaded(),
+  gitWorktreeTargets: {},
+  gitWorktreeEpoch: 0,
   sidecarStatus: "connecting",
   isLoading: false,
   verifyDetectRevision: 0,

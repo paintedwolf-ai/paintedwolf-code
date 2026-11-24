@@ -510,7 +510,7 @@ func TestGitWorktreeEndpointCount(t *testing.T) {
 			paths = append(paths, strings.TrimSuffix(line, ":"))
 		}
 	}
-	if len(paths) != 13 {
-		t.Fatalf("git paths = %d want 13 (11 repository + 2 worktree): %v", len(paths), paths)
+	if len(paths) != 16 {
+		t.Fatalf("git paths = %d want 16 (14 repository + 2 worktree): %v", len(paths), paths)
 	}
 }

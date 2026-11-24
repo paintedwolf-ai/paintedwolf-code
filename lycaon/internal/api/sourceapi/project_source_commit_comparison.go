@@ -87,12 +87,31 @@ func (s *Review) writeCommitPathComparison(w http.ResponseWriter, r *http.Reques
 		s.responses.InvalidQueryParam(w, "baseline", "must be commit, with root_id and a local path")
 		return
 	}
+	worktreeID := ""
+	if q.Has("worktree_id") {
+		worktreeID = q.Get("worktree_id")
+		if worktreeID == "" {
+			s.responses.InvalidQueryParam(w, "worktree_id", "must be a valid checkout UUID")
+			return
+		}
+	}
+	stage := q.Get("stage")
+	if stage != "" && stage != "working" && stage != "staged" && stage != "unstaged" {
+		s.responses.InvalidQueryParam(w, "stage", "must be working, staged, or unstaged")
+		return
+	}
 	var expected *string
 	if q.Has("expected_head") {
 		value := q.Get("expected_head")
 		expected = &value
 	}
-	diff, err := s.Comparisons.loadCommitComparison(r.Context(), p, wire.CommitComparisonSource{RootID: rootID, Path: path, ExpectedHead: expected}, nil)
+	diff, err := s.Comparisons.loadCommitComparison(r.Context(), p, wire.CommitComparisonSource{
+		RootID:       rootID,
+		Path:         path,
+		ExpectedHead: expected,
+		WorktreeID:   worktreeID,
+		Stage:        stage,
+	}, nil)
 	if err != nil {
 		s.Comparisons.writeComparisonError(w, r, err)
 		return

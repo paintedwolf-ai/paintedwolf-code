@@ -246,6 +246,18 @@ func (c *StatusCache) GetOrRevalidate(ctx context.Context, dir string) (CachedSt
 	return cached, nil
 }
 
+// Peek returns the cached status entry for dir without triggering a refresh.
+func (c *StatusCache) Peek(dir string) (CachedStatus, bool) {
+	if c == nil {
+		return CachedStatus{}, false
+	}
+	key := cacheKey(dir)
+	if key == "" {
+		return CachedStatus{}, false
+	}
+	return c.lookupAny(key)
+}
+
 // PeekOrRevalidate returns immediately and refreshes absent or stale entries.
 func (c *StatusCache) PeekOrRevalidate(ctx context.Context, dir string) (CachedStatus, bool, error) {
 	if c == nil || c.loader == nil {

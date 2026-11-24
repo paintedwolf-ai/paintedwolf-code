@@ -84,15 +84,30 @@ func (s *Comparisons) writeSourceComparison(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Comparisons) HandleGetProjectSourceComparison(w http.ResponseWriter, r *http.Request) {
-	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
-	if !ok {
-		return
-	}
-	p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, p)
+	baseProject, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
+	var p *project.Project
+	if q.Has("worktree_id") && q.Get("path") != "" {
+		if sessionID := strings.TrimSpace(q.Get("session_id")); sessionID != "" {
+			sess, ok := requestscope.Session(s.SessionQueries, s.responses, w, r, sessionID)
+			if !ok {
+				return
+			}
+			if sess == nil || strings.TrimSpace(sess.ProjectID) != strings.TrimSpace(baseProject.ID) {
+				s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "Session not found.")
+				return
+			}
+		}
+		p = baseProject
+	} else {
+		p, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, baseProject)
+		if !ok {
+			return
+		}
+	}
 	effectID := strings.TrimSpace(q.Get("effect_id"))
 	versionID := strings.TrimSpace(q.Get("version_id"))
 	fileID := strings.TrimSpace(q.Get("file_id"))

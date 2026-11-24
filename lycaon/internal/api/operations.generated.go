@@ -126,6 +126,7 @@ var (
 	operationGetExtensionsCatalog               = generatedOperation{ID: "getExtensionsCatalog", Method: "GET", Path: "/v1/extensions"}
 	operationGetFileBriefing                    = generatedOperation{ID: "getFileBriefing", Method: "GET", Path: "/v1/projects/{id}/source/file-briefings", Params: []string{"id"}}
 	operationGetFileSummariesSettings           = generatedOperation{ID: "getFileSummariesSettings", Method: "GET", Path: "/v1/settings/file-summaries"}
+	operationGetGitDiff                         = generatedOperation{ID: "getGitDiff", Method: "GET", Path: "/v1/projects/{id}/git/repos/{repo_id}/diff", Params: []string{"id", "repo_id"}}
 	operationGetGitStatus                       = generatedOperation{ID: "getGitStatus", Method: "GET", Path: "/v1/projects/{id}/git/repos/{repo_id}/status", Params: []string{"id", "repo_id"}}
 	operationGetGitWorktree                     = generatedOperation{ID: "getGitWorktree", Method: "GET", Path: "/v1/sessions/{id}/git-worktree", Params: []string{"id"}}
 	operationGetHealth                          = generatedOperation{ID: "getHealth", Method: "GET", Path: "/health"}
@@ -201,6 +202,8 @@ var (
 	operationListGitBranches                    = generatedOperation{ID: "listGitBranches", Method: "GET", Path: "/v1/projects/{id}/git/repos/{repo_id}/branches", Params: []string{"id", "repo_id"}}
 	operationListGitChanges                     = generatedOperation{ID: "listGitChanges", Method: "GET", Path: "/v1/projects/{id}/git/repos/{repo_id}/changes", Params: []string{"id", "repo_id"}}
 	operationListGitRepos                       = generatedOperation{ID: "listGitRepos", Method: "GET", Path: "/v1/projects/{id}/git/repos", Params: []string{"id"}}
+	operationListGitStashes                     = generatedOperation{ID: "listGitStashes", Method: "GET", Path: "/v1/projects/{id}/git/repos/{repo_id}/stashes", Params: []string{"id", "repo_id"}}
+	operationListGitWorktrees                   = generatedOperation{ID: "listGitWorktrees", Method: "GET", Path: "/v1/projects/{id}/git/repos/{repo_id}/worktrees", Params: []string{"id", "repo_id"}}
 	operationListMcpProviderTools               = generatedOperation{ID: "listMcpProviderTools", Method: "GET", Path: "/v1/mcp/providers/{provider_id}/tools", Params: []string{"provider_id"}}
 	operationListMcpProviders                   = generatedOperation{ID: "listMcpProviders", Method: "GET", Path: "/v1/mcp/providers"}
 	operationListMcpRecipes                     = generatedOperation{ID: "listMcpRecipes", Method: "GET", Path: "/v1/mcp/recipes"}
@@ -474,6 +477,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetExtensionsCatalog,
 	operationGetFileBriefing,
 	operationGetFileSummariesSettings,
+	operationGetGitDiff,
 	operationGetGitStatus,
 	operationGetGitWorktree,
 	operationGetHealth,
@@ -549,6 +553,8 @@ var allGeneratedOperations = []generatedOperation{
 	operationListGitBranches,
 	operationListGitChanges,
 	operationListGitRepos,
+	operationListGitStashes,
+	operationListGitWorktrees,
 	operationListMcpProviderTools,
 	operationListMcpProviders,
 	operationListMcpRecipes,

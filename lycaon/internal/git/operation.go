@@ -142,6 +142,9 @@ func (p *preparedOperation) apply(ctx context.Context, repo gitrepo.Repo) (resul
 		return result, err
 	}
 	defer release()
+	if err := checkLockedVerify(ctx); err != nil {
+		return result, err
+	}
 	if err := p.validate(ctx, repo); err != nil {
 		return result, err
 	}

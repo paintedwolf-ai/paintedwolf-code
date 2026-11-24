@@ -409,6 +409,9 @@ func (m *gitBranchManager) Stash(ctx context.Context, projectDir string, message
 		return err
 	}
 	defer release()
+	if err := checkLockedVerify(ctx); err != nil {
+		return err
+	}
 	args := []string{"stash", "push", "-u"}
 	if msg := strings.TrimSpace(message); msg != "" {
 		args = append(args, "-m", msg)
@@ -435,6 +438,9 @@ func (m *gitBranchManager) DiscardAll(ctx context.Context, projectDir string) er
 		return err
 	}
 	defer release()
+	if err := checkLockedVerify(ctx); err != nil {
+		return err
+	}
 	if head, _ := m.HeadSHA(ctx, dir); head != "" {
 		out, code, err := gitexec.Run(ctx, dir, []string{"reset", "--hard", "HEAD"}, hermeticOpts(0))
 		if err != nil {
@@ -457,12 +463,55 @@ func (m *gitBranchManager) DiscardAll(ctx context.Context, projectDir string) er
 
 // Push publishes the current branch to its upstream.
 func (m *gitBranchManager) Push(ctx context.Context, projectDir string) error {
-	return m.runRemote(ctx, projectDir, "push", []string{"push"})
+	return m.PushRef(ctx, projectDir, "", "")
+}
+
+// PushRef publishes the checkout branch to its upstream or an explicit remote/ref.
+func (m *gitBranchManager) PushRef(ctx context.Context, projectDir, remote, ref string) error {
+	args, err := remoteSyncArgs("push", nil, remote, ref)
+	if err != nil {
+		return err
+	}
+	return m.runRemote(ctx, projectDir, "push", args)
 }
 
 // Pull fast-forwards the current branch from its upstream.
 func (m *gitBranchManager) Pull(ctx context.Context, projectDir string) error {
-	return m.runRemote(ctx, projectDir, "pull", []string{"pull", "--ff-only"})
+	return m.PullRef(ctx, projectDir, "", "")
+}
+
+// PullRef fast-forwards the checkout branch from its upstream or an explicit remote/ref.
+func (m *gitBranchManager) PullRef(ctx context.Context, projectDir, remote, ref string) error {
+	args, err := remoteSyncArgs("pull", []string{"--ff-only"}, remote, ref)
+	if err != nil {
+		return err
+	}
+	return m.runRemote(ctx, projectDir, "pull", args)
+}
+
+func remoteSyncArgs(verb string, flags []string, remote, ref string) ([]string, error) {
+	remote = strings.TrimSpace(remote)
+	ref = strings.TrimSpace(ref)
+	args := make([]string, 0, 2+len(flags)+3)
+	args = append(args, verb)
+	args = append(args, flags...)
+	if remote == "" && ref == "" {
+		return args, nil
+	}
+	if remote == "" {
+		return nil, fmt.Errorf("remote is required when ref is set")
+	}
+	if err := validateGitRef(remote, "remote"); err != nil {
+		return nil, err
+	}
+	args = append(args, gitargv.EndOfOptions, remote)
+	if ref != "" {
+		if err := validateGitRef(ref, "ref"); err != nil {
+			return nil, err
+		}
+		args = append(args, ref)
+	}
+	return args, nil
 }
 
 func (m *gitBranchManager) runRemote(ctx context.Context, projectDir, label string, args []string) error {
@@ -475,6 +524,9 @@ func (m *gitBranchManager) runRemote(ctx context.Context, projectDir, label stri
 		return err
 	}
 	defer release()
+	if err := checkLockedVerify(ctx); err != nil {
+		return err
+	}
 	out, code, err := gitexec.Run(ctx, dir, args, networkOpts("", 0))
 	if err != nil {
 		return err
@@ -482,6 +534,7 @@ func (m *gitBranchManager) runRemote(ctx context.Context, projectDir, label stri
 	if code != 0 {
 		return fmt.Errorf("git %s failed: %s", label, strings.TrimSpace(string(out)))
 	}
+	notifyRepoChange(ctx, dir, repochange.HeadMoved)
 	return nil
 }
 
@@ -499,6 +552,9 @@ func (m *gitBranchManager) Checkout(ctx context.Context, projectDir string, bran
 		return err
 	}
 	defer release()
+	if err := checkLockedVerify(ctx); err != nil {
+		return err
+	}
 	// The trailing separator forces a branch checkout rather than a path checkout.
 	out, code, err := gitexec.Run(ctx, dir, []string{"checkout", gitargv.EndOfOptions, branch, "--"}, hermeticOpts(0))
 	if err != nil {
@@ -584,6 +640,9 @@ func (m *gitBranchManager) CreateBranch(ctx context.Context, projectDir string, 
 		return err
 	}
 	defer release()
+	if err := checkLockedVerify(ctx); err != nil {
+		return err
+	}
 	out, code, err := gitexec.Run(ctx, dir, []string{"checkout", "-b", branch, "--"}, hermeticOpts(0))
 	if err != nil {
 		return err
@@ -591,6 +650,7 @@ func (m *gitBranchManager) CreateBranch(ctx context.Context, projectDir string, 
 	if code != 0 {
 		return fmt.Errorf("git checkout failed: %s", strings.TrimSpace(string(out)))
 	}
+	notifyRepoChange(ctx, dir, repochange.HeadMoved)
 	return nil
 }
 

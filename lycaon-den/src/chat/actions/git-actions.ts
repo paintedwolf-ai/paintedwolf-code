@@ -1,8 +1,11 @@
 import type { LycaonClient } from "../../api/client.ts";
+import type { GitDiscardGuard, GitRemoteRef } from "../../api/http-capabilities/git.ts";
 import type {
   GitBranchEntry,
+  GitCommitRequest,
   GitMutationResult,
   GitRepoEntry,
+  GitStashRequest,
   GitWorktreeLandResult,
   GitWorktreeView,
 } from "../../api/types.ts";
@@ -15,6 +18,7 @@ import {
   type GitProjection,
 } from "./git-status-reads.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
+import { resolveGitWorktreeTarget } from "../../store/git-cache-actions.ts";
 import { invalidateWorkspace } from "../../files/source/workspace-invalidation.ts";
 
 export type WorktreeLandOutcome = GitWorktreeLandResult & {
@@ -92,6 +96,7 @@ function applyGitWrite(
   projectId: string,
   repoId: string,
   sessionId: string | undefined,
+  worktreeId: string | undefined,
   projection: GitProjection,
   write: () => Promise<GitMutationResult>,
 ): Promise<GitWorkspaceStatus> {
@@ -103,7 +108,8 @@ function applyGitWrite(
       // A failed write can still change the working tree.
       invalidateWorkspace(client, projectId);
     }
-    return loadGitWorkspaceStatus(client, projectId, result.repo_id || repoId, sessionId);
+    const resolvedWorktree = worktreeId?.trim() || result.worktree_id?.trim() || undefined;
+    return loadGitWorkspaceStatus(client, projectId, result.repo_id || repoId, sessionId, resolvedWorktree);
   });
 }
 
@@ -112,9 +118,13 @@ export async function listBranches(
   projectId: string,
   repoId: string,
   sessionId?: string,
+  worktreeId?: string,
 ): Promise<GitBranchEntry[]> {
   if (!projectId.trim() || !repoId.trim()) return [];
-  const view = await client.listGitBranches(projectId, repoId, sessionId);
+  const target = worktreeId?.trim() || undefined;
+  const view = target
+    ? await client.listGitBranches(projectId, repoId, sessionId, target)
+    : await client.listGitBranches(projectId, repoId, sessionId);
   return view.branches;
 }
 
@@ -126,9 +136,19 @@ export function checkoutBranch(
   branch: string,
   create: boolean,
   sessionId?: string,
+  worktreeId?: string,
+  expectedHead?: string,
 ): Promise<GitWorkspaceStatus> {
-  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
-    projection, () => client.checkoutGit(projectId, repoId, { branch, create }, sessionId)));
+  const target = worktreeId?.trim() || resolveGitWorktreeTarget(appStore.state, projectId, repoId);
+  const req = {
+    branch,
+    create,
+    ...(expectedHead ? { expected_head: expectedHead } : {}),
+  };
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId, target,
+    projection, () => target
+      ? client.checkoutGit(projectId, repoId, req, sessionId, target)
+      : client.checkoutGit(projectId, repoId, req, sessionId)));
 }
 
 export function discardAll(
@@ -137,9 +157,14 @@ export function discardAll(
   projectId: string,
   repoId: string,
   sessionId?: string,
+  worktreeId?: string,
+  guard?: GitDiscardGuard,
 ): Promise<GitWorkspaceStatus> {
-  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
-    projection, () => client.discardGit(projectId, repoId, sessionId)));
+  const target = worktreeId?.trim() || resolveGitWorktreeTarget(appStore.state, projectId, repoId);
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId, target,
+    projection, () => (target || guard)
+      ? client.discardGit(projectId, repoId, sessionId, target, guard)
+      : client.discardGit(projectId, repoId, sessionId)));
 }
 
 export function pushChanges(
@@ -148,9 +173,14 @@ export function pushChanges(
   projectId: string,
   repoId: string,
   sessionId?: string,
+  worktreeId?: string,
+  remoteRef?: GitRemoteRef,
 ): Promise<GitWorkspaceStatus> {
-  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
-    projection, () => client.pushGit(projectId, repoId, sessionId)));
+  const target = worktreeId?.trim() || resolveGitWorktreeTarget(appStore.state, projectId, repoId);
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId, target,
+    projection, () => (target || remoteRef)
+      ? client.pushGit(projectId, repoId, sessionId, target, remoteRef)
+      : client.pushGit(projectId, repoId, sessionId)));
 }
 
 export function pullChanges(
@@ -159,9 +189,14 @@ export function pullChanges(
   projectId: string,
   repoId: string,
   sessionId?: string,
+  worktreeId?: string,
+  remoteRef?: GitRemoteRef,
 ): Promise<GitWorkspaceStatus> {
-  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
-    projection, () => client.pullGit(projectId, repoId, sessionId)));
+  const target = worktreeId?.trim() || resolveGitWorktreeTarget(appStore.state, projectId, repoId);
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId, target,
+    projection, () => (target || remoteRef)
+      ? client.pullGit(projectId, repoId, sessionId, target, remoteRef)
+      : client.pullGit(projectId, repoId, sessionId)));
 }
 
 export function initRepo(
@@ -191,9 +226,15 @@ export function commitChanges(
   repoId: string,
   message: string,
   sessionId?: string,
+  worktreeId?: string,
+  options?: Omit<GitCommitRequest, "message">,
 ): Promise<GitWorkspaceStatus> {
-  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
-    projection, () => client.commitGit(projectId, repoId, { message }, sessionId)));
+  const target = worktreeId?.trim() || resolveGitWorktreeTarget(appStore.state, projectId, repoId);
+  const req: GitCommitRequest = { message, ...options };
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId, target,
+    projection, () => target
+      ? client.commitGit(projectId, repoId, req, sessionId, target)
+      : client.commitGit(projectId, repoId, req, sessionId)));
 }
 
 export function stashChanges(
@@ -202,9 +243,14 @@ export function stashChanges(
   projectId: string,
   repoId: string,
   sessionId?: string,
+  worktreeId?: string,
+  req: GitStashRequest = {},
 ): Promise<GitWorkspaceStatus> {
-  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId,
-    projection, () => client.stashGit(projectId, repoId, {}, sessionId)));
+  const target = worktreeId?.trim() || resolveGitWorktreeTarget(appStore.state, projectId, repoId);
+  return runGitWrite(appStore, (projection) => applyGitWrite(appStore, client, projectId, repoId, sessionId, target,
+    projection, () => target
+      ? client.stashGit(projectId, repoId, req, sessionId, target)
+      : client.stashGit(projectId, repoId, req, sessionId)));
 }
 
 export async function draftCommitMessage(
@@ -212,8 +258,12 @@ export async function draftCommitMessage(
   projectId: string,
   repoId: string,
   sessionId?: string,
+  worktreeId?: string,
 ): Promise<string> {
-  const resp = await client.draftGitCommitMessage(projectId, repoId, sessionId);
+  const target = worktreeId?.trim() || undefined;
+  const resp = target
+    ? await client.draftGitCommitMessage(projectId, repoId, sessionId, target)
+    : await client.draftGitCommitMessage(projectId, repoId, sessionId);
   return resp.message;
 }
 

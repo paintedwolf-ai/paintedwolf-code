@@ -37,6 +37,7 @@ type Deps struct {
 type Handler struct {
 	Board           *board.SnapshotBuilder
 	CommitDrafter   compaction.Summarizer
+	Database        db.Handle
 	LLMService      *llm.Service
 	ProjectRegistry project.Registry
 	RepoSetCache    *git.RepoSetCache
@@ -70,11 +71,19 @@ func New(responses *httpio.Responder, deps Deps) Handler {
 		wt = worktrees.New(deps.Database, worktrees.Options{Git: manager})
 	}
 	return Handler{
-		Board: deps.Board, CommitDrafter: deps.CommitDrafter, LLMService: deps.LLMService,
+		Board: deps.Board, CommitDrafter: deps.CommitDrafter, Database: deps.Database, LLMService: deps.LLMService,
 		ProjectRegistry: deps.ProjectRegistry, RepoSetCache: deps.RepoSetCache,
 		SessionStore: deps.SessionStore.Sessions, Sessions: deps.Sessions, Worktrees: wt, DataDir: deps.DataDir,
 		git: manager, responses: responses,
 	}
+}
+
+// ConcreteManager returns the concrete Git manager for repository index and worktree operations.
+func (s *Handler) ConcreteManager() *git.Manager {
+	if s == nil {
+		return nil
+	}
+	return s.git
 }
 
 // ScheduleWorktreeRefresh marks a project's repository checkouts dirty for background reconciliation.

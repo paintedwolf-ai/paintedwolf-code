@@ -1,0 +1,8 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Checkout changed
+message: The checkout changed since it was last read, so the requested Git action was not applied.
+suggested_action: Review the updated checkout state and try again.
+scenarios:
+  - id: default
+    vars: {}

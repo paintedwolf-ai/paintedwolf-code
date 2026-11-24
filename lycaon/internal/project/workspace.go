@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceworkspace"
 )
@@ -46,37 +46,44 @@ func ResolveWorkspaceRoot(p *Project, workspaceRootID string) (rootID, workspace
 	return "", "", fmt.Errorf("%w: workspace_root_id %s", ErrNotFound, want)
 }
 
-// WithRootRefs resolves a physical workspace without changing logical root IDs.
-func WithRootRefs(p *Project, roots []projectroot.RootRef) *Project {
+// WithWorktree applies one durable checkout binding to the current root set.
+func WithWorktree(p *Project, binding Binding) *Project {
 	if p == nil {
 		return nil
 	}
-	out := *p
-	out.Roots = append([]Root(nil), p.Roots...)
-	paths := make(map[string]string, len(roots))
-	for _, root := range roots {
+	substituted := SubstituteWorktreeRoots(p.SourceRoots(), binding)
+	paths := make(map[string]string, len(substituted))
+	for _, root := range substituted {
 		paths[root.ID] = root.Path
 	}
-	for i := range out.Roots {
-		if path, ok := paths[out.Roots[i].ID]; ok {
-			out.Roots[i].Path = path
+	branch := sourcebranch.ForWorktree(binding.ID)
+	if sameCheckoutRoot(binding.Toplevel, binding.WorktreePath) {
+		branch = sourcebranch.Trunk
+	}
+	out := *p
+	out.SourceBranch = branch
+	out.Roots = make([]Root, 0, len(p.Roots))
+	out.RootBranches = make(map[string]sourcebranch.ID, len(p.Roots))
+	for _, root := range p.Roots {
+		path, ok := paths[root.ID]
+		if !ok {
+			continue
+		}
+		copied := root
+		copied.Path = path
+		out.Roots = append(out.Roots, copied)
+		out.RootBranches[root.ID] = p.BranchForRoot(root.ID)
+		if rootInsideToplevel(binding.Toplevel, root.Path) {
+			out.RootBranches[root.ID] = branch
 		}
 	}
 	return &out
 }
 
-// WithWorktree applies one durable checkout binding to the current root set.
-func WithWorktree(p *Project, binding Binding) *Project {
-	out := WithRootRefs(p, SubstituteWorktreeRoots(RootRefsFrom(p), binding))
-	out.SourceBranch = sourcebranch.ForWorktree(binding.ID)
-	out.RootBranches = make(map[string]sourcebranch.ID, len(p.Roots))
-	for i, root := range p.Roots {
-		out.RootBranches[root.ID] = p.BranchForRoot(root.ID)
-		if root.Path != out.Roots[i].Path {
-			out.RootBranches[root.ID] = out.SourceBranch
-		}
-	}
-	return out
+func sameCheckoutRoot(a, b string) bool {
+	ca := gitrepo.CanonicalDir(a)
+	cb := gitrepo.CanonicalDir(b)
+	return ca != "" && ca == cb
 }
 
 // BranchForRoot preserves sharing for roots outside a bound worktree. The

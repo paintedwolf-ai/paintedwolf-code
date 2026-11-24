@@ -168,7 +168,19 @@ export function GitCheckout(props: Props) {
       void refresh();
     }),
   );
-  // Status refreshes also update merge counts.
+  // Status refreshes also update merge counts; checkout target switches close open branch dialogs.
+  createEffect(
+    on(
+      () => props.status?.worktree_id,
+      () => {
+        if (!pending() && dialog() === "branch") {
+          setDialog(undefined);
+          setActionError(undefined);
+        }
+      },
+      { defer: true },
+    ),
+  );
   createEffect(
     on(
       () => props.status,

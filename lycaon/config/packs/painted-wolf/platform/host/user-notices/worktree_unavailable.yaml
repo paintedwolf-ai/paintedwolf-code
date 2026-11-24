@@ -1,0 +1,8 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Worktree unavailable
+message: That Git worktree is missing, removed, or no longer accessible on disk.
+suggested_action: Select another checkout or return to the project folder.
+scenarios:
+  - id: default
+    vars: {}

@@ -187,7 +187,7 @@ func NewGitBoard() *board.SnapshotBuilder {
 func NewGitServer(t *testing.T, sessions *store.Repositories, reg project.Registry, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: sessions, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
+		Database: sessions.DB(), Store: sessions, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
 		Board: NewGitBoard(), RepoSetCache: git.NewRepoSetCache(git.DefaultStatusCacheTTL)}}
 	for _, opt := range opts {
 		opt(&deps)

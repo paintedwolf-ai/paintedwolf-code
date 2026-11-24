@@ -1924,6 +1924,8 @@ type CommitComparisonSource struct {
 	RootID       string  `json:"root_id"`
 	Path         string  `json:"path"`
 	ExpectedHead *string `json:"expected_head,omitempty"`
+	WorktreeID   string  `json:"worktree_id,omitempty"`
+	Stage        string  `json:"stage,omitempty"`
 }
 
 // CompactedChunkMeta
@@ -3800,7 +3802,8 @@ type GitBranchEntry struct {
 
 // GitBranchesView
 type GitBranchesView struct {
-	Branches []GitBranchEntry `json:"branches"`
+	WorktreeID string           `json:"worktree_id,omitempty"`
+	Branches   []GitBranchEntry `json:"branches"`
 }
 
 // GitChangeComparisonSource
@@ -3814,8 +3817,9 @@ type GitChangeComparisonSource struct {
 
 // GitChangesPage
 type GitChangesPage struct {
-	RepoID   string `json:"repo_id"`
-	Revision uint64 `json:"revision"`
+	RepoID     string `json:"repo_id"`
+	WorktreeID string `json:"worktree_id,omitempty"`
+	Revision   uint64 `json:"revision"`
 	// True while a newer generation is loading behind this page. The page still answers for its own revision.
 	Refreshing bool           `json:"refreshing"`
 	Files      []GitFileEntry `json:"files"`
@@ -3826,19 +3830,46 @@ type GitChangesPage struct {
 type GitCheckoutRequest struct {
 	Branch string `json:"branch"`
 	// Create the branch (checkout -b) before switching.
-	Create bool `json:"create,omitempty"`
+	Create       bool   `json:"create,omitempty"`
+	ExpectedHead string `json:"expected_head,omitempty"`
 }
 
 // GitCommitMessageResponse
 type GitCommitMessageResponse struct {
-	Message string `json:"message"`
+	WorktreeID string `json:"worktree_id,omitempty"`
+	HeadSHA    string `json:"head_sha,omitempty"`
+	Message    string `json:"message"`
 }
 
 // GitCommitRequest
 type GitCommitRequest struct {
 	Message string `json:"message"`
-	// Paths to stage; all changes are staged when omitted.
+	// Paths to stage; all changes are staged when omitted unless staged_only is true.
 	Paths []string `json:"paths,omitempty"`
+	// Commit only changes already staged in the checkout index.
+	StagedOnly       bool   `json:"staged_only,omitempty"`
+	ExpectedHead     string `json:"expected_head,omitempty"`
+	ExpectedRevision uint64 `json:"expected_revision,omitempty"`
+}
+
+// GitDiffStatItem
+type GitDiffStatItem struct {
+	Path             string `json:"path"`
+	Insertions       int    `json:"insertions"`
+	Deletions        int    `json:"deletions"`
+	Untracked        bool   `json:"untracked,omitempty"`
+	RootID           string `json:"root_id"`
+	RootRelativePath string `json:"root_relative_path"`
+}
+
+// GitDiffView
+type GitDiffView struct {
+	RepoID     string            `json:"repo_id"`
+	WorktreeID string            `json:"worktree_id,omitempty"`
+	Mode       string            `json:"mode"`
+	HeadSHA    string            `json:"head_sha,omitempty"`
+	Patch      string            `json:"patch"`
+	Files      []GitDiffStatItem `json:"files"`
 }
 
 // GitFileEntry
@@ -3862,6 +3893,8 @@ type GitInitRequest struct {
 // GitMutationResult
 type GitMutationResult struct {
 	RepoID     string `json:"repo_id"`
+	WorktreeID string `json:"worktree_id,omitempty"`
+	HeadSHA    string `json:"head_sha,omitempty"`
 	Revision   uint64 `json:"revision"`
 	Refreshing bool   `json:"refreshing"`
 }
@@ -3907,22 +3940,43 @@ type GitReposView struct {
 	ActiveRepoID string `json:"active_repo_id,omitempty"`
 }
 
+// GitStashEntry
+type GitStashEntry struct {
+	Ref     string `json:"ref"`
+	OID     string `json:"oid"`
+	Subject string `json:"subject"`
+}
+
 // GitStashRequest
 type GitStashRequest struct {
-	Message string `json:"message,omitempty"`
+	Action         string `json:"action,omitempty"`
+	Ref            string `json:"ref,omitempty"`
+	ReinstateIndex bool   `json:"reinstate_index,omitempty"`
+	ExpectedHead   string `json:"expected_head,omitempty"`
+	Message        string `json:"message,omitempty"`
+}
+
+// GitStashesView
+type GitStashesView struct {
+	RepoID     string          `json:"repo_id"`
+	WorktreeID string          `json:"worktree_id,omitempty"`
+	Stashes    []GitStashEntry `json:"stashes"`
 }
 
 // GitStatusSummary
 type GitStatusSummary struct {
-	Available bool     `json:"available"`
-	RepoID    string   `json:"repo_id"`
-	RootIDs   []string `json:"root_ids"`
+	Available  bool     `json:"available"`
+	RepoID     string   `json:"repo_id"`
+	WorktreeID string   `json:"worktree_id,omitempty"`
+	RootIDs    []string `json:"root_ids"`
 	// The published status generation these values come from; zero while the first snapshot loads.
 	Revision uint64 `json:"revision"`
 	// True while a newer generation is loading behind these values. The values remain usable.
 	Refreshing    bool   `json:"refreshing"`
 	Branch        string `json:"branch,omitempty"`
+	HeadSHA       string `json:"head_sha,omitempty"`
 	HeadShort     string `json:"head_short,omitempty"`
+	Detached      bool   `json:"detached,omitempty"`
 	Upstream      string `json:"upstream,omitempty"`
 	Ahead         int    `json:"ahead"`
 	Behind        int    `json:"behind"`
@@ -3940,6 +3994,37 @@ type GitWorktreeBindRequest struct {
 	Branch string `json:"branch"`
 }
 
+// GitWorktreeEntry
+type GitWorktreeEntry struct {
+	WorktreeID        string   `json:"worktree_id"`
+	Kind              string   `json:"kind"`
+	Path              string   `json:"path"`
+	Branch            string   `json:"branch,omitempty"`
+	BaseBranch        string   `json:"base_branch,omitempty"`
+	HeadSHA           string   `json:"head_sha,omitempty"`
+	HeadShort         string   `json:"head_short,omitempty"`
+	Detached          bool     `json:"detached"`
+	Locked            bool     `json:"locked"`
+	LockReason        string   `json:"lock_reason,omitempty"`
+	Prunable          bool     `json:"prunable"`
+	PruneReason       string   `json:"prune_reason,omitempty"`
+	Available         bool     `json:"available"`
+	Managed           bool     `json:"managed"`
+	IsProjectCheckout bool     `json:"is_project_checkout"`
+	BoundToSession    bool     `json:"bound_to_session"`
+	CreatedByChat     bool     `json:"created_by_chat"`
+	UsedByChat        bool     `json:"used_by_chat"`
+	WorkerIDs         []string `json:"worker_ids"`
+	LastActivityAt    string   `json:"last_activity_at,omitempty"`
+	StatusCached      bool     `json:"status_cached"`
+	Dirty             bool     `json:"dirty,omitempty"`
+	StagedCount       int      `json:"staged_count,omitempty"`
+	UnstagedCount     int      `json:"unstaged_count,omitempty"`
+	ChangedCount      int      `json:"changed_count,omitempty"`
+	Ahead             int      `json:"ahead,omitempty"`
+	Behind            int      `json:"behind,omitempty"`
+}
+
 // GitWorktreeLandResult Outcome of landing a session branch into the recorded base branch in the project folder. landed false with reason nothing_to_land is success with nothing to do; other reasons are refusals.
 type GitWorktreeLandResult struct {
 	Landed     bool   `json:"landed"`
@@ -3955,8 +4040,9 @@ type GitWorktreeLandResult struct {
 // GitWorktreeView One chat's worktree binding. When bound is false, every other field is absent or zero except session_id. State is absent when unbound.
 type GitWorktreeView struct {
 	// False means the chat has no worktree.
-	Bound     bool   `json:"bound"`
-	SessionID string `json:"session_id"`
+	Bound      bool   `json:"bound"`
+	SessionID  string `json:"session_id"`
+	WorktreeID string `json:"worktree_id,omitempty"`
 	// The bound repository's derived id.
 	RepoID string `json:"repo_id,omitempty"`
 	// The repository's label, for copy.
@@ -3978,6 +4064,14 @@ type GitWorktreeView struct {
 	// Preflight reason Land can surface even when ahead counts are unavailable.
 	LandBlockedReason string `json:"land_blocked_reason,omitempty"`
 	CreatedAt         string `json:"created_at,omitempty"`
+}
+
+// GitWorktreesView
+type GitWorktreesView struct {
+	RepoID            string             `json:"repo_id"`
+	ProjectCheckoutID string             `json:"project_checkout_id,omitempty"`
+	BoundWorktreeID   string             `json:"bound_worktree_id,omitempty"`
+	Worktrees         []GitWorktreeEntry `json:"worktrees"`
 }
 
 // GroundingEvent

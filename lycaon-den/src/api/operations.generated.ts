@@ -41,11 +41,13 @@ export const API_OPERATIONS = {
   checkScanners: { method: "POST", path: "/v1/scanners/check" },
   checkoutGit: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/checkout", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   clearLocalData: { method: "POST", path: "/v1/local-data/clear" },
   cloneProject: { method: "POST", path: "/v1/projects/clone" },
   commitGit: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/commit", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   compactSession: { method: "POST", path: "/v1/sessions/{id}/compact" },
   completeMcpOAuth: { method: "POST", path: "/v1/mcp/providers/{provider_id}/oauth/complete", query: [
@@ -138,13 +140,17 @@ export const API_OPERATIONS = {
   digestSourceComparisons: { method: "POST", path: "/v1/projects/{id}/source/comparison-digests" },
   discardEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/discard" },
   discardGit: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/discard", query: [
+    {"name":"expected_head","type":"string"},
+    {"name":"expected_revision","type":"integer"},
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   dismissVerifySettings: { method: "POST", path: "/v1/settings/verify/dismiss", query: [
     {"name":"project_id","type":"string","required":true},
   ] },
   draftGitCommitMessage: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/commit-message", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   exitWorkflowRun: { method: "POST", path: "/v1/workflow-runs/{id}/exit" },
   exportBackup: { method: "GET", path: "/v1/backup" },
@@ -222,8 +228,15 @@ export const API_OPERATIONS = {
     {"name":"worker_id","type":"string"},
   ] },
   getFileSummariesSettings: { method: "GET", path: "/v1/settings/file-summaries" },
+  getGitDiff: { method: "GET", path: "/v1/projects/{id}/git/repos/{repo_id}/diff", query: [
+    {"name":"mode","type":"string","enum":["unstaged","staged","commit"]},
+    {"name":"path","type":"string"},
+    {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
+  ] },
   getGitStatus: { method: "GET", path: "/v1/projects/{id}/git/repos/{repo_id}/status", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   getGitWorktree: { method: "GET", path: "/v1/sessions/{id}/git-worktree" },
   getHealth: { method: "GET", path: "/health" },
@@ -293,7 +306,9 @@ export const API_OPERATIONS = {
     {"name":"reviewed_through_ordinal","type":"integer","minimum":1},
     {"name":"root_id","type":"string"},
     {"name":"session_id","type":"string"},
+    {"name":"stage","type":"string","enum":["working","staged","unstaged"]},
     {"name":"version_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   getProjectSourceFormatSettings: { method: "GET", path: "/v1/projects/{id}/source/format-settings", query: [
     {"name":"path","type":"string","required":true,"minLength":1},
@@ -416,14 +431,24 @@ export const API_OPERATIONS = {
   ] },
   listGitBranches: { method: "GET", path: "/v1/projects/{id}/git/repos/{repo_id}/branches", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   listGitChanges: { method: "GET", path: "/v1/projects/{id}/git/repos/{repo_id}/changes", query: [
     {"name":"cursor","type":"string"},
     {"name":"limit","type":"integer","minimum":1,"maximum":500},
     {"name":"revision","type":"integer"},
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   listGitRepos: { method: "GET", path: "/v1/projects/{id}/git/repos", query: [
+    {"name":"session_id","type":"string"},
+  ] },
+  listGitStashes: { method: "GET", path: "/v1/projects/{id}/git/repos/{repo_id}/stashes", query: [
+    {"name":"limit","type":"integer","minimum":1,"maximum":200},
+    {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
+  ] },
+  listGitWorktrees: { method: "GET", path: "/v1/projects/{id}/git/repos/{repo_id}/worktrees", query: [
     {"name":"session_id","type":"string"},
   ] },
   listMcpProviderTools: { method: "GET", path: "/v1/mcp/providers/{provider_id}/tools", query: [
@@ -572,10 +597,16 @@ export const API_OPERATIONS = {
   pruneHistory: { method: "POST", path: "/v1/history-storage/prune" },
   publishEditorDocumentPresence: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/presence" },
   pullGit: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/pull", query: [
+    {"name":"ref","type":"string"},
+    {"name":"remote","type":"string"},
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   pushGit: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/push", query: [
+    {"name":"ref","type":"string"},
+    {"name":"remote","type":"string"},
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   queryCodeScan: { method: "POST", path: "/v1/projects/{id}/scans/{scan_id}/query" },
   queryProjectFindings: { method: "POST", path: "/v1/projects/{id}/findings/query", query: [
@@ -699,6 +730,7 @@ export const API_OPERATIONS = {
   startWorkflowRun: { method: "POST", path: "/v1/sessions/{id}/workflow-runs" },
   stashGit: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/stash", query: [
     {"name":"session_id","type":"string"},
+    {"name":"worktree_id","type":"string"},
   ] },
   stopBackgroundProcess: { method: "POST", path: "/v1/sessions/{id}/background/{process_id}/stop" },
   stopProjectBackgroundProcess: { method: "POST", path: "/v1/projects/{id}/background/{process_id}/stop" },
@@ -896,6 +928,7 @@ export type OperationPathParameters = {
   getExtensionsCatalog: Record<string, never>;
   getFileBriefing: { id: string | number; };
   getFileSummariesSettings: Record<string, never>;
+  getGitDiff: { id: string | number; repo_id: string | number; };
   getGitStatus: { id: string | number; repo_id: string | number; };
   getGitWorktree: { id: string | number; };
   getHealth: Record<string, never>;
@@ -971,6 +1004,8 @@ export type OperationPathParameters = {
   listGitBranches: { id: string | number; repo_id: string | number; };
   listGitChanges: { id: string | number; repo_id: string | number; };
   listGitRepos: { id: string | number; };
+  listGitStashes: { id: string | number; repo_id: string | number; };
+  listGitWorktrees: { id: string | number; repo_id: string | number; };
   listMcpProviderTools: { provider_id: string | number; };
   listMcpProviders: Record<string, never>;
   listMcpRecipes: Record<string, never>;

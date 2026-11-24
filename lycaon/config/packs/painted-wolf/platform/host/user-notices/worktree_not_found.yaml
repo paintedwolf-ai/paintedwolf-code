@@ -1,0 +1,8 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Worktree not found
+message: That Git worktree is not registered for this repository.
+suggested_action: Refresh the worktree list and select an available checkout.
+scenarios:
+  - id: default
+    vars: {}

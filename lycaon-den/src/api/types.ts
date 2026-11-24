@@ -4522,6 +4522,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/git/repos/{repo_id}/worktrees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registered worktree checkouts for one project repository */
+        get: operations["listGitWorktrees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/git/repos/{repo_id}/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Staged, unstaged, or commit-preview diff for one checkout */
+        get: operations["getGitDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/git/repos/{repo_id}/stashes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Shared repository stash entries */
+        get: operations["listGitStashes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{id}/git/repos/{repo_id}/status": {
         parameters: {
             query?: never;
@@ -9159,6 +9210,8 @@ export interface components {
         GitStatusSummary: {
             available: boolean;
             repo_id: string;
+            /** Format: uuid */
+            worktree_id?: string;
             root_ids: string[];
             /**
              * Format: uint64
@@ -9168,7 +9221,9 @@ export interface components {
             /** @description True while a newer generation is loading behind these values. The values remain usable. */
             refreshing: boolean;
             branch?: string;
+            head_sha?: string;
             head_short?: string;
+            detached?: boolean;
             upstream?: string;
             ahead: number;
             behind: number;
@@ -9179,6 +9234,8 @@ export interface components {
         };
         GitChangesPage: {
             repo_id: string;
+            /** Format: uuid */
+            worktree_id?: string;
             /** Format: uint64 */
             revision: number;
             /** @description True while a newer generation is loading behind this page. The page still answers for its own revision. */
@@ -9188,6 +9245,9 @@ export interface components {
         };
         GitMutationResult: {
             repo_id: string;
+            /** Format: uuid */
+            worktree_id?: string;
+            head_sha?: string;
             /** Format: uint64 */
             revision: number;
             refreshing: boolean;
@@ -9222,12 +9282,15 @@ export interface components {
             current: boolean;
         };
         GitBranchesView: {
+            /** Format: uuid */
+            worktree_id?: string;
             branches: components["schemas"]["GitBranchEntry"][];
         };
         GitCheckoutRequest: {
             branch: string;
             /** @description Create the branch (checkout -b) before switching. */
             create?: boolean;
+            expected_head?: string;
         };
         GitInitRequest: {
             /**
@@ -9238,13 +9301,26 @@ export interface components {
         };
         GitCommitRequest: {
             message: string;
-            /** @description Paths to stage; all changes are staged when omitted. */
+            /** @description Paths to stage; all changes are staged when omitted unless staged_only is true. */
             paths?: string[];
+            /** @description Commit only changes already staged in the checkout index. */
+            staged_only?: boolean;
+            expected_head?: string;
+            /** Format: uint64 */
+            expected_revision?: number;
         };
         GitStashRequest: {
+            /** @enum {string} */
+            action?: "push" | "apply" | "pop" | "drop";
+            ref?: string;
+            reinstate_index?: boolean;
+            expected_head?: string;
             message?: string;
         };
         GitCommitMessageResponse: {
+            /** Format: uuid */
+            worktree_id?: string;
+            head_sha?: string;
             message: string;
         };
         /** @description One chat's worktree binding. When bound is false, every other field is absent or zero except session_id. State is absent when unbound. */
@@ -9253,6 +9329,8 @@ export interface components {
             bound: boolean;
             /** Format: uuid */
             session_id: string;
+            /** Format: uuid */
+            worktree_id?: string;
             /** @description The bound repository's derived id. */
             repo_id?: string;
             /** @description The repository's label, for copy. */
@@ -9299,6 +9377,76 @@ export interface components {
             repo_id: string;
             /** @description New branch the worktree checks out. */
             branch: string;
+        };
+        GitWorktreeEntry: {
+            /** Format: uuid */
+            worktree_id: string;
+            /** @enum {string} */
+            kind: "primary" | "linked";
+            path: string;
+            branch?: string;
+            base_branch?: string;
+            head_sha?: string;
+            head_short?: string;
+            detached: boolean;
+            locked: boolean;
+            lock_reason?: string;
+            prunable: boolean;
+            prune_reason?: string;
+            available: boolean;
+            managed: boolean;
+            is_project_checkout: boolean;
+            bound_to_session: boolean;
+            created_by_chat: boolean;
+            used_by_chat: boolean;
+            worker_ids: string[];
+            /** Format: date-time */
+            last_activity_at?: string;
+            status_cached: boolean;
+            dirty?: boolean;
+            staged_count?: number;
+            unstaged_count?: number;
+            changed_count?: number;
+            ahead?: number;
+            behind?: number;
+        };
+        GitWorktreesView: {
+            repo_id: string;
+            /** Format: uuid */
+            project_checkout_id?: string;
+            /** Format: uuid */
+            bound_worktree_id?: string;
+            worktrees: components["schemas"]["GitWorktreeEntry"][];
+        };
+        GitDiffStatItem: {
+            path: string;
+            insertions: number;
+            deletions: number;
+            untracked?: boolean;
+            /** Format: uuid */
+            root_id: string;
+            root_relative_path: string;
+        };
+        GitDiffView: {
+            repo_id: string;
+            /** Format: uuid */
+            worktree_id?: string;
+            /** @enum {string} */
+            mode: "unstaged" | "staged" | "commit";
+            head_sha?: string;
+            patch: string;
+            files: components["schemas"]["GitDiffStatItem"][];
+        };
+        GitStashEntry: {
+            ref: string;
+            oid: string;
+            subject: string;
+        };
+        GitStashesView: {
+            repo_id: string;
+            /** Format: uuid */
+            worktree_id?: string;
+            stashes: components["schemas"]["GitStashEntry"][];
         };
         GroundingEvent: {
             /** Format: uuid */
@@ -10850,7 +10998,7 @@ export interface components {
          * @description Closed machine-readable error identity emitted by the private Den-sidecar API.
          * @enum {string}
          */
-        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "project_not_draft" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_settings_need_repair" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_model_timeout" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_mode_locked" | "session_mode_unavailable" | "session_ask_mode_workflow_requires_agent" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
+        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "project_not_draft" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "worktree_not_found" | "worktree_unavailable" | "git_state_changed" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_settings_need_repair" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_model_timeout" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_mode_locked" | "session_mode_unavailable" | "session_ask_mode_workflow_requires_agent" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
         /** @enum {string} */
         NoticeAction: "open_ai_providers" | "retry_contribution_frame" | "prompt_retry" | "prompt_keep_going" | "prompt_rewind_and_retry";
         /** @enum {string} */
@@ -17100,6 +17248,10 @@ export interface components {
             root_id: string;
             path: string;
             expected_head?: string;
+            /** Format: uuid */
+            worktree_id?: string;
+            /** @enum {string} */
+            stage?: "working" | "staged" | "unstaged";
         };
         BlobComparisonSource: {
             /**
@@ -25051,6 +25203,10 @@ export interface operations {
                 path?: string;
                 /** @description Commit path mode. HEAD observed by the listing, or empty for an unborn repository. */
                 expected_head?: string;
+                /** @description Commit path mode. Explicit registered checkout incarnation to compare instead of the project checkout. */
+                worktree_id?: string;
+                /** @description Commit path mode. Selects HEAD vs working tree (working), HEAD vs index (staged), or index vs working tree (unstaged). */
+                stage?: "working" | "staged" | "unstaged";
                 /** @description Recorded scope mode, or commit path mode. Commit comparisons require root_id and path. */
                 baseline?: string;
                 /** @description Presentation scope only. Retains an open view's returned unread boundary even if another view acknowledges changes. */
@@ -28905,11 +29061,119 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    listGitWorktrees: {
+        parameters: {
+            query?: {
+                /** @description Optional session whose binding and recorded checkout usage are projected. */
+                session_id?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Canonical project UUID. */
+                id: string;
+                /** @description Repository to list checkouts for. */
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified checkouts registered under this repository */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitWorktreesView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getGitDiff: {
+        parameters: {
+            query?: {
+                /** @description Optional session whose checkout supplies the default target. */
+                session_id?: string;
+                /** @description Explicit checkout incarnation to diff. */
+                worktree_id?: string;
+                /** @description Selects index-vs-worktree (unstaged), HEAD-vs-index (staged), or HEAD-vs-working-tree commit preview (commit). */
+                mode?: "unstaged" | "staged" | "commit";
+                /** @description Optional repo-relative path filter. */
+                path?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Canonical project UUID. */
+                id: string;
+                /** @description Repository to diff. */
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unified patch and per-file stats for the selected checkout */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitDiffView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    listGitStashes: {
+        parameters: {
+            query?: {
+                session_id?: string;
+                worktree_id?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Canonical project UUID. */
+                id: string;
+                /** @description Repository whose shared stashes are listed. */
+                repo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Shared repository stashes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitStashesView"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
     getGitStatus: {
         parameters: {
             query?: {
                 /** @description Optional session whose checkout supplies the status. */
                 session_id?: string;
+                /** @description Explicit checkout incarnation to report status for. */
+                worktree_id?: string;
             };
             header?: never;
             path: {
@@ -28952,6 +29216,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose checkout supplies the changes. */
                 session_id?: string;
+                /** @description Explicit checkout incarnation to page changes for. */
+                worktree_id?: string;
                 revision?: number;
                 cursor?: string;
                 limit?: number;
@@ -28997,6 +29263,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose checkout scopes the repository. */
                 session_id?: string;
+                /** @description Explicit checkout incarnation to mark current branch for. */
+                worktree_id?: string;
             };
             header?: never;
             path: {
@@ -29030,6 +29298,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose checkout scopes the operation. */
                 session_id?: string;
+                /** @description Explicit checkout incarnation to switch branches in. */
+                worktree_id?: string;
             };
             header?: never;
             path: {
@@ -29071,6 +29341,12 @@ export interface operations {
             query?: {
                 /** @description Optional session whose checkout scopes the operation. */
                 session_id?: string;
+                /** @description Explicit checkout incarnation to discard changes in. */
+                worktree_id?: string;
+                /** @description Optional HEAD commit SHA observed during confirmation. */
+                expected_head?: string;
+                /** @description Optional status revision observed during confirmation. */
+                expected_revision?: number;
             };
             header?: never;
             path: {
@@ -29108,6 +29384,12 @@ export interface operations {
             query?: {
                 /** @description Optional session whose checkout scopes the operation. */
                 session_id?: string;
+                /** @description Explicit checkout incarnation whose branch is pushed. */
+                worktree_id?: string;
+                /** @description Optional remote name when overriding default upstream. */
+                remote?: string;
+                /** @description Optional branch or refspec when overriding default upstream. */
+                ref?: string;
             };
             header?: never;
             path: {
@@ -29145,6 +29427,12 @@ export interface operations {
             query?: {
                 /** @description Optional session whose checkout scopes the operation. */
                 session_id?: string;
+                /** @description Explicit checkout incarnation to fast-forward. */
+                worktree_id?: string;
+                /** @description Optional remote name when overriding default upstream. */
+                remote?: string;
+                /** @description Optional remote branch when overriding default upstream. */
+                ref?: string;
             };
             header?: never;
             path: {
@@ -29182,6 +29470,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose checkout scopes the operation. */
                 session_id?: string;
+                /** @description Explicit checkout incarnation to commit in. */
+                worktree_id?: string;
             };
             header?: never;
             path: {
@@ -29223,6 +29513,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose checkout scopes the operation. */
                 session_id?: string;
+                /** @description Explicit checkout incarnation to stash or apply in. */
+                worktree_id?: string;
             };
             header?: never;
             path: {
@@ -29264,6 +29556,8 @@ export interface operations {
             query?: {
                 /** @description Optional session whose checkout scopes the operation. */
                 session_id?: string;
+                /** @description Explicit checkout incarnation whose diff is summarized. */
+                worktree_id?: string;
             };
             header?: never;
             path: {
@@ -31745,6 +32039,12 @@ export type GitCommitMessageResponse = components["schemas"]["GitCommitMessageRe
 export type GitWorktreeView = components["schemas"]["GitWorktreeView"];
 export type GitWorktreeLandResult = components["schemas"]["GitWorktreeLandResult"];
 export type GitWorktreeBindRequest = components["schemas"]["GitWorktreeBindRequest"];
+export type GitWorktreeEntry = components["schemas"]["GitWorktreeEntry"];
+export type GitWorktreesView = components["schemas"]["GitWorktreesView"];
+export type GitDiffStatItem = components["schemas"]["GitDiffStatItem"];
+export type GitDiffView = components["schemas"]["GitDiffView"];
+export type GitStashEntry = components["schemas"]["GitStashEntry"];
+export type GitStashesView = components["schemas"]["GitStashesView"];
 export type GroundingEvent = components["schemas"]["GroundingEvent"];
 export type McpCheckRow = components["schemas"]["McpCheckRow"];
 export type McpCheckRowStatus = components["schemas"]["McpCheckRowStatus"];

@@ -33,6 +33,9 @@ components:
         repo_id:
           type: string
           pattern: '^[a-zA-Z0-9_-]+$'
+        worktree_id:
+          type: string
+          format: uuid
         root_ids:
           x-go-name: "RootIDs"
           type: array
@@ -48,7 +51,11 @@ components:
           type: boolean
           description: True while a newer generation is loading behind these values. The values remain usable.
         branch: {type: string}
+        head_sha:
+          x-go-name: "HeadSHA"
+          type: string
         head_short: {type: string}
+        detached: {type: boolean}
         upstream: {type: string}
         ahead: {type: integer}
         behind: {type: integer}
@@ -67,6 +74,9 @@ components:
         repo_id:
           type: string
           pattern: '^[a-zA-Z0-9_-]+$'
+        worktree_id:
+          type: string
+          format: uuid
         revision: { x-go-type: "uint64", type: integer, format: uint64}
         refreshing:
           type: boolean
@@ -85,6 +95,12 @@ components:
         repo_id:
           type: string
           pattern: '^[a-zA-Z0-9_-]+$'
+        worktree_id:
+          type: string
+          format: uuid
+        head_sha:
+          x-go-name: "HeadSHA"
+          type: string
         revision: { x-go-type: "uint64", type: integer, format: uint64}
         refreshing: {type: boolean}
 
@@ -175,6 +191,9 @@ components:
       type: object
       additionalProperties: false
       properties:
+        worktree_id:
+          type: string
+          format: uuid
         branches:
           type: array
           items:
@@ -192,6 +211,9 @@ components:
         create:
           type: boolean
           description: Create the branch (checkout -b) before switching.
+        expected_head:
+          x-go-name: "ExpectedHead"
+          type: string
       required:
         - branch
 
@@ -216,9 +238,19 @@ components:
           type: string
         paths:
           type: array
-          description: Paths to stage; all changes are staged when omitted.
+          description: Paths to stage; all changes are staged when omitted unless staged_only is true.
           items:
             type: string
+        staged_only:
+          type: boolean
+          description: Commit only changes already staged in the checkout index.
+        expected_head:
+          x-go-name: "ExpectedHead"
+          type: string
+        expected_revision:
+          x-go-type: "uint64"
+          type: integer
+          format: uint64
       required:
         - message
 
@@ -227,6 +259,16 @@ components:
       type: object
       additionalProperties: false
       properties:
+        action:
+          type: string
+          enum: [push, apply, pop, drop]
+        ref:
+          type: string
+        reinstate_index:
+          type: boolean
+        expected_head:
+          x-go-name: "ExpectedHead"
+          type: string
         message:
           type: string
 
@@ -235,6 +277,12 @@ components:
       type: object
       additionalProperties: false
       properties:
+        worktree_id:
+          type: string
+          format: uuid
+        head_sha:
+          x-go-name: "HeadSHA"
+          type: string
         message:
           type: string
       required:
@@ -252,6 +300,9 @@ components:
           type: boolean
           description: False means the chat has no worktree.
         session_id:
+          type: string
+          format: uuid
+        worktree_id:
           type: string
           format: uuid
         repo_id:
@@ -348,3 +399,198 @@ components:
       required:
         - repo_id
         - branch
+
+    GitWorktreeEntry:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        worktree_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [primary, linked]
+        path:
+          type: string
+        branch:
+          type: string
+        base_branch:
+          type: string
+        head_sha:
+          x-go-name: "HeadSHA"
+          type: string
+        head_short:
+          type: string
+        detached:
+          type: boolean
+        locked:
+          type: boolean
+        lock_reason:
+          type: string
+        prunable:
+          type: boolean
+        prune_reason:
+          type: string
+        available:
+          type: boolean
+        managed:
+          type: boolean
+        is_project_checkout:
+          type: boolean
+        bound_to_session:
+          type: boolean
+        created_by_chat:
+          type: boolean
+        used_by_chat:
+          type: boolean
+        worker_ids:
+          x-go-name: "WorkerIDs"
+          type: array
+          items:
+            type: string
+        last_activity_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+        status_cached:
+          type: boolean
+        dirty:
+          type: boolean
+        staged_count:
+          type: integer
+        unstaged_count:
+          type: integer
+        changed_count:
+          type: integer
+        ahead:
+          type: integer
+        behind:
+          type: integer
+      required:
+        - worktree_id
+        - kind
+        - path
+        - detached
+        - locked
+        - prunable
+        - available
+        - managed
+        - is_project_checkout
+        - bound_to_session
+        - created_by_chat
+        - used_by_chat
+        - worker_ids
+        - status_cached
+
+    GitWorktreesView:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        project_checkout_id:
+          type: string
+          format: uuid
+        bound_worktree_id:
+          type: string
+          format: uuid
+        worktrees:
+          type: array
+          items:
+            $ref: '#/components/schemas/GitWorktreeEntry'
+      required:
+        - repo_id
+        - worktrees
+
+    GitDiffStatItem:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        insertions:
+          type: integer
+        deletions:
+          type: integer
+        untracked:
+          type: boolean
+        root_id:
+          type: string
+          format: uuid
+        root_relative_path:
+          type: string
+      required:
+        - path
+        - insertions
+        - deletions
+        - root_id
+        - root_relative_path
+
+    GitDiffView:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        worktree_id:
+          type: string
+          format: uuid
+        mode:
+          type: string
+          enum: [unstaged, staged, commit]
+        head_sha:
+          x-go-name: "HeadSHA"
+          type: string
+        patch:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/GitDiffStatItem'
+      required:
+        - repo_id
+        - mode
+        - patch
+        - files
+
+    GitStashEntry:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        ref:
+          type: string
+        oid:
+          x-go-name: "OID"
+          type: string
+        subject:
+          type: string
+      required:
+        - ref
+        - oid
+        - subject
+
+    GitStashesView:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        repo_id:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+        worktree_id:
+          type: string
+          format: uuid
+        stashes:
+          type: array
+          items:
+            $ref: '#/components/schemas/GitStashEntry'
+      required:
+        - repo_id
+        - stashes

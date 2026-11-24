@@ -9,6 +9,22 @@ import (
 	"context"
 )
 
+const countSessionWorktreesByWorktreeID = `-- name: CountSessionWorktreesByWorktreeID :one
+SELECT COUNT(1) FROM session_worktrees WHERE project_id=? AND worktree_id=?
+`
+
+type CountSessionWorktreesByWorktreeIDParams struct {
+	ProjectID  string `json:"project_id"`
+	WorktreeID string `json:"worktree_id"`
+}
+
+func (q *Queries) CountSessionWorktreesByWorktreeID(ctx context.Context, arg CountSessionWorktreesByWorktreeIDParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSessionWorktreesByWorktreeID, arg.ProjectID, arg.WorktreeID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteSessionWorktree = `-- name: DeleteSessionWorktree :exec
 DELETE FROM session_worktrees WHERE session_id=?
 `

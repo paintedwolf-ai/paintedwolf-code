@@ -4,6 +4,7 @@ import type { GitRepoEntry, GitReposView } from "../../api/types.ts";
 import { loadGitWorkspaceStatus, type GitWorkspaceStatus } from "./git-workspace-status.ts";
 import { resolveScope } from "../../components/git-repo-scope.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
+import { resolveGitWorktreeTarget } from "../../store/git-cache-actions.ts";
 import { valueOf } from "../../store/load-state.ts";
 
 type GitStatusFlight = {
@@ -40,13 +41,16 @@ export function gitStatusRefreshPending(appStore: AppStore): boolean {
 function beginGitProjection(appStore: AppStore, kind: "read" | "write" = "read"): GitProjection {
   const epoch = appStore.state.sessionViewEpoch;
   const pin = appStore.state.gitScopePin;
+  const worktreeEpoch = appStore.state.gitWorktreeEpoch ?? 0;
   const boardEpoch = appStore.state.boardEventEpoch;
   const projection: GitProjection = {
     order: ++gitProjectionOrder,
     sessionViewEpoch: epoch,
     current: () => appStore.state.sessionViewEpoch === epoch &&
       (kind === "write" || appStore.state.boardEventEpoch === boardEpoch) &&
-      appStore.state.gitScopePin === pin && gitProjections.get(appStore) === projection,
+      appStore.state.gitScopePin === pin &&
+      (appStore.state.gitWorktreeEpoch ?? 0) === worktreeEpoch &&
+      gitProjections.get(appStore) === projection,
   };
   gitProjections.set(appStore, projection);
   return projection;
@@ -120,6 +124,7 @@ export async function refreshGitRepos(
 
 type GitStatusReadOptions = {
   repoId?: string;
+  worktreeId?: string;
   refreshSet?: boolean;
   /** A write's follow-up read, which completes even when it may no longer publish status. */
   projection?: GitProjection;
@@ -135,14 +140,22 @@ export async function refreshGitStatus(
   if (!options?.projection && gitWriteInFlight(appStore)) {
     const epoch = appStore.state.sessionViewEpoch;
     const pin = appStore.state.gitScopePin;
+    const worktreeEpoch = appStore.state.gitWorktreeEpoch ?? 0;
     await settleGitWrites(appStore);
-    // The caller chose its repository for the view and pin it saw.
-    if (appStore.state.sessionViewEpoch !== epoch || appStore.state.gitScopePin !== pin) return undefined;
+    // The caller chose its repository and checkout target for the view and pin it saw.
+    if (
+      appStore.state.sessionViewEpoch !== epoch ||
+      appStore.state.gitScopePin !== pin ||
+      (appStore.state.gitWorktreeEpoch ?? 0) !== worktreeEpoch
+    ) {
+      return undefined;
+    }
   }
   const key = [
     projectId.trim(),
     sessionId?.trim() ?? "",
     options?.repoId?.trim() ?? "",
+    options?.worktreeId?.trim() ?? String(appStore.state.gitWorktreeEpoch ?? 0),
     options?.refreshSet === false ? "status" : "repos+status",
   ].join("\u0000");
   let flights = gitStatusFlights.get(appStore);
@@ -230,7 +243,8 @@ async function loadGitStatusRemote(
     }
     return valueOf(appStore.state.gitStatus);
   }
-  const status = await loadGitWorkspaceStatus(client, projectId, repoId, sessionId);
+  const targetWorktreeId = options?.worktreeId?.trim() || resolveGitWorktreeTarget(appStore.state, projectId, repoId);
+  const status = await loadGitWorkspaceStatus(client, projectId, repoId, sessionId, targetWorktreeId);
   if (!isCurrent()) return undefined;
   appStore.actions.setGitStatus(status);
   return status;

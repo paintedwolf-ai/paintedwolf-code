@@ -164,6 +164,15 @@ components:
         expected_head:
           type: "string"
           x-go-pointer: true
+        worktree_id:
+          type: "string"
+          format: "uuid"
+        stage:
+          type: "string"
+          enum:
+            - "working"
+            - "staged"
+            - "unstaged"
     BlobComparisonSource:
       x-go-generate: true
       type: "object"

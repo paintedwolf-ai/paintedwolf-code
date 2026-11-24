@@ -371,6 +371,9 @@ func (s *Server) registerMCPRoutes(r chi.Router) {
 
 func (s *Server) registerGitRoutes(r chi.Router) {
 	s.registerV1Operation(r, operationListGitRepos, s.Admin.Git.HandleGitRepos)
+	s.registerV1Operation(r, operationListGitWorktrees, s.Admin.Git.HandleGitWorktrees)
+	s.registerV1Operation(r, operationGetGitDiff, s.Admin.Git.HandleGitDiff)
+	s.registerV1Operation(r, operationListGitStashes, s.Admin.Git.HandleGitStashes)
 	s.registerV1Operation(r, operationGetGitStatus, s.Admin.Git.HandleGitStatus)
 	s.registerV1Operation(r, operationListGitChanges, s.Admin.Git.HandleGitChanges)
 	s.registerV1Operation(r, operationListGitBranches, s.Admin.Git.HandleGitBranches)
