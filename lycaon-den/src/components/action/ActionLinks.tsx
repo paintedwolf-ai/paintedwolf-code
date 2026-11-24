@@ -80,13 +80,12 @@ export function ActionLinks(props: Props) {
             <Show when={document()} keyed>
               {(shown) => {
                 const kind = link().kind;
-                const active = targetPart();
-                const messageId = kind === "input" ? active.argsMessageId ?? active.assistantMessageId : active.messageId;
                 const language = kind === "receipt" ? "jsonl" : undefined;
                 return (
                   <ToolContentLink short label={LINK_LABELS[kind]} testId={`action-link-${kind}`} projectId={props.projectId}
-                    pane={`action:${active.id}:${kind}`} content={shown} language={language}
-                    messageId={messageId} toolCallId={active.toolCallId} revealOffset={revealOffset(kind)} />
+                    pane={`action:${targetPart().id}:${kind}`} content={shown} language={language}
+                    messageId={kind === "input" ? targetPart().argsMessageId ?? targetPart().assistantMessageId : targetPart().messageId}
+                    toolCallId={targetPart().toolCallId} revealOffset={revealOffset(kind)} />
                 );
               }}
             </Show>
