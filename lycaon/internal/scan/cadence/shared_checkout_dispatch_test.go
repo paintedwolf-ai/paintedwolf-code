@@ -67,7 +67,7 @@ func TestDispatchRootRecordsClaimAndUnchangedDecisionsWhileReusingSharedSnapshot
 	}
 
 	logs := logBuf.String()
-	for _, token := range []string{"stage=claimed", "claim_token=", "series_count=", "stage=unchanged", "snapshot_id="} {
+	for _, token := range []string{"state=claimed", "claim_token=", "series_count=", "state=unchanged", "snapshot_id="} {
 		if !strings.Contains(logs, token) {
 			t.Fatalf("dispatch logs missing %q:\n%s", token, logs)
 		}

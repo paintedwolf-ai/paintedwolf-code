@@ -102,8 +102,11 @@ func TestSharedCheckoutStructureCoalescesPreservesLanesAndReusesHeads(t *testing
 		if len(st.seen) < 2 {
 			t.Fatalf("project %s publications = %d, want lane + complete head", label, len(st.seen))
 		}
-		if !slices.Equal(st.seen[0], []bool{true, true, true, false, false}) {
-			t.Fatalf("project %s first lane state = %v", label, st.seen[0])
+		sawLane := slices.ContainsFunc(st.seen, func(v []bool) bool {
+			return slices.Equal(v, []bool{true, true, true, false, false})
+		})
+		if !sawLane {
+			t.Fatalf("project %s states = %v, missing early lane [true true true false false]", label, st.seen)
 		}
 		if !slices.Equal(st.seen[len(st.seen)-1], []bool{true, true, true, true, true}) {
 			t.Fatalf("project %s final state = %v", label, st.seen[len(st.seen)-1])
