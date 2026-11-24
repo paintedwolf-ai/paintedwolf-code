@@ -2,6 +2,7 @@ package toolexecution
 
 import (
 	"context"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/platform"
@@ -93,8 +94,27 @@ func (e *Metadata) enrichToolMeta(ctx context.Context, meta tools.ToolMeta, filt
 			}
 		}
 		meta = ProjectCommandMeta(meta, e.commandEffectsForFilter(ctx, filter), e.externalHidden)
+		if !e.profileCanPark(ctx, filter) {
+			meta.ArgsSchema = tools.PruneCommandParkSchema(meta.ArgsSchema)
+		}
 	}
 	return meta
+}
+
+func (e *Metadata) profileCanPark(ctx context.Context, filter platform.ToolFilter) bool {
+	decision, err := tools.EvaluateListVisible(ctx, e.policy, platform.PolicyContext{
+		ProfileID:  filter.ProfileID,
+		ToolAccess: filter.ToolAccess,
+		ToolName:   "wait",
+	})
+	if err != nil || decision == nil || !decision.Allowed {
+		return false
+	}
+	source, ok := e.policy.(interface{ WaitConditions(string) []string })
+	if !ok {
+		return true
+	}
+	return slices.Contains(source.WaitConditions(filter.ProfileID), "process_done")
 }
 
 func pruneWaitConditionSchema(schema map[string]any, allowed []string) map[string]any {

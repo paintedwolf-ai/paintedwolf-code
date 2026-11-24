@@ -39,6 +39,14 @@ func PruneCommandReadOnlySchema(schema map[string]any) map[string]any {
 	return out
 }
 
+// PruneCommandParkSchema removes until_complete when a profile cannot park.
+func PruneCommandParkSchema(schema map[string]any) map[string]any {
+	out := projectArgsSchema(schema)
+	props, _ := out["properties"].(map[string]any)
+	delete(props, "until_complete")
+	return out
+}
+
 func projectArgsSchema(schema map[string]any) map[string]any {
 	if schema == nil {
 		return map[string]any{"type": "object"}
