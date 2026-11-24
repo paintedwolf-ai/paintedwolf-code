@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -18,6 +19,8 @@ import (
 func TestCredentialIndexEmitsValueFreeBuildAndReadinessDiagnostics(t *testing.T) {
 	repochangetest.Acquire(t)
 	files := credentialFilesFixture(t)
+	files.startCredentialIndex()
+	t.Cleanup(func() { testutil.FailErr(t, "close index", files.closeCredentialIndex(context.Background())) })
 	root := attachCredentialRoot(t, files)
 	testutil.FailErr(t, "mkdir sub", os.MkdirAll(filepath.Join(root, "config"), 0o755))
 	testutil.FailErr(t, "write ordinary", os.WriteFile(filepath.Join(root, "config/app.yaml"), []byte("port: 8080\n"), 0o600))
@@ -59,27 +62,29 @@ func TestCredentialIndexEmitsValueFreeBuildAndReadinessDiagnostics(t *testing.T)
 	mu.Unlock()
 	const rotatedVal = "credential-rotated-secret-554433"
 	testutil.FailErr(t, "rotate env", os.WriteFile(filepath.Join(root, ".env"), []byte("API_TOKEN="+rotatedVal+"\n"), 0o600))
-	epoch := repochange.Advance(root)
-	files.index.changed(t.Context(), repochange.Event{
-		ProjectDir:    root,
-		Kind:          repochange.WorktreeChanged,
-		Paths:         []string{".env"},
-		EpochBootID:   epoch.BootID,
-		WorktreeEpoch: epoch.Value,
+	repochange.Notify(t.Context(), repochange.Event{
+		ProjectDir: root,
+		Kind:       repochange.WorktreeChanged,
+		Paths:      []string{".env"},
 	})
 	testutil.FailErr(t, "await incremental", files.Await(t.Context(), tools.CredentialWait{ProjectID: "proj-1"}))
 
 	mu.Lock()
 	defer mu.Unlock()
-	var buildRec *secretmatch.ScreenPhaseRecord
+	buildCount := 0
 	for idx := range records {
-		if records[idx].Phase == "credential_build" {
-			buildRec = &records[idx]
+		if records[idx].Phase != "credential_build" {
+			continue
+		}
+		buildCount++
+		rec := records[idx]
+		if rec.Mode != "incremental" || rec.DirectoriesListed != 0 ||
+			rec.PathsClassified != 1 || rec.CredentialFilesRead != 1 {
+			t.Fatalf("incremental build records = %+v", records)
 		}
 	}
-	if buildRec == nil || buildRec.Mode != "incremental" ||
-		buildRec.PathsClassified != 1 || buildRec.CredentialFilesRead != 1 {
-		t.Fatalf("incremental build records = %+v", records)
+	if buildCount == 0 {
+		t.Fatalf("expected incremental credential_build record, got %+v", records)
 	}
 	raw, err := json.Marshal(records)
 	testutil.FailErr(t, "marshal records", err)
