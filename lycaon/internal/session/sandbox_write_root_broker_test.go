@@ -619,6 +619,10 @@ func (c *tempDecisionFixture) GetCheckpoint(_ context.Context, id string) (*hitl
 	return &hitl.CheckpointResponse{CheckpointID: id, Status: c.status, ResolvedBy: authzledger.ResolvedByHuman, Result: &hitl.DecisionResult{Approved: c.status == hitl.DecisionStatusApproved}}, nil
 }
 
+func (c *tempDecisionFixture) PollCheckpoint(_ context.Context, id string) (*hitl.CheckpointResponse, error) {
+	return &hitl.CheckpointResponse{CheckpointID: id, Status: c.status, ResolvedBy: authzledger.ResolvedByHuman, Result: &hitl.DecisionResult{Approved: c.status == hitl.DecisionStatusApproved}}, nil
+}
+
 func TestSharedTempSettlementAndChatScope(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", "/opt/shared-temp-review-fixture/config")
 	roots := []string{confine.SharedTempLocation("/tmp"), confine.SharedTempLocation("/var/tmp")}

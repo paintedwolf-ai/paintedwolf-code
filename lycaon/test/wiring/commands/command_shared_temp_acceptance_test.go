@@ -67,7 +67,6 @@ func buildInternalTempProbe(t *testing.T) string {
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 )
 
