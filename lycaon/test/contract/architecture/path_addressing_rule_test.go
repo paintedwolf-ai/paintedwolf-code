@@ -109,6 +109,7 @@ var noneClassifiedPathArgs = map[string]bool{
 	"state_update/path":                                            false,
 	"submit_verdict/cited_evidence.path":                           false,
 	"task/scope.paths":                                             false,
+	"watch/conditions.path":                                        false,
 	"http_request/capture_tokens.from":                             false,
 }
 

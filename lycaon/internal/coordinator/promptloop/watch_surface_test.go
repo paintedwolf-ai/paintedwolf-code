@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolhost"
@@ -24,7 +25,10 @@ import (
 
 func buildWatchSurfaceMetadata(t *testing.T) *toolexecution.Metadata {
 	t.Helper()
-	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: filepath.Join("..", "..", "..")})
+	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{
+		ConfigRoot: filepath.Join("..", "..", ".."),
+		Catalog:    extpackstest.StockCatalog(t),
+	})
 	testutil.FailErr(t, "toolhost.NewRuntime", err)
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "toolschema.LoadSchemaDir", err)
