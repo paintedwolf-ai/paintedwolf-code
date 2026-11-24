@@ -15,7 +15,9 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/confine/admissiontest"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -62,88 +64,90 @@ func makeSharedTempDir(t *testing.T, prefix string) string {
 	return fspath.CanonicalPath(dir)
 }
 
+func sessionScratchMarker(t *testing.T, sessionID string) string {
+	t.Helper()
+	root, err := configdir.Root()
+	testutil.FailErr(t, "config root", err)
+	return filepath.Join(enginepaths.SessionScratchUnder(root, sessionID), "effect.marker")
+}
+
 func buildInternalTempProbe(t *testing.T) string {
 	t.Helper()
 	srcDir := outsideCommandFolder(t)
-	src := `package main
-
-import (
-	"os"
-	"strings"
-)
-
-func main() {
-	cfgBytes, err := os.ReadFile("probe.cfg")
-	if err != nil {
-		os.Exit(2)
-	}
-	lines := strings.Split(strings.TrimSpace(string(cfgBytes)), "\n")
-	mode := lines[0]
-	target := lines[1]
-	if os.Getenv("SCRATCH_DIR") == "" {
-		os.Stderr.WriteString("missing SCRATCH_DIR\n")
-		os.Exit(3)
-	}
-	f, err := os.OpenFile("effect.marker", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err == nil {
-		_, _ = f.Write([]byte("1"))
-		_ = f.Close()
-	}
-	switch mode {
-	case "read":
-		data, err := os.ReadFile(target)
-		if err != nil {
-			os.Stderr.WriteString(err.Error() + "\n")
-			os.Exit(1)
-		}
-		os.Stdout.Write(data)
-	case "tolerated":
-		_, _ = os.ReadFile(target)
-		os.Stdout.WriteString("tolerated-ok\n")
-	case "exchange":
-		outPath := lines[2]
-		data, err := os.ReadFile(target)
-		if err != nil {
-			os.Stderr.WriteString(err.Error() + "\n")
-			os.Exit(1)
-		}
-		if err := os.WriteFile(outPath, append(data, []byte("processed\n")...), 0o600); err != nil {
-			os.Stderr.WriteString(err.Error() + "\n")
-			os.Exit(1)
-		}
-	case "list":
-		entries, err := os.ReadDir(target)
-		if err != nil {
-			os.Stderr.WriteString(err.Error() + "\n")
-			os.Exit(1)
-		}
-		for _, e := range entries {
-			os.Stdout.WriteString(e.Name() + "\n")
-		}
-	case "write":
-		if err := os.WriteFile(target, []byte("process-written\n"), 0o600); err != nil {
-			os.Stderr.WriteString(err.Error() + "\n")
-			os.Exit(1)
-		}
-	}
-}
-`
-	mainPath := filepath.Join(srcDir, "main.go")
-	binPath := filepath.Join(srcDir, "temp-probe")
-	testutil.FailErr(t, "write probe source", os.WriteFile(mainPath, []byte(src), 0o600))
-	goBin, err := exec.LookPath("go")
-	testutil.FailErr(t, "find go", err)
-	cmd := exec.CommandContext(t.Context(), goBin, "build", "-o", binPath, mainPath)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("compile probe: %v\n%s", err, out)
-	}
+	shebang := "#!/usr/bin/env python3\n"
 	if runtime.GOOS == "darwin" {
-		// Ad-hoc signature adds the CMS wrapper macOS Sandbox.kext requires to log denials.
-		signOut, signErr := exec.CommandContext(t.Context(), "/usr/bin/codesign", "-f", "-s", "-", binPath).CombinedOutput()
-		if signErr != nil {
-			t.Fatalf("codesign probe: %v\n%s", signErr, signOut)
+		if _, err := os.Stat("/usr/bin/python3"); err == nil {
+			// Platform-signed interpreter reports Sandbox.kext violations on first exec.
+			shebang = "#!/usr/bin/python3\n"
 		}
+	}
+	script := shebang + `import os
+import sys
+
+if len(sys.argv) > 1 and sys.argv[1] == "warm":
+    sys.exit(0)
+
+try:
+    with open("probe.cfg", "r", encoding="utf-8") as fh:
+        lines = fh.read().strip().splitlines()
+except OSError:
+    sys.exit(2)
+
+mode = lines[0]
+target = lines[1]
+scratch = os.environ.get("SCRATCH_DIR", "")
+if not scratch:
+    sys.stderr.write("missing SCRATCH_DIR\n")
+    sys.exit(3)
+
+with open(os.path.join(scratch, "effect.marker"), "ab") as fh:
+    fh.write(b"1")
+
+if mode == "read":
+    try:
+        with open(target, "rb") as fh:
+            sys.stdout.buffer.write(fh.read())
+    except OSError as exc:
+        sys.stderr.write(f"{exc}\n")
+        sys.exit(1)
+elif mode == "tolerated":
+    try:
+        with open(target, "rb") as fh:
+            fh.read()
+    except OSError:
+        pass
+    sys.stdout.write("tolerated-ok\n")
+elif mode == "exchange":
+    out_path = lines[2]
+    try:
+        with open(target, "rb") as fh:
+            data = fh.read()
+        with open(out_path, "wb") as fh:
+            fh.write(data + b"processed\n")
+    except OSError as exc:
+        sys.stderr.write(f"{exc}\n")
+        sys.exit(1)
+elif mode == "list":
+    try:
+        entries = sorted(os.listdir(target))
+    except OSError as exc:
+        sys.stderr.write(f"{exc}\n")
+        sys.exit(1)
+    for name in entries:
+        sys.stdout.write(name + "\n")
+elif mode == "write":
+    try:
+        with open(target, "wb") as fh:
+            fh.write(b"process-written\n")
+    except OSError as exc:
+        sys.stderr.write(f"{exc}\n")
+        sys.exit(1)
+`
+	binPath := filepath.Join(srcDir, "temp-probe")
+	testutil.FailErr(t, "write probe script", os.WriteFile(binPath, []byte(script), 0o755))
+	out, err := exec.CommandContext(t.Context(), binPath, "warm").CombinedOutput()
+	if err != nil {
+		t.Fatalf("warm probe: %v\n%s", err, out)
 	}
 	return binPath
 }
@@ -282,7 +286,7 @@ func TestSharedTempOneDecisionDeclaredExchangeAndDirectionalReuse(t *testing.T) 
 		filepath.Join(s.dir, "probe.cfg"),
 		[]byte("exchange\n"+inFile+"\n"+outFile+"\n"), 0o600,
 	))
-	markerPath := filepath.Join(s.dir, "effect.marker")
+	markerPath := sessionScratchMarker(t, s.session)
 	declArgs := map[string]any{
 		"command": "external -- '" + probeBin + "'",
 		"capability_request": map[string]any{
@@ -500,7 +504,7 @@ func TestSharedTempAutomaticTriggerAndBackgroundStarterSettlement(t *testing.T) 
 
 	// Automatic foreground trigger: no argv path, no capability_request; side effect recorded once, no auto-replay.
 	testutil.FailErr(t, "write auto read cfg", os.WriteFile(filepath.Join(s.dir, "probe.cfg"), []byte("read\n"+internalInput+"\n"), 0o600))
-	markerPath := filepath.Join(s.dir, "effect.marker")
+	markerPath := sessionScratchMarker(t, s.session)
 	_ = os.Remove(markerPath)
 	fgCards := runTurnDeciding(t, s, "auto-fg-1", "command", map[string]any{
 		"command": "external -- '" + probeBin + "'",
