@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActivityEvent, Message } from "../../api/types.ts";
+import { COMPOSER_STATUS_HIDE_SETTLE_MS } from "../../chat/composer/composer-status-settle.ts";
 import { THINKING_LABEL_HOLD_MS } from "../../chat/session/thinking-label-hold.ts";
 import { TERMINAL_WAIT_DELIVERY_LABEL } from "../../chat/session/wait-target-activity.ts";
 import {
@@ -243,10 +244,12 @@ describe("terminal background command wait delivery presentation", () => {
     appStore.actions.upsertMessage(waitSettledResult("wait-35"));
     appStore.actions.setActivity({ ...waitAct, status: "done" });
     appStore.actions.setCurrentSession({ ...appStore.state.currentSession!, status: "idle" });
-    await Promise.resolve();
 
-    expect(screen.queryByTestId("thinking-indicator")).toBeNull();
     expect(waitSpan!.getAttribute("data-status")).toBe("done");
+    expect(screen.queryByTestId("thinking-indicator")?.textContent ?? "").not.toContain(TERMINAL_WAIT_DELIVERY_LABEL);
+    vi.advanceTimersByTime(COMPOSER_STATUS_HIDE_SETTLE_MS);
+    await Promise.resolve();
+    expect(screen.queryByTestId("thinking-indicator")).toBeNull();
     expect(waitSpan!.querySelector(":scope > .den-transcript-disclosure-header")?.getAttribute("aria-label"))
       .toContain(", done,");
     const waitRowAfter = waitSpan!.querySelector<HTMLElement>("[data-tool-call-id='wait-35']")!;
