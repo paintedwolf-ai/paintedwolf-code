@@ -203,6 +203,45 @@ describe("thinking-activity-label", () => {
     ).toBe("Preparing context...");
   });
 
+  it("names the root and counts of a credential-file wait", () => {
+    const indexing = (directories: number, files: number) => resolveThinkingActivityLabel({
+      activities: [
+        {
+          activity_id: "activity-1",
+          session_id: "s1",
+          kind: "indexing_credentials",
+          status: "active",
+          started_at: "2026-01-01T00:00:00Z",
+          indexing: { root_id: "r1", root_label: "web-app", directories_visited: directories, credential_files_read: files },
+        },
+      ],
+      progressSteps: [{ label: "Run check-fast", state: "pending" }],
+      progressRunning: true,
+    });
+    expect(indexing(0, 0)).toBe("Checking credential files in web-app · 0 folders · 0 files...");
+    expect(indexing(1, 1)).toBe("Checking credential files in web-app · 1 folder · 1 file...");
+    expect(indexing(214, 3)).toBe("Checking credential files in web-app · 214 folders · 3 files...");
+  });
+
+  it("drops a credential-file wait once its lease closes", () => {
+    expect(
+      resolveThinkingActivityLabel({
+        activities: [
+          {
+            activity_id: "activity-1",
+            session_id: "s1",
+            kind: "indexing_credentials",
+            status: "done",
+            started_at: "2026-01-01T00:00:00Z",
+            indexing: { root_id: "r1", root_label: "web-app", directories_visited: 4, credential_files_read: 1 },
+          },
+        ],
+        progressSteps: [{ label: "Run check-fast", state: "pending" }],
+        progressRunning: true,
+      }),
+    ).not.toContain("credential files");
+  });
+
   it("shows the local decision over the turn's preparing lease", () => {
     expect(
       resolveThinkingActivityLabel({
