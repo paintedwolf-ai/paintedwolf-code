@@ -9,6 +9,7 @@ export type GitWorkspaceStatus = Omit<GitStatusSummary, "revision" | "refreshing
 
 const CHANGES_PAGE_LIMIT = 500;
 const READ_ATTEMPTS = 3;
+const WORKTREE_LOADING_ATTEMPTS = 30;
 
 /**
  * Reads the status summary and the changed files of one published revision.
@@ -24,7 +25,8 @@ export async function loadGitWorkspaceStatus(
 ): Promise<GitWorkspaceStatus> {
   let latest: GitStatusSummary | undefined;
   const targetWorktree = worktreeId?.trim() || undefined;
-  for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
+  const maxAttempts = targetWorktree ? WORKTREE_LOADING_ATTEMPTS : READ_ATTEMPTS;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const summary = targetWorktree
       ? await client.getGitStatus(projectId, repoId, sessionId, targetWorktree)
       : await client.getGitStatus(projectId, repoId, sessionId);
@@ -38,7 +40,10 @@ export async function loadGitWorkspaceStatus(
       });
       if (files) return workspaceStatus(summary, files);
     }
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    if (attempt + 1 >= READ_ATTEMPTS && (summary.revision !== 0 || !summary.refreshing)) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, attempt < READ_ATTEMPTS ? 25 : 100));
   }
   throw new Error(latest?.revision === 0
     ? "Git status is still loading. Try again."
