@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -179,7 +180,7 @@ func coalescePendingProcessOutputMatch(s *Store, ctx context.Context, watchID, h
 	err = tx.QueryRowContext(ctx, `SELECT match_id, evidence_json FROM watch_matches
 		WHERE watch_id = ? AND source_kind = 'process_output' AND reservation_state = 'pending'
 		ORDER BY seq DESC LIMIT 1`, watchID).Scan(&matchID, &evStr)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
