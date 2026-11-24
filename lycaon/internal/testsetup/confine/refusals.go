@@ -14,6 +14,7 @@ import (
 func RequireRefusalReports(t *testing.T) {
 	t.Helper()
 	confine.StartRefusalWatch(t.Context(), "", nil)
+	t.Cleanup(confine.StopRefusalWatch)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	root := t.TempDir()
