@@ -96,7 +96,7 @@ func TestCollectCoordinatorAndWorkerAssemblyResourcePresenceAndFailedRender(t *t
 	})
 
 	// Preview renders never reserve or consume matches.
-	_, err = eng.BuildCompletionMessages(assembly.WithPreviewOnly(t.Context()), coordSess, history, nil)
+	_, err = eng.BuildCompletionMessages(t.Context(), coordSess, history, nil)
 	testutil.FailErr(t, "preview render", err)
 	actionableAfterPreview, err := adapter.HasActionableWatches(t.Context(), coordSess)
 	testutil.FailErr(t, "actionable after preview", err)
