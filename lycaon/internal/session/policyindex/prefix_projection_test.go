@@ -3,12 +3,11 @@ package policyindex
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentpolicy"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -54,18 +53,9 @@ func (r *toggleRoots) Roots(ctx context.Context, sess *api.Session) ([]projectro
 	return r.base.Roots(ctx, sess)
 }
 
-func prefixModuleRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "..", "..", "..")
-}
-
 func prefixAssemblyEngine(t *testing.T, m *Service) *assembly.AssemblyEngine {
 	t.Helper()
-	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: prefixModuleRoot(t)})
+	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
 	m.SetRenderer(pe)
 	eng := &assembly.AssemblyEngine{}
 	eng.SetDeps(assembly.AssemblyDeps{
