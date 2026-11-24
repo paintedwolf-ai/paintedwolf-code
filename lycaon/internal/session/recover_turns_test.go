@@ -400,6 +400,26 @@ func TestReconcileToolResultsProjectsSettledRefusals(t *testing.T) {
 	}
 	settle("asst-live", "call-live", "")
 	settle("asst-withdrawn", "call-withdrawn", api.DraftStatusWithdrawn)
+	settle("asst-answered", "call-answered", "")
+	testutil.FailErr(t, "append existing result", sqlStore.Transcript.AppendMessages(ctx, sess.ID, api.Message{
+		ID: "result-answered", Role: api.MessageRoleTool,
+		ToolResult: &api.ToolResult{Tool: "command", ToolCallID: "call-answered", AssistantMessageID: "asst-answered", Outcome: api.ToolResultOutcomeRejected},
+	}))
+	testutil.FailErr(t, "append unrelated call", sqlStore.Transcript.AppendMessages(ctx, sess.ID, api.Message{
+		ID: "asst-other", Role: api.MessageRoleAssistant,
+		ToolCalls: []api.ToolCall{{ID: "call-other", Name: "command"}},
+	}))
+	foreign, err := recorder.Begin(ctx, invocation.Start{
+		ProjectID: testdbseed.DefaultProjectID, SessionID: sess.ID,
+		AssistantMessageID: "asst-other", ToolCallID: "call-not-in-message", ToolName: "command",
+		Args: map[string]any{}, Contract: contract,
+	})
+	testutil.FailErr(t, "begin foreign receipt", err)
+	_, err = recorder.Settle(ctx, foreign.ID, invocation.Settlement{
+		Status: api.InvocationStatusRejected, EvidenceKind: "rejection",
+		Failure: &api.InvocationFailure{Code: "TEST_REFUSAL", Class: "policy"},
+	})
+	testutil.FailErr(t, "settle foreign receipt", err)
 
 	testutil.FailErr(t, "reconcile", mgr.Stops.Recovery.ReconcileToolResults(ctx, sess.ID))
 	testutil.FailErr(t, "reconcile replay", mgr.Stops.Recovery.ReconcileToolResults(ctx, sess.ID))
@@ -414,8 +434,8 @@ func TestReconcileToolResultsProjectsSettledRefusals(t *testing.T) {
 			results[msg.ToolResult.ToolCallID] = msg.ToolResult
 		}
 	}
-	if count != 1 {
-		t.Fatalf("tool results = %d want one for the live call", count)
+	if count != 2 || results["call-answered"] == nil {
+		t.Fatalf("tool results = %d want the live projection plus the existing result", count)
 	}
 	got := results["call-live"]
 	if got == nil || got.Outcome != api.ToolResultOutcomeRejected || got.AssistantMessageID != "asst-live" {
