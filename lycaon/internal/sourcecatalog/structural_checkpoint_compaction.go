@@ -39,6 +39,9 @@ func (s *indexStore) compactCheckpointPin(ctx context.Context, pin *GenerationPi
 	if pin.Generation >= headGeneration-1 {
 		return nil, pagedview.ErrBudget
 	}
+	if m := s.structuralMetrics(); m != nil {
+		m.compactionAttempts.Add(1)
+	}
 	work, err := newStructuralCompaction(ctx, s, pin.value)
 	if err != nil {
 		return nil, err
@@ -54,6 +57,9 @@ func (s *indexStore) compactCheckpointPin(ctx context.Context, pin *GenerationPi
 		return nil, err
 	}
 	if !caught {
+		if m := s.structuralMetrics(); m != nil {
+			m.compactionDeclines.Add(1)
+		}
 		// The root moved wider than one catch-up absorbs. The next checkpoint
 		// compacts from a newer generation rather than holding publication open.
 		slog.DebugContext(ctx, "structural compaction outrun", "root", s.root.ID, "generation", pin.Generation)
@@ -74,6 +80,9 @@ func (s *indexStore) installCompaction(ctx context.Context, expected, compacted 
 	s.mu.Lock()
 	if s.structure != expected || s.checkpoint.Drained() || s.pins.drained || ctx.Err() != nil {
 		s.mu.Unlock()
+		if m := s.structuralMetrics(); m != nil {
+			m.compactionDeclines.Add(1)
+		}
 		compacted.close()
 		return nil, ctx.Err()
 	}
@@ -81,6 +90,9 @@ func (s *indexStore) installCompaction(ctx context.Context, expected, compacted 
 	s.pins.held[compacted.id] = &generationPin{count: 1, value: compacted}
 	replacement := &GenerationPin{store: s, Generation: compacted.id, value: compacted}
 	s.mu.Unlock()
+	if m := s.structuralMetrics(); m != nil {
+		m.compactionInstalls.Add(1)
+	}
 	s.stores.Directories.navigationChanged(s.root)
 	return replacement, nil
 }

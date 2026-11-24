@@ -33,10 +33,10 @@ func notifyChange(root string, paths ...string) {
 func TestSecondGenerationCostsOnlyWhatChanged(t *testing.T) {
 	store := openSnapshotStore(t)
 	root := t.TempDir()
-	coverRoot(t, root)
 	for _, name := range []string{"a.go", "b.go", "deep/c.go"} {
 		writeSource(t, root, name, "package x // "+name+"\n")
 	}
+	coverRoot(t, root)
 	request := Request{Roots: []Root{{Path: root}}}
 	first, err := store.Ensure(t.Context(), request)
 	testutil.FailErr(t, "publish first generation", err)
@@ -175,10 +175,10 @@ func TestChangesDuringACaptureArePickedUpBeforePublishing(t *testing.T) {
 func TestIgnoredChurnDoesNotMoveTheGeneration(t *testing.T) {
 	store := openSnapshotStore(t)
 	root := t.TempDir()
-	coverRoot(t, root)
 	writeSource(t, root, ".gitignore", "build/\n")
 	writeSource(t, root, "src/a.go", "package a\n")
 	writeSource(t, root, "build/out.o", "x")
+	coverRoot(t, root)
 	request := Request{Roots: []Root{{Path: root}}}
 	first, err := store.Ensure(t.Context(), request)
 	testutil.FailErr(t, "publish first generation", err)
@@ -235,7 +235,7 @@ func TestUnreadableBoundaryCannotPublishExactCoverage(t *testing.T) {
 	testutil.FailErr(t, "prepare readable source", err)
 	defer candidate.close(t.Context(), store)
 	candidate.boundaries["unreadable"] = Boundary{RootPath: root, Path: "unreadable", Reason: "unreadable", Detail: "permission denied"}
-	snapshot, err := store.publishCandidates(t.Context(), req, []rootCapture{{candidate: candidate}}, CaptureExact, time.Now())
+	snapshot, _, _, err := store.publishCandidates(t.Context(), req, []rootCapture{{candidate: candidate}}, CaptureExact, time.Now())
 	testutil.FailErr(t, "publish incomplete observation", err)
 	if snapshot.Quality != CaptureObserved || snapshot.FileCount != 1 {
 		t.Fatalf("incomplete source became exact or lost readable files: %+v", snapshot)

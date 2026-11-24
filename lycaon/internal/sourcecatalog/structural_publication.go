@@ -141,6 +141,7 @@ func (s *indexStore) installPreparedStructure(ctx context.Context, next *structu
 	// Newer invalidations remain queued; this generation records what was read.
 	s.installStructureLocked(next)
 	s.mu.Unlock()
+	s.recordPublication(next.complete)
 	return true, nil
 }
 
@@ -401,9 +402,19 @@ func (s *indexStore) buildStructure(ctx context.Context, dirty map[string]struct
 	if base.directories.Len() == 0 {
 		full = true
 	}
+	expected := pin.Generation
+	var sharedFlight *sharedStructureFlight
 	if full {
 		base = nil
 		dirty = map[string]struct{}{".": {}}
+		handled, flight, shareErr := s.prepareSharedFullBuild(ctx, expected)
+		if handled {
+			return shareErr
+		}
+		sharedFlight = flight
+		defer sharedFlight.finish()
+	} else {
+		s.refreshWalkPolicy(ctx)
 	}
 	builder, err := newStructuralBuilder(s, base)
 	if err != nil {
@@ -412,8 +423,10 @@ func (s *indexStore) buildStructure(ctx context.Context, dirty map[string]struct
 	// A lane boundary replaces builder, so close whichever one is current.
 	defer func() { builder.close() }()
 	builder.comparison = pin.value
-	expected := pin.Generation
 	options := structuralScanOptions{store: s, broker: s.stores.broker, epoch: repochange.CurrentEpoch(s.root.Path)}
+	if sharedFlight != nil {
+		options.onDirectoryScanned = sharedFlight.markDirectoryScanned
+	}
 	options.request = func(dir string) backgroundwork.Request {
 		request := s.observationRequest(dir)
 		request.Interests = &s.inventory.interests
@@ -427,7 +440,7 @@ func (s *indexStore) buildStructure(ctx context.Context, dirty map[string]struct
 		if err != nil {
 			return false, err
 		}
-		return !found || !record.observation.Complete && record.observation.Failure == "" || record.observation.Invalidation != s.observationMark(dir), nil
+		return !found || !record.observation.Complete && record.observation.Failure == "" || record.observation.Invalidation < s.observationMark(dir), nil
 	}
 	if full {
 		// Publishing at the lane boundary settles recursive demand in the trees
@@ -442,6 +455,7 @@ func (s *indexStore) buildStructure(ctx context.Context, dirty map[string]struct
 			if err != nil {
 				return err
 			}
+			sharedFlight.publishLane(next.base)
 			builder.close()
 			builder, expected, published = next, generation, true
 			return nil
@@ -465,6 +479,9 @@ func (s *indexStore) buildStructure(ctx context.Context, dirty map[string]struct
 	}
 	scanned := time.Now()
 	err = s.publishStructure(ctx, builder, expected)
+	if err == nil {
+		sharedFlight.publishHeadFrom(s)
+	}
 	slog.DebugContext(ctx, "Structural discovery finished", "root", s.root.ID, "directories", builder.directories.Len(),
 		"scan_ms", scanned.Sub(started).Milliseconds(),
 		"publish_ms", time.Since(scanned).Milliseconds(), "encoded_bytes", builder.writer.TotalBytes(), "error", err)

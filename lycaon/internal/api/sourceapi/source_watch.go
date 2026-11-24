@@ -72,10 +72,12 @@ func (s *Watch) ensureWorkspaceWatch(ctx context.Context, p *project.Project) bo
 		return false
 	}
 	defer finish()
+	uncovered := uncoveredWorkspaceRoots(p)
 	bound := s.bindWorkspaceWatch(ctx, p)
 	if bound {
-		resyncWorkspaceWatch(ctx, p)
+		resyncUncoveredRoots(ctx, uncovered)
 		s.scheduleWorkspaceInventory(ctx, p)
+		s.RevalidateEditorDocuments(ctx, p, sourcefeed.ExternalBatch{Resync: true})
 	}
 	s.seedSourceWatch(ctx, p)
 	return bound

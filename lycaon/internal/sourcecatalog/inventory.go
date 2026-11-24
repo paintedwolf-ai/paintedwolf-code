@@ -190,6 +190,13 @@ const (
 // first pass the rest: the directories whose stamps moved, or the whole tree
 // when nothing was restored.
 func (s *indexStore) seedInventoryWork(ctx context.Context) {
+	if s.restorePeerStructure(ctx) {
+		select {
+		case s.inventory.wake <- struct{}{}:
+		default:
+		}
+		return
+	}
 	restored, stale := s.restoreStructure(ctx)
 	s.mu.Lock()
 	if restored {
@@ -206,24 +213,39 @@ func (s *indexStore) seedInventoryWork(ctx context.Context) {
 	}
 }
 
+const maxImmediateDeltaPasses = 8
+
 // A root scan runs directly from directory entries; persistence never selects its frontier.
 func (s *indexStore) inventoryPass(ctx context.Context) error {
-	s.mu.Lock()
-	dirty := s.inventory.dirty
-	full := s.inventory.full
-	s.inventory.full = false
-	s.inventory.dirty = nil
-	s.mu.Unlock()
-	if len(dirty) == 0 {
-		return nil
-	}
-	err := s.buildStructure(ctx, dirty, full)
-	if err != nil {
+	for pass := 0; ; pass++ {
 		s.mu.Lock()
-		s.inventory.requeueFull()
+		dirty := s.inventory.dirty
+		full := s.inventory.full
+		s.inventory.full = false
+		s.inventory.dirty = nil
 		s.mu.Unlock()
+		if len(dirty) == 0 {
+			return nil
+		}
+		if err := s.buildStructure(ctx, dirty, full); err != nil {
+			s.mu.Lock()
+			s.inventory.requeueFull()
+			s.mu.Unlock()
+			return err
+		}
+		s.mu.Lock()
+		more := len(s.inventory.dirty) > 0 && pass+1 < maxImmediateDeltaPasses
+		if len(s.inventory.dirty) > 0 && !more {
+			select {
+			case s.inventory.wake <- struct{}{}:
+			default:
+			}
+		}
+		s.mu.Unlock()
+		if !more {
+			return nil
+		}
 	}
-	return err
 }
 
 func (w *inventoryWork) requeueFull() {

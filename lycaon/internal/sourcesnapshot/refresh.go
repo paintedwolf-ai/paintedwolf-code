@@ -22,7 +22,7 @@ func (s *Store) RefreshNeeded(ctx context.Context, id string) (bool, error) {
 		scopeID := s.scopeFor(ctx, Request{}, root).Identity()
 		s.deltas.mu.Lock()
 		d := s.deltas.roots[filepath.Clean(root.Path)]
-		refresh := d == nil || d.covered != manifests[i] || d.scopeID != scopeID || d.overflow || len(d.paths) > 0
+		refresh := d.manifestPendingLocked(scopeID, manifests[i])
 		s.deltas.mu.Unlock()
 		if refresh {
 			return true, nil
@@ -45,7 +45,7 @@ func (s *Store) RefreshPending(ctx context.Context, id string) (bool, error) {
 		scopeID := s.scopeFor(ctx, Request{}, root).Identity()
 		s.deltas.mu.Lock()
 		d := s.deltas.roots[filepath.Clean(root.Path)]
-		pending := d == nil || d.covered != manifests[i] || d.scopeID != scopeID || d.overflow || len(d.paths) > 0
+		pending := d.manifestPendingLocked(scopeID, manifests[i])
 		s.deltas.mu.Unlock()
 		if pending {
 			return true, nil

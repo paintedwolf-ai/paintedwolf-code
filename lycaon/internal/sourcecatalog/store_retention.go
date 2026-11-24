@@ -458,13 +458,14 @@ func (c *TreeStores) Drain(ctx context.Context) error {
 
 // TreeStores owns rebuildable disk generations and their writer lifetimes.
 type TreeStores struct {
-	mu            sync.Mutex
-	trees         map[string]projectionStore
-	limit         int
-	treeDir       string
-	treeLifecycle sync.RWMutex
-	broker        *backgroundwork.Broker
-	Directories   *Directories
-	scopesMu      sync.RWMutex
-	scopes        ScopeProvider
+	mu              sync.Mutex
+	trees           map[string]projectionStore
+	limit           int
+	treeDir         string
+	treeLifecycle   sync.RWMutex
+	broker          *backgroundwork.Broker
+	Directories     *Directories
+	scopesMu        sync.RWMutex
+	scopes          ScopeProvider
+	sharedStructure sharedStructureCoordinator
 }

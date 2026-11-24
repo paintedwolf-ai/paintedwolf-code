@@ -27,7 +27,7 @@ type rootCapture struct {
 	plan      deltaPlan
 }
 
-func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
+func (s *Store) converge(ctx context.Context, req Request, onReadStart func()) (Snapshot, uint64, bool, error) {
 	if !req.Unwatched {
 		for _, root := range req.Roots {
 			repochange.EnsureRoot(ctx, root.Path)
@@ -35,9 +35,12 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 	}
 	rootRelease, err := s.acquireRootStorage(ctx, req.Roots, true)
 	if err != nil {
-		return Snapshot{}, err
+		return Snapshot{}, 0, false, err
 	}
 	defer rootRelease()
+	if onReadStart != nil {
+		onReadStart()
+	}
 
 	started := time.Now()
 	captures := make([]rootCapture, 0, len(req.Roots))
@@ -49,15 +52,17 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 	for _, root := range req.Roots {
 		var plan deltaPlan
 		// Content verification reads every file; incremental capture waits for events.
-		if req.Verify == VerifyContent || req.Unwatched {
-			plan = deltaPlan{upTo: s.deltas.sequence()}
+		if req.Verify == VerifyContent {
+			plan = deltaPlan{upTo: s.deltas.sequence(), reason: SurveyExplicitVerifyContent}
+		} else if req.Unwatched {
+			plan = deltaPlan{upTo: s.deltas.sequence(), reason: SurveyIncompleteWatcher}
 		} else {
 			repochange.WaitQuiet(ctx, root.Path, deltaQuietGrace, deltaQuietWait)
 			plan = s.deltas.begin(root.Path, s.scopeFor(ctx, req, root).Identity())
 		}
 		candidate, err := s.candidate(ctx, req, root, plan)
 		if err != nil {
-			return Snapshot{}, err
+			return Snapshot{}, 0, false, err
 		}
 		captures = append(captures, rootCapture{candidate: candidate, plan: plan})
 	}
@@ -77,7 +82,7 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 				if c.surveyed && !c.confirmed {
 					reads, err := s.confirm(ctx, req, c)
 					if err != nil {
-						return Snapshot{}, err
+						return Snapshot{}, 0, false, err
 					}
 					if reads > 0 {
 						moved = true
@@ -91,11 +96,11 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 					c.scope = s.scopeFor(ctx, req, root)
 				}
 				if next.overflow {
-					if err := s.resurvey(ctx, req, c); err != nil {
-						return Snapshot{}, err
+					if err := s.resurvey(ctx, req, c, SurveyPhaseResurvey, SurveyOverflow); err != nil {
+						return Snapshot{}, 0, false, err
 					}
 				} else if err := s.applyDelta(ctx, req, c, next.paths); err != nil {
-					return Snapshot{}, err
+					return Snapshot{}, 0, false, err
 				}
 				capture.plan = next
 			}
@@ -128,11 +133,15 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 // candidate applies retained deltas when the covered manifest is still held.
 func (s *Store) candidate(ctx context.Context, req Request, root Root, plan deltaPlan) (*rootCandidate, error) {
 	if plan.covered == "" {
-		return s.survey(ctx, req, root)
+		reason := plan.reason
+		if reason == "" {
+			reason = SurveyNoCoveredHead
+		}
+		return s.survey(ctx, req, root, SurveyPhaseInitial, reason)
 	}
 	scope := s.scopeFor(ctx, req, root)
 	if scope.Identity() != plan.scopeID {
-		return s.survey(ctx, req, root)
+		return s.survey(ctx, req, root, SurveyPhaseInitial, SurveyScopeMismatch)
 	}
 	held := s.pins.holdManifests(plan.covered)
 	if _, err := s.queries.GetSourceManifest(ctx, plan.covered); err != nil {
@@ -140,7 +149,7 @@ func (s *Store) candidate(ctx context.Context, req Request, root Root, plan delt
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
-		return s.survey(ctx, req, root)
+		return s.survey(ctx, req, root, SurveyPhaseInitial, SurveyMissingManifest)
 	}
 	baseline, err := s.newObserved(ctx, root.Path)
 	if err != nil {
@@ -170,7 +179,8 @@ func (s *Store) candidate(ctx context.Context, req Request, root Root, plan delt
 }
 
 // survey reuses verified content identities for unchanged files.
-func (s *Store) survey(ctx context.Context, req Request, root Root) (*rootCandidate, error) {
+func (s *Store) survey(ctx context.Context, req Request, root Root, phase SurveyPhase, reason SurveyReason) (*rootCandidate, error) {
+	s.deltas.diag.recordSurvey(ctx, req, root, phase, reason)
 	if s.onSurvey != nil {
 		s.onSurvey(root.Path)
 	}
@@ -210,8 +220,8 @@ func (s *Store) survey(ctx context.Context, req Request, root Root) (*rootCandid
 	return c, nil
 }
 
-func (s *Store) resurvey(ctx context.Context, req Request, c *rootCandidate) error {
-	fresh, err := s.survey(ctx, req, c.root)
+func (s *Store) resurvey(ctx context.Context, req Request, c *rootCandidate, phase SurveyPhase, reason SurveyReason) error {
+	fresh, err := s.survey(ctx, req, c.root, phase, reason)
 	if err != nil {
 		return err
 	}
@@ -230,7 +240,7 @@ func (s *Store) confirm(ctx context.Context, req Request, c *rootCandidate) (int
 	// The earlier build's chunks stay pinned until this candidate closes.
 	earlier := s.pins.holdManifests(before.id)
 	defer earlier.release()
-	if err := s.resurvey(ctx, req, c); err != nil {
+	if err := s.resurvey(ctx, req, c, SurveyPhaseConfirm, SurveyIncompleteWatcher); err != nil {
 		return 0, err
 	}
 	c.confirmed = true
@@ -251,7 +261,7 @@ func (s *Store) applyDelta(ctx context.Context, req Request, c *rootCandidate, p
 			return err
 		}
 		if rel == "." {
-			return s.resurvey(ctx, req, c)
+			return s.resurvey(ctx, req, c, SurveyPhaseResurvey, SurveyOverflow)
 		}
 		abs := absPath(c.root.Path, rel)
 		info, err := os.Lstat(abs)
@@ -323,15 +333,19 @@ func (s *Store) captureInto(ctx context.Context, req Request, c *rootCandidate, 
 	return nil
 }
 
-func (s *Store) publishCandidates(ctx context.Context, req Request, captures []rootCapture, quality CaptureQuality, started time.Time) (Snapshot, error) {
+func (s *Store) publishCandidates(ctx context.Context, req Request, captures []rootCapture, quality CaptureQuality, started time.Time) (Snapshot, uint64, bool, error) {
 	roots := make([]publishedRoot, 0, len(captures))
 	// Retained budget boundaries keep the snapshot admission bounded.
 	admission := AdmissionScope
-	for _, capture := range captures {
+	var minUpTo uint64
+	for i, capture := range captures {
+		if i == 0 || capture.plan.upTo < minUpTo {
+			minUpTo = capture.plan.upTo
+		}
 		c := capture.candidate
 		manifest, err := c.manifest(ctx, s)
 		if err != nil {
-			return Snapshot{}, err
+			return Snapshot{}, 0, false, err
 		}
 		root := publishedRoot{root: c.root, manifest: manifest}
 		for _, b := range c.boundaries {
@@ -347,16 +361,20 @@ func (s *Store) publishCandidates(ctx context.Context, req Request, captures []r
 	}
 	snapshot, err := s.publish(ctx, req, roots, quality, admission)
 	if err != nil {
-		return Snapshot{}, err
+		return Snapshot{}, 0, false, err
 	}
+	allExact := !req.Unwatched && quality == CaptureExact
 	if !req.Unwatched {
 		_, storedManifests, err := s.load(ctx, snapshot.ID)
 		if err != nil {
-			return Snapshot{}, err
+			return Snapshot{}, 0, false, err
 		}
 		for i, capture := range captures {
 			c := capture.candidate
 			exact := quality == CaptureExact && repochange.Coverage(c.root.Path).Complete
+			if !exact {
+				allExact = false
+			}
 			s.deltas.coveredBy(c.root.Path, storedManifests[i], roots[i].boundaries, c.scope.Identity(), capture.plan.upTo, exact)
 		}
 	}
@@ -364,7 +382,7 @@ func (s *Store) publishCandidates(ctx context.Context, req Request, captures []r
 		"roots_key", snapshot.RootsKey, "snapshot_id", snapshot.ID, "files", snapshot.FileCount,
 		"boundaries", len(snapshot.Boundaries), "unobserved", len(snapshot.Unobserved()),
 		"quality", string(quality), "admission", string(admission), "duration_ms", time.Since(started).Milliseconds())
-	return snapshot, nil
+	return snapshot, minUpTo, allExact, nil
 }
 
 func (s *Store) scopeFor(ctx context.Context, req Request, root Root) *sourcescope.Scope {

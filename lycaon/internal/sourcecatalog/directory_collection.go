@@ -27,12 +27,13 @@ func collectDirectoryObservation(ctx context.Context, store *indexStore, dir str
 		return observeExactEntry(ctx, store, root, dir, directory, observation, consume)
 	}
 	// Unwatched membership is reusable only after its directory has been re-statted.
-	if cached.Complete && cached.Failure == "" && cached.Stamp.known() && cached.Stamp == observation.Stamp && cached.Invalidation == observation.Invalidation && cached.Epoch == observation.Epoch {
+	if cached.Complete && cached.Failure == "" && cached.Stamp.known() && cached.Stamp == observation.Stamp && cached.Invalidation >= observation.Invalidation && cached.Epoch == observation.Epoch {
 		return cached, true, nil
 	}
 	if policy, ok := held.(interface{ AllowDirectoryCollection() bool }); ok && !policy.AllowDirectoryCollection() {
 		return observation, false, ErrDirectoryNamespace
 	}
+	store.recordPhysicalDirectoryRead(dir)
 	reader := directoryBatch{file: directory.entries}
 	for {
 		finish, err := store.stores.broker.Acquire(ctx, store.observationRequest(dir))
@@ -81,6 +82,7 @@ func observeExactEntry(ctx context.Context, store *indexStore, root *os.Root, di
 	}
 	defer finish()
 	name := store.root.Only
+	store.recordPhysicalDirectoryRead(dir)
 	info, err := root.Lstat(filepath.FromSlash(name))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return observation, false, err

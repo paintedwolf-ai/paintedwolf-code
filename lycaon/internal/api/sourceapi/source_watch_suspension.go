@@ -48,11 +48,25 @@ func (s *Watch) SuspendProjectWatch(ctx context.Context, projectID string) (func
 	return resume, sourcefeed.StopProjectWatch(ctx, projectID)
 }
 
-// A newly bound stream cannot account for edits made while it was absent.
-func resyncWorkspaceWatch(ctx context.Context, p *project.Project) {
+// Uncovered roots cannot account for edits made before binding; roots whose
+// physical watcher already held continuous complete coverage stay valid.
+func uncoveredWorkspaceRoots(p *project.Project) []string {
+	if p == nil {
+		return nil
+	}
+	var out []string
 	for _, root := range p.Roots {
+		if !repochange.Coverage(root.Path).Complete {
+			out = append(out, root.Path)
+		}
+	}
+	return out
+}
+
+func resyncUncoveredRoots(ctx context.Context, paths []string) {
+	for _, rootPath := range paths {
 		repochange.Notify(ctx, repochange.Event{
-			ProjectDir: root.Path, Kind: repochange.WorktreeChanged, Source: repochange.SourceWatcher,
+			ProjectDir: rootPath, Kind: repochange.WorktreeChanged, Source: repochange.SourceWatcher,
 			Changes: []repochange.WorktreeChange{{Path: ".", Kind: repochange.WorktreeChangeResync}},
 		})
 	}
