@@ -30,9 +30,9 @@ func TestCoordinatorTurnIncludesChainOnWritePath(t *testing.T) {
 	deps := assembly.AssemblyDeps{
 		Prompts:       engine,
 		AgentsMDIndex: policies.Index,
-		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error) {
+		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) (assembly.AgentsMDPolicyDelivery, error) {
 			delivery, err := policies.ResolveCurrent(ctx, sess, history)
-			return delivery.Messages, err
+			return assembly.AgentsMDPolicyDelivery{Messages: delivery.Messages, ActiveRootID: delivery.ActiveRootID}, err
 		},
 	}
 	asm := &assembly.AssemblyEngine{}
@@ -71,9 +71,9 @@ func TestCoordinatorTurnIncludesRootChainBeforeAnyPathTool(t *testing.T) {
 	asm := &assembly.AssemblyEngine{}
 	asm.SetDeps(assembly.AssemblyDeps{
 		Prompts: engine,
-		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error) {
+		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) (assembly.AgentsMDPolicyDelivery, error) {
 			delivery, err := policies.ResolveCurrent(ctx, sess, history)
-			return delivery.Messages, err
+			return assembly.AgentsMDPolicyDelivery{Messages: delivery.Messages, ActiveRootID: delivery.ActiveRootID}, err
 		},
 	})
 	sess := &api.Session{ID: "sess-root", ProjectID: "project", WorkspaceRootID: "root", WorkspacePath: root}

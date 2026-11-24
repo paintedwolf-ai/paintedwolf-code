@@ -137,7 +137,7 @@ func TestSourceChangeSnapshotNeverAppearsAsDynamicTailState(t *testing.T) {
 		eng.SetDeps(deps)
 		sess := &api.Session{ID: "source-tail", AgentType: orchestration.ProfileCoordinator}
 		eng.BeginPromptTurn(sess.ID, "")
-		_, err := testTurnContext(eng).buildTailSystemInjects(context.Background(), sess, true, inject.CoordinatorTurnFrame{}, nil, nil, eng.cache.LoadTurn(sess.ID))
+		_, err := testTurnContext(eng).buildTailSystemInjects(context.Background(), sess, true, inject.CoordinatorTurnFrame{}, nil, nil, eng.cache.LoadTurn(sess.ID), nil)
 		testutil.FailErr(t, "assemble dynamic state", err)
 		if calls != 0 {
 			t.Fatal("a turn-start source snapshot was requested as live tail state")

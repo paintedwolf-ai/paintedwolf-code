@@ -117,6 +117,9 @@ func (m *Service) ResolveCurrent(ctx context.Context, sess *api.Session, history
 	scopes = append(scopes, observedScopes(sess.ProjectID, roots, history)...)
 	scopes = append(scopes, agentpolicy.Scope{RootID: active.ID, RootPath: active.Path, Path: "."})
 	delivery, err := m.Resolve(ctx, sess, uniqueScopes(scopes))
+	if delivery.ActiveRootID == "" {
+		delivery.ActiveRootID = active.ID
+	}
 	if err != nil {
 		unavailable, diagnosticErr := m.unavailable(ctx, sess, err)
 		if diagnosticErr != nil {
