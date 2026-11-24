@@ -174,7 +174,7 @@ func TestStandingWatchHostEventsAndDispatch(t *testing.T) {
 			defer lock.Unlock()
 			return &promptresult.Result{}, runOutcome
 		},
-		nil, nil, nil,
+		nil, nil, func(context.Context, string) bool { return false },
 	)
 	b := &serveBuilder{
 		startup: startupBootstrap{ctx: t.Context()},
