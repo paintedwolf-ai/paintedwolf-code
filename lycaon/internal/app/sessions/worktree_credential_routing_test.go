@@ -175,6 +175,10 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 	if got := callStdout(fmt.Sprintf("cd %q && find src -name '*.go' && grep -rl UpdatedCommandToken src || true", siblingWT)); got != "src/item.go" {
 		t.Fatalf("unexpected cold search output: %q", got)
 	}
+	testutil.FailErr(t, "settle initial primary inventory", ledger.Inventory.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
+		ProjectID: testdbseed.DefaultProjectID,
+		Roots:     []sourceledger.RootSpec{{ID: "r1", Path: primary}},
+	}))
 	repochange.UseDebounce(t.Context(), repochange.DefaultDebounce)()
 	testutil.FailErr(t, "settle initial primary credentials", files.EnsureProject(t.Context(), testdbseed.DefaultProjectID))
 
