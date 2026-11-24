@@ -135,7 +135,7 @@ func (s *Store) RecordProcessCompletion(ctx context.Context, sessionID string, f
 			res.TransferredKick = true
 		}
 		if decision.AlreadyAdmitted {
-			_, _, _ = s.recordAlreadyAdmittedMatch(ctx, reg.WatchID, MatchInput{
+			_, _ = s.recordAlreadyAdmittedMatch(ctx, reg.WatchID, MatchInput{
 				SourceKind:   ConditionProcessDone,
 				OccurrenceID: occ,
 				Outcome:      outcome,
@@ -177,35 +177,35 @@ func (s *Store) RecordProcessCompletion(ctx context.Context, sessionID string, f
 	return res, nil
 }
 
-func (s *Store) recordAlreadyAdmittedMatch(ctx context.Context, watchID string, input MatchInput, cursorUpdates map[string]string, existingReceipt string) (RecordedMatch, bool, error) {
+func (s *Store) recordAlreadyAdmittedMatch(ctx context.Context, watchID string, input MatchInput, cursorUpdates map[string]string, existingReceipt string) (bool, error) {
 	now := s.clock.Now()
 	nowStr := now.UTC().Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return RecordedMatch{}, false, err
+		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	recorded, inserted, err := insertMatchTx(ctx, tx, watchID, input, cursorUpdates, now)
 	if err != nil || !inserted {
-		return RecordedMatch{}, false, err
+		return false, err
 	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE watch_matches SET reservation_state = 'delivered', delivery_id = NULLIF(?, '') WHERE match_id = ?`,
 		strings.TrimSpace(existingReceipt), recorded.MatchID); err != nil {
-		return RecordedMatch{}, false, err
+		return false, err
 	}
 	reg, err := loadRegistrationByIDTx(ctx, tx, watchID)
 	if err == nil {
 		_ = releaseCompletedOneShotSlotTx(ctx, tx, &reg, nowStr)
 	}
 	if err := tx.Commit(); err != nil {
-		return RecordedMatch{}, false, err
+		return false, err
 	}
 	if reg.Lifecycle.State == StateTerminal {
 		s.retireWatchRuntime(reg.WatchID)
 	}
-	return recorded, true, nil
+	return true, nil
 }
 
 func (s *Store) matchingProcessWatches(ctx context.Context, sessionID, handle string) ([]Registration, error) {
