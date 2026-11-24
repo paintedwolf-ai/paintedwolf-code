@@ -22,6 +22,7 @@ const (
 	// CacheDirName groups rebuildable caches that have their own subtree.
 	CacheDirName              = "cache"
 	DecideCacheDirName        = "decide"
+	ScannerCacheDirName       = "opengrep"
 	SourceCatalogDirName      = "sourcecatalog"
 	SessionWorktreesDirName   = "session-worktrees"
 	SessionCheckpointsDirName = "session-checkpoints"
@@ -65,6 +66,11 @@ func DecideModelsRootUnder(stateRoot string) string {
 // compiled GPU kernels, rebuilt by measuring again.
 func DecideCacheRootUnder(stateRoot string) string {
 	return filepath.Join(strings.TrimSpace(stateRoot), CacheDirName, DecideCacheDirName)
+}
+
+// ScannerCacheRootUnder returns the bundled scanner runtime extraction cache.
+func ScannerCacheRootUnder(stateRoot string) string {
+	return filepath.Join(strings.TrimSpace(stateRoot), CacheDirName, ScannerCacheDirName)
 }
 
 // ModelfeedRootUnder returns the model-feed cache directory.

@@ -11,6 +11,7 @@ import (
 
 type opengrepRunFiles struct {
 	workspace        confine.ActionWorkspace
+	cacheDir         string
 	jsonPath         string
 	logPath          string
 	settingsPath     string
@@ -20,11 +21,16 @@ type opengrepRunFiles struct {
 func (f opengrepRunFiles) dir() string { return f.workspace.Path() }
 
 func newOpengrepRunFiles() (files opengrepRunFiles, cleanup func(), err error) {
+	cache, err := confine.NewScannerCache()
+	if err != nil {
+		return opengrepRunFiles{}, nil, fmt.Errorf("opengrep cache directory: %w", err)
+	}
 	workspace, err := confine.NewActionWorkspace()
 	if err != nil {
 		return opengrepRunFiles{}, nil, fmt.Errorf("opengrep run directory: %w", err)
 	}
 	files.workspace = workspace
+	files.cacheDir = cache.Path()
 	dir := workspace.Path()
 	// The reaper removes the run directory if the host exits before this cleanup.
 	cleanup = exec.TrackScratchDir(dir)

@@ -208,7 +208,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 			HostExecution: true,
 			Network:       NetworkDirectIP,
 			Roots:         append([]string(nil), req.Roots...),
-			Workspaces:    WorkspaceRoots{SessionScratch: scratch},
+			Workspaces:    WorkspaceRoots{SessionScratch: scratch, Action: req.ActionWorkspace, ScannerCache: req.ScannerCache},
 		}, true
 	}
 	prepared, err := prepareRequest(req)
@@ -225,7 +225,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		ProjectID:                   req.ProjectID,
 		Roots:                       prepared.Roots,
 		GrantedWriteRoots:           append([]string(nil), prepared.GrantedWriteRoots...),
-		Workspaces:                  WorkspaceRoots{SessionScratch: prepared.SessionScratchRoot, Action: req.ActionWorkspace},
+		Workspaces:                  WorkspaceRoots{SessionScratch: prepared.SessionScratchRoot, Action: req.ActionWorkspace, ScannerCache: req.ScannerCache},
 		ReadRoots:                   prepared.ReadRoots,
 		ReadDenyPaths:               prepared.ReadDenyPaths,
 		View:                        prepared.View,

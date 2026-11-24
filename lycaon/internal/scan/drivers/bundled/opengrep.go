@@ -102,8 +102,6 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 		return nil, fmt.Errorf("opengrep path excludes: %w", err)
 	}
 
-	ctx, cancel := o.runtimePolicy.Context(ctx)
-	defer cancel()
 	runFiles, cleanup, err := newOpengrepRunFiles()
 	if err != nil {
 		return nil, err
@@ -114,7 +112,8 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 	if err != nil {
 		return nil, err
 	}
-	parsed, err := o.scanTargets(ctx, projectDir, bin, rulePaths, targets, excludes.Patterns(), gates.Analysis, runFiles)
+	var batchDeadline time.Time
+	parsed, err := o.scanTargetsWithDeadline(ctx, projectDir, bin, rulePaths, targets, excludes.Patterns(), gates.Analysis, runFiles, &batchDeadline)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +128,7 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 	if len(origins) > 0 {
 		embeddedFiles := runFiles
 		embeddedFiles.jsonPath = filepath.Join(runFiles.dir(), "embedded.json")
-		extra, err := o.scanTargets(ctx, projectDir, bin, rulePaths, []string{projectionDir}, nil, gates.Analysis, embeddedFiles)
+		extra, err := o.scanTargetsWithDeadline(ctx, projectDir, bin, rulePaths, []string{projectionDir}, nil, gates.Analysis, embeddedFiles, &batchDeadline)
 		if err != nil {
 			return nil, err
 		}
@@ -154,12 +153,17 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 }
 
 func (o *OpenGrepScanner) scanTargets(ctx context.Context, projectDir, bin string, rulePaths, targets, excludes []string, analysis opengrep.Analysis, runFiles opengrepRunFiles) (*scanoutput.Result, error) {
+	var batchDeadline time.Time
+	return o.scanTargetsWithDeadline(ctx, projectDir, bin, rulePaths, targets, excludes, analysis, runFiles, &batchDeadline)
+}
+
+func (o *OpenGrepScanner) scanTargetsWithDeadline(ctx context.Context, projectDir, bin string, rulePaths, targets, excludes []string, analysis opengrep.Analysis, runFiles opengrepRunFiles, batchDeadline *time.Time) (*scanoutput.Result, error) {
 	return scanOpengrepTargetBatches(ctx, targets, func(batch []string) (*scanoutput.Result, error) {
-		return o.scanTargetBatch(ctx, projectDir, bin, rulePaths, batch, excludes, analysis, runFiles)
+		return o.scanTargetBatch(ctx, projectDir, bin, rulePaths, batch, excludes, analysis, runFiles, batchDeadline)
 	})
 }
 
-func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin string, rulePaths, targets, excludes []string, analysis opengrep.Analysis, runFiles opengrepRunFiles) (*scanoutput.Result, error) {
+func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin string, rulePaths, targets, excludes []string, analysis opengrep.Analysis, runFiles opengrepRunFiles, batchDeadline *time.Time) (*scanoutput.Result, error) {
 	targets, err := opengrepRelativeTargets(projectDir, targets)
 	if err != nil {
 		return nil, err
@@ -176,16 +180,38 @@ func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin s
 	if err := os.Remove(runFiles.jsonPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("opengrep clear prior batch output: %w", err)
 	}
+	var timeout time.Duration
+	noTimeout := o.runtimePolicy.HardLimitSec == 0
+	if !noTimeout {
+		limit := time.Duration(o.runtimePolicy.HardLimitSec) * time.Second
+		if batchDeadline == nil || batchDeadline.IsZero() {
+			timeout = limit
+			if batchDeadline != nil {
+				*batchDeadline = time.Now().Add(limit)
+			}
+		} else {
+			timeout = time.Until(*batchDeadline)
+			if timeout <= 0 {
+				return nil, &exec.TimeoutError{
+					Elapsed: limit, Deadline: limit, Cause: context.DeadlineExceeded, CommandDeadline: true,
+				}
+			}
+		}
+	}
 	output, console, exitCode, err := exec.RunSeparate(ctx, bin, args, exec.ExecOpts{
 		Launch:          launch,
 		Dir:             projectDir,
-		Timeout:         time.Duration(o.runtimePolicy.HardLimitSec) * time.Second,
-		NoTimeout:       o.runtimePolicy.HardLimitSec == 0,
+		Timeout:         timeout,
+		NoTimeout:       noTimeout,
 		MaxOutputBytes:  exec.DefaultMaxOutputBytes,
 		Env:             opengrepSubprocessEnv(runFiles),
 		ProcessPriority: o.processPriority,
 	})
 	console = append(output, console...)
+	var cmdTimeout *exec.TimeoutError
+	if errors.As(err, &cmdTimeout) && cmdTimeout.CommandDeadline {
+		return nil, fmt.Errorf("opengrep scan (exit %d): %w%s", exitCode, err, o.consoleTail(console))
+	}
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("opengrep scan interrupted: %w", ctx.Err())
 	}
@@ -228,13 +254,17 @@ func (o *OpenGrepScanner) consoleTail(console []byte) string {
 	}, console)
 }
 
-// CLI state stays inside the jail output root.
+// CLI state stays inside the jail output root, with runtime extraction cached separately.
 func opengrepSubprocessEnv(files opengrepRunFiles) []string {
 	out := append([]string(nil), os.Environ()...)
+	cacheDir := files.cacheDir
+	if cacheDir == "" {
+		cacheDir = files.dir()
+	}
 	pins := map[string]string{
 		"HOME":                       files.dir(),
 		"XDG_CONFIG_HOME":            files.dir(),
-		"XDG_CACHE_HOME":             files.dir(),
+		"XDG_CACHE_HOME":             cacheDir,
 		"XDG_DATA_HOME":              files.dir(),
 		"XDG_STATE_HOME":             files.dir(),
 		"TMPDIR":                     files.dir(),

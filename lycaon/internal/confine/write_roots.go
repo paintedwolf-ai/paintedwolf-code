@@ -24,10 +24,11 @@ func osDefaultWriteRoots() []string {
 	return append(standardCacheDataRoots(), platformUserCache())
 }
 
-// WorkspaceRoots separates session storage from a single invocation’s private stage.
+// WorkspaceRoots separates session storage from invocation staging and scanner cache.
 type WorkspaceRoots struct {
 	SessionScratch string
 	Action         ActionWorkspace `json:"-"`
+	ScannerCache   ScannerCache    `json:"-"`
 }
 
 // ActionWorkspace holds a private working directory for one tool invocation.
@@ -48,9 +49,26 @@ func NewActionWorkspace() (ActionWorkspace, error) {
 
 func (w ActionWorkspace) Path() string { return w.path }
 
+// ScannerCache holds the host-managed runtime cache for bundled scanners.
+type ScannerCache struct{ path string }
+
+func NewScannerCache() (ScannerCache, error) {
+	root, err := configdir.UserConfigDir()
+	if err != nil {
+		return ScannerCache{}, err
+	}
+	path := enginepaths.ScannerCacheRootUnder(root)
+	if err := os.MkdirAll(path, 0700); err != nil {
+		return ScannerCache{}, err
+	}
+	return ScannerCache{path: path}, nil
+}
+
+func (c ScannerCache) Path() string { return c.path }
+
 func (c Confinement) privateWorkRoots() []string {
 	var paths []string
-	for _, dir := range []string{c.Workspaces.SessionScratch, c.Workspaces.Action.Path()} {
+	for _, dir := range []string{c.Workspaces.SessionScratch, c.Workspaces.Action.Path(), c.Workspaces.ScannerCache.Path()} {
 		if dir != "" {
 			paths = append(paths, fspath.CanonicalPath(dir))
 		}
@@ -59,9 +77,11 @@ func (c Confinement) privateWorkRoots() []string {
 }
 
 func (c Confinement) writeRoots() ([]string, error) {
-	granted := c.GrantedWriteRoots
-	if c.Workspaces.Action.Path() != "" {
-		granted = append(slices.Clone(granted), c.Workspaces.Action.Path())
+	granted := slices.Clone(c.GrantedWriteRoots)
+	for _, dir := range []string{c.Workspaces.Action.Path(), c.Workspaces.ScannerCache.Path()} {
+		if dir != "" {
+			granted = append(granted, dir)
+		}
 	}
 	return WriteRootsForBoundary(c.ProjectID, c.Roots, granted, c.Workspaces.SessionScratch)
 }

@@ -23,6 +23,9 @@ func TestOpengrepTempJSONPathUsesPrivateDir(t *testing.T) {
 	if parent := filepath.Dir(files.dir()); parent != enginepaths.ActionWorkRootUnder(config) {
 		t.Fatalf("scanner workspace parent = %q, want private action storage", parent)
 	}
+	if files.cacheDir != enginepaths.ScannerCacheRootUnder(config) {
+		t.Fatalf("scanner cacheDir = %q, want %q", files.cacheDir, enginepaths.ScannerCacheRootUnder(config))
+	}
 	st, err := os.Stat(files.jsonPath)
 	testutil.FailErr(t, "stat temp json", err)
 	if st.Mode().Perm() != 0o600 {
@@ -148,7 +151,7 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 	want := map[string]string{
 		"HOME":                       files.dir(),
 		"XDG_CONFIG_HOME":            files.dir(),
-		"XDG_CACHE_HOME":             files.dir(),
+		"XDG_CACHE_HOME":             files.cacheDir,
 		"XDG_DATA_HOME":              files.dir(),
 		"XDG_STATE_HOME":             files.dir(),
 		"TMPDIR":                     files.dir(),
