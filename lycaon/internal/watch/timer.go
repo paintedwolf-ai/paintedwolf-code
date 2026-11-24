@@ -216,7 +216,7 @@ func watchTimerAnchor(reg Registration, fallback time.Time) time.Time {
 	return fallback.UTC()
 }
 
-func (s *Store) scheduleWatchTimer(reg Registration) {
+func scheduleWatchTimer(s *Store, reg Registration) {
 	if s == nil || reg.Lifecycle.State != StateLive {
 		return
 	}
@@ -323,7 +323,7 @@ func fireWatchTimer(ctx context.Context, s *Store, watchID string, now time.Time
 	refreshed, err := loadRegistrationByIDTx(ctx, rtx, watchID)
 	_ = rtx.Rollback()
 	if err == nil && refreshed.Lifecycle.State == StateLive {
-		s.scheduleWatchTimer(refreshed)
+		scheduleWatchTimer(s, refreshed)
 	}
 	return nil
 }

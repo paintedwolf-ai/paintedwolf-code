@@ -43,7 +43,8 @@ func newWatchToolsHarness(t *testing.T, standingExists map[string]bool) *watchTo
 	testutil.FailErr(t, "NewCatalogRegistry", err)
 
 	rootDir := t.TempDir()
-	testutil.FailErr(t, "mkdir .git", os.MkdirAll(filepath.Join(rootDir, ".git"), 0o755))
+	testutil.FailErr(t, "mkdir .git", os.MkdirAll(filepath.Join(rootDir, ".git", "refs", "heads"), 0o755))
+	testutil.FailErr(t, "write .git/HEAD", os.WriteFile(filepath.Join(rootDir, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644))
 
 	testutil.FailErr(t, "RegisterWatchTools", watch.RegisterWatchTools(reg, watch.ToolDeps{
 		Store: store,

@@ -89,9 +89,9 @@ func (s *Store) SelectOrPark(ctx context.Context, req SelectRequest) (SelectResu
 		}
 		for _, reg := range regs {
 			if reg.Lifecycle.State == StateTerminal {
-				s.retireWatchRuntime(reg.WatchID)
+				retireWatchRuntime(s, reg.WatchID)
 			}
-			if allowed, reason := s.checkWatchAuthority(ctx, reg); !allowed {
+			if allowed, reason := checkWatchAuthority(s, ctx, reg); !allowed {
 				for idx := range immediate.Matches {
 					if immediate.Matches[idx].WatchID == reg.WatchID {
 						immediate.Matches[idx] = redactRecordedMatch(immediate.Matches[idx], reg.WatchID, reason)

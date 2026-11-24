@@ -155,10 +155,10 @@ func expireWatch(ctx context.Context, s *Store, watchID string, now time.Time) e
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.retireWatchRuntime(reg.WatchID)
+	retireWatchRuntime(s, reg.WatchID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
-		s.notifyLeaseWake(ctx, w.lease, w.winner)
+		notifyLeaseWake(s, ctx, w.lease, w.winner)
 	}
 	return nil
 }
@@ -204,13 +204,13 @@ func (s *Store) RetireOwner(ctx context.Context, owner Owner) error {
 		return err
 	}
 	for _, wID := range retiredIDs {
-		s.retireWatchRuntime(wID)
+		retireWatchRuntime(s, wID)
 	}
 	stopped, _ := s.IsSessionStopped(ctx, owner.SessionID)
 	for _, w := range wokeAll {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
 		if !stopped {
-			s.notifyLeaseWake(ctx, w.lease, w.winner)
+			notifyLeaseWake(s, ctx, w.lease, w.winner)
 		}
 	}
 	return nil
@@ -274,11 +274,11 @@ func settleDueLease(ctx context.Context, s *Store, leaseID string, now time.Time
 			}
 			for _, r := range regs {
 				if r.Lifecycle.State == StateTerminal {
-					s.retireWatchRuntime(r.WatchID)
+					retireWatchRuntime(s, r.WatchID)
 				}
 			}
 			if n, _ := result.RowsAffected(); n == 1 {
-				s.notifyLeaseWake(ctx, awaitstore.Lease{ID: leaseID, SessionID: sessionID, WorkerJobID: workerJobID, ProjectID: projectID}, res.Winner)
+				notifyLeaseWake(s, ctx, awaitstore.Lease{ID: leaseID, SessionID: sessionID, WorkerJobID: workerJobID, ProjectID: projectID}, res.Winner)
 			}
 			return nil
 		}
@@ -305,7 +305,7 @@ func settleDueLease(ctx context.Context, s *Store, leaseID string, now time.Time
 			return err
 		}
 		if n, _ := result.RowsAffected(); n == 1 {
-			s.notifyLeaseWake(ctx, awaitstore.Lease{ID: leaseID, SessionID: sessionID, WorkerJobID: workerJobID, ProjectID: projectID}, timeoutWinner)
+			notifyLeaseWake(s, ctx, awaitstore.Lease{ID: leaseID, SessionID: sessionID, WorkerJobID: workerJobID, ProjectID: projectID}, timeoutWinner)
 		}
 		return nil
 	}

@@ -85,7 +85,7 @@ func (s *Store) SetProcessOutputLookup(fn ProcessOutputLookup) {
 	s.mu.Unlock()
 }
 
-func (s *Store) lookupProcessOutput(ctx context.Context, sessionID, handle string, since int64) (bgprocess.ProcessOutputState, bool, error) {
+func lookupProcessOutput(s *Store, ctx context.Context, sessionID, handle string, since int64) (bgprocess.ProcessOutputState, bool, error) {
 	s.mu.RLock()
 	fn := s.processOutputLookup
 	s.mu.RUnlock()
@@ -114,7 +114,7 @@ func (s *Store) SetAuthorityChecker(fn AuthorityChecker) {
 	s.mu.Unlock()
 }
 
-func (s *Store) lookupCoordinatorState(ctx context.Context, sessionID string) (WorkerWatchStateSnapshot, bool, error) {
+func lookupCoordinatorState(s *Store, ctx context.Context, sessionID string) (WorkerWatchStateSnapshot, bool, error) {
 	s.mu.RLock()
 	fn := s.coordinatorLookup
 	s.mu.RUnlock()
@@ -125,7 +125,7 @@ func (s *Store) lookupCoordinatorState(ctx context.Context, sessionID string) (W
 	return snap, true, err
 }
 
-func (s *Store) checkWatchAuthority(ctx context.Context, reg Registration) (bool, string) {
+func checkWatchAuthority(s *Store, ctx context.Context, reg Registration) (bool, string) {
 	s.mu.RLock()
 	fn := s.authorityChecker
 	s.mu.RUnlock()
@@ -135,7 +135,7 @@ func (s *Store) checkWatchAuthority(ctx context.Context, reg Registration) (bool
 	return fn(ctx, reg)
 }
 
-func (s *Store) retireWatchRuntime(watchID string) {
+func retireWatchRuntime(s *Store, watchID string) {
 	if s == nil || watchID == "" {
 		return
 	}
@@ -186,7 +186,7 @@ func (s *Store) SetProcessObserver(fn func(sessionID, handle string)) {
 	s.mu.Unlock()
 }
 
-func (s *Store) notifyProcessKickTransfer(sessionID, handle string) {
+func notifyProcessKickTransfer(s *Store, sessionID, handle string) {
 	s.mu.RLock()
 	fn := s.onProcessKickTransfer
 	s.mu.RUnlock()
@@ -195,7 +195,7 @@ func (s *Store) notifyProcessKickTransfer(sessionID, handle string) {
 	}
 }
 
-func (s *Store) notifyProcessObserve(sessionID, handle string) {
+func notifyProcessObserve(s *Store, sessionID, handle string) {
 	s.mu.RLock()
 	fn := s.onProcessObserve
 	s.mu.RUnlock()
@@ -231,7 +231,7 @@ func (s *Store) SetTreeStoppingFunc(fn func(sessionID string) bool) {
 	s.mu.Unlock()
 }
 
-func (s *Store) isTreeStopping(sessionID string) bool {
+func isTreeStopping(s *Store, sessionID string) bool {
 	if s == nil || strings.TrimSpace(sessionID) == "" {
 		return false
 	}
@@ -254,7 +254,7 @@ func (s *Store) TriggerAmbientWake(ctx context.Context, sessionID string) (bool,
 	return TryScheduleAmbientWake(ctx, s, sessionID, gate)
 }
 
-func (s *Store) lookupProcess(ctx context.Context, sessionID, handle string) (ProcessCompletionFact, bool, error) {
+func lookupProcess(s *Store, ctx context.Context, sessionID, handle string) (ProcessCompletionFact, bool, error) {
 	s.mu.RLock()
 	fn := s.processLookup
 	s.mu.RUnlock()
@@ -264,7 +264,7 @@ func (s *Store) lookupProcess(ctx context.Context, sessionID, handle string) (Pr
 	return fn(ctx, sessionID, handle)
 }
 
-func (s *Store) notifyLeaseWake(ctx context.Context, lease awaitstore.Lease, winner awaitstore.Condition) {
+func notifyLeaseWake(s *Store, ctx context.Context, lease awaitstore.Lease, winner awaitstore.Condition) {
 	s.mu.RLock()
 	fn := s.onLeaseWake
 	s.mu.RUnlock()

@@ -31,7 +31,7 @@ func collectInitialProcessOutputMatches(ctx context.Context, s *Store, req *Regi
 		}
 		key := processOutputCursorKey(handle)
 		if cond.Cursor == nil {
-			state, ok, err := s.lookupProcessOutput(ctx, req.Owner.SessionID, handle, 0)
+			state, ok, err := lookupProcessOutput(s, ctx, req.Owner.SessionID, handle, 0)
 			if err != nil {
 				return nil, err
 			}
@@ -45,7 +45,7 @@ func collectInitialProcessOutputMatches(ctx context.Context, s *Store, req *Regi
 
 		since := max(0, *cond.Cursor)
 		req.Cursors[key] = strconv.FormatInt(since, 10)
-		state, ok, err := s.lookupProcessOutput(ctx, req.Owner.SessionID, handle, since)
+		state, ok, err := lookupProcessOutput(s, ctx, req.Owner.SessionID, handle, since)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +129,7 @@ func (s *Store) NotifyProcessOutput(ctx context.Context, sessionID, handle strin
 	for _, reg := range regs {
 		key := processOutputCursorKey(handle)
 		since, _ := strconv.ParseInt(reg.Cursors[key], 10, 64)
-		state, ok, err := s.lookupProcessOutput(ctx, sessionID, handle, since)
+		state, ok, err := lookupProcessOutput(s, ctx, sessionID, handle, since)
 		if err != nil || !ok {
 			continue
 		}
@@ -140,7 +140,7 @@ func (s *Store) NotifyProcessOutput(ctx context.Context, sessionID, handle strin
 			continue
 		}
 		if state.HasProcessBytes && state.ProcessEndCursor > since {
-			coalesced, cErr := s.coalescePendingProcessOutputMatch(ctx, reg.WatchID, handle, state)
+			coalesced, cErr := coalescePendingProcessOutputMatch(s, ctx, reg.WatchID, handle, state)
 			if cErr != nil {
 				return cErr
 			}
@@ -161,13 +161,13 @@ func (s *Store) NotifyProcessOutput(ctx context.Context, sessionID, handle strin
 			continue
 		}
 		if !state.Running && state.HasExit && reg.Lifecycle.State == StateLive && len(reg.Conditions) == 1 {
-			_ = s.completeSilentExitedOutputWatch(ctx, reg.WatchID)
+			_ = completeSilentExitedOutputWatch(s, ctx, reg.WatchID)
 		}
 	}
 	return nil
 }
 
-func (s *Store) coalescePendingProcessOutputMatch(ctx context.Context, watchID, handle string, state bgprocess.ProcessOutputState) (bool, error) {
+func coalescePendingProcessOutputMatch(s *Store, ctx context.Context, watchID, handle string, state bgprocess.ProcessOutputState) (bool, error) {
 	nowStr := s.clock.Now().UTC().Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -222,7 +222,7 @@ func (s *Store) coalescePendingProcessOutputMatch(ctx context.Context, watchID, 
 	return true, nil
 }
 
-func (s *Store) completeSilentExitedOutputWatch(ctx context.Context, watchID string) error {
+func completeSilentExitedOutputWatch(s *Store, ctx context.Context, watchID string) error {
 	now := s.clock.Now()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -244,10 +244,10 @@ func (s *Store) completeSilentExitedOutputWatch(ctx context.Context, watchID str
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.retireWatchRuntime(watchID)
+	retireWatchRuntime(s, watchID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
-		s.notifyLeaseWake(ctx, w.lease, w.winner)
+		notifyLeaseWake(s, ctx, w.lease, w.winner)
 	}
 	return nil
 }

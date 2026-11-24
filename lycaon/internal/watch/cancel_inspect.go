@@ -63,13 +63,13 @@ func (s *Store) Cancel(ctx context.Context, owner Owner, handle string) (CancelR
 	if err := tx.Commit(); err != nil {
 		return CancelReceipt{}, err
 	}
-	s.retireWatchRuntime(reg.WatchID)
+	retireWatchRuntime(s, reg.WatchID)
 	_ = WithdrawAmbientWakeIfNoDemand(ctx, s, reg.Owner.SessionID)
 	stopped, _ := s.IsSessionStopped(ctx, reg.Owner.SessionID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
 		if !stopped {
-			s.notifyLeaseWake(ctx, w.lease, w.winner)
+			notifyLeaseWake(s, ctx, w.lease, w.winner)
 		}
 	}
 	return receipt, nil
@@ -102,7 +102,7 @@ func (s *Store) Inspect(ctx context.Context, owner Owner, handle string) (Inspec
 	if err != nil {
 		return InspectView{}, err
 	}
-	if allowed, reason := s.checkWatchAuthority(ctx, reg); !allowed && latest != nil {
+	if allowed, reason := checkWatchAuthority(s, ctx, reg); !allowed && latest != nil {
 		redacted := redactRecordedMatch(*latest, reg.WatchID, reason)
 		latest = &redacted
 		if redacted.RetainedRef != "" && !containsHandle(refs, redacted.RetainedRef) {
@@ -211,10 +211,10 @@ func (s *Store) MarkSourceLost(ctx context.Context, watchID string) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.retireWatchRuntime(reg.WatchID)
+	retireWatchRuntime(s, reg.WatchID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
-		s.notifyLeaseWake(ctx, w.lease, w.winner)
+		notifyLeaseWake(s, ctx, w.lease, w.winner)
 	}
 	return nil
 }
@@ -251,8 +251,8 @@ func (s *Store) AdvanceDue(ctx context.Context) error {
 		}
 	}
 	if len(dueProbeGroups) > 0 {
-		s.enqueueDueProbeGroups(dueProbeGroups)
-		if err := s.stepSamplerRoundRobin(ctx, now); err != nil {
+		enqueueDueProbeGroups(s, dueProbeGroups)
+		if err := stepSamplerRoundRobin(s, ctx, now); err != nil {
 			return err
 		}
 	}
@@ -319,8 +319,8 @@ func (s *Store) Recover(ctx context.Context) error {
 			}
 		}
 		s.heap.Upsert(KindWatchExpiry, reg.WatchID, reg.Lifecycle.ExpiresAt)
-		s.scheduleWatchTimer(reg)
-		s.subscribeWatchSampler(reg, now)
+		scheduleWatchTimer(s, reg)
+		subscribeWatchSampler(s, reg, now)
 	}
 
 	leaseRows, err := s.db.QueryContext(ctx, `SELECT wl.id, COALESCE(wl.deadline_at, ''), COALESCE(MIN(wws.expires_at), '')

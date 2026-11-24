@@ -109,9 +109,21 @@ func TestSW07ProcessOutputCursorCatchupBurstCoalescingHostTrailerAndTruncation(t
 		t.Fatalf("expected truncated=true after ring buffer wrap: %+v", catchEv)
 	}
 
-	// Complete job1 and start two more completed jobs to evict h1 (MaxRecent=1) -> wOut settles with source_lost.
+	// Complete job1 with no new output -> live wOut settles cleanly as completed without an empty match.
 	close(releaseJob1)
 	_, _, _ = reg.Lifecycle.Wait(t.Context(), owner.SessionID, h1)
+	testutil.WaitFor(t, "exited handle completes live output watch", func() bool {
+		v, iErr := store.Inspect(t.Context(), owner, wOut.Handle)
+		return iErr == nil && v.State == StateTerminal && v.Outcome == OutcomeCompleted
+	})
+
+	// Repeating catch-up watch on retained h1 settles with source_lost once MaxRecent=1 evicts h1.
+	wEvict, err := store.Register(t.Context(), RegisterRequest{
+		Owner:      owner,
+		Repeat:     true,
+		Conditions: []awaitstore.Condition{{Kind: "process_output", Handle: h1, Cursor: &zero}},
+	})
+	testutil.FailErr(t, "register eviction watch on retained handle", err)
 	for range 2 {
 		hTmp, sErr := reg.StartProgram(t.Context(), bgprocess.ProgramJobSpec{
 			SessionID: owner.SessionID, ProjectID: owner.ProjectID, OriginTool: "command", CommandLine: "noop",
@@ -123,7 +135,7 @@ func TestSW07ProcessOutputCursorCatchupBurstCoalescingHostTrailerAndTruncation(t
 		_, _, _ = reg.Lifecycle.Wait(t.Context(), owner.SessionID, hTmp)
 	}
 	testutil.WaitFor(t, "evicted handle marks watch source_lost", func() bool {
-		v, iErr := store.Inspect(t.Context(), owner, wOut.Handle)
+		v, iErr := store.Inspect(t.Context(), owner, wEvict.Handle)
 		return iErr == nil && v.State == StateTerminal && v.Outcome == OutcomeSourceLost
 	})
 }
@@ -263,11 +275,17 @@ func TestSW07FileChangeOwnExclusionActorsSymlinkBudgetAndGitRef(t *testing.T) {
 
 	batchDef, hasDef, err := ReserveCollectBatch(t.Context(), store, owner, "req:file:actors")
 	testutil.FailErr(t, "collect wDefault matches", err)
-	if !hasDef || len(batchDef.Matches) != 5 {
-		t.Fatalf("expected 5 matches (bundler, human, overlay, raw create, rename), got %d: %+v", len(batchDef.Matches), batchDef.Matches)
+	defMatches := batchDef.Matches[:0:0]
+	for _, m := range batchDef.Matches {
+		if m.Handle == wDefault.Handle {
+			defMatches = append(defMatches, m)
+		}
+	}
+	if !hasDef || len(defMatches) != 5 {
+		t.Fatalf("expected 5 matches (bundler, human, overlay, raw create, rename) on wDefault, got %d: %+v", len(defMatches), defMatches)
 	}
 	joinedEv := ""
-	for _, m := range batchDef.Matches {
+	for _, m := range defMatches {
 		joinedEv += string(m.Evidence) + "\n"
 	}
 	for _, want := range []string{effBundler, effHuman, effOverlay, `"actor_class":"unattributed"`, `"from_path":"raw.ts"`, `"path":"moved.ts"`} {

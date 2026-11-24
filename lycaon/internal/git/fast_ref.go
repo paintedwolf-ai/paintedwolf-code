@@ -3,6 +3,7 @@ package git
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,7 +41,7 @@ func ResolveFullRef(projectDir, ref string) (string, bool, error) {
 	}
 	oid, err := resolveRef(repo, ref)
 	if err != nil {
-		if strings.Contains(err.Error(), "ref not found") || os.IsNotExist(err) {
+		if strings.Contains(err.Error(), "ref not found") || errors.Is(err, os.ErrNotExist) {
 			return "", false, nil
 		}
 		return "", false, err

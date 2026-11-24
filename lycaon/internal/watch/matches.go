@@ -52,7 +52,7 @@ func (s *Store) RecordMatch(ctx context.Context, watchID string, input MatchInpu
 	if err != nil {
 		return RecordedMatch{}, false, err
 	}
-	if s.isTreeStopping(preReg.Owner.SessionID) {
+	if isTreeStopping(s, preReg.Owner.SessionID) {
 		return RecordedMatch{}, false, nil
 	}
 	if stopped, err := isStoppedTx(ctx, tx, preReg.Owner.SessionID); err != nil || stopped {
@@ -78,11 +78,11 @@ func (s *Store) RecordMatch(ctx context.Context, watchID string, input MatchInpu
 		return RecordedMatch{}, false, err
 	}
 	if reg.Lifecycle.State == StateTerminal {
-		s.retireWatchRuntime(reg.WatchID)
+		retireWatchRuntime(s, reg.WatchID)
 	}
 	for _, woke := range wokeLeases {
 		s.heap.Remove(KindWaitDeadline, woke.lease.ID)
-		s.notifyLeaseWake(ctx, woke.lease, woke.winner)
+		notifyLeaseWake(s, ctx, woke.lease, woke.winner)
 	}
 	if len(wokeLeases) == 0 && reg.Owner.Kind == OwnerSession && reg.Lifecycle.Delivery == DeliveryWake {
 		_, _ = s.TriggerAmbientWake(ctx, reg.Owner.SessionID)
@@ -113,7 +113,7 @@ func (s *Store) RecordProcessCompletion(ctx context.Context, sessionID string, f
 	if sessionID == "" || handle == "" {
 		return ProcessPresentationOutcome{}, nil
 	}
-	targets, err := s.matchingProcessWatches(ctx, sessionID, handle)
+	targets, err := matchingProcessWatches(s, ctx, sessionID, handle)
 	if err != nil || len(targets) == 0 {
 		return ProcessPresentationOutcome{}, err
 	}
@@ -135,7 +135,7 @@ func (s *Store) RecordProcessCompletion(ctx context.Context, sessionID string, f
 			res.TransferredKick = true
 		}
 		if decision.AlreadyAdmitted {
-			_, _ = s.recordAlreadyAdmittedMatch(ctx, reg.WatchID, MatchInput{
+			_, _ = recordAlreadyAdmittedMatch(s, ctx, reg.WatchID, MatchInput{
 				SourceKind:   ConditionProcessDone,
 				OccurrenceID: occ,
 				Outcome:      outcome,
@@ -177,7 +177,7 @@ func (s *Store) RecordProcessCompletion(ctx context.Context, sessionID string, f
 	return res, nil
 }
 
-func (s *Store) recordAlreadyAdmittedMatch(ctx context.Context, watchID string, input MatchInput, cursorUpdates map[string]string, existingReceipt string) (bool, error) {
+func recordAlreadyAdmittedMatch(s *Store, ctx context.Context, watchID string, input MatchInput, cursorUpdates map[string]string, existingReceipt string) (bool, error) {
 	now := s.clock.Now()
 	nowStr := now.UTC().Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -203,12 +203,12 @@ func (s *Store) recordAlreadyAdmittedMatch(ctx context.Context, watchID string, 
 		return false, err
 	}
 	if reg.Lifecycle.State == StateTerminal {
-		s.retireWatchRuntime(reg.WatchID)
+		retireWatchRuntime(s, reg.WatchID)
 	}
 	return true, nil
 }
 
-func (s *Store) matchingProcessWatches(ctx context.Context, sessionID, handle string) ([]Registration, error) {
+func matchingProcessWatches(s *Store, ctx context.Context, sessionID, handle string) ([]Registration, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+registrationColumns+` FROM watch_registrations WHERE session_id = ? AND state = 'live' ORDER BY seq ASC`, sessionID)
 	if err != nil {

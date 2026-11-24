@@ -23,7 +23,7 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	if err != nil {
 		return RegisterReceipt{}, err
 	}
-	if s.isTreeStopping(normalized.Owner.SessionID) {
+	if isTreeStopping(s, normalized.Owner.SessionID) {
 		return RegisterReceipt{}, ErrSessionStopped
 	}
 	initialMatches, err := collectInitialProcessMatches(ctx, s, normalized)
@@ -86,17 +86,17 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 			receipt.State = string(StateTerminal)
 		} else if reg.Lifecycle.State == StateLive {
 			s.heap.Upsert(KindWatchExpiry, reg.WatchID, reg.Lifecycle.ExpiresAt)
-			s.scheduleWatchTimer(reg)
-			s.subscribeWatchSampler(reg, now)
+			scheduleWatchTimer(s, reg)
+			subscribeWatchSampler(s, reg, now)
 		}
 	}
 	if !replayed && len(initialMatches) > 0 {
-		receipt = s.reconcileInitialProcessClaims(ctx, reg, receipt, initialMatches)
+		receipt = reconcileInitialProcessClaims(s, ctx, reg, receipt, initialMatches)
 	}
 	return receipt, nil
 }
 
-func (s *Store) reconcileInitialProcessClaims(ctx context.Context, reg Registration, receipt RegisterReceipt, initial []MatchInput) RegisterReceipt {
+func reconcileInitialProcessClaims(s *Store, ctx context.Context, reg Registration, receipt RegisterReceipt, initial []MatchInput) RegisterReceipt {
 	for _, m := range initial {
 		if m.SourceKind != ConditionProcessDone {
 			continue
@@ -107,10 +107,10 @@ func (s *Store) reconcileInitialProcessClaims(ctx context.Context, reg Registrat
 			continue
 		}
 		if decision.TransferredKick && handle != "" {
-			s.notifyProcessKickTransfer(reg.Owner.SessionID, handle)
+			notifyProcessKickTransfer(s, reg.Owner.SessionID, handle)
 		}
 		if handle != "" {
-			s.notifyProcessObserve(reg.Owner.SessionID, handle)
+			notifyProcessObserve(s, reg.Owner.SessionID, handle)
 		}
 		if decision.AlreadyAdmitted && decision.ExistingReceiptID != "" {
 			_, _ = s.db.ExecContext(ctx, `UPDATE watch_matches
@@ -247,7 +247,7 @@ func collectInitialProcessMatches(ctx context.Context, s *Store, req RegisterReq
 				continue
 			}
 			seen[handle] = true
-			fact, done, err := s.lookupProcess(ctx, req.Owner.SessionID, handle)
+			fact, done, err := lookupProcess(s, ctx, req.Owner.SessionID, handle)
 			if err != nil {
 				return nil, err
 			}
