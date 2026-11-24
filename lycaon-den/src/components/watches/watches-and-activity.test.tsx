@@ -875,13 +875,20 @@ describe("SW10 watches, proposals, transcript controls, and Activity", () => {
         replaces: liveStanding.watch_id,
       },
     });
+    const proposalDismiss = makeAgentWatch({
+      handle: "watch-prop-dismiss",
+      standing_draft: {
+        name: "Dismissable check",
+        prompt: "Check later",
+      },
+    });
 
     const liveCancelWatch = vi.fn(async (_sid: string, handle: string) => {
       if (handle === "watch-keepable") {
         throw new Error("cancel failed");
       }
       return {
-        watch: { ...proposalReplace, state: "terminal" as const },
+        watch: { ...proposalDismiss, handle, state: "terminal" as const },
         receipt: {
           receipt_id: "rec-dismiss",
           handle,
@@ -904,6 +911,7 @@ describe("SW10 watches, proposals, transcript controls, and Activity", () => {
     const liveClient = stubClient({
       cancelWatch: liveCancelWatch,
       keepWatch: liveKeepWatch,
+      listWatches: vi.fn(async () => ({ watches: [] })),
     });
     const onStopProc = vi.fn();
     const onOpenChat = vi.fn();
@@ -932,7 +940,12 @@ describe("SW10 watches, proposals, transcript controls, and Activity", () => {
             ],
           },
         ]}
-        liveAgentWatches={[derivedWatch, plainKeepable, proposalReplace]}
+        liveAgentWatches={[
+          derivedWatch,
+          plainKeepable,
+          proposalReplace,
+          proposalDismiss,
+        ]}
         activeRunBySession={
           new Map([["sess-run", { watch: liveStanding, run: activeRun }]])
         }
@@ -988,10 +1001,10 @@ describe("SW10 watches, proposals, transcript controls, and Activity", () => {
     });
 
     fireEvent.click(
-      screen.getByTestId("activity-proposal-dismiss-watch-prop-live"),
+      screen.getByTestId("activity-proposal-dismiss-watch-prop-dismiss"),
     );
     await waitFor(() => {
-      expect(liveCancelWatch).toHaveBeenCalledWith(SESS_ID, "watch-prop-live");
+      expect(liveCancelWatch).toHaveBeenCalledWith(SESS_ID, "watch-prop-dismiss");
     });
   });
 });
