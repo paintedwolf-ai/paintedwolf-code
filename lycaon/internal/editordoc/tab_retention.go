@@ -159,6 +159,9 @@ func (p *PresenceService) closePresence() {
 func (p *PresenceService) withParticipants(d *Document) *Document {
 	s := p.s
 	out := *d
+	if out.WorkspaceID == "" {
+		s.projectWorkspacePresentation(context.Background(), &out)
+	}
 	out.Participants = nil
 	s.presenceMu.Lock()
 	for _, participant := range s.participants[d.ID] {

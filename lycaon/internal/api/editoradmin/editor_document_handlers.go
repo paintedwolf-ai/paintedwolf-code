@@ -328,7 +328,7 @@ func (s *Handler) HandleObserveEditorDocument(w http.ResponseWriter, r *http.Req
 		return
 	}
 	defer release()
-	p, ok := s.editorProject(w, r)
+	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
 	}
@@ -337,7 +337,7 @@ func (s *Handler) HandleObserveEditorDocument(w http.ResponseWriter, r *http.Req
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	d, err := s.EditorDocuments.ObserveDisk(r.Context(), p, chi.URLParam(r, "document_id"), req.ClientID)
+	d, err := s.EditorDocuments.ObserveByID(r.Context(), p.ID, chi.URLParam(r, "document_id"), req.ClientID)
 	if err != nil {
 		s.writeEditorDocumentError(w, r, err)
 		return

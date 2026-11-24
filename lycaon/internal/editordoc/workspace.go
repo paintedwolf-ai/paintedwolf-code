@@ -83,6 +83,39 @@ func (l *LifecycleService) Workspace(ctx context.Context, p *project.Project, id
 	return resolved, nil
 }
 
+// ObserveByID reconciles an addressed document against its live checkout, or marks its checkout unavailable when removed.
+func (l *LifecycleService) ObserveByID(ctx context.Context, projectID, documentID, clientID string) (*Document, error) {
+	s := l.s
+	d, err := s.checked(ctx, documentID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	liveP, branchErr := s.projectBranch(ctx, projectID, d.BranchID)
+	if branchErr == nil {
+		return l.ObserveDisk(ctx, liveP, documentID, clientID)
+	}
+	if _, isWT := d.BranchID.WorktreeID(); !isWT || !isCheckoutGone(branchErr) {
+		return nil, branchErr
+	}
+	s.ops.RLock()
+	defer s.ops.RUnlock()
+	unlock := s.docLocks.lock(documentLockKey(documentID))
+	defer unlock()
+	current, err := s.checked(ctx, documentID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.markAbsent(ctx, current); err != nil {
+		return nil, err
+	}
+	if err := s.replicaProjection(ctx, current, nil); err != nil {
+		return nil, err
+	}
+	current.CheckoutUnavailable = true
+	current.WorkspaceID = unavailableBranchWorkspaceID(current.ProjectID, current.BranchID)
+	return s.withParticipants(current), nil
+}
+
 func (o documentOpener) projectWorkspacePresentation(ctx context.Context, d *Document) {
 	if p, err := o.s.projectBranch(ctx, d.ProjectID, d.BranchID); err == nil {
 		d.WorkspaceID = p.WorkspaceID()

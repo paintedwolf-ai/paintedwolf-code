@@ -285,30 +285,16 @@ func (l *LifecycleService) ObserveDisk(ctx context.Context, p *project.Project, 
 	if err != nil {
 		return nil, err
 	}
-	liveP := p
-	if liveP == nil || liveP.BranchForRoot(d.RootID) != d.BranchID {
-		resolved, branchErr := s.projectBranch(ctx, p.ID, d.BranchID)
-		if branchErr != nil {
-			if _, isWT := d.BranchID.WorktreeID(); isWT && isCheckoutGone(branchErr) {
-				if err := s.markAbsent(ctx, d); err != nil {
-					return nil, err
-				}
-				if err := s.replicaProjection(ctx, d, nil); err != nil {
-					return nil, err
-				}
-				d.CheckoutUnavailable = true
-				d.WorkspaceID = unavailableBranchWorkspaceID(d.ProjectID, d.BranchID)
-				return s.withParticipants(d), nil
-			}
-			return nil, branchErr
-		}
-		liveP = resolved
+	if err := checkWorkspace(p, d); err != nil {
+		return nil, err
 	}
-	if err := s.reconcileDocumentDisk(ctx, liveP, d, clientID); err != nil {
+	if err := s.reconcileDocumentDisk(ctx, p, d, clientID); err != nil {
 		return nil, err
 	}
 	if err := s.replicaProjection(ctx, d, nil); err != nil {
 		return nil, err
 	}
+	d.WorkspaceID = p.WorkspaceID()
+	d.CheckoutUnavailable = false
 	return s.withParticipants(d), nil
 }
