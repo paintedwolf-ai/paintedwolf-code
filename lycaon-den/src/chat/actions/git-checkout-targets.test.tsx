@@ -294,7 +294,7 @@ describe("git checkout targets", () => {
     expect(store.state.gitWorktreeEpoch).toBe(epochAfterFirst);
 
     // Clearing a single repo target deletes its key.
-    store.actions.setGitWorktreeTarget("proj-1", "repo-1", undefined);
+    store.actions.setGitWorktreeTarget("proj-1", "repo-1", null);
     expect(resolveGitWorktreeTarget(store.state, "proj-1", "repo-1")).toBeUndefined();
 
     // Scoped and unscoped clearGitWorktreeTargets only clear matching project keys.
