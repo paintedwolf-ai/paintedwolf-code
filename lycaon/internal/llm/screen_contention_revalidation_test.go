@@ -283,7 +283,9 @@ func TestProtectedRefusalCancellationAndOverloadAccounting(t *testing.T) {
 	}
 	testutil.FailErr(t, "register retry provider", reg.Register(overloaded))
 	capPolicy := testCapacityPolicy()
-	capPolicy.Holds = []time.Duration{40 * time.Millisecond}
+	capPolicy.HoldMax = 1
+	capPolicy.HoldWaitMs = []int{40}
+	capPolicy.HoldMaxWaitMs = 40
 	client := NewRoutingClient(reg, nil, nil, plane, NewCapacityGate(capPolicy), nil, func(context.Context) (*ModelSelection, error) {
 		return &ModelSelection{ProviderID: "ollama-retry", Model: "m"}, nil
 	})
