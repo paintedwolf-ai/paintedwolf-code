@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -18,7 +19,7 @@ func TestAppendTurnCloseoutNudge(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			CloseoutTrackingDeps: CloseoutTrackingDeps{
-				TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
+				TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ prompts.Reader, cause TurnCloseoutCause) HostNudge {
 					return HostNudge{
 						Content:  "This is your final turn — " + cause.Text() + ". Give the user a closing summary.",
 						SignalID: "turn.closeout",
@@ -57,7 +58,7 @@ func TestAppendTurnCloseoutNudgeDedupsVerbatim(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			CloseoutTrackingDeps: CloseoutTrackingDeps{
-				TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
+				TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ prompts.Reader, cause TurnCloseoutCause) HostNudge {
 					return HostNudge{
 						Content:  "This is your final turn — " + cause.Text() + ". Give the user a closing summary.",
 						SignalID: "turn.closeout",
@@ -123,7 +124,7 @@ func TestEarlyWorkerCloseoutExecutesCompleteLeg(t *testing.T) {
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}
-	deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, prompts.Reader, TurnCloseoutCause) HostNudge {
 		return HostNudge{Content: "close out with complete_leg", SignalID: "turn.closeout"}
 	}
 	loop := NewPromptLoopForTest(deps)

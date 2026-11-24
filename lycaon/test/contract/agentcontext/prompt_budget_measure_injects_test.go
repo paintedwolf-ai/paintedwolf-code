@@ -70,15 +70,15 @@ func measureCoordinatorInjectBlock(
 		}
 		plan, err := prompts.CompileSurfacePlan("implement_investigate", 1)
 		contractcheck.FailErr(t, "CompileSurfacePlan turn_state", err)
-		reader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: prompts.CoordinatorProfileID,
-			SurfaceID: "implement_investigate",
-			Plan:      plan,
+		reader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:  profiles,
-			Visible:   turnStateTools,
-			Loaded:    loaded,
 			RootCount: 1,
 			WebSearch: true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_investigate",
+			Plan:      readerLoadedPlan(plan, loaded),
+			Offered:   readerLoadedOffer(plan, turnStateTools, loaded),
 		})
 		contractcheck.FailErr(t, "NewReader turn_state", err)
 		block, err := inject.RenderTurnStateBlock(ctx, renderer, "sess-inject-test", inject.TurnStateInjectInput{
@@ -115,12 +115,14 @@ func measureCoordinatorInjectBlock(
 		}
 		profiles, err := sandbox.LoadToolProfiles()
 		contractcheck.FailErr(t, "load tool profiles", err)
-		reader, err := prompts.NewReader(prompts.ReaderInput{
+		reader, err := prompts.NewReader(prompts.HostFacts{
+			Profiles:  profiles,
+			RootCount: 1,
+		}, prompts.TurnProjection{
 			ProfileID: profile,
 			SurfaceID: surfaceID,
 			Plan:      toolsurface.Compile(offered, nil),
-			Profiles:  profiles,
-			RootCount: 1,
+			Offered:   (toolsurface.Compile(offered, nil)).ImmediateNames(),
 		})
 		contractcheck.FailErr(t, "new procedure reader", err)
 		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", reader)
@@ -170,13 +172,15 @@ func measureCoordinatorInjectBlock(
 		contractcheck.FailErr(t, "CompileSurfacePlan command_jobs", err)
 		profiles, err := sandbox.LoadToolProfiles()
 		contractcheck.FailErr(t, "load profiles command_jobs", err)
-		floorReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: prompts.CoordinatorProfileID,
-			SurfaceID: "implement_investigate",
-			Plan:      floorPlan.Promote("wait"),
+		floorReader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:  profiles,
 			RootCount: 1,
 			WebSearch: true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_investigate",
+			Plan:      floorPlan.Promote("wait"),
+			Offered:   (floorPlan.Promote("wait")).ImmediateNames(),
 		})
 		contractcheck.FailErr(t, "NewReader floor command_jobs", err)
 		deferred := inject.RenderCommandJobsBlock(ctx, renderer, floorReader, waitSchema, "sess-inject-test", jobs, nil, now, "coordinator")

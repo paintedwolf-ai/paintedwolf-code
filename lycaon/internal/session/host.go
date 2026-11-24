@@ -44,6 +44,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
 	"github.com/lycaon/lycaon/internal/session/protection"
+	"github.com/lycaon/lycaon/internal/session/readerfacts"
 	"github.com/lycaon/lycaon/internal/session/recovery"
 	"github.com/lycaon/lycaon/internal/session/researchwarm"
 	"github.com/lycaon/lycaon/internal/session/resources"
@@ -100,7 +101,9 @@ type Host struct {
 	Observations       *sessionobservation.Service
 	Submissions        *submissions.Service
 	Decisions          decisions.Store
-	loopbackProv       LoopbackProvenanceResolver
+	// ReaderFacts resolves the host facts every prompt Reader of a session derives from.
+	ReaderFacts  *readerfacts.Resolver
+	loopbackProv LoopbackProvenanceResolver
 }
 
 // SetLoopbackProvenance installs host listener observation and provenance.
@@ -199,7 +202,6 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 		return OverlayWorkspaceChangedPaths(ctx, task, roots, "")
 	}})
 	m.Coordinator.Loading = loading.New(store.Sessions, store.Compaction, store.Turns, m.Workspace, router, models, tracker, nil, m.Profiles.EffectiveSkillsForProfile, workerState.ForSession)
-	m.Coordinator.Loading.SetProfiles(m.Profiles.ForSession)
 	m.ToolPolicy.SetSources(store.Sessions, store.Evidence, m.Workspace, m.Coordinator.Feedback, m.Coordinator.Loading.Ledger)
 	turnHistory := history.New(store.Sessions, store.Transcript, store.Compaction, gate, m.Workspace, m.Limits, router, m.Profiles.RecallAvailable)
 	m.Admission = turnadmission.New(store.Sessions, store.Submissions, gate, m.Workspace, turnTurns, queueStore)
@@ -238,7 +240,6 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 	}, OverlayStatus: ResolveWorkerSummaryStatus, OverlayPending: OverlayAwaitingPromote})
 	workerResults.SetSummaries(workerSummaries)
 	m.Coordinator.Guidance = guidancedelivery.New(store.Sessions, store.Transcript, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
-	m.Coordinator.Guidance.SetPostureView(m.Profiles)
 	m.Processes = processcontrol.New(store.Sessions, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)
 	m.Submissions.SetProcessObserver(m.Processes.Observe)
 	m.Workers = workerexecution.New(store.Sessions, store.Evidence, m.Workspace, gate, m.Coordinator.Guidance, m.Limits, router, workerexecution.PeerServices{Cancel: workerCancel, Cards: workerCards, Cancellations: workerCancellations, Delivery: workerDelivery, Summaries: workerSummaries, Results: workerResults, Digests: workerDigests, State: workerState, Notes: workerNotes, Workspaces: workerworkspace.New(store.Sessions, m.Workspace, newBranchWorkspace)})
@@ -248,8 +249,6 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 	m.Coordinator.Batch = batchcontrol.New(store.Sessions, store.Transcript, workerState, m.Verification, m.Coordinator.Guidance)
 	turnSettlement := turnsettlement.New(store.Sessions, gate, &turnExecution.Prompt, turnStatus, m.Workspace, m.Coordinator.Batch)
 	m.Coordinator.Nudges = turnnudges.New(m.Coordinator.Loading.Ledger, turnSpend)
-	m.Coordinator.Nudges.SetProfiles(m.Profiles)
-	m.Coordinator.Nudges.SetWorkspace(m.Workspace)
 	turnInstructions := instructions.New(store.Sessions, store.Transcript, turnTranscript, captures, m.Coordinator.Guidance.DeliverPending)
 	turnInstructions.SetWaitEnds(func(sessionID string) []string {
 		var texts []string
@@ -259,6 +258,8 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 		return texts
 	})
 	m.Runner = turnexecution.New(store.Sessions, store.Turns, svc, turnexecution.Components{Execution: turnExecution, Workspace: m.Workspace, Spend: turnSpend, Transcript: turnTranscript, Turns: turnTurns, Chats: m.Chats, SubmissionState: turnSubmissionState, Settlement: turnSettlement, Clocks: turnClocks, Closeouts: turnCloseouts, Guidance: m.Coordinator.Guidance, Curation: turnCuration, Status: turnStatus, Instructions: turnInstructions, Preparation: turnPreparation, Authorization: turnAuthorization, History: turnHistory, PostTurn: turnPostTurn})
+	m.ReaderFacts = readerfacts.New(readerfacts.Sources{Catalog: &m.Catalog, Profiles: m.Profiles, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces, ToolContext: m.ToolContext})
+	m.Coordinator.Loading.SetHostFacts(m.ReaderFacts.HostFacts)
 	m.Workers.Harness = workerharness.New(store.Transcript, store.Evidence, m.Profiles, m.ToolContext, m.Workers.Workspaces, m.Workspace, registry, m.Verification, OverlaySourceProofForWorkspaces(m.Workers.Workspaces))
 	m.Admission.Bind(m.Runner, turnSettlement, m.Submissions)
 	m.Coordinator.Closeout = closeoutassembly.New(store.Sessions, store.Transcript, store.Evidence, m.Workspace, workerState, m.Verification.Evidence)

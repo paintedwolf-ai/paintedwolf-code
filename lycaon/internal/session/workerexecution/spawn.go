@@ -116,13 +116,14 @@ func (m *Service) WorkerSummaryFinalizeOpts(ctx context.Context, sess *api.Sessi
 		maxChars = compaction.DefaultCompactionConfig().MaxWorkerSummaryChars
 	}
 	return workercloseout.WorkerSummaryFinalizeOpts{
-		MaxChars:         maxChars,
-		WorkflowHints:    m.workflowHints,
-		RenderWorkerKick: m.RenderKick,
-		WorkspaceCheck:   m.WorkspaceCheck,
-		Ledger:           m.evidenceStore,
-		Pipeline:         m.pipeline,
-		DecisionPending:  m.DecisionPending,
+		MaxChars:          maxChars,
+		WorkflowHints:     m.workflowHints,
+		RenderWorkerKick:  m.RenderKick,
+		NextRequestReader: m.NextRequestReader,
+		WorkspaceCheck:    m.WorkspaceCheck,
+		Ledger:            m.evidenceStore,
+		Pipeline:          m.pipeline,
+		DecisionPending:   m.DecisionPending,
 	}
 }
 

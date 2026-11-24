@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
@@ -87,9 +88,9 @@ func (l *promptContext) coordinatorToolsForTurn(
 	iterIndex, maxIter int,
 	frame inject.CoordinatorTurnFrame,
 	st *promptLoopTurnState,
-) ([]tools.ToolMeta, toolsurface.Plan, string, error) {
+) (TurnTools, error) {
 	if l == nil {
-		return nil, toolsurface.Plan{}, "", nil
+		return TurnTools{ProfileID: profileID}, nil
 	}
 	if st != nil && st.proseTurn(sess, iterIndex, maxIter) {
 		st.proseFinish = true
@@ -98,8 +99,9 @@ func (l *promptContext) coordinatorToolsForTurn(
 	if guard.IsCoordinatorProfile(profileID) {
 		surfaceID = l.resolveTurnProfile(ctx, sess, history, frame).SurfaceID
 	}
+	out := TurnTools{ProfileID: profileID, SurfaceID: surfaceID}
 	if l.Deps.Policy == nil {
-		return nil, toolsurface.Plan{}, surfaceID, nil
+		return out, nil
 	}
 	listCtx := ctx
 	if surfaceID != "" {
@@ -133,13 +135,15 @@ func (l *promptContext) coordinatorToolsForTurn(
 			}
 			plan = toolsurface.Compile(names, nil)
 		}
-		return trimPromptToolMetas(filtered), plan, "", nil
+		out.Metas, out.Plan = trimPromptToolMetas(filtered), plan
+		out.DeferredSchemas = deferredToolSchemas(plan, all, nil, false, nil)
+		return out, nil
 	}
 	profile := surface.TurnProfile{SurfaceID: surfaceID}
 	rootCount := l.projectRootCount(ctx, sess)
 	plan, err := surface.CompileToolPlan(profile, rootCount)
 	if err != nil {
-		return nil, toolsurface.Plan{}, surfaceID, fmt.Errorf("compile coordinator tool surface %q: %w", surfaceID, err)
+		return out, fmt.Errorf("compile coordinator tool surface %q: %w", surfaceID, err)
 	}
 	taskAllowlist := taskSpawnAllowlistForTurn(frame)
 	ask := sess != nil && sess.Mode == api.SessionModeAsk
@@ -162,7 +166,43 @@ func (l *promptContext) coordinatorToolsForTurn(
 		}
 		all = ProjectAskToolMetas(all)
 	}
-	return trimCoordinatorToolMetasForPlan(plan, all, taskAllowlist, phaseVerdictSchema(frame)), plan, surfaceID, nil
+	verdict := phaseVerdictSchema(frame)
+	out.Metas, out.Plan = trimCoordinatorToolMetasForPlan(plan, all, taskAllowlist, verdict), plan
+	out.DeferredSchemas = deferredToolSchemas(plan, all, taskAllowlist, true, verdict)
+	return out, nil
+}
+
+// deferredToolSchemas projects the provider schemas of the plan's deferred
+// tools as a load would offer them.
+func deferredToolSchemas(plan toolsurface.Plan, all []tools.ToolMeta, taskAllowlist []string, coordinator bool, verdict map[string]any) map[string]map[string]any {
+	if len(plan.DeferredNames()) == 0 {
+		return nil
+	}
+	out := make(map[string]map[string]any)
+	for _, meta := range all {
+		if !plan.Deferred(meta.Name) {
+			continue
+		}
+		if meta.Name == "submit_verdict" && verdict != nil {
+			meta.ArgsSchema = verdict
+		}
+		proj := tools.ProjectProviderToolMeta(meta)
+		if coordinator {
+			switch meta.Name {
+			case "task":
+				if taskAllowlist != nil && len(taskAllowlist) == 0 {
+					continue
+				}
+				proj = guard.ApplySpawnAllowlistSchema(proj, taskAllowlist)
+			case "instruct_worker":
+				proj = guard.ApplySpawnAllowlistSchema(proj, taskAllowlist)
+			}
+		}
+		if proj.ArgsSchema != nil {
+			out[meta.Name] = jsonvalue.CloneMap(proj.ArgsSchema)
+		}
+	}
+	return out
 }
 
 func filterToolPlanForRootCount(plan toolsurface.Plan, rootCount int) toolsurface.Plan {

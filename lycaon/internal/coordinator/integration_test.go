@@ -193,11 +193,13 @@ func integrationCoordReader(t *testing.T) prompts.Reader {
 	t.Helper()
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	r, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	r, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader coordinator", err)
 	return r
@@ -328,13 +330,15 @@ func TestRenderCoordinatorTripartiteComposeDraft(t *testing.T) {
 	testutil.FailErr(t, "LoadToolProfiles", err)
 	plans, err := surface.CompileToolPlans(1)
 	testutil.FailErr(t, "CompileToolPlans", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_synthesis",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plans["implement_synthesis"],
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_synthesis",
+		Plan:      plans["implement_synthesis"],
+		Offered:   (plans["implement_synthesis"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "NewReader", err)
 	vars := reader.Facts()

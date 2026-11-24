@@ -561,12 +561,19 @@ func runOARMatrixAndRelevanceSeeds(
 	oarAvailPlan := toolsurface.Compile(oarAvailOffered, []string{"command"})
 	oarAvailSchemas := map[string]map[string]any{"complete_leg": compMeta.ArgsSchema, "recall": recallMeta.ArgsSchema, "request_tools": reqMeta.ArgsSchema, "scan_query": scanMeta.ArgsSchema}
 	oarAvailReach := toolreach.Freeze(oarAvailOffered, oarAvailPlan).WithProgramTable(availAuth.ProgramTable).WithSchemas(oarAvailSchemas)
-	oarAvailReader, _ := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:   "implement",
-		SessionMode: string(api.SessionModeAgent), Profiles: availProfiles,
-		Plan: oarAvailPlan, Loaded: map[string]bool{"complete_leg": true, "recall": true, "request_tools": true, "scan_query": true},
-		Visible: append(slices.Clone(oarAvailOffered), "command"), Schemas: s.Schemas, ProjectedSchemas: oarAvailSchemas,
-		RootCount: 1, HasGit: true, HasAnyGitRoot: true, WebSearch: true,
+	oarAvailReader, _ := prompts.NewReader(prompts.HostFacts{
+		SessionMode:   string(api.SessionModeAgent),
+		Profiles:      availProfiles,
+		Schemas:       s.Schemas,
+		RootCount:     1,
+		HasGit:        true,
+		HasAnyGitRoot: true,
+		WebSearch:     true,
+	}, prompts.TurnProjection{
+		ProfileID:        "implement",
+		Plan:             readerLoadedPlan(oarAvailPlan, map[string]bool{"complete_leg": true, "recall": true, "request_tools": true, "scan_query": true}),
+		Offered:          readerLoadedOffer(oarAvailPlan, append(slices.Clone(oarAvailOffered), "command"), map[string]bool{"complete_leg": true, "recall": true, "request_tools": true, "scan_query": true}),
+		ProjectedSchemas: oarAvailSchemas,
 	})
 	oarAvailMetas := []tools.ToolMeta{
 		{Name: "complete_leg", Description: compMeta.Description, ArgsSchema: compMeta.ArgsSchema},
@@ -591,12 +598,19 @@ func runOARMatrixAndRelevanceSeeds(
 	oarUnavailPlan := toolsurface.Compile(oarUnavailOffered, nil)
 	oarUnavailSchemas := map[string]map[string]any{"complete_leg": compMeta.ArgsSchema, "recall": recallMeta.ArgsSchema, "scan_query": scanMeta.ArgsSchema}
 	oarUnavailReach := toolreach.Freeze(oarUnavailOffered, oarUnavailPlan).WithSchemas(oarUnavailSchemas)
-	oarUnavailReader, _ := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:   "implement",
-		SessionMode: string(api.SessionModeAgent), Profiles: unavailProfiles,
-		Plan: oarUnavailPlan, Loaded: map[string]bool{"complete_leg": true, "recall": true, "scan_query": true},
-		Visible: oarUnavailOffered, Schemas: s.Schemas, ProjectedSchemas: oarUnavailSchemas,
-		RootCount: 1, HasGit: true, HasAnyGitRoot: true, WebSearch: true,
+	oarUnavailReader, _ := prompts.NewReader(prompts.HostFacts{
+		SessionMode:   string(api.SessionModeAgent),
+		Profiles:      unavailProfiles,
+		Schemas:       s.Schemas,
+		RootCount:     1,
+		HasGit:        true,
+		HasAnyGitRoot: true,
+		WebSearch:     true,
+	}, prompts.TurnProjection{
+		ProfileID:        "implement",
+		Plan:             readerLoadedPlan(oarUnavailPlan, map[string]bool{"complete_leg": true, "recall": true, "scan_query": true}),
+		Offered:          readerLoadedOffer(oarUnavailPlan, oarUnavailOffered, map[string]bool{"complete_leg": true, "recall": true, "scan_query": true}),
+		ProjectedSchemas: oarUnavailSchemas,
 	})
 	oarUnavailMetas := []tools.ToolMeta{
 		{Name: "complete_leg", Description: compMeta.Description, ArgsSchema: compMeta.ArgsSchema},
@@ -849,12 +863,19 @@ func buildLoaderAndAskTransitionCaptures(
 		loaderMetas = append(loaderMetas, tools.ToolMeta{Name: tn, Description: tm.Description, ArgsSchema: tm.ArgsSchema})
 	}
 	loaderReach := toolreach.Freeze(loaderOffered, loaderPlan).WithProgramTable(floorAuth.ProgramTable).WithSchemas(loaderSchemas)
-	loaderReader, _ := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:   "web_research",
-		SessionMode: string(api.SessionModeAgent), Profiles: loaderProfiles,
-		Plan: loaderPlan, Loaded: loadedSetFromOffered(loaderOffered),
-		Visible: append(slices.Clone(loaderOffered), "command"), Schemas: s.Schemas, ProjectedSchemas: loaderSchemas,
-		RootCount: 1, HasGit: true, HasAnyGitRoot: true, WebSearch: true,
+	loaderReader, _ := prompts.NewReader(prompts.HostFacts{
+		SessionMode:   string(api.SessionModeAgent),
+		Profiles:      loaderProfiles,
+		Schemas:       s.Schemas,
+		RootCount:     1,
+		HasGit:        true,
+		HasAnyGitRoot: true,
+		WebSearch:     true,
+	}, prompts.TurnProjection{
+		ProfileID:        "web_research",
+		Plan:             readerLoadedPlan(loaderPlan, loadedSetFromOffered(loaderOffered)),
+		Offered:          readerLoadedOffer(loaderPlan, append(slices.Clone(loaderOffered), "command"), loadedSetFromOffered(loaderOffered)),
+		ProjectedSchemas: loaderSchemas,
 	})
 	loaderAuth := hoststate.TurnAuthority{
 		Metas:        loaderMetas,

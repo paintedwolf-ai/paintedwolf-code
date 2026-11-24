@@ -3,13 +3,14 @@ package promptloop
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil/oartest"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"

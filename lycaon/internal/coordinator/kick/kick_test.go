@@ -31,14 +31,14 @@ func TestRenderPendingNudgeRetainsKickAcrossRenderFailure(t *testing.T) {
 	if id := kicks.TakePendingKickIDUnless("s1", nil); id != "coordinator-gate-blocked" {
 		t.Fatalf("staged id = %q", id)
 	}
-	if _, _, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok || err == nil {
+	if _, _, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)}); ok || err == nil {
 		t.Fatalf("failed render = ok %v, err %v", ok, err)
 	}
 	if id, ok := kicks.PeekPendingKickID("s1"); !ok || id != "coordinator-gate-blocked" {
 		t.Fatalf("failed render consumed kick: %q, %v", id, ok)
 	}
 	failed = false
-	text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
+	text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)})
 	if err != nil || !ok || text != "rendered:coordinator-gate-blocked" {
 		t.Fatalf("retry = %q, %v, %v", text, ok, err)
 	}
@@ -54,7 +54,7 @@ func TestAckPendingNudgeDoesNotConsumeReplacement(t *testing.T) {
 	if id := kicks.TakePendingKickIDUnless("s1", nil); id != "kick-1" {
 		t.Fatalf("staged id = %q", id)
 	}
-	_, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
+	_, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)})
 	if err != nil || !ok {
 		t.Fatalf("render = ok %v, err %v", ok, err)
 	}
@@ -186,7 +186,7 @@ func TestNilEngineMethodsAreSafe(t *testing.T) {
 	if id := k.TakePendingKickIDUnless("s", nil); id != "" {
 		t.Errorf("nil TakePendingKickIDUnless = %q", id)
 	}
-	if n, _, ok, _ := k.RenderPendingNudge(t.Context(), "s", CoordinatorKickRenderContext{}); n != "" || ok {
+	if n, _, ok, _ := k.RenderPendingNudge(t.Context(), "s", CoordinatorKickRenderContext{Reader: kickTestReader(t)}); n != "" || ok {
 		t.Errorf("nil RenderPendingNudge = %q,%v", n, ok)
 	}
 	if cfg := k.config(); cfg.engine != nil {
@@ -207,7 +207,7 @@ func TestQueuePendingTextWithKickID(t *testing.T) {
 	if id, ok := k.PeekPendingKickID("s1"); !ok || id != "kick-7" {
 		t.Errorf("staged PeekPendingKickID = %q,%v want kick-7", id, ok)
 	}
-	n, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
+	n, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)})
 	if !ok || n != "do the thing" {
 		t.Errorf("RenderPendingNudge = %q,%v want trimmed nudge", n, ok)
 	}
@@ -219,7 +219,7 @@ func TestQueuePendingTextRequiresKickID(t *testing.T) {
 	if id, ok := k.PeekPendingKickID("s1"); ok || id != "" {
 		t.Errorf("id-less nudge queued as %q,%v", id, ok)
 	}
-	if n, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok || n != "" {
+	if n, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)}); ok || n != "" {
 		t.Errorf("id-less nudge rendered as %q,%v", n, ok)
 	}
 }
@@ -232,7 +232,7 @@ func TestRenderPendingNudgeDropsStaleBatchSeq(t *testing.T) {
 	if id := k.TakePendingKickIDUnless("s1", nil); id != "coordinator-scheduled" {
 		t.Fatalf("TakePendingKickIDUnless = %q want %s", id, "coordinator-scheduled")
 	}
-	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{BatchSeq: 3}); ok {
+	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t), BatchSeq: 3}); ok {
 		t.Fatal("stale batch_seq kick should drop at render")
 	}
 	if eng.lastName != "" {
@@ -242,7 +242,7 @@ func TestRenderPendingNudgeDropsStaleBatchSeq(t *testing.T) {
 	if id := k.TakePendingKickIDUnless("s1", nil); id != "coordinator-scheduled" {
 		t.Fatalf("TakePendingKickIDUnless = %q", id)
 	}
-	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{BatchSeq: 3}); !ok {
+	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t), BatchSeq: 3}); !ok {
 		t.Fatal("live batch_seq kick should render")
 	}
 }
@@ -251,7 +251,7 @@ func TestQueuePendingTextIgnoresBlankInput(t *testing.T) {
 	k := &KickEngine{}
 	k.QueuePendingText("  ", "text", "id")
 	k.QueuePendingText("s1", "   ", "id")
-	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok {
+	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)}); ok {
 		t.Errorf("blank session/text should not queue anything")
 	}
 }
@@ -265,7 +265,7 @@ func TestQueueCoordinatorKickWithoutEngineReturnsRetryableError(t *testing.T) {
 	if id := k.TakePendingKickIDUnless("s1", nil); id != "coordinator-gate-blocked" {
 		t.Fatalf("TakePendingKickIDUnless = %q want %s", id, "coordinator-gate-blocked")
 	}
-	if _, _, ok, err := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok || err == nil {
+	if _, _, ok, err := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)}); ok || err == nil {
 		t.Errorf("RenderPendingNudge = ok %v, error %v", ok, err)
 	}
 	if id, ok := k.PeekPendingKickID("s1"); !ok || id != "coordinator-gate-blocked" {
@@ -295,6 +295,7 @@ func TestQueueCoordinatorKickRendersAtTake(t *testing.T) {
 		t.Fatalf("TakePendingKickIDUnless = %q want %s", id, "coordinator-scan-finished")
 	}
 	live := CoordinatorKickRenderContext{
+		Reader:          kickTestReader(t),
 		PendingOverlays: 1,
 		PartialWorkers:  2,
 		PromotedPaths:   []string{"x.go"},
@@ -314,9 +315,6 @@ func TestQueueCoordinatorKickRendersAtTake(t *testing.T) {
 	if eng.lastData["pending_overlays"] != 1 || eng.lastData["partial_workers"] != 2 {
 		t.Errorf("counts = %v, %v want the live 1 and 2", eng.lastData["pending_overlays"], eng.lastData["partial_workers"])
 	}
-	if _, err := kickReader(CoordinatorKickRenderContext{SurfaceID: "implement_investigate", RootCount: 1}); err != nil {
-		t.Fatalf("kickReader with surface: %v", err)
-	}
 }
 
 func TestQueueCoordinatorKickEmptyRenderIsNoop(t *testing.T) {
@@ -330,7 +328,7 @@ func TestQueueCoordinatorKickEmptyRenderIsNoop(t *testing.T) {
 	if id := k.TakePendingKickIDUnless("s1", nil); id != "coordinator-gate-blocked" {
 		t.Fatalf("TakePendingKickIDUnless = %q", id)
 	}
-	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok {
+	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)}); ok {
 		t.Errorf("empty render should not produce nudge")
 	}
 }
@@ -344,12 +342,12 @@ func TestQueueEagerRequiresInformRender(t *testing.T) {
 	if eng.lastName != "" {
 		t.Errorf("empty template must not render, got %q", eng.lastName)
 	}
-	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok {
+	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)}); ok {
 		t.Errorf("empty template must not queue nudge")
 	}
 
 	k.QueueEager("s1", "worker-task-started", map[string]string{"task": "scan"})
-	n, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
+	n, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)})
 	if !ok || n != "rendered:"+"worker-task-started" {
 		t.Errorf("RenderPendingNudge = %q,%v", n, ok)
 	}
@@ -361,7 +359,7 @@ func TestQueueEagerRequiresInformRender(t *testing.T) {
 func TestQueueEagerWithoutEngineReturnsRetryableError(t *testing.T) {
 	k := &KickEngine{}
 	k.QueueEager("s1", "worker-closeout", nil)
-	if _, _, ok, err := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok || err == nil {
+	if _, _, ok, err := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)}); ok || err == nil {
 		t.Fatalf("unwired eager kick = ok %v, err %v", ok, err)
 	}
 	if id, ok := k.PeekPendingKickID("s1"); !ok || id != "worker-closeout" {
@@ -377,7 +375,7 @@ func TestClearPendingDropsEverything(t *testing.T) {
 	if id, ok := k.PeekPendingKickID("s1"); ok || id != "" {
 		t.Errorf("ClearPending left kick id %q,%v", id, ok)
 	}
-	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok {
+	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)}); ok {
 		t.Errorf("ClearPending left a pending nudge")
 	}
 }
@@ -425,7 +423,7 @@ func TestQueueDeferredLatestReplacesStagedLifecycleGuidance(t *testing.T) {
 		t.Fatalf("staged kick = %q want phase-old", got)
 	}
 	k.QueueDeferredLatest("s1", "phase.entered", "phase-current")
-	text, lease, ok, err := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
+	text, lease, ok, err := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{Reader: kickTestReader(t)})
 	if err != nil {
 		t.Fatalf("render latest phase: %v", err)
 	}
@@ -471,7 +469,7 @@ func TestDropKickIDRemovesQueuedAndStaged(t *testing.T) {
 	if id, ok := k.PeekPendingKickID("s2"); ok {
 		t.Fatalf("staged pending survived DropKickID: %q", id)
 	}
-	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s2", CoordinatorKickRenderContext{}); ok {
+	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s2", CoordinatorKickRenderContext{Reader: kickTestReader(t)}); ok {
 		t.Fatal("RenderPendingNudge must not render dropped staged kick")
 	}
 }

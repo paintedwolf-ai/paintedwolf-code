@@ -90,48 +90,31 @@ func buildWidestTupleReader(
 	externalHidden bool,
 ) prompts.Reader {
 	t.Helper()
-	loaded := map[string]bool{}
-	var planInput prompts.ReaderInput
+	host := prompts.HostFacts{
+		Profiles:              profiles,
+		Schemas:               stock.Schemas,
+		RootCount:             1,
+		HasGit:                true,
+		HasAnyGitRoot:         true,
+		WebSearch:             true,
+		CommandExternalHidden: externalHidden,
+	}
+	turn := prompts.TurnProjection{ProfileID: profile.ID, Declared: true}
 	if surfaceID != "" {
 		plan, err := prompts.CompileSurfacePlan(surfaceID, 1)
 		contractcheck.FailErr(t, "CompileSurfacePlan "+surfaceID, err)
-		for _, name := range plan.DeferredNames() {
-			loaded[name] = true
-		}
-		planInput = prompts.ReaderInput{
-			ProfileID:             profile.ID,
-			SurfaceID:             surfaceID,
-			Mode:                  surface.ExecutionModeFamily(surfaceID),
-			Profiles:              profiles,
-			Plan:                  plan,
-			Loaded:                loaded,
-			Schemas:               stock.Schemas,
-			RootCount:             1,
-			HasGit:                true,
-			HasAnyGitRoot:         true,
-			WebSearch:             true,
-			SpawnAllowlist:        stock.SpawnAllowlist,
-			CommandExternalHidden: externalHidden,
-		}
+		host.SpawnAllowlist = stock.SpawnAllowlist
+		turn = prompts.TurnProjection{ProfileID: profile.ID, SurfaceID: surfaceID, Plan: plan.Promote(plan.DeferredNames()...), Offered: plan.AddressableNames()}
 	} else {
-		for name := range profile.DeferredTools {
+		var offered []string
+		for name := range profile.Tools {
 			if !strings.HasSuffix(name, "*") {
-				loaded[name] = true
+				offered = append(offered, name)
 			}
 		}
-		planInput = prompts.ReaderInput{
-			ProfileID:             profile.ID,
-			Profiles:              profiles,
-			Loaded:                loaded,
-			Schemas:               stock.Schemas,
-			RootCount:             1,
-			HasGit:                true,
-			HasAnyGitRoot:         true,
-			WebSearch:             true,
-			CommandExternalHidden: externalHidden,
-		}
+		turn.Offered = offered
 	}
-	reader, err := prompts.NewReader(planInput)
+	reader, err := prompts.NewReader(host, turn)
 	contractcheck.FailErr(t, "prompts.NewReader", err)
 	return reader
 }
@@ -422,11 +405,19 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 							lbl := string(posture) + "/" + string(mode) + "/" + cc.surfID + "/" + cc.runCtx.RunID
 							assertReaderRunnerSchemaParity(t, "coord-live/"+lbl, auth.Reader, auth.Offered, auth.Schemas)
 
-							derivedReader, dErr := prompts.NewReader(prompts.ReaderInput{
-								ProfileID: prompts.CoordinatorProfileID, SurfaceID: cc.surfID, SessionMode: string(mode),
-								Profiles: narrowed, Plan: auth.Plan, Loaded: loaded, Visible: auth.Offered,
-								Schemas: stock.Schemas, RootCount: 1, HasGit: true, WebSearch: true,
+							derivedReader, dErr := prompts.NewReader(prompts.HostFacts{
+								SessionMode:           string(mode),
+								Profiles:              narrowed,
+								Schemas:               stock.Schemas,
+								RootCount:             1,
+								HasGit:                true,
+								WebSearch:             true,
 								CommandExternalHidden: externalHidden,
+							}, prompts.TurnProjection{
+								ProfileID: prompts.CoordinatorProfileID,
+								SurfaceID: cc.surfID,
+								Plan:      readerLoadedPlan(auth.Plan, loaded),
+								Offered:   readerLoadedOffer(auth.Plan, auth.Offered, loaded),
 							})
 							contractcheck.FailErr(t, "derived coordinator NewReader", dErr)
 							assertReaderRunnerSchemaParity(t, "coord-derived/"+lbl, derivedReader, auth.Offered, auth.Schemas)
@@ -456,10 +447,17 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 						lbl := agent.ID + "/" + string(posture) + "/" + string(parentMode)
 						assertReaderRunnerSchemaParity(t, "worker-live/"+lbl, auth.Reader, auth.Offered, auth.Schemas)
 
-						derivedWorker, dErr := prompts.NewReader(prompts.ReaderInput{
-							ProfileID: agent.ToolProfile, SessionMode: string(parentMode),
-							Profiles: narrowed, Plan: auth.Plan, Loaded: loaded, Visible: auth.Offered,
-							Schemas: stock.Schemas, RootCount: 1, HasGit: true, WebSearch: true,
+						derivedWorker, dErr := prompts.NewReader(prompts.HostFacts{
+							SessionMode: string(parentMode),
+							Profiles:    narrowed,
+							Schemas:     stock.Schemas,
+							RootCount:   1,
+							HasGit:      true,
+							WebSearch:   true,
+						}, prompts.TurnProjection{
+							ProfileID: agent.ToolProfile,
+							Plan:      readerLoadedPlan(auth.Plan, loaded),
+							Offered:   readerLoadedOffer(auth.Plan, auth.Offered, loaded),
 						})
 						contractcheck.FailErr(t, "derived worker NewReader", dErr)
 						assertReaderRunnerSchemaParity(t, "worker-derived/"+lbl, derivedWorker, auth.Offered, auth.Schemas)
@@ -523,18 +521,19 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 				},
 			},
 		}
-		asymReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "asym_runners",
+		asymReader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             "asym_runners",
 				Tools:          map[string]bool{"command": true, "verify": true},
 				CommandEffects: toolcontract.AllCommandEffects(),
 			}},
+			Schemas:   stock.Schemas,
+			RootCount: 1,
+		}, prompts.TurnProjection{
+			ProfileID:        "asym_runners",
 			Plan:             toolsurface.Compile([]string{"command", "verify"}, nil),
-			Visible:          []string{"command", "verify"},
-			Schemas:          stock.Schemas,
+			Offered:          []string{"command", "verify"},
 			ProjectedSchemas: customProjected,
-			RootCount:        1,
 		})
 		contractcheck.FailErr(t, "asymReader", err)
 		af := asymReader.Facts()
@@ -557,17 +556,19 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 			Tools:          map[string]bool{"ask_user": true, "command": true, "terminal_open": true},
 			CommandEffects: toolcontract.AllCommandEffects(),
 		}
-		baseInput := prompts.ReaderInput{
-			ProfileID:   "missing_entry_probe",
+		baseHost := prompts.HostFacts{
 			SessionMode: string(api.SessionModeAgent),
 			Profiles:    []sandbox.ToolProfile{profile},
-			Plan:        toolsurface.Compile(offered, nil),
-			Visible:     offered,
 			Schemas:     stock.Schemas,
 			RootCount:   1,
 		}
+		baseTurn := prompts.TurnProjection{
+			ProfileID: "missing_entry_probe",
+			Plan:      toolsurface.Compile(offered, nil),
+			Offered:   offered,
+		}
 
-		preFreeze, err := prompts.NewReader(baseInput)
+		preFreeze, err := prompts.NewReader(baseHost, baseTurn)
 		contractcheck.FailErr(t, "preFreeze NewReader", err)
 		pfFacts := preFreeze.Facts()
 		if got, _ := pfFacts["runner_host_resources_tools"].([]string); !slices.Equal(got, []string{"command", "terminal_open"}) {
@@ -581,11 +582,11 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 		}
 
 		// Frozen map omits command and ask_user while keeping stock.Schemas populated.
-		partialIn := baseInput
-		partialIn.ProjectedSchemas = map[string]map[string]any{
+		partialTurn := baseTurn
+		partialTurn.ProjectedSchemas = map[string]map[string]any{
 			"terminal_open": termMeta.ArgsSchema,
 		}
-		missingEntryReader, err := prompts.NewReader(partialIn)
+		missingEntryReader, err := prompts.NewReader(baseHost, partialTurn)
 		contractcheck.FailErr(t, "missingEntryReader", err)
 		if !slices.Equal(missingEntryReader.Offered(), offered) {
 			t.Fatalf("offered = %v, want %v", missingEntryReader.Offered(), offered)
@@ -612,9 +613,9 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 			t.Fatal("missing-entry can_ask_user_secret = true, want false when ask_user has no frozen entry")
 		}
 
-		emptyIn := baseInput
-		emptyIn.ProjectedSchemas = map[string]map[string]any{}
-		emptyFrozenReader, err := prompts.NewReader(emptyIn)
+		emptyTurn := baseTurn
+		emptyTurn.ProjectedSchemas = map[string]map[string]any{}
+		emptyFrozenReader, err := prompts.NewReader(baseHost, emptyTurn)
 		contractcheck.FailErr(t, "emptyFrozenReader", err)
 		ef := emptyFrozenReader.Facts()
 		for _, runnerKey := range []string{
@@ -683,14 +684,15 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 				"secret_list":     {"type": "object"},
 				"secret_revoke":   {"type": "object"},
 			}
-			r, rErr := prompts.NewReader(prompts.ReaderInput{
+			r, rErr := prompts.NewReader(prompts.HostFacts{
+				Profiles:  []sandbox.ToolProfile{prof},
+				Schemas:   stock.Schemas,
+				RootCount: 1,
+			}, prompts.TurnProjection{
 				ProfileID:        "ask_enum_probe",
-				Profiles:         []sandbox.ToolProfile{prof},
 				Plan:             toolsurface.Compile(offered, nil),
-				Visible:          offered,
-				Schemas:          stock.Schemas,
+				Offered:          offered,
 				ProjectedSchemas: schemas,
-				RootCount:        1,
 			})
 			contractcheck.FailErr(t, "NewReader ask_enum_probe", rErr)
 			return r, schemas

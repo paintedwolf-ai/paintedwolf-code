@@ -26,7 +26,7 @@ func TestTurnSourceBriefsSitBeforeTheirOpeningPrompt(t *testing.T) {
 		loads++
 		return map[string]inject.SourceChangeBrief{"u2": brief, "gone": brief}
 	}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	sess := &api.Session{ID: "source-window", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	ctx := context.Background()
 	history := []api.Message{
@@ -34,7 +34,7 @@ func TestTurnSourceBriefsSitBeforeTheirOpeningPrompt(t *testing.T) {
 		{ID: "a1", Role: api.MessageRoleAssistant, Content: "There are 3."},
 		{ID: "u2", Role: api.MessageRoleUser, Content: "Update the inventory and summarize the result."},
 	}
-	reader, err := testTurnContext(eng).surface.turnReader(ctx, sess, inject.CoordinatorTurnFrame{}, history, &TurnAssemblyScratch{}, 1)
+	reader, err := testTurnContext(eng).surface.turnReader(ctx, sess, inject.CoordinatorTurnFrame{}, history, &TurnAssemblyScratch{})
 	testutil.FailErr(t, "turnReader", err)
 	block := inject.RenderSourceChangesBlock(ctx, deps.Injects, reader, sess.ID, brief)
 	if block == "" {
@@ -96,7 +96,7 @@ func TestTruncatedBriefOffersSourceHistoryOnlyWhereTheSurfaceHasIt(t *testing.T)
 	deps.TurnSourceBriefs = func(context.Context, *api.Session) map[string]inject.SourceChangeBrief {
 		return map[string]inject.SourceChangeBrief{"u1": {Truncated: true}}
 	}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	sess := &api.Session{ID: "source-surface", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	eng.BeginPromptTurn(sess.ID, "")
 	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Update the inventory."}}
@@ -136,7 +136,7 @@ func TestSourceChangeSnapshotNeverAppearsAsDynamicTailState(t *testing.T) {
 			calls++
 			return map[string]inject.SourceChangeBrief{"u1": brief}
 		}
-		eng.SetDeps(deps)
+		eng.SetDeps(withTestTurnReader(deps))
 		sess := &api.Session{ID: "source-tail", AgentType: orchestration.ProfileCoordinator}
 		eng.BeginPromptTurn(sess.ID, "")
 		_, err := testTurnContext(eng).buildTailSystemInjects(context.Background(), sess, true, inject.CoordinatorTurnFrame{}, nil, nil, eng.cache.LoadTurn(sess.ID))

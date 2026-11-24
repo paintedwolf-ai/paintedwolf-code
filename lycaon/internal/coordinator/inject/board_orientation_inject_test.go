@@ -21,12 +21,14 @@ func boardTestCoordReader(t *testing.T) prompts.Reader {
 	t.Helper()
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	r, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	r, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader coordinator", err)
 	return r
@@ -58,11 +60,13 @@ func TestRenderBoardOrientationInject_WorkerSnapshotOmitsScanLegend(t *testing.T
 	renderer := promptstest.InjectRenderer(t)
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Declared:  true,
 	})
 	testutil.FailErr(t, "worker reader", err)
 	block, err := inject.RenderBoardOrientationInject(
@@ -110,13 +114,15 @@ func TestRenderBoardOrientationInject_PackBoardPairedWitnesses(t *testing.T) {
 	now := time.Now().UTC()
 
 	// Positive witness 1: pack_board offered directly.
-	withBoard, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_park",
+	withBoard, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plans["implement_park"],
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_park",
+		Plan:      plans["implement_park"],
+		Offered:   (plans["implement_park"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "withBoard reader", err)
 	pos, err := inject.RenderBoardOrientationInject(t.Context(), renderer, withBoard, "s", snap, packboard.InjectScopeFull, false, false, now)
@@ -126,13 +132,15 @@ func TestRenderBoardOrientationInject_PackBoardPairedWitnesses(t *testing.T) {
 	}
 
 	// Positive witness 2: pack_board deferred/loadable via request_tools (floor-only implement_investigate).
-	floorInvestigate, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_investigate",
+	floorInvestigate, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plans["implement_investigate"],
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Plan:      plans["implement_investigate"],
+		Offered:   (plans["implement_investigate"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "floorInvestigate reader", err)
 	loadable, err := inject.RenderBoardOrientationInject(t.Context(), renderer, floorInvestigate, "s", snap, packboard.InjectScopeFull, false, false, now)
@@ -144,30 +152,36 @@ func TestRenderBoardOrientationInject_PackBoardPairedWitnesses(t *testing.T) {
 	// Negative witnesses: 0-root coordinator, implement_synthesis, and worker board inject omit pack_board.
 	zeroRootPlans, err := surface.CompileToolPlans(0)
 	testutil.FailErr(t, "CompileToolPlans(0)", err)
-	zeroRoot, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_investigate",
+	zeroRoot, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      zeroRootPlans["implement_investigate"],
 		RootCount: 0,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Plan:      zeroRootPlans["implement_investigate"],
+		Offered:   (zeroRootPlans["implement_investigate"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "zeroRoot reader", err)
-	synthesis, err := prompts.NewReader(prompts.ReaderInput{
+	synthesis, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: "implement_synthesis",
-		Profiles:  profiles,
 		Plan:      plans["implement_synthesis"],
-		RootCount: 1,
-		WebSearch: true,
+		Offered:   (plans["implement_synthesis"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "synthesis reader", err)
-	worker, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	worker, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   []string{"command", "complete_leg"},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Offered:   []string{"command", "complete_leg"},
+		Declared:  true,
 	})
 	testutil.FailErr(t, "worker reader", err)
 

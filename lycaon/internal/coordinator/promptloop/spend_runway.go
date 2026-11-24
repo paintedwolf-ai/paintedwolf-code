@@ -2,9 +2,11 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"log/slog"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/prompts"
 
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -27,10 +29,10 @@ type SpendCeilingCheck struct {
 }
 
 // SpendRunwayNudge renders the first spend warning.
-type SpendRunwayNudge func(ctx context.Context, sess *api.Session, ceilingUSD float64) HostNudge
+type SpendRunwayNudge func(ctx context.Context, sess *api.Session, reader prompts.Reader, ceilingUSD float64) HostNudge
 
 // SpendSoftStopNudge renders instructions for the final tool round.
-type SpendSoftStopNudge func(ctx context.Context, sess *api.Session) HostNudge
+type SpendSoftStopNudge func(ctx context.Context, sess *api.Session, reader prompts.Reader) HostNudge
 
 // spendCeilingDecision selects a warning, final tool round, or completed closeout.
 type spendCeilingDecision struct {
@@ -75,7 +77,7 @@ func (l *turnNudges) applySpendCeiling(
 		return out, err
 	}
 	if sess != nil && !st.spendSoftStopGranted && check.SoftStop && l.Deps.SpendSoftStopNudge != nil {
-		out.WindDown = l.Deps.SpendSoftStopNudge(ctx, sess)
+		out.WindDown = l.Deps.SpendSoftStopNudge(ctx, sess, turnReader(st))
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
@@ -154,7 +156,7 @@ func (l *turnNudges) maybeSpendRunwayNudge(
 	if !runway.Low {
 		return history, nil
 	}
-	nudge := l.Deps.SpendRunwayNudge(ctx, sess, runway.CeilingUSD)
+	nudge := l.Deps.SpendRunwayNudge(ctx, sess, turnReader(st), runway.CeilingUSD)
 	if nudge.Empty() {
 		return history, nil
 	}

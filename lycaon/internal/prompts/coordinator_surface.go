@@ -136,30 +136,6 @@ func MergeCoordinatorKickVarsForTools(into map[string]any, reader Reader) error 
 	return nil
 }
 
-// OfferedTools partitions a surface's loadable tools by the turn's loaded set:
-// offered is the floor plus every loaded loadable tool, requestable the rest.
-func OfferedTools(floor, loadable []string, loaded map[string]bool) (offered, requestable []string) {
-	offered = append([]string(nil), floor...)
-	seen := make(map[string]bool, len(floor)+len(loadable))
-	for _, name := range floor {
-		seen[name] = true
-	}
-	for _, name := range loadable {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		if loaded[name] {
-			offered = append(offered, name)
-		} else {
-			requestable = append(requestable, name)
-		}
-	}
-	sort.Strings(offered)
-	sort.Strings(requestable)
-	return offered, requestable
-}
-
 // clearSkillRosterWithoutSkillsRead drops the catalog when the surface lacks skills_read.
 func clearSkillRosterWithoutSkillsRead(into map[string]any) {
 	if readable, _ := into["profile_has_skills_read"].(bool); readable {

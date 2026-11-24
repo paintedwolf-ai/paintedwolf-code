@@ -2,10 +2,11 @@ package promptloop
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/project"

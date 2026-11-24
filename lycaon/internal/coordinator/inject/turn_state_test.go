@@ -20,22 +20,25 @@ func TestRenderTurnStateBlock(t *testing.T) {
 	testutil.FailErr(t, "LoadToolProfiles", err)
 	plans, err := surface.CompileToolPlans(1)
 	testutil.FailErr(t, "CompileToolPlans", err)
-	withProgress, err := prompts.NewReader(prompts.ReaderInput{
+	withProgress, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: "implement_investigate",
-		Profiles:  profiles,
 		Plan:      plans["implement_investigate"],
-		RootCount: 1,
-		WebSearch: true,
+		Offered:   (plans["implement_investigate"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "NewReader implement_investigate", err)
-	withoutProgress, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	withoutProgress, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   []string{"read_file"},
-		Loaded:    map[string]bool{"read_file": true},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Offered:   readerDeclaredOffer(profiles, prompts.CoordinatorProfileID, []string{"read_file"}, map[string]bool{"read_file": true}),
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader without progress", err)
 
@@ -90,13 +93,15 @@ func TestTurnStateCarriesCurrentProgressSnapshot(t *testing.T) {
 	testutil.FailErr(t, "LoadToolProfiles", err)
 	plans, err := surface.CompileToolPlans(1)
 	testutil.FailErr(t, "CompileToolPlans", err)
-	withProgress, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_investigate",
+	withProgress, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plans["implement_investigate"],
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Plan:      plans["implement_investigate"],
+		Offered:   (plans["implement_investigate"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "NewReader implement_investigate", err)
 	snapshot := `{"content":"- [ ] Deliver","revision":"current-snapshot-revision","reconciliation":{"token":"worker-finish-token","jobs":["worker-one"]}}`
@@ -135,22 +140,24 @@ func TestTurnStateRosterRendersEveryState(t *testing.T) {
 			}
 		}
 	}
-	withStateTools, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	withStateTools, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   allVisible,
-		Loaded:    allLoaded,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Offered:   readerDeclaredOffer(profiles, prompts.CoordinatorProfileID, allVisible, allLoaded),
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader withStateTools", err)
-	withoutStateTools, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	withoutStateTools, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   []string{"recall"},
-		Loaded:    map[string]bool{"recall": true},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Offered:   readerDeclaredOffer(profiles, prompts.CoordinatorProfileID, []string{"recall"}, map[string]bool{"recall": true}),
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader withoutStateTools", err)
 	for state, tools := range stateTools {
@@ -185,11 +192,13 @@ func TestTurnStateNamesOmittedWorkers(t *testing.T) {
 	renderer := prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: testConfigRoot(t)}))
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	coordReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	coordReader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader coordinator", err)
 	block, err := inject.RenderTurnStateBlock(t.Context(), renderer, "roster-omitted", inject.TurnStateInjectInput{

@@ -2,16 +2,19 @@
 package tools
 
 import (
-	"github.com/lycaon/lycaon/internal/hostprocess"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"sync"
 	"sync/atomic"
 
+	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/toolreach"
+
 	"context"
-	"github.com/lycaon/lycaon/internal/sourcebranch"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"net/netip"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -262,6 +265,9 @@ type InvocationTurn struct {
 	TurnToolPlan toolsurface.Plan
 	// TurnPrograms freezes which native programs and modes this model turn admits.
 	TurnPrograms *toolreach.ProgramTable
+	// Reader projects the model request that carried the call; it is invalid
+	// for non-model callers and when the request's host facts were unavailable.
+	Reader prompts.Reader
 	// TurnWritePinRootID and Globs constrain writes to one root.
 	TurnWritePinRootID string
 	TurnWritePinGlobs  []string

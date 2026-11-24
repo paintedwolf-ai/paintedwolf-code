@@ -78,7 +78,7 @@ func synthesisPromptStabilityEngine(t *testing.T) *AssemblyEngine {
 		},
 	}
 	eng := &AssemblyEngine{}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	return eng
 }
 

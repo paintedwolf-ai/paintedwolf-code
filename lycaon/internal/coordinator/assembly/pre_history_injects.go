@@ -39,7 +39,7 @@ func (e *turnContextAssembler) interleaveSourceBriefs(ctx context.Context, sess 
 	if e == nil || e.surface == nil {
 		return messages
 	}
-	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn, 0)
+	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn)
 	if err != nil {
 		return messages
 	}
@@ -150,7 +150,7 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 			if coordinator {
 				surface = "coordinator"
 			}
-			if reader, waitSchema, rErr := e.surface.commandJobsReader(ctx, sess, coordinator, frame, history, turn, jobs, held); rErr == nil {
+			if reader, waitSchema, rErr := e.surface.commandJobsReader(ctx, sess, coordinator, frame, history, turn); rErr == nil {
 				if block := inject.RenderCommandJobsBlock(ctx, deps.Injects, reader, waitSchema, sess.ID, jobs, held, time.Now().UTC(), surface); block != "" {
 					tail = append(tail, api.Message{
 						Role: api.MessageRoleSystem, Content: block,
@@ -230,7 +230,7 @@ func (e *turnContextAssembler) prepareCoordinatorBoard(
 			return prompts.Reader{}
 		}
 		f.Roster = e.surface.resolveTurnRoster(ctx, sess, *f, history, turn)
-		r, _ := e.surface.turnReader(ctx, sess, *f, history, turn, 0)
+		r, _ := e.surface.turnReader(ctx, sess, *f, history, turn)
 		return r
 	}
 	run := frame.RunContext
@@ -301,7 +301,7 @@ func (e *turnContextAssembler) turnStateInject(
 		return "", false
 	}
 	_, implState := e.surface.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn, 0)
+	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn)
 	if err != nil {
 		return "", false
 	}

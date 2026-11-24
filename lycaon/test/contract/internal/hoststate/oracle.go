@@ -14,14 +14,17 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/session/readerfacts"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/internal/webresearch"
@@ -379,10 +382,11 @@ func FreezeTurnAuthorityWithResources(
 	}
 	if proj.offered == nil {
 		deps, sess, history, frame := buildCoordinatorTurnInputs(state, bundle, resources)
-		metas, plan, resolvedSurfaceID, pErr := promptloop.ProjectTurnTools(ctx, deps, sess, history, frame)
+		turn, pErr := promptloop.ProjectTurnTools(ctx, deps, sess, history, frame)
 		if pErr != nil {
 			return TurnAuthority{}, fmt.Errorf("ProjectTurnTools: %w", pErr)
 		}
+		metas, plan, resolvedSurfaceID := turn.Metas, turn.Plan, turn.SurfaceID
 		if state.TurnProfile.SurfaceID != "" && resolvedSurfaceID != state.TurnProfile.SurfaceID {
 			return TurnAuthority{}, fmt.Errorf(
 				"resolved surface %q disagrees with state.TurnProfile.SurfaceID %q",
@@ -402,10 +406,7 @@ func FreezeTurnAuthorityWithResources(
 		if tErr != nil {
 			return TurnAuthority{}, fmt.Errorf("Metadata.ProgramTable: %w", tErr)
 		}
-		postLoadSchemas, dErr := projectDeferredSchemas(ctx, deps, sess, history, frame, plan, state.Loaded, metas)
-		if dErr != nil {
-			return TurnAuthority{}, fmt.Errorf("projectDeferredSchemas: %w", dErr)
-		}
+		postLoadSchemas := turn.DeferredSchemas
 		offered := toolMetaNames(metas)
 		projectedSchemas := toolMetaSchemas(metas)
 		encSchemas, encErr := encodeAdmittedValue(reflect.ValueOf(projectedSchemas), map[ptrVisit]bool{})
@@ -429,30 +430,16 @@ func FreezeTurnAuthorityWithResources(
 		}
 	}
 
-	var reviewsConfinedWrites bool
-	if state.ApprovalPosture != "" {
-		reviewsConfinedWrites = state.ApprovalPosture.ReviewsConfinedWrites()
+	host, err := CoordinatorHostFacts(state, narrowed, overlay.Schemas)
+	if err != nil {
+		return TurnAuthority{}, err
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:             prompts.CoordinatorProfileID,
-		SurfaceID:             proj.resolvedSurface,
-		Mode:                  surface.ExecutionModeFamily(proj.resolvedSurface),
-		SessionMode:           string(state.SessionMode),
-		Profiles:              narrowed,
-		Plan:                  proj.plan,
-		Loaded:                state.Loaded,
-		Visible:               proj.offered,
-		Schemas:               overlay.Schemas,
-		ProjectedSchemas:      proj.projectedSchemas,
-		RootCount:             state.RootCount,
-		HasGit:                state.HasGit,
-		HasAnyGitRoot:         state.HasAnyGitRoot,
-		WebSearch:             state.WebSearch,
-		SpawnAllowlist:        state.SpawnAllowlist,
-		ReviewsConfinedWrites: reviewsConfinedWrites,
-		CommandExternalHidden: state.CommandExternalHidden,
-		SessionScratchDir:     state.SessionScratchDir,
-		SharedTempLocations:   state.SharedTempLocations,
+	reader, err := prompts.NewReader(host, prompts.TurnProjection{
+		ProfileID:        prompts.CoordinatorProfileID,
+		SurfaceID:        proj.resolvedSurface,
+		Plan:             proj.plan,
+		Offered:          proj.offered,
+		ProjectedSchemas: mergedSchemas(proj.postLoadSchemas, proj.projectedSchemas),
 	})
 	if err != nil {
 		return TurnAuthority{}, fmt.Errorf("prompts.NewReader: %w", err)
@@ -467,17 +454,7 @@ func buildCoordinatorTurnInputs(
 	bundle executorBundle,
 	resources toolcontract.ResourcePresence,
 ) (promptloop.ContextDeps, *api.Session, []api.Message, inject.CoordinatorTurnFrame) {
-	sess := &api.Session{
-		ID:        "coord-fixture",
-		Mode:      state.SessionMode,
-		Posture:   state.Posture,
-		AgentType: prompts.CoordinatorProfileID,
-	}
-	if len(state.Roots) > 0 {
-		sess.WorkspacePath = state.Roots[0].Ref.Path
-	} else if state.RootCount > 0 {
-		sess.WorkspacePath = "/tmp/fixture-primary"
-	}
+	sess := coordinatorFixtureSession(state)
 
 	history := state.History
 	if len(history) == 0 {
@@ -513,6 +490,19 @@ func buildCoordinatorTurnInputs(
 		},
 	}
 	return deps, sess, history, frame
+}
+
+func coordinatorFixtureSession(state CoordinatorState) *api.Session {
+	sess := &api.Session{
+		ID:        "coord-fixture",
+		Mode:      state.SessionMode,
+		Posture:   state.Posture,
+		AgentType: prompts.CoordinatorProfileID,
+	}
+	if len(state.Roots) > 0 {
+		sess.WorkspacePath = state.Roots[0].Ref.Path
+	}
+	return sess
 }
 
 // NormalizeCoordinatorRunContext synthesizes the minimal run-context fields needed
@@ -566,57 +556,56 @@ func toolMetaSchemas(metas []tools.ToolMeta) map[string]map[string]any {
 	return out
 }
 
-func projectDeferredSchemas(
-	ctx context.Context,
-	deps promptloop.ContextDeps,
-	sess *api.Session,
-	history []api.Message,
-	frame inject.CoordinatorTurnFrame,
-	plan toolsurface.Plan,
-	alreadyLoaded map[string]bool,
-	currentMetas []tools.ToolMeta,
-) (map[string]map[string]any, error) {
-	deferredNames := plan.DeferredNames()
-	if len(deferredNames) == 0 {
-		return nil, nil
-	}
-	allPresent := true
-	currentByTool := toolMetaSchemas(currentMetas)
-	for _, name := range deferredNames {
-		if currentByTool[name] == nil {
-			allPresent = false
-			break
-		}
-	}
-	if allPresent {
-		out := make(map[string]map[string]any, len(deferredNames))
-		for _, name := range deferredNames {
-			out[name] = currentByTool[name]
-		}
-		return out, nil
-	}
-	allLoaded := maps.Clone(alreadyLoaded)
-	if allLoaded == nil {
-		allLoaded = make(map[string]bool, len(deferredNames))
-	}
-	deferredSet := make(map[string]bool, len(deferredNames))
-	for _, name := range deferredNames {
-		allLoaded[name] = true
-		deferredSet[name] = true
-	}
-	depsLoaded := deps
-	depsLoaded.LoadedTools = func(string) map[string]bool { return maps.Clone(allLoaded) }
-	postMetas, _, _, err := promptloop.ProjectTurnTools(ctx, depsLoaded, sess, history, frame)
+// CoordinatorHostFacts derives state's host facts through the production
+// derivation from the observation the generated state describes.
+func CoordinatorHostFacts(state CoordinatorState, profiles []sandbox.ToolProfile, schemas *toolschema.Config) (prompts.HostFacts, error) {
+	sess := coordinatorFixtureSession(state)
+	host, err := readerfacts.Derive(readerfacts.Observation{
+		Session:               sess,
+		Profiles:              profiles,
+		Schemas:               schemas,
+		Roots:                 rootRefs(state.Roots),
+		WebSearch:             state.WebSearch,
+		ApprovalPosture:       state.ApprovalPosture,
+		CommandExternalHidden: state.CommandExternalHidden,
+		SessionScratchDir:     state.SessionScratchDir,
+		SharedTempLocations:   state.SharedTempLocations,
+		AllowedAgents:         state.SpawnAllowlist,
+		IsRepo:                rootRepoProbe(state.Roots),
+	})
 	if err != nil {
-		return nil, err
+		return prompts.HostFacts{}, err
 	}
-	out := make(map[string]map[string]any, len(deferredNames))
-	for _, m := range postMetas {
-		if deferredSet[m.Name] && m.ArgsSchema != nil {
-			out[m.Name] = m.ArgsSchema
-		}
+	if host.RootCount != state.RootCount || host.HasGit != state.HasGit || host.HasAnyGitRoot != state.HasAnyGitRoot {
+		return prompts.HostFacts{}, fmt.Errorf("state %s: derived roots=%d git=%t/%t disagree with generated roots=%d git=%t/%t",
+			state.ID, host.RootCount, host.HasGit, host.HasAnyGitRoot, state.RootCount, state.HasGit, state.HasAnyGitRoot)
 	}
-	return out, nil
+	return host, nil
+}
+
+func rootRefs(roots []RootSpec) []projectroot.RootRef {
+	out := make([]projectroot.RootRef, 0, len(roots))
+	for _, root := range roots {
+		out = append(out, root.Ref)
+	}
+	return out
+}
+
+// rootRepoProbe answers the repository probe from the generated roots.
+func rootRepoProbe(roots []RootSpec) func(string) bool {
+	repos := make(map[string]bool, len(roots))
+	for _, root := range roots {
+		repos[root.Ref.Path] = root.HasGit
+	}
+	return func(path string) bool { return repos[path] }
+}
+
+func mergedSchemas(layers ...map[string]map[string]any) map[string]map[string]any {
+	out := map[string]map[string]any{}
+	for _, layer := range layers {
+		maps.Copy(out, layer)
+	}
+	return out
 }
 
 func assembleTurnAuthorityFromEntry(proj projectedTurnToolsEntry, reader prompts.Reader) TurnAuthority {

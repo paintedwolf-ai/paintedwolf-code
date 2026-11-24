@@ -17,11 +17,13 @@ func TestWorkerKickMarkerFallbackIsMarkerOnly(t *testing.T) {
 	data := map[string]any{"max_chars": 12000, "actual_chars": 21000}
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader worker", err)
 	failing := func(context.Context, prompts.Reader, string, map[string]any) (string, error) {

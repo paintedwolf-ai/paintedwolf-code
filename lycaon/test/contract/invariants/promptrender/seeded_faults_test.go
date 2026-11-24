@@ -59,12 +59,17 @@ func TestEightMandatorySeededFaultsFailPinpointAndHarmlessRewordingsPass(t *test
 			t.Fatalf("FreezeTurnAuthority: %v", fErr)
 		}
 		// Faulty skill reader: marks deferred "verify" as loaded/visible even though floorAuth.Offered omits "verify".
-		faultyReader, rErr := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: prompts.CoordinatorProfileID, SurfaceID: "implement_investigate",
-			Profiles: s.Profiles, Plan: floorAuth.Plan,
-			Loaded:  map[string]bool{"verify": true},
-			Visible: append(append([]string(nil), floorAuth.Offered...), "verify"),
-			Schemas: s.Schemas, RootCount: 1, HasGit: true, WebSearch: true,
+		faultyReader, rErr := prompts.NewReader(prompts.HostFacts{
+			Profiles:  s.Profiles,
+			Schemas:   s.Schemas,
+			RootCount: 1,
+			HasGit:    true,
+			WebSearch: true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_investigate",
+			Plan:      readerLoadedPlan(floorAuth.Plan, map[string]bool{"verify": true}),
+			Offered:   readerLoadedOffer(floorAuth.Plan, append(append([]string(nil), floorAuth.Offered...), "verify"), map[string]bool{"verify": true}),
 		})
 		if rErr != nil {
 			t.Fatalf("faulty NewReader: %v", rErr)

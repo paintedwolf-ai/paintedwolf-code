@@ -183,7 +183,7 @@ func TestPromptCacheBreakpointPlacementTable(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			eng := &AssemblyEngine{}
-			eng.SetDeps(tc.deps)
+			eng.SetDeps(withTestTurnReader(tc.deps))
 			eng.BeginPromptTurn(tc.sess.ID, "")
 			msgs, err := eng.BuildCompletionMessages(context.Background(), tc.sess, []api.Message{
 				{Role: api.MessageRoleUser, Content: "continue"},

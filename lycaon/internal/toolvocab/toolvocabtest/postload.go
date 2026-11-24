@@ -26,7 +26,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
-	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -377,11 +376,17 @@ func ResolveCoordinatorTurnAuthority(ctx context.Context, spec CoordinatorTurnSp
 		ToolLister:       exec.Metadata,
 		ProjectRootCount: func(context.Context, *api.Session) int { return spec.RootCount },
 	})
+	host := prompts.HostFacts{
+		SessionMode: string(mode), Profiles: narrowed, Schemas: schemas, RootCount: spec.RootCount,
+		HasGit: spec.HasGit, HasAnyGitRoot: spec.HasGit, WebSearch: spec.WebSearch,
+		SpawnAllowlist: spec.SpawnAllowlist, CommandExternalHidden: spec.CommandExternalHidden,
+	}
 	deps := promptloop.ContextDeps{
 		Tools:              reg,
 		Policy:             policy,
 		LoadedTools:        func(string) map[string]bool { return maps.Clone(spec.Loaded) },
 		ProjectRootCount:   func(context.Context, *api.Session) int { return spec.RootCount },
+		HostFacts:          func(context.Context, *api.Session) (prompts.HostFacts, error) { return host, nil },
 		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{WebSearchEnabled: func() bool { return spec.WebSearch }},
 	}
 	sess := &api.Session{ID: "coord-check", Mode: mode, Posture: posture, AgentType: prompts.CoordinatorProfileID}
@@ -406,14 +411,11 @@ func ResolveCoordinatorTurnAuthority(ctx context.Context, spec CoordinatorTurnSp
 		Roster:     roster,
 		Machine:    inject.Machine{ProfileID: prompts.CoordinatorProfileID},
 	}
-	metas, plan, surfaceID, err := promptloop.ProjectTurnTools(ctx, deps, sess, history, frame)
+	turn, err := promptloop.ProjectTurnTools(ctx, deps, sess, history, frame)
 	if err != nil {
 		return ActorAuthority{}, err
 	}
-	deferredSchemas, err := projectDeferredViaTurnTools(ctx, deps, sess, history, frame, plan, spec.Loaded)
-	if err != nil {
-		return ActorAuthority{}, err
-	}
+	metas, surfaceID := turn.Metas, turn.SurfaceID
 	filter := platform.ToolFilter{ProfileID: prompts.CoordinatorProfileID, SurfaceID: surfaceID, ProjectRootCount: spec.RootCount}
 	progReach, err := exec.Metadata.ProgramReach(ctx, filter)
 	if err != nil {
@@ -423,18 +425,11 @@ func ResolveCoordinatorTurnAuthority(ctx context.Context, spec CoordinatorTurnSp
 	if err != nil {
 		return ActorAuthority{}, err
 	}
-	offered := sortedMetaNames(metas)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID, SurfaceID: surfaceID, Mode: surface.ExecutionModeFamily(surfaceID),
-		SessionMode: string(mode), Profiles: narrowed, Plan: plan, Loaded: spec.Loaded, Visible: offered,
-		Schemas: schemas, ProjectedSchemas: metaSchemaMap(metas), RootCount: spec.RootCount,
-		HasGit: spec.HasGit, HasAnyGitRoot: spec.HasGit, WebSearch: spec.WebSearch,
-		SpawnAllowlist: spec.SpawnAllowlist, CommandExternalHidden: spec.CommandExternalHidden,
-	})
+	reader, err := prompts.NewReader(host, turn.Projection(metas))
 	if err != nil {
 		return ActorAuthority{}, err
 	}
-	return AuthorityFromReaderAndMetas(reader, progReach, metas, WithProgramTable(progTable), WithPostLoadAuthority(deferredSchemas, progTable)), nil
+	return AuthorityFromReaderAndMetas(reader, progReach, metas, WithProgramTable(progTable), WithPostLoadAuthority(turn.DeferredSchemas, progTable)), nil
 }
 
 // ResolveWorkerAuthorityForSession builds the production-projected ActorAuthority
@@ -445,7 +440,7 @@ func ResolveWorkerAuthorityForSession(
 	sessionMode api.SessionMode,
 	posture api.SessionPosture,
 	rootCount int,
-	hasGit, webSearch, externalHidden bool,
+	hasGit, onWorkerBranch, webSearch, externalHidden bool,
 	agentID string,
 ) (ActorAuthority, error) {
 	if eff == nil {
@@ -473,28 +468,31 @@ func ResolveWorkerAuthorityForSession(
 	if err != nil {
 		return ActorAuthority{}, err
 	}
-	rc := max(rootCount, 1)
+	rc := rootCount
 	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
 		ToolLister:       exec.Metadata,
 		ProjectRootCount: func(context.Context, *api.Session) int { return rc },
 	})
+	host := prompts.HostFacts{
+		SessionMode: string(sessionMode), Profiles: narrowed, Schemas: schemas, RootCount: rc,
+		HasGit: hasGit, HasAnyGitRoot: hasGit, OnWorkerBranch: onWorkerBranch,
+		WebSearch: webSearch, CommandExternalHidden: externalHidden,
+	}
 	deps := promptloop.ContextDeps{
 		Tools:              reg,
 		Policy:             policy,
 		LoadedTools:        func(string) map[string]bool { return map[string]bool{} },
 		ProjectRootCount:   func(context.Context, *api.Session) int { return rc },
+		HostFacts:          func(context.Context, *api.Session) (prompts.HostFacts, error) { return host, nil },
 		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{WebSearchEnabled: func() bool { return webSearch }},
 	}
 	workerSess := &api.Session{ID: "worker-check", ParentSessionID: "coord-check", Mode: sessionMode, Posture: posture, AgentType: target.ID, WorkspacePath: "/tmp/proj"}
 	frame := inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: target.ToolProfile}}
-	metas, plan, _, err := promptloop.ProjectTurnTools(ctx, deps, workerSess, nil, frame)
+	turn, err := promptloop.ProjectTurnTools(ctx, deps, workerSess, nil, frame)
 	if err != nil {
 		return ActorAuthority{}, err
 	}
-	deferredSchemas, err := projectDeferredViaTurnTools(ctx, deps, workerSess, nil, frame, plan, nil)
-	if err != nil {
-		return ActorAuthority{}, err
-	}
+	metas := turn.Metas
 	filter := platform.ToolFilter{ProfileID: target.ToolProfile, ProjectRootCount: rc}
 	progReach, err := exec.Metadata.ProgramReach(ctx, filter)
 	if err != nil {
@@ -504,55 +502,11 @@ func ResolveWorkerAuthorityForSession(
 	if err != nil {
 		return ActorAuthority{}, err
 	}
-	offered := sortedMetaNames(metas)
-	mutCapable, _ := prompts.AgentMutationCapable(target.ID)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: target.ToolProfile, SessionMode: string(sessionMode), Profiles: narrowed,
-		Plan: plan, Visible: offered, Schemas: schemas, ProjectedSchemas: metaSchemaMap(metas), RootCount: rc,
-		HasGit: hasGit, HasAnyGitRoot: hasGit, OnWorkerBranch: hasGit && mutCapable && !askChild,
-		WebSearch: webSearch, CommandExternalHidden: externalHidden,
-	})
+	reader, err := prompts.NewReader(host, turn.Projection(metas))
 	if err != nil {
 		return ActorAuthority{}, err
 	}
-	return AuthorityFromReaderAndMetas(reader, progReach, metas, WithProgramTable(progTable), WithPostLoadAuthority(deferredSchemas, progTable)), nil
-}
-
-func projectDeferredViaTurnTools(
-	ctx context.Context,
-	deps promptloop.ContextDeps,
-	sess *api.Session,
-	history []api.Message,
-	frame inject.CoordinatorTurnFrame,
-	plan toolsurface.Plan,
-	alreadyLoaded map[string]bool,
-) (map[string]map[string]any, error) {
-	names := plan.DeferredNames()
-	if len(names) == 0 {
-		return nil, nil
-	}
-	deferred := make(map[string]bool, len(names))
-	allLoaded := maps.Clone(alreadyLoaded)
-	if allLoaded == nil {
-		allLoaded = make(map[string]bool, len(names))
-	}
-	for _, name := range names {
-		deferred[name] = true
-		allLoaded[name] = true
-	}
-	depsLoaded := deps
-	depsLoaded.LoadedTools = func(string) map[string]bool { return maps.Clone(allLoaded) }
-	postMetas, _, _, err := promptloop.ProjectTurnTools(ctx, depsLoaded, sess, history, frame)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]map[string]any, len(names))
-	for _, m := range postMetas {
-		if deferred[m.Name] && m.ArgsSchema != nil {
-			out[m.Name] = m.ArgsSchema
-		}
-	}
-	return out, nil
+	return AuthorityFromReaderAndMetas(reader, progReach, metas, WithProgramTable(progTable), WithPostLoadAuthority(turn.DeferredSchemas, progTable)), nil
 }
 
 func buildTurnExecutor(

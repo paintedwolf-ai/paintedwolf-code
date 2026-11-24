@@ -60,17 +60,18 @@ func newGuidanceTestEnv(t *testing.T) (
 func TestStateSpecificGuidanceValidationExecution(t *testing.T) {
 	engine, _, _, readOnlyEffects := newGuidanceTestEnv(t)
 
-	withCmdExec, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker_verify",
+	withCmdExec, err := prompts.NewReader(prompts.HostFacts{
 		Profiles: []sandbox.ToolProfile{{
 			ID:             "worker_verify",
 			Tools:          map[string]bool{"command": true, "complete_leg": true},
 			CommandEffects: toolcontract.AllCommandEffects(),
 		}},
-		Plan:      toolsurface.Compile([]string{"command", "complete_leg"}, nil),
-		Visible:   []string{"command", "complete_leg"},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker_verify",
+		Plan:      toolsurface.Compile([]string{"command", "complete_leg"}, nil),
+		Offered:   []string{"command", "complete_leg"},
 	})
 	testutil.FailErr(t, "withCmdExec", err)
 	varsExec, err := prompts.Vars(withCmdExec, map[string]any{"verify_command": "./task test:short"})
@@ -81,18 +82,19 @@ func TestStateSpecificGuidanceValidationExecution(t *testing.T) {
 		t.Fatalf("eligible verify state lost concrete command(verification: true):\n%s", outExec)
 	}
 
-	loadableCmd, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker_loadable",
+	loadableCmd, err := prompts.NewReader(prompts.HostFacts{
 		Profiles: []sandbox.ToolProfile{{
 			ID:             "worker_loadable",
 			Tools:          map[string]bool{"command": true, "request_tools": true, "complete_leg": true},
 			DeferredTools:  map[string]bool{"command": true},
 			CommandEffects: toolcontract.AllCommandEffects(),
 		}},
-		Plan:      toolsurface.Compile([]string{"request_tools", "complete_leg"}, []string{"command"}),
-		Visible:   []string{"request_tools", "complete_leg", "command"},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker_loadable",
+		Plan:      toolsurface.Compile([]string{"request_tools", "complete_leg"}, []string{"command"}),
+		Offered:   []string{"request_tools", "complete_leg", "command"},
 	})
 	testutil.FailErr(t, "loadableCmd", err)
 	varsLoad, err := prompts.Vars(loadableCmd, map[string]any{"verify_command": "./task test:short"})
@@ -103,17 +105,18 @@ func TestStateSpecificGuidanceValidationExecution(t *testing.T) {
 		t.Fatalf("loadable verify state did not direct request_tools without premature command call:\n%s", outLoad)
 	}
 
-	readOnlyCmd, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker_ro",
+	readOnlyCmd, err := prompts.NewReader(prompts.HostFacts{
 		Profiles: []sandbox.ToolProfile{{
 			ID:             "worker_ro",
 			Tools:          map[string]bool{"command": true, "complete_leg": true},
 			CommandEffects: readOnlyEffects,
 		}},
-		Plan:      toolsurface.Compile([]string{"command", "complete_leg"}, nil),
-		Visible:   []string{"command", "complete_leg"},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker_ro",
+		Plan:      toolsurface.Compile([]string{"command", "complete_leg"}, nil),
+		Offered:   []string{"command", "complete_leg"},
 	})
 	testutil.FailErr(t, "readOnlyCmd", err)
 	varsRO, err := prompts.Vars(readOnlyCmd, map[string]any{"verify_command": "./task test:short"})
@@ -131,15 +134,16 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 	t.Run("investigate_code_history_paired_states", func(t *testing.T) {
 		sk := loadSkillByName(t, eff, "investigate-code-history")
 
-		gitPrimary, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:     "explore_readonly",
+		gitPrimary, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:      profiles,
-			Visible:       []string{"command", "source_history"},
-			Loaded:        map[string]bool{"command": true, "source_history": true},
 			RootCount:     1,
 			HasGit:        true,
 			HasAnyGitRoot: true,
 			WebSearch:     true,
+		}, prompts.TurnProjection{
+			ProfileID: "explore_readonly",
+			Offered:   readerDeclaredOffer(profiles, "explore_readonly", []string{"command", "source_history"}, map[string]bool{"command": true, "source_history": true}),
+			Declared:  true,
 		})
 		testutil.FailErr(t, "gitPrimary", err)
 		outPrimary := renderSkillForReader(t, sk, gitPrimary)
@@ -150,15 +154,16 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 		}
 
 		// Secondary root has Git while primary does not.
-		secondaryGit, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:     "explore_readonly",
+		secondaryGit, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:      profiles,
-			Visible:       []string{"command", "source_history"},
-			Loaded:        map[string]bool{"command": true, "source_history": true},
 			RootCount:     2,
 			HasGit:        false,
 			HasAnyGitRoot: true,
 			WebSearch:     true,
+		}, prompts.TurnProjection{
+			ProfileID: "explore_readonly",
+			Offered:   readerDeclaredOffer(profiles, "explore_readonly", []string{"command", "source_history"}, map[string]bool{"command": true, "source_history": true}),
+			Declared:  true,
 		})
 		testutil.FailErr(t, "secondaryGit", err)
 		outSecondary := renderSkillForReader(t, sk, secondaryGit)
@@ -166,20 +171,21 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 			t.Fatalf("secondary-git state did not guide cwd=@<label> while omitting primary git blame:\n%s", outSecondary)
 		}
 
-		deferredGit, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "worker_loadable_git",
+		deferredGit, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             "worker_loadable_git",
 				Tools:          map[string]bool{"command": true, "request_tools": true},
 				DeferredTools:  map[string]bool{"command": true},
 				CommandEffects: readOnlyEffects,
 			}},
-			Plan:          toolsurface.Compile([]string{"request_tools"}, []string{"command"}),
-			Visible:       []string{"request_tools", "command"},
 			RootCount:     1,
 			HasGit:        true,
 			HasAnyGitRoot: true,
 			WebSearch:     true,
+		}, prompts.TurnProjection{
+			ProfileID: "worker_loadable_git",
+			Plan:      toolsurface.Compile([]string{"request_tools"}, []string{"command"}),
+			Offered:   []string{"request_tools", "command"},
 		})
 		testutil.FailErr(t, "deferredGit", err)
 		outDeferred := renderSkillForReader(t, sk, deferredGit)
@@ -187,16 +193,17 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 			t.Fatalf("deferred command state did not render request_tools:\n%s", outDeferred)
 		}
 
-		workerBranch, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:      "implement",
+		workerBranch, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:       profiles,
-			Visible:        []string{"command", "source_history"},
-			Loaded:         map[string]bool{"command": true, "source_history": true},
 			RootCount:      1,
 			HasGit:         true,
 			HasAnyGitRoot:  true,
 			OnWorkerBranch: true,
 			WebSearch:      true,
+		}, prompts.TurnProjection{
+			ProfileID: "implement",
+			Offered:   readerDeclaredOffer(profiles, "implement", []string{"command", "source_history"}, map[string]bool{"command": true, "source_history": true}),
+			Declared:  true,
 		})
 		testutil.FailErr(t, "workerBranch", err)
 		outBranch := renderSkillForReader(t, sk, workerBranch)
@@ -211,16 +218,18 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 
 		buildPlan, err := prompts.CompileSurfacePlan("implement_investigate", 1)
 		testutil.FailErr(t, "CompileSurfacePlan implement_investigate", err)
-		mutatingCoord, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:      prompts.CoordinatorProfileID,
-			SurfaceID:      "implement_investigate",
+		mutatingCoord, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:       profiles,
-			Plan:           buildPlan,
 			RootCount:      1,
 			HasGit:         true,
 			HasAnyGitRoot:  true,
 			WebSearch:      true,
 			SpawnAllowlist: spawn.AmbientAllowedAgents(),
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_investigate",
+			Plan:      buildPlan,
+			Offered:   (buildPlan).ImmediateNames(),
 		})
 		testutil.FailErr(t, "mutatingCoord", err)
 		commitMut := renderSkillForReader(t, commitSk, mutatingCoord)
@@ -234,16 +243,18 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 
 		routingPlan, err := prompts.CompileSurfacePlan("implement_routing", 1)
 		testutil.FailErr(t, "CompileSurfacePlan implement_routing", err)
-		readOnlyCoord, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:      prompts.CoordinatorProfileID,
-			SurfaceID:      "implement_routing",
+		readOnlyCoord, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:       profiles,
-			Plan:           routingPlan,
 			RootCount:      1,
 			HasGit:         true,
 			HasAnyGitRoot:  true,
 			WebSearch:      true,
 			SpawnAllowlist: spawn.AmbientAllowedAgents(),
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_routing",
+			Plan:      routingPlan,
+			Offered:   (routingPlan).ImmediateNames(),
 		})
 		testutil.FailErr(t, "readOnlyCoord", err)
 		commitRO := renderSkillForReader(t, commitSk, readOnlyCoord)
@@ -263,16 +274,18 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 	t.Run("coordinator_dispatch_ask_and_posture_paired_states", func(t *testing.T) {
 		dispatch1Plan, err := prompts.CompileSurfacePlan("implement_dispatch", 1)
 		testutil.FailErr(t, "CompileSurfacePlan dispatch 1", err)
-		dispatch1Reader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:      prompts.CoordinatorProfileID,
-			SurfaceID:      "implement_dispatch",
+		dispatch1Reader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:       profiles,
-			Plan:           dispatch1Plan,
 			RootCount:      1,
 			HasGit:         true,
 			HasAnyGitRoot:  true,
 			WebSearch:      true,
 			SpawnAllowlist: spawn.AmbientAllowedAgents(),
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_dispatch",
+			Plan:      dispatch1Plan,
+			Offered:   (dispatch1Plan).ImmediateNames(),
 		})
 		testutil.FailErr(t, "dispatch1Reader", err)
 		f1 := dispatch1Reader.Facts()
@@ -290,14 +303,16 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 
 		dispatch0Plan, err := prompts.CompileSurfacePlan("implement_dispatch", 0)
 		testutil.FailErr(t, "CompileSurfacePlan dispatch 0", err)
-		dispatch0Reader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:      prompts.CoordinatorProfileID,
-			SurfaceID:      "implement_dispatch",
+		dispatch0Reader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:       profiles,
-			Plan:           dispatch0Plan,
 			RootCount:      0,
 			WebSearch:      true,
 			SpawnAllowlist: []string{"web-researcher"},
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_dispatch",
+			Plan:      dispatch0Plan,
+			Offered:   (dispatch0Plan).ImmediateNames(),
 		})
 		testutil.FailErr(t, "dispatch0Reader", err)
 		vars0, err := prompts.Vars(dispatch0Reader, nil)
@@ -310,14 +325,16 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 
 		obsPlan, err := prompts.CompileSurfacePlan("observe_investigate", 1)
 		testutil.FailErr(t, "CompileSurfacePlan observe_investigate", err)
-		askReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:   prompts.CoordinatorProfileID,
-			SurfaceID:   "observe_investigate",
+		askReader, err := prompts.NewReader(prompts.HostFacts{
 			SessionMode: "ask",
 			Profiles:    profiles,
-			Plan:        obsPlan,
 			RootCount:   1,
 			WebSearch:   true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "observe_investigate",
+			Plan:      obsPlan,
+			Offered:   (obsPlan).ImmediateNames(),
 		})
 		testutil.FailErr(t, "askReader", err)
 		askVars, err := prompts.Vars(askReader, nil)
@@ -328,14 +345,16 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 			t.Fatalf("Ask mode observe prompt missing (Ask mode):\n%s", outAsk)
 		}
 
-		agentReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:   prompts.CoordinatorProfileID,
-			SurfaceID:   "observe_investigate",
+		agentReader, err := prompts.NewReader(prompts.HostFacts{
 			SessionMode: "agent",
 			Profiles:    profiles,
-			Plan:        obsPlan,
 			RootCount:   1,
 			WebSearch:   true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "observe_investigate",
+			Plan:      obsPlan,
+			Offered:   (obsPlan).ImmediateNames(),
 		})
 		testutil.FailErr(t, "agentReader", err)
 		agentVars, err := prompts.Vars(agentReader, nil)
@@ -350,19 +369,20 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 	t.Run("prepare_a_release_fixed_workspace_varying_reach", func(t *testing.T) {
 		relSk := loadSkillByName(t, eff, "prepare-a-release")
 
-		fullExec, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "rel_full",
+		fullExec, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             "rel_full",
 				Tools:          map[string]bool{"command": true, "verify": true},
 				CommandEffects: toolcontract.AllCommandEffects(),
 			}},
-			Plan:              toolsurface.Compile([]string{"command", "verify"}, nil),
-			Visible:           []string{"command", "verify"},
 			RootCount:         1,
 			HasGit:            true,
 			HasAnyGitRoot:     true,
 			SessionScratchDir: "/scratch/rel",
+		}, prompts.TurnProjection{
+			ProfileID: "rel_full",
+			Plan:      toolsurface.Compile([]string{"command", "verify"}, nil),
+			Offered:   []string{"command", "verify"},
 		})
 		testutil.FailErr(t, "fullExec", err)
 		outFull := renderSkillForReader(t, relSk, fullExec)
@@ -372,20 +392,21 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 			}
 		}
 
-		verifyOnlyDeferredCmd, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "rel_verify_only",
+		verifyOnlyDeferredCmd, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             "rel_verify_only",
 				Tools:          map[string]bool{"command": true, "verify": true, "request_tools": true},
 				DeferredTools:  map[string]bool{"command": true},
 				CommandEffects: toolcontract.AllCommandEffects(),
 			}},
-			Plan:              toolsurface.Compile([]string{"verify", "request_tools"}, []string{"command"}),
-			Visible:           []string{"verify", "request_tools", "command"},
 			RootCount:         1,
 			HasGit:            true,
 			HasAnyGitRoot:     true,
 			SessionScratchDir: "/scratch/rel",
+		}, prompts.TurnProjection{
+			ProfileID: "rel_verify_only",
+			Plan:      toolsurface.Compile([]string{"verify", "request_tools"}, []string{"command"}),
+			Offered:   []string{"verify", "request_tools", "command"},
 		})
 		testutil.FailErr(t, "verifyOnlyDeferredCmd", err)
 		outVerifyOnly := renderSkillForReader(t, relSk, verifyOnlyDeferredCmd)
@@ -393,19 +414,20 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 			t.Fatalf("verify-only partial state leaked unoffered command or missed request_tools:\n%s", outVerifyOnly)
 		}
 
-		roCmdOnly, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "rel_ro_cmd",
+		roCmdOnly, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             "rel_ro_cmd",
 				Tools:          map[string]bool{"command": true},
 				CommandEffects: readOnlyEffects,
 			}},
-			Plan:              toolsurface.Compile([]string{"command"}, nil),
-			Visible:           []string{"command"},
 			RootCount:         1,
 			HasGit:            true,
 			HasAnyGitRoot:     true,
 			SessionScratchDir: "/scratch/rel",
+		}, prompts.TurnProjection{
+			ProfileID: "rel_ro_cmd",
+			Plan:      toolsurface.Compile([]string{"command"}, nil),
+			Offered:   []string{"command"},
 		})
 		testutil.FailErr(t, "roCmdOnly", err)
 		outROCmd := renderSkillForReader(t, relSk, roCmdOnly)
@@ -424,18 +446,19 @@ func TestStateSpecificGuidanceProjectedSchemaAndSelectorStates(t *testing.T) {
 		occHost := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{HostResources: sampleResources})
 
 		// Read-only command is pruned while verify keeps runner fields.
-		roCmdPlusVerify, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "implement",
+		roCmdPlusVerify, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             "implement",
 				Tools:          map[string]bool{"command": true, "verify": true, "secret_generate": true, "secret_list": true, "secret_revoke": true},
 				CommandEffects: readOnlyEffects,
 			}},
-			Plan:              toolsurface.Compile([]string{"command", "verify", "secret_generate", "secret_list", "secret_revoke"}, nil),
-			Visible:           []string{"command", "verify", "secret_generate", "secret_list", "secret_revoke"},
 			RootCount:         1,
 			HasGit:            true,
 			SessionScratchDir: "/scratch/s1",
+		}, prompts.TurnProjection{
+			ProfileID: "implement",
+			Plan:      toolsurface.Compile([]string{"command", "verify", "secret_generate", "secret_list", "secret_revoke"}, nil),
+			Offered:   []string{"command", "verify", "secret_generate", "secret_list", "secret_revoke"},
 		})
 		testutil.FailErr(t, "roCmdPlusVerify", err)
 		varsROVerify, err := prompts.Vars(roCmdPlusVerify, occHost)
@@ -459,17 +482,18 @@ func TestStateSpecificGuidanceProjectedSchemaAndSelectorStates(t *testing.T) {
 			t.Fatalf("sandbox-confinement on read-only clamped implement profile leaked command or file-write claims:\n%s", sandboxOut)
 		}
 
-		roCmdAlone, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "explore_readonly",
+		roCmdAlone, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             "explore_readonly",
 				Tools:          map[string]bool{"command": true, "secret_list": true},
 				CommandEffects: readOnlyEffects,
 			}},
-			Plan:      toolsurface.Compile([]string{"command", "secret_list"}, nil),
-			Visible:   []string{"command", "secret_list"},
 			RootCount: 1,
 			HasGit:    true,
+		}, prompts.TurnProjection{
+			ProfileID: "explore_readonly",
+			Plan:      toolsurface.Compile([]string{"command", "secret_list"}, nil),
+			Offered:   []string{"command", "secret_list"},
 		})
 		testutil.FailErr(t, "roCmdAlone", err)
 		varsROAlone, err := prompts.Vars(roCmdAlone, occHost)
@@ -492,18 +516,19 @@ func TestStateSpecificGuidanceProjectedSchemaAndSelectorStates(t *testing.T) {
 		testutil.FailErr(t, "Compile diagnose_resource_exhaustion.md", err)
 
 		for _, hidden := range []bool{false, true} {
-			selReader, rErr := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: "worker_ext",
+			selReader, rErr := prompts.NewReader(prompts.HostFacts{
 				Profiles: []sandbox.ToolProfile{{
 					ID:             "worker_ext",
 					Tools:          map[string]bool{"command": true},
 					CommandEffects: toolcontract.AllCommandEffects(),
 				}},
-				Plan:                  toolsurface.Compile([]string{"command"}, nil),
-				Visible:               []string{"command"},
 				RootCount:             1,
 				HasGit:                true,
 				CommandExternalHidden: hidden,
+			}, prompts.TurnProjection{
+				ProfileID: "worker_ext",
+				Plan:      toolsurface.Compile([]string{"command"}, nil),
+				Offered:   []string{"command"},
 			})
 			testutil.FailErr(t, "selReader", rErr)
 			skVars, vErr := prompts.SkillVars(selReader)
@@ -540,12 +565,14 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 		batchTpl, cErr := pongoplain.Compile(string(rawBatch))
 		testutil.FailErr(t, "Compile batch-and-amend.md", cErr)
 
-		allowCommitReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:     "plan_write_only",
+		allowCommitReader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:      profiles,
 			RootCount:     1,
 			HasGit:        true,
 			HasAnyGitRoot: true,
+		}, prompts.TurnProjection{
+			ProfileID: "plan_write_only",
+			Declared:  true,
 		})
 		testutil.FailErr(t, "allowCommitReader", err)
 		if allowCommitReader.Facts()["can_git_commit"] != true {
@@ -557,12 +584,14 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 		}
 
 		// Stock editor_file mutates and offers command on Git, while denying git_commit.
-		editorReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:     "editor_file",
+		editorReader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:      profiles,
 			RootCount:     1,
 			HasGit:        true,
 			HasAnyGitRoot: true,
+		}, prompts.TurnProjection{
+			ProfileID: "editor_file",
+			Declared:  true,
 		})
 		testutil.FailErr(t, "editorReader", err)
 		facts := editorReader.Facts()
@@ -585,8 +614,7 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 			t.Fatalf("batch-and-amend leaked git commit or missed handoff on editor_file:\n%s", batchOut)
 		}
 
-		deferredDenyCommit, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "deferred_no_commit",
+		deferredDenyCommit, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             "deferred_no_commit",
 				Tools:          map[string]bool{"command": true, "request_tools": true},
@@ -594,10 +622,12 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 				CommandEffects: readMutEffects,
 				DenyTools:      []string{"git_commit"},
 			}},
-			Plan:      toolsurface.Compile([]string{"request_tools"}, []string{"command"}),
-			Visible:   []string{"request_tools", "command"},
 			RootCount: 1,
 			HasGit:    true,
+		}, prompts.TurnProjection{
+			ProfileID: "deferred_no_commit",
+			Plan:      toolsurface.Compile([]string{"request_tools"}, []string{"command"}),
+			Offered:   []string{"request_tools", "command"},
 		})
 		testutil.FailErr(t, "deferredDenyCommit", err)
 		df := deferredDenyCommit.Facts()
@@ -611,18 +641,19 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 		histSk := loadSkillByName(t, eff, "investigate-code-history")
 		bisectSk := loadSkillByName(t, eff, "hunt-a-regression-with-bisect")
 
-		denyBlameReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "ro_no_blame",
+		denyBlameReader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             "ro_no_blame",
 				Tools:          map[string]bool{"command": true, "source_history": true},
 				CommandEffects: readOnlyEffects,
 				DenyTools:      []string{"git_blame"},
 			}},
-			Plan:      toolsurface.Compile([]string{"command", "source_history"}, nil),
-			Visible:   []string{"command", "source_history"},
 			RootCount: 1,
 			HasGit:    true,
+		}, prompts.TurnProjection{
+			ProfileID: "ro_no_blame",
+			Plan:      toolsurface.Compile([]string{"command", "source_history"}, nil),
+			Offered:   []string{"command", "source_history"},
 		})
 		testutil.FailErr(t, "denyBlameReader", err)
 		if denyBlameReader.Facts()["can_git_read"] != false {
@@ -633,18 +664,19 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 			t.Fatalf("git_blame-denied history render leaked git blame or lost source_history fallback:\n%s", histOut)
 		}
 
-		denyBisectReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "exec_no_git",
+		denyBisectReader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles: []sandbox.ToolProfile{{
 				ID:             "exec_no_git",
 				Tools:          map[string]bool{"command": true},
 				CommandEffects: toolcontract.AllCommandEffects(),
 				DenyTools:      []string{"git_*"},
 			}},
-			Plan:      toolsurface.Compile([]string{"command"}, nil),
-			Visible:   []string{"command"},
 			RootCount: 1,
 			HasGit:    true,
+		}, prompts.TurnProjection{
+			ProfileID: "exec_no_git",
+			Plan:      toolsurface.Compile([]string{"command"}, nil),
+			Offered:   []string{"command"},
 		})
 		testutil.FailErr(t, "denyBisectReader", err)
 		if denyBisectReader.Facts()["can_git_bisect"] != false {

@@ -3,7 +3,6 @@ package promptsource
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
@@ -14,15 +13,14 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
 	"github.com/lycaon/lycaon/internal/session/loading"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
 	"github.com/lycaon/lycaon/internal/session/policyindex"
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/session/readerfacts"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
@@ -30,10 +28,8 @@ import (
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -68,6 +64,7 @@ type Evidence interface {
 type Context struct {
 	ActivateAgentWorkflow func(context.Context, string) error
 	PolicyIndex           *policyindex.Service
+	ReaderFacts           *readerfacts.Resolver
 	Frame                 inject.CoordinatorTurnFrameSource
 	Guards                *turnguards.Service
 	Limits                *sessionlimits.Service
@@ -109,6 +106,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 			return count
 		},
 		WritableSharedTemp: m.Profiles.WritableSharedTemp,
+		HostFacts:          m.ReaderFacts.HostFacts,
 		LoadedTools:        m.Loading.LoadedTools,
 		LiveResources: func(sessionID string) toolcontract.ResourcePresence {
 			presence := toolcontract.ResourcePresence{}
@@ -187,171 +185,16 @@ func (m *Context) Build() promptloop.ContextDeps {
 	return deps
 }
 
-func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error) {
-	reader, err := m.procedureReader(ctx, sess, profileID, offered)
-	if err != nil {
-		return "", err
-	}
+// ToolProcedures renders the standing procedures of the tools reader offers.
+func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, reader prompts.Reader) (string, error) {
 	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID, reader)
-}
-
-func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profileID string, offered []string) (prompts.Reader, error) {
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return prompts.Reader{}, err
-	}
-	if m != nil && m.Profiles != nil && sess != nil && sess.Posture != "" {
-		profiles = m.Profiles.ConstrainCommandProfiles(ctx, sess.ID, profiles)
-	}
-	surfaceID := ""
-	resolvedProfileID := strings.TrimSpace(profileID)
-	var deferred []string
-	if prompts.IsCoordinatorSurfaceID(resolvedProfileID) {
-		surfaceID = resolvedProfileID
-		resolvedProfileID = prompts.CoordinatorProfileID
-		deferred, _ = prompts.LoadCoordinatorSurfaceLoadable(surfaceID)
-	} else {
-		if mapped, err := prompts.ToolProfileForAgent(resolvedProfileID); err == nil && mapped != "" {
-			resolvedProfileID = mapped
-		}
-		for _, p := range profiles {
-			if p.ID == resolvedProfileID {
-				for name, enabled := range p.Tools {
-					if enabled && p.ToolAllowed(name) && !strings.HasSuffix(name, "*") {
-						deferred = append(deferred, name)
-					}
-				}
-				break
-			}
-		}
-	}
-	offeredSet := make(map[string]bool, len(offered))
-	for _, name := range offered {
-		offeredSet[name] = true
-	}
-	var remaining []string
-	if offeredSet["request_tools"] {
-		for _, name := range deferred {
-			if sess != nil && sess.Mode == api.SessionModeAsk && !tools.AllowedInAsk(tools.ToolMeta{Name: name}) {
-				continue
-			}
-			if !offeredSet[name] {
-				remaining = append(remaining, name)
-			}
-		}
-	}
-	visible := slices.Clone(offered)
-	if visible == nil {
-		visible = []string{}
-	}
-	if surfaceID == "" {
-		visible = append(visible, remaining...)
-	}
-	var (
-		rootRows   []map[string]any
-		activePath string
-	)
-	rootCount := 0
-	if m != nil && m.Workspace != nil && sess != nil {
-		rootRows, rootCount, activePath, _ = m.Workspace.PromptRootRows(ctx, sess)
-		if rootCount < 0 {
-			rootCount = 0
-		}
-	} else if sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
-		rootCount = 1
-	}
-	sessionMode := string(api.SessionModeAgent)
-	var fallbackPath string
-	if sess != nil {
-		if sess.Mode == api.SessionModeAsk {
-			sessionMode = string(api.SessionModeAsk)
-		}
-		fallbackPath = sess.WorkspacePath
-	}
-	var (
-		branchRoot     string
-		onWorkerBranch bool
-	)
-	if m != nil && m.Workspaces != nil {
-		branchRoot, onWorkerBranch = m.Workspaces.OnWorkerBranch(ctx, sess)
-	}
-	hasGit, hasAnyGitRoot := procedureGitFacts(rootRows, activePath, fallbackPath, branchRoot)
-	var (
-		reviewsConfinedWrites bool
-		externalHidden        bool
-		scratchDir            string
-		sharedTemp            []string
-		spawnAllowlist        []string
-	)
-	if m != nil && m.Profiles != nil {
-		externalHidden = m.Profiles.CommandExternalHidden()
-		if sess != nil {
-			reviewsConfinedWrites = m.Profiles.ProjectApprovalPosture(ctx, sess).ReviewsConfinedWrites()
-			sharedTemp = m.Profiles.WritableSharedTemp(ctx, sess)
-		}
-	}
-	if m != nil && m.ToolContext != nil && sess != nil {
-		scratchDir = m.ToolContext.ScratchDir(ctx, sess)
-	}
-	if resolvedProfileID == prompts.CoordinatorProfileID {
-		spawnAllowlist = spawn.AmbientAllowedAgents()
-		if m != nil && m.Frame != nil && sess != nil {
-			if frame, frameErr := m.Frame.BuildCoordinatorTurnFrame(ctx, sess.ID, sess); frameErr == nil && len(frame.RunContext.AllowedAgents) > 0 {
-				spawnAllowlist = frame.RunContext.AllowedAgents
-			}
-		}
-	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID:             resolvedProfileID,
-		SurfaceID:             surfaceID,
-		SessionMode:           sessionMode,
-		Profiles:              profiles,
-		Plan:                  toolsurface.Compile(offered, remaining),
-		Loaded:                offeredSet,
-		Visible:               visible,
-		ProjectedSchemas:      prompts.ProjectedSchemasFromContext(ctx),
-		RootCount:             rootCount,
-		HasGit:                hasGit,
-		HasAnyGitRoot:         hasAnyGitRoot,
-		OnWorkerBranch:        onWorkerBranch,
-		WebSearch:             m.WebSearchEnabled(),
-		SpawnAllowlist:        spawnAllowlist,
-		ReviewsConfinedWrites: reviewsConfinedWrites,
-		CommandExternalHidden: externalHidden,
-		SessionScratchDir:     scratchDir,
-		SharedTempLocations:   sharedTemp,
-	})
-}
-
-func procedureGitFacts(roots []map[string]any, activePath, fallbackWorkspacePath, workerBranchRoot string) (hasGit, hasAnyGitRoot bool) {
-	primaryPath := strings.TrimSpace(activePath)
-	if primaryPath == "" {
-		primaryPath = strings.TrimSpace(fallbackWorkspacePath)
-	}
-	if primaryPath != "" {
-		_, hasGit = gitrepo.Discover(primaryPath)
-	}
-	if !hasGit && strings.TrimSpace(workerBranchRoot) != "" {
-		_, hasGit = gitrepo.Discover(strings.TrimSpace(workerBranchRoot))
-	}
-	hasAnyGitRoot = hasGit
-	if !hasAnyGitRoot {
-		for _, row := range roots {
-			if p, _ := row["path"].(string); strings.TrimSpace(p) != "" {
-				if _, ok := gitrepo.Discover(strings.TrimSpace(p)); ok {
-					hasAnyGitRoot = true
-					break
-				}
-			}
-		}
-	}
-	return hasGit, hasAnyGitRoot
 }
 
 // PromptSurface reports the host facts that shaped a request offering these
 // tools: their turn-load sources, the procedure units they attached, the skill
 // the turn read and the decision in effect.
-func (m *Context) PromptSurface(ctx context.Context, sess *api.Session, profileID string, offered []string) (trainingcapture.PromptSurface, error) {
+func (m *Context) PromptSurface(ctx context.Context, sess *api.Session, reader prompts.Reader) (trainingcapture.PromptSurface, error) {
+	offered := reader.Offered()
 	surface := trainingcapture.PromptSurface{Tools: []trainingcapture.OfferedTool{}, Units: []trainingcapture.RenderedUnit{}}
 	var standing turnload.Standing
 	if m.Loading != nil && m.Loading.Ledger != nil {
@@ -369,10 +212,6 @@ func (m *Context) PromptSurface(ctx context.Context, sess *api.Session, profileI
 			tool.Source, tool.With = string(load.Source), load.With
 		}
 		surface.Tools = append(surface.Tools, tool)
-	}
-	reader, err := m.procedureReader(ctx, sess, profileID, offered)
-	if err != nil {
-		return surface, err
 	}
 	units, err := inject.ToolProcedureUnits(prompts.NewInjectRenderer(m.Prompts), reader)
 	if err != nil {
@@ -398,6 +237,21 @@ func (m *Context) PromptSurface(ctx context.Context, sess *api.Session, profileI
 		surface.TurnLoadReceiptID, surface.Engine, surface.CatalogRevision = receipt.ID, receipt.Engine, receipt.CatalogRevision
 	}
 	return surface, nil
+}
+
+// NextRequestReader projects sess's next model request through the live turn
+// pipeline and derives its Reader.
+func (m *Context) NextRequestReader(ctx context.Context, sess *api.Session, history []api.Message) (prompts.Reader, error) {
+	if m == nil || m.Runtime == nil || sess == nil {
+		return prompts.Reader{}, fmt.Errorf("next request reader: runtime not configured")
+	}
+	profileID, err := m.Profiles.PromptToolProfile(ctx, sess)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	frame := inject.CoordinatorTurnFrame{}
+	frame.Machine.ProfileID = profileID
+	return m.Runtime.TurnReader(ctx, sess, history, frame)
 }
 
 func (m *Context) WebSearchEnabled() bool {

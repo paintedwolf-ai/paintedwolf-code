@@ -14,8 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -175,24 +173,5 @@ func TestNeededForTurnIncludesRecallWhenHistoryHasCompactedContent(t *testing.T)
 
 	if got := neededForTurn(nil, uncompacted, "epoch-1"); !slices.Equal(got, []string{"recall"}) {
 		t.Fatalf("history epoch should mark recall needed: got %v", got)
-	}
-}
-
-func TestToolEventReaderKeepsUnactivatedDeferredPlanToolsRequestable(t *testing.T) {
-	t.Parallel()
-	m := &Service{Ledger: turnload.NewLedger()}
-	sess := &api.Session{ID: "s1"}
-	plan := toolsurface.Compile([]string{"command", "request_tools"}, []string{"terminal_open", "terminal_snapshot"})
-	reader, err := m.toolEventReader(context.Background(), sess, tools.ToolContext{
-		Turn: tools.InvocationTurn{TurnToolPlan: plan},
-	}, "terminal_open", 1)
-	if err != nil {
-		t.Fatalf("toolEventReader: %v", err)
-	}
-	if !slices.Contains(reader.Offered(), "terminal_open") || slices.Contains(reader.Offered(), "terminal_snapshot") {
-		t.Fatalf("offered = %v, want terminal_open offered and terminal_snapshot deferred", reader.Offered())
-	}
-	if !slices.Contains(reader.Requestable(), "terminal_snapshot") {
-		t.Fatalf("requestable = %v, want terminal_snapshot", reader.Requestable())
 	}
 }

@@ -593,8 +593,9 @@ func verifyV2RO02Option1AskProjectedRequest(t *testing.T, oracle *reachOracle) {
 		ProjectRootCount:   func(context.Context, *api.Session) int { return 1 },
 		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{WebSearchEnabled: func() bool { return true }},
 	}
-	metas, plan, resolvedSurface, err := promptloop.ProjectTurnTools(ctx, ctxDeps, sess, history, frame)
+	turn, err := promptloop.ProjectTurnTools(ctx, ctxDeps, sess, history, frame)
 	testutil.FailErr(t, "ProjectTurnTools v2-ro02-option1", err)
+	metas, plan, resolvedSurface := turn.Metas, turn.Plan, turn.SurfaceID
 	metas = promptloop.ProjectAskToolMetas(metas)
 
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
@@ -605,10 +606,20 @@ func verifyV2RO02Option1AskProjectedRequest(t *testing.T, oracle *reachOracle) {
 		offeredNames[i] = m.Name
 		projMap[m.Name] = m.ArgsSchema
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID, SurfaceID: resolvedSurface, Mode: surface.ExecutionModeFamily(resolvedSurface),
-		SessionMode: string(api.SessionModeAsk), Profiles: roProfiles, Plan: plan, Visible: offeredNames,
-		Schemas: schemas, ProjectedSchemas: projMap, RootCount: 1, HasGit: true, HasAnyGitRoot: true, WebSearch: true,
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		SessionMode:   string(api.SessionModeAsk),
+		Profiles:      roProfiles,
+		Schemas:       schemas,
+		RootCount:     1,
+		HasGit:        true,
+		HasAnyGitRoot: true,
+		WebSearch:     true,
+	}, prompts.TurnProjection{
+		ProfileID:        prompts.CoordinatorProfileID,
+		SurfaceID:        resolvedSurface,
+		Plan:             plan,
+		Offered:          offeredNames,
+		ProjectedSchemas: projMap,
 	})
 	testutil.FailErr(t, "prompts.NewReader v2-ro02-option1", err)
 	procBlock, err := inject.RenderToolProceduresBlock(ctx, injRenderer, sess.ID, reader)

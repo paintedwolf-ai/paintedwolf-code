@@ -152,14 +152,16 @@ func preloadRenderService(t *testing.T) *Service {
 			surfaceID := strings.TrimSpace(tctx.Turn.TurnSurfaceID)
 			plan, err := prompts.CompileSurfacePlan(surfaceID, 1)
 			testutil.FailErr(t, "compile surface plan", err)
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: prompts.CoordinatorProfileID,
-				SurfaceID: surfaceID,
+			reader, err := prompts.NewReader(prompts.HostFacts{
 				Profiles:  profiles,
-				Plan:      plan,
 				RootCount: 1,
 				HasGit:    true,
 				WebSearch: true,
+			}, prompts.TurnProjection{
+				ProfileID: prompts.CoordinatorProfileID,
+				SurfaceID: surfaceID,
+				Plan:      plan,
+				Offered:   (plan).ImmediateNames(),
 			})
 			testutil.FailErr(t, "new reader", err)
 			vars, err := prompts.SkillVars(reader)

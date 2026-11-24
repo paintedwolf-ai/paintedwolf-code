@@ -398,7 +398,7 @@ func evaluateNamedAgentBlock(cat *toolvocab.Catalog, evalCtx ClaimEvaluationCont
 		if mode == "" {
 			mode = api.SessionModeAgent
 		}
-		targetAuth, err = ResolveWorkerAuthorityForSession(context.Background(), nil, mode, posture, 1, true, true, false, agentID)
+		targetAuth, err = ResolveWorkerAuthorityForSession(context.Background(), nil, mode, posture, 1, true, false, true, false, agentID)
 	}
 	if err != nil {
 		return []SubjectViolation{{Label: block.Label, Subject: block.Subject, Claim: agentID, Line: 1, Reason: err.Error()}}

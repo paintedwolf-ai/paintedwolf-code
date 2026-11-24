@@ -135,6 +135,7 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 	refreshed.Turn.TurnPrograms = base.Turn.TurnPrograms
 	refreshed.Turn.TurnOfferedToolNames = slices.Clone(base.Turn.TurnOfferedToolNames)
 	refreshed.Turn.TurnOfferedToolSchemas = base.Turn.TurnOfferedToolSchemas
+	refreshed.Turn.Reader = base.Turn.Reader
 	refreshed.Source.ModelSourceContext = base.Source.ModelSourceContext
 	refreshed.Source.AskMode = base.Source.AskMode
 	refreshed.Source.ReadOnly = refreshed.Source.ReadOnly || base.Source.ReadOnly
@@ -202,6 +203,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 		baseToolCtx.Turn.TurnPrograms = st.turnPrograms
 		baseToolCtx.Turn.TurnOfferedToolNames = slices.Clone(st.offeredToolNames)
 		baseToolCtx.Turn.TurnOfferedToolSchemas = st.offeredToolSchemas
+		baseToolCtx.Turn.Reader = st.reader
 		baseToolCtx.Source.ModelSourceContext = st.output.sourceContext
 		ctx = tools.WithAgentPolicy(ctx, st.output.policyCheck)
 	}

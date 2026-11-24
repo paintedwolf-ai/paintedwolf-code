@@ -2,10 +2,10 @@ package promptloop
 
 import (
 	"context"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
-	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -48,6 +48,8 @@ type ContextDeps struct {
 	LoadedTools           func(sessionID string) map[string]bool
 	LiveResources         func(sessionID string) toolcontract.ResourcePresence
 	ProjectRootCount      func(ctx context.Context, sess *api.Session) int
+	// HostFacts resolves the session facts every request Reader derives from.
+	HostFacts func(ctx context.Context, sess *api.Session) (prompts.HostFacts, error)
 	ContextSurfaceDeps
 }
 
@@ -56,9 +58,9 @@ type ContextSurfaceDeps struct {
 	// CommitTurnContext advances delivered findings and messages after a successful response.
 	CommitTurnContext  func(context.Context, string, string) error
 	PrepareAgentPolicy func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
-	ToolProcedures     func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
+	ToolProcedures     func(ctx context.Context, sess *api.Session, reader prompts.Reader) (string, error)
 	// PromptSurface reports the host facts that selected a request's tools and units.
-	PromptSurface                   func(ctx context.Context, sess *api.Session, profileID string, offered []string) (trainingcapture.PromptSurface, error)
+	PromptSurface                   func(ctx context.Context, sess *api.Session, reader prompts.Reader) (trainingcapture.PromptSurface, error)
 	CoordinatorSurfaceActivityLabel func(surfaceID string) string
 	WebSearchEnabled                func() bool
 	CoordinatorFrame                inject.CoordinatorTurnFrameSource
@@ -187,9 +189,8 @@ type InboxDeps struct {
 }
 
 type promptContext struct {
-	Deps          ContextDeps
-	Closeout      *turnCloseout
-	observedModes sync.Map
+	Deps     ContextDeps
+	Closeout *turnCloseout
 }
 
 type modelTurn struct {

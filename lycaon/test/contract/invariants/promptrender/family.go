@@ -135,9 +135,15 @@ func CoordinatorReader(stock *Stock, surfaceID string, roots int) (prompts.Reade
 	if err != nil {
 		return prompts.Reader{}, err
 	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID, SurfaceID: surfaceID, Plan: plan,
-		Profiles: stock.Profiles, RootCount: roots, WebSearch: true,
+	return prompts.NewReader(prompts.HostFacts{
+		Profiles:  stock.Profiles,
+		RootCount: roots,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: surfaceID,
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
 	})
 }
 
@@ -220,9 +226,14 @@ func readOnlyProfilesNeverNameMutations(r *invariants.Run) {
 					reachable = append(reachable, name)
 				}
 			}
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: pid, Plan: toolsurface.Compile(reachable, nil), Visible: reachable,
-				Profiles: []sandbox.ToolProfile{profile}, RootCount: 1, WebSearch: true,
+			reader, err := prompts.NewReader(prompts.HostFacts{
+				Profiles:  []sandbox.ToolProfile{profile},
+				RootCount: 1,
+				WebSearch: true,
+			}, prompts.TurnProjection{
+				ProfileID: pid,
+				Plan:      toolsurface.Compile(reachable, nil),
+				Offered:   reachable,
 			})
 			r.Must(err)
 			text, err := kicks.RenderKick(context.Background(), reader, id, KickFixture())

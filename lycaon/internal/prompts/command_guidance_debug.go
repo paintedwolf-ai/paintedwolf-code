@@ -3,12 +3,10 @@ package prompts
 import (
 	"runtime"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gate"
-	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/internal/promptunit"
 )
 
 // CommandGuidanceFactKeys lists every structured fact branched on by the
@@ -63,16 +61,10 @@ func ExtractCommandGuidanceFacts(vars map[string]any) map[string]any {
 	return out
 }
 
-// CommandGuidanceSnapshotInput describes the turn facts used to record
-// command-guidance debug metadata in llm-requests.jsonl.
+// CommandGuidanceSnapshotInput carries the request facts command-guidance
+// debug metadata records beside the request's Reader.
 type CommandGuidanceSnapshotInput struct {
-	ProfileID             string
-	SurfaceID             string
 	AgentType             string
-	IsCoordinator         bool
-	OfferedTools          []string
-	DeferredTools         []string
-	RootCount             int
 	ProjectDir            string
 	SessionScratchDir     string
 	SharedTempLocations   []string
@@ -81,43 +73,14 @@ type CommandGuidanceSnapshotInput struct {
 }
 
 // BuildCommandGuidanceSnapshot computes the rendered command-guidance
-// template/partial/unit list and structured fact map for a turn request.
-func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, map[string]any) {
-	offered := append([]string(nil), in.OfferedTools...)
-	sort.Strings(offered)
-	deferred := append([]string(nil), in.DeferredTools...)
-	sort.Strings(deferred)
-
-	scopeID := strings.TrimSpace(in.ProfileID)
-	if strings.TrimSpace(in.SurfaceID) != "" {
-		scopeID = strings.TrimSpace(in.SurfaceID)
+// template/partial/unit list and structured fact map for a request's Reader.
+func BuildCommandGuidanceSnapshot(reader Reader, in CommandGuidanceSnapshotInput) ([]string, map[string]any) {
+	if !reader.Valid() {
+		return nil, nil
 	}
-	base, _ := DeclaredReader(nil, scopeID)
-	profiles, _ := declaredToolProfiles(nil)
-	profileID := strings.TrimSpace(in.ProfileID)
-	if profileID == "" || in.IsCoordinator || strings.TrimSpace(in.SurfaceID) != "" {
-		profileID = CoordinatorProfileID
-	}
-	if !hasProfileID(profiles, profileID) {
-		profiles = append(profiles, sandbox.ToolProfile{
-			ID:             profileID,
-			CommandEffects: base.Effects(),
-		})
-	}
-	reader, err := NewReader(ReaderInput{
-		ProfileID:             profileID,
-		SurfaceID:             strings.TrimSpace(in.SurfaceID),
-		Profiles:              profiles,
-		Plan:                  toolsurface.Compile(offered, deferred),
-		Loaded:                toolNameSet(offered),
-		Visible:               append(slices.Clone(offered), deferred...),
-		RootCount:             in.RootCount,
-		WebSearch:             true,
-		ReviewsConfinedWrites: in.Posture.ReviewsConfinedWrites(),
-		CommandExternalHidden: in.CommandExternalHidden,
-		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
-		SharedTempLocations:   in.SharedTempLocations,
-	})
+	offered := reader.Offered()
+	deferred := reader.Requestable()
+	isCoordinator := reader.Selection().Host == promptunit.HostCoordinator
 	vars := AgentPromptSurfaceTemplateVars(AgentPromptSurface{
 		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
 		Posture:               in.Posture,
@@ -126,10 +89,8 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	})
 	vars["platform_os"] = runtime.GOOS
 	vars["project_dir"] = strings.TrimSpace(in.ProjectDir)
-	if err == nil {
-		if merged, mergeErr := Vars(reader, vars); mergeErr == nil {
-			vars = merged
-		}
+	if merged, mergeErr := Vars(reader, vars); mergeErr == nil {
+		vars = merged
 	}
 
 	hasCommandOffered := slices.Contains(offered, "command")
@@ -143,7 +104,7 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 		templates = append(templates, "tools/schemas/command.yaml")
 	}
 	if hasCommandAny {
-		if !in.IsCoordinator {
+		if !isCoordinator {
 			templates = append(templates, "partials/command-surface.md")
 		}
 		templates = append(templates, "partials/temporary-storage.md")
@@ -151,7 +112,7 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if strings.TrimSpace(in.AgentType) == "implementer" {
 		templates = append(templates, "partials/sandbox-confinement.md")
 	}
-	if in.IsCoordinator && (cmdMutation || hasVerify || hasTerminal) {
+	if isCoordinator && (cmdMutation || hasVerify || hasTerminal) {
 		templates = append(templates, "units/coordinator-host-runner.md")
 	}
 	if (cmdMutation || hasTerminal) && (hasCommandOffered || hasTerminal) {

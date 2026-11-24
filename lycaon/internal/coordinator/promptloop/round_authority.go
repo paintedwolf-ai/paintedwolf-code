@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -64,11 +65,22 @@ func (a RoundAuthority) toolContext(base tools.ToolContext) tools.ToolContext {
 	return base
 }
 
-func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sessionID string, state *promptLoopTurnState) ([]api.Message, error) {
+// appendAgentEnabledNudge renders against the next request's projection, which
+// the upgraded mode widens.
+func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sess *api.Session, sessionID, profileID string, state *promptLoopTurnState) ([]api.Message, error) {
 	if l.Closeout.Deps.RenderHostKick == nil {
 		return state.history, nil
 	}
-	content, err := l.Closeout.Deps.RenderHostKick(ctx, closeoutTurnReader(state), "session-agent-enabled", nil)
+	turn, err := l.Context.coordinatorToolsForTurn(ctx, sess, profileID, state.history, 0, 0, state.coordinatorFrame, nil)
+	if err != nil {
+		return nil, err
+	}
+	reader, err := l.Context.requestReader(ctx, sess, turn, turn.Metas)
+	if err != nil {
+		slog.WarnContext(ctx, "agent-enabled nudge reader", "session_id", sessionID, "error", err)
+		return state.history, nil
+	}
+	content, err := l.Closeout.Deps.RenderHostKick(ctx, reader, "session-agent-enabled", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -85,12 +97,7 @@ func (l *promptContext) swapObservedMode(sessionID string, mode api.SessionMode)
 	if fn := l.Deps.SwapObservedSessionMode; fn != nil {
 		return fn(sessionID, mode)
 	}
-	prev, ok := l.observedModes.Swap(sessionID, mode)
-	if !ok {
-		return "", false
-	}
-	m, _ := prev.(api.SessionMode)
-	return m, m != ""
+	return "", false
 }
 
 // observeModeUpgrade reports whether this coordinator round is the first round

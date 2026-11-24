@@ -157,16 +157,13 @@ func (c *Catalog) profileReader(profileID string) (prompts.Reader, error) {
 	if prof.CommandEffects == 0 && prof.ToolAllowed("command") {
 		prof.CommandEffects = toolcontract.AllCommandEffects()
 	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prof.ID,
+	return prompts.NewReader(prompts.HostFacts{
 		Profiles:  []sandbox.ToolProfile{prof},
-		Visible:   visible,
-		Loaded:    loaded,
 		Schemas:   c.schemas,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
-	})
+	}, prompts.TurnProjection{ProfileID: prof.ID, Offered: visible, Declared: true})
 }
 
 func offeredReader(offered map[string]bool) (prompts.Reader, error) {
@@ -198,20 +195,17 @@ func offeredReader(offered map[string]bool) (prompts.Reader, error) {
 		}
 		effects, _ = toolcontract.NewCommandEffects(classes...)
 	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID: profileID,
+	return prompts.NewReader(prompts.HostFacts{
 		Profiles: []sandbox.ToolProfile{{
 			ID:             profileID,
 			Tools:          tools,
 			CommandEffects: effects,
 		}},
-		Visible:               visible,
-		Loaded:                tools,
 		RootCount:             1,
 		HasGit:                true,
 		WebSearch:             true,
 		CommandExternalHidden: offered[toolcontract.ReachCommandExternalExec] && !offered[toolcontract.ReachCommandExternalExecSelector],
-	})
+	}, prompts.TurnProjection{ProfileID: profileID, Offered: visible, Declared: true})
 }
 
 type skillRenderMemo struct {
@@ -565,7 +559,7 @@ func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
 		return true
 	}
 	if !reader.Valid() {
-		return SkillToolsOffered(sk, nil)
+		return false
 	}
 	fp := reader.Fingerprint()
 	var memoKey string
@@ -604,7 +598,7 @@ func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
 		vars, err = prompts.SkillVars(reader)
 	}
 	if err != nil {
-		return SkillToolsOffered(sk, reader.Held())
+		return false
 	}
 	c := StockCatalog()
 	if c == nil {

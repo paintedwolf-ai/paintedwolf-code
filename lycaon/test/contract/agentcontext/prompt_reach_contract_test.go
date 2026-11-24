@@ -481,16 +481,17 @@ func TestAskModeCommandUtilityClaimsFollowResolvedAuthorityAcrossRevisions(t *te
 
 	t.Run("v1-baseline Ask withholds command and rejects command utilities", func(t *testing.T) {
 		v1Plan := toolsurface.Compile([]string{"recall", "source_history", "ask_user"}, nil)
-		v1Reader, rErr := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:   prompts.CoordinatorProfileID,
-			SurfaceID:   "observe_investigate",
+		v1Reader, rErr := prompts.NewReader(prompts.HostFacts{
 			SessionMode: string(api.SessionModeAsk),
 			Profiles:    narrowedProfiles,
-			Plan:        v1Plan,
-			Visible:     []string{"recall", "source_history", "ask_user"},
 			Schemas:     schemas,
 			RootCount:   1,
 			HasGit:      true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "observe_investigate",
+			Plan:      v1Plan,
+			Offered:   []string{"recall", "source_history", "ask_user"},
 		})
 		contractcheck.FailErr(t, "v1 reader", rErr)
 		evalCtx := toolvocabtest.ClaimEvaluationContext{
@@ -519,16 +520,17 @@ func TestAskModeCommandUtilityClaimsFollowResolvedAuthorityAcrossRevisions(t *te
 
 	t.Run("v2-ro02-option1 Ask offers read-only command and rejects mutating or pruned forms", func(t *testing.T) {
 		v2Plan := toolsurface.Compile([]string{"recall", "command", "source_history", "ask_user"}, nil)
-		v2Reader, rErr := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:   prompts.CoordinatorProfileID,
-			SurfaceID:   "observe_investigate",
+		v2Reader, rErr := prompts.NewReader(prompts.HostFacts{
 			SessionMode: string(api.SessionModeAsk),
 			Profiles:    narrowedProfiles,
-			Plan:        v2Plan,
-			Visible:     []string{"recall", "command", "source_history", "ask_user"},
 			Schemas:     schemas,
 			RootCount:   1,
 			HasGit:      true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "observe_investigate",
+			Plan:      v2Plan,
+			Offered:   []string{"recall", "command", "source_history", "ask_user"},
 		})
 		contractcheck.FailErr(t, "v2 reader", rErr)
 		evalCtx := toolvocabtest.ClaimEvaluationContext{

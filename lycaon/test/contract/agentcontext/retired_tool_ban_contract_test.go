@@ -114,13 +114,14 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 							reachable = append(reachable, name)
 						}
 					}
-					reader, err := prompts.NewReader(prompts.ReaderInput{
-						ProfileID: profile.ID,
-						Plan:      toolsurface.Compile(reachable, nil),
-						Visible:   reachable,
+					reader, err := prompts.NewReader(prompts.HostFacts{
 						Profiles:  []sandbox.ToolProfile{profile},
 						RootCount: 1,
 						WebSearch: true,
+					}, prompts.TurnProjection{
+						ProfileID: profile.ID,
+						Plan:      toolsurface.Compile(reachable, nil),
+						Offered:   reachable,
 					})
 					contractcheck.FailErr(t, "new reader", err)
 					corpus, err := kickEngine.RenderKick(context.Background(), reader, binding.Render, promptrender.KickFixture())

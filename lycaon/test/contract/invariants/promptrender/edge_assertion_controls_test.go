@@ -15,7 +15,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -372,19 +371,19 @@ func buildCustomCoordinatorAuthority(
 			postLoadSchemas[d] = sc
 		}
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		SessionMode:   string(mode),
+		Profiles:      narrowed,
+		Schemas:       s.Schemas,
+		RootCount:     1,
+		HasGit:        true,
+		HasAnyGitRoot: true,
+	}, prompts.TurnProjection{
 		ProfileID:        prompts.CoordinatorProfileID,
 		SurfaceID:        baseSt.TurnProfile.SurfaceID,
-		Mode:             surface.ExecutionModeFamily(baseSt.TurnProfile.SurfaceID),
-		SessionMode:      string(mode),
-		Profiles:         narrowed,
 		Plan:             plan,
-		Visible:          offered,
-		Schemas:          s.Schemas,
+		Offered:          offered,
 		ProjectedSchemas: offeredSchemas,
-		RootCount:        1,
-		HasGit:           true,
-		HasAnyGitRoot:    true,
 	})
 	if err != nil {
 		t.Fatalf("prompts.NewReader: %v", err)

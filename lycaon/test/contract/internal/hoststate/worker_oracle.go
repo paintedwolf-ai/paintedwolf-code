@@ -10,8 +10,12 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/session/readerfacts"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -45,16 +49,7 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 	proj, hit := projTurnCache[cacheKey]
 	projTurnMu.Unlock()
 	if !hit {
-		workerSess := &api.Session{
-			ID:              "worker-fixture",
-			ParentSessionID: "coord-fixture",
-			Mode:            state.ParentSessionMode,
-			Posture:         state.Posture,
-			AgentType:       state.AgentID,
-		}
-		if state.RootCount > 0 {
-			workerSess.WorkspacePath = "/tmp/fixture-primary"
-		}
+		workerSess := workerFixtureSession(state)
 		policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
 			ToolLister:       bundle.exec.Metadata,
 			ProjectRootCount: func(context.Context, *api.Session) int { return state.RootCount },
@@ -71,10 +66,11 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		frame := inject.CoordinatorTurnFrame{
 			Machine: inject.Machine{ProfileID: state.ToolProfile, SkillCount: 1},
 		}
-		offeredMetas, plan, _, pErr := promptloop.ProjectTurnTools(ctx, deps, workerSess, nil, frame)
+		turn, pErr := promptloop.ProjectTurnTools(ctx, deps, workerSess, nil, frame)
 		if pErr != nil {
 			return TurnAuthority{}, fmt.Errorf("worker ProjectTurnTools: %w", pErr)
 		}
+		offeredMetas, plan := turn.Metas, turn.Plan
 		filter := platform.ToolFilter{ProfileID: state.ToolProfile, ProjectRootCount: state.RootCount}
 		progReach, rErr := bundle.programReach(ctx, filter)
 		if rErr != nil {
@@ -84,10 +80,7 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		if tErr != nil {
 			return TurnAuthority{}, fmt.Errorf("worker Metadata.ProgramTable: %w", tErr)
 		}
-		postLoadSchemas, dErr := projectDeferredSchemas(ctx, deps, workerSess, nil, frame, plan, state.Loaded, offeredMetas)
-		if dErr != nil {
-			return TurnAuthority{}, fmt.Errorf("worker projectDeferredSchemas: %w", dErr)
-		}
+		postLoadSchemas := turn.DeferredSchemas
 		offered := toolMetaNames(offeredMetas)
 		projectedSchemas := toolMetaSchemas(offeredMetas)
 		encSchemas, encErr := encodeAdmittedValue(reflect.ValueOf(projectedSchemas), map[ptrVisit]bool{})
@@ -108,34 +101,81 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		projTurnMu.Unlock()
 	}
 
-	visible := slices.Clone(proj.offered)
-	visible = append(visible, proj.plan.DeferredNames()...)
-	var reviewsConfinedWrites bool
-	if state.ApprovalPosture != "" {
-		reviewsConfinedWrites = state.ApprovalPosture.ReviewsConfinedWrites()
+	host, err := WorkerHostFacts(state, narrowed, overlay.Schemas)
+	if err != nil {
+		return TurnAuthority{}, err
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:             state.ToolProfile,
-		SessionMode:           string(state.ParentSessionMode),
-		Profiles:              narrowed,
-		Plan:                  proj.plan,
-		Loaded:                state.Loaded,
-		Visible:               visible,
-		Schemas:               overlay.Schemas,
-		ProjectedSchemas:      proj.projectedSchemas,
-		RootCount:             state.RootCount,
-		HasGit:                state.HasGit,
-		HasAnyGitRoot:         state.HasAnyGitRoot,
-		OnWorkerBranch:        state.OnWorkerBranch,
-		WebSearch:             state.WebSearch,
-		ReviewsConfinedWrites: reviewsConfinedWrites,
-		CommandExternalHidden: state.CommandExternalHidden,
+	reader, err := prompts.NewReader(host, prompts.TurnProjection{
+		ProfileID:        state.ToolProfile,
+		Plan:             proj.plan,
+		Offered:          proj.offered,
+		ProjectedSchemas: mergedSchemas(proj.postLoadSchemas, proj.projectedSchemas),
 	})
 	if err != nil {
 		return TurnAuthority{}, fmt.Errorf("worker NewReader: %w", err)
 	}
 	reader = reader.WithVision(state.Vision)
 	return assembleTurnAuthorityFromEntry(proj, reader), nil
+}
+
+// worker fixture paths; the branch checkout is a Git repository.
+const (
+	workerFixturePrimary   = "/tmp/fixture-primary"
+	workerFixtureSecondary = "/tmp/fixture-secondary"
+	workerFixtureBranch    = "/tmp/fixture-worker-branch"
+)
+
+func workerFixtureSession(state WorkerState) *api.Session {
+	sess := &api.Session{
+		ID:              "worker-fixture",
+		ParentSessionID: "coord-fixture",
+		Mode:            state.ParentSessionMode,
+		Posture:         state.Posture,
+		AgentType:       state.AgentID,
+	}
+	if state.RootCount > 0 {
+		sess.WorkspacePath = workerFixturePrimary
+	}
+	return sess
+}
+
+// WorkerHostFacts derives state's host facts through the production
+// derivation from the roots and branch checkout its branch view describes.
+func WorkerHostFacts(state WorkerState, profiles []sandbox.ToolProfile, schemas *toolschema.Config) (prompts.HostFacts, error) {
+	repos := map[string]bool{}
+	var roots []projectroot.RootRef
+	if state.RootCount > 0 {
+		roots = append(roots, projectroot.RootRef{ID: "r1", Label: "primary", Path: workerFixturePrimary, IsPrimary: true})
+		repos[workerFixturePrimary] = state.BranchView != BranchMainNonGit
+	}
+	for i := 2; i <= state.RootCount; i++ {
+		path := fmt.Sprintf("%s-%d", workerFixtureSecondary, i)
+		roots = append(roots, projectroot.RootRef{ID: fmt.Sprintf("r%d", i), Label: "secondary", Path: path})
+		repos[path] = state.SecondaryRootGit
+	}
+	obs := readerfacts.Observation{
+		Session:               workerFixtureSession(state),
+		Profiles:              profiles,
+		Schemas:               schemas,
+		Roots:                 roots,
+		WebSearch:             state.WebSearch,
+		ApprovalPosture:       state.ApprovalPosture,
+		CommandExternalHidden: state.CommandExternalHidden,
+		IsRepo:                func(path string) bool { return repos[path] },
+	}
+	if state.BranchView == BranchIsolatedWorker {
+		obs.BranchRoot, obs.OnWorkerBranch = workerFixtureBranch, true
+		repos[workerFixtureBranch] = true
+	}
+	host, err := readerfacts.Derive(obs)
+	if err != nil {
+		return prompts.HostFacts{}, err
+	}
+	if host.HasGit != state.HasGit || host.HasAnyGitRoot != state.HasAnyGitRoot || host.OnWorkerBranch != state.OnWorkerBranch {
+		return prompts.HostFacts{}, fmt.Errorf("state %s: derived git=%t/%t branch=%t disagree with generated git=%t/%t branch=%t",
+			state.ID, host.HasGit, host.HasAnyGitRoot, host.OnWorkerBranch, state.HasGit, state.HasAnyGitRoot, state.OnWorkerBranch)
+	}
+	return host, nil
 }
 
 // WorkerReaderForSession builds the prompt Reader for a named worker agent
@@ -173,7 +213,7 @@ func WorkerReaderForSession(ctx context.Context, sessionState CoordinatorState, 
 		ExecMode:              target.ExecMode,
 		Posture:               sessionState.Posture,
 		BranchView:            bv,
-		RootCount:             max(sessionState.RootCount, 1),
+		RootCount:             sessionState.RootCount,
 		Loading:               WorkerLoadingStickyOnly,
 		ParentSessionMode:     sessionState.SessionMode,
 		WebSearch:             sessionState.WebSearch,

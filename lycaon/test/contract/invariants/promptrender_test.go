@@ -465,15 +465,16 @@ func TestProductionSkillAdmissionGuaranteesAndNonGuarantees(t *testing.T) {
 				Tools:          map[string]bool{"command": true, "verify": true, "terminal_open": true, "wait": true, "ask_user": true},
 				CommandEffects: wAuth.Reader.Effects(),
 			}
-			timerReader, tErr := prompts.NewReader(prompts.ReaderInput{
+			timerReader, tErr := prompts.NewReader(prompts.HostFacts{
+				SessionMode: string(mode),
+				Profiles:    []sandbox.ToolProfile{timerProf},
+				Schemas:     s.Schemas,
+				RootCount:   1,
+			}, prompts.TurnProjection{
 				ProfileID:        "timer_only_worker",
-				SessionMode:      string(mode),
-				Profiles:         []sandbox.ToolProfile{timerProf},
 				Plan:             toolsurface.Compile(wAuth.Offered, nil),
-				Visible:          wAuth.Offered,
-				Schemas:          s.Schemas,
+				Offered:          wAuth.Offered,
 				ProjectedSchemas: timerSchemas,
-				RootCount:        1,
 			})
 			contractcheck.FailErr(t, "timerReader", tErr)
 			checkAuthoritySkills("timer-only/"+string(posture)+"/"+string(mode), timerReader.Held(), timerReader.Offered(), timerSchemas)

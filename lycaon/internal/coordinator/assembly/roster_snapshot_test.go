@@ -12,7 +12,7 @@ import (
 
 func TestRosterRenderingReusesAvailabilityFacts(t *testing.T) {
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{
 		Injects: prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)})),
 		RepoKnownEmpty: func(context.Context, string) bool {
 			t.Error("rendering re-read repository availability")
@@ -22,7 +22,7 @@ func TestRosterRenderingReusesAvailabilityFacts(t *testing.T) {
 			t.Error("rendering re-read the web search gate")
 			return false
 		},
-	})
+	}))
 	roster := inject.ResolveAgentRoster("implement_investigate", []string{"repo-researcher"}, 1, false, true)
 	frame := inject.CoordinatorTurnFrame{Roster: &roster}
 	_, err := testTurnContext(engine).prependCoordinatorRunInject(t.Context(), &api.Session{ID: "session", WorkspacePath: t.TempDir()},

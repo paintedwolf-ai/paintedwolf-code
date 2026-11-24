@@ -94,12 +94,14 @@ func TestRenderUtilityPromptsAndSurveySeparation(t *testing.T) {
 
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load tool profiles", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Declared:  true,
 	})
 	testutil.FailErr(t, "build reader", err)
 	gr := prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))

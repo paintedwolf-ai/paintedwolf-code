@@ -6,59 +6,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func (e *promptSurface) repoKnownEmpty(ctx context.Context, workspacePath string) bool {
 	fn := e.deps.RepoKnownEmpty
 	return fn != nil && fn(ctx, workspacePath)
-}
-func (e *promptSurface) mergeVisibleTools(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, vars map[string]any) {
-	if e == nil || vars == nil || sess == nil || e.deps.PromptToolLister == nil {
-		return
-	}
-	profileID := strings.TrimSpace(frame.Machine.ProfileID)
-	if agents := e.agentsForSession(ctx, sess); profileID == "" && agents != nil {
-		if profile, err := agents.Get(sess.AgentType); err == nil {
-			profileID = profile.ToolProfile
-		}
-	}
-	if profileID == "" {
-		fe, ok := e.deps.Prompts.(*prompts.FileTemplateEngine)
-		if !ok || fe == nil {
-			return
-		}
-		var err error
-		profileID, err = prompts.ToolProfileForAgent(sess.AgentType)
-		if err != nil {
-			return
-		}
-	}
-	metas, err := e.deps.PromptToolLister(ctx, sess, profileID)
-	if err != nil || len(metas) == 0 {
-		return
-	}
-	if frame.Machine.Compiled() {
-		metas = tools.HideSkillsReadWhenEmpty(metas, frame.Machine.SkillCount)
-	}
-	names := make([]string, 0, len(metas))
-	for _, meta := range metas {
-		if sess.Mode == api.SessionModeAsk && !tools.AllowedInAsk(meta) {
-			continue
-		}
-		if strings.TrimSpace(meta.Name) != "" {
-			names = append(names, meta.Name)
-		}
-	}
-	vars["visible_tools"] = names
-	// A persona renders the units and loaded tools of its own session.
-	vars["loaded_tools"] = e.loadedTools(sess)
 }
 func (e *promptSurface) effectivePromptSurface(
 	ctx context.Context,
@@ -128,62 +83,6 @@ func (e *promptSurface) mergeEffectivePromptSurfaceWithTurn(
 	}
 }
 
-func (e *promptSurface) onWorkerBranch(ctx context.Context, sess *api.Session) (string, bool) {
-	if e == nil || e.deps.OnWorkerBranch == nil || sess == nil {
-		return "", false
-	}
-	return e.deps.OnWorkerBranch(ctx, sess)
-}
-
-func readerGitFacts(roots []map[string]any, activePath, fallbackWorkspacePath, workerBranchRoot string) (hasGit, hasAnyGitRoot bool) {
-	primaryPath := strings.TrimSpace(activePath)
-	if primaryPath == "" {
-		for _, row := range roots {
-			if active, _ := row["is_active"].(bool); active {
-				if p, _ := row["path"].(string); strings.TrimSpace(p) != "" {
-					primaryPath = strings.TrimSpace(p)
-					break
-				}
-			}
-		}
-	}
-	if primaryPath == "" {
-		for _, row := range roots {
-			if primary, _ := row["is_primary"].(bool); primary {
-				if p, _ := row["path"].(string); strings.TrimSpace(p) != "" {
-					primaryPath = strings.TrimSpace(p)
-					break
-				}
-			}
-		}
-	}
-	if primaryPath == "" && len(roots) > 0 {
-		if p, _ := roots[0]["path"].(string); strings.TrimSpace(p) != "" {
-			primaryPath = strings.TrimSpace(p)
-		}
-	}
-	if primaryPath == "" {
-		primaryPath = strings.TrimSpace(fallbackWorkspacePath)
-	}
-	if primaryPath != "" {
-		_, hasGit = gitrepo.Discover(primaryPath)
-	}
-	if !hasGit && strings.TrimSpace(workerBranchRoot) != "" {
-		_, hasGit = gitrepo.Discover(strings.TrimSpace(workerBranchRoot))
-	}
-	hasAnyGitRoot = hasGit
-	if !hasAnyGitRoot {
-		for _, row := range roots {
-			if p, _ := row["path"].(string); strings.TrimSpace(p) != "" {
-				if _, ok := gitrepo.Discover(strings.TrimSpace(p)); ok {
-					hasAnyGitRoot = true
-					break
-				}
-			}
-		}
-	}
-	return hasGit, hasAnyGitRoot
-}
 func (e *promptSurface) workspaceRootsForTurn(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) ([]map[string]any, int, string, int, bool) {
 	if turn != nil && turn.WorkspaceRootsLoaded {
 		return turn.WorkspaceRoots, turn.WorkspaceRootCount, turn.WorkspaceActivePath, turn.WorkspaceRootsOmittedCount, true
@@ -271,13 +170,14 @@ func (e *promptSurface) taskOffered(sess *api.Session, surfaceID string, rootCou
 	return plan.Deferred("task") && e.loadedTools(sess)["task"]
 }
 
+// turnReader is the Reader of the coordinator request this assembly precedes,
+// projected through the live turn pipeline.
 func (e *promptSurface) turnReader(
 	ctx context.Context,
 	sess *api.Session,
 	frame inject.CoordinatorTurnFrame,
 	history []api.Message,
 	turn *TurnAssemblyScratch,
-	fallbackRootCount int,
 ) (prompts.Reader, error) {
 	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
 	if frame.Roster != nil && strings.TrimSpace(frame.Roster.Facts.SurfaceID) != "" {
@@ -288,103 +188,24 @@ func (e *promptSurface) turnReader(
 	if turn != nil && turn.Reader.Valid() && turn.Reader.SurfaceID() == profile.SurfaceID {
 		return turn.Reader, nil
 	}
-	roots, rootCount, activePath, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
-	if !ok {
-		switch {
-		case fallbackRootCount > 0:
-			rootCount = fallbackRootCount
-		case frame.Roster != nil && frame.Roster.Facts.RootCount > 0:
-			rootCount = frame.Roster.Facts.RootCount
-		case sess != nil && strings.TrimSpace(sess.WorkspacePath) != "":
-			rootCount = 1
-		}
-	}
-	plan, err := surface.CompileToolPlan(profile, rootCount)
+	reader, err := e.requestReader(ctx, sess, history, frame)
 	if err != nil {
 		return prompts.Reader{}, err
 	}
-	webSearchEnabled := true
-	if frame.Roster != nil {
-		webSearchEnabled = frame.Roster.Facts.WebSearchEnabled
-	} else if fn := e.deps.WebSearchEnabled; fn != nil {
-		webSearchEnabled = fn()
-	}
-	var (
-		profiles []sandbox.ToolProfile
-		schemas  *toolschema.Config
-	)
-	if view := e.sessionCatalogView(ctx, sess); view != nil {
-		profiles = view.ToolProfiles
-		schemas = view.ToolSchemas
-	}
-	if len(profiles) == 0 {
-		loaded, err := sandbox.LoadToolProfiles()
-		if err != nil {
-			return prompts.Reader{}, err
-		}
-		profiles = loaded
-	}
-	sessionMode := string(api.SessionModeAgent)
-	var fallbackPath string
-	if sess != nil {
-		if sess.Mode == api.SessionModeAsk {
-			sessionMode = string(api.SessionModeAsk)
-		}
-		fallbackPath = sess.WorkspacePath
-	}
-	branchRoot, onWorkerBranch := e.onWorkerBranch(ctx, sess)
-	hasGit, hasAnyGitRoot := readerGitFacts(roots, activePath, fallbackPath, branchRoot)
-	var spawnAllowlist []string
-	if frame.Roster != nil {
-		spawnAllowlist = frame.Roster.Effective
-	} else {
-		declared := frame.RunContext.AllowedAgents
-		if len(declared) == 0 {
-			declared = spawn.AmbientAllowedAgents()
-		}
-		spawnAllowlist = declared
-	}
-	var (
-		reviewsConfinedWrites bool
-		externalHidden        bool
-		scratchDir            string
-		sharedTemp            []string
-	)
-	if promptSurf, hasSurf := e.effectivePromptSurface(ctx, sess, frame, turn); hasSurf {
-		if promptSurf.Posture != "" {
-			reviewsConfinedWrites = promptSurf.Posture.ReviewsConfinedWrites()
-		}
-		externalHidden = promptSurf.CommandExternalHidden
-		scratchDir = promptSurf.SessionScratchDir
-		sharedTemp = promptSurf.SharedTempLocations
-	}
-	visionEnabled := e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:             prompts.CoordinatorProfileID,
-		SurfaceID:             profile.SurfaceID,
-		Mode:                  surface.ExecutionModeFamily(profile.SurfaceID),
-		SessionMode:           sessionMode,
-		Profiles:              profiles,
-		Plan:                  plan,
-		Loaded:                e.loadedTools(sess),
-		Schemas:               schemas,
-		RootCount:             rootCount,
-		HasGit:                hasGit,
-		HasAnyGitRoot:         hasAnyGitRoot,
-		OnWorkerBranch:        onWorkerBranch,
-		WebSearch:             webSearchEnabled,
-		SpawnAllowlist:        spawnAllowlist,
-		ReviewsConfinedWrites: reviewsConfinedWrites,
-		CommandExternalHidden: externalHidden,
-		SessionScratchDir:     scratchDir,
-		SharedTempLocations:   sharedTemp,
-	})
-	if err != nil {
-		return prompts.Reader{}, err
-	}
-	reader = reader.WithVision(visionEnabled)
 	if turn != nil {
 		turn.Reader = reader
 	}
 	return reader, nil
+}
+
+// requestReader projects sess's request through the deps' turn pipeline.
+func (e *promptSurface) requestReader(ctx context.Context, sess *api.Session, history []api.Message, frame inject.CoordinatorTurnFrame) (prompts.Reader, error) {
+	if e == nil || e.deps.TurnReader == nil {
+		return prompts.Reader{}, errTurnReaderNotConfigured
+	}
+	reader, err := e.deps.TurnReader(ctx, sess, history, frame)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	return reader.WithVision(e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)), nil
 }

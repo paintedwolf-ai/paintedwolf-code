@@ -18,7 +18,7 @@ func TestExplicitToolProfilesDoNotAdvertiseCoordinatorReportProtocol(t *testing.
 			engine := &AssemblyEngine{}
 			workflow := &advancingTurnFrameSource{phase: "boot", revision: 1}
 			var listed []string
-			engine.SetDeps(AssemblyDeps{
+			engine.SetDeps(withTestTurnReader(AssemblyDeps{
 				Board: advancingBoard{}, BoardOrientReady: advancingOrientRecorder{source: workflow},
 				CoordinatorFrame: workflow,
 				Prompts:          prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)}),
@@ -26,7 +26,7 @@ func TestExplicitToolProfilesDoNotAdvertiseCoordinatorReportProtocol(t *testing.
 					listed = append(listed, id)
 					return []tools.ToolMeta{{Name: "read"}, {Name: "summarize"}}, nil
 				},
-			})
+			}))
 			sess := &api.Session{ID: "selection", AgentType: "coordinator", Posture: api.SessionPostureBuild}
 			frame := inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: profile}}
 			history := []api.Message{{Role: api.MessageRoleUser, Content: "Explain this selection."}}

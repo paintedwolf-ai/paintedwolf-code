@@ -2,11 +2,13 @@ package promptloop
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -42,14 +44,17 @@ func (l *modelTurn) sessionRoutingClient(sess *api.Session) modelcall.LLMClient 
 
 // trainingCapturePolicy gives an opted-in collection turn the durable
 // transcript policy and the provider registry's offline request rendering.
-func (l *modelTurn) trainingCapturePolicy(ctx context.Context, sess *api.Session, procedureProfile string) trainingcapture.Policy {
+func (l *modelTurn) trainingCapturePolicy(ctx context.Context, sess *api.Session, reader prompts.Reader) trainingcapture.Policy {
 	policy := trainingcapture.Policy{StorageChanges: func(msg api.Message) bool { return l.Projection.storageChanges(ctx, msg) }}
 	if l.Deps.LLMService != nil && l.Deps.LLMService.Registry != nil {
 		policy.Render = l.Deps.LLMService.Registry.RenderRequest
 	}
 	if surface := l.Context.Deps.PromptSurface; surface != nil {
-		policy.Surface = func(ctx context.Context, offered []string) (trainingcapture.PromptSurface, error) {
-			return surface(ctx, sess, procedureProfile, offered)
+		policy.Surface = func(ctx context.Context, _ []string) (trainingcapture.PromptSurface, error) {
+			if !reader.Valid() {
+				return trainingcapture.PromptSurface{}, fmt.Errorf("request reader unavailable")
+			}
+			return surface(ctx, sess, reader)
 		}
 	}
 	return policy

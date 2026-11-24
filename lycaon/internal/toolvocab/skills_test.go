@@ -396,28 +396,43 @@ func TestSkillToolsOfferedForReaderDistinguishesProjectedSchemasBothOrders(t *te
 			},
 		}
 	}
-	wideAsk, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker", Profiles: profiles,
-		Visible: []string{"ask_user"}, Loaded: map[string]bool{"ask_user": true},
+	wideAsk, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Offered:   readerDeclaredOffer(profiles, "worker", []string{"ask_user"}, map[string]bool{"ask_user": true}),
 		ProjectedSchemas: map[string]map[string]any{
 			"ask_user": makeAskSchema([]any{"text", "secret"}),
 		},
-		RootCount: 1, HasGit: true, WebSearch: true,
+		Declared: true,
 	})
 	testutil.FailErr(t, "wideAsk reader", err)
-	narrowAsk, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker", Profiles: profiles,
-		Visible: []string{"ask_user"}, Loaded: map[string]bool{"ask_user": true},
+	narrowAsk, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Offered:   readerDeclaredOffer(profiles, "worker", []string{"ask_user"}, map[string]bool{"ask_user": true}),
 		ProjectedSchemas: map[string]map[string]any{
 			"ask_user": makeAskSchema([]any{"text", "single_choice"}),
 		},
-		RootCount: 1, HasGit: true, WebSearch: true,
+		Declared: true,
 	})
 	testutil.FailErr(t, "narrowAsk reader", err)
 
-	wideVerify, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker", Profiles: profiles,
-		Visible: []string{"verify"}, Loaded: map[string]bool{"verify": true},
+	wideVerify, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Offered:   readerDeclaredOffer(profiles, "worker", []string{"verify"}, map[string]bool{"verify": true}),
 		ProjectedSchemas: map[string]map[string]any{
 			"verify": {
 				"type": "object",
@@ -429,16 +444,21 @@ func TestSkillToolsOfferedForReaderDistinguishesProjectedSchemasBothOrders(t *te
 				},
 			},
 		},
-		RootCount: 1, HasGit: true, WebSearch: true,
+		Declared: true,
 	})
 	testutil.FailErr(t, "wideVerify reader", err)
-	narrowVerify, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker", Profiles: profiles,
-		Visible: []string{"verify"}, Loaded: map[string]bool{"verify": true},
+	narrowVerify, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Offered:   readerDeclaredOffer(profiles, "worker", []string{"verify"}, map[string]bool{"verify": true}),
 		ProjectedSchemas: map[string]map[string]any{
 			"verify": {"type": "object", "properties": map[string]any{"socks_proxy": map[string]any{"type": "boolean"}}},
 		},
-		RootCount: 1, HasGit: true, WebSearch: true,
+		Declared: true,
 	})
 	testutil.FailErr(t, "narrowVerify reader", err)
 

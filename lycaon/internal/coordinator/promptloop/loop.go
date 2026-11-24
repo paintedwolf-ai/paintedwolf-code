@@ -3,9 +3,10 @@ package promptloop
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"math"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -148,7 +149,7 @@ loop:
 			}
 		}
 		if modeUpgraded {
-			st.history, err = l.appendAgentEnabledNudge(ctx, id, st)
+			st.history, err = l.appendAgentEnabledNudge(ctx, sess, id, profileID, st)
 			if err != nil {
 				return nil, err
 			}

@@ -7,27 +7,16 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func (l *toolInvocations) appendToolProcedures(
-	ctx context.Context, sess *api.Session, profileID string,
-	messages []api.Message, offered []tools.ToolMeta,
+	ctx context.Context, sess *api.Session, reader prompts.Reader, messages []api.Message,
 ) ([]api.Message, error) {
-	if l.Context.Deps.ToolProcedures == nil || len(offered) == 0 {
+	if l.Context.Deps.ToolProcedures == nil || len(reader.Offered()) == 0 {
 		return messages, nil
 	}
-	names := make([]string, 0, len(offered))
-	projected := make(map[string]map[string]any, len(offered))
-	for _, meta := range offered {
-		names = append(names, meta.Name)
-		if meta.ArgsSchema != nil {
-			projected[meta.Name] = meta.ArgsSchema
-		}
-	}
-	ctx = prompts.WithProjectedSchemas(ctx, projected)
-	block, err := l.Context.Deps.ToolProcedures(ctx, sess, profileID, names)
+	block, err := l.Context.Deps.ToolProcedures(ctx, sess, reader)
 	if err != nil {
 		return nil, fmt.Errorf("render offered tool procedures: %w", err)
 	}

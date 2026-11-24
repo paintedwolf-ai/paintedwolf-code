@@ -13,7 +13,7 @@ import (
 func TestSkillPreloadInjectUsesRenderedProcedureWithoutRoster(t *testing.T) {
 	e := &AssemblyEngine{}
 	selected := &turnload.SkillPreload{Name: "selected-skill", Score: 3.6, Body: "Run the targeted check."}
-	e.SetDeps(AssemblyDeps{Injects: promptstest.InjectRenderer(t), SkillPreload: func(string) *turnload.SkillPreload { return selected }})
+	e.SetDeps(withTestTurnReader(AssemblyDeps{Injects: promptstest.InjectRenderer(t), SkillPreload: func(string) *turnload.SkillPreload { return selected }}))
 	for i := 0; i < 2; i++ {
 		message, ok := testTurnContext(e).skillProcedureInject(t.Context(), &api.Session{ID: "s"}, "coordinator")
 		if !ok || !strings.Contains(message.Content, selected.Body) || !strings.Contains(message.Content, "### Procedure: selected-skill") || strings.Contains(message.Content, "skills_read") {
@@ -39,7 +39,7 @@ func TestSkillPreloadInjectUsesRenderedProcedureWithoutRoster(t *testing.T) {
 func TestInterleaveSkillGuidanceAnchorsInHistoryPrefix(t *testing.T) {
 	e := &AssemblyEngine{}
 	selected := &turnload.SkillPreload{Name: "game-ai", Score: 3.8, Body: "Use minimax."}
-	e.SetDeps(AssemblyDeps{Injects: promptstest.InjectRenderer(t), SkillPreload: func(string) *turnload.SkillPreload { return selected }})
+	e.SetDeps(withTestTurnReader(AssemblyDeps{Injects: promptstest.InjectRenderer(t), SkillPreload: func(string) *turnload.SkillPreload { return selected }}))
 	sess := &api.Session{ID: "s"}
 
 	u1 := api.Message{ID: "u1", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, Content: "Build tic-tac-toe"}

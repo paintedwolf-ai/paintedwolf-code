@@ -40,7 +40,7 @@ func prefixStabilityEngine(t *testing.T) *AssemblyEngine {
 		WorkspaceRoots:   prefixStabilityWorkspaceRoots(),
 	}
 	eng := &AssemblyEngine{}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	return eng
 }
 
@@ -142,7 +142,7 @@ func TestPromptTurnReadsWorkspaceRootsOnce(t *testing.T) {
 		reads++
 		return base(ctx, sess)
 	}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	sess := &api.Session{
 		ID: "single-root-snapshot", Posture: api.SessionPostureBuild,
 		AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir(),
@@ -169,7 +169,7 @@ func TestPromptCacheStableKeyChangesWithEffectiveCapabilitySurface(t *testing.T)
 	deps.EffectivePromptSurface = func(context.Context, *api.Session) prompts.AgentPromptSurface {
 		return surface
 	}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	sess := &api.Session{
 		ID: "prefix-capability-flip", Posture: api.SessionPostureBuild,
 		AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir(),
@@ -291,7 +291,7 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 		base:          deps.CoordinatorFrame,
 		evidenceGates: &evidenceGates,
 	}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 
 	sess := &api.Session{
 		ID:            "prefix-gate-flips",

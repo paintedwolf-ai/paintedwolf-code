@@ -257,10 +257,16 @@ func buildOARBoundaryCells(s *Stock, existing []oarproducers.AuthCell) []oarprod
 	cmdOnly.Schemas = map[string]map[string]any{"command": cmdMeta.ArgsSchema}
 	cmdOnly.PostLoadSchemas = nil
 	cmdOnly.Reach = toolreach.Freeze(cmdOnly.Offered, cmdOnly.Plan).WithProgramTable(base.ProgramTable).WithSchemas(cmdOnly.Schemas)
-	if r, rErr := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID, Profiles: s.Profiles,
-		Plan: cmdOnly.Plan, Visible: cmdOnly.Offered, Schemas: s.Schemas,
-		ProjectedSchemas: cmdOnly.Schemas, RootCount: 1, HasGit: true,
+	if r, rErr := prompts.NewReader(prompts.HostFacts{
+		Profiles:  s.Profiles,
+		Schemas:   s.Schemas,
+		RootCount: 1,
+		HasGit:    true,
+	}, prompts.TurnProjection{
+		ProfileID:        prompts.CoordinatorProfileID,
+		Plan:             cmdOnly.Plan,
+		Offered:          cmdOnly.Offered,
+		ProjectedSchemas: cmdOnly.Schemas,
 	}); rErr == nil {
 		cmdOnly.Reader = r
 	}
@@ -281,10 +287,16 @@ func buildOARBoundaryCells(s *Stock, existing []oarproducers.AuthCell) []oarprod
 	mpOnly.Schemas = map[string]map[string]any{"measure_page": mpMeta.ArgsSchema}
 	mpOnly.PostLoadSchemas = nil
 	mpOnly.Reach = toolreach.Freeze(mpOnly.Offered, mpOnly.Plan).WithSchemas(mpOnly.Schemas)
-	if r, rErr := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID, Profiles: s.Profiles,
-		Plan: mpOnly.Plan, Visible: mpOnly.Offered, Schemas: s.Schemas,
-		ProjectedSchemas: mpOnly.Schemas, RootCount: 1, HasGit: true,
+	if r, rErr := prompts.NewReader(prompts.HostFacts{
+		Profiles:  s.Profiles,
+		Schemas:   s.Schemas,
+		RootCount: 1,
+		HasGit:    true,
+	}, prompts.TurnProjection{
+		ProfileID:        prompts.CoordinatorProfileID,
+		Plan:             mpOnly.Plan,
+		Offered:          mpOnly.Offered,
+		ProjectedSchemas: mpOnly.Schemas,
 	}); rErr == nil {
 		mpOnly.Reader = r
 	}
@@ -307,10 +319,16 @@ func buildOARBoundaryCells(s *Stock, existing []oarproducers.AuthCell) []oarprod
 	defAskAuth.PostLoadSchemas = nil
 	defAskAuth.Reach = defAskLive
 	defAskAuth.Digest = "oar-def-ask-no-schema"
-	if r, rErr := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID, Profiles: s.Profiles,
-		Plan: defAskPlan, Visible: []string{"request_tools"}, Schemas: s.Schemas,
-		ProjectedSchemas: defAskSchemas, RootCount: 1, HasGit: true,
+	if r, rErr := prompts.NewReader(prompts.HostFacts{
+		Profiles:  s.Profiles,
+		Schemas:   s.Schemas,
+		RootCount: 1,
+		HasGit:    true,
+	}, prompts.TurnProjection{
+		ProfileID:        prompts.CoordinatorProfileID,
+		Plan:             defAskPlan,
+		Offered:          []string{"request_tools"},
+		ProjectedSchemas: defAskSchemas,
 	}); rErr == nil {
 		defAskAuth.Reader = r
 	}
@@ -371,10 +389,16 @@ func buildHeldControlsCell(s *Stock, base hoststate.TurnAuthority) oarproducers.
 	heldAuth.Schemas = schemas
 	heldAuth.PostLoadSchemas = nil
 	heldAuth.Reach = toolreach.Freeze(offered, heldAuth.Plan).WithProgramTable(base.ProgramTable).WithSchemas(schemas)
-	if r, rErr := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID, Profiles: s.Profiles,
-		Plan: heldAuth.Plan, Visible: offered, Schemas: s.Schemas,
-		ProjectedSchemas: schemas, RootCount: 1, HasGit: true,
+	if r, rErr := prompts.NewReader(prompts.HostFacts{
+		Profiles:  s.Profiles,
+		Schemas:   s.Schemas,
+		RootCount: 1,
+		HasGit:    true,
+	}, prompts.TurnProjection{
+		ProfileID:        prompts.CoordinatorProfileID,
+		Plan:             heldAuth.Plan,
+		Offered:          offered,
+		ProjectedSchemas: schemas,
 	}); rErr == nil {
 		heldAuth.Reader = r
 	}

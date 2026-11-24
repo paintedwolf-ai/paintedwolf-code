@@ -24,13 +24,15 @@ func renderNoFolderCoordinatorCore(t *testing.T, webSearch bool) string {
 	plan, err := prompts.CompileSurfacePlan(spawn.SurfaceImplementRouting, 0)
 	contractcheck.FailErr(t, "CompileSurfacePlan", err)
 	roster := inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, webSearch).Effective
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:      prompts.CoordinatorProfileID,
-		SurfaceID:      spawn.SurfaceImplementRouting,
-		Plan:           plan,
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:       profiles,
 		WebSearch:      webSearch,
 		SpawnAllowlist: roster,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: spawn.SurfaceImplementRouting,
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
 	})
 	contractcheck.FailErr(t, "NewReader", err)
 	vars := map[string]any{}

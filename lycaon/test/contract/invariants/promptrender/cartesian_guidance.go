@@ -105,15 +105,16 @@ func collectDistinctReachAuthorities(s *Stock, cReps []coordRep, wReps []workerR
 			a.PostLoadSchemas = nil
 			a.Plan = toolsurface.Compile(offered, nil)
 			a.Reach = toolreach.Offered(offered).WithSchemas(schemas)
-			if r, rErr := prompts.NewReader(prompts.ReaderInput{
+			if r, rErr := prompts.NewReader(prompts.HostFacts{
+				Profiles:  s.Profiles,
+				Schemas:   s.Schemas,
+				RootCount: 1,
+				HasGit:    true,
+			}, prompts.TurnProjection{
 				ProfileID:        prompts.CoordinatorProfileID,
-				Profiles:         s.Profiles,
 				Plan:             a.Plan,
-				Visible:          offered,
-				Schemas:          s.Schemas,
+				Offered:          offered,
 				ProjectedSchemas: schemas,
-				RootCount:        1,
-				HasGit:           true,
 			}); rErr == nil {
 				a.Reader = r
 			}

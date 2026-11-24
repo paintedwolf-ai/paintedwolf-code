@@ -41,13 +41,15 @@ func TestRenderPersonaHandlesDisabledWebSearchAndWithheldTools(t *testing.T) {
 	engine := NewFileTemplateEngineLayers(PromptLayers{})
 	profiles, err := declaredToolProfiles(nil)
 	testutil.FailErr(t, "declaredToolProfiles", err)
-	reader, err := NewReader(ReaderInput{
-		ProfileID: "implement",
+	reader, err := NewReader(HostFacts{
 		Profiles:  profiles,
-		Visible:   []string{"command", "fetch_url", "complete_leg", "update_progress"},
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: false,
+	}, TurnProjection{
+		ProfileID: "implement",
+		Offered:   []string{"command", "fetch_url", "complete_leg", "update_progress"},
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader implementer web=false", err)
 	rendered, err := RenderPersona(context.Background(), engine, "implementer", reader, nil)

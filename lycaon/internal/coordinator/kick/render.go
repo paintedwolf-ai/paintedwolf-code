@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
 func buildKickRenderData(meta kickMeta, live CoordinatorKickRenderContext, now time.Time) map[string]any {
@@ -105,46 +104,12 @@ func (k *KickEngine) renderCoordinatorKick(ctx context.Context, kickID string, m
 	if cfg.engine == nil {
 		return "", fmt.Errorf("kick %q: prompt engine not configured", kickID)
 	}
-	data := buildKickRenderData(meta, live, time.Now().UTC())
-	reader, err := kickReader(live)
-	if err != nil {
-		return "", fmt.Errorf("kick reader: %w", err)
+	if !live.Reader.Valid() {
+		return "", fmt.Errorf("kick %q: no reader for the model call", kickID)
 	}
-	if err := prompts.MergeCoordinatorKickVarsForTools(data, reader); err != nil {
+	data := buildKickRenderData(meta, live, time.Now().UTC())
+	if err := prompts.MergeCoordinatorKickVarsForTools(data, live.Reader); err != nil {
 		return "", fmt.Errorf("kick policy vars: %w", err)
 	}
-	return cfg.engine.RenderKick(ctx, reader, strings.TrimSpace(kickID), data)
-}
-
-func kickReader(live CoordinatorKickRenderContext) (prompts.Reader, error) {
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return prompts.Reader{}, err
-	}
-	surfaceID := strings.TrimSpace(live.SurfaceID)
-	plan := live.ToolPlan
-	if !plan.Compiled() && surfaceID != "" {
-		plan, err = prompts.CompileSurfacePlan(surfaceID, max(live.RootCount, 1))
-		if err != nil {
-			return prompts.Reader{}, err
-		}
-	}
-	var loaded map[string]bool
-	if plan.Compiled() {
-		loaded = make(map[string]bool, len(plan.AddressableNames()))
-		for _, name := range plan.AddressableNames() {
-			loaded[name] = true
-		}
-	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID:             prompts.CoordinatorProfileID,
-		SurfaceID:             surfaceID,
-		Profiles:              profiles,
-		Plan:                  plan,
-		Loaded:                loaded,
-		RootCount:             live.RootCount,
-		WebSearch:             true,
-		ReviewsConfinedWrites: live.ReviewsConfinedWrites,
-		CommandExternalHidden: live.CommandExternalHidden,
-	})
+	return cfg.engine.RenderKick(ctx, live.Reader, strings.TrimSpace(kickID), data)
 }
