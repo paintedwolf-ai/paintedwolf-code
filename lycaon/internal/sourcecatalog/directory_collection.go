@@ -30,6 +30,9 @@ func collectDirectoryObservation(ctx context.Context, store *indexStore, dir str
 	if cached.Complete && cached.Failure == "" && cached.Stamp.known() && cached.Stamp == observation.Stamp && cached.Invalidation == observation.Invalidation && cached.Epoch == observation.Epoch {
 		return cached, true, nil
 	}
+	if policy, ok := held.(interface{ AllowDirectoryCollection() bool }); ok && !policy.AllowDirectoryCollection() {
+		return observation, false, ErrDirectoryNamespace
+	}
 	reader := directoryBatch{file: directory.entries}
 	for {
 		finish, err := store.stores.broker.Acquire(ctx, store.observationRequest(dir))

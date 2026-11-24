@@ -156,6 +156,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	r.reviewSharedTemp(callCtx, e.callTC, e.run.tool, e.run.source, false)
 	stateObservation(e.callTC, e.run.window.fact())
 	stateGitNoRepository(e)
+	stateGrepStops(e)
 	return ending.content()
 }
 
@@ -214,6 +215,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 	}
 	e.observeRunningConfinement()
 	stateGitNoRepository(e)
+	stateGrepStops(e)
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
 	if run.tool == "verify" {
 		result.ResultVersion = 2

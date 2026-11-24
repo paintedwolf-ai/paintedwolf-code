@@ -102,6 +102,9 @@ const (
 	ActivityKindAwaitingWake ActivityKind = "awaiting_wake"
 	// ActivityKindDeciding brackets a call to an available local decision engine.
 	ActivityKindDeciding ActivityKind = "deciding"
+	// ActivityKindIndexingCredentials brackets a session's wait on one root's
+	// credential-file pass.
+	ActivityKindIndexingCredentials ActivityKind = "indexing_credentials"
 )
 
 // LLMRetryReason names why a provider request is being reissued.

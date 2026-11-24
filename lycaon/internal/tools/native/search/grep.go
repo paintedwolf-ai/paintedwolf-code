@@ -1,6 +1,7 @@
 package search
 
 import (
+	"github.com/lycaon/lycaon/internal/tools"
 	"strconv"
 	"strings"
 	"time"
@@ -52,6 +53,11 @@ type grepRun struct {
 	stopped  bool
 	operands commandprogram.Fields
 	files    *grepFiles
+	// multiFile continues past an input whose record search stops on a budget.
+	multiFile bool
+	stops     []tools.GrepStoppedFile
+	searched  int
+	matched   int
 }
 
 func runGrep(inv *invocation) error {

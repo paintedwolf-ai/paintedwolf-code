@@ -3,43 +3,47 @@ package llm
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
 func (c *RoutingClient) openWithCapacity(ctx context.Context, sel *ModelSelection, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, *ModelSelection, error) {
+	callID := firstNonEmpty(req.Debug.CallID, secretmatch.ScreenCallIDFrom(ctx))
+	if callID == "" {
+		callID = uuid.NewString()
+	}
+	req.Debug.CallID = callID
+	ctx = secretmatch.WithScreenCallID(ctx, callID)
+	capStart := time.Now()
 	if sel != nil {
 		// Standing refusals avoid repeated calls.
 		if refused := c.refusals.Err(sel.ProviderID, sel.Model); refused != nil {
 			return nil, sel, refused
 		}
 		if err := c.capacity.Await(ctx, sel.ProviderID, sel.Model); err != nil {
+			emitCapacityWait(ctx, "foreground", capStart, true)
 			return nil, sel, err
 		}
 	}
-	release, err := c.acquireLocalCall(ctx, sel)
-	if err != nil {
-		return nil, sel, err
+	ch, adm, err := c.openOnce(ctx, sel, req)
+	if adm == nil || !adm.singleFlight {
+		emitCapacityWait(ctx, "foreground", capStart, err != nil && !adm.Dispatched())
 	}
-	handedOff := false
-	defer func() {
-		if !handedOff && release != nil {
-			release()
-		}
-	}()
-	ch, err := c.openOnce(ctx, sel, req)
-	for hold := 0; c.capacity.ShouldHold(err, hold); hold++ {
+	for hold := 0; adm.Dispatched() && c.capacity.ShouldHold(err, hold); hold++ {
 		if holdErr := c.capacity.Hold(ctx, hold); holdErr != nil {
 			if sel != nil {
 				c.capacity.NoteFailure(sel.ProviderID, sel.Model, err)
 			}
 			return nil, sel, holdErr
 		}
-		ch, err = c.openOnce(ctx, sel, req)
+		ch, adm, err = c.openOnce(ctx, sel, req)
 	}
 	if err != nil {
-		if sel != nil {
+		if sel != nil && adm.Dispatched() {
 			c.capacity.NoteFailure(sel.ProviderID, sel.Model, err)
 			c.refusals.Note(sel.ProviderID, sel.Model, err)
 		}
@@ -50,8 +54,7 @@ func (c *RoutingClient) openWithCapacity(ctx context.Context, sel *ModelSelectio
 		c.refusals.Clear(sel.ProviderID, sel.Model)
 		ch = c.observeStreamOutcome(ctx, sel, ch)
 	}
-	handedOff = true
-	return releaseAfterStream(ctx, ch, release), sel, nil
+	return ch, sel, nil
 }
 
 // observeStreamOutcome records provider failures before exposing their chunks.
@@ -73,18 +76,19 @@ func (c *RoutingClient) observeStreamOutcome(ctx context.Context, sel *ModelSele
 	return out
 }
 
-func (c *RoutingClient) openOnce(ctx context.Context, sel *ModelSelection, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+func (c *RoutingClient) openOnce(ctx context.Context, sel *ModelSelection, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, *callAdmission, error) {
 	if c.registry != nil && sel != nil {
-		primary, err := c.registry.StreamWithSelection(ctx, sel, req)
+		adm := c.foregroundAdmission(sel)
+		primary, err := c.registry.StreamWithSelection(withCallAdmission(ctx, adm), sel, req)
 		if err != nil {
-			return nil, stampSelection(fmt.Errorf("provider %s: %w", sel.ProviderID, err), sel)
+			return nil, adm, stampSelection(fmt.Errorf("provider %s: %w", sel.ProviderID, err), sel)
 		}
-		return primary, nil
+		return primary, adm, nil
 	}
 	if sel != nil {
-		return nil, &failure.ProviderNotConfiguredError{ProviderID: sel.ProviderID}
+		return nil, nil, &failure.ProviderNotConfiguredError{ProviderID: sel.ProviderID}
 	}
-	return nil, fmt.Errorf("no AI provider available")
+	return nil, nil, fmt.Errorf("no AI provider available")
 }
 
 // stampSelection supplies missing provider and model identities.
@@ -114,18 +118,19 @@ func stampedIdentity(providerID string, sel *ModelSelection) (string, string) {
 	return providerID, sel.Model
 }
 
-func (c *RoutingClient) acquireLocalCall(ctx context.Context, sel *ModelSelection) (func(), error) {
+func (c *RoutingClient) foregroundAdmission(sel *ModelSelection) *callAdmission {
+	adm := &callAdmission{foreground: true}
 	if c.plane == nil || c.registry == nil || sel == nil {
-		return nil, nil
+		return adm
 	}
 	provider, err := c.registry.Get(sel.ProviderID)
-	if err != nil {
-		return nil, err
+	if err != nil || !provider.Profile().UtilitySingleFlight {
+		return adm
 	}
-	if !provider.Profile().UtilitySingleFlight {
-		return nil, nil
-	}
-	return c.plane.acquireForeground(ctx, provider)
+	adm.plane = c.plane
+	adm.capacityKey = modelcall.CapacityKey(provider)
+	adm.singleFlight = true
+	return adm
 }
 
 // Admission lasts until the upstream stream has drained.

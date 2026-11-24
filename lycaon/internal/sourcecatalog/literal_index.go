@@ -79,19 +79,34 @@ func (c *literalIndexCache) invalidate(rootPath string, paths []string) {
 	if rootPath == "" {
 		return
 	}
-	prefixes, valid := reconciliationPaths(Root{Path: rootPath}, paths)
-	if !valid || len(prefixes) == 0 {
-		prefixes = []string{"."}
+	prefixesFor := func(targetRoot string) ([]string, bool) {
+		changed, relevant := treeChangesForRoot(rootPath, targetRoot, paths)
+		if !relevant {
+			return nil, false
+		}
+		prefixes, valid := reconciliationPaths(Root{Path: targetRoot}, changed)
+		if !valid || len(prefixes) == 0 {
+			prefixes = []string{"."}
+		}
+		return prefixes, true
 	}
 	c.fileMu.Lock()
 	defer c.fileMu.Unlock()
 	for read := range c.fileReads {
-		if read.rootPath == rootPath && entryUnderAnyBase(read.path, prefixes) {
+		if prefixes, ok := prefixesFor(read.rootPath); ok && entryUnderAnyBase(read.path, prefixes) {
 			read.invalidated = true
 		}
 	}
-	for _, prefix := range prefixes {
-		c.files.drop(rootPath, prefix)
+	roots := make([]string, 0, len(c.files.roots)+1)
+	for r := range c.files.roots {
+		roots = append(roots, r)
+	}
+	for _, r := range roots {
+		if prefixes, ok := prefixesFor(r); ok {
+			for _, prefix := range prefixes {
+				c.files.drop(r, prefix)
+			}
+		}
 	}
 }
 

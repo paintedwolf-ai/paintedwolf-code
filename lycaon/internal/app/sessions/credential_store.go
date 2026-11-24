@@ -18,27 +18,10 @@ func (r *Runtime) wireCredentialFiles(ctx context.Context, deps CheckpointDepend
 	if err := deps.Security.Harvest.RestoreFiles(values); err != nil {
 		return err
 	}
-	files := newCredentialFiles(deps.Security.Harvest, deps.Security.Fingerprinter, deps.Database, deps.Security.Capabilities, deps.Sessions.Evidence)
+	files := newCredentialFiles(deps.Security.Harvest, deps.Security.Fingerprinter, deps.Database, deps.Security.Capabilities, deps.Sessions.Evidence, deps.EventPublisher)
 	files.startCredentialIndex()
 	deps.Resources.Track("credential-file-index", 23, files.closeCredentialIndex)
 	r.Manager.ToolContext.CredentialFiles = files
 	deps.Security.CredentialFiles = files
-	return nil
-}
-
-func (c *credentialFiles) ForgetProject(ctx context.Context, project string) error {
-	_, finish, err := c.index.begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer finish()
-	if err := c.harvest.ForgetProject(project); err != nil {
-		return err
-	}
-	for key, root := range c.index.roots {
-		if root.projectID == project {
-			delete(c.index.roots, key)
-		}
-	}
 	return nil
 }

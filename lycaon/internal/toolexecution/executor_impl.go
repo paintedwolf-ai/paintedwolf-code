@@ -78,7 +78,9 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
-	if reject := admitCredentialFiles(ctx, qualifiedName, tc); reject != nil {
+	if reject, err := admitCredentialFiles(ctx, qualifiedName, false, tc); err != nil {
+		return "", err
+	} else if reject != nil {
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
 	secretUse, parseErr := parseSecretUse(qualifiedName, tc.Invocation.Contract, args)
@@ -281,7 +283,9 @@ func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID strin
 		ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
 		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 	}
-	if reject := admitCredentialFiles(ctx, tool, tc); reject != nil {
+	if reject, err := admitCredentialFiles(ctx, tool, true, tc); err != nil {
+		return "", err
+	} else if reject != nil {
 		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 	}
 	if strings.TrimSpace(tc.Invocation.Contract.Owner) == "" {

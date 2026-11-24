@@ -132,6 +132,11 @@ func (r *CommandServices) programs() *command.ProgramRuntime {
 	return r.commandTool.Programs
 }
 
+// ProgramRuntime exposes the underlying command program runtime for host composition and tests.
+func (r *CommandServices) ProgramRuntime() *command.ProgramRuntime {
+	return r.programs()
+}
+
 // SetProgramServices completes the program runtime at host composition. An
 // owner that cannot be composed fails host startup rather than leaving
 // programs without their native utilities.

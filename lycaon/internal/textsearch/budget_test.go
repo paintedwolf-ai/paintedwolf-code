@@ -24,9 +24,11 @@ func budgetResource(t *testing.T, err error) string {
 func TestRegexBudgets(t *testing.T) {
 	limits := catalogLimits(t)
 	ctx := t.Context()
-	linear, err := Compile(ctx, Spec{Patterns: []string{`b`}, Dialect: Extended}, limits)
+	stepped := limits
+	stepped.WorkSteps = 1 << 16
+	linear, err := Compile(ctx, Spec{Patterns: []string{`b`}, Dialect: Extended}, stepped)
 	testutil.FailErr(t, "compile text-search pattern", err)
-	at := []byte(strings.Repeat("a", int(limits.WorkSteps)-1))
+	at := []byte(strings.Repeat("a", int(stepped.WorkSteps)-1))
 	if _, ok, err := linear.Select(ctx, at); err != nil || ok {
 		t.Fatalf("record at the step ceiling: %v %v", ok, err)
 	}

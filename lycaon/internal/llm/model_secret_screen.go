@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -111,36 +110,6 @@ type ModelSecretScreen struct {
 	adopter  ManagedSecretAdopter
 }
 
-type secretScreenedProvider struct {
-	inner       modelcall.Provider
-	destination ScreenDestination
-	screen      OutboundSecretScreen
-}
-
-func (p *secretScreenedProvider) ID() string                       { return p.inner.ID() }
-func (p *secretScreenedProvider) Models() []modelcall.ModelInfo    { return p.inner.Models() }
-func (p *secretScreenedProvider) Profile() providerprofile.Profile { return p.inner.Profile() }
-
-func (p *secretScreenedProvider) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	started := time.Now()
-	screened, err := p.screen.Screen(ctx, p.destination, req)
-	lifecycleFromContext(ctx).record(ctx, "screened", "screen_ms", time.Since(started).Milliseconds(), "failed", err != nil)
-	if err != nil {
-		return nil, err
-	}
-	return p.inner.Complete(ctx, screened)
-}
-
-func (p *secretScreenedProvider) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
-	started := time.Now()
-	screened, err := p.screen.Screen(ctx, p.destination, req)
-	lifecycleFromContext(ctx).record(ctx, "screened", "screen_ms", time.Since(started).Milliseconds(), "failed", err != nil)
-	if err != nil {
-		return nil, err
-	}
-	return p.inner.Stream(ctx, screened)
-}
-
 func NewModelSecretScreen(matcher *secretmatch.Matcher, ask secretmatch.AskFunc) *ModelSecretScreen {
 	return &ModelSecretScreen{matcher: matcher, ask: ask}
 }
@@ -175,22 +144,48 @@ type locatedModelSecret struct {
 // Screen asks at most once per request and modifies only the provider-bound
 // copy. Destination trust and host composition reach the gate as alert facts.
 func (s *ModelSecretScreen) Screen(ctx context.Context, destination ScreenDestination, req modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
+	screened, _, err := s.ScreenWithBasis(ctx, destination, "", req)
+	return screened, err
+}
+
+func (s *ModelSecretScreen) ScreenWithBasis(
+	ctx context.Context,
+	destination ScreenDestination,
+	policyRev string,
+	req modelcall.CompletionRequest,
+) (modelcall.CompletionRequest, screenBasis, error) {
+	original := req
 	if s == nil {
-		return req, nil
+		return req, screenBasis{
+			valid:          true,
+			destination:    destination,
+			payloadDigest:  requestScreenDigest(original),
+			policyRevision: policyRev,
+		}, nil
 	}
 	attr := curationctx.SessionFrom(ctx)
 	sessionID := firstNonEmpty(req.Debug.SessionID, attr.SessionID)
 	projectID := firstNonEmpty(req.Debug.ProjectID, attr.ProjectID)
 	projectDir := firstNonEmpty(req.Debug.ProjectDir, attr.ProjectDir)
 	rootSessionID := firstNonEmpty(req.Debug.RootSessionID, req.Debug.ParentSessionID, attr.ParentSessionID, sessionID)
+	callID := firstNonEmpty(req.Debug.CallID, secretmatch.ScreenCallIDFrom(ctx))
+	if callID != "" {
+		ctx = secretmatch.WithScreenCallID(ctx, callID)
+	}
 	ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
 		SessionID: sessionID, RootSessionID: rootSessionID,
 		ProjectID: projectID, ProjectDir: projectDir,
 	})
+	var values []secretmatch.Remembered
 	if s.evidence != nil && projectID != "" {
-		values, err := s.evidence(ctx, projectID, rootSessionID)
+		var err error
+		values, err = s.evidence(ctx, projectID, rootSessionID)
 		if err != nil {
-			return modelcall.CompletionRequest{}, &ModelRequestSecretScreenFaultError{
+			// A caller that stops waiting cancels the request, not the screen.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return modelcall.CompletionRequest{}, screenBasis{}, ctxErr
+			}
+			return modelcall.CompletionRequest{}, screenBasis{}, &ModelRequestSecretScreenFaultError{
 				Stage: secretmatch.FaultStageManagedSecretStore,
 				Err:   err,
 			}
@@ -198,23 +193,14 @@ func (s *ModelSecretScreen) Screen(ctx context.Context, destination ScreenDestin
 		ctx = secretmatch.WithScreeningValues(ctx, values)
 	}
 	if s.matcher.Inert() {
-		return req, nil
+		basis := snapshotScreenBasis(ctx, s, destination, policyRev, original, projectID, rootSessionID, nil, "", values)
+		return req, basis, nil
 	}
-	classification := s.matcher.ClassificationSnapshot(ctx)
-	ctx = s.matcher.WithClassifications(ctx, classification)
-	req = redactModelRequest(ctx, s.matcher, req, keepOnlyReferences)
-	hits := inspectModelRequest(ctx, s.matcher, req)
+	classificationRev := s.matcher.ClassificationRevision(ctx)
+	ctx, req, classification, hits := runScreenMatcherPass(ctx, s.matcher, callID, projectID, req)
 	if len(hits) == 0 {
-		return req, nil
-	}
-	if containsNonDisclosable(hits) {
-		req = redactModelRequest(ctx, s.matcher, req, func(hit secretmatch.Match) bool {
-			return hit.NonDisclosable
-		})
-		hits = inspectModelRequest(ctx, s.matcher, req)
-		if len(hits) == 0 {
-			return req, nil
-		}
+		basis := snapshotScreenBasis(ctx, s, destination, policyRev, original, projectID, rootSessionID, classification, classificationRev, values)
+		return req, basis, nil
 	}
 	primary := primaryModelSecret(hits)
 	// Evidence persists even when the approval remains unanswered.
@@ -224,10 +210,12 @@ func (s *ModelSecretScreen) Screen(ctx context.Context, destination ScreenDestin
 	safeDestinationID := s.matcher.RedactString(ctx, destinationID)
 	safeDestinationLabel := s.matcher.RedactString(ctx, destinationLabel)
 	if s.ask == nil {
-		return modelcall.CompletionRequest{}, &ModelRequestSecretScreenFaultError{
+		emitPersonDecision(ctx, callID, projectID, 0, len(hits), "fault", true)
+		return modelcall.CompletionRequest{}, screenBasis{}, &ModelRequestSecretScreenFaultError{
 			Stage: secretmatch.FaultStageScreenUnwired,
 		}
 	}
+	askStart := time.Now()
 	resolution, err := s.ask(ctx, secretmatch.Alert{
 		ReviewValue:        primary.value,
 		SessionID:          sessionID,
@@ -256,33 +244,28 @@ func (s *ModelSecretScreen) Screen(ctx context.Context, destination ScreenDestin
 		Fingerprints:       modelSecretFingerprints(hits),
 	})
 	if err != nil {
+		emitPersonDecision(ctx, callID, projectID, time.Since(askStart).Milliseconds(), len(hits), "fault", true)
 		fault := &ModelRequestSecretScreenFaultError{Err: err}
 		if f, ok := secretmatch.Faulted(err); ok {
 			fault.Stage, fault.Err = f.Stage, f.Err
 		}
-		return modelcall.CompletionRequest{}, fault
+		return modelcall.CompletionRequest{}, screenBasis{}, fault
 	}
 	if err := s.matcher.CheckClassification(ctx, classification); err != nil {
-		return modelcall.CompletionRequest{}, &ModelRequestSecretScreenFaultError{Stage: secretmatch.FaultStageRaise, Err: err}
+		emitPersonDecision(ctx, callID, projectID, time.Since(askStart).Milliseconds(), len(hits), "stale_classification", true)
+		return modelcall.CompletionRequest{}, screenBasis{}, &ModelRequestSecretScreenFaultError{Stage: secretmatch.FaultStageRaise, Err: err}
 	}
-	switch resolution.Decision {
-	case secretmatch.SendUnchanged:
-		return req, nil
-	case secretmatch.SendRedacted:
-		return redactModelRequest(ctx, s.matcher, req, nil), nil
-	case secretmatch.TrackAndReplace:
-		return s.trackAndReplace(ctx, req, projectID, rootSessionID, sessionID, hits)
-	case secretmatch.Withhold:
-		// A refusal sends neither the original nor a redacted copy.
-		return modelcall.CompletionRequest{}, &ModelRequestSecretWithheldError{Guidance: resolution.Guidance}
-	case secretmatch.Unanswered:
-		return modelcall.CompletionRequest{}, ErrModelRequestSecretUnanswered
-	default:
-		return modelcall.CompletionRequest{}, &ModelRequestSecretScreenFaultError{
-			Stage: secretmatch.FaultStageRaise,
-			Err:   fmt.Errorf("unknown secret screen decision %q", resolution.Decision),
+	out, decErr := resolvePersonDecision(ctx, s, req, callID, projectID, rootSessionID, sessionID, hits, resolution, askStart)
+	if decErr != nil {
+		return modelcall.CompletionRequest{}, screenBasis{}, decErr
+	}
+	if resolution.Decision == secretmatch.TrackAndReplace && s.evidence != nil && projectID != "" {
+		if updated, evErr := s.evidence(ctx, projectID, rootSessionID); evErr == nil {
+			values = updated
 		}
 	}
+	basis := snapshotScreenBasis(ctx, s, destination, policyRev, original, projectID, rootSessionID, classification, classificationRev, values)
+	return out, basis, nil
 }
 
 func (s *ModelSecretScreen) trackAndReplace(

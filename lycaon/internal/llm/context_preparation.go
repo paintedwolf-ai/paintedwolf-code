@@ -82,6 +82,9 @@ func (s *ModelSecretScreen) ScreenPreparation(ctx context.Context, req modelcall
 	if s.evidence != nil && project != "" {
 		values, err := s.evidence(ctx, project, root)
 		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return false, ctxErr
+			}
 			return false, &ModelRequestSecretScreenFaultError{Stage: secretmatch.FaultStageManagedSecretStore, Err: err}
 		}
 		ctx = secretmatch.WithScreeningValues(ctx, values)

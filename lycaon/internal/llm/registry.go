@@ -263,8 +263,9 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 		p = &responseRetryProvider{inner: p, policy: entry.HTTPRetry.Clone()}
 	}
 	p = &dispatchProvider{Provider: &budgetedProvider{inner: p}}
+	providerID := p.ID()
 	screen := r.outboundScreen()
-	destination := ScreenDestination{ID: p.ID()}
+	destination := ScreenDestination{ID: providerID}
 	if hasEntry {
 		destination = ScreenDestination{
 			ID:         entry.SecretDestinationID(),
@@ -273,7 +274,26 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 			Trusted:    entry.SecretScreenTrusted(),
 		}
 	}
-	p = &secretScreenedProvider{inner: p, destination: destination, screen: screen}
+	resolveDestination := func() ScreenDestination {
+		if snap := r.snapshot.Load(); snap != nil {
+			if current, ok := snap.entries[providerID]; ok {
+				return ScreenDestination{
+					ID:         current.SecretDestinationID(),
+					Label:      strings.TrimSpace(current.Label),
+					ProviderID: strings.TrimSpace(current.ID),
+					Trusted:    current.SecretScreenTrusted(),
+				}
+			}
+		}
+		return destination
+	}
+	p = &secretScreenedProvider{
+		inner:              p,
+		destination:        destination,
+		resolveDestination: resolveDestination,
+		screen:             screen,
+		registry:           r,
+	}
 	return &lifecycleProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}, capacity: capacity}
 }
 

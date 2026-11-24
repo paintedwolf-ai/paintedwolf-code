@@ -1,0 +1,22 @@
+spec_version: "1.0"
+id: GREP_STOPPED_FILES
+kind: policy
+on: tool.post_invoke
+selector:
+  tools: [command]
+requires_facts: [paintedwolf.grep_lines_emitted_before_stop, paintedwolf.grep_matched_files, paintedwolf.grep_searched_files, paintedwolf.grep_stop_resource, paintedwolf.grep_stopped_count, paintedwolf.grep_stopped_inputs]
+when: paintedwolf.grep_stopped_count > 0
+effect: warn
+x-paintedwolf-category: informational
+x-paintedwolf-emit: guard:grep_stopped_files
+message: grep stopped searching some files
+what: 'grep stopped searching {{ paintedwolf.grep_stopped_inputs }} at that line; the first stopped file printed {{ paintedwolf.grep_lines_emitted_before_stop }} lines before it stopped.'
+cause: 'That record exceeded the {{ paintedwolf.grep_stop_resource }} budget. Every other file was searched: {{ paintedwolf.grep_searched_files }} searched, {{ paintedwolf.grep_matched_files }} with matches.'
+why: Exit status 2 reflects the stopped files. The output before each stop and every other file's results stand.
+fix: Exclude the stopped files with --exclude, or search them by line range.
+instead: A fixed-string search (-F) bounds work by record length when regular expressions are unnecessary.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      tool: command
+      profile: implement
