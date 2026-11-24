@@ -136,7 +136,8 @@ func TestContinuationSurvivesBackgroundPassesAndEnrichesOnce(t *testing.T) {
 		t.Fatalf("continuation-only pass advanced generation from %d to %d", genBeforeOnlyPass, sessAfterOnlyPass.CompactionGeneration)
 	}
 
-	// Pass 3: append an independently oversized ordinary assistant row (quoting a continuation heading) + protected recent tail.
+	// Pass 3: append an oversized ordinary assistant row quoting a continuation
+	// heading, followed by a protected recent tail.
 	quotedOrdinary := "## Continuation\n" + strings.Repeat("Ordinary assistant response quoting a heading. ", 220)
 	testutil.FailErr(t, "append ordinary oversized row and protected tail", st.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "ordinary-oversized", Role: api.MessageRoleAssistant, Content: quotedOrdinary},
