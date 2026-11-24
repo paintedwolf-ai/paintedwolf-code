@@ -313,10 +313,15 @@ func (s *rejectScan) resolve(p *packages.Package, fd *ast.FuncDecl, expr ast.Exp
 		if sel, ok := p.TypesInfo.Selections[e]; ok && (sel.Kind() == types.FieldVal || sel.Kind() == types.MethodVal) {
 			return nil, forwardedCode
 		}
+	case *ast.IndexExpr:
+		return s.resolveMapValues(p, e)
 	case *ast.CallExpr:
 		fn := calledFunc(p, e)
 		if callee, ok := s.decls[fn]; fn != nil && ok {
-			return s.resolveReturns(callee, depth+1)
+			return s.resolveReturns(callee, 0, depth+1)
+		}
+		if fn != nil && len(e.Args) == 1 && stringToString(fn) {
+			return s.resolve(p, fd, e.Args[0], depth+1)
 		}
 		if sel, ok := ast.Unparen(e.Fun).(*ast.SelectorExpr); ok {
 			if selection, ok := p.TypesInfo.Selections[sel]; ok && selection.Kind() == types.MethodVal {
@@ -330,7 +335,73 @@ func (s *rejectScan) resolve(p *packages.Package, fd *ast.FuncDecl, expr ast.Exp
 	return nil, unresolvedCode
 }
 
-func (s *rejectScan) resolveReturns(d funcDecl, depth int) ([]string, resolution) {
+// stringToString reports a function outside the module that maps one string
+// to another, such as strings.TrimSpace; it keeps its argument's origin.
+func stringToString(fn *types.Func) bool {
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Recv() != nil || sig.Params().Len() != 1 || sig.Results().Len() != 1 {
+		return false
+	}
+	isString := func(t types.Type) bool {
+		b, ok := t.Underlying().(*types.Basic)
+		return ok && b.Info()&types.IsString != 0
+	}
+	return fn.Pkg() != nil && !strings.HasPrefix(fn.Pkg().Path(), "github.com/lycaon/") &&
+		isString(sig.Params().At(0).Type()) && isString(sig.Results().At(0).Type())
+}
+
+// resolveMapValues resolves a lookup in a package-level map whose literal
+// initializer holds only constant values.
+func (s *rejectScan) resolveMapValues(p *packages.Package, e *ast.IndexExpr) ([]string, resolution) {
+	id, ok := ast.Unparen(e.X).(*ast.Ident)
+	if !ok {
+		return nil, unresolvedCode
+	}
+	obj, ok := p.TypesInfo.Uses[id].(*types.Var)
+	if !ok || obj.Parent() != obj.Pkg().Scope() {
+		return nil, unresolvedCode
+	}
+	for _, f := range p.Syntax {
+		for _, decl := range f.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				for i, name := range vs.Names {
+					if p.TypesInfo.Defs[name] != obj || i >= len(vs.Values) {
+						continue
+					}
+					lit, ok := ast.Unparen(vs.Values[i]).(*ast.CompositeLit)
+					if !ok {
+						return nil, unresolvedCode
+					}
+					var codes []string
+					for _, elt := range lit.Elts {
+						kv, ok := elt.(*ast.KeyValueExpr)
+						if !ok {
+							return nil, unresolvedCode
+						}
+						tv, ok := p.TypesInfo.Types[kv.Value]
+						if !ok || tv.Value == nil || tv.Value.Kind() != constant.String {
+							return nil, unresolvedCode
+						}
+						codes = append(codes, constant.StringVal(tv.Value))
+					}
+					return codes, resolvedCodes
+				}
+			}
+		}
+	}
+	return nil, unresolvedCode
+}
+
+// resolveReturns resolves result index of every return in d.
+func (s *rejectScan) resolveReturns(d funcDecl, index, depth int) ([]string, resolution) {
 	var codes []string
 	outcome := resolvedCodes
 	ast.Inspect(d.decl.Body, func(n ast.Node) bool {
@@ -338,10 +409,10 @@ func (s *rejectScan) resolveReturns(d funcDecl, depth int) ([]string, resolution
 			return false
 		}
 		ret, ok := n.(*ast.ReturnStmt)
-		if !ok || len(ret.Results) == 0 {
+		if !ok || index >= len(ret.Results) {
 			return true
 		}
-		got, r := s.resolve(d.pkg, d.decl, ret.Results[0], depth)
+		got, r := s.resolve(d.pkg, d.decl, ret.Results[index], depth)
 		codes = append(codes, got...)
 		outcome = max(outcome, r)
 		return true
@@ -371,9 +442,12 @@ func (s *rejectScan) resolveLocal(p *packages.Package, fd *ast.FuncDecl, id *ast
 				if !ok || (p.TypesInfo.Defs[l] != obj && p.TypesInfo.Uses[l] != obj) {
 					continue
 				}
-				if len(st.Rhs) == len(st.Lhs) {
+				switch {
+				case len(st.Rhs) == len(st.Lhs):
 					note(st.Rhs[i])
-				} else {
+				case len(st.Rhs) == 1:
+					s.noteTuple(p, fd, st.Rhs[0], i, depth, &assigned, &codes, &outcome)
+				default:
 					assigned, outcome = true, unresolvedCode
 				}
 			}
@@ -394,4 +468,26 @@ func (s *rejectScan) resolveLocal(p *packages.Package, fd *ast.FuncDecl, id *ast
 		return nil, unresolvedCode
 	}
 	return codes, outcome
+}
+
+// noteTuple resolves element i of a multi-value right-hand side: a comma-ok
+// map lookup or a call to a module function.
+func (s *rejectScan) noteTuple(p *packages.Package, fd *ast.FuncDecl, rhs ast.Expr, i, depth int, assigned *bool, codes *[]string, outcome *resolution) {
+	*assigned = true
+	var got []string
+	r := unresolvedCode
+	switch e := ast.Unparen(rhs).(type) {
+	case *ast.IndexExpr:
+		if i == 0 {
+			got, r = s.resolveMapValues(p, e)
+		}
+	case *ast.CallExpr:
+		if fn := calledFunc(p, e); fn != nil {
+			if callee, ok := s.decls[fn]; ok {
+				got, r = s.resolveReturns(callee, i, depth+1)
+			}
+		}
+	}
+	*codes = append(*codes, got...)
+	*outcome = max(*outcome, r)
 }
