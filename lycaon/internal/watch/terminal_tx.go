@@ -86,8 +86,14 @@ func cancelRegistrationTx(ctx context.Context, tx *sql.Tx, reg Registration, out
 		return CancelReceipt{}, nil, err
 	}
 
-	matchIDJSON, _ := json.Marshal(matchIDs)
-	watchIDJSON, _ := json.Marshal([]string{reg.WatchID})
+	matchIDJSON, err := json.Marshal(matchIDs)
+	if err != nil {
+		return CancelReceipt{}, nil, err
+	}
+	watchIDJSON, err := json.Marshal([]string{reg.WatchID})
+	if err != nil {
+		return CancelReceipt{}, nil, err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO watch_deliveries
 		(delivery_id, session_id, worker_job_id, destination_kind, destination_id, match_ids_json, watch_ids_json, payload_json, state, created_at, committed_at)
 		VALUES (?, ?, NULLIF(?, ''), 'final_receipt', ?, ?, ?, ?, 'committed', ?, ?)`,
@@ -293,10 +299,18 @@ func settleDueLease(ctx context.Context, s *Store, leaseID string, now time.Time
 	if !callDeadline.IsZero() && !callDeadline.After(now) {
 		timeoutWinner := awaitstore.Condition{Kind: "timer", Outcome: "timed_out"}
 		if active := activeHandleNames(regs); len(active) > 0 {
-			rep, _ := json.Marshal(map[string]any{"active_handles": active})
+			rep, err := json.Marshal(struct {
+				ActiveHandles []string `json:"active_handles"`
+			}{ActiveHandles: active})
+			if err != nil {
+				return err
+			}
 			timeoutWinner.Report = string(rep)
 		}
-		winnerBytes, _ := json.Marshal(timeoutWinner)
+		winnerBytes, err := json.Marshal(timeoutWinner)
+		if err != nil {
+			return err
+		}
 		result, err := tx.ExecContext(ctx,
 			`UPDATE wait_leases SET status = 'timed_out', winner_json = ?, updated_at = ?, resolved_at = ? WHERE id = ? AND status = 'armed'`,
 			string(winnerBytes), nowStr, nowStr, leaseID)

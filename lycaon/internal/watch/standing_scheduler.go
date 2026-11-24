@@ -36,7 +36,10 @@ func (e *StandingEngine) RunNow(ctx context.Context, actorPersonID, projectID, w
 	nowStr := now.UTC().Format(time.RFC3339Nano)
 	runID := uuid.NewString()
 	runKey := "manual:" + runID
-	detailBytes, _ := json.Marshal(map[string]any{"kind": "manual", "requested_at": now.UTC().Format(time.RFC3339)})
+	detailBytes, err := json.Marshal(map[string]any{"kind": "manual", "requested_at": now.UTC().Format(time.RFC3339)})
+	if err != nil {
+		return WatchRun{}, err
+	}
 
 	tx, err := e.store.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -115,32 +118,11 @@ func recoverStandingWatches(ctx context.Context, e *StandingEngine, now time.Tim
 	}
 	e.store.heap.Upsert(KindScheduleRun, standingRetentionKey, now.Add(6*time.Hour))
 
-	rows, err := e.store.db.QueryContext(ctx,
-		`SELECT `+registrationColumns+` FROM watch_registrations WHERE owner_kind = 'person' AND state = 'enabled' ORDER BY created_at ASC`)
+	enabledRegs, err := queryEnabledStandingRegistrations(ctx, e.store)
 	if err != nil {
 		return err
 	}
-	var enabledRegs []Registration
-	for rows.Next() {
-		reg, sErr := scanRegistration(rows)
-		if sErr != nil {
-			_ = rows.Close()
-			return sErr
-		}
-		enabledRegs = append(enabledRegs, reg)
-	}
-	_ = rows.Close()
-
-	projects := map[string]bool{}
-	if rRows, rErr := e.store.db.QueryContext(ctx, `SELECT DISTINCT project_id FROM watch_runs WHERE status IN ('pending', 'queued', 'running')`); rErr == nil {
-		for rRows.Next() {
-			var pid string
-			if rRows.Scan(&pid) == nil && pid != "" {
-				projects[pid] = true
-			}
-		}
-		_ = rRows.Close()
-	}
+	projects := queryActiveStandingRunProjects(ctx, e.store)
 
 	for _, reg := range enabledRegs {
 		projects[reg.Owner.ProjectID] = true
@@ -179,6 +161,46 @@ func recoverStandingWatches(ctx context.Context, e *StandingEngine, now time.Tim
 		}
 	}
 	return nil
+}
+
+func queryEnabledStandingRegistrations(ctx context.Context, s *Store) ([]Registration, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+registrationColumns+` FROM watch_registrations WHERE owner_kind = 'person' AND state = 'enabled' ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var enabledRegs []Registration
+	for rows.Next() {
+		reg, sErr := scanRegistration(rows)
+		if sErr != nil {
+			return nil, sErr
+		}
+		enabledRegs = append(enabledRegs, reg)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return enabledRegs, nil
+}
+
+func queryActiveStandingRunProjects(ctx context.Context, s *Store) map[string]bool {
+	projects := map[string]bool{}
+	rRows, rErr := s.db.QueryContext(ctx, `SELECT DISTINCT project_id FROM watch_runs WHERE status IN ('pending', 'queued', 'running')`)
+	if rErr != nil {
+		return projects
+	}
+	defer func() { _ = rRows.Close() }()
+	for rRows.Next() {
+		var pid string
+		if rRows.Scan(&pid) == nil && pid != "" {
+			projects[pid] = true
+		}
+	}
+	if rRows.Err() != nil {
+		return map[string]bool{}
+	}
+	return projects
 }
 
 func reconcileMissedStandingTimersOnStart(ctx context.Context, e *StandingEngine, reg Registration, sw StandingWatch, now time.Time) error {
@@ -365,7 +387,10 @@ func enqueueStandingTimerOccurrence(ctx context.Context, e *StandingEngine, sw S
 	}
 
 	nowStr, schedStr := now.UTC().Format(time.RFC3339Nano), scheduledFor.UTC().Format(time.RFC3339Nano)
-	detailBytes, _ := json.Marshal(detail)
+	detailBytes, err := json.Marshal(detail)
+	if err != nil {
+		return err
+	}
 	if sw.Target.Kind == "existing_chat" {
 		if _, err := tx.ExecContext(ctx, `UPDATE watch_runs SET status = 'skipped_busy', ended_at = ? WHERE watch_id = ? AND status = 'pending'`, nowStr, sw.WatchID); err != nil {
 			return err
@@ -410,8 +435,11 @@ func enqueueStandingTimerOccurrence(ctx context.Context, e *StandingEngine, sw S
 func insertTerminalStandingTimerRun(ctx context.Context, s *Store, sw StandingWatch, scheduledFor time.Time, status WatchRunStatus, missedCount int, detail map[string]any, now time.Time) error {
 	runKey := fmt.Sprintf("timer:%s:%s", sw.WatchID, scheduledFor.UTC().Format(time.RFC3339))
 	nowStr, schedStr := now.UTC().Format(time.RFC3339Nano), scheduledFor.UTC().Format(time.RFC3339Nano)
-	detailBytes, _ := json.Marshal(detail)
-	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO watch_runs (
+	detailBytes, err := json.Marshal(detail)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO watch_runs (
 		run_id, watch_id, project_id, run_key, status, scheduled_for, missed_count,
 		condition_detail_json, prompt_snapshot, spend_limit_usd, allow_unpriced, created_at, ended_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -442,10 +470,13 @@ func recordStandingSourceTrigger(ctx context.Context, e *StandingEngine, reg Reg
 	if lastStartedStr != "" {
 		if lastStarted, pErr := time.Parse(time.RFC3339Nano, lastStartedStr); pErr == nil {
 			if gapEnd := lastStarted.Add(time.Duration(sw.MinGapMinutes) * time.Minute); now.Before(gapEnd) {
-				payload, _ := json.Marshal(coalescedStandingChange{
+				payload, mErr := json.Marshal(coalescedStandingChange{
 					OccurrenceID: match.OccurrenceID, SourceKind: match.SourceKind,
 					Evidence: match.Evidence, ObservedAt: now.UTC().Format(time.RFC3339Nano),
 				})
+				if mErr != nil {
+					return false, mErr
+				}
 				_ = updateWatchCursor(e.store, ctx, sw.WatchID, standingPendingChangeKey, string(payload))
 				e.store.heap.Upsert(KindScheduleRun, standingGapPrefix+sw.WatchID, gapEnd)
 				return true, nil
@@ -485,8 +516,8 @@ func flushPendingStandingChange(ctx context.Context, e *StandingEngine, watchID 
 			}
 		}
 	}
-	var pending coalescedStandingChange
-	if json.Unmarshal([]byte(reg.Cursors[standingPendingChangeKey]), &pending) != nil {
+	pending, ok := parseCoalescedStandingChange(reg.Cursors[standingPendingChangeKey])
+	if !ok {
 		return nil
 	}
 	if _, err := e.store.db.ExecContext(ctx,
@@ -500,9 +531,20 @@ func flushPendingStandingChange(ctx context.Context, e *StandingEngine, watchID 
 	return e.DispatchProjectRuns(ctx, sw.ProjectID)
 }
 
+func parseCoalescedStandingChange(raw string) (coalescedStandingChange, bool) {
+	var pending coalescedStandingChange
+	if json.Unmarshal([]byte(raw), &pending) != nil {
+		return coalescedStandingChange{}, false
+	}
+	return pending, true
+}
+
 func enqueueStandingChangeRun(ctx context.Context, e *StandingEngine, sw StandingWatch, occID string, detail map[string]any, now time.Time) error {
 	runKey := fmt.Sprintf("change:%s:%s", sw.WatchID, occID)
-	detailBytes, _ := json.Marshal(detail)
+	detailBytes, err := json.Marshal(detail)
+	if err != nil {
+		return err
+	}
 	nowStr := now.UTC().Format(time.RFC3339Nano)
 	tx, err := e.store.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -575,7 +617,10 @@ func initStandingBaselines(ctx context.Context, e *StandingEngine, in preparedSt
 		if gErr != nil {
 			return nil, "", gErr
 		}
-		raw, _ := json.Marshal(gb)
+		raw, mErr := json.Marshal(gb)
+		if mErr != nil {
+			return nil, "", mErr
+		}
 		gateBaseline = string(raw)
 	}
 	return manifests, gateBaseline, nil
@@ -608,6 +653,14 @@ func captureStandingGateBaseline(ctx context.Context, s *Store, projectID string
 	}
 }
 
+func parsePersistedGateBaseline(raw string) (persistedGateBaseline, bool) {
+	var prev persistedGateBaseline
+	if json.Unmarshal([]byte(raw), &prev) != nil {
+		return persistedGateBaseline{}, false
+	}
+	return prev, true
+}
+
 func evaluateStandingGate(ctx context.Context, e *StandingEngine, sw StandingWatch) (bool, string, error) {
 	if sw.Gate == nil {
 		return true, "", nil
@@ -618,12 +671,15 @@ func evaluateStandingGate(ctx context.Context, e *StandingEngine, sw StandingWat
 	if err != nil {
 		return false, "", err
 	}
-	curRaw, _ := json.Marshal(cur)
+	curRaw, err := json.Marshal(cur)
+	if err != nil {
+		return false, "", err
+	}
 	if rawBase == "" {
 		return false, string(curRaw), nil
 	}
-	var prev persistedGateBaseline
-	if json.Unmarshal([]byte(rawBase), &prev) != nil {
+	prev, ok := parsePersistedGateBaseline(rawBase)
+	if !ok {
 		return true, string(curRaw), nil
 	}
 	if sw.Gate.Kind == "git_ref" {

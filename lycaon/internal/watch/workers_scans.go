@@ -320,6 +320,10 @@ func (s *Store) RecordWorkerDecisionOpened(ctx context.Context, parentSessionID,
 // RecordWorkerDecisionClosed updates the observed decision status (closed or retried) on matching watches
 // so Inspect and subsequent batch deliveries report the current status.
 func (s *Store) RecordWorkerDecisionClosed(ctx context.Context, parentSessionID, workerHandle, jobID, status string) error {
+	return recordWorkerDecisionClosed(ctx, s, parentSessionID, workerHandle, jobID, status)
+}
+
+func recordWorkerDecisionClosed(ctx context.Context, s *Store, parentSessionID, workerHandle, jobID, status string) error {
 	if !s.Configured() || strings.TrimSpace(parentSessionID) == "" {
 		return nil
 	}
@@ -335,6 +339,7 @@ func (s *Store) RecordWorkerDecisionClosed(ctx context.Context, parentSessionID,
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	var targetIDs []string
 	for rows.Next() {
 		reg, sErr := scanRegistration(rows)
@@ -351,6 +356,9 @@ func (s *Store) RecordWorkerDecisionClosed(ctx context.Context, parentSessionID,
 				break
 			}
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	_ = rows.Close()
 

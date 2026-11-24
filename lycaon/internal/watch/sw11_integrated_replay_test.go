@@ -22,16 +22,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestSW11IntegratedBuildFileWorkerAndRestartWalkthrough(t *testing.T) {
-	store, clock, database, owner := openTestWatchStore(t)
-	trunkDir := t.TempDir()
-	overlayDir := t.TempDir()
+func seedSW11WorkspaceAndWorker(t *testing.T, store *Store, trunkDir, overlayDir string) (Authority, *sessiondecisions.SQL) {
+	t.Helper()
 	testutil.FailErr(t, "seed trunk generated.js", os.WriteFile(filepath.Join(trunkDir, "generated.js"), []byte("v0\n"), 0o644))
 	testutil.FailErr(t, "seed overlay generated.js", os.WriteFile(filepath.Join(overlayDir, "generated.js"), []byte("v0\n"), 0o644))
 
-	rootID := testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-app", trunkDir)
-	ownerPersonID := testdbseed.OwnerID(t, database)
-	ledger := sourceledger.New(database, t.TempDir(), sourceledger.Timing{})
+	rootID := testdbseed.InsertProjectRootWithID(t, store.db, testdbseed.DefaultProjectID, "root-app", trunkDir)
+	ownerPersonID := testdbseed.OwnerID(t, store.db)
+	ledger := sourceledger.New(store.db, t.TempDir(), sourceledger.Timing{})
 	testutil.FailErr(t, "seed ledger", ledger.Record(t.Context(), sourceledger.RecordInput{
 		ProjectID:      testdbseed.DefaultProjectID,
 		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "generated.js"},
@@ -43,14 +41,14 @@ func TestSW11IntegratedBuildFileWorkerAndRestartWalkthrough(t *testing.T) {
 		After:          []byte("v0\n"),
 	}))
 
-	testdbseed.InsertSession(t, database, "worker-child-sw11", testdbseed.DefaultProjectID)
-	_, err := database.ExecContext(t.Context(), `INSERT INTO worker_jobs
+	testdbseed.InsertSession(t, store.db, "worker-child-sw11", testdbseed.DefaultProjectID)
+	_, err := store.db.ExecContext(t.Context(), `INSERT INTO worker_jobs
 		(id, project_id, parent_session_id, child_session_id, agent_type, prompt, brief, status, created_at)
 		VALUES ('job-sw11', ?, 'session-1', 'worker-child-sw11', 'implementer', 'work', 'work', 'running', '2026-11-23T12:00:00Z')`,
 		testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "seed worker job", err)
 
-	decStore := sessiondecisions.NewSQL(database)
+	decStore := sessiondecisions.NewSQL(store.db)
 	decStore.SetWatchHooks(
 		func(ctx context.Context, dec api.WorkerDecisionRequest) {
 			_, _ = store.RecordWorkerDecisionOpened(ctx, "session-1", "scout", dec.WorkerID, dec)
@@ -59,11 +57,18 @@ func TestSW11IntegratedBuildFileWorkerAndRestartWalkthrough(t *testing.T) {
 			_ = store.RecordWorkerDecisionClosed(ctx, "session-1", "scout", "job-sw11", "closed")
 		},
 	)
-
 	trunkAuth := Authority{
 		ProjectDir: trunkDir,
 		Roots:      []WatchRootGrant{{Label: "app", RootID: rootID, Path: trunkDir}},
 	}
+	return trunkAuth, decStore
+}
+
+func TestSW11IntegratedBuildFileWorkerAndRestartWalkthrough(t *testing.T) {
+	store, clock, database, owner := openTestWatchStore(t)
+	trunkDir := t.TempDir()
+	overlayDir := t.TempDir()
+	trunkAuth, decStore := seedSW11WorkspaceAndWorker(t, store, trunkDir, overlayDir)
 
 	buildWatch, err := store.Register(t.Context(), RegisterRequest{
 		Owner:                owner,
@@ -196,25 +201,11 @@ func TestSW11IntegratedBuildFileWorkerAndRestartWalkthrough(t *testing.T) {
 }
 
 func TestSW11StalledTurnRecoverySessionReplay(t *testing.T) {
-	// Replays the counterfactual event orderings from session c1abaa1a-f5fe-4a2a-8b5e-cc95fab43f0f (2026-11-23 PST).
 	store, clock, _, owner := openTestWatchStore(t)
 	owner.SessionID = "session-1"
 	t0 := time.Date(2026, 11, 23, 16, 26, 13, 0, time.UTC) // 08:26:13 PST
 	clock.Set(t0)
 
-	cfg := bgprocess.DefaultConfig()
-	reg := bgprocess.NewRegistry(cfg, bgprocess.Hooks{})
-	reg.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
-	t.Cleanup(func() { _ = reg.Lifecycle.Close(context.Background()) })
-
-	store.SetProcessOutputLookup(func(ctx context.Context, sessionID, handle string, since int64) (bgprocess.ProcessOutputState, error) {
-		return reg.Output.InspectProcessOutput(ctx, sessionID, handle, since)
-	})
-	reg.Output.SetWatchOutputHook(func(ctx context.Context, sessionID, handle string) {
-		_ = store.NotifyProcessOutput(ctx, sessionID, handle)
-	})
-
-	// Command 5: promoted foreground fetch at 08:26:13 -> wait parks at 08:27:25 -> exit 128 at 08:27:27 wakes it once.
 	cmd5Watch, err := store.Register(t.Context(), RegisterRequest{
 		Owner:                owner,
 		DerivedCommandHandle: "cmd-5",
@@ -265,7 +256,6 @@ func TestSW11StalledTurnRecoverySessionReplay(t *testing.T) {
 		t.Fatalf("expected settled terminal reference on re-select, got %+v", resCmd5)
 	}
 
-	// Command 6: retry fetch at 08:28:09 -> exits 128 at 08:29:13 BEFORE wait executes at 08:29:15.
 	clock.Set(time.Date(2026, 11, 23, 16, 28, 9, 0, time.UTC))
 	cmd6Watch, err := store.Register(t.Context(), RegisterRequest{
 		Owner:                owner,
@@ -285,7 +275,6 @@ func TestSW11StalledTurnRecoverySessionReplay(t *testing.T) {
 	}, nil)
 	testutil.FailErr(t, "record cmd-6 exit 128", err)
 
-	// Late selection at 08:29:15 returns cmd-6's retained receipt in-turn; cmd-5's receipt cannot satisfy cmd-6.
 	clock.Set(time.Date(2026, 11, 23, 16, 29, 15, 0, time.UTC))
 	resCmd6, err := store.SelectOrPark(t.Context(), SelectRequest{
 		Owner:     owner,
@@ -300,8 +289,24 @@ func TestSW11StalledTurnRecoverySessionReplay(t *testing.T) {
 	if _, hasExtra, _ := ReserveCollectBatch(t.Context(), store, owner, "req:after-cmd6"); hasExtra {
 		t.Fatalf("duplicate completion remained after late selection")
 	}
+}
 
-	// Command 13 starts at 08:31:49; host writes JSON stderr trailer + exit 0 at 08:33:21; collected at 08:37:06.
+func TestSW11StalledTurnHostTrailerAndQuietCollection(t *testing.T) {
+	store, clock, _, owner := openTestWatchStore(t)
+	owner.SessionID = "session-1"
+
+	cfg := bgprocess.DefaultConfig()
+	reg := bgprocess.NewRegistry(cfg, bgprocess.Hooks{})
+	reg.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
+	t.Cleanup(func() { _ = reg.Lifecycle.Close(context.Background()) })
+
+	store.SetProcessOutputLookup(func(ctx context.Context, sessionID, handle string, since int64) (bgprocess.ProcessOutputState, error) {
+		return reg.Output.InspectProcessOutput(ctx, sessionID, handle, since)
+	})
+	reg.Output.SetWatchOutputHook(t.Context(), func(ctx context.Context, sessionID, handle string) {
+		_ = store.NotifyProcessOutput(ctx, sessionID, handle)
+	})
+
 	clock.Set(time.Date(2026, 11, 23, 16, 31, 49, 0, time.UTC))
 	trailerCh := make(chan func([]byte), 1)
 	releaseCmd13 := make(chan struct{})

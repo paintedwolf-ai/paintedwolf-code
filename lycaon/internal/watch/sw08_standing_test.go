@@ -441,13 +441,11 @@ func TestSW08DraftKeepTimerConversionReplacesDismissAndOneOff(t *testing.T) {
 	}
 }
 
-func TestSW08ConcurrencyApprovalHoldCatchupSpendCapFailuresRevocationAndWalkthrough(t *testing.T) {
-	// Monday 2026-11-23 08:00 UTC: walkthrough + concurrency + governance.
+func TestSW08ConcurrencyApprovalHoldAndOverlap(t *testing.T) {
 	start := time.Date(2026, 11, 23, 8, 0, 0, 0, time.UTC)
 	h := newStandingHarness(t, start)
 	ctx := t.Context()
 
-	// Five runs due at once: 4 run, 5th queues in creation order, and approval hold frees a slot.
 	var fiveIDs []string
 	for i := 1; i <= 5; i++ {
 		sw, err := h.engine.Create(ctx, h.ownerID, watch.StandingWatchInput{
@@ -475,7 +473,6 @@ func TestSW08ConcurrencyApprovalHoldCatchupSpendCapFailuresRevocationAndWalkthro
 		t.Fatalf("5th due watch expected queued, got %+v", runs5)
 	}
 
-	// Edit Batch 1 during active run: active run's prompt snapshot stays "Prompt 1".
 	sw1, _ := h.engine.Get(ctx, h.projectID, fiveIDs[0])
 	_, err := h.engine.Update(ctx, h.ownerID, h.projectID, sw1.WatchID, sw1.Revision, watch.StandingWatchPatch{
 		Prompt: ptrStr("Updated Prompt 1"),
@@ -483,14 +480,12 @@ func TestSW08ConcurrencyApprovalHoldCatchupSpendCapFailuresRevocationAndWalkthro
 	testutil.FailErr(t, "edit during active run", err)
 	r1Before, _, _ := h.engine.ListRuns(ctx, h.projectID, sw1.WatchID, "", 5)
 
-	// Hold run 1 on approval (waiting_for_owner) -> frees slot so queued 5th watch dispatches immediately!
 	testutil.FailErr(t, "mark run 1 waiting_for_owner", h.engine.MarkWaitingForOwner(ctx, r1Before[0].SessionID))
 	runs5After, _, _ := h.engine.ListRuns(ctx, h.projectID, fiveIDs[4], "", 5)
 	if runs5After[0].Status != watch.RunRunning {
 		t.Fatalf("expected 5th watch to dispatch when run 1 entered waiting_for_owner, got %+v", runs5After)
 	}
 
-	// While run 1 waits for owner, next tick records skipped_overlap and RunNow returns WATCH_RUN_ACTIVE.
 	var activeErr *watch.RunActiveError
 	if _, err := h.engine.RunNow(ctx, h.ownerID, h.projectID, sw1.WatchID); !errors.As(err, &activeErr) {
 		t.Fatalf("expected RunActiveError while waiting_for_owner, got %v", err)
@@ -501,20 +496,13 @@ func TestSW08ConcurrencyApprovalHoldCatchupSpendCapFailuresRevocationAndWalkthro
 	if r1List[0].Status != watch.RunSkippedOverlap {
 		t.Fatalf("expected skipped_overlap while prior run is waiting_for_owner, got %+v", r1List)
 	}
+}
 
-	// Settle active batch runs and pause the 5 batch watches so subsequent checks run cleanly.
-	for i := 0; i < 5; i++ {
-		rs, _, _ := h.engine.ListRuns(ctx, h.projectID, fiveIDs[i], "", 5)
-		for _, r := range rs {
-			if r.Status == watch.RunRunning || r.Status == watch.RunWaitingForOwner {
-				_ = h.engine.SettleRun(ctx, r.SessionID, watch.RunCompleted)
-			}
-		}
-		cur, _ := h.engine.Get(ctx, h.projectID, fiveIDs[i])
-		_, _ = h.engine.Pause(ctx, h.projectID, cur.WatchID, cur.Revision)
-	}
+func TestSW08DailyCapFailuresRevocationAndBusyChat(t *testing.T) {
+	start := time.Date(2026, 11, 23, 8, 0, 0, 0, time.UTC)
+	h := newStandingHarness(t, start)
+	ctx := t.Context()
 
-	// 2. Daily cap, spend fence + failures -> 3 consecutive fenced/failed pauses watch with standing_watch_paused!
 	cap2 := 2
 	swGov, err := h.engine.Create(ctx, h.ownerID, watch.StandingWatchInput{
 		ProjectID: h.projectID, Name: "Governed watch", Prompt: "Run governed.",
@@ -535,7 +523,6 @@ func TestSW08ConcurrencyApprovalHoldCatchupSpendCapFailuresRevocationAndWalkthro
 	if _, err := h.engine.RunNow(ctx, h.ownerID, h.projectID, swGov.WatchID); !errors.As(err, &capErr) {
 		t.Fatalf("expected DailyCapReachedError after 2 runs, got %v", err)
 	}
-	// Cross midnight UTC -> 3rd failure pauses the watch and emits standing_watch_paused!
 	h.clock.Advance(24 * time.Hour)
 	testutil.FailErr(t, "advance across day for 3rd run", h.store.Recover(ctx))
 	govRuns, _, _ := h.engine.ListRuns(ctx, h.projectID, swGov.WatchID, "", 10)
@@ -549,7 +536,6 @@ func TestSW08ConcurrencyApprovalHoldCatchupSpendCapFailuresRevocationAndWalkthro
 		t.Fatalf("expected paused with consecutive_failures after 3 failures, got %+v", swGovPaused)
 	}
 
-	// Resume clears consecutive_failures without catch-up; owner revocation disables watch, and member2 takes it over!
 	swGovResumed, err := h.engine.Resume(ctx, h.ownerID, h.projectID, swGovPaused.WatchID, swGovPaused.Revision)
 	testutil.FailErr(t, "resume governed watch", err)
 	h.mu.Lock()
@@ -561,7 +547,6 @@ func TestSW08ConcurrencyApprovalHoldCatchupSpendCapFailuresRevocationAndWalkthro
 	if swDisabled.State != watch.StateDisabled || swDisabled.StateReason != "owner_access_revoked" {
 		t.Fatalf("expected disabled with owner_access_revoked, got %+v", swDisabled)
 	}
-	// Verify non-owner cannot edit an enabled/paused watch, and an active member can take over a disabled watch!
 	var notOwnerErr *watch.NotOwnerError
 	if _, err := h.engine.Update(ctx, "other-person", h.projectID, swDisabled.WatchID, swDisabled.Revision, watch.StandingWatchPatch{Prompt: ptrStr("nope")}); !errors.As(err, &notOwnerErr) {
 		t.Fatalf("expected NotOwnerError without Enable takeover, got %v", err)
@@ -581,7 +566,6 @@ func TestSW08ConcurrencyApprovalHoldCatchupSpendCapFailuresRevocationAndWalkthro
 	}
 	_, _ = h.engine.Pause(ctx, h.projectID, swTakenOver.WatchID, swTakenOver.Revision)
 
-	// 3. Existing-chat busy target -> skipped_busy when next run falls due, and hourly 12-run budget!
 	swExisting, err := h.engine.Create(ctx, h.ownerID, watch.StandingWatchInput{
 		ProjectID:  h.projectID,
 		Name:       "Existing chat watch",
@@ -608,15 +592,12 @@ func TestSW08ConcurrencyApprovalHoldCatchupSpendCapFailuresRevocationAndWalkthro
 	if !foundSkippedBusy {
 		t.Fatalf("expected skipped_busy on earlier pending existing_chat run, got %+v", exRuns)
 	}
-	h.mu.Lock()
-	h.targetBusy["chat-1"] = false
-	h.mu.Unlock()
-	_, _ = h.engine.Pause(ctx, h.projectID, swExisting.WatchID, swExisting.Revision)
+}
 
-	// Walkthrough: draft, keep with gate, unchanged skip, commit run, catch-up, delete, own-run exclusion.
-	// Set clock to Monday 08:30 UTC so 09:00 UTC is 30m ahead.
+func TestSW08WalkthroughKeepGateCatchupDeleteAndOwnRunExclusion(t *testing.T) {
 	walkStart := time.Date(2026, 11, 30, 8, 30, 0, 0, time.UTC)
-	h.clock.Set(walkStart)
+	h := newStandingHarness(t, walkStart)
+	ctx := t.Context()
 
 	walkDraftRaw, err := h.execTool(ctx, "watch", map[string]any{
 		"conditions": []any{map[string]any{

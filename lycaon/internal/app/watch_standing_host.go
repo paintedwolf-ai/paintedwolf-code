@@ -28,8 +28,8 @@ func (b *serveBuilder) watchStore() *watch.Store {
 	return b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions.WatchStore()
 }
 
-func (b *serveBuilder) wireStandingWatchHost(watchStore *watch.Store) {
-	if watchStore == nil || watchStore.Standing() == nil {
+func wireStandingWatchHost(b *serveBuilder, watchStore *watch.Store) {
+	if b == nil || watchStore == nil || watchStore.Standing() == nil {
 		return
 	}
 	engine := watchStore.Standing()
@@ -47,12 +47,20 @@ func (b *serveBuilder) wireStandingWatchHost(watchStore *watch.Store) {
 
 	var wg sync.WaitGroup
 	engine.SetCallbacks(watch.StandingCallbacks{
-		ModelPriceCheck:    b.standingModelPriceCheck,
-		PersonAccessCheck:  b.standingPersonAccessCheck,
-		SessionTargetCheck: b.standingSessionTargetCheck,
-		ProjectDefaults:    b.standingProjectDefaults,
+		ModelPriceCheck: func(ctx context.Context, projectID, modelID string) (bool, error) {
+			return standingModelPriceCheck(b, ctx, projectID, modelID)
+		},
+		PersonAccessCheck: func(ctx context.Context, projectID, personID string) (bool, error) {
+			return standingPersonAccessCheck(b, ctx, projectID, personID)
+		},
+		SessionTargetCheck: func(ctx context.Context, projectID, sessionID string) (bool, bool, error) {
+			return standingSessionTargetCheck(b, ctx, projectID, sessionID)
+		},
+		ProjectDefaults: func(ctx context.Context, projectID string) (string, string, string, watch.Authority) {
+			return standingProjectDefaults(b, ctx, projectID)
+		},
 		RunDispatcher: func(ctx context.Context, sw watch.StandingWatch, run watch.WatchRun, promptText string) (watch.StandingRunDispatchOutcome, error) {
-			return b.dispatchStandingWatchRun(ctx, &wg, engine, sw, run, promptText)
+			return dispatchStandingWatchRun(b, ctx, &wg, engine, sw, run, promptText)
 		},
 	})
 	if b.events != nil {
@@ -79,7 +87,7 @@ func (b *serveBuilder) wireStandingWatchHost(watchStore *watch.Store) {
 						if !ok {
 							return
 						}
-						b.observeStandingWatchEvent(engine, env)
+						observeStandingWatchEvent(b.startup.ctx, b, engine, env)
 					}
 				}
 			}()
@@ -99,10 +107,8 @@ func (b *serveBuilder) wireStandingWatchHost(watchStore *watch.Store) {
 	}
 }
 
-func (b *serveBuilder) observeStandingWatchEvent(engine *watch.StandingEngine, env api.EventEnvelope) {
-	ctx := context.Background()
-	switch env.Topic {
-	case api.EventTopicCheckpoint:
+func observeStandingWatchEvent(ctx context.Context, b *serveBuilder, engine *watch.StandingEngine, env api.EventEnvelope) {
+	if env.Topic == api.EventTopicCheckpoint {
 		var ev api.CheckpointEvent
 		if json.Unmarshal(env.Data, &ev) != nil || strings.TrimSpace(ev.SessionID) == "" {
 			return
@@ -112,7 +118,9 @@ func (b *serveBuilder) observeStandingWatchEvent(engine *watch.StandingEngine, e
 		} else {
 			_ = engine.MarkResumed(ctx, ev.SessionID)
 		}
-	case api.EventTopicSession:
+		return
+	}
+	if env.Topic == api.EventTopicSession {
 		var ev api.SessionEvent
 		if json.Unmarshal(env.Data, &ev) != nil || strings.TrimSpace(ev.ID) == "" {
 			return
@@ -121,13 +129,13 @@ func (b *serveBuilder) observeStandingWatchEvent(engine *watch.StandingEngine, e
 			_ = engine.NotifySessionClosedOrDeleted(ctx, ev.ID)
 			return
 		}
-		if ev.Status == api.SessionStatusIdle && !b.sessionHasOpenCheckpoint(ctx, ev.ID) {
+		if ev.Status == api.SessionStatusIdle && !sessionHasOpenCheckpoint(b, ctx, ev.ID) {
 			_ = engine.SettleRun(ctx, ev.ID, watch.RunCompleted)
 		}
 	}
 }
 
-func (b *serveBuilder) sessionHasOpenCheckpoint(ctx context.Context, sessionID string) bool {
+func sessionHasOpenCheckpoint(b *serveBuilder, ctx context.Context, sessionID string) bool {
 	if b.storage.Database == nil || strings.TrimSpace(sessionID) == "" {
 		return false
 	}
@@ -138,17 +146,16 @@ func (b *serveBuilder) sessionHasOpenCheckpoint(ctx context.Context, sessionID s
 	return err == nil && count > 0
 }
 
-func (b *serveBuilder) standingModelPriceCheck(ctx context.Context, _, modelID string) (bool, error) {
+func standingModelPriceCheck(b *serveBuilder, ctx context.Context, _, modelID string) (bool, error) {
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" || b.providers.Costs == nil {
 		return true, nil
 	}
 	providerID, model := splitProviderModelID(modelID)
-	est, err := b.providers.Costs.Estimate(ctx, providerID, model, cost.TokenUsage{PromptTokens: 1000, CompletionTokens: 1000})
-	if err != nil {
-		return false, nil
+	if est, estErr := b.providers.Costs.Estimate(ctx, providerID, model, cost.TokenUsage{PromptTokens: 1000, CompletionTokens: 1000}); estErr == nil {
+		return !est.Unpriced, nil
 	}
-	return !est.Unpriced, nil
+	return false, nil
 }
 
 func splitProviderModelID(modelID string) (string, string) {
@@ -158,7 +165,7 @@ func splitProviderModelID(modelID string) (string, string) {
 	return "", strings.TrimSpace(modelID)
 }
 
-func (b *serveBuilder) standingPersonAccessCheck(ctx context.Context, _, personID string) (bool, error) {
+func standingPersonAccessCheck(b *serveBuilder, ctx context.Context, _, personID string) (bool, error) {
 	if b.storage.Database == nil || strings.TrimSpace(personID) == "" {
 		return false, nil
 	}
@@ -174,48 +181,27 @@ func (b *serveBuilder) standingPersonAccessCheck(ctx context.Context, _, personI
 	return role == string(api.PersonRoleOwner), nil
 }
 
-func (b *serveBuilder) standingSessionTargetCheck(ctx context.Context, projectID, sessionID string) (bool, bool, error) {
+func standingSessionTargetCheck(b *serveBuilder, ctx context.Context, projectID, sessionID string) (bool, bool, error) {
 	if b.storage.Sessions == nil || b.storage.Sessions.Sessions == nil {
 		return false, false, nil
 	}
-	sess, err := b.storage.Sessions.Sessions.Get(ctx, strings.TrimSpace(sessionID))
-	if err != nil || sess == nil || sess.ProjectID != strings.TrimSpace(projectID) || sess.ArchivedAt != nil || sess.IsWorkerChild() {
-		return false, false, nil
+	sess, getErr := b.storage.Sessions.Sessions.Get(ctx, strings.TrimSpace(sessionID))
+	if getErr == nil && sess != nil && sess.ProjectID == strings.TrimSpace(projectID) && sess.ArchivedAt == nil && !sess.IsWorkerChild() {
+		if b.sessions != nil && b.sessions.Manager != nil && b.sessions.Manager.Submissions != nil {
+			eligible, _ := b.sessions.Manager.Submissions.AmbientWakeEligible(ctx, sess.ID)
+			return true, !eligible, nil
+		}
+		return true, sess.Status != api.SessionStatusIdle, nil
 	}
-	if b.sessions != nil && b.sessions.Manager != nil && b.sessions.Manager.Submissions != nil {
-		eligible, _ := b.sessions.Manager.Submissions.AmbientWakeEligible(ctx, sess.ID)
-		return true, !eligible, nil
-	}
-	return true, sess.Status != api.SessionStatusIdle, nil
+	return false, false, nil
 }
 
-func (b *serveBuilder) standingProjectDefaults(ctx context.Context, projectID string) (string, string, string, watch.Authority) {
+func standingProjectDefaults(b *serveBuilder, ctx context.Context, projectID string) (string, string, string, watch.Authority) {
 	tz := time.Local.String()
 	if tz == "" || strings.EqualFold(tz, "Local") {
 		tz = "UTC"
 	}
-	var auth watch.Authority
-	if b.storage.Database != nil {
-		if rows, err := b.storage.Database.QueryContext(ctx,
-			`SELECT id, label, path FROM project_roots WHERE project_id = ? ORDER BY created_at ASC`,
-			strings.TrimSpace(projectID)); err == nil {
-			for rows.Next() {
-				var id, label, p string
-				if rows.Scan(&id, &label, &p) == nil {
-					clean := strings.TrimPrefix(strings.TrimSpace(label), "@")
-					if clean == "" {
-						clean = id
-					}
-					if auth.ProjectDir == "" {
-						auth.ProjectDir = p
-					}
-					auth.RootPaths = append(auth.RootPaths, p)
-					auth.Roots = append(auth.Roots, watch.WatchRootGrant{Label: clean, RootID: id, Path: p})
-				}
-			}
-			_ = rows.Close()
-		}
-	}
+	auth := loadStandingProjectAuthority(b, ctx, projectID)
 	modelID := ""
 	if b.providers.Service != nil && len(auth.RootPaths) > 0 {
 		if policy, err := b.providers.Service.Policy.GetForProjectRoots(auth.RootPaths); err == nil {
@@ -229,7 +215,40 @@ func (b *serveBuilder) standingProjectDefaults(ctx context.Context, projectID st
 	return "default", modelID, tz, auth
 }
 
-func (b *serveBuilder) dispatchStandingWatchRun(
+func loadStandingProjectAuthority(b *serveBuilder, ctx context.Context, projectID string) watch.Authority {
+	if b.storage.Database == nil {
+		return watch.Authority{}
+	}
+	rows, err := b.storage.Database.QueryContext(ctx,
+		`SELECT id, label, path FROM project_roots WHERE project_id = ? ORDER BY created_at ASC`,
+		strings.TrimSpace(projectID))
+	if err != nil {
+		return watch.Authority{}
+	}
+	defer func() { _ = rows.Close() }()
+	var auth watch.Authority
+	for rows.Next() {
+		var id, label, p string
+		if rows.Scan(&id, &label, &p) == nil {
+			clean := strings.TrimPrefix(strings.TrimSpace(label), "@")
+			if clean == "" {
+				clean = id
+			}
+			if auth.ProjectDir == "" {
+				auth.ProjectDir = p
+			}
+			auth.RootPaths = append(auth.RootPaths, p)
+			auth.Roots = append(auth.Roots, watch.WatchRootGrant{Label: clean, RootID: id, Path: p})
+		}
+	}
+	if rows.Err() != nil {
+		return watch.Authority{}
+	}
+	return auth
+}
+
+func dispatchStandingWatchRun(
+	b *serveBuilder,
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	engine *watch.StandingEngine,
@@ -285,10 +304,10 @@ func (b *serveBuilder) dispatchStandingWatchRun(
 			TranscriptVisible: true,
 		},
 	}
+	runCtx := people.WithoutCaller(context.WithoutCancel(ctx))
 	wg.Add(1)
 	go func(sid string) {
 		defer wg.Done()
-		runCtx := people.WithoutCaller(context.Background())
 		resp, runErr := b.sessions.Manager.Submissions.HostTurnWithAdmission(runCtx, sid, sessionstore.PromptSubmissionOriginLoopWake, in, nil)
 		switch {
 		case errors.Is(runErr, spendguard.ErrCeiling) || (resp != nil && resp.Outcome == promptresult.OutcomeSpendLimit):
@@ -297,7 +316,7 @@ func (b *serveBuilder) dispatchStandingWatchRun(
 			_ = engine.SettleRun(runCtx, sid, watch.RunCanceled)
 		case runErr != nil:
 			_ = engine.SettleRun(runCtx, sid, watch.RunFailed)
-		case b.sessionHasOpenCheckpoint(runCtx, sid):
+		case sessionHasOpenCheckpoint(b, runCtx, sid):
 			_ = engine.MarkWaitingForOwner(runCtx, sid)
 		default:
 			_ = engine.SettleRun(runCtx, sid, watch.RunCompleted)

@@ -117,31 +117,7 @@ func TestSW11StandingWatchesEndToEndWalkthrough(t *testing.T) {
 		0o644,
 	))
 	h.clock.Set(time.Date(2026, 4, 24, 15, 0, 0, 0, time.UTC)) // Friday 11:00 EDT
-	restartedStore := watch.NewStore(h.db, h.clock)
-	restartedEngine := restartedStore.Standing()
-	auth := watch.Authority{
-		ProjectDir: h.rootDir,
-		RootPaths:  []string{h.rootDir},
-		Roots:      []watch.WatchRootGrant{{Label: "repo", RootID: h.rootID, Path: h.rootDir}},
-	}
-	restartedEngine.SetCallbacks(watch.StandingCallbacks{
-		ModelPriceCheck:   func(_ context.Context, _, _ string) (bool, error) { return true, nil },
-		PersonAccessCheck: func(_ context.Context, _, _ string) (bool, error) { return true, nil },
-		ProjectDefaults: func(_ context.Context, _ string) (string, string, string, watch.Authority) {
-			return "default", "openai:gpt-5", "America/New_York", auth
-		},
-		RunDispatcher: func(rCtx context.Context, sw watch.StandingWatch, run watch.WatchRun, prompt string) (watch.StandingRunDispatchOutcome, error) {
-			sid := "catchup-chat-" + run.RunID[:8]
-			testdbseed.InsertSession(t, h.db, sid, sw.ProjectID)
-			_ = restartedEngine.RecordChatProvenance(rCtx, watch.StandingChatProvenance{
-				SessionID: sid, ProjectID: sw.ProjectID, WatchID: sw.WatchID, WatchName: sw.Name, RunID: run.RunID,
-			})
-			h.mu.Lock()
-			h.dispatched = append(h.dispatched, dispatchedRunRecord{WatchID: sw.WatchID, RunID: run.RunID, SessionID: sid, Prompt: prompt})
-			h.mu.Unlock()
-			return watch.StandingRunDispatchOutcome{SessionID: sid}, nil
-		},
-	})
+	restartedStore, restartedEngine := newSW11RestartedStandingStore(t, h)
 	testutil.FailErr(t, "recover startup after 3 missed runs", restartedStore.Recover(ctx))
 	testutil.FailErr(t, "dispatch catch-up run", restartedEngine.DispatchProjectRuns(ctx, h.projectID))
 
@@ -167,6 +143,19 @@ func TestSW11StandingWatchesEndToEndWalkthrough(t *testing.T) {
 		t.Fatalf("expected skipped_overlap while prior run is waiting_for_owner, got %+v", runsOverlap[0])
 	}
 	testutil.FailErr(t, "settle held run", restartedEngine.SettleRun(ctx, catchupSessionID, watch.RunCompleted))
+}
+
+func TestSW11StandingWatchesOwnRunExclusionDismissalAndScale(t *testing.T) {
+	start := time.Date(2026, 4, 27, 14, 0, 0, 0, time.UTC)
+	h := newStandingHarness(t, start)
+	ctx := t.Context()
+	restartedStore := h.store
+	restartedEngine := h.engine
+	auth := watch.Authority{
+		ProjectDir: h.rootDir,
+		RootPaths:  []string{h.rootDir},
+		Roots:      []watch.WatchRootGrant{{Label: "repo", RootID: h.rootID, Path: h.rootDir}},
+	}
 
 	// 6. File-change standing watch whose own run edits the watched file does NOT retrigger itself.
 	ledger := sourceledger.New(h.db, t.TempDir(), sourceledger.Timing{})
@@ -289,4 +278,34 @@ func TestSW11StandingWatchesEndToEndWalkthrough(t *testing.T) {
 	if len(hundredList) < 100 {
 		t.Fatalf("expected >= 100 standing watches, got %d", len(hundredList))
 	}
+}
+
+func newSW11RestartedStandingStore(t *testing.T, h *standingHarness) (*watch.Store, *watch.StandingEngine) {
+	t.Helper()
+	restartedStore := watch.NewStore(h.db, h.clock)
+	restartedEngine := restartedStore.Standing()
+	auth := watch.Authority{
+		ProjectDir: h.rootDir,
+		RootPaths:  []string{h.rootDir},
+		Roots:      []watch.WatchRootGrant{{Label: "repo", RootID: h.rootID, Path: h.rootDir}},
+	}
+	restartedEngine.SetCallbacks(watch.StandingCallbacks{
+		ModelPriceCheck:   func(_ context.Context, _, _ string) (bool, error) { return true, nil },
+		PersonAccessCheck: func(_ context.Context, _, _ string) (bool, error) { return true, nil },
+		ProjectDefaults: func(_ context.Context, _ string) (string, string, string, watch.Authority) {
+			return "default", "openai:gpt-5", "America/New_York", auth
+		},
+		RunDispatcher: func(rCtx context.Context, sw watch.StandingWatch, run watch.WatchRun, prompt string) (watch.StandingRunDispatchOutcome, error) {
+			sid := "catchup-chat-" + run.RunID[:8]
+			testdbseed.InsertSession(t, h.db, sid, sw.ProjectID)
+			_ = restartedEngine.RecordChatProvenance(rCtx, watch.StandingChatProvenance{
+				SessionID: sid, ProjectID: sw.ProjectID, WatchID: sw.WatchID, WatchName: sw.Name, RunID: run.RunID,
+			})
+			h.mu.Lock()
+			h.dispatched = append(h.dispatched, dispatchedRunRecord{WatchID: sw.WatchID, RunID: run.RunID, SessionID: sid, Prompt: prompt})
+			h.mu.Unlock()
+			return watch.StandingRunDispatchOutcome{SessionID: sid}, nil
+		},
+	})
+	return restartedStore, restartedEngine
 }
