@@ -74,13 +74,13 @@ func prefixAssemblyEngine(t *testing.T, m *Service) *assembly.AssemblyEngine {
 					ActiveRootHasNested: delivery.ActiveRootHasNested,
 				}, err
 			},
-			RootPolicies: func(ctx context.Context, sess *api.Session) (assembly.AgentsMDPolicyDelivery, error) {
-				delivery, err := m.ProjectRoot(ctx, sess)
+			RootPolicies: func(ctx context.Context, sess *api.Session) assembly.AgentsMDPolicyDelivery {
+				delivery := m.ProjectRoot(ctx, sess)
 				return assembly.AgentsMDPolicyDelivery{
 					Messages:            delivery.Messages,
 					ActiveRootID:        delivery.ActiveRootID,
 					ActiveRootHasNested: delivery.ActiveRootHasNested,
-				}, err
+				}
 			},
 		},
 	})

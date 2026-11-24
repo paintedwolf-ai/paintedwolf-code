@@ -117,13 +117,13 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 					ActiveRootHasNested: delivery.ActiveRootHasNested,
 				}, err
 			},
-			RootPolicies: func(ctx context.Context, sess *api.Session) (assembly.AgentsMDPolicyDelivery, error) {
-				delivery, err := m.PolicyIndex.ProjectRoot(ctx, sess)
+			RootPolicies: func(ctx context.Context, sess *api.Session) assembly.AgentsMDPolicyDelivery {
+				delivery := m.PolicyIndex.ProjectRoot(ctx, sess)
 				return assembly.AgentsMDPolicyDelivery{
 					Messages:            delivery.Messages,
 					ActiveRootID:        delivery.ActiveRootID,
 					ActiveRootHasNested: delivery.ActiveRootHasNested,
-				}, err
+				}
 			},
 		},
 		WebSearchEnabled:  m.WebSearchEnabled,

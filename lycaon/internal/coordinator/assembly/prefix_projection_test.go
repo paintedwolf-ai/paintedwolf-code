@@ -79,12 +79,12 @@ func TestKnownPrefixMatchesCompletionWithRootPolicyEnabled(t *testing.T) {
 				TrustTier: api.ContentTrustTierTrusted,
 			}, true
 		},
-		RootPolicies: func(context.Context, *api.Session) (AgentsMDPolicyDelivery, error) {
+		RootPolicies: func(context.Context, *api.Session) AgentsMDPolicyDelivery {
 			return AgentsMDPolicyDelivery{
 				Messages:            []api.Message{rootPolicy, overlayPolicy},
 				ActiveRootID:        "r1",
 				ActiveRootHasNested: true,
-			}, nil
+			}
 		},
 		Policies: func(context.Context, *api.Session, []api.Message) (AgentsMDPolicyDelivery, error) {
 			return AgentsMDPolicyDelivery{

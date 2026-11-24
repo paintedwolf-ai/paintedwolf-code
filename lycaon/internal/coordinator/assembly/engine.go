@@ -79,7 +79,7 @@ type AgentsMDIndexInjector func(ctx context.Context, sess *api.Session) (block a
 type AgentsMDPoliciesInjector func(ctx context.Context, sess *api.Session, history []api.Message) (AgentsMDPolicyDelivery, error)
 
 // AgentsMDRootPoliciesInjector projects active-root guidance without turn side effects.
-type AgentsMDRootPoliciesInjector func(ctx context.Context, sess *api.Session) (AgentsMDPolicyDelivery, error)
+type AgentsMDRootPoliciesInjector func(ctx context.Context, sess *api.Session) AgentsMDPolicyDelivery
 
 // AgentsMD groups project guidance index and policy delivery hooks.
 type AgentsMD struct {
