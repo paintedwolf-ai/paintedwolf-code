@@ -269,7 +269,11 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		if st.Overlay.Catalog != nil && st.PackOverlayID != "stock" {
 			cached, found := overlaySkillsCache[st.PackOverlayID]
 			if !found {
-				cached, _ = extpacks.LoadEffectiveSkills(st.Overlay.Catalog)
+				var diags []extpacks.Diagnostic
+				cached, diags = extpacks.LoadEffectiveSkills(st.Overlay.Catalog)
+				if extpacks.HasErrorDiagnostic(diags) {
+					return audit, fmt.Errorf("load skills for overlay %s: %+v", st.PackOverlayID, diags)
+				}
 				overlaySkillsCache[st.PackOverlayID] = cached
 			}
 			overlaySkills = cached

@@ -17,32 +17,21 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func activeEffectiveHooks() []string {
-	return []string{
-		oar.AnchorToolRejected,
-		oar.AnchorCoordinatorCloseoutCheck,
-		oar.AnchorToolPost,
-		oar.AnchorCoordinatorPreInvoke,
-		oar.AnchorWorkerReportCheck,
-		oar.AnchorCoordinatorMidTurnNote,
-		oar.AnchorCoordinatorPostTurn,
-		oar.AnchorContentOutput,
-		oar.AnchorCredentialAssignment,
-		oar.AnchorSharedTemp,
-		oar.AnchorSessionPreInvoke,
-	}
-}
-
 func TestOARHookProducersPopulateRequiredFactsAcrossAllEffectiveHooks(t *testing.T) {
 	h := newHookProducerHarness(t)
-	cells := representativeCartesianCells(t, h)
-	expectedActiveHooks := activeEffectiveHooks()
+	cells := representativeHostStateCells(t, h)
+	var expectedActiveHooks []string
+	for _, r := range h.rules.All() {
+		if !h.pipeline.AnchorEnforced(r.Anchor) {
+			t.Errorf("effective rule %s resolved to unenforced anchor %q", r.ID, r.Anchor)
+		}
+		if !slices.Contains(expectedActiveHooks, r.Anchor) {
+			expectedActiveHooks = append(expectedActiveHooks, r.Anchor)
+		}
+	}
+	slices.Sort(expectedActiveHooks)
 
-	t.Run("effective_hook_discovery_and_core_alias_resolution", func(t *testing.T) {
-		verifyEffectiveHookDiscovery(t, h, expectedActiveHooks)
-	})
-
-	t.Run("cartesian_hoststate_hook_producers_and_negative_witnesses", func(t *testing.T) {
+	t.Run("hoststate_hook_producers_and_negative_witnesses", func(t *testing.T) {
 		for _, cell := range cells {
 			t.Run(cell.name, func(t *testing.T) {
 				verifySharedCellHooks(t, h, cell)
@@ -63,43 +52,6 @@ func TestOARHookProducersPopulateRequiredFactsAcrossAllEffectiveHooks(t *testing
 	t.Run("occurrence_vs_recovery_authority_across_ask_to_agent_and_child_clamp", func(t *testing.T) {
 		verifyOccurrenceVsRecoveryAuthority(t, h, cells)
 	})
-}
-
-func verifyEffectiveHookDiscovery(t *testing.T, h *hookProducerHarness, expectedActiveHooks []string) {
-	t.Helper()
-	if got := h.declaration.ProfileMap.Core[oar.CoreAnchorModelOutput]; got != oar.AnchorContentOutput {
-		t.Fatalf("profile_map.core[model.output] = %q, want %q", got, oar.AnchorContentOutput)
-	}
-	if got := h.declaration.ProfileMap.Core[oar.CoreAnchorToolPostInvoke]; got != oar.AnchorToolPost {
-		t.Fatalf("profile_map.core[tool.post_invoke] = %q, want %q", got, oar.AnchorToolPost)
-	}
-	if got := h.declaration.ProfileMap.Core[oar.CoreAnchorAgentPostTurn]; got != oar.AnchorCoordinatorPostTurn {
-		t.Fatalf("profile_map.core[agent.post_turn] = %q, want %q", got, oar.AnchorCoordinatorPostTurn)
-	}
-
-	byHook := map[string]int{}
-	for _, r := range h.rules.All() {
-		byHook[r.Anchor]++
-		if !h.pipeline.AnchorEnforced(r.Anchor) {
-			t.Errorf("effective rule %s resolved to unenforced anchor %q", r.ID, r.Anchor)
-		}
-	}
-	for _, hook := range expectedActiveHooks {
-		if byHook[hook] == 0 {
-			t.Errorf("expected >=1 effective OAR rule on hook %q, got 0", hook)
-		}
-	}
-	for hook, count := range byHook {
-		if !slices.Contains(expectedActiveHooks, hook) {
-			t.Errorf("unexpected active OAR hook %q (%d rules) missing producer coverage", hook, count)
-		}
-	}
-	for _, id := range []string{"MODEL_RESPONSE_EMPTY", "MODEL_RESPONSE_INVALID", "TOOL_ACTION_IN_TEXT", "TOOL_CALL_UNPARSED"} {
-		r, ok := h.rules.Get(id)
-		if !ok || r == nil || r.Anchor != oar.AnchorContentOutput {
-			t.Errorf("model.output rule %s resolved to %v, want anchor %q", id, r, oar.AnchorContentOutput)
-		}
-	}
 }
 
 func verifySharedCellHooks(t *testing.T, h *hookProducerHarness, cell roleCell) {

@@ -21,7 +21,7 @@ import (
 )
 
 // CartesianSummary aggregates reach/claim violations, render cache statistics,
-// skill audit metrics, and branch/cell coverage across all 7 families.
+// skill audit metrics, and branch/cell coverage across every recipient host state.
 type CartesianSummary struct {
 	Violations             []string
 	Coverage               hoststate.CoverageReport
@@ -40,13 +40,13 @@ type CartesianSummary struct {
 
 var cartesianInvariants = []invariants.Invariant{
 	{
-		Name: "cartesian-7-family-matrix-names-only-offered",
+		Name: "host-state-matrix-names-only-offered",
 		Anchors: []invariants.Anchor{
 			personaRenderer,
 			kickRenderer,
 			invariants.Func("internal/coordinator/inject", "RenderToolProceduresBlock"),
 		},
-		Check: checkCartesianSevenFamilies,
+		Check: checkHostStateMatrix,
 	},
 	{
 		Name: "stock-templates-and-oar-have-no-dead-or-vacuous-branches",
@@ -84,16 +84,12 @@ func hasSiteOverlayFiles(site string) bool {
 }
 
 func cartesianSummary(r *invariants.Run) *CartesianSummary {
-	return invariants.Part(r.Corpus, "cartesian 7-family matrix", func() (*CartesianSummary, error) {
-		s := stock(r)
-		if hasSiteOverlayFiles(s.Site) {
-			return &CartesianSummary{FolderlessParkVerified: true}, nil
-		}
-		return RunCartesianMatrix(context.Background(), s)
+	return invariants.Part(r.Corpus, "host-state matrix", func() (*CartesianSummary, error) {
+		return RunCartesianMatrix(context.Background(), stock(r))
 	})
 }
 
-func checkCartesianSevenFamilies(r *invariants.Run) {
+func checkHostStateMatrix(r *invariants.Run) {
 	sum := cartesianSummary(r)
 	r.Expect(sum.CoordinatorPromptCount, "coordinator standing prompt renders")
 	r.Expect(sum.CoordinatorProcCount, "coordinator tool procedure renders")
@@ -123,7 +119,7 @@ func checkNoDeadOrVacuousBranches(r *invariants.Run) {
 	}
 }
 
-// RunCartesianMatrix executes all 7 prompt/skill/inject/schema/OAR families across
+// RunCartesianMatrix executes the prompt, skill, inject, schema and OAR renders across
 // hoststate.CoordinatorStates and hoststate.WorkerStates with branch tracking active.
 func RunCartesianMatrix(ctx context.Context, s *Stock) (*CartesianSummary, error) {
 	if !hasSiteOverlayFiles(s.Site) {
@@ -272,14 +268,14 @@ func registerStockTemplatesInTracker(s *Stock, tracker *hoststate.CoverageTracke
 }
 
 func registerExpectedZeroBranches(tracker *hoststate.CoverageTracker) {
-	// All 19 shipped guidance/gate-feedback/*.yaml definitions declare missing_signals with when: "true",
-	// while _gate.md.tmpl retains its fallback branch as fail-closed host armor for sealed/future leaves.
-	gateReason := "all 19 shipped guidance/gate-feedback/*.yaml leaves declare unconditional missing_signals (when: \"true\"), keeping matched_signals non-empty in production"
+	// Every shipped gate-feedback leaf declares unconditional missing_signals,
+	// so the template's fallback branch is never taken by stock leaves.
+	gateReason := "every shipped guidance/gate-feedback/*.yaml leaf declares unconditional missing_signals (when: \"true\"), keeping matched_signals non-empty in production"
 	tracker.ExpectZeroTemplateBranch("guidance/gate-feedback-templates/_gate.md.tmpl@L5:C4:if", hoststate.ExpectedZeroFalse, gateReason)
 	tracker.ExpectZeroTemplateBranch("guidance/gate-feedback-templates/_gate.md.tmpl@L11:C4:else", hoststate.ExpectedZeroTrue, gateReason)
 
-	// These 3 OAR next-step .reach checks are preceded by step.when predicates computed from the exact
-	// same toolreach.Request predicate that Sequence verifies, making .reach == false structurally unreachable.
+	// Each step.when below is computed from the same toolreach.Request
+	// predicate Sequence verifies, so .reach == false cannot occur.
 	tracker.ExpectZeroRuleBranch("PROCESS_UNSUPPORTED", "steps[0].reach", hoststate.ExpectedZeroFalse,
 		"step.when size(paintedwolf.admitted_process_capability_fields) > 0 requires request.AcceptsField(\"command\", ...), which structurally implies Sequence(command) == true")
 	tracker.ExpectZeroRuleBranch("TOOL_ACTION_IN_TEXT", "steps[0].reach", hoststate.ExpectedZeroFalse,
@@ -415,6 +411,6 @@ func projectCacheableValue(v reflect.Value) any {
 		}
 		return out
 	default:
-		return fmt.Sprintf("%s", v.Type())
+		return v.Type().String()
 	}
 }

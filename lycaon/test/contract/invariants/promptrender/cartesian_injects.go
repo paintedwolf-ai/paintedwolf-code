@@ -3,21 +3,17 @@ package promptrender
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -76,7 +72,6 @@ func runAllKicksAndNudges(
 	cache *hoststate.RenderCache,
 	sum *CartesianSummary,
 ) error {
-	engine := s.Engine()
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
 	if err != nil {
 		return err
@@ -85,378 +80,18 @@ func runAllKicksAndNudges(
 	if err != nil {
 		return err
 	}
-
-	var coordKicks, workerKicks []string
-	for _, b := range anchorReg.AllInform() {
-		if b == nil || !b.IsInform() {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(b.Render, "coordinator-") && !slices.Contains(coordKicks, b.Render):
-			coordKicks = append(coordKicks, b.Render)
-		case strings.HasPrefix(b.Render, "worker-") && !slices.Contains(workerKicks, b.Render):
-			workerKicks = append(workerKicks, b.Render)
-		case b.Render == "session-agent-enabled" && !slices.Contains(coordKicks, b.Render):
-			coordKicks = append(coordKicks, b.Render)
-		}
+	sweep := newKickSweep(s, cache, func(v string) { sum.Violations = append(sum.Violations, v) })
+	if err := sweep.coordinatorKicks(ctx, anchorReg, informKickIDs(anchorReg, "coordinator-", "session-agent-enabled"), cReps); err != nil {
+		return err
 	}
-	slices.Sort(coordKicks)
-	slices.Sort(workerKicks)
-
-	for _, kick := range coordKicks {
-		if err := renderCoordinatorKickAcrossReps(ctx, s, engine, anchorReg, kick, cReps, cache, sum); err != nil {
-			return err
-		}
+	if err := sweep.workerKicks(ctx, anchorReg, informKickIDs(anchorReg, "worker-"), wReps); err != nil {
+		return err
 	}
-	for _, kick := range workerKicks {
-		if err := renderWorkerKickAcrossReps(ctx, s, engine, anchorReg, kick, wReps, cache, sum); err != nil {
-			return err
-		}
+	if err := sweep.phaseKicks(ctx, wfReg, cReps); err != nil {
+		return err
 	}
-	return renderWorkflowPhaseKicks(ctx, s, engine, wfReg, cReps, cache, sum)
-}
-
-func renderCoordinatorKickAcrossReps(
-	ctx context.Context,
-	s *Stock,
-	engine *prompts.FileTemplateEngine,
-	anchorReg *anchor.Registry,
-	kick string,
-	cReps []coordRep,
-	cache *hoststate.RenderCache,
-	sum *CartesianSummary,
-) error {
-	if slices.ContainsFunc(phaseKickPrefixes, func(p string) bool { return strings.HasPrefix(kick, p) }) {
-		return nil
-	}
-	envs := richKickEnvelopes(anchorReg, kick)
-	for envIdx, envBase := range envs {
-		limit := len(cReps)
-		if envIdx > 0 && limit > 10 {
-			limit = 10
-		}
-		for i := 0; i < limit; i++ {
-			cr := cReps[i]
-			if kick == "coordinator-closeout" && !surface.SurfaceDeliversReport(cr.state.TurnProfile.SurfaceID) {
-				continue
-			}
-			reader := cr.auth.Reader
-			subj := toolvocabtest.SubjectSelfNow()
-			var nextTurn *toolvocabtest.ActorAuthority
-			data := maps.Clone(envBase)
-			alignKickOccurrenceToAuthority(kick, data, cr.auth.Reader, cr.auth.Offered)
-			if kick == "coordinator-turn-closeout" || kick == "session-agent-enabled" {
-				closeR, err := closeoutTurnReader(cr.state, false)
-				if err != nil {
-					return err
-				}
-				reader = closeR
-				active := cr.auth.ActorAuthority()
-				nextTurn = &active
-				subj = toolvocabtest.SubjectSessionNextTurn()
-				data["session_command_mutation_capable"] = cr.state.SessionMode != api.SessionModeAsk && cr.auth.Reader.Held()["command_mutation"]
-			}
-			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			fullVars, _ := prompts.Vars(reader, stripReaderFactKeys(data))
-			rKey := renderCacheKeyForVars("mkick:"+kick+":"+s.Site, s.Catalog.Revision, nil, fullVars)
-			text, _, err := cache.RenderOrReuse(rKey, func() (string, error) {
-				return engine.RenderKick(ctx, reader, kick, data)
-			})
-			if err != nil {
-				return err
-			}
-			sum.KickAndNudgeCount++
-			label := fmt.Sprintf("kick %s (%s)", kick, cr.state.ID)
-			checkKey := cr.auth.Digest + "|" + string(subj.Kind)
-			_ = cache.CheckAuthority(rKey, checkKey, func() error {
-				targetAuth := cr.auth
-				targetAuth.Reader = reader
-				if subj.Kind == toolvocabtest.SubjectKindSessionNextTurn {
-					targetAuth.Metas = nil
-					targetAuth.Schemas = map[string]map[string]any{}
-					targetAuth.Offered = nil
-				}
-				viols, cErr := checkClaimsOnce(s, label, text, targetAuth, cr.state.SessionMode, cr.state.Posture, subj, nil, nextTurn, nil, true)
-				sum.Violations = append(sum.Violations, viols...)
-				return cErr
-			})
-		}
-	}
+	sum.KickAndNudgeCount += sweep.rendered
 	return nil
-}
-
-func renderWorkerKickAcrossReps(
-	ctx context.Context,
-	s *Stock,
-	engine *prompts.FileTemplateEngine,
-	anchorReg *anchor.Registry,
-	kick string,
-	wReps []workerRep,
-	cache *hoststate.RenderCache,
-	sum *CartesianSummary,
-) error {
-	envs := richKickEnvelopes(anchorReg, kick)
-	for envIdx, envBase := range envs {
-		limit := len(wReps)
-		if envIdx > 0 && limit > 8 {
-			limit = 8
-		}
-		for i := 0; i < limit; i++ {
-			wr := wReps[i]
-			if !wr.auth.Reader.Held()["complete_leg"] {
-				continue
-			}
-			reader := wr.auth.Reader
-			subj := toolvocabtest.SubjectSelfNow()
-			var followup *toolvocabtest.ActorAuthority
-			data := maps.Clone(envBase)
-			if kick == "worker-closeout" || kick == "worker-cancel-closeout" {
-				closeR, err := workerCloseoutReader(wr.ws)
-				if err != nil {
-					return err
-				}
-				reader = closeR
-				if kick == "worker-closeout" {
-					active := wr.auth.ActorAuthority()
-					followup = &active
-					subj = toolvocabtest.SubjectFollowupLeg()
-					data["leg_command_mutation_capable"] = wr.ws.ParentSessionMode != api.SessionModeAsk && wr.auth.Reader.Held()["command_mutation"]
-				}
-			}
-			fullVars, _ := prompts.Vars(reader, stripReaderFactKeys(data))
-			rKey := renderCacheKeyForVars("mwkick:"+kick+":"+s.Site, s.Catalog.Revision, nil, fullVars)
-			text, _, err := cache.RenderOrReuse(rKey, func() (string, error) {
-				return engine.RenderKick(ctx, reader, kick, data)
-			})
-			if err != nil {
-				return err
-			}
-			sum.KickAndNudgeCount++
-			label := fmt.Sprintf("worker kick %s (%s)", kick, wr.ws.ID)
-			checkKey := wr.auth.Digest + "|" + string(subj.Kind)
-			_ = cache.CheckAuthority(rKey, checkKey, func() error {
-				targetAuth := wr.auth
-				targetAuth.Reader = reader
-				if kick == "worker-closeout" || kick == "worker-cancel-closeout" {
-					var closeMetas []tools.ToolMeta
-					for _, m := range wr.auth.Metas {
-						if m.Name == "complete_leg" {
-							closeMetas = append(closeMetas, m)
-						}
-					}
-					targetAuth.Metas = closeMetas
-					targetAuth.Schemas = map[string]map[string]any{}
-					if len(closeMetas) > 0 {
-						targetAuth.Schemas["complete_leg"] = closeMetas[0].ArgsSchema
-					}
-					targetAuth.Offered = []string{"complete_leg"}
-				}
-				viols, cErr := checkClaimsOnce(s, label, text, targetAuth, wr.ws.ParentSessionMode, wr.ws.Posture, subj, followup, nil, nil, true)
-				sum.Violations = append(sum.Violations, viols...)
-				return cErr
-			})
-		}
-	}
-	return nil
-}
-
-func renderWorkflowPhaseKicks(
-	ctx context.Context,
-	s *Stock,
-	engine *prompts.FileTemplateEngine,
-	wfReg *workflowdef.Registry,
-	cReps []coordRep,
-	cache *hoststate.RenderCache,
-	sum *CartesianSummary,
-) error {
-	bySurface := map[string][]coordRep{}
-	for _, cr := range cReps {
-		if cr.state.PackOverlayID == "stock" {
-			bySurface[cr.state.TurnProfile.SurfaceID] = append(bySurface[cr.state.TurnProfile.SurfaceID], cr)
-		}
-	}
-	phaseVariants := phaseKickVariants()
-	for _, wfKey := range sortedKeys(wfReg.All()) {
-		m := wfReg.All()[wfKey]
-		surfaces := map[string]string{}
-		for _, p := range m.PhaseDefs {
-			surfaces[p.ID] = p.CoordinatorSurface
-		}
-		for _, in := range m.Injects {
-			if in.On != "phase.entered" || in.Selector.Phase == nil {
-				continue
-			}
-			surfID := surfaces[*in.Selector.Phase]
-			for _, cr := range bySurface[surfID] {
-				for vIdx, pv := range phaseVariants {
-					if vIdx > 0 && cr.state.Posture != api.SessionPostureBuild {
-						continue
-					}
-					data := maps.Clone(pv)
-					prompts.MergeCoordinatorKickVarsForTools(data, cr.auth.Reader)
-					fullVars, _ := prompts.Vars(cr.auth.Reader, stripReaderFactKeys(data))
-					rKey := renderCacheKeyForVars("mphase:"+in.Render+":"+s.Site, s.Catalog.Revision, nil, fullVars)
-					text, _, err := cache.RenderOrReuse(rKey, func() (string, error) {
-						return engine.RenderKick(ctx, cr.auth.Reader, in.Render, data)
-					})
-					if err != nil {
-						return err
-					}
-					sum.KickAndNudgeCount++
-					label := fmt.Sprintf("phase kick %s on %s (%s)", in.Render, surfID, cr.state.ID)
-					_ = cache.CheckAuthority(rKey, cr.auth.Digest, func() error {
-						viols, cErr := checkClaimsOnce(s, label, text, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
-						sum.Violations = append(sum.Violations, viols...)
-						return cErr
-					})
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func richKickEnvelopes(reg *anchor.Registry, kick string) []map[string]any {
-	out := append(kickEnvelopeVariants(reg, kick), map[string]any{})
-	extraA := map[string]any{
-		"reason_text":                  "closeout criteria open",
-		"llm_timeout":                  true,
-		"cancel_reason":                "user canceled leg",
-		"progress_closure_armed":       true,
-		"leg_id":                       "leg-alpha",
-		"advance_when_gate_met":        "coordinator",
-		"completed_ago":                "1m ago",
-		"workers":                      []map[string]any{{"worker": "w1", "state": "working"}, {"worker": "", "state": "queued"}},
-		"overlays":                     []map[string]any{{"worker": "w1", "id": "ov-1"}, {"worker": "", "id": "ov-2"}},
-		"label":                        "@secondary",
-		"command_external_changed":     true,
-		"command_external_shown":       true,
-		"offenders_omitted":            2,
-		"resume_work_allowed":          true,
-		"held_call_handle":             "held-1",
-		"command_completion":           "cmd-1 exited 0",
-		"command_refusal":              "SANDBOX_TRY_WRITE_ROOT on /opt",
-		"run_report":                   true,
-		"offending_keys":               []string{"status"},
-		"allowed_top_level_keys":       "summary, findings",
-		"document_issues":              []map[string]any{{"message": "bad citation", "offenders": []string{"read#99"}}},
-		"offenders_sample":             []string{"read#99"},
-		"pinned_body_chars":            512,
-		"retained_document":            true,
-		"changes":                      []map[string]any{{"kind": "added", "label": "a"}, {"kind": "removed", "label": "b"}, {"kind": "renamed", "old_label": "old-c", "label": "c"}},
-		"changes_omitted":              1,
-		"primary_changed":              true,
-		"new_primary":                  map[string]any{"label": "a"},
-		"after_count":                  2,
-		"after":                        []map[string]any{{"label": "a", "is_active": true}, {"label": "c", "is_active": false}},
-		"after_omitted_count":          1,
-		"session_folder_changed":       map[string]any{"label": "a"},
-		"active_root":                  map[string]any{"label": "a"},
-		"pending_overlays":             1,
-		"partial_workers":              0,
-		"batch_phase":                  "integrate",
-		"guidance":                     "Store secret via Den settings.",
-		"tools":                        []string{"command", "recall"},
-		"scanner_id":                   "semgrep",
-		"scan_id":                      "scan-1",
-		"introduced_count":             2,
-		"introduced":                   []map[string]any{{"level": "high", "rule_id": "r1", "path": "a.go", "line": 10, "message": "issue"}, {"level": "low", "rule_id": "r2", "path": "b.go"}},
-		"introduced_omitted_count":     1,
-		"fixed_count":                  2,
-		"fixed":                        []map[string]any{{"level": "high", "rule_id": "r1", "path": "c.go", "line": 4}, {"level": "low", "rule_id": "r3", "path": "d.go"}},
-		"fixed_omitted_count":          1,
-		"scan_categories":              "sast",
-		"scan_findings_count":          3,
-		"worker":                       "impl-1",
-		"producer":                     "scout-1",
-		"producer_state":               "closed",
-		"notice_kind":                  "quiet",
-		"round_ordinal":                2,
-		"workflow_work_id":             "work-1",
-		"in_flight":                    "tools",
-		"tools_minutes":                3,
-		"tokens":                       4200,
-		"spend_under_cent":             true,
-		"latest_message_seq":           4,
-		"worker_result":                map[string]any{"result_handle": "res-1", "changed": []string{"a.go", "b.go"}, "changed_omitted": 1, "not_applied": []string{"c.go", "d.go"}},
-		"worker_digest":                "2 files updated",
-		"evidence_digest":              "[read#1] a.go:1",
-		"last_worker_decision_request": map[string]any{"worker": "impl-1", "options": []string{"opt-a", "opt-b"}},
-		"repair_targets": []map[string]any{
-			{"claim": "c1", "web_link": true, "candidates": []string{"web#1"}, "use": "web#1", "worker_output": true},
-			{"claim": "c2", "web_link": false},
-		},
-		"document_citation_targets": []map[string]any{{"section": "Risks", "claim": "ungrounded"}},
-		"observed_handles_sample":   []string{"read#1"},
-		"observed_handles_omitted":  1,
-		"observed_paths_sample":     []string{"a.go"},
-		"observed_paths_omitted":    1,
-		"observed_urls_sample":      []string{"https://example.com"},
-		"observed_urls_omitted":     1,
-		"repair_observations":       true,
-		"drafted_synthesis":         "Draft body.",
-		"gate_obligations": []map[string]any{
-			{"id": "plan_stub_valid", "purpose": "Plan sections", "required": []string{"Goal"}, "missing": []string{"Goal missing"}, "satisfy": []string{"Add Goal"}},
-			{"id": "simple", "purpose": "Simple", "satisfy": []string{"Continue"}},
-		},
-	}
-	extraB := map[string]any{
-		"after_count":              0,
-		"changes":                  []map[string]any{},
-		"changes_omitted":          0,
-		"primary_changed":          true,
-		"new_primary":              map[string]any{"label": "b"},
-		"pending_overlays":         2,
-		"batch_phase":              "closed",
-		"producer_state":           "rejected",
-		"notice_kind":              "progress",
-		"in_flight":                "queued",
-		"spend_under_cent":         false,
-		"estimated_spend_usd":      "0.04",
-		"command_external_changed": true,
-		"command_external_shown":   false,
-	}
-	extraC := map[string]any{
-		"after_count":            1,
-		"after":                  []map[string]any{{"label": "b", "is_active": false}},
-		"after_omitted_count":    0,
-		"session_folder_changed": nil,
-		"active_root":            nil,
-		"pending_overlays":       0,
-		"partial_workers":        2,
-		"in_flight":              "model_call",
-		"producer_state":         "pending",
-	}
-	extraD := map[string]any{
-		"pending_overlays": 0,
-		"partial_workers":  1,
-		"in_flight":        "idle",
-	}
-	return append(out, extraA, extraB, extraC, extraD)
-}
-
-func phaseKickVariants() []map[string]any {
-	return []map[string]any{
-		{
-			"options_criterion":        "Minimize blast radius",
-			"topology_output":          "3 recon findings",
-			"fanout_plan":              "2 slices",
-			"spawnable_reviewers":      []string{"skeptic"},
-			"review_followup_attempts": 1,
-			"rating_questions":         "severity: high|low",
-			"review_verdict": map[string]any{
-				"survey_claims":     map[string]any{"threat_model": "Untrusted HTTP input", "claims": "- claim-1: validated"},
-				"survey_challenged": map[string]any{"challenges": "- claim-1: survives"},
-			},
-			"evidence_digest": "[read#1] main.go:1",
-			"obligations":     map[string]any{"scan": map[string]any{"findings_count": 2, "error": "partial"}},
-		},
-		{
-			"topology_output": "Recon summary only",
-			"obligations":     map[string]any{"scan": map[string]any{"findings_count": 0, "error": ""}},
-		},
-		{},
-	}
 }
 
 func runCoordinatorInjectRenders(
@@ -476,6 +111,10 @@ func runCoordinatorInjectRenders(
 	}
 	heldRunning := []heldcall.Running{{Handle: "held-1", Tool: "ask_user", Elapsed: 15 * time.Second}}
 
+	firstOfReader := map[int]bool{}
+	for _, i := range distinctReaderIndexes(len(cReps), func(i int) prompts.Reader { return cReps[i].auth.Reader }) {
+		firstOfReader[i] = true
+	}
 	for idx, cr := range cReps {
 		resolveNamed := resolver.forCoordinatorState(cr.state)
 		waitSchema := cr.auth.Schemas["wait"]
@@ -486,7 +125,7 @@ func runCoordinatorInjectRenders(
 			var held []heldcall.Running
 			if withRunning {
 				held = heldRunning
-			} else if idx > 4 {
+			} else if !firstOfReader[idx] {
 				continue
 			} else {
 				jobs = jobsBoth[1:]
@@ -494,7 +133,7 @@ func runCoordinatorInjectRenders(
 			cmdBlock := inject.RenderCommandJobsBlock(ctx, injRenderer, cr.auth.Reader, waitSchema, "sess-inj", jobs, held, now, "coordinator")
 			if cmdBlock != "" {
 				sum.InjectAndGuidanceCount++
-				viols, _ := checkClaimsOnce(s, "inject/command-jobs ("+cr.state.ID+")", cmdBlock, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+				viols := checkClaimsOnce(s, "inject/command-jobs ("+cr.state.ID+")", cmdBlock, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 				sum.Violations = append(sum.Violations, viols...)
 			}
 		}
@@ -517,7 +156,7 @@ func runCoordinatorInjectRenders(
 			},
 		}
 		for tIdx, tsIn := range tsInputs {
-			if tIdx > 0 && idx > 6 {
+			if tIdx > 0 && !firstOfReader[idx] {
 				continue
 			}
 			tsBlock, err := inject.RenderTurnStateBlock(ctx, injRenderer, "sess-ts", tsIn)
@@ -526,15 +165,15 @@ func runCoordinatorInjectRenders(
 			}
 			sum.InjectAndGuidanceCount++
 			if tsBlock != "" {
-				viols, _ := checkClaimsOnce(s, "inject/turn-state ("+cr.state.ID+")", tsBlock, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+				viols := checkClaimsOnce(s, "inject/turn-state ("+cr.state.ID+")", tsBlock, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 				sum.Violations = append(sum.Violations, viols...)
 			}
 		}
 
-		// board-orientation, source-changes, implement-spawn, transition.
-		// (across first 16 distinct authorities + all 0/2-root authorities).
-		if idx < 16 || cr.state.RootCount != 1 {
-			if err := renderRemainingCoordInjectsForRep(ctx, s, injRenderer, cr, resolveNamed, now, idx, sum); err != nil {
+		// board-orientation, source-changes, implement-spawn and transition,
+		// once per distinct reader.
+		if firstOfReader[idx] {
+			if err := renderRemainingCoordInjectsForRep(ctx, s, injRenderer, cr, resolveNamed, now, idx == 0, sum); err != nil {
 				return err
 			}
 		}
@@ -553,7 +192,7 @@ func renderRemainingCoordInjectsForRep(
 	cr coordRep,
 	resolveNamed func(string) (toolvocabtest.ActorAuthority, error),
 	now time.Time,
-	idx int,
+	first bool,
 	sum *CartesianSummary,
 ) error {
 	namedWorkers := make([]api.BoardWorker, 9)
@@ -583,22 +222,19 @@ func renderRemainingCoordInjectsForRep(
 			snap:   api.BoardSnapshot{Repo: api.RepoBrief{Languages: []string{"Go"}, FileCount: 10}},
 		},
 	}
-	for sIdx, sb := range snaps {
-		if sIdx > 0 && idx > 4 {
-			continue
-		}
+	for _, sb := range snaps {
 		bText, err := inject.RenderBoardOrientationInject(ctx, injRenderer, cr.auth.Reader, "sess-b", sb.snap, packboard.InjectScopeFull, false, sb.legend, now)
 		if err != nil {
 			return err
 		}
 		sum.InjectAndGuidanceCount++
 		if bText != "" {
-			viols, _ := checkClaimsOnce(s, "inject/board-orientation ("+cr.state.ID+")", bText, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+			viols := checkClaimsOnce(s, "inject/board-orientation ("+cr.state.ID+")", bText, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 			sum.Violations = append(sum.Violations, viols...)
 		}
 	}
-	// Exercise inventory_at branch in board-orientation.md directly via RenderWithReader.
-	if idx == 0 {
+	// The inventory_at branch has no producer input in the snapshot renderer.
+	if first {
 		invText, err := injRenderer.RenderWithReader(ctx, cr.auth.Reader, "board-orientation", map[string]any{
 			"pack_sentinel": inject.BoardOrientationInjectSentinel,
 			"inventory_at":  "14:00 UTC",
@@ -608,7 +244,7 @@ func renderRemainingCoordInjectsForRep(
 			return err
 		}
 		sum.InjectAndGuidanceCount++
-		viols, _ := checkClaimsOnce(s, "inject/board-orientation-inv", invText, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+		viols := checkClaimsOnce(s, "inject/board-orientation-inv", invText, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 		sum.Violations = append(sum.Violations, viols...)
 	}
 
@@ -637,14 +273,11 @@ func renderRemainingCoordInjectsForRep(
 				Files:        []inject.SourceChangeFile{{Path: "only.go", Actor: "user", Op: "modify", At: "14:00 UTC", Effects: 1, WorkingSet: true}},
 			},
 		}
-		for bIdx, br := range scBriefs {
-			if bIdx > 0 && idx > 8 {
-				continue
-			}
+		for _, br := range scBriefs {
 			scText := inject.RenderSourceChangesBlock(ctx, injRenderer, cr.auth.Reader, "sess-sc", br)
 			if scText != "" {
 				sum.InjectAndGuidanceCount++
-				viols, _ := checkClaimsOnce(s, "inject/source-changes ("+cr.state.ID+")", scText, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+				viols := checkClaimsOnce(s, "inject/source-changes ("+cr.state.ID+")", scText, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 				sum.Violations = append(sum.Violations, viols...)
 			}
 		}
@@ -652,25 +285,19 @@ func renderRemainingCoordInjectsForRep(
 
 	// implement-spawn (repoKnownEmpty false & true)
 	for _, emptyRepo := range []bool{false, true} {
-		if emptyRepo && idx > 6 {
-			continue
-		}
 		spText, err := inject.RenderImplementSpawnInject(ctx, injRenderer, "sess-sp", cr.state.SpawnAllowlist, spawn.MaxInFlightTaskWorkers, cr.auth.Reader, emptyRepo)
 		if err != nil {
 			return err
 		}
 		if spText != "" {
 			sum.InjectAndGuidanceCount++
-			viols, _ := checkClaimsOnce(s, "inject/implement-spawn ("+cr.state.ID+")", spText, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+			viols := checkClaimsOnce(s, "inject/implement-spawn ("+cr.state.ID+")", spText, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 			sum.Violations = append(sum.Violations, viols...)
 		}
 	}
 
 	// transition.md
 	for _, entered := range []string{"investigate", "orchestrate", "wrapup"} {
-		if idx > 4 {
-			break
-		}
 		trText, err := injRenderer.RenderWithReader(ctx, cr.auth.Reader, "transition", map[string]any{
 			"execution_mode_entered": entered,
 			"execution_mode_left":    "investigate",
@@ -680,7 +307,7 @@ func renderRemainingCoordInjectsForRep(
 		}
 		sum.InjectAndGuidanceCount++
 		if strings.TrimSpace(trText) != "" {
-			viols, _ := checkClaimsOnce(s, "inject/transition ("+cr.state.ID+")", trText, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+			viols := checkClaimsOnce(s, "inject/transition ("+cr.state.ID+")", trText, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 			sum.Violations = append(sum.Violations, viols...)
 		}
 	}

@@ -131,10 +131,8 @@ func renderAndCheckCoordinatorStandingPrompt(
 	}
 	sum.CoordinatorPromptCount++
 	label := fmt.Sprintf("coordinator standing %s (%s)", st.TurnProfile.SurfaceID, st.ID)
-	_ = cache.CheckAuthority(rKey, auth.Digest, func() error {
-		viols, cErr := checkClaimsOnce(s, label, promptText, auth, st.SessionMode, st.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
-		sum.Violations = append(sum.Violations, viols...)
-		return cErr
+	checkClaimsCached(cache, rKey, auth.Digest, func(v string) { sum.Violations = append(sum.Violations, v) }, func() []string {
+		return checkClaimsOnce(s, label, promptText, auth, st.SessionMode, st.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 	})
 	return nil
 }
@@ -304,10 +302,8 @@ func renderAndCheckToolProcedures(
 		return nil
 	}
 	label := fmt.Sprintf("tool-procedures (%s)", idLabel)
-	_ = cache.CheckAuthority(rKey, auth.Digest, func() error {
-		viols, cErr := checkClaimsOnce(s, label, procText, auth, mode, posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
-		sum.Violations = append(sum.Violations, viols...)
-		return cErr
+	checkClaimsCached(cache, rKey, auth.Digest, func(v string) { sum.Violations = append(sum.Violations, v) }, func() []string {
+		return checkClaimsOnce(s, label, procText, auth, mode, posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 	})
 	return nil
 }
@@ -359,10 +355,8 @@ func checkSkillRenderClaims(
 		joined := strings.Join(parts, "\n")
 		label := fmt.Sprintf("skill %s as read by %s", sr.Skill.Name, sr.Reader)
 		rKey := hoststate.RenderCacheKey("cskill:"+sr.Skill.Name, s.Catalog.Revision, nil, map[string]any{"body": joined})
-		_ = cache.CheckAuthority(rKey, sr.Authority.Digest, func() error {
-			viols, err := checkClaimsOnce(s, label, joined, sr.Authority, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
-			sum.Violations = append(sum.Violations, viols...)
-			return err
+		checkClaimsCached(cache, rKey, sr.Authority.Digest, func(v string) { sum.Violations = append(sum.Violations, v) }, func() []string {
+			return checkClaimsOnce(s, label, joined, sr.Authority, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
 		})
 	}
 }
@@ -438,7 +432,7 @@ func runCoordinatorStandingBoundaryVariants(
 			return rErr
 		}
 		sum.CoordinatorPromptCount++
-		viols, _ := checkClaimsOnce(s, "standing-boundary/"+tr.ExecutionModeEntered, text, auth, sample.SessionMode, sample.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+		viols := checkClaimsOnce(s, "standing-boundary/"+tr.ExecutionModeEntered, text, auth, sample.SessionMode, sample.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 		sum.Violations = append(sum.Violations, viols...)
 	}
 	return nil
@@ -495,10 +489,8 @@ func runWorkerPersonaAndInjectMatrix(
 			}
 			sum.WorkerArtifactCount++
 			label := fmt.Sprintf("worker persona %s (%s)", ws.AgentID, ws.ID)
-			_ = cache.CheckAuthority(rKey, auth.Digest, func() error {
-				viols, cErr := checkClaimsOnce(s, label, text, auth, ws.ParentSessionMode, ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
-				sum.Violations = append(sum.Violations, viols...)
-				return cErr
+			checkClaimsCached(cache, rKey, auth.Digest, func(v string) { sum.Violations = append(sum.Violations, v) }, func() []string {
+				return checkClaimsOnce(s, label, text, auth, ws.ParentSessionMode, ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
 			})
 		}
 
@@ -570,7 +562,7 @@ func RenderCoordinatorStandingForTest(
 	return renderStandingFromVars(ctx, engine, unitCat, st.TurnProfile, auth.Reader.Selection(), vars)
 }
 
-// EvaluateClaimsForTest runs checkClaimsOnce for seeded-fault and witness tests.
+// EvaluateClaimsForTest checks text against auth the way the matrix does.
 func EvaluateClaimsForTest(
 	s *Stock,
 	label, text string,
@@ -580,6 +572,5 @@ func EvaluateClaimsForTest(
 	subject toolvocabtest.ClaimSubject,
 	checkBackticks bool,
 ) []string {
-	viols, _ := checkClaimsOnce(s, label, text, auth, mode, posture, subject, nil, nil, nil, checkBackticks)
-	return viols
+	return checkClaimsOnce(s, label, text, auth, mode, posture, subject, nil, nil, nil, checkBackticks)
 }

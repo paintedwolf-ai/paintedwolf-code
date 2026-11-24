@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
@@ -48,28 +47,6 @@ var phaseKickPrefixes = []string{
 	"coordinator-review-loop-", "coordinator-security-",
 }
 
-// evaluateAndReportClaims checks text against auth via EvaluateClaimBlock
-// and closed backtick vocabulary, reporting violations onto r.
-func evaluateAndReportClaims(
-	r *invariants.Run,
-	s *Stock,
-	label, text string,
-	auth hoststate.TurnAuthority,
-	mode api.SessionMode,
-	posture api.SessionPosture,
-	subject toolvocabtest.ClaimSubject,
-	followup *toolvocabtest.ActorAuthority,
-	nextTurn *toolvocabtest.ActorAuthority,
-	resolveNamed func(string) (toolvocabtest.ActorAuthority, error),
-	checkBackticks bool,
-) {
-	if violations, err := checkClaimsOnce(s, label, text, auth, mode, posture, subject, followup, nextTurn, resolveNamed, checkBackticks); err != nil {
-		for _, v := range violations {
-			r.Report("%s", v)
-		}
-	}
-}
-
 type memoizedClaimResult struct {
 	viols []toolvocabtest.SubjectViolation
 	diags []toolvocabtest.BacktickSpan
@@ -94,6 +71,11 @@ func semanticClaimAuthorityKey(auth hoststate.TurnAuthority) string {
 	return sem
 }
 
+func isAuthoringMetaDoc(rel string) bool {
+	v, err := toolvocabtest.StockBacktickVocab()
+	return err == nil && v.IsAuthoringReferenceSource(rel)
+}
+
 func labelMemoClass(label string) string {
 	if isAuthoringMetaDoc(label) {
 		return "meta"
@@ -112,7 +94,7 @@ func checkClaimsOnce(
 	nextTurn *toolvocabtest.ActorAuthority,
 	resolveNamed func(string) (toolvocabtest.ActorAuthority, error),
 	checkBackticks bool,
-) ([]string, error) {
+) []string {
 	var memoKey string
 	if auth.Digest != "" && followup == nil && nextTurn == nil {
 		sum := sha256.Sum256([]byte(text))
@@ -161,10 +143,7 @@ func formatClaimViolations(
 	label, text string,
 	viols []toolvocabtest.SubjectViolation,
 	diags []toolvocabtest.BacktickSpan,
-) ([]string, error) {
-	if len(viols) == 0 && len(diags) == 0 {
-		return nil, nil
-	}
+) []string {
 	var msgs []string
 	for _, v := range viols {
 		msgs = append(msgs, fmt.Sprintf("%s names `%s` (%s): %s", label, v.Claim, v.Reason, lineNaming(text, v.Claim)))
@@ -172,7 +151,7 @@ func formatClaimViolations(
 	for _, diag := range diags {
 		msgs = append(msgs, fmt.Sprintf("%s unclassified protocol backtick `%s` at line %d", label, diag.Span, diag.Line))
 	}
-	return msgs, fmt.Errorf("%d claim violations", len(msgs))
+	return msgs
 }
 
 func lineNaming(text, name string) string {
@@ -190,12 +169,13 @@ func kickData() map[string]any {
 	return data
 }
 
-func informKicks(r *invariants.Run, prefix string) []string {
-	reg, err := anchor.LoadRegistryFromConfigRoot()
-	r.Must(err)
+func informKickIDs(reg *anchor.Registry, prefix string, extra ...string) []string {
 	var ids []string
 	for _, b := range reg.AllInform() {
-		if b != nil && b.IsInform() && strings.HasPrefix(b.Render, prefix) && !slices.Contains(ids, b.Render) {
+		if b == nil || !b.IsInform() || slices.Contains(ids, b.Render) {
+			continue
+		}
+		if strings.HasPrefix(b.Render, prefix) || slices.Contains(extra, b.Render) {
 			ids = append(ids, b.Render)
 		}
 	}
@@ -274,137 +254,16 @@ var (
 	})
 )
 
-func alignKickOccurrenceToAuthority(kick string, data map[string]any, reader prompts.Reader, offered []string) {
-	if kick == "coordinator-progress-missing" {
-		if rawTool, ok := data["tool"].(string); ok && rawTool != "" && !slices.Contains(offered, rawTool) {
-			if len(offered) > 0 {
-				data["tool"] = offered[0]
-			} else {
-				delete(data, "tool")
-			}
-		}
-	}
-	if rawTools, ok := data["tools"].([]string); ok && len(rawTools) > 0 {
-		var kept []string
-		for _, t := range rawTools {
-			if slices.Contains(offered, t) {
-				kept = append(kept, t)
-			}
-		}
-		if len(kept) == 0 && len(offered) > 0 {
-			kept = []string{offered[0]}
-		}
-		if len(kept) > 0 {
-			data["tools"] = kept
-		} else {
-			delete(data, "tools")
-		}
-	}
-	if adv, ok := data["advance_when_gate_met"].(string); ok && adv == "coordinator" && !slices.Contains(offered, "workflow_advance") {
-		data["advance_when_gate_met"] = "host"
-	}
-	mints := reader.Mints()
-	if !mints["web"] {
-		if targets, ok := data["repair_targets"].([]map[string]any); ok {
-			cleaned := make([]map[string]any, len(targets))
-			for i, t := range targets {
-				cp := maps.Clone(t)
-				delete(cp, "candidates")
-				delete(cp, "use")
-				cleaned[i] = cp
-			}
-			data["repair_targets"] = cleaned
-		}
-	}
-	if !mints["read"] {
-		delete(data, "evidence_digest")
-		if _, hasIssues := data["document_issues"]; hasIssues {
-			data["document_issues"] = []map[string]any{{"message": "bad citation", "offenders": []string{"ungrounded-ref"}}}
-		}
-		if _, hasOff := data["offenders_sample"]; hasOff {
-			data["offenders_sample"] = []string{"ungrounded-ref"}
-		}
-	}
-}
-
 // coordinatorKicksNameOnlyOffered verifies every non-phase coordinator kick
-// across hoststate.CoordinatorStates and AnchorEnvelopes.
+// across the coordinator host states and anchor envelopes.
 func coordinatorKicksNameOnlyOffered(r *invariants.Run) {
-	ctx := context.Background()
-	s := stock(r)
-	engine := s.Engine()
-	cache := hoststate.NewRenderCache()
 	reps, err := cachedCoordinatorReps()
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
 	r.Must(err)
-
-	checked := 0
-	kicks := informKicks(r, "coordinator-")
-	for _, kick := range kicks {
-		if slices.ContainsFunc(phaseKickPrefixes, func(p string) bool { return strings.HasPrefix(kick, p) }) {
-			continue
-		}
-		envelopes := kickEnvelopeVariants(anchorReg, kick)
-		for envIdx, envBase := range envelopes {
-			// Sweep canonical fixture (envIdx == 0) across all distinct authorities,
-			// and additional AnchorEnvelopes boundaries across representative authorities.
-			limit := len(reps)
-			if envIdx > 0 && limit > 8 {
-				limit = 8
-			}
-			for i := 0; i < limit; i++ {
-				sa := reps[i]
-				if kick == "coordinator-closeout" && !surface.SurfaceDeliversReport(sa.state.TurnProfile.SurfaceID) {
-					continue
-				}
-				reader := sa.auth.Reader
-				subj := toolvocabtest.SubjectSelfNow()
-				var nextTurn *toolvocabtest.ActorAuthority
-				data := maps.Clone(envBase)
-				alignKickOccurrenceToAuthority(kick, data, sa.auth.Reader, sa.auth.Offered)
-				if kick == "coordinator-turn-closeout" {
-					// Turn-closeout strips current-turn tools and advises session_next_turn.
-					closeReader, cErr := closeoutTurnReader(sa.state, false)
-					r.Must(cErr)
-					reader = closeReader
-					activeActor := sa.auth.ActorAuthority()
-					nextTurn = &activeActor
-					subj = toolvocabtest.SubjectSessionNextTurn()
-					data["session_command_mutation_capable"] = sa.state.SessionMode != api.SessionModeAsk && sa.auth.Reader.Held()["command_mutation"]
-				}
-				prompts.MergeCoordinatorKickVarsForTools(data, reader)
-				fullVars, _ := prompts.Vars(reader, stripReaderFactKeys(data))
-				rKey := renderCacheKeyForVars("kick:"+kick+":"+s.Site, s.Catalog.Revision, nil, fullVars)
-				text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
-					return engine.RenderKick(ctx, reader, kick, data)
-				})
-				r.Must(rErr)
-				checked++
-				label := fmt.Sprintf("kick %s on %s (%s)", kick, sa.state.TurnProfile.SurfaceID, sa.state.ID)
-				checkKey := sa.auth.Digest + "|" + string(subj.Kind)
-				if cErr := cache.CheckAuthority(rKey, checkKey, func() error {
-					targetAuth := sa.auth
-					targetAuth.Reader = reader
-					if subj.Kind == toolvocabtest.SubjectKindSessionNextTurn {
-						targetAuth.Metas = nil
-						targetAuth.Schemas = map[string]map[string]any{}
-						targetAuth.Offered = nil
-					}
-					viols, err := checkClaimsOnce(s, label, text, targetAuth, sa.state.SessionMode, sa.state.Posture, subj, nil, nextTurn, nil, true)
-					if err != nil {
-						for _, msg := range viols {
-							r.Report("%s", msg)
-						}
-					}
-					return err
-				}); cErr != nil {
-					_ = cErr
-				}
-			}
-		}
-	}
-	r.Expect(checked, "coordinator kick renders")
+	sweep := newKickSweep(stock(r), hoststate.NewRenderCache(), func(v string) { r.Report("%s", v) })
+	r.Must(sweep.coordinatorKicks(context.Background(), anchorReg, informKickIDs(anchorReg, "coordinator-", "session-agent-enabled"), reps))
+	r.Expect(sweep.rendered, "coordinator kick renders")
 }
 
 func kickEnvelopeVariants(reg *anchor.Registry, kick string) []map[string]any {
@@ -463,142 +322,27 @@ func closeoutTurnReader(st hoststate.CoordinatorState, worker bool) (prompts.Rea
 }
 
 // phaseKicksNameOnlyTheirSurface verifies workflow phase.entered kicks across
-// postures, modes, and loading states from hoststate.CoordinatorStates.
+// the coordinator host states of each phase's surface.
 func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
-	ctx := context.Background()
-	s := stock(r)
 	reg, err := workflowdef.RegistryFromDirs("")
 	r.Must(err)
 	pairs, err := cachedCoordinatorPairs()
 	r.Must(err)
-	engine := s.Engine()
-	cache := hoststate.NewRenderCache()
-
-	bySurface := map[string][]coordRep{}
-	for _, cp := range pairs {
-		if cp.state.PackOverlayID != "stock" {
-			continue
-		}
-		bySurface[cp.state.TurnProfile.SurfaceID] = append(bySurface[cp.state.TurnProfile.SurfaceID], cp)
-	}
-
-	checked := 0
-	for _, key := range sortedKeys(reg.All()) {
-		m := reg.All()[key]
-		surfaces := map[string]string{}
-		for _, phase := range m.PhaseDefs {
-			surfaces[phase.ID] = phase.CoordinatorSurface
-		}
-		for _, in := range m.Injects {
-			if in.On != "phase.entered" || in.Selector.Phase == nil {
-				continue
-			}
-			surfID := surfaces[*in.Selector.Phase]
-			for _, cp := range bySurface[surfID] {
-				st, auth := cp.state, cp.auth
-				data := kickData()
-				prompts.MergeCoordinatorKickVarsForTools(data, auth.Reader)
-				fullVars, _ := prompts.Vars(auth.Reader, stripReaderFactKeys(data))
-				rKey := renderCacheKeyForVars("phasekick:"+in.Render+":"+s.Site, s.Catalog.Revision, nil, fullVars)
-				text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
-					return engine.RenderKick(ctx, auth.Reader, in.Render, data)
-				})
-				r.Must(rErr)
-				checked++
-				label := fmt.Sprintf("%s phase %s kick %s on %s (%s)", key, *in.Selector.Phase, in.Render, surfID, st.ID)
-				_ = cache.CheckAuthority(rKey, auth.Digest, func() error {
-					viols, cErr := checkClaimsOnce(s, label, text, auth, st.SessionMode, st.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
-					for _, msg := range viols {
-						r.Report("%s", msg)
-					}
-					return cErr
-				})
-			}
-		}
-	}
-	r.Expect(checked, "phase kick renders")
+	sweep := newKickSweep(stock(r), hoststate.NewRenderCache(), func(v string) { r.Report("%s", v) })
+	r.Must(sweep.phaseKicks(context.Background(), reg, pairs))
+	r.Expect(sweep.rendered, "phase kick renders")
 }
 
-// workerKicksNameOnlyOffered verifies worker-* kicks across hoststate.WorkerStates
-// and AnchorEnvelopes, including SubjectFollowupLeg on worker-closeout.
+// workerKicksNameOnlyOffered verifies worker kicks across the worker host
+// states and anchor envelopes, including the follow-up leg on worker-closeout.
 func workerKicksNameOnlyOffered(r *invariants.Run) {
-	ctx := context.Background()
-	s := stock(r)
-	engine := s.Engine()
-	cache := hoststate.NewRenderCache()
-	allReps, err := cachedWorkerReps()
+	reps, err := cachedWorkerReps()
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
 	r.Must(err)
-
-	var reps []workerRep
-	for _, wr := range allReps {
-		if wr.auth.Reader.Held()["complete_leg"] {
-			reps = append(reps, wr)
-		}
-	}
-
-	checked := 0
-	for _, kick := range informKicks(r, "worker-") {
-		envelopes := kickEnvelopeVariants(anchorReg, kick)
-		for envIdx, envBase := range envelopes {
-			limit := len(reps)
-			if envIdx > 0 && limit > 6 {
-				limit = 6
-			}
-			for i := 0; i < limit; i++ {
-				wa := reps[i]
-				reader := wa.auth.Reader
-				subj := toolvocabtest.SubjectSelfNow()
-				var followup *toolvocabtest.ActorAuthority
-				data := maps.Clone(envBase)
-				if kick == "worker-closeout" || kick == "worker-cancel-closeout" {
-					closeR, cErr := workerCloseoutReader(wa.ws)
-					r.Must(cErr)
-					reader = closeR
-					if kick == "worker-closeout" {
-						active := wa.auth.ActorAuthority()
-						followup = &active
-						subj = toolvocabtest.SubjectFollowupLeg()
-						data["leg_command_mutation_capable"] = wa.ws.ParentSessionMode != api.SessionModeAsk && wa.auth.Reader.Held()["command_mutation"]
-					}
-				}
-				fullVars, _ := prompts.Vars(reader, stripReaderFactKeys(data))
-				rKey := renderCacheKeyForVars("wkick:"+kick+":"+s.Site, s.Catalog.Revision, nil, fullVars)
-				text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
-					return engine.RenderKick(ctx, reader, kick, data)
-				})
-				r.Must(rErr)
-				checked++
-				label := fmt.Sprintf("kick %s for %s (%s)", kick, wa.ws.ToolProfile, wa.ws.ID)
-				checkKey := wa.auth.Digest + "|" + string(subj.Kind)
-				_ = cache.CheckAuthority(rKey, checkKey, func() error {
-					targetAuth := wa.auth
-					targetAuth.Reader = reader
-					if kick == "worker-closeout" || kick == "worker-cancel-closeout" {
-						var closeMetas []tools.ToolMeta
-						for _, m := range wa.auth.Metas {
-							if m.Name == "complete_leg" {
-								closeMetas = append(closeMetas, m)
-							}
-						}
-						targetAuth.Metas = closeMetas
-						targetAuth.Schemas = map[string]map[string]any{}
-						if len(closeMetas) > 0 {
-							targetAuth.Schemas["complete_leg"] = closeMetas[0].ArgsSchema
-						}
-						targetAuth.Offered = []string{"complete_leg"}
-					}
-					viols, cErr := checkClaimsOnce(s, label, text, targetAuth, wa.ws.ParentSessionMode, wa.ws.Posture, subj, followup, nil, nil, true)
-					for _, msg := range viols {
-						r.Report("%s", msg)
-					}
-					return cErr
-				})
-			}
-		}
-	}
-	r.Expect(checked, "worker kick renders")
+	sweep := newKickSweep(stock(r), hoststate.NewRenderCache(), func(v string) { r.Report("%s", v) })
+	r.Must(sweep.workerKicks(context.Background(), anchorReg, informKickIDs(anchorReg, "worker-"), reps))
+	r.Expect(sweep.rendered, "worker kick renders")
 }
 
 func workerCloseoutReader(ws hoststate.WorkerState) (prompts.Reader, error) {
@@ -642,7 +386,8 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 			}
 		}
 		occ := workerPersonaOccurrence(auth.Reader, skillsList)
-		fullVars, _ := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
+		fullVars, err := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
+		r.Must(err)
 		rKey := renderCacheKeyForVars("persona:"+ws.AgentID+":"+s.Site, s.Catalog.Revision, nil, fullVars)
 		text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
 			return prompts.RenderPersona(ctx, engine, ws.AgentID, auth.Reader, occ)
@@ -650,12 +395,8 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 		r.Must(rErr)
 		checked++
 		label := fmt.Sprintf("persona %s (%s)", ws.AgentID, ws.ID)
-		_ = cache.CheckAuthority(rKey, auth.Digest, func() error {
-			viols, cErr := checkClaimsOnce(s, label, text, auth, ws.ParentSessionMode, ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
-			for _, msg := range viols {
-				r.Report("%s", msg)
-			}
-			return cErr
+		checkClaimsCached(cache, rKey, auth.Digest, func(v string) { r.Report("%s", v) }, func() []string {
+			return checkClaimsOnce(s, label, text, auth, ws.ParentSessionMode, ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
 		})
 	}
 	r.Expect(checked, "worker persona renders")
@@ -703,16 +444,12 @@ func skillsNameOnlyOffered(r *invariants.Run) {
 		joined := strings.Join(texts, "\n")
 		label := fmt.Sprintf("skill %s as read by %s", sr.Skill.Name, sr.Reader)
 		rKey := hoststate.RenderCacheKey("skillcheck:"+sr.Skill.Name, s.Catalog.Revision, nil, map[string]any{"body": joined})
-		_ = cache.CheckAuthority(rKey, sr.Authority.Digest, func() error {
+		checkClaimsCached(cache, rKey, sr.Authority.Digest, func(v string) { r.Report("%s", v) }, func() []string {
 			auth := sr.Authority
 			if !auth.Reader.Valid() {
 				auth.Reader = sr.State
 			}
-			viols, err := checkClaimsOnce(s, label, joined, auth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
-			for _, msg := range viols {
-				r.Report("%s", msg)
-			}
-			return err
+			return checkClaimsOnce(s, label, joined, auth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
 		})
 	}
 }

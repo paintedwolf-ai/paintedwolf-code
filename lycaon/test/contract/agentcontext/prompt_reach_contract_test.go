@@ -21,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
@@ -61,11 +60,8 @@ func linesNaming(corpus string, names []string) string {
 	return strings.Join(out, "\n")
 }
 
-// TestRenderedCoordinatorPromptsNameOnlyReachableTools verifies coordinator standing
-// prompts, attached units, and RenderToolProceduresBlock across hoststate.CoordinatorStates:
-// floor_only, partly_loaded, and all_loaded (without inflating held with DeferredNames),
-// all 4 postures (spec, build, orchestrate, vet), Agent and Ask modes, 0/1/2 roots
-// (including mixed Git/non-Git root orders), and projected tool schemas.
+// Coordinator standing prompts, attached units and tool procedures name only
+// what each coordinator host state can reach.
 func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 	ctx := t.Context()
 	catalog, _ := promptNameCatalog(t)
@@ -99,8 +95,6 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 	seenLoadings := map[hoststate.LoadingMode]int{}
 	seenSurfaces := map[string]int{}
 	seenTopologies := map[hoststate.RootTopology]int{}
-	checkedStanding := 0
-	checkedProcedures := 0
 	verifiedFolderlessPark := false
 
 	for _, st := range coordStates {
@@ -113,7 +107,7 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 		auth, fErr := hoststate.FreezeTurnAuthority(ctx, st)
 		contractcheck.FailErr(t, "FreezeTurnAuthority "+st.ID, fErr)
 
-		// Verify floor_only and partly_loaded turns never mark unoffered deferred tools as held!
+		// Deferred tools that are not loaded are never held.
 		if st.Loading == hoststate.LoadingFloorOnly {
 			for _, defName := range auth.Plan.DeferredNames() {
 				if auth.Reader.Held()[defName] {
@@ -178,13 +172,11 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 			return renderStandingWithUnits(ctx, engine, unitCatalog, st.TurnProfile, auth.Reader.Selection(), vars)
 		})
 		contractcheck.FailErr(t, "render standing "+st.ID, rErr)
-		checkedStanding++
 
 		_ = cache.CheckAuthority(rKey, auth.Digest, func() error {
 			return checkCorpusAgainstAuthority(t, catalog, prunable, vocab, "standing/"+st.ID, standingCorpus, auth, st.SessionMode, st.Posture, resolveNamed)
 		})
 
-		// Render and evaluate inject.RenderToolProceduresBlock for the same turn authority.
 		procUnits, pErr := inject.ToolProcedureUnits(injRenderer, auth.Reader)
 		contractcheck.FailErr(t, "ToolProcedureUnits "+st.ID, pErr)
 		procIDs := make([]string, len(procUnits))
@@ -198,7 +190,6 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 			return inject.RenderToolProceduresBlock(ctx, injRenderer, "sess-ac", auth.Reader)
 		})
 		contractcheck.FailErr(t, "RenderToolProceduresBlock "+st.ID, pbErr)
-		checkedProcedures++
 		if strings.TrimSpace(procBlock) != "" {
 			_ = cache.CheckAuthority(pKey, auth.Digest, func() error {
 				return checkCorpusAgainstAuthority(t, catalog, prunable, vocab, "procedures/"+st.ID, procBlock, auth, st.SessionMode, st.Posture, resolveNamed)
@@ -226,14 +217,16 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 			t.Errorf("missing root topology %q in coordinator reach sweep", wantTopo)
 		}
 	}
-	if len(seenSurfaces) < 22 {
-		t.Errorf("expected all 22 coordinator surfaces, reached %d (%v)", len(seenSurfaces), seenSurfaces)
+	plans, err := surface.CompileToolPlans(1)
+	contractcheck.FailErr(t, "CompileToolPlans", err)
+	for id := range plans {
+		if seenSurfaces[id] == 0 {
+			t.Errorf("coordinator surface %s not reached by the sweep", id)
+		}
 	}
 	if !verifiedFolderlessPark {
 		t.Error("expected 0-root WorkflowWorkersInFlight -> implement_park cell to be verified")
 	}
-	t.Logf("verified %d coordinator standing renders and %d tool-procedure renders across %d surfaces, 4 postures, {agent, ask}, and {floor_only, partly_loaded, all_loaded}",
-		checkedStanding, checkedProcedures, len(seenSurfaces))
 }
 
 func buildStandingVarsForState(t *testing.T, baseSpawnVars map[string]any, st hoststate.CoordinatorState, reader prompts.Reader) map[string]any {
@@ -445,7 +438,9 @@ func TestRenderedAskModeCoordinatorPromptsMatchOfferedTools(t *testing.T) {
 	}
 }
 
-func TestAskModeCommandUtilityClaimsFollowResolvedAuthorityAcrossRevisions(t *testing.T) {
+// An Ask coordinator, which is not offered command, is told no command
+// utilities.
+func TestAskModeWithholdsCommandUtilities(t *testing.T) {
 	eff := contractcheck.StockCatalog(t)
 	profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
 	contractcheck.FailErr(t, "load profiles", err)
@@ -465,103 +460,47 @@ func TestAskModeCommandUtilityClaimsFollowResolvedAuthorityAcrossRevisions(t *te
 		narrowedProfiles[i].CommandEffects &= roEffects
 	}
 
-	cmdMeta, ok := schemas.ToolMeta("command")
-	if !ok {
-		t.Fatal("missing command schema")
-	}
 	askMeta, ok := schemas.ToolMeta("ask_user")
 	if !ok {
 		t.Fatal("missing ask_user schema")
 	}
-	roCommandSchema := toolschema.PruneCommandReadOnlySchema(cmdMeta.ArgsSchema)
-	askMetas := promptloop.ProjectAskToolMetas([]tools.ToolMeta{
-		{Name: "ask_user", ArgsSchema: askMeta.ArgsSchema},
-		{Name: "command", ArgsSchema: roCommandSchema},
-	})
+	askMetas := promptloop.ProjectAskToolMetas([]tools.ToolMeta{{Name: "ask_user", ArgsSchema: askMeta.ArgsSchema}})
 
-	t.Run("v1-baseline Ask withholds command and rejects command utilities", func(t *testing.T) {
-		v1Plan := toolsurface.Compile([]string{"recall", "source_history", "ask_user"}, nil)
-		v1Reader, rErr := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:   prompts.CoordinatorProfileID,
-			SurfaceID:   "observe_investigate",
-			SessionMode: string(api.SessionModeAsk),
-			Profiles:    narrowedProfiles,
-			Plan:        v1Plan,
-			Visible:     []string{"recall", "source_history", "ask_user"},
-			Schemas:     schemas,
-			RootCount:   1,
-			HasGit:      true,
-		})
-		contractcheck.FailErr(t, "v1 reader", rErr)
-		evalCtx := toolvocabtest.ClaimEvaluationContext{
-			Catalog:     catalog,
-			Prunable:    prunable,
-			Vocab:       vocab,
-			Self:        toolvocabtest.AuthorityFromReaderAndMetas(v1Reader, nil, askMetas[:1]),
-			SessionMode: api.SessionModeAsk,
-			Posture:     api.SessionPostureBuild,
-		}
-		if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
-			Label: "v1-valid", Subject: toolvocabtest.SubjectSelfNow(),
-			Text: "Use `source_history` to inspect recorded changes and `ask_user(prompt=\"Clarify?\")` when needed.",
-		}); len(got) > 0 {
-			t.Fatalf("unexpected v1-baseline violations: %+v", got)
-		}
-		for _, badUtility := range []string{"`cat -n FILE`", "`grep -n PAT FILE`", "`rg -n PAT`", "`sed -n '1,20p' FILE`"} {
-			if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
-				Label: "v1-cmd", Subject: toolvocabtest.SubjectSelfNow(),
-				Text: "Inspect lines with " + badUtility + ".",
-			}); len(got) == 0 {
-				t.Fatalf("expected v1-baseline Ask authority without command to reject %s", badUtility)
-			}
-		}
+	plan := toolsurface.Compile([]string{"recall", "source_history", "ask_user"}, nil)
+	reader, rErr := prompts.NewReader(prompts.ReaderInput{
+		ProfileID:   prompts.CoordinatorProfileID,
+		SurfaceID:   "observe_investigate",
+		SessionMode: string(api.SessionModeAsk),
+		Profiles:    narrowedProfiles,
+		Plan:        plan,
+		Visible:     []string{"recall", "source_history", "ask_user"},
+		Schemas:     schemas,
+		RootCount:   1,
+		HasGit:      true,
 	})
-
-	t.Run("v2-ro02-option1 Ask offers read-only command and rejects mutating or pruned forms", func(t *testing.T) {
-		v2Plan := toolsurface.Compile([]string{"recall", "command", "source_history", "ask_user"}, nil)
-		v2Reader, rErr := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:   prompts.CoordinatorProfileID,
-			SurfaceID:   "observe_investigate",
-			SessionMode: string(api.SessionModeAsk),
-			Profiles:    narrowedProfiles,
-			Plan:        v2Plan,
-			Visible:     []string{"recall", "command", "source_history", "ask_user"},
-			Schemas:     schemas,
-			RootCount:   1,
-			HasGit:      true,
-		})
-		contractcheck.FailErr(t, "v2 reader", rErr)
-		evalCtx := toolvocabtest.ClaimEvaluationContext{
-			Catalog:     catalog,
-			Prunable:    prunable,
-			Vocab:       vocab,
-			Self:        toolvocabtest.AuthorityFromReaderAndMetas(v2Reader, nil, askMetas),
-			SessionMode: api.SessionModeAsk,
-			Posture:     api.SessionPostureBuild,
-		}
+	contractcheck.FailErr(t, "ask reader", rErr)
+	evalCtx := toolvocabtest.ClaimEvaluationContext{
+		Catalog:     catalog,
+		Prunable:    prunable,
+		Vocab:       vocab,
+		Self:        toolvocabtest.AuthorityFromReaderAndMetas(reader, nil, askMetas),
+		SessionMode: api.SessionModeAsk,
+		Posture:     api.SessionPostureBuild,
+	}
+	if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+		Label: "ask-valid", Subject: toolvocabtest.SubjectSelfNow(),
+		Text: "Use `source_history` to inspect recorded changes and `ask_user(prompt=\"Clarify?\")` when needed.",
+	}); len(got) > 0 {
+		t.Fatalf("unexpected Ask violations: %+v", got)
+	}
+	for _, badUtility := range []string{"`cat -n FILE`", "`grep -n PAT FILE`", "`rg -n PAT`", "`sed -n '1,20p' FILE`"} {
 		if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
-			Label: "v2-readonly-utilities", Subject: toolvocabtest.SubjectSelfNow(),
-			Text: "Inspect files with `cat -n FILE`, `grep -n PAT FILE`, `rg -n PAT`, `sed -n '1,20p' FILE`, and `git status` in `command`.",
-		}); len(got) > 0 {
-			t.Fatalf("expected v2-ro02-option1 Ask authority to admit read-only command utilities, got %+v", got)
+			Label: "ask-command-utility", Subject: toolvocabtest.SubjectSelfNow(),
+			Text: "Inspect lines with " + badUtility + ".",
+		}); len(got) == 0 {
+			t.Fatalf("Ask authority without command admitted %s", badUtility)
 		}
-		for _, forbidden := range []string{
-			"Apply changes with `edit --path a.go --old-string x --new-string y`.",
-			"Commit via `git commit -m msg -- a.go`.",
-			"Fetch with `curl -s https://example.com`.",
-			"Run `external -- ls`.",
-			"Run `command(command=\"./task test:short\", verification=true)`.",
-			"Declare `capability_request.local_listen` on `command`.",
-			"Ask secret via `ask_user(response_type=\"secret\", …)`.",
-		} {
-			if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
-				Label: "v2-forbidden", Subject: toolvocabtest.SubjectSelfNow(),
-				Text: forbidden,
-			}); len(got) == 0 {
-				t.Fatalf("expected v2-ro02-option1 Ask authority to reject %q", forbidden)
-			}
-		}
-	})
+	}
 }
 
 type workflowPhaseBindings struct {

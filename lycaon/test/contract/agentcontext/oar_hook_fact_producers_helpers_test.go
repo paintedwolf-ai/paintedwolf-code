@@ -155,7 +155,7 @@ type roleCell struct {
 	sess      *api.Session
 }
 
-func representativeCartesianCells(t *testing.T, h *hookProducerHarness) []roleCell {
+func representativeHostStateCells(t *testing.T, h *hookProducerHarness) []roleCell {
 	t.Helper()
 	coordStates, err := hoststate.CoordinatorStates(t.Context())
 	contractcheck.FailErr(t, "CoordinatorStates", err)
