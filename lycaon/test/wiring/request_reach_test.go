@@ -392,6 +392,9 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 			span.after = len(conversation())
 		}
 	}
+	// A dispatched worker's requests are sent only once its queued job runs; a
+	// scenario that reads the requests before then has not seen that surface.
+	testutil.FailErr(t, "drain worker jobs", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID))
 	stored, err := h.Store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read the session", err)
 	profiles := h.Sessions.Manager.Profiles.ForSession(ctx, stored)
