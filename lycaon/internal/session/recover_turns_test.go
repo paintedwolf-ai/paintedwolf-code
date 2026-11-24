@@ -77,7 +77,7 @@ func awaitIdleDisposition(t *testing.T, ch <-chan api.EventEnvelope) api.Session
 	}
 }
 
-func TestRecoverInterruptedToolResultsAppendsMissingToolRows(t *testing.T) {
+func TestRecoverSettledToolResultsAppendsMissingToolRows(t *testing.T) {
 	ctx := context.Background()
 	database := testdbfixture.Open(t, "recover-turns.db")
 
@@ -111,8 +111,8 @@ func TestRecoverInterruptedToolResultsAppendsMissingToolRows(t *testing.T) {
 		testutil.FailErr(t, "interrupt", err)
 	}
 	testutil.FailErr(t, "RecoverOrphanedTurns", mgr.Stops.Recovery.RecoverOrphanedTurns(ctx))
-	testutil.FailErr(t, "RecoverInterruptedToolResults", mgr.Stops.Recovery.RecoverInterruptedToolResults(ctx))
-	testutil.FailErr(t, "RecoverInterruptedToolResults replay", mgr.Stops.Recovery.RecoverInterruptedToolResults(ctx))
+	testutil.FailErr(t, "RecoverSettledToolResults", mgr.Stops.Recovery.RecoverSettledToolResults(ctx))
+	testutil.FailErr(t, "RecoverSettledToolResults replay", mgr.Stops.Recovery.RecoverSettledToolResults(ctx))
 
 	got, err := sqlStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get", err)
@@ -364,5 +364,84 @@ func TestListenDayGrantExpires(t *testing.T) {
 	granted, ports := rt.SessionPorts("chat")
 	if !granted || len(ports) != 1 || ports[0] != 8000 {
 		t.Fatalf("live day grant: granted=%v ports=%v", granted, ports)
+	}
+}
+
+func TestReconcileToolResultsProjectsSettledRefusals(t *testing.T) {
+	ctx := context.Background()
+	database := testdbfixture.Open(t, "reconcile-refusals.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	sqlStore := store.NewSQL(database)
+	mgr := NewHost(sqlStore, Models{Limits: settings.DefaultSessionLimits()}, nil)
+	recorder := invocation.NewSQLRecorder(database)
+	mgr.SetInvocationRecorder(recorder)
+	sess, err := sqlStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "Create", err)
+	contract, ok := toolcontract.Lookup("command")
+	if !ok {
+		t.Fatal("command contract is not declared")
+	}
+	settle := func(assistantID, callID string, draft api.DraftStatus) {
+		testutil.FailErr(t, "append call", sqlStore.Transcript.AppendMessages(ctx, sess.ID, api.Message{
+			ID: assistantID, Role: api.MessageRoleAssistant, DraftStatus: draft,
+			ToolCalls: []api.ToolCall{{ID: callID, Name: "command"}},
+		}))
+		rec, err := recorder.Begin(ctx, invocation.Start{
+			ProjectID: testdbseed.DefaultProjectID, SessionID: sess.ID,
+			AssistantMessageID: assistantID, ToolCallID: callID, ToolName: "command",
+			Args: map[string]any{}, Contract: contract,
+		})
+		testutil.FailErr(t, "begin receipt", err)
+		_, err = recorder.Settle(ctx, rec.ID, invocation.Settlement{
+			Status: api.InvocationStatusRejected, EvidenceKind: "rejection",
+			Failure: &api.InvocationFailure{Code: "TEST_REFUSAL", Class: "policy"},
+		})
+		testutil.FailErr(t, "settle receipt", err)
+	}
+	settle("asst-live", "call-live", "")
+	settle("asst-withdrawn", "call-withdrawn", api.DraftStatusWithdrawn)
+	settle("asst-answered", "call-answered", "")
+	testutil.FailErr(t, "append existing result", sqlStore.Transcript.AppendMessages(ctx, sess.ID, api.Message{
+		ID: "result-answered", Role: api.MessageRoleTool,
+		ToolResult: &api.ToolResult{Tool: "command", ToolCallID: "call-answered", AssistantMessageID: "asst-answered", Outcome: api.ToolResultOutcomeRejected},
+	}))
+	testutil.FailErr(t, "append unrelated call", sqlStore.Transcript.AppendMessages(ctx, sess.ID, api.Message{
+		ID: "asst-other", Role: api.MessageRoleAssistant,
+		ToolCalls: []api.ToolCall{{ID: "call-other", Name: "command"}},
+	}))
+	foreign, err := recorder.Begin(ctx, invocation.Start{
+		ProjectID: testdbseed.DefaultProjectID, SessionID: sess.ID,
+		AssistantMessageID: "asst-other", ToolCallID: "call-not-in-message", ToolName: "command",
+		Args: map[string]any{}, Contract: contract,
+	})
+	testutil.FailErr(t, "begin foreign receipt", err)
+	_, err = recorder.Settle(ctx, foreign.ID, invocation.Settlement{
+		Status: api.InvocationStatusRejected, EvidenceKind: "rejection",
+		Failure: &api.InvocationFailure{Code: "TEST_REFUSAL", Class: "policy"},
+	})
+	testutil.FailErr(t, "settle foreign receipt", err)
+
+	testutil.FailErr(t, "reconcile", mgr.Stops.Recovery.ReconcileToolResults(ctx, sess.ID))
+	testutil.FailErr(t, "reconcile replay", mgr.Stops.Recovery.ReconcileToolResults(ctx, sess.ID))
+
+	msgs, err := sqlStore.Transcript.GetMessages(ctx, sess.ID)
+	testutil.FailErr(t, "GetMessages", err)
+	results := map[string]*api.ToolResult{}
+	count := 0
+	for _, msg := range msgs {
+		if msg.ToolResult != nil {
+			count++
+			results[msg.ToolResult.ToolCallID] = msg.ToolResult
+		}
+	}
+	if count != 2 || results["call-answered"] == nil {
+		t.Fatalf("tool results = %d want the live projection plus the existing result", count)
+	}
+	got := results["call-live"]
+	if got == nil || got.Outcome != api.ToolResultOutcomeRejected || got.AssistantMessageID != "asst-live" {
+		t.Fatalf("live call result = %+v", got)
+	}
+	if got.Invocation == nil || got.Invocation.Failure == nil || got.Invocation.Failure.Code != "TEST_REFUSAL" {
+		t.Fatalf("result lost its refusal code: %+v", got.Invocation)
 	}
 }

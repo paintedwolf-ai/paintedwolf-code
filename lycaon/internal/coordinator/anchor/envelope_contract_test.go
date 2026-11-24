@@ -34,7 +34,7 @@ func TestKickTemplateIDRoundTrip(t *testing.T) {
 		anchor.GateBlocked, anchor.ComposeDone, anchor.LegFinished, anchor.WorkerTaskFinished,
 		anchor.PhaseAdvanced, anchor.WaitTimerFired, anchor.ScanFinished, anchor.ProcessFinished,
 		anchor.WorkerRoundNotice, anchor.FeedbackPending, anchor.FeedbackReceived,
-		anchor.OverlayPromoteComplete, anchor.EditFollowUpRepeat,
+		anchor.OverlayPromoteComplete,
 	} {
 		if got, ok := anchor.ParseID(string(id)); !ok || got != id {
 			t.Fatalf("ParseID(%q)=%q ok=%v want %s", id, got, ok, id)
@@ -76,7 +76,7 @@ func TestCatalogContainsKickMappedAnchors(t *testing.T) {
 		anchor.ReviewLoopContinue, anchor.ReviewLoopDecide,
 		anchor.FeedbackPending, anchor.FeedbackReceived, anchor.WorkerTaskStarted,
 		anchor.WaitTimerFired, anchor.OverlayPromoteComplete, anchor.ScanFinished, anchor.ScanDelta, anchor.ProcessFinished,
-		anchor.WorkerRoundNotice, anchor.EditFollowUpRepeat, anchor.CoordinatorCloseout,
+		anchor.WorkerRoundNotice, anchor.CoordinatorCloseout,
 		anchor.CoordinatorCitationGrounding, anchor.CoordinatorReportDocument, anchor.ProjectRootsChanged, anchor.ProjectPostureChanged, anchor.ProjectRootDetachCanceled,
 		anchor.WorkerCloseout, anchor.WorkerCancelCloseout,
 		anchor.WorkerCitationGrounding, anchor.LoopWake, anchor.BoardChanged,

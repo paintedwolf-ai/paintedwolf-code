@@ -135,7 +135,7 @@ func TestLoopRecoversOllamaDroppedToolCall(t *testing.T) {
 			var drafts []string
 			deps := PromptLoopDeps{
 				Context: ContextDeps{Tools: reg, Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() }, BuildMessages: func(_ context.Context, _ *api.Session, h []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-					return h, nil
+					return api.FilterPromptHistory(h), nil
 				}},
 				Model:    ModelDeps{LLM: client},
 				Closeout: CloseoutDeps{EvaluateContentAnchor: outputPolicyEvaluator(t, newPipeline())},
@@ -185,7 +185,7 @@ func TestLoopRecoversOllamaDroppedToolCall(t *testing.T) {
 						}
 					}
 				}
-				// A repeated drop refreshes the same host nudge in place.
+				// A repeated drop supersedes the earlier host nudge.
 				if feedback != min(i, 1) {
 					t.Fatalf("request %d carries %d feedback messages, want %d", i, feedback, min(i, 1))
 				}

@@ -22,16 +22,8 @@ func (k *KickEngine) QueuePendingGuidance(sessionID, text string, feedback api.T
 		return
 	}
 	k.sessionKickQueue(sessionID).push(kickQueueItem{
-		kickID: guidanceKickID(feedback), nudge: strings.TrimSpace(text),
+		kickID: api.RepairSignal(feedback), nudge: strings.TrimSpace(text),
 	})
-}
-
-func guidanceKickID(feedback api.ToolFeedback) string {
-	code := strings.TrimSpace(feedback.Code)
-	if feedback.Subject == nil || strings.TrimSpace(feedback.Subject.Kind) == "" || strings.TrimSpace(feedback.Subject.ID) == "" {
-		return "guidance:" + code
-	}
-	return "guidance:" + code + ":" + strings.TrimSpace(feedback.Subject.Kind) + ":" + strings.TrimSpace(feedback.Subject.ID)
 }
 
 // KickEngine queues coordinator and worker nudges.

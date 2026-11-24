@@ -139,157 +139,6 @@ func (q *Queries) InterruptRunningSessionInvocationReceipts(ctx context.Context,
 	return result.RowsAffected()
 }
 
-const listInterruptedInvocationReceiptsWithoutResult = `-- name: ListInterruptedInvocationReceiptsWithoutResult :many
-SELECT
-    receipt.id, receipt.project_id, receipt.session_id, receipt.assistant_message_id,
-    receipt.tool_call_id, receipt.tool_name, receipt.contract_digest, receipt.args_digest,
-    receipt.owner, receipt.lifecycle, receipt.reversibility, receipt.evidence_policy,
-    receipt.recovery_policy, receipt.status, receipt.invoked, receipt.evidence_kind,
-    receipt.evidence_ref, receipt.owner_ref, receipt.source_revision,
-    receipt.source_root_digest, receipt.source_verdict, receipt.isolation_code,
-    receipt.isolation_disposition, receipt.failure_code,
-    receipt.failure_class, receipt.failure_retryable, receipt.failure_owner_ref,
-    receipt.started_at, receipt.settled_at
-FROM invocation_receipts receipt
-WHERE receipt.status = 'interrupted'
-  AND NOT EXISTS (
-      SELECT 1 FROM messages
-      WHERE messages.session_id = receipt.session_id
-        AND messages.tool_result_call_id = receipt.tool_call_id
-  )
-ORDER BY receipt.settled_at, receipt.id
-LIMIT 256
-`
-
-func (q *Queries) ListInterruptedInvocationReceiptsWithoutResult(ctx context.Context) ([]InvocationReceipts, error) {
-	rows, err := q.db.QueryContext(ctx, listInterruptedInvocationReceiptsWithoutResult)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []InvocationReceipts
-	for rows.Next() {
-		var i InvocationReceipts
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.SessionID,
-			&i.AssistantMessageID,
-			&i.ToolCallID,
-			&i.ToolName,
-			&i.ContractDigest,
-			&i.ArgsDigest,
-			&i.Owner,
-			&i.Lifecycle,
-			&i.Reversibility,
-			&i.EvidencePolicy,
-			&i.RecoveryPolicy,
-			&i.Status,
-			&i.Invoked,
-			&i.EvidenceKind,
-			&i.EvidenceRef,
-			&i.OwnerRef,
-			&i.SourceRevision,
-			&i.SourceRootDigest,
-			&i.SourceVerdict,
-			&i.IsolationCode,
-			&i.IsolationDisposition,
-			&i.FailureCode,
-			&i.FailureClass,
-			&i.FailureRetryable,
-			&i.FailureOwnerRef,
-			&i.StartedAt,
-			&i.SettledAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSessionInterruptedInvocationReceiptsWithoutResult = `-- name: ListSessionInterruptedInvocationReceiptsWithoutResult :many
-SELECT
-    receipt.id, receipt.project_id, receipt.session_id, receipt.assistant_message_id,
-    receipt.tool_call_id, receipt.tool_name, receipt.contract_digest, receipt.args_digest,
-    receipt.owner, receipt.lifecycle, receipt.reversibility, receipt.evidence_policy,
-    receipt.recovery_policy, receipt.status, receipt.invoked, receipt.evidence_kind,
-    receipt.evidence_ref, receipt.owner_ref, receipt.source_revision,
-    receipt.source_root_digest, receipt.source_verdict, receipt.isolation_code,
-    receipt.isolation_disposition, receipt.failure_code,
-    receipt.failure_class, receipt.failure_retryable, receipt.failure_owner_ref,
-    receipt.started_at, receipt.settled_at
-FROM invocation_receipts receipt
-WHERE receipt.session_id = ?
-  AND receipt.status = 'interrupted'
-  AND NOT EXISTS (
-      SELECT 1 FROM messages
-      WHERE messages.session_id = receipt.session_id
-        AND messages.tool_result_call_id = receipt.tool_call_id
-  )
-ORDER BY receipt.settled_at, receipt.id
-LIMIT 256
-`
-
-func (q *Queries) ListSessionInterruptedInvocationReceiptsWithoutResult(ctx context.Context, sessionID string) ([]InvocationReceipts, error) {
-	rows, err := q.db.QueryContext(ctx, listSessionInterruptedInvocationReceiptsWithoutResult, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []InvocationReceipts
-	for rows.Next() {
-		var i InvocationReceipts
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.SessionID,
-			&i.AssistantMessageID,
-			&i.ToolCallID,
-			&i.ToolName,
-			&i.ContractDigest,
-			&i.ArgsDigest,
-			&i.Owner,
-			&i.Lifecycle,
-			&i.Reversibility,
-			&i.EvidencePolicy,
-			&i.RecoveryPolicy,
-			&i.Status,
-			&i.Invoked,
-			&i.EvidenceKind,
-			&i.EvidenceRef,
-			&i.OwnerRef,
-			&i.SourceRevision,
-			&i.SourceRootDigest,
-			&i.SourceVerdict,
-			&i.IsolationCode,
-			&i.IsolationDisposition,
-			&i.FailureCode,
-			&i.FailureClass,
-			&i.FailureRetryable,
-			&i.FailureOwnerRef,
-			&i.StartedAt,
-			&i.SettledAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listSessionInvocationReceipts = `-- name: ListSessionInvocationReceipts :many
 SELECT
     id, project_id, session_id, assistant_message_id, tool_call_id, tool_name,
@@ -457,6 +306,177 @@ type ListSessionInvocationReceiptsFirstPageParams struct {
 
 func (q *Queries) ListSessionInvocationReceiptsFirstPage(ctx context.Context, arg ListSessionInvocationReceiptsFirstPageParams) ([]InvocationReceipts, error) {
 	rows, err := q.db.QueryContext(ctx, listSessionInvocationReceiptsFirstPage, arg.SessionID, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InvocationReceipts
+	for rows.Next() {
+		var i InvocationReceipts
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.AssistantMessageID,
+			&i.ToolCallID,
+			&i.ToolName,
+			&i.ContractDigest,
+			&i.ArgsDigest,
+			&i.Owner,
+			&i.Lifecycle,
+			&i.Reversibility,
+			&i.EvidencePolicy,
+			&i.RecoveryPolicy,
+			&i.Status,
+			&i.Invoked,
+			&i.EvidenceKind,
+			&i.EvidenceRef,
+			&i.OwnerRef,
+			&i.SourceRevision,
+			&i.SourceRootDigest,
+			&i.SourceVerdict,
+			&i.IsolationCode,
+			&i.IsolationDisposition,
+			&i.FailureCode,
+			&i.FailureClass,
+			&i.FailureRetryable,
+			&i.FailureOwnerRef,
+			&i.StartedAt,
+			&i.SettledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessionSettledInvocationReceiptsWithoutResult = `-- name: ListSessionSettledInvocationReceiptsWithoutResult :many
+SELECT
+    receipt.id, receipt.project_id, receipt.session_id, receipt.assistant_message_id,
+    receipt.tool_call_id, receipt.tool_name, receipt.contract_digest, receipt.args_digest,
+    receipt.owner, receipt.lifecycle, receipt.reversibility, receipt.evidence_policy,
+    receipt.recovery_policy, receipt.status, receipt.invoked, receipt.evidence_kind,
+    receipt.evidence_ref, receipt.owner_ref, receipt.source_revision,
+    receipt.source_root_digest, receipt.source_verdict, receipt.isolation_code,
+    receipt.isolation_disposition, receipt.failure_code,
+    receipt.failure_class, receipt.failure_retryable, receipt.failure_owner_ref,
+    receipt.started_at, receipt.settled_at
+FROM invocation_receipts receipt
+WHERE receipt.session_id = ?
+  AND receipt.status IN ('rejected', 'error', 'interrupted')
+  AND receipt.failure_code <> ''
+  AND EXISTS (
+      SELECT 1 FROM messages assistant, json_each(assistant.tool_calls_json) call
+      WHERE assistant.session_id = receipt.session_id
+        AND assistant.id = receipt.assistant_message_id
+        AND assistant.role = 'assistant'
+        AND assistant.draft_status NOT IN ('withdrawn', 'rejected')
+        AND assistant.tool_calls_json <> ''
+        AND json_extract(call.value, '$.id') = receipt.tool_call_id
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM messages
+      WHERE messages.session_id = receipt.session_id
+        AND messages.tool_result_call_id = receipt.tool_call_id
+  )
+ORDER BY receipt.settled_at, receipt.id
+LIMIT 256
+`
+
+func (q *Queries) ListSessionSettledInvocationReceiptsWithoutResult(ctx context.Context, sessionID string) ([]InvocationReceipts, error) {
+	rows, err := q.db.QueryContext(ctx, listSessionSettledInvocationReceiptsWithoutResult, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InvocationReceipts
+	for rows.Next() {
+		var i InvocationReceipts
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.AssistantMessageID,
+			&i.ToolCallID,
+			&i.ToolName,
+			&i.ContractDigest,
+			&i.ArgsDigest,
+			&i.Owner,
+			&i.Lifecycle,
+			&i.Reversibility,
+			&i.EvidencePolicy,
+			&i.RecoveryPolicy,
+			&i.Status,
+			&i.Invoked,
+			&i.EvidenceKind,
+			&i.EvidenceRef,
+			&i.OwnerRef,
+			&i.SourceRevision,
+			&i.SourceRootDigest,
+			&i.SourceVerdict,
+			&i.IsolationCode,
+			&i.IsolationDisposition,
+			&i.FailureCode,
+			&i.FailureClass,
+			&i.FailureRetryable,
+			&i.FailureOwnerRef,
+			&i.StartedAt,
+			&i.SettledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSettledInvocationReceiptsWithoutResult = `-- name: ListSettledInvocationReceiptsWithoutResult :many
+SELECT
+    receipt.id, receipt.project_id, receipt.session_id, receipt.assistant_message_id,
+    receipt.tool_call_id, receipt.tool_name, receipt.contract_digest, receipt.args_digest,
+    receipt.owner, receipt.lifecycle, receipt.reversibility, receipt.evidence_policy,
+    receipt.recovery_policy, receipt.status, receipt.invoked, receipt.evidence_kind,
+    receipt.evidence_ref, receipt.owner_ref, receipt.source_revision,
+    receipt.source_root_digest, receipt.source_verdict, receipt.isolation_code,
+    receipt.isolation_disposition, receipt.failure_code,
+    receipt.failure_class, receipt.failure_retryable, receipt.failure_owner_ref,
+    receipt.started_at, receipt.settled_at
+FROM invocation_receipts receipt
+WHERE receipt.status IN ('rejected', 'error', 'interrupted')
+  AND receipt.failure_code <> ''
+  AND EXISTS (
+      SELECT 1 FROM messages assistant, json_each(assistant.tool_calls_json) call
+      WHERE assistant.session_id = receipt.session_id
+        AND assistant.id = receipt.assistant_message_id
+        AND assistant.role = 'assistant'
+        AND assistant.draft_status NOT IN ('withdrawn', 'rejected')
+        AND assistant.tool_calls_json <> ''
+        AND json_extract(call.value, '$.id') = receipt.tool_call_id
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM messages
+      WHERE messages.session_id = receipt.session_id
+        AND messages.tool_result_call_id = receipt.tool_call_id
+  )
+ORDER BY receipt.settled_at, receipt.id
+LIMIT 256
+`
+
+func (q *Queries) ListSettledInvocationReceiptsWithoutResult(ctx context.Context) ([]InvocationReceipts, error) {
+	rows, err := q.db.QueryContext(ctx, listSettledInvocationReceiptsWithoutResult)
 	if err != nil {
 		return nil, err
 	}

@@ -224,6 +224,10 @@
     "paintedwolf.grep_scope_required": {
       "version": 1,
       "summary": "Open-root grep needed a path or narrowing glob; search through command walks the requested scope under the program's own budgets."
+    },
+    "paintedwolf.edit_follow_up_repeat": {
+      "version": 1,
+      "summary": "Count-only edit follow-up nudges are retired; consecutive turns with edits do not trigger an automatic debugging instruction."
     }
   },
   "vocabularies": {
@@ -941,6 +945,10 @@
       },
       "worker.iterations.low": {
         "content_contract": "paintedwolf.worker_round_without_ceiling",
+        "version": 1
+      },
+      "edit.follow_up.repeat": {
+        "content_contract": "paintedwolf.edit_follow_up_repeat",
         "version": 1
       }
     },

@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -94,9 +95,9 @@ func (m *Recovery) RecoverOrphanedTurnsForSession(ctx context.Context, sessionID
 	return nil
 }
 
-// RecoverInterruptedToolResults appends a tool-result for each interrupted
-// invocation that has no matching transcript row.
-func (m *Recovery) RecoverInterruptedToolResults(ctx context.Context) error {
+// RecoverSettledToolResults appends a tool result for each settled invocation
+// whose result row is missing.
+func (m *Recovery) RecoverSettledToolResults(ctx context.Context) error {
 	if m == nil || (m.sessionStore == nil) || m.invocations == nil {
 		return nil
 	}
@@ -104,16 +105,25 @@ func (m *Recovery) RecoverInterruptedToolResults(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("invocation recorder does not support bounded projection recovery")
 	}
-	return m.recoverInterruptedProjectionPages(ctx, lister.ListInterruptedWithoutResult)
+	return m.recoverUnansweredPages(ctx, lister.ListSettledWithoutResult)
 }
 
-func (m *Recovery) RecoverInterruptedToolResultPagesForSession(ctx context.Context, lister invocation.SessionProjectionRecoveryRecorder, sessionID string) error {
-	return m.recoverInterruptedProjectionPages(ctx, func(ctx context.Context) ([]invocation.InterruptedProjection, error) {
-		return lister.ListInterruptedWithoutResultForSession(ctx, sessionID)
+// ReconcileToolResults restores missing result rows for one session before its
+// history is assembled, so every recorded call reaches the model once.
+func (m *Recovery) ReconcileToolResults(ctx context.Context, sessionID string) error {
+	if m == nil || m.invocations == nil {
+		return nil
+	}
+	lister, ok := m.invocations.(invocation.SessionProjectionRecoveryRecorder)
+	if !ok {
+		return nil
+	}
+	return m.recoverUnansweredPages(ctx, func(ctx context.Context) ([]invocation.UnansweredReceipt, error) {
+		return lister.ListSettledWithoutResultForSession(ctx, sessionID)
 	})
 }
 
-func (m *Recovery) recoverInterruptedProjectionPages(ctx context.Context, list func(context.Context) ([]invocation.InterruptedProjection, error)) error {
+func (m *Recovery) recoverUnansweredPages(ctx context.Context, list func(context.Context) ([]invocation.UnansweredReceipt, error)) error {
 	for {
 		pending, err := list(ctx)
 		if err != nil {
@@ -125,7 +135,7 @@ func (m *Recovery) recoverInterruptedProjectionPages(ctx context.Context, list f
 			if _, seen := bySession[item.SessionID]; !seen {
 				order = append(order, item.SessionID)
 			}
-			bySession[item.SessionID] = append(bySession[item.SessionID], interruptedToolMessage(item))
+			bySession[item.SessionID] = append(bySession[item.SessionID], unansweredToolMessage(item))
 		}
 		for _, sessionID := range order {
 			if err := m.transcript.AppendPlain(ctx, sessionID, bySession[sessionID]...); err != nil {
@@ -138,16 +148,19 @@ func (m *Recovery) recoverInterruptedProjectionPages(ctx context.Context, list f
 	}
 }
 
-func interruptedToolMessage(item invocation.InterruptedProjection) api.Message {
+// unansweredToolMessage projects the receipt's recorded outcome. An interrupted
+// owner left no outcome; a settled refusal keeps only its code.
+func unansweredToolMessage(item invocation.UnansweredReceipt) api.Message {
 	rec := item.Receipt
-	content := "The host stopped while this tool was in flight."
-	facts := guidance.ToolResultFacts{
-		Outcome: api.ToolResultOutcomeError,
-		Codes:   []string{"TOOL_OWNER_INTERRUPTED"},
-	}
-	toolResult := guidance.ComposeToolResult(content, facts, nil)
-	if toolResult == nil {
-		toolResult = &api.ToolResult{Content: content, Outcome: api.ToolResultOutcomeError}
+	var toolResult *api.ToolResult
+	if rec.Status == api.InvocationStatusInterrupted {
+		content := "The host stopped while this tool was in flight."
+		toolResult = guidance.ComposeToolResult(content, guidance.ToolResultFacts{
+			Outcome: api.ToolResultOutcomeError,
+			Codes:   []string{toolrejection.ToolOwnerInterruptedCode},
+		}, nil)
+	} else {
+		toolResult = settledRefusalResult(rec)
 	}
 	toolResult.Tool = rec.Tool
 	toolResult.ToolCallID = rec.ToolCallID
@@ -156,8 +169,21 @@ func interruptedToolMessage(item invocation.InterruptedProjection) api.Message {
 	return api.Message{
 		ID:         uuid.NewString(),
 		Role:       api.MessageRoleTool,
-		Content:    content,
+		Content:    toolResult.Content,
 		ToolResult: toolResult,
 		CreatedAt:  time.Now().UTC(),
 	}
+}
+
+func settledRefusalResult(rec api.InvocationReceipt) *api.ToolResult {
+	code := ""
+	if rec.Failure != nil {
+		code = strings.TrimSpace(rec.Failure.Code)
+	}
+	outcome := api.ToolResultOutcomeError
+	if rec.Status == api.InvocationStatusRejected {
+		outcome = api.ToolResultOutcomeRejected
+	}
+	content := toolrejection.RenderRejectBlock(code, nil, nil, nil).Error()
+	return guidance.ComposeToolResult(content, guidance.ToolResultFacts{Outcome: outcome, Codes: []string{code}}, nil)
 }

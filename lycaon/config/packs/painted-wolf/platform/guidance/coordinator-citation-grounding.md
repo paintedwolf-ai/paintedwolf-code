@@ -1,6 +1,6 @@
 [host:coordinator-citation-grounding]
 
-Your answer is retained, and its valid citations stay as they are. Repair only what is listed. Attempt {{ attempt }}/{{ max_attempts }}.
+Keep the answer and its valid citations. Repair the listed citations. Attempt {{ attempt }}/{{ max_attempts }}.
 
 Rejected: {{ offenders_sample }}
 {% if repair_targets %}Citations to replace:

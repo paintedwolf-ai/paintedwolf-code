@@ -92,7 +92,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		if err := deps.RegisterRecovery(bootrecovery.Entry{
 			Name: "transcript-invocations", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 			After: []string{"tool-invocations", "session-turns"},
-			Run:   mgr.Stops.Recovery.RecoverInterruptedToolResults,
+			Run:   mgr.Stops.Recovery.RecoverSettledToolResults,
 		}); err != nil {
 			return nil, err
 		}

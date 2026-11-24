@@ -31,7 +31,6 @@ const (
 	WorkerRoundNotice             ID = "worker.round.notice"
 	WorkerMessageReceived         ID = "worker.message.received"
 	WorkerPrerequisiteBlocked     ID = "worker.prerequisite.blocked"
-	EditFollowUpRepeat            ID = "edit.follow_up.repeat"
 	CoordinatorCloseout           ID = "coordinator.closeout"
 	CoordinatorCitationGrounding  ID = "coordinator.citation.grounding"
 	CoordinatorReportDocument     ID = "coordinator.report.document"

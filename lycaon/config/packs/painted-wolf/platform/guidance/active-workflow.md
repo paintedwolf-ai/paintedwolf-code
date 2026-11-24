@@ -50,7 +50,7 @@ The plan is stamped, not automatically started. If no planned worker from this p
 {% endfor %}{% endif %}{% for s in o.satisfy %}  {{ forloop.Counter }}. {{ s }}
 {% endfor %}{% endfor %}{% endif %}{% if phase_exit %}
 ### Phase exit
-When no phase work is required below, work the user's request directly.
+Outside phase duties, offer advice when asked. Make requested edits.
 {% if phase_exit.kind == "terminal" %}
 This is the last phase. There is no further advance to call.
 {% elif phase_exit.kind == "review_loop" %}{% if phase_exit.review_work_ids %}Use these exact `workflow_work_id` values: {% for agent, work_id in phase_exit.review_work_ids %}`{{ agent }}` → `{{ work_id }}`. {% endfor %}
