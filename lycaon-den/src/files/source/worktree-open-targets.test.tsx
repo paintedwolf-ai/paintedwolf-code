@@ -578,4 +578,116 @@ describe("WT06 checkout and revision open targets", () => {
     fireEvent.click(screen.getByTestId("source-path-link"));
     expect(await screen.findByTestId("navigation-chooser")).toBeTruthy();
   });
+
+  it("resolves live, git-blob, effect, version, and ambiguous activity and diff open targets", () => {
+    const liveDiff = gitDiffSideOpenTarget({
+      projectId: PROJECT_ID,
+      repoId: REPO_ID,
+      worktreeId: WORKER_WT,
+      stage: "working",
+      side: "after",
+      mode: "live",
+      item: { path: "src/a.ts", status: "M", root_id: ROOT_ID, root_relative_path: "src/a.ts" } as GitDiffStatItem,
+    });
+    expect(liveDiff).toMatchObject({ kind: "live", worktreeId: WORKER_WT, selectCheckout: true });
+
+    const blobAfter = gitDiffSideOpenTarget({
+      projectId: PROJECT_ID,
+      repoId: REPO_ID,
+      worktreeId: WORKER_WT,
+      stage: "working",
+      side: "after",
+      item: {
+        path: "src/a.ts",
+        status: "A",
+        root_id: ROOT_ID,
+        root_relative_path: "src/a.ts",
+        after_blob_oid: "aaaa1111",
+      } as GitDiffStatItem,
+    });
+    expect(blobAfter).toMatchObject({ kind: "historical-diff", revision: "aaaa1111", binding: { kind: "git-blobs" } });
+
+    const uncapturedWorking = gitDiffSideOpenTarget({
+      projectId: PROJECT_ID,
+      repoId: REPO_ID,
+      worktreeId: WORKER_WT,
+      stage: "working",
+      side: "after",
+      item: { path: "src/a.ts", status: "M", root_id: ROOT_ID, root_relative_path: "src/a.ts" } as GitDiffStatItem,
+    });
+    expect(uncapturedWorking).toMatchObject({ kind: "historical-diff", binding: { kind: "unavailable" } });
+
+    const singleLoc: NavigationTarget = {
+      project_id: PROJECT_ID,
+      root_id: ROOT_ID,
+      repo_id: REPO_ID,
+      worktree_id: WORKER_WT,
+      path: "src/one.ts",
+      entry_kind: "file",
+    };
+    const otherLoc: NavigationTarget = {
+      project_id: PROJECT_ID,
+      root_id: ROOT_ID,
+      repo_id: REPO_ID,
+      worktree_id: PRIMARY_WT,
+      path: "src/two.ts",
+      entry_kind: "file",
+    };
+
+    expect(
+      activityFileOpenTarget({
+        projectId: PROJECT_ID,
+        mode: "live",
+        sourceLocations: [singleLoc],
+      }),
+    ).toMatchObject({ kind: "live", path: "src/one.ts", worktreeId: WORKER_WT, selectCheckout: true });
+
+    expect(
+      activityFileOpenTarget({
+        projectId: PROJECT_ID,
+        mode: "live",
+        path: "src/two.ts",
+        sourceLocations: [singleLoc, otherLoc],
+      }),
+    ).toMatchObject({ kind: "live", path: "src/two.ts", worktreeId: PRIMARY_WT, selectCheckout: true });
+
+    expect(
+      activityFileOpenTarget({
+        projectId: PROJECT_ID,
+        mode: "live",
+        path: "src/shared.ts",
+        sourceLocations: [
+          { ...singleLoc, path: "src/shared.ts" },
+          { ...otherLoc, path: "src/shared.ts" },
+        ],
+      }),
+    ).toMatchObject({ kind: "ambiguous" });
+
+    expect(
+      activityFileOpenTarget({
+        projectId: PROJECT_ID,
+        mode: "live",
+        path: "src/bare.ts",
+        rootId: ROOT_ID,
+      }),
+    ).toMatchObject({ kind: "live", path: "src/bare.ts", rootId: ROOT_ID });
+
+    expect(
+      activityFileOpenTarget({
+        projectId: PROJECT_ID,
+        mode: "historical-diff",
+        effectId: "eff-1",
+        sourceLocations: [singleLoc],
+      }),
+    ).toMatchObject({ kind: "historical-diff", revision: "eff-1", binding: { kind: "effect", effectId: "eff-1" } });
+
+    expect(
+      activityFileOpenTarget({
+        projectId: PROJECT_ID,
+        mode: "historical-diff",
+        versionId: "ver-1",
+        sourceLocations: [singleLoc],
+      }),
+    ).toMatchObject({ kind: "historical-diff", revision: "ver-1", binding: { kind: "version", versionId: "ver-1" } });
+  });
 });
