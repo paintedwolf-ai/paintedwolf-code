@@ -12,63 +12,6 @@ import (
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 )
 
-// RetireOwner cancels all remaining live watches belonging to a closed session or completed worker job.
-func RetireOwner(ctx context.Context, s *Store, owner Owner) ([]CancelReceipt, error) {
-	if !s.Configured() {
-		return nil, nil
-	}
-	owner = owner.Normalized()
-	now := s.clock.Now()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	rows, err := tx.QueryContext(ctx, `SELECT `+registrationColumns+` FROM watch_registrations
-		WHERE session_id = ? AND owner_kind = ? AND COALESCE(worker_job_id, '') = ? AND state = 'live'
-		ORDER BY seq ASC`,
-		owner.SessionID, string(owner.Kind), owner.WorkerJobID)
-	if err != nil {
-		return nil, err
-	}
-	var regs []Registration
-	for rows.Next() {
-		reg, err := scanRegistration(rows)
-		if err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		regs = append(regs, reg)
-	}
-	_ = rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	var receipts []CancelReceipt
-	var allWoke []wokeLease
-	for _, reg := range regs {
-		rcpt, woke, err := cancelRegistrationTx(ctx, tx, reg, OutcomeCanceled, now)
-		if err != nil {
-			return nil, err
-		}
-		receipts = append(receipts, rcpt)
-		allWoke = append(allWoke, woke...)
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	for _, reg := range regs {
-		s.heap.Remove(KindWatchExpiry, reg.WatchID)
-	}
-	for _, w := range allWoke {
-		s.heap.Remove(KindWaitDeadline, w.lease.ID)
-		s.notifyLeaseWake(ctx, w.lease, w.winner)
-	}
-	return receipts, nil
-}
-
 func cancelRegistrationTx(ctx context.Context, tx *sql.Tx, reg Registration, outcome TerminalOutcome, now time.Time) (CancelReceipt, []wokeLease, error) {
 	if reg.Lifecycle.FinalReceiptID != "" {
 		var saved string

@@ -1,0 +1,24 @@
+spec_version: "1.0"
+id: WATCH_HANDLE_UNKNOWN
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - wait
+requires_facts: [paintedwolf.handle, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "WATCH_HANDLE_UNKNOWN"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:wait
+message: Watch handle {{ paintedwolf.handle }} is unknown
+what: Handle {{ paintedwolf.handle }} does not name a watch owned by this session or worker job.
+cause: The handle was never issued here, belongs to another owner, or has aged out after terminal settlement.
+why: Watch handles are scoped to the exact session or worker job that registered them.
+fix: Pass an active watch handle owned by this session or worker job to wait.
+instead: Do not pass a command handle, PID, or worker name where a watch handle is required
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      handle: watch-99
+      profile: coordinator
+      tool: wait

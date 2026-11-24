@@ -15,36 +15,6 @@ type RealClock struct{}
 
 func (RealClock) Now() time.Time { return time.Now().UTC() }
 
-// FakeClock is a deterministic manual clock for tests.
-type FakeClock struct {
-	mu  sync.Mutex
-	now time.Time
-}
-
-func NewFakeClock(initial time.Time) *FakeClock {
-	return &FakeClock{now: initial.UTC()}
-}
-
-func (c *FakeClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.now
-}
-
-func (c *FakeClock) Set(t time.Time) {
-	c.mu.Lock()
-	c.now = t.UTC()
-	c.mu.Unlock()
-}
-
-func (c *FakeClock) Advance(d time.Duration) time.Time {
-	c.mu.Lock()
-	c.now = c.now.Add(d)
-	now := c.now
-	c.mu.Unlock()
-	return now
-}
-
 // DeadlineKind orders coinciding deadlines: handle expiry settles before timer ticks or wait timeouts.
 type DeadlineKind int
 

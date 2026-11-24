@@ -351,7 +351,7 @@ func TestCommandCompletionPresentationClaimsAcrossWaitWatchAndKick(t *testing.T)
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "session", testdbseed.DefaultProjectID)
 	now := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
-	clock := watch.NewFakeClock(now)
+	clock := testutil.NewFakeClock(now)
 	watches := watch.NewStore(database, clock)
 	owner := watch.Owner{ProjectID: testdbseed.DefaultProjectID, SessionID: "session"}
 
