@@ -163,13 +163,6 @@ export function GitStrip(props: Props) {
 
   const repos = () => props.repos ?? [];
   const live = useResidentLive();
-  const pendingStatusRefresh = createAdaptivePoller(async () => {
-    await props.onRefreshRepos?.();
-  }, 250, 2_000);
-  onCleanup(pendingStatusRefresh.cancel);
-  createEffect(() => {
-    pendingStatusRefresh.setEnabled(live() && !busy() && repoSummaryPending(repos()));
-  });
   const showScope = () => repos().length > 1;
   const scope = () =>
     resolveScope(repos(), props.activeRepoId ?? "", props.scopePin ?? null);
@@ -179,6 +172,17 @@ export function GitStrip(props: Props) {
   // A cached status remains usable during refresh.
   const statusKnown = () => isLoaded(props.status) || status() !== undefined;
   const statusError = () => errorOf(props.status);
+  const pendingStatusRefresh = createAdaptivePoller(async () => {
+    await props.onRefreshRepos?.();
+  }, 250, 2_000);
+  onCleanup(pendingStatusRefresh.cancel);
+  createEffect(() => {
+    pendingStatusRefresh.setEnabled(
+      live() &&
+        !busy() &&
+        (repoSummaryPending(repos()) || statusError()?.includes("Git status is still loading") === true),
+    );
+  });
   const available = () => status()?.available === true;
   const files = (): GitFileEntry[] => status()?.files ?? [];
   const dirty = () => status()?.dirty === true;
