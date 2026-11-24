@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestWriteRootPreflightUsesCompiledCapability(t *testing.T) {
