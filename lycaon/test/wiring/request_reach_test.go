@@ -509,9 +509,9 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 			span.after = len(conversation())
 		}
 	}
-	testutil.WaitFor(t, "worker cycle quiescent", func() bool {
-		return workerCycleQuiescent(ctx, h, sess.ProjectID, sess.ID)
-	})
+	// A dispatched worker's requests are sent only once its queued job runs; a
+	// scenario that reads the requests before then has not seen that surface.
+	testutil.FailErr(t, "drain worker jobs", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID))
 	FailOnEndedWorker(t, h, ctx, sess.ProjectID)
 	WaitForSessionIdleGate(t, h, ctx, sess.ID)
 
