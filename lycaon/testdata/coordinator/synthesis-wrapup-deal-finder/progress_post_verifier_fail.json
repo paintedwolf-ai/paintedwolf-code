@@ -1,0 +1,7 @@
+{
+  "rows": [
+    {"id": "p1", "state": "done", "label": "Add tests for app.py"},
+    {"id": "p2", "state": "done", "label": "Add tests for scraper.py"},
+    {"id": "p3", "state": "pending", "label": "Verify (command-verifier)"}
+  ]
+}

@@ -2885,10 +2885,24 @@ CREATE TABLE worker_finding_delivery (
 CREATE TABLE IF NOT EXISTS session_progress (
     session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
     workflow_run_id TEXT NOT NULL DEFAULT '',
-    content TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    item_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(item_ids_json) AND json_type(item_ids_json) = 'array'),
-    document_version INTEGER NOT NULL DEFAULT 1 CHECK (document_version >= 1)
+    document_version INTEGER NOT NULL DEFAULT 1 CHECK (document_version >= 1),
+    next_item_seq INTEGER NOT NULL DEFAULT 1 CHECK (next_item_seq >= 1)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS session_progress_items (
+    session_id TEXT NOT NULL REFERENCES session_progress(session_id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL CHECK (
+        length(item_id) >= 2
+        AND substr(item_id, 1, 1) = 'p'
+        AND substr(item_id, 2, 1) GLOB '[1-9]'
+        AND (length(item_id) = 2 OR substr(item_id, 3) NOT GLOB '*[^0-9]*')
+    ),
+    ord INTEGER NOT NULL CHECK (ord >= 0),
+    state TEXT NOT NULL CHECK (state IN ('pending', 'done', 'na', 'optional')),
+    label TEXT NOT NULL CHECK (length(trim(label)) > 0 AND length(label) <= 8000),
+    PRIMARY KEY (session_id, item_id),
+    UNIQUE (session_id, ord)
 ) STRICT, WITHOUT ROWID;
 
 -- Project-attributed search projection (retention-exempt).

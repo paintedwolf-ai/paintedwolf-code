@@ -165,5 +165,109 @@ class WorkerPreflightTests(unittest.TestCase):
                 validate_worker_controls(trials, suite)
 
 
+class RelationalProgressReconciliationTests(unittest.TestCase):
+    def _seed_store(self, root):
+        with sqlite3.connect(root / 'store.db') as db:
+            db.execute('CREATE TABLE session_progress_items(session_id, item_id, ord, state, label)')
+            db.execute('CREATE TABLE worker_results(id, worker_job_id, created_at)')
+            db.execute('CREATE TABLE worker_rounds(job_id)')
+            db.execute('CREATE TABLE worker_jobs(id, parent_session_id, result_json)')
+            db.execute('CREATE TABLE worker_result_dispositions(result_id, change_state, accounted_at)')
+
+    def test_reconcile_progress_replaces_then_updates_by_id_and_acknowledges_handles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._seed_store(root)
+            app = Mock(directory=root)
+            calls = []
+
+            def fake_invoke(_app, sess, tool, args):
+                calls.append((tool, args))
+                with sqlite3.connect(root / 'store.db') as db:
+                    if 'replace' in args:
+                        db.execute('DELETE FROM session_progress_items WHERE session_id=?', (sess,))
+                        for idx, row in enumerate(args['replace']):
+                            db.execute('INSERT INTO session_progress_items VALUES(?,?,?,?,?)',
+                                       (sess, f'p{idx + 1}', idx, row['state'], row['label']))
+                    for upd in args.get('update', []):
+                        db.execute('UPDATE session_progress_items SET state=? WHERE session_id=? AND item_id=?',
+                                   (upd['state'], sess, upd['id']))
+                    for handle in args.get('acknowledge_results', []):
+                        db.execute('INSERT OR REPLACE INTO worker_result_dispositions VALUES(?,?,?)',
+                                   (handle, '', '2026-01-01T00:00:00Z'))
+                return {}
+
+            with sqlite3.connect(root / 'store.db') as db:
+                db.execute('INSERT INTO worker_jobs VALUES(?,?,?)', ('job-1', 'sess-1', '{}'))
+                db.execute('INSERT INTO worker_rounds VALUES(?)', ('job-1',))
+                db.execute('INSERT INTO worker_results VALUES(?,?,?)', ('scout#1', 'job-1', '1'))
+
+            with patch.object(smoke_workers, 'invoke', side_effect=fake_invoke):
+                smoke_workers.reconcile_progress(app, 'sess-1', {'Leg A': 'pending', 'Leg B': 'pending'})
+                self.assertEqual(calls[-1], ('update_progress', {
+                    'replace': [{'label': 'Leg A', 'state': 'pending'}, {'label': 'Leg B', 'state': 'pending'}],
+                    'acknowledge_results': ['scout#1'],
+                }))
+
+                with sqlite3.connect(root / 'store.db') as db:
+                    db.execute('INSERT INTO worker_jobs VALUES(?,?,?)', ('job-2', 'sess-1', '{}'))
+                    db.execute('INSERT INTO worker_rounds VALUES(?)', ('job-2',))
+                    db.execute('INSERT INTO worker_results VALUES(?,?,?)', ('impl#1', 'job-2', '2'))
+
+                smoke_workers.reconcile_progress(app, 'sess-1', {'Leg A': 'done', 'Leg B': 'pending'})
+                self.assertEqual(calls[-1], ('update_progress', {
+                    'update': [{'id': 'p1', 'state': 'done'}],
+                    'acknowledge_results': ['impl#1'],
+                }))
+
+                before_noop = len(calls)
+                smoke_workers.reconcile_progress(app, 'sess-1', {'Leg A': 'done', 'Leg B': 'pending'})
+                self.assertEqual(len(calls), before_noop)
+
+    def test_intended_dispatches_updates_states_and_handles_existing_progress(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            project = root / 'proj'
+            project.mkdir()
+            (project / 'a.txt').write_text('ok')
+            self._seed_store(root)
+            with sqlite3.connect(root / 'store.db') as db:
+                db.execute('INSERT INTO worker_jobs VALUES(?,?,?)', ('j-ok', 'sess-1', '{}'))
+                db.execute('INSERT INTO worker_rounds VALUES(?)', ('j-ok',))
+                db.execute('INSERT INTO worker_results VALUES(?,?,?)', ('impl#1', 'j-ok', '1'))
+
+            app = Mock(directory=root)
+            dispatches = [
+                {'label': 'Write A', 'mode': 'write', 'paths': ['a.txt'],
+                 'stages': [{'kind': 'complete', 'files': {'a.txt': 'ok'}}]},
+                {'label': 'Fail B', 'mode': 'read', 'paths': [],
+                 'stages': [{'kind': 'failed', 'code': 'HARNESS_STAGE_FAIL'}]},
+            ]
+            invoked = []
+
+            def fake_invoke(_app, _sess, tool, args):
+                invoked.append((tool, args))
+                return {}
+
+            def fake_settled(_app, _sess, job, _want):
+                if job == 'j-ok':
+                    return {'status': 'complete', 'merge_status': 'pending', 'child_session_id': 'c1', 'error': ''}
+                return {'status': 'failed', 'merge_status': '', 'child_session_id': 'c2', 'error': 'worker stopped'}
+
+            with patch.object(smoke_workers, 'invoke', side_effect=fake_invoke), \
+                    patch.object(smoke_workers, 'respond', return_value=[{'job_id': 'j-ok'}, {'job_id': 'j-fail'}]), \
+                    patch.object(smoke_workers, 'job_id', side_effect=lambda r: r['job_id']), \
+                    patch.object(smoke_workers, 'settled', side_effect=fake_settled), \
+                    patch.object(smoke_workers, 'outcome', return_value={'code': 'HARNESS_STAGE_FAIL'}):
+                observed, _ = smoke_workers.intended_dispatches(app, 'sess-1', project, dispatches, existing=True)
+                self.assertEqual([o['label'] for o in observed], ['Write A', 'Fail B'])
+                self.assertIn(('update_progress', {'acknowledge_results': ['impl#1']}), invoked)
+
+                invoked.clear()
+                smoke_workers.intended_dispatches(app, 'sess-1', project, dispatches, existing=False)
+                progress_calls = [args for tool, args in invoked if tool == 'update_progress']
+                self.assertEqual(len(progress_calls), 2)
+
+
 if __name__ == '__main__':
     unittest.main()

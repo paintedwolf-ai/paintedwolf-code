@@ -63,7 +63,7 @@ type OwnerPorts struct {
 type Fixture struct {
 	Runtime    *command.ProgramRuntime
 	Recorder   *invocation.SQLRecorder
-	Database   db.Handle
+	Database   *db.Store
 	Session    string
 	Dir        string
 	ScratchDir string
@@ -104,7 +104,16 @@ func (f *Fixture) Delivered() []evidence.Record {
 type progressFacts struct{ store progress.Store }
 
 func (p progressFacts) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
-	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
+	snap, err := p.store.Snapshot(ctx, id)
+	if err != nil {
+		return progress.PrerequisiteState{}, err
+	}
+	return progress.PrerequisiteState{
+		SessionID:     id,
+		RootSessionID: id,
+		Missing:       snap.Missing(),
+		OpenSteps:     snap.OpenStepCount(),
+	}, nil
 }
 
 // New composes the entry. Structured tools exist only as owner identities.
@@ -140,7 +149,10 @@ func New(t testing.TB, options Options) *Fixture {
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"command": true, "verify": true, "summarize": true, "survey_repo": true, "code_rewrite": true}, CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "fixture")
 	owner := progress.NewSQLStore(database)
-	testutil.FailErr(t, "set actual progress", owner.Set(session, "- [ ] Run the fixture program"))
+	_, err = owner.Apply(context.Background(), session, progress.Mutation{
+		Replace: []progress.RowSpec{{Label: "Run the fixture program", State: progress.ProgressStatePending}},
+	}, progress.ApplyOptions{})
+	testutil.FailErr(t, "set actual progress", err)
 	background := options.Background
 	if background == nil {
 		background = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
@@ -199,8 +211,19 @@ func (f *Fixture) AttachLedger(t testing.TB, timing sourceledger.Timing) *source
 	return ledger
 }
 
-// SetProgress changes the session checklist observed by reached command writes.
-func (f *Fixture) SetProgress(content string) error { return f.progress.Set(f.Session, content) }
+// ClearProgress clears session progress rows observed by reached command writes.
+func (f *Fixture) ClearProgress() error {
+	return f.progress.Clear(context.Background(), f.Session)
+}
+
+// ReplaceProgress replaces session progress rows observed by reached command writes.
+func (f *Fixture) ReplaceProgress(rows ...progress.RowSpec) error {
+	if len(rows) == 0 {
+		return f.ClearProgress()
+	}
+	_, err := f.progress.Apply(context.Background(), f.Session, progress.Mutation{Replace: rows}, progress.ApplyOptions{})
+	return err
+}
 
 // Call opens a real model receipt for one command call and runs the entry.
 func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string, error) {

@@ -35,7 +35,16 @@ func programDoorMemory(t *testing.T) *toolcontract.ProgramMemory {
 type programDoorProgress struct{ store progress.Store }
 
 func (p programDoorProgress) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
-	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
+	snap, err := p.store.Snapshot(ctx, id)
+	if err != nil {
+		return progress.PrerequisiteState{}, err
+	}
+	return progress.PrerequisiteState{
+		SessionID:     id,
+		RootSessionID: id,
+		Missing:       snap.Missing(),
+		OpenSteps:     snap.OpenStepCount(),
+	}, nil
 }
 
 type programDoorStart struct{ starts int }
@@ -126,7 +135,7 @@ func TestProgramAdmissionPreservesActualFirstCreationAndMissingProgress(t *testi
 	if _, err := os.Stat(filepath.Join(dir, "new.txt")); !os.IsNotExist(err) {
 		t.Fatal("missing progress created a file")
 	}
-	testutil.FailErr(t, "set actual progress owner", owner.Set("s1", "- [ ] Create fixture"))
+	progresstest.SeedRows(t, owner, "s1", progress.RowSpec{Label: "Create fixture"})
 	result, err = executor.InvokeNative(t.Context(), frame, surface, memory, facts, marker, effect, tc)
 	testutil.FailErr(t, "invoke actual admitted mutation door", err)
 	data, err := os.ReadFile(filepath.Join(dir, "new.txt"))

@@ -73,7 +73,7 @@ func TestProgramReviewedInputCaptureScreensOriginalBytesAndRetainsIndependentPro
 	releaseInspection()
 	releaseReview()
 	progressIdentity := toolcontract.ProgramProgressIdentity{ProgramID: f.program, ExecutionID: uuid.NewString(), ActorID: "fixture-person", SessionID: f.session, RootSessionID: f.session, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}}
-	progressReview, releaseProgress, err := toolcontract.NewReviewedOperationInputs(t.Context(), quota, map[string]any{"content": "- [ ] fixture"})
+	progressReview, releaseProgress, err := toolcontract.NewReviewedOperationInputs(t.Context(), quota, map[string]any{"replace": []any{map[string]any{"label": "fixture"}}})
 	testutil.FailErr(t, "freeze actual envelope review", err)
 	testutil.FailErr(t, "retain and mark independent progress envelope", recorder.BeforeProgressOwner(t.Context(), progressIdentity, "actual-model-call", progressReview))
 	releaseProgress()

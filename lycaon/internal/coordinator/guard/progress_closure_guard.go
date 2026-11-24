@@ -10,16 +10,14 @@ import (
 
 const ProgressReconciliationRequiredCode = "PROGRESS_RECONCILIATION_REQUIRED"
 
-// ProgressClosureBaseline snapshots the checklist when the closure latch arms.
-// Only the reconciliation service acknowledges finished worker jobs.
+// ProgressClosureBaseline records settled worker finishes awaiting acknowledgement.
 type ProgressClosureBaseline struct {
-	Revision string
-	JobIDs   []string
-	// Settled[i] names the finish of JobIDs[i] for the coordinator, by worker.
-	Settled []string
+	JobIDs      []string
+	Settled     []string
+	Unaccounted []progress.UnaccountedResult
 }
 
-// SettledWork lists the named finishes.
+// SettledWork lists human-readable worker descriptions for latched finishes.
 func (b ProgressClosureBaseline) SettledWork() []string {
 	out := make([]string, 0, len(b.Settled))
 	for _, entry := range b.Settled {
@@ -30,10 +28,22 @@ func (b ProgressClosureBaseline) SettledWork() []string {
 	return out
 }
 
+// UnaccountedHandles lists result handles awaiting acknowledgement.
+func (b ProgressClosureBaseline) UnaccountedHandles() []string {
+	out := make([]string, 0, len(b.Unaccounted))
+	for _, u := range b.Unaccounted {
+		if u.Handle != "" {
+			out = append(out, u.Handle)
+		}
+	}
+	return out
+}
+
 // ObserveProgressReconciliationBeforeDispatch publishes progress-closure facts.
 func ObserveProgressReconciliationBeforeDispatch(
 	sess *api.Session,
-	progressContent, tool string,
+	openSteps int,
+	tool string,
 	baseline ProgressClosureBaseline,
 	armed bool,
 	gc *oar.GuardContext,
@@ -48,11 +58,11 @@ func ObserveProgressReconciliationBeforeDispatch(
 	if !armed || !gc.Progress.ProgressGatedTool {
 		return
 	}
-	_, pending, _ := progress.CloseCounts(progressContent)
-	gc.Progress.ProgressOpenItems = int64(pending)
+	gc.Progress.ProgressOpenItems = int64(openSteps)
 	gc.PutRejectData(ProgressReconciliationRequiredCode, map[string]any{
-		"tool":         strings.TrimSpace(tool),
-		"pending":      pending,
-		"settled_work": baseline.SettledWork(),
+		"tool":                strings.TrimSpace(tool),
+		"pending":             openSteps,
+		"settled_work":        baseline.SettledWork(),
+		"unaccounted_handles": baseline.UnaccountedHandles(),
 	})
 }

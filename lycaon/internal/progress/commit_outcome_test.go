@@ -2,66 +2,80 @@ package progress
 
 import (
 	"context"
+	"database/sql"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	api "github.com/lycaon/lycaon/pkg/api"
 )
 
-type unsettledProgressStore struct {
-	Store
+type failingTranscript struct {
+	inner   TranscriptTransactions
 	failure error
 	cancel  context.CancelFunc
 }
 
-func (s unsettledProgressStore) Update(ctx context.Context, id string, change func(Snapshot) (Document, error)) (Snapshot, error) {
-	if s.cancel != nil {
-		return s.Store.Update(ctx, id, func(current Snapshot) (Document, error) {
-			doc, err := change(current)
-			s.cancel()
-			return doc, err
-		})
-	}
-	current, err := s.Snapshot(ctx, id)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	doc, err := change(current)
-	if err != nil {
-		return current, err
-	}
-	return snapshotVersion(current.RunID, doc.Content, doc.ItemIDs, "uncommitted", current.documentVersion+1), s.failure
+func (f failingTranscript) AppendMessagesWith(ctx context.Context, id string, mutate func(*sql.Tx) ([]api.Message, error)) error {
+	return f.inner.AppendMessagesWith(ctx, id, func(tx *sql.Tx) ([]api.Message, error) {
+		msgs, err := mutate(tx)
+		if err != nil {
+			return nil, err
+		}
+		if f.cancel != nil {
+			f.cancel()
+			return nil, ctx.Err()
+		}
+		return msgs, f.failure
+	})
 }
 
-type unsettledReconciliation struct {
-	token            string
-	acknowledgements int
+type trackingReconciler struct {
+	txCalls  int
+	releases int
 }
 
-func (r *unsettledReconciliation) Reconciliation(string) *Reconciliation {
-	return &Reconciliation{Token: r.token, Jobs: []string{"worker"}}
-}
-func (r *unsettledReconciliation) Acknowledge(context.Context, string, string) bool {
-	r.acknowledgements++
-	return true
+func (r *trackingReconciler) Reconciliation(string) *Reconciliation {
+	return &Reconciliation{
+		Jobs:        []string{"job-1"},
+		Unaccounted: []UnaccountedResult{{Handle: "scout#1", Worker: "scout"}},
+	}
 }
 
-func TestAuthorUpdatePublishesOnlySettledStoreOutcomes(t *testing.T) {
+func (r *trackingReconciler) UnaccountedResults(string) []UnaccountedResult {
+	return []UnaccountedResult{{Handle: "scout#1", Worker: "scout"}}
+}
+
+func (r *trackingReconciler) AcknowledgeTx(_ context.Context, _ *sql.Tx, _, _ string, _ []string) (AckOutcome, error) {
+	r.txCalls++
+	return AckOutcome{AccountedJobIDs: []string{"job-1"}}, nil
+}
+
+func (r *trackingReconciler) Release(string, []string) {
+	r.releases++
+}
+
+func TestApplyPublishesOnlySettledStoreOutcomes(t *testing.T) {
 	for _, mode := range []string{"store failure", "callback cancellation"} {
 		t.Run(mode, func(t *testing.T) {
 			store := newProgressFixture(t, "unsettled")
-			testutil.FailErr(t, "seed preserved work", store.Set("unsettled", "- [ ] Deliver"))
+			_, err := store.Apply(t.Context(), "unsettled", Mutation{
+				Replace: []RowSpec{{Label: "Deliver", State: ProgressStatePending}},
+			}, ApplyOptions{})
+			testutil.FailErr(t, "seed preserved work", err)
 			before, err := store.Snapshot(t.Context(), "unsettled")
 			testutil.FailErr(t, "observe current progress", err)
+
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			sentinel := errors.New("commit unavailable")
-			writer := unsettledProgressStore{Store: store, failure: sentinel}
+			tx := failingTranscript{inner: store.transcript, failure: sentinel}
 			if mode == "callback cancellation" {
-				writer.cancel = cancel
+				tx.cancel = cancel
 				sentinel = context.Canceled
 			}
+			failingStore := NewSQLStore(store.database, tx)
+
 			publications := 0
 			release := RegisterWriteObserver(func(_ context.Context, event WriteEvent) {
 				if event.SessionID == "unsettled" {
@@ -69,18 +83,21 @@ func TestAuthorUpdatePublishesOnlySettledStoreOutcomes(t *testing.T) {
 				}
 			})
 			defer release()
-			reconciliation := &unsettledReconciliation{token: strings.Repeat("a", 64)}
-			update, err := PrepareAuthorUpdate("- [x] Deliver")
-			testutil.FailErr(t, "prepare completion", err)
-			result, err := update.ExpectRevision(before.Revision).ExpectItemIDs(before.ItemIDs...).ExpectReconciliation(reconciliation.token).Apply(ctx, writer, "unsettled", reconciliation)
+
+			reconciler := &trackingReconciler{}
+			done := ProgressStateDone
+			result, err := failingStore.Apply(ctx, "unsettled", Mutation{
+				Update:             []UpdateRowSpec{{ID: "p1", State: &done}},
+				AcknowledgeResults: []string{"scout#1"},
+			}, ApplyOptions{Reconciler: reconciler})
 			if !errors.Is(err, sentinel) {
 				t.Fatalf("unsettled result error: %v", err)
 			}
-			if result.Updated || result.StateChanged || len(result.ClosedItemIDs) != 0 || result.Snapshot.Revision != "" || result.Snapshot.Content != "" || result.ReconciliationStatus != "not_requested" {
+			if result.Updated || result.StateChanged || len(result.ClosedItemIDs) != 0 || result.ReconciliationStatus != "not_requested" {
 				t.Fatalf("uncommitted proposal escaped as outcome: %+v", result)
 			}
-			if publications != 0 || reconciliation.acknowledgements != 0 {
-				t.Fatalf("failed commit published events=%d acknowledgements=%d", publications, reconciliation.acknowledgements)
+			if publications != 0 || reconciler.releases != 0 {
+				t.Fatalf("failed commit published events=%d releases=%d", publications, reconciler.releases)
 			}
 			after, err := store.Snapshot(t.Context(), "unsettled")
 			testutil.FailErr(t, "read preserved snapshot", err)

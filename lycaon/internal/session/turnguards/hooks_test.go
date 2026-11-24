@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
@@ -40,11 +41,11 @@ func (s stubState) ForSession(context.Context, *api.Session) surface.ImplementSe
 }
 
 type stubProgress struct {
-	content string
+	snap progress.Snapshot
 }
 
-func (s *stubProgress) Get(context.Context, string) string {
-	return s.content
+func (s *stubProgress) Snapshot(context.Context, string) (progress.Snapshot, error) {
+	return s.snap, nil
 }
 
 type stubSessions struct {
@@ -174,7 +175,12 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 		ProgressOpenCount: 1,
 	}}
 	closeoutSvc := closeouts.New(store)
-	progressStore := &stubProgress{content: "- [x] Done\n- [ ] Pending item\n"}
+	progressStore := &stubProgress{snap: progress.Snapshot{
+		Rows: []progress.Row{
+			{ID: "p1", State: progress.ProgressStateDone, Label: "Done"},
+			{ID: "p2", State: progress.ProgressStatePending, Label: "Pending item"},
+		},
+	}.WithDocumentVersion(1)}
 	svc := New(store, policy, nil, nil, state, nil, nil, nil, nil, closeoutSvc, nil, nil)
 	svc.SetProgress(progressStore)
 
@@ -205,7 +211,12 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 		t.Fatalf("unchanged waived checklist on subsequent prompt: got blocked=%v reject=%v, want waiver preserved", blocked, reject)
 	}
 
-	progressStore.content = "- [x] Done\n- [ ] Newly added item\n"
+	progressStore.snap = progress.Snapshot{
+		Rows: []progress.Row{
+			{ID: "p1", State: progress.ProgressStateDone, Label: "Done"},
+			{ID: "p3", State: progress.ProgressStatePending, Label: "Newly added item"},
+		},
+	}.WithDocumentVersion(2)
 	reject, blocked = svc.BeforeFinish(
 		t.Context(), sess, history, "Updated checklist summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 	)

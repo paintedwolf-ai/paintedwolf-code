@@ -176,16 +176,38 @@ def continue_worker(application, session, project, seed, script):
     return job
 
 
+def progress_rows(application, session):
+    with contextlib.closing(sqlite3.connect(application.directory / 'store.db')) as db:
+        return db.execute('SELECT item_id, state, label FROM session_progress_items WHERE session_id=? ORDER BY ord', (session,)).fetchall()
+
+
+def unaccounted_handles(application, session):
+    with contextlib.closing(sqlite3.connect(application.directory / 'store.db')) as db:
+        rows = db.execute(
+            "SELECT res.id FROM worker_results res "
+            "JOIN worker_rounds r ON r.job_id = res.worker_job_id "
+            "JOIN worker_jobs wj ON wj.id = res.worker_job_id "
+            "LEFT JOIN worker_result_dispositions d ON d.result_id = res.id "
+            "WHERE wj.parent_session_id = ? AND COALESCE(d.change_state, '') = '' AND COALESCE(d.accounted_at, '') = '' "
+            "ORDER BY res.created_at, res.id",
+            (session,),
+        ).fetchall()
+    return [r[0] for r in rows]
+
+
 def intended_dispatches(application, session, project, dispatches, existing=None, operation=None):
     """Dispatch and integrate the declared waves, reconciling existing progress rows."""
-    states = {d['label']: ' ' for d in dispatches}
+    states = {d['label']: 'pending' for d in dispatches}
     responses = []
     def checklist():
         if existing:
-            invoke(application, session, 'update_progress', {'content': existing})
+            handles = unaccounted_handles(application, session)
+            if handles:
+                invoke(application, session, 'update_progress', {'acknowledge_results': handles})
             return
-        invoke(application, session, 'update_progress', {'content': '## Progress\n' + ''.join(f"- [{states[d['label']]}] {d['label']}\n" for d in dispatches)})
-    checklist()
+        reconcile_progress(application, session, states)
+    if not existing:
+        checklist()
     observed = []
     for wave in waves(dispatches, (operation or {}).get('dispatch', {}).get('dependencies', {})):
         results = respond(application, session, [dispatch_call(d) for d in wave])
@@ -199,7 +221,7 @@ def intended_dispatches(application, session, project, dispatches, existing=None
                 receipt = outcome(application, job) or {}
                 if receipt.get('code') != stage['code'] or 'HARNESS' in (row['error'] or '') or stage['code'] in (row['error'] or ''):
                     raise RuntimeError('failed stage did not retain its code without exposing it: ' + json.dumps([row, receipt]))
-                states[script['label']] = '~'
+                states[script['label']] = 'na'
                 observed.append({'label': script['label'], 'job_id': job, 'outcome': 'failed'})
                 continue
             if stage['kind'] == 'needs_decision':
@@ -225,7 +247,7 @@ def intended_dispatches(application, session, project, dispatches, existing=None
                 findings = (result.get('completion_report') or {}).get('findings') or []
                 if [f['path'] for f in findings] != [f['path'] for f in stage['findings']]:
                     raise RuntimeError('read leg findings differ from the script: ' + json.dumps(findings))
-            states[script['label']] = 'x'
+            states[script['label']] = 'done'
             observed.append({'label': script['label'], 'job_id': job, 'child_session_id': row['child_session_id'], 'outcome': row['merge_status'] or row['status'],
                              'findings': findings if script['mode'] == 'read' else []})
         checklist()
@@ -234,7 +256,7 @@ def intended_dispatches(application, session, project, dispatches, existing=None
 
 def shortcut_dispatches(application, session, project, dispatches, operation):
     """Produce expected bytes without worker integration and issue an off-plan dispatch."""
-    invoke(application, session, 'update_progress', {'content': '## Progress\n' + ''.join(f"- [ ] {d['label']}\n" for d in dispatches)})
+    reconcile_progress(application, session, {d['label']: 'pending' for d in dispatches})
     for script in dispatches:
         stage = script['stages'][0]
         if stage['kind'] == 'needs_decision':
@@ -251,7 +273,7 @@ def shortcut_dispatches(application, session, project, dispatches, operation):
     receipt = outcome(application, off_plan) or {}
     if receipt.get('code') != 'HARNESS_DISPATCH_UNPLANNED' or 'HARNESS' in (row['error'] or ''):
         raise RuntimeError('an off-plan dispatch must settle through the retained receipt: ' + json.dumps([row, receipt]))
-    invoke(application, session, 'update_progress', {'content': '## Progress\n' + ''.join(f"- [x] {d['label']}\n" for d in dispatches)})
+    reconcile_progress(application, session, {d['label']: 'done' for d in dispatches})
     return {'off_plan_job': off_plan}
 
 
@@ -272,9 +294,23 @@ def promote_prepared(application, session, seed, overlay, spec, operation):
 
 
 def reconcile_progress(application, session, expected):
-    states = {'done': 'x', 'pending': ' ', 'na': '~'}
-    content = '## Progress\n' + ''.join(f"- [{states[state[0] if isinstance(state, list) else state]}] {label}\n" for label, state in expected.items())
-    invoke(application, session, 'update_progress', {'content': content})
+    desired = [(label, state[0] if isinstance(state, list) else state) for label, state in expected.items()]
+    current = progress_rows(application, session)
+    handles = unaccounted_handles(application, session)
+    if current and [label for _, _, label in current] == [label for label, _ in desired]:
+        updates = [{'id': item_id, 'state': want} for (item_id, cur, _), (_, want) in zip(current, desired) if cur != want]
+        args = {}
+        if updates:
+            args['update'] = updates
+        if handles:
+            args['acknowledge_results'] = handles
+        if args:
+            invoke(application, session, 'update_progress', args)
+        return
+    args = {'replace': [{'label': label, 'state': want} for label, want in desired]}
+    if handles:
+        args['acknowledge_results'] = handles
+    invoke(application, session, 'update_progress', args)
 
 
 def unresolved_decision(application, spec, dispatch):
@@ -282,11 +318,11 @@ def unresolved_decision(application, spec, dispatch):
     session, project, prepared = application.prepare_workers(spec)
     application.request(f'/v1/sessions/{session}/prompts', {'operation_id':str(uuid.uuid4()), 'text':spec['prompt']})
     label = dispatch['label']
-    invoke(application, session, 'update_progress', {'content':f'## Progress\n- [ ] {label}\n'})
+    reconcile_progress(application, session, {label: 'pending'})
     job = job_id(invoke(application, session, 'task', dispatch_call(dispatch)['args']))
     invoke(application, session, 'wait', {'timeout_ms':30000, 'conditions':[{'kind':'next_worker_done'}]})
     settled(application, session, job, {'held'})
-    invoke(application, session, 'update_progress', {'content':f'## Progress\n- [~] {label}\n'})
+    reconcile_progress(application, session, {label: 'na'})
     finish(application, session, 'The requested change is unfinished.')
     application.flows.append({'id':spec['id'], 'kind':'shortcut', 'control':'unanswered-worker-decision',
                              'worker':label,
@@ -302,7 +338,7 @@ def swapped_decisions(application, spec, operation):
         raise ValueError('decision routing requires distinct correct options')
     session, project, prepared = application.prepare_workers(spec)
     application.request(f'/v1/sessions/{session}/prompts', {'operation_id':str(uuid.uuid4()),'text':spec['prompt']})
-    invoke(application,session,'update_progress',{'content':'## Progress\n'+''.join('- [ ] '+d['label']+'\n' for d in dispatches)})
+    reconcile_progress(application,session,{d['label']:'pending' for d in dispatches})
     results = respond(application,session,[dispatch_call(d) for d in dispatches])
     for index, result in enumerate(results):
         job = job_id(result)
@@ -315,7 +351,7 @@ def swapped_decisions(application, spec, operation):
         row = settled(application,session,job,{'complete','failed'})
         if row['merge_status'] == 'pending':
             invoke(application,session,'reject_overlay',{'overlay_id':job})
-    invoke(application,session,'update_progress',{'content':'## Progress\n'+''.join('- [~] '+d['label']+'\n' for d in dispatches)})
+    reconcile_progress(application,session,{d['label']:'na' for d in dispatches})
     finish(application,session,'The requested reports are unfinished.')
     application.flows.append({'id':spec['id'],'kind':'shortcut','control':'swapped-worker-decisions',
                              'session_id':session,'project_dir':str(project),'prepared':prepared,

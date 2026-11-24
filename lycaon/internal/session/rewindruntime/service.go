@@ -74,10 +74,10 @@ func (s *Service) ResetTurnLedgers(sessionID, rootID string) {
 	}
 }
 
-// Progress checklists have no version to restore.
+// ResetProgress clears visible rows and notifies progress observers.
 func (s *Service) ResetProgress(rootID string) {
 	if s.Progress != nil {
-		_ = s.Progress.Set(rootID, "")
+		_ = s.Progress.Clear(context.Background(), rootID)
 	}
 }
 

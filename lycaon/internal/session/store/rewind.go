@@ -172,11 +172,17 @@ func commitRewindSQL(ctx context.Context, s *sqlCore, id, sessionID, anchorMessa
 	if err != nil {
 		return 0, err
 	}
-	if err := queries.DeleteSessionProgress(ctx, rootID); err != nil {
+	nowStamp := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := queries.DeleteSessionProgressItems(ctx, rootID); err != nil {
+		return 0, err
+	}
+	if err := queries.BumpSessionProgressOnClear(ctx, db.BumpSessionProgressOnClearParams{
+		UpdatedAt: nowStamp, SessionID: rootID,
+	}); err != nil {
 		return 0, err
 	}
 	if _, err := queries.CancelQueuedPromptSubmissionsBySession(ctx, db.CancelQueuedPromptSubmissionsBySessionParams{
-		CompletedAt: db.NullString(time.Now().UTC().Format(time.RFC3339Nano)),
+		CompletedAt: db.NullString(nowStamp),
 		SessionID:   sessionID,
 	}); err != nil {
 		return 0, err

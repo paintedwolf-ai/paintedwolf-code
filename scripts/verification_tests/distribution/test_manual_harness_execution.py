@@ -138,12 +138,12 @@ class ManualDriverTests(unittest.TestCase):
 
     def test_repl_preserves_programs_and_raw_tool_arguments(self):
         driver = Mock(last={"tool_schemas": [{"name": "command"}]})
-        inputs = iter(["", ":help", ":prompt", ":tools", ":begin", "for i in a b; do", "echo $i", "done", ":end", ":begin", "discard", ":cancel", ':call update_progress {"content":"- [ ] Test command writes"}', ":call tool []", ":unknown", "echo hi", ":quit"])
+        inputs = iter(["", ":help", ":prompt", ":tools", ":begin", "for i in a b; do", "echo $i", "done", ":end", ":begin", "discard", ":cancel", ':call update_progress {"replace":[{"label":"Test command writes"}]}', ":call tool []", ":unknown", "echo hi", ":quit"])
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as errors:
             manual.repl(driver, lambda _: next(inputs))
         self.assertEqual(driver.invoke.call_args_list, [
             unittest.mock.call("command", {"command": "for i in a b; do\necho $i\ndone"}),
-            unittest.mock.call("update_progress", {"content": "- [ ] Test command writes"}),
+            unittest.mock.call("update_progress", {"replace": [{"label": "Test command writes"}]}),
             unittest.mock.call("command", {"command": "echo hi"}),
         ])
         self.assertIn("must be a JSON object", errors.getvalue())

@@ -1,17 +1,16 @@
 package progress
 
-// PrerequisiteMissing preserves the existing worker and workflow review-loop
-// exemptions. Content validity comes from the existing progress parser.
-func PrerequisiteMissing(content string, workerChild, reviewLoopActive bool) bool {
-	return !workerChild && !reviewLoopActive && ProgressMissing(content)
+// PrerequisiteMissing reports whether gated work lacks a required session plan.
+func PrerequisiteMissing(missing, workerChild, reviewLoopActive bool) bool {
+	return !workerChild && !reviewLoopActive && missing
 }
 
-// PrerequisiteState comes from current session/workflow facts and the existing
-// root-session progress store. No field is inferred from command or chat prose.
+// PrerequisiteState captures session, workflow, and progress facts for gate checks.
 type PrerequisiteState struct {
 	SessionID        string
 	RootSessionID    string
-	Content          string
+	Missing          bool
+	OpenSteps        int
 	WorkerChild      bool
 	ReviewLoopActive bool
 	Reconciliation   *Reconciliation

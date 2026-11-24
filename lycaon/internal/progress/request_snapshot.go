@@ -1,13 +1,31 @@
 package progress
 
-// RequestSnapshot identifies the authoritative checklist scope and its next action.
+import "slices"
+
+// RequestSnapshot projects the model-visible session progress state without internal UUIDs or hashes.
 type RequestSnapshot struct {
-	Snapshot
-	Summary                Summary `json:"summary"`
-	ScopeSessionID         string  `json:"scope_session_id"`
-	InitializationRequired bool    `json:"initialization_required"`
+	ScopeSessionID         string              `json:"scope_session_id"`
+	Rows                   []Row               `json:"rows"`
+	Summary                Summary             `json:"summary"`
+	InitializationRequired bool                `json:"initialization_required"`
+	UnaccountedResults     []UnaccountedResult `json:"unaccounted_results"`
 }
 
+// ForRequest formats snapshot for turn-state injection and update_progress results.
 func ForRequest(scope string, snapshot Snapshot) RequestSnapshot {
-	return RequestSnapshot{Snapshot: snapshot, Summary: Summarize(snapshot.Content), ScopeSessionID: scope, InitializationRequired: ProgressMissing(snapshot.Content)}
+	rows := slices.Clone(snapshot.Rows)
+	if rows == nil {
+		rows = []Row{}
+	}
+	unaccounted := []UnaccountedResult{}
+	if snapshot.Reconciliation != nil && len(snapshot.Reconciliation.Unaccounted) > 0 {
+		unaccounted = slices.Clone(snapshot.Reconciliation.Unaccounted)
+	}
+	return RequestSnapshot{
+		ScopeSessionID:         scope,
+		Rows:                   rows,
+		Summary:                snapshot.Summary(),
+		InitializationRequired: snapshot.Missing(),
+		UnaccountedResults:     unaccounted,
+	}
 }

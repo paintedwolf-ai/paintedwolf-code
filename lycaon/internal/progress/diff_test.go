@@ -7,8 +7,8 @@ import (
 	api "github.com/lycaon/lycaon/pkg/api"
 )
 
-func snap(content string, ids ...string) progress.Snapshot {
-	return progress.Snapshot{Content: content, ItemIDs: ids}
+func row(id, state, label string) progress.Row {
+	return progress.Row{ID: id, State: state, Label: label}
 }
 
 func change(kind api.ProgressChangeKind, label, prevLabel, state string) api.ProgressChange {
@@ -24,14 +24,14 @@ func TestDiffSteps(t *testing.T) {
 	}{
 		{
 			name: "no change",
-			prev: snap("- [ ] a\n- [x] b", "id-1", "id-2"),
-			next: snap("- [ ] a\n- [x] b", "id-1", "id-2"),
+			prev: progress.NewSnapshot("", row("p1", "pending", "a"), row("p2", "done", "b")),
+			next: progress.NewSnapshot("", row("p1", "pending", "a"), row("p2", "done", "b")),
 			want: nil,
 		},
 		{
 			name: "create from empty",
-			prev: snap(""),
-			next: snap("- [ ] a\n- [ ] b", "id-1", "id-2"),
+			prev: progress.NewSnapshot(""),
+			next: progress.NewSnapshot("", row("p1", "pending", "a"), row("p2", "pending", "b")),
 			want: []api.ProgressChange{
 				change(api.ProgressChangeCreated, "a", "", "pending"),
 				change(api.ProgressChangeCreated, "b", "", "pending"),
@@ -39,32 +39,32 @@ func TestDiffSteps(t *testing.T) {
 		},
 		{
 			name: "mark done",
-			prev: snap("- [ ] a\n- [ ] b", "id-1", "id-2"),
-			next: snap("- [ ] a\n- [x] b", "id-1", "id-2"),
+			prev: progress.NewSnapshot("", row("p1", "pending", "a"), row("p2", "pending", "b")),
+			next: progress.NewSnapshot("", row("p1", "pending", "a"), row("p2", "done", "b")),
 			want: []api.ProgressChange{change(api.ProgressChangeDone, "b", "", "done")},
 		},
 		{
 			name: "mark na",
-			prev: snap("- [ ] a", "id-1"),
-			next: snap("- [~] a", "id-1"),
+			prev: progress.NewSnapshot("", row("p1", "pending", "a")),
+			next: progress.NewSnapshot("", row("p1", "na", "a")),
 			want: []api.ProgressChange{change(api.ProgressChangeNA, "a", "", "na")},
 		},
 		{
 			name: "reopened",
-			prev: snap("- [x] a", "id-1"),
-			next: snap("- [ ] a", "id-1"),
+			prev: progress.NewSnapshot("", row("p1", "done", "a")),
+			next: progress.NewSnapshot("", row("p1", "pending", "a")),
 			want: []api.ProgressChange{change(api.ProgressChangeReopened, "a", "", "pending")},
 		},
 		{
 			name: "label edit pairs into updated",
-			prev: snap("- [ ] old label", "id-1"),
-			next: snap("- [ ] new label", "id-1"),
+			prev: progress.NewSnapshot("", row("p1", "pending", "old label")),
+			next: progress.NewSnapshot("", row("p1", "pending", "new label")),
 			want: []api.ProgressChange{change(api.ProgressChangeUpdated, "new label", "old label", "pending")},
 		},
 		{
 			name: "relabel and reorder preserves identity",
-			prev: snap("- [ ] first old\n- [ ] second old", "id-1", "id-2"),
-			next: snap("- [ ] second new\n- [ ] first new", "id-2", "id-1"),
+			prev: progress.NewSnapshot("", row("p1", "pending", "first old"), row("p2", "pending", "second old")),
+			next: progress.NewSnapshot("", row("p2", "pending", "second new"), row("p1", "pending", "first new")),
 			want: []api.ProgressChange{
 				change(api.ProgressChangeUpdated, "second new", "second old", "pending"),
 				change(api.ProgressChangeUpdated, "first new", "first old", "pending"),
@@ -72,26 +72,26 @@ func TestDiffSteps(t *testing.T) {
 		},
 		{
 			name: "duplicate labels track distinct item IDs",
-			prev: snap("- [ ] same\n- [ ] same", "id-1", "id-2"),
-			next: snap("- [ ] same\n- [x] same", "id-2", "id-1"),
+			prev: progress.NewSnapshot("", row("p1", "pending", "same"), row("p2", "pending", "same")),
+			next: progress.NewSnapshot("", row("p2", "pending", "same"), row("p1", "done", "same")),
 			want: []api.ProgressChange{change(api.ProgressChangeDone, "same", "", "done")},
 		},
 		{
 			name: "removed",
-			prev: snap("- [ ] a\n- [ ] b", "id-1", "id-2"),
-			next: snap("- [ ] a", "id-1"),
+			prev: progress.NewSnapshot("", row("p1", "pending", "a"), row("p2", "pending", "b")),
+			next: progress.NewSnapshot("", row("p1", "pending", "a")),
 			want: []api.ProgressChange{change(api.ProgressChangeRemoved, "b", "", "pending")},
 		},
 		{
 			name: "reorder is no change",
-			prev: snap("- [ ] a\n- [x] b", "id-1", "id-2"),
-			next: snap("- [x] b\n- [ ] a", "id-2", "id-1"),
+			prev: progress.NewSnapshot("", row("p1", "pending", "a"), row("p2", "done", "b")),
+			next: progress.NewSnapshot("", row("p2", "done", "b"), row("p1", "pending", "a")),
 			want: nil,
 		},
 		{
 			name: "add and complete in one diff",
-			prev: snap("- [ ] a", "id-1"),
-			next: snap("- [x] a\n- [ ] b", "id-1", "id-2"),
+			prev: progress.NewSnapshot("", row("p1", "pending", "a")),
+			next: progress.NewSnapshot("", row("p1", "done", "a"), row("p2", "pending", "b")),
 			want: []api.ProgressChange{
 				change(api.ProgressChangeDone, "a", "", "done"),
 				change(api.ProgressChangeCreated, "b", "", "pending"),

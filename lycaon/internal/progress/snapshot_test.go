@@ -1,174 +1,186 @@
 package progress
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"regexp"
+	"slices"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestAuthorUpdateRevisionAdmitsOneConcurrentReplacement(t *testing.T) {
+func TestMixedAddRemoveAnchorAndMultiAddOrder(t *testing.T) {
 	store := newProgressFixture(t, "session")
-	if _, err := store.Update(t.Context(), "session", func(Snapshot) (Document, error) {
-		return Document{RunID: "run-session", Content: "# Goal\n\n" + "Deliver change" + "\n\n## Progress\n"}, nil
-	}); err != nil {
-		t.Fatalf("seed progress run: %v", err)
+	seeded, err := store.Apply(t.Context(), "session", Mutation{
+		Replace: []RowSpec{
+			{Label: "First", State: ProgressStatePending},
+			{Label: "Second", State: ProgressStatePending},
+			{Label: "Note", State: ProgressStateOptional},
+		},
+	}, ApplyOptions{})
+	testutil.FailErr(t, "seed plan", err)
+	if !slices.Equal(seeded.AddedItemIDs, []string{"p1", "p2", "p3"}) {
+		t.Fatalf("added IDs = %v", seeded.AddedItemIDs)
 	}
-	initial, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read initial progress", err)
-	var wait sync.WaitGroup
-	results := make(chan error, 2)
-	for _, content := range []string{"- [ ] First", "- [ ] Second"} {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			update, prepareErr := PrepareAuthorUpdate(content)
-			if prepareErr != nil {
-				results <- prepareErr
-				return
-			}
-			_, applyErr := update.ExpectRevision(initial.Revision).Apply(t.Context(), store, "session", nil)
-			results <- applyErr
-		}()
+
+	// Anchoring an addition onto a row removed in the same call must reject.
+	_, err = PrepareMutation(map[string]any{
+		"remove": []any{"p2"},
+		"add":    []any{map[string]any{"label": "After removed", "after_id": "p2"}},
+	})
+	var conflict *MutationRejection
+	if !errors.As(err, &conflict) || conflict.Code != "PROGRESS_CONFLICTING_OPERATIONS" {
+		t.Fatalf("removed anchor outcome = %v, want PROGRESS_CONFLICTING_OPERATIONS", err)
 	}
-	wait.Wait()
-	close(results)
-	accepted, conflicted := 0, 0
-	for err := range results {
-		if err == nil {
-			accepted++
-			continue
-		}
-		var rejection *AuthorUpdateRejection
-		if !errors.As(err, &rejection) || rejection.Code != "PROGRESS_REVISION_CHANGED" {
-			t.Fatalf("unexpected update result: %v", err)
-		}
-		conflicted++
+
+	// Multiple additions sharing an anchor (start, surviving p1, and default tail) preserve input order.
+	mixed, err := PrepareMutation(map[string]any{
+		"remove": []any{"p2"},
+		"add": []any{
+			map[string]any{"label": "Start A", "after_id": "start"},
+			map[string]any{"label": "Start B", "after_id": "start"},
+			map[string]any{"label": "After p1 A", "after_id": "p1"},
+			map[string]any{"label": "After p1 B", "after_id": "p1"},
+			map[string]any{"label": "Tail A"},
+			map[string]any{"label": "Tail B"},
+		},
+	})
+	testutil.FailErr(t, "prepare mixed edit", err)
+	out, err := store.Apply(t.Context(), "session", mixed, ApplyOptions{})
+	testutil.FailErr(t, "apply mixed edit", err)
+
+	var labels []string
+	var ids []string
+	for _, r := range out.Snapshot.Rows {
+		labels = append(labels, r.Label)
+		ids = append(ids, r.ID)
 	}
-	if accepted != 1 || conflicted != 1 {
-		t.Fatalf("accepted=%d conflicts=%d", accepted, conflicted)
+	wantLabels := []string{"Start A", "Start B", "First", "After p1 A", "After p1 B", "Tail A", "Tail B", "Note"}
+	wantIDs := []string{"p4", "p5", "p1", "p6", "p7", "p8", "p9", "p3"}
+	if !slices.Equal(labels, wantLabels) || !slices.Equal(ids, wantIDs) {
+		t.Fatalf("rows = %v (%v), want %v (%v)", labels, ids, wantLabels, wantIDs)
 	}
 }
 
-func TestAuthorUpdateSeparatesDocumentAndDeliverableChanges(t *testing.T) {
-	store := newProgressFixture(t, "session")
-	apply := func(content string) AuthorUpdateResult {
-		t.Helper()
-		update, err := PrepareAuthorUpdate(content)
-		testutil.FailErr(t, "prepare checklist", err)
-		observed, err := store.Snapshot(t.Context(), "session")
-		testutil.FailErr(t, "observe checklist", err)
-		update = update.ExpectRevision(observed.Revision)
-		if len(observed.ItemIDs) > 0 {
-			update = update.ExpectItemIDs(observed.ItemIDs...)
-		}
-		result, err := update.Apply(t.Context(), store, "session", nil)
-		testutil.FailErr(t, "apply checklist", err)
-		return result
+func TestRequestSnapshotContainsNoRowUUIDsOrRevisionHashes(t *testing.T) {
+	var rows []Row
+	label := strings.Repeat("x", MaxLabelRunes)
+	for i := 0; i < MaxAuthorProgressRows; i++ {
+		rows = append(rows, Row{ID: "p1", State: ProgressStatePending, Label: label})
 	}
-	first := apply("- [ ] Write code\n- [ ] Verify code")
+	snap := NewSnapshot(uuid.NewString(), rows...)
+	snap.Reconciliation = &Reconciliation{
+		Jobs:        []string{"job-secret-1", "job-secret-2"},
+		Settled:     []string{"`scout` (repo-researcher): survey"},
+		Unaccounted: []UnaccountedResult{{Handle: "scout#1", Worker: "scout", Summary: "survey"}},
+	}
+	view := ForRequest("session-scope", snap)
+	raw, err := json.Marshal(view)
+	testutil.FailErr(t, "marshal request snapshot", err)
+
+	hex64 := regexp.MustCompile(`[0-9a-f]{64}`)
+	uuidPattern := regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+	if hex64.Match(raw) || uuidPattern.Match(raw) || bytes.Contains(raw, []byte("job-secret")) {
+		t.Fatalf("request snapshot leaked internal hash/UUID/job: %s", raw)
+	}
+	const maxSnapshotPromptBytes = 8192
+	if len(raw) > maxSnapshotPromptBytes {
+		t.Fatalf("serialized request snapshot size = %d, exceeds %d", len(raw), maxSnapshotPromptBytes)
+	}
+}
+
+func TestApplySeparatesDocumentAndDeliverableChanges(t *testing.T) {
+	store := newProgressFixture(t, "session")
+	first, err := store.Apply(t.Context(), "session", Mutation{
+		Replace: []RowSpec{
+			{Label: "Write code", State: ProgressStatePending},
+			{Label: "Verify code", State: ProgressStatePending},
+		},
+	}, ApplyOptions{})
+	testutil.FailErr(t, "seed rows", err)
 	if !first.Updated || first.StateChanged || len(first.ClosedItemIDs) != 0 {
 		t.Fatalf("establishment outcome: %+v", first)
 	}
-	noop := apply(first.Snapshot.Content)
-	if noop.Updated || noop.StateChanged || len(noop.ClosedItemIDs) != 0 || noop.Snapshot.Revision != first.Snapshot.Revision {
+
+	pending := ProgressStatePending
+	noop, err := store.Apply(t.Context(), "session", Mutation{
+		Update: []UpdateRowSpec{{ID: "p1", State: &pending}},
+	}, ApplyOptions{})
+	testutil.FailErr(t, "noop update", err)
+	if noop.Updated || noop.StateChanged || len(noop.ClosedItemIDs) != 0 || noop.Snapshot.DocumentVersion() != first.Snapshot.DocumentVersion() {
 		t.Fatalf("no-op outcome: %+v", noop)
 	}
-	label := apply("- [ ] Implement code\n- [ ] Verify code")
-	if !label.Updated || label.StateChanged || len(label.ClosedItemIDs) != 0 {
-		t.Fatalf("label change outcome: %+v", label)
+
+	relabeled := "Implement code"
+	labelOut, err := store.Apply(t.Context(), "session", Mutation{
+		Update: []UpdateRowSpec{{ID: "p1", Label: &relabeled}},
+	}, ApplyOptions{})
+	testutil.FailErr(t, "relabel update", err)
+	if !labelOut.Updated || labelOut.StateChanged || len(labelOut.ClosedItemIDs) != 0 {
+		t.Fatalf("label change outcome: %+v", labelOut)
 	}
-	closed := apply("- [x] Implement code\n- [ ] Verify code")
-	if !closed.Updated || !closed.StateChanged || len(closed.ClosedItemIDs) != 1 || closed.ClosedItemIDs[0] != first.Snapshot.ItemIDs[0] {
+
+	done := ProgressStateDone
+	closed, err := store.Apply(t.Context(), "session", Mutation{
+		Update: []UpdateRowSpec{{ID: "p1", State: &done}},
+	}, ApplyOptions{})
+	testutil.FailErr(t, "close update", err)
+	if !closed.Updated || !closed.StateChanged || !slices.Equal(closed.ClosedItemIDs, []string{"p1"}) {
 		t.Fatalf("terminal transition outcome: %+v", closed)
 	}
 }
 
-func TestSnapshotRevisionIncludesBoundRun(t *testing.T) {
-	first := NewSnapshot("first", "- [ ] Deliver")
-	second := NewSnapshot("second", first.Content)
-	if first.Revision == second.Revision {
-		t.Fatal("different run inherited revision")
-	}
-	if NewSnapshot(first.RunID, first.Content).Revision != first.Revision {
-		t.Fatal("revision depends on process-local state")
-	}
-}
-
-func TestAuthorUpdateRejectsOversizeWithoutTruncatingState(t *testing.T) {
-	store := newProgressFixture(t, "session")
-	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Keep complete"))
-	_, err := PrepareAuthorUpdate("- [ ] " + strings.Repeat("x", ContentMaxChars))
-	var rejected *AuthorUpdateRejection
-	if !errors.As(err, &rejected) || rejected.Code != "PROGRESS_DOCUMENT_TOO_LARGE" {
-		t.Fatalf("oversize outcome: %v", err)
-	}
-	if store.Get(t.Context(), "session") != "- [ ] Keep complete" {
-		t.Fatal("oversized proposal changed stored state")
-	}
-}
-
 func TestDeliverableTransitionsAreInvariantUnderRowPermutation(t *testing.T) {
-	initial := NewSnapshot("run", "- [ ] Same label\n- [x] Same label\n- [ ] Other", "id-1", "id-2", "id-3")
-	permuted := NewSnapshot("run", "- [ ] Other\n- [x] Same label\n- [ ] Same label", "id-3", "id-2", "id-1")
+	initial := NewSnapshot("run",
+		Row{ID: "p1", State: ProgressStatePending, Label: "Same label"},
+		Row{ID: "p2", State: ProgressStateDone, Label: "Same label"},
+		Row{ID: "p3", State: ProgressStatePending, Label: "Other"},
+	)
+	permuted := NewSnapshot("run",
+		Row{ID: "p3", State: ProgressStatePending, Label: "Other"},
+		Row{ID: "p2", State: ProgressStateDone, Label: "Same label"},
+		Row{ID: "p1", State: ProgressStatePending, Label: "Same label"},
+	)
 	if result := ClassifyTransitions(initial, permuted); result.Changed || len(result.ClosedItemIDs) != 0 {
 		t.Fatalf("permutation invented a transition: %+v", result)
 	}
-	for _, extra := range []string{"- [ ] Same label", "- [x] Same label", "- [ ] New scope"} {
-		withExtra := NewSnapshot("run", permuted.Content+"\n"+extra, "id-3", "id-2", "id-1", "id-4")
-		if result := ClassifyTransitions(initial, withExtra); result.Changed || len(result.ClosedItemIDs) != 0 {
-			t.Fatalf("new row invented a transition: %+v", result)
-		}
+	withExtra := NewSnapshot("run", append(slices.Clone(permuted.Rows), Row{ID: "p4", State: ProgressStateDone, Label: "New"})...)
+	if result := ClassifyTransitions(initial, withExtra); result.Changed || len(result.ClosedItemIDs) != 0 {
+		t.Fatalf("new row invented a transition: %+v", result)
 	}
-	completed := NewSnapshot("run", "- [x] Same label\n- [ ] Other\n- [x] Same label", "id-1", "id-3", "id-2")
-	if result := ClassifyTransitions(initial, completed); !result.Changed || len(result.ClosedItemIDs) != 1 || result.ClosedItemIDs[0] != "id-1" {
+	completed := NewSnapshot("run",
+		Row{ID: "p1", State: ProgressStateDone, Label: "Same label"},
+		Row{ID: "p3", State: ProgressStatePending, Label: "Other"},
+		Row{ID: "p2", State: ProgressStateDone, Label: "Same label"},
+	)
+	if result := ClassifyTransitions(initial, completed); !result.Changed || !slices.Equal(result.ClosedItemIDs, []string{"p1"}) {
 		t.Fatalf("terminal transition lost: %+v", result)
-	}
-}
-
-func TestSnapshotMaxLegalChecklistAndItemIDsBudget(t *testing.T) {
-	var rows []string
-	var ids []string
-	label := strings.Repeat("x", MaxLabelRunes)
-	for i := 0; i < MaxAuthorProgressLines; i++ {
-		rows = append(rows, "- [ ] "+label)
-		ids = append(ids, uuid.NewString())
-	}
-	snap := NewSnapshot(uuid.NewString(), "## Progress\n"+strings.Join(rows, "\n"), ids...)
-	snap.Reconciliation = &Reconciliation{
-		Token: strings.Repeat("a", 64),
-		Jobs:  []string{"worker-1", "worker-2", "worker-3", "worker-4"},
-	}
-	raw, err := json.Marshal(snap)
-	testutil.FailErr(t, "marshal max legal snapshot", err)
-	const maxSnapshotPromptBytes = 12288
-	if len(raw) > maxSnapshotPromptBytes {
-		t.Fatalf("serialized snapshot size = %d, exceeds prompt budget %d", len(raw), maxSnapshotPromptBytes)
 	}
 }
 
 func TestProgressSummarySeparatesTerminalAndCompleted(t *testing.T) {
 	for _, tc := range []struct {
-		name, content string
-		want          Summary
+		name string
+		rows []Row
+		want Summary
 	}{
-		{"empty", "", Summary{}},
-		{"partial", "- [x] Build\n- [ ] Verify", Summary{Pending: 1, Completed: 1}},
-		{"complete", "- [x] Build\n- [x] Verify", Summary{Completed: 2, AllRequiredItemsTerminal: true, AllRequiredItemsCompleted: true}},
-		{"not pursued", "- [x] Build\n- [~] Verify", Summary{Completed: 1, NotPursued: 1, AllRequiredItemsTerminal: true}},
-		{"optional only", "- [>] Later", Summary{Optional: 1, AllRequiredItemsTerminal: true}},
-		{"optional remaining", "- [x] Build\n- [>] Later", Summary{Completed: 1, Optional: 1, AllRequiredItemsTerminal: true, AllRequiredItemsCompleted: true}},
+		{"empty", nil, Summary{}},
+		{"partial", []Row{{ID: "p1", State: "done", Label: "Build"}, {ID: "p2", State: "pending", Label: "Verify"}}, Summary{Pending: 1, Completed: 1}},
+		{"complete", []Row{{ID: "p1", State: "done", Label: "Build"}, {ID: "p2", State: "done", Label: "Verify"}}, Summary{Completed: 2, AllRequiredItemsTerminal: true, AllRequiredItemsCompleted: true}},
+		{"not pursued", []Row{{ID: "p1", State: "done", Label: "Build"}, {ID: "p2", State: "na", Label: "Verify"}}, Summary{Completed: 1, NotPursued: 1, AllRequiredItemsTerminal: true}},
+		{"optional only", []Row{{ID: "p1", State: "optional", Label: "Later"}}, Summary{Optional: 1, AllRequiredItemsTerminal: true}},
+		{"optional remaining", []Row{{ID: "p1", State: "done", Label: "Build"}, {ID: "p2", State: "optional", Label: "Later"}}, Summary{Completed: 1, Optional: 1, AllRequiredItemsTerminal: true, AllRequiredItemsCompleted: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			view := ForRequest("session", NewSnapshot("run", tc.content))
-			if view.Summary != tc.want || AllTerminal(tc.content) != tc.want.AllRequiredItemsTerminal {
+			view := ForRequest("session", NewSnapshot("run", tc.rows...))
+			if view.Summary != tc.want || AllTerminal(tc.rows) != tc.want.AllRequiredItemsTerminal {
 				t.Fatalf("summary = %+v, want %+v", view.Summary, tc.want)
 			}
-			done, pending, na := CloseCounts(tc.content)
+			done, pending, na := CloseCounts(tc.rows)
 			if done != tc.want.Completed || pending != tc.want.Pending || na != tc.want.NotPursued {
 				t.Fatalf("closure counts = %d/%d/%d", done, pending, na)
 			}

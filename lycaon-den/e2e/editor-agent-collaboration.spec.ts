@@ -43,7 +43,10 @@ webE2e("agent commands read the person's unsaved text and edit it while they kee
     const driver = manualHarnessTools(request, sessionId);
     await driver.loadTools("update_progress");
     await driver.completed(await driver.invoke("update_progress", {
-      content: "## Progress\n- [ ] Update shared.txt while preserving the person's edits\n- [ ] Verify the shared document\n",
+      replace: [
+        { label: "Update shared.txt while preserving the person's edits" },
+        { label: "Verify the shared document" },
+      ],
     }));
     const read = await driver.completed(await driver.invoke("command", { command: "cat shared.txt" }));
     expect(read).toContain("Unsaved person 🐺");

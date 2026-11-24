@@ -149,7 +149,7 @@ func TestLogLLMRequestWritesCompletionSummary(t *testing.T) {
 
 	summary := SummarizeLLMCompletion("", []api.ToolCall{{
 		Name: "update_progress",
-		Args: map[string]any{"content": "- [ ] Core library\n"},
+		Args: map[string]any{"replace": []any{map[string]any{"label": "Core library"}}},
 	}})
 	LogLLMRequest("mock", "mock", "stream", nil, nil, LLMRequestTiming{}, LLMUsageCapture{
 		CompletionTokens: 8007,

@@ -31,12 +31,17 @@ func (s interruptedTransaction) AppendMessagesWith(ctx context.Context, id strin
 }
 
 func TestPlanAndTranscriptRollbackTogether(t *testing.T) {
-	for _, mode := range []string{"plan insertion", "message insertion", "outbox insertion", "before commit", "commit constraint", "cancellation"} {
+	for _, mode := range []string{"plan insertion", "item insertion", "message insertion", "outbox insertion", "before commit", "commit constraint", "cancellation"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newProgressFixture(t)
 			before, err := f.plans.Snapshot(t.Context(), "session")
 			testutil.FailErr(t, "read original plan", err)
-			table := map[string]string{"plan insertion": "session_progress", "message insertion": "messages", "outbox insertion": "event_outbox"}[mode]
+			table := map[string]string{
+				"plan insertion":    "session_progress",
+				"item insertion":    "session_progress_items",
+				"message insertion": "messages",
+				"outbox insertion":  "event_outbox",
+			}[mode]
 			if table != "" {
 				_, err = f.database.ExecContext(t.Context(), "CREATE TRIGGER reject_progress BEFORE INSERT ON "+table+" BEGIN SELECT RAISE(ABORT, 'injected persistence failure'); END")
 				testutil.FailErr(t, "install failure", err)
@@ -70,9 +75,9 @@ func TestPlanAndTranscriptRollbackTogether(t *testing.T) {
 				}
 			})
 			defer detach()
-			_, err = plans.Update(ctx, "session", func(progress.Snapshot) (progress.Document, error) {
-				return progress.Document{Content: "- [ ] Keep"}, nil
-			})
+			_, err = plans.Apply(ctx, "session", progress.Mutation{
+				Replace: []progress.RowSpec{{Label: "Keep", State: progress.ProgressStatePending}},
+			}, progress.ApplyOptions{})
 			if err == nil {
 				t.Fatal("injected failure accepted")
 			}
@@ -94,10 +99,10 @@ func TestPlanAndTranscriptRollbackTogether(t *testing.T) {
 				_, err = f.database.ExecContext(t.Context(), "DROP TABLE deferred_failure")
 				testutil.FailErr(t, "remove deferred fixture", err)
 			}
-			applyPlan(t, f.plans, "- [ ] Keep")
+			snap := replacePlan(t, f.plans, progress.RowSpec{Label: "Keep", State: progress.ProgressStatePending})
 			rows := f.messages(t)
-			if len(rows) != 1 || rows[0].Ord != 1 || !rows[0].ProgressUpdate.Initial {
-				t.Fatalf("retry skipped initial transition: %+v", rows)
+			if len(rows) != 1 || rows[0].Ord != 1 || !rows[0].ProgressUpdate.Initial || snap.Rows[0].ID != "p1" {
+				t.Fatalf("retry skipped initial transition or burned sequence: snap=%+v rows=%+v", snap, rows)
 			}
 		})
 	}
@@ -112,9 +117,9 @@ func TestPlanRunIdentityIsValidatedBeforeMutation(t *testing.T) {
 			}
 			before, err := f.plans.Snapshot(t.Context(), "session")
 			testutil.FailErr(t, "read before invalid binding", err)
-			_, err = f.plans.Update(t.Context(), "session", func(progress.Snapshot) (progress.Document, error) {
-				return progress.Document{RunID: runID, Content: "- [ ] Invalid"}, nil
-			})
+			_, err = f.plans.Apply(t.Context(), "session", progress.Mutation{
+				Replace: []progress.RowSpec{{Label: "Invalid", State: progress.ProgressStatePending}},
+			}, progress.ApplyOptions{RunID: runID})
 			if err == nil {
 				t.Fatal("invalid run accepted")
 			}

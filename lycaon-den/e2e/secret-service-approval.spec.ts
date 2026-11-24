@@ -104,7 +104,10 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
     const driver = manualHarnessTools(request, sessionId);
     await driver.loadTools("secret_generate", "update_progress");
     await driver.completed(await driver.invoke("update_progress", {
-      content: "## Progress\n- [ ] Configure the service\n- [ ] Verify authenticated requests\n",
+      replace: [
+        { label: "Configure the service" },
+        { label: "Verify authenticated requests" },
+      ],
     }));
     // A person-held value needs desktop presence; a project-scoped generated value asks through the ordinary card.
     await driver.completed(await driver.invoke("secret_generate", {

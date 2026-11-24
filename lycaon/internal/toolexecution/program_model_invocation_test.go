@@ -12,15 +12,15 @@ import (
 func TestProgramFrameRetainsActualModelArgumentsAndSharedLifetime(t *testing.T) {
 	parent, tc := frameFixture(t)
 	memory := stageMemory(t, 64<<20)
-	submitted := map[string]any{"command": "cat 'original'", "progress_update": map[string]any{"content": "- [ ] Actual submitted work"}}
+	submitted := map[string]any{"command": "cat 'original'", "progress_update": map[string]any{"replace": []any{map[string]any{"label": "Actual submitted work"}}}}
 	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: submitted}, memory)
 	testutil.FailErr(t, "capture actual model invocation", err)
 	defer frame.Close()
 	submitted["command"] = "caller changed"
-	submitted["progress_update"].(map[string]any)["content"] = "caller changed"
+	submitted["progress_update"].(map[string]any)["replace"].([]any)[0].(map[string]any)["label"] = "caller changed"
 	observed, err := frame.ModelInvocation(t.Context())
 	testutil.FailErr(t, "observe submitted input", err)
-	if observed.ToolName != "command" || observed.ToolCallID != tc.Identity.ToolCallID || observed.CanonicalArguments != `{"command":"cat 'original'","progress_update":{"content":"- [ ] Actual submitted work"}}` || memory.InUse().State == 0 {
+	if observed.ToolName != "command" || observed.ToolCallID != tc.Identity.ToolCallID || observed.CanonicalArguments != `{"command":"cat 'original'","progress_update":{"replace":[{"label":"Actual submitted work"}]}}` || memory.InUse().State == 0 {
 		t.Fatalf("actual model observation lost: %+v", observed)
 	}
 	copied := frame

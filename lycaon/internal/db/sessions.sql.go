@@ -287,15 +287,6 @@ func (q *Queries) DeleteSessionEntriesFromOrd(ctx context.Context, arg DeleteSes
 	return result.RowsAffected()
 }
 
-const deleteSessionProgress = `-- name: DeleteSessionProgress :exec
-DELETE FROM session_progress WHERE session_id = ?
-`
-
-func (q *Queries) DeleteSessionProgress(ctx context.Context, sessionID string) error {
-	_, err := q.db.ExecContext(ctx, deleteSessionProgress, sessionID)
-	return err
-}
-
 const finishPromptSubmission = `-- name: FinishPromptSubmission :execrows
 UPDATE prompt_submissions
 SET status = ?, result_json = ?, error = ?, error_code = ?, completed_at = ?

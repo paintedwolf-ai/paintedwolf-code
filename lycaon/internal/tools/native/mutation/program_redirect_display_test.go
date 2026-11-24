@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -11,7 +12,7 @@ import (
 // inputs keep the resolved path.
 func TestRedirectReceiptsNameTheWorkspacePath(t *testing.T) {
 	f := mutationProgramFixture(t)
-	testutil.FailErr(t, "record checklist", f.SetProgress("- [ ] Write the files"))
+	testutil.FailErr(t, "record checklist", f.ReplaceProgress(progress.RowSpec{Label: "Write the files"}))
 	for _, tc := range []struct{ operator, path string }{
 		{">", "index.html"}, {">>", "log.txt"}, {"&>", "both.txt"}, {"&>>", "both.txt"},
 	} {
@@ -44,7 +45,7 @@ func TestRedirectReceiptsNameTheWorkspacePath(t *testing.T) {
 // producer feeding it or a host path.
 func TestRedirectRowsNameTheirFiles(t *testing.T) {
 	f := mutationProgramFixture(t)
-	testutil.FailErr(t, "record checklist", f.SetProgress("- [ ] Write the files"))
+	testutil.FailErr(t, "record checklist", f.ReplaceProgress(progress.RowSpec{Label: "Write the files"}))
 	for _, tc := range []struct {
 		source string
 		paths  []string

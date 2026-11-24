@@ -12,22 +12,18 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// ValidatedProgramIdentity is supplied by the actual sealed parsed program.
-// Its retained-state lease must remain held through admission and application.
-// Inspection-only plans, closed plans and unvalidated source cannot satisfy it.
+// ValidatedProgramIdentity is supplied by the sealed parsed program.
 type ValidatedProgramIdentity interface {
 	ValidatedProgramIdentity(context.Context) (sourceDigest, catalogDigest string, err error)
 }
 
-// ProgramProgressUpdate is a distinct host invocation of the existing progress
-// owner, attributed separately from program operations and the real model call.
+// ProgramProgressUpdate is a distinct host invocation of update_progress inside a program envelope.
 type ProgramProgressUpdate struct {
 	ExecutionID string
 	Arguments   map[string]any
 }
 
-// PreparedProgramEnvelope owns only admitted immutable envelope facts. It never
-// executes a program; the introducing command entry retains the parsed plan.
+// PreparedProgramEnvelope owns admitted immutable envelope facts and progress preconditions.
 type PreparedProgramEnvelope struct {
 	program        ValidatedProgramIdentity
 	sourceDigest   string
@@ -35,6 +31,7 @@ type PreparedProgramEnvelope struct {
 	contractDigest string
 	frame          ProgramFrame
 	update         *nativeArguments
+	basis          progress.PreparedProgressBasis
 	admission      *toolcontract.ProgramMemory
 	identity       toolcontract.ProgramProgressIdentity
 	closed         bool
@@ -42,17 +39,24 @@ type PreparedProgramEnvelope struct {
 	releaseFrame   func()
 }
 
-// ProgramProgressResult records progress independently of later program success.
-// A committed update cannot justify replaying an already reached program child.
+// ProgramProgressResult records progress independently of later program operations.
 type ProgramProgressResult struct {
 	Identity     toolcontract.ProgramProgressIdentity
 	OwnerInvoked bool
-	Outcome      progress.AuthorUpdateResult
+	Outcome      progress.MutationResult
 }
 
-// PrepareProgramEnvelope validates both complete syntax and progress before
-// either owner may apply an effect. A missing update preserves existing progress.
-func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFrame, program ValidatedProgramIdentity, update *ProgramProgressUpdate, admission *toolcontract.ProgramMemory, tc tools.ToolContext) (*PreparedProgramEnvelope, error) {
+// PrepareProgramEnvelope validates syntax and progress arguments and snapshots host preconditions.
+func (e *Executor) PrepareProgramEnvelope(
+	ctx context.Context,
+	frame ProgramFrame,
+	program ValidatedProgramIdentity,
+	update *ProgramProgressUpdate,
+	store progress.Store,
+	facts ProgramProgressFacts,
+	admission *toolcontract.ProgramMemory,
+	tc tools.ToolContext,
+) (*PreparedProgramEnvelope, error) {
 	end, err := frame.beginUse()
 	if err != nil {
 		return nil, err
@@ -73,7 +77,13 @@ func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFram
 	if len(source) != 64 || catalog != frame.lifetime.facts.parent.CatalogDigest {
 		return nil, fmt.Errorf("validated program identity changed")
 	}
-	prepared := &PreparedProgramEnvelope{program: program, sourceDigest: source, catalogDigest: catalog, frame: frame, releaseFrame: end}
+	prepared := &PreparedProgramEnvelope{
+		program:       program,
+		sourceDigest:  source,
+		catalogDigest: catalog,
+		frame:         frame,
+		releaseFrame:  end,
+	}
 	if update == nil {
 		held = true
 		return prepared, nil
@@ -82,7 +92,10 @@ func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFram
 	if !ok || definition.Contract.Owner == "" {
 		return nil, fmt.Errorf("progress owner unavailable")
 	}
-	if strings.TrimSpace(update.ExecutionID) == "" || strings.TrimSpace(update.ExecutionID) != update.ExecutionID || strings.ContainsAny(update.ExecutionID, "\x00\x01") || update.ExecutionID == frame.lifetime.facts.parent.Identity.ExecutionID {
+	if strings.TrimSpace(update.ExecutionID) == "" ||
+		strings.TrimSpace(update.ExecutionID) != update.ExecutionID ||
+		strings.ContainsAny(update.ExecutionID, "\x00\x01") ||
+		update.ExecutionID == frame.lifetime.facts.parent.Identity.ExecutionID {
 		return nil, fmt.Errorf("separate host progress execution identity required")
 	}
 	if err := frame.validateHostContext(ctx, tc); err != nil {
@@ -91,7 +104,14 @@ func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFram
 	if err := frame.validateScope(frame.lifetime.facts.parent.Scope, tc); err != nil {
 		return nil, err
 	}
-	child := freshProgramOwnerContext("update_progress", definition.Contract, update.ExecutionID, frame.lifetime.facts.parent.Scope.ProjectID, frame.lifetime.facts.parent.SessionID, tc)
+	child := freshProgramOwnerContext(
+		"update_progress",
+		definition.Contract,
+		update.ExecutionID,
+		frame.lifetime.facts.parent.Scope.ProjectID,
+		frame.lifetime.facts.parent.SessionID,
+		tc,
+	)
 	schema := e.Metadata.argsSchemaFor(ctx, child.Identity.SessionID, "update_progress")
 	if schema == nil {
 		return nil, fmt.Errorf("progress owner schema unavailable")
@@ -104,22 +124,43 @@ func (e *Executor) PrepareProgramEnvelope(ctx context.Context, frame ProgramFram
 		args.close()
 		return nil, reject
 	}
-	content, _ := args.values["content"].(string)
-	_, err = progress.PrepareAuthorUpdate(content)
+	mutation, err := progress.PrepareMutation(args.values)
 	if err != nil {
 		args.close()
-		return nil, progressOwnerError(err)
+		return nil, progressOwnerError(err, "")
+	}
+	if store != nil && facts != nil {
+		state, stateErr := facts.ProgramProgressState(ctx, frame.lifetime.facts.parent.SessionID)
+		if stateErr != nil {
+			args.close()
+			return nil, stateErr
+		}
+		if state.SessionID != frame.lifetime.facts.parent.SessionID || state.RootSessionID == "" {
+			args.close()
+			return nil, fmt.Errorf("progress owner root identity unavailable")
+		}
+		snap, snapErr := store.Snapshot(ctx, state.RootSessionID)
+		if snapErr != nil {
+			args.close()
+			return nil, snapErr
+		}
+		prepared.basis = progress.CaptureBasis(mutation, snap)
 	}
 	prepared.update = args
 	prepared.admission = admission
 	prepared.contractDigest = definition.Contract.Digest()
-	prepared.identity = toolcontract.ProgramProgressIdentity{ProgramID: frame.lifetime.facts.parent.Identity.ProgramID, ExecutionID: update.ExecutionID, ActorID: frame.lifetime.facts.parent.ActorID, SessionID: frame.lifetime.facts.parent.SessionID, Scope: frame.lifetime.facts.parent.Scope}
+	prepared.identity = toolcontract.ProgramProgressIdentity{
+		ProgramID:   frame.lifetime.facts.parent.Identity.ProgramID,
+		ExecutionID: update.ExecutionID,
+		ActorID:     frame.lifetime.facts.parent.ActorID,
+		SessionID:   frame.lifetime.facts.parent.SessionID,
+		Scope:       frame.lifetime.facts.parent.Scope,
+	}
 	held = true
 	return prepared, nil
 }
 
-// Close releases review snapshots after application or abandonment. It does not
-// close the caller's parsed plan, whose lifetime belongs to the command entry.
+// Close releases review snapshots after application or abandonment.
 func (p *PreparedProgramEnvelope) Close() {
 	if p == nil || p.closed {
 		return
@@ -130,6 +171,7 @@ func (p *PreparedProgramEnvelope) Close() {
 	}
 	p.program = nil
 	p.admission = nil
+	p.basis = progress.PreparedProgressBasis{}
 	p.sourceDigest = ""
 	p.catalogDigest = ""
 	p.contractDigest = ""
@@ -157,9 +199,14 @@ func (p *PreparedProgramEnvelope) validate(ctx context.Context) error {
 	return nil
 }
 
-func progressOwnerError(err error) error {
-	var rejected *progress.AuthorUpdateRejection
+func progressOwnerError(err error, root string) error {
+	var rejected *progress.MutationRejection
 	if errors.As(err, &rejected) {
+		if root != "" && rejected.Data != nil {
+			if snap, ok := rejected.Data["snapshot"].(progress.Snapshot); ok {
+				rejected.Data["snapshot"] = progress.ForRequest(root, snap)
+			}
+		}
 		return &toolrejection.ToolReject{Code: rejected.Code, OwnerRef: "progress", Data: rejected.Data}
 	}
 	return err

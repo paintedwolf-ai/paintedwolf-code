@@ -6,6 +6,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -34,17 +36,16 @@ func (r stubWorkflowRuns) ActiveBySession(context.Context, string) (*api.Workflo
 func TestBootstrapProgressNotifiesWithBeforeAndAfterSnapshots(t *testing.T) {
 	database := testdbfixture.Open(t, "progress.db")
 	testdbseed.InsertWorkflowRun(t, database, "run-0", "sess-1", testdbseed.DefaultProjectID)
+	store := progress.NewSQLStore(database, sessionstore.NewSQL(database))
+	seeded := progresstest.SeedRows(t, store, "sess-1", progress.RowSpec{Label: "Initial run"})
+	progresstest.UpdateRows(t, store, "sess-1", progress.UpdateRowSpec{ID: seeded.Rows[0].ID, State: progresstest.State("done")})
+
 	_, err := database.ExecContext(t.Context(), `UPDATE workflow_runs SET status = 'complete', completed_at = updated_at WHERE id = 'run-0'`)
 	if err != nil {
 		t.Fatalf("mark prior run complete: %v", err)
 	}
 	testdbseed.InsertWorkflowRun(t, database, "run-1", "sess-1", testdbseed.DefaultProjectID)
-	store := progress.NewSQLStore(database)
-	if _, err := store.Update(t.Context(), "sess-1", func(progress.Snapshot) (progress.Document, error) {
-		return progress.Document{RunID: "run-0", Content: "# Goal\n\n" + "Initial run" + "\n\n## Progress\n"}, nil
-	}); err != nil {
-		t.Fatalf("seed progress run: %v", err)
-	}
+
 	svc := New(stubInstructionStore{session: &api.Session{ID: "sess-1"}}, stubInstructionStore{session: &api.Session{ID: "sess-1"}}, nil, nil, nil)
 	svc.SetProgress(store)
 	svc.SetWorkflow(&WorkflowDomains{Runs: stubWorkflowRuns{run: &api.WorkflowRun{ID: "run-1"}}})
@@ -57,19 +58,21 @@ func TestBootstrapProgressNotifiesWithBeforeAndAfterSnapshots(t *testing.T) {
 	})
 	defer release()
 
-	svc.BootstrapProgress(context.Background(), "sess-1", api.Message{
+	if err := svc.BootstrapProgress(context.Background(), "sess-1", api.Message{
 		Role:    "user",
 		Origin:  api.MessageOriginUser,
 		Content: "Ship stable progress item identities",
-	})
+	}); err != nil {
+		t.Fatalf("BootstrapProgress: %v", err)
+	}
 
 	if len(events) != 1 {
 		t.Fatalf("events = %d, want 1", len(events))
 	}
-	if events[0].Before.RunID != "run-0" || events[0].Before.Revision == "" {
+	if events[0].Before.RunID != "run-0" || len(events[0].Before.Rows) != 1 {
 		t.Fatalf("expected run-0 before snapshot, got %+v", events[0].Before)
 	}
-	if events[0].After.RunID != "run-1" || events[0].After.Revision == "" {
-		t.Fatalf("expected run-1 after snapshot, got %+v", events[0].After)
+	if events[0].After.RunID != "run-1" || len(events[0].After.Rows) != 0 {
+		t.Fatalf("expected cleared run-1 after snapshot, got %+v", events[0].After)
 	}
 }

@@ -104,7 +104,7 @@ func TestLocalProviderKindsReplayReasoningContentAcrossMultiStepToolLoop(t *test
 				{Role: api.MessageRoleUser, Content: "Build me a tic tac toe game with AI I can beat"},
 				{
 					Role:           api.MessageRoleAssistant,
-					ToolCalls:      []api.ToolCall{{ID: "call_1", WireID: "wire_1", Name: "update_progress", Args: map[string]any{"content": "- [ ] Plan game"}}},
+					ToolCalls:      []api.ToolCall{{ID: "call_1", WireID: "wire_1", Name: "update_progress", Args: map[string]any{"replace": []any{map[string]any{"label": "Plan game"}}}}},
 					ModelReasoning: &api.ModelReasoning{ProviderID: entry.ID, Model: "local-4b-instruct", Text: "Plan the deliverables before requesting filesystem tools."},
 				},
 				{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "call_1", Content: "ok"}},

@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -94,7 +95,7 @@ func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	prog := progress.NewSQLStore(store.DB())
+	prog := progress.NewSQLStore(store.DB(), store)
 	mgr.SetProgressStore(prog)
 
 	ctx := context.Background()
@@ -106,7 +107,14 @@ func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {
 	testutil.FailErr(t, "LoadRegistryConfig", err)
 	_, err = wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
-	prog.Set(sess.ID, "## Progress\n- [x] implement\n- [x] verify")
+	seeded := progresstest.SeedRows(t, prog, sess.ID,
+		progress.RowSpec{Label: "implement"},
+		progress.RowSpec{Label: "verify"},
+	)
+	progresstest.UpdateRows(t, prog, sess.ID,
+		progress.UpdateRowSpec{ID: seeded.Rows[0].ID, State: progresstest.State("done")},
+		progress.UpdateRowSpec{ID: seeded.Rows[1].ID, State: progresstest.State("done")},
+	)
 
 	testutil.FailErr(t, "ApplyCoordinatorBatchEvent dispatch", wfMgr.Batch.ApplyCoordinatorBatchEvent(ctx, sess.ID, batch.EventWriterTaskEnqueued, 0))
 	testutil.FailErr(t, "ApplyCoordinatorBatchEvent integrate", wfMgr.Batch.ApplyCoordinatorBatchEvent(ctx, sess.ID, batch.EventOverlaysPendingIdle, 0))

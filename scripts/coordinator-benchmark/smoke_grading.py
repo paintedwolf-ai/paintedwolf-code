@@ -93,7 +93,7 @@ def verify_closeout(application, spec, operation):
     application.request(f'/v1/sessions/{session}/prompts', {'operation_id':str(uuid.uuid4()),'text':spec['prompt']})
     application.wait_for(lambda:application.request('/harness/preparation/'+session,missing=True),'closeout entry',session)
     smoke_workers.invoke(application,session,'read',{'path':'report.py'})
-    smoke_workers.invoke(application,session,'update_progress',{'content':'- [ ] Change the default limit\n- [ ] Validate the change'})
+    smoke_workers.reconcile_progress(application,session,{'Change the default limit':'pending','Validate the change':'pending'})
     smoke_workers.invoke(application,session,'edit',{'path':'report.py','old_string':'def select(records, limit=8):','new_string':'def select(records, limit=3):'})
     smoke_workers.invoke(application,session,'command',{'command':'python3 -B -m unittest discover','verification':True})
     result = smoke_capabilities.invoke(application,session,spec,'verify',{

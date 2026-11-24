@@ -10,15 +10,20 @@ import (
 )
 
 // ProgramProgressStart records a progress update attempt before applying it.
-// It never attributes the payload to an invented shell source unit or span.
 type ProgramProgressStart interface {
 	BeforeProgressOwner(context.Context, toolcontract.ProgramProgressIdentity, string, toolcontract.ReviewedOperationInputs) error
 }
 
-// ApplyProgramProgress uses reviewed inputs and shared checklist publication.
-// The caller records its result even when a later program operation is denied.
-// An attempted update cannot be automatically replayed through this envelope.
-func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramEnvelope, store progress.Store, facts ProgramProgressFacts, reconciler progress.Reconciler, observer ProgramProgressStart, tc tools.ToolContext) (result ProgramProgressResult, err error) {
+// ApplyProgramProgress applies reviewed DML progress inputs against captured preconditions.
+func (e *Executor) ApplyProgramProgress(
+	ctx context.Context,
+	p *PreparedProgramEnvelope,
+	store progress.Store,
+	facts ProgramProgressFacts,
+	reconciler progress.TxReconciler,
+	observer ProgramProgressStart,
+	tc tools.ToolContext,
+) (result ProgramProgressResult, err error) {
 	if e == nil {
 		return result, fmt.Errorf("executor required")
 	}
@@ -81,8 +86,6 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	if err != nil {
 		return result, err
 	}
-	// The final review may have waited. Re-enter the existing policy boundary
-	// against current facts; a changed reviewed object requires fresh preparation.
 	rechecked, err := e.applyPreInvokePolicy(ctx, "update_progress", tc.Identity.Agent, canonical, &tc, e.Boundary.actionConfineRequest(ctx, tc), boundaryApproved)
 	if err != nil {
 		return result, err
@@ -95,10 +98,9 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	if currentReview != reviewed {
 		return result, fmt.Errorf("reviewed progress changed during authority recheck")
 	}
-	content, _ := resolved["content"].(string)
-	author, err := progress.PrepareAuthorUpdate(content)
+	mutation, err := progress.PrepareMutation(resolved)
 	if err != nil {
-		return result, progressOwnerError(err)
+		return result, progressOwnerError(err, "")
 	}
 	if err := p.validate(ctx); err != nil {
 		return result, err
@@ -134,8 +136,10 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 		return result, fmt.Errorf("progress root changed before owner application")
 	}
 	result.OwnerInvoked = true
-	expected, _ := resolved["expected_revision"].(string)
-	token, _ := resolved["reconciliation_token"].(string)
-	result.Outcome, err = author.ExpectRevision(expected).ExpectItemIDsFromArgs(resolved).ExpectReconciliation(token).Apply(ctx, store, current.RootSessionID, reconciler)
-	return result, progressOwnerError(err)
+	result.Outcome, err = store.Apply(ctx, current.RootSessionID, mutation, progress.ApplyOptions{
+		PrincipalID: current.RootSessionID,
+		Basis:       p.basis,
+		Reconciler:  reconciler,
+	})
+	return result, progressOwnerError(err, current.RootSessionID)
 }

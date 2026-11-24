@@ -11,7 +11,7 @@ steps:
     say: "Use {{ call }} only when this empty overlay is no longer needed."
   - when: "size(paintedwolf.remaining_overlay_paths) == 0"
     tool: "update_progress"
-    say: "Then use {{ call }} to close only rows whose completion or skip is supported by evidence."
+    say: "Then use {{ call }} (`acknowledge_results` and row `update` as supported by evidence) to account for the settled result."
   - when: "size(paintedwolf.remaining_overlay_paths) == 0"
     tool: "task"
     say: "Dispatch a fresh {{ call }} with a corrected brief only if work remains."

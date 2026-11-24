@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -57,6 +58,7 @@ type Service struct {
 	synthesisCurator   llm.Curator
 	prompts            prompts.PromptTemplateEngine
 	sourceVerification SourceVerification
+	progress           progress.Store
 }
 
 func New(sessionStore Sessions, transcriptStore Transcript, evidenceStore EvidenceStore, workspace Workspace, state State, evidence Evidence) *Service {
@@ -64,3 +66,4 @@ func New(sessionStore Sessions, transcriptStore Transcript, evidenceStore Eviden
 }
 func (s *Service) SetWorkflow(workflows *WorkflowDomains)          { s.workflows = workflows }
 func (s *Service) SetPrompts(prompts prompts.PromptTemplateEngine) { s.prompts = prompts }
+func (s *Service) SetProgress(store progress.Store)                { s.progress = store }

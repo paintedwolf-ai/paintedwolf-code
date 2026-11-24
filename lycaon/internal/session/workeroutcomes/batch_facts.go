@@ -10,19 +10,19 @@ import (
 )
 
 // BatchReadyForSynthesis checks every host wrapup gate.
-func BatchReadyForSynthesis(state surface.ImplementSessionState, history []api.Message, progressContent string, verifyRequired, verifyOK bool) bool {
+func BatchReadyForSynthesis(state surface.ImplementSessionState, history []api.Message, snapshot progress.Snapshot, verifyRequired, verifyOK bool) bool {
 	if !batchReadyIgnoringProgress(state, history, verifyRequired, verifyOK) {
 		return false
 	}
-	return progress.AllTerminal(progressContent)
+	return snapshot.AllTerminal()
 }
 
 // SynthesisBlockedOnlyByOpenProgress isolates the open-progress gate.
-func SynthesisBlockedOnlyByOpenProgress(state surface.ImplementSessionState, history []api.Message, progressContent string, verifyRequired, verifyOK bool) bool {
+func SynthesisBlockedOnlyByOpenProgress(state surface.ImplementSessionState, history []api.Message, snapshot progress.Snapshot, verifyRequired, verifyOK bool) bool {
 	if !batchReadyIgnoringProgress(state, history, verifyRequired, verifyOK) {
 		return false
 	}
-	return !progress.AllTerminal(progressContent) && !progress.ProgressMissing(progressContent)
+	return !snapshot.AllTerminal() && !snapshot.Missing()
 }
 
 // batchReadyIgnoringProgress checks every gate except progress completion.

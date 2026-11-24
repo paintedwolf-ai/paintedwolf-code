@@ -129,15 +129,22 @@ describe("transcript-items", () => {
   });
 
   it("hides coordinator-internal orientation and plan tool calls", () => {
-    const planContent =
-      "## Progress\n- [ ] ChessCore module (rules, board state, moves)\n- [ ] Verify build";
     const items = messagesToTranscriptItems([
       {
         id: "a-plan",
         role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
         content: "",
         tool_calls: [
-          { id: "tc-plan", name: "update_progress", args: { content: planContent } },
+          {
+            id: "tc-plan",
+            name: "update_progress",
+            args: {
+              replace: [
+                { label: "ChessCore module (rules, board state, moves)" },
+                { label: "Verify build" },
+              ],
+            },
+          },
         ],
         created_at: "t",
       },

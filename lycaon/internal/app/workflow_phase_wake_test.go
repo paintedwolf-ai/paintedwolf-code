@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/scan"
@@ -235,11 +236,11 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 	wfStore := workflowpersistence.New(database)
 	manager := workflow.NewManager(wfStore, sessionsStore, manifests, nil)
 	testdbseed.InsertWorkflowRun(t, database, "previous-run", "chat", testdbseed.DefaultProjectID)
-	progressStore := progress.NewSQLStore(database)
-	if _, err := progress.AdoptActiveRun(t.Context(), progressStore, "chat", "previous-run", ""); err != nil {
+	progressStore := progress.NewSQLStore(database, sessionsStore)
+	if _, err := progress.AdoptActiveRun(t.Context(), progressStore, "chat", "previous-run"); err != nil {
 		t.Fatalf("bind progress run: %v", err)
 	}
-	testutil.FailErr(t, "seed old progress", progressStore.Set("chat", "old run checklist"))
+	progresstest.SeedRows(t, progressStore, "chat", progress.RowSpec{Label: "old run checklist"})
 	_, err = database.ExecContext(ctx, `DELETE FROM workflow_runs WHERE id = 'previous-run'`)
 	testutil.FailErr(t, "clear previous run before handoff run", err)
 	now := time.Now().UTC()
@@ -269,7 +270,7 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 	testutil.FailErr(t, "enter phase", runtime.OnWorkflowPhaseEnter(ctx, &workflowphases.RunContext{SessionID: "chat", RunID: run.ID, WorkflowID: run.WorkflowID, WorkflowVersion: run.WorkflowVersion, PreviousPhase: "execute", Phase: "claims"}, workflowdef.PhaseDef{ID: "claims", BindTopologyStage: "claims"}))
 	snapshot, err := progressStore.Snapshot(ctx, "chat")
 	testutil.FailErr(t, "read adopted run", err)
-	if topologyCalls != 1 || snapshot.RunID != run.ID || snapshot.Content == previous.Content {
+	if topologyCalls != 1 || snapshot.RunID != run.ID || len(snapshot.Rows) != 0 || len(previous.Rows) == 0 {
 		t.Fatal("phase handoff retained previous run progress or missed topology")
 	}
 	kicks.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()}))

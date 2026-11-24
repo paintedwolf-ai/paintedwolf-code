@@ -924,7 +924,7 @@ describe("thinking-activity-label", () => {
   it("findLatestRunningToolInTurn skips orientation tools", () => {
     const messages: Message[] = [
       { id: "u1", role: "user", origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "go", created_at: "t" },
-      assistantWithTool("a1", "update_progress", { content: "- [ ] x" }),
+      assistantWithTool("a1", "update_progress", { replace: [{ label: "x" }] }),
       assistantWithTool("a2", "read", { path: "README.md" }),
     ];
     expect(findLatestRunningToolInTurn(messages)?.tool).toBe("read");

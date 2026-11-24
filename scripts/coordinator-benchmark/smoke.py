@@ -206,7 +206,7 @@ class Application:
             if spec.get('prelude'):
                 observed['entry']=flow['entry']=self.wait_for(lambda:self.request('/harness/preparation/'+session,missing=True),
                                                              'worker handoff entry',session)
-            existing=next((step['args']['content'] for step in reversed(spec.get('prelude') or []) if step.get('tool')=='update_progress'),None)
+            existing=next((step['args'].get('replace') for step in reversed(spec.get('prelude') or []) if step.get('tool')=='update_progress'),None)
             continuation_progress={o['label']:'done' for o in setup.get('overlays') or [] if o.get('script')}
             if continuation_progress and not existing:
                 smoke_workers.reconcile_progress(self,session,{label:'pending' for label in continuation_progress})
@@ -249,12 +249,11 @@ class Application:
         for label, prerequisites in operation.get('dispatch',{}).get('dependencies', {}).items():
             session,project,result=self.prepare_workers(spec)
             self.request(f'/v1/sessions/{session}/prompts',{'operation_id':str(uuid.uuid4()),'text':spec['prompt']})
-            progress='## Progress\n'+''.join(f"- [ ] {d['label']}\n" for d in setup['dispatches'])
-            smoke_workers.invoke(self,session,'update_progress',{'content':progress})
+            smoke_workers.reconcile_progress(self,session,{d['label']:'pending' for d in setup['dispatches']})
             dependent=next(d for d in setup['dispatches'] if d['label']==label)
             job=smoke_workers.job_id(smoke_workers.invoke(self,session,'task',smoke_workers.dispatch_call(dependent)['args']))
             smoke_workers.settled(self,session,job,{'failed'} if dependent['mode']=='write' else {'complete'})
-            smoke_workers.invoke(self,session,'update_progress',{'content':progress.replace('- [ ] ','- [~] ')})
+            smoke_workers.reconcile_progress(self,session,{d['label']:'na' for d in setup['dispatches']})
             smoke_workers.finish(self,session,'The worker could not complete its assignment.')
             self.flows.append({'id':spec['id'],'kind':'shortcut','control':'dependent-before-prerequisite',
                                'session_id':session,'project_dir':str(project),'prepared':result,

@@ -19,8 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
-// progressMemory is the catalog-sized ledger; actual parser and admission
-// objects must retain and release their real leases through the composed call.
 func progressMemory(t *testing.T) *toolcontract.ProgramMemory {
 	t.Helper()
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
@@ -33,12 +31,25 @@ func progressMemory(t *testing.T) *toolcontract.ProgramMemory {
 type progressFacts struct{ store progress.Store }
 
 func (f progressFacts) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
-	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: f.store.Get(ctx, id)}, nil
+	snap, err := f.store.Snapshot(ctx, id)
+	if err != nil {
+		return progress.PrerequisiteState{}, err
+	}
+	return progress.PrerequisiteState{
+		SessionID:     id,
+		RootSessionID: id,
+		Missing:       snap.Missing(),
+		OpenSteps:     snap.OpenStepCount(),
+	}, nil
 }
+
 func TestProgramActualParserProgressStoreAndReceiptRemainIndependent(t *testing.T) {
 	for _, mode := range []string{"committed", "closed-plan", "invalid-update"} {
 		t.Run(mode, func(t *testing.T) {
-			submitted := map[string]any{"command": "${op} arg", "progress_update": map[string]any{"content": "- [ ] Create fixture"}}
+			submitted := map[string]any{
+				"command":         "${op} arg",
+				"progress_update": map[string]any{"replace": []any{map[string]any{"label": "Create fixture"}}},
+			}
 			if mode == "invalid-update" {
 				submitted["progress_update"].(map[string]any)["unknown_field"] = true
 			}
@@ -73,11 +84,14 @@ func TestProgramActualParserProgressStoreAndReceiptRemainIndependent(t *testing.
 			store := progress.NewSQLStore(database, sessionstore.NewSQL(database))
 			inputs := f.capture(t)
 			observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}
-			update := &toolexecution.ProgramProgressUpdate{ExecutionID: uuid.NewString(), Arguments: map[string]any{"content": "- [ ] Create fixture"}}
+			update := &toolexecution.ProgramProgressUpdate{
+				ExecutionID: uuid.NewString(),
+				Arguments:   map[string]any{"replace": []any{map[string]any{"label": "Create fixture"}}},
+			}
 			if mode == "invalid-update" {
 				update.Arguments["unknown_field"] = true
 			}
-			prepared, err := executor.PrepareProgramEnvelope(t.Context(), frame, plan, update, memory, tc)
+			prepared, err := executor.PrepareProgramEnvelope(t.Context(), frame, plan, update, store, progressFacts{store}, memory, tc)
 			if mode == "invalid-update" {
 				if err == nil {
 					prepared.Close()
@@ -108,11 +122,13 @@ func TestProgramActualParserProgressStoreAndReceiptRemainIndependent(t *testing.
 			}
 			page, err := f.recorder.ReadProgramPage(t.Context(), f.session, f.program, "", 10)
 			testutil.FailErr(t, "read durable progress attribution", err)
+			snap, err := store.Snapshot(t.Context(), f.session)
+			testutil.FailErr(t, "snapshot", err)
 			if mode == "committed" {
-				if store.Get(t.Context(), f.session) != "- [ ] Create fixture" || page.Progress == nil || page.Progress.State != "committed" || page.Program.ProgressState != "committed" || page.Program.State != "rejected" {
+				if len(snap.Rows) != 1 || snap.Rows[0].Label != "Create fixture" || page.Progress == nil || page.Progress.State != "committed" || page.Program.ProgressState != "committed" || page.Program.State != "rejected" {
 					t.Fatalf("later refusal erased progress: %+v", page)
 				}
-			} else if store.Get(t.Context(), f.session) != "" || page.Progress != nil {
+			} else if len(snap.Rows) != 0 || page.Progress != nil {
 				t.Fatal("rejected envelope committed progress or receipt")
 			}
 		})

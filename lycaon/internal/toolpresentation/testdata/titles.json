@@ -286,5 +286,33 @@
       "need": "inspect source"
     },
     "title": "inspect source"
+  },
+  {
+    "tool": "update_progress",
+    "args": {
+      "replace": [
+        { "label": "Normalize store" },
+        { "label": "Verify migration" }
+      ]
+    },
+    "title": "Normalize store +1 more"
+  },
+  {
+    "tool": "update_progress",
+    "args": {
+      "update": [
+        { "id": "p1", "state": "done" }
+      ]
+    },
+    "title": "p1 → done"
+  },
+  {
+    "tool": "update_progress",
+    "args": {
+      "acknowledge_results": [
+        "scout-api#1"
+      ]
+    },
+    "title": "scout-api#1"
   }
 ]

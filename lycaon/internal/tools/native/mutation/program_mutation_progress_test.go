@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/programtest"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -69,7 +70,7 @@ func decodeMutationOutcome(t *testing.T, raw string) command.ProgramOutcome {
 
 func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 	f := mutationProgramFixture(t)
-	testutil.FailErr(t, "clear checklist", f.SetProgress(""))
+	testutil.FailErr(t, "clear checklist", f.ClearProgress())
 	for _, source := range []string{"touch config.json", "true > config.json"} {
 		raw, err := f.Call(t, t.Context(), source)
 		testutil.FailErr(t, "run refused project write", err)
@@ -99,7 +100,7 @@ func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 	if _, err := os.Stat(scratchFile); err != nil {
 		t.Fatalf("rejected move removed scratch source: %v", err)
 	}
-	testutil.FailErr(t, "record checklist", f.SetProgress("- [ ] Publish config.json"))
+	testutil.FailErr(t, "record checklist", f.ReplaceProgress(progress.RowSpec{Label: "Publish config.json"}))
 	raw, err = f.Call(t, t.Context(), `mv "$TMPDIR/temporary.txt" config.json`)
 	testutil.FailErr(t, "move scratch with progress", err)
 	if outcome := decodeMutationOutcome(t, raw); outcome.Refusal != nil || outcome.Status != 0 {
@@ -117,7 +118,7 @@ func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 // mode.
 func TestProgramMktempMoveKeepsPrivateMode(t *testing.T) {
 	f := mutationProgramFixture(t)
-	testutil.FailErr(t, "record checklist", f.SetProgress("- [ ] Save saved.txt"))
+	testutil.FailErr(t, "record checklist", f.ReplaceProgress(progress.RowSpec{Label: "Save saved.txt"}))
 	raw, err := f.Call(t, t.Context(), `p=$(mktemp) && printf 'saved\n' > "$p" && mv "$p" saved.txt`)
 	testutil.FailErr(t, "run mktemp and move", err)
 	if outcome := decodeMutationOutcome(t, raw); outcome.Refusal != nil || outcome.Status != 0 {

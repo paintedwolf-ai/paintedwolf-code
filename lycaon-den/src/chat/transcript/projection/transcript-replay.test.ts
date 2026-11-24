@@ -354,7 +354,7 @@ describe("guarded coordinator turn replay", () => {
         {
           id: "call_progress",
           name: "update_progress",
-          args: { content: "## Progress\n- [ ] overview" },
+          args: { replace: [{ label: "overview" }] },
         },
       ],
     } as Message);

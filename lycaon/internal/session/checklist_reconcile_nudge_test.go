@@ -31,7 +31,11 @@ func pendingReconcileNudge(mgr *Host, rootID string) (string, bool) {
 
 func TestChecklistReconcileNudgeFiresOnOpenSteps(t *testing.T) {
 	store := progresstest.New(t, "root-1")
-	store.Set("root-1", "## Progress\n- [x] survey repo\n- [ ] wire the handler\n- [ ] add tests")
+	progresstest.SeedRows(t, store, "root-1",
+		progress.RowSpec{Label: "survey repo", State: "done"},
+		progress.RowSpec{Label: "wire the handler"},
+		progress.RowSpec{Label: "add tests"},
+	)
 	mgr := newClosureGuardManager(t, store)
 
 	mgr.Stops.QueueChecklistReconcileNudge(t.Context(), "root-1")
@@ -43,7 +47,14 @@ func TestChecklistReconcileNudgeFiresOnOpenSteps(t *testing.T) {
 
 func TestChecklistReconcileNudgeSilentWhenAllTerminal(t *testing.T) {
 	store := progresstest.New(t, "root-1")
-	store.Set("root-1", "## Progress\n- [x] survey repo\n- [~] wire the handler")
+	seeded := progresstest.SeedRows(t, store, "root-1",
+		progress.RowSpec{Label: "survey repo"},
+		progress.RowSpec{Label: "wire the handler"},
+	)
+	progresstest.UpdateRows(t, store, "root-1",
+		progress.UpdateRowSpec{ID: seeded.Rows[0].ID, State: progresstest.State("done")},
+		progress.UpdateRowSpec{ID: seeded.Rows[1].ID, State: progresstest.State("na")},
+	)
 	mgr := newClosureGuardManager(t, store)
 
 	mgr.Stops.QueueChecklistReconcileNudge(t.Context(), "root-1")
@@ -66,7 +77,13 @@ func TestChecklistReconcileNudgeSilentWhenProgressMissing(t *testing.T) {
 
 func TestChecklistReconcileNudgeIgnoresOptionalOnlyRemainder(t *testing.T) {
 	store := progresstest.New(t, "root-1")
-	store.Set("root-1", "## Progress\n- [x] investigate\n- [>] write up findings")
+	seeded := progresstest.SeedRows(t, store, "root-1",
+		progress.RowSpec{Label: "investigate"},
+		progress.RowSpec{Label: "write up findings", State: "optional"},
+	)
+	progresstest.UpdateRows(t, store, "root-1",
+		progress.UpdateRowSpec{ID: seeded.Rows[0].ID, State: progresstest.State("done")},
+	)
 	mgr := newClosureGuardManager(t, store)
 
 	mgr.Stops.QueueChecklistReconcileNudge(t.Context(), "root-1")
@@ -360,7 +377,7 @@ func TestFirstChecklistPublicationResolvesMissingProgressWithoutGeneralAdvanceme
 	session, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator", err)
 	testdbseed.InsertWorkflowRun(t, sessions.DB(), "run-"+session.ID, session.ID, testdbseed.DefaultProjectID)
-	store := progress.NewSQLStore(sessions.DB())
+	store := progress.NewSQLStore(sessions.DB(), sessions)
 	manager.SetProgressStore(store)
 	guard := loopguard.NewMemoryDoomLoopGuard()
 	manager.SetDoomLoopGuard(guard)
@@ -373,14 +390,15 @@ func TestFirstChecklistPublicationResolvesMissingProgressWithoutGeneralAdvanceme
 	if allowed {
 		t.Fatal("missing checklist released rejection")
 	}
-	update, err := progress.PrepareAuthorUpdate("- [ ] Deliver")
+	seedArgs := map[string]any{"replace": []any{map[string]any{"label": "Deliver"}}}
+	update, err := progress.PrepareMutation(seedArgs)
 	testutil.FailErr(t, "prepare first checklist", err)
-	result, err := update.Apply(t.Context(), store, session.ID, nil)
+	result, err := store.Apply(t.Context(), session.ID, update, progress.ApplyOptions{})
 	testutil.FailErr(t, "publish first checklist", err)
-	if result.AdvancesWorkflow() {
+	if result.StateChanged {
 		t.Fatal("first checklist claimed deliverable advancement")
 	}
-	testutil.FailErr(t, "record neutral establishment", guard.RecordAttempt(t.Context(), session.ID, "checklist", "update_progress", map[string]any{"content": result.Snapshot.Content}, nil, false))
+	testutil.FailErr(t, "record neutral establishment", guard.RecordAttempt(t.Context(), session.ID, "checklist", "update_progress", seedArgs, nil, false))
 	allowed, count, _, err := guard.Check(t.Context(), session.ID, "recovered", "edit", args, true, nil)
 	testutil.FailErr(t, "check stored prerequisite recovery", err)
 	if !allowed || count != 0 {

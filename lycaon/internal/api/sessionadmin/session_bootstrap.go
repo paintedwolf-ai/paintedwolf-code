@@ -40,11 +40,11 @@ func (s *Bootstrap) HandleSessionBootstrap(w http.ResponseWriter, r *http.Reques
 		transcript.Messages = []wire.Message{}
 	}
 	root := sessiontree.RootID(r.Context(), s.SessionStore, id)
-	progressContent := ""
+	var progressSnapshot progress.Snapshot
 	if s.ProgressStore != nil {
-		progressContent = s.ProgressStore.Get(r.Context(), root)
+		progressSnapshot, _ = s.ProgressStore.Snapshot(r.Context(), root)
 	}
-	progressDigest := progress.BuildDigest(progressContent, root)
+	progressDigest := progress.BuildDigest(progressSnapshot)
 	rows, err := s.Sessions.Workers.Notes.ListFindings(r.Context(), root, findings.DefaultListCap)
 	if err != nil {
 		s.responses.InternalError(w, r, err)

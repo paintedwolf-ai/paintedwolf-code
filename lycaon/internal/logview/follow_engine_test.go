@@ -59,7 +59,8 @@ func TestToolSummary(t *testing.T) {
 		{"command", `{"command":"make build"}`, `[command#2] {"ExitCode":2}`, "exit 2", true},
 		{"grep", `{"pattern":"TODO"}`, `[grep#1] {"matches":[1,2,3]}`, "3 matches", false},
 		{"list_dir", `{"path":"tests"}`, `[list_dir#1] {"entries":[1,2,3,4]}`, "4 entries", false},
-		{"update_progress", `{"content":"## Progress\n- [x] a\n- [ ] b\n- [ ] c"}`, ``, "1/3 steps", false},
+		{"update_progress", `{"replace":[{"label":"a","state":"done"},{"label":"b"},{"label":"c"}]}`, ``, "1/3 steps", false},
+		{"update_progress", `{"update":[{"id":"p1","state":"done"}]}`, `{"status":"updated","snapshot":{"rows":[{"id":"p1","state":"done","label":"a"},{"id":"p2","state":"pending","label":"b"}]}}`, "1/2 steps", false},
 		{"scan_query", `{}`, `[scan#1] {"findings":[1,2,3,4,5,6,7]}`, "7 findings", false},
 	}
 	for _, c := range cases {

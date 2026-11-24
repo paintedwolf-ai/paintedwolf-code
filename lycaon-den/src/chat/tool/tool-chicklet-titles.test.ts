@@ -57,7 +57,12 @@ const SAMPLE_ARGS: Record<string, Record<string, unknown>> = {
     description: "Survey auth flow",
   },
   record_finding: { summary: "Auth middleware blocks token refresh" },
-  update_progress: { content: "- [ ] Wire login form\n- [x] Add tests" },
+  update_progress: {
+    replace: [
+      { label: "Wire login form" },
+      { label: "Add tests", state: "done" },
+    ],
+  },
   render_view: {
     markup: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"20\"><rect width=\"40\" height=\"20\" fill=\"#333\"/></svg>",
     mime: "svg",
@@ -237,9 +242,12 @@ describe("tool-chicklet-titles", () => {
         }),
       ).toBe("Fix the thing");
       const progress = resolveChickletTitle("update_progress", {
-        content: "- [ ] Wire login form\n- [ ] Add tests",
+        replace: [
+          { label: "Wire login form\nWith second line" },
+          { label: "Add tests" },
+        ],
       });
-      expect(progress).toBe("- [ ] Wire login form");
+      expect(progress).toBe("Wire login form +1 more");
       expect(progress).not.toContain("\n");
     });
 

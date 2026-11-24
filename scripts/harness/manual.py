@@ -113,7 +113,7 @@ class Driver:
 HELP = """Enter a command program to run it as the assistant's command tool call.
 :begin              multiline program; finish with :end (:cancel discards)
 :call NAME JSON     another offered tool, such as update_progress or request_tools
-:call update_progress {"content":"- [ ] Test command writes"}
+:call update_progress {"replace":[{"label":"Test command writes"}]}
 :prompt             full last model request, including prompts and schemas
 :tools              offered schemas from that request
 :help               this help

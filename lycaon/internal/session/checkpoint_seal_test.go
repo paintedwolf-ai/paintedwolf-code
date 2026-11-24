@@ -17,6 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/people"
+	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
@@ -299,9 +301,15 @@ func TestPromptExecutionAppliesCloseoutBoundaryBeforeModel(t *testing.T) {
 	}
 }
 
-const (
-	openPlanFixture     = "## Progress\n- [x] survey\n- [ ] review"
-	terminalPlanFixture = "## Progress\n- [x] survey\n- [x] review"
+var (
+	openPlanFixture = progress.Snapshot{Rows: []progress.Row{
+		{ID: "p1", State: progress.ProgressStateDone, Label: "survey"},
+		{ID: "p2", State: progress.ProgressStatePending, Label: "review"},
+	}}
+	terminalPlanFixture = progress.Snapshot{Rows: []progress.Row{
+		{ID: "p1", State: progress.ProgressStateDone, Label: "survey"},
+		{ID: "p2", State: progress.ProgressStateDone, Label: "review"},
+	}}
 )
 
 // implementSurfaceUniverse lists every implement-family coordinator surface.
@@ -334,7 +342,10 @@ func TestCloseoutPushCoversEveryReachableProseSurface(t *testing.T) {
 	var fired []string
 	for _, surfaceID := range implementSurfaceUniverse {
 		mgr, sess, _ := newSynthesisDelayManager(t)
-		mgr.RewindRuntime.Progress.Set(sess.ID, openPlanFixture)
+		progresstest.SeedRows(t, mgr.RewindRuntime.Progress, sess.ID,
+			progress.RowSpec{Label: "survey", State: "done"},
+			progress.RowSpec{Label: "review"},
+		)
 
 		_, block := rejectCloseout(t, mgr, sess, surfaceID, true)
 

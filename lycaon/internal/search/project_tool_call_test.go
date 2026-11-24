@@ -18,7 +18,7 @@ func TestProjectToolCallsSurfacesNameAndArgs(t *testing.T) {
 		Role:      api.MessageRoleAssistant,
 		CreatedAt: time.Now().UTC(),
 		ToolCalls: []api.ToolCall{
-			{ID: "call-0", Name: "update_progress", Args: map[string]any{"content": "- [ ] build chess engine"}},
+			{ID: "call-0", Name: "update_progress", Args: map[string]any{"replace": []any{map[string]any{"label": "build chess engine"}}}},
 			{ID: "call-1", Name: "list_dir", Args: map[string]any{"path": "."}},
 		},
 	}

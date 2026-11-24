@@ -191,7 +191,7 @@ func RegisterRecordFindingTool(reg *tools.DefaultRegistry, gates reporttools.Rec
 	return reg.Register("record_finding", reporttools.FindingsHandler(gates, store, scopeKey))
 }
 
-func RegisterUpdateProgressTool(reg *tools.DefaultRegistry, store progress.Store, scopeKey reporttools.ProgressScopeKey, reconciliation progress.Reconciler) error {
+func RegisterUpdateProgressTool(reg *tools.DefaultRegistry, store progress.Store, scopeKey reporttools.ProgressScopeKey, reconciliation progress.TxReconciler) error {
 	if reg == nil {
 		return fmt.Errorf("registry required")
 	}

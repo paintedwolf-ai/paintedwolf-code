@@ -177,6 +177,7 @@ var queuedByRegisteredSteps = map[string]string{
 // drops; the remaining columns keep their rows.
 var retiredColumnsByRegisteredSteps = map[string][]string{
 	"rewind_operations":       {"journal_path"},
+	"session_progress":        {"content"},
 	"source_manifest_staging": {"bucket", "root_path"},
 }
 

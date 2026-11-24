@@ -9,59 +9,148 @@ import (
 	"context"
 )
 
-const getSessionProgressSnapshot = `-- name: GetSessionProgressSnapshot :one
-SELECT content, workflow_run_id, updated_at, item_ids_json, document_version FROM session_progress WHERE session_id = ?
+const bumpSessionProgressOnClear = `-- name: BumpSessionProgressOnClear :exec
+UPDATE session_progress
+SET updated_at = ?, document_version = document_version + 1
+WHERE session_id = ?
 `
 
-type GetSessionProgressSnapshotRow struct {
-	Content         string `json:"content"`
-	WorkflowRunID   string `json:"workflow_run_id"`
-	UpdatedAt       string `json:"updated_at"`
-	ItemIdsJson     string `json:"item_ids_json"`
-	DocumentVersion int64  `json:"document_version"`
+type BumpSessionProgressOnClearParams struct {
+	UpdatedAt string `json:"updated_at"`
+	SessionID string `json:"session_id"`
 }
 
-func (q *Queries) GetSessionProgressSnapshot(ctx context.Context, sessionID string) (GetSessionProgressSnapshotRow, error) {
-	row := q.db.QueryRowContext(ctx, getSessionProgressSnapshot, sessionID)
-	var i GetSessionProgressSnapshotRow
+func (q *Queries) BumpSessionProgressOnClear(ctx context.Context, arg BumpSessionProgressOnClearParams) error {
+	_, err := q.db.ExecContext(ctx, bumpSessionProgressOnClear, arg.UpdatedAt, arg.SessionID)
+	return err
+}
+
+const deleteSessionProgressItems = `-- name: DeleteSessionProgressItems :exec
+DELETE FROM session_progress_items
+WHERE session_id = ?
+`
+
+func (q *Queries) DeleteSessionProgressItems(ctx context.Context, sessionID string) error {
+	_, err := q.db.ExecContext(ctx, deleteSessionProgressItems, sessionID)
+	return err
+}
+
+const getSessionProgressHeader = `-- name: GetSessionProgressHeader :one
+
+SELECT workflow_run_id, updated_at, document_version, next_item_seq
+FROM session_progress
+WHERE session_id = ?
+`
+
+type GetSessionProgressHeaderRow struct {
+	WorkflowRunID   string `json:"workflow_run_id"`
+	UpdatedAt       string `json:"updated_at"`
+	DocumentVersion int64  `json:"document_version"`
+	NextItemSeq     int64  `json:"next_item_seq"`
+}
+
+// Coordinator progress header and ordered items, keyed by root session.
+func (q *Queries) GetSessionProgressHeader(ctx context.Context, sessionID string) (GetSessionProgressHeaderRow, error) {
+	row := q.db.QueryRowContext(ctx, getSessionProgressHeader, sessionID)
+	var i GetSessionProgressHeaderRow
 	err := row.Scan(
-		&i.Content,
 		&i.WorkflowRunID,
 		&i.UpdatedAt,
-		&i.ItemIdsJson,
 		&i.DocumentVersion,
+		&i.NextItemSeq,
 	)
 	return i, err
 }
 
-const upsertSessionProgressContent = `-- name: UpsertSessionProgressContent :exec
-
-INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
-VALUES (?, ?, ?, ?, ?, 1)
-ON CONFLICT(session_id) DO UPDATE SET
-    workflow_run_id = excluded.workflow_run_id,
-    content = excluded.content,
-    updated_at = excluded.updated_at,
-    item_ids_json = excluded.item_ids_json,
-    document_version = session_progress.document_version + 1
+const insertSessionProgressItem = `-- name: InsertSessionProgressItem :exec
+INSERT INTO session_progress_items (session_id, item_id, ord, state, label)
+VALUES (?, ?, ?, ?, ?)
 `
 
-type UpsertSessionProgressContentParams struct {
-	SessionID     string `json:"session_id"`
-	WorkflowRunID string `json:"workflow_run_id"`
-	Content       string `json:"content"`
-	UpdatedAt     string `json:"updated_at"`
-	ItemIdsJson   string `json:"item_ids_json"`
+type InsertSessionProgressItemParams struct {
+	SessionID string `json:"session_id"`
+	ItemID    string `json:"item_id"`
+	Ord       int64  `json:"ord"`
+	State     string `json:"state"`
+	Label     string `json:"label"`
 }
 
-// Coordinator-authored progress doc, keyed by root session.
-func (q *Queries) UpsertSessionProgressContent(ctx context.Context, arg UpsertSessionProgressContentParams) error {
-	_, err := q.db.ExecContext(ctx, upsertSessionProgressContent,
+func (q *Queries) InsertSessionProgressItem(ctx context.Context, arg InsertSessionProgressItemParams) error {
+	_, err := q.db.ExecContext(ctx, insertSessionProgressItem,
+		arg.SessionID,
+		arg.ItemID,
+		arg.Ord,
+		arg.State,
+		arg.Label,
+	)
+	return err
+}
+
+const listSessionProgressItems = `-- name: ListSessionProgressItems :many
+SELECT item_id, ord, state, label
+FROM session_progress_items
+WHERE session_id = ?
+ORDER BY ord
+`
+
+type ListSessionProgressItemsRow struct {
+	ItemID string `json:"item_id"`
+	Ord    int64  `json:"ord"`
+	State  string `json:"state"`
+	Label  string `json:"label"`
+}
+
+func (q *Queries) ListSessionProgressItems(ctx context.Context, sessionID string) ([]ListSessionProgressItemsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSessionProgressItems, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSessionProgressItemsRow
+	for rows.Next() {
+		var i ListSessionProgressItemsRow
+		if err := rows.Scan(
+			&i.ItemID,
+			&i.Ord,
+			&i.State,
+			&i.Label,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertSessionProgressHeader = `-- name: UpsertSessionProgressHeader :exec
+INSERT INTO session_progress (session_id, workflow_run_id, updated_at, document_version, next_item_seq)
+VALUES (?, ?, ?, 1, ?)
+ON CONFLICT(session_id) DO UPDATE SET
+    workflow_run_id = excluded.workflow_run_id,
+    updated_at = excluded.updated_at,
+    document_version = session_progress.document_version + 1,
+    next_item_seq = excluded.next_item_seq
+`
+
+type UpsertSessionProgressHeaderParams struct {
+	SessionID     string `json:"session_id"`
+	WorkflowRunID string `json:"workflow_run_id"`
+	UpdatedAt     string `json:"updated_at"`
+	NextItemSeq   int64  `json:"next_item_seq"`
+}
+
+func (q *Queries) UpsertSessionProgressHeader(ctx context.Context, arg UpsertSessionProgressHeaderParams) error {
+	_, err := q.db.ExecContext(ctx, upsertSessionProgressHeader,
 		arg.SessionID,
 		arg.WorkflowRunID,
-		arg.Content,
 		arg.UpdatedAt,
-		arg.ItemIdsJson,
+		arg.NextItemSeq,
 	)
 	return err
 }

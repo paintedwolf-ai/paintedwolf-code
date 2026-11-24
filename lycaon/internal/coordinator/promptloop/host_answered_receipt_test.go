@@ -305,7 +305,7 @@ func TestInvocationSettlementMatchesEffectsAndRefusal(t *testing.T) {
 		invoked        bool
 		code           string
 	}{
-		{name: "owner precondition", beforeEffect: true, status: api.InvocationStatusRejected, code: "PROGRESS_REVISION_REQUIRED"},
+		{name: "owner precondition", beforeEffect: true, status: api.InvocationStatusRejected, code: "PROGRESS_ITEM_NOT_FOUND"},
 		{name: "owner refused", status: api.InvocationStatusRejected, invoked: true, code: "ASK_USER_OPTIONS_FORBIDDEN"},
 		{name: "program stopped before any operation", programState: "rejected", status: api.InvocationStatusRejected, code: "COMMAND_OPTION_UNSUPPORTED"},
 		{name: "program stopped after an operation", programState: "rejected", programStarted: true, status: api.InvocationStatusRejected, invoked: true, code: "COMMAND_OPTION_UNSUPPORTED"},

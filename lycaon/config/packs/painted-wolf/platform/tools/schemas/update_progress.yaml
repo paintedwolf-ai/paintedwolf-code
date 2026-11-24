@@ -1,27 +1,96 @@
-description: Set session progress checklist (markdown). Replaces the whole checklist — see content for markers and caps.
+description: >-
+  Manage progress rows by ID (replace, add, update, remove) and acknowledge
+  settled worker handles (acknowledge_results).
 schema:
   type: object
-  properties:
-    reconciliation_token:
-      type: string
-      minLength: 64
-      maxLength: 64
-      description: Current host reconciliation token; accounts for its listed complete worker results without closing unfinished deliverables.
-    expected_revision:
-      type: string
-      description: Current snapshot revision. Required when a checklist exists; omitted only for first creation.
-      minLength: 64
-      maxLength: 64
-    item_ids:
-      type: array
-      maxItems: 48
-      items:
-        type: [string, 'null']
-        maxLength: 64
-      description: 'Checklist row identities aligned with content rows. Required when replacing an existing checklist: pass each retained row''s snapshot item_ids entry, null or "" for newly added rows, and omit removed rows.'
-    content:
-      type: string
-      maxLength: 8000
-      description: 'Checklist: `- [ ]` pending, `- [x]` done, `- [~]` terminal descope (not in-progress), `- [>]` optional (last). One row per deliverable in the request; for user-facing CLI, terminal, or web UI work, include a separate final row to snapshot the running program. Max 48 lines when needed; labels ≤60c.'
-  required: [content]
+  minProperties: 1
   additionalProperties: false
+  properties:
+    replace:
+      type: array
+      minItems: 1
+      maxItems: 48
+      description: >-
+        Seed or replace all rows (mints p<N> IDs; optional rows last; exclusive
+        with add/update/remove).
+      items:
+        type: object
+        additionalProperties: false
+        required: [label]
+        properties:
+          label:
+            type: string
+            minLength: 1
+            maxLength: 240
+            description: Deliverable outcome (include a final snapshot row for CLI/UI work).
+          state:
+            type: string
+            enum: [pending, done, na, optional]
+            default: pending
+            description: Row state (na = descoped; optional = trailing note).
+    add:
+      type: array
+      minItems: 1
+      maxItems: 48
+      description: Insert new rows (appends before optional rows unless after_id is set).
+      items:
+        type: object
+        additionalProperties: false
+        required: [label]
+        properties:
+          label:
+            type: string
+            minLength: 1
+            maxLength: 240
+            description: Deliverable outcome.
+          state:
+            type: string
+            enum: [pending, optional]
+            default: pending
+            description: Initial row state.
+          after_id:
+            type: string
+            pattern: '^(start|p[1-9][0-9]*)$'
+            description: Surviving row ID to insert after, or "start" to prepend.
+    update:
+      type: array
+      minItems: 1
+      maxItems: 48
+      description: Patch existing rows by ID; omit unchanged rows and fields.
+      items:
+        type: object
+        additionalProperties: false
+        required: [id]
+        properties:
+          id:
+            type: string
+            pattern: '^p[1-9][0-9]*$'
+            description: Target row ID.
+          state:
+            type: string
+            enum: [pending, done, na, optional]
+            description: Updated state (done = verified; na = descoped).
+          label:
+            type: string
+            minLength: 1
+            maxLength: 240
+            description: Updated label.
+    remove:
+      type: array
+      minItems: 1
+      maxItems: 48
+      uniqueItems: true
+      description: Superseded row IDs to delete.
+      items:
+        type: string
+        pattern: '^p[1-9][0-9]*$'
+    acknowledge_results:
+      type: array
+      minItems: 1
+      maxItems: 32
+      uniqueItems: true
+      description: Settled worker result_handle values reviewed in this step.
+      items:
+        type: string
+        minLength: 1
+        maxLength: 128

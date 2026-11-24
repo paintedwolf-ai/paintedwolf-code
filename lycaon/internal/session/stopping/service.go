@@ -71,10 +71,9 @@ func (m *Service) QueueChecklistReconcileNudge(ctx context.Context, id string) {
 	if m == nil || m.progress == nil || m.runtime == nil {
 		return
 	}
-	content := m.progress.Get(ctx, id)
-	if !progress.HasOpenSteps(content) {
+	snapshot, err := m.progress.Snapshot(ctx, id)
+	if err != nil || !snapshot.HasOpenSteps() {
 		return
 	}
-	_, pending, _ := progress.CloseCounts(content)
-	m.runtime.Anchors().Emit(ctx, id, anchor.ProgressStale, anchor.Envelope{Vars: map[string]any{"pending": pending}})
+	m.runtime.Anchors().Emit(ctx, id, anchor.ProgressStale, anchor.Envelope{Vars: map[string]any{"pending": snapshot.OpenStepCount()}})
 }

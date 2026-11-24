@@ -1,4 +1,4 @@
-Leg finished — review envelope and host digest; chain the next worker per policy.{% if progress_closure_armed %} This finish latched the checklist with **{{ progress_open_items }}** row(s) open: reconcile the checklist with the current snapshot reconciliation token before that dispatch, or it returns `Code: PROGRESS_RECONCILIATION_REQUIRED`.{% endif %}
+Leg finished — review envelope and host digest; chain the next worker per policy.{% if progress_closure_armed %} This finish latched progress with **{{ progress_open_items }}** row(s) open: {% if profile_has_update_progress %}acknowledge settled result handles with `update_progress(acknowledge_results=[…])` (updating closed row states as warranted){% else %}reconcile progress{% endif %} before that dispatch, or it returns `Code: PROGRESS_RECONCILIATION_REQUIRED`.{% endif %}
 {% if worker_digest %}
 {{ worker_digest }}
 {% endif %}

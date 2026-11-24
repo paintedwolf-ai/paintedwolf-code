@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -45,7 +46,7 @@ type WorkflowRuns interface {
 }
 
 type Progress interface {
-	Get(context.Context, string) string
+	Snapshot(context.Context, string) (progress.Snapshot, error)
 }
 type Closure interface {
 	Baseline(string) (guard.ProgressClosureBaseline, bool)

@@ -235,7 +235,7 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 			client := &sequentialLLMClient{completions: []*modelcall.Completion{
 				{ToolCalls: []api.ToolCall{
 					{ID: "tc1", Name: "read", Args: map[string]any{"path": "x.go"}},
-					{ID: "tc2", Name: "update_progress", Args: map[string]any{"content": "- [ ] x"}},
+					{ID: "tc2", Name: "update_progress", Args: map[string]any{"replace": []any{map[string]any{"label": "x"}}}},
 				}},
 				{Content: "done"},
 			}}

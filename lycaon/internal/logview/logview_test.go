@@ -40,7 +40,9 @@ func sampleCalls(t *testing.T) []LLMRecord {
 			Usage: &LLMUsage{PromptTokens: 500, CompletionTokens: 9},
 			Messages: []LLMMessage{
 				{Role: "assistant", Content: mustMarshal(t, ""), ToolCalls: []LLMToolCall{
-					{Name: "update_progress", Args: mustMarshal(t, map[string]string{"content": "## Progress\n- [x] done"})},
+					{Name: "update_progress", Args: mustMarshal(t, map[string]any{
+						"replace": []map[string]string{{"label": "done", "state": "done"}},
+					})},
 				}},
 				{Role: "tool", Content: mustMarshal(t, `{"status":"updated"}`)},
 			},
@@ -104,7 +106,7 @@ func TestRenderPromptHideSystemAndToolCall(t *testing.T) {
 	if !strings.Contains(out, "→ update_progress") {
 		t.Errorf("tool call not rendered\n%s", out)
 	}
-	if !strings.Contains(out, `"## Progress\n- [x] done"`) && !strings.Contains(out, "- [x] done") {
+	if !strings.Contains(out, `"replace"`) || !strings.Contains(out, `"done"`) {
 		t.Errorf("tool args not rendered\n%s", out)
 	}
 	if !strings.Contains(out, `{"status":"updated"}`) {

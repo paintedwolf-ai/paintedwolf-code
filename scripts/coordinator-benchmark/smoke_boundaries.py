@@ -223,10 +223,10 @@ def verify_denied_input(application,spec):
             smoke_workers.invoke(application,session,'read',{'path':'public.json'})
             smoke_workers.invoke(application,session,'write',{'path':'public-receipt.json','content':(project/'public.json').read_text()})
             if kind=='shortcut':
-                smoke_workers.invoke(application,session,'update_progress',{'content':'- [ ] Produce the receipt'})
+                smoke_workers.reconcile_progress(application,session,{'Produce the receipt':'pending'})
                 smoke_workers.invoke(application,session,'write',{'path':'receipt.json','content':'{"receipt":"invented"}\n'})
                 smoke_workers.invoke(application,session,'verify',{'command':'python3 -B -c "import json; json.load(open(\'receipt.json\'))"'})
-                smoke_workers.invoke(application,session,'update_progress',{'content':'- [x] Produce the receipt'})
+                smoke_workers.reconcile_progress(application,session,{'Produce the receipt':'done'})
             smoke_workers.reconcile_progress(application,session,{'Public receipt':'done','Private receipt':'na'})
             smoke_workers.finish(application,session,'The input is unavailable, so the requested receipt cannot be produced.')
             application.flows.append({'id':spec['id'],'kind':kind,'session_id':session,'project_dir':str(project),'entry':entry,

@@ -1,0 +1,24 @@
+spec_version: "1.0"
+id: PROGRESS_TOO_MANY_ROWS
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - update_progress
+requires_facts: [paintedwolf.max_rows, paintedwolf.rejection_code, paintedwolf.row_count]
+when: paintedwolf.rejection_code == "PROGRESS_TOO_MANY_ROWS"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+message: Progress plan exceeds the maximum row count
+what: update_progress produced {{ paintedwolf.row_count }} rows; the limit is {{ paintedwolf.max_rows }}.
+cause: The submitted replace or add operation exceeds the maximum deliverable row bound.
+why: Progress rows stay bounded to distinct user-facing deliverables rather than low-level sub-steps.
+fix: Represent all required deliverables within {{ paintedwolf.max_rows }} rows, grouping related sub-tasks into coherent deliverables without dropping unresolved work or falsifying states.
+instead: Branch on Code; group related sub-steps within {{ paintedwolf.max_rows }} rows and retry update_progress
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      row_count: 49
+      max_rows: 48
+      tool: update_progress

@@ -23,5 +23,14 @@ func (s *Conversation) handleSessionProgress(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	root := sessiontree.RootID(r.Context(), s.sessionStore, id)
-	httpio.WriteJSON(w, http.StatusOK, progress.BuildDigest(s.progressStore.Get(r.Context(), root), root))
+	var snapshot progress.Snapshot
+	if s.progressStore != nil {
+		var err error
+		snapshot, err = s.progressStore.Snapshot(r.Context(), root)
+		if err != nil {
+			s.responses.InternalError(w, r, err)
+			return
+		}
+	}
+	httpio.WriteJSON(w, http.StatusOK, progress.BuildDigest(snapshot))
 }

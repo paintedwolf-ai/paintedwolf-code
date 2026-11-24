@@ -2,39 +2,41 @@ package progress
 
 import api "github.com/lycaon/lycaon/pkg/api"
 
-// DiffSteps compares visible items across immutable snapshots by their stable item IDs.
+// DiffSteps compares visible rows across snapshots by their stable row IDs.
 func DiffSteps(before, after Snapshot) []api.ProgressChange {
-	prevVisible := visibleItems(before.Items())
-	nextVisible := visibleItems(after.Items())
+	prevVisible := visibleRows(before.Rows)
+	nextVisible := visibleRows(after.Rows)
 
-	prevByID := make(map[string]Item, len(prevVisible))
-	for _, item := range prevVisible {
-		if item.ID != "" {
-			prevByID[item.ID] = item
+	prevByID := make(map[string]Row, len(prevVisible))
+	for _, r := range prevVisible {
+		if r.ID != "" {
+			prevByID[r.ID] = r
 		}
 	}
 	nextIDs := make(map[string]struct{}, len(nextVisible))
-	for _, item := range nextVisible {
-		if item.ID != "" {
-			nextIDs[item.ID] = struct{}{}
+	for _, r := range nextVisible {
+		if r.ID != "" {
+			nextIDs[r.ID] = struct{}{}
 		}
 	}
 
 	var changes []api.ProgressChange
 	for _, n := range nextVisible {
+		nLabel := clampLabel(n.Label)
 		if n.ID != "" {
 			if p, ok := prevByID[n.ID]; ok {
+				pLabel := clampLabel(p.Label)
 				if p.State != n.State {
 					changes = append(changes, api.ProgressChange{
 						Kind:  transitionKind(n.State),
-						Label: n.Label,
+						Label: nLabel,
 						State: n.State,
 					})
-				} else if p.Label != n.Label {
+				} else if pLabel != nLabel {
 					changes = append(changes, api.ProgressChange{
 						Kind:      api.ProgressChangeUpdated,
-						Label:     n.Label,
-						PrevLabel: p.Label,
+						Label:     nLabel,
+						PrevLabel: pLabel,
 						State:     n.State,
 					})
 				}
@@ -43,7 +45,7 @@ func DiffSteps(before, after Snapshot) []api.ProgressChange {
 		}
 		changes = append(changes, api.ProgressChange{
 			Kind:  api.ProgressChangeCreated,
-			Label: n.Label,
+			Label: nLabel,
 			State: n.State,
 		})
 	}
@@ -55,20 +57,20 @@ func DiffSteps(before, after Snapshot) []api.ProgressChange {
 		}
 		changes = append(changes, api.ProgressChange{
 			Kind:  api.ProgressChangeRemoved,
-			Label: p.Label,
+			Label: clampLabel(p.Label),
 			State: p.State,
 		})
 	}
 	return changes
 }
 
-func visibleItems(items []Item) []Item {
-	var out []Item
-	for _, item := range items {
-		if item.State == ProgressStateOptional {
+func visibleRows(rows []Row) []Row {
+	var out []Row
+	for _, r := range rows {
+		if r.State == ProgressStateOptional {
 			continue
 		}
-		out = append(out, item)
+		out = append(out, r)
 	}
 	return out
 }

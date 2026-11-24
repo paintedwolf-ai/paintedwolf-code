@@ -32,7 +32,16 @@ import (
 type nativeProgressFixture struct{ store progress.Store }
 
 func (p nativeProgressFixture) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
-	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
+	snap, err := p.store.Snapshot(ctx, id)
+	if err != nil {
+		return progress.PrerequisiteState{}, err
+	}
+	return progress.PrerequisiteState{
+		SessionID:     id,
+		RootSessionID: id,
+		Missing:       snap.Missing(),
+		OpenSteps:     snap.OpenStepCount(),
+	}, nil
 }
 
 type nativeStartFunc func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error
@@ -81,7 +90,7 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath, modelTool string) {
 	bound, err := toolcontract.BindOperation(definition, child, "cat", definition.Facts().Commands[0].Effects[0].Mode, nil)
 	testutil.FailErr(t, "bind native read", err)
 	owner := progresstest.New(t, parent.SessionID)
-	testutil.FailErr(t, "set actual progress", owner.Set(parent.SessionID, "- [ ] Inspect"))
+	progresstest.SeedRows(t, owner, parent.SessionID, progress.RowSpec{Label: "Inspect"})
 	args := map[string]any{"path": inputPath}
 	prepared, invoked := false, false
 	var stdout bytes.Buffer
@@ -192,7 +201,7 @@ func testNativeOwnerPolicyAfterRecorder(t *testing.T, phases []string) {
 	testutil.FailErr(t, "capture native frame", err)
 	t.Cleanup(frame.Close)
 	progressStore := progresstest.New(t, parent.SessionID)
-	testutil.FailErr(t, "set current progress", progressStore.Set(parent.SessionID, "- [ ] Inspect"))
+	progresstest.SeedRows(t, progressStore, parent.SessionID, progress.RowSpec{Label: "Inspect"})
 	for _, phase := range phases {
 		t.Run(phase, func(t *testing.T) {
 			testutil.FailErr(t, "clear only fixture policy", store.PutProject(root, settings.ApprovalConfig{}))
@@ -411,7 +420,7 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 				}}, nil
 			}
 			owner := progresstest.New(t, parent.SessionID)
-			testutil.FailErr(t, "seed progress", owner.Set(parent.SessionID, "- [ ] Inspect"))
+			progresstest.SeedRows(t, owner, parent.SessionID, progress.RowSpec{Label: "Inspect"})
 			memory := stageMemory(t, 64<<20)
 			observer := nativeWaitObserver{
 				nativeStartFunc: func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {

@@ -40,13 +40,20 @@ func newImplementLifecycleMock(state *implementLifecycleState) *llmtest.KickDriv
 				state.workerTaskFinishedCount.Add(1)
 				if state.stage.CompareAndSwap(1, 2) {
 					return modelcall.Completion{ToolCalls: []wire.ToolCall{
-						{ID: "p1", Name: "update_progress", Args: map[string]any{"content": "## Progress\n- [x] build stub\n- [ ] resolve TODO\n"}},
+						{ID: "p1", Name: "update_progress", Args: map[string]any{
+							"replace": []any{
+								map[string]any{"label": "build stub", "state": "done"},
+								map[string]any{"label": "resolve TODO", "state": "pending"},
+							},
+						}},
 						{ID: "t2", Name: "task", Args: TaskToolArgs("implementer", "Resolve the TODO marker.")},
 					}}
 				}
 				if state.stage.CompareAndSwap(2, 3) {
 					return modelcall.Completion{ToolCalls: []wire.ToolCall{{
-						ID: "p2", Name: "update_progress", Args: map[string]any{"content": "## Progress\n- [x] build stub\n- [x] resolve TODO\n"},
+						ID: "p2", Name: "update_progress", Args: map[string]any{
+							"update": []any{map[string]any{"id": "p3", "state": "done"}},
+						},
 					}}}
 				}
 			}

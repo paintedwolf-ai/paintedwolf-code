@@ -40,10 +40,10 @@ func (p *dispatchPolicy) FreezeCommandProfile(ctx context.Context, _ string) (co
 	return ctx, p.effects, nil
 }
 
-type dispatchProgress struct{ content string }
+type dispatchProgress struct{ openSteps int }
 
 func (p dispatchProgress) ProgramProgressState(_ context.Context, id string) (progress.PrerequisiteState, error) {
-	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.content}, nil
+	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Missing: p.openSteps == 0, OpenSteps: p.openSteps}, nil
 }
 
 type feedbackForbiddenStart struct{ called bool }
@@ -109,7 +109,7 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 		t.Fatal("blocked operation reached owner preparation")
 		return toolexecution.PreparedNativeEffect{}, nil
 	}}
-	result, cause := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Inspect"}, start, effect, tc)
+	result, cause := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{openSteps: 1}, start, effect, tc)
 	var policy *toolfeedback.ProgramPolicyBlock
 	if !errors.As(cause, &policy) || toolrejection.AsToolReject(cause) == nil || result.OwnerInvoked || start.called {
 		t.Fatalf("policy lost typed unrendered stop or invoked owner: %+v %v", result, cause)
@@ -168,7 +168,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 			},
 		}
 		observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: f.capture(t)}
-		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{content: "- [ ] Active step"}, &observer, effect, tc)
+		res, invokeErr := executor.InvokeNative(t.Context(), frame, surface, memory, dispatchProgress{openSteps: 1}, &observer, effect, tc)
 		return res, executor, frame, tc, memory, invokeErr
 	}
 

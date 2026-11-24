@@ -8,11 +8,12 @@ import (
 	api "github.com/lycaon/lycaon/pkg/api"
 )
 
-// TranscriptTransactions commits derived messages with their source mutation.
+// TranscriptTransactions commits derived messages inside the same transaction as mutate.
 type TranscriptTransactions interface {
 	AppendMessagesWith(context.Context, string, func(*sql.Tx) ([]api.Message, error)) error
 }
 
+// SQLStore persists session_progress and session_progress_items in SQLite.
 type SQLStore struct {
 	database   db.Handle
 	queries    *db.Queries
@@ -32,6 +33,7 @@ func (d directTranscriptTransactions) AppendMessagesWith(ctx context.Context, _ 
 	})
 }
 
+// NewSQLStore constructs a SQLite-backed progress store.
 func NewSQLStore(database db.Handle, transcript ...TranscriptTransactions) *SQLStore {
 	var tx TranscriptTransactions
 	if len(transcript) > 0 && transcript[0] != nil {
@@ -40,19 +42,4 @@ func NewSQLStore(database db.Handle, transcript ...TranscriptTransactions) *SQLS
 		tx = directTranscriptTransactions{database: database}
 	}
 	return &SQLStore{database: database, queries: db.New(database), transcript: tx}
-}
-
-func (s *SQLStore) Set(sessionID, content string) error {
-	_, err := s.Update(context.Background(), sessionID, func(Snapshot) (Document, error) {
-		return Document{Content: content, ItemIDs: mintItemIDs(clampContent(content))}, nil
-	})
-	return err
-}
-
-func (s *SQLStore) Get(ctx context.Context, sessionID string) string {
-	snapshot, err := s.Snapshot(ctx, sessionID)
-	if err != nil {
-		return ""
-	}
-	return snapshot.Content
 }

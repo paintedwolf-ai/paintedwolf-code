@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/profiles"
@@ -45,7 +46,7 @@ func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session, *sessionstore.
 	testdbseed.InsertWorkflowRun(t, store.DB(), "run-"+sess.ID, sess.ID, testdbseed.DefaultProjectID)
 	rejectFmt := guidance.NewStaticRejectFormatter(hints)
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	mgr.SetProgressStore(progress.NewSQLStore(store.DB()))
+	mgr.SetProgressStore(progress.NewSQLStore(store.DB(), store))
 	mgr.SetRejectFormatter(rejectFmt)
 	schemaDir := filepath.Join("..", "..", "..", "schemas")
 	loader, err := oar.NewLoader(schemaDir)
@@ -77,7 +78,7 @@ func rejectCloseout(t *testing.T, mgr *Host, sess *api.Session, surfaceID string
 
 func TestCloseoutSkipsOpenProgressWhenInvokeGated(t *testing.T) {
 	mgr, sess, _ := newSynthesisDelayManager(t)
-	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] review")
+	progresstest.SeedRows(t, mgr.RewindRuntime.Progress, sess.ID, progress.RowSpec{Label: "review"})
 
 	if _, block := mgr.Coordinator.Guards.OpenProgress(
 		context.Background(), sess, nil, "implement_investigate", true, surface.ImplementSessionState{}, false,
@@ -88,7 +89,10 @@ func TestCloseoutSkipsOpenProgressWhenInvokeGated(t *testing.T) {
 
 func TestCloseoutBlocksOnOpenSteps(t *testing.T) {
 	mgr, sess, _ := newSynthesisDelayManager(t)
-	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [x] survey\n- [ ] review")
+	progresstest.SeedRows(t, mgr.RewindRuntime.Progress, sess.ID,
+		progress.RowSpec{Label: "survey", State: "done"},
+		progress.RowSpec{Label: "review"},
+	)
 
 	reject, block := rejectCloseout(t, mgr, sess, "implement_investigate", true)
 	if !block {
@@ -101,8 +105,15 @@ func TestCloseoutBlocksOnOpenSteps(t *testing.T) {
 
 func TestCloseoutAllowsWhenTerminal(t *testing.T) {
 	mgr, sess, _ := newSynthesisDelayManager(t)
-	// Done, skipped, and optional steps do not block closeout.
-	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [x] survey\n- [~] review\n- [>] synthesize report")
+	seeded := progresstest.SeedRows(t, mgr.RewindRuntime.Progress, sess.ID,
+		progress.RowSpec{Label: "survey"},
+		progress.RowSpec{Label: "review"},
+		progress.RowSpec{Label: "synthesize report", State: "optional"},
+	)
+	progresstest.UpdateRows(t, mgr.RewindRuntime.Progress, sess.ID,
+		progress.UpdateRowSpec{ID: seeded.Rows[0].ID, State: progresstest.State("done")},
+		progress.UpdateRowSpec{ID: seeded.Rows[1].ID, State: progresstest.State("na")},
+	)
 
 	if _, block := rejectCloseout(t, mgr, sess, "implement_investigate", true); block {
 		t.Fatal("a terminal plan (done/na/optional) must let the closeout through")
@@ -111,12 +122,11 @@ func TestCloseoutAllowsWhenTerminal(t *testing.T) {
 
 func TestCloseoutSkipsReadOnlySynthesisAndNonProseSurfaces(t *testing.T) {
 	mgr, sess, _ := newSynthesisDelayManager(t)
-	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] review")
+	progresstest.SeedRows(t, mgr.RewindRuntime.Progress, sess.ID, progress.RowSpec{Label: "review"})
 
 	if _, block := rejectCloseout(t, mgr, sess, "implement_synthesis", true); block {
 		t.Fatal("the read-only synthesis surface must never carry the open-plan push")
 	}
-	// Dispatch ends through a tool call.
 	if _, block := rejectCloseout(t, mgr, sess, "implement_dispatch", true); block {
 		t.Fatal("non-prose surfaces must not carry the open-plan push")
 	}
@@ -127,7 +137,7 @@ func TestCloseoutSkipsReadOnlySynthesisAndNonProseSurfaces(t *testing.T) {
 
 func TestCloseoutBoundedPerPrompt(t *testing.T) {
 	mgr, sess, _ := newSynthesisDelayManager(t)
-	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] review")
+	progresstest.SeedRows(t, mgr.RewindRuntime.Progress, sess.ID, progress.RowSpec{Label: "review"})
 	ctx := context.Background()
 
 	for i := 0; i < 2; i++ {
@@ -150,30 +160,27 @@ func TestCloseoutPendingProgressDoesNotArmWorkerCompletionLatch(t *testing.T) {
 	testutil.FailErr(t, "register progress", native.RegisterUpdateProgressTool(reg, mgr.RewindRuntime.Progress, func(_ context.Context, id string) string { return id }, nil))
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}
-	pending := "## Progress\n- [ ] Build feature"
 	for attempt := 0; attempt < 2; attempt++ {
-		snapshot, err := mgr.RewindRuntime.Progress.Snapshot(t.Context(), sess.ID)
-		testutil.FailErr(t, "observe pending checklist", err)
-		args := map[string]any{"content": pending, "expected_revision": snapshot.Revision}
-		if len(snapshot.ItemIDs) > 0 {
-			args["item_ids"] = snapshot.ItemIDs
+		args := map[string]any{"replace": []any{map[string]any{"label": "Build feature"}}}
+		if attempt > 0 {
+			args = map[string]any{"update": []any{map[string]any{"id": "p1", "label": "Build feature"}}}
 		}
-		_, err = exec.Invoke(t.Context(), "update_progress", args, tctx)
+		_, err := exec.Invoke(t.Context(), "update_progress", args, tctx)
 		testutil.FailErr(t, "record pending work", err)
 		refusal, blocked := mgr.Coordinator.Guards.OpenProgress(t.Context(), sess, nil, "implement_investigate", true, surface.ImplementSessionState{}, true)
 		if !blocked || refusal == nil || refusal.Code() != "PROGRESS_OPEN_BEFORE_CLOSEOUT" {
 			t.Fatalf("pending closeout = %v, %v", refusal, blocked)
 		}
-		if got := mgr.RewindRuntime.Progress.Get(t.Context(), sess.ID); got != pending {
-			t.Fatalf("closeout recovery changed unfinished work: %q", got)
+		snap, err := mgr.RewindRuntime.Progress.Snapshot(t.Context(), sess.ID)
+		testutil.FailErr(t, "snapshot", err)
+		if len(snap.Rows) != 1 || snap.Rows[0].State != progress.ProgressStatePending {
+			t.Fatalf("closeout recovery changed unfinished work: %+v", snap.Rows)
 		}
 		if _, armed := mgr.Coordinator.ProgressClosure.Baseline(sess.ID); armed {
 			t.Fatal("pending work armed a worker-completion latch")
 		}
 	}
-	snapshot, err := mgr.RewindRuntime.Progress.Snapshot(t.Context(), sess.ID)
-	testutil.FailErr(t, "observe completed checklist revision", err)
-	_, err = exec.Invoke(t.Context(), "update_progress", map[string]any{"content": "## Progress\n- [x] Build feature", "expected_revision": snapshot.Revision, "item_ids": snapshot.ItemIDs}, tctx)
+	_, err := exec.Invoke(t.Context(), "update_progress", map[string]any{"update": []any{map[string]any{"id": "p1", "state": "done"}}}, tctx)
 	testutil.FailErr(t, "record completed work", err)
 	if _, blocked := mgr.Coordinator.Guards.OpenProgress(t.Context(), sess, nil, "implement_investigate", true, surface.ImplementSessionState{}, true); blocked {
 		t.Fatal("completed work still blocks closeout")

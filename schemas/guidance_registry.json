@@ -657,7 +657,7 @@
       "summary": "The coordinator request names a private worker workspace path: {{ paintedwolf.path }}."
     },
     "COORDINATOR_PROGRESS_SHADOW_BOARD": {
-      "branch_instruction": "Keep the checklist in the progress record.",
+      "branch_instruction": "Keep progress rows in the host progress record.",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Coordinator {{ tool }} on {{ paintedwolf.path }} targets a parallel progress board."
@@ -1921,11 +1921,11 @@
       "emit": "guard:host_process",
       "summary": "This host does not support instance-bound process operations."
     },
-    "PROGRESS_DOCUMENT_TOO_LARGE": {
-      "branch_instruction": "Submit one concise row per deliverable within the reported character limit.",
+    "PROGRESS_CONFLICTING_OPERATIONS": {
+      "branch_instruction": "Branch on Code; separate replace from incremental edits, deduplicate target IDs, and retry update_progress",
       "category": "recoverable",
       "emit": "guard:update_progress",
-      "summary": "The checklist exceeds its document size budget."
+      "summary": "update_progress combined incompatible row edits in one call."
     },
     "PROGRESS_ITEM_NOT_CLOSED": {
       "branch_instruction": "Record the completed work, then retry on the next call.",
@@ -1933,71 +1933,65 @@
       "emit": "guard:coordinator",
       "summary": "Worker output completed while progress steps were open, and a progress-gated tool was called before the checklist recorded it."
     },
+    "PROGRESS_ITEM_NOT_FOUND": {
+      "branch_instruction": "Branch on Code; use row IDs from the current snapshot and retry update_progress",
+      "category": "recoverable",
+      "emit": "guard:update_progress",
+      "summary": "update_progress referenced unknown row IDs: {{ paintedwolf.unknown_ids }}."
+    },
     "PROGRESS_MISSING": {
-      "branch_instruction": "Record the checklist, then retry the same rejected call.",
+      "branch_instruction": "Seed the progress rows, then retry the same rejected call.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "**`{{ tool }}`** did not run: the current request has no progress checklist."
-    },
-    "PROGRESS_NESTED_LINE": {
-      "branch_instruction": "Branch on Code; flatten to top-level lines and retry update_progress",
-      "category": "recoverable",
-      "emit": "guard:update_progress",
-      "summary": "Checklist line \"{{ paintedwolf.line }}\" is indented — only top-level `- [ ]`/`- [x]`/`- [~]`/`- [\u003e]` rows are allowed."
+      "summary": "**`{{ tool }}`** did not run: the current request has no active progress rows."
     },
     "PROGRESS_NO_OPEN_STEP": {
-      "branch_instruction": "Branch on Code; include at least one open `- [ ]` step or continue without update_progress if no work remains",
+      "branch_instruction": "Branch on Code; include at least one `\"pending\"` row or continue without update_progress if no work remains",
       "category": "recoverable",
       "emit": "guard:update_progress",
-      "summary": "Initial progress checklist contains no open `- [ ]` steps."
+      "summary": "Initial progress plan contains no `state: \"pending\"` rows."
     },
     "PROGRESS_OPEN_BEFORE_CLOSEOUT": {
-      "branch_instruction": "Repeating the same pending checklist does not resolve this rejection. Do not close unfinished rows to clear it. For a concrete blocker or authorized scope change, mark only the work you will not pursue `- [~]` and report the limitation.",
+      "branch_instruction": "Repeating unchanged pending rows does not resolve this rejection. Do not mark unfinished rows `\"done\"` to clear it. For a concrete blocker or authorized scope change, update only the work you will not pursue to `state: \"na\"` and report the limitation.",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "This tool-free response would end the turn with {{ paintedwolf.progress_open_items }} progress {% if paintedwolf.progress_has_one_open_item %}step{% else %}steps{% endif %} still pending."
     },
     "PROGRESS_PENDING_AFTER_OPTIONAL": {
-      "branch_instruction": "Branch on Code; reorder so optional `- [\u003e]` lines are last and retry update_progress",
+      "branch_instruction": "Branch on Code; place `\"pending\"` rows before `\"optional\"` rows and retry update_progress",
       "category": "recoverable",
       "emit": "guard:update_progress",
-      "summary": "Pending checklist label \"{{ paintedwolf.label }}\" appears after a `- [\u003e]` optional line."
-    },
-    "PROGRESS_RECONCILIATION_CHANGED": {
-      "branch_instruction": "Review the current listed worker rounds and submit their reconciliation_token with expected_revision.",
-      "category": "recoverable",
-      "emit": "guard:update_progress",
-      "summary": "The unacknowledged worker-round settlement set changed."
+      "summary": "Pending row \"{{ paintedwolf.label }}\" appears after a `state: \"optional\"` row."
     },
     "PROGRESS_RECONCILIATION_REQUIRED": {
-      "branch_instruction": "Acknowledge the listed worker rounds with the current reconciliation_token and expected_revision, then retry the authorized action",
+      "branch_instruction": "Acknowledge the settled result handles{% if paintedwolf.unaccounted_handles %} ({{ paintedwolf.unaccounted_handles }}){% endif %} via acknowledge_results, then retry the authorized action",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Settled worker rounds await acknowledgement before **`{{ tool }}`**{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}."
     },
-    "PROGRESS_REVISION_CHANGED": {
-      "branch_instruction": "Reconcile the replacement against the current snapshot and submit its expected_revision and item_ids.",
+    "PROGRESS_RESULT_HANDLE_UNKNOWN": {
+      "branch_instruction": "Branch on Code; pass settled result_handle values from this session and retry update_progress",
       "category": "recoverable",
       "emit": "guard:update_progress",
-      "summary": "The checklist revision or row item_ids did not match the current snapshot."
+      "summary": "acknowledge_results named unknown or unsettled result handles: {{ paintedwolf.unknown_handles }}."
     },
-    "PROGRESS_REVISION_REQUIRED": {
-      "branch_instruction": "Use the current snapshot revision as expected_revision and pass aligned item_ids when replacing the checklist.",
+    "PROGRESS_STALE_BASIS": {
+      "branch_instruction": "Branch on Code; inspect the returned snapshot and submit a fresh update_progress call",
       "category": "recoverable",
       "emit": "guard:update_progress",
-      "summary": "Replacing an existing checklist requires its current revision and row item_ids."
+      "summary": "{% if paintedwolf.changed_ids %}Prepared update_progress targeted rows whose labels changed since preparation: {{ paintedwolf.changed_ids }}.{% else %}Prepared update_progress ran after the progress plan was replaced or cleared.{% endif %}"
     },
     "PROGRESS_SYNTHESIS_RECONCILE_ONLY": {
-      "branch_instruction": "Reconcile the existing **`## Progress`** in place — close or N/A rows only — then deliver the final report",
+      "branch_instruction": "Reconcile existing rows in place with `update` (`state` set to `\"done\"` or `\"na\"` only), then deliver the final report",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "You called **`update_progress`** on **`implement_synthesis`**, but the proposed checklist would add new scope or reopen finished rows."
+      "summary": "You called **`update_progress`** on **`implement_synthesis`**, but the call attempted `replace`, `add`, `remove`, row relabeling, or reopening a finished row."
     },
-    "PROGRESS_TOO_MANY_LINES": {
-      "branch_instruction": "Branch on Code; shorten to ≤ {{ paintedwolf.max_lines }} top-level lines and retry update_progress",
+    "PROGRESS_TOO_MANY_ROWS": {
+      "branch_instruction": "Branch on Code; group related sub-steps within {{ paintedwolf.max_rows }} rows and retry update_progress",
       "category": "recoverable",
       "emit": "guard:update_progress",
-      "summary": "update_progress had {{ paintedwolf.line_count }} checklist lines; the limit is {{ paintedwolf.max_lines }}."
+      "summary": "update_progress produced {{ paintedwolf.row_count }} rows; the limit is {{ paintedwolf.max_rows }}."
     },
     "PROJECT_HAS_NO_ROOTS": {
       "branch_instruction": "Chat, web research, and plan-read tools remain available until a folder is attached",

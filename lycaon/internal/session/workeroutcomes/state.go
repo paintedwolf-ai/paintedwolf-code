@@ -293,20 +293,20 @@ func (m *State) ForSession(ctx context.Context, sess *api.Session) surface.Imple
 			state.PendingUserInput = scaffoldvars.HasPendingUserInput(vars)
 		}
 	}
-	progressContent := ""
+	var progressSnapshot progress.Snapshot
 	if m.progress != nil {
 		rootID := sessiontree.RootID(ctx, m.sessionStore, sess.ID)
 		if snapshot, err := m.progress.Snapshot(ctx, rootID); err == nil {
 			if m.reconciliation != nil {
 				snapshot.Reconciliation = m.reconciliation.Reconciliation(rootID)
 			}
-			progressContent = snapshot.Content
+			progressSnapshot = snapshot
 			encoded, _ := json.Marshal(progress.ForRequest(rootID, snapshot)) //nolint:errchkjson // Progress snapshots hold plain text, numbers and times.
 			state.ProgressSnapshot = string(encoded)
 		}
 	}
-	state.ProgressOpenCount = progress.OpenStepCount(progressContent)
-	state.ProgressMissing = progress.ProgressMissing(progressContent)
+	state.ProgressOpenCount = progressSnapshot.OpenStepCount()
+	state.ProgressMissing = progressSnapshot.Missing()
 	if m.sessionStore != nil && m.transcriptStore != nil {
 		msgs, err := m.transcriptStore.GetMessages(ctx, sess.ID)
 		if err == nil {
@@ -319,7 +319,7 @@ func (m *State) ForSession(ctx context.Context, sess *api.Session) surface.Imple
 			if m.verification != nil && m.workspace != nil {
 				state.VerifyCommand = strings.TrimSpace(m.verification.SourceVerifyCommand(ctx, m.workspace.SettingsPath(ctx, sess)))
 			}
-			state.BatchReadyForSynthesis = BatchReadyForSynthesis(state, msgs, progressContent, verifyRequired, verifyPassed || verifyUnverified)
+			state.BatchReadyForSynthesis = BatchReadyForSynthesis(state, msgs, progressSnapshot, verifyRequired, verifyPassed || verifyUnverified)
 			state.OpenRepairSinceUserIntent = OpenRepairSinceUserIntent(msgs, verifyRepair)
 			since := api.UserIntentBoundary(msgs)
 			state.ProgressGatedToolAttemptedSinceIntent = progress.ProgressGatedToolAttemptedSinceBoundary(msgs, since)

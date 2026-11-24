@@ -79,19 +79,28 @@ func TestWebSearchSchemaOmitsProvider(t *testing.T) {
 	})
 }
 
-// Each checklist row carries one item id, so the schema's item_ids bound is
-// the author row budget update_progress enforces.
+// The update_progress schema enforces row and acknowledgement array bounds.
 func TestUpdateProgressToolSchemaMatchesProgressLimits(t *testing.T) {
 	t.Parallel()
-	ids := func(n int) []any {
+	rows := func(n int) []any {
 		out := make([]any, n)
 		for i := range out {
-			out[i] = strconv.Itoa(i)
+			out[i] = map[string]any{"label": "step " + strconv.Itoa(i)}
+		}
+		return out
+	}
+	handles := func(n int) []any {
+		out := make([]any, n)
+		for i := range out {
+			out[i] = "worker#" + strconv.Itoa(i+1)
 		}
 		return out
 	}
 	assertToolArgs(t, "update_progress", []toolArgsCase{
-		{name: "row budget", args: map[string]any{"content": "- [ ] a", "item_ids": ids(progress.MaxAuthorProgressLines)}, accept: true},
-		{name: "over row budget", args: map[string]any{"content": "- [ ] a", "item_ids": ids(progress.MaxAuthorProgressLines + 1)}},
+		{name: "row budget", args: map[string]any{"replace": rows(progress.MaxAuthorProgressRows)}, accept: true},
+		{name: "over row budget", args: map[string]any{"replace": rows(progress.MaxAuthorProgressRows + 1)}},
+		{name: "ack budget", args: map[string]any{"acknowledge_results": handles(progress.MaxAcknowledgeHandles)}, accept: true},
+		{name: "over ack budget", args: map[string]any{"acknowledge_results": handles(progress.MaxAcknowledgeHandles + 1)}},
+		{name: "empty object rejected", args: map[string]any{}},
 	})
 }

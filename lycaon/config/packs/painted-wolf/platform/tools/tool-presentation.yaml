@@ -528,7 +528,8 @@ tools:
     activity: {headline: "running commands", salience: primary, role: command}
   update_progress:
     label: "Update progress"
-    title_keys: [content]
+    title_keys: [replace, add, update, remove, acknowledge_results]
+    title_fallback: "Update progress"
     visibility: coordinator_internal
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   verify:

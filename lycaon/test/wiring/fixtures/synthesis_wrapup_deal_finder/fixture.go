@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
 )
@@ -23,7 +24,7 @@ type Fixture struct {
 type SurfaceCase struct {
 	Name             string
 	History          []api.Message
-	Progress         string
+	Progress         progress.Snapshot
 	State            SnapshotState
 	UserPrompt       string
 	WantSurface      string
@@ -88,7 +89,7 @@ func Load(t *testing.T) Fixture {
 		out.Surface = append(out.Surface, SurfaceCase{
 			Name:             row.Name,
 			History:          loadHistory(t, root, row.HistoryFile),
-			Progress:         loadText(t, root, row.ProgressFile),
+			Progress:         loadProgress(t, root, row.ProgressFile),
 			State:            loadState(t, root, row.StateFile),
 			UserPrompt:       row.UserPrompt,
 			WantSurface:      row.WantSurface,
@@ -120,13 +121,17 @@ func fixtureRoot(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "testdata", "coordinator", fixtureDirName)
 }
 
-func loadText(t *testing.T, root, name string) string {
+func loadProgress(t *testing.T, root, name string) progress.Snapshot {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- fixture name
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
 	}
-	return string(data)
+	var snap progress.Snapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		t.Fatalf("parse %s: %v", name, err)
+	}
+	return snap
 }
 
 func loadState(t *testing.T, root, name string) SnapshotState {

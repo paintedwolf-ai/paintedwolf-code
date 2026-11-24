@@ -483,6 +483,8 @@ Session workflow composition stores authored YAML beside its resolved definition
 
 New runs store their selected workflow definition in the same transaction as run creation. Existing runs without a snapshot resolve their recorded workflow ID and version. Workflow manifests describe execution. Each operation continues through the host's current authorization checks.
 
+Revision 5 migrates `session_progress.content` into normalized `session_progress` (`document_version`, `next_item_seq`) and `session_progress_items` (`item_id`, `ord`, `state`, `label`) via `SessionProgressRows()`, staging non-checklist header text in `_session_progress_legacy_docs` before `DropReleased` retires `session_progress.content` so released Revision-4 stores reconstruct losslessly regardless of goal headers or label length. Retired `v1.0.2` progress host facts (`paintedwolf.line_count`, `paintedwolf.max_lines`) and rejection codes (`PROGRESS_NESTED_LINE`, `PROGRESS_TOO_MANY_LINES`) map to their row-DML successors in `schemas/agent-public-retirements.json`.
+
 ## Agent-public vocabulary
 
 Structured tool names, `Code:` meanings, rule effects, theme tokens, and other model- or extension-authored ids are contracts because external text or content can name them.

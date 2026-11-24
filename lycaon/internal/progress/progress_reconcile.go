@@ -1,50 +1,32 @@
 package progress
 
-// SynthesisReconcileOnly reports whether proposed is a reconcile-only update_progress from
-// current on implement_synthesis: close or N/A existing rows only — no new checklist scope.
-func SynthesisReconcileOnly(current, proposed string) bool {
-	if ProgressMissing(current) {
+import "strings"
+
+// IsSynthesisReconcileOnly reports whether m only acknowledges worker results
+// or transitions existing rows to done or na without changing labels or scope.
+func (m Mutation) IsSynthesisReconcileOnly(current Snapshot) bool {
+	if current.Missing() || m.IsEmpty() {
 		return false
 	}
-	currentItems := ChecklistItems(current)
-	proposedItems := ChecklistItems(proposed)
-	currentByLabel := make(map[string]string, len(currentItems))
-	for _, item := range currentItems {
-		currentByLabel[item.Label] = item.State
+	if len(m.Replace) > 0 || len(m.Add) > 0 || len(m.Remove) > 0 {
+		return false
 	}
-	proposedByLabel := make(map[string]string, len(proposedItems))
-	for _, item := range proposedItems {
-		proposedByLabel[item.Label] = item.State
+	byID := make(map[string]Row, len(current.Rows))
+	for _, r := range current.Rows {
+		byID[r.ID] = r
 	}
-	for _, item := range currentItems {
-		if item.State != ProgressStatePending {
-			continue
-		}
-		propState, ok := proposedByLabel[item.Label]
+	for _, u := range m.Update {
+		prev, ok := byID[u.ID]
 		if !ok {
 			return false
 		}
-		if propState != ProgressStatePending && propState != ProgressStateDone && propState != ProgressStateNA {
+		if u.Label != nil && strings.TrimSpace(*u.Label) != prev.Label {
 			return false
 		}
-	}
-	for _, item := range proposedItems {
-		prev, ok := currentByLabel[item.Label]
-		if !ok {
+		if u.State == nil {
 			return false
 		}
-		switch item.State {
-		case ProgressStatePending:
-			if prev != ProgressStatePending && prev != ProgressStateOptional {
-				return false
-			}
-		case ProgressStateOptional:
-			if prev != ProgressStateOptional && prev != ProgressStatePending {
-				return false
-			}
-		case ProgressStateDone, ProgressStateNA:
-			continue
-		default:
+		if *u.State != ProgressStateDone && *u.State != ProgressStateNA {
 			return false
 		}
 	}

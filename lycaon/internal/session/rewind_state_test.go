@@ -154,26 +154,48 @@ func TestRewindRefusesWhileBusy(t *testing.T) {
 	}
 }
 
-// Rewind clears separately persisted progress so deleted commitments stay out of the next prompt.
+// Rewind clears separately persisted progress while preserving monotonic row IDs.
 func TestRewindClearsTheProgressChecklist(t *testing.T) {
 	mgr, sessionID, _, repositories := newCheckpointTestSession(t)
 	testdbseed.InsertWorkflowRun(t, repositories.DB(), "run-"+sessionID, sessionID, testdbseed.DefaultProjectID)
-	mgr.SetProgressStore(progress.NewSQLStore(repositories.DB()))
+	store := progress.NewSQLStore(repositories.DB(), repositories)
+	mgr.SetProgressStore(store)
 	ctx := context.Background()
 
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "the ask")
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
-	mgr.RewindRuntime.Progress.Set(sessionID, "## Progress\n- [x] ship the thing\n")
-	if mgr.RewindRuntime.Progress.Get(t.Context(), sessionID) == "" {
-		t.Fatal("progress setup failed")
+	firstOutcome, err := store.Apply(ctx, sessionID, progress.Mutation{
+		Replace: []progress.RowSpec{{Label: "ship the thing", State: "done"}, {Label: "verify"}},
+	}, progress.ApplyOptions{})
+	testutil.FailErr(t, "apply first plan", err)
+	if len(firstOutcome.Snapshot.Rows) != 2 || firstOutcome.Snapshot.Rows[0].ID != "p1" || firstOutcome.Snapshot.Rows[1].ID != "p2" {
+		t.Fatalf("first plan rows = %+v, want [p1 p2]", firstOutcome.Snapshot.Rows)
 	}
 
 	_, err = rewindTest(t, mgr, repositories, ctx, uuid.NewString(), sessionID, anchor)
 	testutil.FailErr(t, "rewind", err)
 
-	if got := mgr.RewindRuntime.Progress.Get(t.Context(), sessionID); got != "" {
-		t.Fatalf("progress = %q, want cleared — it described work the rewind deleted", got)
+	cleared, err := mgr.RewindRuntime.Progress.Snapshot(t.Context(), sessionID)
+	testutil.FailErr(t, "snapshot after rewind", err)
+	if len(cleared.Rows) != 0 || cleared.DocumentVersion() <= firstOutcome.Snapshot.DocumentVersion() {
+		t.Fatalf("progress after rewind = %+v, want empty rows and bumped version > %d", cleared, firstOutcome.Snapshot.DocumentVersion())
+	}
+
+	secondOutcome, err := store.Apply(ctx, sessionID, progress.Mutation{
+		Replace: []progress.RowSpec{{Label: "new plan"}},
+	}, progress.ApplyOptions{})
+	testutil.FailErr(t, "apply second plan", err)
+	if len(secondOutcome.Snapshot.Rows) != 1 || secondOutcome.Snapshot.Rows[0].ID != "p3" {
+		t.Fatalf("post-rewind rows = %+v, want [p3]", secondOutcome.Snapshot.Rows)
+	}
+
+	done := progress.ProgressStateDone
+	var rejected *progress.MutationRejection
+	if _, err := store.Apply(ctx, sessionID, progress.Mutation{
+		Update: []progress.UpdateRowSpec{{ID: "p1", State: &done}},
+	}, progress.ApplyOptions{}); !errors.As(err, &rejected) || rejected.Code != "PROGRESS_ITEM_NOT_FOUND" {
+		t.Fatalf("pre-rewind p1 update err = %v, want PROGRESS_ITEM_NOT_FOUND", err)
 	}
 }

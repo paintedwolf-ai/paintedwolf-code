@@ -48,5 +48,10 @@
     "workers_in_flight": 0,
     "pending_overlay_ids": []
   },
-  "progress_content": "## Plan\n- [x] Timer feature\n- [x] Notify feature\n- [x] Bookmark feature\n- [x] Verify"
+  "progress_rows": [
+    {"id": "p1", "state": "done", "label": "Timer feature"},
+    {"id": "p2", "state": "done", "label": "Notify feature"},
+    {"id": "p3", "state": "done", "label": "Bookmark feature"},
+    {"id": "p4", "state": "done", "label": "Verify"}
+  ]
 }

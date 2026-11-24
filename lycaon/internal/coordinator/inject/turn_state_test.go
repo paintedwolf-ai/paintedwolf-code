@@ -53,8 +53,8 @@ func TestRenderTurnStateBlock(t *testing.T) {
 			Reader:          withProgress,
 		})
 		testutil.FailErr(t, "RenderTurnStateBlock", err)
-		if !strings.Contains(block, "No checklist is stored") {
-			t.Fatalf("expected checklist warning, got: %q", block)
+		if !strings.Contains(block, "No progress rows are stored") {
+			t.Fatalf("expected missing-progress warning, got: %q", block)
 		}
 	})
 
@@ -64,8 +64,8 @@ func TestRenderTurnStateBlock(t *testing.T) {
 			Reader:          withoutProgress,
 		})
 		testutil.FailErr(t, "RenderTurnStateBlock", err)
-		if strings.Contains(block, "No checklist is stored") {
-			t.Fatalf("unexpected checklist warning without tool, got: %q", block)
+		if strings.Contains(block, "No progress rows are stored") {
+			t.Fatalf("unexpected missing-progress warning without tool, got: %q", block)
 		}
 	})
 
@@ -92,10 +92,10 @@ func TestTurnStateCarriesCurrentProgressSnapshot(t *testing.T) {
 		WebSearch: true,
 	})
 	testutil.FailErr(t, "NewReader implement_investigate", err)
-	snapshot := `{"content":"- [ ] Deliver","revision":"current-snapshot-revision","reconciliation":{"token":"worker-finish-token","jobs":["worker-one"]}}`
+	snapshot := `{"rows":[{"id":"p1","state":"pending","label":"Deliver"}],"summary":{"pending":1,"done":0,"na":0,"optional":0},"unaccounted_results":[{"handle":"res-worker-1","worker":"worker-one","status":"done","summary":"completed"}]}`
 	block, err := inject.RenderTurnStateBlock(t.Context(), renderer, "snapshot", inject.TurnStateInjectInput{ProgressSnapshot: snapshot, Reader: withProgress})
 	testutil.FailErr(t, "render current progress", err)
-	for _, value := range []string{"current-snapshot-revision", "worker-finish-token", "worker-one", "Deliver"} {
+	for _, value := range []string{"p1", "res-worker-1", "worker-one", "Deliver"} {
 		if !strings.Contains(block, value) {
 			t.Fatalf("snapshot omitted %q: %s", value, block)
 		}

@@ -3,48 +3,52 @@ package progress_test
 import (
 	"context"
 	"errors"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/progress/progresstest"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA(t *testing.T) {
+func TestSQLProgressVersionAndSequenceSurviveReopenAndDetectStaleBasis(t *testing.T) {
 	database := testdbfixture.Open(t, "progress-snapshot")
 	testdbseed.InsertWorkflowRun(t, database, "run", "session", testdbseed.DefaultProjectID)
 	store := progress.NewSQLStore(database, sessionstore.NewSQL(database))
-	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver"))
-	before, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read checklist", err)
-	for _, text := range []string{"- [ ] Other scope", before.Content} {
-		update, prepareErr := progress.PrepareAuthorUpdate(text)
-		testutil.FailErr(t, "prepare checklist", prepareErr)
-		observed, readErr := store.Snapshot(t.Context(), "session")
-		testutil.FailErr(t, "observe replacement revision", readErr)
-		_, applyErr := update.ExpectRevision(observed.Revision).ExpectItemIDs(observed.ItemIDs...).Apply(t.Context(), store, "session", nil)
-		testutil.FailErr(t, "replace checklist", applyErr)
-	}
+
+	first, err := store.Apply(t.Context(), "session", progress.Mutation{
+		Replace: []progress.RowSpec{{Label: "Deliver", State: progress.ProgressStatePending}},
+	}, progress.ApplyOptions{})
+	testutil.FailErr(t, "seed rows", err)
+	basis := progress.CaptureBasis(progress.Mutation{
+		Replace: []progress.RowSpec{{Label: "Stale replacement", State: progress.ProgressStatePending}},
+	}, first.Snapshot)
+
+	_, err = store.Apply(t.Context(), "session", progress.Mutation{
+		Replace: []progress.RowSpec{{Label: "Other scope", State: progress.ProgressStatePending}},
+	}, progress.ApplyOptions{})
+	testutil.FailErr(t, "replace rows", err)
+
 	reopened := progress.NewSQLStore(database, sessionstore.NewSQL(database))
 	after, err := reopened.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read reopened checklist", err)
-	if before.Content != after.Content || before.Revision == after.Revision {
-		t.Fatal("revision lost replacement identity")
+	testutil.FailErr(t, "read reopened rows", err)
+	if after.DocumentVersion() != 2 || after.NextItemSeq() != 3 || after.Rows[0].ID != "p2" {
+		t.Fatalf("reopened snapshot = %+v, ver=%d seq=%d", after, after.DocumentVersion(), after.NextItemSeq())
 	}
-	update, err := progress.PrepareAuthorUpdate("- [x] Deliver")
-	testutil.FailErr(t, "prepare stale checklist", err)
-	_, err = update.ExpectRevision(before.Revision).ExpectItemIDs(before.ItemIDs...).Apply(t.Context(), reopened, "session", nil)
-	var conflict *progress.AuthorUpdateRejection
-	if !errors.As(err, &conflict) || conflict.Code != "PROGRESS_REVISION_CHANGED" {
-		t.Fatalf("stale update result: %v", err)
+
+	_, err = reopened.Apply(t.Context(), "session", progress.Mutation{
+		Replace: []progress.RowSpec{{Label: "Stale replacement", State: progress.ProgressStatePending}},
+	}, progress.ApplyOptions{Basis: basis})
+	var stale *progress.MutationRejection
+	if !errors.As(err, &stale) || stale.Code != "PROGRESS_STALE_BASIS" {
+		t.Fatalf("stale replace result: %v", err)
 	}
 	current, err := reopened.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read unchanged checklist", err)
+	testutil.FailErr(t, "read unchanged rows", err)
 	if !current.Equal(after) {
-		t.Fatal("stale update changed progress")
+		t.Fatal("stale replace mutated progress")
 	}
 }
 
@@ -52,74 +56,61 @@ func TestSQLProgressKeepsAtomicSnapshotOnRejectedOrCanceledUpdates(t *testing.T)
 	store := progresstest.New(t, "session")
 	empty, err := store.Snapshot(t.Context(), "session")
 	testutil.FailErr(t, "read empty progress", err)
-	if empty.Content != "" || empty.Revision == "" {
+	if !empty.Missing() || empty.DocumentVersion() != 0 || empty.NextItemSeq() != 1 {
 		t.Fatalf("empty snapshot: %+v", empty)
 	}
-	testutil.FailErr(t, "seed complete progress", store.Set("session", "- [ ] Preserve"))
-	before, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read progress", err)
-	refusal := errors.New("replacement refused")
-	_, err = store.Update(t.Context(), "session", func(s progress.Snapshot) (progress.Document, error) {
-		return progress.Document{Content: "- [x] Preserve", ItemIDs: s.ItemIDs}, refusal
-	})
-	if !errors.Is(err, refusal) {
-		t.Fatalf("replacement rejection: %v", err)
+	seeded, err := store.Apply(t.Context(), "session", progress.Mutation{
+		Replace: []progress.RowSpec{{Label: "Preserve", State: progress.ProgressStatePending}},
+	}, progress.ApplyOptions{})
+	testutil.FailErr(t, "seed progress", err)
+	before := seeded.Snapshot
+
+	done := progress.ProgressStateDone
+	_, err = store.Apply(t.Context(), "session", progress.Mutation{
+		Update: []progress.UpdateRowSpec{{ID: "p99", State: &done}},
+	}, progress.ApplyOptions{})
+	var missing *progress.MutationRejection
+	if !errors.As(err, &missing) || missing.Code != "PROGRESS_ITEM_NOT_FOUND" {
+		t.Fatalf("unknown ID rejection: %v", err)
 	}
 	after, err := store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read rejected replacement", err)
+	testutil.FailErr(t, "read after rejection", err)
 	if !before.Equal(after) {
-		t.Fatal("rejected replacement changed snapshot")
+		t.Fatal("rejected update changed snapshot")
 	}
-	during, cancelDuring := context.WithCancel(t.Context())
-	_, err = store.Update(during, "session", func(s progress.Snapshot) (progress.Document, error) {
-		cancelDuring()
-		return progress.Document{Content: "- [x] Preserve", ItemIDs: s.ItemIDs}, nil
-	})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("cancellation during publication: %v", err)
-	}
-	after, err = store.Snapshot(t.Context(), "session")
-	testutil.FailErr(t, "read canceled publication", err)
-	if !before.Equal(after) {
-		t.Fatal("canceled publication changed snapshot")
-	}
+
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, err = store.Snapshot(ctx, "session"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled snapshot: %v", err)
 	}
-	_, err = store.Update(ctx, "session", func(progress.Snapshot) (progress.Document, error) {
-		t.Error("canceled update entered publication")
-		return progress.Document{}, nil
-	})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled update: %v", err)
+	if _, err = store.Apply(ctx, "session", progress.Mutation{
+		Update: []progress.UpdateRowSpec{{ID: "p1", State: &done}},
+	}, progress.ApplyOptions{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled apply: %v", err)
 	}
 }
 
-func TestSQLProgressReplacesChecklistWithPlainTextOrEmptyDocument(t *testing.T) {
+func TestSQLProgressClearPreservesNextItemSeq(t *testing.T) {
 	store := progresstest.New(t, "session")
-	t.Run("set prose", func(t *testing.T) {
-		testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver"))
-		testutil.FailErr(t, "replace checklist with prose", store.Set("session", "Deliver the changes."))
-		snapshot, err := store.Snapshot(t.Context(), "session")
-		testutil.FailErr(t, "read replacement", err)
-		if snapshot.Content != "Deliver the changes." || len(snapshot.ItemIDs) != 0 || snapshot.RunID != "run-session" {
-			t.Fatalf("plain progress snapshot = %+v", snapshot)
-		}
-	})
-	t.Run("clear through update", func(t *testing.T) {
-		testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Deliver"))
-		before, err := store.Snapshot(t.Context(), "session")
-		testutil.FailErr(t, "read checklist", err)
-		_, err = store.Update(t.Context(), "session", func(progress.Snapshot) (progress.Document, error) {
-			return progress.Document{}, nil
-		})
-		testutil.FailErr(t, "clear checklist", err)
-		after, err := store.Snapshot(t.Context(), "session")
-		testutil.FailErr(t, "read cleared progress", err)
-		if after.Content != "" || len(after.ItemIDs) != 0 || after.RunID != before.RunID || after.Revision == before.Revision {
-			t.Fatalf("cleared progress snapshot = %+v", after)
-		}
-	})
+	_, err := store.Apply(t.Context(), "session", progress.Mutation{
+		Replace: []progress.RowSpec{
+			{Label: "First", State: progress.ProgressStatePending},
+			{Label: "Second", State: progress.ProgressStatePending},
+		},
+	}, progress.ApplyOptions{})
+	testutil.FailErr(t, "seed rows", err)
+	testutil.FailErr(t, "clear rows", store.Clear(t.Context(), "session"))
+	cleared, err := store.Snapshot(t.Context(), "session")
+	testutil.FailErr(t, "read cleared snapshot", err)
+	if !cleared.Missing() || cleared.DocumentVersion() != 2 || cleared.NextItemSeq() != 3 {
+		t.Fatalf("cleared snapshot = %+v ver=%d seq=%d", cleared, cleared.DocumentVersion(), cleared.NextItemSeq())
+	}
+	next, err := store.Apply(t.Context(), "session", progress.Mutation{
+		Replace: []progress.RowSpec{{Label: "Post-clear", State: progress.ProgressStatePending}},
+	}, progress.ApplyOptions{})
+	testutil.FailErr(t, "seed post-clear row", err)
+	if next.Snapshot.Rows[0].ID != "p3" {
+		t.Fatalf("post-clear ID = %q, want p3", next.Snapshot.Rows[0].ID)
+	}
 }

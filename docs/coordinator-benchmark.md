@@ -285,7 +285,7 @@ requirements, bounded dataset generators and linked OAR controls. Its disk-only
 materializer refuses an existing destination and preserves binary fixture bytes.
 The OAR matrix in `oar-matrix.json` separates syntax and options, missing progress,
 scope refusal, stale sources, unavailable remedies, partial writes and unknown
-HTTP outcomes. Progress uses the existing `update_progress` content schema.
+HTTP outcomes. Progress uses the `update_progress` row-DML schema (`replace`, `add`, `update`, `remove`, `acknowledge_results`).
 P32 binds typed causes without a declared code to its registered codes; the
 matrix does not invent a new rejection owner or parse diagnostic prose.
 

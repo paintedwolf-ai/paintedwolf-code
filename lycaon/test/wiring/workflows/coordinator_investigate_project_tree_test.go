@@ -45,8 +45,9 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 				}}}
 			case 4:
 				return modelcall.Completion{ToolCalls: []api.ToolCall{{
-					ID: "p1", Name: "update_progress",
-					Args: map[string]any{"content": "## Progress\n- [x] wiring test plan\n"},
+					ID:   "p1",
+					Name: "update_progress",
+					Args: map[string]any{"update": []any{map[string]any{"id": "p1", "state": "done"}}},
 				}}}
 			default:
 				return modelcall.Completion{Content: wiring.MockCoordinatorCloseoutMarkdown(

@@ -3,21 +3,23 @@ id: PROGRESS_RECONCILIATION_REQUIRED
 kind: policy
 on: coordinator.pre_invoke
 selector: {}
-requires_facts: [paintedwolf.next_steps, paintedwolf.pending, paintedwolf.progress_closure_armed, paintedwolf.progress_gated_tool, paintedwolf.progress_open_items, paintedwolf.settled_work]
+requires_facts: [paintedwolf.next_steps, paintedwolf.pending, paintedwolf.progress_closure_armed, paintedwolf.progress_gated_tool, paintedwolf.progress_open_items, paintedwolf.settled_work, paintedwolf.unaccounted_handles]
 when: paintedwolf.progress_closure_armed && paintedwolf.progress_gated_tool
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-message: Reconcile Progress rows before more progress-gated work
+message: Acknowledge settled worker results before more progress-gated work
 what: 'Settled worker rounds await acknowledgement before **`{{ tool }}`**{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}.'
 cause: Newly settled worker rounds have not been acknowledged in current progress state.
 why: The coordinator must review settled worker round results before continuing governed work.
-fix: '{{ paintedwolf.next_steps }} Close only completed deliverables and keep unfinished rows pending. An unchanged document can acknowledge its listed worker rounds with that exact token. Then immediately retry the authorized `{{ tool }}` action.'
-instead: Acknowledge the listed worker rounds with the current reconciliation_token and expected_revision, then retry the authorized action
+fix: '{{ paintedwolf.next_steps }} Update completed deliverable rows to `"done"` (or `"na"` when superseded) and keep unfinished rows `"pending"`; `acknowledge_results` may be called alone when no row states changed. Then immediately retry the authorized `{{ tool }}` action.'
+instead: 'Acknowledge the settled result handles{% if paintedwolf.unaccounted_handles %} ({{ paintedwolf.unaccounted_handles }}){% endif %} via acknowledge_results, then retry the authorized action'
 x-paintedwolf-scenarios:
   - id: not_closed
     vars:
       pending: 3
       tool: task
+      unaccounted_handles:
+        - res-1
       settled_work:
         - 'security-reviewer `job-1`: Loopback API authentication'

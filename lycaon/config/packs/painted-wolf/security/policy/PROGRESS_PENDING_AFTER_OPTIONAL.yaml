@@ -10,12 +10,12 @@ when: paintedwolf.rejection_code == "PROGRESS_PENDING_AFTER_OPTIONAL"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:update_progress
-message: Pending plan line follows an optional line
-what: Pending checklist label "{{ paintedwolf.label }}" appears after a `- [>]` optional line.
-cause: Optional closeout lines must be last — a `- [ ]` row after `- [>]` would block completion incorrectly
-why: '`- [>]` marks non-blocking notes; any still-open work must come before them'
-fix: Move required open - [ ] rows above optional - [>] rows. Mark an item optional only when it is actually outside required completion; do not relabel required work to clear this rejection.
-instead: Branch on Code; reorder so optional `- [>]` lines are last and retry update_progress
+message: Pending progress row follows an optional row
+what: 'Pending row "{{ paintedwolf.label }}" appears after a `state: "optional"` row.'
+cause: Optional rows must trail the plan — a `"pending"` row after `"optional"` would order active work behind non-blocking notes
+why: '`state: "optional"` marks trailing non-blocking notes; any still-open deliverable must precede them'
+fix: Place required `"pending"` rows before `"optional"` rows (for example by inserting with `after_id` before the first optional row or reordering via `replace`). Mark a row `"optional"` only when it is outside required completion; do not relabel required work to clear this rejection.
+instead: Branch on Code; place `"pending"` rows before `"optional"` rows and retry update_progress
 x-paintedwolf-scenarios:
   - id: default
     vars:

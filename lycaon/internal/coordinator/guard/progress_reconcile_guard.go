@@ -13,7 +13,7 @@ const ProgressSynthesisReconcileOnlyCode = "PROGRESS_SYNTHESIS_RECONCILE_ONLY"
 // ObserveProgressReconcileOnSynthesis publishes synthesis progress-update facts.
 func ObserveProgressReconcileOnSynthesis(
 	surfaceID string,
-	currentProgress string,
+	current progress.Snapshot,
 	args map[string]any,
 	gc *oar.GuardContext,
 ) {
@@ -24,10 +24,9 @@ func ObserveProgressReconcileOnSynthesis(
 	if gc.Session.Surface != spawn.SurfaceImplementSynthesis {
 		return
 	}
-	proposed, _ := args["content"].(string)
-	proposed = strings.TrimSpace(proposed)
-	if proposed == "" {
+	mutation, err := progress.PrepareMutation(args)
+	if err != nil {
 		return
 	}
-	gc.Progress.ProgressReconcileNeeded = !progress.SynthesisReconcileOnly(currentProgress, proposed)
+	gc.Progress.ProgressReconcileNeeded = !mutation.IsSynthesisReconcileOnly(current)
 }

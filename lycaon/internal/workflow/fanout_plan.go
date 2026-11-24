@@ -114,27 +114,20 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *Fanout) error {
 	})
 }
 
-// seedFanoutProgress gives a coordinator with no checklist one pending row per
-// planned leg, so the progress gate opens on the plan it just stamped.
+// seedFanoutProgress gives a coordinator with no rows one pending row per
+// planned leg so the progress gate opens on the plan it stamped.
 func seedFanoutProgress(ctx context.Context, store progress.Store, sessionID, runID string, plan runstate.FanoutPlan) error {
 	if store == nil {
 		return nil
 	}
-	labels := make([]string, 0, len(plan.Legs))
+	specs := make([]progress.RowSpec, 0, len(plan.Legs))
 	for _, leg := range plan.Legs {
-		labels = append(labels, leg.ID+" "+leg.Subject)
+		specs = append(specs, progress.RowSpec{
+			Label: leg.ID + " " + leg.Subject,
+			State: progress.ProgressStatePending,
+		})
 	}
-	_, err := store.Update(ctx, sessionID, func(before progress.Snapshot) (progress.Document, error) {
-		doc := progress.Document{Content: before.Content, ItemIDs: before.ItemIDs, RunID: before.RunID}
-		if before.RunID != "" && before.RunID != runID {
-			return doc, nil
-		}
-		doc.RunID = runID
-		if progress.ProgressMissing(before.Content) {
-			doc.Content = progress.SeedChecklist(before.Content, labels)
-		}
-		return doc, nil
-	})
+	_, err := store.SeedIfMissing(ctx, sessionID, runID, specs)
 	return err
 }
 

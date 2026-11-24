@@ -331,9 +331,11 @@ func TestValidateRejectsClosedEnumTitleKey(t *testing.T) {
 
 func TestValidateAcceptsPrintableTitleKeyShapes(t *testing.T) {
 	for _, tc := range []struct{ tool, key string }{
-		{"copy", "copies"}, // array of {from,to}
-		{"stat", "paths"},  // array of strings
-		{"read", "path"},   // plain string
+		{"copy", "copies"},             // array of {from,to}
+		{"update_progress", "replace"}, // array of {label}
+		{"update_progress", "update"},  // array of {id}
+		{"stat", "paths"},              // array of strings
+		{"read", "path"},               // plain string
 	} {
 		cfg, schemas := loadBundled(t)
 		entry := cfg.Tools[tc.tool]

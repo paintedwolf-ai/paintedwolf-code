@@ -1,0 +1,29 @@
+spec_version: "1.0"
+id: PROGRESS_STALE_BASIS
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - update_progress
+requires_facts: [paintedwolf.changed_ids, paintedwolf.next_steps, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "PROGRESS_STALE_BASIS"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
+message: Prepared progress edit is stale against the current plan
+what: '{% if paintedwolf.changed_ids %}Prepared update_progress targeted rows whose labels changed since preparation: {{ paintedwolf.changed_ids }}.{% else %}Prepared update_progress ran after the progress plan was replaced or cleared.{% endif %}'
+cause: While this invocation waited to apply, another turn replaced the plan or relabeled a targeted row.
+why: Applying a delayed edit over a replaced plan or relabeled deliverable could close or overwrite unreviewed work.
+fix: '{{ paintedwolf.next_steps }} Review the returned snapshot and submit a fresh update against the current rows.'
+instead: Branch on Code; inspect the returned snapshot and submit a fresh update_progress call
+x-paintedwolf-scenarios:
+  - id: relabeled_row
+    vars:
+      tool: update_progress
+      profile: coordinator
+      changed_ids: [p2]
+  - id: replaced_plan
+    vars:
+      tool: update_progress
+      profile: coordinator
+      changed_ids: []

@@ -23,7 +23,7 @@ Then draft once.
 | Product mutations | Done on investigate or dispatch through workers |
 | Execution checks | Done before wrapup |
 | Delegation and orchestration | Workers are idle |
-{% if profile_has_update_progress %}| `update_progress` (new `- [ ]`) | Reconcile only here — close rows in place |
+{% if profile_has_update_progress %}| `update_progress` (`replace` / `add` / `remove`) | Reconcile only here — update existing rows to `done` or `na` |
 {% endif %}| Overlay integration | Not on this report turn |
 | Worker lifecycle | Workers are idle |
 

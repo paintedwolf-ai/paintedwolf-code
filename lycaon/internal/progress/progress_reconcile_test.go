@@ -2,40 +2,44 @@ package progress
 
 import "testing"
 
-func TestSynthesisReconcileOnly_allowsClosePending(t *testing.T) {
-	current := "## Progress\n- [ ] survey\n- [x] scan"
-	proposed := "## Progress\n- [x] survey\n- [x] scan"
-	if !SynthesisReconcileOnly(current, proposed) {
-		t.Fatal("closing a pending row must be allowed on synthesis")
-	}
-}
+func TestSynthesisReconcileOnly(t *testing.T) {
+	current := NewSnapshot("run",
+		Row{ID: "p1", State: ProgressStatePending, Label: "survey"},
+		Row{ID: "p2", State: ProgressStateDone, Label: "scan"},
+	)
+	done := ProgressStateDone
+	na := ProgressStateNA
+	pending := ProgressStatePending
+	relabeled := "expanded survey"
 
-func TestSynthesisReconcileOnly_rejectsNewPending(t *testing.T) {
-	current := "## Progress\n- [x] survey"
-	proposed := "## Progress\n- [x] survey\n- [ ] new work"
-	if SynthesisReconcileOnly(current, proposed) {
-		t.Fatal("new pending row must be rejected on synthesis")
+	if !(Mutation{Update: []UpdateRowSpec{{ID: "p1", State: &done}}}).IsSynthesisReconcileOnly(current) {
+		t.Fatal("closing pending row to done must be allowed")
 	}
-}
-
-func TestSynthesisReconcileOnly_rejectsMissingPlan(t *testing.T) {
-	if SynthesisReconcileOnly("", "## Progress\n- [x] survey") {
-		t.Fatal("cannot reconcile from missing plan")
+	if !(Mutation{Update: []UpdateRowSpec{{ID: "p1", State: &na}}, AcknowledgeResults: []string{"scout#1"}}).IsSynthesisReconcileOnly(current) {
+		t.Fatal("marking row na and acknowledging results must be allowed")
 	}
-}
-
-func TestSynthesisReconcileOnly_rejectsReopen(t *testing.T) {
-	current := "## Progress\n- [x] survey"
-	proposed := "## Progress\n- [ ] survey"
-	if SynthesisReconcileOnly(current, proposed) {
-		t.Fatal("reopening a done row must be rejected")
+	if !(Mutation{AcknowledgeResults: []string{"scout#1"}}).IsSynthesisReconcileOnly(current) {
+		t.Fatal("pure handle acknowledgement must be allowed")
 	}
-}
-
-func TestSynthesisReconcileOnly_allowsNA(t *testing.T) {
-	current := "## Progress\n- [ ] survey\n- [ ] review"
-	proposed := "## Progress\n- [~] survey\n- [x] review"
-	if !SynthesisReconcileOnly(current, proposed) {
-		t.Fatal("marking rows done or n/a must be allowed")
+	if (Mutation{Add: []AddRowSpec{{Label: "new work", State: ProgressStatePending}}}).IsSynthesisReconcileOnly(current) {
+		t.Fatal("adding rows on synthesis must be rejected")
+	}
+	if (Mutation{Replace: []RowSpec{{Label: "survey", State: ProgressStateDone}}}).IsSynthesisReconcileOnly(current) {
+		t.Fatal("replace on synthesis must be rejected")
+	}
+	if (Mutation{Remove: []string{"p1"}}).IsSynthesisReconcileOnly(current) {
+		t.Fatal("remove on synthesis must be rejected")
+	}
+	if (Mutation{Update: []UpdateRowSpec{{ID: "p2", State: &pending}}}).IsSynthesisReconcileOnly(current) {
+		t.Fatal("reopening row on synthesis must be rejected")
+	}
+	if (Mutation{Update: []UpdateRowSpec{{ID: "p1", State: &done, Label: &relabeled}}}).IsSynthesisReconcileOnly(current) {
+		t.Fatal("relabeling row on synthesis must be rejected")
+	}
+	if (Mutation{Update: []UpdateRowSpec{{ID: "p99", State: &done}}}).IsSynthesisReconcileOnly(current) {
+		t.Fatal("unknown row ID on synthesis must be rejected")
+	}
+	if (Mutation{Update: []UpdateRowSpec{{ID: "p1", State: &done}}}).IsSynthesisReconcileOnly(NewSnapshot("run")) {
+		t.Fatal("missing plan cannot reconcile on synthesis")
 	}
 }

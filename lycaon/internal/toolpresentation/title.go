@@ -149,10 +149,18 @@ func argLine(value any) string {
 			}
 			if object, ok := item.(map[string]any); ok {
 				from, to := argLine(object["from"]), argLine(object["to"])
-				if from != "" && to != "" {
+				id, state, label := argLine(object["id"]), argLine(object["state"]), argLine(object["label"])
+				switch {
+				case from != "" && to != "":
 					labels = append(labels, from+" → "+to)
-				} else if from != "" {
+				case from != "":
 					labels = append(labels, from)
+				case id != "" && state != "":
+					labels = append(labels, id+" → "+state)
+				case id != "" && label != "":
+					labels = append(labels, id+" · "+label)
+				case label != "":
+					labels = append(labels, label)
 				}
 			}
 		}

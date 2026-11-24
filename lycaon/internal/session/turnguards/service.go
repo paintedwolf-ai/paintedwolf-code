@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
@@ -31,7 +32,7 @@ type Sessions interface {
 	Get(context.Context, string) (*api.Session, error)
 }
 type Progress interface {
-	Get(context.Context, string) string
+	Snapshot(context.Context, string) (progress.Snapshot, error)
 }
 type State interface {
 	ForSession(context.Context, *api.Session) surface.ImplementSessionState

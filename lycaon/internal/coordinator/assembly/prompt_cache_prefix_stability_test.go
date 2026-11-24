@@ -379,7 +379,7 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 			var turnStateBlock string
 			for idx := historyIdx + 1; idx < len(out); idx++ {
 				content := out[idx].Content
-				if strings.Contains(content, "No checklist is stored") ||
+				if strings.Contains(content, "No progress rows are stored") ||
 					strings.Contains(content, "`roster-worker`") ||
 					strings.Contains(content, "test-evidence gate") {
 					turnStateBlock = content
@@ -387,8 +387,8 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 				}
 			}
 
-			if tc.missingProgress && !strings.Contains(turnStateBlock, "No checklist is stored") {
-				t.Fatalf("expected checklist warning in turn-state block: %q", turnStateBlock)
+			if tc.missingProgress && !strings.Contains(turnStateBlock, "No progress rows are stored") {
+				t.Fatalf("expected missing-progress warning in turn-state block: %q", turnStateBlock)
 			}
 			if tc.roster && !strings.Contains(turnStateBlock, "`result-roster-1`") {
 				t.Fatalf("expected the roster's result handle in turn-state block: %q", turnStateBlock)
