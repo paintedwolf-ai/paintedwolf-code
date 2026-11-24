@@ -156,6 +156,9 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	r.reviewSharedTemp(callCtx, e.callTC, e.run.tool, e.run.source, false)
 	stateObservation(e.callTC, e.run.window.fact())
 	stateGitNoRepository(e)
+	if ending.err == nil {
+		r.handoffBackgroundJobs(callCtx, e, &ending.settlement.outcome)
+	}
 	return ending.content()
 }
 

@@ -66,3 +66,22 @@ func TestCommandJobsBoundCommandPreviewWithoutDroppingHandle(t *testing.T) {
 		t.Fatalf("unbounded preview or missing recovery handle: %q", block)
 	}
 }
+
+func TestRenderCommandJobsBlockBranchesOnWatchedJobs(t *testing.T) {
+	now := time.Now().UTC()
+	renderer := promptstest.InjectRenderer(t)
+	jobs := []bgprocess.JobSnapshot{{
+		Handle: "cmd-bg-1", WatchHandle: "watch-2", Mode: bgprocess.JobModeBackground,
+		OriginTool: "command", StartedAt: now.Add(-10 * time.Second),
+		Stages: []hostcmd.StageResult{{Command: "go test ./... &"}},
+	}}
+	block := inject.RenderCommandJobsBlock(context.Background(), renderer, "sess-watched", jobs, nil, now, "coordinator")
+	for _, want := range []string{"handle=cmd-bg-1", "watch=watch-2", "watch_match", "watch_control", "output_cursor"} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("watched ledger missing %q: %q", want, block)
+		}
+	}
+	if strings.Contains(block, `"kind":"process_done"`) {
+		t.Fatalf("watched-only ledger should not instruct direct process_done wait: %q", block)
+	}
+}

@@ -26,10 +26,15 @@ func (m *Service) HandleHeldCallSettled(sessionID, handle string) {
 		"held_call_handle": status.Handle, "held_call_tool": status.Tool,
 		"held_call_outcome": string(status.Settled.Outcome),
 	}}
-	m.processReports.publish(sessionID, handle, processReport{digest: digest})
+	occID := "held_done:" + strings.TrimSpace(status.Handle)
+	m.processReports.publish(sessionID, handle, processReport{
+		occurrenceID: occID,
+		outcome:      string(status.Settled.Outcome),
+		digest:       digest,
+	})
 	if m.watches != nil {
 		_, _ = m.watches.RecordProcessDone(context.Background(), sessionID, watch.ProcessCompletionFact{
-			OccurrenceID: "held_done:" + strings.TrimSpace(status.Handle),
+			OccurrenceID: occID,
 			Handle:       strings.TrimSpace(status.Handle),
 			Outcome:      string(status.Settled.Outcome),
 			Report:       digest,
@@ -47,10 +52,19 @@ func (m *Service) CompletedReport(sessionID, handle string) (watch.ProcessComple
 	if !ok {
 		return watch.ProcessCompletionFact{}, false
 	}
+	occID := rep.occurrenceID
+	if occID == "" {
+		occID = "process_done:" + strings.TrimSpace(handle)
+	}
+	outcome := rep.outcome
+	if outcome == "" {
+		outcome = "satisfied"
+	}
 	return watch.ProcessCompletionFact{
-		OccurrenceID: "process_done:" + strings.TrimSpace(handle),
+		OccurrenceID: occID,
 		Handle:       strings.TrimSpace(handle),
-		Outcome:      "satisfied",
+		Outcome:      outcome,
+		Code:         rep.code,
 		Report:       rep.digest,
 	}, true
 }

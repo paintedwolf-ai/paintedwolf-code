@@ -31,14 +31,16 @@ type LeaseWakeFunc func(ctx context.Context, lease awaitstore.Lease, winner awai
 
 // Store manages durable watch registrations, matches, deliveries and wait selections.
 type Store struct {
-	db            db.Handle
-	clock         Clock
-	heap          *DeadlineHeap
-	mu            sync.RWMutex
-	processLookup ProcessLookup
-	onLeaseWake   LeaseWakeFunc
-	wakeGate      AmbientWakeGate
-	treeStopping  func(sessionID string) bool
+	db                    db.Handle
+	clock                 Clock
+	heap                  *DeadlineHeap
+	mu                    sync.RWMutex
+	processLookup         ProcessLookup
+	onLeaseWake           LeaseWakeFunc
+	wakeGate              AmbientWakeGate
+	treeStopping          func(sessionID string) bool
+	onProcessKickTransfer func(sessionID, handle string)
+	onProcessObserve      func(sessionID, handle string)
 }
 
 func NewStore(database db.Handle, clock Clock) *Store {
@@ -64,6 +66,42 @@ func (s *Store) SetProcessLookup(fn ProcessLookup) {
 	s.mu.Lock()
 	s.processLookup = fn
 	s.mu.Unlock()
+}
+
+func (s *Store) SetProcessKickTransfer(fn func(sessionID, handle string)) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.onProcessKickTransfer = fn
+	s.mu.Unlock()
+}
+
+func (s *Store) SetProcessObserver(fn func(sessionID, handle string)) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.onProcessObserve = fn
+	s.mu.Unlock()
+}
+
+func (s *Store) notifyProcessKickTransfer(sessionID, handle string) {
+	s.mu.RLock()
+	fn := s.onProcessKickTransfer
+	s.mu.RUnlock()
+	if fn != nil {
+		fn(sessionID, handle)
+	}
+}
+
+func (s *Store) notifyProcessObserve(sessionID, handle string) {
+	s.mu.RLock()
+	fn := s.onProcessObserve
+	s.mu.RUnlock()
+	if fn != nil {
+		fn(sessionID, handle)
+	}
 }
 
 func (s *Store) SetLeaseWakeHandler(fn LeaseWakeFunc) {

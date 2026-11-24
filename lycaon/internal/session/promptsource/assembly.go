@@ -117,10 +117,10 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		WebSearchEnabled:  m.WebSearchEnabled,
 		SynthesisEvidence: m.Closeout,
 		CommandJobs: func(sessionID string) []bgprocess.JobSnapshot {
-			if m == nil || m.Processes.Background == nil {
+			if m == nil || m.Processes == nil {
 				return nil
 			}
-			return m.Processes.Background.LedgerJobs(sessionID)
+			return m.Processes.LedgerJobs(sessionID)
 		},
 		HeldCalls: func(sessionID string) []heldcall.Running {
 			if m == nil {
