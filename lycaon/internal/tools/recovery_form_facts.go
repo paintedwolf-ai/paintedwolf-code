@@ -14,7 +14,13 @@ func registerCommandFormRecoveryFacts(gc *oar.GuardContext, request toolreach.Re
 	cmdLoaderOnly := cmdLoadable && !hasCmdSchema
 
 	put := func(bare string, compute func() any) {
-		putRecoveryFact(gc, bare, func(*oar.GuardContext) any { return compute() })
+		gc.RegisterProvider("paintedwolf."+bare, func(target *oar.GuardContext) error {
+			if target.ObservationData == nil {
+				target.ObservationData = map[string]any{}
+			}
+			target.ObservationData[bare] = compute()
+			return nil
+		})
 	}
 	admittedIDs := func(invocations ...[]string) []string {
 		if !cmdFieldAdmitted {
