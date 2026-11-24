@@ -451,8 +451,7 @@ func pathDepth(rel string) int {
 }
 
 func cleanAbs(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
+	if strings.TrimSpace(value) == "" {
 		return ""
 	}
 	abs, err := filepath.Abs(value)

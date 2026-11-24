@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -24,6 +25,8 @@ type entry struct {
 	link, followed bool
 	metadata       *entryMetadata
 	parent         *projectpaths.BoundDir
+	checkout       *gitrepo.CheckoutBinding
+	catalog        *gitrepo.CatalogAddress
 }
 
 func (e entry) dir() bool  { return e.stat.Mode.IsDir() }
@@ -31,18 +34,25 @@ func (e entry) file() bool { return e.stat.Mode.IsRegular() }
 
 // Every listed name charges traversal_visits before read filtering.
 type walker struct {
-	inv     *invocation
-	visited int64
-	maximum int64
-	filters map[string]sandbox.ReadFilter
-	roots   map[string]*fseffect.ReadRoot
-	lazy    bool
-	work    discoveryWork
-	held    int64
+	inv       *invocation
+	visited   int64
+	maximum   int64
+	filters   map[string]sandbox.ReadFilter
+	roots     map[string]*fseffect.ReadRoot
+	worktrees *worktreeIdentityMemo
+	lazy      bool
+	work      discoveryWork
+	held      int64
 }
 
 func newWalker(inv *invocation) *walker {
-	return &walker{inv: inv, maximum: inv.owners.limit("traversal_visits"), filters: map[string]sandbox.ReadFilter{}, roots: map[string]*fseffect.ReadRoot{}}
+	return &walker{
+		inv:       inv,
+		maximum:   inv.owners.limit("traversal_visits"),
+		filters:   map[string]sandbox.ReadFilter{},
+		roots:     map[string]*fseffect.ReadRoot{},
+		worktrees: newWorktreeIdentityMemo(inv.tc),
+	}
 }
 
 func (w *walker) close() {
@@ -59,26 +69,57 @@ func (w *walker) close() {
 	}
 }
 
+func (w *walker) evictRoot(path string) {
+	if old, ok := w.roots[path]; ok {
+		w.work.opens += old.DescriptorOpens()
+		peak, held := old.DirectoryIdentityDescriptors()
+		w.work.identityPeak = max(w.work.identityPeak, peak)
+		w.work.identityHeld += held
+		_ = old.Close()
+		delete(w.roots, path)
+	}
+}
+
 func (w *walker) readRoot(bound projectpaths.BoundPath) *fseffect.ReadRoot {
 	path := bound.Resolved.Root.Path
 	if path == "" || bound.Resolved.External {
 		return nil
 	}
 	if err := bound.Validate(); err != nil {
-		if old, ok := w.roots[path]; ok {
-			w.work.opens += old.DescriptorOpens()
-			peak, held := old.DirectoryIdentityDescriptors()
-			w.work.identityPeak = max(w.work.identityPeak, peak)
-			w.work.identityHeld += held
-			_ = old.Close()
-			delete(w.roots, path)
-		}
+		w.evictRoot(path)
 		return nil
 	}
 	if r, ok := w.roots[path]; ok {
 		return r
 	}
 	r, err := fseffect.OpenReadRoot(path)
+	if err != nil {
+		return nil
+	}
+	w.work.roots++
+	w.roots[path] = r
+	return r
+}
+
+func (w *walker) readRootFor(e entry) *fseffect.ReadRoot {
+	if !e.bound.Resolved.External {
+		return w.readRoot(e.bound)
+	}
+	if e.catalog == nil || !e.catalog.Valid() {
+		return nil
+	}
+	path := e.bound.Resolved.Root.Path
+	if path == "" {
+		return nil
+	}
+	if err := e.bound.AdmitPathRead(path); err != nil {
+		w.evictRoot(path)
+		return nil
+	}
+	if r, ok := w.roots[path]; ok {
+		return r
+	}
+	r, err := e.bound.OpenSharedRoot()
 	if err != nil {
 		return nil
 	}
@@ -120,6 +161,9 @@ func (w *walker) operand(spelling string, follow bool) (entry, error) {
 			e.stat, e.link, e.followed = target, false, true
 		}
 	}
+	if !e.link && !e.followed {
+		w.worktrees.bindOperand(&e)
+	}
 	return e, nil
 }
 
@@ -130,7 +174,7 @@ func (w *walker) openDirectory(dir entry) (*projectpaths.BoundDir, error) {
 	if dir.parent != nil {
 		return dir.parent.OpenChildDirectory(dir.name)
 	}
-	return dir.bound.OpenDirWithRoot(w.readRoot(dir.bound))
+	return dir.bound.OpenDirWithRoot(w.readRootFor(dir))
 }
 
 // directoryNames observes membership without retaining it across command actions.
@@ -150,6 +194,9 @@ func (w *walker) children(dir entry, follow bool) ([]entry, func(), error) {
 	opened, err := w.openDirectory(dir)
 	if err != nil {
 		return nil, func() {}, err
+	}
+	if !follow && !dir.followed {
+		w.worktrees.enterDirectory(&dir)
 	}
 	w.work.handles++
 	w.work.peak = max(w.work.peak, w.held+1)
@@ -243,6 +290,9 @@ func (w *walker) readChildren(dir entry, follow bool, opened *projectpaths.Bound
 			if target, err := opened.StatChildFollowed(child); err == nil {
 				e.stat, e.link, e.followed = target, false, true
 			}
+		}
+		if !e.link && !e.followed {
+			inheritChildCatalog(dir, &e)
 		}
 		if filter != nil && !filter(child.Resolved.ScopeRel, e.dir()) {
 			continue

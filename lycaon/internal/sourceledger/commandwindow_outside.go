@@ -50,6 +50,7 @@ type outsideObservation struct {
 
 	mu         sync.Mutex
 	folders    []*outsideFolder
+	rawPaths   []string
 	unconfined bool
 	missed     bool
 }
@@ -92,6 +93,11 @@ func (o *outsideObservation) decided() []FolderCoverage {
 func (o *outsideObservation) join(specs []OutsideRootSpec) []*outsideFolder {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	for _, spec := range specs {
+		if cleaned := cleanRootPath(spec.Path); cleaned != "" {
+			o.rawPaths = append(o.rawPaths, cleaned)
+		}
+	}
 	if o.rootID == "" {
 		return nil
 	}
@@ -212,7 +218,11 @@ func (s *Commands) baselineOutside(ctx context.Context, w *openCommandWindow, sp
 
 // AddOutsideRoots captures how new write roots looked before a launch.
 func (o *OpenCommandWindow) AddOutsideRoots(ctx context.Context, specs []OutsideRootSpec) error {
-	if o == nil || o.store == nil || len(specs) == 0 || o.window.outside.rootID == "" {
+	if o == nil || o.store == nil || len(specs) == 0 {
+		return nil
+	}
+	if o.window.outside.rootID == "" {
+		o.window.outside.join(specs)
 		return nil
 	}
 	// Concurrent launches wait until a joining root has a baseline and its before-images.
@@ -235,13 +245,21 @@ func (o *OpenCommandWindow) AddOutsideRoots(ctx context.Context, specs []Outside
 
 // Each folder settles independently so a failure leaves other observations intact.
 func (s *Commands) settleOutside(ctx context.Context, w *openCommandWindow) {
+	resolver := linkedCheckoutResolver(w.roots)
 	if w.outside.rootID == "" {
+		w.outside.invalidateAllLinked(resolver)
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, windowSettlePassBudget)
 	defer cancel()
+	w.outside.mu.Lock()
+	wholeGap := w.outside.unconfined || w.outside.missed
+	w.outside.mu.Unlock()
+	if wholeGap {
+		w.outside.invalidateAllLinked(resolver)
+	}
 	for _, folder := range w.outside.pending() {
-		w.outside.settle(folder, s.compareOutside(ctx, w, folder))
+		w.outside.settle(folder, s.compareOutside(ctx, w, folder, resolver))
 	}
 	coverage := w.outside.decided()
 	if len(coverage) == 0 {
@@ -257,8 +275,9 @@ func (s *Commands) settleOutside(ctx context.Context, w *openCommandWindow) {
 	}
 }
 
-func (s *Commands) compareOutside(ctx context.Context, w *openCommandWindow, folder *outsideFolder) FolderCoverage {
+func (s *Commands) compareOutside(ctx context.Context, w *openCommandWindow, folder *outsideFolder, resolver *linkedResolver) FolderCoverage {
 	gap := func(err error, otherwise api.SourceWindowGapReason) FolderCoverage {
+		invalidateLinkedFolder(resolver, folder.spec.Path)
 		slog.InfoContext(ctx, "command window outside settlement", "window_id", w.id, "folder", folder.spec.Path, "err", err)
 		return notObserved(w.outside.rootID, folder.rel, folder.spec.Path, gapReason(err, api.SourceWindowGapTimeBudget, otherwise))
 	}
@@ -273,22 +292,27 @@ func (s *Commands) compareOutside(ctx context.Context, w *openCommandWindow, fol
 		start: folder.start, end: end,
 		beforeGaps: boundaryPaths(folder.start.Boundaries), afterGaps: boundaryPaths(end.Boundaries),
 	}
-	if err := s.inventory.recordOutsideChanges(ctx, w, w.outside.rootID, comparison); err != nil {
+	changedAbs, err := s.inventory.recordOutsideChanges(ctx, w, w.outside.rootID, comparison)
+	if err != nil {
 		return gap(err, api.SourceWindowGapSettlementFailed)
 	}
+	invalidateLinkedChanges(resolver, folder.spec.Path, changedAbs, comparison.boundaries())
 	return observedCoverage(w.outside.rootID, folder.rel, folder.spec.Path, comparison.boundaries())
 }
 
 // Tracked files reconcile from their ledger head. New identities record both snapshot states.
-func (s *Inventory) recordOutsideChanges(ctx context.Context, w *openCommandWindow, rootID string, comparison outsideComparison) error {
+func (s *Inventory) recordOutsideChanges(ctx context.Context, w *openCommandWindow, rootID string, comparison outsideComparison) ([]string, error) {
 	cause := observationCause{batchID: newID(), window: w}
 	now := time.Now().UTC()
 	var admitted []RecordInput
+	var changedAbs []string
 	err := s.snapshots.Diff(ctx, comparison.start.ID, comparison.end.ID, func(change sourcesnapshot.Change) error {
+		absPath := filepath.Join(change.RootPath(), filepath.FromSlash(change.Path()))
+		changedAbs = append(changedAbs, absPath)
 		if !comparison.observed(change) {
 			return nil
 		}
-		rel, ok := projectroot.OutsideRel(filepath.Join(change.RootPath(), filepath.FromSlash(change.Path())))
+		rel, ok := projectroot.OutsideRel(absPath)
 		if !ok {
 			return nil
 		}
@@ -312,10 +336,10 @@ func (s *Inventory) recordOutsideChanges(ctx context.Context, w *openCommandWind
 		return s.recordOutsideHead(ctx, w.projectID, head, change, cause)
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	_, err = s.recordWindowAdmissions(ctx, admitted)
-	return err
+	return changedAbs, err
 }
 
 // The command's baseline can be newer than the last retained head.

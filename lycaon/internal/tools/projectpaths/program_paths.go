@@ -73,28 +73,7 @@ func (p BoundPath) Validate() error {
 
 // Open reads through the existing confined filesystem door, never an argv path.
 func (p BoundPath) Open() (*os.File, error) {
-	if p.Null {
-		return nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Cause: errors.New("null input is an empty stream, not a file")}
-	}
-	if settingsoverlay.IsRecoveryRelPath(p.Resolved.ScopeRel) || settingsoverlay.HasRecoverySegment(p.Resolved.Abs) || settingsoverlay.IsRecoveryOnlyDir(p.Resolved.Abs) {
-		return nil, PathOperationError(p.Resolved.DisplayPath, &os.PathError{Op: "open", Path: p.Resolved.DisplayPath, Err: os.ErrNotExist})
-	}
-	root, err := p.openRoot()
-	if err != nil {
-		return nil, PathOperationError(p.Resolved.DisplayPath, err)
-	}
-	defer func() { _ = root.Close() }()
-	file, err := root.OpenExact(p.exactRelative)
-	if err != nil {
-		return nil, PathOperationError(p.Resolved.DisplayPath, err)
-	}
-	if p.admitRead != nil {
-		if err := p.admitRead(file.Name()); err != nil {
-			_ = file.Close()
-			return nil, PathOperationError(p.Resolved.DisplayPath, err)
-		}
-	}
-	return file, nil
+	return p.OpenWithRoot(nil)
 }
 
 // ProgramPaths is one invocation's logical cwd. It never changes process cwd,
