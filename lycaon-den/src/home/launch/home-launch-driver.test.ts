@@ -297,6 +297,21 @@ describe("home launch persistence", () => {
     expect(homeLaunches.record(id)?.text).toBe("Unsaved");
   });
 
+  it("never writes back a launch another window removed", async () => {
+    const outbox = memoryHomeOutbox();
+    resetHomeLaunchesForTest(outbox);
+    const kept = launch("Kept");
+    const removed = launch("Removed elsewhere");
+    await vi.waitFor(() => expect(outbox.manifest().launches).toHaveLength(2));
+    await flushHomeLaunchWrites();
+    const stored = outbox.manifest();
+    await outbox.commit({ ...stored, launches: stored.launches.filter((r) => r.launchId !== removed), forgotten: [removed] }, stored.revision);
+    updateLaunch(kept, (r) => ({ ...r, text: "Kept, edited" }));
+    await flushHomeLaunchWrites();
+    expect(outbox.manifest().launches.map((r) => r.launchId)).toEqual([kept]);
+    expect(homeLaunches.record(removed)).toBeUndefined();
+  });
+
   it("never lets an older host view replace a newer one", () => {
     const id = launch("Ordered");
     applyHostState(id, { ...host.view(id), phase: "session_bound", revision: 5 });

@@ -100,7 +100,12 @@ export type HomeOutboxManifest = {
   launches: LaunchRecord[];
   /** The launch last shown in the foreground. */
   foregroundLaunchId?: string;
+  /** Launches removed in any window, newest last, so no window writes them back. */
+  forgotten?: string[];
 };
+
+/** Tombstones kept for launches removed in some window. */
+export const FORGOTTEN_CAP = 256;
 
 export function emptyManifest(): HomeOutboxManifest {
   return { format: 1, revision: 0, launches: [] };

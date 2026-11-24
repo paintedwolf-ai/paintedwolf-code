@@ -12,6 +12,7 @@ import {
   homeLaunches,
   loadHomeLaunches,
   persistLaunch,
+  refreshHomeLaunches,
   saveComposition,
   setForegroundLaunch,
   stageLaunchBytes,
@@ -232,6 +233,12 @@ export function createHomeLaunchController(options: Options) {
     forgetLaunch(launchId);
     void options.resumeSession({ ...chat, title: DEFAULT_SESSION_TITLE });
   };
+
+  const refresh = () => { void refreshHomeLaunches().catch(() => undefined); };
+  if (typeof window !== "undefined") {
+    window.addEventListener("focus", refresh);
+    onCleanup(() => window.removeEventListener("focus", refresh));
+  }
 
   onCleanup(() => {
     for (const record of homeLaunches.pending()) haltLaunch(record.launchId);

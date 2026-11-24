@@ -3,6 +3,7 @@ import { createStore, produce, reconcile } from "solid-js/store";
 import type { HomeStart, SessionMode } from "../../api/types.ts";
 import { afterPaint } from "../../ui/surface-reveal.ts";
 import {
+  FORGOTTEN_CAP,
   chipsNeedingAction,
   firstPromptAdmitted,
   withHostState,
@@ -93,6 +94,11 @@ export async function loadHomeLaunches(): Promise<{ composition?: CompositionRec
     setState("loaded", true);
   });
   return { composition: manifest.composition, foregroundLaunchId: manifest.foregroundLaunchId };
+}
+
+/** Picks up launches other windows saved or removed since the last write. */
+export async function refreshHomeLaunches(): Promise<void> {
+  adoptManifest(await outbox().read());
 }
 
 export type HomeSubmission = {
@@ -300,16 +306,19 @@ function writeManifest(extra: (manifest: HomeOutboxManifest) => void, savingLaun
 }
 
 function mergeManifest(stored: HomeOutboxManifest): HomeOutboxManifest {
+  const forgotten = [...(stored.forgotten ?? []).filter((id) => !removedHere.has(id)), ...removedHere].slice(-FORGOTTEN_CAP);
+  const gone = new Set(forgotten);
   const byId = new Map(stored.launches.map((record) => [record.launchId, record]));
-  for (const id of removedHere) byId.delete(id);
+  for (const id of gone) byId.delete(id);
   for (const record of Object.values(state.records)) {
+    if (gone.has(record.launchId)) continue;
     const other = byId.get(record.launchId);
     if (!other || other.localRevision < record.localRevision ||
       (other.localRevision === record.localRevision && (other.hostState?.revision ?? 0) < (record.hostState?.revision ?? 0))) {
       byId.set(record.launchId, structuredClone(unwrap(record)));
     }
   }
-  const next: HomeOutboxManifest = { ...stored, launches: [...byId.values()] };
+  const next: HomeOutboxManifest = { ...stored, launches: [...byId.values()], ...(forgotten.length ? { forgotten } : {}) };
   if (compositionToSave !== undefined) {
     const stale = compositionToSave && stored.composition?.id === compositionToSave.id &&
       stored.composition.revision > compositionToSave.revision;
@@ -320,7 +329,13 @@ function mergeManifest(stored: HomeOutboxManifest): HomeOutboxManifest {
 
 function adoptManifest(manifest: HomeOutboxManifest): void {
   compositionToSave = undefined;
+  const gone = new Set(manifest.forgotten ?? []);
   batch(() => {
+    for (const id of Object.keys(state.records)) {
+      if (!gone.has(id)) continue;
+      setState("records", produce((records) => { delete records[id]; }));
+      setState("runtime", produce((runtime) => { delete runtime[id]; }));
+    }
     for (const record of manifest.launches) {
       if (removedHere.has(record.launchId)) continue;
       const mine = state.records[record.launchId];
