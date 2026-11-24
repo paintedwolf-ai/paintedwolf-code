@@ -108,6 +108,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 	if prepared.Mode != "" {
 		request.EffectMode = prepared.Mode
 	}
+	prepared.Review.PathTargets = absolutePathTargets(d.paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, prepared.Review.PathTargets)
 	return d.invokeHost(ctx, request, streams, prepared.LaunchesConfined, &prepared.Review, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		frame, err := d.paths.Rebind(ctx, tc)
 		if err != nil {
@@ -141,10 +142,17 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 		return ownerFailure(err), err
 	}
 	arguments := map[string]any{"argv": request.Argv.Values(), "source_unit_id": request.Invocation.SourceUnitID, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte}
-	if launches {
+	if review != nil {
+		normalized := *review
+		normalized.OperationID = definition.ReadOnlyFacts().Identity
+		normalized.PathTargets = absolutePathTargets(d.paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, normalized.PathTargets)
+		review = &normalized
+		maps.Copy(arguments, review.Arguments())
+	}
+	if launches || review != nil {
 		arguments = d.run.nativeArguments(arguments, definition.ReadOnlyFacts().Contract, nil)
 	}
-	child, err := d.prepareInvocation(ctx, definition, request.Invocation, spec.Name, arguments, review)
+	child, err := d.prepareInvocation(ctx, definition, request.Invocation, spec.Name, arguments, nil)
 	if err != nil {
 		return d.prepareChildFailure(streams, spec.Name, request, err)
 	}

@@ -22,7 +22,7 @@ func refusalsOf(t *testing.T, self string, roots []string, name string, args ...
 
 func refusalsOfConfinement(t *testing.T, self string, c confine.Confinement, name string, args ...string) (confine.SandboxRefusals, string) {
 	t.Helper()
-	if c.Network == "" {
+	if c.Network == 0 {
 		c.Network = confine.NetworkDeny
 	}
 	lease, err := confine.BindAction(&c, confine.EgressCommand{SessionID: "refusal-live", ToolName: "command", CommandLine: name})
