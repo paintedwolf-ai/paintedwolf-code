@@ -17,6 +17,7 @@ import {
   initRepo,
   landWorktree,
   listBranches,
+  listWorktrees,
   pullChanges,
   pushChanges,
   refreshWorktree,
@@ -24,6 +25,8 @@ import {
   unbindWorktree,
 } from "../../chat/actions/git-actions.ts";
 import { refreshGitStatus } from "../../chat/actions/git-status-reads.ts";
+import { setFilesStagePaneMode } from "../../files/review/review-pane.ts";
+import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
 
 type ChatGitOptions = {
   appStore: Accessor<AppStore>;
@@ -330,6 +333,43 @@ export function createChatGitBinding(options: ChatGitOptions) {
     } finally {
       setGitBusy(false);
     }
+  },
+  onListWorktrees: async (repoId) => {
+    const projectId = gitProjectId();
+    if (!projectId || !repoId.trim() || !getLycaonClient()) return undefined;
+    return listWorktrees(clientOrThrow(), projectId, repoId, gitSessionId());
+  },
+  onSelectWorktree: async (repoId, entry) => {
+    const projectId = gitProjectId();
+    if (!projectId || !repoId.trim() || !getLycaonClient()) return;
+    try {
+      await refreshGitStatus(appStore(), clientOrThrow(), projectId, gitSessionId(), {
+        repoId,
+        worktreeId: entry.worktree_id,
+        refreshSet: false,
+      });
+    } catch (err) {
+      chatNotices().reportError(err);
+    }
+  },
+  onClearWorktreePin: async (repoId, nextWorktreeId) => {
+    const projectId = gitProjectId();
+    if (!projectId || !repoId.trim() || !getLycaonClient()) return;
+    try {
+      await refreshGitStatus(appStore(), clientOrThrow(), projectId, gitSessionId(), {
+        repoId,
+        worktreeId: nextWorktreeId,
+        refreshSet: false,
+      });
+    } catch (err) {
+      chatNotices().reportError(err);
+    }
+  },
+  onOpenInFiles: () => {
+    const pid = gitProjectId();
+    if (!pid) return;
+    setFilesStagePaneMode(pid, "files");
+    openFilesSurface({ kind: "stage", projectId: pid });
   },
 });
   return binding;

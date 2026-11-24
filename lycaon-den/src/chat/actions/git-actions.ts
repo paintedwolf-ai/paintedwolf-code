@@ -8,6 +8,7 @@ import type {
   GitStashRequest,
   GitWorktreeLandResult,
   GitWorktreeView,
+  GitWorktreesView,
 } from "../../api/types.ts";
 import { loadGitWorkspaceStatus, type GitWorkspaceStatus } from "./git-workspace-status.ts";
 import {
@@ -111,6 +112,16 @@ function applyGitWrite(
     const resolvedWorktree = worktreeId?.trim() || result.worktree_id?.trim() || undefined;
     return loadGitWorkspaceStatus(client, projectId, result.repo_id || repoId, sessionId, resolvedWorktree);
   });
+}
+
+export async function listWorktrees(
+  client: LycaonClient,
+  projectId: string,
+  repoId: string,
+  sessionId?: string,
+): Promise<GitWorktreesView | undefined> {
+  if (!projectId.trim() || !repoId.trim()) return undefined;
+  return client.listGitWorktrees(projectId, repoId, sessionId);
 }
 
 export async function listBranches(

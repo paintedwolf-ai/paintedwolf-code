@@ -3,7 +3,7 @@ import { loadFailed, loaded } from "./load-state.ts";
 import type { SetStoreFunction } from "solid-js/store";
 import type { AppState, AppStoreActions } from "./app-state-model.ts";
 
-function gitWorktreeTargetKey(projectId: string, repoId: string): string {
+export function gitWorktreeTargetKey(projectId: string, repoId: string): string {
   return `${projectId.trim()}\u0000${repoId.trim()}`;
 }
 

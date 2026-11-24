@@ -14,10 +14,13 @@ import { ResidentPortal } from "./primitives/ResidentPortal.tsx";
 import { Scrollport } from "./primitives/Scrollport.tsx";
 import type {
   GitBranchEntry,
+  GitWorktreeEntry,
+  GitWorktreesView,
   GitWorktreeView,
 } from "../api/types.ts";
 import type { GitWorkspaceStatus } from "../chat/actions/git-workspace-status.ts";
 import type { WorktreeLandOutcome } from "../chat/actions/git-actions.ts";
+import type { AppStore } from "../store/app-state-model.ts";
 import {
   createAnchoredPopoverFocus,
   createModalFocusTrap,
@@ -25,6 +28,8 @@ import {
 import { chromeProps } from "../styling/ui-chrome.ts";
 import { DenButton } from "./primitives/DenButton.tsx";
 import { formatWorktreeLandResult } from "./git-worktree-result.ts";
+import { GitWorktreeSelector } from "./git/GitWorktreeSelector.tsx";
+import { useGitCheckoutWorktrees } from "./git/useGitCheckoutWorktrees.ts";
 
 export type GitCheckoutActions = {
   onListBranches: () => Promise<GitBranchEntry[]>;
@@ -36,9 +41,14 @@ export type GitCheckoutActions = {
   ) => Promise<GitWorktreeView>;
   onLandWorktree?: () => Promise<WorktreeLandOutcome>;
   onUnbindWorktree?: () => Promise<void>;
+  onListWorktrees?: (repoId: string) => Promise<GitWorktreesView | undefined>;
+  onSelectWorktree?: (repoId: string, entry: GitWorktreeEntry) => void | Promise<void>;
+  onClearWorktreePin?: (repoId: string, nextWorktreeId?: string) => void | Promise<void>;
+  onOpenInFiles?: () => void;
 };
 
 type Props = GitCheckoutActions & {
+  appStore?: AppStore;
   projectId?: string;
   sessionId?: string;
   repoId: string;
@@ -49,6 +59,10 @@ type Props = GitCheckoutActions & {
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
   onSelectWorktreeRepo: (repoId: string) => void;
+  onInspectionUnavailableChange?: (unavailable: boolean) => void;
+  onInspectedTargetChange?: (
+    target: { branchLabel: string; shortDir: string; isProjectCheckout: boolean } | undefined,
+  ) => void;
   children?: JSX.Element;
 };
 
@@ -92,16 +106,38 @@ export function GitCheckout(props: Props) {
   const checkoutKnown = () => !hasWorktreeSupport() || worktree() !== undefined;
   // Stays focusable while unavailable so dialogs can restore focus to it.
   const triggerUnavailable = () => busy() || !checkoutKnown() || !!loadError();
+  const boundBranch = () => worktree()?.branch;
+  const inspection = useGitCheckoutWorktrees({
+    appStore: props.appStore,
+    projectId: () => props.projectId,
+    sessionId: () => props.sessionId,
+    repoId: () => props.repoId,
+    status: () => props.status,
+    scopedWorktree,
+    boundBranch,
+    menuOpen: () => props.menuOpen,
+    onListWorktrees: props.onListWorktrees,
+    onSelectWorktree: props.onSelectWorktree,
+    onClearWorktreePin: props.onClearWorktreePin,
+    onInspectionUnavailableChange: props.onInspectionUnavailableChange,
+    onInspectedTargetChange: props.onInspectedTargetChange,
+  });
+  const inspectedLinked = () => {
+    const row = inspection.inspectedRow();
+    return Boolean(row && !row.entry.is_project_checkout);
+  };
   const branch = () =>
-    scopedWorktree() ? worktree()?.branch : props.status?.branch;
+    scopedWorktree() ? boundBranch() : props.status?.branch;
   const canChangeBranch = () =>
     !busy() &&
     !bound() &&
+    !inspection.selection().unavailable &&
     checkoutKnown() &&
     !loadError() &&
     props.status?.available === true;
   const canCreateWorktree = () =>
     canChangeBranch() &&
+    !inspectedLinked() &&
     !!branch() &&
     !!props.repoId &&
     !!props.onBindWorktree &&
@@ -330,17 +366,18 @@ export function GitCheckout(props: Props) {
           when={checkoutKnown()}
           fallback={<span data-testid="git-checkout-pending">Checking checkout…</span>}
         >
-          <span
-            data-testid={
-              scopedWorktree()
-                ? "git-checkout-mode-worktree"
-                : "git-checkout-mode-project"
-            }
-          >
-            {scopedWorktree() ? "Chat worktree" : "Project folder"}
+          <span data-testid={inspection.modeInfo().testId}>
+            {inspection.modeInfo().label}
           </span>
           <Show when={props.repoLabel}>
             <span class="git-checkout__repository">{props.repoLabel}</span>
+          </Show>
+          <Show when={inspection.directoryLabel()}>
+            {(dir) => (
+              <code class="git-checkout__directory" data-testid="git-checkout-directory">
+                {dir()}
+              </code>
+            )}
           </Show>
         </Show>
       </div>
@@ -350,7 +387,7 @@ export function GitCheckout(props: Props) {
           type="button"
           class="git-strip__branch"
           data-testid="git-branch"
-          aria-label={`Branch and checkout: ${branch() || "Detached HEAD"}`}
+          aria-label={`Branch and checkout: ${inspection.displayBranch()}`}
           aria-expanded={props.menuOpen}
           aria-controls={`${id}-menu`}
           aria-haspopup="dialog"
@@ -362,11 +399,8 @@ export function GitCheckout(props: Props) {
           <span class="git-strip__leaf" aria-hidden="true">
             ⎇
           </span>
-          <span class="git-strip__branch-name" data-tip={branch()} data-tip-when-clipped>
-            {branch() ||
-              (props.status?.head_short
-                ? `Detached at ${props.status.head_short}`
-                : "No branch")}
+          <span class="git-strip__branch-name" data-tip={inspection.displayBranch()} data-tip-when-clipped>
+            {inspection.displayBranch()}
           </span>
           <span class="git-strip__caret" aria-hidden="true">
             ⌄
@@ -458,6 +492,28 @@ export function GitCheckout(props: Props) {
           aria-label="Branch and checkout"
           data-testid="git-branches"
         >
+          <Show when={inspection.enabled()}>
+            <GitWorktreeSelector
+              worktrees={inspection.worktrees()}
+              inspectedWorktreeId={inspection.selection().inspectedWorktreeId}
+              pinned={inspection.selection().pinned}
+              unavailable={inspection.selection().unavailable}
+              preservedSummary={inspection.selection().summary}
+              loading={inspection.loading()}
+              error={inspection.error()}
+              onSelectWorktree={(entry) => inspection.selectWorktree(entry)}
+              onClearPin={() => inspection.clearPin()}
+              onRetry={() => void inspection.refreshList()}
+              onOpenInFiles={
+                props.onOpenInFiles
+                  ? () => {
+                      props.onMenuOpenChange(false);
+                      props.onOpenInFiles?.();
+                    }
+                  : undefined
+              }
+            />
+          </Show>
           <Show
             when={!bound()}
             fallback={

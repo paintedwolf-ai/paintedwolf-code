@@ -14,6 +14,7 @@ import { retryProjectSourceHistory, type createSourceHistoryCommands } from "../
 import { setFilesStagePaneMode } from "../review/review-pane.ts";
 import type { WalkFileTarget } from "../walk/walk-model.ts";
 import { WalkButton } from "../walk/WalkButton.tsx";
+import { FilesCheckoutPicker } from "../../components/git/FilesCheckoutPicker.tsx";
 import type { FileBriefingSelection, FileBriefingTarget } from "./file-briefing-target.ts";
 import { FileOperationStatus } from "./FileOperationStatus.tsx";
 import { FileSummaryDrawer } from "./FileSummaryDrawer.tsx";
@@ -108,6 +109,11 @@ export function FilesTreePane(props: {
           initialFile={props.walkInitialFile}
         />
         <SidebarScopePicker
+          projectId={props.projectId}
+          client={props.client}
+          appStore={props.appStore}
+        />
+        <FilesCheckoutPicker
           projectId={props.projectId}
           client={props.client}
           appStore={props.appStore}
