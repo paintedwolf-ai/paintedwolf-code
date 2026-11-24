@@ -71,7 +71,7 @@ func (r *ToolUsageRecorder) NotifyCheckoutChange(ctx context.Context, tc tools.T
 	r.Inventory.ScheduleRepoRefreshForPath(ctx, tc.Identity.ProjectID, repoPath)
 }
 
-// ScheduleRepoRefreshForProject schedules asynchronous checkout reconciliation for every attached Git repository of projectID.
+// ScheduleRepoRefreshForProject schedules background checkout reconciliation for projectID's repositories.
 func (inv *Inventory) ScheduleRepoRefreshForProject(ctx context.Context, projectID string) {
 	if inv == nil {
 		return
