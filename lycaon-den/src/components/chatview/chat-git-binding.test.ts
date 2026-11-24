@@ -363,4 +363,39 @@ describe("chat Git binding", () => {
       dispose();
     });
   });
+
+  it("threads selected checkout worktree_id through onDraftMessage and onListBranches", async () => {
+    const draftErr = new Error("draft failed");
+    let failDraft = false;
+    const client = stubClient({
+      draftGitCommitMessage: vi.fn(async () => {
+        if (failDraft) throw draftErr;
+        return { worktree_id: "wt-pin", message: "feat: drafted" };
+      }),
+      listGitBranches: vi.fn(async () => ({
+        worktree_id: "wt-pin",
+        branches: [{ name: "feat/pin", current: true }],
+      })),
+    });
+    setLycaonClientForTest(client);
+    const appStore = createAppStore();
+    appStore.actions.setGitRepos([repo], REPO_ID);
+    appStore.actions.setGitWorktreeTarget(project.id, REPO_ID, "wt-pin");
+    const reportError = vi.fn();
+
+    await createRoot(async (dispose) => {
+      const binding = bindingFor(client, appStore, reportError);
+      await expect(binding.onDraftMessage()).resolves.toBe("feat: drafted");
+      expect(client.draftGitCommitMessage).toHaveBeenCalledWith(project.id, REPO_ID, "session-1", "wt-pin");
+
+      const branches = await binding.onListBranches();
+      expect(branches).toHaveLength(1);
+      expect(client.listGitBranches).toHaveBeenCalledWith(project.id, REPO_ID, "session-1", "wt-pin");
+
+      failDraft = true;
+      await expect(binding.onDraftMessage()).resolves.toBe("");
+      expect(reportError).toHaveBeenCalledWith(draftErr);
+      dispose();
+    });
+  });
 });
