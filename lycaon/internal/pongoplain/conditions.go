@@ -40,8 +40,9 @@ type ConditionHit struct {
 }
 
 // atomReplayKey marks a context that replays one atom, so tracked tags inside
-// the replay record nothing.
-const atomReplayKey = "\x00pongoplain_atom_replay"
+// the replay record nothing. Like execStateKey it lexes as a number, so
+// templates cannot reference it.
+const atomReplayKey = "1"
 
 // conditionArm holds one arm's source and, once observed, its compiled atoms.
 type conditionArm struct {
