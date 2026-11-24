@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hostprocess"
@@ -162,6 +164,9 @@ func New(t testing.TB, options Options) *Fixture {
 	ports, err := hostprocess.New()
 	testutil.FailErr(t, "host process service", err)
 	scratchDir := fspath.CanonicalPath(t.TempDir())
+	if err := os.Mkdir(enginepaths.ProgramTempUnder(scratchDir), 0o700); err != nil {
+		t.Fatalf("prepare program temp: %v", err)
+	}
 	f := &Fixture{Recorder: recorder, Database: database, Session: session, Dir: dir, ScratchDir: scratchDir, OutputDir: t.TempDir(), Background: background, Boundary: boundary, progress: owner}
 	runtime := &command.ProgramRuntime{
 		Executor: executor, Registry: registry, Recorder: recorder, Blobs: blobstore.Store{Root: t.TempDir()},

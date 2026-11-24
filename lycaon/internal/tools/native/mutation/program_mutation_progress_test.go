@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -87,7 +88,7 @@ func TestProgramProjectProgressAndScratchMove(t *testing.T) {
 	if outcome := decodeMutationOutcome(t, raw); outcome.Refusal != nil || outcome.Status != 0 {
 		t.Fatalf("scratch write = %+v", outcome)
 	}
-	scratchFile := filepath.Join(f.ScratchDir, "temporary.txt")
+	scratchFile := filepath.Join(enginepaths.ProgramTempUnder(f.ScratchDir), "temporary.txt")
 	if _, err := os.Stat(scratchFile); err != nil {
 		t.Fatalf("scratch file missing: %v", err)
 	}

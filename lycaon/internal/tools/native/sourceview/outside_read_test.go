@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -17,7 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-func TestOutsideReadRecordsAnOrdinaryPathButNotScratch(t *testing.T) {
+func TestOutsideReadRecordsAnOrdinaryPathButNotProgramTemp(t *testing.T) {
 	ctx := t.Context()
 	database := testdbfixture.Open(t, "store.db")
 	const projectID, chatID = "p1", "chat"
@@ -41,7 +42,7 @@ func TestOutsideReadRecordsAnOrdinaryPathButNotScratch(t *testing.T) {
 		home, err = os.UserHomeDir()
 		testutil.FailErr(t, "read home folder", err)
 	}
-	outside, err := os.MkdirTemp(home, ".pw-outside-read-") //nolint:usetesting // Outside history omits scratch roots.
+	outside, err := os.MkdirTemp(home, ".pw-outside-read-") //nolint:usetesting // A home folder is an ordinary outside location.
 	testutil.FailErr(t, "make outside fixture", err)
 	t.Cleanup(func() { testutil.FailErr(t, "remove outside fixture", os.RemoveAll(outside)) })
 	read := func(dir string) string {
@@ -59,7 +60,11 @@ func TestOutsideReadRecordsAnOrdinaryPathButNotScratch(t *testing.T) {
 		return name
 	}
 	name := read(outside)
-	_ = read(t.TempDir())
+	scratch := t.TempDir()
+	tc.Host.SessionScratchDir = scratch
+	programTemp := enginepaths.ProgramTempUnder(scratch)
+	testutil.FailErr(t, "make program temp", os.Mkdir(programTemp, 0o700))
+	_ = read(programTemp)
 
 	locations, err := ledger.ChatLocations(ctx, chatID)
 	testutil.FailErr(t, "list chat locations", err)

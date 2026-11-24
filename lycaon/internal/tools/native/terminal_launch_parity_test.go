@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine/admissiontest"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/programtest"
@@ -87,7 +88,8 @@ fi
 		expectedDir, err := filepath.EvalSymlinks(f.Dir)
 		testutil.FailErr(t, "fixture physical working directory", err)
 		got[6] = physical
-		want := []string{"unset", "provided", scratch, scratch, scratch, scratch, expectedDir, "pipe"}
+		temp := enginepaths.ProgramTempUnder(scratch)
+		want := []string{"unset", "provided", scratch, temp, temp, temp, expectedDir, "pipe"}
 		if route == "terminal" {
 			want[7] = "tty"
 		}

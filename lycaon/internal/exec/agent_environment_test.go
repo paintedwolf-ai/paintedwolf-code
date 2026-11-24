@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -46,7 +47,7 @@ func TestAgentCommandLaunchDropsTheEngineEnvironment(t *testing.T) {
 					t.Fatalf("%s reached an agent launch: %v", key, cmd.Env)
 				}
 			}
-			if env["XDG_CACHE_HOME"] != "/xdg/cache" || env["USER"] != "person" || env["TMPDIR"] != scratch || env["PATH"] == "" || env["PW_STAGE"] != "stage" {
+			if env["XDG_CACHE_HOME"] != "/xdg/cache" || env["USER"] != "person" || env["TMPDIR"] != enginepaths.ProgramTempUnder(scratch) || env["PATH"] == "" || env["PW_STAGE"] != "stage" {
 				t.Fatalf("agent launch lost plumbing, boundary or stage entries: %v", cmd.Env)
 			}
 			if opts.InlineEnv != nil && env["PW_INLINE"] != "inline" {

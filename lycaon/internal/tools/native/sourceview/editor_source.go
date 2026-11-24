@@ -116,7 +116,7 @@ func loadText(ctx context.Context, tool string, access Access, tctx tools.ToolCo
 
 // RecordOutsideRead places a read file in the chat's locations.
 func RecordOutsideRead(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, sha256 string, size int64) {
-	if !resolved.External || resolved.ToolOutput || resolved.Compressed || tctx.Identity.ProjectID == "" || tctx.Identity.SessionID == "" {
+	if resolved.ToolOutput || resolved.Compressed || tctx.Identity.ProjectID == "" || tctx.Identity.SessionID == "" {
 		return
 	}
 	root, rel, ok := tctx.RecordedLocation(resolved.Abs)

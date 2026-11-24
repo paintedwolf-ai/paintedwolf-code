@@ -45,11 +45,11 @@ func TestProgramTempStaysOutOfHistory(t *testing.T) {
 
 func TestApprovedSharedTempRecordsWhatWasTouched(t *testing.T) {
 	temp := outsideCommandFolder(t)
-	t.Setenv("TMPDIR", temp)
 	loose := filepath.Join(temp, "loose.txt")
 	folder := filepath.Join(temp, "build")
 	program := "printf 'x\\n' > '" + loose + "'; mkdir -p '" + folder + "'; printf 'y\\n' > '" + folder + "/out.txt'; rm '" + loose + "'"
 	s := newProgramHost(t, gate.PostureBalanced).program(t, program, "")
+	t.Setenv("TMPDIR", temp)
 	cards := runCommandWithApprovals(t, s, "recommended")
 	if plan := cards[0].ToolApproval.Plan; plan.Subject.Kind != wire.ApprovalSubjectKindWriteRootSet {
 		t.Fatalf("shared temp review = %+v", plan)
@@ -70,10 +70,10 @@ func TestApprovedSharedTempRecordsWhatWasTouched(t *testing.T) {
 
 func TestSharedTempRootIsReportedNotCompared(t *testing.T) {
 	temp := outsideCommandFolder(t)
-	t.Setenv("TMPDIR", temp)
 	program := `sh -c 'printf z > "` + filepath.Join(temp, "external.txt") + `"'`
 	args := map[string]any{"command": program, "capability_request": map[string]any{"write_root": temp}}
 	s := newProgramHost(t, gate.PostureBalanced).programWithArgs(t, args, wire.CreateSessionRequest{}, "")
+	t.Setenv("TMPDIR", temp)
 	runCommandWithApprovals(t, s, "recommended")
 	if outcome := s.outcome(t, "program-1"); outcome.Status != 0 {
 		t.Fatalf("shared temp program = %+v", outcome)
@@ -104,7 +104,8 @@ func (s *commandProgramSession) chatAnchors(t *testing.T) []string {
 func (s *commandProgramSession) chatFileCounts(t *testing.T) (changed, read int) {
 	t.Helper()
 	testutil.FailErr(t, "count chat files", s.h.DB.QueryRowContext(t.Context(),
-		`SELECT COALESCE(SUM(changed), 0), COALESCE(SUM(read), 0) FROM source_chat_files WHERE session_id = ?`, s.session).Scan(&changed, &read))
+		`SELECT COALESCE(SUM(c.changed), 0), COALESCE(SUM(c.read), 0) FROM source_chat_files c JOIN source_files f ON f.id = c.file_id
+		WHERE c.session_id = ? AND f.entry_kind = 'file'`, s.session).Scan(&changed, &read))
 	return changed, read
 }
 
