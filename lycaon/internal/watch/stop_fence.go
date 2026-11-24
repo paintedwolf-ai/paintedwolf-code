@@ -180,19 +180,19 @@ func releaseSessionUncommittedDeliveriesTx(ctx context.Context, tx *sql.Tx, sess
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	var ids []string
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
 			return err
 		}
 		ids = append(ids, id)
 	}
-	_ = rows.Close()
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	_ = rows.Close()
 	for _, id := range ids {
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE watch_matches SET reservation_state = 'pending', delivery_id = NULL WHERE delivery_id = ? AND reservation_state = 'reserved'`,
@@ -237,19 +237,19 @@ func interruptArmedSessionLeasesTx(ctx context.Context, tx *sql.Tx, sessionID, n
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	var ids []string
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
 			return nil, err
 		}
 		ids = append(ids, id)
 	}
-	_ = rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	_ = rows.Close()
 	for _, id := range ids {
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE wait_leases SET status = 'canceled', resolved_at = ? WHERE id = ? AND status = 'armed'`,
