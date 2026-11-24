@@ -44,7 +44,7 @@ type routeProvider struct {
 
 func (p *routeProvider) ID() string { return p.id }
 func (p *routeProvider) Models() []modelcall.ModelInfo {
-	return []modelcall.ModelInfo{{ID: p.id, ContextLength: 16384}}
+	return []modelcall.ModelInfo{{ID: p.id}}
 }
 func (p *routeProvider) Profile() providerprofile.Profile {
 	return providerprofile.Profile{UtilitySingleFlight: true}
