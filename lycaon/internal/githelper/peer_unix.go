@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package gitcredential
+package githelper
 
 import (
 	"errors"
@@ -9,28 +9,27 @@ import (
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
-// maxAncestry bounds the walk from the helper to the served git process.
+// maxAncestry bounds the parent walk from the helper to the served process.
 const maxAncestry = 16
 
-// descendsFromServedGit walks up from the peer to the served process and
-// requires a git process on the way, the served process included.
-func descendsFromServedGit(peer int, gitBinary string, served servedProcess) error {
+// descendsFromServedGit requires a bundled git process along the ancestry up to served.
+func descendsFromServedGit(peer int, gitBinary string, served ServedProcess) error {
 	sawGit := false
 	pid, err := parentProcess(peer)
 	for hops := 0; err == nil && pid > 1 && hops < maxAncestry; hops++ {
 		if exe, exeErr := processExecutable(pid); exeErr == nil && sameFile(exe, gitBinary) {
 			sawGit = true
 		}
-		if pid == served.pid {
+		if pid == served.PID {
 			start, ok := osprocess.StartTime(pid)
-			if ok && start == served.start && sawGit {
+			if ok && start == served.Start && sawGit {
 				return nil
 			}
 			break
 		}
 		pid, err = parentProcess(pid)
 	}
-	return errors.New("credential helper peer does not descend from the served git process")
+	return errors.New("git helper peer does not descend from the served git process")
 }
 
 func sameFile(a, b string) bool {
