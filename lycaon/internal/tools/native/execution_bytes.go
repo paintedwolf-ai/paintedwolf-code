@@ -125,7 +125,7 @@ func (e ExecutionRevisions) OpenWalkedStream(ctx context.Context, tctx tools.Too
 	})
 }
 
-// OpenBoundWalkedStream acquires the file through bound's authority and learns literal filters at catalog when eligible.
+// OpenBoundWalkedStream opens bound through root when present and records literal filter observations when eligible.
 func (e ExecutionRevisions) OpenBoundWalkedStream(ctx context.Context, tctx tools.ToolContext, bound projectpaths.BoundPath, root *fseffect.ReadRoot, catalog *CatalogObservation, maxBytes int64) (ExecutionStream, error) {
 	return e.openWalkedStream(ctx, tctx, bound.Resolved, catalog, maxBytes, func() (*os.File, error) {
 		return bound.OpenWithRoot(root)
