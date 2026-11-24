@@ -191,7 +191,7 @@ describe("session transcript findable adapter", () => {
 
     let sawApprovalsExpanded = false;
     let sawDiffExpanded = false;
-    for (let step = 0; step < totalMatches + 1; step++) {
+    for (let step = 0; step < 12 && (!sawApprovalsExpanded || !sawDiffExpanded); step++) {
       findNext();
       if (approvalsToggle?.getAttribute("aria-expanded") === "true") sawApprovalsExpanded = true;
       if (diffToggle?.getAttribute("aria-expanded") === "true") sawDiffExpanded = true;
