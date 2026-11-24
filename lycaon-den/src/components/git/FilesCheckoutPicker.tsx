@@ -79,13 +79,13 @@ export function FilesCheckoutPicker(props: FilesCheckoutPickerProps) {
   const loadRepoCheckouts = async () => {
     const c = props.client;
     const pid = props.projectId.trim();
-    if (!c || !pid || typeof c.listGitWorktrees !== "function") return;
+    if (!c || !pid || !("listGitWorktrees" in c) || typeof c.listGitWorktrees !== "function") return;
     const gen = ++fetchGeneration;
     setLoading(true);
     setError(undefined);
     try {
       let availableRepos = repos();
-      if (availableRepos.length === 0 && typeof c.listGitRepos === "function") {
+      if (availableRepos.length === 0 && "listGitRepos" in c && typeof c.listGitRepos === "function") {
         const repoView = await c.listGitRepos(pid, sessionId());
         if (gen !== fetchGeneration) return;
         setLocalRepos(repoView.repos);
