@@ -18,7 +18,7 @@ import (
 func TestWaitWithWatchMatchModeTimeoutsUntilCompleteAndResume(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "session-1", testdbseed.DefaultProjectID)
-	clock := watch.NewFakeClock(time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC))
+	clock := testutil.NewFakeClock(time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC))
 	watchStore := watch.NewStore(database, clock)
 	waitStore := &awaitstore.Store{DB: database}
 

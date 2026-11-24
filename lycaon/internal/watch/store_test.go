@@ -14,12 +14,12 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func openTestWatchStore(t *testing.T) (*Store, *FakeClock, db.Handle, Owner) {
+func openTestWatchStore(t *testing.T) (*Store, *testutil.FakeClock, db.Handle, Owner) {
 	t.Helper()
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "session-1", testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "session-2", testdbseed.DefaultProjectID)
-	clock := NewFakeClock(time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC))
+	clock := testutil.NewFakeClock(time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC))
 	store := NewStore(database, clock)
 	owner := Owner{ProjectID: testdbseed.DefaultProjectID, SessionID: "session-1"}
 	return store, clock, database, owner
