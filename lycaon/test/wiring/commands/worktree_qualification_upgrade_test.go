@@ -302,7 +302,7 @@ func TestWorktreeQualificationPreFeatureStoreUpgradeAndRestart(t *testing.T) {
 			RootID:   corpusRootID,
 			Path:     "editor-fixture.txt",
 		}, http.StatusCreated)
-		if siblingDoc.ID == corpusDirtyDocID || siblingDoc.WorkspaceID != preWorktreeID || siblingDoc.Dirty {
+		if siblingDoc.ID == corpusDirtyDocID || siblingDoc.BranchID != "worktree:"+preWorktreeID || siblingDoc.WorkspaceID == "" || siblingDoc.WorkspaceID == dirtyDoc.WorkspaceID || siblingDoc.Dirty {
 			t.Fatalf("sibling checkout document collided with primary draft: %+v", siblingDoc)
 		}
 	})

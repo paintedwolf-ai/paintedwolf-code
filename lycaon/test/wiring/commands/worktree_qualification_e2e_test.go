@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/gitrepo"
+	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -183,10 +184,29 @@ func TestWorktreeQualificationNativeAgentAddCrossCheckoutEditAndNextCommandCwd(t
 		ExpectedRevision: primaryDoc.Revision,
 	}, http.StatusOK)
 
-	// Turn 1: Native agent adds and edits an authorized sibling checkout; zero extra model calls beyond tool + follow-up.
-	submitPromptWithApprovals(t, s, "turn one create sibling", "recommended")
+	// Authorize outsideParent as an approved sibling location for this chat session.
+	if !s.h.Sessions.SandboxWriteRoot.GrantChat(s.session, outsideParent, "grant-sibling-write", "cp-sibling", nil) {
+		t.Fatal("grant chat write root for sibling parent")
+	}
+	if _, err := s.h.Sessions.GrantedPath.Grant(s.session, grantedpath.Grant{
+		ID: "grant-sibling-path", Path: outsideParent, Mode: grantedpath.ModeWrite, Tree: true,
+	}); err != nil {
+		t.Fatalf("grant sibling path authority: %v", err)
+	}
+
+	// Turn 1: Native agent adds and edits an authorized sibling checkout with zero extra model calls.
+	submitPromptWithApprovals(t, s, "turn one create sibling")
 	if got := counted.calls.Load(); got != 2 {
 		t.Fatalf("model calls after turn 1 = %d, want 2", got)
+	}
+	var turn1State string
+	testutil.FailErr(t, "read turn 1 state", s.h.DB.QueryRowContext(
+		t.Context(),
+		`SELECT p.state FROM invocation_programs p JOIN invocation_receipts r ON r.id = p.parent_receipt_id WHERE r.session_id = ? AND r.tool_call_id = 'call-turn-1'`,
+		s.session,
+	).Scan(&turn1State))
+	if turn1State != "completed" {
+		t.Fatalf("turn 1 program state = %q, want completed", turn1State)
 	}
 
 	// Turn 2: Next independent command runs without cwd override and stays in primary checkout.
@@ -293,10 +313,66 @@ func TestWorktreeQualificationSaveBarrierExternalContinuityAndLifecycle(t *testi
 			}
 		}))
 
+		// Partial-root project exposes only packages/ui across sibling checkouts and refuses outside paths.
+		partialProj, err := h.Server.Sources.Workspace.ProjectRegistry.Create(t.Context(), project.CreateParams{
+			Roots: []project.AttachRootParams{
+				{Path: filepath.Join(primaryDir, "packages", "ui"), Label: "ui-slice"},
+			},
+		})
+		testutil.FailErr(t, "create partial-root project", err)
+		uiRootID := partialProj.Roots[0].ID
+		partialRepos := doJSON[wire.GitReposView](t, h, http.MethodGet, "/v1/projects/"+partialProj.ID+"/git/repos", nil, http.StatusOK)
+		if len(partialRepos.Repos) != 1 {
+			t.Fatalf("partial-root repos = %+v", partialRepos.Repos)
+		}
+		partialRepoID := partialRepos.Repos[0].RepoID
+		partialWTView := doJSON[wire.GitWorktreesView](t, h, http.MethodGet, "/v1/projects/"+partialProj.ID+"/git/repos/"+partialRepoID+"/worktrees", nil, http.StatusOK)
+		var partialSliceWT wire.GitWorktreeEntry
+		for _, entry := range partialWTView.Worktrees {
+			if entry.Branch == "feat/partial" {
+				partialSliceWT = entry
+			}
+		}
+		if partialSliceWT.WorktreeID == "" || !partialSliceWT.Available {
+			t.Fatalf("partial-root project missing feat/partial in %+v", partialWTView.Worktrees)
+		}
+		doJSON[wire.EditorDocument](t, h, http.MethodPost, "/v1/projects/"+partialProj.ID+"/editor-documents?worktree_id="+partialSliceWT.WorktreeID, wire.OpenEditorDocumentRequest{
+			ClientID: "win-partial",
+			RootID:   uiRootID,
+			Path:     "view.ts",
+		}, http.StatusCreated)
+		unauthParentDoc := doRaw(t, h, http.MethodPost, "/v1/projects/"+partialProj.ID+"/editor-documents?worktree_id="+partialSliceWT.WorktreeID, wire.OpenEditorDocumentRequest{
+			ClientID: "win-partial",
+			RootID:   uiRootID,
+			Path:     "../notes.txt",
+		})
+		if unauthParentDoc.Code == http.StatusOK || unauthParentDoc.Code == http.StatusCreated {
+			t.Fatalf("partial root unexpectedly allowed ungranted parent file in sibling checkout: %d", unauthParentDoc.Code)
+		}
+
+		// One-file outside capture authorizes only that captured file, not sibling files in the same checkout.
+		partialSess, err := h.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: partialProj.ID}, partialProj.ID)
+		testutil.FailErr(t, "create partial session", err)
+		oneFileCapture := doJSON[wire.OpenedOutsideFile](t, h, http.MethodPost, "/v1/projects/"+partialProj.ID+"/source/outside-files", wire.OpenOutsideFileRequest{
+			SessionID: partialSess.ID,
+			Path:      filepath.Join(extShellDir, "notes.txt"),
+		}, http.StatusOK)
+		doJSON[wire.EditorDocument](t, h, http.MethodPost, "/v1/projects/"+partialProj.ID+"/editor-documents", wire.OpenEditorDocumentRequest{
+			ClientID: "win-partial",
+			FileID:   oneFileCapture.FileID,
+		}, http.StatusCreated)
+		ungrantedSiblingRes := doRaw(t, h, http.MethodPost, "/v1/projects/"+partialProj.ID+"/editor-documents", wire.OpenEditorDocumentRequest{
+			ClientID: "win-partial",
+			RootID:   oneFileCapture.RootID,
+			Path:     "packages/ui/view.ts",
+		})
+		if ungrantedSiblingRes.Code == http.StatusOK || ungrantedSiblingRes.Code == http.StatusCreated {
+			t.Fatalf("one-file outside grant unexpectedly exposed ungranted file in same checkout: %d", ungrantedSiblingRes.Code)
+		}
+
 		proj, err := h.Server.Sources.Workspace.ProjectRegistry.Create(t.Context(), project.CreateParams{
 			Roots: []project.AttachRootParams{
 				{Path: primaryDir, Label: "primary"},
-				{Path: filepath.Join(partialSiblingDir, "packages", "ui"), Label: "ui-slice"},
 				{Path: barrierSiblingDir, Label: "barrier-wt"},
 			},
 		})
@@ -315,14 +391,12 @@ func TestWorktreeQualificationSaveBarrierExternalContinuityAndLifecycle(t *testi
 		}
 
 		wtView := doJSON[wire.GitWorktreesView](t, h, http.MethodGet, "/v1/projects/"+projID+"/git/repos/"+repoID+"/worktrees", nil, http.StatusOK)
-		var partialWT, barrierWT wire.GitWorktreeEntry
+		var barrierWT wire.GitWorktreeEntry
 		for _, entry := range wtView.Worktrees {
 			if strings.Contains(entry.Path, "wt-fake-pointer") || strings.Contains(entry.Path, "vendor-unrelated") {
 				t.Fatalf("unrelated or fake checkout adopted into inventory: %+v", entry)
 			}
 			switch entry.Branch {
-			case "feat/partial":
-				partialWT = entry
 			case "feat/ext-shell":
 				extShellID = entry.WorktreeID
 				if entry.UsedByChat || entry.CreatedByChat {
@@ -332,24 +406,8 @@ func TestWorktreeQualificationSaveBarrierExternalContinuityAndLifecycle(t *testi
 				barrierWT = entry
 			}
 		}
-		if partialWT.WorktreeID == "" || !partialWT.Available || extShellID == "" || barrierWT.WorktreeID == "" {
+		if extShellID == "" || barrierWT.WorktreeID == "" {
 			t.Fatalf("missing expected checkouts in %+v", wtView.Worktrees)
-		}
-
-		// Partial root grants packages/ui/view.ts in partialWT, while refusing root-level notes.txt outside the slice.
-		uiRootID := proj.Roots[1].ID
-		doJSON[wire.EditorDocument](t, h, http.MethodPost, "/v1/projects/"+projID+"/editor-documents?worktree_id="+partialWT.WorktreeID, wire.OpenEditorDocumentRequest{
-			ClientID: "win-1",
-			RootID:   uiRootID,
-			Path:     "view.ts",
-		}, http.StatusCreated)
-		unauthRes := doRaw(t, h, http.MethodPost, "/v1/projects/"+projID+"/editor-documents?worktree_id="+partialWT.WorktreeID, wire.OpenEditorDocumentRequest{
-			ClientID: "win-1",
-			RootID:   primaryRootID,
-			Path:     "notes.txt",
-		})
-		if unauthRes.Code == http.StatusOK || unauthRes.Code == http.StatusCreated {
-			t.Fatalf("partial root unexpectedly allowed ungranted parent file in sibling checkout")
 		}
 
 		// Open barrierSiblingDir notes.txt in two windows, edit, and replace directory during pending save commit.
