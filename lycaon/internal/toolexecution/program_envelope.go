@@ -78,11 +78,11 @@ func (e *Executor) PrepareProgramEnvelope(
 		return nil, fmt.Errorf("validated program identity changed")
 	}
 	prepared := &PreparedProgramEnvelope{
-		program:      program,
-		sourceDigest: source,
+		program:       program,
+		sourceDigest:  source,
 		catalogDigest: catalog,
-		frame:        frame,
-		releaseFrame: end,
+		frame:         frame,
+		releaseFrame:  end,
 	}
 	if update == nil {
 		held = true
