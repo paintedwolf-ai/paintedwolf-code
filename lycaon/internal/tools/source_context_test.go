@@ -24,7 +24,7 @@ func (s *stubCheckoutUsageRecorder) NotifyCheckoutChange(_ context.Context, _ To
 	s.notified = append(s.notified, repoPath)
 }
 
-func (s *stubCheckoutUsageRecorder) ResolvePathCheckout(_ context.Context, _ string, targetPath string) (ResolvedCheckoutPath, bool) {
+func (s *stubCheckoutUsageRecorder) ResolvePathCheckout(_ string, targetPath string) (ResolvedCheckoutPath, bool) {
 	out, ok := s.resolved[targetPath]
 	return out, ok
 }

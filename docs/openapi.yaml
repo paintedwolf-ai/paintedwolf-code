@@ -34739,6 +34739,7 @@ components:
           description: Durable source branch for this root; omitted for the primary tree. Roots unaffected by a worktree binding retain their primary branch.
         repo_id:
           type: string
+          pattern: ^[a-zA-Z0-9_-]+$
           description: Repository identifier when this root belongs to a Git repository.
         worktree_id:
           type: string

@@ -21,10 +21,10 @@ import { fileVersionFromComparison, type FileVersionView } from "../history/file
 import { resolveCheckoutRootPath, worktreeIdFromBranchId } from "./files-checkout-scope.ts";
 import { outsideHostPath } from "./outside-namespace.ts";
 
-export type DiffSideKind = "before" | "after";
-export type GitDiffStageKind = "working" | "staged" | "unstaged";
+type DiffSideKind = "before" | "after";
+type GitDiffStageKind = "working" | "staged" | "unstaged";
 
-export type VerifiedLiveFileOpenTarget = {
+type VerifiedLiveFileOpenTarget = {
   kind: "live";
   projectId: string;
   repoId?: string;
@@ -40,7 +40,7 @@ export type VerifiedLiveFileOpenTarget = {
   selectCheckout?: boolean;
 };
 
-export type HistoricalRevisionBinding =
+type HistoricalRevisionBinding =
   | {
       kind: "git-blobs";
       rootId: string;
@@ -81,7 +81,7 @@ export type HistoricalRevisionBinding =
       reason: string;
     };
 
-export type VerifiedHistoricalDiffOpenTarget = {
+type VerifiedHistoricalDiffOpenTarget = {
   kind: "historical-diff";
   projectId: string;
   repoId?: string;
@@ -97,14 +97,14 @@ export type VerifiedHistoricalDiffOpenTarget = {
   binding: HistoricalRevisionBinding;
 };
 
-export type AmbiguousLegacyFileOpenTarget = {
+type AmbiguousLegacyFileOpenTarget = {
   kind: "ambiguous";
   projectId: string;
   path: string;
   candidates: readonly NavigationTarget[];
 };
 
-export type VerifiedFileOpenTarget =
+type VerifiedFileOpenTarget =
   | VerifiedLiveFileOpenTarget
   | VerifiedHistoricalDiffOpenTarget
   | AmbiguousLegacyFileOpenTarget;
@@ -153,7 +153,7 @@ export function fileOpenTarget(
   };
 }
 
-export function gitChangeNavigationTarget(args: {
+function gitChangeNavigationTarget(args: {
   projectId: string;
   repoId?: string;
   worktreeId?: string;
@@ -349,6 +349,7 @@ export function activityFileOpenTarget(args: {
   line?: number;
   endLine?: number;
   locations?: readonly NavigationTarget[];
+  rootRefs?: readonly { id: string; label?: string }[];
   sessionId?: string;
   fold?: FileEditFold;
   revisionIndex?: number | null;
@@ -449,8 +450,13 @@ export function activityFileOpenTarget(args: {
   }
   if (locations.length > 1) {
     const requestedPath = args.path?.trim() ?? "";
+    const norm = requestedPath.replace(/\\/g, "/");
     const exact = requestedPath
-      ? locations.filter((loc) => loc.path === requestedPath || requestedPath.replace(/\\/g, "/").endsWith(`/${loc.path}`))
+      ? locations.filter((loc) => {
+          if (loc.path === norm || norm.endsWith(`/${loc.path}`)) return true;
+          const rootLabel = args.rootRefs?.find((r) => r.id === loc.root_id)?.label;
+          return Boolean(rootLabel && norm === `@${rootLabel}/${loc.path}`);
+        })
       : locations;
     if (exact.length === 1) {
       const loc = exact[0]!;
@@ -670,7 +676,7 @@ function selectorForHistoricalBinding(binding: HistoricalRevisionBinding): {
   }
 }
 
-export function unavailableHistoricalVersionView(
+function unavailableHistoricalVersionView(
   target: Pick<VerifiedHistoricalDiffOpenTarget, "rootId" | "path" | "op" | "revision">,
   reason: string,
 ): FileVersionView {
@@ -692,7 +698,7 @@ export function unavailableHistoricalVersionView(
   };
 }
 
-export type OpenVerifiedFileTargetResult =
+type OpenVerifiedFileTargetResult =
   | { status: "opened-live"; result: OpenSourceLocationResult }
   | { status: "opened-historical"; version: FileVersionView; snapshot?: ComparisonSnapshot }
   | { status: "ambiguous"; candidates: readonly NavigationTarget[] };

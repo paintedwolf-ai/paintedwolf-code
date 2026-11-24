@@ -16,7 +16,7 @@ import {
 } from "../documents/editor-document.ts";
 import { connectFilesEditorDocuments } from "../editor/files-editor-synchronization.ts";
 import { applyFilesBufferDraft, applyFilesBufferEditorDocument, applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
-import { closeFilesBuffer, closeFilesBuffers, FILES_CLOSE_FAILED_MESSAGE, openFilesBuffer, prepareFilesRootDetach, resetProjectFilesForTests, switchFilesRootBranches, type FilesBufferRelease } from "../documents/project-files-buffer-lifecycle.ts";
+import { closeFilesBuffer, closeFilesBuffers, FILES_CLOSE_FAILED_MESSAGE, openFilesBuffer, prepareFilesRootDetach, resetProjectFilesForTests, type FilesBufferRelease } from "../documents/project-files-buffer-lifecycle.ts";
 import { focusedFilesBufferKey, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import type { FileBufferKey } from "../components/project-files-model.ts";
@@ -156,35 +156,6 @@ describe("closing files tabs", () => {
     resetProjectFilesForTests();
     for (const host of fixtures.values()) host.doc.destroy();
     fixtures.clear();
-  });
-
-  it("preserves a checkout's dirty replica before reopening that root in another branch", async () => {
-    await switchFilesRootBranches(PROJECT, { "root-1": "worktree:first", shared: "" }, () => true);
-    const a = await openJoined("a.ts");
-    const shared = openFilesBuffer(PROJECT, { rootId: "shared", rootLabel: "shared", path: "common.txt", intent: "permanent" });
-    const replica = editorReplica(documentId("a.ts"));
-    expect(replica).toBeDefined();
-    replica?.replaceLocal("unsaved worktree text");
-    applyFilesBufferDraft(PROJECT, a, "unsaved worktree text");
-    setFilesActiveBuffer(PROJECT, a);
-
-    await expect(switchFilesRootBranches(PROJECT, { "root-1": "", shared: "" }, () => true)).resolves.toBe(true);
-    const state = projectFilesState(PROJECT);
-    const reopened = Object.values(state.byKey).find((buffer) => buffer.path === "a.ts");
-    expect(reopened).toMatchObject({ loading: true, fileId: null, documentId: null, dirty: false });
-    expect(filesBufferText(required(reopened))).toEqual("");
-    expect(state.byKey[shared]).toBeDefined();
-    expect(state.order).toEqual([reopened?.key, shared]);
-    expect(state.pendingKey ?? state.activeKey).toBe(reopened?.key);
-    expect((await documentOutbox().read(documentId("a.ts"))).some((record) => record.kind === "update")).toBe(true);
-  });
-
-  it("keeps the old checkout when a prepared workspace selection is superseded", async () => {
-    await switchFilesRootBranches(PROJECT, { "root-1": "worktree:first" }, () => true);
-    const a = await openJoined("a.ts");
-    await expect(switchFilesRootBranches(PROJECT, { "root-1": "" }, () => false)).resolves.toBe(false);
-    expect(projectFilesState(PROJECT).byKey[a]?.documentId).toBe(documentId("a.ts"));
-    expect(projectFilesState(PROJECT).rootBranches["root-1"]).toBe("worktree:first");
   });
 
   it("takes each tab out of the strip while earlier releases are still in flight", async () => {

@@ -22,7 +22,7 @@ type ResolvedCheckoutPath struct {
 type CheckoutUsageRecorder interface {
 	RecordCheckoutActivity(ctx context.Context, tc ToolContext, targetPath string, activityID string, relation CheckoutUsageRelation) string
 	NotifyCheckoutChange(ctx context.Context, tc ToolContext, repoPath string)
-	ResolvePathCheckout(ctx context.Context, projectID, targetPath string) (ResolvedCheckoutPath, bool)
+	ResolvePathCheckout(projectID, targetPath string) (ResolvedCheckoutPath, bool)
 }
 
 // RecordCheckoutCreated records that an authorized command created a registered checkout.

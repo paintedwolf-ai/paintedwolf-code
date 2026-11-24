@@ -30,7 +30,7 @@ export type WorktreeRowView = {
   changeSummary?: string;
 };
 
-export type GroupedWorktreeRows = {
+type GroupedWorktreeRows = {
   project: WorktreeRowView[];
   chat: WorktreeRowView[];
   other: WorktreeRowView[];

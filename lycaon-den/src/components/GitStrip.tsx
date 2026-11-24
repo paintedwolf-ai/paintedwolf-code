@@ -33,7 +33,12 @@ import {
   type GitScope,
 } from "./git-repo-scope.ts";
 import { SourcePathLink } from "./source/SourcePathLink.tsx";
-import { gitChangeNavigationTarget } from "../files/source/file-open-target.ts";
+import {
+  gitChangeOpenTarget,
+  gitDiffSideOpenTarget,
+  openVerifiedFileTarget,
+} from "../files/source/file-open-target.ts";
+import { getLycaonClient } from "../platform/connection/app-connection.ts";
 import { createModalFocusTrap } from "../platform/interaction/modal-focus-trap.ts";
 import {
   type LoadState,
@@ -86,6 +91,37 @@ function statusFileChange(code: string): "added" | "deleted" | undefined {
   const label = statusLabel(code);
   if (label === "deleted") return "deleted";
   return label === "new" || label === "added" ? "added" : undefined;
+}
+
+async function openGitChangeDiff(
+  projectId: string,
+  repoId: string,
+  worktreeId: string | undefined,
+  file: GitFileEntry,
+  sessionId?: string,
+): Promise<void> {
+  const client = getLycaonClient();
+  if (!client || !repoId) return;
+  const isStagedOnly = file.status.length >= 2 && file.status[0] !== " " && file.status[0] !== "?" && file.status[1] === " ";
+  const stage = isStagedOnly ? "staged" : "unstaged";
+  const diff = await client.getGitDiff(projectId, repoId, {
+    ...(sessionId ? { session_id: sessionId } : {}),
+    ...(worktreeId ? { worktree_id: worktreeId } : {}),
+    mode: stage,
+    path: file.path,
+  });
+  const item = diff.files[0];
+  if (!item) return;
+  const target = gitDiffSideOpenTarget({
+    projectId,
+    repoId,
+    worktreeId: diff.worktree_id ?? worktreeId,
+    stage,
+    side: "after",
+    item,
+    headSha: diff.head_sha,
+  });
+  if (target) await openVerifiedFileTarget(target, { client, sessionId });
 }
 
 function entryChangeCount(entry: GitRepoEntry): number {
@@ -785,33 +821,67 @@ export function GitStrip(props: Props) {
                       }
                       keyed
                     >
-                      {(pid) => (
-                        <SourcePathLink
-                          truncate
-                          projectId={pid}
-                          path={f.root_relative_path || f.path}
-                          repoId={worktreeRepoId() || undefined}
-                          worktreeId={status()?.worktree_id}
-                          navigationTarget={
-                            gitChangeNavigationTarget({
-                              projectId: pid,
-                              repoId: worktreeRepoId(),
-                              worktreeId: status()?.worktree_id,
-                              file: f,
-                            }) ?? undefined
-                          }
-                          change={statusFileChange(f.status)}
-                          rootRefs={rootsForFile(f, props.rootRefs)}
-                          chatDestination={
-                            props.sessionId?.trim()
-                              ? {
-                                  projectId: pid,
-                                  sessionId: props.sessionId.trim(),
+                      {(pid) => {
+                        const liveTarget = () =>
+                          gitChangeOpenTarget({
+                            projectId: pid,
+                            repoId: worktreeRepoId(),
+                            worktreeId: status()?.worktree_id,
+                            file: f,
+                          });
+                        return (
+                          <>
+                            <SourcePathLink
+                              truncate
+                              projectId={pid}
+                              path={f.root_relative_path || f.path}
+                              repoId={worktreeRepoId() || undefined}
+                              worktreeId={status()?.worktree_id}
+                              navigationTarget={
+                                liveTarget()?.rootId
+                                  ? {
+                                      project_id: pid,
+                                      root_id: liveTarget()!.rootId!,
+                                      path: liveTarget()!.path,
+                                      entry_kind: "file",
+                                      ...(liveTarget()?.repoId ? { repo_id: liveTarget()!.repoId } : {}),
+                                      ...(liveTarget()?.worktreeId ? { worktree_id: liveTarget()!.worktreeId } : {}),
+                                    }
+                                  : undefined
+                              }
+                              change={statusFileChange(f.status)}
+                              rootRefs={rootsForFile(f, props.rootRefs)}
+                              chatDestination={
+                                props.sessionId?.trim()
+                                  ? {
+                                      projectId: pid,
+                                      sessionId: props.sessionId.trim(),
+                                    }
+                                  : null
+                              }
+                            />
+                            <Show when={worktreeRepoId()}>
+                              <button
+                                type="button"
+                                class="den-chat-content-link git-strip__file-diff"
+                                data-testid="git-file-diff"
+                                aria-label={`Open diff for ${f.path}`}
+                                onClick={() =>
+                                  void openGitChangeDiff(
+                                    pid,
+                                    worktreeRepoId(),
+                                    status()?.worktree_id,
+                                    f,
+                                    props.sessionId,
+                                  )
                                 }
-                              : null
-                          }
-                        />
-                      )}
+                              >
+                                Diff
+                              </button>
+                            </Show>
+                          </>
+                        );
+                      }}
                     </Show>
                   </li>
                 );

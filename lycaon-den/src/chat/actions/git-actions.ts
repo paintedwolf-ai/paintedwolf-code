@@ -3,10 +3,8 @@ import type { GitDiscardGuard, GitRemoteRef } from "../../api/http-capabilities/
 import type {
   GitBranchEntry,
   GitCommitRequest,
-  GitDiffView,
   GitMutationResult,
   GitRepoEntry,
-  GitStashEntry,
   GitStashRequest,
   GitWorktreeLandResult,
   GitWorktreeView,
@@ -124,40 +122,6 @@ export async function listWorktrees(
 ): Promise<GitWorktreesView | undefined> {
   if (!projectId.trim() || !repoId.trim()) return undefined;
   return client.listGitWorktrees(projectId, repoId, sessionId);
-}
-
-export async function getCheckoutDiff(
-  client: LycaonClient,
-  projectId: string,
-  repoId: string,
-  options?: {
-    sessionId?: string;
-    worktreeId?: string;
-    mode?: "unstaged" | "staged" | "commit";
-    path?: string;
-  },
-): Promise<GitDiffView> {
-  return client.getGitDiff(projectId, repoId, {
-    session_id: options?.sessionId,
-    worktree_id: options?.worktreeId,
-    mode: options?.mode,
-    path: options?.path,
-  });
-}
-
-export async function listStashes(
-  client: LycaonClient,
-  projectId: string,
-  repoId: string,
-  sessionId?: string,
-  worktreeId?: string,
-): Promise<GitStashEntry[]> {
-  if (!projectId.trim() || !repoId.trim()) return [];
-  const view = await client.listGitStashes(projectId, repoId, {
-    session_id: sessionId,
-    worktree_id: worktreeId,
-  });
-  return view.stashes;
 }
 
 export async function listBranches(

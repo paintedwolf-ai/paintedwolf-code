@@ -103,6 +103,7 @@ type Inventory struct {
 	git       Lister
 	inspector Inspector
 	now       func() time.Time
+	baseCtx   context.Context
 
 	mu        sync.Mutex
 	slots     map[repoKey]*repoSlot
@@ -137,6 +138,7 @@ func New(database db.Handle, opts Options) *Inventory {
 		git:       gitLister,
 		inspector: inspector,
 		now:       nowFn,
+		baseCtx:   context.Background(),
 		slots:     make(map[repoKey]*repoSlot),
 		witnesses: make(map[repoKey]map[string]liveWitness),
 		moves:     make(map[repoKey][]MoveReceipt),
