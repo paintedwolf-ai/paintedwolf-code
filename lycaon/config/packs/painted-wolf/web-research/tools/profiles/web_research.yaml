@@ -15,8 +15,6 @@ tools:
   scan_query: sticky
   skills_read: sticky
   wait: sticky
-  watch: sticky
-  watch_control: true
 deny_tools:
   - write
   - edit
@@ -31,5 +29,4 @@ deny_tools:
   - handoff_*
   - scan_pack
   - task
-wait_conditions: [watch_match, http_ready, port_ready]
-watch_conditions: [http_ready, port_ready, timer]
+wait_conditions: [http_ready, port_ready]
