@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/curationctx"
@@ -124,7 +125,7 @@ func requestScreenDigest(req modelcall.CompletionRequest) [32]byte {
 		_, _ = h.Write([]byte(s))
 	}
 	writeStr(req.Model)
-	writeStr(string(req.Think))
+	writeStr(strconv.Itoa(int(req.Think)))
 	writeStr(string(req.Composition))
 	if req.ThinkingOverride != nil {
 		if raw, err := json.Marshal(req.ThinkingOverride); err == nil {
