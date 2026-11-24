@@ -217,26 +217,39 @@ func (s *Store) Recover(ctx context.Context) error {
 	if !s.Configured() {
 		return nil
 	}
+	return recoverStore(ctx, s)
+}
+
+func recoverStore(ctx context.Context, s *Store) error {
 	s.heap.Reset()
+	if err := recoverLiveWatches(ctx, s); err != nil {
+		return err
+	}
+	if err := recoverArmedLeases(ctx, s); err != nil {
+		return err
+	}
+	return s.AdvanceDue(ctx)
+}
+
+func recoverLiveWatches(ctx context.Context, s *Store) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT watch_id, expires_at FROM watch_registrations WHERE state = 'live'`)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id, expStr string
 		if err := rows.Scan(&id, &expStr); err != nil {
-			_ = rows.Close()
 			return err
 		}
 		if exp, err := time.Parse(time.RFC3339Nano, expStr); err == nil {
 			s.heap.Upsert(KindWatchExpiry, id, exp)
 		}
 	}
-	_ = rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
+	return rows.Err()
+}
 
+func recoverArmedLeases(ctx context.Context, s *Store) error {
 	leaseRows, err := s.db.QueryContext(ctx, `SELECT wl.id, COALESCE(wl.deadline_at, ''), COALESCE(MIN(wws.expires_at), '')
 		FROM wait_leases wl
 		LEFT JOIN watch_wait_selections wws ON wws.lease_id = wl.id
@@ -245,10 +258,10 @@ func (s *Store) Recover(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer func() { _ = leaseRows.Close() }()
 	for leaseRows.Next() {
 		var leaseID, deadlineStr, minExpStr string
 		if err := leaseRows.Scan(&leaseID, &deadlineStr, &minExpStr); err != nil {
-			_ = leaseRows.Close()
 			return err
 		}
 		var due time.Time
@@ -266,9 +279,5 @@ func (s *Store) Recover(ctx context.Context) error {
 			s.heap.Upsert(KindWaitDeadline, leaseID, due)
 		}
 	}
-	_ = leaseRows.Close()
-	if err := leaseRows.Err(); err != nil {
-		return err
-	}
-	return s.AdvanceDue(ctx)
+	return leaseRows.Err()
 }

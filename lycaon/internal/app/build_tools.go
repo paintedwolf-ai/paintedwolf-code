@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/blueprint"
@@ -11,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -45,28 +48,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	}
 	waitStore := &awaitstore.Store{DB: b.storage.Database}
 	subscriptions := b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions
-	var watchStore *watch.Store
-	if b.storage.Database != nil {
-		watchStore = watch.NewStore(b.storage.Database, nil)
-		if b.sessions != nil && b.sessions.Manager != nil && b.sessions.Manager.Processes != nil {
-			processes := b.sessions.Manager.Processes
-			processes.SetWatches(watchStore)
-			watchStore.SetProcessLookup(func(_ context.Context, sessionID, handle string) (watch.ProcessCompletionFact, bool, error) {
-				fact, ok := processes.CompletedReport(sessionID, handle)
-				return fact, ok, nil
-			})
-		}
-		watchStore.SetLeaseWakeHandler(func(ctx context.Context, lease awaitstore.Lease, winner awaitstore.Condition) {
-			if lease.WorkerJobID != "" {
-				subscriptions.Waits.BreakSleep(ctx, lease.SessionID, winner.Kind, true)
-				if b.workerRuntime != nil && b.workerRuntime.Queue != nil {
-					_, _ = b.workerRuntime.Queue.ResumeReadyWaits(ctx)
-				}
-				return
-			}
-			subscriptions.Deliveries.NotifyWatchLeaseResolved(ctx, lease.SessionID, lease.ID, winner)
-		})
-	}
+	watchStore := newCoordinatorWatchStore(b.storage.Database, b.sessions, subscriptions, b.workerRuntime)
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
 		Store: waitStore, Watches: watchStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
@@ -88,6 +70,41 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 		return fmt.Errorf("serve wiring: %w", err)
 	}
 	return nil
+}
+
+func newCoordinatorWatchStore(
+	database *db.Store,
+	sessRuntime *sessions.Runtime,
+	subscriptions *loopwake.WaitSubscriptions,
+	workerRuntime *workerruntime.Runtime,
+) *watch.Store {
+	if database == nil {
+		return nil
+	}
+	watchStore := watch.NewStore(database, nil)
+	if sessRuntime != nil && sessRuntime.Manager != nil && sessRuntime.Manager.Processes != nil {
+		processes := sessRuntime.Manager.Processes
+		processes.SetWatches(watchStore)
+		watchStore.SetProcessLookup(func(_ context.Context, sessionID, handle string) (watch.ProcessCompletionFact, bool, error) {
+			fact, ok := processes.CompletedReport(sessionID, handle)
+			return fact, ok, nil
+		})
+	}
+	watchStore.SetLeaseWakeHandler(func(ctx context.Context, lease awaitstore.Lease, winner awaitstore.Condition) {
+		if lease.WorkerJobID != "" {
+			if subscriptions != nil && subscriptions.Waits != nil {
+				subscriptions.Waits.BreakSleep(ctx, lease.SessionID, winner.Kind, true)
+			}
+			if workerRuntime != nil && workerRuntime.Queue != nil {
+				_, _ = workerRuntime.Queue.ResumeReadyWaits(ctx)
+			}
+			return
+		}
+		if subscriptions != nil && subscriptions.Deliveries != nil {
+			subscriptions.Deliveries.NotifyWatchLeaseResolved(ctx, lease.SessionID, lease.ID, winner)
+		}
+	})
+	return watchStore
 }
 
 func (b *serveBuilder) registerCoordinatorTools() error {
