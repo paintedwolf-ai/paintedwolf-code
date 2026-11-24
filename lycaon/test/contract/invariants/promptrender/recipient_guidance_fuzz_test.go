@@ -9,7 +9,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
@@ -210,7 +215,7 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 	}
 
 	// Trailing bytes past fuzzDecoderByteLimit must produce the exact same decoded case!
-	withTrailing := append(slices.Clone(coordSeed), 0xDE, 0xAD, 0xBE, 0xEF)
+	withTrailing := append(slices.Clone(coordSeed), 0x00, 0xDE, 0xAD, 0xBE, 0xEF)
 	repTrailing, err := executeFuzzRecipientCase(t.Context(), env, withTrailing, wsDir, nil)
 	if err != nil || repTrailing.TurnACoords != repCoord.TurnACoords || repTrailing.TurnBCoords != repCoord.TurnBCoords {
 		t.Fatalf("decoder did not ignore trailing bytes past limit: %+v vs %+v (err=%v)", repTrailing, repCoord, err)
@@ -337,7 +342,7 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 		"guidance/command-jobs.md": maskedJobs,
 	}, map[string]string{"guidance/command-jobs": "acme/fuzz-masked-fault"})
 	maskedStock := cloneStockWithCatalog(t, env.overlays[0].stock, maskedEff)
-	maskedBundle := rebuildFuzzBundleForCatalog(env.overlays[0], maskedStock)
+	maskedBundle := rebuildFuzzBundleForCatalog(t, env.overlays[0], maskedStock)
 
 	for lbl, b := range map[string][]byte{
 		"baseline_build_git":    baseBytes,
@@ -377,6 +382,8 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 		t.Fatalf("committed fuzz corpus %s drifted:\ngot:  %q\nwant: %q", corpusRel, string(diskCorpus), wantCorpus)
 	}
 
+	oarCtrlSummary := verifyOARTwoTurnDeliveredRefusalControls(t, env, wsDir, true)
+
 	if outDir := strings.TrimSpace(os.Getenv("PW_INTERACTION_LEDGER_DIR")); outDir != "" {
 		_ = os.MkdirAll(outDir, 0o755)
 		summary := map[string]any{
@@ -388,6 +395,7 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 			"fault_injected_report":       faultRep,
 			"fault_injected_error":        faultErr.Error(),
 			"corrected_control_report":    correctedRep,
+			"oar_delivered_refusal":       oarCtrlSummary,
 			"total_confirmed_executions":  env.confirmedRuns.Load(),
 		}
 		raw, _ := json.MarshalIndent(summary, "", "  ")
@@ -395,12 +403,301 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 	}
 }
 
-func rebuildFuzzBundleForCatalog(base fuzzOverlayBundle, st *promptrender.Stock) fuzzOverlayBundle {
+// TestOARTwoTurnFuzzDeliveredRefusalControls exercises the identical-fix
+// delivered-refusal controls, corrected stock neighbor, and 4-way contribution
+// distinction in isolation.
+func TestOARTwoTurnFuzzDeliveredRefusalControls(t *testing.T) {
+	env, err := loadFuzzEnvOnce()
+	if err != nil {
+		t.Fatalf("loadFuzzEnvOnce: %v", err)
+	}
+	verifyOARTwoTurnDeliveredRefusalControls(t, env, t.TempDir(), false)
+}
+
+func verifyOARTwoTurnDeliveredRefusalControls(t *testing.T, env *fuzzWorkerEnv, wsDir string, sweepAll bool) map[string]any {
+	t.Helper()
+	d := env.domains
+	stockBundle := env.overlays[0]
+
+	ruleIndex := func(shortOrQual string) uint16 {
+		for i, r := range stockBundle.rejRules {
+			if r.ID == shortOrQual || r.Qualified() == shortOrQual {
+				if i > 65535 {
+					t.Fatalf("rule index %d exceeds uint16 selector", i)
+				}
+				return uint16(i)
+			}
+		}
+		t.Fatalf("missing OAR tool.rejected rule %q in bundle (%d rules)", shortOrQual, len(stockBundle.rejRules))
+		return 0
+	}
+	withItemSel16 := func(b []byte, sel uint16) []byte {
+		out := slices.Clone(b)
+		out[14] = uint8(sel & 0xFF)
+		if sel > 255 {
+			out = append(out[:20], uint8(sel>>8))
+		}
+		return out
+	}
+
+	if sweepAll {
+		// 1. Sweep every stock tool.rejected rule across coordinator and worker two-turn fuzz seeds.
+		for i, r := range stockBundle.rejRules {
+			if i > 65535 {
+				t.Fatalf("rule index %d exceeds uint16 selector", i)
+			}
+			cSeed := withItemSel16(encodeCoordinatorFuzzBytes(
+				d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+				hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
+				gate.PostureBalanced, hoststate.TempScratchOnly, hoststate.MCPNone,
+				2, 0, 1, 1, 0, 0, 0,
+			), uint16(i))
+			if cRep, cErr := executeFuzzRecipientCase(t.Context(), env, cSeed, wsDir, nil); cErr != nil || !cRep.PropertyExecuted {
+				t.Errorf("stock coordinator OAR fuzz failed on %s: rep=%+v err=%v", r.Qualified(), cRep, cErr)
+			}
+			wSeed := withItemSel16(encodeWorkerFuzzBytes(
+				d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
+				hoststate.BranchIsolatedWorker, hoststate.WorkerLoadingAllLoaded,
+				2, 0, 0, 0, 0,
+			), uint16(i))
+			if wRep, wErr := executeFuzzRecipientCase(t.Context(), env, wSeed, wsDir, nil); wErr != nil || !wRep.PropertyExecuted {
+				t.Errorf("stock worker OAR fuzz failed on %s: rep=%+v err=%v", r.Qualified(), wRep, wErr)
+			}
+		}
+		if t.Failed() {
+			t.FailNow()
+		}
+	}
+
+	// 2. Deterministic control retaining byte-for-byte identical fix copy while changing
+	// an actionable next step in delivered output (Next: / instead), plus passing stock neighbor.
+	httpIdx := ruleIndex("HTTP_REQUEST_FAILED")
+	stickyIdx := uint8(slices.Index(d.WorkerLoadings, hoststate.WorkerLoadingStickyOnly))
+	httpTransSeed := withItemSel16(encodeWorkerFuzzBytes(
+		d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
+		hoststate.BranchIsolatedWorker, hoststate.WorkerLoadingAllLoaded,
+		2, 0, 1,
+		// Turn A offers fetch_url; Turn B sticky-only loading keeps command and withholds fetch_url.
+		3, stickyIdx,
+	), httpIdx)
+
+	origHTTPBytes, _, ok := stockBundle.stock.Catalog.UnitContent("policy/HTTP_REQUEST_FAILED")
+	if !ok {
+		t.Fatal("missing stock policy/HTTP_REQUEST_FAILED")
+	}
+	origHTTP := string(origHTTPBytes)
+	if !strings.Contains(origHTTP, "instead: '{{ paintedwolf.next_steps }}'") {
+		t.Fatalf("unexpected stock HTTP_REQUEST_FAILED instead line:\n%s", origHTTP)
+	}
+
+	// Control A: identical fix copy; delivered Next: step calls unoffered fetch_url on Turn B.
+	badActionHTTP := strings.Replace(
+		origHTTP,
+		"instead: '{{ paintedwolf.next_steps }}'",
+		"instead: '{{ paintedwolf.next_steps }} Or call `fetch_url(url=\"https://example.com\")`.'",
+		1,
+	)
+	badActionEff := replaceStockCatalogUnits(t, map[string]string{"policy/HTTP_REQUEST_FAILED": badActionHTTP})
+	badActionBundle := rebuildFuzzBundleForCatalog(t, stockBundle, cloneStockWithCatalog(t, stockBundle.stock, badActionEff))
+	badRule, _ := badActionBundle.oarRules.Get("HTTP_REQUEST_FAILED")
+	origRule, _ := stockBundle.oarRules.Get("HTTP_REQUEST_FAILED")
+	if badRule == nil || origRule == nil || badRule.Copy.Fix != origRule.Copy.Fix {
+		t.Fatalf("expected identical fix copy between control and stock neighbor: got %q vs %q", badRule.Copy.Fix, origRule.Copy.Fix)
+	}
+
+	badActionRep, badActionErr := executeFuzzRecipientCase(t.Context(), env, httpTransSeed, wsDir, &badActionBundle)
+	if badActionErr == nil || badActionRep.FailedProperty != "oar_turn_b_claim_authority" {
+		t.Fatalf("expected identical-fix bad next-step control to fail oar_turn_b_claim_authority, got rep=%+v err=%v", badActionRep, badActionErr)
+	}
+
+	// Control B: identical fix copy; fire_count changes delivered Next: between warm and fresh Turn B.
+	warmDriftHTTP := strings.Replace(
+		origHTTP,
+		"when: paintedwolf.operation == \"http_request\" && paintedwolf.rejection_code == \"HTTP_REQUEST_FAILED\"\n",
+		"when: paintedwolf.operation == \"http_request\" && paintedwolf.rejection_code == \"HTTP_REQUEST_FAILED\" && fire_count >= 0\n",
+		1,
+	)
+	warmDriftHTTP = strings.Replace(
+		warmDriftHTTP,
+		"effect: block\n",
+		"effect: block\non_fire:\n  - increment_counter\n",
+		1,
+	)
+	warmDriftNextSteps := `steps:
+  - when: fire_count >= 1
+    program: ["git", "status"]
+    say: "Inspect workspace state first with {{ call }}."
+    otherwise: "Inspect the recorded response and server state before deciding whether to retry."
+  - program: ["curl", "--help"]
+    say: "When retrying, keep the method, headers, body, and destination explicit in {{ call }}."
+    otherwise: "Inspect the recorded response and server state before deciding whether to retry."
+`
+	warmDriftEff := replaceStockCatalogUnits(t, map[string]string{
+		"policy/HTTP_REQUEST_FAILED":          warmDriftHTTP,
+		"host/next-steps/HTTP_REQUEST_FAILED": warmDriftNextSteps,
+	})
+	warmDriftBundle := rebuildFuzzBundleForCatalog(t, stockBundle, cloneStockWithCatalog(t, stockBundle.stock, warmDriftEff))
+	driftRule, _ := warmDriftBundle.oarRules.Get("HTTP_REQUEST_FAILED")
+	if driftRule == nil || driftRule.Copy.Fix != origRule.Copy.Fix {
+		t.Fatalf("expected identical fix copy on warm-drift control: got %q vs %q", driftRule.Copy.Fix, origRule.Copy.Fix)
+	}
+	warmDriftRep, warmDriftErr := executeFuzzRecipientCase(t.Context(), env, httpTransSeed, wsDir, &warmDriftBundle)
+	if warmDriftErr == nil || warmDriftRep.FailedProperty != "oar_warm_vs_fresh_parity" {
+		t.Fatalf("expected identical-fix warm-vs-fresh control to fail oar_warm_vs_fresh_parity, got rep=%+v err=%v", warmDriftRep, warmDriftErr)
+	}
+
+	// Corrected stock neighbor on the exact same seed bytes must pass and record selected-rule contribution identity.
+	stockNeighborRep, stockNeighborErr := executeFuzzRecipientCase(t.Context(), env, httpTransSeed, wsDir, nil)
+	if stockNeighborErr != nil || !stockNeighborRep.PropertyExecuted ||
+		stockNeighborRep.OAROutcome != "matched_selected_rule" ||
+		stockNeighborRep.OmittedOutcome ||
+		stockNeighborRep.MatchedContribution != "oar:tool.rejected:"+origRule.Qualified() {
+		t.Fatalf("expected corrected stock neighbor to pass with matched_selected_rule, got rep=%+v err=%v", stockNeighborRep, stockNeighborErr)
+	}
+
+	// 3. Verify 4-way distinction: normally omitted selected rule vs different matched rule vs fallback.
+	contentRejIdx := ruleIndex("CONTENT_APPLY_REJECTED")
+	omittedSeed := withItemSel16(encodeCoordinatorFuzzBytes(
+		d, "stock", api.SessionPostureSpec, api.SessionModeAgent, "implement_investigate",
+		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
+		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone,
+		2, 0, 0, 0, 0, 0, 0,
+	), contentRejIdx)
+	omittedRep, omittedErr := executeFuzzRecipientCase(t.Context(), env, omittedSeed, wsDir, nil)
+	if omittedErr != nil || !omittedRep.PropertyExecuted || omittedRep.OAROutcome != "omitted" || !omittedRep.OmittedOutcome || omittedRep.MatchedContribution != "" {
+		t.Fatalf("expected unmatched When rule to report omitted, got rep=%+v err=%v", omittedRep, omittedErr)
+	}
+
+	interceptPolicy := `spec_version: "1.0"
+namespace: acme.security
+id: HTTP_REQUEST_FAILED
+kind: schema
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.retryable]
+when: paintedwolf.operation == "http_request" && paintedwolf.rejection_code == "HTTP_REQUEST_FAILED" && paintedwolf.retryable == false
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
+message: Intercepted HTTP rejection
+what: Intercepted HTTP request failure.
+cause: Synthetic higher-precedence invariant rule matched before schema rule.
+why: Verifies runOARTwoTurnFuzzCheck distinguishes a different matched rule from the selected rule.
+fix: Inspect recorded response state before retrying.
+instead: Review the failure details before issuing another call
+`
+	otherRuleEff := buildDisposablePackCatalog(t, "acme/fuzz-oar-other-rule", map[string]string{
+		"policy/DISPOSABLE_HTTP_INTERCEPT.yaml": interceptPolicy,
+	}, nil)
+	if extpacks.HasErrorDiagnostic(otherRuleEff.Diagnostics) {
+		t.Fatalf("otherRuleEff diagnostics: %+v", otherRuleEff.Diagnostics)
+	}
+	otherRuleBundle := rebuildFuzzBundleForCatalog(t, stockBundle, cloneStockWithCatalog(t, stockBundle.stock, otherRuleEff))
+	interceptIdx := uint16(0)
+	for i, r := range otherRuleBundle.rejRules {
+		if r.Qualified() == "acme.security/HTTP_REQUEST_FAILED" {
+			interceptIdx = uint16(i)
+			break
+		}
+	}
+	otherRuleSeed := withItemSel16(httpTransSeed, interceptIdx)
+	otherRuleRep, otherRuleErr := executeFuzzRecipientCase(t.Context(), env, otherRuleSeed, wsDir, &otherRuleBundle)
+	if otherRuleErr != nil || !otherRuleRep.PropertyExecuted ||
+		otherRuleRep.OAROutcome != "matched_other_rule" ||
+		!otherRuleRep.OmittedOutcome ||
+		otherRuleRep.SelectedContribution != "oar:tool.rejected:acme.security/HTTP_REQUEST_FAILED" ||
+		otherRuleRep.MatchedContribution != "oar:tool.rejected:"+origRule.Qualified() {
+		t.Fatalf("expected higher-precedence rule match to distinguish matched_other_rule from selected rule, got rep=%+v err=%v", otherRuleRep, otherRuleErr)
+	}
+
+	fallbackBundle := stockBundle
+	fallbackBundle.oarRender = nil
+	fallbackRep, fallbackErr := executeFuzzRecipientCase(t.Context(), env, httpTransSeed, wsDir, &fallbackBundle)
+	if fallbackErr == nil || fallbackRep.FailedProperty != "oar_unexpected_fallback" {
+		t.Fatalf("expected nil-renderer fallback refusal to fail oar_unexpected_fallback, got rep=%+v err=%v", fallbackRep, fallbackErr)
+	}
+
+	return map[string]any{
+		"stock_rejected_rules_swept":     len(stockBundle.rejRules),
+		"identical_fix_bad_next_step":    map[string]any{"report": badActionRep, "error": badActionErr.Error()},
+		"identical_fix_warm_fresh_drift": map[string]any{"report": warmDriftRep, "error": warmDriftErr.Error()},
+		"corrected_stock_neighbor":       stockNeighborRep,
+		"normally_omitted_rule":          omittedRep,
+		"matched_other_rule":             otherRuleRep,
+		"unexpected_fallback_control":    map[string]any{"report": fallbackRep, "error": fallbackErr.Error()},
+	}
+}
+
+func replaceStockCatalogUnits(t *testing.T, replacements map[string]string) *extpacks.EffectiveCatalog {
+	t.Helper()
+	stockContent, err := extpacks.DiscoverStockContent()
+	if err != nil {
+		t.Fatalf("DiscoverStockContent: %v", err)
+	}
+	cloned := make([]extpacks.PackContent, len(stockContent))
+	matched := map[string]bool{}
+	for i, pc := range stockContent {
+		pc.Units = slices.Clone(pc.Units)
+		for j, u := range pc.Units {
+			if body, ok := replacements[u.ID]; ok {
+				u.Content = []byte(body)
+				pc.Units[j] = u
+				matched[u.ID] = true
+			}
+		}
+		cloned[i] = pc
+	}
+	for unitID := range replacements {
+		if !matched[unitID] {
+			t.Fatalf("unit %q not found in stock content", unitID)
+		}
+	}
+	eff := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
+		Packs:   cloned,
+		Desired: extpacks.DesiredState{Format: 1},
+	})
+	if extpacks.HasErrorDiagnostic(eff.Diagnostics) {
+		t.Fatalf("replaceStockCatalogUnits diagnostics: %+v", eff.Diagnostics)
+	}
+	return eff
+}
+
+func rebuildFuzzBundleForCatalog(t *testing.T, base fuzzOverlayBundle, st *promptrender.Stock) fuzzOverlayBundle {
+	t.Helper()
 	out := base
 	out.stock = st
 	out.overlay.Catalog = st.Catalog
 	out.engine = st.Engine()
 	out.injRender = prompts.NewInjectRenderer(out.engine)
+
+	schemaDir := filepath.Join(filepath.Dir(configlayout.FindModuleRoot()), "schemas")
+	loader, err := oar.NewLoader(schemaDir)
+	if err != nil {
+		t.Fatalf("oar.NewLoader: %v", err)
+	}
+	loader.SetToolSchemas(st.Schemas)
+	loader.SetDetectors(oar.HostDetectors(nil))
+	rs, err := loader.LoadEffectivePolicyWithCatalog(st.Catalog)
+	if err != nil {
+		t.Fatalf("LoadEffectivePolicyWithCatalog: %v", err)
+	}
+	var rejRules []*oar.Rule
+	for _, r := range rs.All() {
+		if r != nil && r.Anchor == oar.AnchorToolRejected && len(oarcore.ConjunctValues(r.When, "paintedwolf.rejection_code")) > 0 {
+			rejRules = append(rejRules, r)
+		}
+	}
+	slices.SortFunc(rejRules, func(a, b *oar.Rule) int {
+		return strings.Compare(a.Qualified(), b.Qualified())
+	})
+	hintCfg, err := guidance.LoadHintConfigStock()
+	if err != nil {
+		t.Fatalf("LoadHintConfigStock: %v", err)
+	}
+	out.oarLoader = loader
+	out.oarRules = rs
+	out.rejRules = rejRules
+	out.oarRender = oar.NewRenderer(guidance.NewStaticRejectFormatter(hintCfg), noopNudgeFormatter{})
 	return out
 }
 

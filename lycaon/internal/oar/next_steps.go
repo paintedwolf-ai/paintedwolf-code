@@ -605,6 +605,13 @@ func firstListValue(v any) (any, bool) {
 	return nil, false
 }
 
+const (
+	// PolicyRuleDetailKey names the qualified OAR rule ID attached to refusal feedback details.
+	PolicyRuleDetailKey = "policy_rule"
+	// PolicyAnchorDetailKey names the OAR anchor attached to refusal feedback details.
+	PolicyAnchorDetailKey = "policy_anchor"
+)
+
 // NextCallsDetails adds a decision's next calls to the details a refusal reports.
 func NextCallsDetails(details, decisionData map[string]any) map[string]any {
 	calls, present := decisionData[api.ToolFeedbackNextCalls]
@@ -616,6 +623,27 @@ func NextCallsDetails(details, decisionData map[string]any) map[string]any {
 		merged[key] = value
 	}
 	merged[api.ToolFeedbackNextCalls] = calls
+	return merged
+}
+
+// PolicyDecisionDetails attaches policy_rule, policy_anchor, and next_calls to refusal details.
+func PolicyDecisionDetails(anchor, rule string, details, decisionData map[string]any) map[string]any {
+	base := NextCallsDetails(details, decisionData)
+	anchor = strings.TrimSpace(anchor)
+	rule = strings.TrimSpace(rule)
+	if anchor == "" && rule == "" {
+		return base
+	}
+	merged := make(map[string]any, len(base)+2)
+	for key, value := range base {
+		merged[key] = value
+	}
+	if rule != "" {
+		merged[PolicyRuleDetailKey] = rule
+	}
+	if anchor != "" {
+		merged[PolicyAnchorDetailKey] = anchor
+	}
 	return merged
 }
 

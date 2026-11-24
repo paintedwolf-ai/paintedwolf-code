@@ -89,14 +89,38 @@ func runOARNextStepsMatrix(
 
 	allOutcomes := append(rejOutcomes, hookOutcomes...)
 	for _, out := range allOutcomes {
-		if !out.CheckClaims || strings.TrimSpace(out.FixCopy) == "" {
+		if !out.CheckClaims || strings.TrimSpace(out.ActionCopy) == "" {
 			continue
 		}
 		label := fmt.Sprintf("oar/%s:%s (%s)", out.RuleID, out.EventLabel, out.Cell.Label)
-		viols, _ := checkClaimsOnce(s, label, out.FixCopy, out.Cell.Auth, out.Cell.Mode, out.Cell.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
+		viols, _ := checkClaimsOnce(s, label, out.ActionCopy, out.Cell.Auth, out.Cell.Mode, out.Cell.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
 		sum.Violations = append(sum.Violations, viols...)
 	}
 	return nil
+}
+
+// EvaluateDeliveredRefusalForTest checks a delivered OAR refusal block against
+// the recipient's authority, evaluating past occurrence diagnostics under
+// SubjectHistoricalObservation and host-authored guidance under SubjectSelfNow.
+func EvaluateDeliveredRefusalForTest(
+	s *Stock,
+	label string,
+	obs oarproducers.DeliveredRefusalObservation,
+	auth hoststate.TurnAuthority,
+	mode api.SessionMode,
+	posture api.SessionPosture,
+	resolveNamed func(string) (toolvocabtest.ActorAuthority, error),
+) []string {
+	var out []string
+	if strings.TrimSpace(obs.Historical) != "" {
+		viols, _ := checkClaimsOnce(s, label+"#occurrence", obs.Historical, auth, mode, posture, toolvocabtest.SubjectHistoricalObservation(api.MessageOriginHost), nil, nil, resolveNamed, false)
+		out = append(out, viols...)
+	}
+	if strings.TrimSpace(obs.HostActions) != "" {
+		viols, _ := checkClaimsOnce(s, label+"#actions", obs.HostActions, auth, mode, posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, false)
+		out = append(out, viols...)
+	}
+	return out
 }
 
 func buildOARAuthorityCells(

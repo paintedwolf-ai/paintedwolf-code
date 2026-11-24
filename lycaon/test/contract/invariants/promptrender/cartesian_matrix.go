@@ -291,7 +291,7 @@ func registerExpectedZeroBranches(tracker *hoststate.CoverageTracker) {
 type namedWorkerResolver struct {
 	ctx      context.Context
 	profiles map[string]string
-	memo     map[string]toolvocabtest.ActorAuthority
+	memo     sync.Map
 }
 
 func newNamedWorkerResolver(ctx context.Context, s *Stock) (*namedWorkerResolver, error) {
@@ -303,7 +303,17 @@ func newNamedWorkerResolver(ctx context.Context, s *Stock) (*namedWorkerResolver
 	for _, d := range defs {
 		profiles[d.ID] = d.ToolProfile
 	}
-	return &namedWorkerResolver{ctx: ctx, profiles: profiles, memo: make(map[string]toolvocabtest.ActorAuthority)}, nil
+	return &namedWorkerResolver{ctx: ctx, profiles: profiles}, nil
+}
+
+// CoordinatorNamedAgentResolver returns a thread-safe named-agent authority resolver
+// parameterized by st's actual session mode, posture, workspace topology, and settings.
+func CoordinatorNamedAgentResolver(ctx context.Context, s *Stock, st hoststate.CoordinatorState) (func(string) (toolvocabtest.ActorAuthority, error), error) {
+	nr, err := newNamedWorkerResolver(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	return nr.forCoordinatorState(st), nil
 }
 
 func (nr *namedWorkerResolver) forCoordinatorState(st hoststate.CoordinatorState) func(string) (toolvocabtest.ActorAuthority, error) {
@@ -312,11 +322,15 @@ func (nr *namedWorkerResolver) forCoordinatorState(st hoststate.CoordinatorState
 		if !ok {
 			return toolvocabtest.ActorAuthority{}, fmt.Errorf("unknown agent %q", agentID)
 		}
-		key := fmt.Sprintf("%s|%s|%s|%d|%t|%t|%t|%t|%s",
-			st.Overlay.Catalog.Revision, st.SessionMode, st.Posture, st.RootCount,
-			st.HasGit, st.HasAnyGitRoot, st.WebSearch, st.CommandExternalHidden, agentID)
-		if cached, found := nr.memo[key]; found {
-			return cached, nil
+		rev := ""
+		if st.Overlay.Catalog != nil {
+			rev = st.Overlay.Catalog.Revision
+		}
+		key := fmt.Sprintf("%s|%s|%s|%d|%t|%t|%t|%t|%t|%s|%s",
+			rev, st.SessionMode, st.Posture, st.RootCount,
+			st.HasGit, st.HasAnyGitRoot, st.WebSearch, st.Vision, st.CommandExternalHidden, st.ApprovalPosture, agentID)
+		if cached, found := nr.memo.Load(key); found {
+			return cached.(toolvocabtest.ActorAuthority), nil
 		}
 		wAuth, err := hoststate.FreezeWorkerAuthority(nr.ctx, hoststate.WorkerState{
 			AgentID:               agentID,
@@ -327,14 +341,16 @@ func (nr *namedWorkerResolver) forCoordinatorState(st hoststate.CoordinatorState
 			HasGit:                st.HasGit,
 			HasAnyGitRoot:         st.HasAnyGitRoot,
 			WebSearch:             st.WebSearch,
+			Vision:                st.Vision,
 			CommandExternalHidden: st.CommandExternalHidden,
+			ApprovalPosture:       st.ApprovalPosture,
 			Overlay:               st.Overlay,
 		})
 		if err != nil {
 			return toolvocabtest.ActorAuthority{}, err
 		}
 		actor := wAuth.ActorAuthority()
-		nr.memo[key] = actor
+		nr.memo.Store(key, actor)
 		return actor, nil
 	}
 }

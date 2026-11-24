@@ -73,16 +73,189 @@ func ObserveIndirectProducerCall(moduleRoot string, facts ...string) []string {
 	return out
 }
 
-func extractRefusalNextCalls(ref *guidance.Refusal) []toolreach.Call {
+// RefusalDeliveryKind classifies how a delivered guidance.Refusal was produced.
+type RefusalDeliveryKind string
+
+const (
+	RefusalDeliveryOmitted    RefusalDeliveryKind = "omitted"
+	RefusalDeliveryPolicyRule RefusalDeliveryKind = "policy_rule"
+	RefusalDeliveryFallback   RefusalDeliveryKind = "fallback"
+)
+
+// DeliveredRefusalObservation captures the delivered refusal block and
+// structured OAR contribution metadata at the refusal boundary.
+type DeliveredRefusalObservation struct {
+	Kind         RefusalDeliveryKind
+	Code         string
+	PolicyRule   string
+	PolicyAnchor string
+	Body         string
+	Historical   string
+	HostActions  string
+	NextCalls    []toolreach.Call
+}
+
+// ObserveDeliveredRefusal inspects a delivered guidance.Refusal and extracts its
+// contribution identity, structured next-calls, and delivered prose sections.
+func ObserveDeliveredRefusal(ref *guidance.Refusal) DeliveredRefusalObservation {
 	if ref == nil {
-		return nil
+		return DeliveredRefusalObservation{Kind: RefusalDeliveryOmitted}
 	}
-	fb := ref.Facts.FeedbackFor(ref.Code())
-	if fb.Details == nil {
-		return nil
+	code := strings.TrimSpace(ref.Code())
+	body := strings.TrimSpace(ref.Body)
+	hist, actions := SplitDeliveredRefusalBody(body)
+	fb := ref.Facts.FeedbackFor(code)
+	var policyRule, policyAnchor string
+	var nextCalls []toolreach.Call
+	if fb.Details != nil {
+		policyRule, _ = fb.Details[oar.PolicyRuleDetailKey].(string)
+		policyAnchor, _ = fb.Details[oar.PolicyAnchorDetailKey].(string)
+		if calls, ok := fb.Details[api.ToolFeedbackNextCalls].([]toolreach.Call); ok {
+			nextCalls = slices.Clone(calls)
+		}
 	}
-	calls, _ := fb.Details[api.ToolFeedbackNextCalls].([]toolreach.Call)
-	return slices.Clone(calls)
+	policyRule = strings.TrimSpace(policyRule)
+	policyAnchor = strings.TrimSpace(policyAnchor)
+	kind := RefusalDeliveryPolicyRule
+	if ref.Copy == nil || policyRule == "" {
+		kind = RefusalDeliveryFallback
+	}
+	return DeliveredRefusalObservation{
+		Kind:         kind,
+		Code:         code,
+		PolicyRule:   policyRule,
+		PolicyAnchor: policyAnchor,
+		Body:         body,
+		Historical:   hist,
+		HostActions:  actions,
+		NextCalls:    nextCalls,
+	}
+}
+
+// SplitDeliveredRefusalBody partitions a rendered refusal block into past-occurrence
+// observations (Rejected/Cause) and host-authored guidance (State/Why/Fix/Next).
+func SplitDeliveredRefusalBody(body string) (historical, hostActions string) {
+	var histLines, actionLines []string
+	section := ""
+	for _, rawLine := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(rawLine)
+		if trimmed == "" {
+			continue
+		}
+		switch {
+		case trimmed == ">>> Tool feedback":
+			section = "historical"
+		case strings.HasPrefix(trimmed, "Rejected:"):
+			section = "historical"
+			if rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "Rejected:")); rest != "" {
+				histLines = append(histLines, rest)
+			}
+		case strings.HasPrefix(trimmed, "Cause:"):
+			section = "historical"
+			if rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "Cause:")); rest != "" {
+				histLines = append(histLines, rest)
+			}
+		case strings.HasPrefix(trimmed, "State:"):
+			section = "actions"
+			if rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "State:")); rest != "" {
+				actionLines = append(actionLines, rest)
+			}
+		case strings.HasPrefix(trimmed, "Why:"):
+			section = "actions"
+			if rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "Why:")); rest != "" {
+				actionLines = append(actionLines, rest)
+			}
+		case strings.HasPrefix(trimmed, "Fix:"):
+			section = "actions"
+			if rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "Fix:")); rest != "" {
+				actionLines = append(actionLines, rest)
+			}
+		case strings.HasPrefix(trimmed, "Next:"):
+			section = "actions"
+			if rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "Next:")); rest != "" {
+				actionLines = append(actionLines, rest)
+			}
+		case strings.HasPrefix(trimmed, "Code:"):
+			section = "code"
+		default:
+			switch section {
+			case "historical":
+				histLines = append(histLines, trimmed)
+			case "actions":
+				actionLines = append(actionLines, trimmed)
+			}
+		}
+	}
+	return strings.Join(histLines, "\n"), strings.Join(actionLines, "\n")
+}
+
+// ScopedNextStepObserver captures ResolveNextSteps outputs only for rules in a
+// given RuleSet so concurrent pipelines do not observe each other's evaluations.
+type ScopedNextStepObserver struct {
+	mu       sync.Mutex
+	rulePtrs map[*oar.Rule]bool
+	byQual   map[string]*oar.Rule
+	observed map[*oar.Rule]oar.ResolvedSteps
+}
+
+// InstallScopedNextStepObserver registers a RuleSet-scoped observer on ActiveNextStepObservers.
+func InstallScopedNextStepObserver(rules *oar.RuleSet) (*ScopedNextStepObserver, func()) {
+	ptrs := map[*oar.Rule]bool{}
+	byQual := map[string]*oar.Rule{}
+	if rules != nil {
+		for _, r := range rules.All() {
+			if r != nil {
+				ptrs[r] = true
+				byQual[r.Qualified()] = r
+			}
+		}
+	}
+	obs := &ScopedNextStepObserver{
+		rulePtrs: ptrs,
+		byQual:   byQual,
+		observed: make(map[*oar.Rule]oar.ResolvedSteps),
+	}
+	oar.ActiveNextStepObservers.Store(obs, oar.NextStepObserver(func(r *oar.Rule, resolved oar.ResolvedSteps) {
+		if !obs.rulePtrs[r] {
+			return
+		}
+		obs.mu.Lock()
+		obs.observed[r] = resolved
+		obs.mu.Unlock()
+	}))
+	return obs, func() { oar.ActiveNextStepObservers.Delete(obs) }
+}
+
+// TakeByQualified returns and clears the observed ResolvedSteps for qualifiedRuleID.
+func (s *ScopedNextStepObserver) TakeByQualified(qualifiedRuleID string) (*oar.Rule, oar.ResolvedSteps, bool) {
+	if s == nil || qualifiedRuleID == "" {
+		return nil, oar.ResolvedSteps{}, false
+	}
+	r := s.byQual[qualifiedRuleID]
+	if r == nil {
+		return nil, oar.ResolvedSteps{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	res, ok := s.observed[r]
+	if ok {
+		delete(s.observed, r)
+	}
+	return r, res, ok
+}
+
+// Clear discards any pending step resolutions recorded on s.
+func (s *ScopedNextStepObserver) Clear() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	clear(s.observed)
+	s.mu.Unlock()
+}
+
+func extractRefusalNextCalls(ref *guidance.Refusal) []toolreach.Call {
+	return ObserveDeliveredRefusal(ref).NextCalls
 }
 
 func extractDecisionNextCalls(d *oar.Decision) []toolreach.Call {

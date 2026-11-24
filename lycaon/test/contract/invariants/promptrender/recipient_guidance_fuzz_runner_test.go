@@ -40,12 +40,13 @@ import (
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
+	"github.com/lycaon/lycaon/test/contract/internal/oarproducers"
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 )
 
 const (
 	fuzzDecoderVersion1  uint8 = 1
-	fuzzDecoderByteLimit int   = 20
+	fuzzDecoderByteLimit int   = 21
 )
 
 type fuzzOverlayBundle struct {
@@ -63,6 +64,8 @@ type fuzzOverlayBundle struct {
 type fuzzWorkerEnv struct {
 	domains       *hoststate.SeedDomains
 	overlays      []fuzzOverlayBundle
+	factTypes     map[string]string
+	capFacts      map[string]bool
 	confirmedRuns atomic.Int64
 }
 
@@ -76,13 +79,39 @@ var loadFuzzEnvOnce = sync.OnceValues(func() (*fuzzWorkerEnv, error) {
 	if err != nil {
 		return nil, err
 	}
-	repoRoot := filepath.Dir(configlayout.FindModuleRoot())
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(baseStock.Engine()))
+	moduleRoot := configlayout.FindModuleRoot()
+	repoRoot := filepath.Dir(moduleRoot)
 	schemaDir := filepath.Join(repoRoot, "schemas")
 	if err := anchorcatalog.InstallBundled(); err != nil {
 		return nil, err
 	}
 	if err := oar.InstallEngineDeclarationBundled(schemaDir); err != nil {
 		return nil, err
+	}
+	declPath := filepath.Join(moduleRoot, "config", "packs", "painted-wolf", "platform", "host", "anchors", "oar-profile.yaml")
+	decl, err := oar.LoadEngineDeclaration(declPath)
+	if err != nil {
+		return nil, err
+	}
+	factTypes := make(map[string]string, len(decl.HostFacts))
+	probeGC := oar.NewGuardContext()
+	tools.RegisterRecoveryFacts(ctx, probeGC)
+	for _, hf := range decl.HostFacts {
+		factTypes[hf.Name] = hf.Type
+		_ = probeGC.Ensure(hf.Name)
+	}
+	capFacts := map[string]bool{
+		"command_operation_reachable": true,
+		"admitted_command_forms":      true,
+		"session_mode":                true,
+		"session_posture":             true,
+		"session_role":                true,
+		"worker_leg":                  true,
+		"rejection_code":              true,
+	}
+	for k := range probeGC.ObservationData {
+		capFacts[k] = true
 	}
 
 	bundles := make([]fuzzOverlayBundle, 0, len(domains.Overlays))
@@ -136,7 +165,7 @@ var loadFuzzEnvOnce = sync.OnceValues(func() (*fuzzWorkerEnv, error) {
 			oarRender: oar.NewRenderer(guidance.NewStaticRejectFormatter(hintCfg), noopNudgeFormatter{}),
 		})
 	}
-	return &fuzzWorkerEnv{domains: domains, overlays: bundles}, nil
+	return &fuzzWorkerEnv{domains: domains, overlays: bundles, factTypes: factTypes, capFacts: capFacts}, nil
 })
 
 // FuzzCaseReport captures replay and audit metadata for one two-turn fuzz execution.
@@ -148,6 +177,8 @@ type FuzzCaseReport struct {
 	TurnACoords          string `json:"turn_a_coords"`
 	TurnBCoords          string `json:"turn_b_coords"`
 	SelectedContribution string `json:"selected_contribution"`
+	MatchedContribution  string `json:"matched_contribution,omitempty"`
+	OAROutcome           string `json:"oar_outcome,omitempty"`
 	OmittedOutcome       bool   `json:"omitted_outcome,omitempty"`
 	Excluded             bool   `json:"excluded,omitempty"`
 	ExcludedReason       string `json:"excluded_reason,omitempty"`
@@ -276,7 +307,7 @@ func executeFuzzRecipientCase(ctx context.Context, env *fuzzWorkerEnv, data []by
 	isWorker := byteAt(data, 1)%2 == 1
 	numChanges := int(byteAt(data, 15)) % 3
 	familyIdx := int(byteAt(data, 13)) % 3
-	itemSel := int(byteAt(data, 14))
+	itemSel := int(byteAt(data, 14)) | (int(byteAt(data, 20)) << 8)
 
 	if !isWorker {
 		rep.Recipient = "coordinator"
@@ -442,7 +473,17 @@ func runCoordinatorTwoTurnProperties(
 		return runSkillTwoTurnFuzzCheck(env, bundle, stA.ID, stB.ID, authA, authB, stA.SessionMode, stB.SessionMode, stA.Posture, stB.Posture, itemSel, rep)
 
 	case 2:
-		return runOARTwoTurnFuzzCheck(ctx, env, bundle, stA.ID, stB.ID, "coordinator", stA.TurnProfile.SurfaceID, stB.TurnProfile.SurfaceID, "coordinator", authA, authB, stA.SessionMode, stB.SessionMode, stA.Posture, stB.Posture, itemSel, rep)
+		resA, err := promptrender.CoordinatorNamedAgentResolver(ctx, bundle.stock, stA)
+		if err != nil {
+			rep.FailedProperty = "resolve_named_agent_a"
+			return rep, err
+		}
+		resB, err := promptrender.CoordinatorNamedAgentResolver(ctx, bundle.stock, stB)
+		if err != nil {
+			rep.FailedProperty = "resolve_named_agent_b"
+			return rep, err
+		}
+		return runOARTwoTurnFuzzCheck(ctx, env, bundle, stA.ID, stB.ID, "coordinator", stA.TurnProfile.SurfaceID, stB.TurnProfile.SurfaceID, "coordinator", "coordinator", authA, authB, stA.SessionMode, stB.SessionMode, stA.Posture, stB.Posture, resA, resB, itemSel, rep)
 	}
 
 	env.confirmedRuns.Add(1)
@@ -518,7 +559,12 @@ func runWorkerTwoTurnProperties(
 		return runSkillTwoTurnFuzzCheck(env, bundle, stA.ID, stB.ID, authA, authB, stA.ParentSessionMode, stB.ParentSessionMode, stA.Posture, stB.Posture, itemSel, rep)
 
 	case 2:
-		return runOARTwoTurnFuzzCheck(ctx, env, bundle, stA.ID, stB.ID, "worker", "", "", stB.ToolProfile, authA, authB, stA.ParentSessionMode, stB.ParentSessionMode, stA.Posture, stB.Posture, itemSel, rep)
+		workerNoDelegate := func(prof string) func(string) (toolvocabtest.ActorAuthority, error) {
+			return func(agentID string) (toolvocabtest.ActorAuthority, error) {
+				return toolvocabtest.ActorAuthority{}, fmt.Errorf("worker profile %s cannot delegate to %q", prof, agentID)
+			}
+		}
+		return runOARTwoTurnFuzzCheck(ctx, env, bundle, stA.ID, stB.ID, "worker", "", "", stA.ToolProfile, stB.ToolProfile, authA, authB, stA.ParentSessionMode, stB.ParentSessionMode, stA.Posture, stB.Posture, workerNoDelegate(stA.ToolProfile), workerNoDelegate(stB.ToolProfile), itemSel, rep)
 	}
 
 	env.confirmedRuns.Add(1)
@@ -814,19 +860,29 @@ func runSkillTwoTurnFuzzCheck(
 	return rep, nil
 }
 
+type oarFuzzTurnResult struct {
+	outcome    string
+	policyRule string
+	body       string
+	nextCalls  []toolreach.Call
+}
+
 func runOARTwoTurnFuzzCheck(
 	ctx context.Context,
 	env *fuzzWorkerEnv,
 	bundle fuzzOverlayBundle,
-	idA, idB, role, surfA, surfB, prof string,
+	idA, idB, role, surfA, surfB, profA, profB string,
 	authA, authB hoststate.TurnAuthority,
 	modeA, modeB api.SessionMode,
 	postA, postB api.SessionPosture,
+	resolveNamedA, resolveNamedB func(string) (toolvocabtest.ActorAuthority, error),
 	itemSel int,
 	rep FuzzCaseReport,
 ) (FuzzCaseReport, error) {
 	if len(bundle.rejRules) == 0 {
 		rep.SelectedContribution = "oar:<none>"
+		rep.OAROutcome = "omitted"
+		rep.OmittedOutcome = true
 		env.confirmedRuns.Add(1)
 		rep.PropertyExecuted = true
 		return rep, nil
@@ -834,7 +890,10 @@ func runOARTwoTurnFuzzCheck(
 	rule := bundle.rejRules[itemSel%len(bundle.rejRules)]
 	codes := oarcore.ConjunctValues(rule.When, "paintedwolf.rejection_code")
 	code := codes[0]
-	rep.SelectedContribution = "oar:tool.rejected:" + rule.ID
+	rep.SelectedContribution = "oar:tool.rejected:" + rule.Qualified()
+
+	stepObs, removeStepObs := oarproducers.InstallScopedNextStepObserver(bundle.oarRules)
+	defer removeStepObs()
 
 	newIsolatedBlockPlane := func() *toolfeedback.BlockPlane {
 		pipe := oar.NewGuardPipeline(bundle.oarRules, bundle.oarLoader, oar.NewCounterStore())
@@ -843,9 +902,23 @@ func runOARTwoTurnFuzzCheck(
 		return &toolfeedback.BlockPlane{Pipeline: pipe, Renderer: bundle.oarRender}
 	}
 
-	evalTurn := func(bp *toolfeedback.BlockPlane, turnID, surf string, auth hoststate.TurnAuthority, mode api.SessionMode, post api.SessionPosture) (string, bool, error) {
+	evalTurn := func(
+		bp *toolfeedback.BlockPlane,
+		turnID, surf, prof string,
+		auth hoststate.TurnAuthority,
+		mode api.SessionMode,
+		post api.SessionPosture,
+		resolveNamed func(string) (toolvocabtest.ActorAuthority, error),
+	) (oarFuzzTurnResult, string, error) {
+		if len(rule.Audience) > 0 && !slices.Contains(rule.Audience, prof) {
+			return oarFuzzTurnResult{outcome: "omitted"}, "", nil
+		}
 		invoked := "command"
-		if selTools := rule.Tools(); len(selTools) > 0 {
+		selTools := rule.Tools()
+		if len(selTools) == 0 {
+			selTools = oarcore.ConjunctValues(rule.When, "tool")
+		}
+		if len(selTools) > 0 {
 			invoked = ""
 			for _, st := range selTools {
 				if slices.Contains(auth.Offered, st) {
@@ -854,7 +927,7 @@ func runOARTwoTurnFuzzCheck(
 				}
 			}
 			if invoked == "" {
-				return "", false, nil
+				return oarFuzzTurnResult{outcome: "omitted"}, "", nil
 			}
 		} else if len(auth.Offered) > 0 {
 			invoked = auth.Offered[0]
@@ -867,6 +940,19 @@ func runOARTwoTurnFuzzCheck(
 			SessionID: "sess-oar-fuzz", ParentSessionID: parentID,
 			Posture: string(post), Mode: string(mode), Surface: surf,
 		})
+		if slices.Contains(rule.RequiresFacts, "paintedwolf.mcp_error_code") {
+			mcpTool := ""
+			for _, tName := range auth.Offered {
+				if strings.HasPrefix(tName, "mcp_") {
+					mcpTool = tName
+					break
+				}
+			}
+			if mcpTool == "" {
+				return oarFuzzTurnResult{outcome: "omitted"}, "", nil
+			}
+			invoked = mcpTool
+		}
 		data := map[string]any{
 			"need": "read", "command": "plain", "path": "vendor/sdk.7z", "target": "a.go",
 			"handle": "cmd-1", "handles_text": "held-1", "limit": int64(4), "worker": "impl-1",
@@ -879,61 +965,157 @@ func runOARTwoTurnFuzzCheck(
 			"http_last_status": int64(503), "retryable": true, "code": code,
 			"extract_allowed": []string{".zip", ".tar", ".tar.gz"}, "extract_format_cause": "unsupported_suffix",
 			"extract_invalid_format": false, "extract_rejected_value": ".7z",
+			"rule_unit_id": "approvals/rules/deny-fixture", "rule_pack_id": "acme/watchdog",
+			"rule_scope": "project", "rule_category": "command", "rule_pattern": "plain*",
+			"error_code": "MCP_SERVER_UNAVAILABLE", "field": "path",
+		}
+		for _, rf := range rule.RequiresFacts {
+			short := strings.TrimPrefix(rf, "paintedwolf.")
+			if !strings.HasPrefix(rf, "paintedwolf.") || env.capFacts[short] {
+				continue
+			}
+			if _, exists := data[short]; exists {
+				continue
+			}
+			switch env.factTypes[rf] {
+			case "string":
+				data[short] = "fixture"
+			case "integer":
+				data[short] = int64(1)
+			case "boolean":
+				data[short] = false
+			case "string_list":
+				data[short] = []string{"fixture"}
+			}
 		}
 		if ops := oarcore.ConjunctValues(rule.When, "paintedwolf.operation"); len(ops) > 0 {
-			data["operation"] = ops[0]
+			op := ops[0]
+			if slices.Contains(auth.Offered, op) {
+				invoked = op
+			} else {
+				hasCmd := slices.Contains(auth.Offered, "command")
+				admissible := hasCmd
+				switch op {
+				case "http_request":
+					admissible = hasCmd && auth.Reader.Held()[toolcontract.ReachCommandNetworkEgress]
+				case "write", "edit", "replace_lines", "code_rewrite", "jq_edit", "restore_version":
+					admissible = hasCmd && auth.Reader.Held()[toolcontract.ReachCommandMutation]
+				}
+				if !admissible {
+					return oarFuzzTurnResult{outcome: "omitted"}, "", nil
+				}
+				invoked = op
+			}
+			data["operation"] = op
 		}
 		natOps := oarcore.ConjunctValues(rule.When, "paintedwolf.native_operation")
 		if len(natOps) > 0 {
 			natOp := natOps[0]
 			if !slices.Contains(auth.Offered, "command") {
-				return "", false, nil
+				return oarFuzzTurnResult{outcome: "omitted"}, "", nil
 			}
 			if (natOp == "edit" || natOp == "jq_edit") && !auth.Reader.Held()[toolcontract.ReachCommandMutation] {
-				return "", false, nil
+				return oarFuzzTurnResult{outcome: "omitted"}, "", nil
 			}
 			if natOp == "http_request" && !auth.Reader.Held()[toolcontract.ReachCommandNetworkEgress] {
-				return "", false, nil
+				return oarFuzzTurnResult{outcome: "omitted"}, "", nil
 			}
 			data["native_operation"] = natOp
 			invoked = "command"
 		}
+		stepObs.Clear()
+		argVal := slices.Contains(rule.RequiresFacts, "paintedwolf.arg_validation_errors")
 		rErr := bp.RejectObservation(cctx, invoked, prof, nil, &toolrejection.ToolReject{
-			Code: code, Data: data,
+			Code: code, Data: data, ArgumentValidation: argVal,
 		})
+		if rErr == nil {
+			return oarFuzzTurnResult{outcome: "omitted"}, "", nil
+		}
 		ref, ok := guidance.RefusalFromError(rErr)
 		if !ok || ref == nil {
-			return "", false, nil
+			return oarFuzzTurnResult{}, "oar_unexpected_error", fmt.Errorf("OAR %s returned non-refusal error on %s: %w", rule.Qualified(), turnID, rErr)
 		}
-		fix := strings.TrimSpace(ref.Copy["fix"])
-		if fix != "" {
-			if viols := promptrender.EvaluateClaimsForTest(bundle.stock, "fuzz/oar/"+rule.ID+" ("+turnID+")", fix, auth, mode, post, toolvocabtest.SubjectSelfNow(), false); len(viols) > 0 {
-				return "", true, fmt.Errorf("OAR %s claim violation on %s: %v", rule.ID, turnID, viols[0])
+		obs := oarproducers.ObserveDeliveredRefusal(ref)
+		if obs.Kind == oarproducers.RefusalDeliveryFallback {
+			return oarFuzzTurnResult{outcome: "fallback", body: obs.Body}, "oar_unexpected_fallback", fmt.Errorf("OAR %s degraded to fallback refusal on %s: %s", rule.Qualified(), turnID, obs.Body)
+		}
+		if obs.PolicyAnchor != oar.AnchorToolRejected || obs.Body == "" {
+			return oarFuzzTurnResult{}, "oar_delivery_observation", fmt.Errorf("OAR %s missing anchor/body metadata on %s (anchor=%q bodyLen=%d)", rule.Qualified(), turnID, obs.PolicyAnchor, len(obs.Body))
+		}
+		matchedRule, resolvedSteps, hasSteps := stepObs.TakeByQualified(obs.PolicyRule)
+		if matchedRule == nil {
+			return oarFuzzTurnResult{}, "oar_delivery_observation", fmt.Errorf("OAR refusal reported unknown policy_rule %q on %s", obs.PolicyRule, turnID)
+		}
+		if hasSteps {
+			if !callsSliceEqual(resolvedSteps.Calls, obs.NextCalls) {
+				return oarFuzzTurnResult{}, "oar_delivery_observation", fmt.Errorf("OAR %s next_calls mismatch on %s: observed=%v delivered=%v", obs.PolicyRule, turnID, resolvedSteps.Calls, obs.NextCalls)
+			}
+			stepText := strings.TrimSpace(resolvedSteps.Text)
+			insteadDeduped := strings.TrimSpace(ref.Copy["instead"]) == strings.TrimSpace(ref.Copy["fix"]) && !strings.Contains(ref.Copy["fix"], stepText)
+			if stepText != "" && !insteadDeduped && !strings.Contains(obs.Body, stepText) {
+				return oarFuzzTurnResult{}, "oar_delivery_observation", fmt.Errorf("OAR %s resolved next_steps %q absent from delivered refusal body on %s", obs.PolicyRule, stepText, turnID)
 			}
 		}
-		return fix, true, nil
+		if len(obs.NextCalls) > 0 && auth.Reach.Status(obs.NextCalls[0].Tool) != toolreach.Callable {
+			return oarFuzzTurnResult{}, "oar_delivery_observation", fmt.Errorf("OAR %s first delivered next_call %q is not callable on %s", obs.PolicyRule, obs.NextCalls[0].Text(), turnID)
+		}
+		for _, c := range obs.NextCalls {
+			if !strings.Contains(obs.Body, c.Text()) {
+				return oarFuzzTurnResult{}, "oar_delivery_observation", fmt.Errorf("OAR %s next_call %q absent from delivered body on %s", obs.PolicyRule, c.Text(), turnID)
+			}
+		}
+		if viols := promptrender.EvaluateDeliveredRefusalForTest(bundle.stock, "fuzz/oar/"+obs.PolicyRule+" ("+turnID+")", obs, auth, mode, post, resolveNamed); len(viols) > 0 {
+			return oarFuzzTurnResult{}, "claim_authority", fmt.Errorf("OAR %s delivered-refusal claim violation on %s: %v", obs.PolicyRule, turnID, viols[0])
+		}
+		outcome := "matched_other_rule"
+		if obs.PolicyRule == rule.Qualified() {
+			outcome = "matched_selected_rule"
+		}
+		return oarFuzzTurnResult{
+			outcome:    outcome,
+			policyRule: obs.PolicyRule,
+			body:       obs.Body,
+			nextCalls:  obs.NextCalls,
+		}, "", nil
 	}
 
 	warmBP := newIsolatedBlockPlane()
-	if _, _, err := evalTurn(warmBP, idA, surfA, authA, modeA, postA); err != nil {
-		rep.FailedProperty = "oar_turn_a"
+	if _, subProp, err := evalTurn(warmBP, idA, surfA, profA, authA, modeA, postA, resolveNamedA); err != nil {
+		if subProp == "claim_authority" {
+			rep.FailedProperty = "oar_turn_a_claim_authority"
+		} else {
+			rep.FailedProperty = subProp
+		}
 		return rep, err
 	}
-	warmFixB, firedWarm, err := evalTurn(warmBP, idB, surfB, authB, modeB, postB)
+	warmB, subProp, err := evalTurn(warmBP, idB, surfB, profB, authB, modeB, postB, resolveNamedB)
 	if err != nil {
-		rep.FailedProperty = "oar_turn_b_warm"
+		if subProp == "claim_authority" {
+			rep.FailedProperty = "oar_turn_b_claim_authority"
+		} else {
+			rep.FailedProperty = subProp
+		}
 		return rep, err
 	}
-	freshFixB, firedFresh, err := evalTurn(newIsolatedBlockPlane(), idB, surfB, authB, modeB, postB)
+	freshB, subProp, err := evalTurn(newIsolatedBlockPlane(), idB, surfB, profB, authB, modeB, postB, resolveNamedB)
 	if err != nil {
-		rep.FailedProperty = "oar_turn_b_fresh"
+		if subProp == "claim_authority" {
+			rep.FailedProperty = "oar_turn_b_fresh_claim_authority"
+		} else {
+			rep.FailedProperty = subProp
+		}
 		return rep, err
 	}
-	if firedWarm != firedFresh || warmFixB != freshFixB {
+	if warmB.outcome != freshB.outcome || warmB.policyRule != freshB.policyRule || warmB.body != freshB.body || !callsSliceEqual(warmB.nextCalls, freshB.nextCalls) {
 		rep.FailedProperty = "oar_warm_vs_fresh_parity"
-		return rep, fmt.Errorf("OAR %s warm vs fresh mismatch on %s", rule.ID, idB)
+		return rep, fmt.Errorf("OAR %s warm vs fresh mismatch on %s: warm=(%s,%s) fresh=(%s,%s)\nwarmBody=%q\nfreshBody=%q\nwarmCalls=%v freshCalls=%v",
+			rule.Qualified(), idB, warmB.outcome, warmB.policyRule, freshB.outcome, freshB.policyRule, warmB.body, freshB.body, warmB.nextCalls, freshB.nextCalls)
 	}
-	if !firedWarm {
+	rep.OAROutcome = warmB.outcome
+	if warmB.policyRule != "" {
+		rep.MatchedContribution = "oar:tool.rejected:" + warmB.policyRule
+	}
+	if warmB.outcome != "matched_selected_rule" {
 		rep.OmittedOutcome = true
 	}
 	env.confirmedRuns.Add(1)
