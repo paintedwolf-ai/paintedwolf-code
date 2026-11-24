@@ -1,3 +1,4 @@
+import type { LycaonClient } from "../../api/client.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 import { isApiErrorCode } from "../../api/http.ts";
 import { findLiteralOffsets } from "../../find/find-match.ts";
@@ -22,7 +23,7 @@ export async function searchToolPart(
   query: string,
   sensitive: boolean,
   signal: AbortSignal,
-  options?: { referencesOnly?: boolean },
+  options?: { referencesOnly?: boolean; client?: LycaonClient | null },
 ): Promise<VirtualListMatch[]> {
   const referencesOnly = options?.referencesOnly === true;
   const matches: VirtualListMatch[] = [];
@@ -53,7 +54,7 @@ export async function searchToolPart(
     ["tool_output", part.output ?? "", part.outputReference, part.messageId],
   ] as const) {
     if (matches.length >= 10000 || signal.aborted) break;
-    const client = reference ? getLycaonClient() : undefined;
+    const client = reference ? (options?.client ?? getLycaonClient()) : undefined;
     if (!reference || !client || !sessionId) {
       if (!referencesOnly) {
         matches.push(...findLiteralOffsets(text, query, sensitive, 10000-matches.length).map(match => ({ from: match.start, to: match.start+match.length, field, toolCallId: part.toolCallId })));

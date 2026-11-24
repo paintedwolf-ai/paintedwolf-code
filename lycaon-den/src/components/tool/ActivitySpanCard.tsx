@@ -10,6 +10,7 @@ import {
   useTranscriptDisclosure,
 } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
+import type { LycaonClient } from "../../api/client.ts";
 import { subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import {
@@ -35,6 +36,7 @@ export type ActivitySpanCardProps = {
   entries: readonly ActivitySpanEntry[];
   layout: TranscriptLayout;
   sessionId?: string;
+  client?: LycaonClient | null;
   entryKey?: string;
   running?: boolean;
   renderToolEntry: (part: () => ToolPartView) => JSX.Element;
@@ -210,7 +212,10 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
     ownsCorpus: false,
     search: (entry, query, sensitive, signal) =>
       entry.kind === "tool"
-        ? searchToolPart(entry.part, props.sessionId, query, sensitive, signal, { referencesOnly: true })
+        ? searchToolPart(entry.part, props.sessionId, query, sensitive, signal, {
+            referencesOnly: true,
+            client: props.client,
+          })
         : Promise.resolve([]),
     reveal: (index, match) => {
       const entry = entries()[index];
@@ -293,7 +298,11 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
           <VirtualCardList threshold={100} scroll="ancestor" items={entries()} keyOf={activitySpanEntryKey} label="Actions"
             pinnedKeys={[accordion.activeKey(), findToolKey()].filter((key): key is string => !!key)}
             onReveal={value => { revealRow = value; }}
-            search={(entry, query, sensitive, signal) => entry.kind === "tool" ? searchToolPart(entry.part, props.sessionId, query, sensitive, signal) : Promise.resolve([])}
+            search={(entry, query, sensitive, signal) =>
+              entry.kind === "tool"
+                ? searchToolPart(entry.part, props.sessionId, query, sensitive, signal, { client: props.client })
+                : Promise.resolve([])
+            }
             onFindReveal={(entry, match) => {
               if (entry.kind !== "tool") return;
               revealTool(match.toolCallId ?? entry.part.toolCallId, match);

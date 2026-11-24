@@ -204,11 +204,12 @@ describe("tool body find + collapsed reveal", () => {
       const sink = vi.fn();
       registerOpenFilesSurfaceSink(sink);
       const retainedRef = {
-        content_id: "blob-member-2",
         field: "tool_output" as const,
-        byte_len: 1024,
-        rune_len: 512,
-        line_count: 20,
+        tool_call_id: "member-call",
+        sha256: "blob-member-2",
+        size_bytes: 1024,
+        total_runes: 512,
+        rows: 20,
       };
       const searchChatContent = vi.fn(async () => ({
         matches: [{ offset: 42, length: 6, preview: "RETAINED_FOLD_NEEDLE" }],
@@ -265,7 +266,7 @@ describe("tool body find + collapsed reveal", () => {
 
       openFind();
       setFindQuery("RETAINED_FOLD_NEEDLE");
-      await waitFor(() => expect(findController.totalCount()).toBe(1), { timeout: 2000 });
+      await waitFor(() => expect(findController.matches()).toHaveLength(1), { timeout: 2000 });
       expect(searchChatContent).toHaveBeenCalledTimes(1);
       expect(isDisclosureOpen(span)).toBe(false);
 

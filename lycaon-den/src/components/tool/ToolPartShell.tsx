@@ -185,7 +185,7 @@ export function ToolPartShell(props: Props) {
   bindVirtualListFind({
     items: () => [props.part], host: () => hostEl() ?? undefined,
     enabled: () => !!props.part.commandActivity,
-    search: (part, query, sensitive, signal) => searchToolPart(part, props.sessionId, query, sensitive, signal),
+    search: (part, query, sensitive, signal) => searchToolPart(part, props.sessionId, query, sensitive, signal, { client: props.client }),
     reveal: (_index, match) => hostEl()?.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: match })),
   });
 
