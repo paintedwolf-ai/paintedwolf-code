@@ -109,7 +109,7 @@ func (r *RegistrySummarizer) summarize(ctx context.Context, systemPrompt, userPr
 				"purpose", r.Purpose, "provider", cp.ID(), "model", cmodel, "error", coordErr)
 			cause = newSummarizerFallbackError(p.ID(), model, liteErr, cp.ID(), cmodel, coordErr)
 			if SecretScreenBlocked(coordErr) || ctx.Err() != nil {
-				return "", cause
+				return "", preserveCallerContextError(cause, ctx.Err())
 			}
 		}
 	}
