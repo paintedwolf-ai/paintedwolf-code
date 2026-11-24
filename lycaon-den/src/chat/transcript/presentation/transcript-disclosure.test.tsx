@@ -362,7 +362,7 @@ describe("transcript disclosure leases", () => {
 
   it("returns focus to the toggle when a focused descendant closes", async () => {
     await createRoot(async (dispose) => {
-      const { disclosure, shell, animations, click } = manualDisclosure();
+      const { disclosure, shell, body, animations, click } = manualDisclosure();
       shell.querySelector("button")?.classList.add("den-transcript-disclosure-toggle");
 
       click();
@@ -371,7 +371,7 @@ describe("transcript disclosure leases", () => {
 
       const inside = document.createElement("button");
       inside.textContent = "Inside";
-      shell.querySelector('[data-testid="body"]')!.appendChild(inside);
+      body.appendChild(inside);
       inside.focus();
       expect(document.activeElement).toBe(inside);
 
