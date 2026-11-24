@@ -158,6 +158,9 @@ func (t *Tracker) RecordPassingCheck(fact CheckFact) {
 		win.seenIntentID = fact.IntentID
 		win.seenCheckIDs = make(map[string]bool)
 	}
+	if win.seenCheckIDs == nil {
+		win.seenCheckIDs = make(map[string]bool)
+	}
 	if win.seenCheckIDs[fact.CheckID] {
 		return
 	}
