@@ -372,6 +372,7 @@ func TestClaimLevelNegationAndRequestToolsBinding(t *testing.T) {
 	t.Run("real prohibitions pass without excusing surrounding unoffered claims", func(t *testing.T) {
 		for _, prose := range []string{
 			"Do not call `edit` on this surface.",
+			"Do not repeat `edit`; use what this request offers or report the constraint.",
 			"`edit` is not available on this turn.",
 			"Run `command` without `verification: true`.",
 		} {
@@ -382,6 +383,15 @@ func TestClaimLevelNegationAndRequestToolsBinding(t *testing.T) {
 			}); len(got) > 0 {
 				t.Fatalf("expected prohibition %q to pass, got %+v", prose, got)
 			}
+		}
+
+		nearbyInvalid := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+			Label:   "do-not-repeat-followed-by-unoffered-retry",
+			Subject: toolvocabtest.SubjectSelfNow(),
+			Text:    "Do not repeat `delete_file`; retry `edit` on this turn.",
+		})
+		if hasViolationClaim(nearbyInvalid, "delete_file") || !hasViolationClaim(nearbyInvalid, "edit") {
+			t.Fatalf("expected Do not repeat to excuse delete_file while still failing unoffered retry edit, got %+v", nearbyInvalid)
 		}
 	})
 
