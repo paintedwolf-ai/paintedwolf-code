@@ -115,6 +115,7 @@ func (s *Store) ReconcileStoppedSessions(ctx context.Context, sessionIDs ...stri
 	}
 	for _, id := range ids {
 		s.heap.Remove(KindTimerTick, "wake-retry:"+id)
+		_ = s.Standing().SettleRun(ctx, id, RunCanceled)
 	}
 	return summary, nil
 }

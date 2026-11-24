@@ -63,9 +63,10 @@ type Service struct {
 	queue        *queue.Store
 	resources    *resourcelifecycle.Registry
 	workers      Workers
-	scratch      *scratch.Folders
-	events       *events.Publisher
-	processes    *bgprocess.Registry
+	scratch       *scratch.Folders
+	events        *events.Publisher
+	processes     *bgprocess.Registry
+	onUnavailable func(ctx context.Context, sessionID string)
 }
 
 func New(sessionStore Sessions, policy Policy, prompt *promptstate.MutexRegistry, queue *queue.Store, resources *resourcelifecycle.Registry, l Lifecycle) *Service {
@@ -76,6 +77,9 @@ func (m *Service) SetWorkers(workers Workers)                 { m.workers = work
 func (m *Service) SetScratch(scratch *scratch.Folders)        { m.scratch = scratch }
 func (m *Service) SetPublisher(events *events.Publisher)      { m.events = events }
 func (m *Service) SetProcesses(processes *bgprocess.Registry) { m.processes = processes }
+func (m *Service) SetOnSessionUnavailable(fn func(ctx context.Context, sessionID string)) {
+	m.onUnavailable = fn
+}
 func (m *Service) removeScratch(ctx context.Context, ids []string) {
 	if m.scratch == nil || len(ids) == 0 {
 		return

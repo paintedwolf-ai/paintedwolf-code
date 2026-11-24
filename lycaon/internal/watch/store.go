@@ -37,6 +37,7 @@ type Store struct {
 	heap                  *DeadlineHeap
 	sampler               *Sampler
 	manifests             *manifestStore
+	standing              *StandingEngine
 	mu                    sync.RWMutex
 	processLookup         ProcessLookup
 	processOutputLookup   ProcessOutputLookup
@@ -53,13 +54,22 @@ func NewStore(database db.Handle, clock Clock) *Store {
 	if clock == nil {
 		clock = RealClock{}
 	}
-	return &Store{
+	s := &Store{
 		db:        database,
 		clock:     clock,
 		heap:      NewDeadlineHeap(),
 		sampler:   newSampler(),
 		manifests: newManifestStore(),
 	}
+	s.standing = newStandingEngine(s)
+	return s
+}
+
+func (s *Store) Standing() *StandingEngine {
+	if s == nil {
+		return nil
+	}
+	return s.standing
 }
 
 func (s *Store) Clock() Clock        { return s.clock }
@@ -141,6 +151,8 @@ func retireWatchRuntime(s *Store, watchID string) {
 	}
 	s.heap.Remove(KindWatchExpiry, watchID)
 	s.heap.Remove(KindTimerTick, watchTimerPrefix+watchID)
+	s.heap.Remove(KindScheduleRun, standingTimerPrefix+watchID)
+	s.heap.Remove(KindScheduleRun, standingGapPrefix+watchID)
 	if s.sampler != nil {
 		s.sampler.unsubscribeWatch(watchID, s.heap)
 	}
@@ -273,11 +285,12 @@ func notifyLeaseWake(s *Store, ctx context.Context, lease awaitstore.Lease, winn
 	}
 }
 
-const registrationColumns = `watch_id, project_id, owner_kind, session_id, COALESCE(worker_job_id, ''),
-	handle, seq, COALESCE(derived_command_handle, ''), COALESCE(creating_invocation_id, ''),
-	conditions_json, authority_json, cursors_json, delivery, repeat, expires_at, state,
-	COALESCE(terminal_outcome, ''), slot_released, match_seq, overflow_count,
-	COALESCE(overflow_summary_json, ''), COALESCE(final_receipt_id, ''), revision`
+const registrationColumns = `watch_id, project_id, owner_kind, COALESCE(session_id, ''), COALESCE(worker_job_id, ''),
+	COALESCE(owner_person_id, ''), handle, seq, COALESCE(derived_command_handle, ''), COALESCE(creating_invocation_id, ''),
+	COALESCE(standing_draft, ''), conditions_json, authority_json, cursors_json, delivery, repeat,
+	COALESCE(expires_at, ''), state, COALESCE(state_reason, ''), COALESCE(terminal_outcome, ''),
+	slot_released, match_seq, overflow_count, COALESCE(overflow_summary_json, ''), COALESCE(final_receipt_id, ''),
+	revision, created_at, updated_at, COALESCE(ended_at, '')`
 
 type scanner interface {
 	Scan(dest ...any) error
@@ -285,15 +298,17 @@ type scanner interface {
 
 func scanRegistration(row scanner) (Registration, error) {
 	var reg Registration
-	var ownerKind, conditionsJSON, authorityJSON, cursorsJSON string
-	var delivery, expiresAt, state, outcome, overflowJSON string
+	var ownerKind, standingJSON, conditionsJSON, authorityJSON, cursorsJSON string
+	var delivery, expiresAt, state, stateReason, outcome, overflowJSON string
+	var createdAt, updatedAt, endedAt string
 	var repeat, slotReleased int
 	if err := row.Scan(
 		&reg.WatchID, &reg.Owner.ProjectID, &ownerKind, &reg.Owner.SessionID, &reg.Owner.WorkerJobID,
-		&reg.Handle, &reg.Seq, &reg.DerivedCommandHandle, &reg.InvocationID,
-		&conditionsJSON, &authorityJSON, &cursorsJSON, &delivery, &repeat, &expiresAt, &state,
-		&outcome, &slotReleased, &reg.Lifecycle.MatchSeq, &reg.Lifecycle.OverflowCount,
-		&overflowJSON, &reg.Lifecycle.FinalReceiptID, &reg.Lifecycle.Revision,
+		&reg.Owner.OwnerPersonID, &reg.Handle, &reg.Seq, &reg.DerivedCommandHandle, &reg.InvocationID,
+		&standingJSON, &conditionsJSON, &authorityJSON, &cursorsJSON, &delivery, &repeat,
+		&expiresAt, &state, &stateReason, &outcome,
+		&slotReleased, &reg.Lifecycle.MatchSeq, &reg.Lifecycle.OverflowCount, &overflowJSON, &reg.Lifecycle.FinalReceiptID,
+		&reg.Lifecycle.Revision, &createdAt, &updatedAt, &endedAt,
 	); err != nil {
 		return Registration{}, err
 	}
@@ -301,13 +316,39 @@ func scanRegistration(row scanner) (Registration, error) {
 	reg.Lifecycle.Delivery = DeliveryMode(delivery)
 	reg.Lifecycle.Repeat = repeat == 1
 	reg.Lifecycle.State = State(state)
+	reg.Lifecycle.StateReason = stateReason
 	reg.Lifecycle.Outcome = TerminalOutcome(outcome)
 	reg.Lifecycle.SlotReleased = slotReleased == 1
-	parsedExp, err := time.Parse(time.RFC3339Nano, expiresAt)
-	if err != nil {
-		return Registration{}, fmt.Errorf("parse watch expires_at: %w", err)
+	if expiresAt != "" {
+		parsedExp, err := time.Parse(time.RFC3339Nano, expiresAt)
+		if err != nil {
+			return Registration{}, fmt.Errorf("parse watch expires_at: %w", err)
+		}
+		reg.Lifecycle.ExpiresAt = parsedExp.UTC()
 	}
-	reg.Lifecycle.ExpiresAt = parsedExp.UTC()
+	if createdAt != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
+			reg.CreatedAt = parsed.UTC()
+		}
+	}
+	if updatedAt != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, updatedAt); err == nil {
+			reg.UpdatedAt = parsed.UTC()
+		}
+	}
+	if endedAt != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, endedAt); err == nil {
+			u := parsed.UTC()
+			reg.EndedAt = &u
+		}
+	}
+	if standingJSON != "" {
+		var draft StandingDraft
+		if err := json.Unmarshal([]byte(standingJSON), &draft); err != nil {
+			return Registration{}, err
+		}
+		reg.Standing = &draft
+	}
 	if err := json.Unmarshal([]byte(conditionsJSON), &reg.Conditions); err != nil {
 		return Registration{}, err
 	}
@@ -318,6 +359,12 @@ func scanRegistration(row scanner) (Registration, error) {
 	if cursorsJSON != "" {
 		if err := json.Unmarshal([]byte(cursorsJSON), &reg.Cursors); err != nil {
 			return Registration{}, err
+		}
+	}
+	if reg.Standing == nil && reg.Cursors[standingDraftCursorKey] != "" {
+		var draft StandingDraft
+		if json.Unmarshal([]byte(reg.Cursors[standingDraftCursorKey]), &draft) == nil {
+			reg.Standing = &draft
 		}
 	}
 	if overflowJSON != "" {

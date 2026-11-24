@@ -32,6 +32,7 @@ type OwnerKind string
 const (
 	OwnerSession OwnerKind = "session"
 	OwnerJob     OwnerKind = "job"
+	OwnerPerson  OwnerKind = "person"
 )
 
 type DeliveryMode string
@@ -39,13 +40,18 @@ type DeliveryMode string
 const (
 	DeliveryCollect DeliveryMode = "collect"
 	DeliveryWake    DeliveryMode = "wake"
+	DeliveryRun     DeliveryMode = "run"
 )
 
 type State string
 
 const (
-	StateLive     State = "live"
-	StateTerminal State = "terminal"
+	StateLive      State = "live"
+	StateTerminal  State = "terminal"
+	StateEnabled   State = "enabled"
+	StatePaused    State = "paused"
+	StateDisabled  State = "disabled"
+	StateCompleted State = "completed"
 )
 
 type TerminalOutcome string
@@ -70,25 +76,33 @@ const (
 
 // Owner identifies who owns a watch registration.
 type Owner struct {
-	Kind        OwnerKind `json:"kind"`
-	ProjectID   string    `json:"project_id"`
-	SessionID   string    `json:"session_id"`
-	WorkerJobID string    `json:"worker_job_id,omitempty"`
+	Kind          OwnerKind `json:"kind"`
+	ProjectID     string    `json:"project_id"`
+	SessionID     string    `json:"session_id,omitempty"`
+	WorkerJobID   string    `json:"worker_job_id,omitempty"`
+	OwnerPersonID string    `json:"owner_person_id,omitempty"`
 }
 
 func (o Owner) Normalized() Owner {
 	o.ProjectID = strings.TrimSpace(o.ProjectID)
 	o.SessionID = strings.TrimSpace(o.SessionID)
 	o.WorkerJobID = strings.TrimSpace(o.WorkerJobID)
-	if o.WorkerJobID != "" {
+	o.OwnerPersonID = strings.TrimSpace(o.OwnerPersonID)
+	switch {
+	case o.Kind == OwnerPerson || (o.OwnerPersonID != "" && o.SessionID == ""):
+		o.Kind = OwnerPerson
+	case o.WorkerJobID != "":
 		o.Kind = OwnerJob
-	} else {
+	default:
 		o.Kind = OwnerSession
 	}
 	return o
 }
 
 func (o Owner) Destination() string {
+	if o.Kind == OwnerPerson {
+		return "run"
+	}
 	if strings.TrimSpace(o.WorkerJobID) != "" {
 		return "job"
 	}
@@ -177,10 +191,14 @@ type Registration struct {
 	Seq                  int
 	DerivedCommandHandle string
 	InvocationID         string
+	Standing             *StandingDraft
 	Conditions           []awaitstore.Condition
 	Authority            Authority
 	Cursors              map[string]string
 	Lifecycle            Lifecycle
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	EndedAt              *time.Time
 }
 
 // Lifecycle groups mutable watch state and retention metadata.
@@ -189,6 +207,7 @@ type Lifecycle struct {
 	Repeat         bool
 	ExpiresAt      time.Time
 	State          State
+	StateReason    string
 	Outcome        TerminalOutcome
 	SlotReleased   bool
 	MatchSeq       int

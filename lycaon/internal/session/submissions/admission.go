@@ -96,6 +96,8 @@ func (m *Service) admitPrompt(
 			return nil, false, err
 		}
 		submittedBy = sender.ID
+	} else if in.HostSignal != nil && in.HostSignal.TranscriptVisible {
+		submittedBy = strings.TrimSpace(in.AuthorPersonID)
 	}
 	var row *store.PromptSubmission
 	var created bool

@@ -51,7 +51,7 @@ func (s *Store) NotifyWorkspaceChange(ctx context.Context, projectID, rootDir st
 	if !s.Configured() {
 		return nil
 	}
-	query := `SELECT ` + registrationColumns + ` FROM watch_registrations WHERE state = 'live' AND (conditions_json LIKE '%file_change%' OR conditions_json LIKE '%git_ref%')`
+	query := `SELECT ` + registrationColumns + ` FROM watch_registrations WHERE state IN ('live', 'enabled') AND (conditions_json LIKE '%file_change%' OR conditions_json LIKE '%git_ref%')`
 	var args []any
 	if strings.TrimSpace(projectID) != "" {
 		query += ` AND project_id = ?`
@@ -125,11 +125,27 @@ func reconcileSourceWatchByID(s *Store, ctx context.Context, watchID string) (bo
 	if err != nil {
 		return false, err
 	}
-	if reg.Lifecycle.State != StateLive {
+	if reg.Lifecycle.State != StateLive && reg.Lifecycle.State != StateEnabled {
 		s.sampler.unsubscribeWatch(reg.WatchID, s.heap)
 		return false, nil
 	}
 	return reconcileSourceWatch(s, ctx, reg)
+}
+
+func emitSourceWatchMatch(s *Store, ctx context.Context, reg Registration, match MatchInput, cursorUpdates map[string]string) (bool, error) {
+	if reg.Owner.Kind == OwnerPerson {
+		return recordStandingSourceTrigger(ctx, s.Standing(), reg, match, cursorUpdates)
+	}
+	_, recorded, err := s.RecordMatch(ctx, reg.WatchID, match, cursorUpdates)
+	return recorded, err
+}
+
+func markSourceWatchUnavailable(s *Store, ctx context.Context, reg Registration) {
+	if reg.Owner.Kind == OwnerPerson {
+		_ = pauseStandingTargetUnavailable(ctx, s.Standing(), reg.WatchID)
+		return
+	}
+	_ = s.MarkSourceLost(ctx, reg.WatchID)
 }
 
 func reconcileSourceWatch(s *Store, ctx context.Context, reg Registration) (bool, error) {
@@ -169,12 +185,12 @@ func reconcileSourceWatch(s *Store, ctx context.Context, reg Registration) (bool
 func reconcileGitRefAlternative(s *Store, ctx context.Context, reg Registration, altIdx int, cond awaitstore.Condition) (bool, error) {
 	grant, ok := resolveWatchRootGrant(reg.Authority, cond.Root)
 	if !ok || grant.Path == "" {
-		_ = s.MarkSourceLost(ctx, reg.WatchID)
+		markSourceWatchUnavailable(s, ctx, reg)
 		return true, nil
 	}
 	oid, exists, err := git.ResolveFullRef(grant.Path, cond.Ref)
 	if err != nil {
-		_ = s.MarkSourceLost(ctx, reg.WatchID)
+		markSourceWatchUnavailable(s, ctx, reg)
 		return true, nil
 	}
 	curState := formatGitRefState(oid, exists)
@@ -197,11 +213,10 @@ func reconcileGitRefAlternative(s *Store, ctx context.Context, reg Registration,
 		"after_oid":  oid,
 		"deleted":    !exists,
 	}
-	_, recorded, err := s.RecordMatch(ctx, reg.WatchID, MatchInput{
+	return emitSourceWatchMatch(s, ctx, reg, MatchInput{
 		SourceKind:   "git_ref",
 		OccurrenceID: occID,
 		Outcome:      "satisfied",
 		Evidence:     ev,
 	}, map[string]string{key: curState})
-	return recorded, err
 }

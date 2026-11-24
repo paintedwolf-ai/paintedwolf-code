@@ -58,6 +58,9 @@ func (m *Service) Apply(ctx context.Context, id string, in promptinput.Input) (s
 		userMsg.Authority = api.ContentAuthoritySystem
 		userMsg.Kind = in.HostSignal.Kind
 		userMsg.HostSignalID = in.HostSignal.ID
+		if in.HostSignal.TranscriptVisible {
+			userMsg.Visibility = api.MessageVisibilityTranscript
+		}
 	}
 	transcript.StampUserVisibility(&userMsg)
 	m.ReviewCheckpoint(ctx, id, userMsg)

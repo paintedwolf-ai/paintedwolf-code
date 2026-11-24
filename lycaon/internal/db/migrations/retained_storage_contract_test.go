@@ -78,7 +78,7 @@ func assertRetainedStorageFallback(t *testing.T, plan Plan) {
 }
 
 func retainedStorageContractPlan() Plan {
-	target := Baseline{Revision: 5, Shape: "1f17192a3ea624d2a0f89749252d3f0698acd0a5aaa5c12185f0cf47fe8b6ad3"}
+	target := Baseline{Revision: 5, Shape: "89f59b8ad903d8ba8b2853d5c0bed33d3fbb08cf789308f2fa21f5313b8aa71d"}
 	step := Revision5(target)
 	return Plan{Source: step.From, Target: target, steps: []Step{step}}
 }

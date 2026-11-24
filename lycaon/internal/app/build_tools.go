@@ -119,6 +119,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 			b.execution.Host.Commands.SetDerivedWatches(derivedCommandWatchAdapter{store: watchStore})
 		}
 		b.wireWatchProducers(watchStore)
+		b.wireStandingWatchHost(watchStore)
 	}
 	workerKnownFn := waitWorkerKnown(b.boards.WorkerRecords, b.workerRuntime.Queue)
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
@@ -148,6 +149,15 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 			}
 			p, err := b.storage.Projects.Get(ctx, projectID)
 			return err == nil && p != nil && !p.IsDraft
+		},
+		StandingWatchExists: func(projectID, watchID string) bool {
+			return watchStore != nil && watchStore.Standing().Exists(b.startup.ctx, projectID, watchID)
+		},
+		OverlappingStanding: func(ctx context.Context, projectID string, conditions []awaitstore.Condition) []watch.OverlappingStandingWatch {
+			if watchStore == nil {
+				return []watch.OverlappingStandingWatch{}
+			}
+			return watchStore.Standing().Overlapping(ctx, projectID, conditions)
 		},
 	}); err != nil {
 		return fmt.Errorf("watch tools: %w", err)

@@ -5007,21 +5007,24 @@ CREATE INDEX idx_program_publications_session
 CREATE TABLE watch_registrations (
     watch_id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    owner_kind TEXT NOT NULL CHECK (owner_kind IN ('session','job')),
-    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    owner_kind TEXT NOT NULL CHECK (owner_kind IN ('session','job','person')),
+    session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
     worker_job_id TEXT REFERENCES worker_jobs(id) ON DELETE CASCADE,
+    owner_person_id TEXT REFERENCES people(id),
     handle TEXT NOT NULL CHECK (handle != ''),
     seq INTEGER NOT NULL CHECK (seq >= 0),
     derived_command_handle TEXT,
     creating_invocation_id TEXT,
+    standing_draft TEXT CHECK (standing_draft IS NULL OR json_valid(standing_draft)),
     conditions_json TEXT NOT NULL CHECK (json_valid(conditions_json)),
     authority_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(authority_json)),
     cursors_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(cursors_json)),
-    delivery TEXT NOT NULL CHECK (delivery IN ('collect','wake')),
+    delivery TEXT NOT NULL CHECK (delivery IN ('collect','wake','run')),
     repeat INTEGER NOT NULL DEFAULT 0 CHECK (repeat IN (0,1)),
-    expires_at TEXT NOT NULL,
-    state TEXT NOT NULL CHECK (state IN ('live','terminal')),
-    terminal_outcome TEXT CHECK (terminal_outcome IS NULL OR terminal_outcome IN ('completed','expired','canceled','source_lost')),
+    expires_at TEXT,
+    state TEXT NOT NULL CHECK (state IN ('live','terminal','enabled','paused','disabled','completed')),
+    state_reason TEXT CHECK (state_reason IS NULL OR state_reason IN ('person','consecutive_failures','target_unavailable','owner_access_revoked')),
+    terminal_outcome TEXT CHECK (terminal_outcome IS NULL OR terminal_outcome IN ('completed','expired','canceled','source_lost','kept','dismissed')),
     slot_released INTEGER NOT NULL DEFAULT 0 CHECK (slot_released IN (0,1)),
     match_seq INTEGER NOT NULL DEFAULT 0 CHECK (match_seq >= 0),
     overflow_count INTEGER NOT NULL DEFAULT 0 CHECK (overflow_count >= 0),
@@ -5032,20 +5035,93 @@ CREATE TABLE watch_registrations (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     ended_at TEXT,
+    CHECK ((owner_kind = 'person') = (session_id IS NULL)),
+    CHECK ((owner_kind = 'person') = (owner_person_id IS NOT NULL)),
     CHECK ((owner_kind = 'job') = (worker_job_id IS NOT NULL)),
+    CHECK ((owner_kind = 'person') = (state IN ('enabled','paused','disabled','completed'))),
+    CHECK ((owner_kind = 'person') OR (expires_at IS NOT NULL AND expires_at != '')),
     CHECK ((state = 'terminal') = (terminal_outcome IS NOT NULL))
 ) STRICT;
 
 CREATE INDEX idx_watch_registrations_project_fk ON watch_registrations(project_id);
 CREATE INDEX idx_watch_registrations_session_fk ON watch_registrations(session_id);
 CREATE INDEX idx_watch_registrations_worker_job_fk ON watch_registrations(worker_job_id);
-CREATE UNIQUE INDEX idx_watch_registrations_session_handle ON watch_registrations(session_id, handle);
+CREATE INDEX idx_watch_registrations_owner_person_fk ON watch_registrations(owner_person_id);
+CREATE UNIQUE INDEX idx_watch_registrations_session_handle
+    ON watch_registrations(session_id, handle)
+    WHERE session_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_watch_registrations_invocation
     ON watch_registrations(session_id, creating_invocation_id)
-    WHERE creating_invocation_id IS NOT NULL AND creating_invocation_id != '';
+    WHERE session_id IS NOT NULL AND creating_invocation_id IS NOT NULL AND creating_invocation_id != '';
 CREATE UNIQUE INDEX idx_watch_registrations_derived_cmd
     ON watch_registrations(session_id, COALESCE(worker_job_id, ''), derived_command_handle)
-    WHERE derived_command_handle IS NOT NULL AND derived_command_handle != '';
+    WHERE session_id IS NOT NULL AND derived_command_handle IS NOT NULL AND derived_command_handle != '';
+
+CREATE TABLE standing_watch_settings (
+    watch_id TEXT PRIMARY KEY REFERENCES watch_registrations(watch_id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL CHECK (length(name) >= 1 AND length(name) <= 80),
+    name_folded TEXT NOT NULL CHECK (name_folded != ''),
+    prompt TEXT NOT NULL CHECK (length(prompt) >= 1 AND length(prompt) <= 8000),
+    gate_json TEXT CHECK (gate_json IS NULL OR json_valid(gate_json)),
+    gate_baseline_json TEXT CHECK (gate_baseline_json IS NULL OR json_valid(gate_baseline_json)),
+    min_gap_minutes INTEGER NOT NULL DEFAULT 15 CHECK (min_gap_minutes >= 15 AND min_gap_minutes <= 1440),
+    target_json TEXT NOT NULL CHECK (json_valid(target_json)),
+    workflow_id TEXT NOT NULL DEFAULT '',
+    model_id TEXT NOT NULL DEFAULT '',
+    run_spend_limit_usd REAL NOT NULL DEFAULT 2.00 CHECK (run_spend_limit_usd >= 0.10 AND run_spend_limit_usd <= 100.00),
+    allow_unpriced INTEGER NOT NULL DEFAULT 0 CHECK (allow_unpriced IN (0,1)),
+    daily_run_cap INTEGER NOT NULL DEFAULT 24 CHECK (daily_run_cap >= 1 AND daily_run_cap <= 96),
+    time_zone TEXT NOT NULL CHECK (time_zone != ''),
+    interval_anchor TEXT NOT NULL,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0 CHECK (consecutive_failures >= 0),
+    kept_from_session_id TEXT,
+    kept_from_handle TEXT,
+    last_outcome TEXT,
+    last_started_at TEXT,
+    UNIQUE (project_id, name_folded)
+) STRICT;
+
+CREATE INDEX idx_standing_watch_settings_project_fk ON standing_watch_settings(project_id);
+
+CREATE TABLE watch_runs (
+    run_id TEXT PRIMARY KEY,
+    watch_id TEXT NOT NULL REFERENCES watch_registrations(watch_id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    run_key TEXT NOT NULL UNIQUE CHECK (run_key != ''),
+    status TEXT NOT NULL CHECK (status IN (
+        'pending','queued','running','waiting_for_owner','completed','failed',
+        'fenced','canceled','skipped_overlap','skipped_unchanged','skipped_daily_cap',
+        'skipped_busy','missed'
+    )),
+    scheduled_for TEXT NOT NULL,
+    session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+    missed_count INTEGER NOT NULL DEFAULT 0 CHECK (missed_count >= 0),
+    condition_detail_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(condition_detail_json)),
+    gate_snapshot_json TEXT CHECK (gate_snapshot_json IS NULL OR json_valid(gate_snapshot_json)),
+    prompt_snapshot TEXT NOT NULL DEFAULT '',
+    spend_limit_usd REAL NOT NULL DEFAULT 2.00,
+    allow_unpriced INTEGER NOT NULL DEFAULT 0 CHECK (allow_unpriced IN (0,1)),
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    ended_at TEXT
+) STRICT;
+
+CREATE INDEX idx_watch_runs_watch_fk ON watch_runs(watch_id, created_at DESC);
+CREATE INDEX idx_watch_runs_project_status ON watch_runs(project_id, status, scheduled_for);
+CREATE INDEX idx_watch_runs_session_fk ON watch_runs(session_id) WHERE session_id IS NOT NULL;
+
+CREATE TABLE standing_watch_chat_provenance (
+    session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    watch_id TEXT NOT NULL,
+    watch_name TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    created_at TEXT NOT NULL
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX idx_standing_watch_chat_provenance_project_fk ON standing_watch_chat_provenance(project_id);
+CREATE INDEX idx_standing_watch_chat_provenance_watch ON standing_watch_chat_provenance(watch_id);
 
 CREATE TABLE watch_matches (
     match_id TEXT PRIMARY KEY,
