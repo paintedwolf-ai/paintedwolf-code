@@ -4,6 +4,7 @@ import { createSignal } from "solid-js";
 import { stubClient } from "../../test/client-fixture.ts";
 import { gitWorkspaceStatus } from "../../test/git-status-fixture.ts";
 import { createAppStore } from "../../store/app-state.ts";
+import { resolveGitWorktreeTarget } from "../../store/git-cache-actions.ts";
 import { loaded, valueOf } from "../../store/load-state.ts";
 import { refreshGitStatus } from "./git-status-reads.ts";
 import {
@@ -279,5 +280,32 @@ describe("git checkout targets", () => {
     expect(calls).toBe(5);
     expect(status.branch).toBe("feat/cold");
     expect(status.files[0]?.path).toBe("cold.ts");
+  });
+
+  it("updates, deduplicates, deletes, and clears per-project worktree targets", () => {
+    const store = createAppStore();
+    expect(resolveGitWorktreeTarget(store.state, "", "repo-1")).toBeUndefined();
+
+    store.actions.setGitWorktreeTarget("proj-1", "repo-1", "wt-1");
+    const epochAfterFirst = store.state.gitWorktreeEpoch;
+    expect(resolveGitWorktreeTarget(store.state, "proj-1", "repo-1")).toBe("wt-1");
+
+    // Duplicate assignment is a no-op.
+    store.actions.setGitWorktreeTarget("proj-1", "repo-1", "wt-1");
+    expect(store.state.gitWorktreeEpoch).toBe(epochAfterFirst);
+
+    // Clearing a single repo target deletes its key.
+    store.actions.setGitWorktreeTarget("proj-1", "repo-1", undefined);
+    expect(resolveGitWorktreeTarget(store.state, "proj-1", "repo-1")).toBeUndefined();
+
+    // Scoped and unscoped clearGitWorktreeTargets only clear matching project keys.
+    store.actions.setGitWorktreeTarget("proj-1", "repo-1", "wt-1");
+    store.actions.setGitWorktreeTarget("proj-2", "repo-2", "wt-2");
+    store.actions.clearGitWorktreeTargets("proj-1");
+    expect(resolveGitWorktreeTarget(store.state, "proj-1", "repo-1")).toBeUndefined();
+    expect(resolveGitWorktreeTarget(store.state, "proj-2", "repo-2")).toBe("wt-2");
+
+    store.actions.clearGitWorktreeTargets();
+    expect(resolveGitWorktreeTarget(store.state, "proj-2", "repo-2")).toBeUndefined();
   });
 });
