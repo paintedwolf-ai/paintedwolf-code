@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// ToolUsageRecorder adapts Inventory to tools.CheckoutUsageRecorder without failing tool calls on background discovery errors.
+// ToolUsageRecorder adapts Inventory to tools.CheckoutUsageRecorder without failing on discovery errors.
 type ToolUsageRecorder struct {
 	Inventory *Inventory
 }
