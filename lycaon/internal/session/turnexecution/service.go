@@ -73,6 +73,7 @@ type Service struct {
 	Authorization   *authorization.Service
 	History         *history.Service
 	PostTurn        *postturn.Service
+	ToolResults     ToolResults
 	sessionStore    Sessions
 	turnStore       Turns
 	llmSvc          *llm.Service
@@ -82,6 +83,12 @@ type Service struct {
 	slash           SlashCommands
 	Coordinator     *coordinator.Runtime
 }
+
+// ToolResults restores result rows for settled calls that lost them.
+type ToolResults interface {
+	ReconcileToolResults(ctx context.Context, sessionID string) error
+}
+
 type Components struct {
 	Execution       *execution.Lifetime
 	Workspace       Workspace
@@ -101,10 +108,11 @@ type Components struct {
 	Authorization   *authorization.Service
 	History         *history.Service
 	PostTurn        *postturn.Service
+	ToolResults     ToolResults
 }
 
 func New(sessionStore Sessions, turnStore Turns, llmSvc *llm.Service, c Components) *Service {
-	return &Service{sessionStore: sessionStore, turnStore: turnStore, llmSvc: llmSvc, Execution: c.Execution, Workspace: c.Workspace, Spend: c.Spend, Transcript: c.Transcript, Turns: c.Turns, Chats: c.Chats, SubmissionState: c.SubmissionState, Settlement: c.Settlement, Clocks: c.Clocks, Closeouts: c.Closeouts, Guidance: c.Guidance, Curation: c.Curation, Status: c.Status, Instructions: c.Instructions, Preparation: c.Preparation, Authorization: c.Authorization, History: c.History, PostTurn: c.PostTurn}
+	return &Service{sessionStore: sessionStore, turnStore: turnStore, llmSvc: llmSvc, Execution: c.Execution, Workspace: c.Workspace, Spend: c.Spend, Transcript: c.Transcript, Turns: c.Turns, Chats: c.Chats, SubmissionState: c.SubmissionState, Settlement: c.Settlement, Clocks: c.Clocks, Closeouts: c.Closeouts, Guidance: c.Guidance, Curation: c.Curation, Status: c.Status, Instructions: c.Instructions, Preparation: c.Preparation, Authorization: c.Authorization, History: c.History, PostTurn: c.PostTurn, ToolResults: c.ToolResults}
 }
 func (m *Service) SetRuntime(runtime *coordinator.Runtime) { m.Coordinator = runtime }
 func (m *Service) SetGrounding(grounding Grounding)        { m.grounding = grounding }

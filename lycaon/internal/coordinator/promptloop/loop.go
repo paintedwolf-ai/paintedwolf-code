@@ -298,6 +298,11 @@ func (l *PromptLoop) preparePromptLoop(ctx context.Context, in PromptRunInput) (
 	if err := l.Projection.seedModelIteration(ctx, in.AttemptID, setup.state); err != nil {
 		return nil, err
 	}
+	history, err := l.Nudges.expireSettledRepairs(ctx, in.SessionID, in.History)
+	if err != nil {
+		return nil, err
+	}
+	setup.state.history = history
 	if guard.IsCoordinatorProfile(setup.profileID) && l.Closeout.Deps.CloseoutStallState != nil {
 		retained := l.Closeout.Deps.CloseoutStallState(ctx, setup.sessionID)
 		setup.state.closeoutRetry = closeoutRetryState{
@@ -308,7 +313,6 @@ func (l *PromptLoop) preparePromptLoop(ctx context.Context, in PromptRunInput) (
 	if l.Context.Deps.Limits != nil {
 		setup.limits = l.Context.Deps.Limits(ctx, setup.sess)
 	}
-	var err error
 	setup.surfaceID, err = l.Context.refreshCoordinatorSurface(
 		ctx, setup.sess, setup.sessionID, setup.profileID, setup.state, "")
 	if err != nil {

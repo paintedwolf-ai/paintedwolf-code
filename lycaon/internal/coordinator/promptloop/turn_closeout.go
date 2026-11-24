@@ -452,7 +452,7 @@ func (l *turnCloseout) returnAssembledEarlyCloseout(
 func hostNudgeSignalID(nudge HostNudge) string {
 	signalID := strings.TrimSpace(nudge.SignalID)
 	if nudge.Feedback != nil {
-		signalID = feedbackSignalID(*nudge.Feedback)
+		signalID = api.RepairSignal(*nudge.Feedback)
 	}
 	return api.DraftRecoverySignal(nudge.DraftID, signalID)
 }
@@ -484,75 +484,20 @@ func (l *turnNudges) appendHostNudge(
 	if hostNudge.Content == "" {
 		return history, nil
 	}
-	if i := lastHostNudgeWithSignal(history, hostNudge); i >= 0 {
-		history[i].Content = hostNudge.Content
-		history[i].CreatedAt = time.Now().UTC()
-		if replaceDeferredUserNudge(st, history[i]) {
-			return history, nil
-		}
-		if l.Projection.Deps.UpdateMessage != nil {
-			if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, history[i].ID, history[i]); err != nil {
-				return nil, err
-			}
-		}
-		return history, nil
-	}
 	nudge := newHostNudge(hostNudge, kind)
+	history, err := l.supersedeHostNudges(ctx, sessionID, history, nudge, st)
+	if err != nil {
+		return nil, err
+	}
 	if deferUserNudgeStore(st) && hostNudge.DraftID == "" {
 		st.deferredUserNudges = append(st.deferredUserNudges, nudge)
 		return append(history, nudge), nil
 	}
-	nudge, err := l.Projection.appendMessage(ctx, sessionID, nudge)
+	nudge, err = l.Projection.appendMessage(ctx, sessionID, nudge)
 	if err != nil {
 		return nil, err
 	}
 	return append(history, nudge), nil
-}
-
-func lastHostNudgeWithSignal(history []api.Message, nudge HostNudge) int {
-	signalID := hostNudgeSignalID(nudge)
-	if signalID == "" {
-		return -1
-	}
-	for i := len(history) - 1; i >= 0; i-- {
-		msg := history[i]
-		if msg.Origin != api.MessageOriginHost {
-			continue
-		}
-		if strings.TrimSpace(msg.HostSignalID) == signalID {
-			return i
-		}
-	}
-	return -1
-}
-
-func feedbackSignalID(feedback api.ToolFeedback) string {
-	code := strings.TrimSpace(feedback.Code)
-	if code == "" {
-		return ""
-	}
-	if feedback.Subject == nil {
-		return "guidance:" + code
-	}
-	kind := strings.TrimSpace(feedback.Subject.Kind)
-	id := strings.TrimSpace(feedback.Subject.ID)
-	if kind == "" || id == "" {
-		return "guidance:" + code
-	}
-	return "guidance:" + code + ":" + kind + ":" + id
-}
-
-func replaceDeferredUserNudge(st *promptLoopTurnState, msg api.Message) bool {
-	if st == nil {
-		return false
-	}
-	for i := range st.deferredUserNudges {
-		if st.deferredUserNudges[i].ID == msg.ID {
-			st.deferredUserNudges[i] = msg
-			return true
-		}
-	}
-	return false
 }
 
 func deferUserNudgeStore(st *promptLoopTurnState) bool {

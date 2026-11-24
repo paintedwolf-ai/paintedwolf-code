@@ -49,8 +49,8 @@ type Settlement struct {
 	Isolation     *api.InvocationIsolation
 }
 
-// InterruptedProjection is an interrupted invocation missing its transcript result.
-type InterruptedProjection struct {
+// UnansweredReceipt is a settled invocation missing its transcript result.
+type UnansweredReceipt struct {
 	SessionID          string
 	AssistantMessageID string
 	Receipt            api.InvocationReceipt
@@ -65,11 +65,11 @@ type Recorder interface {
 	InterruptRunning(context.Context) (int64, error)
 }
 
-// ProjectionRecoveryRecorder finds interrupted receipts whose transcript
+// ProjectionRecoveryRecorder finds settled receipts whose transcript
 // projection is missing without enumerating sessions or transcript history.
 type ProjectionRecoveryRecorder interface {
 	Recorder
-	ListInterruptedWithoutResult(context.Context) ([]InterruptedProjection, error)
+	ListSettledWithoutResult(context.Context) ([]UnansweredReceipt, error)
 }
 
 // SessionInterrupter closes in-flight receipts for one stopped session.
@@ -81,7 +81,7 @@ type SessionInterrupter interface {
 // scanning its transcript or unrelated sessions.
 type SessionProjectionRecoveryRecorder interface {
 	SessionInterrupter
-	ListInterruptedWithoutResultForSession(context.Context, string) ([]InterruptedProjection, error)
+	ListSettledWithoutResultForSession(context.Context, string) ([]UnansweredReceipt, error)
 }
 
 // SQLRecorder stores receipts in the main database.
@@ -325,42 +325,42 @@ func (r *SQLRecorder) ListSessionPage(ctx context.Context, sessionID string, cur
 	}, nil
 }
 
-// ListInterruptedWithoutResult returns one bounded repair page across sessions.
-func (r *SQLRecorder) ListInterruptedWithoutResult(ctx context.Context) ([]InterruptedProjection, error) {
+// ListSettledWithoutResult returns one bounded repair page across sessions.
+func (r *SQLRecorder) ListSettledWithoutResult(ctx context.Context) ([]UnansweredReceipt, error) {
 	if r == nil || r.queries == nil {
 		return nil, fmt.Errorf("invocation recorder is not configured")
 	}
-	rows, err := r.queries.ListInterruptedInvocationReceiptsWithoutResult(ctx)
+	rows, err := r.queries.ListSettledInvocationReceiptsWithoutResult(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]InterruptedProjection, 0, len(rows))
+	out := make([]UnansweredReceipt, 0, len(rows))
 	for _, row := range rows {
 		receipt, convertErr := receiptFromRow(row)
 		if convertErr != nil {
 			return nil, convertErr
 		}
-		out = append(out, InterruptedProjection{SessionID: row.SessionID, AssistantMessageID: row.AssistantMessageID.String, Receipt: *receipt})
+		out = append(out, UnansweredReceipt{SessionID: row.SessionID, AssistantMessageID: row.AssistantMessageID.String, Receipt: *receipt})
 	}
 	return out, nil
 }
 
-// ListInterruptedWithoutResultForSession returns one bounded repair page for a stopped session.
-func (r *SQLRecorder) ListInterruptedWithoutResultForSession(ctx context.Context, sessionID string) ([]InterruptedProjection, error) {
+// ListSettledWithoutResultForSession returns one bounded repair page for one session.
+func (r *SQLRecorder) ListSettledWithoutResultForSession(ctx context.Context, sessionID string) ([]UnansweredReceipt, error) {
 	if r == nil || r.queries == nil {
 		return nil, fmt.Errorf("invocation recorder is not configured")
 	}
-	rows, err := r.queries.ListSessionInterruptedInvocationReceiptsWithoutResult(ctx, strings.TrimSpace(sessionID))
+	rows, err := r.queries.ListSessionSettledInvocationReceiptsWithoutResult(ctx, strings.TrimSpace(sessionID))
 	if err != nil {
 		return nil, err
 	}
-	out := make([]InterruptedProjection, 0, len(rows))
+	out := make([]UnansweredReceipt, 0, len(rows))
 	for _, row := range rows {
 		receipt, convertErr := receiptFromRow(db.InvocationReceipts(row))
 		if convertErr != nil {
 			return nil, convertErr
 		}
-		out = append(out, InterruptedProjection{SessionID: row.SessionID, AssistantMessageID: row.AssistantMessageID.String, Receipt: *receipt})
+		out = append(out, UnansweredReceipt{SessionID: row.SessionID, AssistantMessageID: row.AssistantMessageID.String, Receipt: *receipt})
 	}
 	return out, nil
 }

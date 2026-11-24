@@ -254,7 +254,7 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 		}
 		return texts
 	})
-	m.Runner = turnexecution.New(store.Sessions, store.Turns, svc, turnexecution.Components{Execution: turnExecution, Workspace: m.Workspace, Spend: turnSpend, Transcript: turnTranscript, Turns: turnTurns, Chats: m.Chats, SubmissionState: turnSubmissionState, Settlement: turnSettlement, Clocks: turnClocks, Closeouts: turnCloseouts, Guidance: m.Coordinator.Guidance, Curation: turnCuration, Status: turnStatus, Instructions: turnInstructions, Preparation: turnPreparation, Authorization: turnAuthorization, History: turnHistory, PostTurn: turnPostTurn})
+	m.Runner = turnexecution.New(store.Sessions, store.Turns, svc, turnexecution.Components{Execution: turnExecution, Workspace: m.Workspace, Spend: turnSpend, Transcript: turnTranscript, Turns: turnTurns, Chats: m.Chats, SubmissionState: turnSubmissionState, Settlement: turnSettlement, Clocks: turnClocks, Closeouts: turnCloseouts, Guidance: m.Coordinator.Guidance, Curation: turnCuration, Status: turnStatus, Instructions: turnInstructions, Preparation: turnPreparation, Authorization: turnAuthorization, History: turnHistory, PostTurn: turnPostTurn, ToolResults: interruptions})
 	m.Workers.Harness = workerharness.New(store.Transcript, store.Evidence, m.Profiles, m.ToolContext, m.Workers.Workspaces, m.Workspace, registry, m.Verification, OverlaySourceProofForWorkspaces(m.Workers.Workspaces))
 	m.Admission.Bind(m.Runner, turnSettlement, m.Submissions)
 	m.Coordinator.Closeout = closeoutassembly.New(store.Sessions, store.Transcript, store.Evidence, m.Workspace, workerState, m.Verification.Evidence)

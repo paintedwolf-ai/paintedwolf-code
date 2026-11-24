@@ -259,15 +259,6 @@ anchors:
     envelope:
       vars: {}
 
-  - id: edit.follow_up.repeat
-    title: Edit follow-up repeat
-    description: Two consecutive user-visible turns each answered with coordinator inline file edits.
-    trigger_class: observed_history
-    surface: coordinator
-    planes: [inform]
-    envelope:
-      vars: {}
-
   - id: coordinator.closeout
     title: Coordinator closeout
     description: Investigate/synthesis final turn forced to the final report (no tools).

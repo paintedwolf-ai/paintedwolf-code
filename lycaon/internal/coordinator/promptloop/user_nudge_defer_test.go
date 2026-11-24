@@ -41,7 +41,7 @@ func TestAppendUserNudgeDefersStoreWhileDraftSlotOpen(t *testing.T) {
 	}
 }
 
-func TestAppendHostNudgeReplacesSameCode(t *testing.T) {
+func TestAppendHostNudgeSupersedesSameCode(t *testing.T) {
 	var updated []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Projection: ProjectionDeps{
@@ -57,24 +57,22 @@ func TestAppendHostNudgeReplacesSameCode(t *testing.T) {
 	first := "Rejected: first\nCode: SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT\nRun verify"
 	history, err := loop.Nudges.appendHostNudge(context.Background(), "s1", nil, HostNudge{Content: first, Feedback: &api.ToolFeedback{Code: "SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT"}}, "", nil)
 	testutil.FailErr(t, "first nudge", err)
-	if len(history) != 1 {
-		t.Fatalf("history after first = %d", len(history))
-	}
 	second := "Rejected: second\nCode: SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT\nUse command"
 	history, err = loop.Nudges.appendHostNudge(context.Background(), "s1", history, HostNudge{Content: second, Feedback: &api.ToolFeedback{Code: "SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT"}}, "", nil)
 	testutil.FailErr(t, "second nudge", err)
-	if len(history) != 1 {
-		t.Fatalf("same-code kick must replace, history = %d", len(history))
+	if len(history) != 2 || history[0].DraftStatus != api.DraftStatusWithdrawn || history[1].Content != second {
+		t.Fatalf("history = %+v want withdrawn first and active second", history)
 	}
-	if history[0].Content != second {
-		t.Fatalf("replaced content = %q", history[0].Content)
+	if len(updated) != 1 || updated[0].Content != first || updated[0].DraftStatus != api.DraftStatusWithdrawn {
+		t.Fatalf("UpdateMessage = %+v want withdrawn first row", updated)
 	}
-	if len(updated) != 1 || updated[0].Content != second {
-		t.Fatalf("UpdateMessage = %+v", updated)
+	prompt := api.FilterPromptHistory(history)
+	if len(prompt) != 1 || prompt[0].Content != second {
+		t.Fatalf("prompt history = %+v want only the latest repair", prompt)
 	}
 }
 
-func TestAppendHostNudgeSameCodeWhileSlotOpenPatchesStore(t *testing.T) {
+func TestAppendHostNudgeSupersedesStoredRowWhileSlotOpen(t *testing.T) {
 	var appended []api.Message
 	var updated []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
@@ -92,27 +90,47 @@ func TestAppendHostNudgeSameCodeWhileSlotOpenPatchesStore(t *testing.T) {
 	first := "Rejected: first\nCode: SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT\nRun verify"
 	history, err := loop.Nudges.appendHostNudge(context.Background(), "s1", nil, HostNudge{Content: first, Feedback: &api.ToolFeedback{Code: "SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT"}}, "", nil)
 	testutil.FailErr(t, "persist first", err)
-	if len(appended) != 1 {
-		t.Fatalf("first persist = %d want 1", len(appended))
-	}
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true}
 	second := "Rejected: second\nCode: SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT\nUse command"
 	history, err = loop.Nudges.appendHostNudge(context.Background(), "s1", history, HostNudge{Content: second, Feedback: &api.ToolFeedback{Code: "SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT"}}, "", st)
 	testutil.FailErr(t, "same-code while slot open", err)
-	if len(history) != 1 || history[0].Content != second {
+	if len(history) != 2 || history[0].DraftStatus != api.DraftStatusWithdrawn || history[1].Content != second {
 		t.Fatalf("history = %+v", history)
 	}
-	if len(st.deferredUserNudges) != 0 {
-		t.Fatalf("persisted row must not join deferred list: %d", len(st.deferredUserNudges))
+	if len(updated) != 1 || updated[0].DraftStatus != api.DraftStatusWithdrawn {
+		t.Fatalf("UpdateMessage = %+v want the stored row withdrawn", updated)
 	}
-	if len(updated) != 1 || updated[0].Content != second {
-		t.Fatalf("UpdateMessage = %+v", updated)
+	if len(st.deferredUserNudges) != 1 {
+		t.Fatalf("deferred = %d want the replacement", len(st.deferredUserNudges))
 	}
-	if err := loop.Nudges.closeCoordinatorDraftSlot(context.Background(), "s1", st, "slot-1"); err != nil {
-		testutil.FailErr(t, "close slot", err)
+	testutil.FailErr(t, "close slot", loop.Nudges.closeCoordinatorDraftSlot(context.Background(), "s1", st, "slot-1"))
+	if len(appended) != 2 || appended[1].Content != second {
+		t.Fatalf("appended = %+v want the replacement after the stored row", appended)
 	}
-	if len(appended) != 1 {
-		t.Fatalf("flush re-appended persisted nudge: %d", len(appended))
+}
+
+func TestAppendHostNudgeDropsDeferredRowItSupersedes(t *testing.T) {
+	var appended []api.Message
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				appended = append(appended, msgs...)
+				return nil
+			},
+		},
+	})
+	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true}
+	feedback := &api.ToolFeedback{Code: "SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT"}
+	history, err := loop.Nudges.appendHostNudge(context.Background(), "s1", nil, HostNudge{Content: "first", Feedback: feedback}, "", st)
+	testutil.FailErr(t, "first", err)
+	history, err = loop.Nudges.appendHostNudge(context.Background(), "s1", history, HostNudge{Content: "second", Feedback: feedback}, "", st)
+	testutil.FailErr(t, "second", err)
+	if len(history) != 1 || history[0].Content != "second" || len(st.deferredUserNudges) != 1 {
+		t.Fatalf("history = %+v deferred = %d want only the replacement", history, len(st.deferredUserNudges))
+	}
+	testutil.FailErr(t, "close slot", loop.Nudges.closeCoordinatorDraftSlot(context.Background(), "s1", st, "slot-1"))
+	if len(appended) != 1 || appended[0].Content != "second" {
+		t.Fatalf("appended = %+v want only the replacement", appended)
 	}
 }
 
@@ -174,7 +192,7 @@ func TestFilterPromptHistoryKeepsToolGroupContiguousForWire(t *testing.T) {
 	}
 }
 
-func TestDraftRecoveryPersistsBeforeRetryAndScopesDeduplication(t *testing.T) {
+func TestDraftRecoveryPersistsBeforeRetryAndKeepsOneActiveRepair(t *testing.T) {
 	var stored []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{Projection: ProjectionDeps{
 		AppendMessages: func(_ context.Context, _ string, messages ...api.Message) error {
@@ -192,15 +210,25 @@ func TestDraftRecoveryPersistsBeforeRetryAndScopesDeduplication(t *testing.T) {
 	}
 	nudge.Content = "revised recovery"
 	history, err = loop.Nudges.appendHostNudge(t.Context(), "session", history, nudge, api.MessageKindCoordinatorGuidance, st)
-	testutil.FailErr(t, "replace same draft recovery", err)
-	if len(history) != 1 || len(stored) != 1 {
-		t.Fatal("same draft and code must deduplicate")
-	}
+	testutil.FailErr(t, "supersede same draft recovery", err)
 	nudge.DraftID = "later-draft"
+	nudge.Content = "later recovery"
 	history, err = loop.Nudges.appendHostNudge(t.Context(), "session", history, nudge, api.MessageKindCoordinatorGuidance, st)
-	testutil.FailErr(t, "append different draft recovery", err)
-	if len(history) != 2 || len(stored) != 2 {
-		t.Fatal("different drafts must retain separate recovery identities")
+	testutil.FailErr(t, "append later draft recovery", err)
+	if len(stored) != 3 {
+		t.Fatalf("stored = %d want every repair retained for audit", len(stored))
+	}
+	active := 0
+	for _, msg := range history {
+		if api.IsActiveRepair(msg) {
+			active++
+			if msg.Content != "later recovery" {
+				t.Fatalf("active repair = %q want the latest", msg.Content)
+			}
+		}
+	}
+	if active != 1 {
+		t.Fatalf("active repairs = %d want 1", active)
 	}
 }
 

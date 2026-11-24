@@ -31,7 +31,7 @@ func (m *Recovery) InterruptTools(ctx context.Context, id string) error {
 	if _, err := interrupter.InterruptRunningSession(ctx, id); err != nil {
 		return fmt.Errorf("interrupt tool invocations for session %s: %w", id, err)
 	}
-	if err := m.RecoverInterruptedToolResultPagesForSession(ctx, interrupter, id); err != nil {
+	if err := m.ReconcileToolResults(ctx, id); err != nil {
 		return fmt.Errorf("reconcile tool results for session %s: %w", id, err)
 	}
 	return nil

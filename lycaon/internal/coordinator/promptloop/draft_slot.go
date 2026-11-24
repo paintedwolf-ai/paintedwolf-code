@@ -140,11 +140,8 @@ func (l *turnNudges) retireToolFreeDraftRecovery(
 		if api.DraftRecoveryTarget(history[i]) != draftID || history[i].DraftStatus == api.DraftStatusWithdrawn {
 			continue
 		}
-		history[i].DraftStatus = api.DraftStatusWithdrawn
-		if l.Projection.Deps.UpdateMessage != nil && history[i].ID != "" {
-			if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, history[i].ID, history[i]); err != nil {
-				return nil, err
-			}
+		if err := l.withdrawHostRow(ctx, sessionID, &history[i]); err != nil {
+			return nil, err
 		}
 	}
 	return history, nil

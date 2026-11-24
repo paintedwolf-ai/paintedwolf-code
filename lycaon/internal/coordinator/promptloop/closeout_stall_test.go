@@ -177,7 +177,7 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 	for _, repair := range []struct {
 		code, contract, offer string
 	}{
-		{code: guidance.InvestHandleNotObservedCode, contract: "Your answer is retained", offer: "use a tool with effects"},
+		{code: guidance.InvestHandleNotObservedCode, contract: "Keep the answer and its valid citations", offer: "use a tool with effects"},
 		{code: guidance.ReportFenceUnreadableCode, contract: "emit only the report fence", offer: "use an offered tool"},
 	} {
 		for _, tc := range []struct {

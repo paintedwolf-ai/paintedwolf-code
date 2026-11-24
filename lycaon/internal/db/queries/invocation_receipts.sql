@@ -55,7 +55,7 @@ WHERE session_id = sqlc.arg(session_id)
 ORDER BY started_at, id
 LIMIT sqlc.arg(limit_count);
 
--- name: ListInterruptedInvocationReceiptsWithoutResult :many
+-- name: ListSettledInvocationReceiptsWithoutResult :many
 SELECT
     receipt.id, receipt.project_id, receipt.session_id, receipt.assistant_message_id,
     receipt.tool_call_id, receipt.tool_name, receipt.contract_digest, receipt.args_digest,
@@ -67,7 +67,17 @@ SELECT
     receipt.failure_class, receipt.failure_retryable, receipt.failure_owner_ref,
     receipt.started_at, receipt.settled_at
 FROM invocation_receipts receipt
-WHERE receipt.status = 'interrupted'
+WHERE receipt.status IN ('rejected', 'error', 'interrupted')
+  AND receipt.failure_code <> ''
+  AND EXISTS (
+      SELECT 1 FROM messages assistant, json_each(assistant.tool_calls_json) call
+      WHERE assistant.session_id = receipt.session_id
+        AND assistant.id = receipt.assistant_message_id
+        AND assistant.role = 'assistant'
+        AND assistant.draft_status NOT IN ('withdrawn', 'rejected')
+        AND assistant.tool_calls_json <> ''
+        AND json_extract(call.value, '$.id') = receipt.tool_call_id
+  )
   AND NOT EXISTS (
       SELECT 1 FROM messages
       WHERE messages.session_id = receipt.session_id
@@ -76,7 +86,7 @@ WHERE receipt.status = 'interrupted'
 ORDER BY receipt.settled_at, receipt.id
 LIMIT 256;
 
--- name: ListSessionInterruptedInvocationReceiptsWithoutResult :many
+-- name: ListSessionSettledInvocationReceiptsWithoutResult :many
 SELECT
     receipt.id, receipt.project_id, receipt.session_id, receipt.assistant_message_id,
     receipt.tool_call_id, receipt.tool_name, receipt.contract_digest, receipt.args_digest,
@@ -89,7 +99,17 @@ SELECT
     receipt.started_at, receipt.settled_at
 FROM invocation_receipts receipt
 WHERE receipt.session_id = ?
-  AND receipt.status = 'interrupted'
+  AND receipt.status IN ('rejected', 'error', 'interrupted')
+  AND receipt.failure_code <> ''
+  AND EXISTS (
+      SELECT 1 FROM messages assistant, json_each(assistant.tool_calls_json) call
+      WHERE assistant.session_id = receipt.session_id
+        AND assistant.id = receipt.assistant_message_id
+        AND assistant.role = 'assistant'
+        AND assistant.draft_status NOT IN ('withdrawn', 'rejected')
+        AND assistant.tool_calls_json <> ''
+        AND json_extract(call.value, '$.id') = receipt.tool_call_id
+  )
   AND NOT EXISTS (
       SELECT 1 FROM messages
       WHERE messages.session_id = receipt.session_id

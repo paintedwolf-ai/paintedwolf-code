@@ -146,9 +146,6 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 		ProjectDir:      sess.WorkspacePath,
 	})
 	m.Closeouts.BeginPrompt(ctx, sess, in)
-	if !hostTurn {
-		m.PostTurn.EditFollowUp(ctx, sess, text)
-	}
 	if m.Preparation != nil && m.Preparation.Profiles != nil {
 		_ = m.Preparation.Profiles.EffectiveApprovalPosture(ctx, sess)
 	}
@@ -208,6 +205,11 @@ func (m *Service) executePromptRun(
 	finishPreparing func(),
 ) (promptRunExecution, error) {
 	var execution promptRunExecution
+	if m.ToolResults != nil {
+		if err := m.ToolResults.ReconcileToolResults(ctx, sessionID); err != nil {
+			return execution, err
+		}
+	}
 	assembly, err := m.Preparation.Build(ctx, sess, sessionID, in, openingMessageID)
 	if err != nil {
 		return execution, err

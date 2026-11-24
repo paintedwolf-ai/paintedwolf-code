@@ -89,7 +89,7 @@ func (r *Rasterizer) Rasterize(ctx context.Context, req RasterizeRequest) (Raste
 				"render_kit_kind":        "icon",
 				"unknown":                ire.Unknown,
 				"render_kit_suggestions": ire.Suggestions,
-				"naming":                 designkit.IconNamingGuide,
+				"naming":                 designkit.IconNamingGuide(),
 			})
 		}
 		return RasterizeResult{}, browserengine.Reject("RENDER_KIT_UNKNOWN", map[string]any{
