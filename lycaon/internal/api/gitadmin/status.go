@@ -159,13 +159,13 @@ func (s *Handler) gitChangesPage(
 			oldRootID, oldRootRel = attributeChangedFile(repo.Toplevel, file.OldPath, roots)
 		}
 		files = append(files, wire.GitFileEntry{
-			Path:                 file.Path,
-			Status:               file.Status,
-			RootID:               rootID,
-			RootRelativePath:     rootRel,
-			OldPath:              file.OldPath,
-			OldRootID:            oldRootID,
-			OldRootRelativePath:  oldRootRel,
+			Path:                file.Path,
+			Status:              file.Status,
+			RootID:              rootID,
+			RootRelativePath:    rootRel,
+			OldPath:             file.OldPath,
+			OldRootID:           oldRootID,
+			OldRootRelativePath: oldRootRel,
 		})
 	}
 	empty.Files = files
