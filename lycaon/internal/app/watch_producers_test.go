@@ -40,13 +40,12 @@ func TestWatchProducersAuthorityAndStateLookup(t *testing.T) {
 
 	parent, err := repos.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent session", err)
-	child, err := repos.Sessions.Create(t.Context(), api.CreateSessionRequest{ParentSessionID: parent.ID}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create child session", err)
+	testdbseed.InsertChildSession(t, database, "child-prod-1", parent.ID)
 
 	_, err = database.ExecContext(t.Context(), `INSERT INTO worker_jobs
 		(id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at)
-		VALUES ('job-p1', ?, ?, ?, 'implementer', 'completed', 'work', 'work', '2026-05-01T10:00:00Z')`,
-		testdbseed.DefaultProjectID, parent.ID, child.ID)
+		VALUES ('job-p1', ?, ?, 'child-prod-1', 'implementer', 'completed', 'work', 'work', '2026-05-01T10:00:00Z')`,
+		testdbseed.DefaultProjectID, parent.ID)
 	testutil.FailErr(t, "insert worker job", err)
 
 	clock := testutil.NewFakeClock(time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC))
@@ -89,7 +88,7 @@ func TestWatchProducersAuthorityAndStateLookup(t *testing.T) {
 	if !snap.HasWorkerCycle || len(snap.SettledWorkers) != 1 || snap.SettledWorkers[0].Status != "complete" {
 		t.Fatalf("coordinator watch state = %+v", snap)
 	}
-	gotParent, _, gotJob := resolveChildWorkerIdentity(b, t.Context(), child.ID)
+	gotParent, _, gotJob := resolveChildWorkerIdentity(b, t.Context(), "child-prod-1")
 	if gotParent != parent.ID || gotJob != "job-p1" {
 		t.Fatalf("resolveChildWorkerIdentity = (%q, %q), want (%q, job-p1)", gotParent, gotJob, parent.ID)
 	}
@@ -131,8 +130,7 @@ func TestWatchProducersHooksAndOutcomeBridge(t *testing.T) {
 
 	parent, err := repos.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent session", err)
-	child, err := repos.Sessions.Create(t.Context(), api.CreateSessionRequest{ParentSessionID: parent.ID}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create child session", err)
+	testdbseed.InsertChildSession(t, database, "child-bridge-1", parent.ID)
 
 	clock := testutil.NewFakeClock(time.Date(2026, 5, 1, 11, 0, 0, 0, time.UTC))
 	ws := watch.NewStore(database, clock)
@@ -165,11 +163,11 @@ func TestWatchProducersHooksAndOutcomeBridge(t *testing.T) {
 		Categories:    []api.ScanCategory{"security", "quality"},
 		FindingsCount: 1,
 	})
-	b.workerRuntime.Cancel.OnJobRetired(t.Context(), child.ID, "job-1")
+	b.workerRuntime.Cancel.OnJobRetired(t.Context(), "child-bridge-1", "job-1")
 
 	bridge := &worker.SessionOutcomeBridge{}
 	bindWorkerOutcomeWatches(b, bridge)
-	bridge.OnJobRetired(t.Context(), child.ID, "job-1")
+	bridge.OnJobRetired(t.Context(), "child-bridge-1", "job-1")
 	for _, st := range []string{"complete", "failed", "needs_decision"} {
 		_ = bridge.OnWorkerWatchTerminal(t.Context(), parent.ID, "job-"+st, st, "done")
 	}
