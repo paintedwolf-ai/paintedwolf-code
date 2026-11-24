@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolhost"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
@@ -249,6 +250,7 @@ func TestCommandSchemaProjectsUntilCompleteByProfileParking(t *testing.T) {
 		t.Fatal("command schema missing")
 	}
 
+	var ran int
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register command", reg.RegisterDerived(tools.ToolMeta{
 		Name:               cmdMeta.Name,
@@ -256,13 +258,22 @@ func TestCommandSchemaProjectsUntilCompleteByProfileParking(t *testing.T) {
 		DescriptionEffects: cmdMeta.DescriptionEffects,
 		ArgsSchema:         cmdMeta.ArgsSchema,
 	}, func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-		return "", nil
+		ran++
+		return "ok", nil
 	}))
+
+	newExec := func(policy platform.PolicyEngine, asProgramEntry bool) *toolexecution.Executor {
+		exec := toolexecution.NewExecutor(policy, reg, "test-profile")
+		exec.Metadata.SetToolSchemas(schemas)
+		if asProgramEntry {
+			exec.SetProgramEntry("command", nil)
+		}
+		return exec
+	}
 
 	hasUntilComplete := func(t *testing.T, policy platform.PolicyEngine) bool {
 		t.Helper()
-		exec := toolexecution.NewExecutor(policy, reg, "test-profile")
-		exec.Metadata.SetToolSchemas(schemas)
+		exec := newExec(policy, true)
 		listed, err := exec.Metadata.List(t.Context(), platform.ToolFilter{ProfileID: "test-profile"})
 		testutil.FailErr(t, "Metadata.List", err)
 		for _, item := range listed {
@@ -277,13 +288,41 @@ func TestCommandSchemaProjectsUntilCompleteByProfileParking(t *testing.T) {
 		return false
 	}
 
-	if !hasUntilComplete(t, parkProjectionPolicy{allowWait: true, waitConditions: []string{"process_done"}}) {
+	allowPolicy := parkProjectionPolicy{allowWait: true, waitConditions: []string{"process_done"}}
+	noWaitPolicy := parkProjectionPolicy{allowWait: false, waitConditions: []string{"process_done"}}
+	noProcessDonePolicy := parkProjectionPolicy{allowWait: true, waitConditions: []string{"http_ready"}}
+
+	if !hasUntilComplete(t, allowPolicy) {
 		t.Fatal("expected until_complete for profile that can park")
 	}
-	if hasUntilComplete(t, parkProjectionPolicy{allowWait: false, waitConditions: []string{"process_done"}}) {
+	if hasUntilComplete(t, noWaitPolicy) {
 		t.Fatal("expected until_complete to be pruned when wait is disallowed")
 	}
-	if hasUntilComplete(t, parkProjectionPolicy{allowWait: true, waitConditions: []string{"http_ready"}}) {
+	if hasUntilComplete(t, noProcessDonePolicy) {
 		t.Fatal("expected until_complete to be pruned without process_done wait condition")
+	}
+
+	for _, asEntry := range []bool{true, false} {
+		ran = 0
+		tc := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "test-profile", SessionID: "sess-park"}}
+		out, err := newExec(allowPolicy, asEntry).Invoke(t.Context(), "command", map[string]any{"command": "echo hi", "until_complete": true}, tc)
+		testutil.FailErr(t, "invoke allowed until_complete", err)
+		if out != "ok" || ran != 1 {
+			t.Fatalf("allowed invoke (entry=%v): out=%q ran=%d", asEntry, out, ran)
+		}
+
+		for _, blockedPolicy := range []platform.PolicyEngine{noWaitPolicy, noProcessDonePolicy} {
+			for _, flagVal := range []bool{true, false} {
+				ran = 0
+				_, err := newExec(blockedPolicy, asEntry).Invoke(t.Context(), "command", map[string]any{"command": "echo hi", "until_complete": flagVal}, tc)
+				tr := toolrejection.AsToolReject(err)
+				if tr == nil || tr.Code != "TOOL_ARGS_INVALID" {
+					t.Fatalf("expected TOOL_ARGS_INVALID when profile cannot park (entry=%v, val=%v), got err=%v", asEntry, flagVal, err)
+				}
+				if ran != 0 {
+					t.Fatalf("command ran despite unsupported until_complete (entry=%v, val=%v)", asEntry, flagVal)
+				}
+			}
+		}
 	}
 }
