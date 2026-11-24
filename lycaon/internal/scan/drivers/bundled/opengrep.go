@@ -232,7 +232,11 @@ func (o *OpenGrepScanner) consoleTail(console []byte) string {
 func opengrepSubprocessEnv(files opengrepRunFiles) []string {
 	out := append([]string(nil), os.Environ()...)
 	pins := map[string]string{
+		"HOME":                       files.dir(),
+		"XDG_CONFIG_HOME":            files.dir(),
 		"XDG_CACHE_HOME":             files.dir(),
+		"XDG_DATA_HOME":              files.dir(),
+		"XDG_STATE_HOME":             files.dir(),
 		"TMPDIR":                     files.dir(),
 		"TMP":                        files.dir(),
 		"TEMP":                       files.dir(),
