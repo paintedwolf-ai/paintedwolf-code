@@ -26,11 +26,12 @@ type recordingParking struct {
 	unavailable bool
 	// gate, when set, holds each park until the test opens it, then the park
 	// claims the wait as the host's park does.
-	gate    chan struct{}
-	parks   []tools.ProgramPark
-	claims  []bool
-	parked  chan *recordedPark
-	refused chan struct{}
+	gate     chan struct{}
+	entering chan string
+	parks    []tools.ProgramPark
+	claims   []bool
+	parked   chan *recordedPark
+	refused  chan struct{}
 }
 
 type recordedPark struct {
@@ -44,10 +45,18 @@ type settledProgram struct {
 }
 
 func newRecordingParking() *recordingParking {
-	return &recordingParking{parked: make(chan *recordedPark, 1), refused: make(chan struct{}, 2)}
+	return &recordingParking{
+		entering: make(chan string, 1),
+		parked:   make(chan *recordedPark, 1),
+		refused:  make(chan struct{}, 2),
+	}
 }
 
 func (p *recordingParking) ParkProgram(_ context.Context, _ tools.ToolContext, park tools.ProgramPark) (tools.ParkedProgram, error) {
+	select {
+	case p.entering <- park.ProgramID:
+	default:
+	}
 	if p.gate != nil {
 		<-p.gate
 	}

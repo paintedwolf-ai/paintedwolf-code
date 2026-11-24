@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
@@ -61,6 +62,8 @@ type Config struct {
 	// TestFileOperationHold runs before each file operation's work, while it
 	// is still cancelable.
 	TestFileOperationHold func(context.Context, fileops.Request)
+	// TestProgramClock overrides the clock used for program inline wait budgets.
+	TestProgramClock commandprogram.Clock
 	// TestStoreCommitObserver sees each store write transaction as it commits.
 	TestStoreCommitObserver db.CommitObserver
 	// TestSecretMatcher supplies outbound secret matching in tests.

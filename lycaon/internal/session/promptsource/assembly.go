@@ -107,10 +107,24 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		WorkspaceRoots:          m.Workspace.PromptRootRows,
 		ProjectOverlayRootPaths: m.Workspace.PromptRoots,
 		SessionView:             m.sessionView,
-		AgentsMDIndex:           m.PolicyIndex.Index,
-		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error) {
-			delivery, err := m.PolicyIndex.ResolveCurrent(ctx, sess, history)
-			return delivery.Messages, err
+		AgentsMD: assembly.AgentsMD{
+			Index: m.PolicyIndex.Index,
+			Policies: func(ctx context.Context, sess *api.Session, history []api.Message) (assembly.AgentsMDPolicyDelivery, error) {
+				delivery, err := m.PolicyIndex.ResolveCurrent(ctx, sess, history)
+				return assembly.AgentsMDPolicyDelivery{
+					Messages:            delivery.Messages,
+					ActiveRootID:        delivery.ActiveRootID,
+					ActiveRootHasNested: delivery.ActiveRootHasNested,
+				}, err
+			},
+			RootPolicies: func(ctx context.Context, sess *api.Session) assembly.AgentsMDPolicyDelivery {
+				delivery := m.PolicyIndex.ProjectRoot(ctx, sess)
+				return assembly.AgentsMDPolicyDelivery{
+					Messages:            delivery.Messages,
+					ActiveRootID:        delivery.ActiveRootID,
+					ActiveRootHasNested: delivery.ActiveRootHasNested,
+				}
+			},
 		},
 		WebSearchEnabled:  m.WebSearchEnabled,
 		SynthesisEvidence: m.Closeout,

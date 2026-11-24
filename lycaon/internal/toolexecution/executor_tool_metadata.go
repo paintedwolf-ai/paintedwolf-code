@@ -2,6 +2,7 @@ package toolexecution
 
 import (
 	"context"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/platform"
@@ -49,6 +50,17 @@ func (e *Metadata) argsSchemaFor(ctx context.Context, sessionID, tool string) ma
 	return nil
 }
 
+func (e *Metadata) invocationArgsSchema(ctx context.Context, sessionID, tool string, filter platform.ToolFilter) map[string]any {
+	schema := e.argsSchemaFor(ctx, sessionID, tool)
+	if schema == nil || filter.ProfileID == "" {
+		return schema
+	}
+	if tool == "command" && !e.ProfileCanPark(ctx, filter) {
+		return tools.PruneCommandParkSchema(schema)
+	}
+	return schema
+}
+
 // List returns tools from the underlying registry filtered by profile when set.
 func (e *Metadata) List(ctx context.Context, filter platform.ToolFilter) ([]tools.ToolMeta, error) {
 	all := e.registry.List()
@@ -93,8 +105,31 @@ func (e *Metadata) enrichToolMeta(ctx context.Context, meta tools.ToolMeta, filt
 			}
 		}
 		meta = ProjectCommandMeta(meta, e.commandEffectsForFilter(ctx, filter), e.externalHidden)
+		if !e.ProfileCanPark(ctx, filter) {
+			meta.ArgsSchema = tools.PruneCommandParkSchema(meta.ArgsSchema)
+		}
 	}
 	return meta
+}
+
+// ProfileCanPark reports whether filter allows parking a command on completion.
+func (e *Metadata) ProfileCanPark(ctx context.Context, filter platform.ToolFilter) bool {
+	if e == nil || filter.ProfileID == "" {
+		return true
+	}
+	decision, err := tools.EvaluateListVisible(ctx, e.policy, platform.PolicyContext{
+		ProfileID:  filter.ProfileID,
+		ToolAccess: filter.ToolAccess,
+		ToolName:   "wait",
+	})
+	if err != nil || decision == nil || !decision.Allowed {
+		return false
+	}
+	source, ok := e.policy.(interface{ WaitConditions(string) []string })
+	if !ok {
+		return true
+	}
+	return slices.Contains(source.WaitConditions(filter.ProfileID), "process_done")
 }
 
 func pruneWaitConditionSchema(schema map[string]any, allowed []string) map[string]any {

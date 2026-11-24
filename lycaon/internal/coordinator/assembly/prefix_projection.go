@@ -70,6 +70,9 @@ func (e *AssemblyEngine) BuildKnownPrefix(ctx context.Context, sess *api.Session
 	}
 	out := []api.Message{{Role: api.MessageRoleSystem, Content: rendered, ContextPinned: true}}
 	out, standing := contextAssembler.appendPreHistorySystemInjects(ctx, sess, turn, out, 0)
+	rootDelivery := contextAssembler.agentsMDRootInject(ctx, sess, turn)
+	preHistoryPolicies, _ := splitPreHistoryAgentsMDPolicies(sess, rootDelivery)
+	out = append(out, preHistoryPolicies...)
 	messages := api.FilterPromptHistory(history)
 	if deps.EnrichHistory != nil {
 		messages = deps.EnrichHistory(sess.ID, messages)
