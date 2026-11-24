@@ -6,8 +6,7 @@ import {
 
 import {
   clearTranscriptEntryMemory,
-  hasTranscriptEntryMemory,
-  transcriptEntryKeysFromMessages,
+  transcriptEntryMemoryCount,
 } from "../chat/transcript/presentation/transcript-entry.ts";
 import { publishTranscriptReaderReach } from "../chat/transcript/history/transcript-reader-reach.ts";
 import { residentPageOrds } from "../chat/transcript/layout/transcript-window.ts";
@@ -96,7 +95,7 @@ describe("createAppStore", () => {
     expect(store.state.chatHydrationLock).toBeUndefined();
   });
 
-  it("installTranscriptBaseline baselines entry fade only on fresh hydration", () => {
+  it("installTranscriptBaseline marks the session hydrated with zero historical key retention", () => {
     const sessionId = "sess-fade";
     clearTranscriptEntryMemory(sessionId);
     const store = createAppStore();
@@ -104,26 +103,24 @@ describe("createAppStore", () => {
     const history = [
       { id: "m1", role: "user" as const, origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "hi", created_at: "t", seq: 1 },
     ];
-    // Loaded history has already entered the transcript.
     store.actions.installTranscriptBaseline(sessionId, history, 1);
-    for (const key of transcriptEntryKeysFromMessages(history)) {
-      expect(hasTranscriptEntryMemory(sessionId, key)).toBe(true);
-    }
+    expect(transcriptEntryMemoryCount(sessionId)).toBe(0);
 
-    // Newly discovered tail rows retain their entry fade.
-    const withTail = [
-      ...history,
-      { id: "a1", role: "assistant" as const, origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const, content: "reply", created_at: "t", seq: 2 },
-    ];
-    store.actions.installTranscriptBaseline(sessionId, withTail, 2);
-    const historyKeys = new Set(transcriptEntryKeysFromMessages(history));
-    const tailKeys = transcriptEntryKeysFromMessages(withTail).filter(
-      (key) => !historyKeys.has(key),
-    );
-    expect(tailKeys.length).toBeGreaterThan(0);
-    for (const key of tailKeys) {
-      expect(hasTranscriptEntryMemory(sessionId, key)).toBe(false);
-    }
+    // Live arrivals above the watermark mark only their own transient keys.
+    store.actions.upsertMessage({
+      id: "a1",
+      role: "assistant" as const,
+      origin: "model" as const,
+      authority: "none" as const,
+      trust_tier: "trusted" as const,
+      content: "reply",
+      created_at: "t",
+      seq: 2,
+      ord: 2,
+    });
+    expect(transcriptEntryMemoryCount(sessionId)).toBeGreaterThan(0);
+    clearTranscriptEntryMemory(sessionId);
+    expect(transcriptEntryMemoryCount(sessionId)).toBe(0);
   });
 
   it("resetChatForSessionSwitch clears record-typed session slices", () => {

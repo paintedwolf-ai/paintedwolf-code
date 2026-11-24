@@ -234,7 +234,7 @@ describe("useTranscriptEntry", () => {
     const el = document.createElement("div");
     bind(el, { sessionId: "s1", entryKey: "u-instant", skipFade: true });
     expect(el.classList.contains(FADE_CLASS)).toBe(false);
-    expect(hasTranscriptEntryMemory("s1", "u-instant")).toBe(true);
+    expect(hasTranscriptEntryMemory("s1", "u-instant")).toBe(false);
   });
 
   it("mounts rows entering through an active scroll without an arrival fade", () => {
@@ -245,7 +245,7 @@ describe("useTranscriptEntry", () => {
     bind(el, { sessionId: "s1", entryKey: "history-through-scroll" });
 
     expect(el.classList.contains(FADE_CLASS)).toBe(false);
-    expect(hasTranscriptEntryMemory("s1", "history-through-scroll")).toBe(true);
+    expect(hasTranscriptEntryMemory("s1", "history-through-scroll")).toBe(false);
   });
 
   it("checks the scroll ancestor after the initial ref is inserted", () => {
@@ -258,7 +258,7 @@ describe("useTranscriptEntry", () => {
       binding.bindTranscriptEntry(row);
       scroller.append(row);
     });
-    expect(hasTranscriptEntryMemory("scroll", "inserted")).toBe(true);
+    expect(hasTranscriptEntryMemory("scroll", "inserted")).toBe(false);
     expect(row.classList.contains(FADE_CLASS)).toBe(false);
   });
 
@@ -378,5 +378,58 @@ describe("useTranscriptEntry", () => {
     vi.advanceTimersByTime(TRANSCRIPT_ENTER_FADE_MS + 80);
     expect(el.classList.contains(FADE_CLASS)).toBe(false);
     vi.useRealTimers();
+  });
+
+  it("retains zero historical keys across 5,000-message store paging while keeping live arrivals bounded", async () => {
+    const { createAppStore } = await import("../../../store/app-state.ts");
+    const { transcriptEntryMemoryCount } = await import("./transcript-entry.ts");
+    const { messagesInRange } = await import("../layout/transcript-scale-fixture.ts");
+
+    const store = createAppStore();
+    const sid = "lc07-5000";
+    clearTranscriptEntryMemory(sid);
+    store.actions.installTranscriptBaseline(sid, messagesInRange(4901, 5000), 5000, {
+      hasMoreBefore: true,
+      hasMoreAfter: false,
+      bounds: { firstOrd: 1, lastOrd: 5000 },
+    });
+    for (let end = 4900; end >= 100; end -= 100) {
+      const applied = store.actions.loadTranscriptPage(
+        { edge: "older", beforeMessageId: `m-${end + 1}` },
+        {
+          messages: messagesInRange(end - 99, end),
+          watermark: 5000,
+          turn_clocks: {},
+          turn_loads: {},
+          after_cursor: "newer",
+          ...(end > 100 ? { before_cursor: "older" } : {}),
+        },
+      );
+      expect(applied).toBe(true);
+    }
+    expect(transcriptEntryMemoryCount(sid)).toBe(0);
+
+    // Live arrival animates once and stays bounded.
+    store.actions.upsertMessage({
+      id: "live-5001",
+      ord: 5001,
+      seq: 5001,
+      role: "assistant",
+      origin: "model",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "live",
+      created_at: "t",
+    });
+    const el = document.createElement("div");
+    bind(el, { sessionId: sid, entryKey: "live-5001" });
+    expect(el.classList.contains(FADE_CLASS)).toBe(true);
+
+    const dup = document.createElement("div");
+    bind(dup, { sessionId: sid, entryKey: "live-5001" });
+    expect(dup.classList.contains(FADE_CLASS)).toBe(false);
+
+    clearTranscriptEntryMemory(sid);
+    expect(transcriptEntryMemoryCount(sid)).toBe(0);
   });
 });

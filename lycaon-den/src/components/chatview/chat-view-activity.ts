@@ -3,7 +3,11 @@ import { softPauseWorkerHint } from "../../chat/composer/composer-rules.ts";
 import { subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
 import { isBackendReachable } from "../../platform/connection/sidecar-status.ts";
 import { isPromptStarting, isChatActivityLive, llmTurnFor, sessionActivityFor } from "../../chat/session/session-activity.ts";
-import { resolveThinkingActivityLabel } from "../../chat/session/thinking-activity-label.ts";
+import type { Message } from "../../api/types.ts";
+import {
+  messagesShareCurrentTurnSuffix,
+  resolveThinkingActivityLabel,
+} from "../../chat/session/thinking-activity-label.ts";
 import { createThinkingLabelHold } from "../../chat/session/thinking-label-hold.ts";
 import { sameSessionWorkers, sessionWorkers } from "../../chat/actions/chat-actions.ts";
 import { plainMessageRows } from "../../chat/transcript/projection/plain-message-rows.ts";
@@ -39,12 +43,20 @@ export function createChatViewActivity(props: ChatViewProps) {
     sessionActivityFor(props.appStore, props.sessionId).stopping === true;
   const llmTurn = () => llmTurnFor(props.appStore, props.sessionId);
 
+  const composerMessages = createMemo<readonly Message[]>((prev) => {
+    const next = props.appStore.state.messages;
+    const transcript = props.appStore.state.transcript;
+    if (!prev || prev.length === 0 || transcript.hasTailGap) return next;
+    const activities = Object.values(sessionActivityFor(props.appStore, props.sessionId).activities ?? {});
+    return messagesShareCurrentTurnSuffix(prev, next, activities) ? prev : next;
+  });
+
   const resolvedThinkingLabel = () => {
     backgroundProcessRevision();
     const sessionActivity = sessionActivityFor(props.appStore, props.sessionId);
     return resolveThinkingActivityLabel({
       sessionId: props.sessionId,
-      messages: props.appStore.state.messages,
+      messages: composerMessages(),
       activities: Object.values(sessionActivity.activities ?? {}),
       coordinatorLoop: props.appStore.state.coordinatorLoopProgress,
       progressSteps: props.appStore.state.progress?.steps,

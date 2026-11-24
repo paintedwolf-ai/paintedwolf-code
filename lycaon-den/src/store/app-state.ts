@@ -11,7 +11,12 @@ import { WorkerTranscriptRetention } from "../chat/worker/worker-transcript.ts";
 import { loadFailed, loaded, unloaded, valueOf } from "./load-state.ts";
 import { reconcilePendingOnQueueDraft } from "../chat/send/pending-sends.ts";
 import { pendingFromEvent } from "../chat/checkpoint/checkpoint-model.ts";
-import { clearTranscriptEntryMemory, noteTranscriptEntryBaseline, transcriptEntryKeysFromMessages } from "../chat/transcript/presentation/transcript-entry.ts";
+import {
+  clearTranscriptEntryMemory,
+  markTranscriptLiveEntries,
+  markTranscriptSessionHydrated,
+  transcriptEntryKeysFromMessages,
+} from "../chat/transcript/presentation/transcript-entry.ts";
 import { clearVisualArtifactSessionMemory, noteVisualArtifactIntroBaseline } from "../chat/visual/visual-artifact-reveal.ts";
 import { mergeTranscriptBaseline } from "../chat/transcript/projection/transcript-baseline-merge.ts";
 import {
@@ -350,10 +355,7 @@ export function createAppStore(
       traceTranscriptPageEvictions(evicted);
       // Reconciliation preserves the live reveal baseline.
       if (isFreshHydration) {
-        noteTranscriptEntryBaseline(
-          sessionId,
-          transcriptEntryKeysFromMessages(merged.messages, nextTurnLoads),
-        );
+        markTranscriptSessionHydrated(sessionId);
         noteVisualArtifactIntroBaseline(merged.messages);
       }
     },
@@ -394,12 +396,9 @@ export function createAppStore(
           publishAdmittedTranscriptReach(sessionId, { firstOrd, lastOrd }, request.edge);
         }
       }
-      // Paged history enters the reveal baseline immediately.
-      if (applied && sessionId && page.messages.length > 0) {
-        noteTranscriptEntryBaseline(
-          sessionId,
-          transcriptEntryKeysFromMessages(page.messages, state.turnLoads),
-        );
+      // Paged history enters quietly without per-row key retention.
+      if (applied && sessionId) {
+        markTranscriptSessionHydrated(sessionId);
       }
       return applied;
     },
@@ -479,6 +478,13 @@ export function createAppStore(
           applied = true;
         }),
       );
+      const sessionId = state.transcriptSessionId?.trim();
+      if (applied && sessionId) {
+        markTranscriptLiveEntries(
+          sessionId,
+          transcriptEntryKeysFromMessages([message], state.turnLoads),
+        );
+      }
       return applied;
     },
     bufferHydrationMessageEvent(event) {
@@ -847,10 +853,7 @@ export function createAppStore(
       const sessionId = snapshot.scope.sessionId.trim();
       const transcript = copyTranscriptWindow(snapshot.transcript);
       const messages = materializeTranscriptWindow(transcript);
-      noteTranscriptEntryBaseline(
-        sessionId,
-        transcriptEntryKeysFromMessages(messages, mergeTurnLoads({}, snapshot.turnLoads)),
-      );
+      markTranscriptSessionHydrated(sessionId);
       noteVisualArtifactIntroBaseline(messages);
       setState(
         produce((draft) => {

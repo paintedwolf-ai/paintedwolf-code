@@ -23,7 +23,6 @@ import {
   type ToolPartView,
 } from "../tool/tool-part-model.ts";
 import {
-  findToolResult,
   isInternalTranscriptUserMessage,
 } from "../transcript/projection/message-transcript.ts";
 import { isWorkerTaskActive } from "./session-activity.ts";
@@ -266,11 +265,81 @@ function userTurnStartIndex(messages: readonly Message[]): number {
   return 0;
 }
 
+const resultIndexCache = new WeakMap<readonly Message[], Map<string, Map<string, Message>>>();
+
+function resultIndexForMessages(messages: readonly Message[]): Map<string, Map<string, Message>> {
+  const cached = resultIndexCache.get(messages);
+  if (cached) return cached;
+  const byParent = new Map<string, Map<string, Message>>();
+  for (let i = 0; i < messages.length; i++) {
+    const row = messages[i];
+    if (row?.role !== "tool") continue;
+    const parent = row.tool_result?.assistant_message_id?.trim();
+    const call = row.tool_result?.tool_call_id?.trim();
+    if (!parent || !call) continue;
+    let calls = byParent.get(parent);
+    if (!calls) {
+      calls = new Map();
+      byParent.set(parent, calls);
+    }
+    if (!calls.has(call)) calls.set(call, row);
+  }
+  resultIndexCache.set(messages, byParent);
+  return byParent;
+}
+
+function lookupIndexedResult(
+  index: Map<string, Map<string, Message>>,
+  assistantMessageId: string,
+  callId: string,
+): Message | undefined {
+  return index.get(assistantMessageId.trim())?.get(callId.trim());
+}
+
+/**
+ * True when `next` only changed history before a verified current-turn boundary and
+ * supplied no missing parent/result needed by an active host activity.
+ */
+export function messagesShareCurrentTurnSuffix(
+  prev: readonly Message[],
+  next: readonly Message[],
+  activities: readonly ActivityEvent[] = [],
+): boolean {
+  if (prev.length === 0 || next.length === 0) return false;
+  const prevStart = userTurnStartIndex(prev);
+  const prevBoundary = prev[prevStart];
+  if (prevBoundary?.role !== "user" || isInternalTranscriptUserMessage(prevBoundary)) return false;
+  const nextStart = userTurnStartIndex(next);
+  const tailLen = prev.length - prevStart;
+  if (next.length - nextStart !== tailLen) return false;
+  for (let i = 0; i < tailLen; i++) {
+    const a = prev[prevStart + i];
+    const b = next[nextStart + i];
+    if (a !== b && (a?.id !== b?.id || (a?.seq ?? 0) !== (b?.seq ?? 0))) return false;
+  }
+  for (const activity of activities) {
+    if (activity.status !== "active") continue;
+    const callId = activity.tool_call_id?.trim();
+    const toolName = activity.tool_name?.trim().toLowerCase();
+    if (!callId || !toolName) continue;
+    const inCurrentTurn = prev.slice(prevStart).some(
+      (msg) =>
+        msg.role === "assistant" &&
+        msg.tool_calls?.some(
+          (call) => call.id.trim() === callId && call.name.trim().toLowerCase() === toolName,
+        ),
+    );
+    if (!inCurrentTurn) return false;
+  }
+  return true;
+}
+
 /** Latest running call in this turn, excluding parked and hidden tools. */
 export function findLatestRunningToolInTurn(
   messages: readonly Message[],
   activities: readonly ActivityEvent[] = [],
 ): ToolPartView | undefined {
+  const results = resultIndexForMessages(messages);
   const turnStart = userTurnStartIndex(messages);
   let latest: ToolPartView | undefined;
 
@@ -288,7 +357,7 @@ export function findLatestRunningToolInTurn(
         activity.tool_name?.trim().toLowerCase() === toolName.toLowerCase()
       )) continue;
 
-      const result = findToolResult(messages, msg.id, call.id);
+      const result = lookupIndexedResult(results, msg.id, call.id);
       const part = toolPartFromCall(call, result, msg.id, undefined, {
         message: msg,
         index: callIndex,
@@ -332,7 +401,8 @@ function toolPartForActivity(
     ) ?? -1;
     const call = index >= 0 ? msg.tool_calls?.[index] : undefined;
     if (call) {
-      return toolPartFromCall(call, findToolResult(messages, msg.id, call.id), msg.id, undefined, {
+      const result = lookupIndexedResult(resultIndexForMessages(messages), msg.id, call.id);
+      return toolPartFromCall(call, result, msg.id, undefined, {
         message: msg,
         index,
       });

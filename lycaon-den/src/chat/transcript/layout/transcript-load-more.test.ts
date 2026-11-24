@@ -10,7 +10,7 @@ import {
 } from "./transcript-load-more.ts";
 import {
   clearTranscriptEntryMemory,
-  hasTranscriptEntryMemory,
+  transcriptEntryMemoryCount,
 } from "../presentation/transcript-entry.ts";
 import { createAppStore } from "../../../store/app-state.ts";
 import { bindOverlayScrollbarInput } from "../../../platform/scrolling/overlay-scrollbar-input.ts";
@@ -422,15 +422,14 @@ describe("createTranscriptPaging", () => {
     expect(listSessionMessages).toHaveBeenCalledTimes(1);
   });
 
-  it("baselines an older page so scrolling back does not replay entry fades", () => {
+  it("loads older pages without retaining per-row entry fade keys", () => {
     clearTranscriptEntryMemory("s-older");
     const appStore = createAppStore();
     appStore.actions.installTranscriptBaseline("s-older", [older(50)], 51, {
       hasMoreBefore: true,
       hasMoreAfter: false,
     });
-    expect(hasTranscriptEntryMemory("s-older", "old-50")).toBe(true);
-    expect(hasTranscriptEntryMemory("s-older", "old-3")).toBe(false);
+    expect(transcriptEntryMemoryCount("s-older")).toBe(0);
 
     appStore.actions.loadTranscriptPage({ edge: "older", beforeMessageId: "old-50" }, {
       messages: Array.from({ length: 5 }, (_, i) => older(i)),
@@ -439,9 +438,7 @@ describe("createTranscriptPaging", () => {
       turn_loads: {},
     });
 
-    for (let i = 0; i < 5; i++) {
-      expect(hasTranscriptEntryMemory("s-older", `old-${i}`)).toBe(true);
-    }
+    expect(transcriptEntryMemoryCount("s-older")).toBe(0);
     clearTranscriptEntryMemory("s-older");
   });
 

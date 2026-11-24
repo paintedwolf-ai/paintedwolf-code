@@ -985,4 +985,60 @@ describe("thinking-activity-label", () => {
       }),
     ).toBe("Sending HTTP request · https://api.github.com/repos...");
   });
+
+  it("indexes tool results in one pass independent of call count and preserves first-match trimmed-ID semantics", () => {
+    const userMsg: Message = {
+      id: "u-turn",
+      role: "user",
+      origin: "user",
+      authority: "user",
+      trust_tier: "trusted",
+      content: "run",
+      created_at: "t",
+    };
+    const calls = Array.from({ length: 100 }, (_, i) => ({
+      id: `call-${i}`,
+      name: "read",
+      args: { path: `file-${i}.ts` },
+    }));
+    const assistantMsg: Message = {
+      id: " a-1 ",
+      role: "assistant",
+      origin: "model",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "",
+      created_at: "t",
+      tool_calls: calls,
+    };
+    const results: Message[] = calls.slice(0, 99).map((c, i) => ({
+      id: `res-${i}`,
+      role: "tool",
+      origin: "tool",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "ok",
+      created_at: "t",
+      tool_result: {
+        tool: "read",
+        assistant_message_id: "a-1",
+        tool_call_id: ` ${c.id} `,
+        content: "ok",
+        outcome: "completed",
+      },
+    }));
+    const raw = [userMsg, assistantMsg, ...results];
+    let arrayReads = 0;
+    const proxied = new Proxy(raw, {
+      get(target, prop) {
+        if (typeof prop === "string" && /^\d+$/.test(prop)) arrayReads += 1;
+        return Reflect.get(target, prop);
+      },
+    });
+
+    const found = findLatestRunningToolInTurn(proxied);
+    expect(found?.toolCallId).toBe("call-99");
+    // One indexing pass plus one turn pass: strictly linear, not quadratic in call count.
+    expect(arrayReads).toBeLessThanOrEqual(raw.length * 3);
+  });
 });

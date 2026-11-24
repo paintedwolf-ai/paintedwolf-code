@@ -140,4 +140,54 @@ describe("parked command presentation", () => {
     await Promise.resolve();
     expect(screen.queryByTestId("thinking-indicator")).toBeNull();
   });
+
+  it.each(["held", "immediate", "hidden"] as const)(
+    "keeps older history prepends from recomputing the live composer label in %s mode",
+    (mode) => {
+      const userTurn: Message = {
+        id: "user-turn",
+        ord: 101,
+        role: "user",
+        origin: "user",
+        authority: "user",
+        trust_tier: "trusted",
+        content: "start",
+        created_at: "2026-10-28T00:00:00Z",
+      };
+      const store = mountActivity([
+        userTurn,
+        { ...call, ord: 102 },
+        { ...parkedResult(), ord: 103 },
+      ]);
+      if (mode === "hidden") store.actions.setActivity({ ...park, status: "done" });
+      if (mode === "immediate") {
+        store.actions.setActivity({
+          ...park,
+          activity_id: "live",
+          kind: "running_tool",
+          tool_name: "read",
+          tool_call_id: "other",
+          progress: { phase: "executing", files_searched: 0, files_skipped: 0, matches: 0 },
+        });
+      }
+      const before = screen.queryByRole("status")?.textContent;
+      const ok = store.actions.loadTranscriptPage(
+        { edge: "older", beforeMessageId: "user-turn" },
+        {
+          messages: Array.from({ length: 10 }, (_, i) => ({
+            ...userTurn,
+            id: `old-${i}`,
+            ord: 91 + i,
+          })),
+          before_cursor: "older",
+          after_cursor: "newer",
+          watermark: 103,
+          turn_clocks: {},
+          turn_loads: {},
+        },
+      );
+      expect(ok).toBe(true);
+      expect(screen.queryByRole("status")?.textContent).toBe(before);
+    },
+  );
 });
