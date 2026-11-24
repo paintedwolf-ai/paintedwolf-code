@@ -14,7 +14,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -226,6 +228,7 @@ func readProjectFile(ctx context.Context, boundary *sandbox.Boundary, tctx tools
 	if err != nil {
 		return nil, "", err
 	}
+	sourceview.RecordOutsideRead(ctx, tctx, resolved, textfile.SHA256(data), int64(len(data)))
 	if files != nil {
 		files[p] = requestFile{bytes: data, display: resolved.DisplayPath}
 	}

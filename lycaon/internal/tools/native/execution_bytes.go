@@ -114,6 +114,20 @@ func (e ExecutionRevisions) OpenStream(ctx context.Context, tctx tools.ToolConte
 	return e.OpenWalkedStream(ctx, tctx, resolved, nil, maxBytes)
 }
 
+// OpenNamedStream opens a file the agent named, as OpenStream does, and
+// records the read when the file lies outside the attached folders.
+func (e ExecutionRevisions) OpenNamedStream(ctx context.Context, tctx tools.ToolContext, path string, maxBytes int64) (ExecutionStream, error) {
+	resolved, err := projectpaths.ResolveRead(ctx, e.Boundary, tctx, path)
+	if err != nil {
+		return ExecutionStream{}, err
+	}
+	stream, err := e.OpenWalkedStream(ctx, tctx, resolved, nil, maxBytes)
+	if err == nil {
+		sourceview.RecordOutsideRead(ctx, tctx, resolved, stream.Revision.DiskSHA256, stream.Revision.ContentBytes)
+	}
+	return stream, err
+}
+
 // OpenWalkedStream pins published disk bytes for an already-resolved path,
 // reusing root when non-nil to avoid re-opening the root directory per file.
 func (e ExecutionRevisions) OpenWalkedStream(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, root *fseffect.ReadRoot, maxBytes int64) (ExecutionStream, error) {
