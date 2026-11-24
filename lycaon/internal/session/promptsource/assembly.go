@@ -110,7 +110,19 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		AgentsMDIndex:           m.PolicyIndex.Index,
 		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) (assembly.AgentsMDPolicyDelivery, error) {
 			delivery, err := m.PolicyIndex.ResolveCurrent(ctx, sess, history)
-			return assembly.AgentsMDPolicyDelivery{Messages: delivery.Messages, ActiveRootID: delivery.ActiveRootID}, err
+			return assembly.AgentsMDPolicyDelivery{
+				Messages:            delivery.Messages,
+				ActiveRootID:        delivery.ActiveRootID,
+				ActiveRootHasNested: delivery.ActiveRootHasNested,
+			}, err
+		},
+		AgentsMDRootPolicies: func(ctx context.Context, sess *api.Session) (assembly.AgentsMDPolicyDelivery, error) {
+			delivery, err := m.PolicyIndex.ProjectRoot(ctx, sess)
+			return assembly.AgentsMDPolicyDelivery{
+				Messages:            delivery.Messages,
+				ActiveRootID:        delivery.ActiveRootID,
+				ActiveRootHasNested: delivery.ActiveRootHasNested,
+			}, err
 		},
 		WebSearchEnabled:  m.WebSearchEnabled,
 		SynthesisEvidence: m.Closeout,

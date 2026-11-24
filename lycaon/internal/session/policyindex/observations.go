@@ -120,6 +120,7 @@ func (m *Service) ResolveCurrent(ctx context.Context, sess *api.Session, history
 	if delivery.ActiveRootID == "" {
 		delivery.ActiveRootID = active.ID
 	}
+	delivery.ActiveRootHasNested = m.activeRootHasNested(ctx, sess.ID, active.Path)
 	if err != nil {
 		unavailable, diagnosticErr := m.unavailable(ctx, sess, err)
 		if diagnosticErr != nil {
@@ -137,6 +138,43 @@ func (m *Service) ResolveCurrent(ctx context.Context, sess *api.Session, history
 		delivery.Messages = append(delivery.Messages, notice)
 	}
 	return delivery, nil
+}
+
+// ProjectRoot resolves the active root's policy without mutating observed turn scopes.
+func (m *Service) ProjectRoot(ctx context.Context, sess *api.Session) (Delivery, error) {
+	if m == nil || m.roots == nil || sess == nil {
+		return Delivery{}, nil
+	}
+	if !m.roots.Applies(ctx, projectcontrib.SurfaceAgentsMD, sess) {
+		return Delivery{Status: StatusDisabled}, nil
+	}
+	roots, err := m.sessionRoots(ctx, sess)
+	if err != nil || len(roots) == 0 {
+		return Delivery{Status: StatusNoPolicy}, nil
+	}
+	active, err := projectroot.ActiveRoot(roots, sess.WorkspaceRootID)
+	if err != nil {
+		return Delivery{Status: StatusUnavailable}, nil
+	}
+	delivery, err := m.Resolve(ctx, sess, []agentpolicy.Scope{{RootID: active.ID, RootPath: active.Path, Path: "."}})
+	if err != nil {
+		return Delivery{Status: StatusUnavailable, ActiveRootID: active.ID}, nil
+	}
+	if delivery.ActiveRootID == "" {
+		delivery.ActiveRootID = active.ID
+	}
+	delivery.ActiveRootHasNested = m.activeRootHasNested(ctx, sess.ID, active.Path)
+	return delivery, nil
+}
+
+func (m *Service) activeRootHasNested(ctx context.Context, sessionID, rootPath string) bool {
+	overlayRel := settingsoverlay.Rel("AGENTS.md")
+	for _, entry := range m.ensureState(ctx, sessionID, rootPath).Snapshot() {
+		if entry.Path != "AGENTS.md" && entry.Path != overlayRel {
+			return true
+		}
+	}
+	return false
 }
 
 func observedScopes(projectID string, roots []projectroot.RootRef, history []api.Message) []agentpolicy.Scope {

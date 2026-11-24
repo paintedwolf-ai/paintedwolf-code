@@ -127,3 +127,56 @@ func TestPreparationRetainsStandingWhenHistoryExceedsContext(t *testing.T) {
 		t.Fatalf("oversized standing prefix: %v", err)
 	}
 }
+
+func TestPreparationReusesPreHistoryRootGuidanceAndHistoryOnCompletion(t *testing.T) {
+	t.Setenv("PW_NATIVEGEN_CONTENT_TOKENS", "1")
+	provider, runtime := fixtureProvider(t)
+	runtime.config.PrefillChunk = 6
+	testutil.FailErr(t, "warm model", runtime.Warm(t.Context(), DefaultModelID))
+
+	rootGuidance := api.Message{
+		ID:        "host-agent-policy-root",
+		Role:      api.MessageRoleSystem,
+		Content:   "## Project agent guidance\n\nAlways verify with ./task.",
+		Origin:    api.MessageOriginProject,
+		Authority: api.ContentAuthorityDeveloper,
+		TrustTier: api.ContentTrustTierTrusted,
+	}
+	prepared := modelcall.CompletionRequest{Messages: []api.Message{
+		{Role: api.MessageRoleSystem, Content: "Standing system instructions", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+		rootGuidance,
+		{Role: api.MessageRoleUser, Content: "Earlier question"},
+		{Role: api.MessageRoleAssistant, Content: "Earlier answer", PromptCacheBreakpoint: api.PromptCacheTierHistory},
+	}}
+	wire, err := prepareRender(prepared)
+	testutil.FailErr(t, "render prepared request", err)
+	if wire.CheckpointMessages != 1 || wire.KnownPrefixMessages != 4 {
+		t.Fatalf("unexpected boundaries: checkpoint=%d known=%d", wire.CheckpointMessages, wire.KnownPrefixMessages)
+	}
+	if wire.Messages[0].Role != "system" || wire.Messages[1].Role != "user" {
+		t.Fatalf("expected standing system then user-role project guidance, got roles %q and %q", wire.Messages[0].Role, wire.Messages[1].Role)
+	}
+
+	prepResult, err := provider.PrepareContext(t.Context(), prepared)
+	testutil.FailErr(t, "prepare context with root guidance", err)
+	if prepResult.PreparedTokens != 8 {
+		t.Fatalf("prepared tokens = %d, want 8 (standing + root guidance + 2 history rows)", prepResult.PreparedTokens)
+	}
+
+	live := modelcall.CompletionRequest{
+		Messages: []api.Message{
+			{Role: api.MessageRoleSystem, Content: "Standing system instructions", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+			rootGuidance,
+			{Role: api.MessageRoleUser, Content: "Earlier question"},
+			{Role: api.MessageRoleAssistant, Content: "Earlier answer"},
+			{Role: api.MessageRoleUser, Content: "Follow-up question", PromptCacheBreakpoint: api.PromptCacheTierHistory},
+			{Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Dynamic execution state"},
+		},
+		MaxTokens: 2,
+	}
+	comp, err := provider.Complete(t.Context(), live)
+	testutil.FailErr(t, "complete after preparation", err)
+	if comp.Usage.CacheReadInputTokens != 8 {
+		t.Fatalf("reused prefix tokens = %d, want 8 (standing + root guidance + prior history)", comp.Usage.CacheReadInputTokens)
+	}
+}

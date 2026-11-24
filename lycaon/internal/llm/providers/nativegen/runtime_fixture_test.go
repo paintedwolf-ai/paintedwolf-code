@@ -2,9 +2,43 @@ package nativegen
 
 import (
 	"encoding/json"
+	"hash/fnv"
 	"os"
 	"strconv"
 )
+
+func fixtureContentTokens(render renderRequest) ([]uint32, int) {
+	tokens := make([]uint32, 0, len(render.Messages)*2)
+	for _, m := range render.Messages {
+		h := fnv.New32a()
+		raw, _ := json.Marshal(m)
+		_, _ = h.Write(raw)
+		roleTok := uint32(10)
+		switch m.Role {
+		case "system":
+			roleTok = 11
+		case "user":
+			roleTok = 12
+		case "assistant":
+			roleTok = 13
+		case "tool":
+			roleTok = 14
+		}
+		tokens = append(tokens, roleTok, (h.Sum32()%100000)+1000)
+	}
+	tokens = append(tokens, 99)
+	return tokens, render.CheckpointMessages * 2
+}
+
+func fixtureCommonPrefix(a, b []uint32) int {
+	n := min(len(a), len(b))
+	for i := 0; i < n; i++ {
+		if a[i] != b[i] {
+			return i
+		}
+	}
+	return n
+}
 
 func runtimeFixture() {
 	artifact := ""
@@ -59,7 +93,15 @@ func runtimeFixture() {
 				return
 			}
 			result = map[string]any{"kind": "measured", "input_tokens": 3, "prompt_tokens": []uint32{2, 7, 8}, "checkpoint_tokens": 1}
-			if os.Getenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES") == "1" {
+			if os.Getenv("PW_NATIVEGEN_CONTENT_TOKENS") == "1" {
+				var render renderRequest
+				raw, _ := json.Marshal(request.Command.Request)
+				if json.Unmarshal(raw, &render) != nil {
+					os.Exit(6)
+				}
+				toks, cp := fixtureContentTokens(render)
+				result = map[string]any{"kind": "measured", "input_tokens": len(toks), "prompt_tokens": toks, "checkpoint_tokens": cp}
+			} else if os.Getenv("PW_NATIVEGEN_PREPARATION_BOUNDARIES") == "1" {
 				var render renderRequest
 				raw, _ := json.Marshal(request.Command.Request)
 				if json.Unmarshal(raw, &render) != nil {
@@ -69,6 +111,15 @@ func runtimeFixture() {
 			}
 		case "render":
 			result = map[string]any{"kind": "rendered", "prompt_tokens": []uint32{2, 7, 8}, "checkpoint_tokens": 1}
+			if os.Getenv("PW_NATIVEGEN_CONTENT_TOKENS") == "1" {
+				var render renderRequest
+				raw, _ := json.Marshal(request.Command.Request)
+				if json.Unmarshal(raw, &render) != nil {
+					os.Exit(6)
+				}
+				toks, cp := fixtureContentTokens(render)
+				result = map[string]any{"kind": "rendered", "prompt_tokens": toks, "checkpoint_tokens": cp}
+			}
 		case "prepare":
 			raw, err := json.Marshal(request.Command.Request)
 			if err != nil || json.Unmarshal(raw, &prefix) != nil {
@@ -109,6 +160,12 @@ func runtimeFixture() {
 				begun++
 			}
 			generated = 0
+			if os.Getenv("PW_NATIVEGEN_CONTENT_TOKENS") == "1" {
+				reused = fixtureCommonPrefix(prefix.PromptTokens[:prefixProcessed], active.PromptTokens)
+				if reused >= len(active.PromptTokens) && len(active.PromptTokens) > 0 {
+					reused = len(active.PromptTokens) - 1
+				}
+			}
 			result = map[string]any{"kind": "begun", "request_id": active.RequestID, "reused_prefix_tokens": reused}
 		case "advance", "cancel":
 			var ok bool
