@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/constant"
+	"go/token"
 	"go/types"
 	"path/filepath"
 	"strings"
@@ -292,6 +293,7 @@ type resolution int
 const (
 	resolvedCodes resolution = iota
 	forwardedCode
+	familyCode
 	unresolvedCode
 )
 
@@ -315,6 +317,12 @@ func (s *rejectScan) resolve(p *packages.Package, fd *ast.FuncDecl, expr ast.Exp
 		}
 	case *ast.IndexExpr:
 		return s.resolveMapValues(p, e)
+	case *ast.BinaryExpr:
+		// A constant prefix joined to a value an external peer declares
+		// names an open code family, such as MCP_SERVER_<server code>.
+		if tv, ok := p.TypesInfo.Types[e.X]; ok && e.Op == token.ADD && tv.Value != nil && tv.Value.Kind() == constant.String {
+			return nil, familyCode
+		}
 	case *ast.CallExpr:
 		fn := calledFunc(p, e)
 		if callee, ok := s.decls[fn]; fn != nil && ok {
