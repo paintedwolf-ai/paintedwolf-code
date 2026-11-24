@@ -18,8 +18,9 @@ type unavailableCredentialIndex struct {
 	failure error
 }
 
-func (i *unavailableCredentialIndex) EnsureProject(_ context.Context, project string) error {
-	i.project = project
+func (*unavailableCredentialIndex) Start(string) {}
+func (i *unavailableCredentialIndex) Await(_ context.Context, wait tools.CredentialWait) error {
+	i.project = wait.ProjectID
 	return i.failure
 }
 func (*unavailableCredentialIndex) ForgetProject(context.Context, string) error { return nil }
@@ -57,6 +58,28 @@ func TestCredentialFileAdmissionPrecedesToolDispatch(t *testing.T) {
 					t.Fatalf("output=%q dispatched=%v project=%q reject=%+v error=%v", output, dispatched, index.project, reject, err)
 				}
 			})
+		}
+	}
+}
+
+func TestCredentialFileAdmissionReturnsCallerCancellation(t *testing.T) {
+	for _, program := range []bool{false, true} {
+		registry := tools.NewDefaultRegistry()
+		registerTestDefinition(t, registry, "probe", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+			return "unexpected", nil
+		})
+		executor := NewExecutor(nil, registry, "implement")
+		if program {
+			executor.programEntries = map[string]func(map[string]any) bool{"probe": nil}
+		}
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		tc := fixtureToolContext(t.TempDir())
+		tc.Identity.ProjectID = "project"
+		tc.Effects.CredentialFiles = &unavailableCredentialIndex{failure: context.Canceled}
+		output, err := executor.Invoke(ctx, "probe", map[string]any{}, tc)
+		if output != "" || !errors.Is(err, context.Canceled) || toolrejection.AsToolReject(err) != nil {
+			t.Fatalf("program=%v output=%q error=%v", program, output, err)
 		}
 	}
 }

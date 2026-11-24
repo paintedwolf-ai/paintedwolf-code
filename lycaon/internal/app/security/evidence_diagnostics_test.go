@@ -23,9 +23,11 @@ type tracedFileAdmission struct {
 	err error
 }
 
-func (f *tracedFileAdmission) EnsureProject(ctx context.Context, _ string) error {
+func (*tracedFileAdmission) Start(string) {}
+
+func (f *tracedFileAdmission) Await(ctx context.Context, _ tools.CredentialWait) error {
 	if trace := secretmatch.EvidenceTraceFrom(ctx); trace != nil {
-		trace.NoteRootWait(5, "build-42", 3, 18, 2)
+		trace.NoteRootGenerationWait(5, "root-1", "build-42", 1, true, 3, 18, 2)
 	}
 	return f.err
 }

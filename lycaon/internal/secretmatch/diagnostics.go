@@ -6,6 +6,14 @@ import (
 	"sync"
 )
 
+// RootBuildRef identifies one root credential build observed during readiness wait.
+type RootBuildRef struct {
+	RootID     string
+	BuildID    string
+	Generation uint64
+	Started    bool
+}
+
 // ScreenPhaseRecord captures value-free counts, durations, and opaque IDs for
 // one model-screen or credential-evidence step.
 type ScreenPhaseRecord struct {
@@ -13,12 +21,15 @@ type ScreenPhaseRecord struct {
 	ProjectID           string
 	BuildID             string
 	RootID              string
+	Generation          uint64
 	Phase               string
 	Mode                string
 	DurationMS          int64
 	RootsChecked        int
+	BuildsStarted       int
 	BuildsJoined        int
 	BuildIDs            []string
+	RootBuilds          []RootBuildRef
 	DirectoriesListed   int
 	PathsClassified     int
 	CredentialFilesRead int
@@ -110,8 +121,10 @@ type EvidenceTrace struct {
 	mu                  sync.Mutex
 	ReadinessWaitMS     int64
 	RootsChecked        int
+	BuildsStarted       int
 	BuildsJoined        int
 	BuildIDs            []string
+	RootBuilds          []RootBuildRef
 	DirectoriesListed   int
 	PathsClassified     int
 	CredentialFilesRead int
@@ -121,6 +134,17 @@ type EvidenceTrace struct {
 
 // NoteRootWait records one root readiness check and any joined build.
 func (t *EvidenceTrace) NoteRootWait(waitMS int64, buildID string, dirs, classified, filesRead int) {
+	t.NoteRootGenerationWait(waitMS, "", buildID, 0, false, dirs, classified, filesRead)
+}
+
+// NoteRootGenerationWait records one root readiness check with root, generation, and start ownership.
+func (t *EvidenceTrace) NoteRootGenerationWait(
+	waitMS int64,
+	rootID, buildID string,
+	generation uint64,
+	started bool,
+	dirs, classified, filesRead int,
+) {
 	if t == nil {
 		return
 	}
@@ -129,8 +153,14 @@ func (t *EvidenceTrace) NoteRootWait(waitMS int64, buildID string, dirs, classif
 	t.RootsChecked++
 	t.ReadinessWaitMS += waitMS
 	if buildID != "" {
+		if started {
+			t.BuildsStarted++
+		}
 		t.BuildsJoined++
 		t.BuildIDs = append(t.BuildIDs, buildID)
+		t.RootBuilds = append(t.RootBuilds, RootBuildRef{
+			RootID: rootID, BuildID: buildID, Generation: generation, Started: started,
+		})
 		t.DirectoriesListed += dirs
 		t.PathsClassified += classified
 		t.CredentialFilesRead += filesRead
@@ -147,8 +177,10 @@ func (t *EvidenceTrace) Snapshot() EvidenceTrace {
 	return EvidenceTrace{
 		ReadinessWaitMS:     t.ReadinessWaitMS,
 		RootsChecked:        t.RootsChecked,
+		BuildsStarted:       t.BuildsStarted,
 		BuildsJoined:        t.BuildsJoined,
 		BuildIDs:            append([]string(nil), t.BuildIDs...),
+		RootBuilds:          append([]RootBuildRef(nil), t.RootBuilds...),
 		DirectoriesListed:   t.DirectoriesListed,
 		PathsClassified:     t.PathsClassified,
 		CredentialFilesRead: t.CredentialFilesRead,

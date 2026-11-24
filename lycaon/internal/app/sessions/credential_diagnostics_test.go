@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestCredentialIndexEmitsValueFreeBuildAndReadinessDiagnostics(t *testing.T) {
@@ -33,22 +34,22 @@ func TestCredentialIndexEmitsValueFreeBuildAndReadinessDiagnostics(t *testing.T)
 	})
 	defer unsub()
 
-	// Cold EnsureProject builds once ("full") and joins its BuildID in root_readiness_wait.
+	// Cold Await starts 1 build ("full") and joins its BuildID in root_readiness_wait.
 	coldCtx, trace := secretmatch.WithEvidenceTrace(secretmatch.WithScreenCallID(t.Context(), "call-cold"))
-	testutil.FailErr(t, "cold EnsureProject", files.EnsureProject(coldCtx, "proj-1"))
+	testutil.FailErr(t, "cold Await", files.Await(coldCtx, tools.CredentialWait{ProjectID: "proj-1"}))
 	snap := trace.Snapshot()
-	if snap.RootsChecked != 1 || snap.BuildsJoined != 1 || snap.DirectoriesListed < 2 || snap.PathsClassified != 3 || snap.CredentialFilesRead != 1 {
+	if snap.RootsChecked != 1 || snap.BuildsStarted != 1 || snap.BuildsJoined != 1 || snap.DirectoriesListed < 2 || snap.PathsClassified != 3 || snap.CredentialFilesRead != 1 {
 		t.Fatalf("cold trace = %+v", snap)
 	}
 
-	// Warm EnsureProject over ready root joins zero builds.
+	// Warm Await over ready root starts/joins zero builds.
 	mu.Lock()
 	records = nil
 	mu.Unlock()
 	warmCtx, warmTrace := secretmatch.WithEvidenceTrace(secretmatch.WithScreenCallID(t.Context(), "call-warm"))
-	testutil.FailErr(t, "warm EnsureProject", files.EnsureProject(warmCtx, "proj-1"))
+	testutil.FailErr(t, "warm Await", files.Await(warmCtx, tools.CredentialWait{ProjectID: "proj-1"}))
 	warmSnap := warmTrace.Snapshot()
-	if warmSnap.RootsChecked != 1 || warmSnap.BuildsJoined != 0 || warmSnap.CredentialFilesRead != 0 {
+	if warmSnap.RootsChecked != 1 || warmSnap.BuildsStarted != 0 || warmSnap.BuildsJoined != 0 || warmSnap.CredentialFilesRead != 0 {
 		t.Fatalf("warm trace = %+v", warmSnap)
 	}
 
@@ -59,13 +60,14 @@ func TestCredentialIndexEmitsValueFreeBuildAndReadinessDiagnostics(t *testing.T)
 	const rotatedVal = "credential-rotated-secret-554433"
 	testutil.FailErr(t, "rotate env", os.WriteFile(filepath.Join(root, ".env"), []byte("API_TOKEN="+rotatedVal+"\n"), 0o600))
 	epoch := repochange.Advance(root)
-	testutil.FailErr(t, "incremental changed", files.index.changed(t.Context(), repochange.Event{
+	files.index.changed(repochange.Event{
 		ProjectDir:    root,
 		Kind:          repochange.WorktreeChanged,
 		Paths:         []string{".env"},
 		EpochBootID:   epoch.BootID,
 		WorktreeEpoch: epoch.Value,
-	}))
+	})
+	testutil.FailErr(t, "await incremental", files.Await(t.Context(), tools.CredentialWait{ProjectID: "proj-1"}))
 
 	mu.Lock()
 	defer mu.Unlock()

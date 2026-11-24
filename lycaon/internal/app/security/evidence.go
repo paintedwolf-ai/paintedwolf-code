@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/secretharvest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func (b *Runtime) LoadMatcher(ctx context.Context, override *secretmatch.Matcher) (*secretmatch.Matcher, error) {
@@ -163,17 +164,18 @@ func (b *Runtime) InstallEvidence(ctx context.Context, m *secretmatch.Matcher, f
 	})
 }
 
-// ModelScreeningValues reconciles file evidence before a provider sees the request.
+// ModelScreeningValues waits for current file evidence before a provider sees the request.
 func (b *Runtime) ModelScreeningValues(ctx context.Context, projectID, rootSessionID string) ([]secretmatch.Remembered, error) {
 	ctx, trace := secretmatch.WithEvidenceTrace(ctx)
 	callID := secretmatch.ScreenCallIDFrom(ctx)
 	if b.CredentialFiles != nil {
-		if err := b.CredentialFiles.EnsureProject(ctx, projectID); err != nil {
+		if err := b.CredentialFiles.Await(ctx, tools.CredentialWait{ProjectID: projectID, SessionID: rootSessionID}); err != nil {
 			snap := trace.Snapshot()
 			secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
 				CallID: callID, ProjectID: projectID, Phase: "evidence_reconciled",
 				DurationMS: snap.ReadinessWaitMS, RootsChecked: snap.RootsChecked,
-				BuildsJoined: snap.BuildsJoined, BuildIDs: snap.BuildIDs,
+				BuildsStarted: snap.BuildsStarted, BuildsJoined: snap.BuildsJoined,
+				BuildIDs: snap.BuildIDs, RootBuilds: snap.RootBuilds,
 				DirectoriesListed: snap.DirectoriesListed, PathsClassified: snap.PathsClassified,
 				CredentialFilesRead: snap.CredentialFilesRead, Failed: true,
 			})
@@ -203,7 +205,8 @@ func (b *Runtime) ModelScreeningValues(ctx context.Context, projectID, rootSessi
 	secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
 		CallID: callID, ProjectID: projectID, Phase: "evidence_reconciled",
 		DurationMS: snap.ReadinessWaitMS + lookupMS, RootsChecked: snap.RootsChecked,
-		BuildsJoined: snap.BuildsJoined, BuildIDs: snap.BuildIDs,
+		BuildsStarted: snap.BuildsStarted, BuildsJoined: snap.BuildsJoined,
+		BuildIDs: snap.BuildIDs, RootBuilds: snap.RootBuilds,
 		DirectoriesListed: snap.DirectoriesListed, PathsClassified: snap.PathsClassified,
 		CredentialFilesRead: snap.CredentialFilesRead, ManagedValues: len(values),
 	})

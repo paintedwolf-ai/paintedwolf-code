@@ -37,7 +37,9 @@ type gatedCredentialFiles struct {
 	release chan struct{}
 }
 
-func (g *gatedCredentialFiles) EnsureProject(ctx context.Context, _ string) error {
+func (*gatedCredentialFiles) Start(string) {}
+
+func (g *gatedCredentialFiles) Await(ctx context.Context, _ tools.CredentialWait) error {
 	g.mu.Lock()
 	entered, release := g.entered, g.release
 	g.mu.Unlock()

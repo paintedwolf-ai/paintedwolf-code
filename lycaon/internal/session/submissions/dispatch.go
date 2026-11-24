@@ -44,7 +44,7 @@ func (m *Service) PromptWorkerResume(ctx context.Context, id, jobID, leaseID str
 	return m.HostTurnWithAdmission(ctx, id, store.PromptSubmissionOriginLoopWake, promptinput.Input{
 		SubmissionID: strings.TrimSpace(leaseID), WorkerJobID: strings.TrimSpace(jobID), Text: loopwake.WaitEndedText(winner),
 		HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: string(anchor.LoopWake)},
-	}, m.waitObservation(id, winner, onAdmitted))
+	}, m.waitObservation(id, strings.TrimSpace(leaseID), winner, onAdmitted))
 }
 
 func (m *Service) WaitResume(ctx context.Context, id string, delivery loopwake.WaitDelivery) (*promptresult.Result, error) {

@@ -16381,6 +16381,10 @@ components:
         decision_trigger:
           $ref: '#/components/schemas/TurnLoadTrigger'
           description: What asked the local decision engine. Present only on deciding, which the host opens only while an available engine is answering; the answer arrives as a turn_load event.
+        indexing:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CredentialIndexingProgress'
+          description: Present only on indexing_credentials.
     BackgroundProcessTerminationReason:
       type: string
       description: 'Why a background process ended: natural exit, timeout, explicit stop by the agent or user, or host teardown of the owning chat, project, detached root, app process, or worker runtime.'
@@ -28575,6 +28579,7 @@ components:
         - starting_workflow
         - awaiting_wake
         - deciding
+        - indexing_credentials
     ActivityStatus:
       type: string
       description: Lifecycle edge for one host-observed activity lease.
@@ -29098,6 +29103,28 @@ components:
           type: integer
           minimum: 0
         matches:
+          type: integer
+          minimum: 0
+    CredentialIndexingProgress:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - root_id
+        - root_label
+        - directories_visited
+        - credential_files_read
+      description: One attached root's credential-file pass that a session waits on. Counts cover the current pass and are observations, not a completion estimate.
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        root_label:
+          type: string
+        directories_visited:
+          type: integer
+          minimum: 0
+        credential_files_read:
           type: integer
           minimum: 0
     MessageOrigin:

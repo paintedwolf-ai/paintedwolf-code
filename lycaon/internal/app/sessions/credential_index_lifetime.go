@@ -1,45 +1,34 @@
 package sessions
 
-import (
-	"context"
-	"time"
+import "context"
 
-	"github.com/lycaon/lycaon/internal/secretmatch"
-)
-
-// begin serializes evidence transitions while allowing waiting providers,
-// tools, and observers to cancel. Every admitted operation joins shutdown.
-func (i *credentialIndex) begin(ctx context.Context) (context.Context, func(), error) {
+// ForgetProject removes the project's roots and its retained file evidence
+// after any in-flight pass has stopped publishing.
+func (c *credentialFiles) ForgetProject(ctx context.Context, project string) error {
+	if !c.indexing() {
+		return nil
+	}
+	i := c.index
 	ctx, finish, err := i.work.Begin(ctx)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	waitStart := time.Now()
-	release, err := i.access.Acquire(ctx, "evidence")
-	waitMS := time.Since(waitStart).Milliseconds()
-	if err != nil {
-		secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
-			CallID: secretmatch.ScreenCallIDFrom(ctx), Phase: "root_readiness_wait",
-			DurationMS: waitMS, Failed: true,
-		})
-		finish()
-		return nil, nil, err
+	defer finish()
+	i.mu.Lock()
+	var keys []string
+	for _, root := range i.roots {
+		if root.projectID == project {
+			keys = append(keys, root.key())
+			i.detach(root)
+		}
 	}
-	if err := ctx.Err(); err != nil {
-		secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
-			CallID: secretmatch.ScreenCallIDFrom(ctx), Phase: "root_readiness_wait",
-			DurationMS: waitMS, Failed: true,
-		})
-		release()
-		finish()
-		return nil, nil, err
+	i.mu.Unlock()
+	for _, key := range keys {
+		release, err := i.access.Acquire(ctx, key)
+		if err != nil {
+			return err
+		}
+		defer release()
 	}
-	secretmatch.EmitPhaseRecord(ctx, secretmatch.ScreenPhaseRecord{
-		CallID: secretmatch.ScreenCallIDFrom(ctx), Phase: "root_readiness_wait",
-		DurationMS: waitMS,
-	})
-	return ctx, func() {
-		release()
-		finish()
-	}, nil
+	return c.harvest.ForgetProject(project)
 }
