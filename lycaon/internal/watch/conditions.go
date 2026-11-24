@@ -420,11 +420,10 @@ func resolveTimerLocation(field string, raw any) (string, *time.Location, error)
 		if name == "" || name == "Local" {
 			name = "UTC"
 		}
-		loc, err := time.LoadLocation(name)
-		if err != nil {
-			return "UTC", time.UTC, nil
+		if loc, lErr := time.LoadLocation(name); lErr == nil {
+			return name, loc, nil
 		}
-		return name, loc, nil
+		return "UTC", time.UTC, nil
 	}
 	tz, ok := raw.(string)
 	tz = strings.TrimSpace(tz)

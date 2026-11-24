@@ -32,9 +32,22 @@ sizes:
                 cap: 45000
                 reason: Promotion combines pending-write instructions with the complete applicable skill catalog during optional-selection fallback. Bodies remain on demand and the combined request obeys the model window.
         coordinator_tool_surfaces:
+            decision_adjudicate:
+                cap: 44000
+                reason: Carries the largest composed phase submit_verdict schema alongside worker delegation, wait, and floor watch observation; cold discovery tools remain deferred.
             implement_overlay_promote:
                 cap: 44000
                 reason: The integration surface lands or rejects worker overlays and verifies them, so its floor carries overlay, command, terminal_open, verification, and scan tools; terminal session controls, secret, and visual checks load on demand.
+            plan_review:
+                cap: 44000
+                reason: Carries the largest composed phase submit_verdict schema alongside plan inspection, wait, and floor watch observation; cold tools load on demand.
+            review_adjudicate:
+                cap: 45500
+                reason: Carries the largest composed phase submit_verdict schema alongside review evidence, worker delegation, wait, and floor watch observation; cold tools load on demand.
+        worker_tool_surfaces:
+            implement:
+                cap: 44000
+                reason: Implementer carries sticky edit, command, verify, terminal, wait, and watch tools for concurrent job and readiness observation; scan, browser, secret, and watch_control schemas remain deferred or resource-implied.
         worker_personas:
             implementer:
                 cap: 36500
