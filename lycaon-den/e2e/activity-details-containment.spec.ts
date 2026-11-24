@@ -128,8 +128,8 @@ modelIndependentWebE2e("activity details with a wide filmstrip stay inside their
   const wideStage = await stageGeometry();
   expect(wideStage.reading.left).toBeGreaterThanOrEqual(wideStage.hero.right - 1);
 
-  // Narrow the viewport so the card falls below the 24rem filmstrip stack threshold.
-  await page.setViewportSize({ width: 520, height: 900 });
+  // Narrow the viewport so the filmstrip falls below its 24rem stack threshold.
+  await page.setViewportSize({ width: 360, height: 900 });
   await assertContained();
   await expect.poll(async () => {
     const { hero, reading } = await stageGeometry();
