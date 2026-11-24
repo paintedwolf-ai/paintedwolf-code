@@ -381,10 +381,20 @@ func (h *Harness) runToolPostAndSharedTempHook(ctx context.Context, cells []Auth
 			}
 		}
 		if hasCmd || cell.IsBoundary {
-			for _, code := range []string{toolrejection.GitNoRepositoryOnWriteLegCode, toolrejection.HTTPRequestWebPageCode, toolrejection.SourceAnalysisUnavailableCode} {
+			for _, code := range []string{toolrejection.GitNoRepositoryOnWriteLegCode, toolrejection.GrepStoppedFilesCode, toolrejection.HTTPRequestWebPageCode, toolrejection.SourceAnalysisUnavailableCode} {
 				_ = h.takeAdvisories()
+				details := map[string]any{"url": "https://example.com"}
+				if code == toolrejection.GrepStoppedFilesCode {
+					details = map[string]any{
+						"grep_input_path": "b.txt", "grep_stop_line": 2, "grep_record_bytes": int64(200001),
+						"grep_stop_resource": "regex_work_steps", "grep_stop_memory": false,
+						"grep_lines_emitted_before_stop": 1, "grep_pattern_literal": false,
+						"grep_stopped_count": 1, "grep_stopped_inputs": []string{"b.txt:2"},
+						"grep_searched_files": 3, "grep_matched_files": 3,
+					}
+				}
 				_, _ = h.Policy.AfterTool(cctx, sess, "command", map[string]any{"command": "ls"}, "ok", 1, guidance.ToolResultFacts{
-					Codes: []string{code}, Feedback: []api.ToolFeedback{{Code: code, Details: map[string]any{"url": "https://example.com"}}},
+					Codes: []string{code}, Feedback: []api.ToolFeedback{{Code: code, Details: details}},
 				})
 				h.EvalCount++
 				h.drainAdvisoriesTo(&out, oar.AnchorToolPost, "tool.post_invoke/"+code, cell, hasCmd)
