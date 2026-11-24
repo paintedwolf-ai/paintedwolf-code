@@ -321,7 +321,8 @@ func TestRequestEfficiencyIntegratedReplay(t *testing.T) {
 		t.Fatalf("turn 1 model dispatches = %d, want 4", len(reqsTurn1))
 	}
 
-	// Full Anthropic wire serialization with production cache breakpoints on the two same-scope appends (reqs[1] vs reqs[2]).
+	// Full Anthropic wire serialization with production cache breakpoints on
+	// two same-scope appends (reqs[1] vs reqs[2]).
 	ser2 := serializeFullAnthropicRequest(t, reqsTurn1[1], sess.ID)
 	ser3 := serializeFullAnthropicRequest(t, reqsTurn1[2], sess.ID)
 	if !ser2.StandingHasMarker || !ser2.HistoryHasMarker || !ser2.TopLevelHasMarker ||
@@ -465,7 +466,8 @@ func TestRequestEfficiencyIntegratedReplay(t *testing.T) {
 		t.Fatalf("expected oversized continuation >= %d tokens, got %d", compaction.DefaultCompactionConfig().ChunkTokenThreshold, continuationTokens)
 	}
 
-	// Append an independently oversized ordinary assistant row (quoting "## Continuation") and age it past KeepRecentMessages.
+	// Append an oversized ordinary assistant row quoting "## Continuation" and
+	// age it past KeepRecentMessages.
 	oversizedOrdinaryID := "ordinary-oversized-asst"
 	var postCompactRows []wire.Message
 	postCompactRows = append(postCompactRows, wire.Message{
