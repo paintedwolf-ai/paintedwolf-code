@@ -158,9 +158,13 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		testutil.FailErr(t, cmdLine, callErr)
 		var out struct {
 			Stdout string `json:"stdout"`
+			Stderr string `json:"stderr"`
 			Status int    `json:"status"`
 		}
 		testutil.FailErr(t, "decode stdout", json.Unmarshal([]byte(raw), &out))
+		if out.Status != 0 {
+			t.Fatalf("%s exited %d: stderr=%q raw=%s", cmdLine, out.Status, out.Stderr, raw)
+		}
 		return strings.TrimSpace(out.Stdout)
 	}
 
@@ -218,7 +222,8 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 	}
 
 	// Part B: External-process mutation inside sibling worktree via command window.
-	extCmd := fmt.Sprintf("/bin/sh -c 'printf \"package src\\n// ExternalProcToken\\n\" > %s/src/ext_added.go'", siblingWT)
+	extTarget := filepath.Join(siblingWT, "src/ext_added.go")
+	extCmd := fmt.Sprintf("external -- /bin/sh -c 'printf \"package src\\n// ExternalProcToken\\n\" > \"$1\"' sh %q", extTarget)
 	_ = callStdout(extCmd)
 	testutil.WaitFor(t, "command window settles", func() bool {
 		return len(ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)) == 0
@@ -241,7 +246,7 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 	// Verify outside effect was recorded in sourceledger.
 	var outsideHeads int
 	testutil.FailErr(t, "count outside heads", f.Database.QueryRowContext(t.Context(),
-		`SELECT COUNT(*) FROM source_branch_heads WHERE project_id = ? AND root_id = 'outside-r1'`, testdbseed.DefaultProjectID).Scan(&outsideHeads))
+		`SELECT COUNT(*) FROM source_branch_heads WHERE project_id = ? AND root_id = ?`, testdbseed.DefaultProjectID, outsideRootID).Scan(&outsideHeads))
 	if outsideHeads == 0 {
 		t.Fatal("expected outside file effect to be recorded in sourceledger")
 	}
