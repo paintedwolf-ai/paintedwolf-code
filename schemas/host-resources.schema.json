@@ -79,6 +79,13 @@
           "type": "array",
           "maxItems": 16,
           "items": { "$ref": "#/$defs/connection" }
+        },
+        "write_roots": {
+          "description": "Daemon state directories a resolved action may write. Templates: {home}, {config_dir}, {runtime_dir}.",
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
         }
       }
     },
