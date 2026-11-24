@@ -92,7 +92,8 @@ func RecoverWaitLeases(ctx context.Context, loop *WaitSubscriptions, store *awai
 		}
 		loop.Waits.enterSleep(ctx, lease.SessionID, sleepArm{
 			until: until, untilComplete: lease.UntilComplete, reason: lease.Reason,
-			triggers: triggers, processHandles: handles, workerHandles: workerHandlesFromConditions(lease.Conditions), mover: SleepMoverHost,
+			triggers: triggers, processHandles: handles, workerHandles: workerHandlesFromConditions(lease.Conditions),
+			watchHandles: watchHandlesFromConditions(lease.Conditions), mover: SleepMoverHost,
 		})
 		startConditionMonitor(ctx, loop, store, lease)
 	}

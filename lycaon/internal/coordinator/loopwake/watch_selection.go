@@ -181,7 +181,8 @@ func executeWatchWait(ctx context.Context, loop *WaitSubscriptions, deps WaitToo
 	loop.Waits.enterSleep(ctx, sessionID, sleepArm{
 		until: until, untilComplete: request.UntilComplete, reason: request.Reason,
 		triggers: sleepTriggers, processHandles: request.ProcessHandles, workerHandles: request.WorkerHandles,
-		mover: SleepMoverHost, caller: waitCaller{tool: "wait", toolCallID: tctx.Identity.ToolCallID},
+		watchHandles: request.WatchHandles,
+		mover:        SleepMoverHost, caller: waitCaller{tool: "wait", toolCallID: tctx.Identity.ToolCallID},
 	})
 	loop.Waits.MarkWaitCalled(sessionID)
 	if tctx.Effects.Out != nil {
