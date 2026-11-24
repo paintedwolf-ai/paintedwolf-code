@@ -87,6 +87,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, id string, in pr
 		return zero, err
 	}
 	machine.Surface.SessionScratchDir = tctx.Host.SessionScratchDir
+	machine.Surface.Fingerprint = machine.Surface.CacheFingerprint()
 	tctx.Turn.TurnWritePinRootID = strings.TrimSpace(in.WritePinRootID)
 	tctx.Turn.TurnWritePinGlobs = append([]string(nil), in.WritePinGlobs...)
 	tctx, err = m.Workspace.Enrich(ctx, sess, tctx)

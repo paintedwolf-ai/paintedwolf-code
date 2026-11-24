@@ -116,8 +116,11 @@ func TestInotifyBurstKeepsCoverageComplete(t *testing.T) {
 	if coverage.Faulted || coverage.Truncated != 0 {
 		t.Fatalf("burst coverage = %+v", coverage)
 	}
-	if (coverage.Overflows > 0 && !fixture.seen(".")) || (coverage.Overflows == 0 && !fixture.seen("after-burst.txt")) {
-		t.Fatal("neither the marker nor an overflow resync reached observers")
+	// A root resync covers the marker whatever produced it: a kernel overflow
+	// window, or the debouncer collapsing a burst wider than maxDebouncePaths
+	// into the whole tree, which absorbs the marker's own entry.
+	if !fixture.seen("after-burst.txt") && !fixture.seen(".") {
+		t.Fatal("neither the marker nor a root resync reached observers")
 	}
 }
 

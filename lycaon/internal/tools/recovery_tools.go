@@ -46,6 +46,9 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 	}
 	request := CallReach(ctx)
 	gc.Reach = request
+	if !gc.Workers.ProfileMutationCapable && (request.Program("edit") || request.Status("edit") == toolreach.Callable || request.Status("write") == toolreach.Callable || request.Status("code_rewrite") == toolreach.Callable) {
+		gc.Workers.ProfileMutationCapable = true
+	}
 	gc.RegisterProvider("paintedwolf.offered_tools", func(target *oar.GuardContext) error {
 		if target.ObservationData == nil {
 			target.ObservationData = map[string]any{}
@@ -59,7 +62,15 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 			if target.ObservationData == nil {
 				target.ObservationData = map[string]any{}
 			}
-			target.ObservationData[fact] = request.Status(tool) == toolreach.Callable
+			callable := request.Status(tool) == toolreach.Callable
+			if !callable && toolcontract.IsCommandOperation(tool) {
+				if forms, ok := toolcontract.RetiredCommandForms(tool); ok && len(forms) > 0 {
+					callable = request.Program(forms[0])
+				} else {
+					callable = request.Program(tool)
+				}
+			}
+			target.ObservationData[fact] = callable
 			return nil
 		})
 	}

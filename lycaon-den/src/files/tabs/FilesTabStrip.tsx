@@ -1,4 +1,5 @@
 import { registerFocusRegion, releaseFocusRegion } from "../../shortcuts/focus-region.ts";
+import { isOutsideRoot } from "../source/outside-namespace.ts";
 import { For, Show, createMemo, onCleanup, type JSX } from "solid-js";
 import { type ContextMenuAnchor } from "../../components/ContextMenu.tsx";
 import { SidebarAutomaticExpandIcon, SidebarCollapseIcon, SidebarExpandIcon } from "../../components/nav/NavSidebarToggle.tsx";
@@ -55,7 +56,7 @@ function FilesTabStripShell(props: StripShellProps & { children: JSX.Element }) 
         class="den-files-tab-strip__tree-toggle den-auto-restore-control"
         data-restore="automatic"
         aria-label="Widen window to restore file navigator"
-        data-tip="Widen window to restore Files"
+        data-tip="Widen window to restore file navigator"
         data-tip-pos="below"
         data-testid="files-tree-auto-restore-btn"
         onClick={props.onAutoRestore}
@@ -116,10 +117,11 @@ export function FilesTabStrip(props: StripShellProps & {
     void props.scopeMarksVersion();
     return filesBufferChange(props.scope.projectId(), buffer, props.scope.versionForBuffer(buffer));
   };
+  const isOutside = (rootId: string) => isOutsideRoot(props.scope.projectId(), rootId);
   const tabNames = createMemo(() => filesTabNames(state().order.flatMap(key => {
     const buffer = state().byKey[key];
     return buffer ? [buffer] : [];
-  })));
+  }), isOutside));
   const stateLabelsFor = (buffer: FileBuffer): string[] => {
     void props.scopeMarksVersion();
     const kind = fileTabKind(buffer, props.previousVersionForBuffer(buffer))?.label;
@@ -254,6 +256,7 @@ export function FilesTabStrip(props: StripShellProps & {
         </button>
       </Show>
       <FilesOpenList
+        isOutside={isOutside}
         open={props.tabs.filesOpenListOpen()}
         rows={openListRows()}
         activeKey={props.scope.aimedKey()}

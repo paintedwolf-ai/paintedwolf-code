@@ -56,6 +56,7 @@ func loopDepsSnapshotForTest(l *LoopEngine) LoopDeps {
 	deps.GetSession = l.Subscriptions.loopDeps().GetSession
 	deps.HostWakeOverlayPromoteDue = l.Subscriptions.loopDeps().HostWakeOverlayPromoteDue
 	deps.ProcessReport = l.Subscriptions.loopDeps().ProcessReport
+	deps.ObserveProcess = l.Subscriptions.loopDeps().ObserveProcess
 	deps.ProcessRunning = l.Subscriptions.loopDeps().ProcessRunning
 	deps.ProcessState = l.Subscriptions.loopDeps().ProcessState
 	deps.ProcessSubject = l.Subscriptions.loopDeps().ProcessSubject

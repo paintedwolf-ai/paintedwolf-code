@@ -40,8 +40,10 @@ func (m *Service) ResolvePlanForStart(ctx context.Context, req api.StartWorkflow
 	if m == nil || m.Creator == nil {
 		return "", nil
 	}
-	titleSource := blueprint.SlugTitle(strings.TrimSpace(req.Request))
-	if titleSource == "" {
+	var titleSource string
+	if request := strings.TrimSpace(req.Request); request != "" {
+		titleSource = blueprint.SlugTitle(request)
+	} else {
 		titleSource = blueprintTitleFromSlashText(slashText)
 	}
 	if titleSource == "" {

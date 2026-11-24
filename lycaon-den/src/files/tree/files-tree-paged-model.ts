@@ -4,6 +4,8 @@ import type { FlatTreeRow } from "./project-files-tree-flat.ts";
 import type { StickyAncestor } from "./files-tree-sticky.ts";
 import type { NewEntryKind } from "../commands/project-files-create.ts";
 
+type TreeRoot = Pick<ProjectRoot, "id" | "label">;
+
 export type TreeDraft = { rootId: string; dir: string; naming: NewEntryKind | null; createError: string | null };
 export type PagedTreeModel = DisplayRowModel & {
   sourceIndex(index: number): number;
@@ -32,7 +34,7 @@ function treeEntry(row: SourceTreeRow, labels: Map<string, string>): FlatTreeRow
 export const UNKNOWN_SUBTREE_END = Number.MAX_SAFE_INTEGER;
 
 /** Maps bounded frames into display coordinates. */
-export function buildPagedTreeModel(roots: readonly ProjectRoot[], count: number,
+export function buildPagedTreeModel(roots: readonly TreeRoot[], count: number,
   frames: readonly SourceTreeFrame[], drafts: readonly TreeDraft[] = []): PagedTreeModel {
   const source = new Map<number, SourceTreeRow>();
   const ends = new Map<number, number>();
@@ -49,13 +51,13 @@ export function buildPagedTreeModel(roots: readonly ProjectRoot[], count: number
 }
 
 /** Root metadata remains navigable before a host connection is available. */
-export function buildKnownRootsModel(roots: readonly ProjectRoot[]): PagedTreeModel {
+export function buildKnownRootsModel(roots: readonly TreeRoot[]): PagedTreeModel {
   return buildTreeRowsModel(roots, roots.length, new Map(roots.map((root, index) => [index, {
     address: { root_id: root.id, path: "." }, name: root.label, depth: 0, kind: "directory", expanded: false,
   }])), new Map(), []);
 }
 
-function buildTreeRowsModel(roots: readonly ProjectRoot[], count: number, source: Map<number, SourceTreeRow>,
+function buildTreeRowsModel(roots: readonly TreeRoot[], count: number, source: Map<number, SourceTreeRow>,
   ends: Map<number, number>, drafts: readonly TreeDraft[]): PagedTreeModel {
   const labels = new Map(roots.map(root => [root.id, root.label]));
   const addresses = new Map<string, number>();

@@ -22,14 +22,16 @@ elif [[ "${1:-}" == --ocr-only ]]; then
   exec bash "${ROOT}/scripts/ocrengine-fetch.sh" "$@"
 fi
 
+LOCAL_MODEL=""
 MODE="full"
 RELEASE_BUILD=0
 for arg in "$@"; do
   case "${arg}" in
     --minimal) MODE="minimal" ;;
     --release) RELEASE_BUILD=1 ;;
+    --with-local-model=e4b|--with-local-model=12b|--with-local-model=26b) LOCAL_MODEL="${arg#*=}" ;;
     *)
-      echo "usage: stage-engine.sh [--minimal] [--release]" >&2
+      echo "usage: stage-engine.sh [--minimal] [--release] [--with-local-model=e4b|12b|26b]" >&2
       echo "error: unknown argument ${arg}" >&2
       exit 2
       ;;
@@ -196,6 +198,9 @@ fi
 
 if [[ "${HOST_KIND}" == "darwin" || "${HOST_KIND}" == "linux" ]]; then
   GENERATION_ARGS=(--output "${BINARIES_DIR}/nativegen-${TARGET}" --resources "${ENGINE_ROOT}/generation")
+  if [[ -n "${LOCAL_MODEL}" ]]; then
+    GENERATION_ARGS+=(--with-local-model "${LOCAL_MODEL}")
+  fi
   bash "${ROOT}/scripts/generation/run.sh" stage "${GENERATION_ARGS[@]}"
 fi
 

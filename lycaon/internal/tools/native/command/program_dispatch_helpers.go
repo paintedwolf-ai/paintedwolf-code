@@ -189,7 +189,10 @@ func (d *ProgramDispatcher) SettleExecution(ctx context.Context, invocation tool
 		// Descendants own their effects; a structural node only aggregates them.
 		result.EffectCertainty = toolcontract.EffectUnknown
 	}
-	return d.settleWith(ctx, entry.child, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: entry.ownerInvoked, JobHandle: record.JobHandle, Conflict: revisionConflict(record.Diagnostic)})
+	return d.settleWith(ctx, entry.child, toolcontract.ProgramChildSettlement{
+		Result: result, OwnerInvoked: entry.ownerInvoked, JobHandle: record.JobHandle,
+		Conflict: revisionConflict(record.Diagnostic), ConsumerClosedExecutions: record.ConsumerClosedExecutions,
+	})
 }
 
 var compiledStructuralDefinitions sync.Map
@@ -234,7 +237,7 @@ func (d *ProgramDispatcher) Redirections() (commandprogram.InputRedirection, com
 		return nil, nil
 	}
 	forkPaths := d.paths.Fork()
-	in, out := d.redirections(forkPaths, d.beginOutput)
+	in, out := d.redirections(forkPaths, d.outputAdmission())
 	return d.wrapInputRedirection(in, forkPaths), d.wrapOutputPublication(out, forkPaths)
 }
 

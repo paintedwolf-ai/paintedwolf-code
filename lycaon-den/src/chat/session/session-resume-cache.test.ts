@@ -36,6 +36,9 @@ describe("resumeChatSession cache", () => {
       scope: { projectId: "proj-1", sessionId: "sess-a" },
       touchedAt: 1,
       session: {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-a",
         id: "sess-a",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "proj-1",
@@ -86,6 +89,9 @@ describe("resumeChatSession cache", () => {
 
     const client = withBootstrap({
       getSession: vi.fn(async () => ({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-a",
         id: "sess-a",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "proj-1",
@@ -161,6 +167,9 @@ describe("resumeChatSession cache", () => {
     );
     apply = false;
     resolveSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-stale",
       id: "sess-stale",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",
@@ -183,6 +192,9 @@ describe("resumeChatSession cache", () => {
       touchedAt: 1,
       // Corrupt / mismatched session payload — restore cannot bind sess-a.
       session: {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "",
         id: "",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "proj-1",
@@ -226,6 +238,9 @@ describe("resumeChatSession cache", () => {
     };
     const client = withBootstrap({
       getSession: vi.fn(async () => ({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-a",
         id: "sess-a",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "proj-1",
@@ -270,6 +285,9 @@ describe("resumeChatSession cache", () => {
       content: "Historical reply", status: "complete", created_at: "t2", seq: 2,
     };
     const session: Session = {
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-a",
       id: "sess-a", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "proj-1",
       workspace_path: "/tmp/p", posture: "build", status: "idle",
       created_at: "t", activity_at: "t", updated_at: "t",
@@ -326,6 +344,9 @@ describe("resumeChatSession cache", () => {
     const resumeSpy = vi.spyOn(appConnection, "resumeProjectEventsAfter");
     try {
       const session: Session = {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-a",
         id: "sess-a",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "proj-1",
@@ -435,6 +456,9 @@ describe("resumeChatSession cache", () => {
     clearSessionChatCacheForTests();
     const appStore = createAppStore();
     const session: Session = {
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-a",
       id: "sess-a",
       title: "Cached title",
       owner_person_id: "00000000-0000-4000-8000-000000000002",

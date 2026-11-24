@@ -12,16 +12,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
-
 	"github.com/lycaon/lycaon/internal/project/projecttest"
+	"github.com/lycaon/lycaon/internal/promptattach"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 type sessionRoutes struct {
-	router    http.Handler
-	sessionID string
+	router     http.Handler
+	store      *sessionstore.Repositories
+	submission *Submission
+	sessionID  string
 }
 
 // newSessionRoutes mounts the content and queue routes over one real session.
@@ -39,6 +42,7 @@ func newSessionRoutes(t *testing.T) sessionRoutes {
 	background := &taskgroup.Group{}
 	t.Cleanup(func() { background.Stop(); background.Wait(context.Background()) })
 	queue := &Queue{Sessions: deps.Sessions, SessionQueries: deps.Store.Sessions, background: background, responses: responses}
+	submission := &Submission{SessionQueries: deps.Store.Sessions, Sessions: deps.Sessions, Caps: promptattach.Active(), responses: responses}
 	r := chi.NewRouter()
 	r.Post("/v1/sessions/{id}/compact", content.HandleSessionCompact)
 	r.Get("/v1/sessions/{id}/context", content.HandleSessionContext)
@@ -46,7 +50,8 @@ func newSessionRoutes(t *testing.T) sessionRoutes {
 	r.Get("/v1/sessions/{id}/drafts/{slot_id}/versions", content.HandleListDraftVersions)
 	r.Get("/v1/sessions/{id}/queue", queue.HandleGetQueue)
 	r.Patch("/v1/sessions/{id}/queue", queue.HandleUpdateSessionQueue)
-	return sessionRoutes{router: r, sessionID: sess.ID}
+	r.Post("/v1/sessions/{id}/prompts", submission.HandlePrompt)
+	return sessionRoutes{router: r, store: deps.Store, submission: submission, sessionID: sess.ID}
 }
 
 func (s sessionRoutes) serve(t *testing.T, method, target, body string) *httptest.ResponseRecorder {

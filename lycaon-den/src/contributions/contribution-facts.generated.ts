@@ -26,6 +26,7 @@ export type ContributionFactId =
   | "files_version_historical"
   | "line_layout"
   | "mcp_requirement_ready"
+  | "outside_file_picker_available"
   | "peer_open_available"
   | "peer_views_present"
   | "peer_workspace"
@@ -66,6 +67,7 @@ export const CONTRIBUTION_FACTS: Record<ContributionFactId, ContributionFactSpec
   "files_version_historical": { plane: "shell", operand: null },
   "line_layout": { plane: "shell", operand: "line_layout" },
   "mcp_requirement_ready": { plane: "host", operand: "requirement" },
+  "outside_file_picker_available": { plane: "shell", operand: null },
   "peer_open_available": { plane: "shell", operand: null },
   "peer_views_present": { plane: "shell", operand: null },
   "peer_workspace": { plane: "shell", operand: null },

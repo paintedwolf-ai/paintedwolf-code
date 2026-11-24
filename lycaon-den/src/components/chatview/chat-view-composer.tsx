@@ -7,13 +7,22 @@ import { dockVisibleCheckpointId, lastFocusedCheckpointId, pickRedirectTarget } 
 import { getLycaonClient, type noticeReporterFor } from "../../platform/connection/app-connection.ts";
 import { QueuePopover } from "./QueuePopover.tsx";
 import { Composer } from "./Composer.tsx";
+import { createChatViewMode } from "./chat-view-mode.tsx";
 import { ComposerChromeStack } from "./ComposerChromeStack.tsx";
 import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 import { SessionWorkflowLauncher } from "./SessionWorkflowLauncher.tsx";
+import {
+  ASK_INPUT_HINT,
+  NEW_CHAT_AGENT_INPUT_HINT,
+  WORKFLOW_NEEDS_AGENT,
+  WORKFLOW_NEEDS_AGENT_HINT,
+  WORKFLOW_NEEDS_AGENT_NOTICE,
+} from "./session-mode-copy.ts";
 import { CheckpointCards } from "../checkpoint/CheckpointCards.tsx";
 import { AskUserDock } from "../workflow/AskUserDock.tsx";
 import type { AskUserDockSubmitFn } from "../workflow/AskUserDock.tsx";
 import { askUserDockMeta, pendingAskFeedbackEntry, pendingWorkflowFeedback, retainAskDockMeta, workflowFeedbackComposerPlaceholder } from "../../workflow/workflow-feedback-model.ts";
+import { isAmbientRootRun } from "../../workflow/workflow-run-stack.ts";
 import { clearUnreadBoundary } from "../../attention/unread-boundary.ts";
 import { armedComposerPlaceholder, armedWorkflowFromPickerRow, resolveComposerWorkflowStart } from "../../chat/workflow/workflow-arm.ts";
 import { clearPendingArmWorkflow, peekArmWorkflow } from "../../chat/workflow/pending-arm.ts";
@@ -46,6 +55,17 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
   const { viewport, chrome, workflow, blueprint, queue, surfaceActive, composerRefocus, composerRehydrate, clientOrThrow, connectedClient, chatNotices } = options;
   const { activeRun, catalogRun, chatLive, stopping, thinkingLabel, pauseHint, launcherTiles, showSessionLauncher, sessionHoldsExternalContent } = options.activity;
   const [askRefocusPulse, setAskRefocusPulse] = createSignal(0);
+  const mode = createChatViewMode(props.appStore, () => props.sessionId, surfaceActive, connectedClient, () => chatNotices().reportError);
+  const armedNeedsAgent = () => mode.view().workflowNeedsAgent && workflow.armed()?.requiresAgent;
+  const composerRequest = () => {
+    const run = activeRun();
+    const ui = run?.ui;
+    if (mode.view().workflowNeedsAgent && isAmbientRootRun(run) &&
+        ui?.request?.cadence === "each_turn") {
+      return undefined;
+    }
+    return ui;
+  };
   const [checkpointRefocusPulse, setCheckpointRefocusPulse] = createSignal(0);
   let askDockSubmit: AskUserDockSubmitFn | undefined;
   const [askAnswerReady, setAskAnswerReady] = createSignal(false);
@@ -145,6 +165,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
     });
   };
 
+  const sendBlocked = () => Boolean(armedNeedsAgent()) && !pendingAsk() && !approvalRedirectCheckpoint();
   const sendWithStreamFollow = async (
     payload: import("./Composer.tsx").ComposerSendPayload,
   ): Promise<boolean | void> => {
@@ -189,6 +210,8 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
       }
     }
 
+    if (armedNeedsAgent()) return false;
+
     const text = payload.text?.trim() ?? "";
     const armed = workflow.armed();
 
@@ -196,7 +219,12 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
       text,
       catalog: props.appStore.state.workflowCatalog,
       armed,
+      askMode: mode.view().workflowNeedsAgent,
     });
+    if (resolution.kind === "needs_agent") {
+      chatNotices().reportError(new Error(WORKFLOW_NEEDS_AGENT_NOTICE));
+      return false;
+    }
     if (resolution.kind === "arm") {
       workflow.setArmed(resolution.armed);
       return;
@@ -241,11 +269,12 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                 <SessionWorkflowLauncher
                   tiles={launcherTiles()}
                   busy={workflow.busy()}
+                  askMode={mode.view().workflowNeedsAgent}
                   armedWorkflowId={workflow.armed()?.workflow_id}
                   heading={(() => {
                     const armed = workflow.armed();
                     return armed
-                      ? `${armed.label} selected — send a message to start`
+                      ? `${armed.label} selected — ${armedNeedsAgent() ? WORKFLOW_NEEDS_AGENT : "send a message to start"}`
                       : undefined;
                   })()}
                   onSelect={(wf) => workflow.armWorkflow(wf)}
@@ -264,7 +293,9 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                       role="status"
                     >
                       <span class="den-workflow-arm-chip__label">
-                        {armed.label} — send to start
+                        {armed.label} — <Show when={armedNeedsAgent()} fallback="send to start">
+                          {WORKFLOW_NEEDS_AGENT}
+                        </Show>
                       </span>
                       <button
                         type="button"
@@ -337,6 +368,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
             }}
             composer={
               <Composer
+                modeControl={mode.control}
                 approvalsRevision={props.appStore.state.approvalsRevision}
                 sidecarStatus={props.appStore.state.sidecarStatus}
                 sessionId={props.sessionId}
@@ -360,23 +392,26 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                 visionSupport={props.visionSupport}
                 placeholder={(() => {
                   const armed = workflow.armed();
+                  const modeView = mode.view();
                   return (
                     (approvalRedirectCheckpoint()
                       ? APPROVALS_COPY.card.composerRedirect.placeholder
                       : null) ??
-                    (armed ? armedComposerPlaceholder(armed) : null) ??
+                    (armed ? (armedNeedsAgent() ? WORKFLOW_NEEDS_AGENT_HINT : armedComposerPlaceholder(armed)) : null) ??
                     blueprint.composerPlaceholder() ??
                     workflowFeedbackComposerPlaceholder(
                       activeRun(),
                       pendingAskMeta(),
                     ) ??
-                    activeRun()?.ui?.request?.question
+                    composerRequest()?.request?.question ??
+                    (modeView.workflowNeedsAgent ? ASK_INPUT_HINT : undefined) ??
+                    (modeView.show && !modeView.started ? NEW_CHAT_AGENT_INPUT_HINT : undefined)
                   );
                 })()}
                 emptySubmitEnabled={
-                  Boolean(workflow.armed()) ||
-                  activeRun()?.ui?.request?.cadence === "each_turn" ||
-                  activeRun()?.ui?.request_state?.status === "waiting"
+                  Boolean(workflow.armed() && !armedNeedsAgent()) ||
+                  composerRequest()?.request?.cadence === "each_turn" ||
+                  composerRequest()?.request_state?.status === "waiting"
                 }
                 streaming={chatLive()}
                 pendingTranscriptSend={props.appStore.state.pendingSends[props.sessionId]?.some(send => send.kind === "prompt")}
@@ -387,6 +422,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                 activityLabel={stopping() ? "Stopping…" : thinkingLabel()}
                 turnClock={props.appStore.state.turnClock}
                 externalContent={sessionHoldsExternalContent()}
+                sendBlocked={sendBlocked()}
                 onSend={sendWithStreamFollow}
                 onStop={props.onStop}
               />

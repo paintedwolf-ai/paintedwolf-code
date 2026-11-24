@@ -8,7 +8,7 @@ components:
       properties:
         state:
           type: string
-          enum: [idle, loading, ready, repairing, unavailable, repair_required, insufficient_memory, stopped]
+          enum: [idle, loading, ready, repairing, unavailable, repair_required, insufficient_memory, downloading, opted_out, stopped]
           description: Current host runtime state, independent of cached model discovery.
         recovery_action:
           type: string
@@ -24,6 +24,75 @@ components:
           type: integer
           minimum: 0
           description: Admitted context capacity of the ready process.
+        memory_kind:
+          type: string
+          enum: [system, gpu]
+          description: Memory named in local model requirements on this generation host.
+        selection_state:
+          type: string
+          enum: [unconfigured, selected, opted_out]
+          description: Persisted local model decision when the host can read its store.
+        selected_model:
+          type: string
+        target_model:
+          type: string
+        transfer_phase:
+          type: string
+          enum: [preparing, downloading, importing, activating]
+          description: Current phase of an active model installation.
+        downloaded_bytes:
+          type: integer
+        total_bytes:
+          type: integer
+        offline_installer:
+          type: boolean
+          description: This installation was packaged with an explicitly selected offline tier.
+        seed_model:
+          type: string
+          description: Tier contained in the packaged offline seed.
+        seed_available:
+          type: boolean
+        available_models:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalModelTier'
+    LocalModelSelectionRequest:
+      x-go-generate: true
+      type: object
+      required: [model]
+      additionalProperties: false
+      properties:
+        model:
+          type: string
+        packaged_seed:
+          type: boolean
+          description: Use the packaged offline seed for the requested tier.
+        bundle_path:
+          type: string
+    LocalModelTier:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, display_name, description, download_bytes, min_memory_bytes, eligible, recommended, download_available]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+        display_name:
+          type: string
+        description:
+          type: string
+          description: Short guidance for choosing this tier.
+        download_bytes:
+          type: integer
+        min_memory_bytes:
+          type: integer
+        eligible:
+          type: boolean
+        recommended:
+          type: boolean
+        download_available:
+          type: boolean
     LocalGenerationRepairResult:
       x-go-generate: true
       type: object

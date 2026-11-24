@@ -143,7 +143,7 @@ func TestCredentialStoreSeatbeltKeychainAPIReadDoesNotPermitMutation(t *testing.
 	t.Setenv("HOME", home)
 	directory := filepath.Join(home, "Library", "Keychains")
 	testutil.FailErr(t, "create private keychain directory", os.MkdirAll(directory, 0o700))
-	private := filepath.Join(directory, "fixture.keychain")
+	login := filepath.Join(directory, "login.keychain-db")
 	const password = "paintedwolf-fixture-password"
 	const value = "paintedwolf-fixture-value"
 	run := func(args ...string) string {
@@ -156,12 +156,8 @@ func TestCredentialStoreSeatbeltKeychainAPIReadDoesNotPermitMutation(t *testing.
 		}
 		return string(output)
 	}
-	run("create-keychain", "-p", password, private)
-	run("add-generic-password", "-A", "-a", "fixture-account", "-s", "fixture-service", "-w", value, private)
-	run("lock-keychain", private)
-	login := filepath.Join(directory, "login.keychain-db")
-	testutil.FailErr(t, "move closed fixture database", os.Rename(private+"-db", login))
-	run("unlock-keychain", "-p", password, login)
+	run("create-keychain", "-p", password, login)
+	run("add-generic-password", "-A", "-a", "fixture-account", "-s", "fixture-service", "-w", value, login)
 	base := confine.Confinement{Roots: []string{fspath.CanonicalPath(t.TempDir())}, Network: confine.NetworkDeny}
 	read := []string{"find-generic-password", "-a", "fixture-account", "-s", "fixture-service", "-w", login}
 	if code := confinedExit(t, self, base, "/usr/bin/security", read...); code == 0 {

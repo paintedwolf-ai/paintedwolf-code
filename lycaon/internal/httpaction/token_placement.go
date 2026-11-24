@@ -1,12 +1,10 @@
 package httpaction
 
 import (
-	"github.com/lycaon/lycaon/internal/outboundhttp"
-	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"net/url"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // tokenPlacement is one {{token:name}} reference in the request and the
@@ -64,54 +62,4 @@ func placedTokens(req outboundRequest, jar *secretcap.TokenJar, spec requestSpec
 		}
 	}
 	return placements, nil
-}
-
-// substituteTokens writes each placed token onto the wire. A foreign token
-// the screen released redacted is written as the marker instead, and the
-// request then carries the redaction receipt.
-func substituteTokens(req outboundRequest, placements []tokenPlacement, release secretmatch.Resolution) (outboundRequest, *toolrejection.ToolReject) {
-	if len(placements) == 0 {
-		return req, nil
-	}
-	spelling := make(map[string]string, len(placements))
-	redacted := false
-	for _, placement := range placements {
-		spelling[placement.name] = placement.token.Value
-		if placement.foreign && release.Decision == secretmatch.SendRedacted {
-			spelling[placement.name] = secretmatch.RedactedMarker
-			redacted = true
-		}
-	}
-	substitute := func(in string) string {
-		return tokenReference.ReplaceAllStringFunc(in, func(match string) string {
-			return spelling[strings.TrimSpace(tokenReference.FindStringSubmatch(match)[1])]
-		})
-	}
-	out := req
-	out.headers = make([]outboundhttp.Header, len(req.headers))
-	out.body = []byte(substitute(string(req.body)))
-	out.redacted = req.redacted || redacted
-
-	if redacted && out.receipt == "" {
-		out.receipt = release.ReceiptToken
-	}
-	for i, header := range req.headers {
-		out.headers[i] = outboundhttp.Header{Name: header.Name, Value: substitute(header.Value)}
-	}
-	if err := outboundhttp.ValidateHeaders(out.headers); err != nil {
-		return outboundRequest{}, invalid(err)
-	}
-	return out, nil
-}
-
-// responseIssuer identifies the service whose response carried a captured
-// token: the reviewed socket, or the origin the exchange ended at.
-func responseIssuer(spec requestSpec, resp outboundhttp.Response) (id, label string) {
-	if spec.socket != "" || len(spec.recipientOverrides()) > 0 {
-		return requestDestination(spec)
-	}
-	if final, err := url.Parse(strings.TrimSpace(resp.FinalURL)); err == nil && final.Hostname() != "" {
-		return secretmatch.HTTPDestination(final)
-	}
-	return secretmatch.HTTPDestination(spec.target)
 }

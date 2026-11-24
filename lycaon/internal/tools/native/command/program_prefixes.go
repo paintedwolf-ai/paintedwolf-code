@@ -102,29 +102,26 @@ func timeoutBuiltin(spec toolcontract.CommandSpecification, nested commandprogra
 	})
 }
 
-// nohupBuiltin runs COMMAND with SIGHUP ignored. Program streams are not a
-// terminal, so nothing goes to nohup.out; a redirect to nohup.out on the
-// statement is refused before the command runs.
-func nohupBuiltin(spec toolcontract.CommandSpecification, nested commandprogram.NestedCommand) commandprogram.OperationDispatcher {
-	return jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
-		if err != nil {
-			return refusedResult("COMMAND_OPERAND_INVALID"), argvRejection(spec, err)
-		}
+// nohupOperation runs a nested command with SIGHUP ignored.
+func nohupOperation(spec toolcontract.CommandSpecification, nested commandprogram.NestedCommand) NativeOperation {
+	return preparedHostBuiltin(spec, func(request commandprogram.OperationRequest, bound commandprogram.BoundArgv) (hostedBody, error) {
 		inner := prefixedCommand(spec.Name, bound)
-		if len(inner) == 0 {
-			return usageStatus(streams, 125, "nohup: missing operand", "Try 'nohup --help' for more information.")
+		if len(inner) > 0 {
+			if redirect, ok := nohupOutputRedirect(request.Statement); ok {
+				return nil, toolrejection.RejectInvalidArguments("COMMAND_OPTION_UNSUPPORTED", map[string]any{
+					"command": spec.Name, "word": "nohup.out", "expected_form": spec.Argv,
+					"source_start_byte": redirect.Span.StartByte, "source_end_byte": redirect.Span.EndByte, "source_line": redirect.Span.Line, "source_column": redirect.Span.Column,
+				})
+			}
 		}
-		if redirect, ok := nohupOutputRedirect(request.Statement); ok {
-			reject := toolrejection.RejectInvalidArguments("COMMAND_OPTION_UNSUPPORTED", map[string]any{
-				"command": spec.Name, "word": "nohup.out", "expected_form": spec.Argv,
-				"source_start_byte": redirect.Span.StartByte, "source_end_byte": redirect.Span.EndByte, "source_line": redirect.Span.Line, "source_column": redirect.Span.Column,
-			})
-			return refusedResult("COMMAND_OPTION_UNSUPPORTED"), reject
-		}
-		parent := request
-		parent.Process.IgnoreHangup = true
-		return nested.RunNested(ctx, parent, inner, environmentMap(request.Environment), streams)
+		return func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			if len(inner) == 0 {
+				return usageStatus(streams, 125, "nohup: missing operand", "Try 'nohup --help' for more information.")
+			}
+			parent := request
+			parent.Process.IgnoreHangup = true
+			return nested.RunNested(ctx, parent, inner, environmentMap(request.Environment), streams)
+		}, nil
 	})
 }
 

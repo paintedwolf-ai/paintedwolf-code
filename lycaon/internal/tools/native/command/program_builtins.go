@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // sessionOutputResources is session output-lifetime accounting: retained
@@ -104,10 +105,26 @@ func (f jobBuiltin) Invoke(ctx context.Context, request commandprogram.Operation
 	return f(ctx, request, streams)
 }
 
-// jobBuiltins implement jobs, wait, kill, ps, pgrep and pkill. Read-only
-// process inspection (ps, pgrep) lists visible host processes and marks
-// session-owned jobs; signalling (kill, pkill) is restricted to session-owned
-// jobs and refuses foreign processes with PROCESS_NOT_OWNED.
+type hostedBody func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)
+
+// preparedHostBuiltin binds inputs before the host records an owner start.
+func preparedHostBuiltin(spec toolcontract.CommandSpecification, prepare func(commandprogram.OperationRequest, commandprogram.BoundArgv) (hostedBody, error)) NativeOperation {
+	return NativeOperation{Prepare: func(_ context.Context, _ *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (NativePrepared, error) {
+		bound, err := (commandprogram.CatalogBinder{}).Bind(spec, request.Argv)
+		if err != nil {
+			return NativePrepared{}, argvRejection(spec, err)
+		}
+		body, err := prepare(request, bound)
+		if err != nil {
+			return NativePrepared{}, err
+		}
+		return NativePrepared{Review: bound.Review(spec.Name), Invoke: func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			return body(ctx, streams)
+		}}, nil
+	}}
+}
+
+// jobBuiltins list and wait on session jobs and processes.
 func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpecification) map[string]commandprogram.OperationDispatcher {
 	listJobs := jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		bound, err := (commandprogram.CatalogBinder{}).Bind(commands["jobs"], request.Argv)
@@ -155,10 +172,8 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		return readResult(0), nil
 	})
 	return map[string]commandprogram.OperationDispatcher{
-		"jobs":  listJobs,
-		"ps":    psBuiltin(jobs, commands["ps"]),
-		"pgrep": pgrepBuiltin(jobs, commands["pgrep"]),
-		"pkill": pkillBuiltin(jobs, commands["pkill"]),
+		"jobs": listJobs,
+		"ps":   psBuiltin(jobs, commands["ps"]),
 		"wait": jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			handles := request.Argv.Values()[1:]
 			named := len(handles) > 0
@@ -194,20 +209,25 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 			}
 			return last, nil
 		}),
-		"kill": jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
-			bound, err := commandprogram.CatalogBinder{}.Bind(commands["kill"], request.Argv)
-			if err != nil {
-				return refusedResult("COMMAND_OPERAND_INVALID"), argvRejection(commands["kill"], err)
-			}
-			signal := "TERM"
-			if option, ok := bound.Last("-s"); ok {
-				signal = option.Values[0].Value
-			}
-			argv := bound.Operands().Values()
-			if len(argv) == 0 {
-				return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "kill", "reason": "requires a session job"})
-			}
-			for _, handle := range argv {
+	}
+}
+
+func killOperation(jobs *SessionJobs, spec toolcontract.CommandSpecification) NativeOperation {
+	return preparedHostBuiltin(spec, func(_ commandprogram.OperationRequest, bound commandprogram.BoundArgv) (hostedBody, error) {
+		signal := "TERM"
+		if option, ok := bound.Last("-s"); ok {
+			signal = option.Values[0].Value
+		}
+		targets := bound.Operands().Values()
+		if len(targets) == 0 {
+			return nil, toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "kill", "reason": "requires a session job"})
+		}
+		if _, _, err := jobSignal(signal); err != nil {
+			toolrejection.AsToolReject(err).Data["command"] = spec.Name
+			return nil, err
+		}
+		return func(ctx context.Context, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			for _, handle := range targets {
 				if err := jobs.Signal(ctx, handle, signal); err != nil {
 					if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {
 						reject.Data["command"] = "kill"
@@ -216,8 +236,8 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 				}
 			}
 			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectAttempted}, nil
-		}),
-	}
+		}, nil
+	})
 }
 
 func readResult(status int) toolcontract.ProducerResult {

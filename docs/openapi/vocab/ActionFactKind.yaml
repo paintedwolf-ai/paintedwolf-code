@@ -4,6 +4,8 @@ go_const_prefix: ActionFact
 values:
   - id: result
     comment: How the action ended.
+  - id: source_observation
+    comment: Folders a command observation could not fully compare.
   - id: changed
     comment: Files and lines the action changed.
   - id: found

@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
+	"github.com/lycaon/lycaon/internal/modelstore"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -46,5 +47,25 @@ func TestLocalRepairRefusesOtherProvidersAndMissingRuntime(t *testing.T) {
 	}
 	if got := r.LocalGenerationStatus(); got.State != "unavailable" || got.RecoveryAction != "reinstall" {
 		t.Fatalf("missing runtime status: %+v", got)
+	}
+}
+
+func TestUnavailableGenerationReportsSavedSelection(t *testing.T) {
+	r := &Registry{}
+	r.localStore = modelstore.New(t.TempDir(), nil)
+	if status := r.LocalGenerationStatus(); status.State != "unavailable" || status.SelectionState != "unconfigured" {
+		t.Fatalf("empty store: %+v", status)
+	}
+	testutil.FailErr(t, "opt out without runtime", r.RemoveLocalModel(t.Context()))
+	if status := r.LocalGenerationStatus(); status.State != "unavailable" || status.SelectionState != "opted_out" {
+		t.Fatalf("opted out without runtime: %+v", status)
+	}
+
+	r.localRuntime = nativegen.NewRuntime(nativegen.RuntimeConfig{ModelStore: r.localStore})
+	t.Cleanup(func() { _ = r.localRuntime.Close() })
+	out := api.LocalGenerationStatus{State: "unavailable", RecoveryAction: "reinstall"}
+	r.localRuntime.SelectionStatus(&out)
+	if out.State != "unavailable" || out.SelectionState != "opted_out" {
+		t.Fatalf("unavailable runtime: %+v", out)
 	}
 }

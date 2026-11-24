@@ -21,4 +21,15 @@ describe("file tab names", () => {
     expect(new Set([...names.values()].map(name => name.label)).size).toBe(3);
     expect(names.get("worker")?.qualifier).toContain("Worker job-one");
   });
+
+  it("names outside files by their host folders and path", () => {
+    const outside = (rootId: string) => rootId === "outside";
+    const names = filesTabNames([
+      { key: "zshrc", name: ".zshrc", path: "Users/me/.zshrc", rootId: "outside", rootLabel: "Outside project" },
+      { key: "repo", name: ".zshrc", path: "dotfiles/.zshrc", rootId: "root", rootLabel: "repo" },
+    ], outside);
+    expect(names.get("zshrc")?.path).toBe("/Users/me/.zshrc");
+    expect(names.get("zshrc")?.qualifier).toBe("me");
+    expect(names.get("repo")?.path).toBe("repo/dotfiles/.zshrc");
+  });
 });

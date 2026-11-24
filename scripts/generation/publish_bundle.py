@@ -9,6 +9,7 @@ published revision is never replaced and a rerun completes an interrupted upload
 """
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -46,6 +47,19 @@ def publish(model_bundle, bundle, authority, model, device, put=ROOT / "scripts/
     return keys
 
 
+def release_pin(bundle, signed):
+    manifest_bytes = (bundle / "manifest.json").read_bytes()
+    if json.loads(manifest_bytes) != signed:
+        raise ValueError("the signed manifest changed after verification")
+    manifest = signed["manifest"]
+    payloads = [manifest["artifact"], *manifest.get("files", [])]
+    return {
+        "Model": manifest["model"], "Device": manifest["device"], "Revision": manifest["revision"],
+        "ManifestSHA256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "TotalBytes": sum(item["bytes"] for item in payloads),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-bundle", required=True, type=Path, help="the model-bundle binary")
@@ -53,7 +67,12 @@ def main():
     parser.add_argument("--authority", required=True, type=Path, help="the release-key registry")
     parser.add_argument("--model", required=True, choices=MODELS)
     parser.add_argument("--device", required=True, choices=DEVICES)
+    parser.add_argument("--print-pin", action="store_true", help="verify and print an application release pin without uploading")
     args = parser.parse_args()
+    if args.print_pin:
+        signed = verified(args.model_bundle, args.bundle, args.authority, args.model, args.device)
+        print(json.dumps(release_pin(args.bundle, signed), indent=2))
+        return
     for key in publish(args.model_bundle, args.bundle, args.authority, args.model, args.device):
         print(key)
 

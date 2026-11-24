@@ -11,6 +11,7 @@ import {
 import {
   TranscriptDisclosurePanel,
   TranscriptDisclosureShell,
+  TranscriptDisclosureSummary,
   TranscriptDisclosureToggle,
   useTranscriptDisclosure,
 } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
@@ -103,10 +104,9 @@ export function ProgressSnapshot(props: Props) {
           class="den-transcript-card progress-strip progress-strip--snapshot progress-strip--update"
           data-testid={TEST_IDS[props.kind]}
         >
-          <div class="progress-strip__summary" {...chromeProps()}>
+          <TranscriptDisclosureSummary disclosure={disclosure} class="progress-strip__summary" {...chromeProps()}>
             <TranscriptDisclosureToggle
               disclosure={disclosure}
-              inHeader
               class="progress-strip__opener"
               aria-label={`${title()}: ${restText()}`}
               onClick={(event) => {
@@ -153,7 +153,7 @@ export function ProgressSnapshot(props: Props) {
             <Show when={disclosure.open()}>
               <span class="progress-strip__count" data-testid="progress-strip-count">{count()}</span>
             </Show>
-          </div>
+          </TranscriptDisclosureSummary>
           <TranscriptDisclosurePanel disclosure={disclosure} class="progress-strip__body">
             <StepList steps={steps()} />
           </TranscriptDisclosurePanel>

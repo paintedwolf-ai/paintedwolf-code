@@ -36,8 +36,8 @@ func seedDeleteSessionTreeFixture(t testing.TB, sessionID string, runCount, chai
 	`, testdbseed.DefaultProjectID, now, now)
 	testutil.FailErr(t, "insert project", err)
 	_, err = sqlDB.ExecContext(ctx, `
-		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at)
-		VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?)
+		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?, ?1, 'agent')
 	`, sessionID, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert session", err)
 

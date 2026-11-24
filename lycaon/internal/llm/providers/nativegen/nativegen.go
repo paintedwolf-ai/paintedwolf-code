@@ -16,6 +16,9 @@ import (
 
 // RuntimeConfig binds the packaged adapter to host-owned resource admission.
 type RuntimeConfig struct {
+	PhysicalBytes        uint64
+	DecisionDeviceBytes  uint64
+	Pins                 []modelstore.ModelPin
 	ContextLimit         int
 	PrefillChunk         int
 	BinaryPath           string
@@ -58,6 +61,7 @@ type loadedProcess struct {
 
 // Runtime retains one model process across provider snapshots and roles.
 type Runtime struct {
+	transfers         transferState
 	capacity          *modelcall.CapacityGroup
 	config            RuntimeConfig
 	lifetime          context.Context
@@ -74,6 +78,9 @@ type Runtime struct {
 }
 
 func NewRuntime(config RuntimeConfig) *Runtime {
+	if config.Pins == nil {
+		config.Pins = compiledPins()
+	}
 	if config.ContextLimit == 0 {
 		config.ContextLimit = DefaultContextWindowTokens
 	}
@@ -123,6 +130,9 @@ func (p *Provider) Profile() providerprofile.Profile {
 
 func (p *Runtime) Close() error {
 	p.cancel()
+	if err := p.CancelTransfer(context.Background()); err != nil {
+		return err
+	}
 	<-p.gate
 	defer func() { p.gate <- struct{}{} }()
 	p.unload()

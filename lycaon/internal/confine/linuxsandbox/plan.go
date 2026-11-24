@@ -16,7 +16,7 @@ import (
 )
 
 // PlanVersion is the plan shape this helper reads.
-const PlanVersion = 2
+const PlanVersion = 3
 
 // Plan is the typed boundary the helper applies. The host renders it from the
 // same policy inputs as the macOS profile; the helper never widens it.
@@ -65,6 +65,8 @@ const (
 // Filesystem is the mount and Landlock expression of the filesystem rules.
 // Landlock grants are positive; mounts express the denials inside them.
 type Filesystem struct {
+	// SharedTemp names machine directories whose denied writes reach the action.
+	SharedTemp []string `json:"shared_temp,omitempty"`
 	// WriteRoots are directories the process may read and change.
 	WriteRoots []string `json:"write_roots"`
 	// WriteFiles are exact files the process may read and change.
@@ -98,6 +100,7 @@ const (
 // and carries them to other hosts through a gateway interface, deciding each
 // datagram itself.
 type Network struct {
+	SessionSocketRoot    string           `json:"session_socket_root,omitempty"`
 	Mode                 string           `json:"mode"`
 	LoopbackConnect      bool             `json:"loopback_connect,omitempty"`
 	LoopbackConnectPorts []uint16         `json:"loopback_connect_ports,omitempty"`
@@ -232,6 +235,9 @@ func (p Plan) Validate() error {
 			return &Unsupported{Code: UnsupportedFilesystemRule, Detail: "protected name " + named.Name + " below " + named.Below}
 		}
 	}
+	if root := n.SessionSocketRoot; root != "" && (!filepath.IsAbs(root) || filepath.Clean(root) != root || root == "/" || strings.ContainsRune(root, 0)) {
+		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "invalid session socket root"}
+	}
 	if len(n.SocketGrants) > 8 {
 		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "too many socket references"}
 	}
@@ -239,7 +245,7 @@ func (p Plan) Validate() error {
 	seenFDs := make(map[int]bool)
 	credentialRead := false
 	for _, grant := range n.SocketGrants {
-		if !filepath.IsAbs(grant.Path) || strings.ContainsRune(grant.Path, 0) || grant.FD < SocketReferenceFD || grant.FD >= SocketReferenceFD+8 || seenSockets[grant.Path] || seenFDs[grant.FD] {
+		if !filepath.IsAbs(grant.Path) || strings.ContainsRune(grant.Path, 0) || grant.FD < SocketReferenceFD || grant.FD >= SocketReferenceFD+8 || seenSockets[grant.Path] || seenFDs[grant.FD] || (n.SessionSocketRoot != "" && grant.FD == SocketReferenceFD+len(n.SocketGrants)) {
 			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "invalid or repeated socket reference"}
 		}
 		if grant.Delegated != "" && grant.Delegated != DelegatedNixDaemon {

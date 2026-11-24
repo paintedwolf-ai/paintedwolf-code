@@ -17,6 +17,21 @@ func TestResolveTurnProfileImplementInvestigateFirstUser(t *testing.T) {
 	if p.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want investigate default", p.SurfaceID)
 	}
+	askProfile := ResolveTurnProfileForSurface(
+		toolcontract.SurfaceImplementInvestigate,
+		api.CoordinatorRunContext{
+			RunID:                   "run-1",
+			PhaseCoordinatorSurface: "plan_research",
+			AdvanceWhenGateMet:      "coordinator",
+		},
+		&api.Session{Mode: api.SessionModeAsk},
+	)
+	if askProfile.SessionMode != api.SessionModeAsk || !askProfile.WorkflowActive {
+		t.Fatalf("askProfile = %+v", askProfile)
+	}
+	if _, err := CompileToolPlan(askProfile, 1); err != nil {
+		testutil.FailErr(t, "CompileToolPlan ask workflow", err)
+	}
 }
 
 func TestSelectSurfaceInvestigateDefersOperationalTools(t *testing.T) {

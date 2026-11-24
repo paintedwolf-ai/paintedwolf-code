@@ -101,7 +101,7 @@ func ForResult(result api.ToolResult, commandMarks []api.RedactedSpan) *api.Acti
 		Status:  descriptorStatus(result),
 		Ran:     ranText,
 		Facts:   facts,
-		Row:     row,
+		Row:     commandObservationRow(row, facts),
 		Preview: parts.Preview,
 		Links:   resultLinks(result),
 		Opener:  opener,

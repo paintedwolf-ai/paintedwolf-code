@@ -40,27 +40,12 @@ func CollectManifestGatePredicates() ([]GatePredicateRef, error) {
 func gatePredicatesFromManifest(m Manifest) []GatePredicateRef {
 	var out []GatePredicateRef
 	for _, p := range m.PhaseDefs {
-		for _, leaf := range DecomposeGateExpression(p.CompleteWhen) {
-			out = append(out, GatePredicateRef{ManifestID: m.ID, PhaseID: p.ID, LeafID: leaf})
-		}
-		for _, leaf := range DecomposeGateExpression(p.ChildCompleteWhen) {
-			out = append(out, GatePredicateRef{ManifestID: m.ID, PhaseID: p.ID, LeafID: leaf})
-		}
-		for _, leaf := range DecomposeGateExpression(p.EntryWhen) {
-			out = append(out, GatePredicateRef{ManifestID: m.ID, PhaseID: p.ID, LeafID: leaf})
-		}
-		for _, g := range p.Gates {
-			g = strings.TrimSpace(g)
-			if g != "" {
-				out = append(out, GatePredicateRef{ManifestID: m.ID, PhaseID: p.ID, LeafID: g})
+		for _, field := range p.PredicateFields() {
+			for _, leaf := range field.Leaves {
+				out = append(out, GatePredicateRef{ManifestID: m.ID, PhaseID: p.ID, LeafID: leaf})
 			}
 		}
-		for _, g := range p.ChildGates {
-			g = strings.TrimSpace(g)
-			if g != "" {
-				out = append(out, GatePredicateRef{ManifestID: m.ID, PhaseID: p.ID, LeafID: g})
-			}
-		}
+
 	}
 	return out
 }

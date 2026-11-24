@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/modelstore"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -44,12 +45,14 @@ type registryRouting struct {
 
 type registryCore struct {
 	registryState
-	localRuntime    *nativegen.Runtime
-	localStartup    nativegen.Readiness
-	discovery       *discovery.Cache
-	cloudflareUsage *openaicompat.CloudflareUsageCache
-	discoveryClient *http.Client
-	roleExclusions  RoleExclusions
+	offlineInstaller bool
+	localStore       *modelstore.Store
+	localRuntime     *nativegen.Runtime
+	localStartup     nativegen.Readiness
+	discovery        *discovery.Cache
+	cloudflareUsage  *openaicompat.CloudflareUsageCache
+	discoveryClient  *http.Client
+	roleExclusions   RoleExclusions
 	// modelFeed has independent synchronization.
 	modelFeed atomic.Pointer[modelfeed.Feed]
 	listCache *catalogruntime.SnapshotCache[[]api.ProviderMeta]

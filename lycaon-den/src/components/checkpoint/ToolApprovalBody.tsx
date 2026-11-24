@@ -491,7 +491,7 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
       <Show when={held()} keyed>{(release) => {
         const line = () => !presenceAvailable() ? copy.held.needsDesktop
           : chatUnlocked(release.chat_session_id) ? copy.held.unlocked : copy.held.confirm;
-        return <p class="den-settings-hint den-approval-held-confirm" data-testid="approval-held-confirm" data-tip={line()}>{line()}</p>;
+        return <p class="den-settings-hint den-approval-held-confirm" data-testid="approval-held-confirm" data-tip={line()} data-tip-when-clipped="">{line()}</p>;
       }}</Show>
       <ActionsZone
         sessionId={props.sessionId}

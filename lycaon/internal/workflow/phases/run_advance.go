@@ -2,6 +2,7 @@ package phases
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
@@ -35,6 +36,10 @@ func (m *Service) Advance(ctx context.Context, runID string) (*api.WorkflowRun, 
 	}
 	manifest, err := m.Resolver.ForRun(ctx, run)
 	if err != nil {
+		return nil, err
+	}
+	target, _ := manifest.ResolveAdvanceTargetForRun(run, run.CurrentPhase)
+	if err := m.checkAskPhase(ctx, run, manifest, target); err != nil {
 		return nil, err
 	}
 	vars, err := m.Runs.GetScaffoldVars(ctx, runID)
@@ -183,7 +188,9 @@ func (m *Service) advanceToNextPhase(ctx context.Context, run *api.WorkflowRun, 
 					m.PhaseReenterHook(ctx, rc, def)
 				}
 			} else if m.PhaseEnterHook != nil {
-				m.PhaseEnterHook(ctx, rc, def)
+				if err := m.PhaseEnterHook(ctx, rc, def); err != nil {
+					return nil, err
+				}
 			}
 			if err := m.Settlement.InvokeOnPhaseEnter(ctx, run, def); err != nil {
 				return nil, err
@@ -336,6 +343,12 @@ func (m *Service) tryAutoAdvanceOne(ctx context.Context, runID string) (*api.Wor
 	}
 	manifest, err := m.Resolver.ForRun(ctx, run)
 	if err != nil {
+		return nil, err
+	}
+	target, _ := manifest.ResolveAdvanceTargetForRun(run, run.CurrentPhase)
+	if err := m.checkAskPhase(ctx, run, manifest, target); errors.Is(err, runstate.ErrAskWorkflowRequiresAgent) {
+		return run, nil
+	} else if err != nil {
 		return nil, err
 	}
 	vars, err := m.Runs.GetScaffoldVars(ctx, runID)

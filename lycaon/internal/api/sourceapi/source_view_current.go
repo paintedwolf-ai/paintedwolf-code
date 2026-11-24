@@ -20,6 +20,7 @@ type currentSourceSnapshot struct {
 	document *sourcecomparison.CurrentDocument
 	stream   *projectsource.SourceStream
 	users    atomic.Int64
+	fileID   string
 }
 
 func (snapshot *currentSourceSnapshot) retain() { snapshot.users.Add(1) }
@@ -36,7 +37,11 @@ func currentSourceChanged() error {
 
 func (s *ComparisonViews) prepareCurrentSource(view *sourceView, p *project.Project) error {
 	source := view.comparisonData.comparisonSource.Current
-	stream, err := projectsource.OpenProjectSourceStream(p, projectsource.SourceReadRequest{Path: source.Path, RootID: source.RootID, DecodeAs: source.DecodeAs})
+	p, req, err := s.Views.resolveCurrentSource(view.ctx, p, source)
+	if err != nil {
+		return currentSourceReadError(err)
+	}
+	stream, err := projectsource.OpenProjectSourceStream(p, req)
 	if err != nil {
 		return currentSourceReadError(err)
 	}
@@ -50,10 +55,12 @@ func (s *ComparisonViews) prepareCurrentSource(view *sourceView, p *project.Proj
 		stream.Close()
 		return currentSourceChanged()
 	}
-	snapshot := &currentSourceSnapshot{document: document, stream: stream}
+	snapshot := &currentSourceSnapshot{document: document, stream: stream, fileID: source.FileID}
 	snapshot.users.Store(1)
 	s.installCurrentSource(view, snapshot)
-	s.background.Go(view.ctx, func(ctx context.Context) { s.Watch.ensureWorkspaceWatch(ctx, p) })
+	if req.RootID != p.Outside.ID {
+		s.background.Go(view.ctx, func(ctx context.Context) { s.Watch.ensureWorkspaceWatch(ctx, p) })
+	}
 	return nil
 }
 
@@ -86,7 +93,7 @@ func currentSourceReadError(err error) error {
 		return &comparisonFailure{wire.ApiErrorCodeUnsupportedEncoding, "The file contains invalid text for the selected encoding."}
 	case errors.Is(err, projectsource.ErrSourceBinary), errors.Is(err, textfile.ErrBinary):
 		return &comparisonFailure{wire.ApiErrorCodeSourceBinary, "This file contains binary data and cannot be shown as text."}
-	case errors.Is(err, os.ErrNotExist), errors.Is(err, projectsource.ErrSourceNotFound):
+	case errors.Is(err, os.ErrNotExist), errors.Is(err, projectsource.ErrSourceNotFound), errors.Is(err, projectsource.ErrSourcePathDenied):
 		return &comparisonFailure{wire.ApiErrorCodeSourceNotFound, "This file is no longer available."}
 	default:
 		return err

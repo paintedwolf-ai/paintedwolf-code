@@ -23,10 +23,20 @@ func invocationContext(ctx context.Context, tc tools.ToolContext) context.Contex
 	ctx = tools.SandboxScopeContext(ctx, tc)
 	ctx = authzledger.WithInvocation(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID, tc.Identity.ToolCallID)
 	sessionFacts := curationctx.SessionFrom(ctx)
+	mode := sessionFacts.Mode
+	if tc.Source.AskMode && mode == "" {
+		mode = "ask"
+	}
+	surfaceID := tc.Turn.TurnSurfaceID
+	if surfaceID == "" {
+		surfaceID = sessionFacts.Surface
+	}
 	ctx = curationctx.WithSession(ctx, curationctx.Session{
 		SessionID:       tc.Identity.SessionID,
 		OwnerPersonID:   sessionFacts.OwnerPersonID,
 		Posture:         sessionFacts.Posture,
+		Mode:            mode,
+		Surface:         surfaceID,
 		ProjectID:       tc.Identity.ProjectID,
 		Agent:           tc.Identity.Agent,
 		ParentSessionID: tc.Identity.ParentSessionID,

@@ -1,0 +1,149 @@
+package modelstore
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/egressclass"
+	"github.com/lycaon/lycaon/internal/httpclient"
+)
+
+type ModelPin struct {
+	Model, Device, Revision, ManifestSHA256 string
+	TotalBytes                              int64
+}
+
+func (s *Store) ImportFromBucket(ctx context.Context, pin ModelPin, progress func(done, total int64)) error {
+	origin, client, err := httpclient.FixedPublicDownload(ctx, egressclass.LocalModelDownload, 4*time.Hour)
+	if err != nil {
+		return err
+	}
+	defer client.CloseIdleConnections()
+	return s.download(ctx, modelBucket{base: origin, client: client}, pin, progress)
+}
+
+func (s *Store) download(ctx context.Context, source modelBucket, pin ModelPin, progress func(int64, int64)) (resultErr error) {
+	if err := validateIdentity(Manifest{Model: pin.Model, Device: pin.Device, Revision: pin.Revision}); err != nil {
+		return err
+	}
+	if !digestShape.MatchString(pin.ManifestSHA256) || pin.TotalBytes <= 0 {
+		return errors.New("modelstore: incomplete model download pin")
+	}
+	lock, err := s.provisioningLock()
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
+	source.base = fmt.Sprintf("%s/models/%s/%s/%s/", source.base, pin.Model, pin.Device, pin.Revision)
+	signed, err := source.fetchManifest(ctx, pin)
+	if err != nil {
+		return err
+	}
+	transfer := transferProgress{total: pin.TotalBytes, report: progress}
+	return s.install(ctx, signed, true, nil, func(a Artifact) error {
+		if s.reusableArtifact(ctx, a) {
+			transfer.add(a.Bytes)
+			return nil
+		}
+		return s.downloadArtifact(ctx, source, a, &transfer)
+	})
+}
+
+type modelBucket struct {
+	base   string
+	client *http.Client
+}
+
+func (b modelBucket) fetchManifest(ctx context.Context, pin ModelPin) (signed SignedManifest, resultErr error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.base+"manifest.json", nil)
+	if err != nil {
+		return signed, err
+	}
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return signed, err
+	}
+	defer func() { resultErr = errors.Join(resultErr, resp.Body.Close()) }()
+	if resp.StatusCode != http.StatusOK {
+		return signed, fmt.Errorf("modelstore: manifest HTTP %d", resp.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBundleManifestBytes+1))
+	if err != nil {
+		return signed, err
+	}
+	if len(raw) > maxBundleManifestBytes || fmt.Sprintf("%x", sha256.Sum256(raw)) != pin.ManifestSHA256 {
+		return signed, errors.New("modelstore: manifest differs from download pin")
+	}
+	signed, err = decodeBundleManifest(bytes.NewReader(raw))
+	if err != nil {
+		return signed, err
+	}
+	m := signed.Manifest
+	if m.Model != pin.Model || m.Device != pin.Device || m.Revision != pin.Revision || manifestSize(m) != pin.TotalBytes {
+		return signed, errors.New("modelstore: manifest does not match pinned model")
+	}
+	return signed, nil
+}
+
+func manifestSize(m Manifest) int64 {
+	total := m.Artifact.Bytes
+	for _, a := range m.Files {
+		total += a.Bytes
+	}
+	return total
+}
+
+type transferProgress struct {
+	done, total int64
+	report      func(int64, int64)
+}
+
+func (t *transferProgress) add(n int64) {
+	t.done += n
+	if t.report != nil {
+		t.report(t.done, t.total)
+	}
+}
+
+func (t *transferProgress) Write(p []byte) (int, error) { t.add(int64(len(p))); return len(p), nil }
+
+// The returned offset is zero when the origin sends the full payload.
+func (b modelBucket) openPayload(ctx context.Context, a Artifact, offset int64) (io.ReadCloser, int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.base+a.Name, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Accept-Encoding", "identity")
+	if offset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+	}
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	switch resp.StatusCode {
+	case http.StatusOK:
+		offset = 0
+	case http.StatusPartialContent:
+		if offset == 0 || resp.Header.Get("Content-Range") != fmt.Sprintf("bytes %d-%d/%d", offset, a.Bytes-1, a.Bytes) {
+			err = errors.New("modelstore: inconsistent range response")
+		}
+	default:
+		err = fmt.Errorf("modelstore: payload HTTP %d", resp.StatusCode)
+	}
+	if err == nil && resp.ContentLength >= 0 && resp.ContentLength != a.Bytes-offset {
+		err = errors.New("modelstore: payload length differs from manifest")
+	}
+	if err != nil {
+		return nil, 0, errors.Join(err, resp.Body.Close())
+	}
+	return resp.Body, offset, nil
+}

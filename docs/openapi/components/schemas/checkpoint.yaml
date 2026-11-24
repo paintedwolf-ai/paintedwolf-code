@@ -16,13 +16,7 @@ components:
         selects host-authored hunk ids for host composition; reject applies
         nothing. Clients never submit replacement bytes.
     CheckpointStatus:
-      type: string
-      enum:
-      - pending
-      - approved
-      - rejected
-      - expired
-      - canceled
+      $ref: checkpoint-status.generated.yaml#/components/schemas/CheckpointStatus
     ApprovalDecisionAction:
       type: string
       enum:

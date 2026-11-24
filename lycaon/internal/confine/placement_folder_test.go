@@ -85,7 +85,7 @@ func TestDefaultRootAboveAPlacementFolderStaysAndDeniesTheFolder(t *testing.T) {
 	testutil.FailErr(t, "create state", os.MkdirAll(state, 0o700))
 	t.Setenv(configdir.EnvConfigDir, state)
 	parent := fspath.CanonicalPath(t.TempDir())
-	t.Setenv("TMPDIR", parent)
+	t.Setenv("XDG_CACHE_HOME", parent)
 	folder := filepath.Join(parent, enginepaths.WorkerPlacementDirName(os.Getuid(), state))
 	testutil.FailErr(t, "create folder", os.MkdirAll(folder, 0o700))
 	testutil.FailErr(t, "write marker", os.WriteFile(filepath.Join(folder, "placement.json"),
@@ -96,7 +96,7 @@ func TestDefaultRootAboveAPlacementFolderStaysAndDeniesTheFolder(t *testing.T) {
 	roots, err := confine.WriteRootsForBoundary("", []string{t.TempDir()}, nil, "")
 	testutil.FailErr(t, "write roots", err)
 	if !slices.Contains(roots, parent) {
-		t.Fatalf("the temporary root was dropped: %v", roots)
+		t.Fatalf("the cache root was dropped: %v", roots)
 	}
 	specs, err := confine.HardDenyWriteSpecs(confine.Confinement{Roots: []string{t.TempDir()}})
 	testutil.FailErr(t, "hard deny", err)

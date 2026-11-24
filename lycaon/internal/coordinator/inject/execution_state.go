@@ -2,12 +2,12 @@ package inject
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -94,7 +94,7 @@ func quotedExecutionValue(value string) string {
 	if value == "" || len(value) > 256 || !utf8.ValidString(value) {
 		return ""
 	}
-	raw, err := json.Marshal(value)
+	raw, err := surveyjson.Marshal(value)
 	if err != nil || len(raw) > 256 {
 		return ""
 	}

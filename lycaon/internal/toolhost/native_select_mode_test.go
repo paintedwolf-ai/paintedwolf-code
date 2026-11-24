@@ -58,9 +58,12 @@ func TestMultiModeNativesNameTheirMode(t *testing.T) {
 func TestSelectModeNamesWhatPrepareSelects(t *testing.T) {
 	natives := boundNatives(t)
 	for source, want := range map[string]string{
-		"curl https://example.test/":              "request",
-		"curl -o /dev/null https://example.test/": "request",
-		"curl -o page.html https://example.test/": "-o--D--c-to-file",
+		"curl --managed-cookie-jar login https://example.test/":                                    "managed-jar-update",
+		"curl --managed-token-jar login https://example.test/":                                     "request",
+		"curl --managed-token-jar login --capture-token api=json:id -o info https://example.test/": "managed-jar-update-to-file",
+		"curl https://example.test/":                                                               "request",
+		"curl -o /dev/null https://example.test/":                                                  "request",
+		"curl -o page.html https://example.test/":                                                  "-o--D--c-to-file",
 
 		"tar -tf a.tar":  "listing-or-stream-decode",
 		"tar -xf a.tar":  "create-extract-compress-decompress-to-path",

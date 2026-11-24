@@ -88,6 +88,7 @@ export function createChatViewActivity(props: ChatViewProps) {
       props.appStore.state.workflowRuns,
       activeRun(),
       {
+        sessionId: props.sessionId,
         verboseMode: verboseModePref(),
         workers: workers(),
         pendingCheckpoints: props.appStore.state.pendingCheckpoints,

@@ -33,6 +33,7 @@ export const ALL_SHELL_FACTS: ShellFactState = {
   conversationCollapsed: true,
   splitLive: true,
   filesStageActive: true,
+  outsideFilePickerAvailable: true,
   filesTreeCollapsed: true,
   fileSummariesOn: true,
   fileSummariesKnown: true,

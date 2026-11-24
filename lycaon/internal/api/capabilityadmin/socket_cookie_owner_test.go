@@ -29,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/httpaction/httpactiontest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -240,7 +241,7 @@ func newCookieOwnerExecutor(t *testing.T, ctx context.Context, database db.Handl
 	executor.Secrets.SetSecretResolver(service)
 	executor.Secrets.SetSecretMatcher(matcher)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"http_request": true}}})
-	testutil.FailErr(t, "register cookie native consumer", httpaction.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, Jars: service.Jars, SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen}))
+	testutil.FailErr(t, "register cookie native consumer", httpactiontest.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, Jars: service.Jars, SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen}))
 	return executor
 }
 

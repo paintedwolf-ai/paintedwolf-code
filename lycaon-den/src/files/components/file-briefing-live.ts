@@ -188,23 +188,23 @@ export function markFileBriefingSourceChanged(
 ): void {
   const id = projectId.trim();
   if (!id || !event.root_id) return;
-  const paths = new Set(
-    [event.path, event.from_path].filter((path): path is string => Boolean(path)),
-  );
-  const staleUpdates: Array<[string, string, LiveFileBriefing]> = [];
-  for (const path of paths) {
-    const prefix = `${fileKey(id, event.root_id, path)}\0`;
-    for (const [entryKey, prior] of briefings) {
-      if (!entryKey.startsWith(prefix)) continue;
-      if (prior.presentation !== "current") continue;
-      if (event.after_sha256 && event.after_sha256 === prior.source_sha256) continue;
-      const next = { ...prior, stale: true };
-      staleUpdates.push([entryKey, path, next]);
-    }
+  markBriefingPathChanged(id, event.root_id, event.path, event.after_sha256);
+  if (event.from_path && event.op === "rename") {
+    markBriefingPathChanged(id, event.from_root_id ?? event.root_id, event.from_path);
   }
-  for (const [entryKey, path, next] of staleUpdates) {
+}
+
+function markBriefingPathChanged(projectId: string, rootId: string, path: string, afterSHA256?: string): void {
+  const prefix = `${fileKey(projectId, rootId, path)}\0`;
+  const staleUpdates: Array<[string, LiveFileBriefing]> = [];
+  for (const [entryKey, prior] of briefings) {
+    if (!entryKey.startsWith(prefix) || prior.presentation !== "current") continue;
+    if (afterSHA256 && afterSHA256 === prior.source_sha256) continue;
+    staleUpdates.push([entryKey, { ...prior, stale: true }]);
+  }
+  for (const [entryKey, next] of staleUpdates) {
     storeBriefing(entryKey, next);
-    notify(id, event.root_id, path, next);
+    notify(projectId, rootId, path, next);
   }
 }
 

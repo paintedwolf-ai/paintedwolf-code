@@ -18,6 +18,7 @@ import (
 type Sessions interface {
 	Get(context.Context, string) (*wire.Session, error)
 	GetWorktreeBinding(context.Context, string) (*store.WorktreeBinding, bool, error)
+	ResolveEffectiveMode(context.Context, string) (store.RootAuthority, error)
 }
 
 // SessionProject resolves roots for session-scoped filesystem and Git access.

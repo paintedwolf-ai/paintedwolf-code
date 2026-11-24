@@ -20,6 +20,9 @@
   font-size: var(--text-den-hint);
   cursor: pointer;
 }
+.den-file-edit-diff-header > .den-source-path-plain {
+  user-select: text;
+}
 .den-file-edit-diff-disclosure {
   display: inline-flex;
   flex-shrink: 0;
@@ -253,6 +256,14 @@
   padding: 6px 10px;
   border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
   background: var(--den-tint-1);
+}
+
+/* The footer link is an action, so it takes the card's text rather than a path's. */
+.den-file-edit-diff-footer > .den-source-path-link {
+  margin-inline-end: auto;
+  font-family: inherit;
+  font-size: var(--text-den-hint);
+  font-weight: 500;
 }
 
 .den-diff-group-stat {

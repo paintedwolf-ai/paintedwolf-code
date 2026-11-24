@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/httpaction/httpactiontest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -170,7 +171,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"http_request": true}}})
 	var decoy *net.UnixListener
 	swapped := false
-	testutil.FailErr(t, "register retained HTTP consumer", httpaction.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, Jars: service.Jars, SecretMatcher: matcher, SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
+	testutil.FailErr(t, "register retained HTTP consumer", httpactiontest.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, Jars: service.Jars, SecretMatcher: matcher, SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 		if !swapped {
 			// ClaimDeclaredSocket has consumed the real permit before this final screen.
 			if err := os.Rename(path, path+"-original"); err != nil {

@@ -65,6 +65,12 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	tc.Invocation.Contract = contract
 	ctx = tools.WithRecoveryContract(ctx, qualifiedName, contract)
 	ctx = invocationContext(ctx, tc)
+	if tc.Source.AskMode {
+		definition, ok := e.definitionFor(qualifiedName)
+		if !ok || !tools.AllowedInAsk(definition.Meta) {
+			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, tools.AskModeReject(qualifiedName))
+		}
+	}
 	if retained, entry := e.programEntries[qualifiedName]; entry && (retained == nil || !retained(args)) {
 		return e.invokeProgramEntry(ctx, qualifiedName, profileID, args, tc)
 	}

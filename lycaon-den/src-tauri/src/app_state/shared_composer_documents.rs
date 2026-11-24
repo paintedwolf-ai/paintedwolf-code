@@ -33,6 +33,39 @@ pub struct ComposerAttachment {
     pub fields: Map<String, Value>,
 }
 
+impl ComposerAttachment {
+    fn payload_blob(&self) -> Option<&str> {
+        if matches!(
+            self.kind,
+            ComposerAttachmentKind::Image
+                | ComposerAttachmentKind::Text
+                | ComposerAttachmentKind::Document
+                | ComposerAttachmentKind::Video
+        ) {
+            self.fields
+                .get("blobId")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+        } else {
+            None
+        }
+    }
+}
+
+fn merge_attachments(held: &mut Vec<ComposerAttachment>, additions: Vec<ComposerAttachment>) {
+    for attachment in additions {
+        if held.iter().any(|existing| {
+            existing.id == attachment.id
+                || attachment
+                    .payload_blob()
+                    .is_some_and(|blob| existing.payload_blob() == Some(blob))
+        }) {
+            continue;
+        }
+        held.push(attachment);
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum ComposerAttachmentKind {
@@ -173,11 +206,13 @@ fn document_key(project_id: &str, session_id: &str) -> Result<String, String> {
 }
 
 fn record_from_seed(seed: ComposerDocumentSeed) -> SharedComposerDocument {
+    let mut attachments = Vec::new();
+    merge_attachments(&mut attachments, seed.attachments);
     SharedComposerDocument {
         project_id: seed.project_id,
         session_id: seed.session_id,
         draft: seed.draft,
-        attachments: seed.attachments,
+        attachments,
         revision: 1,
         lease_client_id: None,
     }
@@ -288,12 +323,7 @@ pub fn apply_shared_composer_document_mutation(
             .entry(key)
             .or_insert_with(|| record_from_seed(seed));
         let mut merged = document.attachments.clone();
-        for attachment in attachments {
-            if merged.iter().any(|existing| existing.id == attachment.id) {
-                continue;
-            }
-            merged.push(attachment);
-        }
+        merge_attachments(&mut merged, attachments);
         validate_content(&document.draft, &merged)?;
         document.attachments = merged;
         if document.draft.trim().is_empty() {
@@ -422,6 +452,29 @@ mod tests {
 
     fn attachment(value: Value) -> ComposerAttachment {
         serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn keeps_first_receipt_for_each_blob_in_seeds_and_mutations() {
+        let payload = |id: &str, blob: &str| {
+            attachment(serde_json::json!({
+                "id": id, "name": "note.txt", "kind": "text", "blobId": blob,
+            }))
+        };
+        let mut document = record_from_seed(ComposerDocumentSeed {
+            attachments: vec![payload("first", "blob-a"), payload("copy", "blob-a")],
+            ..seed("session-1")
+        });
+        merge_attachments(
+            &mut document.attachments,
+            vec![payload("repeat", "blob-a"), payload("second", "blob-b")],
+        );
+        let ids = document
+            .attachments
+            .iter()
+            .map(|attachment| attachment.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["first", "second"]);
     }
 
     #[test]

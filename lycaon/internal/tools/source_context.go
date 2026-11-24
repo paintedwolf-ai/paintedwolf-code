@@ -37,7 +37,7 @@ func (c ToolContext) RecordSourcePath(value string, kind api.NavigationEntryKind
 	if c.Effects.Out.SourceContext != nil && c.Effects.Out.SourceContext.Truncated {
 		return
 	}
-	root, path, ok := c.SourceLocation(value)
+	root, path, ok := c.RecordedLocation(value)
 	if !ok {
 		return
 	}

@@ -60,8 +60,8 @@ func newFixture(t *testing.T) *fixture {
 func (f *fixture) worker(t *testing.T, name, agent string) string {
 	t.Helper()
 	child := "child-" + name
-	_, err := f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', ?, ?, ?, ?)`, child, testdbseed.DefaultProjectID, agent, now(), now(), now())
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', ?, ?, ?, ?, 'coord', NULL)`, child, testdbseed.DefaultProjectID, agent, now(), now(), now())
 	testutil.FailErr(t, "insert child", err)
 	w, err := f.records.CreateWorker(t.Context(), f.coord, workerrecords.Op{ID: "create-" + name}, workerrecords.WorkerSpec{
 		Name: name, AgentType: agent, ScopeMode: "write", Brief: "brief of " + name, ChildSessionID: child,
@@ -264,8 +264,8 @@ func TestShownQuestionsFollowTheRenderedFrame(t *testing.T) {
 func TestRosterScaleRecencyWorkspaceStatesLabelsAndRoundPathScanBound(t *testing.T) {
 	f := newFixture(t)
 	// Seed read-scope, preparing, refreshed, reset, and long-history workers.
-	_, err := f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES ('child-reader', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now(), now(), now())
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('child-reader', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?, 'coord', NULL)`, testdbseed.DefaultProjectID, now(), now(), now())
 	testutil.FailErr(t, "insert reader child", err)
 	readerW, err := f.records.CreateWorker(t.Context(), f.coord, workerrecords.Op{ID: "create-reader"}, workerrecords.WorkerSpec{
 		Name: "reader", AgentType: "repo-researcher", ScopeMode: "read", Brief: "read repo", ChildSessionID: "child-reader",

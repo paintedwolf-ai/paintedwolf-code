@@ -70,26 +70,26 @@ func composedMutationEntry(t *testing.T) (*programtest.Fixture, *projectsource.S
 	return fixture, service, p, ledger
 }
 
-// settledProgramResult follows a program that outlived its inline wait to its
-// end, as an agent reading its handle would, and returns its final result.
-func settledProgramResult(t *testing.T, fixture *programtest.Fixture, raw string) string {
+// settledProgramOutcome decodes a command entry call's result to its settled
+// program outcome, following a program that outlived its inline wait to its
+// receipt, as an agent reading its handle would. The settlement is no longer
+// delivered on the program's stderr, so the receipt is the only source of the
+// final result after a join.
+func settledProgramOutcome(t *testing.T, fixture *programtest.Fixture, raw string) command.ProgramOutcome {
 	t.Helper()
 	var running command.RunningProgramResult
 	if json.Unmarshal([]byte(raw), &running) != nil || running.State != "running" || running.Handle == "" {
-		return raw
+		var outcome command.ProgramOutcome
+		testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(raw), &outcome))
+		return outcome
 	}
 	_, _, err := fixture.Background.Lifecycle.Wait(t.Context(), fixture.Session, running.Handle)
 	testutil.FailErr(t, "join the running program", err)
-	output, err := fixture.Background.Output.ReadCommandOutput(t.Context(), fixture.Session, running.Handle, 0)
-	testutil.FailErr(t, "read the program's final result", err)
-	var stderr strings.Builder
-	for _, chunk := range output.Output.Chunks {
-		if chunk.Stream == "stderr" {
-			stderr.WriteString(chunk.Text)
-		}
-	}
-	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
-	return lines[len(lines)-1]
+	result, err := fixture.Runtime.ReceiptResult(t.Context(), fixture.Session, running.ProgramID)
+	testutil.FailErr(t, "read the program's settled receipt", err)
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(result), &outcome))
+	return outcome
 }
 
 func runMutationEntryTree(t *testing.T, total int) {
@@ -104,11 +104,9 @@ func runMutationEntryTree(t *testing.T, total int) {
 	call := func(source string) {
 		raw, err := fixture.Call(t, t.Context(), source)
 		testutil.FailErr(t, "run production command entry", err)
-		raw = settledProgramResult(t, fixture, raw)
-		var outcome command.ProgramOutcome
-		testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(raw), &outcome))
+		outcome := settledProgramOutcome(t, fixture, raw)
 		if outcome.State != "completed" || outcome.Status != 0 {
-			t.Fatalf("program %q result: %s", source, raw)
+			t.Fatalf("program %q result: %+v", source, outcome)
 		}
 	}
 	call("cp -r source copied")
@@ -183,8 +181,7 @@ func TestComposedRecursiveRemovalPreservesPolicyWithoutReviewer(t *testing.T) {
 	testutil.FailErr(t, "seed instructions", os.WriteFile(path, []byte("instructions"), 0o644))
 	raw, err := fixture.Call(t, t.Context(), "rm -rf tree")
 	testutil.FailErr(t, "run actual command entry", err)
-	var outcome command.ProgramOutcome
-	testutil.FailErr(t, "decode command outcome", json.Unmarshal([]byte(raw), &outcome))
+	outcome := settledProgramOutcome(t, fixture, raw)
 	if outcome.StopCode != "FILE_CHANGE_APPROVAL_UNAVAILABLE" || outcome.CompletedEffects != 0 {
 		t.Fatalf("policy refusal lost: %+v", outcome)
 	}
@@ -213,8 +210,7 @@ BEGIN SELECT RAISE(ABORT,'recording unavailable'); END`)
 	testutil.FailErr(t, "inject partial ledger failure", err)
 	raw, err := fixture.Call(t, t.Context(), "cp -r source copied")
 	testutil.FailErr(t, "run production copy entry", err)
-	var outcome command.ProgramOutcome
-	testutil.FailErr(t, "decode copy result", json.Unmarshal([]byte(raw), &outcome))
+	outcome := settledProgramOutcome(t, fixture, raw)
 	// The projection counts completed command children; file facts are checked below.
 	if outcome.Status == 0 || outcome.CompletedEffects != 1 || outcome.UncertainEffects != 0 {
 		t.Fatalf("settlement failure lost actual publications: %+v", outcome)
@@ -252,7 +248,7 @@ BEGIN SELECT RAISE(ABORT,'recording unavailable'); END`)
 	}
 	raw, err = fixture.Call(t, t.Context(), "rm -rf copied")
 	testutil.FailErr(t, "remove recovered tree", err)
-	testutil.FailErr(t, "decode removal", json.Unmarshal([]byte(raw), &outcome))
+	outcome = settledProgramOutcome(t, fixture, raw)
 	if outcome.Status != 0 {
 		t.Fatalf("removal after recovery failed: %s", raw)
 	}
@@ -283,9 +279,7 @@ func TestComposedRecoveryAreaHiddenFromLsFindGrepSurveyFilesAndGitStatus(t *test
 		t.Helper()
 		raw, err := fixture.Call(t, t.Context(), source)
 		testutil.FailErr(t, "run command "+source, err)
-		var outcome command.ProgramOutcome
-		testutil.FailErr(t, "decode command outcome "+source, json.Unmarshal([]byte(raw), &outcome))
-		return outcome
+		return settledProgramOutcome(t, fixture, raw)
 	}
 
 	if out := call("git init"); out.State != "completed" || out.Status != 0 {

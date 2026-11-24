@@ -1,3 +1,4 @@
+import { outsideFileId } from "../source/outside-namespace.ts";
 import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { createSignal } from "solid-js";
 import { normalizeEolForEditor } from "../../components/source/editor/eol.ts";
@@ -31,6 +32,7 @@ export function createFileMergeCommands({ projectId, client, sourceSessionId, st
       const res = await c.getProjectSource(projectId(), buf.path, {
         workerId: buf.jobId,
         rootId: buf.rootId || undefined,
+        fileId: outsideFileId(projectId(), buf),
         sessionId: sourceSessionId(),
       });
       const { text } = normalizeEolForEditor(res.content);
@@ -86,6 +88,7 @@ export function createFileMergeCommands({ projectId, client, sourceSessionId, st
         const res = await c.getProjectSource(projectId(), buf.path, {
           workerId: buf.jobId,
           rootId: buf.rootId || undefined,
+          fileId: outsideFileId(projectId(), buf),
           sessionId: sourceSessionId(),
         });
         const { text } = normalizeEolForEditor(res.content);

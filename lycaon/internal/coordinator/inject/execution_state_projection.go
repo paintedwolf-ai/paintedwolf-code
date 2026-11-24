@@ -121,7 +121,7 @@ func newExecutionStateRow(result *api.ToolResult, age int, declared string) exec
 	if receipt.Failure != nil {
 		row.Code = receipt.Failure.Code
 	}
-	if program, ok := rejectedCommandProgram(result); ok {
+	if program, ok := rejectedCommandProgram(result); ok && receipt.Status == api.InvocationStatusCompleted {
 		row.Status = string(api.InvocationStatusRejected)
 		row.completed = false
 		row.Invoked = commandProgramHadEffects(program)

@@ -161,7 +161,7 @@ func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	recorder := &reviewCheckpointRecorder{}
-	mgr.SetSourceLedger(recorder, tools.SourceHistory{}, nil, nil, recorder, nil)
+	mgr.SetSourceLedger(recorder, nil, tools.SourceHistory{}, nil, nil, recorder, nil)
 	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)

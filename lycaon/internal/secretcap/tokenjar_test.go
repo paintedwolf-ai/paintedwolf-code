@@ -40,3 +40,24 @@ func TestTokenJarKeepsEachTokensIssuer(t *testing.T) {
 	testutil.FailErr(t, "restore protected evidence", restarted.Reconcile(ctx))
 	assertDurableValues(t, restarted, "issued-by-auth-7731")
 }
+
+func TestOverlappingCapturesMergeByName(t *testing.T) {
+	service, _, _ := testService(t)
+	open := func(operation string) *TokenJar {
+		t.Helper()
+		jar, err := service.Jars.OpenTokenJar(t.Context(), tokenJarRequest(operation))
+		testutil.FailErr(t, "open jar", err)
+		return jar
+	}
+	first, second := open("first"), open("second")
+	first.Set("a", Token{Value: "first-capture", Origin: "issuer-a"})
+	second.Set("b", Token{Value: "second-capture", Origin: "issuer-b"})
+	for _, jar := range []*TokenJar{first, second, first} {
+		_, err := service.Jars.SaveTokenJar(t.Context(), jar.request, jar)
+		testutil.FailErr(t, "commit capture", err)
+	}
+	merged := open("read")
+	if merged.Tokens["a"] != first.Tokens["a"] || merged.Tokens["b"] != second.Tokens["b"] || merged.Reference != first.Reference {
+		t.Fatal("overlapping captures lost a token or its issuer")
+	}
+}

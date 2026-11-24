@@ -416,8 +416,9 @@ func mkdirAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 }
 
 func renameAgentEntry(ctx context.Context, tctx tools.ToolContext, from, to mutationTarget, displacedBytes int64, memory *toolcontract.ProgramMemory, reviewDisplacedPolicy func() ([]sourceeffect.ReviewedFile, error)) error {
-	if filepath.Clean(from.Location.Root) != filepath.Clean(to.Location.Root) {
-		return fmt.Errorf("rename crosses filesystem effect roots")
+	identity, err := fspath.EntryIdentity(from.Abs)
+	if err != nil {
+		return err
 	}
 	after, err := captureAgentFileAt(from.Location, ctx, memory, true)
 	if err != nil {
@@ -444,10 +445,9 @@ func renameAgentEntry(ctx context.Context, tctx tools.ToolContext, from, to muta
 	if err := reviewAgentMutation(ctx, tctx, mutation, to.Location, from.Location, false); err != nil {
 		return err
 	}
-	rename := fseffect.RenameNoReplace
+	replace := false
 	if before.exists && before.isDir == after.isDir {
-		// The review above showed the replaced destination; set it aside recoverably
-		// so the move never destroys the only copy.
+		// Preserve the replaced entry when native recovery is available.
 		displaced := agentMutation{Memory: memory, Op: api.SourceChangeOpDelete, AbsPath: to.Abs,
 			Before: before.content, BeforeSHA256: before.sha256, BeforeSize: beforeSize, IsDir: before.isDir, Recursive: before.isDir}
 		if reviewDisplacedPolicy != nil {
@@ -471,7 +471,7 @@ func renameAgentEntry(ctx context.Context, tctx tools.ToolContext, from, to muta
 			}
 			mutation.Before, mutation.BeforeSHA256, mutation.BeforeSize = nil, "", 0
 		} else if !before.isDir {
-			rename = fseffect.Rename
+			replace = true
 		} else {
 			identity, idErr := fspath.EntryIdentity(to.Abs)
 			if idErr != nil {
@@ -490,7 +490,10 @@ func renameAgentEntry(ctx context.Context, tctx tools.ToolContext, from, to muta
 		return err
 	}
 	return applyPreparedAgentMutation(ctx, tctx, mutation, journal, func() error {
-		return rename(from.Location.Root, from.Location.Rel, to.Location.Rel)
+		if replace {
+			return fseffect.ReplaceByRelocateGuarded(from.Location, to.Location, identity)
+		}
+		return fseffect.RelocateGuarded(from.Location, to.Location, identity)
 	})
 }
 
@@ -520,9 +523,7 @@ func captureRemovedEntry(ctx context.Context, loc fseffect.Location, memory *too
 	return captureAgentFileAt(loc, ctx, memory, retainBody)
 }
 
-// recoverableRemoval is the attributed removal of an entry in an attached
-// root on a project or worktree branch. A worker overlay is already a private
-// copy its promotion records, and a path outside every root has no history.
+// Recovery snapshots cover removals in attached roots on durable branches.
 func recoverableRemoval(tctx tools.ToolContext, m agentMutation) (sourceeffect.Removal, bool) {
 	if tctx.Source.SourceMutations == nil {
 		return sourceeffect.Removal{}, false

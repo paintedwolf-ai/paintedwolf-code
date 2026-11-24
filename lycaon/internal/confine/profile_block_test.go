@@ -208,11 +208,12 @@ func escapeForeignTemporaryTree(t *testing.T) string {
 func TestBoundaryForeignTemporaryTreeWriteDenied(t *testing.T) {
 	self := requireLiveBoundary(t)
 	proj := t.TempDir()
-	c := confine.Confinement{Roots: []string{proj}}
+	scratch := outsideTemporaryWriteRoots(t)
+	c := confine.Confinement{Roots: []string{proj}, Workspaces: confine.WorkspaceRoots{SessionScratch: scratch}}
 
 	escapeAssertWriteRefused(t, self, c, filepath.Join(escapeForeignTemporaryTree(t), "escape.txt"))
 	escapeAssertWriteLands(t, self, c, filepath.Join(proj, "escape-suite-ok.txt"))
-	ownTmp := filepath.Join(os.TempDir(), "lycaon-escape-f6-own.txt")
+	ownTmp := filepath.Join(scratch, "lycaon-escape-f6-own.txt")
 	_ = os.Remove(ownTmp)
 	t.Cleanup(func() { _ = os.Remove(ownTmp) })
 	escapeAssertWriteLands(t, self, c, ownTmp)

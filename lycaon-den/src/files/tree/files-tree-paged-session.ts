@@ -19,7 +19,9 @@ export class FilesTreeSession extends SourceViewSession<"tree"> {
   }
 
   protected override saveAcceptedIntent(state: SourceTreeView): Promise<void> {
-    return saveFilesTreeIntent(state.workspace_id, state.intent_revision, state.intent.disclosures ?? []);
+    const projectRoots = new Set(state.roots.map(root => root.id));
+    const disclosures = state.intent.disclosures?.filter(rule => projectRoots.has(rule.address.root_id)) ?? [];
+    return saveFilesTreeIntent(state.workspace_id, state.intent_revision, disclosures);
   }
 
   /** Prefix proofs preserve pages whose coordinates remain unchanged. */
@@ -63,7 +65,7 @@ export class FilesTreeSession extends SourceViewSession<"tree"> {
     let attempted = false;
     return this.mutate(state => {
       // A basis applies once, inside the view that presented it.
-      const basis = !attempted && command.kind !== "filter" && command.kind !== "review" && this.presentationOf(base, state.id) ? base : undefined;
+      const basis = !attempted && command.kind !== "filter" && command.kind !== "review" && command.kind !== "select_chat" && this.presentationOf(base, state.id) ? base : undefined;
       attempted = true;
       return this.client.applySourceViewIntent(this.projectId, state.id,
         { kind: "tree", operation_id, expected_intent_revision: state.intent_revision, command, base_presentation_id: basis ?? undefined });

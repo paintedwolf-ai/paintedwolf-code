@@ -19,6 +19,7 @@ export interface PrettySnapshot {
   readonly markup: MarkupState;
   readonly fence: Fence | null;
   readonly inLine: boolean;
+  readonly protectedRun: boolean;
   readonly laidOut: boolean;
   readonly leadColumns: number;
   readonly hasContent: boolean;
@@ -30,7 +31,7 @@ export interface PrettySnapshot {
 }
 
 export function snapshotsEqual(a: PrettySnapshot, b: PrettySnapshot): boolean {
-  if (a.rule !== b.rule || a.inLine !== b.inLine || a.laidOut !== b.laidOut || a.leadColumns !== b.leadColumns) return false;
+  if (a.rule !== b.rule || a.inLine !== b.inLine || a.protectedRun !== b.protectedRun || a.laidOut !== b.laidOut || a.leadColumns !== b.leadColumns) return false;
   if (a.hasContent !== b.hasContent || a.col !== b.col || a.pendingAhead !== b.pendingAhead) return false;
   if (a.pendingAhead >= 0 && a.pendingColumns !== b.pendingColumns) return false;
   if (a.visualBack !== b.visualBack || (a.visualBack >= 0 && a.visualColumns !== b.visualColumns)) return false;
@@ -64,6 +65,7 @@ export function takeSnapshot(s: ScanState, pos: number): PrettySnapshot {
     markup: s.markup,
     fence: s.fence,
     inLine: s.inLine,
+    protectedRun: s.protectedRun,
     laidOut: s.laidOut,
     leadColumns: s.leadColumns,
     hasContent: s.hasContent,
@@ -86,6 +88,7 @@ export function restoreSnapshot(s: ScanState, snapshot: PrettySnapshot, pos: num
   s.markup = snapshot.markup;
   s.fence = snapshot.fence;
   s.inLine = snapshot.inLine;
+  s.protectedRun = snapshot.protectedRun;
   s.laidOut = snapshot.laidOut;
   s.leadColumns = snapshot.leadColumns;
   s.hasContent = snapshot.hasContent;

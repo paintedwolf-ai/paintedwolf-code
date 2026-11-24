@@ -23,6 +23,7 @@ import {
   addPendingAttachments,
   clearPendingAttachments,
   pendingAttachmentsForSession,
+  removePendingAttachment,
   resetComposerAttachmentsForTests,
 } from "./composer-attachment-store.ts";
 import { composerDraftForSession, setComposerDraft, resetComposerDraftsForTests } from "./composer-drafts.ts";
@@ -42,6 +43,8 @@ import { setPreflightReport } from "../../platform/persistence/preflight-report.
 import { setLycaonClientForTest } from "../../platform/connection/app-connection.ts";
 import { LycaonApiError } from "../../api/http.ts";
 import type { AttachmentUploadResponse } from "../../api/types.ts";
+import { attachmentReceiptToPending } from "./composer-attachments.ts";
+import { promptPartsFromPendingAttachments } from "./prompt-parts.ts";
 
 // Accepted uploads let these fixtures exercise attachment staging.
 function seedUploadHost(): void {
@@ -106,11 +109,38 @@ describe("composer-attachment-store", () => {
       rootId: "r1",
       path: "src/main.go",
     }]);
-    expect(result).toEqual({ ok: true });
+    expect(result.ok).toBe(true);
     expect(pendingAttachmentsForSession("s1")).toHaveLength(1);
     expect(pendingAttachmentsForSession("s2")).toHaveLength(0);
     clearPendingAttachments("s1");
     expect(pendingAttachmentsForSession("s1")).toHaveLength(0);
+  });
+
+  it("keeps the first chip and sends a blob once across repeated uploads", () => {
+    const receipt = {
+      blob_id: "a".repeat(64),
+      filename: "image.png",
+      mime: "image/png",
+      kind: "image",
+      bytes: 16,
+    } satisfies AttachmentUploadResponse;
+    const first = attachmentReceiptToPending(receipt);
+    const duplicate = attachmentReceiptToPending(receipt, { previewUrl: "blob:duplicate" });
+    const distinct = attachmentReceiptToPending({ ...receipt, blob_id: "b".repeat(64) });
+    const revoke = vi.fn();
+    vi.stubGlobal("URL", { revokeObjectURL: revoke });
+    try {
+      expect(addPendingAttachments("s1", [first, duplicate, distinct]).ok).toBe(true);
+      expect(revoke).toHaveBeenCalledExactlyOnceWith("blob:duplicate");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(addPendingAttachments("s1", [attachmentReceiptToPending(receipt)]).ok).toBe(true);
+    expect(pendingAttachmentsForSession("s1")).toEqual([first, distinct]);
+    expect(promptPartsFromPendingAttachments(pendingAttachmentsForSession("s1")).attachments)
+      .toEqual([{ blob_id: receipt.blob_id }, { blob_id: "b".repeat(64) }]);
+    removePendingAttachment("s1", first.id);
+    expect(pendingAttachmentsForSession("s1")).toEqual([distinct]);
   });
 
   it("counts references against their own ceiling, not the byte budget", () => {
@@ -121,7 +151,7 @@ describe("composer-attachment-store", () => {
         kind: "text",
         name: `b${i}.txt`,
         mime: "text/plain",
-        blobId: "a".repeat(64),
+        blobId: i.toString(16).repeat(64),
         byteLength: 1,
       }]);
       expect(r.ok).toBe(true);
@@ -131,7 +161,7 @@ describe("composer-attachment-store", () => {
       kind: "text",
       name: "overflow.txt",
       mime: "text/plain",
-      blobId: "a".repeat(64),
+      blobId: "f".repeat(64),
       byteLength: 1,
     }]);
     expect(extraByte.ok).toBe(false);

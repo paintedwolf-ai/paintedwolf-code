@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	confinefixture "github.com/lycaon/lycaon/internal/testsetup/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -114,6 +115,12 @@ func TestOrdinaryToolchainsStartWithoutRefusals(t *testing.T) {
 	confinefixture.RequireRefusalReports(t)
 	project, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve project", err)
+	config := outsideTemporaryWriteRoots(t)
+	t.Setenv("HOME", config)
+	t.Setenv("XDG_CONFIG_HOME", config)
+	userCfg, err := os.UserConfigDir()
+	testutil.FailErr(t, "resolve user config dir", err)
+	testutil.FailErr(t, "initialize toolchain state", os.MkdirAll(filepath.Join(userCfg, "go", "telemetry"), 0700))
 	probes := [][]string{
 		{"/bin/sh", "-c", "true"},
 		{"/usr/bin/env", "true"},
@@ -127,6 +134,8 @@ func TestOrdinaryToolchainsStartWithoutRefusals(t *testing.T) {
 		if err != nil {
 			continue
 		}
+		// Warm system shims (such as macOS xcrun wrappers) outside the sandbox first.
+		_, _ = exec.Command(name, probe[1:]...).CombinedOutput()
 		refusals, out := refusalsOf(t, self, []string{project}, name, probe[1:]...)
 		if len(refusals.Refusals) > 0 {
 			var lines []string
@@ -135,5 +144,33 @@ func TestOrdinaryToolchainsStartWithoutRefusals(t *testing.T) {
 			}
 			t.Errorf("%s started with refusals:\n%s\noutput: %s", strings.Join(probe, " "), strings.Join(lines, "\n"), out)
 		}
+	}
+}
+
+func TestSharedTempWriteRefusalNamesItsLocation(t *testing.T) {
+	self := requireLiveBoundary(t)
+	confinefixture.RequireRefusalReports(t)
+	project, custom := t.TempDir(), outsideTemporaryWriteRoots(t)
+	t.Setenv("TMPDIR", custom)
+	for _, location := range []string{"/tmp", "/var/tmp", custom} {
+		t.Run(filepath.Base(location), func(t *testing.T) {
+			file, err := os.CreateTemp(location, "pw-temp-location-")
+			testutil.FailErr(t, "seed temp sentinel", err)
+			testutil.FailErr(t, "close temp sentinel", file.Close())
+			t.Cleanup(func() { _ = os.Remove(file.Name()) })
+			target := fspath.CanonicalPath(file.Name())
+			refusals, out := refusalsOf(t, self, liveBoundaryRoots(project), "/bin/sh", "-c", `printf x > "$1"`, "sh", target)
+			for _, refused := range refusals.Refusals {
+				if refused.Target == target && refused.Layer == confine.FloorSharedTemp && refused.Recovery == confine.RecoverWriteRoot && refused.Grant == fspath.CanonicalPath(location) {
+					info, err := os.Stat(target)
+					testutil.FailErr(t, "inspect sentinel", err)
+					if info.Size() != 0 {
+						t.Fatal("refused write changed the file")
+					}
+					return
+				}
+			}
+			t.Fatalf("shared temp write: refusals=%+v, output=%q", refusals, out)
+		})
 	}
 }

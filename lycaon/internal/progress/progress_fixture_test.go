@@ -10,6 +10,6 @@ import (
 func newProgressFixture(t *testing.T, sessionID string) *SQLStore {
 	t.Helper()
 	database := testdbfixture.Open(t, "progress.db")
-	testdbseed.InsertSession(t, database, sessionID, testdbseed.DefaultProjectID)
+	testdbseed.InsertWorkflowRun(t, database, "run-"+sessionID, sessionID, testdbseed.DefaultProjectID)
 	return NewSQLStore(database)
 }

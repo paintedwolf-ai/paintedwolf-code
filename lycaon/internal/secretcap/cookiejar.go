@@ -13,12 +13,12 @@ import (
 
 const (
 	cookieJarPurpose = "HTTP cookie jar"
-	// jarTool is the only jar consumer; uses are recorded under its name.
-	jarTool         = "http_request"
+	// Jar access is attributed to the submitted command.
+	jarTool         = "command"
 	maxJarNameRunes = 64
 )
 
-// CookieJarRequest identifies the jar one http_request call opens.
+// CookieJarRequest identifies the jar one HTTP exchange opens.
 type CookieJarRequest struct {
 	ProjectID, ChatSessionID, SessionID, OperationID, Name string
 }
@@ -29,6 +29,7 @@ type CookieJar struct {
 	Reference string
 	Store     *httpcookies.Store
 	id        string
+	version   int64
 	request   CookieJarRequest
 	issuer    *Jars
 }
@@ -77,6 +78,7 @@ func (s *Jars) OpenCookieJar(ctx context.Context, req CookieJarRequest) (*Cookie
 		s.repository.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
 		return nil, fmt.Errorf("%w: stored cookie jar is unreadable", ErrValueMissing)
 	}
+	jar.version = current.Version
 	jar.Store = httpcookies.New(cookies)
 	s.repository.recordUse(ctx, row.ID, current.Version, UseResolved, access)
 	s.rememberJarValues(req.ChatSessionID, "cookie", row.ID, jar.Store.Values())

@@ -36,6 +36,8 @@ const SCOPE_UNAVAILABLE: SurfaceFailureCopy = {
   suggestedAction: "Reopen the review or pick the comparison again.",
 };
 import { mergeSourceWalkFiles } from "../source/source-walk-pages.ts";
+import type { CommandCoverageNotice } from "../source/source-command-window.ts";
+import { readReviewPages } from "../review/review-scope-pages.ts";
 
 type ScopeEffect = {
   fileId: string;
@@ -68,6 +70,7 @@ type ResolvedScope = {
   markUserEdits: boolean;
   commitAvailable: boolean;
   files: readonly SourceWalkFile[];
+  coverage: readonly CommandCoverageNotice[];
   paths: ReadonlySet<string>;
   effects: ReadonlyMap<string, ScopeEffect>;
   deleted: ReadonlySet<string>;
@@ -119,6 +122,7 @@ function emptyRecord(): ResolvedScope {
     markUserEdits: true,
     commitAvailable: false,
     files: [],
+    coverage: [],
     paths: new Set(),
     effects: new Map(),
     deleted: new Set(),
@@ -264,6 +268,7 @@ function sameContent(a: ResolvedScope, b: ResolvedScope): boolean {
     (a.scope.kind !== "pin" || b.scope.kind !== "pin" || a.scope.label === b.scope.label) &&
     sameSubject(a.subject, b.subject) &&
     sameFiles(a.files, b.files) &&
+    JSON.stringify(a.coverage) === JSON.stringify(b.coverage) &&
     a.seenMore === b.seenMore &&
     sameSeen(a.seen, b.seen)
   );
@@ -369,6 +374,7 @@ function answerWithoutFiles(
     markUserEdits,
     commitAvailable: false,
     files: [],
+    coverage: [],
     paths: new Set(),
     effects: new Map(),
     deleted: new Set(),
@@ -431,39 +437,20 @@ export async function resolveScope(
       : null;
 
   try {
-    // Later pages send the baseline the first page resolved, so every page reads one range.
-    let baseline = wanted;
-    let answered: string | null = null;
-    let cursor: string | undefined;
-    let rootError: string | null = null;
-    let rootSnapshot: string | undefined;
-    let commitAvailable = false;
-    const files: SourceWalkFile[] = [];
-    for (;;) {
-      const page = await client.listProjectSourceWalk(id, {
+    const comparison = await readReviewPages(
+      (baseline, cursor) => client.listProjectSourceWalk(id, {
         baseline,
         limit: FILE_LIMIT,
         cursor,
         ...(markUserEdits ? {} : { markUserEdits: false }),
         sessionId: subjectAddress(scope, subject),
-      });
-      if (epochs.get(id) !== epoch) return resolvedScope(id);
-      answered ??= page.baseline;
-      baseline = answered;
-      commitAvailable ||= page.commit_available;
-      if (page.commit_roots) {
-        const snapshot = JSON.stringify(page.commit_roots);
-        if (rootSnapshot !== undefined && rootSnapshot !== snapshot) throw new Error("Git changed while loading. Refresh the comparison.");
-        rootSnapshot = snapshot;
-        const failures = page.commit_roots.filter((root) => !root.available);
-        if (failures.length) rootError = `${failures.length} folder${failures.length === 1 ? "" : "s"} could not be compared with Git. This list is incomplete.`;
-      }
-      files.push(...page.files);
-      const next = page.next_cursor;
-      if (!next) break;
-      cursor = next;
-    }
-    const mergedFiles = mergeSourceWalkFiles(files);
+      }),
+      wanted,
+      () => epochs.get(id) === epoch,
+    );
+    if (!comparison) return resolvedScope(id);
+    const { baseline, commitAvailable, rootError } = comparison;
+    const mergedFiles = mergeSourceWalkFiles(comparison.files);
     const { paths, effects, deleted, added } = indexFiles(mergedFiles);
     const seenList = seenPage ? await seenPage : null;
     if (epochs.get(id) !== epoch) return resolvedScope(id);
@@ -488,6 +475,7 @@ export async function resolveScope(
       markUserEdits,
       commitAvailable,
       files: mergedFiles,
+      coverage: comparison.notices,
       paths,
       effects,
       deleted,

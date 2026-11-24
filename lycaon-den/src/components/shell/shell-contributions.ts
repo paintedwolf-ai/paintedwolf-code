@@ -7,6 +7,7 @@ import { isChatActivityLive } from "../../chat/session/session-activity.ts";
 import { contributionFrame } from "../../contributions/contribution-store.ts";
 import { shellCommandPackaged } from "../../platform/desktop/shell-command.ts";
 import { type ShellFactState, setShellFactState } from "../../contributions/shell-facts.ts";
+import { outsideFilePickerAvailable } from "../../files/commands/open-outside-file.ts";
 import { filesCommandContext } from "../../files/commands/files-command-context.ts";
 import { mountedFilesEditorView } from "../../files/editor/files-editor-host.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
@@ -143,6 +144,7 @@ export function createShellContributions(options: Pick<ShellScope, "shell" | "ap
       conversationCollapsed: (hiddenSplitPanePref() === "conversation"),
       splitLive: splitLive(),
       filesStageActive: stageColumnStageId() === "files",
+      outsideFilePickerAvailable: outsideFilePickerAvailable(),
       filesTreeCollapsed: filesTreeCollapsed(),
       fileSummariesOn: fileSummariesEnabled(),
       fileSummariesKnown: fileSummariesSettingKnown(),

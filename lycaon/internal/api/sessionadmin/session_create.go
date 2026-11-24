@@ -141,8 +141,9 @@ func (s *Lifecycle) prepareCreatedSession(parent context.Context, req wire.Creat
 		}
 		perf.Mark("workspace")
 		if err == nil {
-			err = s.Projects.TouchLastOpened(ctx, sess.ProjectID)
-			if err == nil {
+			var moved bool
+			moved, err = s.Projects.TouchLastOpened(ctx, sess.ProjectID)
+			if err == nil && moved {
 				projectview.PublishTouch(s.Projects, s.Events, ctx, sess.ProjectID)
 			}
 		}
@@ -219,10 +220,13 @@ func (s *Lifecycle) MaterializeSession(
 			return nil, err
 		}
 	}
-	if err := s.Projects.TouchLastOpened(ctx, projectID); err != nil {
+	moved, err := s.Projects.TouchLastOpened(ctx, projectID)
+	if err != nil {
 		return nil, err
 	}
-	projectview.PublishTouch(s.Projects, s.Events, ctx, projectID)
+	if moved {
+		projectview.PublishTouch(s.Projects, s.Events, ctx, projectID)
+	}
 
 	sess, err := s.SessionStore.Create(ctx, req, projectID)
 	if err != nil {
@@ -284,16 +288,24 @@ func (s *Lifecycle) PublishSessionCreated(ctx context.Context, sess *wire.Sessio
 	}
 	key := events.PublishKey{Project: strings.TrimSpace(sess.ProjectID), Session: sess.ID}
 	_ = s.Events.Publish(ctx, wire.EventTopicSession, key, wire.SessionEvent{
-		ID:        sess.ID,
-		ProjectID: sess.ProjectID,
-		Action:    wire.SessionEventActionCreated,
-		Title:     sess.Title,
-		Status:    sess.Status,
+		ID:               sess.ID,
+		ProjectID:        sess.ProjectID,
+		Action:           wire.SessionEventActionCreated,
+		Title:            sess.Title,
+		Status:           sess.Status,
+		Mode:             sess.Mode,
+		Started:          &sess.Started,
+		UntrustedContent: sess.UntrustedContent,
+		CurrentTurn:      sess.CurrentTurn,
+		UI:               sess.UI,
+		PromptPending:    sess.PromptPending,
 	})
 }
 
 func (s *Lifecycle) WriteSessionCreationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case requestscope.WriteSessionModeError(s.responses, w, err):
+		return
 	case errors.Is(err, project.ErrNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeProjectNotFound, "project not found")
 	case errors.Is(err, sessionstore.ErrWorkspaceRootNotFound):

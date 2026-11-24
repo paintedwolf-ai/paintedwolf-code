@@ -78,7 +78,7 @@ func TestSQLChainVerifiesVersion1RowsBeforeVersion2Rows(t *testing.T) {
 	_, err := sqlDB.ExecContext(ctx, `INSERT OR IGNORE INTO projects (id, last_opened_at, created_at) VALUES ('proj', ?, ?)`, stamp, stamp)
 	testutil.FailErr(t, "insert project", err)
 	_, err = sqlDB.ExecContext(ctx,
-		`INSERT INTO sessions (id, project_id, owner_person_id, posture, created_at, activity_at, updated_at) VALUES ('sess', 'proj', (SELECT id FROM people WHERE role = 'owner'), 'build', ?, ?, ?)`,
+		`INSERT INTO sessions (id, project_id, owner_person_id, posture, created_at, activity_at, updated_at, root_session_id, mode) VALUES ('sess', 'proj', (SELECT id FROM people WHERE role = 'owner'), 'build', ?, ?, ?, 'sess', 'agent')`,
 		stamp, stamp, stamp)
 	testutil.FailErr(t, "insert session", err)
 

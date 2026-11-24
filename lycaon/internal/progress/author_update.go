@@ -190,9 +190,6 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string, recon
 	transitions := ClassifyTransitions(previous, snapshot)
 	result.StateChanged = transitions.Changed
 	result.ClosedItemIDs = transitions.ClosedItemIDs
-	if result.Updated {
-		NotifyWriteObservers(ctx, WriteEvent{SessionID: root, Before: previous, After: snapshot})
-	}
 	if u.reconciliationToken != "" {
 		result.ReconciliationStatus = "changed"
 		if reconciler.Acknowledge(ctx, root, u.reconciliationToken) {

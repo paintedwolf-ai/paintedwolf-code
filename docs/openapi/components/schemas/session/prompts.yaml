@@ -293,6 +293,10 @@ components:
       - text
       additionalProperties: false
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: 'identity.yaml#/components/schemas/SessionMode'
+          description: Bind or upgrade the session mode at admission.
         operation_id:
           type: string
           format: uuid

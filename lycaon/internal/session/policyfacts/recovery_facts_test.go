@@ -107,3 +107,42 @@ func TestObserveConfinePublishesPostInvokeRefusalData(t *testing.T) {
 		t.Fatalf("unapplied boundary published reject data: %v", unapplied.RejectData)
 	}
 }
+
+func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
+	items := []confine.SandboxRefusal{
+		{Operation: "file-read-data", Target: "/key", Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath, Grant: "/key"},
+		{Operation: "file-write-data", Target: "/work/file", Layer: confine.FloorOutsideWriteRoots, Recovery: confine.RecoverWriteRoot, Grant: "/work"},
+		{Operation: "file-write-create", Target: "/tmp/slot", Layer: confine.FloorSharedTemp, Recovery: confine.RecoverWriteRoot, Grant: "/tmp"},
+		{Operation: "file-write-create", Target: "/state/file", Layer: confine.FloorControlPlane, Recovery: confine.RecoverNone},
+		{Operation: "file-read-data", Target: "/credential", Layer: confine.FloorReadCredentialStore, Recovery: confine.RecoverCredentialStore},
+		{Operation: "network-outbound", Target: "/socket", Recovery: confine.RecoverSocketPath, Grant: "/socket"},
+		{Operation: "signal", Target: "pid", Recovery: confine.RecoverProcessControl},
+		{Operation: "mount", Target: "device", Recovery: confine.RecoverHostExecution},
+		{Operation: "network-bind", Target: "local:127.0.0.1:5301", Recovery: confine.RecoverLocalListen},
+		{Operation: "network-outbound", Target: "remote:127.0.0.1:5302", Recovery: confine.RecoverOutboundPort},
+		{Operation: "file-read-data", Target: "/state/store", Layer: confine.FloorReadControlPlane, Recovery: confine.RecoverNone},
+	}
+	for mask := 1; mask < 1<<len(items); mask++ {
+		var subset confine.SandboxRefusals
+		for i, item := range items {
+			if mask&(1<<i) != 0 {
+				subset.Refusals = append(subset.Refusals, item)
+			}
+		}
+		gc := oar.NewGuardContext()
+		ObserveConfine(gc, confine.Observation{Applied: true, Refusals: subset})
+		groups := [][]string{gc.Refusals.RefusedReadGrants, gc.Refusals.OrdinaryWriteGrants, subset.SharedTempRoots(), gc.Refusals.RefusedTerminalWritePaths, gc.Refusals.RefusedCredentialStorePaths, gc.Refusals.RefusedSocketPaths, gc.Refusals.RefusedSignals, gc.Refusals.UnsandboxedRefusals, gc.Refusals.RefusedListenPorts, gc.Refusals.RefusedConnectPorts, gc.Refusals.RefusedTerminalReadPaths}
+		for i, group := range groups {
+			if (len(group) > 0) != (mask&(1<<i) != 0) {
+				t.Fatalf("subset %b group %d=%v", mask, i, group)
+			}
+		}
+		hasTemp := mask&(1<<2) != 0
+		if slices.Contains(gc.Refusals.RefusedWritePaths, "/tmp/slot") != hasTemp || slices.Contains(gc.Refusals.RefusedWriteGrants, "/tmp") != hasTemp {
+			t.Fatalf("published write observation missing from subset %b", mask)
+		}
+		if slices.Contains(gc.Refusals.OrdinaryWritePaths, "/tmp/slot") || slices.Contains(gc.Refusals.OrdinaryWriteGrants, "/tmp") {
+			t.Fatalf("temp leaked into ordinary writes in subset %b", mask)
+		}
+	}
+}

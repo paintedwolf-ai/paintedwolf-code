@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 )
@@ -120,7 +121,7 @@ func TestParseManifestYAMLCloseoutGatedShapeRules(t *testing.T) {
 }
 
 func TestMergePhaseDefCloseoutOverride(t *testing.T) {
-	parent := workflowdef.PhaseDef{ID: "work", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"worker_cycle_ready"}}
+	parent := workflowdef.PhaseDef{ID: "work", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"worker_cycle_ready"}}
 	child := workflowdef.PhaseDef{ID: "work", Closeout: workflowdef.CloseoutGated}
 	merged := workflowdef.MergePhaseDef(parent, child)
 	if !merged.Closeout.Gated() {

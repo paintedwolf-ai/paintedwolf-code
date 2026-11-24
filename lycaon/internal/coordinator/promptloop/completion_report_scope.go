@@ -72,7 +72,7 @@ func reportFindingsMeta(findings []guidance.CoordinatorFinding) []api.Completion
 		}
 		// A host-stored report can carry a value the document check refused;
 		// its defects record it and the wire keeps its enum.
-		if d := api.CompletionReportFindingDisposition(f.Disposition); slices.Contains(api.AllCompletionReportFindingDispositions(), d) {
+		if d := api.CompletionReportFindingDisposition(f.Disposition); slices.Contains(api.AllCompletionReportFindingDispositionValues(), d) {
 			row.Disposition = d
 		}
 		if len(f.Answers) > 0 {
@@ -109,7 +109,7 @@ func reportAskMeta(ask *guidance.CoordinatorAsk) *api.CompletionReportAsk {
 		return nil
 	}
 	effort := api.CompletionReportAskEffort(ask.Effort)
-	if !slices.Contains(api.AllCompletionReportAskEfforts(), effort) {
+	if !slices.Contains(api.AllCompletionReportAskEffortValues(), effort) {
 		return nil
 	}
 	return &api.CompletionReportAsk{Do: ask.Do, Effort: effort, Why: ask.Why}

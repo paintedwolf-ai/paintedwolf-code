@@ -48,6 +48,7 @@ host_anchors:
   - content.output
   - content.tool_result
   - credential.assignment
+  - sandbox.shared_temp
   - tool.rejected
 
 profiles:
@@ -147,6 +148,11 @@ host_facts:
    type: bool
  - name: paintedwolf.worker_spawn_blocked
    type: bool
+ - name: paintedwolf.session_mode
+   type: string
+   observation: The root session's capability mode.
+ - name: paintedwolf.ask_worker_writes
+   type: bool
  - name: paintedwolf.active_worker_count
    type: int
  - name: paintedwolf.pending_overlay_promote
@@ -161,6 +167,8 @@ host_facts:
    type: bool
  - name: paintedwolf.progress_open_items
    type: int
+ - name: paintedwolf.progress_has_one_open_item
+   type: bool
  - name: paintedwolf.progress_has_open_steps
    type: bool
  - name: paintedwolf.closeout_has_answer
@@ -227,6 +235,30 @@ host_facts:
  - name: paintedwolf.refused_write_paths
    type: list<string>
    observation: Paths the kernel refused the invocation's processes for writing, at any layer; empty when none.
+ - name: paintedwolf.ordinary_write_paths
+   type: list<string>
+   observation: Refused paths eligible for write-root recovery outside shared temporary directories.
+ - name: paintedwolf.ordinary_write_grants
+   type: list<string>
+   observation: Requestable write-root grants for filesystem refusals outside shared temporary directories.
+ - name: paintedwolf.refused_shared_temp
+   type: list<string>
+   observation: Shared temporary directories refused for writing in this occurrence.
+ - name: paintedwolf.shared_temp_allowed
+   type: list<string>
+   observation: Refused shared temporary directories now authorized for this chat.
+ - name: paintedwolf.shared_temp_declined
+   type: list<string>
+   observation: Refused shared temporary directories denied for this chat.
+ - name: paintedwolf.shared_temp_unanswered
+   type: list<string>
+   observation: Refused shared temporary directories without a completed authorization.
+ - name: paintedwolf.shared_temp_tolerated
+   type: bool
+   observation: The command exited successfully after a refused shared temp write.
+ - name: paintedwolf.session_scratch_available
+   type: bool
+   observation: The invocation has a session scratch folder.
  - name: paintedwolf.refused_write_grants
    type: list<string>
    observation: The capability_request.write_root path whose approval would open each refused write path that a reviewed grant can open; empty when none.
@@ -236,6 +268,12 @@ host_facts:
  - name: paintedwolf.refused_read_grants
    type: list<string>
    observation: The capability_request.read_path path whose approval would open each refused read path that a reviewed grant can open; empty when none.
+ - name: paintedwolf.optional_read_paths
+   type: list<string>
+   observation: Protected reads withheld on a successful command exit that remain eligible for a notice in this chat.
+ - name: paintedwolf.refused_multiple_read_grants
+   type: bool
+   observation: More than one exact read grant is available for protected reads this invocation attempted.
  - name: paintedwolf.refused_credential_store_paths
    type: list<string>
    observation: Host OS credential store paths or session D-Bus endpoints the kernel refused the invocation's processes; empty when none.
@@ -1192,6 +1230,12 @@ host_facts:
    type: string
  - name: paintedwolf.resource
    type: string
+ - name: paintedwolf.command_exit_recorded
+   type: bool
+ - name: paintedwolf.command_exit_status
+   type: int
+ - name: paintedwolf.saved_output_paths
+   type: list<string>
  - name: paintedwolf.receipt_token
    type: string
  - name: paintedwolf.settled_work
@@ -1269,6 +1313,13 @@ host_facts:
  - name: paintedwolf.inapplicable_fields
    type: list<string>
  - name: paintedwolf.missing_required_arguments
+   type: string
+ - name: paintedwolf.missing_required_paths
+   type: list<string>
+ - name: paintedwolf.unsupported_property_paths
+   type: list<string>
+   observation: Bounded quoted JSON pointers to properties the offered schema forbids outside alternatives.
+ - name: paintedwolf.controlled_header
    type: string
  - name: paintedwolf.found_under
    type: string

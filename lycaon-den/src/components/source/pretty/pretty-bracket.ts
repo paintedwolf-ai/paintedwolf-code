@@ -1,3 +1,4 @@
+import { PROTECTED_END, PROTECTED_START } from "./pretty-block-facts.ts";
 import {
   type BracketRule,
   PRETTY_MAX_DEPTH,
@@ -104,6 +105,13 @@ export function stepBracket(cursor: ScanCursor, rule: BracketRule, pos: number, 
   const { text, state } = cursor;
   const lexer = state.lexer!;
   const skipped = lexer.skip(text, pos, end, state.lineEnd);
+  if (rule.statements) {
+    const protectedRun = skipped > pos;
+    if (protectedRun !== state.protectedRun) {
+      cursor.options.factEvent?.(pos, protectedRun ? PROTECTED_START : PROTECTED_END);
+      state.protectedRun = protectedRun;
+    }
+  }
   if (skipped > pos) {
     state.visits += skipped - pos;
     state.col += skipped - pos;
@@ -121,6 +129,7 @@ export function stepBracket(cursor: ScanCursor, rule: BracketRule, pos: number, 
     state.col += cursor.options.tabSize;
     return pos + 1;
   }
+  if (rule.statements && (isOpener(c) || isCloser(c) || c === SEMICOLON)) cursor.options.factEvent?.(pos, c);
   if (isOpener(c)) open(cursor, rule, c, pos);
   else if (isCloser(c)) close(cursor, rule, c, pos);
   else if (c === COMMA || (c === SEMICOLON && rule.statements)) separate(cursor, c, pos);
@@ -304,11 +313,14 @@ function blockFact(cursor: ScanCursor, openPos: number): boolean {
   const facts = cursor.options.facts;
   const known = facts.get(openPos);
   if (known !== undefined) return known;
+  const readTo = text.readTo;
   const lineEnd = state.lineEnd;
   const lexer = state.lexer!.copy();
   const stack: Array<{ kind: number; open: number; semicolon: boolean }> = [{ kind: OPEN_BRACE, open: openPos, semicolon: false }];
+  const closeTag = state.markup.embedded?.closeTag;
   let pos = openPos + 1;
   while (pos < lineEnd && stack.length > 0) {
+    if (closeTag && closeTag !== "---" && !lexer.inProtected() && text.startsWithFolded(pos, closeTag, lineEnd)) break;
     const skipped = lexer.skip(text, pos, lineEnd, lineEnd);
     if (skipped > pos) {
       state.visits += skipped - pos;
@@ -328,7 +340,9 @@ function blockFact(cursor: ScanCursor, openPos: number): boolean {
     }
     pos += 1;
   }
-  // A group still open at the line end lays out as a container would.
-  for (const frame of stack) if (frame.kind === OPEN_BRACE) facts.set(frame.open, lineEnd, false);
+  // Unclosed groups end at the source line or the embedded region.
+  for (const frame of stack) if (frame.kind === OPEN_BRACE) facts.set(frame.open, pos, false);
+  // The fact range tracks these reads independently of the lexical checkpoint.
+  text.readTo = readTo;
   return facts.get(openPos) ?? false;
 }

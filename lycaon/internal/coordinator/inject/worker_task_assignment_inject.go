@@ -2,7 +2,6 @@ package inject
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -143,7 +143,7 @@ func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentI
 	}
 	if in.CoverageAssignment != nil {
 		data.CoverageRequired = in.CoverageAssignment.CoverageRequired
-		if raw, err := json.Marshal(reviewcoverage.FirstPage(*in.CoverageAssignment)); err == nil {
+		if raw, err := surveyjson.Marshal(reviewcoverage.FirstPage(*in.CoverageAssignment)); err == nil {
 			data.CoverageAssignment = string(raw)
 		}
 	}

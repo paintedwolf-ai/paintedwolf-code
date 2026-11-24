@@ -1,15 +1,17 @@
-import { forceParsing, indentUnit } from "@codemirror/language";
+// @vitest-environment jsdom
+import { indentUnit } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
+import { finishFixtureParsing } from "../../../test/codemirror-parsing-fixture.ts";
 import { createPrettyExtension } from "./pretty-layout.ts";
 import { prettyLayoutDecorations } from "./pretty-view.ts";
 
 function open(doc: string, path: string): EditorState {
-  return EditorState.create({
+  return finishFixtureParsing(EditorState.create({
     doc,
     extensions: [languageExtensionForPath(path)!, indentUnit.of("  "), createPrettyExtension({ enabled: true, path })],
-  });
+  }));
 }
 
 function breaks(state: EditorState): number[] {
@@ -74,6 +76,5 @@ describe("S-expression and EDN layout", () => {
     expect(cljRendered).not.toContain('; "\n');
 
     expect(breaks(open("(defn f [x]\n  (+ x 1))\n", "ok.clj"))).toEqual([]);
-    void forceParsing;
   });
 });

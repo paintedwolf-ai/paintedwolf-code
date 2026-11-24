@@ -26,6 +26,7 @@ type SurfaceFacts struct {
 	VerifyUnverified                      bool
 	VisibleUserTurn                       bool
 	Posture                               string
+	Mode                                  api.SessionMode
 	ProgressHasOpenSteps                  bool
 	ProgressMissing                       bool
 	ProgressGatedToolAttemptedSinceIntent bool
@@ -39,6 +40,10 @@ func ComputeSurfaceFacts(
 	history []api.Message,
 	state ImplementSessionState,
 ) SurfaceFacts {
+	mode := api.SessionModeAgent
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		mode = api.SessionModeAsk
+	}
 	return SurfaceFacts{
 		HasComposeDraft:                       runCtx.HasComposeDraft,
 		ManifestBoundSurface:                  strings.TrimSpace(runCtx.PhaseCoordinatorSurface),
@@ -58,6 +63,7 @@ func ComputeSurfaceFacts(
 		VerifyUnverified:                      state.VerifyUnverified,
 		VisibleUserTurn:                       isVisibleUserTurn(history),
 		Posture:                               postureString(sessionPosture(sess)),
+		Mode:                                  mode,
 		ProgressHasOpenSteps:                  state.ProgressOpenCount > 0,
 		ProgressMissing:                       state.ProgressMissing,
 		ProgressGatedToolAttemptedSinceIntent: state.ProgressGatedToolAttemptedSinceIntent,
@@ -86,6 +92,7 @@ func (f SurfaceFacts) AsMap() map[string]any {
 		FactVerifyUnverified:                      f.VerifyUnverified,
 		FactVisibleUserTurn:                       f.VisibleUserTurn,
 		FactPosture:                               f.Posture,
+		FactMode:                                  string(f.Mode),
 		FactProgressHasOpenSteps:                  f.ProgressHasOpenSteps,
 		FactProgressMissing:                       f.ProgressMissing,
 		FactProgressGatedToolAttemptedSinceIntent: f.ProgressGatedToolAttemptedSinceIntent,

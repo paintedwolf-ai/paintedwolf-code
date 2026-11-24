@@ -61,9 +61,9 @@ func RegisterTransitionTool(reg *tools.DefaultRegistry, runs *Service) error {
 			}
 		}
 		commandCtx := runstate.WithCommandOperation(runstate.WithExpectedRevision(ctx, active.Revision), tctx.Identity.ToolCallID)
-		run, err := runs.FireTransition(commandCtx, active.ID, transitionID, workflowdef.TransitionActorCoordinator)
+		run, err := runs.FireTransition(withAskRound(commandCtx, tctx.Source.AskMode), active.ID, transitionID, workflowdef.TransitionActorCoordinator)
 		if err != nil {
-			return "", mapTransitionToolError(err, transitionID, active.CurrentPhase)
+			return "", mapTransitionToolError(askWorkflowToolError(err, "workflow_transition"), transitionID, active.CurrentPhase)
 		}
 		return marshalTransitionToolResult(TransitionToolResult{Run: run})
 	})

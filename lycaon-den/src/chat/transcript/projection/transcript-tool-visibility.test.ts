@@ -126,6 +126,7 @@ describe("transcript-items", () => {
           content: "",
           tool_calls: [
             { id: "tc-cmd", name: "command", args: { command: "ls" } },
+            { id: "tc-worker", name: "instruct_worker", args: {} },
             { id: "tc-read", name: "read", args: { path: "a.go" } },
           ],
           created_at: "t",
@@ -134,7 +135,7 @@ describe("transcript-items", () => {
       { verboseMode: false },
     );
     const tools = items.filter((i) => i.kind === "tool");
-    expect(tools.map((i) => (i.kind === "tool" ? i.part.tool : ""))).toEqual(["command"]);
+    expect(tools.map((i) => (i.kind === "tool" ? i.part.tool : ""))).toEqual(["instruct_worker"]);
   });
 
   it("defers ordinary in-flight tools when verbose mode is off", () => {
@@ -200,7 +201,6 @@ describe("transcript-items", () => {
     ).toBe(true);
   });
 
-  // Tool rows survive benign settles; worker cards follow ui_visibility.
   type VisibleToolRow = Extract<TranscriptItem, { kind: "tool" }>;
   const XML_TASK_ENVELOPE =
     '<task job_id="job-xml" child_session_id="child-1" agent_type="implementer" state="open"/>';
@@ -210,36 +210,6 @@ describe("transcript-items", () => {
     toolResult: Record<string, unknown>;
     verify: (tool: VisibleToolRow) => void;
   }>([
-    {
-      name: "summarize survives a benign TOOL_ARGS_INVALID reject",
-      toolCall: {
-        id: "tc-sum",
-        name: "summarize",
-        args: { task: "path: lycaon/internal/session — how does abort work?" },
-      },
-      toolResult: {
-        content: "Rejected: TOOL_ARGS_INVALID\nCode: TOOL_ARGS_INVALID",
-        outcome: "rejected",
-        codes: ["TOOL_ARGS_INVALID"],
-        tool: "summarize",
-        tool_call_id: "tc-sum",
-        ui_visibility: "benign",
-      },
-      verify: (tool) => expect(tool.part.status).toBe("error"),
-    },
-    {
-      name: "survey_repo survives a benign TOOL_ARGS_INVALID reject",
-      toolCall: { id: "tc-sr", name: "survey_repo", args: { focus: "layout" } },
-      toolResult: {
-        content: "Rejected: TOOL_ARGS_INVALID\nCode: TOOL_ARGS_INVALID",
-        outcome: "rejected",
-        codes: ["TOOL_ARGS_INVALID"],
-        tool: "survey_repo",
-        tool_call_id: "tc-sr",
-        ui_visibility: "benign",
-      },
-      verify: (tool) => expect(tool.part.status).toBe("error"),
-    },
     {
       name: "task keeps its enqueued JSON card on worker_dispatch BANNER_TASK_QUEUED",
       toolCall: {
@@ -363,34 +333,5 @@ describe("transcript-items", () => {
     if (display[0]?.kind === "activity_span") {
       expect(display[0].label).toBe("reading files");
     }
-  });
-
-  describe("running activity spans", () => {
-    it("keeps the compact span collapsed while a call is running", () => {
-      // command is long_running, so it renders live with no result yet.
-      const messages: Message[] = [
-        {
-          id: "a1",
-          role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
-          content: "",
-          tool_calls: [
-            { id: "tc1", name: "command", args: { cmd: "echo a" } },
-            { id: "tc2", name: "command", args: { cmd: "echo b" } },
-          ],
-          created_at: "t",
-        },
-        {
-          id: "tr1",
-          role: "tool", origin: "tool" as const, authority: "none" as const, trust_tier: "untrusted" as const,
-          content: "a",
-          tool_result: { content: "a", tool: "command", tool_call_id: "tc1", assistant_message_id: "a1" },
-          created_at: "t",
-        },
-        // tc2 has no tool_result yet — still running.
-      ];
-      const display = createTranscriptDisplayProjector()(messages, undefined)[0]!;
-      expect(display).toHaveLength(1);
-      expect(display[0]?.kind).toBe("activity_span");
-    });
   });
 });

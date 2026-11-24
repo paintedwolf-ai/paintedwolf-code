@@ -17,6 +17,8 @@ type Session struct {
 	SessionID       string
 	OwnerPersonID   string
 	Posture         string
+	Mode            string
+	Surface         string
 	ProjectID       string
 	Agent           string
 	ParentSessionID string
@@ -48,6 +50,8 @@ func WithSession(ctx context.Context, sess Session) context.Context {
 	if strings.TrimSpace(sess.SessionID) == "" &&
 		strings.TrimSpace(sess.OwnerPersonID) == "" &&
 		strings.TrimSpace(sess.Posture) == "" &&
+		strings.TrimSpace(sess.Mode) == "" &&
+		strings.TrimSpace(sess.Surface) == "" &&
 		strings.TrimSpace(sess.ProjectID) == "" &&
 		strings.TrimSpace(sess.Agent) == "" &&
 		strings.TrimSpace(sess.ParentSessionID) == "" &&

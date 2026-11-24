@@ -11,6 +11,6 @@ hosts: [coordinator, worker]
 
 Run native `curl` in `command` with explicit URL, method, headers and body: `-d` for data, `--data-binary @path` for exact file bytes, `-F` for multipart. `curl --help` lists native forms. Keep protected credential references opaque.
 
-{% if profile_command_mutation != false %}`-o path` saves the body; `-D path` saves headers. {% endif %}`-L` follows reviewed redirects, authorizing each destination. `--max-time` sets a deadline. Loopback requires `capability_request.loopback_connect` with exact ports on the call.{% if profile_has_wait %} Use `wait` with `http_ready`/`port_ready` for readiness.{% endif %}
+{% if profile_command_mutation != false %}`-o path` saves the body; `-D path` saves headers. {% endif %}`-L` follows reviewed redirects, authorizing each destination. `--max-time` sets a deadline.{% if profile_command_external_exec != false %} Loopback requires `capability_request.loopback_connect` with exact ports on the call.{% endif %}{% if profile_has_wait %} Use `wait` with `http_ready`/`port_ready` for readiness.{% endif %}
 
 Exercise changed local endpoints and inspect responses; hermetic tests remain standard when no live service runs.

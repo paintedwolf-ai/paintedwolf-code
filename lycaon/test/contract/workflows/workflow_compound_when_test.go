@@ -8,8 +8,8 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -24,7 +24,7 @@ func TestCompoundCompleteWhenValidInTestdata(t *testing.T) {
 	contractcheck.FailErr(t, "workflow.ParseManifestYAML failed", err)
 	reg, err := conditions.NewDefaultRegistry(conditionstest.DependenciesWithEvidence())
 	contractcheck.FailErr(t, "conditions.NewDefaultRegistry failed", err)
-	if diags := vocabulary.ValidateBundled(reg, workflowdef.NewRegistry(map[string]workflowdef.Manifest{
+	if diags := workflowvalidation.ValidateBundled(reg, workflowdef.NewRegistry(map[string]workflowdef.Manifest{
 		m.ID + "@" + m.Version: m,
 	}), nil); len(diags) > 0 {
 		t.Fatalf("valid compound manifest: %v", diags)
@@ -43,7 +43,7 @@ func TestCompoundCompleteWhenForbiddenLeafFailsLoad(t *testing.T) {
 			Version:   "1.0.0",
 			PhaseDefs: []workflowdef.PhaseDef{{ID: "x", CompleteWhen: completeWhen}},
 		})
-		return vocabulary.ValidateBundled(reg, workflowdef.NewRegistry(map[string]workflowdef.Manifest{"bad@1.0.0": m}), nil)
+		return workflowvalidation.ValidateBundled(reg, workflowdef.NewRegistry(map[string]workflowdef.Manifest{"bad@1.0.0": m}), nil)
 	}
 	if diags := validate("human_approval"); len(diags) > 0 {
 		t.Fatalf("control compound: %+v", diags)
@@ -61,7 +61,7 @@ func TestVarSetForbiddenInRuleWhen(t *testing.T) {
 	contractcheck.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	validate := func(key string) []api.ComposeValidationError {
 		cfg := &rules.RulesConfig{Rules: []rules.RuleEntry{{ID: "r", When: map[string]any{key: true}}}}
-		return vocabulary.ValidateBundled(reg, nil, []*rules.RulesConfig{cfg})
+		return workflowvalidation.ValidateBundled(reg, nil, []*rules.RulesConfig{cfg})
 	}
 	if diags := validate("human_approval"); len(diags) > 0 {
 		t.Fatalf("control rule: %+v", diags)

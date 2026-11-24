@@ -24,7 +24,7 @@ func TestPipelineStatusCompletenessAndPublicationAreIndependent(t *testing.T) {
 		latch := &OutcomeLatch{}
 		out, err := SettlePipeline("pipeline", stages, latch)
 		testutil.FailErr(t, "settle comparison/external pipeline", err)
-		if out.Status != 1 || !out.Complete || out.PublicationEligible != comparison || latch.AdmitNext() != nil {
+		if out.Status != 1 || !out.Complete || out.PublicationEligible != comparison || out.PublicationBasis != first.Result.PublicationBasis || latch.AdmitNext() != nil {
 			t.Fatalf("comparison=%t outcome=%+v", comparison, out)
 		}
 	}

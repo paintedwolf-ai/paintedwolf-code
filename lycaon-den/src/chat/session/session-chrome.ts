@@ -1,3 +1,4 @@
+import { applyCachedSessionMode } from "./session-chat-cache.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import { refreshFindings } from "../actions/findings-actions.ts";
 import { refreshQueue } from "../actions/queue-actions.ts";
@@ -68,6 +69,7 @@ export function installSessionBootstrapChrome(
   session = bootstrap.session,
 ): number {
   hydrationForEpoch(appStore, session.id, appStore.state.sessionViewEpoch + 1).hydrated = true;
+  applyCachedSessionMode(session.id, session);
   appStore.actions.installSessionBootstrap(bootstrap, session);
   hydrationFor(appStore, session.id).hydrated = true;
   return appStore.state.sessionViewEpoch;

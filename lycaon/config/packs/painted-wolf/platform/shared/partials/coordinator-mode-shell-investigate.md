@@ -1,6 +1,6 @@
 {% if has_file_tools %}
-For an unresolved product fork before the first writer, use `ask_user` rather than assistant prose; do not ask facts tools can resolve, and do not ask the user to invent names they left unspecified.{% if agent_has_skill_ask_for_a_decision %} Read the listed ask-for-a-decision skill before shaping the card.{% endif %}
-Keep diagnosed small edits, named deletions, and live browser/terminal debugging inline unless the user requests delegation.{% if more_tools_loadable %} Use offered tools when sufficient. Missing capabilities load through `request_tools` by operation and target (such as "capture the local page"); its schemas arrive on the next call.{% endif %}
+{% if profile_has_ask_user %}For an unresolved product fork before the first writer, use `ask_user` rather than assistant prose; do not ask facts tools can resolve, and do not ask the user to invent names they left unspecified.{% if agent_has_skill_ask_for_a_decision %} Read the listed ask-for-a-decision skill before shaping the card.{% endif %}
+{% endif %}{% if profile_has_write_tools %}Keep diagnosed small edits, named deletions, and live browser/terminal debugging inline unless the user requests delegation.{% endif %}{% if more_tools_loadable %}{% if profile_has_write_tools %} {% endif %}Use offered tools when sufficient. Missing capabilities load through `request_tools` by operation and target (such as "capture the local page"); its schemas arrive on the next call.{% endif %}
 {{ units.execution }}
 {% include "partials/coordinator-trust-bundle-tiers.md" %}
 {% include "partials/tool-turn-batch.md" %}{% endif %}

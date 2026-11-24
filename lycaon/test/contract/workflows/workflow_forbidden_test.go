@@ -5,8 +5,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -26,7 +26,7 @@ func TestForbiddenIDsAreRejectedByRegistry(t *testing.T) {
 				}),
 			})
 			ruleConfig := &rules.RulesConfig{Rules: []rules.RuleEntry{{ID: "forbidden-rule", When: map[string]any{id: true}}}}
-			diags := vocabulary.ValidateBundled(reg, manifests, []*rules.RulesConfig{ruleConfig})
+			diags := workflowvalidation.ValidateBundled(reg, manifests, []*rules.RulesConfig{ruleConfig})
 			want := map[string]bool{
 				"workflow[forbidden@1.0.0].phases[x].complete_when": false,
 				"rules[0].forbidden-rule.when":                      false,

@@ -1,10 +1,10 @@
+import type { LocalGenerationStatus } from "../../api/types.ts";
 import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { DEFAULT_SPLIT_COMPANION } from "../../shell/stage-placement.ts";
 
 /** Gate pages in walking order; the progress cue counts this list. */
 export const ONBOARDING_GATE_PAGES = [
-  "setup",
-  "summarizer",
+  "local_model",
   "layout",
   "welcome",
 ] as const;
@@ -20,63 +20,33 @@ export function needsOnboardingConfig(input: {
   return input.readyProviderCount === 0 || !input.hasDefaultModel;
 }
 
+export function localModelSetup(runtime?: LocalGenerationStatus) {
+  if (runtime?.offline_installer) return "packaged";
+  const decision = runtime?.selection_state;
+  if (decision === "selected" || decision === "opted_out") return "decided";
+  if (!decision && (runtime?.selected_model || runtime?.state === "opted_out")) return "decided";
+  if (!runtime?.available_models) return "unknown";
+  return runtime.available_models.some(tier => tier.eligible && tier.download_available) ? "available" : "deferred";
+}
+
 export function shouldShowOnboardingHardGate(input: {
   prefsReady: boolean;
   firstRunSetupCompleted: boolean;
+  localModelOnboardingCompleted: boolean;
+  runtime?: LocalGenerationStatus;
 }): boolean {
-  return input.prefsReady && !input.firstRunSetupCompleted;
-}
-
-export function shouldSuppressShellForFirstRun(input: {
-  prefsReady: boolean;
-  firstRunSetupCompleted: boolean;
-}): boolean {
-  return !input.prefsReady || !input.firstRunSetupCompleted;
-}
-
-export function onboardingGatePage(needsConfig: boolean): OnboardingGatePage {
-  return needsConfig ? "setup" : "summarizer";
+  if (!input.prefsReady) return false;
+  if (!input.firstRunSetupCompleted) return true;
+  if (input.localModelOnboardingCompleted) return false;
+  return localModelSetup(input.runtime) === "available";
 }
 
 export function onboardingGateStep(page: OnboardingGatePage): number {
   return ONBOARDING_GATE_PAGES.indexOf(page) + 1;
 }
 
-export function onboardingNextPage(
-  page: OnboardingGatePage,
-): OnboardingGatePage | null {
-  return ONBOARDING_GATE_PAGES[ONBOARDING_GATE_PAGES.indexOf(page) + 1] ?? null;
-}
-
-export function onboardingPreviousPage(
-  page: OnboardingGatePage,
-): OnboardingGatePage | null {
-  const index = ONBOARDING_GATE_PAGES.indexOf(page);
-  return index > 0 ? (ONBOARDING_GATE_PAGES[index - 1] ?? null) : null;
-}
-
-/**
- * Escape leaves the gate from Setup, where it is the same as Skip, and from
- * the last page; between them it steps forward without latching.
- */
-export function onboardingEscapeTarget(
-  page: OnboardingGatePage,
-): OnboardingGatePage | "finish" {
-  if (page === "setup") return "finish";
-  return onboardingNextPage(page) ?? "finish";
-}
-
-/** Which half of the setup step is still missing, in the order it is fixed. */
-export type OnboardingSetupBlocker = "provider" | "default_model";
-
-/** The step the gate is waiting for, or null when Continue may proceed. */
-export function onboardingSetupBlocker(input: {
-  readyProviderCount: number;
-  hasDefaultModel: boolean;
-}): OnboardingSetupBlocker | null {
-  if (input.readyProviderCount === 0) return "provider";
-  if (!input.hasDefaultModel) return "default_model";
-  return null;
+export function onboardingEscapeTarget(page: OnboardingGatePage): OnboardingGatePage | "finish" {
+  return page === "layout" ? "welcome" : "finish";
 }
 
 /** The two starting layouts first run offers; Settings lists every companion. */

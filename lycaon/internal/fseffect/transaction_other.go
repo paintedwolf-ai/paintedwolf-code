@@ -23,8 +23,6 @@ func platformChown(Location, int, int) error { return ErrUnsupported }
 
 func platformTimes(Location, *time.Time, *time.Time) error { return ErrUnsupported }
 
-func RenameNoReplace(string, string, string) error { return ErrUnsupported }
-
 func RenameGuarded(string, string, string, string) error { return ErrUnsupported }
 
 func RemoveTreeGuarded(Location, string) error { return ErrUnsupported }
@@ -46,3 +44,5 @@ func RelocateGuarded(Location, Location, string) error { return ErrUnsupported }
 func platformHardLink(HardLinkRequest) error { return ErrUnsupported }
 
 func platformAccessTime(os.FileInfo) (time.Time, bool) { return time.Time{}, false }
+
+func ReplaceByRelocateGuarded(Location, Location, string) error { return ErrUnsupported }

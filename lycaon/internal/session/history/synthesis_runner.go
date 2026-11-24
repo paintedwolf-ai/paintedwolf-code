@@ -15,25 +15,46 @@ const synthesisLifetime = 15 * time.Minute
 // SynthesisRunner bounds optional enrichment independently of baseline compaction.
 type SynthesisRunner struct {
 	mu     sync.Mutex
-	active map[string]context.CancelFunc
+	active map[string]*synthesisRun
 	slots  chan struct{}
 	work   workscope.Group
 }
 
 func NewSynthesisRunner() *SynthesisRunner {
-	return &SynthesisRunner{active: make(map[string]context.CancelFunc), slots: make(chan struct{}, synthesisConcurrency)}
+	return &SynthesisRunner{active: make(map[string]*synthesisRun), slots: make(chan struct{}, synthesisConcurrency)}
 }
 
-// Start declines duplicate or excess work without queuing it.
+type synthesisRun struct {
+	cancel context.CancelFunc
+	next   func()
+}
+
+// Start declines duplicate or excess work.
 func (r *SynthesisRunner) Start(parent context.Context, id string, run func(context.Context)) bool {
+	return r.start(parent, id, run, false)
+}
+
+// StartLatest keeps one successor for a session whose baseline has advanced.
+func (r *SynthesisRunner) StartLatest(parent context.Context, id string, run func(context.Context)) {
+	r.start(parent, id, run, true)
+}
+
+func (r *SynthesisRunner) start(parent context.Context, id string, run func(context.Context), keepLatest bool) bool {
 	if r == nil || id == "" || run == nil {
 		return false
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.active[id] != nil {
+	if active := r.active[id]; active != nil {
+		if keepLatest {
+			active.next = func() { r.startLocked(parent, id, run) }
+		}
 		return false
 	}
+	return r.startLocked(parent, id, run)
+}
+
+func (r *SynthesisRunner) startLocked(parent context.Context, id string, run func(context.Context)) bool {
 	select {
 	case r.slots <- struct{}{}:
 	default:
@@ -45,15 +66,26 @@ func (r *SynthesisRunner) Start(parent context.Context, id string, run func(cont
 		return false
 	}
 	ctx, cancel := context.WithTimeout(ctx, synthesisLifetime)
-	r.active[id] = cancel
+	active := &synthesisRun{cancel: cancel}
+	r.active[id] = active
 	go func() {
-		defer observability.GuardPanic("session.compaction_synthesis")
 		defer finish()
+		defer observability.GuardPanic("session.compaction_synthesis")
+		defer r.release(id, active)
 		defer cancel()
-		defer func() { r.mu.Lock(); delete(r.active, id); r.mu.Unlock(); <-r.slots }()
 		run(ctx)
 	}()
 	return true
+}
+
+func (r *SynthesisRunner) release(id string, active *synthesisRun) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.active, id)
+	<-r.slots
+	if active.next != nil {
+		active.next()
+	}
 }
 
 // Cancel prevents publication without waiting for an unresponsive provider.
@@ -63,8 +95,9 @@ func (r *SynthesisRunner) Cancel(id string) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if cancel := r.active[id]; cancel != nil {
-		cancel()
+	if active := r.active[id]; active != nil {
+		active.next = nil
+		active.cancel()
 	}
 }
 

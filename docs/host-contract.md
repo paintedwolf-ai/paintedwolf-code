@@ -66,6 +66,8 @@ Session creation attaches ambient `implement@`. A catalog start replaces the act
 
 Tool availability is a host projection of the active leaf run, phase, surface, profile, and current resources. Den neither adds a missing workflow tool nor hides one by workflow-name convention.
 
+A chat that has started in Agent rejects a switch to Ask with `session_mode_locked`. The host returns `session_mode_unavailable` when it cannot verify the root chat’s mode, and `session_ask_mode_workflow_requires_agent` when an Ask chat requests a workflow phase that requires Agent. The first coordinator round that observes a switch to Agent receives the `session.mode.agent_enabled` inform.
+
 ### Human checkpoints
 
 Checkpoint DTOs carry a discriminated kind and a host-authored plan. Den displays the reviewed subject and submits one opaque option id or rejection. The client does not calculate authority deltas, rewrite an action, or reinterpret a plan after a newer event. Resolution goes to the checkpoint resolver and wakes the executor only after authority and durable decision state commit.

@@ -1,6 +1,9 @@
 package workflow
 
-import workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+import (
+	"github.com/lycaon/lycaon/internal/vocabulary"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+)
 
 func reviewLoopTestManifest() workflowdef.Manifest {
 	return workflowdef.FinalizeManifest(workflowdef.Manifest{
@@ -11,7 +14,7 @@ func reviewLoopTestManifest() workflowdef.Manifest {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "judge",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{"evidence_passed:rl_key"},
 				Next:         "done",
 				ReviewLoop: &workflowdef.ReviewLoopDef{
@@ -36,7 +39,7 @@ func ifSpawnableReviewManifest() workflowdef.Manifest {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "challenge",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{"evidence_passed:survey_challenged"},
 				Next:         "done",
 				ReviewLoop: &workflowdef.ReviewLoopDef{

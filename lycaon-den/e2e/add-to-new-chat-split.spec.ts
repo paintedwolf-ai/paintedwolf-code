@@ -34,7 +34,18 @@ webE2e.describe("add to a new chat in split view", () => {
       await expect(page.getByTestId("split-col-chat")).toBeVisible();
       await expect(page.getByTestId("split-divider")).toBeVisible();
       await expect(editor).toBeVisible();
-      await expect(liveChatStage(page).getByTestId("composer-attachment-chip")).toContainText("example.ts");
+      const stage = liveChatStage(page);
+      const attachment = stage.getByTestId("composer-attachment-chip");
+      await expect(attachment).toContainText("example.ts");
+      await stage.getByRole("radio", { name: "Ask" }).click();
+      await expect(attachment).toContainText("example.ts");
+
+      const newSession = await settledChatSessionId(page);
+      const posted = page.waitForRequest((request) =>
+        request.method() === "POST" && new URL(request.url()).pathname === `/v1/sessions/${newSession}/prompts`,
+      );
+      await stage.getByTestId("composer-send").click();
+      expect((await posted).postDataJSON()).toMatchObject({ mode: "ask" });
     });
   }
 });

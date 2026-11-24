@@ -1,4 +1,5 @@
 import type { SourceReaderAccess } from "../../../api/source-reader.ts";
+import type { NavigationTarget } from "../../../api/types.ts";
 import type { FileEditLineStat } from "../../../chat/file-edit/file-edit-fold.ts";
 import type { ResolveProjectRoot } from "../../../api/project-path.ts";
 import type { ChatDestination } from "../../../chat/composer/shared-composer-document.ts";
@@ -35,6 +36,8 @@ export type DiffRowSource = {
   rootId(revision: number | null): string | undefined;
   /** False keeps the header plain, for a file absent from the tree. */
   openable(revision: number | null): boolean | undefined;
+  /** Null displays an outside path without a recorded target as a label. */
+  navigationTarget?(revision: number | null): NavigationTarget | null | undefined;
   change(revision: number | null): SourceReaderChange;
   /** Counts the host already supplied; null asks the comparison for them. */
   stat(revision: number | null): FileEditLineStat | null;

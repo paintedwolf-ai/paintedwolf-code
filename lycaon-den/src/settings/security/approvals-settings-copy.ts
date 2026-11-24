@@ -61,7 +61,7 @@ export const DETECTIONS_COPY = {
 
   addPack: "Add pack…",
   addPackHint:
-    "Choose a folder containing pack.yaml and Sigma rule files. A pack can only add approval prompts, never remove one. Quieting a rule from a card is separate — see Saved approvals → Quieted.",
+    "Choose a folder with pack.yaml and Sigma rules. A pack can only add approval prompts, never remove one.",
   addTitle: "Add detection pack",
   addFound: (label: string, n: number) =>
     `${label} — ${n === 1 ? "1 rule" : `${n} rules`}`,
@@ -86,7 +86,7 @@ export const DETECTIONS_COPY = {
 
   remove: "Remove",
   removeConfirm: (label: string) => `Remove ${label}? Its rules stop running.`,
-  removeBundledHint: "Built-in packs can be turned off, but not removed.",
+  removeBundledHint: "Built-in packs can be turned off, but not removed",
   removeExtensionHint: (packID: string) =>
     `${packID} provides this pack. Turn it off here, or uninstall that extension under Extensions.`,
   removeError: "Could not remove that pack.",

@@ -123,11 +123,15 @@ func (c savePublisher) prepareSaveMutation(ctx context.Context, d *Document, ope
 	if err != nil {
 		return nil, err
 	}
+	parentIdentity, err := s.publicationParent(ctx, root, d)
+	if err != nil {
+		return nil, err
+	}
 	var before []byte
 	expected := d.BaseSHA256
 	if d.Absent {
 		expected = ""
-	} else if before, err = readPublicationPreimage(root, d.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	} else if before, err = readPublicationPreimage(root, d.Path, parentIdentity); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	now := time.Now().UTC()
@@ -157,7 +161,7 @@ func (c savePublisher) finishMutation(ctx context.Context, p *project.Project, d
 	}
 	d = current
 	if m.Status == "prepared" {
-		result, err := publishMutation(p, m)
+		result, err := s.publishMutation(ctx, p, d, m)
 		if err != nil {
 			status := "failed"
 			if errors.Is(err, projectsource.ErrSourceWriteConflict) {
@@ -187,8 +191,16 @@ func (c savePublisher) finishMutation(ctx context.Context, p *project.Project, d
 
 // publishMutation lands the journaled bytes: an exclusive create when the
 // document expected no file, a guarded replacement otherwise.
-func publishMutation(p *project.Project, m *Mutation) (*projectsource.SourceWriteResult, error) {
-	req := projectsource.SourceWriteRequest{Path: m.Path, RootID: m.RootID, Content: m.Content, Encoding: m.Encoding, BaseSHA256: m.ExpectedSHA256}
+func (c savePublisher) publishMutation(ctx context.Context, p *project.Project, d *Document, m *Mutation) (*projectsource.SourceWriteResult, error) {
+	if d.Path != m.Path || d.RootID != m.RootID {
+		return nil, projectsource.ErrSourceWriteConflict
+	}
+	identity, err := c.s.publicationParent(ctx, rootPath(p, m.RootID), d)
+	if err != nil {
+		return nil, err
+	}
+	req := projectsource.SourceWriteRequest{Path: m.Path, RootID: m.RootID, Content: m.Content, Encoding: m.Encoding, BaseSHA256: m.ExpectedSHA256, OutsideParentIdentity: identity}
+	p = documentProject(p, m.RootID)
 	if m.Creates() {
 		return projectsource.ApplySourceWriteCreate(p, req)
 	}

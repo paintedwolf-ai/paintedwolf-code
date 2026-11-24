@@ -1,6 +1,6 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { invokeCommand } from "../shortcuts/dispatcher.ts";
-import { bindingForHandler } from "../shortcuts/display-binding-for.ts";
+import { tipWithShortcut } from "../shortcuts/display-binding-for.ts";
 import {
   registerFocusRegion,
   releaseFocusRegion,
@@ -30,11 +30,6 @@ import {
   setFindScopeToSelection,
   toggleFindReplace,
 } from "./find-controller.ts";
-
-function withBinding(text: string, handler: string): string {
-  const binding = bindingForHandler(handler).trim();
-  return binding && binding !== "—" ? `${text} (${binding})` : text;
-}
 
 export function FindBar() {
   const [inputEl, setInputEl] = createSignal<HTMLInputElement | undefined>();
@@ -126,7 +121,7 @@ export function FindBar() {
               aria-controls={
                 findController.replaceOpen() ? "den-find-replace-lane" : undefined
               }
-              data-tip={withBinding("Replace", "find.replace")}
+              data-tip={tipWithShortcut(findController.replaceOpen() ? "Hide replace" : "Show replace", "find.replace")}
               data-testid="find-bar-replace-toggle"
               onClick={() => toggleFindReplace()}
             >
@@ -161,7 +156,7 @@ export function FindBar() {
             type="button"
             class="den-editor-command-bar__button"
             aria-label="Find previous"
-            data-tip={withBinding("Find previous", "find.prev")}
+            data-tip={tipWithShortcut("Find previous", "find.prev")}
             data-testid="find-bar-prev"
             onClick={() => findPrev()}
           >
@@ -171,7 +166,7 @@ export function FindBar() {
             type="button"
             class="den-editor-command-bar__button"
             aria-label="Find next"
-            data-tip={withBinding("Find next", "find.next")}
+            data-tip={tipWithShortcut("Find next", "find.next")}
             data-testid="find-bar-next"
             onClick={() => findNext()}
           >
@@ -290,7 +285,7 @@ export function FindBar() {
               type="button"
               class="den-editor-command-bar__button"
               aria-label="Select all matches"
-              data-tip={withBinding(
+              data-tip={tipWithShortcut(
                 "Select all matches",
                 "find.selectAllMatches",
               )}
@@ -308,7 +303,7 @@ export function FindBar() {
               type="button"
               class="den-editor-command-bar__button"
               aria-label="Find everywhere"
-              data-tip={withBinding(
+              data-tip={tipWithShortcut(
                 "Find everywhere — carries this query",
                 "find.everywhere",
               )}

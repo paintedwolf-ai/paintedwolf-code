@@ -1,6 +1,6 @@
 import { beginSessionSnapshotRead } from "../../api/session-snapshot-refresh.ts";
 import { batch } from "solid-js";
-import type { WorkflowSummary } from "../../api/types.ts";
+import type { SessionMode, WorkflowSummary } from "../../api/types.ts";
 import {
   revokeComposerAttachment,
   type ComposerPendingAttachment,
@@ -21,6 +21,7 @@ import {
   shellSessionSwitchGeneration,
   type SessionSwitchDeps
 } from "../../chat/session/session-switch.ts";
+import { setDraftSessionMode } from "../../chat/session/session-mode-state.ts";
 import { requestArmWorkflow } from "../../chat/workflow/pending-arm.ts";
 import {
   deliverStagedIdea,
@@ -96,6 +97,7 @@ export function createSessionCreation(options: {
     target: DraftTarget,
     opts?: {
       prompt?: string;
+      mode?: SessionMode;
       /** Home idea buffer; staged once the draft project exists. */
       ideaAttachments?: readonly HomeIdeaAttachment[];
       armWorkflow?: WorkflowSummary;
@@ -207,14 +209,21 @@ export function createSessionCreation(options: {
         },
         hasClient: true,
         create: async ({ shouldApply }) => {
-          const session = await createSessionForProject(activeClient, projectId);
+          const session = await createSessionForProject(activeClient, projectId, opts?.mode);
           if (!shouldApply()) {
             return {
               projectId: session.project_id?.trim() || projectId,
               sessionId: session.id,
             };
           }
+          if (opts?.armWorkflow) {
+            requestArmWorkflow({
+              sessionId: session.id,
+              workflow: opts.armWorkflow,
+            });
+          }
           bindCreatedSession(options.appStore, session);
+          if (opts?.mode) setDraftSessionMode(options.appStore, session.id, opts.mode);
           // The sidebar shows the new chat with the workspace, not on the next list refresh.
           options.projectSessions?.insertRow(sessionSummaryFromSession(session));
           const scope = {
@@ -224,12 +233,6 @@ export function createSessionCreation(options: {
               ? { initialPrompt: true as const }
               : {}),
           };
-          if (opts?.armWorkflow) {
-            requestArmWorkflow({
-              sessionId: session.id,
-              workflow: opts.armWorkflow,
-            });
-          }
           return scope;
         },
         enrich: async (scope, { shouldApply }) => {
@@ -314,6 +317,7 @@ export function createSessionCreation(options: {
             parts.references,
             undefined,
             {
+              mode: opts?.mode,
               attachmentLabels: attachmentLabels.length > 0 ? attachmentLabels : undefined,
               shouldSend: (client) => created.shouldApply() && getLycaonClient() === client && sendBackend.isSameBackend(),
             },

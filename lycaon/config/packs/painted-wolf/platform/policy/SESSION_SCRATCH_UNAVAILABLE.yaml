@@ -12,7 +12,7 @@ message: Session scratch is unavailable in this chat
 what: 'Session scratch is unavailable in this chat, so {{ paintedwolf.path }} has no folder to resolve against.'
 cause: The host could not prepare this chat's scratch folder; the cause is in the host log.
 why: Scratch is a folder outside the project, so an @scratch path cannot fall back to another location.
-fix: Keep intermediate output in the tool result, or write to a temporary location such as /tmp. Do not move scratch files into the project.
+fix: Keep intermediate output in the tool result.
 instead: Branch on Code; never re-create scratch files inside an attached folder
 x-paintedwolf-scenarios:
   - id: default

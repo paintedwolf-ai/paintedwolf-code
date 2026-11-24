@@ -4,6 +4,8 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 	"slices"
 	"strings"
 )
@@ -16,6 +18,15 @@ func (m *SessionPolicy) PolicySnapshot(ctx context.Context, sessionID string) (t
 	run, vars, err := m.Runs.ActiveStateBySession(ctx, sessionID)
 	if err != nil {
 		return toolpolicy.WorkflowSnapshot{}, err
+	}
+	if runstate.IsAmbientRun(run) {
+		mode, err := m.sessionMode(ctx, sessionID)
+		if err != nil {
+			return toolpolicy.WorkflowSnapshot{}, err
+		}
+		if mode == api.SessionModeAsk {
+			run = nil
+		}
 	}
 	if run == nil {
 		return toolpolicy.WorkflowSnapshot{AllowedAgents: spawn.AmbientAllowedAgents()}, nil

@@ -285,6 +285,9 @@ func (r *DefaultRegistry) Run(ctx context.Context, name string, args map[string]
 	if !ok {
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
+	if tctx.Source.AskMode && !AllowedInAsk(def.Meta) {
+		return "", AskModeReject(name)
+	}
 	if tctx.Effects.Out != nil {
 		tctx.Effects.Out.OwnerInvoked = true
 	}

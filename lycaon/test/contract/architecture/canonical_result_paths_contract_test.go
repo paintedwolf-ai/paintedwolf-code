@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/summarize"
@@ -104,7 +105,7 @@ func TestCanonicalResultPathsReceiptsAndCommandCwd(t *testing.T) {
 	_ = secondaryDir
 
 	// Approved outside-root paths render as absolute paths.
-	grant := t.TempDir()
+	grant := fspath.CanonicalPath(t.TempDir())
 	contractcheck.FailErr(t, "mkdir grant nested", os.MkdirAll(filepath.Join(grant, "nested"), 0o755))
 	contractcheck.FailErr(t, "write grant nested", os.WriteFile(filepath.Join(grant, "nested", "deep.txt"), []byte("x"), 0o644))
 	release := projectpaths.SetGrantedAccessSource(func(_, _, probe string, _ bool) (projectpaths.Access, bool) {

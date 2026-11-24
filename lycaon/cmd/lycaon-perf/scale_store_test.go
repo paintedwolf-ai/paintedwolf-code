@@ -27,9 +27,9 @@ VALUES ('v1', 'f1', 'owned', 'owned-root', 'a', 'content', 'aa', 1, 'metadata_on
 	testutil.FailErr(t, "close store", store.Close())
 	owned, err := countOwnedRows(t.Context(), path, "owned")
 	testutil.FailErr(t, "count owned rows", err)
-	// The project row, its root, two files and one version.
-	if owned != 5 {
-		t.Fatalf("owned rows = %d, want 5", owned)
+	// The project row, its attached root and outside namespace root, two files and one version.
+	if owned != 6 {
+		t.Fatalf("owned rows = %d, want 6", owned)
 	}
 }
 

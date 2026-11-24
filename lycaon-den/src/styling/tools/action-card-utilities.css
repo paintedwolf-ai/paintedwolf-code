@@ -72,6 +72,14 @@
   }
 }
 
+@utility den-action-card__observation {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 @utility den-action-card__block {
   margin-left: 12px;
 }

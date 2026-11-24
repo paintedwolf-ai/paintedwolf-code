@@ -110,8 +110,8 @@ func TestSQLRegistryDetachRootBumpsGeneration(t *testing.T) {
 	replacementID := p.Roots[1].ID
 	_, err = sqlDB.ExecContext(ctx, `
 		INSERT INTO sessions (
-			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at
-		) VALUES ('detach-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES ('detach-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'detach-session', 'agent')
 	`, p.ID, detachedID)
 	testutil.FailErr(t, "insert bound session", err)
 	change, err = reg.DetachRoot(ctx, p.ID, detachedID)
@@ -139,8 +139,8 @@ func TestSQLLifecycleMutationsRefuseBusyProjectInsideTransaction(t *testing.T) {
 	busyRootID := p.Roots[1].ID
 	_, err = sqlDB.ExecContext(ctx, `
 		INSERT INTO sessions (
-			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at
-		) VALUES ('busy-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'busy', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES ('busy-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'busy', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'busy-session', 'agent')
 	`, p.ID, busyRootID)
 	testutil.FailErr(t, "insert busy session", err)
 
@@ -266,7 +266,29 @@ func TestSQLProjectTouchEventPreservesQueuedPromotion(t *testing.T) {
 	destination := t.TempDir()
 	_, err = reg.CreatePromotion(ctx, p.ID, destination, true)
 	testutil.FailErr(t, "queue promotion", err)
-	testutil.FailErr(t, "touch last opened", reg.TouchLastOpened(ctx, p.ID))
+	_, err = reg.Create(ctx, project.CreateParams{Name: "More recent project"})
+	testutil.FailErr(t, "create more recent project", err)
+	var priorEventID int64
+	testutil.FailErr(t, "find the event boundary", sqlDB.QueryRowContext(ctx, "SELECT MAX(id) FROM event_outbox").Scan(&priorEventID))
+	moved, err := reg.TouchLastOpened(ctx, p.ID)
+	testutil.FailErr(t, "touch last opened", err)
+	if !moved {
+		t.Fatal("project did not move to the front")
+	}
+
+	moved, err = reg.TouchLastOpened(ctx, p.ID)
+	testutil.FailErr(t, "touch the most recent project", err)
+	if moved {
+		t.Fatal("touching the first project changed its recent position")
+	}
+	var updates int
+	testutil.FailErr(t, "count project updates", sqlDB.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM event_outbox
+		WHERE id > ? AND project_id = ? AND topic = 'project' AND json_extract(data_json, '$.action') = 'updated'
+	`, priorEventID, p.ID).Scan(&updates))
+	if updates != 1 {
+		t.Fatalf("project updates = %d, want 1", updates)
+	}
 
 	var raw string
 	testutil.FailErr(t, "read touch event", sqlDB.QueryRowContext(ctx, `
@@ -410,8 +432,8 @@ func TestSQLForcedDeleteRemovesABusyProjectAndItsHistory(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	_, err = sqlDB.ExecContext(ctx, `
 		INSERT INTO sessions (
-			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at
-		) VALUES ('busy-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'busy', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES ('busy-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'busy', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'busy-session', 'agent')
 	`, p.ID, p.Roots[0].ID)
 	testutil.FailErr(t, "insert busy session", err)
 	for i := range 3 {

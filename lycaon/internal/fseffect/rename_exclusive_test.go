@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -12,7 +13,7 @@ func TestRenameNoReplacePreservesConcurrentOccupant(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(root, "source"), []byte("saved"), 0o600))
 	testutil.FailErr(t, "seed occupant", os.WriteFile(filepath.Join(root, "dest"), []byte("new"), 0o600))
-	if err := RenameNoReplace(root, "source", "dest"); !os.IsExist(err) {
+	if err := renameIdentifiedEntry(t, root, "source", "dest"); !os.IsExist(err) {
 		t.Fatalf("rename occupied destination: %v", err)
 	}
 	for name, want := range map[string]string{"source": "saved", "dest": "new"} {
@@ -27,9 +28,9 @@ func TestRenameNoReplacePreservesConcurrentOccupant(t *testing.T) {
 func TestRenameNoReplacePublishesDirectoryAndRefusesLinkedParent(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "seed folder", os.Mkdir(filepath.Join(root, "source"), 0o700))
-	testutil.FailErr(t, "publish folder", RenameNoReplace(root, "source", "dest"))
+	testutil.FailErr(t, "publish folder", renameIdentifiedEntry(t, root, "source", "dest"))
 	testutil.FailErr(t, "seed link", os.Symlink(t.TempDir(), filepath.Join(root, "outside")))
-	if err := RenameNoReplace(root, "dest", "outside/moved"); err == nil {
+	if err := renameIdentifiedEntry(t, root, "dest", "outside/moved"); err == nil {
 		t.Fatal("published through linked parent")
 	}
 	if _, err := os.Stat(filepath.Join(root, "dest")); err != nil {
@@ -41,7 +42,7 @@ func TestRenameNoReplacePreservesLiteralWhitespace(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "seed selected name", os.WriteFile(filepath.Join(root, " source "), []byte("selected"), 0o600))
 	testutil.FailErr(t, "seed similar name", os.WriteFile(filepath.Join(root, "target"), []byte("other"), 0o600))
-	testutil.FailErr(t, "rename literal path", RenameNoReplace(root, " source ", " target "))
+	testutil.FailErr(t, "rename literal path", renameIdentifiedEntry(t, root, " source ", " target "))
 	for _, tc := range []struct{ name, want string }{{" target ", "selected"}, {"target", "other"}} {
 		name, want := tc.name, tc.want
 		body, err := os.ReadFile(filepath.Join(root, name))
@@ -50,4 +51,11 @@ func TestRenameNoReplacePreservesLiteralWhitespace(t *testing.T) {
 			t.Fatalf("%q = %q, want %q", name, body, want)
 		}
 	}
+}
+
+func renameIdentifiedEntry(t *testing.T, root, from, to string) error {
+	t.Helper()
+	identity, err := fspath.EntryIdentity(filepath.Join(root, from))
+	testutil.FailErr(t, "identify source", err)
+	return RenameGuarded(root, from, to, identity)
 }

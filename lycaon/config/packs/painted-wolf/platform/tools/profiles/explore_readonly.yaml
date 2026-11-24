@@ -4,6 +4,7 @@ command_effects: [read_only]
 tools:
   survey_repo: sticky
   summarize: sticky
+  inspect_source: sticky
   command: sticky
   command_output: sticky
   command_stop: sticky

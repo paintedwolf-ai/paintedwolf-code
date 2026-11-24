@@ -1,0 +1,26 @@
+spec_version: "1.0"
+id: HTTP_REQUEST_HEADER_CONTROLLED
+kind: policy
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.controlled_header, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "HTTP_REQUEST_HEADER_CONTROLLED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool_args
+message: A request header is controlled by the host
+what: The host controls the `{{ paintedwolf.controlled_header }}` request header.
+fix: Remove that header from the request and let the host set it.
+x-paintedwolf-scenarios:
+  - id: routing
+    vars:
+      tool: http_request
+      controlled_header: Host
+  - id: framing
+    vars:
+      tool: command
+      controlled_header: Content-Length
+  - id: proxy
+    vars:
+      tool: command
+      controlled_header: Proxy-Authorization

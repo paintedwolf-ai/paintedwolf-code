@@ -559,6 +559,9 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 	if sk.UserProvided {
 		return true
 	}
+	if strings.TrimSpace(sk.Metadata["host_resources"]) != "" && !offered[toolcontract.ReachCommandExternalExec] && !offered["terminal_open"] && !offered["verify"] {
+		return false
+	}
 	c := StockCatalog()
 	if c == nil {
 		return true

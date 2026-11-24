@@ -139,7 +139,11 @@ func (m *Children) InvokeChild(ctx context.Context, parentRunID string, spec wor
 		childRun.EndMessageID = childBoundary.ID
 		messages = append(messages, childBoundary)
 	}
-	mutation := runstate.ChildStartMutation{ProjectDir: projectDir, Vars: vars, Messages: messages,
+	snapshot, err := workflowdef.EncodeRunManifest(childManifest)
+	if err != nil {
+		return nil, err
+	}
+	mutation := runstate.ChildStartMutation{ManifestYAML: snapshot, ProjectDir: projectDir, Vars: vars, Messages: messages,
 		Posture: runstate.MutationPosture(childRun, vars, workflowdef.StartPosture(childManifest, childRun.CurrentPhase))}
 	if err := m.Starts.StartChild(ctx, parent, childRun, mutation); err != nil {
 		return nil, err
@@ -147,13 +151,15 @@ func (m *Children) InvokeChild(ctx context.Context, parentRunID string, spec wor
 	if def, ok := childManifest.PhaseByID(childRun.CurrentPhase); ok && !terminalSink {
 		m.Entries.Trigger(ctx, childRun, projectDir, def)
 		if m.Phases.PhaseEnterHook != nil {
-			m.Phases.PhaseEnterHook(ctx, &workflowphases.RunContext{
+			if err := m.Phases.PhaseEnterHook(ctx, &workflowphases.RunContext{
 				SessionID:       childRun.SessionID,
 				RunID:           childRun.ID,
 				WorkflowID:      childRun.WorkflowID,
 				WorkflowVersion: childRun.WorkflowVersion,
 				Phase:           childRun.CurrentPhase,
-			}, def)
+			}, def); err != nil {
+				return nil, err
+			}
 		}
 	}
 	m.Publication.Publish(ctx, sess, childRun)

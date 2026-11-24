@@ -8,7 +8,7 @@ import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import { isTaskToolPart } from "../../chat/task/task-card-model.ts";
 import type { TaskActivityContext } from "../../chat/task/task-card-model.ts";
 import { partAction, pendingAction } from "../../chat/action/part-action.ts";
-import { commandActivityPart } from "../../chat/tool/command-activity-model.ts";
+import { commandActivityPart } from "../../chat/tool/command-activity-facts.ts";
 import { ActionCard } from "../action/ActionCard.tsx";
 import { TaskCard } from "../TaskCard.tsx";
 import type { ToolBriefingSlots } from "./tool-briefing-slots.ts";

@@ -81,3 +81,25 @@ func BenchmarkContextNavigation(b *testing.B) {
 		})
 	}
 }
+
+func TestOutsidePathsBindOnlyToTheSuppliedFileIdentity(t *testing.T) {
+	p := &project.Project{ID: "p", Outside: project.Root{ID: "outside"}}
+	location := api.NavigationTarget{
+		ProjectID: "p", RootID: "outside", Path: "home/fixture/original.txt",
+		EntryKind: api.NavigationEntryKindFile, FileID: "recorded-file",
+	}
+	context := &api.SourceContext{Locations: []api.NavigationTarget{location}}
+	prose := "Updated `/home/fixture/original.txt` and [the file](source://outside/home/fixture/original.txt)."
+	if got := BuildProjectPathReferences(p, prose, nil, ""); len(got) != 0 {
+		t.Fatalf("unbound outside file produced references: %+v", got)
+	}
+	refs := BuildProjectPathReferences(p, prose, context, "")
+	if len(refs) != 2 {
+		t.Fatalf("outside references = %+v", refs)
+	}
+	for _, ref := range refs {
+		if ref.FileID != location.FileID || ref.RootID != location.RootID || ref.Status != api.NavigationResolved {
+			t.Fatalf("outside reference = %+v", ref)
+		}
+	}
+}

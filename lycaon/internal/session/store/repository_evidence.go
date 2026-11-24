@@ -26,7 +26,7 @@ type EvidenceRepository interface {
 	SeedUntrustedContent(ctx context.Context, sessionID string) error
 	SessionContacts(sessionID string) map[string]evidence.Contact
 	SessionSecretExposure(ctx context.Context, sessionID string) (bool, error)
-	SessionURLStanding(sessionID, rawURL string) evidence.URLStanding
+	SessionURLStanding(ctx context.Context, sessionID, rawURL string) evidence.URLStanding
 	SessionUntrustedContent(sessionID string) bool
 	SessionUntrustedContentResult(ctx context.Context, sessionID string) (bool, error)
 	StageProgramPublication(ctx context.Context, target evidence.ProgramProvenanceTarget, prov evidence.ProgramHTTPProvenance) error

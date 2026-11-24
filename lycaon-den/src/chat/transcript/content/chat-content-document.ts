@@ -15,6 +15,8 @@ export type ChatContentDocument = {
   find?: { query: string; caseSensitive: boolean; offset?: number };
   /** The file the content was read from, which decides its layout. */
   path?: string;
+  /** The project root containing `path`, when known. */
+  rootId?: string;
   /** The content's language where no path names it. */
   language?: string;
   /** Advances each time a link opens the document, so a failed tab can retry. */

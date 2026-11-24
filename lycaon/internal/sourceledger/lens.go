@@ -185,6 +185,10 @@ func (s *Walk) QueryWalk(
 	if err != nil {
 		return out, err
 	}
+	out.Commands, err = s.withGapWindows(ctx, projectID, baseline, next, beforeOrdinal, out.Commands)
+	if err != nil {
+		return out, err
+	}
 	out.Turns, err = s.walkTurns(ctx, projectID, effects, out.GitChanges)
 	if err != nil {
 		return out, err

@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
+import { syncChatPrefsFromSnapshot } from "../../settings/chat/chat-prefs.ts";
 import { HomeView } from "./HomeView.tsx";
 import type { HomeIdeaDraft } from "../../home/idea-attachments.ts";
 import { loaded } from "../../store/load-state.ts";
 import { createSignal } from "solid-js";
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
 import type { ResidentPresence } from "../../ui/resident-surfaces.ts";
+
+beforeEach(() => {
+  resetAppStateSnapshotForTests();
+  syncChatPrefsFromSnapshot();
+});
 
 afterEach(() => {
   cleanup();
@@ -139,17 +146,29 @@ describe("Home idea drop intake", () => {
     await screen.findByTestId("home-idea-attachment-chip");
 
     const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
+    fireEvent.click(screen.getByRole("radio", { name: "Ask" }));
     fireEvent.input(input, { target: { value: "Make it look like this" } });
     fireEvent.click(screen.getByTestId("home-idea-send"));
 
     expect(onSubmitIdea).toHaveBeenCalledTimes(1);
     const draft = onSubmitIdea.mock.calls[0]![0];
     expect(draft.text).toBe("Make it look like this");
+    expect(draft.mode).toBe("ask");
     expect(draft.attachments).toHaveLength(1);
     expect(draft.attachments[0]).toMatchObject({
       kind: "web-file",
       name: "shot.png",
     });
+  });
+
+  it("binds the local Ask selection when immediately submitting the Home idea", () => {
+    const onSubmitIdea = vi.fn<(draft: HomeIdeaDraft) => boolean>().mockReturnValue(true);
+    renderHome({ onSubmitIdea });
+    fireEvent.click(screen.getByRole("radio", { name: "Ask" }));
+    const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
+    fireEvent.input(input, { target: { value: "How do I get started?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSubmitIdea).toHaveBeenCalledWith({ text: "How do I get started?", mode: "ask", attachments: [] });
   });
 
   it("allows an attachment-only submission", async () => {

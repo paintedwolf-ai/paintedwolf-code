@@ -35,6 +35,9 @@ const park: ActivityEvent = {
 function mountActivity(messages: Message[] = [call, parkedResult()]) {
   const appStore = createAppStore();
   appStore.actions.setCurrentSession({
+    mode: "agent" as const,
+    started: true,
+    root_session_id: "session",
     id: "session", project_id: "project", owner_person_id: "person", workspace_path: "/workspace",
     posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
   });

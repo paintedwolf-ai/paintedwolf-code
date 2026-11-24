@@ -18,11 +18,12 @@ import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { filesEditorFindMenuItems, filesEditorGotoMenuItems, type FilesEditorToolbarMenuKind } from "./files-editor-toolbar-menus.ts";
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
 import type { editorStateAction, resolveEditorIdentity } from "../documents/editor-identity.ts";
-import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
+import { tipWithShortcut } from "../../shortcuts/display-binding-for.ts";
 import { BrowseSegmented, type BrowseSegmentedOption } from "../../components/browse/BrowseSegmented.tsx";
 import { DenButton } from "../../components/primitives/DenButton.tsx";
 import { CheckIcon, CopyIcon, FindIcon, GotoLineIcon } from "../../components/source/viewer-icons.tsx";
 import { formatSentenceCase } from "../../format/format-sentence-case.ts";
+import { prettyCopyAction } from "./files-pretty-copy.ts";
 import { FilesPathCrumbs } from "./FilesPathCrumbs.tsx";
 
 export function FilesEditorToolbar(props: { children: JSX.Element; actions: JSX.Element }) {
@@ -131,7 +132,9 @@ export function createEditorToolbarMenus(options: {
   };
   const copyMenuItems = (): ContextMenuItem[] => {
     const buffer = options.buffer();
+    const view = options.activeEditorView();
     return copyPathMenuItems({
+      copyAsShown: options.activeReaderHandle() || view?.dom.closest("[inert]") ? undefined : prettyCopyAction(view?.state, "document"),
       copyAbsolute: absolutePath() ? onCopy : null,
       copyRelative: onCopyRelative,
       copyFileName: onCopyFileName,
@@ -263,7 +266,7 @@ export function FilesEditorHeaderChrome(props: {
               variant="primary"
               compact
               data-testid="files-editor-save"
-              data-tip={`Save (${bindingForHandler("files.save")})`}
+              data-tip={tipWithShortcut("Save", "files.save")}
               data-tip-pos="below"
               disabled={props.saving || props.conflict}
               onClick={() => props.onSave()}
@@ -296,7 +299,7 @@ export function FilesEditorHeaderChrome(props: {
             type="button"
             class="den-files-editor__tool den-inset-icon-btn"
             data-testid="files-editor-find"
-            data-tip={`Find (${bindingForHandler("find.inView")})`}
+            data-tip={tipWithShortcut("Find", "find.inView")}
             data-tip-pos="below"
             aria-label="Find in file"
             aria-expanded={props.toolbarMenus.findBarDisclosure().expanded}
@@ -323,7 +326,7 @@ export function FilesEditorHeaderChrome(props: {
             type="button"
             class="den-files-editor__tool den-inset-icon-btn"
             data-testid="files-editor-goto"
-            data-tip={`Go to line (${bindingForHandler("editor.goToLine")})`}
+            data-tip={tipWithShortcut("Go to line", "editor.goToLine")}
             data-tip-pos="below"
             aria-label="Go to line"
             aria-expanded={props.toolbarMenus.gotoLineBarDisclosure().expanded}
@@ -348,7 +351,6 @@ export function FilesEditorHeaderChrome(props: {
             class="den-files-editor__tool den-inset-icon-btn"
             classList={{ "den-files-editor__tool--ok": props.toolbarMenus.copiedPath() }}
             data-testid="files-editor-copy"
-            data-tip="Copy path"
             data-tip-pos="below"
             aria-label="Copy path"
             onClick={props.toolbarMenus.onCopy}
@@ -394,7 +396,7 @@ export function FilesEditorHeaderChrome(props: {
                 type="button"
                 class="den-files-editor__crumb-seg den-files-editor__crumb-symbol"
                 data-testid="files-crumb-symbol-seg"
-                data-tip={`${sym().kind ? `${formatSentenceCase(sym().kind)} ` : ""}${sym().name} — lines ${sym().startLine}–${sym().endLine}. Click for symbols; right-click to rename.`}
+                data-tip={`Lines ${sym().startLine}–${sym().endLine} · right-click to rename`}
                 aria-expanded={props.symbolMenuOpen}
                 aria-haspopup="listbox"
                 onClick={(e) => props.onToggleSymbolMenu(e.currentTarget)}
