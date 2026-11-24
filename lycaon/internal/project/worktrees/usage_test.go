@@ -70,6 +70,9 @@ func TestRecordUsageIdempotentReplayRetryAndExecutionBindingIndependence(t *test
 	if !first.Recorded || first.Duplicate || first.Checkout.ID == "" {
 		t.Fatalf("unexpected first outcome: %+v", first)
 	}
+	testutil.WaitFor(t, "background discovery attempt", func() bool {
+		return lister.calls.Load() >= 1
+	})
 
 	// Duplicate replay of the same activity ID produces no second registration or receipt.
 	replay, err := inv.RecordUsage(t.Context(), worktrees.UsageInput{
