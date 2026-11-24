@@ -122,7 +122,16 @@ func TestCoordinatorSurfacesWatchPlacementAndPromotionMatrix(t *testing.T) {
 				t.Fatalf("surface %s (watches=%d): wait promoted despite not being addressable on surface", surfaceID, watchesCount)
 			}
 
-			serialized, err := json.Marshal(offered)
+			projected := make([]map[string]any, len(offered))
+			for i, meta := range offered {
+				wireMeta := tools.ProjectProviderToolMeta(meta)
+				projected[i] = map[string]any{
+					"name":        wireMeta.Name,
+					"description": wireMeta.Description,
+					"parameters":  wireMeta.ArgsSchema,
+				}
+			}
+			serialized, err := json.Marshal(projected)
 			testutil.FailErr(t, "marshal offered tools", err)
 			limit := defaultLimit
 			if surfaceID == surface.SurfaceImplementOverlayPromote {
