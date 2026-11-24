@@ -192,7 +192,17 @@ func TestGitWorktreeTargetsStatusDiffCommitDiscardCursorAndRemoval(t *testing.T)
 		t.Fatalf("unexpected staged comparison B: before=%q after=%q", cmpStagedB.Before.Content, cmpStagedB.After.Content)
 	}
 
-	// 3. Reusing sibling A's pagination cursor on sibling B or primary is rejected.
+	// 3–5. Cursor isolation, targeted commit/discard, and removed-target refusal.
+	verifyCheckoutCursorMutationsAndRemoval(t, srv, projectID, repoID, primaryRoot, primaryHead, siblingA, siblingB, idA, idB, diffStagedA.HeadSHA)
+}
+
+func verifyCheckoutCursorMutationsAndRemoval(
+	t *testing.T,
+	srv *hostapi.Server,
+	projectID, repoID, primaryRoot, primaryHead, siblingA, siblingB, idA, idB, expectedHeadA string,
+) {
+	t.Helper()
+
 	page1A := getAuthedJSON[wire.GitChangesPage](t, srv, fmt.Sprintf("/v1/projects/%s/git/repos/%s/changes?worktree_id=%s&limit=1", projectID, repoID, idA), http.StatusOK)
 	if page1A.NextCursor == "" {
 		t.Fatalf("expected next_cursor for 2 changed files with limit=1: %+v", page1A)
@@ -210,7 +220,6 @@ func TestGitWorktreeTargetsStatusDiffCommitDiscardCursorAndRemoval(t *testing.T)
 		t.Fatalf("expected 400 when reusing sibling cursor on omitted primary, got %d body=%s", wCrossPrimary.Code, wCrossPrimary.Body.String())
 	}
 
-	// 4. Draft commit message and commit staged_only in sibling A; discard in sibling B; primary untouched.
 	draftW := contractfixture.PostWorktreeJSON(t, srv, fmt.Sprintf("/v1/projects/%s/git/repos/%s/commit-message?worktree_id=%s", projectID, repoID, idA), map[string]any{})
 	if draftW.Code != http.StatusOK {
 		t.Fatalf("draft commit-message A = %d body=%s", draftW.Code, draftW.Body.String())
@@ -228,7 +237,7 @@ func TestGitWorktreeTargetsStatusDiffCommitDiscardCursorAndRemoval(t *testing.T)
 	commitAW := contractfixture.PostWorktreeJSON(t, srv, fmt.Sprintf("/v1/projects/%s/git/repos/%s/commit?worktree_id=%s", projectID, repoID, idA), map[string]any{
 		"message":       "feat: commit staged A",
 		"staged_only":   true,
-		"expected_head": diffStagedA.HeadSHA,
+		"expected_head": expectedHeadA,
 	})
 	if commitAW.Code != http.StatusOK {
 		t.Fatalf("commit staged_only A = %d body=%s", commitAW.Code, commitAW.Body.String())
@@ -253,7 +262,6 @@ func TestGitWorktreeTargetsStatusDiffCommitDiscardCursorAndRemoval(t *testing.T)
 		t.Fatalf("primary HEAD changed unexpectedly: got %s want %s", gotPrimaryHead, primaryHead)
 	}
 
-	// 5. Remove target between preview and execution -> 409 worktree_unavailable, zero writes in primary.
 	testutil.FailErr(t, "dirty B before remove", os.WriteFile(filepath.Join(siblingB, "shared.txt"), []byte("transient\n"), 0o644))
 	previewRemoved := getAuthedJSON[wire.GitDiffView](t, srv, fmt.Sprintf("/v1/projects/%s/git/repos/%s/diff?worktree_id=%s&mode=commit", projectID, repoID, idB), http.StatusOK)
 	if !strings.Contains(previewRemoved.Patch, "+transient") {
