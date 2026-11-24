@@ -168,7 +168,7 @@ function placeDecisions(entries: readonly ActivitySpanEntry[], memory: CommandAc
     const entry = entries[index]!;
     if (entry.kind === "tool") nextTool = entry.part;
     if (entry.kind === "turn_load") {
-      const target = nextTool && usesCommandProgram(nextTool) ? nextTool.id : undefined;
+      const target = nextTool && FORM_PROGRAM_TOOLS.has(nextTool.tool) ? nextTool.id : undefined;
       decisions.set(entry.key, memory.decision(entry.key, target));
     }
   }
