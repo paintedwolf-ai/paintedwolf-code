@@ -42,6 +42,7 @@ describe("shell navigation sink lifetime", () => {
     expect(seams.attachment.sessionId()).toBe("session"); expect(seams.attachment.projectId()).toBe("project");
     expect(seams.attachment.projectRoots()).toEqual([{ id: "root" }]); expect(seams.attachment.blockReason()).toBeNull();
     seams.attachment.reveal(); expect(calls.setNav).toHaveBeenCalledWith("projects"); expect(calls.closeSearch).toHaveBeenCalledOnce();
+    const lookup = () => ({ roots: [{ id: "root", path: "/repo", label: "repo", is_primary: true }] });
     await openSourceLocation({
       projectId: "other-project",
       rootId: "root",
@@ -51,7 +52,7 @@ describe("shell navigation sink lifetime", () => {
       selectCheckout: true,
       entryKind: "file",
       intent: "permanent",
-    });
+    }, { lookup });
     expect(appStore.state.gitWorktreeTargets["other-project\0repo-1"]).toBe("wt-1");
     await openSourceLocation({
       projectId: "project",
@@ -61,7 +62,7 @@ describe("shell navigation sink lifetime", () => {
       entryKind: "folder",
       action: "reveal",
       intent: "permanent",
-    });
+    }, { lookup });
     openFilesSurface({ kind: "stage", projectId: "project" });
     expect(calls.openStageWithPlacement).toHaveBeenCalledWith("files", "routed");
     view.unmount(); expect(seams.status).toBeNull(); expect(seams.notice).toBeNull(); expect(seams.detach).toHaveBeenCalledOnce();
