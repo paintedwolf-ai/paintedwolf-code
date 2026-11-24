@@ -218,18 +218,19 @@ func (b *serveBuilder) reportRecovery(report bootrecovery.Report, err error) err
 	return report.Err()
 }
 
-func runWatchScheduler(ctx context.Context, ws *watch.Store, interval time.Duration) error {
-	if interval <= 0 {
-		interval = time.Second
+func runWatchScheduler(ctx context.Context, ws *watch.Store, maxIdle time.Duration) error {
+	if maxIdle <= 0 {
+		maxIdle = time.Second
 	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	timer := time.NewTimer(ws.NextDueWait(maxIdle))
+	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-ticker.C:
+		case <-timer.C:
 			_ = ws.AdvanceDue(ctx)
+			timer.Reset(ws.NextDueWait(maxIdle))
 		}
 	}
 }

@@ -14,11 +14,42 @@ import (
 
 // CollectedBatch holds matches reserved for one model request and committed after its response.
 type CollectedBatch struct {
-	DeliveryID    string           `json:"delivery_id"`
-	RequestKey    string           `json:"request_key"`
-	Matches       []RecordedMatch  `json:"matches"`
-	Overflow      *OverflowSummary `json:"overflow,omitempty"`
-	ActiveHandles []string         `json:"active_handles,omitempty"`
+	DeliveryID     string                       `json:"delivery_id"`
+	RequestKey     string                       `json:"request_key"`
+	Matches        []RecordedMatch              `json:"matches"`
+	Overflow       *OverflowSummary             `json:"overflow,omitempty"`
+	ActiveHandles  []string                     `json:"active_handles,omitempty"`
+	DecisionStatus map[string]map[string]string `json:"decision_status,omitempty"`
+}
+
+type redactedMatchEvidence struct {
+	Kind        string `json:"kind"`
+	Outcome     string `json:"outcome"`
+	Restricted  bool   `json:"restricted"`
+	RetainedRef string `json:"retained_ref"`
+	Reason      string `json:"reason,omitempty"`
+}
+
+func redactRecordedMatch(m RecordedMatch, watchID, reason string) RecordedMatch {
+	ref := strings.TrimSpace(m.RetainedRef)
+	if ref == "" {
+		ref = "restricted:" + strings.TrimSpace(watchID)
+	}
+	raw, err := json.Marshal(redactedMatchEvidence{
+		Kind:        m.SourceKind,
+		Outcome:     "redacted",
+		Restricted:  true,
+		RetainedRef: ref,
+		Reason:      strings.TrimSpace(reason),
+	})
+	if err != nil {
+		raw = []byte(`{"outcome":"redacted","restricted":true}`)
+	}
+	m.Outcome = "revoked"
+	m.Restricted = true
+	m.RetainedRef = ref
+	m.Evidence = raw
+	return m
 }
 
 // ReserveCollectBatch reserves a bounded batch of pending matches for an eligible model request.
@@ -58,6 +89,7 @@ func ReserveCollectBatch(ctx context.Context, s *Store, owner Owner, requestKey 
 	var claimed []RecordedMatch
 	var matchIDs, watchIDs []string
 	var overflow *OverflowSummary
+	var decisionStatus map[string]map[string]string
 	usedBytes := 0
 
 	for _, reg := range regs {
@@ -68,6 +100,7 @@ func ReserveCollectBatch(ctx context.Context, s *Store, owner Owner, requestKey 
 		if len(pending) == 0 {
 			continue
 		}
+		allowed, revokeReason := checkWatchAuthority(s, ctx, reg)
 		if overflow == nil && reg.Lifecycle.Overflow != nil {
 			cp := *reg.Lifecycle.Overflow
 			overflow = &cp
@@ -75,6 +108,9 @@ func ReserveCollectBatch(ctx context.Context, s *Store, owner Owner, requestKey 
 		tookFromWatch := false
 		for _, m := range pending {
 			m.Handle = reg.Handle
+			if !allowed {
+				m = redactRecordedMatch(m, reg.WatchID, revokeReason)
+			}
 			entryBytes := len(m.Evidence) + 64
 			if len(claimed) > 0 && usedBytes+entryBytes > MaxBatchBytes {
 				break
@@ -86,6 +122,12 @@ func ReserveCollectBatch(ctx context.Context, s *Store, owner Owner, requestKey 
 		}
 		if tookFromWatch {
 			watchIDs = append(watchIDs, reg.WatchID)
+			if ds := extractDecisionStatusMap(reg.Cursors); len(ds) > 0 {
+				if decisionStatus == nil {
+					decisionStatus = make(map[string]map[string]string)
+				}
+				decisionStatus[reg.Handle] = ds
+			}
 		}
 	}
 	if len(claimed) == 0 {
@@ -101,11 +143,12 @@ func ReserveCollectBatch(ctx context.Context, s *Store, owner Owner, requestKey 
 		}
 	}
 	batch := CollectedBatch{
-		DeliveryID:    deliveryID,
-		RequestKey:    requestKey,
-		Matches:       claimed,
-		Overflow:      overflow,
-		ActiveHandles: activeHandleNames(regs),
+		DeliveryID:     deliveryID,
+		RequestKey:     requestKey,
+		Matches:        claimed,
+		Overflow:       overflow,
+		ActiveHandles:  activeHandleNames(regs),
+		DecisionStatus: decisionStatus,
 	}
 	mJSON, err := json.Marshal(matchIDs)
 	if err != nil {
@@ -270,6 +313,11 @@ func FormatCollectedBatch(batch CollectedBatch) string {
 		fmt.Fprintf(&b, "\n- compacted: %d earlier matches (seq %d..%d, outcomes=%s, had_failure=%v, had_recovery=%v)",
 			batch.Overflow.CompactedCount, batch.Overflow.FirstSeq, batch.Overflow.LastSeq,
 			strings.Join(batch.Overflow.Outcomes, ","), batch.Overflow.HadFailure, batch.Overflow.HadRecovery)
+	}
+	if len(batch.DecisionStatus) > 0 {
+		if rawStatus, err := json.Marshal(batch.DecisionStatus); err == nil {
+			fmt.Fprintf(&b, "\n- decision_status: %s", string(rawStatus))
+		}
 	}
 	return b.String()
 }

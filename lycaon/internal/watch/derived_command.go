@@ -65,13 +65,13 @@ func reconcileShellJoin(ctx context.Context, s *Store, owner Owner, commandHandl
 		return nil
 	}
 	joinReceipt := "shell_wait:" + commandHandle
-	if fact, done, err := s.lookupProcess(ctx, owner.SessionID, commandHandle); err == nil && done && fact.OccurrenceID != "" {
+	if fact, done, err := lookupProcess(s, ctx, owner.SessionID, commandHandle); err == nil && done && fact.OccurrenceID != "" {
 		dec, cErr := ClaimPresentation(ctx, s, owner, fact.OccurrenceID, ClaimDirectWait, true, joinReceipt)
 		if cErr == nil && dec.TransferredKick {
-			s.notifyProcessKickTransfer(owner.SessionID, commandHandle)
+			notifyProcessKickTransfer(s, owner.SessionID, commandHandle)
 		}
 	}
-	s.notifyProcessObserve(owner.SessionID, commandHandle)
+	notifyProcessObserve(s, owner.SessionID, commandHandle)
 
 	now := s.clock.Now()
 	nowStr := now.UTC().Format(time.RFC3339Nano)
@@ -139,7 +139,7 @@ func reconcileShellJoin(ctx context.Context, s *Store, owner Owner, commandHandl
 	s.heap.Remove(KindWatchExpiry, reg.WatchID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
-		s.notifyLeaseWake(ctx, w.lease, w.winner)
+		notifyLeaseWake(s, ctx, w.lease, w.winner)
 	}
 	return nil
 }

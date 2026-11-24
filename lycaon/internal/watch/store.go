@@ -34,8 +34,11 @@ type Store struct {
 	db                    db.Handle
 	clock                 Clock
 	heap                  *DeadlineHeap
+	sampler               *Sampler
 	mu                    sync.RWMutex
 	processLookup         ProcessLookup
+	coordinatorLookup     CoordinatorStateLookup
+	authorityChecker      AuthorityChecker
 	onLeaseWake           LeaseWakeFunc
 	wakeGate              AmbientWakeGate
 	treeStopping          func(sessionID string) bool
@@ -48,9 +51,10 @@ func NewStore(database db.Handle, clock Clock) *Store {
 		clock = RealClock{}
 	}
 	return &Store{
-		db:    database,
-		clock: clock,
-		heap:  NewDeadlineHeap(),
+		db:      database,
+		clock:   clock,
+		heap:    NewDeadlineHeap(),
+		sampler: newSampler(),
 	}
 }
 
@@ -66,6 +70,75 @@ func (s *Store) SetProcessLookup(fn ProcessLookup) {
 	s.mu.Lock()
 	s.processLookup = fn
 	s.mu.Unlock()
+}
+
+func (s *Store) SetCoordinatorStateLookup(fn CoordinatorStateLookup) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.coordinatorLookup = fn
+	s.mu.Unlock()
+}
+
+func (s *Store) SetAuthorityChecker(fn AuthorityChecker) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.authorityChecker = fn
+	s.mu.Unlock()
+}
+
+func lookupCoordinatorState(s *Store, ctx context.Context, sessionID string) (WorkerWatchStateSnapshot, bool, error) {
+	s.mu.RLock()
+	fn := s.coordinatorLookup
+	s.mu.RUnlock()
+	if fn == nil {
+		return WorkerWatchStateSnapshot{}, false, nil
+	}
+	snap, err := fn(ctx, sessionID)
+	return snap, true, err
+}
+
+func checkWatchAuthority(s *Store, ctx context.Context, reg Registration) (bool, string) {
+	s.mu.RLock()
+	fn := s.authorityChecker
+	s.mu.RUnlock()
+	if fn == nil {
+		return true, ""
+	}
+	return fn(ctx, reg)
+}
+
+func retireWatchRuntime(s *Store, watchID string) {
+	if s == nil || watchID == "" {
+		return
+	}
+	s.heap.Remove(KindWatchExpiry, watchID)
+	s.heap.Remove(KindTimerTick, watchTimerPrefix+watchID)
+	if s.sampler != nil {
+		s.sampler.unsubscribeWatch(watchID, s.heap)
+	}
+}
+
+// NextDueWait returns the bounded duration until the next deadline heap entry falls due.
+func (s *Store) NextDueWait(maxWait time.Duration) time.Duration {
+	if s == nil || s.heap == nil {
+		return maxWait
+	}
+	entry, ok := s.heap.Peek()
+	if !ok {
+		return maxWait
+	}
+	wait := entry.DueAt.Sub(s.clock.Now())
+	if wait <= 0 {
+		return 10 * time.Millisecond
+	}
+	if wait > maxWait {
+		return maxWait
+	}
+	return wait
 }
 
 func (s *Store) SetProcessKickTransfer(fn func(sessionID, handle string)) {
@@ -86,7 +159,7 @@ func (s *Store) SetProcessObserver(fn func(sessionID, handle string)) {
 	s.mu.Unlock()
 }
 
-func (s *Store) notifyProcessKickTransfer(sessionID, handle string) {
+func notifyProcessKickTransfer(s *Store, sessionID, handle string) {
 	s.mu.RLock()
 	fn := s.onProcessKickTransfer
 	s.mu.RUnlock()
@@ -95,7 +168,7 @@ func (s *Store) notifyProcessKickTransfer(sessionID, handle string) {
 	}
 }
 
-func (s *Store) notifyProcessObserve(sessionID, handle string) {
+func notifyProcessObserve(s *Store, sessionID, handle string) {
 	s.mu.RLock()
 	fn := s.onProcessObserve
 	s.mu.RUnlock()
@@ -131,7 +204,7 @@ func (s *Store) SetTreeStoppingFunc(fn func(sessionID string) bool) {
 	s.mu.Unlock()
 }
 
-func (s *Store) isTreeStopping(sessionID string) bool {
+func isTreeStopping(s *Store, sessionID string) bool {
 	if s == nil || strings.TrimSpace(sessionID) == "" {
 		return false
 	}
@@ -154,7 +227,7 @@ func (s *Store) TriggerAmbientWake(ctx context.Context, sessionID string) (bool,
 	return TryScheduleAmbientWake(ctx, s, sessionID, gate)
 }
 
-func (s *Store) lookupProcess(ctx context.Context, sessionID, handle string) (ProcessCompletionFact, bool, error) {
+func lookupProcess(s *Store, ctx context.Context, sessionID, handle string) (ProcessCompletionFact, bool, error) {
 	s.mu.RLock()
 	fn := s.processLookup
 	s.mu.RUnlock()
@@ -164,7 +237,7 @@ func (s *Store) lookupProcess(ctx context.Context, sessionID, handle string) (Pr
 	return fn(ctx, sessionID, handle)
 }
 
-func (s *Store) notifyLeaseWake(ctx context.Context, lease awaitstore.Lease, winner awaitstore.Condition) {
+func notifyLeaseWake(s *Store, ctx context.Context, lease awaitstore.Lease, winner awaitstore.Condition) {
 	s.mu.RLock()
 	fn := s.onLeaseWake
 	s.mu.RUnlock()

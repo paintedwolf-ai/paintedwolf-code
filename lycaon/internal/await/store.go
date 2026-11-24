@@ -20,27 +20,28 @@ type CalendarSpec struct {
 }
 
 type Condition struct {
-	Kind       string        `json:"kind"`
-	Outcome    string        `json:"outcome,omitempty"`
-	Code       string        `json:"code,omitempty"`
-	Handles    []string      `json:"handles,omitempty"`
-	Handle     string        `json:"handle,omitempty"`
-	Cursor     *int64        `json:"cursor,omitempty"`
-	URL        string        `json:"url,omitempty"`
-	Method     string        `json:"method,omitempty"`
-	StatusMin  int           `json:"status_min,omitempty"`
-	StatusMax  int           `json:"status_max,omitempty"`
-	Host       string        `json:"host,omitempty"`
-	Port       uint16        `json:"port,omitempty"`
-	Root       string        `json:"root,omitempty"`
-	Path       string        `json:"path,omitempty"`
-	Glob       string        `json:"glob,omitempty"`
-	IncludeOwn bool          `json:"include_own,omitempty"`
-	Ref        string        `json:"ref,omitempty"`
-	DelayMS    int64         `json:"delay_ms,omitempty"`
-	At         string        `json:"at,omitempty"`
-	TimeZone   string        `json:"time_zone,omitempty"`
-	Calendar   *CalendarSpec `json:"calendar,omitempty"`
+	Kind         string        `json:"kind"`
+	Outcome      string        `json:"outcome,omitempty"`
+	Code         string        `json:"code,omitempty"`
+	Handles      []string      `json:"handles,omitempty"`
+	Handle       string        `json:"handle,omitempty"`
+	Cursor       *int64        `json:"cursor,omitempty"`
+	URL          string        `json:"url,omitempty"`
+	Method       string        `json:"method,omitempty"`
+	StatusMin    int           `json:"status_min,omitempty"`
+	StatusMax    int           `json:"status_max,omitempty"`
+	Host         string        `json:"host,omitempty"`
+	Port         uint16        `json:"port,omitempty"`
+	Root         string        `json:"root,omitempty"`
+	Path         string        `json:"path,omitempty"`
+	Glob         string        `json:"glob,omitempty"`
+	IncludeOwn   bool          `json:"include_own,omitempty"`
+	Ref          string        `json:"ref,omitempty"`
+	DelayMS      int64         `json:"delay_ms,omitempty"`
+	EveryMinutes int64         `json:"every_minutes,omitempty"`
+	At           string        `json:"at,omitempty"`
+	TimeZone     string        `json:"time_zone,omitempty"`
+	Calendar     *CalendarSpec `json:"calendar,omitempty"`
 	// ProgramID names the command program a parked call waits on.
 	ProgramID string `json:"program_id,omitempty"`
 	// Report is the host's account of a settled wake: how a job or a parked

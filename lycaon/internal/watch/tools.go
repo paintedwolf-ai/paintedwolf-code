@@ -311,10 +311,17 @@ func authorityFromToolContext(tctx tools.ToolContext) Authority {
 	if tctx.Local.LoopbackConnectGranted {
 		ports = append(ports, tctx.Local.LoopbackConnectPorts...)
 	}
+	rootSession := strings.TrimSpace(tctx.Identity.ParentSessionID)
+	if rootSession == "" {
+		rootSession = strings.TrimSpace(tctx.Identity.SessionID)
+	}
 	return Authority{
-		WorkspaceID:   strings.TrimSpace(tctx.Source.ActiveRootID),
-		RootPaths:     paths,
-		LoopbackPorts: ports,
+		RootSessionID:   rootSession,
+		ProjectDir:      strings.TrimSpace(tctx.ActiveRootPath()),
+		WorkspaceID:     strings.TrimSpace(tctx.Source.ActiveRootID),
+		RootPaths:       paths,
+		LoopbackGranted: tctx.Local.LoopbackConnectGranted,
+		LoopbackPorts:   ports,
 	}
 }
 

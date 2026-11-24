@@ -24,7 +24,7 @@ func TryScheduleAmbientWake(ctx context.Context, s *Store, sessionID string, gat
 		return false, nil
 	}
 	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" || s.isTreeStopping(sessionID) {
+	if sessionID == "" || isTreeStopping(s, sessionID) {
 		return false, nil
 	}
 	if gate.SessionEligible != nil {

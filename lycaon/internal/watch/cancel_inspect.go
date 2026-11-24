@@ -23,20 +23,21 @@ type CancelReceipt struct {
 
 // InspectView describes a watch without acknowledging pending matches.
 type InspectView struct {
-	WatchID         string           `json:"watch_id"`
-	Handle          string           `json:"handle"`
-	State           State            `json:"state"`
-	Outcome         TerminalOutcome  `json:"outcome,omitempty"`
-	Delivery        DeliveryMode     `json:"delivery"`
-	Destination     string           `json:"destination"`
-	ExpiresAt       string           `json:"expires_at"`
-	PendingMatches  int              `json:"pending_matches"`
-	LatestMatch     *RecordedMatch   `json:"latest_match,omitempty"`
-	Overflow        *OverflowSummary `json:"overflow,omitempty"`
-	LastDeliveryRef string           `json:"last_delivery_ref,omitempty"`
-	RetainedRefs    []string         `json:"retained_refs,omitempty"`
-	FinalReceiptID  string           `json:"final_receipt_id,omitempty"`
-	Revision        int              `json:"revision"`
+	WatchID         string            `json:"watch_id"`
+	Handle          string            `json:"handle"`
+	State           State             `json:"state"`
+	Outcome         TerminalOutcome   `json:"outcome,omitempty"`
+	Delivery        DeliveryMode      `json:"delivery"`
+	Destination     string            `json:"destination"`
+	ExpiresAt       string            `json:"expires_at"`
+	PendingMatches  int               `json:"pending_matches"`
+	LatestMatch     *RecordedMatch    `json:"latest_match,omitempty"`
+	Overflow        *OverflowSummary  `json:"overflow,omitempty"`
+	LastDeliveryRef string            `json:"last_delivery_ref,omitempty"`
+	RetainedRefs    []string          `json:"retained_refs,omitempty"`
+	DecisionStatus  map[string]string `json:"decision_status,omitempty"`
+	FinalReceiptID  string            `json:"final_receipt_id,omitempty"`
+	Revision        int               `json:"revision"`
 }
 
 // Cancel fences observations, frees capacity immediately and returns one idempotent final receipt.
@@ -62,13 +63,13 @@ func (s *Store) Cancel(ctx context.Context, owner Owner, handle string) (CancelR
 	if err := tx.Commit(); err != nil {
 		return CancelReceipt{}, err
 	}
-	s.heap.Remove(KindWatchExpiry, reg.WatchID)
+	retireWatchRuntime(s, reg.WatchID)
 	_ = WithdrawAmbientWakeIfNoDemand(ctx, s, reg.Owner.SessionID)
 	stopped, _ := s.IsSessionStopped(ctx, reg.Owner.SessionID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
 		if !stopped {
-			s.notifyLeaseWake(ctx, w.lease, w.winner)
+			notifyLeaseWake(s, ctx, w.lease, w.winner)
 		}
 	}
 	return receipt, nil
@@ -101,6 +102,13 @@ func (s *Store) Inspect(ctx context.Context, owner Owner, handle string) (Inspec
 	if err != nil {
 		return InspectView{}, err
 	}
+	if allowed, reason := checkWatchAuthority(s, ctx, reg); !allowed && latest != nil {
+		redacted := redactRecordedMatch(*latest, reg.WatchID, reason)
+		latest = &redacted
+		if redacted.RetainedRef != "" && !containsHandle(refs, redacted.RetainedRef) {
+			refs = append(refs, redacted.RetainedRef)
+		}
+	}
 	return InspectView{
 		WatchID:         reg.WatchID,
 		Handle:          reg.Handle,
@@ -114,6 +122,7 @@ func (s *Store) Inspect(ctx context.Context, owner Owner, handle string) (Inspec
 		Overflow:        reg.Lifecycle.Overflow,
 		LastDeliveryRef: lastDelivery,
 		RetainedRefs:    refs,
+		DecisionStatus:  extractDecisionStatusMap(reg.Cursors),
 		FinalReceiptID:  reg.Lifecycle.FinalReceiptID,
 		Revision:        reg.Lifecycle.Revision,
 	}, nil
@@ -202,21 +211,22 @@ func (s *Store) MarkSourceLost(ctx context.Context, watchID string) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.heap.Remove(KindWatchExpiry, reg.WatchID)
+	retireWatchRuntime(s, reg.WatchID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
-		s.notifyLeaseWake(ctx, w.lease, w.winner)
+		notifyLeaseWake(s, ctx, w.lease, w.winner)
 	}
 	return nil
 }
 
-// AdvanceDue processes overdue watch expiries and wait deadlines in deterministic priority order.
+// AdvanceDue processes overdue watch expiries, timers, sampler probes and wait deadlines in priority order.
 func (s *Store) AdvanceDue(ctx context.Context) error {
 	if !s.Configured() {
 		return nil
 	}
 	now := s.clock.Now()
 	due := s.heap.PopDue(now)
+	var dueProbeGroups []string
 	for _, entry := range due {
 		switch entry.Key.Kind {
 		case KindWatchExpiry:
@@ -230,14 +240,26 @@ func (s *Store) AdvanceDue(ctx context.Context) error {
 		case KindTimerTick:
 			if sessionID, ok := strings.CutPrefix(entry.Key.ID, "wake-retry:"); ok && sessionID != "" {
 				_, _ = s.TriggerAmbientWake(ctx, sessionID)
+			} else if watchID, ok := strings.CutPrefix(entry.Key.ID, watchTimerPrefix); ok && watchID != "" {
+				if err := fireWatchTimer(ctx, s, watchID, now); err != nil {
+					return err
+				}
 			}
-		case KindScheduleRun, KindSamplerProbe:
+		case KindSamplerProbe:
+			dueProbeGroups = append(dueProbeGroups, entry.Key.ID)
+		case KindScheduleRun:
+		}
+	}
+	if len(dueProbeGroups) > 0 {
+		enqueueDueProbeGroups(s, dueProbeGroups)
+		if err := stepSamplerRoundRobin(s, ctx, now); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-// Recover reconstructs the deadline heap from committed rows and settles overdue items in priority order.
+// Recover reconstructs the deadline heap and sampler from committed rows and settles overdue items.
 func (s *Store) Recover(ctx context.Context) error {
 	if !s.Configured() {
 		return nil
@@ -247,6 +269,7 @@ func (s *Store) Recover(ctx context.Context) error {
 
 func recoverStore(ctx context.Context, s *Store) error {
 	s.heap.Reset()
+	s.sampler = newSampler()
 	if err := recoverStoppedSessions(ctx, s); err != nil {
 		return err
 	}
@@ -290,21 +313,30 @@ func recoverStoppedSessions(ctx context.Context, s *Store) error {
 }
 
 func recoverLiveWatches(ctx context.Context, s *Store) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT watch_id, expires_at FROM watch_registrations WHERE state = 'live'`)
+	now := s.clock.Now()
+	rows, err := s.db.QueryContext(ctx, `SELECT `+registrationColumns+` FROM watch_registrations WHERE state = 'live' ORDER BY seq ASC`)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = rows.Close() }()
+	var liveRegs []Registration
 	for rows.Next() {
-		var id, expStr string
-		if err := rows.Scan(&id, &expStr); err != nil {
-			return err
+		reg, sErr := scanRegistration(rows)
+		if sErr != nil {
+			return sErr
 		}
-		if exp, err := time.Parse(time.RFC3339Nano, expStr); err == nil {
-			s.heap.Upsert(KindWatchExpiry, id, exp)
-		}
+		liveRegs = append(liveRegs, reg)
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_ = rows.Close()
+	for _, reg := range liveRegs {
+		s.heap.Upsert(KindWatchExpiry, reg.WatchID, reg.Lifecycle.ExpiresAt)
+		scheduleWatchTimer(s, reg)
+		subscribeWatchSampler(s, reg, now)
+	}
+	return nil
 }
 
 func recoverArmedLeases(ctx context.Context, s *Store) error {

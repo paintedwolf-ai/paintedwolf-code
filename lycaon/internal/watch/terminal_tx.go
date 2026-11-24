@@ -161,9 +161,63 @@ func expireWatch(ctx context.Context, s *Store, watchID string, now time.Time) e
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	retireWatchRuntime(s, reg.WatchID)
 	for _, w := range woke {
 		s.heap.Remove(KindWaitDeadline, w.lease.ID)
-		s.notifyLeaseWake(ctx, w.lease, w.winner)
+		notifyLeaseWake(s, ctx, w.lease, w.winner)
+	}
+	return nil
+}
+
+// RetireOwner retires all live watches belonging to a completed/canceled worker job or closed session,
+// freeing slots and tearing down timers and sampler probes immediately.
+func (s *Store) RetireOwner(ctx context.Context, owner Owner) error {
+	if !s.Configured() {
+		return nil
+	}
+	owner = owner.Normalized()
+	if owner.SessionID == "" {
+		return nil
+	}
+	now := s.clock.Now()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	regs, err := loadOwnerRegistrationsTx(ctx, tx, owner)
+	if err != nil {
+		return err
+	}
+	var retiredIDs []string
+	var wokeAll []wokeLease
+	for _, reg := range regs {
+		if reg.Lifecycle.State != StateLive {
+			continue
+		}
+		_, woke, cErr := cancelRegistrationTx(ctx, tx, reg, OutcomeCanceled, now)
+		if cErr != nil {
+			return cErr
+		}
+		retiredIDs = append(retiredIDs, reg.WatchID)
+		wokeAll = append(wokeAll, woke...)
+	}
+	if len(retiredIDs) == 0 {
+		return nil
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, wID := range retiredIDs {
+		retireWatchRuntime(s, wID)
+	}
+	stopped, _ := s.IsSessionStopped(ctx, owner.SessionID)
+	for _, w := range wokeAll {
+		s.heap.Remove(KindWaitDeadline, w.lease.ID)
+		if !stopped {
+			notifyLeaseWake(s, ctx, w.lease, w.winner)
+		}
 	}
 	return nil
 }
@@ -226,11 +280,11 @@ func settleDueLease(ctx context.Context, s *Store, leaseID string, now time.Time
 			}
 			for _, r := range regs {
 				if r.Lifecycle.State == StateTerminal {
-					s.heap.Remove(KindWatchExpiry, r.WatchID)
+					retireWatchRuntime(s, r.WatchID)
 				}
 			}
 			if n, _ := result.RowsAffected(); n == 1 {
-				s.notifyLeaseWake(ctx, awaitstore.Lease{ID: leaseID, SessionID: sessionID, WorkerJobID: workerJobID, ProjectID: projectID}, res.Winner)
+				notifyLeaseWake(s, ctx, awaitstore.Lease{ID: leaseID, SessionID: sessionID, WorkerJobID: workerJobID, ProjectID: projectID}, res.Winner)
 			}
 			return nil
 		}
@@ -265,7 +319,7 @@ func settleDueLease(ctx context.Context, s *Store, leaseID string, now time.Time
 			return err
 		}
 		if n, _ := result.RowsAffected(); n == 1 {
-			s.notifyLeaseWake(ctx, awaitstore.Lease{ID: leaseID, SessionID: sessionID, WorkerJobID: workerJobID, ProjectID: projectID}, timeoutWinner)
+			notifyLeaseWake(s, ctx, awaitstore.Lease{ID: leaseID, SessionID: sessionID, WorkerJobID: workerJobID, ProjectID: projectID}, timeoutWinner)
 		}
 		return nil
 	}

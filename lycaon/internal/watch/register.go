@@ -24,12 +24,27 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	if err != nil {
 		return RegisterReceipt{}, err
 	}
-	if s.isTreeStopping(normalized.Owner.SessionID) {
+	if isTreeStopping(s, normalized.Owner.SessionID) {
 		return RegisterReceipt{}, ErrSessionStopped
 	}
 	initialMatches, err := collectInitialProcessMatches(ctx, s, normalized)
 	if err != nil {
 		return RegisterReceipt{}, err
+	}
+	if !normalized.Repeat && len(initialMatches) > 0 {
+		// One-shot already satisfied by initial process state.
+	} else {
+		coordMatches, coordCursors, cErr := collectInitialCoordinatorMatches(ctx, s, normalized)
+		if cErr != nil {
+			return RegisterReceipt{}, cErr
+		}
+		for k, v := range coordCursors {
+			normalized.Cursors[k] = v
+		}
+		initialMatches = append(initialMatches, coordMatches...)
+		if !normalized.Repeat && len(initialMatches) > 1 {
+			initialMatches = initialMatches[:1]
+		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -52,14 +67,16 @@ func (s *Store) Register(ctx context.Context, req RegisterRequest) (RegisterRece
 	}
 	if !replayed && reg.Lifecycle.State == StateLive {
 		s.heap.Upsert(KindWatchExpiry, reg.WatchID, reg.Lifecycle.ExpiresAt)
+		scheduleWatchTimer(s, reg)
+		subscribeWatchSampler(s, reg, now)
 	}
 	if !replayed && len(initialMatches) > 0 {
-		receipt = s.reconcileInitialProcessClaims(ctx, reg, receipt, initialMatches)
+		receipt = reconcileInitialProcessClaims(s, ctx, reg, receipt, initialMatches)
 	}
 	return receipt, nil
 }
 
-func (s *Store) reconcileInitialProcessClaims(ctx context.Context, reg Registration, receipt RegisterReceipt, initial []MatchInput) RegisterReceipt {
+func reconcileInitialProcessClaims(s *Store, ctx context.Context, reg Registration, receipt RegisterReceipt, initial []MatchInput) RegisterReceipt {
 	for _, m := range initial {
 		if m.SourceKind != ConditionProcessDone {
 			continue
@@ -70,10 +87,10 @@ func (s *Store) reconcileInitialProcessClaims(ctx context.Context, reg Registrat
 			continue
 		}
 		if decision.TransferredKick && handle != "" {
-			s.notifyProcessKickTransfer(reg.Owner.SessionID, handle)
+			notifyProcessKickTransfer(s, reg.Owner.SessionID, handle)
 		}
 		if handle != "" {
-			s.notifyProcessObserve(reg.Owner.SessionID, handle)
+			notifyProcessObserve(s, reg.Owner.SessionID, handle)
 		}
 		if decision.AlreadyAdmitted && decision.ExistingReceiptID != "" {
 			if _, err := s.db.ExecContext(ctx, `UPDATE watch_matches
@@ -152,6 +169,9 @@ func normalizeRegisterRequest(req RegisterRequest, now time.Time) (RegisterReque
 	if req.Cursors == nil {
 		req.Cursors = map[string]string{}
 	}
+	if hasTimer && req.Cursors[timerAnchorCursorKey] == "" {
+		req.Cursors[timerAnchorCursorKey] = now.UTC().Format(time.RFC3339Nano)
+	}
 	if req.Standing != nil {
 		if raw, err := json.Marshal(req.Standing); err == nil {
 			req.Cursors[standingDraftCursorKey] = string(raw)
@@ -211,7 +231,7 @@ func collectInitialProcessMatches(ctx context.Context, s *Store, req RegisterReq
 				continue
 			}
 			seen[handle] = true
-			fact, done, err := s.lookupProcess(ctx, req.Owner.SessionID, handle)
+			fact, done, err := lookupProcess(s, ctx, req.Owner.SessionID, handle)
 			if err != nil {
 				return nil, err
 			}
