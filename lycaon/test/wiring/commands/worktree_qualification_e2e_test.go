@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/gitrepo"
-	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -184,29 +183,32 @@ func TestWorktreeQualificationNativeAgentAddCrossCheckoutEditAndNextCommandCwd(t
 		ExpectedRevision: primaryDoc.Revision,
 	}, http.StatusOK)
 
-	// Authorize outsideParent as an approved sibling location for this chat session.
-	if !s.h.Sessions.SandboxWriteRoot.GrantChat(s.session, outsideParent, "grant-sibling-write", "cp-sibling", nil) {
-		t.Fatal("grant chat write root for sibling parent")
-	}
-	if _, err := s.h.Sessions.GrantedPath.Grant(s.session, grantedpath.Grant{
-		ID: "grant-sibling-path", Path: outsideParent, Mode: grantedpath.ModeWrite, Tree: true,
-	}); err != nil {
-		t.Fatalf("grant sibling path authority: %v", err)
-	}
+	// Attach outsideParent as an authorized secondary folder while s.dir stays the primary repo root.
+	_, err := s.h.Server.Sources.Workspace.ProjectRegistry.AttachRoot(t.Context(), s.project, project.AttachRootParams{
+		Path:  outsideParent,
+		Label: "worktrees",
+	})
+	testutil.FailErr(t, "attach sibling parent folder", err)
+	run, err := s.h.Workflows.Manager.Store.Runs.ActiveBySession(t.Context(), s.session)
+	testutil.FailErr(t, "active workflow run", err)
+	vars, err := s.h.Workflows.Manager.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
+	testutil.FailErr(t, "scaffold vars", err)
+	delete(vars, "content_review")
+	testutil.FailErr(t, "clear sibling content_review", s.h.Workflows.Manager.Store.State.UpdateVars(t.Context(), run, outsideParent, vars))
 
 	// Turn 1: Native agent adds and edits an authorized sibling checkout with zero extra model calls.
 	submitPromptWithApprovals(t, s, "turn one create sibling")
 	if got := counted.calls.Load(); got != 2 {
 		t.Fatalf("model calls after turn 1 = %d, want 2", got)
 	}
-	var turn1State string
+	var turn1State, turn1Stop string
 	testutil.FailErr(t, "read turn 1 state", s.h.DB.QueryRowContext(
 		t.Context(),
-		`SELECT p.state FROM invocation_programs p JOIN invocation_receipts r ON r.id = p.parent_receipt_id WHERE r.session_id = ? AND r.tool_call_id = 'call-turn-1'`,
+		`SELECT p.state, p.stop_code FROM invocation_programs p JOIN invocation_receipts r ON r.id = p.parent_receipt_id WHERE r.session_id = ? AND r.tool_call_id = 'call-turn-1'`,
 		s.session,
-	).Scan(&turn1State))
+	).Scan(&turn1State, &turn1Stop))
 	if turn1State != "completed" {
-		t.Fatalf("turn 1 program state = %q, want completed", turn1State)
+		t.Fatalf("turn 1 program state = %q stop = %q executions = %v", turn1State, turn1Stop, s.executions(t))
 	}
 
 	// Turn 2: Next independent command runs without cwd override and stays in primary checkout.
