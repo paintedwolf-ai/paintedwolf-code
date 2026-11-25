@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
+	"weak"
 
 	"github.com/flosch/pongo2/v6"
 )
@@ -65,14 +67,27 @@ type BranchRecorder struct {
 }
 
 // templateNames names the templates Compile and NameTemplate saw, so a
-// recorder can count their executions.
+// recorder can count their executions. Keys are weak, and an entry leaves the
+// map when its template is collected, so naming never retains a template.
 var templateNames sync.Map
 
 // NameTemplate records the ref a composed set loaded tpl from.
 func NameTemplate(tpl *pongo2.Template, name string) {
-	if tpl != nil && name != "" {
-		templateNames.Store(tpl, name)
+	if tpl == nil || name == "" {
+		return
 	}
+	key := weak.Make(tpl)
+	if _, loaded := templateNames.LoadOrStore(key, name); !loaded {
+		runtime.AddCleanup(tpl, func(k weak.Pointer[pongo2.Template]) { templateNames.Delete(k) }, key)
+	}
+}
+
+func templateName(tpl *pongo2.Template) (string, bool) {
+	name, ok := templateNames.Load(weak.Make(tpl))
+	if !ok {
+		return "", false
+	}
+	return name.(string), true
 }
 
 func (r *BranchRecorder) recordRender(name string) {
