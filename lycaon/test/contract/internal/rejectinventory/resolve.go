@@ -253,7 +253,7 @@ func (s *scan) localValues(d funcDecl, id *ast.Ident, obj *types.Var, depth int)
 // resolveParam resolves a parameter through the argument at every call site.
 func (s *scan) resolveParam(d funcDecl, idx int) resolution {
 	return s.node(fmt.Sprintf("param %s#%d", funcKey(d), idx), func() resolution {
-		sites := s.callers[funcKey(d)]
+		sites := s.callSites(d)
 		if len(sites) == 0 {
 			return unresolved("parameter of " + funcKey(d) + " has no static caller")
 		}

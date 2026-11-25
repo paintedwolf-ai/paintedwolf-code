@@ -1,0 +1,25 @@
+spec_version: "1.0"
+id: POSTURE_UNKNOWN
+kind: policy
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "POSTURE_UNKNOWN"
+effect: block
+x-paintedwolf-audience:
+  - coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:coordinator
+message: The session posture has no registered rules
+what: The host could not find the rules for this session's posture.
+cause: The session names a posture that the posture catalog does not register.
+why: Tool calls are checked against the posture's rules, and without them the host cannot admit the call.
+fix: Ask the person to choose one of the registered session postures, then continue.
+instead: Continue after the session has a registered posture.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: task

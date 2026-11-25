@@ -67,6 +67,10 @@ type Enumerator func() ([]string, error)
 type Options struct {
 	Patterns []string
 	Decoded  map[string]Enumerator
+	// Relays are record fields that only copy a code an inventoried emission
+	// already produced, such as a settled receipt's failure code. A read of
+	// one forwards that emission.
+	Relays []string
 }
 
 var cache sync.Map // root|patterns|decoded keys → *cacheEntry
@@ -89,7 +93,7 @@ func Scan(root string, opts Options) (Inventory, error) {
 		decoded = append(decoded, key)
 	}
 	slices.Sort(decoded)
-	raw, _ := cache.LoadOrStore(abs+"|"+strings.Join(opts.Patterns, ",")+"|"+strings.Join(decoded, ","), &cacheEntry{})
+	raw, _ := cache.LoadOrStore(abs+"|"+strings.Join(opts.Patterns, ",")+"|"+strings.Join(decoded, ",")+"|"+strings.Join(opts.Relays, ","), &cacheEntry{})
 	entry := raw.(*cacheEntry)
 	entry.once.Do(func() { entry.inv, entry.err = build(abs, opts) })
 	return entry.inv, entry.err
@@ -100,15 +104,16 @@ type scan struct {
 	pkgs     []*packages.Package
 	carriers map[string]bool
 	// forwarders maps a function to the parameter position it hands on as a code.
-	forwarders  map[string]forwarder
-	decls       map[string]funcDecl
-	callers     map[string][]callSite
-	fieldWrites map[string][]fieldWrite
-	memo        map[string]resolution
-	active      map[string]int
-	lowHit      int
-	locals      map[*types.Var][]Input
-	decoded     map[string]Enumerator
+	forwarders map[string]forwarder
+	decls      map[string]funcDecl
+	callers    map[string][]callSite
+	// interfaceMethods are the interface methods some scanned code calls.
+	interfaceMethods map[string]*types.Func
+	fieldWrites      map[string][]fieldWrite
+	nodes            nodeMemo
+	locals           map[*types.Var][]Input
+	decoded          map[string]Enumerator
+	relays           []string
 }
 
 type forwarder struct {
@@ -138,8 +143,8 @@ func build(root string, opts Options) (Inventory, error) {
 	}
 	s := &scan{
 		root: root, carriers: map[string]bool{}, forwarders: map[string]forwarder{},
-		decls: map[string]funcDecl{}, fieldWrites: map[string][]fieldWrite{}, memo: map[string]resolution{}, active: map[string]int{}, locals: map[*types.Var][]Input{},
-		decoded: opts.Decoded,
+		decls: map[string]funcDecl{}, fieldWrites: map[string][]fieldWrite{}, nodes: nodeMemo{memo: map[string]resolution{}, active: map[string]int{}}, locals: map[*types.Var][]Input{},
+		decoded: opts.Decoded, relays: opts.Relays,
 	}
 	seen := map[*types.Package]bool{}
 	for _, p := range pkgs {

@@ -1,0 +1,25 @@
+spec_version: "1.0"
+id: VET_POSTURE_DELEGATION_FORBIDDEN
+kind: policy
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "VET_POSTURE_DELEGATION_FORBIDDEN"
+effect: block
+x-paintedwolf-audience:
+  - coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:vet
+message: Vet sessions do not delegate work
+what: This vet session cannot delegate work to workers.
+cause: The vet posture is a read-only review; it dispatches no implementers.
+why: A review that started changes would no longer be reviewing the work it was given.
+fix: Continue the review in this session and report what needs changing.
+instead: Review and report; delegate changes from a build session.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: task

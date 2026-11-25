@@ -58,8 +58,34 @@ type callSite struct {
 
 const maxLiftDepth = 3
 
+// callSites returns the static calls of d, including calls through an
+// interface method that d's receiver type implements.
+func (s *scan) callSites(d funcDecl) []callSite {
+	sites := slices.Clone(s.callers[funcKey(d)])
+	fn, ok := d.pkg.TypesInfo.Defs[d.decl.Name].(*types.Func)
+	if !ok {
+		return sites
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Recv() == nil {
+		return sites
+	}
+	recv := sig.Recv().Type()
+	for key, ifaceMethod := range s.interfaceMethods {
+		if ifaceMethod.Name() != fn.Name() {
+			continue
+		}
+		iface := ifaceMethod.Type().(*types.Signature).Recv().Type().Underlying().(*types.Interface)
+		if types.Implements(recv, iface) {
+			sites = append(sites, s.callers[key]...)
+		}
+	}
+	return sites
+}
+
 func (s *scan) indexCallers() {
 	s.callers = map[string][]callSite{}
+	s.interfaceMethods = map[string]*types.Func{}
 	for _, d := range s.decls {
 		ast.Inspect(d.decl.Body, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
@@ -68,6 +94,11 @@ func (s *scan) indexCallers() {
 			}
 			if fn := calledFunc(d.pkg, call); fn != nil {
 				s.callers[fn.FullName()] = append(s.callers[fn.FullName()], callSite{decl: d, call: call})
+				if sig, ok := fn.Type().(*types.Signature); ok && sig.Recv() != nil {
+					if _, iface := sig.Recv().Type().Underlying().(*types.Interface); iface {
+						s.interfaceMethods[fn.FullName()] = fn
+					}
+				}
 			}
 			return true
 		})

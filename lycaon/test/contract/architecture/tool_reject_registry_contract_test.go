@@ -20,7 +20,8 @@ import (
 
 // scanToolRejectEmission inventories the production emission sites. Codes the
 // module copies from shipped OAR rules and posture rules come from those
-// catalogs' production loaders.
+// catalogs' production loaders. Wire feedback and receipt failure records only
+// copy codes an inventoried emission raised, so a read of one forwards it.
 func scanToolRejectEmission(t *testing.T) rejectinventory.Inventory {
 	t.Helper()
 	inv, err := rejectinventory.Scan(filepath.Join(contractcheck.RepoRoot(t), "lycaon"), rejectinventory.Options{
@@ -35,6 +36,11 @@ func scanToolRejectEmission(t *testing.T) rejectinventory.Inventory {
 			},
 			"github.com/lycaon/lycaon/internal/rules.RuleOutcome.RejectCode": postureRuleDenyCodes,
 			"github.com/lycaon/lycaon/internal/rules.RuleOutcome.Code":       postureRuleDenyCodes,
+		},
+		Relays: []string{
+			"github.com/lycaon/lycaon/pkg/api.ToolFeedback.Code",
+			"github.com/lycaon/lycaon/pkg/api.InvocationFailure.Code",
+			"github.com/lycaon/lycaon/internal/db.InvocationReceipts.FailureCode",
 		},
 	})
 	contractcheck.FailErr(t, "scan reject emission sites", err)

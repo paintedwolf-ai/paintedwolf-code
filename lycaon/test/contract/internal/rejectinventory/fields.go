@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
+	"slices"
 )
 
 type fieldWrite struct {
@@ -26,6 +27,9 @@ func (s *scan) writesOf(tn *types.TypeName, field string) []fieldWrite {
 // scanned packages has producers the inventory cannot see.
 func (s *scan) resolveFieldProducers(tn *types.TypeName, field string) resolution {
 	key := typeKey(tn) + "." + field
+	if slices.Contains(s.relays, key) {
+		return resolution{outcome: OutcomeForwardedCarrier, upstream: key}
+	}
 	if !s.scansPackage(tn.Pkg()) {
 		return unresolved("field " + key + " is declared outside the scanned packages")
 	}
