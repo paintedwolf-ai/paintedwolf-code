@@ -27,12 +27,7 @@ type phaseEvent struct {
 // coordinator, and the review-loop kicks on review-loop phases. Further
 // fixtures run on build posture.
 func (k *kickSweep) phaseKicks(ctx context.Context, wfReg *workflowdef.Registry, anchorReg *anchor.Registry, reps []coordRep) error {
-	byBinding := map[string][]coordRep{}
-	for _, cr := range reps {
-		if b := cr.state.PhaseBinding; b != nil && cr.state.PackOverlayID == "stock" {
-			byBinding[b.Key()] = append(byBinding[b.Key()], cr)
-		}
-	}
+	byBinding := boundRecipients(reps)
 	for _, wfKey := range sortedKeys(wfReg.All()) {
 		m := wfReg.All()[wfKey]
 		for _, p := range m.PhaseDefs {
@@ -50,6 +45,26 @@ func (k *kickSweep) phaseKicks(ctx context.Context, wfReg *workflowdef.Registry,
 		}
 	}
 	return nil
+}
+
+// boundRecipients groups the stock recipients of reps by the phase binding
+// their state carries, one per distinct authority and reader.
+func boundRecipients(reps []coordRep) map[string][]coordRep {
+	out := map[string][]coordRep{}
+	seen := map[string]bool{}
+	for _, cr := range reps {
+		b := cr.state.PhaseBinding
+		if b == nil || cr.state.PackOverlayID != "stock" {
+			continue
+		}
+		key := b.Key() + "|" + cr.auth.Digest + "|" + cr.auth.Reader.Fingerprint()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out[b.Key()] = append(out[b.Key()], cr)
+	}
+	return out
 }
 
 func phaseEvents(m workflowdef.Manifest, p workflowdef.PhaseDef, b hoststate.PhaseBinding, anchorReg *anchor.Registry) []phaseEvent {

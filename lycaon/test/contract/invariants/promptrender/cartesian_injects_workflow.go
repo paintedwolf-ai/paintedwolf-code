@@ -68,14 +68,11 @@ func renderActiveWorkflowInjectVariants(
 	if err != nil {
 		return err
 	}
-	bySurface := map[string]coordRep{}
-	for _, cr := range cReps {
-		if cr.state.PackOverlayID == "stock" && cr.state.SessionMode == api.SessionModeAgent && cr.state.Posture == api.SessionPostureBuild && cr.state.Loading == hoststate.LoadingAllLoaded {
-			if _, exists := bySurface[cr.state.TurnProfile.SurfaceID]; !exists {
-				bySurface[cr.state.TurnProfile.SurfaceID] = cr
-			}
-		}
+	pairs, err := cachedCoordinatorPairs()
+	if err != nil {
+		return err
 	}
+	byBinding := boundRecipients(pairs)
 	for _, key := range sortedKeys(wfReg.All()) {
 		m := wfReg.All()[key]
 		var rows []inject.WorkflowPhaseRow
@@ -83,24 +80,28 @@ func renderActiveWorkflowInjectVariants(
 			rows = append(rows, inject.WorkflowPhaseRow{ID: p.ID, CompleteWhen: p.CompleteWhen, Next: p.Next, Terminal: p.Terminal})
 		}
 		for _, p := range m.PhaseDefs {
-			surfID := p.CoordinatorSurface
-			cr, ok := bySurface[surfID]
-			if !ok {
-				continue
+			b, bErr := hoststate.BindPhase(m, p)
+			if bErr != nil {
+				return bErr
 			}
 			exit := workflowpresentation.ProjectPhaseExit(m, p, nil, nil).InjectView()
-			fr := inject.CoordinatorTurnFrame{
-				RunContext: api.CoordinatorRunContext{WorkflowID: m.ID, WorkflowVersion: m.Version, CurrentPhase: p.ID, RunID: "run-cat", RunStatus: "running"},
-				Runtime:    inject.WorkflowRuntimeSnapshot{Phases: rows, PhaseExit: exit},
+			for _, cr := range byBinding[b.Key()] {
+				runCtx := cr.state.RunContext
+				runCtx.WorkflowID, runCtx.WorkflowVersion, runCtx.CurrentPhase = m.ID, m.Version, p.ID
+				runCtx.RunStatus = string(api.WorkflowRunStatusRunning)
+				fr := inject.CoordinatorTurnFrame{
+					RunContext: runCtx,
+					Runtime:    inject.WorkflowRuntimeSnapshot{Phases: rows, PhaseExit: exit},
+				}
+				block, rErr := inject.RenderActiveWorkflowInject(ctx, injRenderer, cr.auth.Reader, "sess-wf-cat", fr, nil, nil, gateCfg)
+				if rErr != nil {
+					return rErr
+				}
+				sum.InjectAndGuidanceCount++
+				resolveNamed := resolver.forCoordinatorState(cr.state)
+				viols := checkClaimsOnce(s, fmt.Sprintf("inject/active-workflow/%s/%s (%s)", m.ID, p.ID, cr.state.ID), block, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+				sum.Violations = append(sum.Violations, viols...)
 			}
-			block, rErr := inject.RenderActiveWorkflowInject(ctx, injRenderer, cr.auth.Reader, "sess-wf-cat", fr, nil, nil, gateCfg)
-			if rErr != nil {
-				return rErr
-			}
-			sum.InjectAndGuidanceCount++
-			resolveNamed := resolver.forCoordinatorState(cr.state)
-			viols := checkClaimsOnce(s, fmt.Sprintf("inject/active-workflow/%s/%s", m.ID, p.ID), block, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
-			sum.Violations = append(sum.Violations, viols...)
 		}
 	}
 	return renderWorkflowFramesOnBoundSurfaces(ctx, s, injRenderer, wfReg, cReps, gateCfg, hintCfg, resolver, sum)

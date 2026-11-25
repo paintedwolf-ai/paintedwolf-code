@@ -329,15 +329,17 @@ func closeoutTurnReader(st hoststate.CoordinatorState, worker bool) (prompts.Rea
 	})
 }
 
-// phaseKicksNameOnlyTheirSurface verifies workflow phase.entered kicks across
-// the coordinator host states of each phase's surface.
+// phaseKicksNameOnlyTheirSurface verifies workflow-event kicks across the
+// coordinator host states bound to each phase.
 func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
 	reg, err := workflowdef.RegistryFromDirs("")
+	r.Must(err)
+	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
 	r.Must(err)
 	pairs, err := cachedCoordinatorPairs()
 	r.Must(err)
 	sweep := newKickSweep(stock(r), hoststate.NewRenderCache(), func(v string) { r.Report("%s", v) })
-	r.Must(sweep.phaseKicks(context.Background(), reg, pairs))
+	r.Must(sweep.phaseKicks(context.Background(), reg, anchorReg, pairs))
 	r.Expect(sweep.rendered, "phase kick renders")
 }
 

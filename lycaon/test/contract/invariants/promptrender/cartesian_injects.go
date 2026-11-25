@@ -88,7 +88,11 @@ func runAllKicksAndNudges(
 	if err := sweep.workerKicks(ctx, anchorReg, informKickIDs(anchorReg, "worker-"), wReps); err != nil {
 		return err
 	}
-	if err := sweep.phaseKicks(ctx, wfReg, anchorReg, cReps); err != nil {
+	pairs, err := cachedCoordinatorPairs()
+	if err != nil {
+		return err
+	}
+	if err := sweep.phaseKicks(ctx, wfReg, anchorReg, pairs); err != nil {
 		return err
 	}
 	sum.KickAndNudgeCount += sweep.rendered
