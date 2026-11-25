@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -622,4 +623,13 @@ func runCommandJobsAxisCase(
 	msgs, err := eng.BuildCompletionMessages(t.Context(), sess, history, nil)
 	testutil.FailErr(t, "BuildCompletionMessages", err)
 	assertCommandJobsInjectMatchesTarget(t, msgs, targetOffered, targetWaitSchema, tc.wantPromoted)
+}
+
+type fixtureToolLister struct {
+	sess *api.Session
+	list PromptToolLister
+}
+
+func (l fixtureToolLister) List(ctx context.Context, filter platform.ToolFilter) ([]tools.ToolMeta, error) {
+	return l.list(ctx, l.sess, filter.ProfileID)
 }

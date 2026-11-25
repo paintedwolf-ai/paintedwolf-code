@@ -19,8 +19,11 @@ func TestTheCapturePolicyAsksForTheSurfaceOfThisSessionAndRequest(t *testing.T) 
 	if policy := turn.trainingCapturePolicy(t.Context(), &api.Session{ID: "s1"}, reader); policy.Surface != nil {
 		t.Fatal("a surface hook appeared without a surface dependency")
 	}
-	turn.Context.Deps.PromptSurface = func(_ context.Context, sess *api.Session, r prompts.Reader) (trainingcapture.PromptSurface, error) {
-		gotSession, gotOffered = sess.ID, r.Offered()
+	turn.Context.Deps.PromptSurface = func(_ context.Context, sess *api.Session, r prompts.Reader, offered []string) (trainingcapture.PromptSurface, error) {
+		if !r.Valid() {
+			t.Fatal("surface asked without the request reader")
+		}
+		gotSession, gotOffered = sess.ID, offered
 		return trainingcapture.PromptSurface{TurnLoadReceiptID: 3}, nil
 	}
 	policy := turn.trainingCapturePolicy(t.Context(), &api.Session{ID: "s1"}, reader)

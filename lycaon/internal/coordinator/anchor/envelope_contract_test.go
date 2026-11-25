@@ -142,6 +142,7 @@ func TestGoldenKickRenderByteIdenticalViaEmit(t *testing.T) {
 			if id != anchor.InformRender(tc.id) {
 				t.Fatalf("pending id = %q want %q", id, anchor.InformRender(tc.id))
 			}
+			tc.live.Reader = declaredRequestReader(t)
 			text, lease, ok, _ := kicks.RenderPendingNudge(t.Context(), "sess-golden", tc.live)
 			if !ok || strings.TrimSpace(text) == "" {
 				t.Fatal("expected rendered nudge text")

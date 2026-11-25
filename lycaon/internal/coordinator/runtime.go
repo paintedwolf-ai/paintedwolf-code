@@ -79,7 +79,7 @@ func (r *Runtime) refreshDepsLocked() {
 	}
 	if r.assemblyDepsFn != nil {
 		deps := r.assemblyDepsFn()
-		if r.loop != nil {
+		if r.loop != nil && deps.TurnReader == nil {
 			deps.TurnReader = turnReaderFor(r.loop.Context.Deps)
 		}
 		eng := r.assemblyEngineLocked()

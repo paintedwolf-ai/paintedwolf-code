@@ -141,6 +141,7 @@ func renderJobGuidanceForRep(t *testing.T, s *promptrender.Stock, rep jobWaitAut
 	eng.SetDeps(assembly.AssemblyDeps{
 		Prompts:          pe,
 		Injects:          prompts.NewInjectRenderer(pe),
+		TurnReader:       authorityReader(rep.auth),
 		SessionView:      func(context.Context, *api.Session) *catalogview.View { return view },
 		Selection:        staticSelection{loaded: cs.Loaded},
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },

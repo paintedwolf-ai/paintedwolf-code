@@ -26,7 +26,7 @@ func TestPromptSurfaceNamesEachToolsSourceAndTheUnitsItAttached(t *testing.T) {
 		Loading: &loading.Service{Ledger: ledger},
 	}
 	offered := []string{"read", "edit", "update_progress"}
-	surface, err := m.PromptSurface(t.Context(), &api.Session{ID: "session"}, coordinatorRequestReader(t, offered, nil))
+	surface, err := m.PromptSurface(t.Context(), &api.Session{ID: "session"}, coordinatorRequestReader(t, offered, nil), offered)
 	testutil.FailErr(t, "build prompt surface", err)
 	want := []trainingcapture.OfferedTool{{Tool: "read", Source: "standing"}, {Tool: "edit", Source: "predicted"}, {Tool: "update_progress", Source: "companion", With: "edit"}}
 	if !slices.Equal(surface.Tools, want) {

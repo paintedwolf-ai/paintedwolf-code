@@ -3,6 +3,7 @@ package kick
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -105,11 +106,19 @@ func (k *KickEngine) renderCoordinatorKick(ctx context.Context, kickID string, m
 		return "", fmt.Errorf("kick %q: prompt engine not configured", kickID)
 	}
 	if !live.Reader.Valid() {
-		return "", fmt.Errorf("kick %q: no reader for the model call", kickID)
+		return unreadKick(ctx, kickID), nil
 	}
 	data := buildKickRenderData(meta, live, time.Now().UTC())
 	if err := prompts.MergeCoordinatorKickVarsForTools(data, live.Reader); err != nil {
 		return "", fmt.Errorf("kick policy vars: %w", err)
 	}
 	return cfg.engine.RenderKick(ctx, live.Reader, strings.TrimSpace(kickID), data)
+}
+
+// unreadKick carries the kick's signal as its host marker when the model call
+// it precedes has no Reader to render its copy against.
+func unreadKick(ctx context.Context, kickID string) string {
+	kickID = strings.TrimSpace(kickID)
+	slog.WarnContext(ctx, "kick has no reader for the model call; delivering its marker", "kick", kickID)
+	return "[host:" + kickID + "]"
 }

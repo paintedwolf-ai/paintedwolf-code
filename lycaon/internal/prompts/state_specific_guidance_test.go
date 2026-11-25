@@ -319,8 +319,12 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 		testutil.FailErr(t, "Vars dispatch0", err)
 		outDispatch0, err := engine.Render(t.Context(), "agents/coordinator-mode-implement-dispatch.md", vars0)
 		testutil.FailErr(t, "Render dispatch 0", err)
-		if !strings.Contains(outDispatch0, "web-researcher") || strings.Contains(outDispatch0, "scope.mode: write") {
-			t.Fatalf("dispatch at 0 roots did not narrow to web-researcher:\n%s", outDispatch0)
+		// The write lane admits no read-lane researcher, and no writer runs without a root.
+		if f0 := dispatch0Reader.Facts(); f0["can_spawn_workers"] != false || f0["can_spawn_web_research"] != false {
+			t.Fatalf("dispatch at 0 roots spawn facts = workers:%v web:%v, want none", f0["can_spawn_workers"], f0["can_spawn_web_research"])
+		}
+		if strings.Contains(outDispatch0, "scope.mode: write") {
+			t.Fatalf("dispatch at 0 roots kept write-worker dispatch guidance:\n%s", outDispatch0)
 		}
 
 		obsPlan, err := prompts.CompileSurfacePlan("observe_investigate", 1)

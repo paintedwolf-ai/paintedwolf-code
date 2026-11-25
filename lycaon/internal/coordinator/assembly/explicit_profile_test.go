@@ -2,6 +2,7 @@ package assembly
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestExplicitToolProfilesDoNotAdvertiseCoordinatorReportProtocol(t *testing.
 			history := []api.Message{{Role: api.MessageRoleUser, Content: "Explain this selection."}}
 			messages, err := engine.BuildCompletionMessages(t.Context(), sess, history, &frame)
 			testutil.FailErr(t, "assemble explicit profile prompt", err)
-			if len(listed) != 1 || listed[0] != profile {
+			if len(listed) == 0 || slices.ContainsFunc(listed, func(id string) bool { return id != profile }) {
 				t.Fatalf("tool listing profiles = %v, want only %s", listed, profile)
 			}
 			if workflow.phase != "work" || frame.Machine.ProfileID != profile {

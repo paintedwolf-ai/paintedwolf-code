@@ -303,7 +303,7 @@ func (k *KickEngine) renderEagerKick(ctx context.Context, templateID string, dat
 		return "", fmt.Errorf("kick %q: prompt engine not configured", templateID)
 	}
 	if !reader.Valid() {
-		return "", fmt.Errorf("eager kick %q: no reader for the model call", templateID)
+		return unreadKick(ctx, templateID), nil
 	}
 	vars := make(map[string]any, len(data))
 	for key, value := range data {

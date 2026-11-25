@@ -4,6 +4,11 @@ package readerseam
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/readerfacts"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -115,9 +121,38 @@ func TestCoordinatorRequestReaderMatchesOracle(t *testing.T) {
 	auth, err := hoststate.FreezeTurnAuthority(ctx, state)
 	contractcheck.FailErr(t, "freeze oracle turn", err)
 	if got := visionFree(auth.Reader.Fingerprint()); got != req.Debug.ReaderFingerprint {
-		t.Fatalf("oracle Reader %s != request Reader %s\noracle offered=%v requestable=%v\nrequest tools=%v",
-			got, req.Debug.ReaderFingerprint, auth.Reader.Offered(), auth.Reader.Requestable(), toolNames(req.Tools))
+		t.Fatalf("oracle Reader %s != request Reader %s\n%s", got, req.Debug.ReaderFingerprint, readerDiff(t, host, auth, req))
 	}
+}
+
+// readerDiff attributes a mismatch: the oracle projection read with the live
+// host facts either matches the request, isolating the host facts, or not.
+func readerDiff(t *testing.T, host prompts.HostFacts, auth hoststate.TurnAuthority, req modelcall.CompletionRequest) string {
+	t.Helper()
+	schemas := map[string]map[string]any{}
+	for name, schema := range auth.PostLoadSchemas {
+		schemas[name] = schema
+	}
+	for name, schema := range auth.Schemas {
+		schemas[name] = schema
+	}
+	live, err := prompts.NewReader(host, prompts.TurnProjection{
+		ProfileID: auth.Reader.ProfileID(), SurfaceID: auth.Reader.SurfaceID(),
+		Plan: auth.Plan, Offered: auth.Offered, ProjectedSchemas: schemas,
+	})
+	if err != nil {
+		return "live host facts on the oracle projection: " + err.Error()
+	}
+	var diffs []string
+	oracleFacts, liveFacts := auth.Reader.Facts(), live.Facts()
+	for key, want := range liveFacts {
+		if !reflect.DeepEqual(oracleFacts[key], want) {
+			diffs = append(diffs, fmt.Sprintf("%s: oracle=%v live=%v", key, oracleFacts[key], want))
+		}
+	}
+	sort.Strings(diffs)
+	return fmt.Sprintf("oracle projection with live host facts matches request: %t\nfact differences:\n%s\nrequest tools=%v",
+		live.Fingerprint() == req.Debug.ReaderFingerprint, strings.Join(diffs, "\n"), toolNames(req.Tools))
 }
 
 // A write-scope implementer's first request is read by the Reader the
@@ -127,6 +162,7 @@ func TestWorkerRequestReaderMatchesOracle(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
 	ctx := context.Background()
 	dir := t.TempDir()
+	contractcheck.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(dir, "README.md"), []byte("fixture\n"), 0o600))
 	gittest.InitCommit(t, dir, "fixture")
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	contractcheck.FailErr(t, "create parent", err)
@@ -187,8 +223,7 @@ func TestWorkerRequestReaderMatchesOracle(t *testing.T) {
 	auth, err := hoststate.FreezeWorkerAuthority(ctx, state)
 	contractcheck.FailErr(t, "freeze worker oracle", err)
 	if got := visionFree(auth.Reader.Fingerprint()); got != req.Debug.ReaderFingerprint {
-		t.Fatalf("oracle Reader %s != worker request Reader %s\noracle offered=%v requestable=%v\nrequest tools=%v",
-			got, req.Debug.ReaderFingerprint, auth.Reader.Offered(), auth.Reader.Requestable(), toolNames(req.Tools))
+		t.Fatalf("oracle Reader %s != worker request Reader %s\n%s", got, req.Debug.ReaderFingerprint, readerDiff(t, host, auth, req))
 	}
 }
 

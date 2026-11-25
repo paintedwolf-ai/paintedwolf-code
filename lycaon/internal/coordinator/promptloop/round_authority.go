@@ -6,6 +6,8 @@ import (
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -66,28 +68,31 @@ func (a RoundAuthority) toolContext(base tools.ToolContext) tools.ToolContext {
 }
 
 // appendAgentEnabledNudge renders against the next request's projection, which
-// the upgraded mode widens.
+// the upgraded mode widens; without that Reader it delivers the host marker.
 func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sess *api.Session, sessionID, profileID string, state *promptLoopTurnState) ([]api.Message, error) {
 	if l.Closeout.Deps.RenderHostKick == nil {
 		return state.history, nil
 	}
-	turn, err := l.Context.coordinatorToolsForTurn(ctx, sess, profileID, state.history, 0, 0, state.coordinatorFrame, nil)
+	const kickID = "session-agent-enabled"
+	content := guard.HostKickMarker(anchor.SessionAgentEnabled.String())
+	reader, err := l.nextRequestReader(ctx, sess, profileID, state)
 	if err != nil {
-		return nil, err
-	}
-	reader, err := l.Context.requestReader(ctx, sess, turn, turn.Metas)
-	if err != nil {
-		slog.WarnContext(ctx, "agent-enabled nudge reader", "session_id", sessionID, "error", err)
-		return state.history, nil
-	}
-	content, err := l.Closeout.Deps.RenderHostKick(ctx, reader, "session-agent-enabled", nil)
-	if err != nil {
+		slog.WarnContext(ctx, "agent-enabled nudge has no request reader; delivering its marker", "session_id", sessionID, "error", err)
+	} else if content, err = l.Closeout.Deps.RenderHostKick(ctx, reader, kickID, nil); err != nil {
 		return nil, err
 	}
 	return l.Nudges.appendHostNudge(ctx, sessionID, state.history, HostNudge{
 		SignalID: anchor.SessionAgentEnabled.String(),
 		Content:  content,
 	}, "", state)
+}
+
+func (l *PromptLoop) nextRequestReader(ctx context.Context, sess *api.Session, profileID string, state *promptLoopTurnState) (prompts.Reader, error) {
+	turn, err := l.Context.coordinatorToolsForTurn(ctx, sess, profileID, state.history, 0, 0, state.coordinatorFrame, nil)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	return l.Context.requestReader(ctx, sess, turn, turn.Metas)
 }
 
 func (l *promptContext) swapObservedMode(sessionID string, mode api.SessionMode) (api.SessionMode, bool) {

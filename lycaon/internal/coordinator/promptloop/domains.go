@@ -60,7 +60,7 @@ type ContextSurfaceDeps struct {
 	PrepareAgentPolicy func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
 	ToolProcedures     func(ctx context.Context, sess *api.Session, reader prompts.Reader) (string, error)
 	// PromptSurface reports the host facts that selected a request's tools and units.
-	PromptSurface                   func(ctx context.Context, sess *api.Session, reader prompts.Reader) (trainingcapture.PromptSurface, error)
+	PromptSurface                   func(ctx context.Context, sess *api.Session, reader prompts.Reader, offered []string) (trainingcapture.PromptSurface, error)
 	CoordinatorSurfaceActivityLabel func(surfaceID string) string
 	WebSearchEnabled                func() bool
 	CoordinatorFrame                inject.CoordinatorTurnFrameSource

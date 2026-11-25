@@ -131,7 +131,7 @@ func TestRuntimeAssemblyEngineDirect(t *testing.T) {
 		PromptToolLister: prompttest.CoordinatorTools,
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{
-		AssemblyDeps: func() assembly.AssemblyDeps { return deps },
+		AssemblyDeps: func() assembly.AssemblyDeps { return withFixtureReader(deps) },
 	})
 	rt.BeginPromptTurn("s1", anchor.InformRender(anchor.GateBlocked))
 	msgs, err := rt.BuildCompletionMessages(context.Background(), &api.Session{

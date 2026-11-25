@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/pongoplain"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -143,7 +144,7 @@ func TestCommandExternalSelectorVisibilityWitness(t *testing.T) {
 			CommandExternalHidden: externalHidden,
 			TurnProfile:           invProfile,
 			Plan:                  invPlan,
-			SpawnAllowlist:        stock.SpawnAllowlist,
+			SpawnAllowlist:        stock.SpawnAllowlist, Roots: singleGitRoot(),
 		})
 		contractcheck.FailErr(t, "FreezeTurnAuthority", err)
 		if got := coordAuth.Reader.CanReachProgram("external"); got != wantExternal || coordAuth.ProgramReach("external") != wantExternal {
@@ -166,7 +167,7 @@ func TestCommandExternalSelectorVisibilityWitness(t *testing.T) {
 			HasAnyGitRoot:         true,
 			OnWorkerBranch:        true,
 			WebSearch:             true,
-			CommandExternalHidden: externalHidden,
+			CommandExternalHidden: externalHidden, BranchView: hoststate.BranchIsolatedWorker,
 		})
 		contractcheck.FailErr(t, "FreezeWorkerAuthority", err)
 		if got := workerAuth.Reader.CanReachProgram("external"); got != wantExternal || workerAuth.ProgramReach("external") != wantExternal {
@@ -200,7 +201,7 @@ func verifyAuthorityProjections(t *testing.T, stock hoststate.PackOverlay) {
 		RunContext:     askRunCtx,
 		TurnProfile:    askProfile,
 		Plan:           askPlan,
-		SpawnAllowlist: prompts.ReadOnlyAgents(stock.SpawnAllowlist),
+		SpawnAllowlist: prompts.ReadOnlyAgents(stock.SpawnAllowlist), HasAnyGitRoot: true, Roots: singleGitRoot(),
 	}
 	askAuth, err := hoststate.FreezeTurnAuthority(t.Context(), askState)
 	contractcheck.FailErr(t, "FreezeTurnAuthority Ask", err)
@@ -233,7 +234,7 @@ func verifyAuthorityProjections(t *testing.T, stock hoststate.PackOverlay) {
 		WebSearch:      true,
 		TurnProfile:    roProfile,
 		Plan:           roPlan,
-		SpawnAllowlist: stock.SpawnAllowlist,
+		SpawnAllowlist: stock.SpawnAllowlist, HasAnyGitRoot: true, Roots: singleGitRoot(),
 	})
 	contractcheck.FailErr(t, "FreezeTurnAuthority implement_routing", err)
 	cmdProps, _ := roAuth.Schemas["command"]["properties"].(map[string]any)
@@ -399,7 +400,7 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 								Overlay: stock, SessionMode: mode, Posture: posture, RootCount: 1,
 								HasGit: true, WebSearch: true, CommandExternalHidden: externalHidden,
 								RunContext: cc.runCtx, TurnProfile: tp, Plan: pl, Loaded: loaded,
-								SpawnAllowlist: stock.SpawnAllowlist,
+								SpawnAllowlist: stock.SpawnAllowlist, HasAnyGitRoot: true, Roots: singleGitRoot(),
 							})
 							contractcheck.FailErr(t, "FreezeTurnAuthority", fErr)
 							lbl := string(posture) + "/" + string(mode) + "/" + cc.surfID + "/" + cc.runCtx.RunID
@@ -441,7 +442,7 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 						auth, wErr := hoststate.FreezeWorkerAuthority(t.Context(), hoststate.WorkerState{
 							Overlay: stock, AgentID: agent.ID, ToolProfile: agent.ToolProfile,
 							Posture: posture, ParentSessionMode: parentMode, RootCount: 1,
-							HasGit: true, WebSearch: true, Loaded: loaded,
+							HasGit: true, WebSearch: true, Loaded: loaded, HasAnyGitRoot: true,
 						})
 						contractcheck.FailErr(t, "FreezeWorkerAuthority", wErr)
 						lbl := agent.ID + "/" + string(posture) + "/" + string(parentMode)
@@ -477,7 +478,7 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 			RootCount:         1,
 			HasGit:            true,
 			WebSearch:         true,
-			Loaded:            map[string]bool{"terminal_send": true, "page_open": true},
+			Loaded:            map[string]bool{"terminal_send": true, "page_open": true}, HasAnyGitRoot: true,
 		})
 		contractcheck.FailErr(t, "FreezeWorkerAuthority spec implementer", err)
 		for _, mustOffer := range []string{"command", "terminal_open", "terminal_send", "verify", "page_open", "wait"} {
@@ -744,4 +745,9 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 			t.Fatalf("narrowed render mismatch:\n%s", outNarrowed)
 		}
 	})
+}
+
+// singleGitRoot is the one Git root the hand-built states read.
+func singleGitRoot() []hoststate.RootSpec {
+	return []hoststate.RootSpec{{Ref: projectroot.RootRef{ID: "r1", Label: "primary", Path: "/tmp/fixture-primary", IsPrimary: true}, HasGit: true}}
 }

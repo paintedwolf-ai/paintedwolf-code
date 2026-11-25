@@ -565,7 +565,12 @@ func newMutableCoordFuzzEngine(bundle fuzzOverlayBundle, st hoststate.Coordinato
 	eng.SetDeps(assembly.AssemblyDeps{
 		Prompts: bundle.engine,
 		Injects: bundle.injRender,
-		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		TurnReader: func(context.Context, *api.Session, []api.Message, inject.CoordinatorTurnFrame) (prompts.Reader, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			return m.auth.Reader, nil
+		},
+		Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		SessionView: func(context.Context, *api.Session) *catalogview.View {
 			m.mu.Lock()
 			cur := m.st

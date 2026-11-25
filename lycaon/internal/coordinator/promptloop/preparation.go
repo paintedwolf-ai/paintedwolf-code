@@ -98,6 +98,10 @@ func (l *promptContext) requestReader(ctx context.Context, sess *api.Session, tu
 	if err != nil {
 		return prompts.Reader{}, fmt.Errorf("session host facts: %w", err)
 	}
+	if !turn.Plan.Compiled() && l.Deps.Policy == nil {
+		// A loop without a tool policy compiles no plan; its requests carry no tools.
+		turn.Plan = toolsurface.Compile(nil, nil)
+	}
 	return prompts.NewReader(host, turn.Projection(callable))
 }
 

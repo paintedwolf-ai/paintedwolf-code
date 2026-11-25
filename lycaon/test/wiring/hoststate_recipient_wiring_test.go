@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -81,7 +82,7 @@ func TestMultiRootGitFactsReachTheRequestReader(t *testing.T) {
 		{name: "both", id: "both", primaryGit: true, secondGit: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			projectID := "multi-root-" + tc.id
+			projectID := uuid.NewString()
 			primary, secondary := t.TempDir(), t.TempDir()
 			if tc.primaryGit {
 				gittest.Init(t, primary)

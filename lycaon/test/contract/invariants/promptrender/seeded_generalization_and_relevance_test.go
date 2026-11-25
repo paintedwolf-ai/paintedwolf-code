@@ -161,6 +161,7 @@ func buildRecipientEngine(
 	deps := assembly.AssemblyDeps{
 		Prompts:          pe,
 		Injects:          prompts.NewInjectRenderer(pe),
+		TurnReader:       authorityReader(auth),
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: staticCoordFrame{ctx: runCtx},
 		Selection:        staticSelection{loaded: loadedSetFromOffered(auth.Offered)},
@@ -520,6 +521,7 @@ func buildWorkerRecipientEngine(s *promptrender.Stock, profiles []sandbox.ToolPr
 	deps := assembly.AssemblyDeps{
 		Prompts:     pe,
 		Injects:     prompts.NewInjectRenderer(pe),
+		TurnReader:  authorityReader(auth),
 		SessionView: func(context.Context, *api.Session) *catalogview.View { return view },
 		Selection:   staticSelection{loaded: loadedSetFromOffered(auth.Offered)},
 		Workers:     assembly.Workers{Leg: staticWorkerLeg{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"Inspect archive handling."}}}},
@@ -957,5 +959,12 @@ func buildLoaderAndAskTransitionCaptures(
 		{"03b-loader-recovery-trigger-absent.md", "Loader Recovery Pair — Trigger Absent (JQ_FORMAT_INVALID, command loadable without post-load schema)", "worker/web-researcher/loader-only/jq_format_invalid", api.SessionModeAgent, loaderAuth, loaderAbsMsgs},
 		{"04a-ask-before-switch.md", "Ask-to-Agent Transition — Before Switch (Ask Mode)", askSt.ID, api.SessionModeAsk, askAuth, askBeforeMsgs},
 		{"04b-agent-after-switch.md", "Ask-to-Agent Transition — After Switch (Agent Mode)", floorSt.ID, api.SessionModeAgent, floorAuth, agentAfterMsgs},
+	}
+}
+
+// authorityReader serves the oracle Reader of the frozen request.
+func authorityReader(auth hoststate.TurnAuthority) assembly.TurnReaderSource {
+	return func(context.Context, *api.Session, []api.Message, inject.CoordinatorTurnFrame) (prompts.Reader, error) {
+		return auth.Reader, nil
 	}
 }

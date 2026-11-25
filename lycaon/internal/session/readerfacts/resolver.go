@@ -132,9 +132,20 @@ func (r *Resolver) Observe(ctx context.Context, sess *api.Session) (Observation,
 	if src.Catalog == nil || src.Profiles == nil || src.Workspace == nil || src.Workspaces == nil || src.ToolContext == nil {
 		return Observation{}, errors.New("reader facts: session sources incomplete")
 	}
-	view := src.Catalog.ViewForSession(ctx, sess)
-	if view == nil {
-		return Observation{}, fmt.Errorf("reader facts: no catalog view for session %s", sess.ID)
+	// Without a session view, admission reads the shipped profiles; so does the Reader.
+	var (
+		profiles []sandbox.ToolProfile
+		schemas  *toolschema.Config
+	)
+	if view := src.Catalog.ViewForSession(ctx, sess); view != nil {
+		profiles, schemas = view.ToolProfiles, view.ToolSchemas
+	}
+	if len(profiles) == 0 {
+		shipped, err := sandbox.LoadToolProfiles()
+		if err != nil {
+			return Observation{}, fmt.Errorf("reader facts: tool profiles: %w", err)
+		}
+		profiles = shipped
 	}
 	roots, err := src.Workspace.Roots(ctx, sess)
 	if err != nil {
@@ -143,8 +154,8 @@ func (r *Resolver) Observe(ctx context.Context, sess *api.Session) (Observation,
 	branchRoot, onBranch := src.Workspaces.OnWorkerBranch(ctx, sess)
 	obs := Observation{
 		Session:               sess,
-		Profiles:              src.Profiles.ConstrainSessionProfiles(ctx, sess, view.ToolProfiles),
-		Schemas:               view.ToolSchemas,
+		Profiles:              src.Profiles.ConstrainSessionProfiles(ctx, sess, profiles),
+		Schemas:               schemas,
 		Roots:                 roots,
 		BranchRoot:            branchRoot,
 		OnWorkerBranch:        onBranch,

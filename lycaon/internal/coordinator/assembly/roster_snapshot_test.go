@@ -13,7 +13,8 @@ import (
 func TestRosterRenderingReusesAvailabilityFacts(t *testing.T) {
 	engine := &AssemblyEngine{}
 	engine.SetDeps(withTestTurnReader(AssemblyDeps{
-		Injects: prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)})),
+		TurnReader: declaredInvestigateReader(t),
+		Injects:    prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)})),
 		RepoKnownEmpty: func(context.Context, string) bool {
 			t.Error("rendering re-read repository availability")
 			return true

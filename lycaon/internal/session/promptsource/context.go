@@ -193,8 +193,7 @@ func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, reader 
 // PromptSurface reports the host facts that shaped a request offering these
 // tools: their turn-load sources, the procedure units they attached, the skill
 // the turn read and the decision in effect.
-func (m *Context) PromptSurface(ctx context.Context, sess *api.Session, reader prompts.Reader) (trainingcapture.PromptSurface, error) {
-	offered := reader.Offered()
+func (m *Context) PromptSurface(ctx context.Context, sess *api.Session, reader prompts.Reader, offered []string) (trainingcapture.PromptSurface, error) {
 	surface := trainingcapture.PromptSurface{Tools: []trainingcapture.OfferedTool{}, Units: []trainingcapture.RenderedUnit{}}
 	var standing turnload.Standing
 	if m.Loading != nil && m.Loading.Ledger != nil {

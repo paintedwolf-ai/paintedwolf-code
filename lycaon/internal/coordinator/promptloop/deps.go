@@ -50,11 +50,11 @@ func (l *modelTurn) trainingCapturePolicy(ctx context.Context, sess *api.Session
 		policy.Render = l.Deps.LLMService.Registry.RenderRequest
 	}
 	if surface := l.Context.Deps.PromptSurface; surface != nil {
-		policy.Surface = func(ctx context.Context, _ []string) (trainingcapture.PromptSurface, error) {
+		policy.Surface = func(ctx context.Context, offered []string) (trainingcapture.PromptSurface, error) {
 			if !reader.Valid() {
 				return trainingcapture.PromptSurface{}, fmt.Errorf("request reader unavailable")
 			}
-			return surface(ctx, sess, reader)
+			return surface(ctx, sess, reader, offered)
 		}
 	}
 	return policy
