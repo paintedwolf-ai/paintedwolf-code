@@ -181,7 +181,7 @@ func TestPromptCacheStableKeyChangesWithEffectiveCapabilitySurface(t *testing.T)
 		t.Fatalf("build ask surface: %v", err)
 	}
 	first := eng.Cache().LoadTurn(sess.ID)
-	if !strings.Contains(first.StablePrompt, "`local-db`") || !strings.Contains(first.StablePrompt, "`local-db` ask") {
+	if !strings.Contains(first.StablePrompt, "`local-db`") || !strings.Contains(first.StablePrompt, "`local-db` (ask)") {
 		t.Fatalf("capability projection missing from stable prompt: %q", first.StablePrompt)
 	}
 	firstKey := first.StablePromptKey
