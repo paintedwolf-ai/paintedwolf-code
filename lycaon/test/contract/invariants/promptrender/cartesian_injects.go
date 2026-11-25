@@ -55,13 +55,13 @@ func runKicksAndInjectsMatrix(
 	if err := runCoordinatorInjectRenders(ctx, s, cReps, resolver, sum); err != nil {
 		return err
 	}
-	if err := runWorkerInjectRenders(ctx, s, wReps, cache, sum); err != nil {
+	if err := runWorkerInjectRenders(ctx, s, wReps, sum); err != nil {
 		return err
 	}
 	if err := runGuidanceAndUtilityRenders(ctx, s, cReps, wReps, sum); err != nil {
 		return err
 	}
-	return runGateFeedbackRenders(ctx, s, cReps, sum)
+	return runGateFeedbackRenders(ctx, s, sum)
 }
 
 func runAllKicksAndNudges(

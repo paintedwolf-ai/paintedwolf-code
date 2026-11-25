@@ -192,10 +192,7 @@ func BuildHostStateInventory(in HostStateInventoryInput) (*HostStateInventoryRep
 	if err != nil {
 		return nil, err
 	}
-	matched, unmatched, err := joinInstructionProducers(in, specs)
-	if err != nil {
-		return nil, err
-	}
+	matched, unmatched := joinInstructionProducers(in, specs)
 	rows := inv.domainRows()
 	rep := &HostStateInventoryReport{
 		CatalogRevision:        in.Catalog.Revision,

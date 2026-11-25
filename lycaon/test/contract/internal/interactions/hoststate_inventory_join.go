@@ -172,7 +172,7 @@ func classifyEnvelopeValue(val any, typ string) string {
 // producer: a traced host write, a declared reader fact, an anchor envelope
 // variable, an OAR host fact, or a delivered render that took both arms of the
 // site's guard. Anything else lands in the unmatched bucket.
-func joinInstructionProducers(in HostStateInventoryInput, specs map[string]hoststate.AnchorEnvelopeSpec) (matched, unmatched []string, err error) {
+func joinInstructionProducers(in HostStateInventoryInput, specs map[string]hoststate.AnchorEnvelopeSpec) (matched, unmatched []string) {
 	anchorVars := map[string]bool{}
 	for _, sp := range specs {
 		for _, v := range sp.Vars {
@@ -212,7 +212,7 @@ func joinInstructionProducers(in HostStateInventoryInput, specs map[string]hosts
 			}
 		}
 	}
-	return sortedKeysOf(matchedSet), sortedKeysOf(unmatchedSet), nil
+	return sortedKeysOf(matchedSet), sortedKeysOf(unmatchedSet)
 }
 
 // branchIndex maps a template and guard line to its delivered branch outcomes.
