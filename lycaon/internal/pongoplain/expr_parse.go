@@ -70,6 +70,7 @@ func (e *Expr) HasLogicalOrCompare() bool {
 		if e.Literal == "true" || e.Literal == "false" {
 			return true
 		}
+	default:
 	}
 	return e.Left.HasLogicalOrCompare() ||
 		e.Right.HasLogicalOrCompare() ||
@@ -424,6 +425,7 @@ func (p *exprParser) parseOperand() (*Expr, error) {
 			return nil, fmt.Errorf("unexpected keyword %q in expression", tk.val)
 		}
 		return p.parseSelector(tk.val)
+	default:
 	}
 	return nil, fmt.Errorf("unexpected token %q", tk.val)
 }

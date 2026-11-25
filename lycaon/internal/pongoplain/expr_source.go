@@ -11,6 +11,7 @@ func (e *Expr) Atoms() []*Expr {
 		return e.Left.Atoms()
 	case ExprAnd, ExprOr:
 		return append(e.Left.Atoms(), e.Right.Atoms()...)
+	default:
 	}
 	return []*Expr{e}
 }
@@ -41,6 +42,7 @@ func (e *Expr) level() int {
 			return levelPower
 		}
 		return levelTerm
+	default:
 	}
 	return levelFactor
 }
@@ -76,6 +78,7 @@ func (e *Expr) Source() string {
 			return e.Left.at(levelTerm) + " " + e.Op + " " + e.Right.at(levelPower)
 		}
 		return e.Left.at(levelFactor) + " ^ " + e.Right.at(levelPower)
+	default:
 	}
 	var b strings.Builder
 	b.WriteString(e.Left.Source())
@@ -104,6 +107,7 @@ func (e *Expr) Decide(values map[string]bool) bool {
 		return e.Left.Decide(values) && e.Right.Decide(values)
 	case ExprOr:
 		return e.Left.Decide(values) || e.Right.Decide(values)
+	default:
 	}
 	return values[e.Source()]
 }

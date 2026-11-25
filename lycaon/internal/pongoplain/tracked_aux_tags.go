@@ -162,7 +162,7 @@ func (node *trackedWidthratioNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	}
 	value := int(math.Ceil(current.Float()/maxF*width.Float() + 0.5))
 	if node.ctxName == "" {
-		if _, wErr := writer.WriteString(fmt.Sprintf("%d", value)); wErr != nil {
+		if _, wErr := fmt.Fprintf(writer, "%d", value); wErr != nil {
 			return ctx.OrigError(wErr, node.position)
 		}
 	} else {

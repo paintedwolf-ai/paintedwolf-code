@@ -101,6 +101,7 @@ func AdmissionDenial(w rejectinventory.Witness) bool {
 	switch isolation.Disposition(w.Disposition) {
 	case isolation.DispositionHumanDecision, isolation.DispositionRetry:
 		return false
+	default:
 	}
 	return true
 }

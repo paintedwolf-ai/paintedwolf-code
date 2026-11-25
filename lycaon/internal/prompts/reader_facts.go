@@ -155,7 +155,7 @@ func deriveSpawnFactFlags(
 				continue
 			}
 		}
-		isExternal := false
+		var isExternal bool
 		if prof, ok := byID[name]; ok {
 			isExternal = slices.Contains(prof.Capabilities, agentdef.CapabilityExternal)
 		} else {

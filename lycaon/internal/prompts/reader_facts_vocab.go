@@ -487,7 +487,13 @@ func checkStructuralFragmentTransitive(eff *extpacks.EffectiveCatalog, unitID, o
 		}
 	}
 	tree, err := pongoplain.ParseTemplateTree(source)
-	if err != nil || eff == nil {
+	if err != nil {
+		if rErr := report(fmt.Sprintf("structural fragment could not be parsed for include checks: %v", err)); rErr != nil {
+			return nil, rErr
+		}
+		return notes, nil
+	}
+	if eff == nil {
 		return notes, nil
 	}
 	var walk func([]*pongoplain.TemplateNode) error

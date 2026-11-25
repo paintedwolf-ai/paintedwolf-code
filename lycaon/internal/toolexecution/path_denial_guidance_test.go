@@ -132,6 +132,7 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 	bp := stockBlockPlane(t)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			assertPathDenialPreflights(t, bp, denyRule, tc.result, tc.wantWriteCode, tc.wantReadCode, tc.wantGuidance, tc.wantRuleFields)
 		})
 	}

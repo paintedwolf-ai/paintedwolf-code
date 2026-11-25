@@ -192,7 +192,7 @@ func rejectStructuralTemplateViolations(engine PromptTemplateEngine, kind, templ
 	}
 	loader := newLayeredLoader(fe.layers, fe.registered)
 	if _, err := loader.Preflight(templatePath); err != nil {
-		return nil
+		return fmt.Errorf("%s template %s: %w", kind, templatePath, err)
 	}
 	var declared map[string]bool
 	if vocab, err := BuildReaderFactVocabulary(fe.layers.Catalog); err == nil {

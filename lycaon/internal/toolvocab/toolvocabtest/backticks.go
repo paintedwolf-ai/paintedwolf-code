@@ -342,9 +342,10 @@ func ExtractInlineBackticks(prose string) []BacktickSpan {
 		trimmed := strings.TrimSpace(lineText)
 		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
 			marker := trimmed[:3]
-			if inFence == "" {
+			switch inFence {
+			case "":
 				inFence = marker
-			} else if inFence == marker {
+			case marker:
 				inFence = ""
 			}
 			lineOffset += len(lineText) + 1

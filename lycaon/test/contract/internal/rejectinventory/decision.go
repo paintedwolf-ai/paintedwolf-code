@@ -204,9 +204,10 @@ func (s *scan) guardsOnPath(d funcDecl, path []ast.Node) []condition {
 		case *ast.FuncLit, *ast.FuncDecl:
 			return guards
 		case *ast.IfStmt:
-			if child == parent.Body {
+			switch child {
+			case parent.Body:
 				add(parent.Cond, false)
-			} else if child == parent.Else {
+			case parent.Else:
 				add(parent.Cond, true)
 			}
 		case *ast.CaseClause:
