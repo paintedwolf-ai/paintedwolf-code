@@ -5,11 +5,12 @@ package app
 import (
 	"archive/zip"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/scan"
-	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/scan"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/project"

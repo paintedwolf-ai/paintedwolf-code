@@ -1,7 +1,6 @@
 package prompts
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -20,32 +19,47 @@ import (
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
-// ReaderInput is what a render knows about who will read it.
-type ReaderInput struct {
-	ProfileID             string
-	SurfaceID             string
-	Mode                  string
-	SessionMode           string
-	Profiles              []sandbox.ToolProfile
-	Plan                  toolsurface.Plan
-	Loaded                map[string]bool
-	Visible               []string
-	Schemas               *toolschema.Config
-	ProjectedSchemas      map[string]map[string]any
+// HostFacts are the session facts every Reader for one session shares.
+type HostFacts struct {
+	SessionMode string
+	// Profiles are the session's catalog profiles constrained by its posture.
+	Profiles []sandbox.ToolProfile
+	Schemas  *toolschema.Config
+	// HasGit covers the primary root or the worker branch; HasAnyGitRoot any root.
 	RootCount             int
 	HasGit                bool
 	HasAnyGitRoot         bool
 	OnWorkerBranch        bool
 	WebSearch             bool
-	SpawnAllowlist        []string
 	ReviewsConfinedWrites bool
 	CommandExternalHidden bool
 	SessionScratchDir     string
 	SharedTempLocations   []string
+	// SpawnAllowlist is the declared dispatch roster; the reader applies the
+	// turn's lane, mode, root and web-search exclusions.
+	SpawnAllowlist []string
+}
+
+// TurnProjection is the tool projection one model request carries.
+type TurnProjection struct {
+	ProfileID string
+	SurfaceID string
+	Plan      toolsurface.Plan
+	// Offered names the tools on the request; only plan-immediate names count.
+	Offered []string
+	// ProjectedSchemas are the request's argument schemas, offered and deferred.
+	ProjectedSchemas map[string]map[string]any
+	// Declared projects the profile's or surface's declared tools for a render
+	// without a model request: NewReader compiles the plan from the host's
+	// profiles and root count, promotes Offered, and nil Offered offers the
+	// plan's immediate tools.
+	Declared bool
 }
 
 // Reader is an immutable projection of a prompt reader's tool reach and facts.
 type Reader struct {
+	host        HostFacts
+	turn        TurnProjection
 	profileID   string
 	surfaceID   string
 	offered     []string
@@ -55,17 +69,19 @@ type Reader struct {
 	mints       map[string]bool
 	selection   promptunit.Selection
 	facts       map[string]any
+	schemas     map[string]map[string]any
 	fingerprint string
 }
 
-// NewReader constructs a validated Reader from the executor's inputs.
-func NewReader(in ReaderInput) (Reader, error) {
-	if len(in.Profiles) == 0 {
+// NewReader derives a Reader from a session's host facts and one request's
+// tool projection.
+func NewReader(host HostFacts, turn TurnProjection) (Reader, error) {
+	if len(host.Profiles) == 0 {
 		return Reader{}, fmt.Errorf("reader requires tool profiles")
 	}
-	profileID := strings.TrimSpace(in.ProfileID)
+	profileID := strings.TrimSpace(turn.ProfileID)
 	var profile sandbox.ToolProfile
-	for _, p := range in.Profiles {
+	for _, p := range host.Profiles {
 		if p.ID == profileID {
 			profile = p
 			break
@@ -74,29 +90,8 @@ func NewReader(in ReaderInput) (Reader, error) {
 	if profile.ID == "" {
 		return Reader{}, fmt.Errorf("tool profile %q not found", profileID)
 	}
-	surfaceID := strings.TrimSpace(in.SurfaceID)
-	if surfaceID != "" && !in.Plan.Compiled() {
-		return Reader{}, fmt.Errorf("coordinator surface %q requires a compiled tool plan", surfaceID)
-	}
-
-	host := promptunit.HostWorker
-	if profileID == CoordinatorProfileID || surfaceID != "" {
-		host = promptunit.HostCoordinator
-	}
-
-	effects, err := surfacecatalog.AdmittedCommandEffects(in.Profiles, profileID, surfaceID)
-	if err != nil {
-		return Reader{}, err
-	}
-
-	var (
-		offered        []string
-		requestable    []string
-		commandOnFloor bool
-	)
-
-	switch {
-	case surfaceID != "":
+	surfaceID := strings.TrimSpace(turn.SurfaceID)
+	if surfaceID != "" {
 		cat, err := surfacecatalog.Load()
 		if err != nil {
 			return Reader{}, err
@@ -104,87 +99,151 @@ func NewReader(in ReaderInput) (Reader, error) {
 		if _, err := cat.Surface(surfaceID); err != nil {
 			return Reader{}, err
 		}
-		floor := in.Plan.ImmediateNames()
-		loadable := in.Plan.DeferredNames()
-		sort.Strings(floor)
-		sort.Strings(loadable)
-		if in.Visible != nil {
-			offered = availableToolsInPlan(slices.Clone(in.Visible), in.Plan)
-			sort.Strings(offered)
-			offeredSet := toolNameSet(offered)
-			for _, name := range loadable {
-				if !offeredSet[name] {
-					requestable = append(requestable, name)
-				}
-			}
-		} else {
-			offered, requestable = OfferedTools(floor, loadable, in.Loaded)
-		}
-		if !in.WebSearch {
-			offered = withoutResearchTools(offered)
-			requestable = withoutResearchTools(requestable)
-		}
-		commandOnFloor = slices.Contains(floor, "command")
+	}
+	plan, offeredNames, err := resolveTurnPlan(profile, surfaceID, host.RootCount, turn)
+	if err != nil {
+		return Reader{}, err
+	}
 
-	case profileID == CoordinatorProfileID:
-		if in.Plan.Compiled() {
-			floor := in.Plan.ImmediateNames()
-			loadable := in.Plan.DeferredNames()
-			offered, requestable = OfferedTools(floor, loadable, in.Loaded)
-			commandOnFloor = slices.Contains(floor, "command")
-		} else {
-			offered = visibleToolNames(profile, in.Visible)
-			commandOnFloor = slices.Contains(offered, "command")
-		}
-		if !in.WebSearch {
-			offered = withoutResearchTools(offered)
-			requestable = withoutResearchTools(requestable)
-		}
+	host.SessionMode = normalizeSessionMode(host.SessionMode)
+	resolved := turn
+	resolved.ProfileID, resolved.SurfaceID, resolved.Plan, resolved.Offered = profileID, surfaceID, plan, offeredNames
 
-	default:
-		toolNames := availableToolsInPlan(visibleToolNames(profile, in.Visible), in.Plan)
-		for _, name := range toolNames {
-			deferred := profile.ToolDeferred(name) || (in.Plan.Compiled() && in.Plan.Deferred(name))
-			if (deferred && !in.Loaded[name]) || !profile.ToolAllowed(name) {
-				requestable = append(requestable, name)
-				continue
-			}
-			offered = append(offered, name)
-		}
-		sort.Strings(offered)
-		sort.Strings(requestable)
+	hostKind := promptunit.HostWorker
+	if profileID == CoordinatorProfileID || surfaceID != "" {
+		hostKind = promptunit.HostCoordinator
+	}
+	effects, err := surfacecatalog.AdmittedCommandEffects(host.Profiles, profileID, surfaceID)
+	if err != nil {
+		return Reader{}, err
+	}
+	offered, requestable := projectReach(plan, offeredNames, host)
+	commandOnFloor := plan.Immediate("command")
+	if hostKind == promptunit.HostWorker {
 		commandOnFloor = slices.Contains(offered, "command") && !profile.ToolDeferred("command")
 	}
 
 	// A requestable tool is not held until it loads: copy that names it would
 	// name a tool the request does not offer.
-	held := readerProfileHeldSet(profile, toolNameSet(offered), effects, in.CommandExternalHidden)
-	mints := evidenceMints(held)
-	mode := strings.TrimSpace(in.Mode)
-	if mode == "" && surfaceID != "" {
-		mode = defaultExecutionModeForSurface(surfaceID)
-	}
-	facts, effectiveSchemas, err := buildReaderFacts(in, profile, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects)
+	held := readerProfileHeldSet(profile, toolNameSet(offered), effects, host.CommandExternalHidden)
+	mode := defaultExecutionModeForSurface(surfaceID)
+	facts, effectiveSchemas, err := buildReaderFacts(host, resolved, profile, mode, offered, requestable, commandOnFloor, effects)
 	if err != nil {
 		return Reader{}, err
 	}
 
+	retained := resolved
+	retained.ProjectedSchemas = nil
 	return Reader{
+		host:        host,
+		turn:        retained,
 		profileID:   profileID,
 		surfaceID:   surfaceID,
 		offered:     offered,
 		requestable: requestable,
 		effects:     effects,
 		held:        held,
-		mints:       mints,
+		mints:       evidenceMints(held),
 		selection: promptunit.Selection{
-			Host: host,
+			Host: hostKind,
 			Mode: mode,
 			Held: held,
 		},
 		facts:       facts,
-		fingerprint: computeReaderFingerprint(host, profile, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects, effectiveSchemas, in),
+		schemas:     effectiveSchemas,
+		fingerprint: computeReaderFingerprint(hostKind, profile, mode, offered, requestable, commandOnFloor, effects, effectiveSchemas, host, resolved),
 	}, nil
+}
+
+// Restricted derives the Reader of a request that offers only names from r's
+// immediate tools, with r's host facts and nothing requestable.
+func (r Reader) Restricted(names []string) (Reader, error) {
+	if !r.Valid() {
+		return Reader{}, fmt.Errorf("restrict an unconstructed reader")
+	}
+	kept := make([]string, 0, len(names))
+	for _, name := range names {
+		if r.turn.Plan.Immediate(name) {
+			kept = append(kept, name)
+		}
+	}
+	turn := r.turn
+	turn.Plan = toolsurface.Compile(kept, nil)
+	turn.Offered = kept
+	turn.Declared = false
+	turn.ProjectedSchemas = make(map[string]map[string]any, len(kept))
+	for _, name := range kept {
+		if schema, ok := r.schemas[name]; ok {
+			turn.ProjectedSchemas[name] = schema
+		}
+	}
+	return NewReader(r.host, turn)
+}
+
+func resolveTurnPlan(profile sandbox.ToolProfile, surfaceID string, rootCount int, turn TurnProjection) (toolsurface.Plan, []string, error) {
+	if !turn.Declared {
+		if !turn.Plan.Compiled() {
+			return toolsurface.Plan{}, nil, fmt.Errorf("reader for %q requires the request's compiled tool plan", profile.ID)
+		}
+		return turn.Plan, turn.Offered, nil
+	}
+	var plan toolsurface.Plan
+	if surfaceID != "" {
+		compiled, err := CompileSurfacePlan(surfaceID, rootCount)
+		if err != nil {
+			return toolsurface.Plan{}, nil, err
+		}
+		plan = compiled
+	} else {
+		var immediate, deferred []string
+		for _, name := range visibleToolNames(profile, nil) {
+			switch {
+			case !profile.ToolAllowed(name):
+			case profile.ToolDeferred(name):
+				deferred = append(deferred, name)
+			default:
+				immediate = append(immediate, name)
+			}
+		}
+		plan = toolsurface.Compile(immediate, deferred)
+	}
+	if turn.Offered == nil {
+		return plan, plan.ImmediateNames(), nil
+	}
+	return plan.Promote(turn.Offered...), turn.Offered, nil
+}
+
+// projectReach offers the request's plan-immediate names and makes the plan's
+// remaining deferred names requestable, without research tools when web search
+// is off and without catalog tools Ask mode refuses.
+func projectReach(plan toolsurface.Plan, names []string, host HostFacts) (offered, requestable []string) {
+	seen := make(map[string]bool, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] || !plan.Immediate(name) {
+			continue
+		}
+		seen[name] = true
+		offered = append(offered, name)
+	}
+	for _, name := range plan.DeferredNames() {
+		if seen[name] {
+			continue
+		}
+		if host.SessionMode == "ask" {
+			if contract, ok := toolcontract.Lookup(name); ok && !contract.AskAllowed {
+				continue
+			}
+		}
+		requestable = append(requestable, name)
+	}
+	if !host.WebSearch {
+		offered = withoutResearchTools(offered)
+		requestable = withoutResearchTools(requestable)
+	}
+	sort.Strings(offered)
+	sort.Strings(requestable)
+	return offered, requestable
 }
 
 func defaultExecutionModeForSurface(surfaceID string) string {
@@ -205,10 +264,6 @@ func normalizeSessionMode(mode string) string {
 		return "ask"
 	}
 	return "agent"
-}
-
-func readerHeldSet(tools map[string]bool, effects toolcontract.CommandEffects, externalHidden bool) map[string]bool {
-	return readerProfileHeldSet(sandbox.ToolProfile{}, tools, effects, externalHidden)
 }
 
 func readerProfileHeldSet(
@@ -309,35 +364,20 @@ func (r Reader) Facts() map[string]any { return maps.Clone(r.facts) }
 // Fingerprint returns a stable digest of the reader's inputs and derived reach.
 func (r Reader) Fingerprint() string { return r.fingerprint }
 
-type projectedSchemasContextKey struct{}
-
-// WithProjectedSchemas attaches materialized turn request schemas to ctx for
-// downstream Reader construction.
-func WithProjectedSchemas(ctx context.Context, schemas map[string]map[string]any) context.Context {
-	if ctx == nil || schemas == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, projectedSchemasContextKey{}, schemas)
-}
-
-// ProjectedSchemasFromContext returns materialized turn request schemas carried on ctx.
-func ProjectedSchemasFromContext(ctx context.Context) map[string]map[string]any {
-	if ctx == nil {
-		return nil
-	}
-	schemas, _ := ctx.Value(projectedSchemasContextKey{}).(map[string]map[string]any)
-	return schemas
-}
+// ProjectedSchema returns the argument schema the request carries for an
+// offered tool.
+func (r Reader) ProjectedSchema(name string) map[string]any { return r.schemas[name] }
 
 func computeReaderFingerprint(
-	host promptunit.Host,
+	hostKind promptunit.Host,
 	profile sandbox.ToolProfile,
-	profileID, surfaceID, mode string,
+	mode string,
 	offered, requestable []string,
 	commandOnFloor bool,
 	effects toolcontract.CommandEffects,
 	effectiveSchemas map[string]map[string]any,
-	in ReaderInput,
+	host HostFacts,
+	turn TurnProjection,
 ) string {
 	payload, err := json.Marshal(struct {
 		Host                   promptunit.Host
@@ -364,29 +404,29 @@ func computeReaderFingerprint(
 		SessionScratchDir      string
 		SharedTempLocations    []string
 	}{
-		Host:                   host,
-		ProfileID:              profileID,
-		SurfaceID:              surfaceID,
+		Host:                   hostKind,
+		ProfileID:              turn.ProfileID,
+		SurfaceID:              turn.SurfaceID,
 		Mode:                   mode,
-		SessionMode:            normalizeSessionMode(in.SessionMode),
+		SessionMode:            host.SessionMode,
 		Offered:                offered,
 		Requestable:            requestable,
 		DenyTools:              normalizedSortedStrings(profile.DenyTools),
 		WaitConditions:         normalizedSortedStrings(profile.WaitConditions),
-		ExplicitProjected:      in.ProjectedSchemas != nil,
+		ExplicitProjected:      turn.ProjectedSchemas != nil,
 		ProjectedSchemasDigest: projectedSchemasDigest(offered, effectiveSchemas),
 		CommandOnFloor:         commandOnFloor,
 		Effects:                uint8(effects),
-		RootCount:              in.RootCount,
-		HasGit:                 in.HasGit,
-		HasAnyGitRoot:          in.HasGit || in.HasAnyGitRoot,
-		OnWorkerBranch:         in.OnWorkerBranch,
-		WebSearch:              in.WebSearch,
-		SpawnAllowlist:         normalizedSortedStrings(in.SpawnAllowlist),
-		ReviewsConfinedWrites:  in.ReviewsConfinedWrites,
-		CommandExternalHidden:  in.CommandExternalHidden,
-		SessionScratchDir:      strings.TrimSpace(in.SessionScratchDir),
-		SharedTempLocations:    slices.Clone(in.SharedTempLocations),
+		RootCount:              host.RootCount,
+		HasGit:                 host.HasGit,
+		HasAnyGitRoot:          host.HasGit || host.HasAnyGitRoot,
+		OnWorkerBranch:         host.OnWorkerBranch,
+		WebSearch:              host.WebSearch,
+		SpawnAllowlist:         normalizedSortedStrings(host.SpawnAllowlist),
+		ReviewsConfinedWrites:  host.ReviewsConfinedWrites,
+		CommandExternalHidden:  host.CommandExternalHidden,
+		SessionScratchDir:      strings.TrimSpace(host.SessionScratchDir),
+		SharedTempLocations:    slices.Clone(host.SharedTempLocations),
 	})
 	if err != nil {
 		return ""
@@ -430,19 +470,6 @@ func normalizedSortedStrings(names []string) []string {
 		}
 	}
 	sort.Strings(out)
-	return out
-}
-
-func availableToolsInPlan(names []string, plan toolsurface.Plan) []string {
-	if !plan.Compiled() {
-		return names
-	}
-	out := make([]string, 0, len(names))
-	for _, name := range names {
-		if plan.Addressable(name) {
-			out = append(out, name)
-		}
-	}
 	return out
 }
 

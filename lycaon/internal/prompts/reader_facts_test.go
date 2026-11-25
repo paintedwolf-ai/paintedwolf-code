@@ -147,13 +147,15 @@ func TestReaderFactsKeysMatchDeclaredCatalogAcrossStateSet(t *testing.T) {
 			for _, surfaceID := range surfaces.SurfaceIDs() {
 				plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
 				testutil.FailErr(t, "compile plan", err)
-				reader, err := prompts.NewReader(prompts.ReaderInput{
-					ProfileID: prompts.CoordinatorProfileID,
-					SurfaceID: surfaceID,
-					Plan:      plan,
+				reader, err := prompts.NewReader(prompts.HostFacts{
 					Profiles:  profiles,
 					RootCount: rootCount,
 					WebSearch: rootCount%2 == 1,
+				}, prompts.TurnProjection{
+					ProfileID: prompts.CoordinatorProfileID,
+					SurfaceID: surfaceID,
+					Plan:      plan,
+					Offered:   (plan).ImmediateNames(),
 				})
 				testutil.FailErr(t, "new coordinator reader", err)
 				reader = reader.WithVision(rootCount > 0)
@@ -163,12 +165,14 @@ func TestReaderFactsKeysMatchDeclaredCatalogAcrossStateSet(t *testing.T) {
 				if agent.ID == prompts.CoordinatorProfileID {
 					continue
 				}
-				reader, err := prompts.NewReader(prompts.ReaderInput{
-					ProfileID: agent.ToolProfile,
+				reader, err := prompts.NewReader(prompts.HostFacts{
 					Profiles:  profiles,
 					RootCount: rootCount,
 					HasGit:    rootCount > 0,
 					WebSearch: true,
+				}, prompts.TurnProjection{
+					ProfileID: agent.ToolProfile,
+					Declared:  true,
 				})
 				testutil.FailErr(t, "new worker reader", err)
 				assertReaderFactsMatchDeclaredSet(t, reader.Facts(), wantTop, wantNested)

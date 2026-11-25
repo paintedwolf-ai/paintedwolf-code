@@ -147,12 +147,14 @@ func TestUnifiedFolderBlockGrammarAtEveryRootCount(t *testing.T) {
 			// The roots-changed kick names every change and row by @label.
 			profiles, err := sandbox.LoadToolProfiles()
 			contractcheck.FailErr(t, "LoadToolProfiles", err)
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: prompts.CoordinatorProfileID,
+			reader, err := prompts.NewReader(prompts.HostFacts{
 				Profiles:  profiles,
 				RootCount: len(refs),
 				HasGit:    len(refs) > 0,
 				WebSearch: true,
+			}, prompts.TurnProjection{
+				ProfileID: prompts.CoordinatorProfileID,
+				Declared:  true,
 			})
 			contractcheck.FailErr(t, "NewReader coordinator", err)
 			before := refs

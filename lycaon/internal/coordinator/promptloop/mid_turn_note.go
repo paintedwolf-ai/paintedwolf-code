@@ -174,7 +174,12 @@ func (l *toolBatch) midTurnHostProgress(ctx context.Context, history []api.Messa
 	if len(workers) == 0 || l.Closeout.Deps.RenderHostKick == nil {
 		return ""
 	}
-	body, err := l.Closeout.Deps.RenderHostKick(ctx, closeoutTurnReader(st), midTurnHostProgressKick, map[string]any{"workers": workers})
+	reader := turnReader(st)
+	if !reader.Valid() {
+		slog.WarnContext(ctx, "mid-turn host progress has no request reader")
+		return ""
+	}
+	body, err := l.Closeout.Deps.RenderHostKick(ctx, reader, midTurnHostProgressKick, map[string]any{"workers": workers})
 	if err != nil {
 		slog.WarnContext(ctx, "render mid-turn host progress", "error", err)
 		return ""

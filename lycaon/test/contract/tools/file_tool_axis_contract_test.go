@@ -6,11 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolscope"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -23,7 +24,7 @@ func TestFileToolFactHasOneSource(t *testing.T) {
 	}
 
 	for _, rootCount := range []int{0, 1} {
-		caps := capability.Derive(rootCount, allowlist, nil)
+		caps := fileFacts(t, rootCount, allowlist)
 		if caps.HasFileTools {
 			t.Errorf("has_file_tools is true at root_count=%d for no-folder allowlist (%s)",
 				rootCount, strings.Join(allowlist, ", "))
@@ -45,11 +46,11 @@ func TestFileToolFactHasOneSource(t *testing.T) {
 		if wantFileTool {
 			fileTools++
 		}
-		zero := capability.Derive(0, []string{tool}, nil)
+		zero := fileFacts(t, 0, []string{tool})
 		if zero.HasWorkspaceRoots || zero.HasFileTools {
 			t.Errorf("root_count=0 set workspace/file flags for %q: %+v", tool, zero)
 		}
-		one := capability.Derive(1, []string{tool}, nil)
+		one := fileFacts(t, 1, []string{tool})
 		if !one.HasWorkspaceRoots {
 			t.Errorf("has_workspace_roots is false at root_count=1 for %q", tool)
 		}
@@ -76,7 +77,7 @@ func TestZeroRootSurfaceNeverClaimsFileTools(t *testing.T) {
 	if len(kept) == 0 {
 		t.Fatal("zero-root filter kept nothing — the comparison is vacuous")
 	}
-	if caps := capability.Derive(0, kept, nil); caps.HasFileTools {
+	if caps := fileFacts(t, 0, kept); caps.HasFileTools {
 		t.Errorf("the zero-root surface sets has_file_tools; kept = %s",
 			strings.Join(kept, ", "))
 	}
@@ -91,4 +92,20 @@ func folderRequiringCatalogTools(cfg nativemanifest.Config, allowlist []string) 
 	}
 	sort.Strings(out)
 	return out
+}
+
+type workspaceFacts struct{ HasWorkspaceRoots, HasFileTools bool }
+
+// fileFacts reads the workspace facts of a request offering tools at rootCount.
+func fileFacts(t *testing.T, rootCount int, tools []string) workspaceFacts {
+	t.Helper()
+	profile := sandbox.ToolProfile{ID: "file_axis", Tools: map[string]bool{}}
+	for _, name := range tools {
+		profile.Tools[name] = true
+	}
+	reader, err := prompts.NewReader(prompts.HostFacts{Profiles: []sandbox.ToolProfile{profile}, RootCount: rootCount, WebSearch: true},
+		prompts.TurnProjection{ProfileID: profile.ID, Plan: toolsurface.Compile(tools, nil), Offered: tools})
+	contractcheck.FailErr(t, "reader", err)
+	facts := reader.Facts()
+	return workspaceFacts{HasWorkspaceRoots: facts["has_workspace_roots"] == true, HasFileTools: facts["has_file_tools"] == true}
 }

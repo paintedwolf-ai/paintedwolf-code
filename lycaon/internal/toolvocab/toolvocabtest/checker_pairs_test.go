@@ -102,17 +102,17 @@ func buildCheckerPairFixture(t *testing.T) checkerPairFixture {
 		for _, o := range offered {
 			loaded[o] = true
 		}
-		r, rErr := prompts.NewReader(prompts.ReaderInput{
+		r, rErr := prompts.NewReader(prompts.HostFacts{
+			SessionMode: string(api.SessionModeAgent),
+			Profiles:    profs,
+			Schemas:     schemas,
+			RootCount:   1,
+			HasGit:      hasGit,
+		}, prompts.TurnProjection{
 			ProfileID:        prompts.CoordinatorProfileID,
-			SessionMode:      string(api.SessionModeAgent),
-			Profiles:         profs,
-			Plan:             plan,
-			Loaded:           loaded,
-			Visible:          offered,
-			Schemas:          schemas,
+			Plan:             readerLoadedPlan(plan, loaded),
+			Offered:          readerLoadedOffer(plan, offered, loaded),
 			ProjectedSchemas: projSchemas,
-			RootCount:        1,
-			HasGit:           hasGit,
 		})
 		testutil.FailErr(t, "NewReader", rErr)
 		return toolvocabtest.ClaimEvaluationContext{
@@ -271,19 +271,27 @@ func TestCheckerRefinementsValidAndNearbyInvalidPairs(t *testing.T) {
 		skUnsequenced := skills.Parse("unseq-probe", []byte("---\nname: unseq-probe\ndescription: Unsequenced probe.\n---\nRun `command` directly without loading.\n"))
 
 		defPlan := toolsurface.Compile([]string{"request_tools", "recall"}, []string{"command"})
-		defReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: prompts.CoordinatorProfileID, Profiles: profiles,
-			Plan: defPlan, Loaded: map[string]bool{"request_tools": true, "recall": true},
-			Visible: []string{"request_tools", "recall", "command"}, RootCount: 1, HasGit: true,
+		defReader, err := prompts.NewReader(prompts.HostFacts{
+			Profiles:  profiles,
+			RootCount: 1,
+			HasGit:    true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			Plan:      readerLoadedPlan(defPlan, map[string]bool{"request_tools": true, "recall": true}),
+			Offered:   readerLoadedOffer(defPlan, []string{"request_tools", "recall", "command"}, map[string]bool{"request_tools": true, "recall": true}),
 		})
 		if err != nil {
 			t.Fatalf("defReader: %v", err)
 		}
 		noDefPlan := toolsurface.Compile([]string{"request_tools", "recall"}, nil)
-		noDefReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: prompts.CoordinatorProfileID, Profiles: profiles,
-			Plan: noDefPlan, Loaded: map[string]bool{"request_tools": true, "recall": true},
-			Visible: []string{"request_tools", "recall"}, RootCount: 1, HasGit: true,
+		noDefReader, err := prompts.NewReader(prompts.HostFacts{
+			Profiles:  profiles,
+			RootCount: 1,
+			HasGit:    true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			Plan:      readerLoadedPlan(noDefPlan, map[string]bool{"request_tools": true, "recall": true}),
+			Offered:   readerLoadedOffer(noDefPlan, []string{"request_tools", "recall"}, map[string]bool{"request_tools": true, "recall": true}),
 		})
 		if err != nil {
 			t.Fatalf("noDefReader: %v", err)

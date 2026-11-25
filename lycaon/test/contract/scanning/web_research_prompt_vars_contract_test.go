@@ -35,14 +35,16 @@ func TestWebResearchPromptVarsSuppliedAndGated(t *testing.T) {
 				plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
 				contractcheck.FailErr(t, "CompileSurfacePlan "+surfaceID, err)
 				roster := inject.ResolveAgentRoster(surfaceID, spawn.AmbientAllowedAgents(), rootCount, false, enabled).Effective
-				reader, err := prompts.NewReader(prompts.ReaderInput{
-					ProfileID:      prompts.CoordinatorProfileID,
-					SurfaceID:      surfaceID,
-					Plan:           plan,
+				reader, err := prompts.NewReader(prompts.HostFacts{
 					Profiles:       profiles,
 					RootCount:      rootCount,
 					WebSearch:      enabled,
 					SpawnAllowlist: roster,
+				}, prompts.TurnProjection{
+					ProfileID: prompts.CoordinatorProfileID,
+					SurfaceID: surfaceID,
+					Plan:      plan,
+					Offered:   (plan).ImmediateNames(),
 				})
 				contractcheck.FailErr(t, "NewReader "+surfaceID, err)
 				vars := map[string]any{}

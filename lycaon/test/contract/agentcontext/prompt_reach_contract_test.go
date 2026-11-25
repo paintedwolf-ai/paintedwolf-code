@@ -467,16 +467,17 @@ func TestAskModeWithholdsCommandUtilities(t *testing.T) {
 	askMetas := promptloop.ProjectAskToolMetas([]tools.ToolMeta{{Name: "ask_user", ArgsSchema: askMeta.ArgsSchema}})
 
 	plan := toolsurface.Compile([]string{"recall", "source_history", "ask_user"}, nil)
-	reader, rErr := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:   prompts.CoordinatorProfileID,
-		SurfaceID:   "observe_investigate",
+	reader, rErr := prompts.NewReader(prompts.HostFacts{
 		SessionMode: string(api.SessionModeAsk),
 		Profiles:    narrowedProfiles,
-		Plan:        plan,
-		Visible:     []string{"recall", "source_history", "ask_user"},
 		Schemas:     schemas,
 		RootCount:   1,
 		HasGit:      true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "observe_investigate",
+		Plan:      plan,
+		Offered:   []string{"recall", "source_history", "ask_user"},
 	})
 	contractcheck.FailErr(t, "ask reader", rErr)
 	evalCtx := toolvocabtest.ClaimEvaluationContext{

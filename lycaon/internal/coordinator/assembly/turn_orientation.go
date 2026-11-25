@@ -44,7 +44,7 @@ func (e *turnContextAssembler) prependCoordinatorRunInject(
 		if archive := deps.WorkflowArchive; archive != nil {
 			gateFeedback = gateFeedback.WithWorkflowArchive(archive(ctx, sess.ID))
 		}
-		wfReader, err := e.surface.turnReader(ctx, sess, frame, history, turn, 0)
+		wfReader, err := e.surface.turnReader(ctx, sess, frame, history, turn)
 		if err != nil {
 			return nil, fmt.Errorf("active-workflow reader: %w", err)
 		}
@@ -73,7 +73,7 @@ func (e *turnContextAssembler) prependCoordinatorRunInject(
 		if len(spawnAgents) == 0 {
 			return out, nil
 		}
-		reader, err := e.surface.turnReader(ctx, sess, frame, history, turn, facts.RootCount)
+		reader, err := e.surface.turnReader(ctx, sess, frame, history, turn)
 		if err != nil {
 			return nil, fmt.Errorf("implement-spawn reader: %w", err)
 		}
@@ -139,7 +139,7 @@ func (e *turnContextAssembler) prependTransitionInject(
 	if inj == nil {
 		return "", false
 	}
-	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn, 0)
+	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn)
 	if err != nil {
 		return "", false
 	}

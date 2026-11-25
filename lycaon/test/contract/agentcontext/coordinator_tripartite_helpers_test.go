@@ -24,16 +24,18 @@ func coordinatorTestReader(t *testing.T, surfaceID string, rootCount int) prompt
 	contractcheck.FailErr(t, "load tool profiles", err)
 	plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
 	contractcheck.FailErr(t, "compile surface plan", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:      prompts.CoordinatorProfileID,
-		SurfaceID:      surfaceID,
-		Plan:           plan,
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:       profiles,
 		RootCount:      rootCount,
 		HasGit:         rootCount > 0,
 		HasAnyGitRoot:  rootCount > 0,
 		WebSearch:      true,
 		SpawnAllowlist: spawn.AmbientAllowedAgents(),
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: surfaceID,
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
 	})
 	contractcheck.FailErr(t, "new reader", err)
 	return reader

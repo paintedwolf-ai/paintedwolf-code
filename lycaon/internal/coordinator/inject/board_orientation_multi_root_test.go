@@ -19,11 +19,13 @@ func boardReaderForRoots(t *testing.T, rootCount int) prompts.Reader {
 	t.Helper()
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	r, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	r, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: rootCount,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Declared:  true,
 	})
 	testutil.FailErr(t, "boardReaderForRoots", err)
 	return r

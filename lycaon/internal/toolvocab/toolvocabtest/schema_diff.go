@@ -390,8 +390,8 @@ func collectCoordinatorTurnSnapshots(ctx context.Context, reg *tools.DefaultRegi
 				RunContext: api.CoordinatorRunContext{RunID: "run-1", WorkflowID: "wf-1", PhaseCoordinatorSurface: surfID, AdvanceWhenGateMet: "coordinator", PhaseHostHeld: surfID == "await_host", HasComposeDraft: surfID == "workflow_compose"},
 				Machine:    inject.Machine{ProfileID: prompts.CoordinatorProfileID},
 			}
-			if metas, _, _, projErr := promptloop.ProjectTurnTools(ctx, deps, sess, history, frame); projErr == nil {
-				snaps = append(snaps, snapshotFromMetas(fmt.Sprintf("coord/%s/%s/%s", mode, posture, surfID), metas))
+			if turn, projErr := promptloop.ProjectTurnTools(ctx, deps, sess, history, frame); projErr == nil {
+				snaps = append(snaps, snapshotFromMetas(fmt.Sprintf("coord/%s/%s/%s", mode, posture, surfID), turn.Metas))
 			}
 		}
 	}

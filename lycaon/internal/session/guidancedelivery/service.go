@@ -8,10 +8,10 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -51,10 +51,9 @@ type Progress interface {
 type Closure interface {
 	Baseline(string) (guard.ProgressClosureBaseline, bool)
 }
-type PostureView interface {
-	ProjectApprovalPosture(context.Context, *api.Session) gate.Posture
-	CommandExternalHidden() bool
-}
+
+// RequestReader projects a session's next model request.
+type RequestReader func(ctx context.Context, sess *api.Session, history []api.Message) (prompts.Reader, error)
 type Service struct {
 	sessionStore    Sessions
 	transcriptStore TranscriptStore
@@ -66,7 +65,7 @@ type Service struct {
 	frame           inject.CoordinatorTurnFrameSource
 	progress        Progress
 	closure         Closure
-	posture         PostureView
+	requestReader   RequestReader
 	gateFeedback    *feedback.GateFeedbackCatalog
 	rejectFmt       *guidance.StaticRejectFormatter
 	renderer        *oar.Renderer
@@ -85,7 +84,7 @@ func (m *Service) SetWorkers(workers workeroutcomes.CycleLedger)     { m.workers
 func (m *Service) SetWorkflow(workflows *WorkflowDomains)            { m.workflows = workflows }
 func (m *Service) SetFrame(frame inject.CoordinatorTurnFrameSource)  { m.frame = frame }
 func (m *Service) SetProgress(progress Progress)                     { m.progress = progress }
-func (m *Service) SetPostureView(posture PostureView)                { m.posture = posture }
+func (m *Service) SetRequestReader(reader RequestReader)             { m.requestReader = reader }
 func (m *Service) SetFeedback(catalog *feedback.GateFeedbackCatalog) { m.gateFeedback = catalog }
 func (m *Service) SetRejectFormatter(formatter *guidance.StaticRejectFormatter) {
 	m.rejectFmt = formatter

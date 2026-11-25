@@ -2,7 +2,10 @@ package turnnudges
 
 import (
 	"context"
+	"log/slog"
 	"strings"
+
+	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -12,19 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// Render resolves session anchor bindings for immediate loop delivery.
-func (m *Service) Render(
-	ctx context.Context,
-	sess *api.Session,
-	id anchor.ID,
-	data map[string]any,
-) promptloop.HostNudge {
-	if m == nil || sess == nil {
-		return promptloop.HostNudge{}
-	}
-	return m.RenderWithReader(ctx, sess, m.activeTurnReader(ctx, sess, ""), id, data)
-}
 
 // RenderWithReader resolves session anchor bindings against an explicit Reader.
 func (m *Service) RenderWithReader(
@@ -54,7 +44,7 @@ func (m *Service) RenderWithReader(
 func (m *Service) Closeout(
 	ctx context.Context,
 	sess *api.Session,
-	profileID string,
+	reader prompts.Reader,
 	cause promptloop.TurnCloseoutCause,
 ) promptloop.HostNudge {
 	if m == nil || sess == nil {
@@ -73,9 +63,14 @@ func (m *Service) Closeout(
 				data = map[string]any{"cancel_reason": cause.CancelReason}
 			}
 		} else {
-			data["leg_command_mutation_capable"] = m.commandMutationCapable(ctx, sess, profileID)
+			data["leg_command_mutation_capable"] = commandMutationCapable(sess, reader)
 		}
-		return m.RenderWithReader(ctx, sess, m.closeoutReader(ctx, sess, profileID, true), id, data)
+		// The closeout request offers only the report tool.
+		closeoutReader, err := reader.Restricted([]string{workertools.CompleteLegTool})
+		if err != nil {
+			slog.WarnContext(ctx, "worker closeout reader", "session_id", sess.ID, "error", err)
+		}
+		return m.RenderWithReader(ctx, sess, closeoutReader, id, data)
 	}
 	surfaceID := ""
 	if rt := m.surface; rt != nil {
@@ -85,45 +80,14 @@ func (m *Service) Closeout(
 	if surface.SurfaceDeliversReport(surfaceID) {
 		id = anchor.CoordinatorCloseout
 	} else {
-		data["session_command_mutation_capable"] = m.commandMutationCapable(ctx, sess, profileID)
+		data["session_command_mutation_capable"] = commandMutationCapable(sess, reader)
 	}
-	return m.RenderWithReader(ctx, sess, m.closeoutReader(ctx, sess, profileID, false), id, data)
-}
-
-func (m *Service) closeoutReader(ctx context.Context, sess *api.Session, explicitProfileID string, worker bool) prompts.Reader {
-	profiles := m.sessionProfiles(ctx, sess)
-	if len(profiles) == 0 {
-		return prompts.Reader{}
-	}
-	profileID := m.resolveProfileID(ctx, sess, explicitProfileID)
-	facts := m.resolveHostFacts(ctx, sess)
-	sessionMode := string(api.SessionModeAgent)
-	if sess != nil && sess.Mode == api.SessionModeAsk {
-		sessionMode = string(api.SessionModeAsk)
-	}
-	visible := []string{}
-	if worker {
-		visible = []string{"complete_leg"}
-	}
-	r, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:             profileID,
-		SessionMode:           sessionMode,
-		Profiles:              profiles,
-		Visible:               visible,
-		RootCount:             facts.rootCount,
-		HasGit:                facts.hasGit,
-		HasAnyGitRoot:         facts.hasAnyGitRoot,
-		OnWorkerBranch:        facts.onWorkerBranch,
-		WebSearch:             facts.webSearch,
-		ReviewsConfinedWrites: facts.reviewsConfinedWrites,
-		CommandExternalHidden: facts.externalHidden,
-		SessionScratchDir:     facts.scratchDir,
-		SharedTempLocations:   facts.sharedTemp,
-	})
+	// The closeout request offers no tools.
+	closeoutReader, err := reader.Restricted(nil)
 	if err != nil {
-		return prompts.Reader{}
+		slog.WarnContext(ctx, "closeout reader", "session_id", sess.ID, "error", err)
 	}
-	return r
+	return m.RenderWithReader(ctx, sess, closeoutReader, id, data)
 }
 
 // SurveyStreak reports read-only streaks in coordinator sessions. An
@@ -131,13 +95,14 @@ func (m *Service) closeoutReader(ctx context.Context, sess *api.Session, explici
 func (m *Service) SurveyStreak(
 	ctx context.Context,
 	sess *api.Session,
+	reader prompts.Reader,
 	batches int,
 	tools []string,
 ) promptloop.HostNudge {
 	if m == nil || sess == nil || sess.IsWorkerChild() || m.ledger.TurnKind(sess.ID) == turnload.KindInspect {
 		return promptloop.HostNudge{}
 	}
-	return m.Render(ctx, sess, anchor.TurnSurveyStreak, map[string]any{
+	return m.RenderWithReader(ctx, sess, reader, anchor.TurnSurveyStreak, map[string]any{
 		"batches": batches,
 		"tools":   append([]string(nil), tools...),
 	})
@@ -147,9 +112,10 @@ func (m *Service) SurveyStreak(
 func (m *Service) SecretWithheld(
 	ctx context.Context,
 	sess *api.Session,
+	reader prompts.Reader,
 	guidanceText string,
 ) promptloop.HostNudge {
-	return m.Render(ctx, sess, anchor.OutboundSecretWithheld, map[string]any{
+	return m.RenderWithReader(ctx, sess, reader, anchor.OutboundSecretWithheld, map[string]any{
 		"guidance": strings.TrimSpace(guidanceText),
 	})
 }
@@ -157,7 +123,7 @@ func (m *Service) SecretWithheld(
 func (m *Service) IterationRunway(
 	ctx context.Context,
 	sess *api.Session,
-	profileID string,
+	reader prompts.Reader,
 	remaining int,
 ) promptloop.HostNudge {
 	if m == nil || sess == nil {
@@ -166,7 +132,7 @@ func (m *Service) IterationRunway(
 	if sess.IsWorkerChild() {
 		return promptloop.HostNudge{}
 	}
-	return m.RenderWithReader(ctx, sess, m.activeTurnReader(ctx, sess, profileID), anchor.TurnIterationsLow, map[string]any{
+	return m.RenderWithReader(ctx, sess, reader, anchor.TurnIterationsLow, map[string]any{
 		"remaining": remaining,
 	})
 }

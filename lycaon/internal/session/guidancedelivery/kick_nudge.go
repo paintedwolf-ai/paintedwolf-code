@@ -3,6 +3,7 @@ package guidancedelivery
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -209,20 +210,20 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 			rc.FailedLeaves = append([]string(nil), frame.RunContext.FailedLeaves...)
 		}
 	}
-	if !sess.IsWorkerChild() && msgErr == nil {
-		profile := surface.ResolveTurnProfile(frame.RunContext, sess, msgs, state)
-		rc.SurfaceID = profile.SurfaceID
-		rc.RootCount = frame.ProjectRootCount
-		if plan, err := surface.CompileToolPlan(profile, frame.ProjectRootCount); err == nil {
-			rc.ToolPlan = plan
+	switch {
+	case m.requestReader == nil:
+		slog.WarnContext(ctx, "kick request reader not configured", "session_id", sessionID)
+	case msgErr != nil:
+		slog.WarnContext(ctx, "kick request reader history", "session_id", sessionID, "error", msgErr)
+	default:
+		reader, err := m.requestReader(ctx, sess, msgs)
+		if err != nil {
+			slog.WarnContext(ctx, "kick request reader", "session_id", sessionID, "error", err)
 		}
+		rc.Reader = reader
 	}
 	rc.GateObligations = m.GateObligations(ctx, sessionID, frame)
 	rc.ProgressOpenItems, rc.ProgressClosureArmed = m.closureState(ctx, sessionID)
-	if m.posture != nil {
-		rc.ReviewsConfinedWrites = m.posture.ProjectApprovalPosture(ctx, sess).ReviewsConfinedWrites()
-		rc.CommandExternalHidden = m.posture.CommandExternalHidden()
-	}
 	return rc
 }
 

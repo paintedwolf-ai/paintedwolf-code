@@ -126,11 +126,11 @@ func groupHostResources(resources []AgentHostResourceView) []map[string]any {
 	return groups
 }
 
-// LoadAgentToolSurface builds one profile's prompt surface. in.Loaded names
-// the profile's deferred tools the session ledger has loaded; they are offered
-// on this call like sticky ones, and the rest list as requestable with the
-// description in.Schemas holds for them.
-func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, in ReaderInput, profiles []sandbox.ToolProfile) (AgentToolSurfaceData, error) {
+// LoadAgentToolSurface builds one profile's prompt surface. loaded names the
+// profile's deferred tools the session ledger has loaded; they are offered on
+// this call like sticky ones, and the rest list as requestable with the
+// description schemas holds for them.
+func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, loaded map[string]bool, schemas *toolschema.Config, profiles []sandbox.ToolProfile) (AgentToolSurfaceData, error) {
 	profileID := strings.TrimSpace(toolProfileID)
 	if profileID == "" {
 		return AgentToolSurfaceData{}, fmt.Errorf("tool profile id required")
@@ -149,23 +149,23 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 		return AgentToolSurfaceData{}, fmt.Errorf("tool profile %q not found", profileID)
 	}
 
-	toolNames := availableToolsInPlan(visibleToolNames(profile, visibleTools), in.Plan)
+	toolNames := visibleToolNames(profile, visibleTools)
 	toolViews := make([]AgentToolArgView, 0, len(toolNames))
 	var requestable []string
 	for _, name := range toolNames {
-		if (profile.ToolDeferred(name) && !in.Loaded[name]) || !profile.ToolAllowed(name) {
+		if (profile.ToolDeferred(name) && !loaded[name]) || !profile.ToolAllowed(name) {
 			requestable = append(requestable, name)
 			continue
 		}
 		view := AgentToolArgView{Name: name}
-		if in.Schemas != nil {
-			if meta, ok := in.Schemas.ToolMeta(name); ok {
+		if schemas != nil {
+			if meta, ok := schemas.ToolMeta(name); ok {
 				view.RequiredArgs, _ = toolschema.ArgFieldSummary(meta.ArgsSchema)
 			}
 		}
 		toolViews = append(toolViews, view)
 	}
-	roster, err := RequestableTools(requestable, in.Schemas)
+	roster, err := RequestableTools(requestable, schemas)
 	if err != nil {
 		return AgentToolSurfaceData{}, err
 	}

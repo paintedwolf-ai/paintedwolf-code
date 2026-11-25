@@ -29,9 +29,6 @@ func (p *promptSurface) renderSystemPrefix(ctx context.Context, sess *api.Sessio
 		vars["skills_heading"] = "##"
 	}
 	coordinatorSurface := coordinator && (!frame.Machine.Compiled() || frame.Machine.ProfileID == orchestration.ProfileCoordinator)
-	if !coordinatorSurface {
-		p.mergeVisibleTools(ctx, sess, frame, vars)
-	}
 	p.mergeEffectivePromptSurfaceWithTurn(ctx, sess, frame, turn, vars)
 	pe, revision, err := p.projectPromptsSnapshot(ctx, sess)
 	if err != nil {

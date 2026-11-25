@@ -21,22 +21,24 @@ func TestWorkerKickCopyRendersEveryState(t *testing.T) {
 	for _, tool := range named {
 		namedLoaded[tool] = true
 	}
-	withNamed, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	withNamed, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   named,
-		Loaded:    namedLoaded,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Offered:   readerDeclaredOffer(profiles, prompts.CoordinatorProfileID, named, namedLoaded),
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader withNamed", err)
-	withoutNamed, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	withoutNamed, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   []string{"recall"},
-		Loaded:    map[string]bool{"recall": true},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Offered:   readerDeclaredOffer(profiles, prompts.CoordinatorProfileID, []string{"recall"}, map[string]bool{"recall": true}),
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader withoutNamed", err)
 	cases := []struct {

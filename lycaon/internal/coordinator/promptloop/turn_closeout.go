@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/citationmd"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/citationmd"
+	"github.com/lycaon/lycaon/internal/prompts"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
@@ -103,10 +105,10 @@ type HostNudge struct {
 func (n HostNudge) Empty() bool { return strings.TrimSpace(n.Content) == "" }
 
 // TurnCloseoutNudge renders the internal user nudge for a prose-only finish turn.
-type TurnCloseoutNudge func(ctx context.Context, sess *api.Session, profileID string, cause TurnCloseoutCause) HostNudge
+type TurnCloseoutNudge func(ctx context.Context, sess *api.Session, reader prompts.Reader, cause TurnCloseoutCause) HostNudge
 
 // IterationRunwayNudge renders the one-shot heads-up when few tool iterations remain.
-type IterationRunwayNudge func(ctx context.Context, sess *api.Session, profileID string, remaining int) HostNudge
+type IterationRunwayNudge func(ctx context.Context, sess *api.Session, reader prompts.Reader, remaining int) HostNudge
 
 // IterationRunwayThreshold reserves final iterations for handoff on longer
 // coordinator turns. A worker round has no iteration cap, so no runway.
@@ -151,7 +153,7 @@ func (l *turnCloseout) maybeIterationRunwayNudge(
 	if !iterationRunwayFires(sess, iterIndex, maxIter) {
 		return history, nil
 	}
-	nudge := l.Deps.IterationRunwayNudge(ctx, sess, profileID, maxIter-iterIndex)
+	nudge := l.Deps.IterationRunwayNudge(ctx, sess, turnReader(st), maxIter-iterIndex)
 	if nudge.Empty() {
 		return history, nil
 	}
@@ -201,7 +203,7 @@ func (l *turnCloseout) appendTurnCloseoutNudge(
 	cause TurnCloseoutCause,
 	st *promptLoopTurnState,
 ) ([]api.Message, error) {
-	nudge := l.turnCloseoutNudge(ctx, sess, profileID, cause)
+	nudge := l.turnCloseoutNudge(ctx, sess, turnReader(st), cause)
 	if nudge.Empty() {
 		return history, nil
 	}
@@ -231,13 +233,13 @@ func historyHasInternalNudge(history []api.Message, content string) bool {
 func (l *turnCloseout) turnCloseoutNudge(
 	ctx context.Context,
 	sess *api.Session,
-	profileID string,
+	reader prompts.Reader,
 	cause TurnCloseoutCause,
 ) HostNudge {
 	if l == nil || l.Deps.TurnCloseoutNudge == nil {
 		return HostNudge{}
 	}
-	nudge := l.Deps.TurnCloseoutNudge(ctx, sess, profileID, cause)
+	nudge := l.Deps.TurnCloseoutNudge(ctx, sess, reader, cause)
 	nudge.Content = strings.TrimSpace(nudge.Content)
 	return nudge
 }

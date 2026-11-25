@@ -3,14 +3,16 @@ package promptloop
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/workerprogress"
@@ -66,6 +68,9 @@ type turnStreamState struct {
 	offeredToolNames      []string
 	offeredToolSchemas    map[string]map[string]any
 	coordinatorFrameReady bool
+	// reader projects the last request; it is invalid when its host facts
+	// could not be established.
+	reader prompts.Reader
 }
 
 type turnBatchState struct {

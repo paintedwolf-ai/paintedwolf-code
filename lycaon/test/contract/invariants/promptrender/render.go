@@ -508,10 +508,17 @@ func verifyWarmColdSkillSchemaNarrowing(stock *Stock, loaded []skills.Skill, aud
 		if wide {
 			proj = map[string]map[string]any{"ask_user": wideAsk, "verify": wideVerify, "command": wideCmd}
 		}
-		return prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "narrow_probe", Profiles: []sandbox.ToolProfile{prof},
-			Visible: offered, Loaded: loadedMap, Schemas: stock.Schemas,
-			ProjectedSchemas: proj, RootCount: 1, HasGit: true, WebSearch: true,
+		return prompts.NewReader(prompts.HostFacts{
+			Profiles:  []sandbox.ToolProfile{prof},
+			Schemas:   stock.Schemas,
+			RootCount: 1,
+			HasGit:    true,
+			WebSearch: true,
+		}, prompts.TurnProjection{
+			ProfileID:        "narrow_probe",
+			Offered:          readerDeclaredOffer([]sandbox.ToolProfile{prof}, "narrow_probe", offered, loadedMap),
+			ProjectedSchemas: proj,
+			Declared:         true,
 		})
 	}
 	wideR, err := buildReader(true)

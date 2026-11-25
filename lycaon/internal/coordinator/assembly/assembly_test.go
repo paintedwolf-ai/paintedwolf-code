@@ -18,7 +18,7 @@ import (
 
 func TestBuildCompletionMessagesOmitsWorkflowBoundaries(t *testing.T) {
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{})
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{}))
 	history := []api.Message{
 		{
 			ID: "b1", Role: api.MessageRoleSystem, Kind: api.MessageKindWorkflowBoundary,
@@ -34,39 +34,11 @@ func TestBuildCompletionMessagesOmitsWorkflowBoundaries(t *testing.T) {
 	}
 }
 
-func TestMergeWorkerVisibleToolsSetsVisibleTools(t *testing.T) {
-	root := kickTestRoot(t)
-	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
-	wantProfile := "explore_readonly"
-	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{
-		Prompts: pe,
-		PromptToolLister: func(_ context.Context, _ *api.Session, profileID string) ([]tools.ToolMeta, error) {
-			if profileID != wantProfile {
-				t.Fatalf("profileID = %q want %q", profileID, wantProfile)
-			}
-			return []tools.ToolMeta{{Name: "read"}, {Name: "grep"}}, nil
-		},
-	})
-	vars := map[string]any{}
-	sess := &api.Session{
-		ID:              "child",
-		ParentSessionID: "parent",
-		AgentType:       "repo-researcher",
-		WorkspacePath:   t.TempDir(),
-	}
-	testPromptSurface(engine).mergeVisibleTools(context.Background(), sess, inject.CoordinatorTurnFrame{}, vars)
-	visible, ok := vars["visible_tools"].([]string)
-	if !ok || len(visible) != 2 || visible[0] != "read" || visible[1] != "grep" {
-		t.Fatalf("visible_tools = %v", vars["visible_tools"])
-	}
-}
-
 func TestSessionViewAgentProfileDrivesTemplateAndToolSurface(t *testing.T) {
 	const agentID = "team-reviewer"
 	const profileID = "review_readonly"
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{
 		SessionView: func(context.Context, *api.Session) *catalogview.View {
 			return &catalogview.View{AgentProfiles: []agentdef.Profile{{
 				ID: agentID, ToolProfile: profileID, SystemPromptTemplate: "agents/team-reviewer.md",
@@ -78,7 +50,7 @@ func TestSessionViewAgentProfileDrivesTemplateAndToolSurface(t *testing.T) {
 			}
 			return []tools.ToolMeta{{Name: "read"}}, nil
 		},
-	})
+	}))
 	sess := &api.Session{ID: "child", ParentSessionID: "parent", AgentType: agentID}
 	ref, err := testPromptSurface(engine).resolveSystemPromptRef(context.Background(), sess)
 	if err != nil {
@@ -87,22 +59,20 @@ func TestSessionViewAgentProfileDrivesTemplateAndToolSurface(t *testing.T) {
 	if ref != "agents/team-reviewer.md" {
 		t.Fatalf("template ref = %q", ref)
 	}
-	vars := map[string]any{}
-	testPromptSurface(engine).mergeVisibleTools(context.Background(), sess, inject.CoordinatorTurnFrame{}, vars)
-	if got, ok := vars["visible_tools"].([]string); !ok || len(got) != 1 || got[0] != "read" {
-		t.Fatalf("visible_tools = %v", vars["visible_tools"])
+	if got, err := testPromptSurface(engine).workerProfileID(context.Background(), sess); err != nil || got != profileID {
+		t.Fatalf("worker profile = %q, %v; want the session view's %q", got, err, profileID)
 	}
 }
 
 func TestMergeEffectivePromptSurfacePrefersMachine(t *testing.T) {
 	called := false
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{
 		EffectivePromptSurface: func(context.Context, *api.Session) prompts.AgentPromptSurface {
 			called = true
 			return prompts.AgentPromptSurface{Fingerprint: "callback"}
 		},
-	})
+	}))
 	vars := map[string]any{}
 	testPromptSurface(engine).mergeEffectivePromptSurfaceWithTurn(context.Background(), &api.Session{ID: "s1"}, inject.CoordinatorTurnFrame{
 		Machine: inject.Machine{
@@ -118,30 +88,10 @@ func TestMergeEffectivePromptSurfacePrefersMachine(t *testing.T) {
 	}
 }
 
-func TestMergeWorkerVisibleToolsHidesSkillsReadFromMachine(t *testing.T) {
-	root := kickTestRoot(t)
-	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{
-		Prompts: prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}),
-		PromptToolLister: func(context.Context, *api.Session, string) ([]tools.ToolMeta, error) {
-			return []tools.ToolMeta{{Name: "read"}, {Name: "skills_read"}}, nil
-		},
-	})
-	sess := &api.Session{ID: "child", ParentSessionID: "parent", AgentType: "repo-researcher"}
-	vars := map[string]any{}
-	testPromptSurface(engine).mergeVisibleTools(context.Background(), sess, inject.CoordinatorTurnFrame{
-		Machine: inject.Machine{ProfileID: "implement", SkillCount: 0},
-	}, vars)
-	got, _ := vars["visible_tools"].([]string)
-	if len(got) != 1 || got[0] != "read" {
-		t.Fatalf("visible_tools = %v", got)
-	}
-}
-
 func TestCompiledMachineRefreshesCatalogVisibility(t *testing.T) {
 	selection := &selectionFixture{}
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{Selection: selection})
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{Selection: selection}))
 	frame := inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: "coordinator", Surface: prompts.AgentPromptSurface{Skills: []prompts.AgentSkillView{{Name: "review", Description: "Review the change."}}}}}
 	sess := &api.Session{ID: "s"}
 	vars := map[string]any{}
@@ -181,13 +131,15 @@ func TestStandingPromptFiltersSkillsByTurnSurfaceReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompileToolPlan(%s): %v", promoteSurface, err)
 	}
-	promoteReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: promoteSurface,
+	promoteReader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plan,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: promoteSurface,
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
 	})
 	if err != nil {
 		t.Fatalf("NewReader(%s): %v", promoteSurface, err)

@@ -83,7 +83,7 @@ func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T)
 	if kickID != "coordinator-roots-changed" {
 		t.Fatalf("pending kick = %q want coordinator-roots-changed", kickID)
 	}
-	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{Reader: postureReader(t, false, false)})
 	testutil.FailErr(t, "render roots changed nudge", err)
 	if !ok {
 		t.Fatal("expected rendered roots changed nudge")
@@ -117,7 +117,7 @@ func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T)
 	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-roots-changed" {
 		t.Fatalf("next turn kick = %q", got)
 	}
-	text2, lease2, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	text2, lease2, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{Reader: postureReader(t, false, false)})
 	testutil.FailErr(t, "render second nudge", err)
 	if !ok || !strings.Contains(text2, "removed @extra") || strings.Contains(text2, "renamed @web") {
 		t.Fatalf("second turn notice = %q", text2)
@@ -172,7 +172,7 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-posture-changed" {
 		t.Fatalf("pending kick = %q want coordinator-posture-changed", got)
 	}
-	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{ReviewsConfinedWrites: true})
+	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{Reader: postureReader(t, true, false)})
 	testutil.FailErr(t, "render strict posture nudge", err)
 	if !ok || strings.TrimSpace(text) != "Declared writes outside the project and scratch now require review, including writes to standard caches." {
 		t.Fatalf("strict nudge = %q (ok=%v)", text, ok)
@@ -185,7 +185,7 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-posture-changed" {
 		t.Fatalf("coalesced pending kick = %q want coordinator-posture-changed", got)
 	}
-	text2, lease2, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	text2, lease2, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{Reader: postureReader(t, false, false)})
 	testutil.FailErr(t, "render non-strict posture nudge", err)
 	if !ok || strings.TrimSpace(text2) != "Confined programs can now write standard caches and package stores without a separate review." {
 		t.Fatalf("non-strict nudge = %q (ok=%v)", text2, ok)
@@ -248,13 +248,15 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	renderPrompt := func(surface prompts.AgentPromptSurface) string {
 		profilesList, err := sandbox.LoadToolProfiles()
 		testutil.FailErr(t, "load tool profiles", err)
-		reader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:             "implement",
+		reader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:              profilesList,
 			RootCount:             len(roots),
 			ReviewsConfinedWrites: surface.Posture.ReviewsConfinedWrites(),
 			CommandExternalHidden: surface.CommandExternalHidden,
 			SharedTempLocations:   surface.SharedTempLocations,
+		}, prompts.TurnProjection{
+			ProfileID: "implement",
+			Declared:  true,
 		})
 		testutil.FailErr(t, "new reader", err)
 		occ := prompts.AgentPromptSurfaceTemplateVars(surface)
@@ -293,7 +295,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != "coordinator-posture-changed" {
 		t.Fatalf("pending kick after overlay tightening = %q want coordinator-posture-changed", got)
 	}
-	notice, lease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{ReviewsConfinedWrites: true})
+	notice, lease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{Reader: postureReader(t, true, false)})
 	testutil.FailErr(t, "render overlay tightening notice", err)
 	if !ok || strings.TrimSpace(notice) != "Declared writes outside the project and scratch now require review, including writes to standard caches." {
 		t.Fatalf("overlay tightening notice = %q (ok=%v)", notice, ok)
@@ -306,10 +308,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != "coordinator-posture-changed" {
 		t.Fatalf("pending kick after external hidden = %q want coordinator-posture-changed", got)
 	}
-	extNotice, extLease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{
-		ReviewsConfinedWrites: true,
-		CommandExternalHidden: true,
-	})
+	extNotice, extLease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{Reader: postureReader(t, true, true)})
 	testutil.FailErr(t, "render external hidden notice", err)
 	if !ok || !strings.Contains(extNotice, "The `external` selector is now hidden on `command`.") {
 		t.Fatalf("external hidden notice = %q (ok=%v)", extNotice, ok)
@@ -400,7 +399,7 @@ func TestEnqueueRootsChangedKickNamesSessionFolderRename(t *testing.T) {
 	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-roots-changed" {
 		t.Fatalf("rename pending kick = %q", got)
 	}
-	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{Reader: postureReader(t, false, false)})
 	testutil.FailErr(t, "render rename nudge", err)
 	if !ok {
 		t.Fatal("expected rendered rename nudge")
@@ -439,7 +438,7 @@ func TestEnqueueRootsChangedKickSessionFolderFallsBackAfterDetach(t *testing.T) 
 	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-roots-changed" {
 		t.Fatalf("detach pending kick = %q", got)
 	}
-	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{Reader: postureReader(t, false, false)})
 	testutil.FailErr(t, "render detach nudge", err)
 	if !ok {
 		t.Fatal("expected rendered detach nudge")
@@ -477,7 +476,7 @@ func TestPromotionCommitEnqueuesRootsChangedKick(t *testing.T) {
 	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-roots-changed" {
 		t.Fatalf("promotion pending kick = %q", got)
 	}
-	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{Reader: postureReader(t, false, false)})
 	testutil.FailErr(t, "render promotion nudge", err)
 	if !ok {
 		t.Fatal("expected rendered promotion nudge")
@@ -492,4 +491,15 @@ func TestPromotionCommitEnqueuesRootsChangedKick(t *testing.T) {
 			t.Fatalf("promotion notice missing %q:\n%s", want, text)
 		}
 	}
+}
+
+// postureReader is a declared coordinator request under the given posture facts.
+func postureReader(t *testing.T, reviewsConfinedWrites, externalHidden bool) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
+	reader, err := prompts.NewReader(prompts.HostFacts{Profiles: profiles, RootCount: 1, WebSearch: true, ReviewsConfinedWrites: reviewsConfinedWrites, CommandExternalHidden: externalHidden},
+		prompts.TurnProjection{ProfileID: prompts.CoordinatorProfileID, SurfaceID: "implement_investigate", Declared: true})
+	testutil.FailErr(t, "reader", err)
+	return reader
 }

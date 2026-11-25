@@ -45,15 +45,17 @@ func TestCommandEnabledToolProfilesRenderCommandSurface(t *testing.T) {
 	for _, profile := range commandEnabledToolProfiles(t) {
 		t.Run(profile.ID, func(t *testing.T) {
 			t.Parallel()
-			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, prompts.ReaderInput{Schemas: schemas}, []sandbox.ToolProfile{profile})
+			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, nil, schemas, []sandbox.ToolProfile{profile})
 			contractcheck.FailErr(t, "LoadAgentToolSurface", err)
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID:         profile.ID,
+			reader, err := prompts.NewReader(prompts.HostFacts{
 				Profiles:          []sandbox.ToolProfile{profile},
 				Schemas:           schemas,
 				RootCount:         1,
 				WebSearch:         true,
 				SessionScratchDir: filepath.Join(t.TempDir(), "session-scratch"),
+			}, prompts.TurnProjection{
+				ProfileID: profile.ID,
+				Declared:  true,
 			})
 			contractcheck.FailErr(t, "NewReader", err)
 			vars, err := prompts.Vars(reader, nil)
@@ -98,12 +100,14 @@ func TestCommandFreeToolProfilesExcludeCommandSurface(t *testing.T) {
 		commandFree++
 		t.Run(profile.ID, func(t *testing.T) {
 			t.Parallel()
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: profile.ID,
+			reader, err := prompts.NewReader(prompts.HostFacts{
 				Profiles:  []sandbox.ToolProfile{profile},
 				Schemas:   schemas,
 				RootCount: 1,
 				WebSearch: true,
+			}, prompts.TurnProjection{
+				ProfileID: profile.ID,
+				Declared:  true,
 			})
 			contractcheck.FailErr(t, "NewReader", err)
 			vars := reader.Facts()

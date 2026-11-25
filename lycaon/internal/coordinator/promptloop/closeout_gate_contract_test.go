@@ -142,6 +142,7 @@ func (c *closeoutContract) drive(t *testing.T, surface, content string, reportPh
 	frame := testReportFrame()
 	frame.Runtime.ReportDocumentEnabled = reportPhase
 	st := &promptLoopTurnState{coordinatorFrame: frame, draftSlotID: "slot", draftSlotAppended: true, turnStreamState: turnStreamState{offeredToolNames: []string{"read"}}, turnBatchState: turnBatchState{turnTools: []string{"read"}}}
+	st.reader = testCoordinatorReader(t, st.offeredToolNames...)
 	sess := &api.Session{ID: "contract-" + t.Name(), WorkspacePath: t.TempDir()}
 	assistant := api.Message{ID: "slot", Role: api.MessageRoleAssistant, Content: content}
 	read, err := c.loop.Closeout.readCloseoutDraft(t.Context(), sess, surface, st, history, assistant)
@@ -410,6 +411,7 @@ func TestRepeatedOffenderExhausts(t *testing.T) {
 	frame := testReportFrame()
 	frame.Runtime.ReportDocumentEnabled = false
 	st := &promptLoopTurnState{coordinatorFrame: frame, draftSlotID: "slot", draftSlotAppended: true, turnStreamState: turnStreamState{offeredToolNames: []string{"read"}}, turnBatchState: turnBatchState{turnTools: []string{"read"}}}
+	st.reader = testCoordinatorReader(t, st.offeredToolNames...)
 	sess := &api.Session{ID: "contract-repeat", WorkspacePath: t.TempDir()}
 	assistant := api.Message{ID: "slot", Role: api.MessageRoleAssistant, Content: content}
 	read, err := c.loop.Closeout.readCloseoutDraft(t.Context(), sess, "implement_synthesis", st, contractHistory(content), assistant)
@@ -510,6 +512,7 @@ func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 	st := &promptLoopTurnState{
 		coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"read"}},
 	}
+	st.reader = testCoordinatorReader(t, st.offeredToolNames...)
 	ledger := evidence.Ledger{
 		Handles: map[string]evidence.Record{
 			"read#1": {Handle: "read#1", Kind: "read", Path: "src/a.go", Body: []string{"package main"}},
@@ -628,6 +631,7 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 				},
 			})
 			st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"command"}}}
+			st.reader = testCoordinatorReader(t, st.offeredToolNames...)
 			read := markdownRead(tc.body+" ["+tc.evidence+"]", false)
 			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, tc.surface, st, history, history[2], read)
 			testutil.FailErr(t, "check report", err)

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -423,7 +424,7 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 			{completion: readCall("read-after-secret")},
 			{completion: textReply("Completed after withheld secret retry.")},
 		})
-		h.deps.Nudges.SecretWithheldNudge = func(_ context.Context, _ *api.Session, guidanceText string) HostNudge {
+		h.deps.Nudges.SecretWithheldNudge = func(_ context.Context, _ *api.Session, _ prompts.Reader, guidanceText string) HostNudge {
 			return HostNudge{Content: "Secret withheld: " + guidanceText}
 		}
 		testutil.FailErr(t, "run withheld secret retry", h.runAttempt(t, "Deploy with token.", "coordinator", ""))

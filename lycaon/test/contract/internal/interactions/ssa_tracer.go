@@ -323,7 +323,7 @@ func isPrimitiveBoundaryType(t types.Type) bool {
 		return false
 	}
 	switch named.Obj().Name() {
-	case "ReaderInput", "GuardContext", "ToolReject", "CoordinatorRunContext", "Session", "Request":
+	case "HostFacts", "TurnProjection", "GuardContext", "ToolReject", "CoordinatorRunContext", "Session", "Request":
 		return true
 	default:
 		return false

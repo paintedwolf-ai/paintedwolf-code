@@ -313,11 +313,9 @@ func closeoutTurnReader(st hoststate.CoordinatorState, worker bool) (prompts.Rea
 	if worker {
 		visible = []string{"complete_leg"}
 	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID:             prompts.CoordinatorProfileID,
+	return prompts.NewReader(prompts.HostFacts{
 		SessionMode:           string(st.SessionMode),
 		Profiles:              narrowed,
-		Visible:               visible,
 		Schemas:               st.Overlay.Schemas,
 		RootCount:             st.RootCount,
 		HasGit:                st.HasGit,
@@ -326,6 +324,10 @@ func closeoutTurnReader(st hoststate.CoordinatorState, worker bool) (prompts.Rea
 		CommandExternalHidden: st.CommandExternalHidden,
 		SessionScratchDir:     st.SessionScratchDir,
 		SharedTempLocations:   st.SharedTempLocations,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Offered:   visible,
+		Declared:  true,
 	})
 }
 
@@ -360,11 +362,9 @@ func workerCloseoutReader(ws hoststate.WorkerState) (prompts.Reader, error) {
 	if err != nil {
 		return prompts.Reader{}, err
 	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID:             ws.ToolProfile,
+	return prompts.NewReader(prompts.HostFacts{
 		SessionMode:           string(ws.ParentSessionMode),
 		Profiles:              narrowed,
-		Visible:               []string{"complete_leg"},
 		Schemas:               ws.Overlay.Schemas,
 		RootCount:             ws.RootCount,
 		HasGit:                ws.HasGit,
@@ -372,6 +372,10 @@ func workerCloseoutReader(ws hoststate.WorkerState) (prompts.Reader, error) {
 		OnWorkerBranch:        ws.OnWorkerBranch,
 		WebSearch:             ws.WebSearch,
 		CommandExternalHidden: ws.CommandExternalHidden,
+	}, prompts.TurnProjection{
+		ProfileID: ws.ToolProfile,
+		Offered:   []string{"complete_leg"},
+		Declared:  true,
 	})
 }
 

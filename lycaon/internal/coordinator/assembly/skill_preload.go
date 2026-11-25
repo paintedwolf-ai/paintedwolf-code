@@ -20,7 +20,7 @@ func (e *turnContextAssembler) skillGuidanceReader(ctx context.Context, sess *ap
 		r, err := e.surface.workerTurnReader(ctx, sess, frame, turn)
 		return r, err == nil && r.Valid()
 	}
-	r, err := e.surface.turnReader(ctx, sess, frame, history, turn, 0)
+	r, err := e.surface.turnReader(ctx, sess, frame, history, turn)
 	return r, err == nil && r.Valid()
 }
 

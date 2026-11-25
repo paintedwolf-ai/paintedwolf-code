@@ -203,13 +203,15 @@ func TestW12PersonaTemplateIsolation(t *testing.T) {
 	if a.Layers().Catalog.Revision == b.Layers().Catalog.Revision {
 		t.Fatal("derived engines must keep distinct catalogs")
 	}
-	rA, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	rA, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  v1.ToolProfiles,
 		Schemas:   v1.ToolSchemas,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader A", err)
 	_, err = prompts.RenderPersona(ctx, a, "implementer", rA, nil)
@@ -217,13 +219,15 @@ func TestW12PersonaTemplateIsolation(t *testing.T) {
 		// Rendering may reject unknown agent variants.
 		t.Logf("render A: %v", err)
 	}
-	rB, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	rB, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  v2.ToolProfiles,
 		Schemas:   v2.ToolSchemas,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader B", err)
 	_, err = prompts.RenderPersona(ctx, b, "implementer", rB, nil)

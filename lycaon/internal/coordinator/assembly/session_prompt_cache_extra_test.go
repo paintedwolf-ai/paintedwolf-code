@@ -48,16 +48,18 @@ func TestStablePromptKeyFollowsEveryRenderedRoot(t *testing.T) {
 	}
 	key := func(label, path, scratch string, reviewsConfinedWrites, externalHidden bool) string {
 		t.Helper()
-		reader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:             prompts.CoordinatorProfileID,
-			SurfaceID:             "implement_routing",
+		reader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:              profiles,
-			Plan:                  plan,
 			RootCount:             2,
 			WebSearch:             true,
 			SessionScratchDir:     scratch,
 			ReviewsConfinedWrites: reviewsConfinedWrites,
 			CommandExternalHidden: externalHidden,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_routing",
+			Plan:      plan,
+			Offered:   (plan).ImmediateNames(),
 		})
 		if err != nil {
 			t.Fatalf("NewReader: %v", err)

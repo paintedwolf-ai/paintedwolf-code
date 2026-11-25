@@ -561,7 +561,18 @@ func newMutableCoordFuzzEngine(bundle fuzzOverlayBundle, st hoststate.Coordinato
 	eng.SetDeps(assembly.AssemblyDeps{
 		Prompts: bundle.engine,
 		Injects: bundle.injRender,
-		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		TurnReader: func(ctx context.Context, _ *api.Session, _ []api.Message, _ inject.CoordinatorTurnFrame) (prompts.Reader, error) {
+			m.mu.Lock()
+			st, auth, jobs := m.st, m.auth, len(m.jobs) > 0
+			m.mu.Unlock()
+			if !jobs {
+				return auth.Reader, nil
+			}
+			// Live jobs promote their handle tools on the request.
+			promoted, err := hoststate.FreezeTurnAuthorityWithResources(ctx, st, toolcontract.ResourcePresence{CommandJobs: true})
+			return promoted.Reader, err
+		},
+		Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		SessionView: func(context.Context, *api.Session) *catalogview.View {
 			m.mu.Lock()
 			cur := m.st

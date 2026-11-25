@@ -93,12 +93,14 @@ func testCoordReader(t *testing.T) prompts.Reader {
 	t.Helper()
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	r, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	r, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader coordinator", err)
 	return r
@@ -108,12 +110,14 @@ func testWorkerReader(t *testing.T) prompts.Reader {
 	t.Helper()
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	r, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	r, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader worker", err)
 	return r

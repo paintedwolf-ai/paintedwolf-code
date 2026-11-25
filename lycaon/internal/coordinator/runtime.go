@@ -2,6 +2,8 @@ package coordinator
 
 import (
 	"context"
+	"sync"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sync"
 )
 
 // RuntimeDeps wires the coordinator prompt runtime.
@@ -78,6 +79,9 @@ func (r *Runtime) refreshDepsLocked() {
 	}
 	if r.assemblyDepsFn != nil {
 		deps := r.assemblyDepsFn()
+		if r.loop != nil && deps.TurnReader == nil {
+			deps.TurnReader = turnReaderFor(r.loop.Context.Deps)
+		}
 		eng := r.assemblyEngineLocked()
 		eng.SetDeps(deps)
 		if r.board != nil {

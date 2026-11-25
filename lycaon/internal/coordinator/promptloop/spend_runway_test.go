@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -77,7 +78,7 @@ func TestMaybeSpendRunwayNudge(t *testing.T) {
 	var gotCeiling float64
 	loop := NewPromptLoop(PromptLoopDeps{
 		Nudges: NudgesDeps{
-			SpendRunwayNudge: func(_ context.Context, _ *api.Session, ceilingUSD float64) HostNudge {
+			SpendRunwayNudge: func(_ context.Context, _ *api.Session, _ prompts.Reader, ceilingUSD float64) HostNudge {
 				calls++
 				gotCeiling = ceilingUSD
 				return HostNudge{Content: "spend runway heads-up"}
@@ -116,7 +117,9 @@ func TestApplySpendCeilingGrantsOneCoordinatorWindDown(t *testing.T) {
 	ceilingErr := errors.New("ceiling reached")
 	loop := NewPromptLoop(PromptLoopDeps{
 		Nudges: NudgesDeps{
-			SpendSoftStopNudge: func(context.Context, *api.Session) HostNudge { return HostNudge{Content: "bounded landing"} },
+			SpendSoftStopNudge: func(context.Context, *api.Session, prompts.Reader) HostNudge {
+				return HostNudge{Content: "bounded landing"}
+			},
 			CheckSpendCeiling: func(context.Context, string, *api.Session) (SpendCeilingCheck, error) {
 				return SpendCeilingCheck{SoftStop: true}, ceilingErr
 			},
@@ -182,10 +185,10 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 				return SpendCeilingCheck{SoftStop: true}, ceilingErr
 			}
 			deps.Nudges.IsSpendCeiling = func(err error) bool { return errors.Is(err, ceilingErr) }
-			deps.Nudges.SpendSoftStopNudge = func(context.Context, *api.Session) HostNudge {
+			deps.Nudges.SpendSoftStopNudge = func(context.Context, *api.Session, prompts.Reader) HostNudge {
 				return HostNudge{Content: tc.guidance}
 			}
-			deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
+			deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, prompts.Reader, TurnCloseoutCause) HostNudge {
 				return HostNudge{Content: "Give the final prose closeout."}
 			}
 			var admitted int

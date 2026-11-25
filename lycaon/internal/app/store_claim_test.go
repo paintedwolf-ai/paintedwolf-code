@@ -3,12 +3,13 @@ package app
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/app/persistence"
 	"os"
 	"path/filepath"
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/app/persistence"
 
 	"github.com/lycaon/lycaon/internal/hostlock"
 	"github.com/lycaon/lycaon/internal/testutil"
