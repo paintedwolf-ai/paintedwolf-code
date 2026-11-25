@@ -1,5 +1,5 @@
 steps:
   - when: "paintedwolf.command_operation_reachable"
     tool: "command"
-    say: "Use the native forms {{ paintedwolf.admitted_command_forms }} through {{ call }}; `COMMAND --help` lists supported forms."
+    say: "Use the native forms {{ paintedwolf.admitted_command_forms }} through {% if load %}{{ load }}, then {% endif %}{{ call }}; `COMMAND --help` lists supported forms."
     otherwise: "Use an available capability or report the missing operation."

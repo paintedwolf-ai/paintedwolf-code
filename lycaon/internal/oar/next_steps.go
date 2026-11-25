@@ -21,7 +21,12 @@ import (
 // it, so it can change what a reader is told but never what a rule decides.
 const NextStepsFact = "paintedwolf.next_steps"
 
+// stepCallBinding is the exact text of the step's own call.
 const stepCallBinding = "call"
+
+// stepLoadBinding is the exact loader call the reader must make before the
+// step's call, or empty when the call's tool is already loaded.
+const stepLoadBinding = "load"
 
 // NextSteps is the host catalog entry for one rule. It lives outside the rule
 // document, which stays portable Open Agent Rules.
@@ -49,7 +54,8 @@ type NextStep struct {
 	Pick map[string]string `yaml:"pick,omitempty"`
 	// Complete says Args is the whole call rather than a shape to finish.
 	Complete bool `yaml:"complete,omitempty"`
-	// Say is the sentence shown when the call is reachable. It binds {{ call }}.
+	// Say is the sentence shown when the call is reachable. It binds {{ call }}
+	// and, inside {% if load %}, the loader call {{ load }}.
 	Say string `yaml:"say,omitempty"`
 	// Otherwise is the sentence shown when When holds and the call is unreachable.
 	Otherwise string `yaml:"otherwise,omitempty"`
@@ -122,8 +128,8 @@ func (l *Loader) validateNextStep(step NextStep, known map[string]bool, selector
 	if strings.TrimSpace(step.Say) == "" {
 		return fmt.Errorf("%s: say is required", where)
 	}
-	if !strings.Contains(step.Say, "{{ "+stepCallBinding+" }}") {
-		return fmt.Errorf("%s: say must show {{ %s }}, the call the host checked", where, stepCallBinding)
+	if err := checkStepSayBindings(step.Say, where); err != nil {
+		return err
 	}
 	if len(step.Program) > 0 {
 		if step.Tool != "" || len(step.Args) > 0 || len(step.Pick) > 0 {
@@ -164,6 +170,25 @@ func (l *Loader) validateNextStep(step NextStep, known map[string]bool, selector
 		if err := l.validateNextStep(alternative, known, selectors, fmt.Sprintf("%s.or[%d]", where, i)); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// ErrStepLoadBranch reports a say that would not render true both for a reader
+// who must load the call's tool first and for one who already has it.
+var ErrStepLoadBranch = errors.New("say must show {{ load }} only inside {% if load %} and {{ call }} whether or not load is set")
+
+// checkStepSayBindings holds say to both renderings: whether a call needs its
+// loader depends on the reader, so it is known only at render time.
+func checkStepSayBindings(say, where string) error {
+	counts, err := oarcore.CountCopyBranches(say, stepLoadBinding)
+	if err != nil {
+		return fmt.Errorf("%s: say: %w", where, err)
+	}
+	call, load := counts[stepCallBinding], counts[stepLoadBinding]
+	callShown := call.Either > 0 || (call.WhenSet > 0 && call.WhenEmpty > 0)
+	if !callShown || load.WhenSet == 0 || load.WhenEmpty > 0 || load.Either > 0 {
+		return fmt.Errorf("%s: %w", where, ErrStepLoadBranch)
 	}
 	return nil
 }
@@ -275,7 +300,7 @@ func nextStepRefs(step NextStep) ([]string, error) {
 			return nil, err
 		}
 		for _, binding := range bindings {
-			if binding.Name != stepCallBinding {
+			if binding.Name != stepCallBinding && binding.Name != stepLoadBinding {
 				refs = append(refs, binding.Name)
 			}
 		}
@@ -469,11 +494,11 @@ func (sr stepResolver) resolve(branchPrefix string, stepIndex int, step NextStep
 	if call, built := stepCall(step, gc, facts); built {
 		if sequence, reachable := gc.Reach.Sequence(call); reachable {
 			recordRuleBranch(ruleID, branchPrefix+".reach", stepIndex, gc, true)
-			bound := make(map[string]any, len(facts)+1)
+			bound := make(map[string]any, len(facts)+2)
 			for name, value := range facts {
 				bound[name] = value
 			}
-			bound[stepCallBinding] = sequenceText(sequence)
+			bound[stepCallBinding], bound[stepLoadBinding] = sequenceBindings(sequence)
 			say := oarcore.RenderCopy(step.Say, bound)
 			if resolutions != nil {
 				outcome := StepOutcomeOmitted
@@ -531,13 +556,14 @@ func (sr stepResolver) resolve(branchPrefix string, stepIndex int, step NextStep
 	return otherwise, nil
 }
 
-// sequenceText renders the loader call before the call it enables, the order
-// in which the reader must make them.
-func sequenceText(sequence []toolreach.Call) string {
-	if len(sequence) == 1 {
-		return sequence[0].Text()
+// sequenceBindings returns the step's own call text and, when the reader must
+// load its tool first, the loader call text.
+func sequenceBindings(sequence []toolreach.Call) (call, load string) {
+	call = sequence[len(sequence)-1].Text()
+	if len(sequence) == 2 {
+		load = sequence[0].Text()
 	}
-	return sequence[0].Text() + ", then " + sequence[1].Text()
+	return call, load
 }
 
 // stepCall builds the step's call. It reports false for a complete call or a

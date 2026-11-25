@@ -25,9 +25,9 @@ func failingFactContext(t *testing.T) (*GuardContext, *int) {
 
 func TestResolveNextStepsOmitsAStepWhoseFactsFail(t *testing.T) {
 	rule := stepRule(
-		NextStep{When: "paintedwolf.session_role == 'worker'", Tool: "recall", Say: "{{ call }}", Otherwise: "fallback",
-			Or: []NextStep{{Tool: "ask_user", Say: "{{ call }}"}}},
-		NextStep{When: "paintedwolf.listed", Tool: "process_list", Complete: true, Say: "{{ call }}", Otherwise: "{{ paintedwolf.listed }}"},
+		NextStep{When: "paintedwolf.session_role == 'worker'", Tool: "recall", Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}", Otherwise: "fallback",
+			Or: []NextStep{{Tool: "ask_user", Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"}}},
+		NextStep{When: "paintedwolf.listed", Tool: "process_list", Complete: true, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}", Otherwise: "{{ paintedwolf.listed }}"},
 	)
 	gc, listedCalls := failingFactContext(t)
 	ActiveNextStepObservers.Store(t.Name(), NextStepObserver(func(*Rule, ResolvedSteps) {}))
@@ -58,7 +58,7 @@ func TestResolveNextStepsOmitsAStepWhoseFactsFail(t *testing.T) {
 }
 
 func TestResolveNextStepsReportsNoErrorWhenFactsAssemble(t *testing.T) {
-	rule := stepRule(NextStep{When: "paintedwolf.listed", Tool: "process_list", Complete: true, Say: "{{ call }}"})
+	rule := stepRule(NextStep{When: "paintedwolf.listed", Tool: "process_list", Complete: true, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"})
 	gc, _ := failingFactContext(t)
 	gc.RegisterProvider("paintedwolf.listed", func(g *GuardContext) error { return nil })
 	got := ResolveNextSteps(rule, gc)
@@ -70,7 +70,7 @@ func TestFiredRuleTraceRecordsNextStepFactFailure(t *testing.T) {
 		ID: "STEP_FACTS", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce",
 		Copy: Copy{Title: "t", Fix: "{{ " + NextStepsFact + " }}"},
 		NextSteps: &NextSteps{Steps: []NextStep{
-			{When: "paintedwolf.session_role == 'worker'", Tool: "recall", Say: "{{ call }}"},
+			{When: "paintedwolf.session_role == 'worker'", Tool: "recall", Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"},
 		}},
 	}
 	pipeline := NewGuardPipeline(NewRuleSet([]*Rule{rule}), nil, nil)

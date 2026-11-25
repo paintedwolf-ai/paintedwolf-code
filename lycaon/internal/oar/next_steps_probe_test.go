@@ -20,7 +20,7 @@ func TestResolveNextStepsChecksAProgramByItsProbe(t *testing.T) {
 		{"a probe outside the program's admitted modes", []string{"sed", "-i", "s/a/b/", "FILE"}, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rule := stepRule(NextStep{Program: shown, Probe: tc.probe, Say: "{{ call }}"})
+			rule := stepRule(NextStep{Program: shown, Probe: tc.probe, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"})
 			got := ResolveNextSteps(rule, reachContext(request))
 			if len(got.Calls) != tc.calls {
 				t.Fatalf("calls = %+v, want %d", got.Calls, tc.calls)
@@ -36,13 +36,13 @@ func TestValidateNextStepsKeepsAProbeOnItsProgram(t *testing.T) {
 	loader, err := NewLoader("")
 	testutil.FailErr(t, "load OAR", err)
 	for _, step := range []NextStep{
-		{Program: []string{"sed", "-n", "A,Bp", "FILE"}, Probe: []string{"cat", "FILE"}, Say: "{{ call }}"},
-		{Tool: "recall", Probe: []string{"sed", "-n", "1,2p"}, Say: "{{ call }}"},
+		{Program: []string{"sed", "-n", "A,Bp", "FILE"}, Probe: []string{"cat", "FILE"}, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"},
+		{Tool: "recall", Probe: []string{"sed", "-n", "1,2p"}, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"},
 	} {
 		if err := loader.validateNextSteps(stepRule(step)); err == nil {
 			t.Errorf("step %+v validated", step)
 		}
 	}
-	valid := NextStep{Program: []string{"sed", "-n", "A,Bp", "FILE"}, Probe: []string{"sed", "-n", "1,2p", "FILE"}, Say: "{{ call }}"}
+	valid := NextStep{Program: []string{"sed", "-n", "A,Bp", "FILE"}, Probe: []string{"sed", "-n", "1,2p", "FILE"}, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"}
 	testutil.FailErr(t, "validate probe", loader.validateNextSteps(stepRule(valid)))
 }
