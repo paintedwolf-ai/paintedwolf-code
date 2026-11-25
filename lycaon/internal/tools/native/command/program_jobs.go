@@ -15,7 +15,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/toolcontract"
