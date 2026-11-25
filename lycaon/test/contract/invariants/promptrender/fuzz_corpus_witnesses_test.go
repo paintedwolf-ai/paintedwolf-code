@@ -74,21 +74,14 @@ func TestFuzzCorpusSemanticWitnesses(t *testing.T) {
 				continue
 			}
 			ran[st.TurnProfile.SurfaceID] = true
-			seed := hoststate.CoordinatorSeed{
-				OverlayIndex: overlayIndexByID(t, d, st.PackOverlayID), SessionMode: st.SessionMode, Posture: st.Posture,
-				WorkflowState: st.WorkflowState, SurfaceID: st.RequestedSurfaceID, RootTopology: st.RootTopology,
-				Loading: st.Loading, WebSearch: st.WebSearch, Vision: st.Vision, CommandExternalHidden: st.CommandExternalHidden,
-				ApprovalPosture: st.ApprovalPosture, TempState: st.TempState, MCPState: st.MCPState,
+			bundle := env.overlays[overlayIndexByID(t, d, st.PackOverlayID)]
+			for family := range 3 {
+				rep, err := runCoordinatorTwoTurnProperties(t.Context(), env, bundle, st, st, family, 0, t.TempDir(),
+					FuzzCaseReport{Recipient: "coordinator", TurnACoords: st.ID, TurnBCoords: st.ID})
+				if err != nil {
+					t.Fatalf("family %d on %s (property=%s): %v", family, st.ID, rep.FailedProperty, err)
+				}
 			}
-			resolved, err := hoststate.ResolveCoordinatorSeed(d, seed)
-			if err != nil || resolved.Excluded || resolved.PackOverlayID != "without-implement" {
-				t.Fatalf("seed for %s resolved to %s err=%v, want the same admitted overlay", st.ID, resolved.ID, err)
-			}
-			raw, err := d.EncodeCoordinator(seed, hoststate.SeedTail{})
-			if err != nil {
-				t.Fatalf("encode %s: %v", st.ID, err)
-			}
-			run(t, raw)
 		}
 		if len(ran) == 0 {
 			t.Fatal("the matrix admits no coordinator without the implement pack")
