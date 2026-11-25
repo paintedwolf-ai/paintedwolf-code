@@ -389,8 +389,6 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 	cache := hoststate.NewRenderCache()
 	workerPairs, err := cachedWorkerPairs()
 	r.Must(err)
-	skillsList, err := StockSkills(s)
-	r.Must(err)
 
 	checked := 0
 	for _, wp := range workerPairs {
@@ -400,7 +398,9 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 				continue
 			}
 		}
-		occ := workerPersonaOccurrence(auth.Reader, skillsList)
+		wSkills, err := overlaySkills(s, ws.Overlay)
+		r.Must(err)
+		occ := workerPersonaOccurrence(auth.Reader, wSkills)
 		fullVars, err := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
 		r.Must(err)
 		rKey := renderCacheKeyForVars("persona:"+ws.AgentID+":"+s.Site, s.Catalog.Revision, nil, fullVars)
@@ -420,6 +420,7 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 func workerPersonaOccurrence(reader prompts.Reader, skillsList []skills.Skill) map[string]any {
 	fp := reader.Fingerprint()
 	if fp != "" {
+		fp += "|" + skillsKey(skillsList)
 		if cached, ok := workerOccByReaderFP.Load(fp); ok {
 			return maps.Clone(cached.(map[string]any))
 		}

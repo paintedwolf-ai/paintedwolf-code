@@ -77,11 +77,15 @@ func runCoordinatorPromptAndProcedureMatrix(
 			bundles[bKey] = bundle
 		}
 		resolveNamed := resolver.forCoordinatorState(st)
-
-		if err := renderAndCheckCoordinatorStandingPrompt(ctx, s, bundle.engine, bundle.unitCat, st, auth, skillsList, idx, resolveNamed, cache, sum); err != nil {
+		stSkills, err := overlaySkills(s, st.Overlay)
+		if err != nil {
 			return err
 		}
-		if err := renderRunStateVariants(ctx, s, bundle, st, auth, skillsList, idx, resolveNamed, cache, runStateAuthChecked, sum); err != nil {
+
+		if err := renderAndCheckCoordinatorStandingPrompt(ctx, s, bundle.engine, bundle.unitCat, st, auth, stSkills, idx, resolveNamed, cache, sum); err != nil {
+			return err
+		}
+		if err := renderRunStateVariants(ctx, s, bundle, st, auth, stSkills, idx, resolveNamed, cache, runStateAuthChecked, sum); err != nil {
 			return err
 		}
 		if err := renderAndCheckToolProcedures(ctx, s, bundle.inj, "coord:"+st.ID, st.Overlay.Catalog.Revision, auth, st.SessionMode, st.Posture, resolveNamed, cache, sum); err != nil {
@@ -226,7 +230,7 @@ func buildCoordinatorStandingVars(
 var admittedSkillVarsMemo sync.Map
 
 func mergeAdmittedSkillsIntoVars(occ map[string]any, reader prompts.Reader, skillsList []skills.Skill) {
-	mKey := fmt.Sprintf("%s|%d", reader.Fingerprint(), len(skillsList))
+	mKey := reader.Fingerprint() + "|" + skillsKey(skillsList)
 	if cached, ok := admittedSkillVarsMemo.Load(mKey); ok {
 		maps.Copy(occ, cached.(map[string]any))
 		return
@@ -493,10 +497,6 @@ func runWorkerPersonaAndInjectMatrix(
 ) error {
 	engine := s.Engine()
 	injRenderer := prompts.NewInjectRenderer(engine)
-	skillsList, err := StockSkills(s)
-	if err != nil {
-		return err
-	}
 	checkedDesc := map[string]bool{}
 	pairs, err := cachedWorkerPairs()
 	if err != nil {
@@ -517,7 +517,11 @@ func runWorkerPersonaAndInjectMatrix(
 			wRev = ws.Overlay.Catalog.Revision
 		}
 		if !mutInAsk {
-			occ := workerPersonaOccurrence(auth.Reader, skillsList)
+			wSkills, sErr := overlaySkills(s, ws.Overlay)
+			if sErr != nil {
+				return sErr
+			}
+			occ := workerPersonaOccurrence(auth.Reader, wSkills)
 			if idx%2 == 0 {
 				occ["agent_host_resources"] = []map[string]any{
 					{"category": "Runtime", "resources": []map[string]any{{"id": "python3", "access": "allow"}}},
