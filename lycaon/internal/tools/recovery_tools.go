@@ -72,7 +72,7 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 	})
 	put("task_callable", func(*oar.GuardContext) any { return request.Status("task") == toolreach.Callable })
 	put("surface_snapshot_handles", func(*oar.GuardContext) any { return mintableSurfaceSnapshotHandles(request) })
-	registerCommandFormRecoveryFacts(gc, request)
+	registerCommandFormRecoveryFacts(ctx, gc, request)
 	for _, fact := range oar.CanCallFacts() {
 		tool := strings.TrimPrefix(fact, "can_")
 		put(fact, func(*oar.GuardContext) any {

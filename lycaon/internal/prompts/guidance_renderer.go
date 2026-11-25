@@ -294,7 +294,7 @@ func (r *GuidanceRenderer) RenderWithReach(ctx context.Context, req toolreach.Re
 	canRecallHistory := callableField("recall", "history.after_ord") && callableField("recall", "history.through_ord")
 	merged := make(map[string]any, len(occurrence)+7)
 	maps.Copy(merged, occurrence)
-	merged["can_sed_read"] = callableField(toolreach.ProgramTool, "command") && req.ProgramInvocation("sed", "-n", "1,1p", "FILE")
+	merged["can_sed_read"] = callableField(toolreach.ProgramTool, "command") && req.ProgramInvocation(ctx, "sed", "-n", "1,1p", "FILE")
 	merged["can_recall_history"] = canRecallHistory
 	merged["can_recall_history_record"] = canRecallHistory &&
 		callableField("recall", "history.search") &&

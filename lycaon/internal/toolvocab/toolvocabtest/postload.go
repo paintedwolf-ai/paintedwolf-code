@@ -89,12 +89,12 @@ func checkSingleCommandSegment(reach toolreach.Request, allowMut bool, seg strin
 		}
 		return true, ""
 	}
-	if reach.ProgramInvocation(words...) {
+	if reach.ProgramInvocation(context.Background(), words...) {
 		return true, ""
 	}
 	if len(words) == 2 && strings.HasPrefix(words[1], "-") {
-		if reach.ProgramInvocation(words[0], words[1], "PATTERN") ||
-			(words[0] == "sed" && words[1] == "-n" && reach.ProgramInvocation("sed", "-n", "1,2p", "FILE")) {
+		if reach.ProgramInvocation(context.Background(), words[0], words[1], "PATTERN") ||
+			(words[0] == "sed" && words[1] == "-n" && reach.ProgramInvocation(context.Background(), "sed", "-n", "1,2p", "FILE")) {
 			return true, ""
 		}
 	}

@@ -49,7 +49,7 @@ func TestResolveNextStepsOffersOnlyWhatTheRequestReaches(t *testing.T) {
 		{"no request reaches nothing", toolreach.Request{}, "Re-observe it.", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ResolveNextSteps(rule, reachContext(tc.request))
+			got := ResolveNextSteps(t.Context(), rule, reachContext(tc.request))
 			if got.Text != tc.want {
 				t.Fatalf("text = %q, want %q", got.Text, tc.want)
 			}
@@ -78,7 +78,7 @@ func TestResolveNextStepsChecksProgramsAsWellAsCommand(t *testing.T) {
 		{"command not offered", toolreach.Offered(nil).WithPrograms(allPrograms), "Report it."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := ResolveNextSteps(rule, reachContext(tc.request)).Text; got != tc.want {
+			if got := ResolveNextSteps(t.Context(), rule, reachContext(tc.request)).Text; got != tc.want {
 				t.Fatalf("text = %q, want %q", got, tc.want)
 			}
 		})
@@ -90,10 +90,10 @@ func TestResolveNextStepsTriesAlternativesInOrder(t *testing.T) {
 		Tool: "recall", Say: "Recall with {% if load %}{{ load }}, then {% endif %}{{ call }}.", Otherwise: "Nothing can recover it.",
 		Or: []NextStep{{Tool: "view_image", Say: "View with {% if load %}{{ load }}, then {% endif %}{{ call }}."}},
 	})
-	if got := ResolveNextSteps(rule, reachContext(toolreach.Offered([]string{"view_image"}))).Text; got != "View with `view_image(…)`." {
+	if got := ResolveNextSteps(t.Context(), rule, reachContext(toolreach.Offered([]string{"view_image"}))).Text; got != "View with `view_image(…)`." {
 		t.Fatalf("alternative = %q", got)
 	}
-	if got := ResolveNextSteps(rule, reachContext(toolreach.Offered(nil))).Text; got != "Nothing can recover it." {
+	if got := ResolveNextSteps(t.Context(), rule, reachContext(toolreach.Offered(nil))).Text; got != "Nothing can recover it." {
 		t.Fatalf("otherwise = %q", got)
 	}
 }
@@ -105,7 +105,7 @@ func TestResolveNextStepsWillNotOfferACompleteCallMissingAValue(t *testing.T) {
 		NextStep{Tool: "wait", Complete: true, Args: map[string]any{"reason": "{{ paintedwolf.path }}"}, Say: "Wait with {% if load %}{{ load }}, then {% endif %}{{ call }}."},
 		NextStep{Program: []string{"ls", "{{ paintedwolf.path }}"}, Complete: true, Say: "List with {% if load %}{{ load }}, then {% endif %}{{ call }}."},
 	)
-	if got := ResolveNextSteps(rule, gc); got.Text != "" || len(got.Calls) != 0 {
+	if got := ResolveNextSteps(t.Context(), rule, gc); got.Text != "" || len(got.Calls) != 0 {
 		t.Fatalf("resolved = %+v", got)
 	}
 }
@@ -114,7 +114,7 @@ func TestResolveNextStepsBindsTheLoaderOnlyWhenTheCallNeedsIt(t *testing.T) {
 	// The say exposes the bindings with a separator so the test reads values, not copy.
 	rule := stepRule(NextStep{Tool: "recall", Say: "{% if load %}{{ load }}|{% endif %}{{ call }}"})
 
-	deferred := ResolveNextSteps(rule, reachContext(toolreach.Freeze([]string{toolreach.LoaderTool}, compileDeferred(t, "recall"))))
+	deferred := ResolveNextSteps(t.Context(), rule, reachContext(toolreach.Freeze([]string{toolreach.LoaderTool}, compileDeferred(t, "recall"))))
 	if len(deferred.Calls) != 2 || deferred.Calls[0].Tool != toolreach.LoaderTool || deferred.Calls[1].Tool != "recall" {
 		t.Fatalf("deferred calls = %+v", deferred.Calls)
 	}
@@ -122,7 +122,7 @@ func TestResolveNextStepsBindsTheLoaderOnlyWhenTheCallNeedsIt(t *testing.T) {
 		t.Fatalf("deferred bindings = %q, want load=%q call=%q", deferred.Text, deferred.Calls[0].Text(), deferred.Calls[1].Text())
 	}
 
-	offered := ResolveNextSteps(rule, reachContext(toolreach.Offered([]string{"recall"})))
+	offered := ResolveNextSteps(t.Context(), rule, reachContext(toolreach.Offered([]string{"recall"})))
 	if len(offered.Calls) != 1 || offered.Calls[0].Tool != "recall" {
 		t.Fatalf("offered calls = %+v", offered.Calls)
 	}
@@ -294,14 +294,14 @@ func TestResolveNextStepsFormatsNestedWaitConditionsAndPartialCalls(t *testing.T
 
 	gc := reachContext(toolreach.Offered([]string{"wait"}))
 	gc.ObservationData["handle"] = "cmd-docker-1"
-	got := ResolveNextSteps(waitRule, gc)
+	got := ResolveNextSteps(t.Context(), waitRule, gc)
 	want := "Call `wait(conditions=[{\"handles\": [\"cmd-docker-1\"], \"kind\": \"process_done\"}], reason=\"waiting on \\\"job\\\"\\nnext\", timeout_ms=60000, until_complete=true)` now."
 	if got.Text != want {
 		t.Fatalf("ResolveNextSteps text =\n%s\nwant:\n%s", got.Text, want)
 	}
 
 	gcMissing := reachContext(toolreach.Offered([]string{"wait"}))
-	gotPartial := ResolveNextSteps(waitRule, gcMissing)
+	gotPartial := ResolveNextSteps(t.Context(), waitRule, gcMissing)
 	if gotPartial.Text != "Park via `wait(until_complete=false, …)`." {
 		t.Fatalf("partial ResolveNextSteps text = %q", gotPartial.Text)
 	}
@@ -314,7 +314,7 @@ func TestResolveNextStepsFormatsNestedWaitConditionsAndPartialCalls(t *testing.T
 		},
 		Say: "Call {% if load %}{{ load }}, then {% endif %}{{ call }}.",
 	})
-	if suppressed := ResolveNextSteps(missingNestedRule, gcMissing); suppressed.Text != "" || len(suppressed.Calls) != 0 {
+	if suppressed := ResolveNextSteps(t.Context(), missingNestedRule, gcMissing); suppressed.Text != "" || len(suppressed.Calls) != 0 {
 		t.Fatalf("complete step with missing nested template should be suppressed, got %+v", suppressed)
 	}
 }

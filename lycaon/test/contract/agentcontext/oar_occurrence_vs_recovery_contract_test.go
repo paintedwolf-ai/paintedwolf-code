@@ -75,7 +75,7 @@ func verifyOccurrenceVsRecoveryAuthority(t *testing.T, h *hookProducerHarness, c
 	recoveryGC.Reach = agentCell.auth.Reach
 	recoveryGC.ObservationData = map[string]any{"need": "edit"}
 	recoveryGC.ObserveCommandOperationReach()
-	steps := oar.ResolveNextSteps(rule, recoveryGC)
+	steps := oar.ResolveNextSteps(t.Context(), rule, recoveryGC)
 	if !slices.ContainsFunc(steps.Calls, func(c toolreach.Call) bool { return c.Tool == "command" }) {
 		t.Fatalf("upgraded Agent recovery reach next calls = %+v, want command", steps.Calls)
 	}

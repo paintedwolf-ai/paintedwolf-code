@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -385,7 +386,7 @@ func assembleNextStepFacts(prefix string, steps []NextStep, gc *GuardContext, fa
 // ResolveNextSteps checks a rule's steps against the occurrence's frozen request.
 // A step the request cannot reach is left out, or replaced by its Otherwise. A
 // step whose facts could not be assembled is left out and reported in Err.
-func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
+func ResolveNextSteps(ctx context.Context, r *Rule, gc *GuardContext) ResolvedSteps {
 	var out ResolvedSteps
 	if r == nil || r.NextSteps == nil || gc == nil {
 		return out
@@ -400,7 +401,7 @@ func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
 	resolver := stepResolver{rule: r, gc: gc, facts: facts, resolutions: resolutions, failed: failed}
 	var sentences []string
 	for i, step := range r.NextSteps.Steps {
-		text, calls := resolver.resolve(fmt.Sprintf("steps[%d]", i), i, step)
+		text, calls := resolver.resolve(ctx, fmt.Sprintf("steps[%d]", i), i, step)
 		if strings.TrimSpace(text) != "" {
 			sentences = append(sentences, text)
 		}
@@ -455,7 +456,7 @@ func (sr stepResolver) joinedFailures() error {
 	return errors.Join(errs...)
 }
 
-func (sr stepResolver) resolve(branchPrefix string, stepIndex int, step NextStep) (string, []toolreach.Call) {
+func (sr stepResolver) resolve(ctx context.Context, branchPrefix string, stepIndex int, step NextStep) (string, []toolreach.Call) {
 	r, gc, facts, resolutions := sr.rule, sr.gc, sr.facts, sr.resolutions
 	ruleID := r.Qualified()
 	if _, unavailable := sr.failed[branchPrefix]; unavailable {
@@ -492,7 +493,7 @@ func (sr stepResolver) resolve(branchPrefix string, stepIndex int, step NextStep
 		return "", nil
 	}
 	if call, built := stepCall(step, gc, facts); built {
-		if sequence, reachable := gc.Reach.Sequence(call); reachable {
+		if sequence, reachable := gc.Reach.Sequence(ctx, call); reachable {
 			recordRuleBranch(ruleID, branchPrefix+".reach", stepIndex, gc, true)
 			bound := make(map[string]any, len(facts)+2)
 			for name, value := range facts {
@@ -541,7 +542,7 @@ func (sr stepResolver) resolve(branchPrefix string, stepIndex int, step NextStep
 		})
 	}
 	for j, alternative := range step.Or {
-		if text, calls := sr.resolve(fmt.Sprintf("%s.or[%d]", branchPrefix, j), stepIndex, alternative); strings.TrimSpace(text) != "" {
+		if text, calls := sr.resolve(ctx, fmt.Sprintf("%s.or[%d]", branchPrefix, j), stepIndex, alternative); strings.TrimSpace(text) != "" {
 			if resolutions != nil {
 				appendUnselectedAlternatives(r, branchPrefix, j+1, step.Or[j+1:], resolutions)
 			}

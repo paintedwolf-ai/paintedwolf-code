@@ -43,11 +43,11 @@ func TestRecoverySequenceRejectsDisallowedEmptyObject(t *testing.T) {
 		Tool: "command", Partial: true,
 		Args: map[string]any{"command": "ps", "capability_request": map[string]any{}},
 	}
-	if _, ok := toolreach.Offered([]string{"command"}).WithSchemas(readOnlySchemas).Sequence(call); ok {
+	if _, ok := toolreach.Offered([]string{"command"}).WithSchemas(readOnlySchemas).Sequence(t.Context(), call); ok {
 		t.Error("callable command sequenced a disallowed empty capability_request")
 	}
 	plan := toolsurface.Compile([]string{toolreach.LoaderTool}, []string{"command"})
-	if _, ok := toolreach.Freeze([]string{toolreach.LoaderTool}, plan).WithSchemas(readOnlySchemas).Sequence(call); ok {
+	if _, ok := toolreach.Freeze([]string{toolreach.LoaderTool}, plan).WithSchemas(readOnlySchemas).Sequence(t.Context(), call); ok {
 		t.Error("loadable command sequenced a disallowed empty capability_request")
 	}
 }
@@ -86,13 +86,13 @@ func TestProductionProgramTablesFollowProfileMutation(t *testing.T) {
 		{"coordinator", "implement_investigate", true},
 	} {
 		r := reach(tc.profile, tc.surface)
-		if !r.ProgramInvocation("sed", "p") || !r.ProgramInvocation("tar", "-t", "-f", "a.tar") || !r.ProgramInvocation("unzip", "-p", "a.zip", "m") {
+		if !r.ProgramInvocation(t.Context(), "sed", "p") || !r.ProgramInvocation(t.Context(), "tar", "-t", "-f", "a.tar") || !r.ProgramInvocation(t.Context(), "unzip", "-p", "a.zip", "m") {
 			t.Errorf("%s/%s: read forms of sed, tar or unzip not admitted", tc.profile, tc.surface)
 		}
-		if got := r.ProgramInvocation("sed", "w out"); got != tc.mutating {
+		if got := r.ProgramInvocation(t.Context(), "sed", "w out"); got != tc.mutating {
 			t.Errorf("%s/%s: sed write admitted=%t, want %t", tc.profile, tc.surface, got, tc.mutating)
 		}
-		if got := r.ProgramInvocation("tar", "-x", "-f", "a.tar"); got != tc.mutating {
+		if got := r.ProgramInvocation(t.Context(), "tar", "-x", "-f", "a.tar"); got != tc.mutating {
 			t.Errorf("%s/%s: tar extract admitted=%t, want %t", tc.profile, tc.surface, got, tc.mutating)
 		}
 		if r.ProgramMode("sed", "unknown-mode") {
@@ -101,7 +101,7 @@ func TestProductionProgramTablesFollowProfileMutation(t *testing.T) {
 	}
 
 	noConfig := reach("git_without_config", "")
-	if !noConfig.ProgramInvocation("git", "status") || noConfig.ProgramInvocation("git", "config", "--list") {
+	if !noConfig.ProgramInvocation(t.Context(), "git", "status") || noConfig.ProgramInvocation(t.Context(), "git", "config", "--list") {
 		t.Error("denying git config must keep git status admitted and deny git config")
 	}
 }

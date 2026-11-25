@@ -33,7 +33,7 @@ func TestResolveNextStepsOmitsAStepWhoseFactsFail(t *testing.T) {
 	ActiveNextStepObservers.Store(t.Name(), NextStepObserver(func(*Rule, ResolvedSteps) {}))
 	t.Cleanup(func() { ActiveNextStepObservers.Delete(t.Name()) })
 
-	got := ResolveNextSteps(rule, gc)
+	got := ResolveNextSteps(t.Context(), rule, gc)
 
 	if !errors.Is(got.Err, errFactUnavailable) {
 		t.Fatalf("err = %v, want the provider failure", got.Err)
@@ -61,7 +61,7 @@ func TestResolveNextStepsReportsNoErrorWhenFactsAssemble(t *testing.T) {
 	rule := stepRule(NextStep{When: "paintedwolf.listed", Tool: "process_list", Complete: true, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"})
 	gc, _ := failingFactContext(t)
 	gc.RegisterProvider("paintedwolf.listed", func(g *GuardContext) error { return nil })
-	got := ResolveNextSteps(rule, gc)
+	got := ResolveNextSteps(t.Context(), rule, gc)
 	testutil.FailErr(t, "resolve", got.Err)
 }
 

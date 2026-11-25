@@ -95,14 +95,14 @@ func TestCallTextPreservesExactTypesAndRoundTripsWaitAgainstProjectedSchema(t *t
 	}
 
 	req := toolreach.Offered([]string{"wait"}).WithSchemas(map[string]map[string]any{"wait": projectedWait})
-	if _, ok := req.Sequence(completeWait); !ok {
+	if _, ok := req.Sequence(t.Context(), completeWait); !ok {
 		t.Fatal("expected admitted wait condition call to succeed in Sequence")
 	}
 	prunedCondCall := toolreach.Call{
 		Tool: "wait",
 		Args: map[string]any{"conditions": []any{map[string]any{"kind": "port_ready", "port": 8080}}},
 	}
-	if _, ok := req.Sequence(prunedCondCall); ok {
+	if _, ok := req.Sequence(t.Context(), prunedCondCall); ok {
 		t.Fatal("expected pruned port_ready condition kind to fail closed in Sequence")
 	}
 }
@@ -237,14 +237,14 @@ func TestCallTextPreservesTypedSlicesMapsStructsAndExactInt64(t *testing.T) {
 		t.Fatalf("ValidateCallExample on typed wait failed: %+v", issues)
 	}
 	waitReq := toolreach.Offered([]string{"wait"}).WithSchemas(map[string]map[string]any{"wait": projectedWait})
-	if _, ok := waitReq.Sequence(typedWait); !ok {
+	if _, ok := waitReq.Sequence(t.Context(), typedWait); !ok {
 		t.Fatal("Sequence rejected admitted []map[string]any wait conditions")
 	}
 	prunedTypedWait := toolreach.Call{
 		Tool: "wait",
 		Args: map[string]any{"conditions": []map[string]any{{"kind": "port_ready", "port": 8080}}},
 	}
-	if _, ok := waitReq.Sequence(prunedTypedWait); ok {
+	if _, ok := waitReq.Sequence(t.Context(), prunedTypedWait); ok {
 		t.Fatal("Sequence admitted pruned port_ready inside []map[string]any")
 	}
 
@@ -397,11 +397,11 @@ func TestCallTextByteSliceMatchesStandardJSONRepresentation(t *testing.T) {
 	}
 
 	req := toolreach.Offered([]string{"command"}).WithSchemas(map[string]map[string]any{"command": projSchema})
-	if _, ok := req.Sequence(call); !ok {
+	if _, ok := req.Sequence(t.Context(), call); !ok {
 		t.Fatal("Sequence rejected admitted []byte(\"ok\") string enum value \"b2s=\"")
 	}
 	rejected := toolreach.Call{Tool: "command", Args: map[string]any{"command": "printf", "payload": []byte("other")}}
-	if _, ok := req.Sequence(rejected); ok {
+	if _, ok := req.Sequence(t.Context(), rejected); ok {
 		t.Fatal("Sequence admitted unpermitted []byte(\"other\") string enum value")
 	}
 }

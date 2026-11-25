@@ -101,11 +101,11 @@ func (r Request) ProgramMode(name, mode string) bool {
 }
 
 // ProgramInvocation reports whether concrete command words are admitted on this request.
-func (r Request) ProgramInvocation(words ...string) bool {
+func (r Request) ProgramInvocation(ctx context.Context, words ...string) bool {
 	if r.Status(ProgramTool) == Absent || len(words) == 0 {
 		return false
 	}
-	bound, ok := commandmode.Resolve(context.Background(), words)
+	bound, ok := commandmode.Resolve(ctx, words)
 	if !ok {
 		return false
 	}

@@ -21,7 +21,7 @@ func TestResolveNextStepsChecksAProgramByItsProbe(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rule := stepRule(NextStep{Program: shown, Probe: tc.probe, Say: "{% if load %}{{ load }}, then {% endif %}{{ call }}"})
-			got := ResolveNextSteps(rule, reachContext(request))
+			got := ResolveNextSteps(t.Context(), rule, reachContext(request))
 			if len(got.Calls) != tc.calls {
 				t.Fatalf("calls = %+v, want %d", got.Calls, tc.calls)
 			}

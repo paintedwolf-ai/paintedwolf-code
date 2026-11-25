@@ -84,7 +84,7 @@ func withHintReachFacts(ctx context.Context, data map[string]any) map[string]any
 	}
 	cmdCallable := reach.Status(toolreach.ProgramTool) == toolreach.Callable
 	out["can_command"] = cmdCallable
-	out["command_sed_reachable"] = cmdCallable && reach.ProgramInvocation("sed", "-n", "1,10p", "FILE")
+	out["command_sed_reachable"] = cmdCallable && reach.ProgramInvocation(ctx, "sed", "-n", "1,10p", "FILE")
 	return out
 }
 

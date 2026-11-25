@@ -1,11 +1,13 @@
 package tools
 
 import (
+	"context"
+
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
-func registerCommandFormRecoveryFacts(gc *oar.GuardContext, request toolreach.Request) {
+func registerCommandFormRecoveryFacts(ctx context.Context, gc *oar.GuardContext, request toolreach.Request) {
 	cmdStatus := request.Status(toolreach.ProgramTool)
 	cmdCallable := cmdStatus == toolreach.Callable
 	cmdLoadable := cmdStatus == toolreach.Loadable
@@ -28,7 +30,7 @@ func registerCommandFormRecoveryFacts(gc *oar.GuardContext, request toolreach.Re
 		}
 		out := make([]string, 0, len(invocations))
 		for _, words := range invocations {
-			if len(words) > 0 && request.ProgramInvocation(words...) {
+			if len(words) > 0 && request.ProgramInvocation(ctx, words...) {
 				out = append(out, words[0])
 			}
 		}
@@ -40,14 +42,14 @@ func registerCommandFormRecoveryFacts(gc *oar.GuardContext, request toolreach.Re
 		}
 		out := make([]string, 0, len(invocations))
 		for _, words := range invocations {
-			if len(words) > 0 && request.ProgramInvocation(words...) {
+			if len(words) > 0 && request.ProgramInvocation(ctx, words...) {
 				out = append(out, toolreach.QuoteProgram(words))
 			}
 		}
 		return out
 	}
 	admittedCall := func(words ...string) string {
-		if !cmdFieldAdmitted || len(words) == 0 || !request.ProgramInvocation(words...) {
+		if !cmdFieldAdmitted || len(words) == 0 || !request.ProgramInvocation(ctx, words...) {
 			return ""
 		}
 		return toolreach.QuoteProgram(words)
@@ -57,7 +59,7 @@ func registerCommandFormRecoveryFacts(gc *oar.GuardContext, request toolreach.Re
 			return false
 		}
 		for _, words := range invocations {
-			if len(words) > 0 && request.ProgramInvocation(words...) {
+			if len(words) > 0 && request.ProgramInvocation(ctx, words...) {
 				return true
 			}
 		}
@@ -94,7 +96,7 @@ func registerCommandFormRecoveryFacts(gc *oar.GuardContext, request toolreach.Re
 
 	registerReadFormRecoveryFacts(put, admittedIDs, admittedCalls, admittedCall, loaderOnly)
 	registerWriteAndArchiveFormRecoveryFacts(put, admittedIDs, admittedCalls, admittedCall, loaderOnly, cmdFieldAdmitted, cmdLoaderOnly, request)
-	registerSingleProgramReachFacts(put, cmdCallable, cmdFieldAdmitted, request)
+	registerSingleProgramReachFacts(ctx, put, cmdCallable, cmdFieldAdmitted, request)
 }
 
 func registerWriteAndArchiveFormRecoveryFacts(
@@ -183,6 +185,7 @@ func registerReadFormRecoveryFacts(
 }
 
 func registerSingleProgramReachFacts(
+	ctx context.Context,
 	put func(string, func() any),
 	cmdCallable bool,
 	cmdFieldAdmitted bool,
@@ -190,23 +193,23 @@ func registerSingleProgramReachFacts(
 ) {
 	callableAdmitted := cmdCallable && cmdFieldAdmitted
 	put("command_jq_edit_reachable", func() any {
-		return cmdFieldAdmitted && request.ProgramInvocation("jq-edit", "--path", "FILE", "--query", ".")
+		return cmdFieldAdmitted && request.ProgramInvocation(ctx, "jq-edit", "--path", "FILE", "--query", ".")
 	})
 	put("command_git_config_reachable", func() any {
 		return callableAdmitted &&
-			request.ProgramInvocation("git", "config", "--list") &&
-			request.ProgramInvocation("git", "config", "--get", "core.bare")
+			request.ProgramInvocation(ctx, "git", "config", "--list") &&
+			request.ProgramInvocation(ctx, "git", "config", "--get", "core.bare")
 	})
-	put("command_wc_reachable", func() any { return callableAdmitted && request.ProgramInvocation("wc", "-l", "FILE") })
-	put("command_tee_reachable", func() any { return callableAdmitted && request.ProgramInvocation("tee", "FILE") })
+	put("command_wc_reachable", func() any { return callableAdmitted && request.ProgramInvocation(ctx, "wc", "-l", "FILE") })
+	put("command_tee_reachable", func() any { return callableAdmitted && request.ProgramInvocation(ctx, "tee", "FILE") })
 	put("command_sed_reachable", func() any {
-		return callableAdmitted && request.ProgramInvocation("sed", "-n", "1,10p", "FILE")
+		return callableAdmitted && request.ProgramInvocation(ctx, "sed", "-n", "1,10p", "FILE")
 	})
 	put("command_find_reachable", func() any {
-		return callableAdmitted && request.ProgramInvocation("find", ".", "-type", "f")
+		return callableAdmitted && request.ProgramInvocation(ctx, "find", ".", "-type", "f")
 	})
 	put("command_grep_reachable", func() any {
-		return callableAdmitted && request.ProgramInvocation("grep", "-n", "PATTERN", "FILE")
+		return callableAdmitted && request.ProgramInvocation(ctx, "grep", "-n", "PATTERN", "FILE")
 	})
-	put("command_repo_map_reachable", func() any { return callableAdmitted && request.ProgramInvocation("repo-map") })
+	put("command_repo_map_reachable", func() any { return callableAdmitted && request.ProgramInvocation(ctx, "repo-map") })
 }
