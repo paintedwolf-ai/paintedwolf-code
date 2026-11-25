@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -180,6 +181,10 @@ func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase ma
 		subj = toolvocabtest.SubjectSessionNextTurn(writes)
 		data["session_command_mutation_capable"] = writes
 	}
+	if closeoutKicks[kick] && data["reason_text"] == nil {
+		// Closeout always states its cause; the default cause is the iteration cap.
+		data["reason_text"] = promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutIterationCap}.Text()
+	}
 	if kick == "coordinator-citation-grounding" {
 		// The closeout retry sets it from the request's reach.
 		data["can_recall"] = cr.auth.Reach.Status("recall") == toolreach.Callable
@@ -290,8 +295,38 @@ func allIndexes(n int) []int {
 	return out
 }
 
+// closeoutKicks names the kicks turnnudges.Closeout renders, true where it is
+// the kick's only producer, so reason_text is always set.
+var closeoutKicks = map[string]bool{
+	"coordinator-closeout": true, "coordinator-turn-closeout": true, "worker-closeout": false, "worker-cancel-closeout": false,
+}
+
+// closeoutCauseEnvelopes is the data turnnudges.Closeout builds from each
+// production turn-closeout cause.
+func closeoutCauseEnvelopes(kick string) []map[string]any {
+	if kick == "worker-cancel-closeout" {
+		return []map[string]any{{"cancel_reason": "the person stopped this leg"}, {}}
+	}
+	if _, ok := closeoutKicks[kick]; !ok {
+		return nil
+	}
+	causes := []promptloop.TurnCloseoutCause{
+		{Reason: promptloop.TurnCloseoutIterationCap},
+		{Reason: promptloop.TurnCloseoutSpendCeiling},
+		{Reason: promptloop.TurnCloseoutStopped},
+		{Reason: promptloop.TurnCloseoutLLMTimeout},
+		{Reason: promptloop.TurnCloseoutBlockedLoop, BlockedTool: "command", BlockedCode: "PATH_DENIED", BlockedCount: promptloop.BlockedLoopRejectCap},
+	}
+	out := make([]map[string]any, 0, len(causes))
+	for _, c := range causes {
+		out = append(out, map[string]any{"reason_text": c.Text(), "llm_timeout": c.Reason == promptloop.TurnCloseoutLLMTimeout})
+	}
+	return out
+}
+
 func richKickEnvelopes(reg *anchor.Registry, kick string) []map[string]any {
 	out := append(kickEnvelopeVariants(reg, kick), map[string]any{})
+	out = append(out, closeoutCauseEnvelopes(kick)...)
 	extraA := map[string]any{
 		"reason_text":                  "closeout criteria open",
 		"llm_timeout":                  true,

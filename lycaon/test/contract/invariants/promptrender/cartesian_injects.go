@@ -170,6 +170,10 @@ func runCoordinatorInjectRenders(
 				Workers: nil,
 			},
 			{
+				Reader: cr.auth.Reader, WorkersOmitted: 0,
+				Workers: workerroster.Roster{Rows: []workerroster.Row{{Name: "w-only", Agent: "implementer", State: workerstate.Working}}}.Vars(),
+			},
+			{
 				Reader: cr.auth.Reader, WorkersOmitted: 1,
 				Workers: workerroster.Roster{Rows: []workerroster.Row{{
 					Name: "w-solo", Agent: "implementer", State: workerstate.Working, About: "Second round",
