@@ -282,8 +282,7 @@ func (l *toolInvocations) curateToolRejectOccurrence(
 // toolRetiredToPublishedText reports a call to a tool whose job is now text, where
 // that text can actually reach the user. Elsewhere the ordinary refusal is the truth.
 func toolRetiredToPublishedText(sess *api.Session, tool, surfaceID string) bool {
-	_, retired := toolcontract.RetiredToContent(tool)
-	return retired && sess != nil && !sess.IsWorkerChild() && surface.PublishesMidTurnText(surfaceID)
+	return toolcontract.RetiredToPublishedText(tool) && sess != nil && !sess.IsWorkerChild() && surface.PublishesMidTurnText(surfaceID)
 }
 
 // toolReject renders a refusal with a structured code.

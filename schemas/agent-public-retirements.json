@@ -229,10 +229,6 @@
       "version": 1,
       "summary": "response_path could not land the response body in the project; curl writes bodies with -o through the write door."
     },
-    "paintedwolf.handoff_plane_binding": {
-      "version": 1,
-      "summary": "Host binding of each worker to its parent session's handoff plane when the worker starts; no call binds it."
-    },
     "paintedwolf.workflow_run_context": {
       "version": 1,
       "summary": "Active workflow run state the host injects into coordinator context, including the current phase and any pending feedback or decision."
@@ -911,21 +907,20 @@
         "plan_from_blueprint",
         "fanout_plan"
       ],
-      "handoff_init": {
-        "content_contract": "paintedwolf.handoff_plane_binding",
-        "version": 1
-      },
+      "handoff_init": [
+        "handoff_reserve"
+      ],
       "handoff_health": [
         "pack_board"
       ],
       "parse_extract_json": [
-        "command"
+        "jq"
       ],
       "parse_validate": [
-        "command"
+        "jq"
       ],
       "parse_evaluation": [
-        "command"
+        "jq"
       ],
       "plan_append_review_evidence": [
         "submit_verdict"

@@ -338,11 +338,15 @@ session_scope:
 runtime_registered_prefixes:
   - mcp_
 
-# Retired tools whose replacement is content, not a call. Models keep calling
-# them from habit and old history, so the refusal says to write the text.
+# Retired tools whose replacement is content, not a call. A tool retired to
+# paintedwolf.markdown_note is refused with a direction to write the text; the
+# others are now host context the model receives.
 # schemas/agent-public-retirements.json records the same names.
 retired_to_content_contract:
+  state_close: paintedwolf.workflow_run_exit
+  state_query: paintedwolf.workflow_run_context
   surface_note: paintedwolf.markdown_note
+  workflow_user_feedback: paintedwolf.workflow_run_context
 
 # Rule-selectable host identities have no model-facing tool schema.
 host_produced_tools:
