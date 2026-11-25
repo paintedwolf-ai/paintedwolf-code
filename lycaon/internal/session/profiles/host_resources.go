@@ -132,28 +132,24 @@ func decorateSkillWithHostResources(skill skills.Skill, resolved map[string]host
 	}
 	sort.Strings(ids)
 	resources := make([]map[string]any, 0, len(ids))
-	anyUses := false
+	var uses []map[string]any
 	for _, id := range ids {
 		state := resolved[id]
 		modes := []string{}
 		for _, connection := range state.Connections {
 			modes = append(modes, string(connection.Mode))
 		}
-		uses := reach.MatchingUses(state, snapshot)
-		anyUses = anyUses || len(uses) > 0
-		useVars := make([]map[string]any, 0, len(uses))
-		for _, use := range uses {
-			useVars = append(useVars, map[string]any{
-				"label": use.Label, "capabilities": use.Capabilities, "alone": use.Alone,
-				"ports": use.Ports, "through": use.Through,
+		resources = append(resources, map[string]any{
+			"id": id, "status": string(state.Status), "access": string(state.Access), "routes": uniqueStrings(modes),
+		})
+		for _, use := range reach.MatchingUses(state, snapshot) {
+			uses = append(uses, map[string]any{
+				"resource": id, "label": use.Label, "capabilities": use.Capabilities,
+				"alone": use.Alone, "ports": use.Ports, "through": use.Through,
 			})
 		}
-		resources = append(resources, map[string]any{
-			"id": id, "status": string(state.Status), "access": string(state.Access),
-			"routes": uniqueStrings(modes), "uses": useVars,
-		})
 	}
-	header, err := pongoplain.ExecuteDetached(tpl, map[string]any{"resources": resources, "uses": anyUses})
+	header, err := pongoplain.ExecuteDetached(tpl, map[string]any{"resources": resources, "uses": uses})
 	if err != nil {
 		return skill, fmt.Errorf("skill host-resource header: %w", err)
 	}

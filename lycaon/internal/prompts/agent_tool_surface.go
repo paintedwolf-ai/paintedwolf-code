@@ -103,7 +103,7 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"full_skill_catalog":           surface.FullCatalog,
 		"agent_host_resources":         groupHostResources(surface.HostResources),
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
-		"agent_host_resource_uses":     hostResourcesHaveUses(surface.HostResources),
+		"agent_host_resource_uses":     hostResourceUseVars(surface.HostResources),
 		"host_unconfined":              surface.HostUnconfined,
 		"prompt_surface_fingerprint":   surface.Fingerprint,
 		"shared_temp_writable":         len(surface.SharedTempLocations) > 0,
@@ -140,29 +140,22 @@ func groupHostResources(resources []AgentHostResourceView) []map[string]any {
 		items = append(items, map[string]any{
 			"id": resource.ID, "label": resource.Label, "category": resource.Category,
 			"status": resource.Status, "access": resource.Access, "guidance": resource.Guidance,
-			"uses": hostResourceUseVars(resource.Uses),
 		})
 	}
 	flush()
 	return groups
 }
 
-func hostResourcesHaveUses(resources []AgentHostResourceView) bool {
+// hostResourceUseVars lists every rendered use with the resource it belongs to.
+func hostResourceUseVars(resources []AgentHostResourceView) []map[string]any {
+	var out []map[string]any
 	for _, resource := range resources {
-		if len(resource.Uses) > 0 {
-			return true
+		for _, use := range resource.Uses {
+			out = append(out, map[string]any{
+				"resource": resource.ID, "label": use.Label, "capabilities": use.Capabilities,
+				"alone": use.Alone, "ports": use.Ports, "through": use.Through,
+			})
 		}
-	}
-	return false
-}
-
-func hostResourceUseVars(uses []AgentHostResourceUse) []map[string]any {
-	out := make([]map[string]any, 0, len(uses))
-	for _, use := range uses {
-		out = append(out, map[string]any{
-			"label": use.Label, "capabilities": use.Capabilities, "alone": use.Alone,
-			"ports": use.Ports, "through": use.Through,
-		})
 	}
 	return out
 }
