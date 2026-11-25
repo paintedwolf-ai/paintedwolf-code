@@ -33,7 +33,6 @@ type workerRep struct {
 func runKicksAndInjectsMatrix(
 	ctx context.Context,
 	s *Stock,
-	cache *hoststate.RenderCache,
 	sum *CartesianSummary,
 ) error {
 	cReps, err := cachedCoordinatorReps()

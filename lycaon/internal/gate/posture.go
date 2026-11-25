@@ -3,6 +3,7 @@ package gate
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -24,22 +25,29 @@ const (
 // DefaultPosture is the out-of-the-box ask-line.
 const DefaultPosture = PostureBalanced
 
-// AllPostures returns a fresh sorted slice of every registered approval posture.
+// AllPostures returns a fresh slice of every registered approval posture,
+// least strict first.
 func AllPostures() []Posture {
 	out := make([]Posture, 0, len(postureRules))
 	for p := range postureRules {
 		out = append(out, p)
 	}
-	slices.Sort(out)
+	slices.SortFunc(out, func(a, b Posture) int { return postureRules[a].strictness - postureRules[b].strictness })
 	return out
 }
 
-// ParsePosture accepts exactly light, balanced, or strict; anything else is an
-// error.
+// ParsePosture accepts exactly a registered posture; anything else is an error
+// naming the registered ones.
 func ParsePosture(token string) (Posture, error) {
 	p := Posture(token)
 	if _, ok := postureRules[p]; !ok {
-		return "", fmt.Errorf("unknown approval posture %q (use light, balanced, or strict)", token)
+		names := AllPostures()
+		list := make([]string, len(names))
+		for i, n := range names {
+			list[i] = string(n)
+		}
+		last := len(list) - 1
+		return "", fmt.Errorf("unknown approval posture %q (use %s, or %s)", token, strings.Join(list[:last], ", "), list[last])
 	}
 	return p, nil
 }
