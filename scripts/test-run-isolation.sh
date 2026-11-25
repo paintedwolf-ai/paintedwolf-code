@@ -50,6 +50,9 @@ test_run_export_isolation() {
   export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
   export GOMODCACHE="${GOMODCACHE:-$(go env GOMODCACHE)}"
   export GOPATH="${GOPATH:-$(go env GOPATH)}"
+  # Toolchain switching can select a wrapper that finds its SDK under HOME, so the
+  # selected toolchain is pinned before HOME changes.
+  export PATH="$(go env GOROOT)/bin:${PATH}"
   # The container client's configuration selects the daemon that holds the reference images.
   export DOCKER_CONFIG="${DOCKER_CONFIG:-${HOME}/.docker}"
   export HOME="${run_dir}/home"
