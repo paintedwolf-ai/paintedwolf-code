@@ -67,10 +67,10 @@ resources:
 	if len(grouped) != 1 || len(groupDiags) != 1 {
 		t.Fatalf("grouped=%#v diags=%#v", grouped, groupDiags)
 	}
-	if grouped[0].Name != "either" || !strings.Contains(grouped[0].Body, "id=present") {
+	if grouped[0].Name != "either" || !strings.Contains(grouped[0].Body, "`present`") {
 		t.Fatalf("any-of decorated skill = %#v", grouped[0])
 	}
-	if strings.Contains(grouped[0].Body, "id=absent") {
+	if strings.Contains(grouped[0].Body, "`absent`") {
 		t.Fatalf("unavailable alternative must not decorate: %s", grouped[0].Body)
 	}
 	if groupDiags[0].UnitID != "skills/neither" || !strings.Contains(groupDiags[0].Message, "absent|missing") {
