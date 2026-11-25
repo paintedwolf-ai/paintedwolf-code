@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -43,14 +42,13 @@ const (
 )
 
 type jobWaitAuthorityRep struct {
-	label         string
-	isWorker      bool
-	coordState    hoststate.CoordinatorState
-	workerState   hoststate.WorkerState
-	auth          hoststate.TurnAuthority
-	overrideMetas []tools.ToolMeta
-	route         outputReaderRoute
-	waitAdmitted  bool
+	label        string
+	isWorker     bool
+	coordState   hoststate.CoordinatorState
+	workerState  hoststate.WorkerState
+	auth         hoststate.TurnAuthority
+	route        outputReaderRoute
+	waitAdmitted bool
 }
 
 func classifyOutputReaderRoute(auth hoststate.TurnAuthority) outputReaderRoute {

@@ -336,6 +336,7 @@ func coordinatorRunInputs(seed coordinatorSeed, allowlist []string) (api.Coordin
 	runCtx := api.CoordinatorRunContext{AllowedAgents: allowlist}
 	var st surface.ImplementSessionState
 	switch seed.wf {
+	case WorkflowAmbientIdle:
 	case WorkflowWorkersInFlight:
 		st.WorkersInFlight = 2
 	case WorkflowPendingOverlays:

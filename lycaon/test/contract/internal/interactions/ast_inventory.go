@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
@@ -323,6 +324,16 @@ func walkTemplateNodes(
 			}
 			walkTemplateContribution(eff, names, vocab, reachFacts, family, incID, incPack, deliverySite, string(incUnit.Content), nextAncestry, selectors, guards, nextStack, emit)
 		case pongoplain.NodeSet:
+			// A string a set binds is delivered wherever the variable is
+			// output, under the guards enclosing the set.
+			for _, b := range n.Bindings {
+				if b.Expr == nil || b.Expr.Kind != pongoplain.ExprLiteral {
+					continue
+				}
+				if text, err := strconv.Unquote(b.Expr.Literal); err == nil {
+					emitActionsFromText(names, vocab, reachFacts, family, contribID, packID, deliverySite, n.Line, text, nil, ancestry, selectors, guards, loopVars, emit)
+				}
+			}
 		}
 	}
 }
