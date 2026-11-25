@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -294,6 +295,35 @@ func TestCompletionDeliveryRespectsTerminationReasonRouting(t *testing.T) {
 	}
 	if len(f.emitted) != 4 {
 		t.Fatalf("live session completions emitted = %d, want 4", len(f.emitted))
+	}
+}
+
+func TestStoppedJobDeliversRefusalsNothingShowed(t *testing.T) {
+	f := &completionFixture{}
+	service := New(f, f, f, f)
+	service.SetLoop(f, f)
+	refused := confine.Observation{Refusals: confine.SandboxRefusals{Witness: confine.WitnessKernel, Refusals: []confine.SandboxRefusal{
+		{Operation: "network-bind", Target: "/Users/person/.lima/colima/ha.sock", Count: 1, Recovery: confine.RecoverHostExecution},
+	}}}
+	stopped := bgprocess.Completion{
+		SessionID: "session", Handle: "h-refused", OriginTool: "command", ExitCode: 130,
+		TerminationReason: bgprocess.TerminationStoppedByAgent, FinishedAt: time.Now(),
+		ProgramStop: bgprocess.ProgramStop{Code: "TOOL_OWNER_INTERRUPTED"}, Observation: refused, UnshownRefusals: 1,
+	}
+	service.HandleCommandCompletion(t.Context(), stopped)
+	if len(f.emitted) != 1 || f.emitted[0] != anchor.ProcessFinished {
+		t.Fatalf("stopped job with unshown refusals emitted %v", f.emitted)
+	}
+	digest := f.envelopes[0].CommandCompletionDigest
+	stop, refusal, remedy := strings.Index(digest, "program_stop_code=TOOL_OWNER_INTERRUPTED"), strings.Index(digest, "sandbox_refusals:"), strings.Index(digest, "policy guidance")
+	if stop < 0 || refusal < stop || remedy < refusal {
+		t.Fatalf("digest does not show the interruption, then the refusal, then the remedy:\n%s", digest)
+	}
+
+	stopped.Handle, stopped.UnshownRefusals = "h-shown", 0
+	service.HandleCommandCompletion(t.Context(), stopped)
+	if len(f.emitted) != 1 {
+		t.Fatalf("stopped job whose refusals were shown emitted again: %v", f.emitted)
 	}
 }
 

@@ -77,7 +77,11 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	defer bound.close(context.WithoutCancel(ctx))
 	boundary := confine.BoundaryOf(bound.confinement)
 	report := CommandConfinementReport(boundary, "", tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution)
-	settleJob := attachProgramStage(ctx, bgprocess.ProgramStage{Boundary: boundary, Report: report, Lease: bound.lease})
+	stage := bgprocess.ProgramStage{Boundary: boundary, Report: report}
+	if bound.lease != nil {
+		stage.Lease = bound.lease
+	}
+	settleJob := attachProgramStage(ctx, stage)
 	// A launch that never starts its process still detaches the stage.
 	defer settleJob(confine.SandboxRefusals{}, nil)
 	launch := agentCommandLaunch(tctx, "command", bound.confinement, bound.lease, commandLine).WithTrustedEnvironment(l.BaseEnvironment)

@@ -11,7 +11,13 @@ import (
 type ProgramStage struct {
 	Boundary confine.Boundary
 	Report   confine.Report
-	Lease    *confine.ActionLease
+	Lease    StageLease
+}
+
+// StageLease is what a program job reads from a running stage's action lease.
+type StageLease interface {
+	Refusals() confine.SandboxRefusals
+	OnRefusal(func())
 }
 
 // ProgramHistory is the confinement a program gathered before its job
@@ -44,7 +50,7 @@ func (proc *Process) seed(history ProgramHistory) {
 // programStages gathers a program job's stage confinement: live leases while
 // their processes run, then each stage's settled reports.
 type programStages struct {
-	live    []*confine.ActionLease
+	live    []StageLease
 	settled confine.SandboxRefusals
 	network []confine.EgressHost
 }
