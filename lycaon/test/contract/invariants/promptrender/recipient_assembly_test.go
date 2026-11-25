@@ -111,6 +111,9 @@ func buildRecipientEngine(
 	deps := assembly.AssemblyDeps{
 		Prompts:          pe,
 		Injects:          prompts.NewInjectRenderer(pe),
+		TurnReader: func(context.Context, *api.Session, []api.Message, inject.CoordinatorTurnFrame) (prompts.Reader, error) {
+			return auth.Reader, nil
+		},
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: staticCoordFrame{ctx: runCtx},
 		Selection:        staticSelection{loaded: loadedSetFromOffered(auth.Offered)},

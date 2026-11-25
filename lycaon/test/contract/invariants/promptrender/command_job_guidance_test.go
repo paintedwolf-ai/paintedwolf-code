@@ -122,8 +122,15 @@ func renderJobGuidanceForRep(t *testing.T, s *promptrender.Stock, rep jobWaitAut
 	pe := s.Engine()
 	eng := &assembly.AssemblyEngine{}
 	eng.SetDeps(assembly.AssemblyDeps{
-		Prompts:          pe,
-		Injects:          prompts.NewInjectRenderer(pe),
+		Prompts: pe,
+		Injects: prompts.NewInjectRenderer(pe),
+		TurnReader: func(ctx context.Context, _ *api.Session, _ []api.Message, _ inject.CoordinatorTurnFrame) (prompts.Reader, error) {
+			if len(jobs) == 0 {
+				return rep.auth.Reader, nil
+			}
+			promoted, err := hoststate.FreezeTurnAuthorityWithResources(ctx, cs, toolcontract.ResourcePresence{CommandJobs: true})
+			return promoted.Reader, err
+		},
 		SessionView:      func(context.Context, *api.Session) *catalogview.View { return view },
 		Selection:        staticSelection{loaded: cs.Loaded},
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
