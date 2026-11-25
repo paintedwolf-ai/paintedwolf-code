@@ -87,7 +87,7 @@ func (s *Trees) chatLocations(ctx context.Context, scope pagedview.Scope, p *pro
 		}
 		root := chatLocationRoot(dto, location.AnchorIdentity)
 		if scratch {
-			root.Root.Hide = enginepaths.ProgramTempDirName
+			root.Hide = enginepaths.ProgramTempDirName
 			out.details = slices.Insert(out.details, scratchCount, dto)
 			out.roots = slices.Insert(out.roots, scratchCount, root)
 			scratchCount++
