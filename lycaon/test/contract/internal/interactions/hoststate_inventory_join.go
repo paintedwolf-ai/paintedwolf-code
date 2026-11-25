@@ -250,4 +250,3 @@ func (idx branchIndex) bothArms(site InstructionSite, fact string) (string, bool
 	}
 	return "", false
 }
-
