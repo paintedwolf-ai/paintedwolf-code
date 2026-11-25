@@ -314,7 +314,7 @@ func verifyUnknownReachAndEmptyCollections(t *testing.T, h *hookProducerHarness,
 		if r.NextSteps == nil {
 			continue
 		}
-		steps := oar.ResolveNextSteps(r, gc)
+		steps := oar.ResolveNextSteps(t.Context(), r, gc)
 		if len(steps.Calls) > 0 {
 			t.Errorf("rule %s emitted next-step calls %+v when !gc.Reach.Known()", r.ID, steps.Calls)
 		}

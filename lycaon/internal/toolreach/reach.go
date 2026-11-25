@@ -349,11 +349,11 @@ func Load(tool string) Call {
 }
 
 // Sequence returns the calls that reach call on this request, or false when unreachable.
-func (r Request) Sequence(call Call) ([]Call, bool) {
+func (r Request) Sequence(ctx context.Context, call Call) ([]Call, bool) {
 	if call.Program != "" {
 		admitted := false
 		if len(call.words) > 0 {
-			admitted = r.ProgramInvocation(probeWords(call)...)
+			admitted = r.ProgramInvocation(ctx, probeWords(call)...)
 		} else {
 			admitted = r.Program(call.Program)
 		}

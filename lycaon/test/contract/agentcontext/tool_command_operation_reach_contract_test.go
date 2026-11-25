@@ -249,7 +249,7 @@ func verifyPartialMultiFormAndStepFallback(
 		if _, observed := data["command_operation_reachable"]; !observed {
 			gc.ObserveCommandOperationReach()
 		}
-		if got := oar.ResolveNextSteps(rule, gc); len(got.Calls) != 0 {
+		if got := oar.ResolveNextSteps(context.Background(), rule, gc); len(got.Calls) != 0 {
 			t.Errorf("unreachable command with %v resolved next calls %+v", data, got.Calls)
 		}
 	}

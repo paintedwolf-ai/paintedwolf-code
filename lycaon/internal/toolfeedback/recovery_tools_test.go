@@ -2,9 +2,6 @@ package toolfeedback
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/oarcopy"
-	"github.com/lycaon/lycaon/internal/oarcore"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"maps"
 	"path/filepath"
 	"runtime"
@@ -12,6 +9,10 @@ import (
 	"strings"
 	"testing"
 	"unicode"
+
+	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/oarcore"
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -353,7 +354,7 @@ func TestNextStepsRulesRenderNonEmptyRemediesWithoutReach(t *testing.T) {
 					tool = entry.Tools[0]
 				}
 				gc.ObserveToolCall(tool, nil)
-				steps := oar.ResolveNextSteps(rule, gc)
+				steps := oar.ResolveNextSteps(t.Context(), rule, gc)
 				facts := oarcopy.FactsFromData(vars)
 				withPlaceholder := maps.Clone(facts)
 				withPlaceholder[oar.NextStepsFact] = "NEXT_STEP_PLACEHOLDER"

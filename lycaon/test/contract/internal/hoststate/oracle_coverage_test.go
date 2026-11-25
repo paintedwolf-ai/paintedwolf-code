@@ -285,7 +285,7 @@ func TestCoverageTrackerFlagsDeadAndVacuousBranches(t *testing.T) {
 	gc.Reach = toolreach.Offered([]string{"recall"})
 	_, err = pipeline.EvaluateBlock(t.Context(), oar.AnchorToolPreInvoke, gc)
 	contractcheck.FailErr(t, "EvaluateBlock", err)
-	_ = oar.ResolveNextSteps(rule, gc)
+	_ = oar.ResolveNextSteps(t.Context(), rule, gc)
 
 	tracker.RecordCell(false, "")
 	tracker.RecordCell(true, "requires_agent_surface_rejected_in_ask_mode")
