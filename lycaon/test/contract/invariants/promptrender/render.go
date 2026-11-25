@@ -179,8 +179,12 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 	seenReaderFP := map[string]bool{}
 	seenPreloadFP := map[string]bool{}
 	unconditionalSkills := map[string]bool{}
+	emptyReader, err := toolvocabtest.ReaderHolding(nil)
+	if err != nil {
+		return SkillSurfaceAudit{}, err
+	}
 	for _, sk := range loaded {
-		if !sk.Project && toolvocab.SkillToolsOffered(sk, map[string]bool{}) {
+		if !sk.Project && toolvocab.SkillToolsOfferedForReader(sk, emptyReader) {
 			unconditionalSkills[sk.Name] = true
 		}
 	}

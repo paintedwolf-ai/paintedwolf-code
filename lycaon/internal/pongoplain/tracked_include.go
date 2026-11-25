@@ -96,7 +96,7 @@ func (node *trackedIncludeEmptyNode) Execute(ctx *pongo2.ExecutionContext, _ pon
 	if stateErr != nil {
 		return stateErr
 	}
-	state.step(1)
+	state.step()
 	return nil
 }
 
@@ -129,10 +129,10 @@ func (node *trackedIncludeNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 	// MaxCompositionFiles and the context entry limits bound the copy above, so
 	// the include spends one step and its body spends its own.
-	state.step(1)
+	state.step()
 
 	for _, pair := range node.withPairs {
-		state.step(1)
+		state.step()
 		val, evalErr := pair.expr.Evaluate(ctx)
 		if evalErr != nil {
 			return evalErr

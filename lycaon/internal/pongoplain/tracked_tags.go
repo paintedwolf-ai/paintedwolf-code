@@ -53,7 +53,7 @@ func (node *trackedIfNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		rec = nil
 	}
 	for i, condition := range node.conditions {
-		state.step(1)
+		state.step()
 		result, err := condition.Evaluate(ctx)
 		if err != nil {
 			return err
@@ -63,8 +63,8 @@ func (node *trackedIfNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 			site := node.sites[i]
 			rec.record(site.filename, site.line, site.col, site.kind, taken)
 			if rec.ObserveConditions {
-				atoms, values := node.arms[i].observe(ctx)
-				rec.recordCondition(site, node.arms[i].source, atoms, values, taken)
+				atoms, values, recomposes := node.arms[i].observe(ctx, taken)
+				rec.recordCondition(site, node.arms[i].source, atoms, values, taken, recomposes)
 			}
 		}
 		if taken {
@@ -74,7 +74,7 @@ func (node *trackedIfNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 			return node.wrappers[i].Execute(ctx, writer)
 		}
 		if len(node.conditions) == i+1 && len(node.wrappers) > i+1 {
-			state.step(1)
+			state.step()
 			if rec != nil && node.elseSite != nil {
 				rec.record(node.elseSite.filename, node.elseSite.line, node.elseSite.col, BranchElse, true)
 			}
@@ -177,7 +177,7 @@ func (node *trackedForNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	if state.forDepth > MaxForNesting {
 		panic(executionAbort{err: fmt.Errorf("%w: for nesting exceeds %d", ErrExecutionLimit, MaxForNesting)})
 	}
-	state.step(1)
+	state.step()
 
 	rec := ActiveBranchRecorder.Load()
 	forCtx := pongo2.NewChildExecutionContext(ctx)
@@ -194,7 +194,7 @@ func (node *trackedForNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 
 	entered := false
 	obj.IterateOrder(func(idx, count int, key, value *pongo2.Value) bool {
-		state.step(1)
+		state.step()
 		entered = true
 		forCtx.Private[node.key] = key
 		if value != nil && node.value != "" {
@@ -218,7 +218,7 @@ func (node *trackedForNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		return true
 	}, func() {
 		if node.emptyWrapper != nil {
-			state.step(1)
+			state.step()
 			if execErr := node.emptyWrapper.Execute(forCtx, writer); execErr != nil {
 				forError = execErr
 			}

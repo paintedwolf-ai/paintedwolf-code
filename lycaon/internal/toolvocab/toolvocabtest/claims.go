@@ -75,7 +75,7 @@ func (g claimGrammar) block(block ClaimBlock, b toolvocab.Block) []SubjectViolat
 		g.checkCall(ex, calls, report)
 	}
 	for _, bs := range ExtractInlineBackticks(b.Text) {
-		g.checkToolPath(bs, calls, report)
+		g.checkToolPath(bs, report)
 		g.checkCommandSpan(bs, calls, report)
 	}
 	return out
@@ -137,7 +137,7 @@ func (g claimGrammar) checkLoader(ex CallExample, report func(string, int, strin
 	}
 }
 
-func (g claimGrammar) checkToolPath(bs BacktickSpan, calls []toolvocab.Call, report func(string, int, string)) {
+func (g claimGrammar) checkToolPath(bs BacktickSpan, report func(string, int, string)) {
 	head, rest, ok := toolPathSpan(g.cat, bs.Span)
 	if !ok {
 		return

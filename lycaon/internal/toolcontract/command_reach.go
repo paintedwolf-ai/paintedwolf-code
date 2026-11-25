@@ -2,7 +2,6 @@ package toolcontract
 
 import (
 	"regexp"
-	"strings"
 	"sync"
 )
 
@@ -59,19 +58,6 @@ func DeniedCommandMarks(held map[string]bool, effects CommandEffects, isDenied f
 		}
 	}
 	return out
-}
-
-// IsReachMark reports whether name is a synthetic command-effect or exclusion reach mark.
-func IsReachMark(name string) bool {
-	if strings.HasPrefix(name, ReachCommandDeniedPrefix) {
-		return true
-	}
-	switch name {
-	case ReachCommandMutation, ReachCommandExternalExec, ReachCommandExternalExecSelector, ReachCommandNetworkEgress:
-		return true
-	default:
-		return false
-	}
 }
 
 // namedForm matches backticked hyphenated command forms, which plain identifier

@@ -19,7 +19,7 @@ func (node *trackedCompareBlockNode) Execute(ctx *pongo2.ExecutionContext, write
 	if stateErr != nil {
 		return stateErr
 	}
-	state.step(1)
+	state.step()
 	r1, err := node.var1.Evaluate(ctx)
 	if err != nil {
 		return err
@@ -36,7 +36,7 @@ func (node *trackedCompareBlockNode) Execute(ctx *pongo2.ExecutionContext, write
 		return node.thenWrapper.Execute(ctx, writer)
 	}
 	if node.elseWrapper != nil {
-		state.step(1)
+		state.step()
 		return node.elseWrapper.Execute(ctx, writer)
 	}
 	return nil
@@ -93,9 +93,9 @@ func (node *trackedFirstofNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if stateErr != nil {
 		return stateErr
 	}
-	state.step(1)
+	state.step()
 	for _, arg := range node.args {
-		state.step(1)
+		state.step()
 		val, err := arg.Evaluate(ctx)
 		if err != nil {
 			return err
@@ -140,7 +140,7 @@ func (node *trackedWidthratioNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	if stateErr != nil {
 		return stateErr
 	}
-	state.step(1)
+	state.step()
 	current, err := node.current.Evaluate(ctx)
 	if err != nil {
 		return err
@@ -208,7 +208,7 @@ func (node *trackedAutoescapeNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	if stateErr != nil {
 		return stateErr
 	}
-	state.step(1)
+	state.step()
 	old := ctx.Autoescape
 	ctx.Autoescape = node.autoescape
 	defer func() { ctx.Autoescape = old }()

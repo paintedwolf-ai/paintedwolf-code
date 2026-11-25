@@ -33,12 +33,9 @@ func (s *executionState) checkContext() {
 	}
 }
 
-func (s *executionState) step(n int) {
+func (s *executionState) step() {
 	s.checkContext()
-	if n < 1 {
-		n = 1
-	}
-	s.steps += n
+	s.steps++
 	if s.steps > MaxExecutionSteps {
 		panic(executionAbort{err: fmt.Errorf("%w: more than %d execution steps", ErrExecutionLimit, MaxExecutionSteps)})
 	}
@@ -74,7 +71,7 @@ type boundedWriter struct {
 
 func (w *boundedWriter) Write(p []byte) (int, error) {
 	w.state.checkContext()
-	w.state.step(1)
+	w.state.step()
 	if len(p) > MaxOutputBytes-w.buf.Len() {
 		panic(executionAbort{err: fmt.Errorf("%w: more than %d bytes", ErrOutputLimit, MaxOutputBytes)})
 	}
@@ -83,7 +80,7 @@ func (w *boundedWriter) Write(p []byte) (int, error) {
 
 func (w *boundedWriter) WriteString(s string) (int, error) {
 	w.state.checkContext()
-	w.state.step(1)
+	w.state.step()
 	if len(s) > MaxOutputBytes-w.buf.Len() {
 		panic(executionAbort{err: fmt.Errorf("%w: more than %d bytes", ErrOutputLimit, MaxOutputBytes)})
 	}

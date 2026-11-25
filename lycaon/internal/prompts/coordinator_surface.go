@@ -100,17 +100,6 @@ func loadCoordinatorSurfaceRow(surfaceID string) (surfacecatalog.Surface, error)
 	return catalog.Surface(surfaceID)
 }
 
-// LoadCoordinatorSurfaceLoadable returns the tools a surface can load or request.
-func LoadCoordinatorSurfaceLoadable(surfaceID string) ([]string, error) {
-	row, err := loadCoordinatorSurfaceRow(surfaceID)
-	if err != nil {
-		return nil, err
-	}
-	out := row.LoadableTools()
-	sort.Strings(out)
-	return out, nil
-}
-
 // MergeCoordinatorKickVarsForTools answers tool facts from the tools the next
 // model call can reach.
 func MergeCoordinatorKickVarsForTools(into map[string]any, reader Reader) error {

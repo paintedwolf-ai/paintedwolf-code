@@ -53,9 +53,9 @@ func TestConditionAtomsSplitConnectivesAndEvaluateIndependently(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := EvaluateConditionAtoms(tc.source, env, tc.facts, nil)
+			got, err := compiledRule(t, tc.source, env).EvaluateAtoms(tc.facts, nil)
 			if err != nil {
-				t.Fatalf("EvaluateConditionAtoms: %v", err)
+				t.Fatalf("EvaluateAtoms: %v", err)
 			}
 			if !slices.Equal(got, tc.want) {
 				t.Fatalf("atoms = %+v, want %+v", got, tc.want)
@@ -66,15 +66,7 @@ func TestConditionAtomsSplitConnectivesAndEvaluateIndependently(t *testing.T) {
 
 func TestRuleAtomsMatchEvaluatedAtoms(t *testing.T) {
 	env := sharedTestEnv(t, nil)
-	root, err := parseCondition(`testhost.flag && testhost.flag || tool != "x"`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, refs, err := checkCondition(root, env)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rule := &Rule{When: root, Refs: refs, environment: env}
+	rule := compiledRule(t, `testhost.flag && testhost.flag || tool != "x"`, env)
 	if want := []string{"testhost.flag", "testhost.flag", `tool != "x"`}; !slices.Equal(rule.Atoms(), want) {
 		t.Fatalf("Atoms() = %v, want %v", rule.Atoms(), want)
 	}
@@ -96,7 +88,17 @@ func TestRuleAtomsMatchEvaluatedAtoms(t *testing.T) {
 	if empty := (&Rule{}).Atoms(); empty != nil {
 		t.Fatalf("a rule without a condition has atoms %v", empty)
 	}
-	if got, err := EvaluateConditionAtoms("  ", env, nil, nil); err != nil || got != nil {
-		t.Fatalf("blank condition = %v, %v", got, err)
+}
+
+func compiledRule(t *testing.T, source string, env *Environment) *Rule {
+	t.Helper()
+	root, err := parseCondition(source)
+	if err != nil {
+		t.Fatal(err)
 	}
+	_, refs, err := checkCondition(root, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &Rule{When: root, Refs: refs, environment: env}
 }

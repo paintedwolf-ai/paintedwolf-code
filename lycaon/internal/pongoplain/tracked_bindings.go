@@ -17,7 +17,7 @@ func (node *trackedSetNode) Execute(ctx *pongo2.ExecutionContext, _ pongo2.Templ
 	if stateErr != nil {
 		return stateErr
 	}
-	state.step(1)
+	state.step()
 	value, err := node.expression.Evaluate(ctx)
 	if err != nil {
 		return err
@@ -54,10 +54,10 @@ func (node *trackedWithNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2
 	if stateErr != nil {
 		return stateErr
 	}
-	state.step(1)
+	state.step()
 	withCtx := pongo2.NewChildExecutionContext(ctx)
 	for _, pair := range node.pairs {
-		state.step(1)
+		state.step()
 		val, err := pair.expr.Evaluate(ctx)
 		if err != nil {
 			return err

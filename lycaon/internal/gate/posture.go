@@ -3,6 +3,7 @@ package gate
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -34,12 +35,15 @@ func AllPostures() []Posture {
 	return out
 }
 
-// ParsePosture accepts exactly light, balanced, or strict; anything else is an
-// error.
+// ParsePosture accepts exactly a registered posture; anything else is an error.
 func ParsePosture(token string) (Posture, error) {
 	p := Posture(token)
 	if _, ok := postureRules[p]; !ok {
-		return "", fmt.Errorf("unknown approval posture %q (use light, balanced, or strict)", token)
+		names := make([]string, 0, len(postureRules))
+		for _, known := range AllPostures() {
+			names = append(names, string(known))
+		}
+		return "", fmt.Errorf("unknown approval posture %q (use %s)", token, strings.Join(names, ", "))
 	}
 	return p, nil
 }

@@ -72,6 +72,9 @@ func TestObservedConditionsRecordEveryAtomPerArm(t *testing.T) {
 		if !slices.Equal(v.Atoms, wantVectors[i].Atoms) || v.Decision != wantVectors[i].Decision || v.Count != wantVectors[i].Count {
 			t.Fatalf("if vector %d = %+v, want %+v", i, *v, wantVectors[i])
 		}
+		if !v.Recomposes {
+			t.Fatalf("if vector %d has every atom known but does not recompose its decision: %+v", i, *v)
+		}
 	}
 	// The elif arm is only evaluated when the if arm did not win.
 	total := 0

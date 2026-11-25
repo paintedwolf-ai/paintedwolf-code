@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -12,10 +13,15 @@ import (
 // profile_has_<name> template facts; real held tools still do.
 func TestSkillRenderVarsSkipsInvalidToolNames(t *testing.T) {
 	t.Parallel()
-	reader, err := offeredReader(map[string]bool{"command": true, "edit": true, "mcp_*": true, toolcontract.ReachCommandMutation: true})
-	if err != nil {
-		t.Fatalf("offeredReader: %v", err)
-	}
+	effects, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)
+	testutil.FailErr(t, "command effects", err)
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles: []sandbox.ToolProfile{{
+			ID: "worker", Tools: map[string]bool{"command": true, "edit": true, "mcp_*": true}, CommandEffects: effects,
+		}},
+		RootCount: 1,
+	}, prompts.TurnProjection{ProfileID: "worker", Offered: []string{"command", "edit"}, Declared: true})
+	testutil.FailErr(t, "reader", err)
 	vars, err := prompts.SkillVars(reader)
 	testutil.FailErr(t, "skill vars", err)
 	if _, ok := vars["profile_has_mcp_*"]; ok {

@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -176,8 +177,8 @@ func mergeWidestUnitBlocks(t *testing.T, engine prompts.PromptTemplateEngine, su
 	row, err := surfaces.Surface(surfaceID)
 	contractcheck.FailErr(t, "surface row", err)
 	floor := row.FloorTools()
-	loadable, err := prompts.LoadCoordinatorSurfaceLoadable(surfaceID)
-	contractcheck.FailErr(t, "surface loadable", err)
+	loadable := row.LoadableTools()
+	slices.Sort(loadable)
 	if rootCount, ok := vars["root_count"].(int); ok {
 		floor, err = surface.FilterSurfaceToolsForRootCount(floor, rootCount)
 		contractcheck.FailErr(t, "filter floor for root count", err)

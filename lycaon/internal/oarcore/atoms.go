@@ -61,26 +61,6 @@ func (r *Rule) EvaluateAtoms(facts map[string]any, functions map[string]func(any
 	return out, nil
 }
 
-// EvaluateConditionAtoms checks source against env and evaluates its atoms.
-func EvaluateConditionAtoms(source string, env *Environment, facts map[string]any, functions map[string]func(any) (any, error)) ([]AtomValue, error) {
-	if strings.TrimSpace(source) == "" {
-		return nil, nil
-	}
-	if err := CheckCondition(source, env); err != nil {
-		return nil, err
-	}
-	root, err := parseCondition(source)
-	if err != nil {
-		return nil, err
-	}
-	_, refs, err := checkCondition(root, env)
-	if err != nil {
-		return nil, err
-	}
-	rule := &Rule{When: root, Refs: refs, environment: env}
-	return rule.EvaluateAtoms(facts, functions)
-}
-
 func atomNodes(n *node) []*node {
 	if n == nil {
 		return nil

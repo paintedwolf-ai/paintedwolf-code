@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
+
 	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
 
 	"github.com/lycaon/lycaon/internal/protectedpath"
@@ -125,7 +127,7 @@ func TestSkillAdmissionFollowsHeldToolsAndProjectedSchemas(t *testing.T) {
 	cmdSkill := skills.Parse("command-skill", []byte(
 		"---\nname: command-skill\ndescription: Names command.\n---\nRun it in `command`.\n",
 	)).Skill
-	if toolvocab.SkillToolsOffered(cmdSkill, map[string]bool{"recall": true}) {
+	if skillOffered(t, cmdSkill, map[string]bool{"recall": true}) {
 		t.Fatal("skill naming `command` admitted without `command` held")
 	}
 	readOnlyCommandHeld := map[string]bool{"command": true}
@@ -146,10 +148,10 @@ func TestSkillAdmissionFollowsHeldToolsAndProjectedSchemas(t *testing.T) {
 	verifySkill := skills.Parse("verify-skill", []byte(
 		"---\nname: verify-skill\ndescription: Names verify.\n---\nCall `verify`.\n",
 	)).Skill
-	if toolvocab.SkillToolsOffered(verifySkill, readOnlyCommandHeld) {
+	if skillOffered(t, verifySkill, readOnlyCommandHeld) {
 		t.Fatal("skill naming `verify` admitted without `verify` held")
 	}
-	if !toolvocab.SkillToolsOffered(verifySkill, map[string]bool{"verify": true}) {
+	if !skillOffered(t, verifySkill, map[string]bool{"verify": true}) {
 		t.Fatal("skill naming `verify` rejected with `verify` held")
 	}
 	verifyMeta, ok := s.Schemas.ToolMeta("verify")
@@ -162,4 +164,12 @@ func TestSkillAdmissionFollowsHeldToolsAndProjectedSchemas(t *testing.T) {
 			t.Fatalf("projected verify schema missing %q", keptField)
 		}
 	}
+}
+
+// skillOffered reports whether a declared Reader holding held admits sk.
+func skillOffered(t *testing.T, sk skills.Skill, held map[string]bool) bool {
+	t.Helper()
+	reader, err := toolvocabtest.ReaderHolding(held)
+	contractcheck.FailErr(t, "reader holding tools", err)
+	return toolvocab.SkillToolsOfferedForReader(sk, reader)
 }

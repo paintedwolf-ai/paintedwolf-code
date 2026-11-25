@@ -24,7 +24,10 @@ const (
 type ConditionVector struct {
 	Atoms    []Truth
 	Decision bool
-	Count    int
+	// Recomposes reports that every atom is known and the condition's
+	// connectives over their truths give Decision.
+	Recomposes bool
+	Count      int
 }
 
 // ConditionHit collects the distinct vectors observed at one if or elif arm.
@@ -48,6 +51,7 @@ const atomReplayKey = "1"
 type conditionArm struct {
 	source string
 	once   sync.Once
+	expr   *Expr
 	atoms  []string
 	tpls   []*pongo2.Template
 }
@@ -93,6 +97,7 @@ func (arm *conditionArm) compile() {
 		if err != nil {
 			return
 		}
+		arm.expr = expr
 		for _, atom := range expr.Atoms() {
 			src := atom.Source()
 			tpl, err := Compile("{% if " + src + " %}1{% else %}0{% endif %}")
@@ -106,11 +111,12 @@ func (arm *conditionArm) compile() {
 }
 
 // observe evaluates each atom of arm in ctx's scope with the production
-// evaluator. Atoms of an unparsable condition are not observed.
-func (arm *conditionArm) observe(ctx *pongo2.ExecutionContext) ([]string, []Truth) {
+// evaluator and reports whether the atoms recompose decision. Atoms of an
+// unparsable condition are not observed.
+func (arm *conditionArm) observe(ctx *pongo2.ExecutionContext, decision bool) ([]string, []Truth, bool) {
 	arm.compile()
 	if len(arm.atoms) == 0 {
-		return nil, nil
+		return nil, nil, false
 	}
 	scope := pongo2.Context{}
 	for _, layer := range []pongo2.Context{ctx.Shared, ctx.Public, ctx.Private} {
@@ -136,7 +142,14 @@ func (arm *conditionArm) observe(ctx *pongo2.ExecutionContext) ([]string, []Trut
 			values[i] = False
 		}
 	}
-	return arm.atoms, values
+	known := make(map[string]bool, len(values))
+	for i, v := range values {
+		if v == Unknown {
+			return arm.atoms, values, false
+		}
+		known[arm.atoms[i]] = v == True
+	}
+	return arm.atoms, values, arm.expr.Decide(known) == decision
 }
 
 func isAtomReplay(ctx *pongo2.ExecutionContext) bool {
@@ -144,7 +157,7 @@ func isAtomReplay(ctx *pongo2.ExecutionContext) bool {
 	return replay
 }
 
-func (r *BranchRecorder) recordCondition(site branchSite, source string, atoms []string, values []Truth, decision bool) {
+func (r *BranchRecorder) recordCondition(site branchSite, source string, atoms []string, values []Truth, decision, recomposes bool) {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
 	if r.Conditions == nil {
@@ -166,7 +179,7 @@ func (r *BranchRecorder) recordCondition(site branchSite, source string, atoms [
 			return
 		}
 	}
-	hit.Vectors = append(hit.Vectors, &ConditionVector{Atoms: values, Decision: decision, Count: 1})
+	hit.Vectors = append(hit.Vectors, &ConditionVector{Atoms: values, Decision: decision, Recomposes: recomposes, Count: 1})
 }
 
 func slicesEqualTruth(a, b []Truth) bool {
