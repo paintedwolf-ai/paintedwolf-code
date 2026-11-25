@@ -322,7 +322,7 @@ func buildWorkerStateWithEnv(
 		Loading: loading, ParentSessionMode: parentMode, ParentUpgradedAskToAgent: upgraded,
 		WebSearch: webSearch, Vision: vision, CommandExternalHidden: extHidden,
 		ApprovalPosture: approval,
-		HasGit:          hasGit, HasAnyGitRoot: anyGit, OnWorkerBranch: onBranch,
+		HasGit: hasGit, HasAnyGitRoot: anyGit, OnWorkerBranch: onBranch,
 		Loaded: loaded, Overlay: overlay,
 		Excluded: excluded != "", ExcludedReason: excluded,
 	}, nil
