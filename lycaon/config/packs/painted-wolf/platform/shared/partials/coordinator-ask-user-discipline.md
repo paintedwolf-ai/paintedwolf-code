@@ -1,6 +1,5 @@
-## Ask user
+{% if profile_has_ask_user %}## Ask user
 
-{% if profile_has_ask_user %}
 {% set cadence = visual_review_cadence|default:"on_request" %}
 **Blocking decision floor** — an unresolved product fork that changes target, stack/runtime, shape, scope, or done-definition uses `ask_user` before the first writer, never an assistant-prose question. Do not ask for facts tools can establish, names the user left unspecified (pick defaults), or reconfirm a single tab/surface/file the user already fixed. `off_menu` answers resolve the fork — do not re-ask.
 

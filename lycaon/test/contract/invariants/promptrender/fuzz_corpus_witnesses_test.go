@@ -61,32 +61,36 @@ func TestFuzzCorpusSemanticWitnesses(t *testing.T) {
 		}
 	})
 
-	// 028e1c4e90279a32: every coordinator state the matrix admits without the
-	// implement pack still receives true guidance, including its spawn roster.
-	t.Run("coordinator_without_the_implement_pack", func(t *testing.T) {
-		states, err := hoststate.CoordinatorStates(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		ran := map[string]bool{}
-		for _, st := range states {
-			if st.Excluded || st.PackOverlayID != "without-implement" || ran[st.TurnProfile.SurfaceID] {
-				continue
+	// 028e1c4e90279a32 and f8ffc935d6763379: every surface the matrix admits
+	// for a coordinator whose catalog has the implement or the hitl pack
+	// removed still renders true guidance; neither pack may hold a template a
+	// platform surface includes.
+	for _, overlay := range []string{"without-implement", "without-hitl"} {
+		t.Run("coordinator_"+overlay, func(t *testing.T) {
+			states, err := hoststate.CoordinatorStates(t.Context())
+			if err != nil {
+				t.Fatal(err)
 			}
-			ran[st.TurnProfile.SurfaceID] = true
-			bundle := env.overlays[overlayIndexByID(t, d, st.PackOverlayID)]
-			for family := range 3 {
-				rep, err := runCoordinatorTwoTurnProperties(t.Context(), env, bundle, st, st, family, 0, t.TempDir(),
-					FuzzCaseReport{Recipient: "coordinator", TurnACoords: st.ID, TurnBCoords: st.ID})
-				if err != nil {
-					t.Fatalf("family %d on %s (property=%s): %v", family, st.ID, rep.FailedProperty, err)
+			ran := map[string]bool{}
+			for _, st := range states {
+				if st.Excluded || st.PackOverlayID != overlay || ran[st.TurnProfile.SurfaceID] {
+					continue
+				}
+				ran[st.TurnProfile.SurfaceID] = true
+				bundle := env.overlays[overlayIndexByID(t, d, st.PackOverlayID)]
+				for family := range 3 {
+					rep, err := runCoordinatorTwoTurnProperties(t.Context(), env, bundle, st, st, family, 0, t.TempDir(),
+						FuzzCaseReport{Recipient: "coordinator", TurnACoords: st.ID, TurnBCoords: st.ID})
+					if err != nil {
+						t.Fatalf("family %d on %s (property=%s): %v", family, st.ID, rep.FailedProperty, err)
+					}
 				}
 			}
-		}
-		if len(ran) == 0 {
-			t.Fatal("the matrix admits no coordinator without the implement pack")
-		}
-	})
+			if len(ran) == 0 {
+				t.Fatalf("the matrix admits no coordinator on %s", overlay)
+			}
+		})
+	}
 
 	// build_git_to_spec_nongit: the masked two-axis interaction, a live job
 	// across a turn whose posture and primary-root Git both change.
