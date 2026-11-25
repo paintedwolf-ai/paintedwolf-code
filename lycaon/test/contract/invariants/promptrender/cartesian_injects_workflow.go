@@ -295,14 +295,10 @@ func renderStructuralInjectVariants(
 		{"agents-md", map[string]any{"mode": "none"}},
 		{"blueprint", map[string]any{"blueprint_path": "plan.md", "frontmatter": []map[string]any{{"key": "goal", "value": "ship"}}, "body": "## Goal\nShip."}},
 		{"blueprint", map[string]any{"body": "Plain blueprint."}},
-		{"execution-state", map[string]any{
-			"view": "instructions", "declared_command": "./task test:digest",
-			"operations":         []map[string]any{{"tool": "edit", "path": "a.go", "command": "edit", "invoked": true, "checklist_after": true, "tool_request_after": true}, {"tool": "write"}},
-			"operations_omitted": 1,
-			"executions":         []map[string]any{{"code": "PASS", "command": "./task test:short", "cwd": "@primary", "resolvable": true, "source_verdict": "clean", "source_revision": "abc", "source_root_digest": "def"}, {"summary": "min"}},
-			"executions_omitted": 1,
-		}},
-		{"execution-state", map[string]any{"view": "summary"}},
+		{"execution-state", executionStateRich("instructions")},
+		{"execution-state", executionStateRich("observations")},
+		{"execution-state", map[string]any{"view": "instructions", "executions": []map[string]any{{"tool": "verify", "call_id": "c-3", "status": "failed"}}}},
+		{"execution-state", map[string]any{"view": "observations", "executions": []map[string]any{{"tool": "verify", "call_id": "c-3", "status": "failed"}}}},
 		{"scan-guidance-ephemeral", map[string]any{"summaries": []map[string]any{{"rule": "R1", "fix": "Validate input.", "count": 2}, {"rule": "R2", "count": 1}}}},
 		{"synthesis-evidence", map[string]any{"execution_observations": "1 test run passed."}},
 		{"synthesis-evidence", map[string]any{}},
@@ -336,6 +332,25 @@ func renderStructuralInjectVariants(
 		}
 	}
 	return nil
+}
+
+// executionStateRich is execution-state data in the row shape
+// inject.RenderExecutionStateMessage projects, for one of the two views it
+// renders: a fully populated row and a sparse row in each list.
+func executionStateRich(view string) map[string]any {
+	return map[string]any{
+		"view": view, "declared_command": "./task test:digest",
+		"operations": []map[string]any{
+			{"tool": "edit", "call_id": "c-1", "path": "a.go", "command": "edit", "invoked": true, "code": "PATH_DENIED", "checklist_after": true, "tool_request_after": true},
+			{"tool": "write", "call_id": "c-2", "code": "PATH_DENIED"},
+		},
+		"operations_omitted": 1,
+		"executions": []map[string]any{
+			{"tool": "command", "call_id": "c-4", "status": "completed", "invoked": true, "code": "PASS", "command": "./task test:short", "cwd": "@primary", "resolvable": "task", "source_verdict": "clean", "source_revision": "abc", "source_root_digest": "def"},
+			{"tool": "verify", "call_id": "c-5", "status": "failed"},
+		},
+		"executions_omitted": 1,
+	}
 }
 
 func runWorkerInjectRenders(
