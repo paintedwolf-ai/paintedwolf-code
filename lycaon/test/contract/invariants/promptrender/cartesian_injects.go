@@ -214,7 +214,7 @@ func renderRemainingCoordInjectsForRep(
 	first bool,
 	sum *CartesianSummary,
 ) error {
-	namedWorkers := make([]api.BoardWorker, 9)
+	namedWorkers := make([]api.BoardWorker, packboard.MaxOrientationWorkers+2)
 	for w := range namedWorkers {
 		namedWorkers[w] = api.BoardWorker{
 			Name: fmt.Sprintf("w%d", w+1), AgentType: "implementer", State: "working",
