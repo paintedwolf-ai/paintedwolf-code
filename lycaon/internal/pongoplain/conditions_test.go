@@ -52,6 +52,7 @@ func TestObservedConditionsRecordEveryAtomPerArm(t *testing.T) {
 			ifHit = hit
 		case BranchElif:
 			elifHit = hit
+		case BranchElse, BranchFor, BranchEmpty:
 		}
 	}
 	if ifHit == nil || elifHit == nil {

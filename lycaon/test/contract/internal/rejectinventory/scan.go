@@ -149,7 +149,7 @@ func build(root string, opts Options) (Inventory, error) {
 	seen := map[*types.Package]bool{}
 	for _, p := range pkgs {
 		if len(p.Errors) > 0 {
-			return Inventory{}, fmt.Errorf("load %s: %v", p.PkgPath, p.Errors[0])
+			return Inventory{}, fmt.Errorf("load %s: %w", p.PkgPath, p.Errors[0])
 		}
 		s.pkgs = append(s.pkgs, p)
 		s.collectCarriers(p.Types, seen)
