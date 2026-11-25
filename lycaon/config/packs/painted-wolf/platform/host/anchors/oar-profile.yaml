@@ -570,6 +570,15 @@ host_facts:
    type: string
  - name: paintedwolf.search_provider_statuses
    type: list<string>
+ - name: paintedwolf.web_fallback_empty_count
+   type: int
+   observation: Fallback providers that ran without results when no provider found a hit.
+ - name: paintedwolf.web_credential_rejected_providers
+   type: list<string>
+   observation: Search providers that rejected their configured API key.
+ - name: paintedwolf.web_has_retryable_provider
+   type: bool
+   observation: A search provider rejected the request itself, so a corrected query may succeed.
  - name: paintedwolf.period_max_year
    type: int
  - name: paintedwolf.period_min_year

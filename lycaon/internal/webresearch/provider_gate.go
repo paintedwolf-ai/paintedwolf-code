@@ -31,6 +31,10 @@ type providerGate struct {
 	coolUntil time.Time
 }
 
+// firstAttemptGateWait bounds how long a provider's first call in a search
+// waits for a pacing slot. It stays inside fanOutZeroHitTimeout.
+const firstAttemptGateWait = 3 * time.Second
+
 type gateWaitCtxKey struct{}
 
 // withProviderGateWait allows a bounded wait for a reserved pacing slot.
@@ -102,11 +106,8 @@ func (g *providerGate) acquire(ctx context.Context, authenticated bool) error {
 	return nil
 }
 
-func (g *providerGate) record(status int) {
+func (g *providerGate) coolDown() {
 	if g == nil || !g.pacingEnabled() {
-		return
-	}
-	if status != 429 && status != 403 {
 		return
 	}
 	g.mu.Lock()
@@ -137,14 +138,7 @@ func ProviderQuotaDayUTC(t time.Time) string {
 }
 
 func providerAuthenticated(entry CatalogEntry, s Settings) bool {
-	slot := entry.CredentialSlot
-	if slot == "" {
-		slot = entry.OptionalCredentialSlot
-	}
-	if slot == "" {
-		return false
-	}
-	return strings.TrimSpace(s.Keys[entry.ID]) != ""
+	return credentialSlot(entry) != "" && strings.TrimSpace(s.Keys[entry.ID]) != ""
 }
 
 type gatedSearchProvider struct {
@@ -177,13 +171,8 @@ func (p *gatedSearchProvider) Search(ctx context.Context, s Settings, query stri
 		}
 	}
 	out := p.inner.Search(ctx, s, query, maxResults)
-	if p.gate != nil {
-		if out.httpStatus > 0 {
-			p.gate.record(out.httpStatus)
-		}
-		if out.gateRecordStatus > 0 {
-			p.gate.record(out.gateRecordStatus)
-		}
+	if out.reason == string(ErrorRateLimited) || out.gateCooldown {
+		p.gate.coolDown()
 	}
 	return out
 }

@@ -26,6 +26,7 @@ type Registry struct {
 	quota       ProviderQuotaStore
 	seedCache   *ttlCache[providerOutcome]
 	resultCache *ttlCache[cachedSearchResult]
+	rejections  *credentialRejections
 }
 
 // NewRegistry builds an empty registry for a catalog.
@@ -38,6 +39,7 @@ func NewRegistry(catalog *Catalog, exchange Exchange) *Registry {
 		providers:   catalogruntime.NewRegistry[SearchProvider](),
 		gates:       make(map[string]*providerGate),
 		health:      make(map[string]*providerHealth),
+		rejections:  newCredentialRejections(),
 	}
 }
 
@@ -104,6 +106,9 @@ func (r *Registry) ResetProviderRuntime(providerID string) {
 	gateID := providerID
 	if r.catalog != nil {
 		entry, ok := r.catalog.Entry(providerID)
+		if ok {
+			r.rejections.clear(credentialSlot(entry))
+		}
 		if ok && entry.Pacing != nil {
 			if sharedKey := strings.TrimSpace(entry.Pacing.SharedKey); sharedKey != "" {
 				gateID = sharedKey
@@ -234,15 +239,19 @@ func (r *Registry) registerProvider(p SearchProvider) {
 	if r == nil || p == nil {
 		return
 	}
-	if rest, ok := p.(*RESTSearchProvider); ok {
-		if entry, hasEntry := r.catalog.Entry(rest.ID()); hasEntry {
-			rest.allowPrivateEndpoint = entry.AllowPrivateEndpoint
+	entry, hasEntry := r.catalog.Entry(p.ID())
+	if hasEntry {
+		switch adapter := p.(type) {
+		case *RESTSearchProvider:
+			adapter.allowPrivateEndpoint = entry.AllowPrivateEndpoint
+			adapter.errors = entry.Errors
 			for _, field := range entry.ExtraFields {
-				rest.requiredConfig = append(rest.requiredConfig, field.Name)
+				adapter.requiredConfig = append(adapter.requiredConfig, field.Name)
 			}
+		case *ietfRFCProvider:
+			adapter.errors = entry.Errors
 		}
 	}
-	entry, hasEntry := r.catalog.Entry(p.ID())
 	if hasEntry && entry.Pacing != nil {
 		gateID := entry.ID
 		if sharedKey := strings.TrimSpace(entry.Pacing.SharedKey); sharedKey != "" {
@@ -254,6 +263,9 @@ func (r *Registry) registerProvider(p SearchProvider) {
 			r.gates[gateID] = gate
 		}
 		p = &gatedSearchProvider{inner: p, gate: gate, entry: entry}
+	}
+	if slot := credentialSlot(entry); hasEntry && slot != "" {
+		p = &credentialGuardProvider{inner: p, slot: slot, rejections: r.rejections}
 	}
 	// Open health gates do not consume pacing quota.
 	p = &healthWrappedProvider{inner: p, health: r.ensureHealthGate(p.ID())}

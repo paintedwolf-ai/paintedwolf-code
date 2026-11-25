@@ -40,12 +40,19 @@ type WebSearchResult struct {
 	ProvidersSkipped []SkippedProvider `json:"providers_skipped"`
 	Partial          bool              `json:"partial"`
 	Error            string            `json:"error,omitempty"`
+	// FallbackEmptyCount counts fallback providers that ran when no provider
+	// found a hit.
+	FallbackEmptyCount int `json:"fallback_empty_count,omitempty"`
 	// RepeatSearch marks a whole-search cache hit for the same normalized query.
 	RepeatSearch bool `json:"repeat_search,omitempty"`
 	// Rerank says what the local engine ranked inside this search; absent when it answered nothing.
 	Rerank *decide.RerankReceipt `json:"rerank,omitempty"`
 	// Unprobed candidates feed post-search warming outside the wire payload.
 	residualURLs []string
+	// Refusal facts: providers that rejected their credential, and whether a
+	// provider rejected the request itself.
+	credentialRejected []string
+	queryRetryable     bool
 	// Direct-pipeline fill counts decide whether the post-search seed runs.
 	directStrongHits   int
 	directMaxResults   int

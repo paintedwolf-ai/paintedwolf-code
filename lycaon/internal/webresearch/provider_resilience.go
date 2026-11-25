@@ -83,8 +83,8 @@ func isHardProviderFailure(out providerOutcome) bool {
 		return false
 	}
 	switch out.reason {
-	case "timeout", "parse_error", "http_error":
-		// Pacing, authentication, and cancellation do not affect health.
+	case "timeout", "parse_error", string(ErrorUnavailable):
+		// Rejections, limits, pacing and cancellation do not affect health.
 		return true
 	default:
 		return false
@@ -241,9 +241,10 @@ func (p *queryBackoffProvider) Configured(s Settings) bool { return p.inner.Conf
 func (p *queryBackoffProvider) Search(ctx context.Context, s Settings, query string, maxResults int) providerOutcome {
 	for i, candidate := range backoffQueryVariants(query, p.minWords) {
 		candidateCtx := ctx
-		// Retry variants may wait for this search's pacing reservation.
-		if i > 0 && providerGateWaitFrom(ctx) <= 0 && s.PerProviderTimeoutSec > 0 {
-			candidateCtx = withProviderGateWait(ctx, time.Duration(s.PerProviderTimeoutSec)*time.Second)
+		// A retry takes a pacing slot only when one is free now, so it never
+		// delays another search's first attempt.
+		if i > 0 {
+			candidateCtx = withProviderGateWait(ctx, 0)
 		}
 		out := p.inner.Search(candidateCtx, s, candidate, maxResults)
 		if !out.ok || len(out.hits) > 0 {

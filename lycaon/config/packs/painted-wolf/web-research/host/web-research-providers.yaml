@@ -19,6 +19,14 @@ providers:
     api_key_env: BRAVE_SEARCH_API_KEY
     test_query: test
     hint: Get a key from Brave Search API.
+    errors:
+      code_paths: [error.code, error.meta.component]
+      codes:
+        SUBSCRIPTION_TOKEN_INVALID: credential_rejected
+        authentication: credential_rejected
+        QUOTA_LIMITED: quota_exhausted
+        RATE_LIMITED: rate_limited
+        INTERNAL: unavailable
 
   - id: marginalia
     kind: keyed
@@ -39,6 +47,21 @@ providers:
         label: Search engine ID (cx)
     test_query: test
     hint: API key plus Programmable Search Engine ID (cx) from Google Cloud Console.
+    errors:
+      code_paths: [error.details.0.reason, error.errors.0.reason]
+      codes:
+        API_KEY_INVALID: credential_rejected
+        keyInvalid: credential_rejected
+        keyExpired: credential_rejected
+        accessNotConfigured: credential_rejected
+        ipRefererBlocked: credential_rejected
+        dailyLimitExceeded: quota_exhausted
+        quotaExceeded: quota_exhausted
+        rateLimitExceeded: rate_limited
+        userRateLimitExceeded: rate_limited
+      # Quota errors also use 403, so an uncoded 403 is not a key verdict.
+      statuses:
+        403: request_rejected
 
   - id: tavily
     kind: keyed
@@ -47,6 +70,10 @@ providers:
     api_key_env: TAVILY_API_KEY
     test_query: test
     hint: Get an API key from Tavily for agent-oriented web search.
+    errors:
+      statuses:
+        432: quota_exhausted
+        433: quota_exhausted
 
   - id: kagi
     kind: keyed
@@ -216,6 +243,13 @@ providers:
     default_enabled: true
     test_query: test
     hint: Stack Overflow Q&A search. Optional API key raises daily quota.
+    errors:
+      code_paths: [error_name]
+      codes:
+        access_denied: credential_rejected
+        key_required: credential_rejected
+        bad_parameter: credential_rejected
+        throttle_violation: rate_limited
     pacing:
       min_interval_ms: 1000
       daily_cap: 250
@@ -235,6 +269,13 @@ providers:
     default_enabled: true
     test_query: test
     hint: Apple platform Q&A (macOS, iOS, iPadOS) via the Stack Exchange API. Shares the Stack Exchange optional API key.
+    errors:
+      code_paths: [error_name]
+      codes:
+        access_denied: credential_rejected
+        key_required: credential_rejected
+        bad_parameter: credential_rejected
+        throttle_violation: rate_limited
     pacing:
       min_interval_ms: 1000
       daily_cap: 250
@@ -254,6 +295,13 @@ providers:
     default_enabled: true
     test_query: test
     hint: Desktop and Windows Q&A via the Stack Exchange API. Shares the Stack Exchange optional API key.
+    errors:
+      code_paths: [error_name]
+      codes:
+        access_denied: credential_rejected
+        key_required: credential_rejected
+        bad_parameter: credential_rejected
+        throttle_violation: rate_limited
     pacing:
       min_interval_ms: 1000
       daily_cap: 250
@@ -273,6 +321,13 @@ providers:
     default_enabled: true
     test_query: systemd
     hint: Ubuntu Q&A via the Stack Exchange API. Shares the Stack Exchange optional API key.
+    errors:
+      code_paths: [error_name]
+      codes:
+        access_denied: credential_rejected
+        key_required: credential_rejected
+        bad_parameter: credential_rejected
+        throttle_violation: rate_limited
     pacing:
       min_interval_ms: 1000
       daily_cap: 250
@@ -292,6 +347,13 @@ providers:
     default_enabled: true
     test_query: nginx
     hint: Server administration Q&A via the Stack Exchange API. Shares the Stack Exchange optional API key.
+    errors:
+      code_paths: [error_name]
+      codes:
+        access_denied: credential_rejected
+        key_required: credential_rejected
+        bad_parameter: credential_rejected
+        throttle_violation: rate_limited
     pacing:
       min_interval_ms: 1000
       daily_cap: 250
@@ -311,6 +373,13 @@ providers:
     default_enabled: true
     test_query: systemd
     hint: Unix and Linux Q&A via the Stack Exchange API. Shares the Stack Exchange optional API key.
+    errors:
+      code_paths: [error_name]
+      codes:
+        access_denied: credential_rejected
+        key_required: credential_rejected
+        bad_parameter: credential_rejected
+        throttle_violation: rate_limited
     pacing:
       min_interval_ms: 1000
       daily_cap: 250
@@ -353,6 +422,10 @@ providers:
     default_enabled: true
     test_query: test
     hint: Searches GitHub issues and pull requests without a token. Add a personal access token to also search code and raise rate limits.
+    errors:
+      # Unauthenticated and token rate limits both answer 403.
+      statuses:
+        403: rate_limited
     pacing:
       min_interval_ms: 6000
       daily_cap: 500

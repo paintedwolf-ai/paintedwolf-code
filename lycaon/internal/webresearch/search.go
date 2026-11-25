@@ -107,7 +107,11 @@ func Search(ctx context.Context, opts SearchOptions) WebSearchResult {
 	}
 
 	outcomes := runProviderTasks(fanCtx, fanCancel, tasks, maxResults)
-	soft := softProviderSet(opts.Settings.SoftProviderIDs)
+	// A pinned provider is the search's only primary outcome.
+	soft := map[string]struct{}(nil)
+	if explicit == "" {
+		soft = softProviderSet(opts.Settings.SoftProviderIDs)
+	}
 	ingestProviderHits(ctx, opts.Index, outcomes, soft)
 	for _, s := range skipped {
 		outcomes = append(outcomes, providerOutcome{providerID: s.Provider, reason: s.Reason})
@@ -176,72 +180,70 @@ func validateProvider(provider string, reg *Registry) error {
 	return fmt.Errorf("unknown provider: %s", provider)
 }
 
-// fanTask is one parallel provider invocation in a web_search fan-out.
+// finalizeSearchResult fuses primary hits, using soft fallback hits only when
+// primary providers found none. Failure, the skipped list and the cause cover
+// primary outcomes; soft fallbacks without hits are only counted.
 func finalizeSearchResult(q string, maxResults int, outcomes []providerOutcome, soft map[string]struct{}) WebSearchResult {
-	skipped := make([]SkippedProvider, 0)
-	for _, o := range outcomes {
-		if o.ok && len(o.hits) == 0 {
-			skipped = append(skipped, SkippedProvider{Provider: o.providerID, Reason: "no_results"})
-		}
-		if !o.ok {
-			skipped = append(skipped, SkippedProvider{Provider: o.providerID, Reason: o.reason})
-		}
-	}
 	primary, softOutcomes := partitionSoftOutcomes(outcomes, soft)
+	skipped := skippedProviders(primary)
 	merged := fuseHits(primary, maxResults)
-	// Soft (Direct-bundled results-only) hits fuse only when primary providers
-	// return nothing.
 	if len(merged) == 0 && len(softOutcomes) > 0 {
 		merged = fuseHits(softOutcomes, maxResults)
 	}
-	partial := false
+	if len(merged) > 0 {
+		partial := false
+		for _, o := range primary {
+			partial = partial || !o.ok
+		}
+		return WebSearchResult{OK: true, Query: q, Results: merged, ProvidersSkipped: skipped, Partial: partial}
+	}
+	result := WebSearchResult{OK: true, Query: q, ProvidersSkipped: skipped, FallbackEmptyCount: len(softOutcomes)}
+	if primaryFailed(primary) {
+		parts := make([]string, 0, len(primary))
+		for _, o := range primary {
+			detail := o.detail
+			if detail == "" {
+				detail = o.reason
+			}
+			parts = append(parts, fmt.Sprintf("%s: %s", o.providerID, detail))
+			switch ProviderErrorState(o.reason) {
+			case ErrorCredentialRejected:
+				result.credentialRejected = append(result.credentialRejected, o.providerID)
+			case ErrorRequestRejected:
+				result.queryRetryable = true
+			case ErrorQuotaExhausted, ErrorRateLimited, ErrorUnavailable:
+			}
+		}
+		result.OK = false
+		result.Error = strings.Join(parts, "; ")
+	}
+	return result
+}
+
+func skippedProviders(outcomes []providerOutcome) []SkippedProvider {
+	skipped := make([]SkippedProvider, 0)
 	for _, o := range outcomes {
-		if !o.ok {
-			partial = partial || len(merged) > 0
+		switch {
+		case !o.ok:
+			skipped = append(skipped, SkippedProvider{Provider: o.providerID, Reason: o.reason})
+		case len(o.hits) == 0:
+			skipped = append(skipped, SkippedProvider{Provider: o.providerID, Reason: "no_results"})
 		}
 	}
-	allSoftEmpty := len(outcomes) > 0
-	for _, o := range outcomes {
-		if o.ok || !isSoftSkipReason(o.reason) {
-			allSoftEmpty = false
-			break
+	return skipped
+}
+
+// primaryFailed reports a search whose primary providers all failed, at least
+// one for a reason other than being unconfigured, paced or empty.
+func primaryFailed(primary []providerOutcome) bool {
+	hard := false
+	for _, o := range primary {
+		if o.ok {
+			return false
 		}
+		hard = hard || !isSoftSkipReason(o.reason)
 	}
-	if len(merged) == 0 && allSoftEmpty {
-		return WebSearchResult{OK: true, Query: q, ProvidersSkipped: skipped}
-	}
-	if len(merged) == 0 {
-		allFailed := true
-		for _, o := range outcomes {
-			if o.ok {
-				allFailed = false
-				break
-			}
-		}
-		if allFailed {
-			parts := make([]string, 0, len(outcomes))
-			for _, o := range outcomes {
-				detail := o.detail
-				if detail == "" {
-					detail = o.reason
-				}
-				parts = append(parts, fmt.Sprintf("%s: %s", o.providerID, detail))
-			}
-			return WebSearchResult{
-				OK:               false,
-				Query:            q,
-				ProvidersSkipped: skipped,
-				Error:            strings.Join(parts, "; "),
-			}
-		}
-	}
-	return WebSearchResult{
-		OK:               true,
-		Query:            q,
-		Results:          merged,
-		ProvidersSkipped: skipped,
-		Partial:          partial && len(merged) > 0,
-	}
+	return hard
 }
 
 func partitionSoftOutcomes(outcomes []providerOutcome, soft map[string]struct{}) (primary, softOnly []providerOutcome) {
@@ -302,7 +304,9 @@ func buildExplicitTasks(ctx context.Context, explicit, query string, maxResults 
 	settings := opts.Settings
 	catalogQuery := opts.Period.providerQuery(query)
 	return []fanTask{{
-		run: func() providerOutcome { return p.Search(ctx, settings, catalogQuery, maxResults) },
+		run: func() providerOutcome {
+			return p.Search(withProviderGateWait(ctx, firstAttemptGateWait), settings, catalogQuery, maxResults)
+		},
 	}}, nil
 }
 
@@ -339,7 +343,7 @@ func buildFanOut(ctx context.Context, query string, maxResults int, opts SearchO
 		tasks = append(tasks, fanTask{
 			soft: soft,
 			run: func() providerOutcome {
-				return provider.Search(ctx, settings, catalogQuery, maxResults)
+				return provider.Search(withProviderGateWait(ctx, firstAttemptGateWait), settings, catalogQuery, maxResults)
 			},
 		})
 	}

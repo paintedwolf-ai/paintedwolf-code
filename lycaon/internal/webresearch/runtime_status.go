@@ -185,15 +185,16 @@ func providerMeta(entry CatalogEntry, reg *Registry, settings Settings, creds *C
 			configured = p.Configured(settings)
 		}
 	}
-	slot := entry.CredentialSlot
-	if slot == "" {
-		slot = entry.OptionalCredentialSlot
-	}
+	slot := credentialSlot(entry)
 	credPresent := false
 	credentialSource := "none"
 	if slot != "" && creds != nil {
 		credentialSource = creds.CredentialSource(slot)
 		credPresent = credentialSource == "stored" || credentialSource == "environment"
+	}
+	var rejected *wire.WebResearchCredentialRejection
+	if rej, ok := reg.credentialRejection(entry.ID, settings); ok {
+		rejected = &wire.WebResearchCredentialRejection{Code: rej.code, ObservedAt: rej.observedAt}
 	}
 	return wire.WebResearchProviderMeta{
 		ID:                   wire.WebSearchProvider(entry.ID),
@@ -205,6 +206,7 @@ func providerMeta(entry CatalogEntry, reg *Registry, settings Settings, creds *C
 		CredentialPresent:    credPresent,
 		CredentialSource:     credentialSource,
 		CredentialSlot:       slot,
+		CredentialRejected:   rejected,
 		AllowPrivateEndpoint: entry.AllowPrivateEndpoint,
 		Config:               copyConfig(settings.Config[entry.ID]),
 	}

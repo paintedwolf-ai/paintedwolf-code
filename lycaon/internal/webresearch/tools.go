@@ -154,7 +154,10 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 			return "", &toolrejection.ToolReject{
 				Code:        webSearchProvidersFailedCode,
 				Observation: webSearchProvidersFailedObservation,
-				Data:        map[string]any{"detail": result.Error, "search_provider_statuses": statuses},
+				Data: map[string]any{"detail": result.Error, "search_provider_statuses": statuses, "web_fallback_empty_count": result.FallbackEmptyCount,
+					"web_credential_rejected_providers": deps.Registry.providerLabels(result.credentialRejected),
+					"web_has_retryable_provider":        result.queryRetryable,
+				},
 			}
 		}
 		if !result.OK {

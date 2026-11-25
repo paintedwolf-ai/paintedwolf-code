@@ -282,6 +282,9 @@ func resolvedSearchProviders(settings Settings, reg *Registry) []resolvedProvide
 		if p := reg.Get(id); p == nil || !p.Configured(settings) {
 			continue
 		}
+		if _, rejected := reg.credentialRejection(id, settings); rejected {
+			continue
+		}
 		out = append(out, resolvedProvider{id: id, endpoint: keylessEndpoint(settings, id)})
 	}
 	return out

@@ -80,6 +80,9 @@ components:
           enum: [none, stored, environment]
         credential_slot:
           type: string
+        credential_rejected:
+          x-go-pointer: true
+          $ref: web-research.yaml#/components/schemas/WebResearchCredentialRejection
         allow_private_endpoint:
           type: boolean
           description: Catalog flag — when true, endpoint may use http and private/LAN addresses (still blocking loopback and link-local metadata).
@@ -87,6 +90,21 @@ components:
           type: object
           additionalProperties:
             type: string
+    WebResearchCredentialRejection:
+      x-go-generate: true
+      type: object
+      description: The provider rejected the credential currently in this slot. Clears when the credential changes or the provider is tested.
+      required:
+        - code
+        - observed_at
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          description: Machine error code from the provider response, or http_<status>.
+        observed_at:
+          type: string
+          format: date-time
     WebResearchProvidersResponse:
       x-go-generate: true
       type: object

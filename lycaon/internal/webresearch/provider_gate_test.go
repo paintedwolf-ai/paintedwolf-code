@@ -92,7 +92,7 @@ func TestProviderGate429Cooldown(t *testing.T) {
 	now := time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC)
 	clock := now
 	g := newProviderGate("mwmbl", &PacingSpec{Cooldown429S: 60}, &memQuotaStore{}, func() time.Time { return clock })
-	g.record(429)
+	g.coolDown()
 	if err := g.acquire(context.Background(), false); err == nil {
 		t.Fatal("expected cooldown skip")
 	}
@@ -107,7 +107,7 @@ func TestProviderGateResetCooldownPreservesDurableQuota(t *testing.T) {
 	quota := &memQuotaStore{}
 	g := newProviderGate("mwmbl", &PacingSpec{DailyCap: 2, Cooldown429S: 60}, quota, func() time.Time { return now })
 	testutil.FailErr(t, "first acquire", g.acquire(context.Background(), false))
-	g.record(429)
+	g.coolDown()
 	g.resetCooldown()
 	testutil.FailErr(t, "acquire after repair", g.acquire(context.Background(), false))
 	if err := g.acquire(context.Background(), false); !errors.Is(err, ErrProviderPaced) {

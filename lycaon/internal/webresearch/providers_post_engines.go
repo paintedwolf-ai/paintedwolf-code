@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/internal/webindex"
 	"net/http"
@@ -138,8 +137,11 @@ type providerOutcome struct {
 	hits       []WebHit
 	httpStatus int
 	// durationMs is stamped by runProviderTasks for the search summary line.
-	durationMs       int64
-	gateRecordStatus int
+	durationMs int64
+	// errorCode is the classified machine code of a failed response.
+	errorCode string
+	// gateCooldown asks the pacing gate to cool down after a successful call.
+	gateCooldown bool
 }
 
 // RESTSpec describes a GET/POST search provider backed by HTTP.
@@ -153,7 +155,7 @@ type RESTSpec struct {
 	ParseHits    func(body []byte) ([]WebHit, error)
 	// ParseHitsWithSettings is used when hit URLs depend on configured endpoint base.
 	ParseHitsWithSettings func(body []byte, s Settings) ([]WebHit, error)
-	GateRecordStatus      func(body []byte) (int, bool)
+	GateCooldown          func(body []byte) bool
 	// TimeoutSec overrides Settings.PerProviderTimeoutSec when positive.
 	TimeoutSec int
 }
@@ -166,6 +168,7 @@ type RESTSearchProvider struct {
 	allowPrivateEndpoint bool
 	// requiredConfig names the catalog extra fields Configured requires.
 	requiredConfig []string
+	errors         *ErrorSpec
 }
 
 func NewRESTSearchProvider(spec RESTSpec, kind ProviderKind, exchange Exchange) *RESTSearchProvider {
@@ -233,12 +236,8 @@ func (p *RESTSearchProvider) Search(ctx context.Context, s Settings, query strin
 		return providerOutcome{providerID: providerID, reason: reason, detail: err.Error()}
 	}
 	if status < 200 || status >= 300 {
-		return providerOutcome{
-			providerID: providerID,
-			reason:     "http_error",
-			detail:     fmt.Sprintf("HTTP %d", status),
-			httpStatus: status,
-		}
+		credentialSent := strings.TrimSpace(s.Keys[providerID]) != ""
+		return providerErrorOutcome(providerID, status, classifyProviderError(p.errors, status, body, credentialSent))
 	}
 	var hits []WebHit
 	if p.spec.ParseHitsWithSettings != nil {
@@ -253,11 +252,7 @@ func (p *RESTSearchProvider) Search(ctx context.Context, s Settings, query strin
 	}
 	parsedHitCount := len(hits)
 	out := providerOutcome{providerID: providerID, ok: true, reason: "ok", hits: hits, httpStatus: status}
-	if p.spec.GateRecordStatus != nil {
-		if gateStatus, ok := p.spec.GateRecordStatus(body); ok {
-			out.gateRecordStatus = gateStatus
-		}
-	}
+	out.gateCooldown = p.spec.GateCooldown != nil && p.spec.GateCooldown(body)
 	for i := range out.hits {
 		if out.hits[i].Provider == "" {
 			out.hits[i].Provider = providerID
