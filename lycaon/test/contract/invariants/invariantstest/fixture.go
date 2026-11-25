@@ -1,4 +1,6 @@
-package invariants_test
+// Package invariantstest builds fixture repositories and checks rule
+// outcomes for invariant family tests.
+package invariantstest
 
 import (
 	"os"
@@ -10,17 +12,18 @@ import (
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
 
-const fixtureModule = "module github.com/lycaon/lycaon\n\ngo 1.26\n"
+// FixtureModule is the lycaon/go.mod a fixture gets unless it supplies one.
+const FixtureModule = "module github.com/lycaon/lycaon\n\ngo 1.26\n"
 
-// fixture writes a repository tree, keyed by repository-relative path, and
+// Fixture writes a repository tree, keyed by repository-relative path, and
 // returns a corpus over it. lycaon/go.mod is added unless given; a nil tree
 // holds nothing else.
-func fixture(t *testing.T, files map[string]string) *invariants.Corpus {
+func Fixture(t *testing.T, files map[string]string) *invariants.Corpus {
 	t.Helper()
 	root := t.TempDir()
-	files = with(files, nil)
+	files = With(files, nil)
 	if _, ok := files["lycaon/go.mod"]; !ok {
-		files["lycaon/go.mod"] = fixtureModule
+		files["lycaon/go.mod"] = FixtureModule
 	}
 	// Rules select whole module roots and refuse an empty one.
 	for _, dir := range []string{"cmd", "pkg", "config", "test"} {
@@ -49,8 +52,8 @@ func hasPrefix(files map[string]string, prefix string) bool {
 	return false
 }
 
-// with returns files plus overrides; an empty override deletes the path.
-func with(files map[string]string, overrides map[string]string) map[string]string {
+// With returns files plus overrides; an empty override deletes the path.
+func With(files map[string]string, overrides map[string]string) map[string]string {
 	out := make(map[string]string, len(files)+len(overrides))
 	for rel, body := range files {
 		out[rel] = body
@@ -65,8 +68,8 @@ func with(files map[string]string, overrides map[string]string) map[string]strin
 	return out
 }
 
-// rule returns a rule of a family by name.
-func rule(t *testing.T, family invariants.Family, name string) invariants.Invariant {
+// Rule returns a rule of a family by name.
+func Rule(t *testing.T, family invariants.Family, name string) invariants.Invariant {
 	t.Helper()
 	for _, r := range family.Invariants {
 		if r.Name == name {
@@ -77,47 +80,47 @@ func rule(t *testing.T, family invariants.Family, name string) invariants.Invari
 	return invariants.Invariant{}
 }
 
-// bare returns rule without its exemptions, which name repository files a
+// Bare returns rule without its exemptions, which name repository files a
 // fixture does not hold.
-func bare(r invariants.Invariant) invariants.Invariant {
+func Bare(r invariants.Invariant) invariants.Invariant {
 	r.Exempt = nil
 	return r
 }
 
-// outcome names what an evaluation found, for table tests.
-type outcome int
+// Outcome names what an evaluation found, for table tests.
+type Outcome int
 
 const (
-	passes outcome = iota
-	violates
-	missesAnchor
-	staleExemption
-	fails
+	Passes Outcome = iota
+	Violates
+	MissesAnchor
+	StaleExemption
+	Fails
 )
 
-func (o outcome) String() string {
+func (o Outcome) String() string {
 	return [...]string{"passes", "violates", "misses an anchor", "has a stale exemption", "fails to load"}[o]
 }
 
-// expect asserts the single kind of result an evaluation produced and, for
+// Expect asserts the single kind of result an evaluation produced and, for
 // violations, how many.
-func expect(t *testing.T, res invariants.Result, want outcome, violations int) {
+func Expect(t *testing.T, res invariants.Result, want Outcome, violations int) {
 	t.Helper()
-	got := passes
+	got := Passes
 	switch {
 	case res.Err != nil:
-		got = fails
+		got = Fails
 	case len(res.MissingAnchors) > 0:
-		got = missesAnchor
+		got = MissesAnchor
 	case len(res.StaleExemptions) > 0:
-		got = staleExemption
+		got = StaleExemption
 	case len(res.Violations) > 0:
-		got = violates
+		got = Violates
 	}
 	if got != want {
 		t.Fatalf("rule %s, want it to %s:\n%s", got, want, res)
 	}
-	if want == violates && violations > 0 && len(res.Violations) != violations {
+	if want == Violates && violations > 0 && len(res.Violations) != violations {
 		t.Fatalf("%d violations, want %d:\n%s", len(res.Violations), violations, strings.Join(res.Violations, "\n"))
 	}
 }
