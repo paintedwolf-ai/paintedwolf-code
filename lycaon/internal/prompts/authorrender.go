@@ -257,16 +257,12 @@ func skillPreviewReader(profileID, surfaceID string) (Reader, error) {
 	if err != nil {
 		return Reader{}, err
 	}
-	return NewReader(ReaderInput{
-		ProfileID: profileID,
-		SurfaceID: surfaceID,
+	return NewReader(HostFacts{
 		Profiles:  profiles,
-		Plan:      plan,
-		Loaded:    toolNameSet(plan.AddressableNames()),
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
-	})
+	}, TurnProjection{ProfileID: profileID, SurfaceID: surfaceID, Offered: plan.AddressableNames(), Declared: true})
 }
 
 // skillPreviewVars builds the render context one pack skill read carries: the
@@ -591,7 +587,7 @@ func resolveTemplatePreviewVars(ctx context.Context, engine *FileTemplateEngine,
 				classes = append(classes, toolcontract.CommandNetworkEgress)
 			}
 			effects, _ := toolcontract.NewCommandEffects(classes...)
-			sel.Held = readerHeldSet(tools, effects, renderVars["command_external_hidden"] == true)
+			sel.Held = readerProfileHeldSet(sandbox.ToolProfile{}, tools, effects, renderVars["command_external_hidden"] == true)
 		}
 		blocks, err := RenderUnitSlots(ctx, UnitRendererFor(engine), catalog, sel, renderVars)
 		if err != nil {
@@ -706,18 +702,13 @@ func resolveTemplatePreviewReader(eff *extpacks.EffectiveCatalog, target Preview
 		visible = append(visible, name)
 	}
 	sort.Strings(visible)
-	mode, _ := vars["execution_mode"].(string)
-	return NewReader(ReaderInput{
-		ProfileID:             profileID,
-		SurfaceID:             target.surfaceID,
-		Mode:                  strings.TrimSpace(mode),
+	return NewReader(HostFacts{
 		Profiles:              adjusted,
-		Visible:               visible,
 		RootCount:             1,
 		HasGit:                true,
 		WebSearch:             true,
 		CommandExternalHidden: vars["command_external_hidden"] == true,
-	})
+	}, TurnProjection{ProfileID: profileID, SurfaceID: target.surfaceID, Offered: visible, Declared: true})
 }
 
 // ValidatePersonaRender checks the final composed persona, not source fragments.

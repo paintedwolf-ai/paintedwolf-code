@@ -2,10 +2,11 @@ package assembly
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/projectroot"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/packboard"
@@ -21,11 +22,13 @@ func assemblyTestReader(t *testing.T, profileID string) prompts.Reader {
 	t.Helper()
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	r, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: profileID,
+	r, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: profileID,
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader "+profileID, err)
 	return r

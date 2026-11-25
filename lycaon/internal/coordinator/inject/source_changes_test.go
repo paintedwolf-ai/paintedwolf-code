@@ -31,14 +31,16 @@ func sourceChangesTestReader(t *testing.T, withSourceHistory, mutating bool) pro
 	} else {
 		plan = plan.Without("source_history")
 	}
-	r, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: surfaceID,
+	r, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plan,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: surfaceID,
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
 	})
 	testutil.FailErr(t, "sourceChangesTestReader", err)
 	return r
@@ -192,12 +194,14 @@ func TestTruncatedLineAndMutationWarningFollowReaderState(t *testing.T) {
 	}
 
 	// Paired witness: deferred/loadable source_history on explore_readonly teaches request_tools(need="source_history").
-	exploreFloor, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "explore_readonly",
+	exploreFloor, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "explore_readonly",
+		Declared:  true,
 	})
 	testutil.FailErr(t, "exploreFloor reader", err)
 	loadable := inject.RenderSourceChangesBlock(context.Background(), renderer, exploreFloor, "sess-brief-test", inject.SourceChangeBrief{Truncated: true})

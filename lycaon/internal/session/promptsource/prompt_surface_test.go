@@ -1,17 +1,16 @@
 package promptsource
 
 import (
-	"context"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/loading"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,7 +26,7 @@ func TestPromptSurfaceNamesEachToolsSourceAndTheUnitsItAttached(t *testing.T) {
 		Loading: &loading.Service{Ledger: ledger},
 	}
 	offered := []string{"read", "edit", "update_progress"}
-	surface, err := m.PromptSurface(t.Context(), &api.Session{ID: "session"}, prompts.CoordinatorProfileID, offered)
+	surface, err := m.PromptSurface(t.Context(), &api.Session{ID: "session"}, coordinatorRequestReader(t, offered, nil), offered)
 	testutil.FailErr(t, "build prompt surface", err)
 	want := []trainingcapture.OfferedTool{{Tool: "read", Source: "standing"}, {Tool: "edit", Source: "predicted"}, {Tool: "update_progress", Source: "companion", With: "edit"}}
 	if !slices.Equal(surface.Tools, want) {
@@ -53,49 +52,17 @@ func TestPromptSurfaceNamesEachToolsSourceAndTheUnitsItAttached(t *testing.T) {
 	}
 }
 
-// verify carries a narrowed schema (socks_proxy only) while command is offered with nil schema.
-func TestToolProceduresPartialSchemasKeepExactPerToolCapabilities(t *testing.T) {
-	reg, err := anchor.LoadRegistryFromConfigRoot()
-	testutil.FailErr(t, "load anchor registry", err)
-	t.Cleanup(anchor.SetAnchorsFor(func(context.Context, string) *anchor.Registry { return reg }))
-	narrowedVerify := map[string]any{
-		"type":       "object",
-		"properties": map[string]any{"socks_proxy": map[string]any{"type": "boolean"}},
-	}
-	m := &Context{
-		Prompts: prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()}),
-	}
-	sess := &api.Session{ID: "proc-partial", AgentType: "implementer", WorkspacePath: t.TempDir(), Posture: api.SessionPostureBuild}
-
-	partialCtx := prompts.WithProjectedSchemas(t.Context(), map[string]map[string]any{
-		"verify": narrowedVerify,
+// coordinatorRequestReader is a coordinator request offering names.
+func coordinatorRequestReader(t *testing.T, offered []string, schemas map[string]map[string]any) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
+	reader, err := prompts.NewReader(prompts.HostFacts{Profiles: profiles, RootCount: 1, WebSearch: true}, prompts.TurnProjection{
+		ProfileID:        prompts.CoordinatorProfileID,
+		Plan:             toolsurface.Compile(offered, nil),
+		Offered:          offered,
+		ProjectedSchemas: schemas,
 	})
-	reader, err := m.procedureReader(partialCtx, sess, "implementer", []string{"command", "verify"})
-	testutil.FailErr(t, "procedureReader partial", err)
-	facts := reader.Facts()
-	if got, _ := facts["runner_socks_proxy_tools"].([]string); !slices.Equal(got, []string{"verify"}) {
-		t.Fatalf("runner_socks_proxy_tools = %v, want [verify]", got)
-	}
-	if got, _ := facts["runner_capability_request_tools"].([]string); len(got) != 0 {
-		t.Fatalf("runner_capability_request_tools = %v, want empty", got)
-	}
-	if facts["profile_has_command"] != true || facts["can_command_verify"] != true {
-		t.Fatalf("command presence/effect facts lost: has=%v verify=%v", facts["profile_has_command"], facts["can_command_verify"])
-	}
-
-	block, err := m.ToolProcedures(partialCtx, sess, "implementer", []string{"command", "verify"})
-	testutil.FailErr(t, "ToolProcedures partial", err)
-	if !strings.Contains(block, "socks_proxy") {
-		t.Fatalf("procedure block dropped verify's socks_proxy:\n%s", block)
-	}
-	if !strings.Contains(block, "command(verification: true)") {
-		t.Fatalf("procedure block lost the command verification call:\n%s", block)
-	}
-
-	emptyCtx := prompts.WithProjectedSchemas(t.Context(), map[string]map[string]any{})
-	emptyBlock, err := m.ToolProcedures(emptyCtx, sess, "implementer", []string{"command", "verify"})
-	testutil.FailErr(t, "ToolProcedures empty", err)
-	if strings.Contains(emptyBlock, "socks_proxy") {
-		t.Fatalf("empty projected map fell back to raw catalog schemas:\n%s", emptyBlock)
-	}
+	testutil.FailErr(t, "request reader", err)
+	return reader
 }

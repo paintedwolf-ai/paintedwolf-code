@@ -3,9 +3,10 @@ package promptloop
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/tools"

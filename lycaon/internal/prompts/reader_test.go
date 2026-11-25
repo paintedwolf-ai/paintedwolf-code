@@ -19,31 +19,41 @@ func TestNewReaderRefusesIncompleteInput(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		in   prompts.ReaderInput
+		host prompts.HostFacts
+		turn prompts.TurnProjection
 	}{
 		{
 			name: "nil profiles",
-			in:   prompts.ReaderInput{ProfileID: "implement", Plan: plan},
+			turn: prompts.TurnProjection{ProfileID: "implement", Plan: plan},
 		},
 		{
 			name: "empty profile ID",
-			in:   prompts.ReaderInput{Profiles: profiles, Plan: plan},
+			host: prompts.HostFacts{Profiles: profiles},
+			turn: prompts.TurnProjection{Plan: plan},
 		},
 		{
 			name: "unknown profile ID",
-			in:   prompts.ReaderInput{ProfileID: "unknown_profile", Profiles: profiles, Plan: plan},
+			host: prompts.HostFacts{Profiles: profiles},
+			turn: prompts.TurnProjection{ProfileID: "unknown_profile", Plan: plan},
 		},
 		{
-			name: "surface without compiled plan",
-			in:   prompts.ReaderInput{ProfileID: prompts.CoordinatorProfileID, SurfaceID: "implement_investigate", Profiles: profiles},
+			name: "request without compiled plan",
+			host: prompts.HostFacts{Profiles: profiles},
+			turn: prompts.TurnProjection{ProfileID: prompts.CoordinatorProfileID, SurfaceID: "implement_investigate"},
+		},
+		{
+			name: "worker request without compiled plan",
+			host: prompts.HostFacts{Profiles: profiles},
+			turn: prompts.TurnProjection{ProfileID: "implement", Offered: []string{"command"}},
 		},
 		{
 			name: "unknown surface ID",
-			in:   prompts.ReaderInput{ProfileID: prompts.CoordinatorProfileID, SurfaceID: "unknown_surface", Plan: plan, Profiles: profiles},
+			host: prompts.HostFacts{Profiles: profiles},
+			turn: prompts.TurnProjection{ProfileID: prompts.CoordinatorProfileID, SurfaceID: "unknown_surface", Plan: plan},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := prompts.NewReader(tc.in); err == nil {
+			if _, err := prompts.NewReader(tc.host, tc.turn); err == nil {
 				t.Fatalf("NewReader(%s) succeeded, want error", tc.name)
 			}
 		})
@@ -92,13 +102,15 @@ func TestReaderHeldComposesOfferedToolsAndReachMarks(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: tc.profileID,
-				SurfaceID: tc.surfaceID,
-				Plan:      toolsurface.Compile(tc.offered, tc.requestable),
+			reader, err := prompts.NewReader(prompts.HostFacts{
 				Profiles:  profiles,
 				RootCount: 1,
 				WebSearch: true,
+			}, prompts.TurnProjection{
+				ProfileID: tc.profileID,
+				SurfaceID: tc.surfaceID,
+				Plan:      toolsurface.Compile(tc.offered, tc.requestable),
+				Offered:   (toolsurface.Compile(tc.offered, tc.requestable)).ImmediateNames(),
 			})
 			testutil.FailErr(t, "NewReader", err)
 

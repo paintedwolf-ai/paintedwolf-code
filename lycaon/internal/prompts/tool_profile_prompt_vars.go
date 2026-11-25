@@ -148,7 +148,7 @@ func holdsAllCommandPrograms(held map[string]bool, programs ...string) bool {
 }
 
 func deriveOfferedGitFacts(
-	in ReaderInput,
+	in HostFacts,
 	hasAnyGit bool,
 	held map[string]bool,
 ) (canGitRead, canAnyGitRead, canGitCommit, canGitBisect bool) {
@@ -167,7 +167,7 @@ func deriveOfferedGitFacts(
 }
 
 func deriveLoadableGitFacts(
-	in ReaderInput,
+	in HostFacts,
 	canRequestCommand, canGitRead, canGitCommit, canGitBisect bool,
 	loadableHeld map[string]bool,
 ) (canRequestGitRead, canRequestGitCommit, canRequestGitBisect bool) {
@@ -183,7 +183,7 @@ func deriveLoadableGitFacts(
 }
 
 func resolveProjectedToolSchemas(
-	in ReaderInput,
+	projected map[string]map[string]any,
 	profile sandbox.ToolProfile,
 	offered []string,
 	schemas *toolschema.Config,
@@ -193,9 +193,9 @@ func resolveProjectedToolSchemas(
 	out := make(map[string]map[string]any, len(offered))
 	// An explicitly supplied projection map freezes tool schemas; missing entries
 	// certify zero schema fields instead of falling back to the raw catalog.
-	if in.ProjectedSchemas != nil {
+	if projected != nil {
 		for _, name := range offered {
-			if explicit, ok := in.ProjectedSchemas[name]; ok && explicit != nil {
+			if explicit, ok := projected[name]; ok && explicit != nil {
 				out[name] = explicit
 			}
 		}
@@ -329,7 +329,7 @@ func loadAgentSurfaceForCheck(agentType string) (AgentToolSurfaceData, []sandbox
 	if err != nil {
 		return AgentToolSurfaceData{}, nil, profileID, false
 	}
-	surface, err := LoadAgentToolSurface(profileID, nil, nil, ReaderInput{}, profiles)
+	surface, err := LoadAgentToolSurface(profileID, nil, nil, nil, nil, profiles)
 	if err != nil {
 		return AgentToolSurfaceData{}, profiles, profileID, false
 	}
@@ -350,7 +350,7 @@ func ToolProfileMutationCapable(profile sandbox.ToolProfile) bool {
 	if strings.TrimSpace(profile.ID) == "" {
 		return false
 	}
-	surface, err := LoadAgentToolSurface(profile.ID, nil, nil, ReaderInput{}, []sandbox.ToolProfile{profile})
+	surface, err := LoadAgentToolSurface(profile.ID, nil, nil, nil, nil, []sandbox.ToolProfile{profile})
 	return err == nil && ProfileMutationCapable(surface)
 }
 

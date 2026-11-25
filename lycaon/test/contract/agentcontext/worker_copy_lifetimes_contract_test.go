@@ -78,7 +78,9 @@ func TestWorkerCopyBranchCoverageAndMissingFacts(t *testing.T) {
 		}
 	}
 
-	if reader, err := prompts.NewReader(prompts.ReaderInput{}); err == nil || reader.Valid() {
+	if reader, err := prompts.NewReader(prompts.HostFacts{}, prompts.TurnProjection{
+		Declared: true,
+	}); err == nil || reader.Valid() {
 		t.Fatalf("withheld ProfileID succeeded: valid=%v err=%v", reader.Valid(), err)
 	}
 	outVars := map[string]any{}
@@ -203,15 +205,16 @@ func TestWorkerCopyLifetimesAndSkillHistory(t *testing.T) {
 	for _, name := range plan.AddressableNames() {
 		loaded[name] = true
 	}
-	readerA, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: surface.SurfaceImplementDispatch,
+	readerA, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plan,
-		Loaded:    loaded,
 		HasGit:    true,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: surface.SurfaceImplementDispatch,
+		Plan:      readerLoadedPlan(plan, loaded),
+		Offered:   readerLoadedOffer(plan, nil, loaded),
 	})
 	contractcheck.FailErr(t, "skill reader A", err)
 	varsA, err := prompts.SkillVars(readerA)

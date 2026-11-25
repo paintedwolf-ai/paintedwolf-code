@@ -2,13 +2,14 @@ package assembly
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
-	"reflect"
 	"slices"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/catalogview"
@@ -130,14 +131,14 @@ func TestBoardOrientationRefreshesAtomicTurnFrameBeforeRender(t *testing.T) {
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
 	source := &advancingTurnFrameSource{phase: "boot", revision: 1}
 	eng := &AssemblyEngine{}
-	eng.SetDeps(AssemblyDeps{
+	eng.SetDeps(withTestTurnReader(AssemblyDeps{
 		Prompts: pe, Injects: prompts.NewInjectRenderer(pe),
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: source,
 		Board:            advancingBoard{},
 		BoardOrientReady: advancingOrientRecorder{source: source},
 		PromptToolLister: prompttest.CoordinatorTools,
-	})
+	}))
 	sess := &api.Session{ID: "atomic-frame", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	eng.BeginPromptTurn(sess.ID, "")
 	msgs, err := eng.BuildCompletionMessages(context.Background(), sess, nil, nil)
@@ -188,14 +189,14 @@ func TestBoardOrientationRecordsInjectForRefreshedRun(t *testing.T) {
 	source := &childStartTurnFrameSource{runID: "parent", phase: "execute"}
 	recorder := &childStartOrientRecorder{source: source}
 	eng := &AssemblyEngine{}
-	eng.SetDeps(AssemblyDeps{
+	eng.SetDeps(withTestTurnReader(AssemblyDeps{
 		Prompts: pe, Injects: prompts.NewInjectRenderer(pe),
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: source,
 		Board:            advancingBoard{},
 		BoardOrientReady: recorder,
 		PromptToolLister: prompttest.CoordinatorTools,
-	})
+	}))
 	sess := &api.Session{ID: "child-start-frame", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	eng.BeginPromptTurn(sess.ID, "")
 	msgs, err := eng.BuildCompletionMessages(context.Background(), sess, nil, nil)
@@ -219,12 +220,12 @@ func TestWorkerPackBoardFollowsHistory(t *testing.T) {
 	boardEng := NewBoardEngine(placementStubBoardBuilder{hash: "worker-board"}, nil, nil)
 	boardEng.SetInjectRenderer(inj)
 	eng := &AssemblyEngine{}
-	eng.SetDeps(AssemblyDeps{
+	eng.SetDeps(withTestTurnReader(AssemblyDeps{
 		Prompts: pe,
 		Injects: inj,
 		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		Board:   boardEng,
-	})
+	}))
 	sess := &api.Session{
 		ID: "worker-board-tail", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,
 		Posture: api.SessionPostureBuild, AgentType: "implementer", WorkspacePath: t.TempDir(),
@@ -422,10 +423,7 @@ func projectCommandJobsTarget(
 	t.Helper()
 	pDeps := promptloop.ContextDeps{
 		Policy: toolpolicy.NewEngine(toolpolicy.EngineDeps{
-			ToolLister: &commandJobsToolLister{
-				sess:         sess,
-				promptLister: promptLister,
-			},
+			ToolLister:       fixtureToolLister{sess: sess, list: promptLister},
 			ProjectRootCount: func(context.Context, *api.Session) int { return rootCount },
 		}),
 		ImplementSessionState: implState,
@@ -437,12 +435,12 @@ func projectCommandJobsTarget(
 			WebSearchEnabled: func() bool { return webSearch },
 		},
 	}
-	targetMetas, _, _, err := promptloop.ProjectTurnTools(t.Context(), pDeps, sess, history, inject.CoordinatorTurnFrame{})
+	turn, err := promptloop.ProjectTurnTools(t.Context(), pDeps, sess, history, inject.CoordinatorTurnFrame{})
 	testutil.FailErr(t, "ProjectTurnTools", err)
 
-	targetOffered := make([]string, 0, len(targetMetas))
+	targetOffered := make([]string, 0, len(turn.Metas))
 	var targetWaitSchema map[string]any
-	for _, meta := range targetMetas {
+	for _, meta := range turn.Metas {
 		targetOffered = append(targetOffered, meta.Name)
 		if meta.Name == "wait" {
 			targetWaitSchema = meta.ArgsSchema
@@ -556,6 +554,10 @@ func runCommandJobsAxisCase(
 	t.Helper()
 	profiles := configureCoordinatorTestProfiles(baseProfiles, tc.waitConds, tc.denyJobControl)
 	promptLister := buildProjectedTestPromptLister(profiles, schemas, tc.waitSchemaMode)
+	if promptLister == nil {
+		// A host that lists no tools projects requests without them.
+		promptLister = func(context.Context, *api.Session, string) ([]tools.ToolMeta, error) { return nil, nil }
+	}
 
 	implState := func(context.Context, *api.Session) surface.ImplementSessionState {
 		if tc.workersInFl > 0 {
@@ -583,7 +585,7 @@ func runCommandJobsAxisCase(
 	}
 
 	eng := &AssemblyEngine{}
-	eng.SetDeps(AssemblyDeps{
+	eng.SetDeps(withTestTurnReader(AssemblyDeps{
 		Prompts:               pe,
 		Injects:               prompts.NewInjectRenderer(pe),
 		Limits:                func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
@@ -595,7 +597,7 @@ func runCommandJobsAxisCase(
 		SessionView: func(context.Context, *api.Session) *catalogview.View {
 			return (&catalogview.View{ToolSchemas: schemas}).WithToolProfiles(profiles)
 		},
-	})
+	}))
 
 	sess := &api.Session{
 		ID:            "cmd-jobs-" + strings.ReplaceAll(tc.name, " ", "-"),
@@ -606,9 +608,9 @@ func runCommandJobsAxisCase(
 	}
 
 	targetOffered, targetWaitSchema := projectCommandJobsTarget(t, sess, history, promptLister, implState, tc.webSearch, rootCount)
-	gotReader, gotWaitSchema, err := testPromptSurface(eng).commandJobsReader(t.Context(), sess, true, inject.CoordinatorTurnFrame{}, history, nil, liveJobs, nil)
+	gotReader, gotWaitSchema, err := testPromptSurface(eng).commandJobsReader(t.Context(), sess, true, inject.CoordinatorTurnFrame{}, history, nil)
 	testutil.FailErr(t, "commandJobsReader", err)
-	if !reflect.DeepEqual(gotReader.Offered(), targetOffered) {
+	if !slices.Equal(gotReader.Offered(), targetOffered) {
 		t.Fatalf("commandJobsReader offered = %v, want target request %v", gotReader.Offered(), targetOffered)
 	}
 	if gotReader.Facts()["has_git"] != false || gotReader.WebSearch() != tc.webSearch {
@@ -624,4 +626,16 @@ func runCommandJobsAxisCase(
 	msgs, err := eng.BuildCompletionMessages(t.Context(), sess, history, nil)
 	testutil.FailErr(t, "BuildCompletionMessages", err)
 	assertCommandJobsInjectMatchesTarget(t, msgs, targetOffered, targetWaitSchema, tc.wantPromoted)
+}
+
+type fixtureToolLister struct {
+	sess *api.Session
+	list PromptToolLister
+}
+
+func (l fixtureToolLister) List(ctx context.Context, filter platform.ToolFilter) ([]tools.ToolMeta, error) {
+	if l.list == nil {
+		return nil, nil
+	}
+	return l.list(ctx, l.sess, filter.ProfileID)
 }

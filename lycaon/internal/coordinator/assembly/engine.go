@@ -105,6 +105,9 @@ type Workers struct {
 	Branch func(ctx context.Context, sess *api.Session) (string, bool)
 }
 
+// TurnReaderSource derives the Reader of the request a frame projects.
+type TurnReaderSource func(ctx context.Context, sess *api.Session, history []api.Message, frame inject.CoordinatorTurnFrame) (prompts.Reader, error)
+
 type AssemblyDeps struct {
 	Prompts                 prompts.PromptTemplateEngine
 	Injects                 *prompts.InjectRenderer
@@ -130,6 +133,9 @@ type AssemblyDeps struct {
 	BoardOrientReady BoardOrientReadyRecorder
 	EnrichHistory    func(sessionID string, history []api.Message) []api.Message
 	PromptToolLister PromptToolLister
+	// TurnReader projects a request through the live turn pipeline; the
+	// runtime binds it.
+	TurnReader TurnReaderSource
 	// ReadMessageWindow reads canonical rows for projections that must not vary
 	// with compaction. Unwired, they read the supplied history.
 	ReadMessageWindow     inject.MessageWindowReader

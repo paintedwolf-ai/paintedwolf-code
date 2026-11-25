@@ -122,20 +122,20 @@ func skillBoundaryAuthorities(stock *Stock, coordPairs []coordRep, loaded []skil
 		}
 		plan := toolsurface.Compile(sortedOff, deferred)
 		visible := append(slices.Clone(sortedOff), deferred...)
-		r, rErr := prompts.NewReader(prompts.ReaderInput{
-			ProfileID:         profileID,
+		r, rErr := prompts.NewReader(prompts.HostFacts{
 			SessionMode:       string(api.SessionModeAgent),
 			Profiles:          profiles,
-			Plan:              plan,
-			Loaded:            loadedMap,
-			Visible:           visible,
 			Schemas:           stock.Schemas,
-			ProjectedSchemas:  schemas,
 			RootCount:         rootCount,
 			HasGit:            hasGit,
 			OnWorkerBranch:    onWorkerBranch,
 			WebSearch:         webSearch,
 			SessionScratchDir: scratchDir,
+		}, prompts.TurnProjection{
+			ProfileID:        profileID,
+			Plan:             readerLoadedPlan(plan, loadedMap),
+			Offered:          readerLoadedOffer(plan, visible, loadedMap),
+			ProjectedSchemas: schemas,
 		})
 		if rErr != nil {
 			return skillBoundaryAuth{}, rErr

@@ -153,7 +153,7 @@ func TestCoordinatorToolsForTurnTrimsEveryDiscoveredProfile(t *testing.T) {
 	ids := discoveredPromptProfileIDs(t)
 	offered := 0
 	for _, id := range ids {
-		got, _, _, err := loop.Context.coordinatorToolsForTurn(
+		turn, err := loop.Context.coordinatorToolsForTurn(
 			context.Background(),
 			&api.Session{ID: "child-1", ParentSessionID: "parent-1", AgentType: id},
 			id,
@@ -165,6 +165,7 @@ func TestCoordinatorToolsForTurnTrimsEveryDiscoveredProfile(t *testing.T) {
 			nil,
 		)
 		testutil.FailErr(t, "compile coordinator tools", err)
+		got := turn.Metas
 		if len(got) == 0 {
 			continue
 		}

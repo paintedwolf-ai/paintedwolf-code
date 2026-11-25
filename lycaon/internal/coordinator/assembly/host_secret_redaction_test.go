@@ -12,7 +12,7 @@ import (
 
 func TestBuildCompletionMessagesProjectsHostRedactionAsSystemAuthority(t *testing.T) {
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{})
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{}))
 	history := []api.Message{{
 		ID: "tool-1", Role: api.MessageRoleTool, Content: "token=[REDACTED]",
 		HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{{Field: "content", Start: 0, Length: 10, Kind: api.RedactionKindSecret}}),

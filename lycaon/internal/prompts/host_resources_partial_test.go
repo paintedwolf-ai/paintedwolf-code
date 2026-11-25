@@ -22,13 +22,15 @@ func TestHostResourcesPartialGroupsPresenceAndCap(t *testing.T) {
 	})
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   []string{"read", "write", "edit", "command", "skills_read"},
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Offered:   []string{"read", "write", "edit", "command", "skills_read"},
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader", err)
 	got, err := prompts.RenderPersona(context.Background(), engine, "implementer", reader, vars)
@@ -56,13 +58,15 @@ func TestHostResourcesPartialOmitsEmptyInventory(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   []string{"read", "write", "edit", "command"},
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Offered:   []string{"read", "write", "edit", "command"},
+		Declared:  true,
 	})
 	testutil.FailErr(t, "NewReader", err)
 	got, err := prompts.RenderPersona(context.Background(), engine, "implementer", reader, nil)

@@ -18,10 +18,7 @@ func factsFromOffered(t *testing.T, offered []string, webSearch bool) map[string
 	for _, name := range offered {
 		tools[name] = true
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker",
-		Plan:      toolsurface.Compile(offered, nil),
-		Visible:   offered,
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles: []sandbox.ToolProfile{{
 			ID:             "worker",
 			Tools:          tools,
@@ -29,6 +26,10 @@ func factsFromOffered(t *testing.T, offered []string, webSearch bool) map[string
 		}},
 		RootCount: 1,
 		WebSearch: webSearch,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Plan:      toolsurface.Compile(offered, nil),
+		Offered:   offered,
 	})
 	testutil.FailErr(t, "NewReader", err)
 	return reader.Facts()
@@ -309,9 +310,7 @@ func TestCommandProgressGuidanceFollowsOfferedEffects(t *testing.T) {
 	}
 	readOnly, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 	testutil.FailErr(t, "read-only effects", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "worker",
-		Plan:      toolsurface.Compile(offered, nil),
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles: []sandbox.ToolProfile{{
 			ID: "worker",
 			Tools: map[string]bool{
@@ -323,6 +322,10 @@ func TestCommandProgressGuidanceFollowsOfferedEffects(t *testing.T) {
 			},
 			CommandEffects: readOnly,
 		}},
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Plan:      toolsurface.Compile(offered, nil),
+		Offered:   (toolsurface.Compile(offered, nil)).ImmediateNames(),
 	})
 	testutil.FailErr(t, "new reader", err)
 	vars = reader.Facts()

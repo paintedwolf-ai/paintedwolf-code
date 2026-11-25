@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -100,7 +101,7 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 		return guidance.NewRefusal("DOOM_LOOP_REPEAT", block), nil
 	}
 	var closeout promptloop.TurnCloseoutCause
-	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ prompts.Reader, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		client.closeout = true
 		closeout = cause
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
@@ -179,7 +180,7 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 		}
 		return guidance.NewRefusal("DOOM_LOOP_REPEAT", block), nil
 	}
-	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ prompts.Reader, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
@@ -237,7 +238,7 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 		}
 		return guidance.NewRefusal("DOOM_LOOP_REPEAT", block), nil
 	}
-	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ prompts.Reader, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
 	}
 	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
@@ -370,7 +371,7 @@ func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Context.LoadedTools = workersLoaded
-	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ prompts.Reader, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "forced closeout: " + cause.Text()}
 	}
 
@@ -475,7 +476,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 		escalateCalls++
 		return guidance.NewRefusal("DOOM_LOOP_CODE_REPEAT", "Escalated: this exact guidance keeps failing to land")
 	}
-	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ prompts.Reader, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		client.closeout = true
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
 	}

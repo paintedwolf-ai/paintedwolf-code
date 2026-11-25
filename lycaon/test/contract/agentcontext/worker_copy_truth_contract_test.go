@@ -43,14 +43,15 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 		for _, name := range plan.AddressableNames() {
 			loaded[name] = true
 		}
-		reader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: prompts.CoordinatorProfileID,
-			SurfaceID: id,
+		reader, err := prompts.NewReader(prompts.HostFacts{
 			Profiles:  profiles,
-			Plan:      plan,
-			Loaded:    loaded,
 			RootCount: 1,
 			WebSearch: true,
+		}, prompts.TurnProjection{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: id,
+			Plan:      readerLoadedPlan(plan, loaded),
+			Offered:   readerLoadedOffer(plan, nil, loaded),
 		})
 		contractcheck.FailErr(t, "new coordinator reader", err)
 		for _, cell := range cells {
@@ -96,14 +97,15 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 		}
 		for _, viewKind := range []string{"materialized", "mounted"} {
 			for _, hasGit := range []bool{false, true} {
-				workerReader, err := prompts.NewReader(prompts.ReaderInput{
-					ProfileID: profile.ID,
+				workerReader, err := prompts.NewReader(prompts.HostFacts{
 					Profiles:  []sandbox.ToolProfile{profile},
-					Plan:      toolsurface.Compile(reachable, nil),
-					Visible:   reachable,
 					RootCount: 1,
 					HasGit:    hasGit,
 					WebSearch: true,
+				}, prompts.TurnProjection{
+					ProfileID: profile.ID,
+					Plan:      toolsurface.Compile(reachable, nil),
+					Offered:   reachable,
 				})
 				contractcheck.FailErr(t, "new worker reader", err)
 				out, err := inject.RenderWorkerTaskAssignment(context.Background(), renderer, inject.WorkerTaskAssignmentInput{
@@ -147,14 +149,15 @@ func TestWorkerCopyAdmissionAgreement(t *testing.T) {
 	for _, name := range promotePlan.AddressableNames() {
 		loaded[name] = true
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: surface.SurfaceImplementOverlayPromote,
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      promotePlan,
-		Loaded:    loaded,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: surface.SurfaceImplementOverlayPromote,
+		Plan:      readerLoadedPlan(promotePlan, loaded),
+		Offered:   readerLoadedOffer(promotePlan, nil, loaded),
 	})
 	contractcheck.FailErr(t, "new promote reader", err)
 

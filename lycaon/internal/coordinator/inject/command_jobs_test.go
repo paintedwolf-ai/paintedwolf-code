@@ -43,20 +43,24 @@ func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 	plans, err := surface.CompileToolPlans(1)
 	testutil.FailErr(t, "CompileToolPlans", err)
 
-	fullCoord, err := prompts.NewReader(prompts.ReaderInput{
+	fullCoord, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: "implement_investigate",
-		Profiles:  profiles,
 		Plan:      plans["implement_investigate"].Promote("command_output", "command_stop", "held_result", "held_stop", "wait"),
-		RootCount: 1,
-		WebSearch: true,
+		Offered:   (plans["implement_investigate"].Promote("command_output", "command_stop", "held_result", "held_stop", "wait")).ImmediateNames(),
 	})
 	testutil.FailErr(t, "fullCoord reader", err)
-	workerReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "implement",
+	workerReader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "implement",
+		Declared:  true,
 	})
 	testutil.FailErr(t, "worker reader", err)
 
@@ -93,13 +97,15 @@ func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 	}
 
 	// Paired witness 2: deferred/loadable surface (floor-only implement_investigate) teaches request_tools(need=...).
-	floorCoord, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_investigate",
+	floorCoord, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plans["implement_investigate"],
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Plan:      plans["implement_investigate"],
+		Offered:   (plans["implement_investigate"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "floorCoord reader", err)
 	deferredBlock := inject.RenderCommandJobsBlock(
@@ -113,13 +119,15 @@ func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 	}
 
 	// Paired witness 3: closed surface without command_output, request_tools, or process_done wait.
-	parkCoord, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: "implement_park",
+	parkCoord, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Plan:      plans["implement_park"],
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_park",
+		Plan:      plans["implement_park"],
+		Offered:   (plans["implement_park"]).ImmediateNames(),
 	})
 	testutil.FailErr(t, "parkCoord reader", err)
 	parkNoProcessWait := inject.RenderCommandJobsBlock(
@@ -137,21 +145,25 @@ func TestRenderCommandJobsBlockListsHeldCallsWithTheirControls(t *testing.T) {
 	testutil.FailErr(t, "LoadToolProfiles", err)
 	plans, err := surface.CompileToolPlans(1)
 	testutil.FailErr(t, "CompileToolPlans", err)
-	withHeld, err := prompts.NewReader(prompts.ReaderInput{
+	withHeld, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: "implement_investigate",
-		Profiles:  profiles,
 		Plan:      plans["implement_investigate"].Promote("held_result", "held_stop", "wait"),
-		RootCount: 1,
-		WebSearch: true,
+		Offered:   (plans["implement_investigate"].Promote("held_result", "held_stop", "wait")).ImmediateNames(),
 	})
 	testutil.FailErr(t, "withHeld reader", err)
-	withoutHeld, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "plan_write_only",
+	withoutHeld, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
-		Visible:   []string{"command"},
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "plan_write_only",
+		Offered:   []string{"command"},
+		Declared:  true,
 	})
 	testutil.FailErr(t, "withoutHeld reader", err)
 
@@ -177,11 +189,13 @@ func TestRenderCommandJobsBlockListsHeldCallsWithTheirControls(t *testing.T) {
 func TestCommandJobsBoundCommandPreviewWithoutDroppingHandle(t *testing.T) {
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	coordReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
+	coordReader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		Declared:  true,
 	})
 	testutil.FailErr(t, "coord reader", err)
 	block := inject.RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), coordReader, projectedWaitSchemaForTest(t, []string{"process_done"}), "sess-inject-test", []bgprocess.JobSnapshot{{

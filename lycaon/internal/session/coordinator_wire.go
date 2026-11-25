@@ -32,7 +32,7 @@ func acquireCoordinatorSources(m *Host, store *sessionstore.Repositories, client
 		return scanWait.InFlight != nil && scanWait.InFlight(ctx, id)
 	}
 	m.Coordinator.PolicyIndex.SetWorkspaceRoots(m.Workers.Workspaces.BoardRoots)
-	m.Coordinator.Context = &promptsource.Context{PolicyIndex: m.Coordinator.PolicyIndex, Frame: nil, Guards: m.Coordinator.Guards, Limits: m.Limits, Loading: m.Coordinator.Loading, Pages: nil, Policy: m.ToolPolicy, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Runtime: nil, Sessions: store.Sessions, ToolContext: m.ToolContext, Tools: registry, WebResearch: nil, WorkerState: m.Workers.State, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces}
+	m.Coordinator.Context = &promptsource.Context{ReaderFacts: m.ReaderFacts, PolicyIndex: m.Coordinator.PolicyIndex, Frame: nil, Guards: m.Coordinator.Guards, Limits: m.Limits, Loading: m.Coordinator.Loading, Pages: nil, Policy: m.ToolPolicy, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Runtime: nil, Sessions: store.Sessions, ToolContext: m.ToolContext, Tools: registry, WebResearch: nil, WorkerState: m.Workers.State, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces}
 	m.Coordinator.Tools = &promptsource.Tools{
 		Results: &promptsource.ToolResults{Batch: m.Coordinator.Batch, Guards: m.Coordinator.Guards,
 			Guidance: m.Coordinator.Guidance, Policy: m.ToolPolicy, WorkerState: m.Workers.State},
@@ -72,12 +72,9 @@ func bindCoordinatorRuntime(m *Host, store *sessionstore.Repositories) {
 	m.Admission.SetLoop(runtime.CoordinatorLoop().Nudges, runtime.CoordinatorLoop().Cycles)
 	m.ProjectControl.SetAnchors(runtime.Anchors())
 	m.Coordinator.Nudges.SetSurface(runtime)
-	m.Coordinator.Nudges.SetWebSearch(m.Coordinator.Assembly.WebSearchEnabled)
-	m.Coordinator.Nudges.SetWorkerBranch(m.Workers.Workspaces.OnWorkerBranch)
-	m.Coordinator.Nudges.SetPromptSurface(m.Coordinator.Assembly.PromptSurface)
-	if store != nil && store.Transcript != nil {
-		m.Coordinator.Nudges.SetHistory(store.Transcript.GetMessages)
-	}
+	m.ReaderFacts.Bind(m.Coordinator.Context.WebSearchEnabled, m.Coordinator.Context.RunContext)
+	m.Coordinator.Guidance.SetRequestReader(m.Coordinator.Context.NextRequestReader)
+	m.Workers.SetRequestReader(m.Coordinator.Context.NextRequestReader)
 	m.Coordinator.Guards.SetSurface(runtime)
 	m.Coordinator.Batch.SetLoop(runtime.CoordinatorLoop().Waits)
 	m.Runner.Settlement.SetRuntime(runtime)

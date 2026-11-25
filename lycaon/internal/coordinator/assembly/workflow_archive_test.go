@@ -38,13 +38,13 @@ func boundArchiveEngine(t *testing.T, bound archiveManifests) *AssemblyEngine {
 	gates, err := feedback.LoadGateFeedbackCatalogWithCatalog(eff)
 	testutil.FailErr(t, "load gate feedback", err)
 	engine := &AssemblyEngine{}
-	engine.SetDeps(AssemblyDeps{
+	engine.SetDeps(withTestTurnReader(AssemblyDeps{
 		Prompts:                 pe,
 		Injects:                 prompts.NewInjectRenderer(pe),
 		GateFeedback:            gates,
 		ProjectOverlayRootPaths: func(context.Context, *api.Session) []string { return nil },
 		Workflows:               bound,
-	})
+	}))
 	return engine
 }
 

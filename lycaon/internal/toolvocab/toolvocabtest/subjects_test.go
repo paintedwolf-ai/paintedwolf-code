@@ -35,36 +35,40 @@ func TestClaimSubjectsEvaluateAgainstTargetActorReader(t *testing.T) {
 
 	invPlan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_investigate"}, 1)
 	testutil.FailErr(t, "compile implement_investigate plan", err)
-	coordFloorReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:      prompts.CoordinatorProfileID,
-		SurfaceID:      "implement_investigate",
+	coordFloorReader, err := prompts.NewReader(prompts.HostFacts{
 		SessionMode:    string(api.SessionModeAgent),
 		Profiles:       profiles,
-		Plan:           invPlan,
 		Schemas:        schemas,
 		RootCount:      1,
 		HasGit:         true,
 		HasAnyGitRoot:  true,
 		WebSearch:      true,
 		SpawnAllowlist: spawn.AmbientAllowedAgents(),
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Plan:      invPlan,
+		Offered:   (invPlan).ImmediateNames(),
 	})
 	testutil.FailErr(t, "coord floor reader", err)
 
 	askProfile := surface.ResolveTurnProfile(api.CoordinatorRunContext{}, &api.Session{Mode: api.SessionModeAsk, Posture: api.SessionPostureBuild}, nil)
 	askPlan, err := surface.CompileToolPlan(askProfile, 1)
 	testutil.FailErr(t, "compile ask plan", err)
-	coordAskReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:      prompts.CoordinatorProfileID,
-		SurfaceID:      askProfile.SurfaceID,
+	coordAskReader, err := prompts.NewReader(prompts.HostFacts{
 		SessionMode:    string(api.SessionModeAsk),
 		Profiles:       profiles,
-		Plan:           askPlan,
 		Schemas:        schemas,
 		RootCount:      1,
 		HasGit:         true,
 		HasAnyGitRoot:  true,
 		WebSearch:      true,
 		SpawnAllowlist: prompts.ReadOnlyAgents(spawn.AmbientAllowedAgents()),
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: askProfile.SurfaceID,
+		Plan:      askPlan,
+		Offered:   (askPlan).ImmediateNames(),
 	})
 	testutil.FailErr(t, "coord ask reader", err)
 
@@ -167,8 +171,13 @@ func testDeferredAndHistoricalSubjects(
 	t.Run("SubjectFollowupLeg and SubjectSessionNextTurn evaluate non-closeout Reader", func(t *testing.T) {
 		engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{Catalog: eff})
 		closeoutOnlyProfile := []sandbox.ToolProfile{{ID: "closeout_only", Tools: map[string]bool{"complete_leg": true}}}
-		closeoutSelfReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "closeout_only", Profiles: closeoutOnlyProfile, Schemas: schemas, RootCount: 1,
+		closeoutSelfReader, err := prompts.NewReader(prompts.HostFacts{
+			Profiles:  closeoutOnlyProfile,
+			Schemas:   schemas,
+			RootCount: 1,
+		}, prompts.TurnProjection{
+			ProfileID: "closeout_only",
+			Declared:  true,
 		})
 		testutil.FailErr(t, "closeout self reader", err)
 
@@ -179,9 +188,9 @@ func testDeferredAndHistoricalSubjects(
 		})
 		testutil.FailErr(t, "render worker-closeout", rErr)
 
-		implAuth, err := toolvocabtest.ResolveWorkerAuthorityForSession(t.Context(), eff, api.SessionModeAgent, api.SessionPostureBuild, 1, true, true, false, "implementer")
+		implAuth, err := toolvocabtest.ResolveWorkerAuthorityForSession(t.Context(), eff, api.SessionModeAgent, api.SessionPostureBuild, 1, true, true, true, false, "implementer")
 		testutil.FailErr(t, "resolve implementer auth", err)
-		roWorkerAuth, err := toolvocabtest.ResolveWorkerAuthorityForSession(t.Context(), eff, api.SessionModeAsk, api.SessionPostureBuild, 1, true, true, false, "path-explorer")
+		roWorkerAuth, err := toolvocabtest.ResolveWorkerAuthorityForSession(t.Context(), eff, api.SessionModeAsk, api.SessionPostureBuild, 1, true, false, true, false, "path-explorer")
 		testutil.FailErr(t, "resolve path-explorer auth", err)
 
 		mutLegCtx := baseCtx
@@ -214,8 +223,13 @@ func testDeferredAndHistoricalSubjects(
 		}
 
 		zeroToolProfile := []sandbox.ToolProfile{{ID: "zero_closeout", Tools: map[string]bool{}}}
-		zeroSelfReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "zero_closeout", Profiles: zeroToolProfile, Schemas: schemas, RootCount: 1,
+		zeroSelfReader, err := prompts.NewReader(prompts.HostFacts{
+			Profiles:  zeroToolProfile,
+			Schemas:   schemas,
+			RootCount: 1,
+		}, prompts.TurnProjection{
+			ProfileID: "zero_closeout",
+			Declared:  true,
 		})
 		testutil.FailErr(t, "zero closeout reader", err)
 
@@ -319,13 +333,15 @@ func TestClaimLevelNegationAndRequestToolsBinding(t *testing.T) {
 	testutil.FailErr(t, "catalog with edit", err)
 
 	planWithEditAndVerifyDeferred := toolsurface.Compile([]string{"command", "request_tools"}, []string{"edit", "verify"})
-	readerWithEditReq, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "test_floor",
+	readerWithEditReq, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  customProfiles,
-		Plan:      planWithEditAndVerifyDeferred,
 		Schemas:   mergedSchemas,
 		RootCount: 1,
 		HasGit:    true,
+	}, prompts.TurnProjection{
+		ProfileID: "test_floor",
+		Plan:      planWithEditAndVerifyDeferred,
+		Offered:   (planWithEditAndVerifyDeferred).ImmediateNames(),
 	})
 	testutil.FailErr(t, "reader with edit requestable", err)
 
@@ -415,9 +431,14 @@ func TestClaimLevelNegationAndRequestToolsBinding(t *testing.T) {
 		}
 
 		planWithoutEdit := toolsurface.Compile([]string{"command", "request_tools"}, []string{"verify"})
-		readerWithoutEdit, rErr := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "test_floor", Profiles: customProfiles, Plan: planWithoutEdit,
-			Schemas: mergedSchemas, RootCount: 1,
+		readerWithoutEdit, rErr := prompts.NewReader(prompts.HostFacts{
+			Profiles:  customProfiles,
+			Schemas:   mergedSchemas,
+			RootCount: 1,
+		}, prompts.TurnProjection{
+			ProfileID: "test_floor",
+			Plan:      planWithoutEdit,
+			Offered:   (planWithoutEdit).ImmediateNames(),
 		})
 		testutil.FailErr(t, "reader without edit", rErr)
 		noEditCtx := evalCtx
@@ -476,12 +497,26 @@ func TestPostLoadSchemaProjectionAndLoadingOnlyAuthority(t *testing.T) {
 	testutil.FailErr(t, "catalog", err)
 	plan := toolsurface.Compile([]string{"request_tools"}, []string{"command", "edit"})
 
-	fullReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "postload_full", Profiles: fullProfiles, Plan: plan, Schemas: mergedSchemas, RootCount: 1, HasGit: true,
+	fullReader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  fullProfiles,
+		Schemas:   mergedSchemas,
+		RootCount: 1,
+		HasGit:    true,
+	}, prompts.TurnProjection{
+		ProfileID: "postload_full",
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
 	})
 	testutil.FailErr(t, "full reader", err)
-	roReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "postload_ro", Profiles: roProfiles, Plan: plan, Schemas: mergedSchemas, RootCount: 1, HasGit: true,
+	roReader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  roProfiles,
+		Schemas:   mergedSchemas,
+		RootCount: 1,
+		HasGit:    true,
+	}, prompts.TurnProjection{
+		ProfileID: "postload_ro",
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
 	})
 	testutil.FailErr(t, "ro reader", err)
 
@@ -505,7 +540,7 @@ func TestPostLoadSchemaProjectionAndLoadingOnlyAuthority(t *testing.T) {
 	} {
 		useCtx := fullCtx
 		if okProse == `Load `+"`command`"+` via `+"`request_tools(need=\"command\")`"+` before calling `+"`command(command=\"ls\", verification=true)`"+`.` {
-			implAuth, wErr := toolvocabtest.ResolveWorkerAuthorityForSession(t.Context(), eff, api.SessionModeAgent, api.SessionPostureBuild, 1, true, true, false, "implementer")
+			implAuth, wErr := toolvocabtest.ResolveWorkerAuthorityForSession(t.Context(), eff, api.SessionModeAgent, api.SessionPostureBuild, 1, true, true, true, false, "implementer")
 			testutil.FailErr(t, "implementer auth", wErr)
 			useCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(
 				fullReader, nil, reqOnlyMetas, toolvocabtest.WithPostLoadAuthority(fullPostSchemas, implAuth.PostLoadPrograms),
@@ -569,7 +604,7 @@ func TestPostLoadCommandModeAdmission(t *testing.T) {
 	testutil.FailErr(t, "vocab", err)
 
 	roWorkerAuth, err := toolvocabtest.ResolveWorkerAuthorityForSession(
-		t.Context(), eff, api.SessionModeAgent, api.SessionPostureSpec, 1, true, true, false, "path-explorer",
+		t.Context(), eff, api.SessionModeAgent, api.SessionPostureSpec, 1, true, false, true, false, "path-explorer",
 	)
 	testutil.FailErr(t, "ro worker auth", err)
 
@@ -583,8 +618,15 @@ func TestPostLoadCommandModeAdmission(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(stockSchemas, roProfiles, toolvocab.Provenance{})
 	testutil.FailErr(t, "catalog", err)
 	plan := toolsurface.Compile([]string{"request_tools"}, []string{"command"})
-	roReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: "postload_cmd_ro", Profiles: roProfiles, Plan: plan, Schemas: stockSchemas, RootCount: 1, HasGit: true,
+	roReader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  roProfiles,
+		Schemas:   stockSchemas,
+		RootCount: 1,
+		HasGit:    true,
+	}, prompts.TurnProjection{
+		ProfileID: "postload_cmd_ro",
+		Plan:      plan,
+		Offered:   (plan).ImmediateNames(),
 	})
 	testutil.FailErr(t, "ro reader", err)
 	reqMeta, _ := stockSchemas.ToolMeta("request_tools")

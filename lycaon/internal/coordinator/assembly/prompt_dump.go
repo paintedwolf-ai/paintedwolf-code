@@ -94,18 +94,19 @@ func RenderPromptDump(
 	if sess.WorkspacePath != "" {
 		_, hasGit = gitrepo.Discover(sess.WorkspacePath)
 	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:      prompts.CoordinatorProfileID,
-		SurfaceID:      profile.SurfaceID,
-		Mode:           current,
+	reader, err := prompts.NewReader(prompts.HostFacts{
 		SessionMode:    string(api.SessionModeAgent),
 		Profiles:       profiles,
-		Plan:           plan,
 		RootCount:      rootCount,
 		HasGit:         hasGit,
 		HasAnyGitRoot:  hasGit,
 		WebSearch:      true,
 		SpawnAllowlist: roster.Effective,
+	}, prompts.TurnProjection{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: profile.SurfaceID,
+		Plan:      plan,
+		Offered:   plan.ImmediateNames(),
 	})
 	if err != nil {
 		return "", err

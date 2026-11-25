@@ -19,10 +19,12 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/turnnudges"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/spawn"
 	setupanchor "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -190,6 +192,10 @@ func newSpendSoftStopLoopFixture(
 				return history, nil
 			},
 			ProjectRootCount: func(context.Context, *api.Session) int { return 1 },
+			HostFacts: func(context.Context, *api.Session) (prompts.HostFacts, error) {
+				profiles, err := sandbox.LoadToolProfiles()
+				return prompts.HostFacts{Profiles: profiles, RootCount: 1, WebSearch: true, SpawnAllowlist: spawn.AmbientAllowedAgents()}, err
+			},
 			ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
 				PromptTurnSurface: func(string) string { return "implement_dispatch" },
 			},

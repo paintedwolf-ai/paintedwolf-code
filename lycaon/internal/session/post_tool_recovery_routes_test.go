@@ -2,11 +2,12 @@ package session
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/guidance"

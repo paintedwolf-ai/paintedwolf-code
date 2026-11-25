@@ -1,13 +1,11 @@
 package kick
 
-import "github.com/lycaon/lycaon/internal/toolsurface"
+import "github.com/lycaon/lycaon/internal/prompts"
 
 // CoordinatorKickRenderContext carries prompt-time host state.
 type CoordinatorKickRenderContext struct {
-	// ToolPlan is what the model call carrying this kick can reach.
-	ToolPlan     toolsurface.Plan
-	SurfaceID    string
-	RootCount    int
+	// Reader projects the model call carrying this kick.
+	Reader       prompts.Reader
 	WorkflowID   string
 	CurrentPhase string
 	BatchPhase   string
@@ -21,10 +19,8 @@ type CoordinatorKickRenderContext struct {
 	FailedLeaves       []string
 	GateObligations    []GateObligation
 	// Progress fields keep guidance behind the checklist latch.
-	ProgressOpenItems     int
-	ProgressClosureArmed  bool
-	ReviewsConfinedWrites bool
-	CommandExternalHidden bool
+	ProgressOpenItems    int
+	ProgressClosureArmed bool
 }
 
 // GateObligation is a compact gate-feedback projection for kick templates.

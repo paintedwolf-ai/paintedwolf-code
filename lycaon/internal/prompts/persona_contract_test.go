@@ -82,12 +82,14 @@ agents:
 	if err != nil {
 		t.Fatalf("LoadToolProfiles: %v", err)
 	}
-	noWebReader, err := NewReader(ReaderInput{
-		ProfileID: "explore_readonly",
+	noWebReader, err := NewReader(HostFacts{
 		Profiles:  profiles,
-		Visible:   []string{"command"},
 		RootCount: 1,
 		WebSearch: false,
+	}, TurnProjection{
+		ProfileID: "explore_readonly",
+		Offered:   []string{"command"},
+		Declared:  true,
 	})
 	if err != nil {
 		t.Fatalf("NewReader: %v", err)

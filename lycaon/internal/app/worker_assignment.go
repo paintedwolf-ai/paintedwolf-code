@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -12,9 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -23,8 +22,16 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+// workerRequests projects a worker child's first request.
+type workerRequests interface {
+	WorkerRequestReader(ctx context.Context, parentID, childSessionID, agentType string) (prompts.Reader, error)
+}
+
 func (b *serveBuilder) composeWorkerAssignment(ctx context.Context, tctx tools.ToolContext, agentType string, brief wire.WorkerTaskCharter, task *wire.WorkerTask) (string, error) {
-	return composeWorkerTaskAssignment(ctx, b.storage, b.workflows, b.scanning, b.boards, b.workerRuntime, tctx, agentType, brief, task)
+	if b.sessions == nil || b.sessions.Manager == nil {
+		return "", fmt.Errorf("worker assignment: session host not configured")
+	}
+	return composeWorkerTaskAssignment(ctx, b.storage, b.workflows, b.scanning, b.boards, b.workerRuntime, b.sessions.Manager.Workers, tctx, agentType, brief, task)
 }
 
 func composeWorkerTaskAssignment(
@@ -34,6 +41,7 @@ func composeWorkerTaskAssignment(
 	scanningRT *scanning.Runtime,
 	boardsRT *boards.Runtime,
 	workersRt *workerruntime.Runtime,
+	requests workerRequests,
 	tctx tools.ToolContext,
 	agentType string,
 	brief wire.WorkerTaskCharter,
@@ -87,50 +95,12 @@ func composeWorkerTaskAssignment(
 			in.ScanInventory = inventory
 		}
 	}
-	workerReader, err := buildWorkerAssignmentReader(agentType, in.ProjectDir, tctx)
+	workerReader, err := requests.WorkerRequestReader(ctx, tctx.Identity.SessionID, task.ChildSessionID, agentType)
 	if err != nil {
 		return "", err
 	}
 	in.Reader = workerReader
 	return inject.RenderWorkerTaskAssignment(ctx, workersRt.InjectRenderer, in)
-}
-
-func buildWorkerAssignmentReader(agentType, projectDir string, tctx tools.ToolContext) (prompts.Reader, error) {
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return prompts.Reader{}, err
-	}
-	profileID := strings.TrimSpace(agentType)
-	hasDirect := false
-	for _, p := range profiles {
-		if p.ID == profileID {
-			hasDirect = true
-			break
-		}
-	}
-	if !hasDirect {
-		profileID, err = prompts.ToolProfileForAgent(agentType)
-		if err != nil {
-			return prompts.Reader{}, err
-		}
-	}
-	rootCount := len(tctx.Source.Roots)
-	if rootCount == 0 && strings.TrimSpace(projectDir) != "" {
-		rootCount = 1
-	}
-	_, hasGit := gitrepo.Discover(strings.TrimSpace(projectDir))
-	sessionMode := string(wire.SessionModeAgent)
-	if tctx.Source.AskMode {
-		sessionMode = string(wire.SessionModeAsk)
-	}
-	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID:   profileID,
-		SessionMode: sessionMode,
-		Profiles:    profiles,
-		RootCount:   rootCount,
-		HasGit:      hasGit,
-		WebSearch:   true,
-	})
 }
 
 // recordedVerdictsForLeg projects stamped verdicts onto the assignment DTO.

@@ -24,20 +24,11 @@ func TestSkillRuntimePlanBoundsCatalogCapabilities(t *testing.T) {
 			{"family", toolsurface.Compile([]string{"web_search", "fetch_url"}, nil), true, true},
 		} {
 			t.Run(profile+"/"+state.name, func(t *testing.T) {
-				in := ReaderInput{
-					ProfileID: profile,
-					Profiles:  profiles,
-					Plan:      state.plan,
-					Visible:   state.plan.ImmediateNames(),
-					Loaded:    toolNameSet(state.plan.AddressableNames()),
-					RootCount: 1,
-					WebSearch: true,
-				}
+				turn := TurnProjection{ProfileID: profile, Plan: state.plan, Offered: state.plan.ImmediateNames()}
 				if profile == CoordinatorProfileID {
-					in.SurfaceID = "implement_investigate"
-					in.Visible = nil
+					turn.SurfaceID = "implement_investigate"
 				}
-				reader, err := NewReader(in)
+				reader, err := NewReader(HostFacts{Profiles: profiles, RootCount: 1, WebSearch: true}, turn)
 				testutil.FailErr(t, "new reader", err)
 				vars, err := SkillVars(reader)
 				testutil.FailErr(t, "skill vars", err)
@@ -63,13 +54,14 @@ func TestCoordinatorSkillCanTeachDeferredToolWithinRuntimePlan(t *testing.T) {
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load tool profiles", err)
 	plan := toolsurface.Compile([]string{"request_tools"}, []string{"fetch_url", "web_search"})
-	reader, err := NewReader(ReaderInput{
+	reader, err := NewReader(HostFacts{
+		Profiles:  profiles,
+		WebSearch: true,
+	}, TurnProjection{
 		ProfileID: CoordinatorProfileID,
 		SurfaceID: "implement_investigate",
-		Profiles:  profiles,
-		Plan:      plan,
-		Loaded:    toolNameSet(plan.AddressableNames()),
-		WebSearch: true,
+		Plan:      readerLoadedPlan(plan, toolNameSet(plan.AddressableNames())),
+		Offered:   readerLoadedOffer(plan, nil, toolNameSet(plan.AddressableNames())),
 	})
 	testutil.FailErr(t, "new reader", err)
 	vars, err := SkillVars(reader)
@@ -85,14 +77,15 @@ func TestCoordinatorSkillCanTeachDeferredToolWithinRuntimePlan(t *testing.T) {
 func TestPromptSurfaceRespectsClosedRuntimePlan(t *testing.T) {
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load tool profiles", err)
-	reader, err := NewReader(ReaderInput{
-		ProfileID: CoordinatorProfileID,
-		SurfaceID: "implement_investigate",
+	reader, err := NewReader(HostFacts{
 		Profiles:  profiles,
-		Plan:      toolsurface.Compile(nil, nil),
-		Loaded:    map[string]bool{"web_search": true, "fetch_url": true, "command": true},
 		RootCount: 1,
 		WebSearch: true,
+	}, TurnProjection{
+		ProfileID: CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Plan:      readerLoadedPlan(toolsurface.Compile(nil, nil), map[string]bool{"web_search": true, "fetch_url": true, "command": true}),
+		Offered:   readerLoadedOffer(toolsurface.Compile(nil, nil), nil, map[string]bool{"web_search": true, "fetch_url": true, "command": true}),
 	})
 	testutil.FailErr(t, "closed runtime surface", err)
 	vars := reader.Facts()

@@ -2,9 +2,10 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolrejection"
