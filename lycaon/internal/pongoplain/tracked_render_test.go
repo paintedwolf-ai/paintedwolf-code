@@ -48,7 +48,7 @@ func TestTrackedTagsRenderTheirPongoMeaning(t *testing.T) {
 			map[string]any{"xs": []string{"a", "b"}}, "1021F;2110L;"},
 		{"parent loop", `{% for x in xs %}{% for y in ys %}{{ forloop.Parentloop.Counter }}{{ forloop.Counter }} {% endfor %}{% endfor %}`,
 			map[string]any{"xs": []int{1, 2}, "ys": []int{1}}, "11 21 "},
-		{"map pairs", `{% for k, v in m %}{{ k }}={{ v }} {% endfor %}`, map[string]any{"m": map[string]int{"b": 2, "a": 1}}, "a=1 b=2 "},
+		{"map pairs", `{% for k, v in m sorted %}{{ k }}={{ v }} {% endfor %}`, map[string]any{"m": map[string]int{"b": 2, "a": 1}}, "a=1 b=2 "},
 		{"reversed", `{% for x in xs reversed %}{{ x }}{% endfor %}`, map[string]any{"xs": []int{1, 2, 3}}, "321"},
 		{"sorted reversed keys", `{% for k in m reversed sorted %}{{ k }}{% endfor %}`, map[string]any{"m": map[string]int{"a": 1, "c": 3, "b": 2}}, "cba"},
 		{"empty", `{% for x in xs %}{{ x }}{% empty %}none{% endfor %}`, map[string]any{"xs": []int{}}, "none"},
