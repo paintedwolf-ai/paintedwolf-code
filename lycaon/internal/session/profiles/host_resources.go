@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/flosch/pongo2/v6"
 
@@ -111,13 +110,13 @@ func skillHostResourceDiagnostic(code string, skill skills.Skill, message string
 	}
 }
 
-var skillHostResourcesTemplate = sync.OnceValues(func() (*pongo2.Template, error) {
+func skillHostResourcesTemplate() (*pongo2.Template, error) {
 	data, err := config.Read(config.SkillHostResources)
 	if err != nil {
 		return nil, err
 	}
 	return pongoplain.Compile(string(data))
-})
+}
 
 // decorateSkillWithHostResources prepends the skill's resolved host resources,
 // with the uses this surface can take, to its body.

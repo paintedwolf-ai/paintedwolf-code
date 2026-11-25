@@ -40,7 +40,7 @@ resources:
             kind: file
             paths: ["/definitely/not/present"]
 `)
-	configtest.Only(t, map[config.Rel]string{config.HostResources: string(catalog)})
+	configtest.Overlay(t, map[config.Rel]string{config.HostResources: string(catalog)})
 	service, err := hostresources.NewService(t.TempDir())
 	testutil.FailErr(t, "new host resources service", err)
 	snapshot := service.SnapshotFor(context.Background(), false, hostresources.ProjectContext{}, nil)
@@ -75,5 +75,28 @@ resources:
 	}
 	if groupDiags[0].UnitID != "skills/neither" || !strings.Contains(groupDiags[0].Message, "absent|missing") {
 		t.Fatalf("group diagnostic = %#v", groupDiags[0])
+	}
+}
+
+func TestSkillHeaderListsOnlyUsesTheSurfaceCanTake(t *testing.T) {
+	colima := hostresources.State{
+		ID: "colima", Status: hostresources.StatusAvailable, HostSupport: hostresources.HostSupported, Access: hostresources.AccessAllow,
+		Uses: []hostresources.Use{{
+			ID: "vm", Label: "VM start", Roles: []hostresources.AgentRole{hostresources.RoleCoordinator},
+			Requires: hostresources.UseRequirement{Capabilities: []string{"host_execution"}, Alone: true},
+		}},
+	}
+	snapshot := hostresources.Snapshot{Resources: []hostresources.State{colima}}
+	skill := skills.Skill{Name: "containers", Body: "body"}
+	resolved := map[string]hostresources.State{"colima": colima}
+	coordinator, err := decorateSkillWithHostResources(skill, resolved, snapshot, hostresources.Reach{Role: hostresources.RoleCoordinator, Offered: []string{"host_execution"}})
+	testutil.FailErr(t, "decorate for coordinator", err)
+	worker, err := decorateSkillWithHostResources(skill, resolved, snapshot, hostresources.Reach{Role: hostresources.RoleWorker, Offered: []string{"host_execution"}})
+	testutil.FailErr(t, "decorate for worker", err)
+	if !strings.Contains(coordinator.Body, "VM start") {
+		t.Fatalf("coordinator header omits a use it can take:\n%s", coordinator.Body)
+	}
+	if strings.Contains(worker.Body, "VM start") || strings.Contains(worker.Body, "`host_execution`") {
+		t.Fatalf("worker header names a coordinator-only use:\n%s", worker.Body)
 	}
 }
