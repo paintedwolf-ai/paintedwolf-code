@@ -3,7 +3,6 @@ package pongoplain
 import (
 	"context"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -65,7 +64,7 @@ func tokenSource(p *pongo2.Parser) string {
 		tok := p.Get(i)
 		text := tok.Val
 		if tok.Typ == pongo2.TokenString {
-			text = strconv.Quote(tok.Val)
+			text = quoteLiteral(tok.Val)
 		}
 		if prev != nil && spaced(prev, tok) {
 			b.WriteByte(' ')
