@@ -26,29 +26,24 @@ export function DiffsPageHeading(props: Props) {
   return (
     <article class="den-diffs-page__article">
       <header class="den-diffs-page__head">
-        <span class="den-diffs-page__glyph" aria-hidden="true">
-          <ThemeIcon slot="diff" size={16} />
-        </span>
-        <div>
-          <p class="den-diffs-page__eyebrow" data-testid="diffs-page-comparison">{props.title}</p>
-          <h1 class="den-diffs-page__title" data-testid="diffs-page-title">
-            <Show when={props.reading && props.fileCount === 0} fallback={fileCount(props.fileCount)}>
-              Reading this comparison…
-            </Show>
-          </h1>
-          <p class="den-diffs-page__stat" data-testid="diffs-page-stat">
-            <Show when={props.total}>
-              {(counted) => (
-                <>
-                  <span class="den-file-edit-diff-stat-add">+{counted().added}</span>
-                  <span class="den-file-edit-diff-stat-del">−{counted().removed}</span>
-                  <Show when={props.writes}><span aria-hidden="true"> · </span></Show>
-                </>
-              )}
-            </Show>
-            {props.writes}
-          </p>
-        </div>
+        <p class="den-diffs-page__eyebrow" data-testid="diffs-page-comparison">{props.title}</p>
+        <h1 class="den-diffs-page__title" data-testid="diffs-page-title">
+          <Show when={props.reading && props.fileCount === 0} fallback={fileCount(props.fileCount)}>
+            Reading this comparison…
+          </Show>
+        </h1>
+        <p class="den-diffs-page__stat" data-testid="diffs-page-stat">
+          <Show when={props.total}>
+            {(counted) => (
+              <>
+                <span class="den-file-edit-diff-stat-add">+{counted().added}</span>
+                <span class="den-file-edit-diff-stat-del">−{counted().removed}</span>
+                <Show when={props.writes}><span aria-hidden="true"> · </span></Show>
+              </>
+            )}
+          </Show>
+          {props.writes}
+        </p>
       </header>
       <p class="den-diffs-page__lede">{props.note}</p>
       <div class="den-diffs-page__actions">
