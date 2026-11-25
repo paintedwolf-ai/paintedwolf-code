@@ -41,14 +41,14 @@ func (r *failingSpendKick) RenderKick(context.Context, prompts.Reader, string, m
 	return "partial", errors.New("render failed")
 }
 
-// A failed spend render degrades to the host marker, never the partial text.
-func TestFailedSpendSoftStopCarriesTheMarkerNotPartialGuidance(t *testing.T) {
+// A failed spend render grants no wind-down round and delivers no partial text.
+func TestFailedSpendSoftStopDoesNotDeliverPartialGuidance(t *testing.T) {
 	setupanchor.Install()
 	r := &failingSpendKick{}
 	s := New(turnload.NewLedger(), nil)
 	s.SetPrompts(r)
 	n := s.SpendSoftStop(t.Context(), &api.Session{ID: "parent"}, surfaceReader(t, "implement_investigate", api.SessionModeAgent))
-	if !r.called || n.Content == "partial" || n.Content != "[host:"+anchor.InformRenderFor(t.Context(), anchor.TurnSpendSoftStop, anchor.MatchContext{Surface: "coordinator", SessionID: "parent"})+"]" {
+	if !r.called || !n.Empty() {
 		t.Fatalf("render called=%v nudge=%+v", r.called, n)
 	}
 }

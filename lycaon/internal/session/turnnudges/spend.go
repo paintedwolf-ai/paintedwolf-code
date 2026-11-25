@@ -2,17 +2,19 @@ package turnnudges
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // SpendSoftStop renders the tool-capable landing instruction used only on
 // the first coordinator iteration after a running task crosses its ceiling.
+// Without the rendered instruction no wind-down round is granted, so a missing
+// Reader or failed render yields no nudge.
 func (m *Service) SpendSoftStop(ctx context.Context, sess *api.Session, reader prompts.Reader) promptloop.HostNudge {
 	if m == nil || sess == nil || sess.IsWorkerChild() {
 		return promptloop.HostNudge{}
@@ -21,8 +23,13 @@ func (m *Service) SpendSoftStop(ctx context.Context, sess *api.Session, reader p
 	if stem == "" {
 		return promptloop.HostNudge{}
 	}
-	content := workercloseout.RenderWorkerKick(ctx, m.renderKick, reader, stem, nil)
-	if strings.TrimSpace(content) == "" {
+	if !reader.Valid() {
+		slog.WarnContext(ctx, "spend soft stop has no request reader; no wind-down round", "session_id", sess.ID)
+		return promptloop.HostNudge{}
+	}
+	content, err := m.renderKick(ctx, reader, stem, nil)
+	if err != nil || strings.TrimSpace(content) == "" {
+		slog.WarnContext(ctx, "spend soft stop render; no wind-down round", "session_id", sess.ID, "error", err)
 		return promptloop.HostNudge{}
 	}
 	return promptloop.HostNudge{Content: content, SignalID: string(anchor.TurnSpendSoftStop)}

@@ -631,5 +631,8 @@ type fixtureToolLister struct {
 }
 
 func (l fixtureToolLister) List(ctx context.Context, filter platform.ToolFilter) ([]tools.ToolMeta, error) {
+	if l.list == nil {
+		return nil, nil
+	}
 	return l.list(ctx, l.sess, filter.ProfileID)
 }

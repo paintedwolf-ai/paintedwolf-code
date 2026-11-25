@@ -296,11 +296,13 @@ func TestStoreOrdAndTSSurvivePatch(t *testing.T) {
 }
 
 func TestSurveyStreakNudgeNamesTheStreakForTheCoordinatorOnly(t *testing.T) {
-	mgr, _ := newTestManager(t)
+	mgr, st := newTestManager(t)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
+	root, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
 
-	nudge := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), &api.Session{ID: "root"}, sessionRequestReader(t, mgr, &api.Session{ID: "root"}), 6, []string{"git_diff", "read"})
+	nudge := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), root, sessionRequestReader(t, mgr, root), 6, []string{"git_diff", "read"})
 	if nudge.Empty() {
 		t.Fatal("coordinator survey streak rendered empty")
 	}
@@ -309,7 +311,7 @@ func TestSurveyStreakNudgeNamesTheStreakForTheCoordinatorOnly(t *testing.T) {
 			t.Fatalf("nudge missing %q:\n%s", want, nudge.Content)
 		}
 	}
-	child := &api.Session{ID: "child", ParentSessionID: "root"}
+	child := &api.Session{ID: "child", ParentSessionID: root.ID}
 	worker := mgr.Coordinator.Nudges.SurveyStreak(t.Context(), child, sessionRequestReader(t, mgr, child), 6, []string{"read"})
 	if !worker.Empty() {
 		t.Fatalf("a worker's reads are its job, not a streak: %q", worker.Content)

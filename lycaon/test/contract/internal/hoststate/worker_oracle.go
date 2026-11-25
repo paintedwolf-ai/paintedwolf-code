@@ -173,7 +173,7 @@ func WorkerHostFacts(state WorkerState, profiles []sandbox.ToolProfile, schemas 
 	if err != nil {
 		return prompts.HostFacts{}, err
 	}
-	if host.HasGit != state.HasGit || host.HasAnyGitRoot != state.HasAnyGitRoot || host.OnWorkerBranch != state.OnWorkerBranch {
+	if host.HasGit != state.HasGit || host.HasAnyGitRoot != (state.HasGit || state.HasAnyGitRoot) || host.OnWorkerBranch != state.OnWorkerBranch {
 		return prompts.HostFacts{}, fmt.Errorf("state %s: derived git=%t/%t branch=%t disagree with generated git=%t/%t branch=%t",
 			state.ID, host.HasGit, host.HasAnyGitRoot, host.OnWorkerBranch, state.HasGit, state.HasAnyGitRoot, state.OnWorkerBranch)
 	}

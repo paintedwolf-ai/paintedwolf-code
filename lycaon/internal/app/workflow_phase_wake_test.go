@@ -397,7 +397,7 @@ func TestComposeWorkerAssignmentRendersNamedFollowUpAndWorkflowContext(t *testin
 		Prompt:          "Re-verify token expiry handling in middleware",
 		Scope:           &api.TaskScope{Mode: api.TaskScopeModeRead},
 	}
-	rendered, err := builder.composeWorkerAssignment(ctx, tctx, "skeptic", brief, task)
+	rendered, err := composeWorkerTaskAssignment(ctx, builder.storage, builder.workflows, builder.scanning, builder.boards, builder.workerRuntime, declaredWorkerRequests{}, tctx, "skeptic", brief, task)
 	testutil.FailErr(t, "compose worker assignment", err)
 	if !strings.Contains(rendered, "challenger") || !strings.Contains(rendered, "Re-verify token expiry handling in middleware") {
 		t.Fatalf("rendered assignment missing worker name or round instructions: %q", rendered)

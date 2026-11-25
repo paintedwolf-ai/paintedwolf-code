@@ -79,7 +79,7 @@ func TestRoundAuthorityKeepsWorkerScopeAcrossUpgradeAndFailsClosed(t *testing.T)
 }
 
 func TestObserveModeUpgradeCoversMidTurnBetweenTurnAndRestart(t *testing.T) {
-	pc := &promptContext{}
+	pc := &promptContext{Deps: ContextDeps{ContextSurfaceDeps: ContextSurfaceDeps{SwapObservedSessionMode: observedModes()}}}
 	coord := &api.Session{ID: "coord", AgentType: "coordinator"}
 	worker := &api.Session{ID: "worker", ParentSessionID: "coord", AgentType: "repo-researcher"}
 

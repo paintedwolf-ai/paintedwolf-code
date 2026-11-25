@@ -560,27 +560,47 @@ func toolMetaSchemas(metas []tools.ToolMeta) map[string]map[string]any {
 // derivation from the observation the generated state describes.
 func CoordinatorHostFacts(state CoordinatorState, profiles []sandbox.ToolProfile, schemas *toolschema.Config) (prompts.HostFacts, error) {
 	sess := coordinatorFixtureSession(state)
+	roots := state.Roots
+	if len(roots) == 0 && state.RootCount > 0 {
+		roots = synthesizedRoots(state.RootCount, state.HasGit, state.HasAnyGitRoot)
+	}
 	host, err := readerfacts.Derive(readerfacts.Observation{
 		Session:               sess,
 		Profiles:              profiles,
 		Schemas:               schemas,
-		Roots:                 rootRefs(state.Roots),
+		Roots:                 rootRefs(roots),
 		WebSearch:             state.WebSearch,
 		ApprovalPosture:       state.ApprovalPosture,
 		CommandExternalHidden: state.CommandExternalHidden,
 		SessionScratchDir:     state.SessionScratchDir,
 		SharedTempLocations:   state.SharedTempLocations,
 		AllowedAgents:         state.RunContext.AllowedAgents,
-		IsRepo:                rootRepoProbe(state.Roots),
+		IsRepo:                rootRepoProbe(roots),
 	})
 	if err != nil {
 		return prompts.HostFacts{}, err
 	}
-	if host.RootCount != state.RootCount || host.HasGit != state.HasGit || host.HasAnyGitRoot != state.HasAnyGitRoot {
+	if host.RootCount != state.RootCount || host.HasGit != state.HasGit || host.HasAnyGitRoot != (state.HasGit || state.HasAnyGitRoot) {
 		return prompts.HostFacts{}, fmt.Errorf("state %s: derived roots=%d git=%t/%t disagree with generated roots=%d git=%t/%t",
 			state.ID, host.RootCount, host.HasGit, host.HasAnyGitRoot, state.RootCount, state.HasGit, state.HasAnyGitRoot)
 	}
 	return host, nil
+}
+
+// synthesizedRoots describes a state that names only its root count and Git
+// facts: the primary root carries the primary Git fact, and a second root any
+// other Git root.
+func synthesizedRoots(count int, primaryGit, anyGit bool) []RootSpec {
+	out := make([]RootSpec, 0, count)
+	for i := range count {
+		ref := projectroot.RootRef{ID: fmt.Sprintf("r%d", i+1), Label: "root", Path: fmt.Sprintf("/tmp/fixture-root-%d", i+1), IsPrimary: i == 0}
+		git := primaryGit
+		if i > 0 {
+			git = anyGit && !primaryGit && i == 1
+		}
+		out = append(out, RootSpec{Ref: ref, HasGit: git})
+	}
+	return out
 }
 
 func rootRefs(roots []RootSpec) []projectroot.RootRef {

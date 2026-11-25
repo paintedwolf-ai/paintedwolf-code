@@ -113,15 +113,7 @@ func NewPromptLoopForTest(deps PromptLoopDeps) *PromptLoop {
 		deps.Context.HostFacts = testHostFacts
 	}
 	if deps.Context.SwapObservedSessionMode == nil {
-		observed := &sync.Map{}
-		deps.Context.SwapObservedSessionMode = func(sessionID string, mode api.SessionMode) (api.SessionMode, bool) {
-			prev, ok := observed.Swap(sessionID, mode)
-			if !ok {
-				return "", false
-			}
-			m, _ := prev.(api.SessionMode)
-			return m, m != ""
-		}
+		deps.Context.SwapObservedSessionMode = observedModes()
 	}
 	if deps.Projection.UpdateMessage == nil {
 		deps.Projection.UpdateMessage = func(_ context.Context, _, _ string, _ api.Message) error { return nil }
@@ -161,4 +153,17 @@ func testHostFacts(_ context.Context, sess *api.Session) (prompts.HostFacts, err
 		mode = string(api.SessionModeAsk)
 	}
 	return prompts.HostFacts{SessionMode: mode, Profiles: profiles, RootCount: 1, WebSearch: true}, nil
+}
+
+// observedModes stands in for the runtime's observed session modes.
+func observedModes() func(sessionID string, mode api.SessionMode) (api.SessionMode, bool) {
+	observed := &sync.Map{}
+	return func(sessionID string, mode api.SessionMode) (api.SessionMode, bool) {
+		prev, ok := observed.Swap(sessionID, mode)
+		if !ok {
+			return "", false
+		}
+		m, _ := prev.(api.SessionMode)
+		return m, m != ""
+	}
 }

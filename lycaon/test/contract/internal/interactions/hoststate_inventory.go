@@ -979,6 +979,9 @@ func readerFactSingleClassReason(name, rec string, classes []string) string {
 	if rec == "coordinator" && name == "visual_show_terminal_needs_request" {
 		return "coordinator_surfaces_with_external_exec_do_not_defer_terminal_open_alone"
 	}
+	if rec == "worker" && name == "visual_show_terminal_needs_request" {
+		return "stock_worker_profiles_never_defer_terminal_open"
+	}
 	if name == "agent_tools" {
 		return "every_admissible_turn_offers_at_least_two_tools"
 	}

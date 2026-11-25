@@ -80,7 +80,7 @@ func TestKickEngineQueueAndTake(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != anchor.InformRender(anchor.ComposeDone) {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "Compose") {
 		t.Fatalf("nudge = %q ok=%v", text, ok)
 	}
@@ -92,7 +92,7 @@ func TestKickEngineWorkerTaskFinishedIncludesDigest(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != anchor.InformRender(anchor.WorkerTaskFinished) {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "Host worker digest") {
 		t.Fatalf("nudge = %q ok=%v", text, ok)
 	}
@@ -104,7 +104,7 @@ func TestKickEngineWorkerTaskFinishedNudge(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != anchor.InformRender(anchor.WorkerTaskFinished) {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "host digest") {
 		t.Fatalf("nudge = %q ok=%v", text, ok)
 	}
@@ -117,7 +117,7 @@ func TestKickEngineClearPending(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-1", nil); id != "" {
 		t.Fatalf("kick id = %q want empty", id)
 	}
-	if text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{}); ok || text != "" {
+	if text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-1", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)}); ok || text != "" {
 		t.Fatalf("nudge = %q ok=%v want cleared", text, ok)
 	}
 }
@@ -129,7 +129,7 @@ func TestKickEngineQueuesMultipleCoordinatorKicksFIFO(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-race", nil); id != anchor.InformRender(anchor.WorkerTaskFinished) {
 		t.Fatalf("first kick id = %q want %q", id, anchor.InformRender(anchor.WorkerTaskFinished))
 	}
-	text, lease, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-race", kick.CoordinatorKickRenderContext{})
+	text, lease, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-race", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "host digest") {
 		t.Fatalf("first nudge = %q ok=%v want worker-task-finished", text, ok)
 	}
@@ -146,7 +146,7 @@ func TestKickEngineLegFinishedRelativeAgo(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-2", nil); id != anchor.InformRender(anchor.LegFinished) {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-2", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-2", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "finished") {
 		t.Fatalf("nudge = %q", text)
 	}
@@ -158,7 +158,7 @@ func TestKickEngineRawNudge(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-3", nil); id != anchor.InformRender(anchor.GateBlocked) {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-3", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "sess-3", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || text != "custom nudge" {
 		t.Fatalf("nudge = %q", text)
 	}
@@ -170,7 +170,7 @@ func TestRenderKickMissingEngine(t *testing.T) {
 	if id := engine.TakePendingKickIDUnless("sess-x", nil); id != anchor.InformRender(anchor.GateBlocked) {
 		t.Fatalf("kick id = %q want %s", id, anchor.InformRender(anchor.GateBlocked))
 	}
-	if text, _, ok, err := engine.RenderPendingNudge(t.Context(), "sess-x", kick.CoordinatorKickRenderContext{}); ok || text != "" || err == nil {
+	if text, _, ok, err := engine.RenderPendingNudge(t.Context(), "sess-x", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)}); ok || text != "" || err == nil {
 		t.Fatalf("missing engine = %q, ok %v, err %v", text, ok, err)
 	}
 }
@@ -574,7 +574,7 @@ func TestQueueEagerDelivery(t *testing.T) {
 	bus := anchor.NewBus(engine)
 	bus.SetRegistry(reg)
 	bus.EmitEager(t.Context(), "child-1", anchor.WorkerTaskStarted, map[string]string{"agent_type": "implementer"})
-	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "child-1", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "child-1", kick.CoordinatorKickRenderContext{Reader: declaredKickReader(t)})
 	if !ok || !strings.Contains(text, "implementer") {
 		t.Fatalf("nudge=%q ok=%v", text, ok)
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/turnreadertest"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -141,7 +142,7 @@ func renderJobGuidanceForRep(t *testing.T, s *promptrender.Stock, rep jobWaitAut
 	eng.SetDeps(assembly.AssemblyDeps{
 		Prompts:          pe,
 		Injects:          prompts.NewInjectRenderer(pe),
-		TurnReader:       authorityReader(rep.auth),
+		TurnReader:       jobRepReader(rep, jobs, cs, view),
 		SessionView:      func(context.Context, *api.Session) *catalogview.View { return view },
 		Selection:        staticSelection{loaded: cs.Loaded},
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
@@ -822,4 +823,26 @@ func pickWorkerRepForEdge(t *testing.T, workerStates []hoststate.WorkerState, ag
 	}
 	t.Fatalf("missing %s (%s) worker rep for edge assertions", agentID, posture)
 	return jobWaitAuthorityRep{}
+}
+
+// jobRepReader serves the oracle Reader of the request with its live jobs, or
+// projects the rep's override listing when one narrows the schemas.
+func jobRepReader(rep jobWaitAuthorityRep, jobs []bgprocess.JobSnapshot, cs hoststate.CoordinatorState, view *catalogview.View) assembly.TurnReaderSource {
+	if len(rep.overrideMetas) == 0 {
+		return func(ctx context.Context, _ *api.Session, _ []api.Message, _ inject.CoordinatorTurnFrame) (prompts.Reader, error) {
+			auth, err := hoststate.FreezeTurnAuthorityWithResources(ctx, cs, toolcontract.ResourcePresence{CommandJobs: len(jobs) > 0})
+			return auth.Reader, err
+		}
+	}
+	fixture := turnreadertest.Fixture{
+		Lister: func(context.Context, *api.Session, string) ([]tools.ToolMeta, error) {
+			return slices.Clone(rep.overrideMetas), nil
+		},
+		View:           func(context.Context, *api.Session) *catalogview.View { return view },
+		Loaded:         func(string) map[string]bool { return cs.Loaded },
+		WebSearch:      func() bool { return cs.WebSearch },
+		ImplementState: func(context.Context, *api.Session) surface.ImplementSessionState { return cs.ImplementState },
+		CommandJobs:    func(string) bool { return len(jobs) > 0 },
+	}
+	return fixture.TurnReader
 }

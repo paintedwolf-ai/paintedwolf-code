@@ -150,6 +150,12 @@ func readerDiff(t *testing.T, host prompts.HostFacts, auth hoststate.TurnAuthori
 			diffs = append(diffs, fmt.Sprintf("%s: oracle=%v live=%v", key, oracleFacts[key], want))
 		}
 	}
+	for _, meta := range req.Tools {
+		if !reflect.DeepEqual(auth.Schemas[meta.Name], meta.ArgsSchema) {
+			diffs = append(diffs, fmt.Sprintf("schema %s: oracle=%v request=%v", meta.Name, auth.Schemas[meta.Name], meta.ArgsSchema))
+		}
+	}
+	diffs = append(diffs, fmt.Sprintf("oracle requestable=%v", auth.Reader.Requestable()))
 	sort.Strings(diffs)
 	return fmt.Sprintf("oracle projection with live host facts matches request: %t\nfact differences:\n%s\nrequest tools=%v",
 		live.Fingerprint() == req.Debug.ReaderFingerprint, strings.Join(diffs, "\n"), toolNames(req.Tools))
