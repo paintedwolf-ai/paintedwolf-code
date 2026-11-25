@@ -52,8 +52,11 @@ test_run_export_isolation() {
   export GOPATH="${GOPATH:-$(go env GOPATH)}"
   # The container client's configuration selects the daemon that holds the reference images.
   export DOCKER_CONFIG="${DOCKER_CONFIG:-${HOME}/.docker}"
+  export PW_HOST_TMPDIR="${PW_HOST_TMPDIR:-${TMPDIR:-/tmp}}"
   export HOME="${run_dir}/home"
   export TMPDIR="${run_dir}/tmp"
+  # A configured `go env GOTMPDIR` would otherwise place build work outside the run.
+  export GOTMPDIR="${TMPDIR}"
   export XDG_CACHE_HOME="${run_dir}/xdg-cache"
   export XDG_CONFIG_HOME="${run_dir}/xdg-config"
   export XDG_DATA_HOME="${run_dir}/xdg-data"

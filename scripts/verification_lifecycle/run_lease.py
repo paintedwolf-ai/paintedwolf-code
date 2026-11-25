@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import errno
 import fcntl
 import os
@@ -11,8 +12,9 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import time
-from typing import NamedTuple
+from typing import IO, Iterator, NamedTuple
 
 UNMOUNT_TIMEOUT_SECONDS = 15
 OWNER_RELEASE_SECONDS = 15
@@ -277,6 +279,43 @@ def await_holders_exit(candidate: Path) -> None:
 def remove(root: Path, candidate: Path) -> None:
     await_holders_exit(candidate)
     prune(root, candidate)
+
+
+def create(root: Path, kind: str) -> tuple[Path, IO]:
+    """Lease a new run directory. The lease lasts until the returned file and every inherited copy close."""
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(root, 0o700)
+    prune(root)
+    # Creation and collection share a lock until the new directory is leased.
+    with (root / ".collection.lock").open("a") as collection:
+        fcntl.flock(collection, fcntl.LOCK_EX)
+        run = Path(tempfile.mkdtemp(prefix=f"{kind}.lease.", dir=root))
+        lease = (run / ".lease").open("w")
+        fcntl.flock(lease, fcntl.LOCK_EX)
+    (run / "tmp").mkdir()
+    return run, lease
+
+
+@contextlib.contextmanager
+def operation_temp(kind: str, root: Path | None = None) -> Iterator[tuple[Path, int]]:
+    """A leased temp directory for one operation and its descendants, removed once none of them holds it.
+
+    Yields the directory and the lease descriptor the operation's child must inherit.
+    """
+    root = RUN_ROOT if root is None else root
+    run, lease = create(root, kind)
+    try:
+        yield run / "tmp", lease.fileno()
+    finally:
+        lease.close()
+        remove(root, run)
+
+
+def temp_environment(environment: dict, directory: Path) -> dict:
+    """Point an operation's temp at its run; PW_HOST_TMPDIR keeps the host's for state meant to outlive it."""
+    host = environment.get("PW_HOST_TMPDIR") or environment.get("TMPDIR") or tempfile.gettempdir()
+    # GOTMPDIR overrides a configured `go env` value that TMPDIR alone would not.
+    return {**environment, "TMPDIR": str(directory), "GOTMPDIR": str(directory), "PW_HOST_TMPDIR": host}
 
 
 def collect_runs(killed: frozenset = frozenset()) -> None:

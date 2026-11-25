@@ -42,6 +42,7 @@ if [[ -n "${CHECKOUT_CACHE}" ]]; then
     consider "${d}" diagnostic
   done
 fi
+python3 "${ROOT}/scripts/verification_cache.py" --abandoned-temp "${PW_HOST_TMPDIR:-${TMPDIR:-/tmp}}"
 
 echo "gocache-trim: applied Go cache budget and >${unused_hours}h age cleanup" >&2
 exit 0

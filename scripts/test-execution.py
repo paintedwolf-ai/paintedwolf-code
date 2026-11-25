@@ -27,6 +27,7 @@ if os.name == "nt":
     import msvcrt
 else:
     import fcntl
+    from verification_lifecycle.run_lease import operation_temp, temp_environment
 
 
 def lock_file(file, blocking=True):
@@ -412,7 +413,8 @@ def run(queue, name, command, spec=EXCLUSIVE, record=False):
     ceiling = worker_budget(os.environ)
     with Lease(queue, name, ceiling, {"kind": "invocation"}) as lease, \
             Reservation(queue, lock_file, lease.entry["ticket"], name, spec, ceiling,
-                        order_of(lease.entry)) as reservation:
+                        order_of(lease.entry)) as reservation, \
+            (operation_temp("run") if os.name != "nt" else contextlib.nullcontext((None, None))) as (temp, temp_lease):
         workers = reservation.entry["workers"]
         with queue.locked():
             lease.entry.update(workers=workers, reservation=reservation.entry["ticket"],
@@ -434,11 +436,13 @@ def run(queue, name, command, spec=EXCLUSIVE, record=False):
         # The child retains admission and its reservation if its supervisor is interrupted.
         fd = fcntl.fcntl(lease.file.fileno(), fcntl.F_DUPFD, 200) if os.name != "nt" else None
         if fd is not None:
+            env = temp_environment(env, temp)
             env.update(PW_TEST_EXECUTION_FD=str(fd), PW_TEST_RESOURCE_FD=str(reservation.file.fileno()))
             with queue.locked():
                 lease.entry["lease_fd"] = fd
                 lease.write()
-        process_options = {"pass_fds": (fd, reservation.file.fileno()), "start_new_session": True} if fd is not None else {}
+        process_options = ({"pass_fds": (fd, reservation.file.fileno(), temp_lease), "start_new_session": True}
+                           if fd is not None else {})
         child = None
         cleanup_blocked = False
         terminal = False
