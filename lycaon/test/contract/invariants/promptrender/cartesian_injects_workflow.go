@@ -448,7 +448,7 @@ func workerLegContexts(offered []string) []inject.WorkerLegContext {
 			LegID: "leg-1", AgentType: "implementer", WorkflowID: "implement", PhaseID: "execute",
 			TopologyPattern: "fanout", RequiresIsolation: true,
 			FailedLeaves:       manyLeaves,
-			CompletionCriteria: []string{"Tests pass"},
+			CompletionCriteria: append([]string{"Tests pass"}, manyLeaves...),
 			LegTools:           offered,
 			Checklist:          []string{"Inspect target", "Verify"},
 			ScanDigest:         []string{"0 critical findings"},
