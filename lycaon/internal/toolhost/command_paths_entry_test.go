@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -85,6 +86,7 @@ func newPathsFixture(t *testing.T) *pathsFixture {
 		return dir
 	}
 	f.scratch = real()
+	testutil.FailErr(t, "prepare program temp", os.Mkdir(enginepaths.ProgramTempUnder(f.scratch), 0o700))
 	f.web = projectroot.RootRef{ID: "web-id", Label: "web", Path: real()}
 	f.Fixture = programtest.New(t, programtest.Options{
 		Owners: f.owners(),
@@ -190,7 +192,7 @@ cd - >/dev/null && pwd
 cd `+f.web.Path+`; cat src/app.js; (cd src; pwd); cd src | pwd; pwd
 cat @api/go.mod`)
 	want := lines(f.api.Path, src,
-		"cwd="+src, "pwd="+src, "tmpdir="+f.scratch,
+		"cwd="+src, "pwd="+src, "tmpdir="+enginepaths.ProgramTempUnder(f.scratch),
 		"arg="+filepath.Join(f.api.Path, "go.mod"), "arg=@api/go.mod", "arg=@web", "arg=rel", "arg=@types/node",
 		f.api.Path, "app", src, f.web.Path, f.web.Path, "module api")
 	if got != want {
@@ -203,7 +205,7 @@ cat @api/go.mod`)
 		t.Fatalf("cd - without OLDPWD: status %d stderr %q refusal %+v", outcome.Status, outcome.Stderr, outcome.Refusal)
 	}
 	// Each program starts again at the session folder.
-	if got := f.stdout(t, `pwd; echo_dir=$PWD; `+f.echo(`"$echo_dir"`)); got != lines(f.api.Path, "cwd="+f.api.Path, "pwd="+f.api.Path, "tmpdir="+f.scratch, "arg="+f.api.Path) {
+	if got := f.stdout(t, `pwd; echo_dir=$PWD; `+f.echo(`"$echo_dir"`)); got != lines(f.api.Path, "cwd="+f.api.Path, "pwd="+f.api.Path, "tmpdir="+enginepaths.ProgramTempUnder(f.scratch), "arg="+f.api.Path) {
 		t.Fatalf("next program = %q", got)
 	}
 }
@@ -216,11 +218,12 @@ basename native-bytes > "$p"
 q="$TMPDIR/from-external"
 `+f.echo(`write "$q" external-bytes`)+`
 cat "$q"
-cat @scratch/from-external
+cat @scratch/.tmp/from-external
 cd "$TMPDIR" && pwd
 basename "$p" > copy-name
-cat "$SCRATCH_DIR/copy-name" | `+f.echo(`read /dev/stdin`))
-	entries, err := os.ReadDir(f.scratch)
+cat "$SCRATCH_DIR/.tmp/copy-name" | `+f.echo(`read /dev/stdin`))
+	temp := enginepaths.ProgramTempUnder(f.scratch)
+	entries, err := os.ReadDir(temp)
 	testutil.FailErr(t, "list scratch", err)
 	var made string
 	for _, entry := range entries {
@@ -228,7 +231,7 @@ cat "$SCRATCH_DIR/copy-name" | `+f.echo(`read /dev/stdin`))
 			made = entry.Name()
 		}
 	}
-	want := lines("read=native-bytes", "external-bytes", "external-bytes", f.scratch, "read="+made)
+	want := lines("read=native-bytes", "external-bytes", "external-bytes", temp, "read="+made)
 	if made == "" || got != want {
 		t.Fatalf("stdout =\n%s\nwant\n%s", got, want)
 	}
