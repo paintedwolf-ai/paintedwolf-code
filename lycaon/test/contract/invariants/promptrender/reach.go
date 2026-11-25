@@ -206,11 +206,13 @@ var (
 		if err != nil {
 			return nil, err
 		}
+		// The digest omits reader facts such as root count, so a recipient
+		// is distinct by authority and reader.
 		seen := map[string]bool{}
 		var out []coordRep
 		for _, p := range pairs {
-			if !seen[p.auth.Digest] {
-				seen[p.auth.Digest] = true
+			if key := p.auth.Digest + "|" + p.auth.Reader.Fingerprint(); !seen[key] {
+				seen[key] = true
 				out = append(out, p)
 			}
 		}
@@ -243,8 +245,8 @@ var (
 		seen := map[string]bool{}
 		var out []workerRep
 		for _, p := range pairs {
-			if !seen[p.auth.Digest] {
-				seen[p.auth.Digest] = true
+			if key := p.auth.Digest + "|" + p.auth.Reader.Fingerprint(); !seen[key] {
+				seen[key] = true
 				out = append(out, p)
 			}
 		}

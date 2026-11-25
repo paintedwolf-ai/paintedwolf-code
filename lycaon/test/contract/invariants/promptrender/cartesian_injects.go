@@ -126,16 +126,14 @@ func runCoordinatorInjectRenders(
 	for idx, cr := range cReps {
 		resolveNamed := resolver.forCoordinatorState(cr.state)
 
-		// command-jobs (running+exited+held and exited-only).
-		for _, withRunning := range []bool{true, false} {
-			jobs := jobsBoth
+		// command-jobs: running, exited and held; exited only; running only.
+		jobSets := [][]bgprocess.JobSnapshot{jobsBoth, jobsBoth[1:], jobsBoth[:1]}
+		for jIdx, jobs := range jobSets {
 			var held []heldcall.Running
-			if withRunning {
+			if jIdx == 0 {
 				held = heldRunning
 			} else if !firstOfReader[idx] {
 				continue
-			} else {
-				jobs = jobsBoth[1:]
 			}
 			// Live jobs and held calls project their control tools onto the turn.
 			jobAuth, err := hoststate.FreezeTurnAuthorityWithResources(ctx, cr.state, toolcontract.ResourcePresence{CommandJobs: true, HeldCalls: len(held) > 0})
