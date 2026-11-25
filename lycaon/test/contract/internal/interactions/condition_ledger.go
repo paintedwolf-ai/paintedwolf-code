@@ -97,11 +97,13 @@ type ConditionLedger struct {
 }
 
 // GenerationSummary counts the targeted cases generated for gaps: targets
-// searched, targets that reached a witnessing pair, and producer runs.
+// searched, targets that reached a witnessing pair, producer runs and the
+// time they took.
 type GenerationSummary struct {
-	Targets int `json:"targets"`
-	Found   int `json:"found"`
-	Runs    int `json:"runs"`
+	Targets int     `json:"targets"`
+	Found   int     `json:"found"`
+	Runs    int     `json:"runs"`
+	Seconds float64 `json:"seconds"`
 }
 
 // LedgerInput is what a ledger joins.

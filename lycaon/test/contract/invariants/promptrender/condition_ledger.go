@@ -3,6 +3,7 @@ package promptrender
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/test/contract/internal/casegen"
@@ -66,7 +67,7 @@ const (
 )
 
 // caseBudget bounds targeted generation: runs per gap and in total.
-var caseBudget = casegen.Budget{PerTarget: 80, Total: 30000}
+var caseBudget = casegen.Budget{PerTarget: 120, Total: 30000}
 
 // StockConditionLedger discovers every stock guard, joins it with the atom
 // observations of the host-state matrix, then generates targeted OAR cases
@@ -93,6 +94,7 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 		return nil, err
 	}
 	targets, gapRecipients := gen.targets(first)
+	started := time.Now()
 	outcomes, err := casegen.Generate(ctx, gen.producer, targets, caseBudget)
 	if err != nil {
 		return nil, err
@@ -103,7 +105,7 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	if err != nil {
 		return nil, err
 	}
-	l.Generation = interactions.GenerationSummary{Targets: len(targets), Runs: gen.producer.Runs()}
+	l.Generation = interactions.GenerationSummary{Targets: len(targets), Runs: gen.producer.Runs(), Seconds: time.Since(started).Seconds()}
 	for _, o := range outcomes {
 		if o.Found {
 			l.Generation.Found++
@@ -153,8 +155,9 @@ func newOARCaseGenerator(ctx context.Context, s *Stock) (*oarCaseGenerator, erro
 
 // derived returns what an OAR guard's own expression and its producer fix:
 // atoms reading one fact can only take the truths that fact's values
-// realise, the recipient fixes the session role facts, and confinement facts
-// stay zero unless confinement applied.
+// realise, the recipient fixes the session role facts, confinement facts
+// stay zero unless confinement applied, shared temp guards run only on a
+// refusal, and a tool selector fixes the tool-derived facts.
 func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient string) independence.Constraints {
 	var c independence.Constraints
 	if site.Family != "oar" {
@@ -168,11 +171,22 @@ func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient st
 	if fixed, ok := occurrenceRoleFacts[recipient]; ok {
 		c.Fixed = casegen.FixedFacts(site.Atoms, logic, fixed, srcOccurrenceRole)
 	}
-	if g.producer.Anchor(site.ID) == oar.AnchorToolPost {
+	switch g.producer.Anchor(site.ID) {
+	case oar.AnchorToolPost:
 		c.Joints = append(c.Joints, casegen.ZeroUnless(site.Atoms, logic, "paintedwolf.confine_applied", oarproducers.ConfineFacts(), srcConfine)...)
+	case oar.AnchorSharedTemp:
+		if slices.Contains(site.Atoms, sharedTempRefusedAtom) {
+			c.Fixed = append(c.Fixed, independence.Fixed{Atom: sharedTempRefusedAtom, Value: independence.True, Source: srcSharedTemp})
+		}
 	}
+	c.Fixed = append(c.Fixed, g.producer.SelectorFixed(site.ID, site.Atoms)...)
 	return c
 }
+
+const (
+	sharedTempRefusedAtom = "size(paintedwolf.refused_shared_temp) > 0"
+	srcSharedTemp         = "internal/session/policyfacts/oar_block.go:AfterTool evaluates sandbox.shared_temp only when the settlement refused a shared temp root"
+)
 
 // targets turns each OAR gap into generation targets: a guard nobody
 // evaluated is searched on every recipient its producer reaches.

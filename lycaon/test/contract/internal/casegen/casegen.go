@@ -147,8 +147,12 @@ type Budget struct {
 	Total     int
 }
 
-// maxNeedsTried caps the needed assignments one target searches.
-const maxNeedsTried = 4
+// maxNeedsTried caps the needed assignments one target searches;
+// maxPaired caps the knobs whose values are changed two at a time.
+const (
+	maxNeedsTried = 4
+	maxPaired     = 4
+)
 
 var errBudget = errors.New("case budget exhausted")
 
@@ -182,6 +186,7 @@ type search struct {
 	memo            map[string][]Vector
 	total           *int
 	runs, budget    int
+	spent           int
 	evaluated       bool
 }
 
@@ -202,6 +207,7 @@ func (s *search) run(set Setting, goal map[string]independence.Truth) (Vector, e
 			return Vector{}, errBudget
 		}
 		s.runs++
+		s.spent++
 		*s.total--
 		id := "generated:" + s.recipient + ":" + s.site + Label(s.knobs, set)
 		var err error
@@ -234,6 +240,10 @@ func (s *search) target(t Target, perTarget int) (Outcome, error) {
 		o.Reason = "no assignment of the other atoms lets this atom decide the guard"
 		return o, nil
 	}
+	if !s.evaluated && s.spent >= perTarget {
+		o.Reason = fmt.Sprintf("the producer did not evaluate the guard in %d generated cases", s.spent)
+		return o, nil
+	}
 	s.runs, s.budget = 0, perTarget
 	nearest := ""
 	for i, need := range t.Needs {
@@ -241,6 +251,9 @@ func (s *search) target(t Target, perTarget int) (Outcome, error) {
 			break
 		}
 		with, then, near, err := s.pair(t, need)
+		if nearest == "" {
+			nearest = near
+		}
 		if errors.Is(err, errBudget) {
 			break
 		}
@@ -251,15 +264,12 @@ func (s *search) target(t Target, perTarget int) (Outcome, error) {
 			o.Found, o.With, o.Then = true, with, then
 			break
 		}
-		if nearest == "" {
-			nearest = near
-		}
 	}
 	o.Runs = s.runs
 	switch {
 	case o.Found:
 	case !s.evaluated:
-		o.Reason = fmt.Sprintf("the producer did not evaluate the guard in %d generated cases", s.runs)
+		o.Reason = fmt.Sprintf("the producer did not evaluate the guard in %d generated cases", s.spent)
 	default:
 		o.Reason = fmt.Sprintf("%d generated cases reached no needed pair; nearest %s", s.runs, nearest)
 	}
@@ -279,7 +289,7 @@ func (s *search) pair(t Target, need map[string]independence.Truth) (*Case, *Cas
 	for _, order := range [][2]independence.Truth{{independence.True, independence.False}, {independence.False, independence.True}} {
 		a, va, ok, err := s.climb(t, Setting{}, goal(order[0]))
 		if err != nil {
-			return nil, nil, nearest, err
+			return nil, nil, cmp.Or(nearest, describe(va, goal(order[0]))), err
 		}
 		if !ok {
 			nearest = cmp.Or(nearest, describe(va, goal(order[0])))
@@ -287,7 +297,7 @@ func (s *search) pair(t Target, need map[string]independence.Truth) (*Case, *Cas
 		}
 		b, vb, ok, err := s.climb(t, a, goal(order[1]))
 		if err != nil {
-			return nil, nil, nearest, err
+			return nil, nil, cmp.Or(nearest, describe(vb, goal(order[1]))), err
 		}
 		if !ok {
 			nearest = cmp.Or(nearest, describe(vb, goal(order[1])))
@@ -395,8 +405,9 @@ func (s *search) improve(knobs []Knob, cur Setting, v Vector, goal map[string]in
 			}
 		}
 	}
-	for a, ka := range knobs {
-		for _, kb := range knobs[a+1:] {
+	paired := knobs[:min(len(knobs), maxPaired)]
+	for a, ka := range paired {
+		for _, kb := range paired[a+1:] {
 			for i := range ka.Values {
 				for j := range kb.Values {
 					if i == cur[ka.Name] || j == cur[kb.Name] {

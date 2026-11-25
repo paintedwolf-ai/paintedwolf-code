@@ -32,9 +32,9 @@ func TestGuardAtomsHaveIndependentWitnesses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode condition ledger: %v", err)
 	}
-	t.Logf("condition ledger: sites=%d compound=%d obligations=%d witnesses=%d exclusions=%d gaps=%d stale=%d generated_targets=%d generated_found=%d generated_runs=%d",
+	t.Logf("condition ledger: sites=%d compound=%d obligations=%d witnesses=%d exclusions=%d gaps=%d stale=%d generated_targets=%d generated_found=%d generated_runs=%d generated_seconds=%.0f",
 		len(ledger.Sites), ledger.CompoundSites, ledger.Obligations, len(ledger.Witnesses), len(ledger.Exclusions), len(ledger.Gaps), len(ledger.StaleConstraints),
-		ledger.Generation.Targets, ledger.Generation.Found, ledger.Generation.Runs)
+		ledger.Generation.Targets, ledger.Generation.Found, ledger.Generation.Runs, ledger.Generation.Seconds)
 	t.Logf("condition ledger JSON:\n%s", raw)
 	sum, err := promptrender.RunCartesianMatrix(t.Context(), stock)
 	if err != nil {

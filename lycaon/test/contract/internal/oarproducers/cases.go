@@ -1,10 +1,12 @@
 package oarproducers
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -136,7 +138,7 @@ type CaseProducer struct {
 	cells     map[string][]AuthCell
 	partition func(*oar.GuardContext) string
 	rules     map[string]*oar.Rule
-	altCode   string
+	altCodes  []string
 	fields    map[string]*factField
 	observed  map[string]*hoststate.ObservedCondition
 	runs      int
@@ -160,36 +162,43 @@ func NewCaseProducer(h *Harness, cells []AuthCell, partition func(*oar.GuardCont
 		}
 	}
 	p.cells[RecipientUnscoped] = p.cells[RecipientCoordinator]
-	var codes []string
+	var rejected []*oar.Rule
 	for _, r := range h.Rules.All() {
 		if r == nil {
 			continue
 		}
 		p.rules[r.Qualified()] = r
-		if r.Anchor == oar.AnchorToolRejected {
-			codes = append(codes, oarcore.ConjunctValues(r.When, "paintedwolf.rejection_code")...)
+		if r.Anchor == oar.AnchorToolRejected && len(oarcore.ConjunctValues(r.When, "paintedwolf.rejection_code")) > 0 {
+			rejected = append(rejected, r)
 		}
 	}
-	slices.Sort(codes)
-	if len(codes) == 0 {
-		return nil, fmt.Errorf("no tool.rejected rule names a rejection code")
+	if len(rejected) < 2 {
+		return nil, fmt.Errorf("fewer than two tool.rejected rules name a rejection code")
 	}
-	p.altCode = codes[0]
+	// The pipeline evaluates rules by kind then id and the first block stops
+	// it, so an alternative code is taken from the last rules evaluated.
+	slices.SortFunc(rejected, func(a, b *oar.Rule) int {
+		return cmp.Or(strings.Compare(string(a.Kind), string(b.Kind)), strings.Compare(a.Qualified(), b.Qualified()))
+	})
+	for _, r := range rejected[len(rejected)-2:] {
+		p.altCodes = append(p.altCodes, oarcore.ConjunctValues(r.When, "paintedwolf.rejection_code")[0])
+	}
 	return p, nil
 }
 
-// recipientCells keeps one cell per distinct mode, posture and surface of
-// role, baseline first, at most eight.
+// recipientCells keeps one cell per distinct mode, posture, surface and
+// profile of role, those offering command first, then the boundary request
+// shapes, at most twelve.
 func recipientCells(cells []AuthCell, role string) []AuthCell {
 	var out []AuthCell
 	seen := map[string]bool{}
-	for _, preferCommand := range []bool{true, false} {
+	for _, pass := range []struct{ command, boundary bool }{{true, false}, {false, false}, {true, true}, {false, true}} {
 		for _, c := range cells {
-			if c.Role != role || c.IsBoundary || slices.Contains(c.Auth.Offered, "command") != preferCommand {
+			if c.Role != role || c.IsBoundary != pass.boundary || slices.Contains(c.Auth.Offered, "command") != pass.command {
 				continue
 			}
-			key := fmt.Sprintf("%s|%s|%s|%s", c.Mode, c.Posture, c.SurfaceID, c.ProfileID)
-			if seen[key] || len(out) == 8 {
+			key := fmt.Sprintf("%s|%s|%s|%s|%s", c.Mode, c.Posture, c.SurfaceID, c.ProfileID, c.Auth.Digest)
+			if seen[key] || len(out) == 12 || (pass.boundary && len(out) == 0) {
 				continue
 			}
 			seen[key] = true
@@ -280,6 +289,12 @@ func (p *CaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	switch entry.kind {
 	case entryRejected:
 		knobs = append(knobs, p.codeKnob(rule, sources))
+		if recipient != RecipientUnscoped {
+			knobs = append(knobs,
+				casegen.Knob{Name: "doom.count", Facts: []string{"paintedwolf.repeat_count", "paintedwolf.count", "paintedwolf.deferred_unactivated"}, Values: []any{0, 1, 9}},
+				casegen.Knob{Name: "doom.code", Facts: []string{"paintedwolf.repeated_rejection_code"}, Values: []any{"", "TOOL_ARGS_INVALID"}},
+			)
+		}
 		sample := defaultOccurrenceSample(rule)
 		for _, f := range p.references(sources...) {
 			if k, ok := p.factKnob("data.", f, sources, sample[strings.TrimPrefix(f, "paintedwolf.")]); ok {
@@ -298,7 +313,13 @@ func (p *CaseProducer) Knobs(site, recipient string) []casegen.Knob {
 		}
 	case entryAfterTool:
 		knobs = append(knobs, confineKnobs(sources)...)
-		knobs = append(knobs, sharedTempKnob(), casegen.Knob{Name: "count", Facts: []string{"paintedwolf.repeat_count", casegen.AnyFact}, Values: []any{1, 4, 9}})
+		knobs = append(knobs, sharedTempKnob(),
+			casegen.Knob{Name: "count", Facts: []string{"paintedwolf.repeat_count", casegen.AnyFact}, Values: []any{1, 4, 9}},
+			casegen.Knob{
+				Name: "args", Facts: []string{"tool_args", "paintedwolf.handle", "paintedwolf.query"},
+				Values: []any{map[string]any{"command": "run"}, map[string]any{"handle": "cmd-1"}, map[string]any{"query": "x"}},
+				Labels: []string{"command", "handle", "query"},
+			})
 	case entryCredential:
 		values := make([]any, len(credentialValues))
 		for i, v := range credentialValues {
@@ -336,7 +357,7 @@ func (p *CaseProducer) toolKnob(rule *oar.Rule, fallback string, sources []strin
 
 func (p *CaseProducer) codeKnob(rule *oar.Rule, sources []string) casegen.Knob {
 	var values []any
-	for _, c := range slices.Concat(oarcore.ConjunctValues(rule.When, "paintedwolf.rejection_code"), literals("paintedwolf.rejection_code", sources...), []string{p.altCode}) {
+	for _, c := range slices.Concat(oarcore.ConjunctValues(rule.When, "paintedwolf.rejection_code"), literals("paintedwolf.rejection_code", sources...), p.altCodes) {
 		if !slices.Contains(values, any(c)) {
 			values = append(values, c)
 		}
@@ -451,20 +472,43 @@ func confineKnobs(sources []string) []casegen.Knob {
 	for _, l := range literals("paintedwolf.denial_subject", sources...) {
 		denial = append(denial, l)
 	}
-	refusals := []any{-1}
-	labels := []string{"none"}
-	for i := range sandboxRefusalSets {
-		refusals = append(refusals, i)
-		labels = append(labels, fmt.Sprintf("set%d", i))
-	}
-	return []casegen.Knob{
+	knobs := []casegen.Knob{
 		{Name: "confine.applied", Facts: confineFacts, Values: []any{true, false}},
 		{Name: "confine.running", Facts: []string{"paintedwolf.process_running"}, Values: []any{false, true}},
 		{Name: "confine.failed", Facts: []string{"paintedwolf.failed_stages"}, Values: []any{[]string{}, []string{"run"}}},
 		{Name: "confine.signals", Facts: []string{"paintedwolf.confine_signals"}, Values: signals},
 		{Name: "confine.denial", Facts: []string{"paintedwolf.denial_subject"}, Values: denial},
-		{Name: "confine.refusals", Facts: confineFacts, Values: refusals, Labels: labels},
 	}
+	for i, set := range sandboxRefusalSets {
+		knobs = append(knobs, casegen.Knob{Name: fmt.Sprintf("refusal.%d", i), Facts: refusalFacts(set), Values: []any{false, true}})
+	}
+	return knobs
+}
+
+// refusalFacts names the facts observeSandboxRefusals publishes for set.
+func refusalFacts(set []confine.SandboxRefusal) []string {
+	var out []string
+	for _, r := range set {
+		switch r.Recovery {
+		case confine.RecoverCredentialStore:
+			out = append(out, "paintedwolf.refused_credential_store_paths")
+		case confine.RecoverSocketPath:
+			out = append(out, "paintedwolf.refused_socket_paths")
+		case confine.RecoverOutboundPort:
+			out = append(out, "paintedwolf.refused_connect_ports")
+		case confine.RecoverLocalListen:
+			out = append(out, "paintedwolf.refused_listen_ports")
+		case confine.RecoverProcessControl:
+			out = append(out, "paintedwolf.refused_signals")
+		case confine.RecoverHostExecution:
+			out = append(out, "paintedwolf.unsandboxed_refusals")
+		case confine.RecoverWriteRoot, confine.RecoverReadPath, confine.RecoverNone:
+			out = append(out, "paintedwolf.refused_write_paths", "paintedwolf.ordinary_write_paths", "paintedwolf.refused_write_grants",
+				"paintedwolf.ordinary_write_grants", "paintedwolf.refused_read_paths", "paintedwolf.refused_read_grants",
+				"paintedwolf.refused_multiple_read_grants", "paintedwolf.refused_terminal_read_paths", "paintedwolf.refused_terminal_write_paths")
+		}
+	}
+	return out
 }
 
 func sharedTempKnob() casegen.Knob {
@@ -493,8 +537,11 @@ type occurrence struct {
 	data      map[string]any
 	fields    []fieldValue
 	confine   confine.Observation
-	refusals  int
+	refusals  []int
+	doomCount int
+	doomCode  string
 	shared    *guidance.SharedTempSettlement
+	args      map[string]any
 	count     int
 	content   string
 	harvested bool
@@ -508,7 +555,7 @@ type fieldValue struct {
 }
 
 func (p *CaseProducer) occurrence(rule *oar.Rule, recipient string, knobs []casegen.Knob, s casegen.Setting) *occurrence {
-	o := &occurrence{rule: rule, recipient: recipient, data: map[string]any{}, refusals: -1, count: 1, repeat: 1, content: credentialValues[0]}
+	o := &occurrence{rule: rule, recipient: recipient, data: map[string]any{}, count: 1, repeat: 1, content: credentialValues[0], args: map[string]any{"command": "run"}}
 	o.confine.Applied = true
 	for _, k := range knobs {
 		if k.Name == "cell" {
@@ -539,12 +586,21 @@ func (p *CaseProducer) occurrence(rule *oar.Rule, recipient string, knobs []case
 			o.confine.Signals = v.([]string)
 		case name == "confine.denial":
 			o.confine.DenialSubject = v.(string)
-		case name == "confine.refusals":
-			o.refusals = v.(int)
+		case strings.HasPrefix(name, "refusal."):
+			if v.(bool) {
+				i, _ := strconv.Atoi(strings.TrimPrefix(name, "refusal."))
+				o.refusals = append(o.refusals, i)
+			}
+		case name == "doom.count":
+			o.doomCount = v.(int)
+		case name == "doom.code":
+			o.doomCode = v.(string)
 		case name == "shared_temp":
 			o.shared = v.(*guidance.SharedTempSettlement)
 		case name == "count":
 			o.count = v.(int)
+		case name == "args":
+			o.args = v.(map[string]any)
 		case name == "content":
 			o.content = v.(string)
 		case name == "harvested":
@@ -559,8 +615,8 @@ func (p *CaseProducer) occurrence(rule *oar.Rule, recipient string, knobs []case
 			o.fields = append(o.fields, fieldValue{p.field("paintedwolf." + strings.TrimPrefix(name, "gc.")), v})
 		}
 	}
-	if o.refusals >= 0 {
-		o.confine.Refusals = confine.SandboxRefusals{Refusals: sandboxRefusalSets[o.refusals]}
+	for _, i := range o.refusals {
+		o.confine.Refusals.Refusals = append(o.confine.Refusals.Refusals, sandboxRefusalSets[i]...)
 	}
 	return o
 }
@@ -617,6 +673,10 @@ func (p *CaseProducer) deliver(ctx context.Context, entry caseEntry, o *occurren
 	}
 	switch entry.kind {
 	case entryRejected:
+		if o.doomCount > 0 || o.doomCode != "" {
+			_, _ = h.Policy.FormatDoomLoopReject(cctx, o.sessID, o.tool, maps.Clone(o.data), o.doomCount, o.doomCode)
+			break
+		}
 		_ = h.BlockPlane.RejectObservation(cctx, o.tool, o.cell.ProfileID, nil, &toolrejection.ToolReject{Code: o.code, Data: o.data})
 	case entryBlock:
 		_, _, _ = h.Policy.Block(cctx, o.rule.Anchor, sess, o.tool, nil, func(gc *oar.GuardContext) error {
@@ -634,7 +694,7 @@ func (p *CaseProducer) deliver(ctx context.Context, entry caseEntry, o *occurren
 			return nil
 		})
 	case entryAfterTool:
-		_, _ = h.Policy.AfterTool(cctx, sess, o.tool, map[string]any{"command": "run"}, "ok", o.count, guidance.ToolResultFacts{Confine: o.confine, SharedTemp: o.shared})
+		_, _ = h.Policy.AfterTool(cctx, sess, o.tool, maps.Clone(o.args), "ok", o.count, guidance.ToolResultFacts{Confine: o.confine, SharedTemp: o.shared})
 	case entryCredential:
 		if o.harvested {
 			for _, root := range []string{o.sessID, "coord-parent-" + o.sessID} {

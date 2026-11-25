@@ -1,8 +1,10 @@
 package oarproducers
 
 import (
+	"fmt"
 	"slices"
 
+	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/test/contract/internal/casegen"
 	"github.com/lycaon/lycaon/test/contract/internal/independence"
@@ -130,4 +132,59 @@ func (l *ruleLogic) Zero(fact string) any {
 		return []string{}
 	}
 	return ""
+}
+
+// toolFacts are the facts the producer derives from the invoked tool alone.
+var toolFacts = map[string]bool{
+	"tool": true, "paintedwolf.tool_is_task": true, "paintedwolf.tool_is_state": true, "paintedwolf.tool_is_delegation": true,
+	"paintedwolf.tool_is_handoff": true, "paintedwolf.tool_payload_chunkable": true, "paintedwolf.receiving_tool_summarize": true,
+}
+
+// SelectorFixed holds each atom that reads only tool-derived facts at its
+// truth when every tool the rule's selector admits gives it the same truth:
+// the pipeline evaluates the rule for those tools only.
+func (p *CaseProducer) SelectorFixed(site string, atoms []string) []independence.Fixed {
+	rule, _ := p.ruleOf(site)
+	if rule == nil || len(rule.Tools()) == 0 {
+		return nil
+	}
+	logic := p.Logic(site)
+	var out []independence.Fixed
+	for _, a := range distinctOf(atoms) {
+		refs := logic.References(a)
+		if len(refs) == 0 || slices.ContainsFunc(refs, func(f string) bool { return !toolFacts[f] }) {
+			continue
+		}
+		truth := independence.Unknown
+		for _, tool := range rule.Tools() {
+			gc := oar.NewGuardContext()
+			gc.ObserveToolCall(tool, nil)
+			gc.DeriveToolClassFacts()
+			held, err := oar.EvaluateCondition(a, gc)
+			t := independence.False
+			if held {
+				t = independence.True
+			}
+			if err != nil || (truth != independence.Unknown && t != truth) {
+				truth = independence.Unknown
+				break
+			}
+			truth = t
+		}
+		if truth != independence.Unknown {
+			out = append(out, independence.Fixed{Atom: a, Value: truth,
+				Source: fmt.Sprintf("policy/%s selector admits only %v, and GuardContext.DeriveToolClassFacts derives the tool facts from the tool", rule.ID, rule.Tools())})
+		}
+	}
+	return out
+}
+
+func distinctOf(atoms []string) []string {
+	var out []string
+	for _, a := range atoms {
+		if !slices.Contains(out, a) {
+			out = append(out, a)
+		}
+	}
+	return out
 }
