@@ -91,6 +91,7 @@ func (l *WaitSubscriptions) settleDurableWaitWake(
 		Wake: wake, CompletingJobID: completingJobID, Subject: legID,
 		Worker:            l.workerName(ctx, completingJobID, legID),
 		ProcessHandles:    processHandles,
+		RefusalHandles:    l.Waits.activeRefusalHandles(sessionID),
 		WorkerHandles:     workerHandlesFromConditions(lease.Conditions),
 		CycleIdle:         l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID),
 		OverlayPromoteDue: l.OverlayPromoteDue(ctx, sessionID),
@@ -255,6 +256,7 @@ func (l *WaitSubscriptions) waitWakeAccepted(
 		Subject:           legID,
 		Worker:            l.workerName(ctx, completingJobID, legID),
 		ProcessHandles:    l.Waits.ActiveProcessHandles(sessionID),
+		RefusalHandles:    l.Waits.activeRefusalHandles(sessionID),
 		WorkerHandles:     l.Waits.activeWorkerHandles(sessionID),
 		CycleIdle:         l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID),
 		OverlayPromoteDue: l.OverlayPromoteDue(ctx, sessionID),
@@ -270,6 +272,7 @@ func (l *WaitSubscriptions) matchesActiveWait(ctx context.Context, sessionID str
 		Wake: pending.wake, CompletingJobID: pending.completingJobID, Subject: pending.legID,
 		Worker:         l.workerName(ctx, pending.completingJobID, pending.legID),
 		ProcessHandles: l.Waits.ActiveProcessHandles(sessionID), WorkerHandles: l.Waits.activeWorkerHandles(sessionID),
+		RefusalHandles:    l.Waits.activeRefusalHandles(sessionID),
 		CycleIdle:         l.Cycles.workerCycleIdle(ctx, sessionID, pending.completingJobID),
 		OverlayPromoteDue: l.OverlayPromoteDue(ctx, sessionID), NeedsDecision: pending.env.HasWorkerDecision(),
 	})

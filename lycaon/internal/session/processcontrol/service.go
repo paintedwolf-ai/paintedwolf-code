@@ -28,7 +28,11 @@ type Guidance interface {
 type SubjectDropper interface {
 	DropSubject(sessionID string, id anchor.ID, subject string) bool
 }
-type Waits interface{ SessionSleepingOnProcess(string, string) bool }
+type Waits interface {
+	SessionSleepingOnProcess(sessionID, handle string) bool
+	// SessionSleepingOnRefusal also covers a process the session watches.
+	SessionSleepingOnRefusal(sessionID, handle string) bool
+}
 type Nudges interface {
 	NudgeProcessRefused(context.Context, string, string, anchor.Envelope)
 	NudgeProcessFinished(context.Context, string, string, anchor.Envelope)
