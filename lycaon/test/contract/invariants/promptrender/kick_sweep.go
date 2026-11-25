@@ -20,15 +20,17 @@ import (
 // kickSweep renders kicks for recipients and checks each render's claims once
 // per render and authority.
 type kickSweep struct {
-	s        *Stock
-	engine   *prompts.FileTemplateEngine
-	cache    *hoststate.RenderCache
-	report   func(string)
-	rendered int
+	s *Stock
+	// envelopes lists the occurrence fixtures for one kick.
+	envelopes func(reg *anchor.Registry, kick string) []map[string]any
+	engine    *prompts.FileTemplateEngine
+	cache     *hoststate.RenderCache
+	report    func(string)
+	rendered  int
 }
 
 func newKickSweep(s *Stock, cache *hoststate.RenderCache, report func(string)) *kickSweep {
-	return &kickSweep{s: s, engine: s.Engine(), cache: cache, report: report}
+	return &kickSweep{s: s, envelopes: richKickEnvelopes, engine: s.Engine(), cache: cache, report: report}
 }
 
 // checkClaimsCached runs check once per render key and authority key and
@@ -130,7 +132,7 @@ func (k *kickSweep) coordinatorKicks(ctx context.Context, anchorReg *anchor.Regi
 			continue
 		}
 		distinct := distinctReaderIndexes(len(reps), func(i int) prompts.Reader { return reps[i].auth.Reader })
-		for envIdx, envBase := range richKickEnvelopes(anchorReg, kick) {
+		for envIdx, envBase := range k.envelopes(anchorReg, kick) {
 			indexes := distinct
 			if envIdx == 0 {
 				indexes = allIndexes(len(reps))
@@ -200,7 +202,7 @@ func (k *kickSweep) workerKicks(ctx context.Context, anchorReg *anchor.Registry,
 	}
 	distinct := distinctReaderIndexes(len(reps), func(i int) prompts.Reader { return reps[i].auth.Reader })
 	for _, kick := range kicks {
-		for envIdx, envBase := range richKickEnvelopes(anchorReg, kick) {
+		for envIdx, envBase := range k.envelopes(anchorReg, kick) {
 			indexes := distinct
 			if envIdx == 0 {
 				indexes = allIndexes(len(reps))

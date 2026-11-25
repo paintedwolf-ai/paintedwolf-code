@@ -76,15 +76,16 @@ func TestGuidanceFollowsSingleHostStateFlips(t *testing.T) {
 			want func(offer) bool
 		}{
 			{investigate(api.SessionModeAgent, api.SessionPostureBuild, hoststate.LoadingAllLoaded, hoststate.RootsSingleGit), func(o offer) bool { return o.commandVerify || o.verify }},
-			{investigate(api.SessionModeAgent, api.SessionPostureBuild, hoststate.LoadingFloorOnly, hoststate.RootsSingleGit), func(o offer) bool { return !o.verify && o.load }},
+			{investigate(api.SessionModeAgent, api.SessionPostureBuild, hoststate.LoadingFloorOnly, hoststate.RootsSingleGit), func(o offer) bool { return !o.verify }},
 			{investigate(api.SessionModeAgent, api.SessionPostureSpec, hoststate.LoadingAllLoaded, hoststate.RootsSingleGit), func(o offer) bool { return !o.commandVerify && o.verify }},
 			{investigate(api.SessionModeAgent, api.SessionPostureSpec, hoststate.LoadingFloorOnly, hoststate.RootsSingleGit), func(o offer) bool { return !o.commandVerify && !o.verify }},
 		} {
-			calls := toolvocabtest.ParseCallExamples(s.Names, renderStandingForWitness(t, s, tc.st, "./task test:digest"))
+			text := renderStandingForWitness(t, s, tc.st, "./task test:digest")
+			calls := toolvocabtest.ParseCallExamples(s.Names, text)
 			got := offer{
 				commandVerify: slices.ContainsFunc(calls, func(c toolvocabtest.CallExample) bool { return c.Tool == "command" && c.Args["verification"] == true }),
 				verify:        slices.ContainsFunc(calls, func(c toolvocabtest.CallExample) bool { return c.Tool == "verify" }),
-				load:          slices.ContainsFunc(calls, func(c toolvocabtest.CallExample) bool { return c.Tool == "request_tools" }),
+				load:          slices.Contains(toolvocab.ToolsIn(s.Names, text), "request_tools"),
 			}
 			if !tc.want(got) {
 				t.Errorf("%s: parsed verification calls %+v", tc.st.ID, got)

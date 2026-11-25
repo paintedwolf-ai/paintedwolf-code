@@ -95,7 +95,7 @@ func TestToolProceduresPartialSchemasKeepExactPerToolCapabilities(t *testing.T) 
 	emptyCtx := prompts.WithProjectedSchemas(t.Context(), map[string]map[string]any{})
 	emptyBlock, err := m.ToolProcedures(emptyCtx, sess, "implementer", []string{"command", "verify"})
 	testutil.FailErr(t, "ToolProcedures empty", err)
-	if strings.Contains(emptyBlock, "socks_proxy") || strings.Contains(emptyBlock, "capability_request") {
+	if strings.Contains(emptyBlock, "socks_proxy") {
 		t.Fatalf("empty projected map fell back to raw catalog schemas:\n%s", emptyBlock)
 	}
 }

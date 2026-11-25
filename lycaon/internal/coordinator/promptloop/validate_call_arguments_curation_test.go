@@ -74,7 +74,6 @@ func setupArgValidationLoop(
 	root := testutil.CheckoutRoot(t)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(engine))
-	t.Cleanup(func() { guidance.SetGuidanceRenderer(nil) })
 	testutil.FailErr(t, "install anchors", anchorcatalog.InstallFile(filepath.Join(root, "lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml")))
 	testutil.FailErr(t, "install oar profile", oar.InstallEngineDeclarationBundled(filepath.Join(root, "schemas")))
 	loader, err := oar.NewLoader(filepath.Join(root, "schemas"))

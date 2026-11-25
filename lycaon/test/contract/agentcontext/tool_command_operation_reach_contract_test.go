@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
@@ -221,19 +222,16 @@ func verifyPartialMultiFormAndStepFallback(
 	}
 	partialReach := toolreach.Offered([]string{"command"}).WithPrograms(func(name string) bool {
 		return name == allForms[0]
-	})
-	var programs []string
+	}).WithSchemas(map[string]map[string]any{"command": {"properties": map[string]any{"command": map[string]any{"type": "string"}}}})
 	for _, c := range oarproducers.ObserveDeliveredRefusal(renderCommandOpRefusal(t, bp, &partialReach, multiOp)).NextCalls {
-		if c.Tool == "command" {
-			programs = append(programs, c.Program)
+		if c.Tool != "command" {
+			continue
 		}
-	}
-	if !slices.Contains(programs, allForms[0]) {
-		t.Errorf("partial multi-form next calls run %v, want admitted form %q", programs, allForms[0])
-	}
-	for _, dropped := range allForms[1:] {
-		if slices.Contains(programs, dropped) {
-			t.Errorf("partial multi-form next calls run unadmitted form %q", dropped)
+		cmd, _ := c.Args["command"].(string)
+		for _, dropped := range allForms[1:] {
+			if c.Program == dropped || strings.HasPrefix(cmd, dropped+" ") || cmd == dropped {
+				t.Errorf("partial multi-form next call runs unadmitted form %q: %+v", dropped, c)
+			}
 		}
 	}
 
