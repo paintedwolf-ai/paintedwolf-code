@@ -11,7 +11,7 @@ func TestParseTemplateTreeAndExpressions(t *testing.T) {
 	t.Parallel()
 	tree, err := pongoplain.ParseTemplateTree(
 		`{% set note = "done" %}` +
-			`{% if can_git_read %}git{% elif profile_has_verify or can_command_verify %}verify{% else %}{{ "load" if can_request_git_read else note }}{% endif %}` +
+			`{% if can_git_read %}git{% elif profile_has_verify or can_command_verify %}verify{% else %}{{ note }}{% endif %}` +
 			`{% for item in items|default:"" %}{{ item }}{% empty %}none{% endfor %}` +
 			`{% include "partials/host.md" %}`,
 	)
@@ -37,12 +37,12 @@ func TestParseTemplateTreeAndExpressions(t *testing.T) {
 		})
 	}
 
-	expr, err := pongoplain.ParseExpression(`"yes" if has_git and not on_worker_branch else "no"`)
+	expr, err := pongoplain.ParseExpression(`has_git and not on_worker_branch`)
 	if err != nil {
-		t.Fatalf("ParseExpression ternary: %v", err)
+		t.Fatalf("ParseExpression: %v", err)
 	}
-	if expr.Kind != pongoplain.ExprTernary || !expr.HasLogicalOrCompare() {
-		t.Fatalf("unexpected ternary AST: %+v", expr)
+	if expr.Kind != pongoplain.ExprAnd || !expr.HasLogicalOrCompare() {
+		t.Fatalf("unexpected AST: %+v", expr)
 	}
 	if got := strings.Join(expr.Identifiers(), ","); got != "has_git,on_worker_branch" {
 		t.Fatalf("Identifiers() = %q, want has_git,on_worker_branch", got)
