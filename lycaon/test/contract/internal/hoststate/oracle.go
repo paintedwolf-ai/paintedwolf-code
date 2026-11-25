@@ -63,6 +63,13 @@ type executorCacheKey struct {
 	mcpState       MCPState
 }
 
+// The registry depends only on the catalog and MCP state, so every executor
+// over the same pair shares one.
+type registryCacheKey struct {
+	revision string
+	mcpState MCPState
+}
+
 type programTableKey struct {
 	profileID string
 	surfaceID string
@@ -94,6 +101,7 @@ type projectedTurnToolsEntry struct {
 var (
 	executorCacheMu   sync.Mutex
 	executorCache     = map[executorCacheKey]executorBundle{}
+	registryCache     = map[registryCacheKey]*tools.DefaultRegistry{}
 	cachedSandboxConf = sync.OnceValues(sandbox.LoadConfig)
 	projTurnMu        sync.Mutex
 	projTurnCache     = map[string]projectedTurnToolsEntry{}
@@ -204,7 +212,7 @@ func executorBundleForOverlay(
 	}
 	executorCacheMu.Unlock()
 
-	reg, err := buildCatalogRegistry(overlay.Catalog, mcpState)
+	reg, err := sharedCatalogRegistry(overlay.Catalog, mcpState)
 	if err != nil {
 		return executorBundle{}, nil, err
 	}
@@ -270,6 +278,21 @@ func (b executorBundle) programTable(ctx context.Context, filter platform.ToolFi
 	b.tables[key] = table
 	b.tablesMu.Unlock()
 	return table, nil
+}
+
+func sharedCatalogRegistry(eff *extpacks.EffectiveCatalog, mcpState MCPState) (*tools.DefaultRegistry, error) {
+	key := registryCacheKey{revision: eff.Revision, mcpState: mcpState}
+	executorCacheMu.Lock()
+	defer executorCacheMu.Unlock()
+	if reg, ok := registryCache[key]; ok {
+		return reg, nil
+	}
+	reg, err := buildCatalogRegistry(eff, mcpState)
+	if err != nil {
+		return nil, err
+	}
+	registryCache[key] = reg
+	return reg, nil
 }
 
 func buildCatalogRegistry(eff *extpacks.EffectiveCatalog, mcpState MCPState) (*tools.DefaultRegistry, error) {
