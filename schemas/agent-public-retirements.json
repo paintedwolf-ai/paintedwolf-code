@@ -236,6 +236,10 @@
     "paintedwolf.workflow_run_exit": {
       "version": 1,
       "summary": "Exit of an active workflow run is a person's control in the app; the coordinator sees the closed run in its run context."
+    },
+    "paintedwolf.command_json_programs": {
+      "version": 1,
+      "summary": "JSON extraction and validation run as jq or yq programs through command."
     }
   },
   "vocabularies": {
@@ -913,15 +917,18 @@
       "handoff_health": [
         "pack_board"
       ],
-      "parse_extract_json": [
-        "jq"
-      ],
-      "parse_validate": [
-        "jq"
-      ],
-      "parse_evaluation": [
-        "jq"
-      ],
+      "parse_extract_json": {
+        "content_contract": "paintedwolf.command_json_programs",
+        "version": 1
+      },
+      "parse_validate": {
+        "content_contract": "paintedwolf.command_json_programs",
+        "version": 1
+      },
+      "parse_evaluation": {
+        "content_contract": "paintedwolf.command_json_programs",
+        "version": 1
+      },
       "plan_append_review_evidence": [
         "submit_verdict"
       ],

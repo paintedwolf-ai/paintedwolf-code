@@ -316,31 +316,20 @@ func TestCandidateRejectionLeavesStateUntouched(t *testing.T) {
 	}
 }
 
-// A disabled schema removes custom copy without removing the tool.
-func TestDisablingStockToolSchemaUnitAcceptsCandidate(t *testing.T) {
+// Every stock tool schema backs a profile grant, so disabling one cannot boot.
+func TestDisablingGrantedToolSchemaRejectsCandidate(t *testing.T) {
 	owner := testOwner(t)
 	before := currentRevision(t, owner, "")
-	res, err := owner.Apply(t.Context(), extensionstate.Intent{
+	_, err := owner.Apply(t.Context(), extensionstate.Intent{
 		Scope:            extensionstate.Scope{Kind: "device"},
 		ExpectedRevision: before,
-		Op:               extensionstate.SetUnitDisabledOp{UnitID: "tools/schemas/request_tools", Disabled: true},
+		Op:               extensionstate.SetUnitDisabledOp{UnitID: "tools/schemas/scan_compare", Disabled: true},
 	})
-	testutil.FailErr(t, "disable stock tool schema unit", err)
-	if res.Revision == before {
-		t.Fatal("accepted disable must move the revision")
+	if err == nil {
+		t.Fatal("disabling a schema a profile grants must reject")
 	}
-	path, pathErr := extpacks.DeviceDesiredPath()
-	testutil.FailErr(t, "device desired path", pathErr)
-	desired, loadErr := extpacks.LoadDesiredFile(path)
-	testutil.FailErr(t, "load desired", loadErr)
-	found := false
-	for _, id := range desired.Disabled {
-		if id == "tools/schemas/request_tools" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("accepted disable must reach desired state")
+	if got := currentRevision(t, owner, ""); got != before {
+		t.Fatal("rejection must not move the revision")
 	}
 }
 
