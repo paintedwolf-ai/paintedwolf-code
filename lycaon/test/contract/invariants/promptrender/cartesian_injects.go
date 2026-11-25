@@ -49,7 +49,7 @@ func runKicksAndInjectsMatrix(
 		return err
 	}
 
-	if err := runAllKicksAndNudges(ctx, s, cReps, wReps, cache, sum); err != nil {
+	if err := runAllKicksAndNudges(ctx, s, cReps, wReps, sum); err != nil {
 		return err
 	}
 	if err := runCoordinatorInjectRenders(ctx, s, cReps, resolver, sum); err != nil {
@@ -69,7 +69,6 @@ func runAllKicksAndNudges(
 	s *Stock,
 	cReps []coordRep,
 	wReps []workerRep,
-	cache *hoststate.RenderCache,
 	sum *CartesianSummary,
 ) error {
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
@@ -80,7 +79,9 @@ func runAllKicksAndNudges(
 	if err != nil {
 		return err
 	}
-	sweep := newKickSweep(s, cache, func(v string) { sum.Violations = append(sum.Violations, v) })
+	// Kick renders share no keys with the other families; a sweep-local cache
+	// is released once the sweep ends.
+	sweep := newKickSweep(s, hoststate.NewRenderCache(), func(v string) { sum.Violations = append(sum.Violations, v) })
 	if err := sweep.coordinatorKicks(ctx, anchorReg, informKickIDs(anchorReg, "coordinator-", "session-agent-enabled"), cReps); err != nil {
 		return err
 	}
