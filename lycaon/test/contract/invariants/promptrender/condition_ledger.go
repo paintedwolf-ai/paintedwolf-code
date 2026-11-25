@@ -2,13 +2,17 @@ package promptrender
 
 import (
 	"context"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/test/contract/internal/casegen"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 	"github.com/lycaon/lycaon/test/contract/internal/independence"
 	"github.com/lycaon/lycaon/test/contract/internal/interactions"
+	"github.com/lycaon/lycaon/test/contract/internal/oarproducers"
 )
 
-const unscopedRecipient = "unscoped"
+const unscopedRecipient = oarproducers.RecipientUnscoped
 
 // renderRecipient names a render's recipient by its reader's is_coordinator
 // fact; a render with no reader is unscoped.
@@ -45,9 +49,29 @@ var conditionConstraints = []interactions.AtomConstraint{
 
 const srcGitFacts = "internal/session/readerfacts/resolver.go:gitFacts starts hasAnyGit at hasGit, so the any-root fact includes the primary root"
 
-// StockConditionLedger discovers every stock guard and joins it with the
-// atom observations of the host-state matrix.
-func StockConditionLedger(ctx context.Context, s *Stock) (*interactions.ConditionLedger, error) {
+// occurrenceRoleFacts are the session facts each recipient's occurrences
+// carry: occurrenceRecipient partitions by session_role, and every producer
+// sets worker_leg exactly when it sets the worker role.
+var occurrenceRoleFacts = map[string]map[string]any{
+	interactions.RecipientCoordinator: {"paintedwolf.session_role": "coordinator", "paintedwolf.worker_leg": false},
+	interactions.RecipientWorker:      {"paintedwolf.session_role": "worker", "paintedwolf.worker_leg": true},
+	unscopedRecipient:                 {"paintedwolf.session_role": "", "paintedwolf.worker_leg": false},
+}
+
+const (
+	srcOccurrenceRole = "occurrenceRecipient partitions occurrences by session_role; toolfeedback/block_plane.go:fillOccurrenceIdentity, " +
+		"session/policyfacts/service.go:FillSessionFacts, session/workercompletion/worker_summary.go and " +
+		"session/workeroutcomes/delivery_policy.go set the worker role exactly with worker_leg"
+	srcConfine = "internal/session/policyfacts/oar_observe.go:ObserveConfine publishes execution facts only for an applied confinement"
+)
+
+// caseBudget bounds targeted generation: runs per gap and in total.
+var caseBudget = casegen.Budget{PerTarget: 80, Total: 30000}
+
+// StockConditionLedger discovers every stock guard, joins it with the atom
+// observations of the host-state matrix, then generates targeted OAR cases
+// for the gaps through the production hook producers and joins again.
+func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.ObservedCondition) (*interactions.ConditionLedger, error) {
 	sum, err := RunCartesianMatrix(ctx, s)
 	if err != nil {
 		return nil, err
@@ -56,5 +80,160 @@ func StockConditionLedger(ctx context.Context, s *Stock) (*interactions.Conditio
 	if err != nil {
 		return nil, err
 	}
-	return interactions.BuildConditionLedger(sites, sum.Conditions, conditionConstraints)
+	gen, err := newOARCaseGenerator(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	in := interactions.LedgerInput{
+		Sites: sites, Observed: interactions.MergeObservations(append([][]hoststate.ObservedCondition{sum.Conditions}, extra...)...),
+		Constraints: conditionConstraints, Derived: gen.derived,
+	}
+	first, err := interactions.BuildConditionLedger(in)
+	if err != nil {
+		return nil, err
+	}
+	targets, gapRecipients := gen.targets(first)
+	outcomes, err := casegen.Generate(ctx, gen.producer, targets, caseBudget)
+	if err != nil {
+		return nil, err
+	}
+	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations())
+	in.Searches = searchesOf(outcomes, gapRecipients)
+	l, err := interactions.BuildConditionLedger(in)
+	if err != nil {
+		return nil, err
+	}
+	l.Generation = interactions.GenerationSummary{Targets: len(targets), Runs: gen.producer.Runs()}
+	for _, o := range outcomes {
+		if o.Found {
+			l.Generation.Found++
+		}
+	}
+	return l, nil
+}
+
+// NewConditionTracker returns a tracker that attributes stock template and
+// OAR guard evaluations to the ledger's sites and recipients.
+func NewConditionTracker(s *Stock) (*hoststate.CoverageTracker, error) {
+	tracker := hoststate.NewCoverageTracker()
+	if err := registerStockTemplatesInTracker(s, tracker); err != nil {
+		return nil, err
+	}
+	tracker.ObserveConditions(renderRecipient, occurrenceRecipient)
+	return tracker, nil
+}
+
+type oarCaseGenerator struct {
+	producer *oarproducers.CaseProducer
+}
+
+func newOARCaseGenerator(ctx context.Context, s *Stock) (*oarCaseGenerator, error) {
+	coordStates, err := hoststate.CoordinatorStates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	workerStates, err := hoststate.WorkerStates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cells, err := buildOARAuthorityCells(ctx, s, coordStates, workerStates)
+	if err != nil {
+		return nil, err
+	}
+	harness, err := oarproducers.NewHarness(s.Catalog, s.Schemas, s.Engine())
+	if err != nil {
+		return nil, err
+	}
+	p, err := oarproducers.NewCaseProducer(harness, cells, occurrenceRecipient)
+	if err != nil {
+		return nil, err
+	}
+	return &oarCaseGenerator{producer: p}, nil
+}
+
+// derived returns what an OAR guard's own expression and its producer fix:
+// atoms reading one fact can only take the truths that fact's values
+// realise, the recipient fixes the session role facts, and confinement facts
+// stay zero unless confinement applied.
+func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient string) independence.Constraints {
+	var c independence.Constraints
+	if site.Family != "oar" {
+		return c
+	}
+	logic := g.producer.Logic(site.ID)
+	if logic == nil {
+		return c
+	}
+	c.Joints = casegen.SharedFactJoints(site.Atoms, logic)
+	if fixed, ok := occurrenceRoleFacts[recipient]; ok {
+		c.Fixed = casegen.FixedFacts(site.Atoms, logic, fixed, srcOccurrenceRole)
+	}
+	if g.producer.Anchor(site.ID) == oar.AnchorToolPost {
+		c.Joints = append(c.Joints, casegen.ZeroUnless(site.Atoms, logic, "paintedwolf.confine_applied", oarproducers.ConfineFacts(), srcConfine)...)
+	}
+	return c
+}
+
+// targets turns each OAR gap into generation targets: a guard nobody
+// evaluated is searched on every recipient its producer reaches.
+func (g *oarCaseGenerator) targets(l *interactions.ConditionLedger) ([]casegen.Target, []string) {
+	byID := map[string]interactions.ConditionSite{}
+	for _, s := range l.Sites {
+		byID[s.ID] = s
+	}
+	var out []casegen.Target
+	var gapRecipients []string
+	for _, gap := range l.Gaps {
+		site := byID[gap.Site]
+		logic := g.producer.Logic(gap.Site)
+		if site.Family != "oar" || logic == nil {
+			continue
+		}
+		needs := gap.Needs
+		if len(needs) == 0 {
+			if decide := g.producer.Decide(gap.Site); decide != nil {
+				needs = casegen.Needs(distinctAtoms(site.Atoms), gap.Atom, decide, 16)
+			}
+		}
+		recipients := []string{gap.Recipient}
+		if gap.Recipient == interactions.RecipientAny {
+			recipients = []string{interactions.RecipientCoordinator, interactions.RecipientWorker, unscopedRecipient}
+		}
+		for _, r := range recipients {
+			out = append(out, casegen.Target{Site: gap.Site, Recipient: r, Input: gap.Atom, Needs: needs, References: logic.References})
+			gapRecipients = append(gapRecipients, gap.Recipient)
+		}
+	}
+	return out, gapRecipients
+}
+
+// searchesOf keys each unwitnessed outcome's reason by its gap; a gap
+// searched on several recipients lists each.
+func searchesOf(outcomes []casegen.Outcome, gapRecipients []string) map[string]string {
+	out := map[string]string{}
+	for i, o := range outcomes {
+		if o.Found {
+			continue
+		}
+		key := interactions.SearchKey(o.Site, gapRecipients[i], o.Input)
+		reason := o.Reason
+		if gapRecipients[i] != o.Recipient {
+			reason = o.Recipient + ": " + reason
+		}
+		if prev := out[key]; prev != "" {
+			reason = prev + "; " + reason
+		}
+		out[key] = reason
+	}
+	return out
+}
+
+func distinctAtoms(atoms []string) []string {
+	var out []string
+	for _, a := range atoms {
+		if !slices.Contains(out, a) {
+			out = append(out, a)
+		}
+	}
+	return out
 }

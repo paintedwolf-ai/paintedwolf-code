@@ -71,7 +71,9 @@ func (m *Service) FillSessionFacts(ctx context.Context, gc *oar.GuardContext, se
 		gc.Session.SessionMode = string(sess.Mode)
 		gc.Session.Principal = sess.OwnerPersonID
 		gc.Session.WorkerLeg = sess.IsWorkerChild()
-		if !gc.Session.WorkerLeg {
+		if gc.Session.WorkerLeg {
+			gc.Session.Role = "worker"
+		} else {
 			gc.Session.Role = "coordinator"
 			if gc.Session.Surface == "" && m.surface != nil && sess.ID != "" {
 				gc.Session.Surface = m.surface.PromptTurnSurfaceID(sess.ID)

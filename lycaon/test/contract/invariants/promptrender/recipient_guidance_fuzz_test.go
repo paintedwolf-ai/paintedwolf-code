@@ -94,6 +94,47 @@ func overlayIndexByID(tb testing.TB, d *hoststate.SeedDomains, id string) int {
 	return i
 }
 
+// fuzzSeeds are the fuzz target's named seeds: reachable coordinator and
+// worker states and the transitions its properties compare.
+func fuzzSeeds(tb testing.TB, d *hoststate.SeedDomains) [][]byte {
+	return [][]byte{
+		// Reachable coordinator standing + live-job warm-cache control (0 changes).
+		encodeCoordinatorFuzzBytes(
+			tb, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+			hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
+			gate.PostureBalanced, hoststate.TempScratchAndShared, hoststate.MCPNone,
+			0, 0, 0, 0, 0, 0, 0,
+		),
+		// Reachable worker persona + live-job check.
+		encodeWorkerFuzzBytes(
+			tb, d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
+			hoststate.BranchIsolatedWorker, hoststate.WorkerLoadingAllLoaded,
+			0, 0, 0, 0, 0,
+		),
+		// Coordinator two-turn transition changing projected capability (Ask -> Agent, axisSel=0).
+		encodeCoordinatorFuzzBytes(
+			tb, d, "stock", api.SessionPostureBuild, api.SessionModeAsk, "implement_investigate",
+			hoststate.RootsSingleGit, hoststate.LoadingFloorOnly, hoststate.WorkflowActivePhase,
+			gate.PostureBalanced, hoststate.TempScratchOnly, hoststate.MCPNone,
+			0, 0, 1, 0, 0, 0, 0,
+		),
+		// Skill body render across loading transition (LoadingFloorOnly -> LoadingAllLoaded, axisSel=4, valSel=0).
+		encodeCoordinatorFuzzBytes(
+			tb, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+			hoststate.RootsSingleGit, hoststate.LoadingFloorOnly, hoststate.WorkflowActivePhase,
+			gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone,
+			1, 0, 1, 4, 0, 0, 0,
+		),
+		// OAR tool.rejected recovery across posture transition (build -> spec).
+		encodeCoordinatorFuzzBytes(
+			tb, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
+			hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
+			gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone,
+			2, 0, 1, 1, 0, 0, 0,
+		),
+	}
+}
+
 // FuzzRecipientGuidanceAcrossHostStates fuzzes recipient guidance over
 // deterministic byte-decoded two-turn coordinator and worker states.
 func FuzzRecipientGuidanceAcrossHostStates(f *testing.F) {
@@ -103,40 +144,9 @@ func FuzzRecipientGuidanceAcrossHostStates(f *testing.F) {
 	}
 	d := env.domains
 
-	// Reachable coordinator standing + live-job warm-cache control (0 changes).
-	f.Add(encodeCoordinatorFuzzBytes(
-		f, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
-		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
-		gate.PostureBalanced, hoststate.TempScratchAndShared, hoststate.MCPNone,
-		0, 0, 0, 0, 0, 0, 0,
-	))
-	// Reachable worker persona + live-job check.
-	f.Add(encodeWorkerFuzzBytes(
-		f, d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
-		hoststate.BranchIsolatedWorker, hoststate.WorkerLoadingAllLoaded,
-		0, 0, 0, 0, 0,
-	))
-	// Coordinator two-turn transition changing projected capability (Ask -> Agent, axisSel=0).
-	f.Add(encodeCoordinatorFuzzBytes(
-		f, d, "stock", api.SessionPostureBuild, api.SessionModeAsk, "implement_investigate",
-		hoststate.RootsSingleGit, hoststate.LoadingFloorOnly, hoststate.WorkflowActivePhase,
-		gate.PostureBalanced, hoststate.TempScratchOnly, hoststate.MCPNone,
-		0, 0, 1, 0, 0, 0, 0,
-	))
-	// Skill body render across loading transition (LoadingFloorOnly -> LoadingAllLoaded, axisSel=4, valSel=0).
-	f.Add(encodeCoordinatorFuzzBytes(
-		f, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
-		hoststate.RootsSingleGit, hoststate.LoadingFloorOnly, hoststate.WorkflowActivePhase,
-		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone,
-		1, 0, 1, 4, 0, 0, 0,
-	))
-	// OAR tool.rejected recovery across posture transition (build -> spec).
-	f.Add(encodeCoordinatorFuzzBytes(
-		f, d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
-		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
-		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone,
-		2, 0, 1, 1, 0, 0, 0,
-	))
+	for _, seed := range fuzzSeeds(f, d) {
+		f.Add(seed)
+	}
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		tracker := hoststate.NewCoverageTracker()

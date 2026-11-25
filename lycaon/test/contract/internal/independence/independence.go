@@ -62,10 +62,30 @@ type Fixed struct {
 	Source string
 }
 
+// Joint is a host invariant over several atoms: only the listed truth vectors,
+// in Atoms order, can occur together. Source names the expression or
+// production code that establishes it.
+type Joint struct {
+	Atoms   []string
+	Allowed [][]Truth
+	Source  string
+}
+
+func (j Joint) admits(values func(string) Truth) bool {
+	got := make([]Truth, len(j.Atoms))
+	for i, a := range j.Atoms {
+		if got[i] = values(a); got[i] == Unknown {
+			return true
+		}
+	}
+	return slices.ContainsFunc(j.Allowed, func(v []Truth) bool { return slices.Equal(v, got) })
+}
+
 // Constraints are the host invariants that rule assignments out.
 type Constraints struct {
 	Implications []Implication
 	Fixed        []Fixed
+	Joints       []Joint
 }
 
 // Witness is a pair of evaluations that differ only in one input and in the
@@ -76,12 +96,14 @@ type Witness struct {
 }
 
 // Gap is an input with neither a witness pair nor a constraint ruling every
-// pair out.
+// pair out. Needs holds the first assignments of the other inputs, keyed by
+// input, under which a pair would witness Input.
 type Gap struct {
 	Site    string
 	Source  string
 	Input   string
 	Missing []string
+	Needs   []map[string]Truth
 }
 
 func (g Gap) String() string {
@@ -125,6 +147,11 @@ func Analyze(guards []Guard, eval func(site string, atoms []Truth) (bool, error)
 					res.Contradicted = append(res.Contradicted, fmt.Sprintf("%s = %s (%s) contradicted at %s", f.Atom, f.Value, f.Source, g.Site))
 				}
 			}
+			for _, j := range cons.Joints {
+				if !j.admits(func(a string) Truth { return valueOf(g, v, a) }) {
+					res.Contradicted = append(res.Contradicted, fmt.Sprintf("joint %s (%s) contradicted at %s", strings.Join(j.Atoms, ", "), j.Source, g.Site))
+				}
+			}
 		}
 	}
 	slices.Sort(res.Contradicted)
@@ -139,7 +166,7 @@ func Analyze(guards []Guard, eval func(site string, atoms []Truth) (bool, error)
 				res.Witnesses[g.Site] = append(res.Witnesses[g.Site], w)
 				continue
 			}
-			needed, err := neededAssignments(g, in, inputs, eval, cons)
+			needed, needs, err := neededAssignments(g, in, inputs, eval, cons)
 			if err != nil {
 				return Result{}, err
 			}
@@ -147,7 +174,7 @@ func Analyze(guards []Guard, eval func(site string, atoms []Truth) (bool, error)
 				res.Exclusions = append(res.Exclusions, Exclusion{Site: g.Site, Input: in, Reason: constraintReason(in, inputs, cons)})
 				continue
 			}
-			res.Gaps = append(res.Gaps, Gap{Site: g.Site, Source: g.Source, Input: in, Missing: needed})
+			res.Gaps = append(res.Gaps, Gap{Site: g.Site, Source: g.Source, Input: in, Missing: needed, Needs: needs})
 		}
 	}
 	sort.Slice(res.Gaps, func(i, j int) bool {
@@ -215,20 +242,25 @@ func findWitness(g Guard, in string, inputs []string) (Witness, bool) {
 // enumerationBound caps the inputs whose assignments neededAssignments walks.
 const enumerationBound = 20
 
-// maxListed caps the assignments a gap prints.
-const maxListed = 4
+// maxListed caps the assignments a gap prints; maxNeeds caps those it keeps
+// as structured targets.
+const (
+	maxListed = 4
+	maxNeeds  = 16
+)
 
 // neededAssignments lists the assignments of the other inputs under which the
 // guard's decision follows in and the constraints allow, printed as the pair
-// of input vectors to observe. Flips of observed vectors come first, since
-// one more observation next to an existing one closes the gap; beyond
-// maxListed, the count of the rest is given.
-func neededAssignments(g Guard, in string, inputs []string, eval func(string, []Truth) (bool, error), cons Constraints) ([]string, error) {
+// of input vectors to observe and kept as structured targets. Flips of
+// observed vectors come first, since one more observation next to an existing
+// one closes the gap; beyond maxListed, the count of the rest is given.
+func neededAssignments(g Guard, in string, inputs []string, eval func(string, []Truth) (bool, error), cons Constraints) ([]string, []map[string]Truth, error) {
 	if len(inputs) > enumerationBound {
-		return nil, fmt.Errorf("%s: %d inputs exceed the enumeration bound", g.Site, len(inputs))
+		return nil, nil, fmt.Errorf("%s: %d inputs exceed the enumeration bound", g.Site, len(inputs))
 	}
 	others := slices.DeleteFunc(slices.Clone(inputs), func(s string) bool { return s == in })
 	var observed, rest []string
+	var obsNeeds, restNeeds []map[string]Truth
 	seen := map[string]bool{}
 	consider := func(assign map[string]Truth, fromObservation bool) error {
 		var decisions [2]bool
@@ -251,10 +283,14 @@ func neededAssignments(g Guard, in string, inputs []string, eval func(string, []
 			return nil
 		}
 		seen[text] = true
+		need := make(map[string]Truth, len(others))
+		for _, o := range others {
+			need[o] = assign[o]
+		}
 		if fromObservation {
-			observed = append(observed, text)
+			observed, obsNeeds = append(observed, text), append(obsNeeds, need)
 		} else {
-			rest = append(rest, text)
+			rest, restNeeds = append(rest, text), append(restNeeds, need)
 		}
 		return nil
 	}
@@ -268,7 +304,7 @@ func neededAssignments(g Guard, in string, inputs []string, eval func(string, []
 		}
 		if known {
 			if err := consider(assign, true); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
@@ -278,14 +314,17 @@ func neededAssignments(g Guard, in string, inputs []string, eval func(string, []
 			assign[o] = truthBit(mask, i)
 		}
 		if err := consider(assign, false); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	all := slices.Concat(observed, rest)
-	if len(all) > maxListed {
-		return append(all[:maxListed:maxListed], fmt.Sprintf("%d more", len(all)-maxListed)), nil
+	all, needs := slices.Concat(observed, rest), slices.Concat(obsNeeds, restNeeds)
+	if len(needs) > maxNeeds {
+		needs = needs[:maxNeeds]
 	}
-	return all, nil
+	if len(all) > maxListed {
+		return append(all[:maxListed:maxListed], fmt.Sprintf("%d more", len(all)-maxListed)), needs, nil
+	}
+	return all, needs, nil
 }
 
 func truthBit(mask, i int) Truth {
@@ -305,6 +344,11 @@ func allowed(assign map[string]Truth, cons Constraints) bool {
 	}
 	for _, f := range cons.Fixed {
 		if v, ok := assign[f.Atom]; ok && v != f.Value {
+			return false
+		}
+	}
+	for _, j := range cons.Joints {
+		if !j.admits(func(a string) Truth { return assign[a] }) {
 			return false
 		}
 	}
@@ -341,6 +385,11 @@ func constraintReason(in string, inputs []string, cons Constraints) string {
 	for _, f := range cons.Fixed {
 		if slices.Contains(inputs, f.Atom) {
 			used = append(used, f.Atom+" = "+f.Value.String()+" ("+f.Source+")")
+		}
+	}
+	for _, j := range cons.Joints {
+		if slices.Contains(j.Atoms, in) {
+			used = append(used, "joint "+strings.Join(j.Atoms, ", ")+" ("+j.Source+")")
 		}
 	}
 	if len(used) == 0 {

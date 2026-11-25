@@ -250,7 +250,7 @@ func (fx *controlFixture) ledger(t *testing.T, site string, renders []map[string
 			observed = append(observed, o)
 		}
 	}
-	l, err := BuildConditionLedger(sites, observed, constraints)
+	l, err := BuildConditionLedger(LedgerInput{Sites: sites, Observed: observed, Constraints: constraints})
 	contractcheck.FailErr(t, "build ledger", err)
 	return l
 }
