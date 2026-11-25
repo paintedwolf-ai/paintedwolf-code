@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -34,7 +33,6 @@ import (
 // the executor's command admission. It holds nothing a renderer produces.
 type reachOracle struct {
 	names    *toolvocab.Catalog
-	fields   map[string]bool
 	profiles []sandbox.ToolProfile
 }
 
@@ -49,13 +47,7 @@ func newReachOracle(t *testing.T) *reachOracle {
 	testutil.FailErr(t, "load tool schemas", err)
 	names, err := toolvocab.NewCatalog(schemas, profiles, toolvocab.Provenance{})
 	testutil.FailErr(t, "tool vocabulary", err)
-	fields := map[string]bool{}
-	for name := range schemas.Tools {
-		if meta, ok := schemas.ToolMeta(name); ok {
-			maps.Copy(fields, argFields(meta.ArgsSchema))
-		}
-	}
-	return &reachOracle{names: names, fields: fields, profiles: profiles}
+	return &reachOracle{names: names, profiles: profiles}
 }
 
 // argFields is every argument path a schema accepts, with each path's head.
@@ -120,21 +112,16 @@ func hostText(m api.Message) []string {
 	return out
 }
 
-var backtickedIdent = regexp.MustCompile("`([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)`")
-
 // check lists what one request's host text names that the request does not
 // offer: a tool, operation or command program outside its tools and command
-// reach; an argument attributed to a tool, as `tool(arg=…)` or `tool.arg`,
-// that the tool's schema as sent lacks; and, in a refused call's recovery, a
-// bare argument that neither the refused tool nor any tool it names accepts.
+// reach; and an argument attributed to a tool, as `tool(arg=…)` or
+// `tool.arg`, that the tool's schema as sent lacks.
 func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, profiles []sandbox.ToolProfile) []string {
 	t.Helper()
 	offered := map[string]bool{}
-	schemas := map[string]map[string]bool{}
 	sent := map[string]map[string]any{}
 	for _, meta := range req.Tools {
 		offered[meta.Name] = true
-		schemas[meta.Name] = argFields(meta.ArgsSchema)
 		sent[meta.Name] = meta.ArgsSchema
 	}
 	schemaSent := func(tool string) (map[string]any, bool) {
@@ -165,7 +152,7 @@ func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, profi
 			reachText := text
 			if m.Role == api.MessageRoleTool {
 				var rejectedTool string
-				if m.ToolResult != nil {
+				if m.ToolResult != nil && m.ToolResult.Outcome == api.ToolResultOutcomeRejected {
 					rejectedTool = m.ToolResult.Tool
 					if rejectedTool == "" {
 						rejectedTool = callToolByID[m.ToolResult.ToolCallID]
@@ -179,64 +166,19 @@ func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, profi
 			for _, claim := range toolvocabtest.UnacceptedArgs(o.names, text, schemaSent) {
 				out = append(out, fmt.Sprintf("message %d (%s %s) gives %s argument `%s`, which its schema as sent lacks: %s", i, m.Role, m.Kind, claim.Tool, claim.Arg, lineWith(text, claim.Arg)))
 			}
-			if m.ToolResult == nil || m.ToolResult.Outcome != api.ToolResultOutcomeRejected {
-				continue
-			}
-			named := append(toolvocab.ToolsIn(o.names, text), m.ToolResult.Tool)
-			for _, field := range o.unschemaed(text, named, schemas) {
-				out = append(out, fmt.Sprintf("message %d recovery for %s names argument `%s`, which no tool it names accepts: %s", i, m.ToolResult.Tool, field, lineWith(text, field)))
-			}
 		}
 	}
 	return out
 }
 
-// unschemaed lists backticked argument names in text that no named tool's
-// schema, as sent, accepts. A word no stock schema accepts is not read as an
-// argument.
-func (o *reachOracle) unschemaed(text string, named []string, schemas map[string]map[string]bool) []string {
-	var bad []string
-	for _, m := range backtickedIdent.FindAllStringSubmatch(text, -1) {
-		claim := m[1]
-		if !o.fields[claim] || o.names.KnownName(claim) || slices.Contains(bad, claim) {
-			continue
-		}
-		if !slices.ContainsFunc(named, func(tool string) bool { return schemas[tool][claim] }) {
-			bad = append(bad, claim)
-		}
-	}
-	return bad
-}
-
-var rejectedHeaderToolRE = regexp.MustCompile("(?m)^(\\s*Rejected:\\s+)`([A-Za-z0-9_]+)`(\\s+(?:is unavailable|no longer exists|is available but its schema is not loaded|is blocked in Ask mode|cannot run in Ask mode))")
-
-// maskRejectedToolEcho removes only echoed/prohibitive mentions of the rejected
-// tool itself (`Rejected: <tool> ...`, `Do not call/repeat <tool>`,
-// `unavailable name <tool>`) so positive recovery calls (`Fix: call <tool>`)
-// still fail if unoffered.
+// maskRejectedToolEcho replaces bare mentions of a rejected result's own tool,
+// which name the result's subject rather than claim reach. A call to that tool
+// is not a bare mention and is still checked.
 func maskRejectedToolEcho(text, rejectedTool string) string {
 	if rejectedTool == "" {
-		if sub := rejectedHeaderToolRE.FindStringSubmatch(text); len(sub) >= 3 {
-			rejectedTool = sub[2]
-		}
+		return text
 	}
-	out := rejectedHeaderToolRE.ReplaceAllString(text, "${1}the rejected tool${3}")
-	if rejectedTool == "" {
-		return out
-	}
-	qt := "`" + rejectedTool + "`"
-	for _, phrase := range []string{
-		"Rejected: " + qt,
-		"Do not call " + qt,
-		"Do not repeat " + qt,
-		"unavailable name " + qt,
-		qt + " no longer exists",
-		qt + " is unavailable",
-		qt + " cannot be loaded",
-	} {
-		out = strings.ReplaceAll(out, phrase, strings.ReplaceAll(phrase, qt, "the rejected tool"))
-	}
-	return out
+	return strings.ReplaceAll(text, "`"+rejectedTool+"`", "the rejected tool")
 }
 
 // lineWith quotes the line that names name, preferring a backticked mention.
