@@ -474,9 +474,12 @@ func (sr stepResolver) resolve(branchPrefix string, stepIndex int, step NextStep
 	}
 	hasGuard := strings.TrimSpace(step.When) != ""
 	applies, err := EvaluateCondition(step.When, gc)
-	if hasGuard && err == nil {
+	switch {
+	case hasGuard && err == nil:
 		recordRuleBranch(ruleID, branchPrefix+".when", stepIndex, gc, applies)
 		observeRuleCondition(ruleID, branchPrefix+".when", step.When, nil, newEvalHolder(gc, nil, nil), gc, applies)
+	case hasGuard:
+		observeRuleError(ruleID, branchPrefix+".when", step.When, false, gc, err)
 	}
 	if err != nil || !applies {
 		if resolutions != nil {

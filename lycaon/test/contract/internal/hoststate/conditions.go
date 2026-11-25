@@ -33,6 +33,10 @@ type ObservedCondition struct {
 	Atoms   []string
 	Vectors []ObservedVector
 	Decide  func(map[string]bool) bool
+	// Errors are the distinct evaluation errors of an OAR condition;
+	// ErrorsHandled reports that the rule declares on_error for them.
+	Errors        []string
+	ErrorsHandled bool
 }
 
 // ObserveConditions turns on atom recording for template arms and OAR
@@ -93,7 +97,10 @@ func (t *CoverageTracker) Conditions() []ObservedCondition {
 
 	t.ruleRec.Mu.Lock()
 	for key, hit := range t.ruleRec.Conditions {
-		oc := ObservedCondition{Site: key, Family: "oar", Source: hit.Source, Atoms: hit.Atoms, Decide: hit.Decide}
+		oc := ObservedCondition{
+			Site: key, Family: "oar", Source: hit.Source, Atoms: hit.Atoms, Decide: hit.Decide,
+			Errors: slices.Clone(hit.Errors), ErrorsHandled: hit.Handled,
+		}
 		for _, v := range hit.Vectors {
 			oc.Vectors = append(oc.Vectors, ObservedVector{
 				Atoms: ruleTruths(v.Atoms), Decision: v.Decision, Recomposes: v.Recomposes,

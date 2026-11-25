@@ -58,6 +58,10 @@ type RuleConditionHit struct {
 	Vectors  []*RuleConditionVector
 	// Decide gives the condition's decision for atom truths keyed by atom text.
 	Decide func(map[string]bool) bool
+	// Errors are the distinct evaluation errors; Handled reports that the rule
+	// declares on_error, which makes an error one of its outcomes.
+	Errors  []string
+	Handled bool
 }
 
 // ActiveRuleBranchRecorder is the opt-in recorder consulted by rule and next-step evaluation.
@@ -200,4 +204,27 @@ func (r *RuleBranchRecorder) recordCondition(ruleID, branchID, source string, co
 		v.Label = r.Label()
 	}
 	hit.Vectors = append(hit.Vectors, v)
+}
+
+// observeRuleError records a guarded branch whose condition raised.
+func observeRuleError(ruleID, branchID, source string, handled bool, gc *GuardContext, evalErr error) {
+	rec := ActiveRuleBranchRecorder.Load()
+	if rec == nil || !rec.ObserveConditions || ruleID == "" || (gc != nil && gc.FromScenario) {
+		return
+	}
+	rec.Mu.Lock()
+	defer rec.Mu.Unlock()
+	if rec.Conditions == nil {
+		rec.Conditions = make(map[string]*RuleConditionHit)
+	}
+	key := ruleID + "#" + branchID
+	hit, ok := rec.Conditions[key]
+	if !ok {
+		hit = &RuleConditionHit{RuleID: ruleID, BranchID: branchID, Source: source}
+		rec.Conditions[key] = hit
+	}
+	hit.Handled = handled
+	if msg := evalErr.Error(); !slices.Contains(hit.Errors, msg) {
+		hit.Errors = append(hit.Errors, msg)
+	}
 }

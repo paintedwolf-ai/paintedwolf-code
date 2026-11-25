@@ -72,6 +72,10 @@ type ConditionLedger struct {
 	Exclusions       []ConditionExclusion `json:"exclusions,omitempty"`
 	Gaps             []ConditionGap       `json:"gaps,omitempty"`
 	StaleConstraints []string             `json:"stale_constraints,omitempty"`
+	// HandledErrors are condition errors the rule's on_error turns into an
+	// outcome; EvaluatorErrors are the rest.
+	HandledErrors   []string `json:"handled_errors,omitempty"`
+	EvaluatorErrors []string `json:"evaluator_errors,omitempty"`
 }
 
 // BuildConditionLedger joins discovered guards with their observed
@@ -97,6 +101,13 @@ func BuildConditionLedger(sites []ConditionSite, observed []hoststate.ObservedCo
 		site := byID[id]
 		l.Sites = append(l.Sites, site)
 		obs, seen := obsByID[id]
+		for _, e := range obs.Errors {
+			if obs.ErrorsHandled {
+				l.HandledErrors = append(l.HandledErrors, id+": "+e)
+			} else {
+				l.EvaluatorErrors = append(l.EvaluatorErrors, id+": "+e)
+			}
+		}
 		atoms := site.Atoms
 		if seen && len(obs.Atoms) > 0 {
 			atoms = obs.Atoms
@@ -271,6 +282,9 @@ func (l *ConditionLedger) ValidateZeroUnexplainedGaps() error {
 	}
 	for _, s := range l.StaleConstraints {
 		issues = append(issues, "stale constraint: "+s)
+	}
+	for _, e := range l.EvaluatorErrors {
+		issues = append(issues, "condition raised without on_error: "+e)
 	}
 	if len(issues) == 0 {
 		return nil
