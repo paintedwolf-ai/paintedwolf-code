@@ -93,6 +93,12 @@ anchors:
         options_criterion: { type: string }
         fanout_plan: { type: string }
         max_fanout_legs: { type: int }
+        obligations: { type: object }
+        spawnable_reviewers: { type: "string[]" }
+        review_verdict: { type: object }
+        rating_questions: { type: string }
+        claim_statuses: { type: "string[]" }
+        review_followup_attempts: { type: int }
 
   - id: review_loop.continue
     title: Review loop continue
@@ -772,7 +778,12 @@ anchors:
     surface: worker
     planes: [inform]
     envelope:
-      vars: {}
+      vars:
+        touch_paths: { type: "string[]" }
+        scope_mode: { type: string }
+        scope_paths: { type: "string[]" }
+        scope_absent: { type: bool }
+        linked_checkout: { type: bool }
 
   - id: inject.scan_guidance
     title: Scan guidance ephemeral inject

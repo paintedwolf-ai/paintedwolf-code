@@ -207,7 +207,7 @@ func joinInstructionProducers(in HostStateInventoryInput, specs map[string]hosts
 				if at, ok := branches.bothArms(site, f); ok {
 					matchedSet[f+"@delivered_branch:"+at] = true
 				} else {
-					unmatchedSet[site.ID+" -> "+f+" "+branches.describe(site)] = true
+					unmatchedSet[site.ID+" -> "+f] = true
 				}
 			}
 		}
@@ -251,18 +251,3 @@ func (idx branchIndex) bothArms(site InstructionSite, fact string) (string, bool
 	return "", false
 }
 
-func (idx branchIndex) describe(site InstructionSite) string {
-	base := site.ContributionID[strings.LastIndex(site.ContributionID, "/")+1:]
-	var out []string
-	for tmpl, lines := range idx {
-		if strings.Contains(tmpl, strings.TrimSuffix(base, ".md")) {
-			for line, bs := range lines {
-				for _, b := range bs {
-					out = append(out, fmt.Sprintf("%s:L%d:%q:%d/%d", tmpl, line, b.Expression, b.TakenTrue, b.TakenFalse))
-				}
-			}
-		}
-	}
-	slices.Sort(out)
-	return fmt.Sprintf("[templates=%d %v]", len(idx), out)
-}
