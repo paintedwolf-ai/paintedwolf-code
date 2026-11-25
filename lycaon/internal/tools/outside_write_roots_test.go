@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func outsideRootsContext(granted ...string) ToolContext {
@@ -36,7 +37,7 @@ func TestOutsideWriteRootsAreTheProfilesGrantsACFL19(t *testing.T) {
 	scratch := fspath.CanonicalPath(t.TempDir())
 	temp := enginepaths.ProgramTempUnder(scratch)
 	if err := os.Mkdir(temp, 0o700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	tc := outsideRootsContext("/fl03-work/shared", "/fl03-work/shared/nested", "/fl03-work/other", "/fl03-work/shared/project/build")
 	tc.Host.SessionScratchDir = scratch
@@ -65,7 +66,7 @@ func TestSharedTempLocationIsNeverComparedWhole(t *testing.T) {
 	}
 	narrow := filepath.Join(whole, "build")
 	if err := os.Mkdir(narrow, 0o700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	got, unobserved := outsideRootsContext(whole, narrow).OutsideWriteRoots()
 	if !slices.Equal(unobserved, []string{whole}) {
