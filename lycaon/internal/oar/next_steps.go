@@ -125,6 +125,9 @@ func rejectDecisionNextSteps(ruleID, field, expr string) error {
 }
 
 func (l *Loader) validateNextStep(step NextStep, known map[string]bool, selectors []string, where string) error {
+	if err := toolcontract.RetiredUse(where, step.Tool); err != nil {
+		return err
+	}
 	if strings.TrimSpace(step.Say) == "" {
 		return fmt.Errorf("%s: say is required", where)
 	}

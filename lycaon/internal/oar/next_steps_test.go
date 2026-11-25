@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -316,5 +317,19 @@ func TestResolveNextStepsFormatsNestedWaitConditionsAndPartialCalls(t *testing.T
 	})
 	if suppressed := ResolveNextSteps(missingNestedRule, gcMissing); suppressed.Text != "" || len(suppressed.Calls) != 0 {
 		t.Fatalf("complete step with missing nested template should be suppressed, got %+v", suppressed)
+	}
+}
+
+// A next step that calls a retired tool is refused with its recorded successor.
+func TestValidateNextStepsRefusesRetiredTool(t *testing.T) {
+	loader, err := NewLoader("")
+	testutil.FailErr(t, "load OAR", err)
+	rule := &Rule{ID: "R", NextSteps: &NextSteps{Steps: []NextStep{
+		{Tool: "state_update", Say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }}."},
+	}}}
+	var retired *toolcontract.RetiredToolError
+	if err := loader.validateNextSteps(rule); !errors.As(err, &retired) || retired.Tool != "state_update" ||
+		!slices.Equal(retired.Retirement.Successors, []string{"workflow_advance", "workflow_transition"}) {
+		t.Fatalf("retired next step = %v", err)
 	}
 }

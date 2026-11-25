@@ -1178,6 +1178,7 @@ tasks:
       - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-native-tool-contracts/**/*
       - internal/nativemanifest/**/*
+      - ../schemas/agent-public-retirements.json
     generates:
       - internal/settings/approval_tiers.generated.go
       - internal/toolcontract/contracts.generated.go
@@ -1186,6 +1187,7 @@ tasks:
         go run ./cmd/codegen-native-tool-contracts
         --out-go ./internal/settings/approval_tiers.generated.go
         --out-contract-go ./internal/toolcontract/contracts.generated.go
+        --retirements ../schemas/agent-public-retirements.json
 
   codegen:native-tool-contracts:check:
     desc: Fail if native tool contract outputs are stale
@@ -1195,6 +1197,7 @@ tasks:
         go run ./cmd/codegen-native-tool-contracts
         --out-go ./internal/settings/approval_tiers.generated.go
         --out-contract-go ./internal/toolcontract/contracts.generated.go
+        --retirements ../schemas/agent-public-retirements.json
         --check
 
   codegen:worker-branch-tools:
