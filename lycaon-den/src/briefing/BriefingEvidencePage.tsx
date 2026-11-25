@@ -106,7 +106,7 @@ function RecordBody(props: { record: BriefingRecord; projectId: string }) {
       <For each={props.record.sections}>{(section) => <SectionInputs record={props.record} section={section} />}</For>
       <section class="den-walk-page__files" aria-labelledby="briefing-evidence-generation">
         <h2 id="briefing-evidence-generation" class="den-walk-page__files-title">{copy.generation}</h2>
-        <dl class="den-walk-page__meta den-briefing-evidence__facts">
+        <dl class="den-briefing-evidence__facts">
           <dt>Method</dt><dd>{copy.method[props.record.method]}</dd>
           <dt>Profile</dt><dd>{props.record.profile_id} {props.record.profile_version}</dd>
           <For each={props.record.sections.filter((section) => section.available)}>
