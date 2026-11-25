@@ -101,6 +101,7 @@ type stateObservation struct {
 	HasGit                bool
 	HasAnyGitRoot         bool
 	MultiRoot             bool
+	RootCount             int
 	WebSearch             bool
 	Vision                bool
 	ExternalHidden        bool
@@ -121,6 +122,7 @@ func observe(loaded map[string]bool, auth hoststate.TurnAuthority) stateObservat
 		Remaining:             auth.Reader.Requestable(),
 	}
 	obs.SessionMode, _ = facts["session_mode"].(string)
+	obs.RootCount, _ = facts["root_count"].(int)
 	if caps, ok := facts["caps"].(map[string]any); ok {
 		obs.Vision, _ = caps["vision"].(bool)
 	}

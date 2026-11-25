@@ -73,6 +73,7 @@ func encodeWorkerFuzzBytes(
 		ParentSessionMode: parentMode,
 		WebSearch:         true,
 		ApprovalPosture:   gate.PostureBalanced,
+		TempState:         hoststate.TempNone,
 	}, hoststate.SeedTail{
 		Family: family, Item: uint16(itemSel), ChangeCount: numChanges,
 		Changes: [2]hoststate.SeedChange{{Axis: ch1Axis, Value: ch1Val}},

@@ -115,6 +115,14 @@ func (inv *inventory) envToggleRows() []DomainClassRow {
 		}
 		rows = append(rows, c)
 	}
+	for _, tmp := range d.TempStates {
+		w := row("temp_roots", "internal/session/profiles:WritableSharedTemp", string(tmp), RecipientWorker)
+		w.FuzzSelectable = workerSelectable(d, func(s *hoststate.WorkerSeed) { s.TempState = tmp })
+		if ws, _, ok := inv.workerWitness(func(ws hoststate.WorkerState, _ stateObservation) bool { return ws.TempState == tmp }); ok {
+			w = w.witness(ws.ID, string(tmp), fmt.Sprintf("scratch=%t shared=%d", ws.SessionScratchDir != "", len(ws.SharedTempLocations)))
+		}
+		rows = append(rows, w)
+	}
 	for _, mcp := range d.MCPStates {
 		c := row("mcp_attachment", "internal/tools:PlanMCPTools", string(mcp), RecipientCoordinator)
 		c.FuzzSelectable = coordinatorSelectable(d, func(s *hoststate.CoordinatorSeed) { s.MCPState = mcp })
@@ -158,6 +166,7 @@ func workerBases(d *hoststate.SeedDomains, overlay int) []hoststate.WorkerSeed {
 			out = append(out, hoststate.WorkerSeed{
 				OverlayIndex: overlay, AgentID: ag.ID, Posture: api.SessionPostureBuild, BranchView: hoststate.BranchMainGit,
 				RootCount: 1, Loading: ld, ParentSessionMode: api.SessionModeAgent, WebSearch: true, ApprovalPosture: gate.PostureBalanced,
+				TempState: hoststate.TempNone,
 			})
 		}
 	}

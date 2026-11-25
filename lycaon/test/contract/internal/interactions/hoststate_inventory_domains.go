@@ -200,6 +200,21 @@ func (inv *inventory) rootAndBranchRows() []DomainClassRow {
 			rows = append(rows, c, w)
 		}
 	}
+	for _, n := range []int{0, 1, 2} {
+		w := row("workspace_root_count", "internal/worker/executor.go:ApplyEnqueueDefaults", fmt.Sprintf("roots=%d", n), RecipientWorker)
+		w.FuzzSelectable = workerSelectable(d, func(s *hoststate.WorkerSeed) {
+			s.RootCount = n
+			if n == 0 {
+				s.BranchView = hoststate.BranchMainNonGit
+			}
+		})
+		if ws, obs, ok := inv.workerWitness(func(ws hoststate.WorkerState, obs stateObservation) bool {
+			return ws.RootCount == n && obs.RootCount == n
+		}); ok {
+			w = w.witness(ws.ID, fmt.Sprintf("roots=%d", n), fmt.Sprintf("agent=%s root_count=%d", ws.AgentID, obs.RootCount))
+		}
+		rows = append(rows, w)
+	}
 	for _, bv := range d.WorkerBranches {
 		b := row("worker_branch_view", "internal/session/workerworkspace:OnWorkerBranch", string(bv), RecipientWorker)
 		b.FuzzSelectable = workerSelectable(d, func(s *hoststate.WorkerSeed) { s.BranchView = bv })
