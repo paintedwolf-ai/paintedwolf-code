@@ -1,6 +1,7 @@
 package interactions
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/gate"
@@ -8,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
 
-func (inv *HostStateInventory) approvalRows() []DomainClassRow {
+func (inv *HostStateInventory) approvalRows(ctx context.Context) []DomainClassRow {
 	const src = "internal/gate/posture.go:AllPostures"
 	d := inv.in.Domains
 	var rows []DomainClassRow
@@ -21,7 +22,7 @@ func (inv *HostStateInventory) approvalRows() []DomainClassRow {
 			c = c.witness(st.ID, string(st.ApprovalPosture), fmt.Sprintf("reviews_confined_writes=%t", obs.ReviewsConfinedWrites))
 		}
 		w := row("approval_posture", src, string(p), RecipientWorker)
-		w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { s.ApprovalPosture = p }, func(ws hoststate.WorkerState) bool { return ws.ApprovalPosture == p })
+		w.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) { s.ApprovalPosture = p }, func(ws hoststate.WorkerState) bool { return ws.ApprovalPosture == p })
 		if ws, obs, ok := inv.workerWitness(func(ws hoststate.WorkerState, obs stateObservation) bool {
 			return ws.ApprovalPosture == p && obs.ReviewsConfinedWrites == p.ReviewsConfinedWrites()
 		}); ok {
@@ -38,7 +39,7 @@ func askReadOnly(s *hoststate.WorkerSeed) {
 	s.BranchView = hoststate.BranchMainGit
 }
 
-func (inv *HostStateInventory) sessionModeRows() []DomainClassRow {
+func (inv *HostStateInventory) sessionModeRows(ctx context.Context) []DomainClassRow {
 	const src = "pkg/api/session_mode.generated.go:AllSessionModeValues"
 	d := inv.in.Domains
 	var rows []DomainClassRow
@@ -51,7 +52,7 @@ func (inv *HostStateInventory) sessionModeRows() []DomainClassRow {
 			c = c.witness(st.ID, obs.SessionMode, "surface="+st.TurnProfile.SurfaceID)
 		}
 		w := row("session_mode", src, string(m), RecipientWorker)
-		w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) {
+		w.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) {
 			s.ParentSessionMode = m
 			if m == api.SessionModeAsk {
 				askReadOnly(s)
@@ -72,7 +73,7 @@ func (inv *HostStateInventory) sessionModeRows() []DomainClassRow {
 				continue
 			}
 			u := row("parent_upgraded_ask_to_agent", upSrc, val, RecipientWorker)
-			u.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) {
+			u.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) {
 				s.ParentSessionMode, s.ParentUpgradedAskToAgent = m, up
 				if m == api.SessionModeAsk {
 					askReadOnly(s)
@@ -91,7 +92,7 @@ func (inv *HostStateInventory) sessionModeRows() []DomainClassRow {
 	return rows
 }
 
-func (inv *HostStateInventory) postureAndOverlayRows() []DomainClassRow {
+func (inv *HostStateInventory) postureAndOverlayRows(ctx context.Context) []DomainClassRow {
 	d := inv.in.Domains
 	var rows []DomainClassRow
 	for _, p := range d.Postures {
@@ -102,7 +103,7 @@ func (inv *HostStateInventory) postureAndOverlayRows() []DomainClassRow {
 			c = c.witness(st.ID, string(p.ID), "surface="+st.TurnProfile.SurfaceID)
 		}
 		w := row("session_posture", src, string(p.ID), RecipientWorker)
-		w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { s.Posture = p.ID }, func(ws hoststate.WorkerState) bool { return ws.Posture == p.ID })
+		w.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) { s.Posture = p.ID }, func(ws hoststate.WorkerState) bool { return ws.Posture == p.ID })
 		if ws, _, ok := inv.workerWitness(func(ws hoststate.WorkerState, _ stateObservation) bool { return ws.Posture == p.ID }); ok {
 			w = w.witness(ws.ID, string(p.ID), "agent="+ws.AgentID)
 		}
@@ -121,7 +122,7 @@ func (inv *HostStateInventory) postureAndOverlayRows() []DomainClassRow {
 			rows = append(rows, impossible("pack_overlay", src, ov.ID, RecipientWorker, "overlay leaves no worker agent to spawn"))
 			continue
 		}
-		w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) {
+		w.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) {
 			s.OverlayIndex = ovIdx
 			s.AgentID = ov.WorkerAgents[0].ID
 		}, func(ws hoststate.WorkerState) bool { return ws.Overlay.ID == ov.ID })
@@ -161,7 +162,7 @@ func (inv *HostStateInventory) surfaceAndWorkflowRows() []DomainClassRow {
 	return rows
 }
 
-func (inv *HostStateInventory) rootAndBranchRows() []DomainClassRow {
+func (inv *HostStateInventory) rootAndBranchRows(ctx context.Context) []DomainClassRow {
 	const src = "internal/session/readerfacts/resolver.go:gitFacts"
 	d := inv.in.Domains
 	var rows []DomainClassRow
@@ -190,7 +191,7 @@ func (inv *HostStateInventory) rootAndBranchRows() []DomainClassRow {
 			w := row("workspace_roots_multi_git", src, cls, RecipientWorker)
 			for _, bv := range d.WorkerBranches {
 				for _, sec := range []bool{false, true} {
-					w.FuzzSelectable = w.FuzzSelectable || workerResolvesTo(d, func(s *hoststate.WorkerSeed) {
+					w.FuzzSelectable = w.FuzzSelectable || workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) {
 						s.BranchView, s.RootCount, s.SecondaryRootGit = bv, 2, sec
 					}, func(ws hoststate.WorkerState) bool { return ws.HasGit == pGit && ws.HasAnyGitRoot == aGit })
 				}
@@ -204,7 +205,7 @@ func (inv *HostStateInventory) rootAndBranchRows() []DomainClassRow {
 	}
 	for _, n := range []int{0, 1, 2} {
 		w := row("workspace_root_count", "internal/worker/executor.go:ApplyEnqueueDefaults", fmt.Sprintf("roots=%d", n), RecipientWorker)
-		w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) {
+		w.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) {
 			s.RootCount = n
 			if n == 0 {
 				s.BranchView = hoststate.BranchMainNonGit
@@ -219,7 +220,7 @@ func (inv *HostStateInventory) rootAndBranchRows() []DomainClassRow {
 	}
 	for _, bv := range d.WorkerBranches {
 		b := row("worker_branch_view", "internal/session/workerworkspace:OnWorkerBranch", string(bv), RecipientWorker)
-		b.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { s.BranchView = bv }, func(ws hoststate.WorkerState) bool { return ws.BranchView == bv })
+		b.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) { s.BranchView = bv }, func(ws hoststate.WorkerState) bool { return ws.BranchView == bv })
 		if ws, obs, ok := inv.workerWitness(func(ws hoststate.WorkerState, _ stateObservation) bool { return ws.BranchView == bv }); ok {
 			b = b.witness(ws.ID, string(bv), fmt.Sprintf("on_worker_branch=%t has_git=%t", ws.OnWorkerBranch, obs.HasGit))
 		}

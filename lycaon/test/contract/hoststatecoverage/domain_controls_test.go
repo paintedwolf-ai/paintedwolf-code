@@ -70,7 +70,7 @@ func TestApprovalPostureDomainGateControls(t *testing.T) {
 			}
 			inv.ObserveWorker(ws, auth)
 		}
-		rep, err := inv.Report()
+		rep, err := inv.Report(ctx)
 		if err != nil {
 			t.Fatalf("inventory report: %v", err)
 		}

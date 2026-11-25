@@ -40,7 +40,7 @@ func TestFuzzCorpusSemanticWitnesses(t *testing.T) {
 			if agent == "implementer" {
 				seed.BranchView = hoststate.BranchIsolatedWorker
 			}
-			ws, err := hoststate.ResolveWorkerSeed(d, seed)
+			ws, err := hoststate.ResolveWorkerSeed(t.Context(), d, seed)
 			if err != nil || ws.WebSearch {
 				t.Fatalf("%s: resolved %s err=%v, want a web-off worker", agent, ws.ID, err)
 			}

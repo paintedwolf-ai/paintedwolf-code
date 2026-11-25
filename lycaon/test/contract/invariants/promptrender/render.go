@@ -232,7 +232,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 			audit.AdmittedChecks++
 			admitted = append(admitted, sk)
 
-			parts, rErr := renderSkillCachedWithDigest(cache, varsDigest, sk, varsWithCfg)
+			parts, rErr := renderSkillCachedWithDigest(ctx, cache, varsDigest, sk, varsWithCfg)
 			if rErr != nil {
 				return rErr
 			}
@@ -307,7 +307,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		}
 	}
 
-	if err := verifyWarmColdSkillSchemaNarrowing(stock, loaded, &audit); err != nil {
+	if err := verifyWarmColdSkillSchemaNarrowing(ctx, stock, loaded, &audit); err != nil {
 		return audit, err
 	}
 	return audit, nil
@@ -329,6 +329,7 @@ func compileSkillTemplateCached(unitID, text string) (*pongo2.Template, error) {
 }
 
 func renderSkillCached(
+	ctx context.Context,
 	cache *hoststate.RenderCache,
 	catalogRev string,
 	sk skills.Skill,
@@ -340,10 +341,11 @@ func renderSkillCached(
 	}
 	data["configuration"] = map[string]any{}
 	varsDigest := renderCacheKeyForVars("skillvars", catalogRev, nil, data)
-	return renderSkillCachedWithDigest(cache, varsDigest, sk, data)
+	return renderSkillCachedWithDigest(ctx, cache, varsDigest, sk, data)
 }
 
 func renderSkillCachedWithDigest(
+	ctx context.Context,
 	cache *hoststate.RenderCache,
 	varsDigest string,
 	sk skills.Skill,
@@ -359,7 +361,7 @@ func renderSkillCachedWithDigest(
 			if cErr != nil {
 				return "", fmt.Errorf("compile %s: %w", unitID, cErr)
 			}
-			rOut, eErr := pongoplain.ExecuteDetached(tpl, data)
+			rOut, eErr := pongoplain.Execute(ctx, tpl, data)
 			if eErr != nil {
 				return "", fmt.Errorf("render %s: %w", unitID, eErr)
 			}
@@ -470,7 +472,7 @@ func verifySkillDiscoveryAndPreloads(
 	}
 }
 
-func verifyWarmColdSkillSchemaNarrowing(stock *Stock, loaded []skills.Skill, audit *SkillSurfaceAudit) error {
+func verifyWarmColdSkillSchemaNarrowing(ctx context.Context, stock *Stock, loaded []skills.Skill, audit *SkillSurfaceAudit) error {
 	var secretSkill, hostResSkill *skills.Skill
 	for i := range loaded {
 		if loaded[i].Name == "use-secrets-without-reading-them" {
@@ -558,7 +560,7 @@ func verifyWarmColdSkillSchemaNarrowing(stock *Stock, loaded []skills.Skill, aud
 				}
 			}
 			if secretSkill != nil {
-				parts, rErr := RenderSkill(*secretSkill, vars)
+				parts, rErr := RenderSkill(ctx, *secretSkill, vars)
 				if rErr != nil {
 					return rErr
 				}
@@ -593,8 +595,8 @@ func StockSkills(stock *Stock) ([]skills.Skill, error) {
 // RenderSkill renders a skill body and each bundled markdown resource the way
 // a read delivers them, with the empty configuration map production keeps
 // for packs without settings.
-func RenderSkill(sk skills.Skill, vars map[string]any) ([]Text, error) {
-	return renderSkillCached(hoststate.NewRenderCache(), "", sk, vars)
+func RenderSkill(ctx context.Context, sk skills.Skill, vars map[string]any) ([]Text, error) {
+	return renderSkillCached(ctx, hoststate.NewRenderCache(), "", sk, vars)
 }
 
 func sortedKeys[V any](m map[string]V) []string {

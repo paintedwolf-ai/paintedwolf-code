@@ -1,6 +1,7 @@
 package interactions
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/gate"
@@ -8,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
 
-func (inv *HostStateInventory) loadingAndAgentRows() []DomainClassRow {
+func (inv *HostStateInventory) loadingAndAgentRows(ctx context.Context) []DomainClassRow {
 	d := inv.in.Domains
 	var rows []DomainClassRow
 	partly := func(obs stateObservation) bool { return len(obs.Activated) > 0 && len(obs.Remaining) > 0 }
@@ -24,7 +25,7 @@ func (inv *HostStateInventory) loadingAndAgentRows() []DomainClassRow {
 	}
 	for _, ld := range d.WorkerLoadings {
 		w := row("deferred_tool_loading", "internal/coordinator/promptloop/worker_tool_plan.go:compileWorkerToolPlan", string(ld), RecipientWorker)
-		w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { s.Loading = ld }, func(ws hoststate.WorkerState) bool { return ws.Loading == ld })
+		w.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) { s.Loading = ld }, func(ws hoststate.WorkerState) bool { return ws.Loading == ld })
 		if ws, obs, ok := inv.workerWitness(func(ws hoststate.WorkerState, obs stateObservation) bool {
 			return ws.Loading == ld && (ld != hoststate.WorkerLoadingPartlyLoaded || partly(obs))
 		}); ok {
@@ -37,7 +38,7 @@ func (inv *HostStateInventory) loadingAndAgentRows() []DomainClassRow {
 	}
 	for _, ag := range d.Overlays[0].WorkerAgents {
 		a := row("worker_agent_profile", "internal/agentdef:LoadEffectiveWithCatalog", ag.ID+":"+ag.ToolProfile, RecipientWorker)
-		a.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { s.AgentID = ag.ID }, func(ws hoststate.WorkerState) bool { return ws.AgentID == ag.ID })
+		a.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) { s.AgentID = ag.ID }, func(ws hoststate.WorkerState) bool { return ws.AgentID == ag.ID })
 		if ws, _, ok := inv.workerWitness(func(ws hoststate.WorkerState, _ stateObservation) bool { return ws.AgentID == ag.ID }); ok {
 			a = a.witness(ws.ID, ag.ID, "profile="+ws.ToolProfile)
 		}
@@ -84,7 +85,7 @@ var envToggles = []envToggle{
 	},
 }
 
-func (inv *HostStateInventory) envToggleRows() []DomainClassRow {
+func (inv *HostStateInventory) envToggleRows(ctx context.Context) []DomainClassRow {
 	d := inv.in.Domains
 	var rows []DomainClassRow
 	for _, tg := range envToggles {
@@ -98,7 +99,7 @@ func (inv *HostStateInventory) envToggleRows() []DomainClassRow {
 				c = c.witness(st.ID, val, "reader="+val)
 			}
 			w := row(tg.domain, tg.source, val, RecipientWorker)
-			w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { tg.worker(s, b) }, func(ws hoststate.WorkerState) bool { return tg.workerState(ws) == b })
+			w.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) { tg.worker(s, b) }, func(ws hoststate.WorkerState) bool { return tg.workerState(ws) == b })
 			if ws, _, ok := inv.workerWitness(func(ws hoststate.WorkerState, obs stateObservation) bool {
 				return tg.workerState(ws) == b && tg.delivered(obs) == b
 			}); ok {
@@ -117,7 +118,7 @@ func (inv *HostStateInventory) envToggleRows() []DomainClassRow {
 	}
 	for _, tmp := range d.TempStates {
 		w := row("temp_roots", "internal/session/profiles:WritableSharedTemp", string(tmp), RecipientWorker)
-		w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { s.TempState = tmp }, func(ws hoststate.WorkerState) bool { return ws.TempState == tmp })
+		w.FuzzSelectable = workerResolvesTo(ctx, d, func(s *hoststate.WorkerSeed) { s.TempState = tmp }, func(ws hoststate.WorkerState) bool { return ws.TempState == tmp })
 		if ws, _, ok := inv.workerWitness(func(ws hoststate.WorkerState, _ stateObservation) bool { return ws.TempState == tmp }); ok {
 			w = w.witness(ws.ID, string(tmp), fmt.Sprintf("scratch=%t shared=%d", ws.SessionScratchDir != "", len(ws.SharedTempLocations)))
 		}
@@ -196,7 +197,7 @@ func coordinatorResolvesTo(d *hoststate.SeedDomains, mutate func(*hoststate.Coor
 
 // workerResolvesTo is coordinatorResolvesTo for worker seeds, starting from
 // every agent of the overlay a mutation selects.
-func workerResolvesTo(d *hoststate.SeedDomains, mutate func(*hoststate.WorkerSeed), accept func(hoststate.WorkerState) bool) bool {
+func workerResolvesTo(ctx context.Context, d *hoststate.SeedDomains, mutate func(*hoststate.WorkerSeed), accept func(hoststate.WorkerState) bool) bool {
 	probe := hoststate.WorkerSeed{}
 	mutate(&probe)
 	for _, seed := range workerBases(d, probe.OverlayIndex) {
@@ -209,7 +210,7 @@ func workerResolvesTo(d *hoststate.SeedDomains, mutate func(*hoststate.WorkerSee
 		if err != nil || !decoded.Worker || !decoded.WorkerRoute || decoded.WorkerSeed != seed {
 			continue
 		}
-		ws, err := hoststate.ResolveWorkerSeed(d, decoded.WorkerSeed)
+		ws, err := hoststate.ResolveWorkerSeed(ctx, d, decoded.WorkerSeed)
 		if err == nil && !ws.Excluded && accept(ws) {
 			return true
 		}

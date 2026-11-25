@@ -154,7 +154,7 @@ func ResolveCoordinatorSeed(domains *SeedDomains, seed CoordinatorSeed) (Coordin
 
 // ResolveWorkerSeed resolves one WorkerSeed directly through the catalog's
 // worker profiles and production exclusion rules without enumerating the matrix.
-func ResolveWorkerSeed(domains *SeedDomains, seed WorkerSeed) (WorkerState, error) {
+func ResolveWorkerSeed(ctx context.Context, domains *SeedDomains, seed WorkerSeed) (WorkerState, error) {
 	if domains == nil || len(domains.Overlays) == 0 {
 		return WorkerState{}, fmt.Errorf("seed domains required")
 	}
@@ -185,5 +185,5 @@ func ResolveWorkerSeed(domains *SeedDomains, seed WorkerSeed) (WorkerState, erro
 	if seed.ParentUpgradedAskToAgent && seed.ParentSessionMode != api.SessionModeAsk {
 		return WorkerState{}, fmt.Errorf("only an Ask parent can upgrade to Agent")
 	}
-	return buildWorkerState(context.Background(), overlay, *target, seed)
+	return buildWorkerState(ctx, overlay, *target, seed)
 }
