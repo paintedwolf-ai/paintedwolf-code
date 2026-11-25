@@ -2,7 +2,6 @@ package gate
 
 import (
 	"encoding/json"
-	"slices"
 	"strings"
 	"testing"
 
@@ -25,8 +24,10 @@ func TestAllPosturesRoundTripThroughParsePosture(t *testing.T) {
 			t.Errorf("ParsePosture(%q) = %q, %v", p, parsed, err)
 		}
 	}
-	if !slices.IsSorted(got) {
-		t.Errorf("AllPostures() = %v, want sorted", got)
+	for i := 1; i < len(got); i++ {
+		if Stricter(got[i-1], got[i]) != got[i] || got[i-1] == got[i] {
+			t.Errorf("AllPostures() = %v, want least strict first", got)
+		}
 	}
 	first := got[0]
 	got[0] = "mutated"

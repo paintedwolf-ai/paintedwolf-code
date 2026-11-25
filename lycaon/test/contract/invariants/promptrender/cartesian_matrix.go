@@ -163,7 +163,7 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 		tracker.RecordCell(ws.Excluded, ws.ExcludedReason)
 	}
 
-	if err := runKicksAndInjectsMatrix(ctx, s, cache, sum); err != nil {
+	if err := runKicksAndInjectsMatrix(ctx, s, sum); err != nil {
 		return nil, err
 	}
 	if err := runOARNextStepsMatrix(ctx, s, oarBundle, coordStates, workerStates, sum); err != nil {

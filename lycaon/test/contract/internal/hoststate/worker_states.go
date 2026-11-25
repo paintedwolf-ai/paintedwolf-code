@@ -50,12 +50,13 @@ type WorkerState struct {
 	Vision                   bool
 	CommandExternalHidden    bool
 	ApprovalPosture          gate.Posture
+	TempState                TempState
 
 	HasGit         bool
 	HasAnyGitRoot  bool
 	OnWorkerBranch bool
 	// SessionScratchDir and SharedTempLocations are the child session's
-	// observed temporary storage; generated states leave them empty.
+	// temporary storage TempState selects.
 	SessionScratchDir   string
 	SharedTempLocations []string
 	Loaded              map[string]bool
@@ -74,10 +75,6 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 	}
 	stock := domains.Overlays[0]
 	postures := domains.Postures
-	profileMap := make(map[string]sandbox.ToolProfile, len(stock.Profiles))
-	for _, p := range stock.Profiles {
-		profileMap[p.ID] = p
-	}
 
 	branches := []WorkerBranchView{BranchMainGit, BranchMainNonGit, BranchLinkedWorktreeGit, BranchIsolatedWorker}
 	loadings := []WorkerLoadingMode{WorkerLoadingStickyOnly, WorkerLoadingAllLoaded}
@@ -93,7 +90,6 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 	}
 
 	for _, agent := range stock.WorkerAgents {
-		prof := profileMap[agent.ToolProfile]
 		for _, posture := range postures {
 			for _, bv := range branches {
 				for _, rc := range []int{1, 2} {
@@ -108,11 +104,11 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 									if parentMode != api.SessionModeAsk && upgraded {
 										continue
 									}
-									ws, buildErr := buildWorkerStateWithEnv(
-										ctx, stock, agent, prof,
-										posture.ID, bv, rc, secGit, ld, parentMode, upgraded,
-										true, false, false, gate.PostureBalanced,
-									)
+									ws, buildErr := buildWorkerState(ctx, stock, agent, WorkerSeed{
+										Posture: posture.ID, BranchView: bv, RootCount: rc, SecondaryRootGit: secGit,
+										Loading: ld, ParentSessionMode: parentMode, ParentUpgradedAskToAgent: upgraded,
+										WebSearch: true, ApprovalPosture: gate.PostureBalanced, TempState: TempNone,
+									})
 									if buildErr != nil {
 										return nil, buildErr
 									}
@@ -148,6 +144,7 @@ func buildNarrowWorkerSeeds(domains *SeedDomains) []WorkerSeed {
 		ParentSessionMode: api.SessionModeAgent,
 		WebSearch:         true,
 		ApprovalPosture:   gate.PostureBalanced,
+		TempState:         TempNone,
 	}
 	baseReadOnly := WorkerSeed{
 		OverlayIndex:      0,
@@ -159,6 +156,7 @@ func buildNarrowWorkerSeeds(domains *SeedDomains) []WorkerSeed {
 		ParentSessionMode: api.SessionModeAsk,
 		WebSearch:         true,
 		ApprovalPosture:   gate.PostureBalanced,
+		TempState:         TempNone,
 	}
 
 	var seeds []WorkerSeed
@@ -192,6 +190,21 @@ func buildNarrowWorkerSeeds(domains *SeedDomains) []WorkerSeed {
 	extHidden := baseMutating
 	extHidden.CommandExternalHidden = true
 	seeds = append(seeds, extHidden)
+
+	// A spawned child has a scratch folder and may hold shared temp.
+	for _, ts := range []TempState{TempScratchOnly, TempScratchAndShared} {
+		withTemp := baseMutating
+		withTemp.TempState = ts
+		seeds = append(seeds, withTemp)
+	}
+
+	// A read-scope worker may run without project roots; a write-scope one may not.
+	for _, agentID := range []string{"repo-researcher", "web-researcher", "implementer"} {
+		rootless := baseReadOnly
+		rootless.AgentID, rootless.RootCount, rootless.BranchView = agentID, 0, BranchMainNonGit
+		rootless.ParentSessionMode = api.SessionModeAgent
+		seeds = append(seeds, rootless)
+	}
 
 	// Partial deferred-tool loading: feasible >=2-candidate worker + <2-candidate exclusion.
 	stock := domains.Overlays[0]
@@ -247,86 +260,74 @@ func buildNarrowWorkerSeeds(domains *SeedDomains) []WorkerSeed {
 	return seeds
 }
 
-func buildWorkerStateWithEnv(
-	ctx context.Context,
-	overlay PackOverlay,
-	agent WorkerAgent,
-	_ sandbox.ToolProfile,
-	posture api.SessionPosture,
-	bv WorkerBranchView,
-	rootCount int,
-	secondaryGit bool,
-	loading WorkerLoadingMode,
-	parentMode api.SessionMode,
-	upgraded, webSearch, vision, extHidden bool,
-	approval gate.Posture,
-) (WorkerState, error) {
-	parentAsk := parentMode == api.SessionModeAsk
-	hasGit := bv != BranchMainNonGit
-	anyGit := hasGit || (rootCount >= 2 && secondaryGit)
+// buildWorkerState resolves seed's coordinates for agent in overlay.
+func buildWorkerState(ctx context.Context, overlay PackOverlay, agent WorkerAgent, seed WorkerSeed) (WorkerState, error) {
+	bv, rootCount := seed.BranchView, seed.RootCount
+	parentAsk := seed.ParentSessionMode == api.SessionModeAsk
+	hasGit := rootCount > 0 && bv != BranchMainNonGit
+	anyGit := hasGit || (rootCount >= 2 && seed.SecondaryRootGit)
 	onBranch := bv == BranchIsolatedWorker
 
 	excluded := ""
-	if rootCount < 2 && secondaryGit {
-		excluded = "secondary_git_requires_multiple_roots"
-	}
 	mutCapable, _ := prompts.AgentMutationCapable(agent.ID)
-	if excluded == "" && onBranch && !mutCapable {
+	switch {
+	case rootCount < 2 && seed.SecondaryRootGit:
+		excluded = "secondary_git_requires_multiple_roots"
+	case rootCount == 0 && bv != BranchMainNonGit:
+		excluded = "worker_without_roots_has_no_repository_view"
+	case rootCount == 0 && mutCapable:
+		excluded = "write_scope_requires_project_roots"
+	case onBranch && !mutCapable:
 		excluded = "read_only_agent_has_no_isolated_worker_branch"
-	}
-	if excluded == "" && parentAsk && mutCapable {
+	case parentAsk && mutCapable:
 		excluded = "ask_mode_forbids_mutating_worker"
-	}
-	if excluded == "" && parentAsk && onBranch {
+	case parentAsk && onBranch:
 		excluded = "ask_mode_never_spawns_isolated_branch_worker"
-	}
-	if excluded == "" && !webSearch && agentdef.DeclaresAny(agent.ID, agentdef.CapabilityExternal) {
+	case !seed.WebSearch && agentdef.DeclaresAny(agent.ID, agentdef.CapabilityExternal):
 		excluded = "web_search_disabled_for_external_agent"
 	}
 
 	loaded := make(map[string]bool)
-	if loading == WorkerLoadingPartlyLoaded || loading == WorkerLoadingAllLoaded {
+	if seed.Loading == WorkerLoadingPartlyLoaded || seed.Loading == WorkerLoadingAllLoaded {
 		deferred, err := admissibleWorkerDeferredNames(
 			ctx, overlay, agent.ID, agent.ToolProfile,
-			posture, parentMode, rootCount, webSearch, extHidden,
+			seed.Posture, seed.ParentSessionMode, rootCount, seed.WebSearch, seed.CommandExternalHidden,
 		)
 		if err != nil {
 			return WorkerState{}, err
 		}
-		switch loading {
-		case WorkerLoadingPartlyLoaded:
-			if len(deferred) < 2 {
-				if excluded == "" {
-					excluded = "worker_partly_loaded_requires_at_least_two_deferred_tools"
-				}
-			} else {
-				loaded[deferred[0]] = true
+		switch {
+		case seed.Loading == WorkerLoadingPartlyLoaded && len(deferred) < 2:
+			if excluded == "" {
+				excluded = "worker_partly_loaded_requires_at_least_two_deferred_tools"
 			}
-		case WorkerLoadingAllLoaded:
-			if len(deferred) == 0 {
-				if excluded == "" {
-					excluded = "worker_profile_has_no_deferred_tools"
-				}
-			} else {
-				for _, name := range deferred {
-					loaded[name] = true
-				}
+		case seed.Loading == WorkerLoadingPartlyLoaded:
+			loaded[deferred[0]] = true
+		case len(deferred) == 0:
+			if excluded == "" {
+				excluded = "worker_profile_has_no_deferred_tools"
+			}
+		default:
+			for _, name := range deferred {
+				loaded[name] = true
 			}
 		}
 	}
+	scratch, shared := buildTempPaths(seed.TempState)
 
 	id := fmt.Sprintf(
-		"worker/%s/posture=%s/branch=%s/roots=%d/secGit=%t/load=%s/parent=%s/upgraded=%t/ov=%s/web=%t/vis=%t/extH=%t/app=%s",
-		agent.ID, posture, bv, rootCount, secondaryGit, loading, parentMode, upgraded,
-		overlay.ID, webSearch, vision, extHidden, approval,
+		"worker/%s/posture=%s/branch=%s/roots=%d/secGit=%t/load=%s/parent=%s/upgraded=%t/ov=%s/web=%t/vis=%t/extH=%t/app=%s/temp=%s",
+		agent.ID, seed.Posture, bv, rootCount, seed.SecondaryRootGit, seed.Loading, seed.ParentSessionMode, seed.ParentUpgradedAskToAgent,
+		overlay.ID, seed.WebSearch, seed.Vision, seed.CommandExternalHidden, seed.ApprovalPosture, seed.TempState,
 	)
 	return WorkerState{
 		ID: id, AgentID: agent.ID, ToolProfile: agent.ToolProfile, ExecMode: agent.ExecMode,
-		Posture: posture, BranchView: bv, RootCount: rootCount, SecondaryRootGit: secondaryGit,
-		Loading: loading, ParentSessionMode: parentMode, ParentUpgradedAskToAgent: upgraded,
-		WebSearch: webSearch, Vision: vision, CommandExternalHidden: extHidden,
-		ApprovalPosture: approval,
-		HasGit:          hasGit, HasAnyGitRoot: anyGit, OnWorkerBranch: onBranch,
+		Posture: seed.Posture, BranchView: bv, RootCount: rootCount, SecondaryRootGit: seed.SecondaryRootGit,
+		Loading: seed.Loading, ParentSessionMode: seed.ParentSessionMode, ParentUpgradedAskToAgent: seed.ParentUpgradedAskToAgent,
+		WebSearch: seed.WebSearch, Vision: seed.Vision, CommandExternalHidden: seed.CommandExternalHidden,
+		ApprovalPosture: seed.ApprovalPosture, TempState: seed.TempState,
+		HasGit: hasGit, HasAnyGitRoot: anyGit, OnWorkerBranch: onBranch,
+		SessionScratchDir: scratch, SharedTempLocations: shared,
 		Loaded: loaded, Overlay: overlay,
 		Excluded: excluded != "", ExcludedReason: excluded,
 	}, nil

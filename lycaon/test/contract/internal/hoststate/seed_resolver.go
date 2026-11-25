@@ -7,7 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/gate"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -65,6 +64,7 @@ type WorkerSeed struct {
 	Vision                   bool
 	CommandExternalHidden    bool
 	ApprovalPosture          gate.Posture
+	TempState                TempState
 }
 
 var (
@@ -162,8 +162,8 @@ func ResolveWorkerSeed(domains *SeedDomains, seed WorkerSeed) (WorkerState, erro
 	if ovIdx < 0 || ovIdx >= len(domains.Overlays) {
 		return WorkerState{}, fmt.Errorf("overlay index %d outside %d overlays", ovIdx, len(domains.Overlays))
 	}
-	if seed.ParentSessionMode == "" || seed.ApprovalPosture == "" || seed.RootCount < 1 {
-		return WorkerState{}, fmt.Errorf("worker seed needs a parent mode, approval posture and root count")
+	if seed.ParentSessionMode == "" || seed.ApprovalPosture == "" || seed.TempState == "" || seed.RootCount < 0 {
+		return WorkerState{}, fmt.Errorf("worker seed needs a parent mode, approval posture, temp state and root count")
 	}
 	overlay := domains.Overlays[ovIdx]
 	var target *WorkerAgent
@@ -182,20 +182,8 @@ func ResolveWorkerSeed(domains *SeedDomains, seed WorkerSeed) (WorkerState, erro
 			ExcludedReason: "worker_agent_absent_in_overlay",
 		}, nil
 	}
-	var prof sandbox.ToolProfile
-	for _, p := range overlay.Profiles {
-		if p.ID == target.ToolProfile {
-			prof = p
-			break
-		}
-	}
 	if seed.ParentUpgradedAskToAgent && seed.ParentSessionMode != api.SessionModeAsk {
 		return WorkerState{}, fmt.Errorf("only an Ask parent can upgrade to Agent")
 	}
-	return buildWorkerStateWithEnv(
-		context.Background(), overlay, *target, prof,
-		seed.Posture, seed.BranchView, seed.RootCount, seed.SecondaryRootGit,
-		seed.Loading, seed.ParentSessionMode, seed.ParentUpgradedAskToAgent,
-		seed.WebSearch, seed.Vision, seed.CommandExternalHidden, seed.ApprovalPosture,
-	)
+	return buildWorkerState(context.Background(), overlay, *target, seed)
 }

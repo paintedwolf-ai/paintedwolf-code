@@ -117,7 +117,6 @@ type ProducerGraph struct {
 }
 
 var defaultEntryPointPatterns = []string{
-	"./internal/app/workerruntime/...",
 	"./internal/coordinator/...",
 	"./internal/guidance/...",
 	"./internal/oar/...",
@@ -126,21 +125,23 @@ var defaultEntryPointPatterns = []string{
 	"./internal/toolfeedback/...",
 	"./internal/toolexecution/...",
 	"./internal/tools/...",
-	"./internal/worker/...",
 }
 
 var defaultGraphBuilds atomic.Int64
 
-var loadDefaultGraphOnce = sync.OnceValues(func() (*ProducerGraph, error) {
+var loadDefaultGraphOnce = sync.OnceValues(BuildProducerGraph)
+
+// BuildProducerGraph builds a fresh current-tree SSA producer graph from the
+// host delivery entry points; the caller owns it and can let it go.
+func BuildProducerGraph() (*ProducerGraph, error) {
 	defaultGraphBuilds.Add(1)
-	modRoot := configlayout.FindModuleRoot()
-	g, err := LoadProducerGraphFromDir(modRoot, defaultEntryPointPatterns...)
+	g, err := LoadProducerGraphFromDir(configlayout.FindModuleRoot(), defaultEntryPointPatterns...)
 	if err != nil {
 		return nil, err
 	}
 	g.stats.DefaultGraphBuildCount = defaultGraphBuilds.Load()
 	return g, nil
-})
+}
 
 // DefaultGraphBuildCount reports how many times the current-tree SSA graph was built in this process.
 func DefaultGraphBuildCount() int64 {

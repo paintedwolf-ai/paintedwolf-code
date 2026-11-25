@@ -48,6 +48,10 @@ const (
 	flagSecondaryRootGit
 )
 
+// workerRootCounts are the worker root counts in byte order; zero comes last
+// so the one- and two-root bytes keep their meaning.
+var workerRootCounts = []int{1, 2, 0}
+
 // SeedChange is one turn-B mutation selector; the fuzz runner interprets it.
 type SeedChange struct {
 	Axis, Value uint8
@@ -191,8 +195,9 @@ func (d *SeedDomains) EncodeWorker(seed WorkerSeed, tail SeedTail) ([]byte, erro
 	if err != nil {
 		return nil, err
 	}
-	if seed.RootCount != 1 && seed.RootCount != 2 {
-		return nil, fmt.Errorf("worker root count %d is not 1 or 2", seed.RootCount)
+	rootByte := slices.Index(workerRootCounts, seed.RootCount)
+	if rootByte < 0 {
+		return nil, fmt.Errorf("worker root count %d is not one of %v", seed.RootCount, workerRootCounts)
 	}
 	if seed.SecondaryRootGit && seed.RootCount != 2 {
 		return nil, fmt.Errorf("a secondary Git root needs two roots")
@@ -216,10 +221,11 @@ func (d *SeedDomains) EncodeWorker(seed WorkerSeed, tail SeedTail) ([]byte, erro
 	b[byteRootsOrBranch] = idx(comparableIndex("worker branches", d.WorkerBranches, seed.BranchView))
 	b[byteLoading] = idx(comparableIndex("worker loadings", d.WorkerLoadings, seed.Loading))
 	b[byteApproval] = idx(comparableIndex("approval postures", d.ApprovalPostures, seed.ApprovalPosture))
+	b[byteMCP] = idx(comparableIndex("temp states", d.TempStates, seed.TempState))
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
-	b[byteWorkflowOrRootCount] = uint8(seed.RootCount - 1)
+	b[byteWorkflowOrRootCount] = uint8(rootByte)
 	b[byteTempOrUpgraded] = boolFlag(seed.ParentUpgradedAskToAgent, 1)
 	b[byteFlags] = boolFlag(seed.WebSearch, flagWebSearch) | boolFlag(seed.Vision, flagVision) |
 		boolFlag(seed.CommandExternalHidden, flagExternalHidden) | boolFlag(seed.SecondaryRootGit, flagSecondaryRootGit)
@@ -281,7 +287,7 @@ func (d *SeedDomains) Decode(data []byte) (SeedCase, error) {
 		return c, nil
 	}
 	c.WorkerRoute = true
-	rootCount := pick(byteWorkflowOrRootCount, 2) + 1
+	rootCount := workerRootCounts[pick(byteWorkflowOrRootCount, len(workerRootCounts))]
 	c.WorkerSeed = WorkerSeed{
 		OverlayIndex:             ov,
 		AgentID:                  agents[pick(byteSurfaceOrAgent, len(agents))].ID,
@@ -296,6 +302,7 @@ func (d *SeedDomains) Decode(data []byte) (SeedCase, error) {
 		Vision:                   flags&flagVision != 0,
 		CommandExternalHidden:    flags&flagExternalHidden != 0,
 		ApprovalPosture:          approval,
+		TempState:                d.TempStates[pick(byteMCP, len(d.TempStates))],
 	}
 	return c, nil
 }

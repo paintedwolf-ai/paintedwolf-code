@@ -435,7 +435,6 @@ func renderZeroToolUtilityPrompts(
 func runGateFeedbackRenders(
 	ctx context.Context,
 	s *Stock,
-	cReps []coordRep,
 	sum *CartesianSummary,
 ) error {
 	gateCat, err := feedback.LoadGateFeedbackCatalogWithCatalog(s.Catalog)

@@ -258,6 +258,8 @@ func sampleStringForVar(name string) string {
 		return "implement"
 	case "phase", "phase_id", "run_phase", "batch_phase":
 		return "work"
+	case "scope_mode":
+		return "write"
 	default:
 		return "sample-" + strings.ReplaceAll(name, "_", "-")
 	}

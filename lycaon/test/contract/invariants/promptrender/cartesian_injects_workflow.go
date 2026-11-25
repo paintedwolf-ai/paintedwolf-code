@@ -341,7 +341,6 @@ func runWorkerInjectRenders(
 	ctx context.Context,
 	s *Stock,
 	wReps []workerRep,
-	cache *hoststate.RenderCache,
 	sum *CartesianSummary,
 ) error {
 	injRenderer := prompts.NewInjectRenderer(s.Engine())
