@@ -573,7 +573,7 @@ func TestRequestReachFailsOnSeededRequests(t *testing.T) {
 		"guide names an unoffered tool":                  {message: system("Store the checklist, then call `promote_overlay`."), want: 1},
 		"guide reworded":                                 {message: system("Keep the checklist current with `update_progress`."), want: 0},
 		"recovery names an unoffered tool":               {message: refused("Rejected: stale revision.\nFix: call `edit` on the board."), want: 1},
-		"recovery names an unknown argument":             {message: refused("Rejected: stale revision.\nFix: pass `path` to `update_progress`."), want: 1},
+		"recovery gives an unknown argument":             {message: refused("Rejected: stale revision.\nFix: call `update_progress(path=…)`."), want: 1},
 		"recovery reworded":                              {message: refused("Rejected: stale revision.\nFix: resend `update_progress` with the current `expected_revision`."), want: 0},
 		"user text is not host text":                     {message: api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "call `promote_overlay`"}, want: 0},
 		"guide gives command a dropped argument":         {message: system("Run it with `command(command=…, timeout_ms=60000)`."), want: 1},
