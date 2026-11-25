@@ -67,7 +67,7 @@ resources:
         connections:
           - mode: dynamic
         uses:
-          - {id: vm_lifecycle, label: "VM start, stop, delete", roles: [coordinator], requires: {capabilities: [host_execution], alone: true}}
+          - {id: vm_lifecycle, label: VM lifecycle, roles: [coordinator], requires: {capabilities: [host_execution], alone: true}}
   - id: deno
     family: runtimes
     label: Deno
@@ -253,8 +253,6 @@ resources:
         connections:
           - mode: baseline_loopback
             target: http://127.0.0.1:11434
-        uses:
-          - {id: api, label: API, requires: {capabilities: [loopback_connect], ports: [11434]}}
   - id: opentofu
     family: infrastructure
     label: OpenTofu
@@ -319,7 +317,7 @@ resources:
             target_from: daemon_socket
             client_env: CONTAINER_HOST
         uses:
-          - {id: machine_lifecycle, label: "machine start, stop", roles: [coordinator], requires: {capabilities: [host_execution], alone: true}}
+          - {id: machine_lifecycle, label: machine lifecycle, roles: [coordinator], requires: {capabilities: [host_execution], alone: true}}
       - platforms: [windows]
         discover:
           executable:
@@ -551,8 +549,6 @@ resources:
         connections:
           - mode: baseline_loopback
             target: http://127.0.0.1:4566
-        uses:
-          - {id: api, label: API, requires: {capabilities: [loopback_connect], ports: [4566]}}
   - id: maven
     family: build-tools
     label: Maven
@@ -581,7 +577,7 @@ resources:
           - mode: dynamic
         uses:
           - {id: container_driver, label: container driver, requires: {any_resource: [docker, podman]}}
-          - {id: vm_lifecycle, label: "VM start, stop", roles: [coordinator], requires: {capabilities: [host_execution], alone: true}}
+          - {id: vm_lifecycle, label: VM lifecycle, roles: [coordinator], requires: {capabilities: [host_execution], alone: true}}
   - id: mysql-cli
     family: data-tools
     label: MySQL client
@@ -864,9 +860,6 @@ resources:
             names: [adb]
         connections:
           - mode: dynamic
-        uses:
-          - {id: adb, label: adb, requires: {capabilities: [loopback_connect], ports: [5037]}}
-          - {id: adb_server, label: adb server start, requires: {capabilities: [local_listen], ports: [5037]}}
   - id: clickhouse
     family: data-tools
     label: ClickHouse
@@ -910,8 +903,6 @@ resources:
         connections:
           - mode: baseline_loopback
             target: http://127.0.0.1:9200
-        uses:
-          - {id: http_api, label: HTTP API, requires: {capabilities: [loopback_connect], ports: [9200]}}
   - id: ffmpeg
     family: media
     label: FFmpeg
