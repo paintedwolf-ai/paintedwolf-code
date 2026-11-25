@@ -43,6 +43,7 @@ func parenthesised(e *Expr) string {
 		return "-(" + parenthesised(e.Left) + ")"
 	case ExprAnd, ExprOr, ExprCompare, ExprArith:
 		return "(" + parenthesised(e.Left) + ") " + e.Op + " (" + parenthesised(e.Right) + ")"
+	case ExprFilter, ExprIdent, ExprLiteral:
 	}
 	return e.Source()
 }
