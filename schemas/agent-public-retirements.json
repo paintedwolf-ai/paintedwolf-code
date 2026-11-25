@@ -228,6 +228,18 @@
     "paintedwolf.http_request_response_path_denied": {
       "version": 1,
       "summary": "response_path could not land the response body in the project; curl writes bodies with -o through the write door."
+    },
+    "paintedwolf.handoff_plane_binding": {
+      "version": 1,
+      "summary": "Host binding of each worker to its parent session's handoff plane when the worker starts; no call binds it."
+    },
+    "paintedwolf.workflow_run_context": {
+      "version": 1,
+      "summary": "Active workflow run state the host injects into coordinator context, including the current phase and any pending feedback or decision."
+    },
+    "paintedwolf.workflow_run_exit": {
+      "version": 1,
+      "summary": "Exit of an active workflow run is a person's control in the app; the coordinator sees the closed run in its run context."
     }
   },
   "vocabularies": {
@@ -898,7 +910,42 @@
       "parse_delegation_plan": [
         "plan_from_blueprint",
         "fanout_plan"
-      ]
+      ],
+      "handoff_init": {
+        "content_contract": "paintedwolf.handoff_plane_binding",
+        "version": 1
+      },
+      "handoff_health": [
+        "pack_board"
+      ],
+      "parse_extract_json": [
+        "command"
+      ],
+      "parse_validate": [
+        "command"
+      ],
+      "parse_evaluation": [
+        "command"
+      ],
+      "plan_append_review_evidence": [
+        "submit_verdict"
+      ],
+      "state_query": {
+        "content_contract": "paintedwolf.workflow_run_context",
+        "version": 1
+      },
+      "state_close": {
+        "content_contract": "paintedwolf.workflow_run_exit",
+        "version": 1
+      },
+      "state_update": [
+        "workflow_advance",
+        "workflow_transition"
+      ],
+      "workflow_user_feedback": {
+        "content_contract": "paintedwolf.workflow_run_context",
+        "version": 1
+      }
     },
     "workflow_terms": {
       "delegation_active": [

@@ -59,7 +59,6 @@ func Build(ctx context.Context, deps Dependencies, registerRecovery func(bootrec
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	blueprintMgr.SetProjects(deps.Projects)
 	blueprintMgr.Approvals = blueprint.NewApprovalStore(deps.Database, deps.AuthzRecorder)
-	blueprintMgr.SetDataDir(deps.DataDir)
 
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	if err != nil {

@@ -154,8 +154,8 @@ The pause transaction retains a report snapshot: accepted verdicts, worker
 reports, bound scans, coverage facts, and the separately labeled unaccepted
 candidate. Its report says **Review incomplete**, assigns no success rating, and
 remains downloadable after cancellation. It does not pass the phase evidence
-gate. Repair episodes and snapshots are host-managed workflow variables; model
-`state_update` cannot alter them.
+gate. Repair episodes and snapshots are host-managed workflow variables that no
+agent tool writes.
 
 `review_loop.coverage_reviewers` selects a subset of `required_agents` to assess coverage independently. It requires a `coverage_review` verdict member and a `reconciles_phase` carrying candidate coverage. Dispatch records the subject before composing the worker prompt. `complete_leg.coverage_review` is validated against that recorded subject; verdict admission separately checks its applicability. Reviewer output cannot change its own assigned inputs. An unrelated or focused job with the same persona cannot replace a completed independent review.
 

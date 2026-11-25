@@ -23,18 +23,18 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	reg := toolstest.NewRegistry()
-	reg.Register("state_update", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-		return `{"updated":true}`, nil
+	reg.Register("state_start", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return `{"started":true}`, nil
 	})
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern:   ".*",
-		ToolCalls: []llm.MockToolCall{{ID: "tc1", Name: "state_update", Args: map[string]any{"path": "x", "value": "in_progress"}}},
+		ToolCalls: []llm.MockToolCall{{ID: "tc1", Name: "state_start", Args: map[string]any{"workflow_id": "implement", "workflow_version": "1.0.0"}}},
 	}}})
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, tool string, _ map[string]any) (string, bool, error) {
-		if tool == "state_update" {
+		if tool == "state_start" {
 			return "host answered", true, nil
 		}
 		return "", false, nil
@@ -54,7 +54,7 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 		if msg.Role == api.MessageRoleTool && strings.Contains(msg.Content, "host answered") {
 			found = true
 			if strings.Contains(msg.Content, `{"updated":true}`) {
-				t.Fatal("registry state_update should not have run")
+				t.Fatal("registry state_start should not have run")
 			}
 		}
 	}
