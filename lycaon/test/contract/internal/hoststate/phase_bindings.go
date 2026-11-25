@@ -19,6 +19,8 @@ type PhaseBinding struct {
 	// RequiresAgent is the admission fact that refuses entering the phase in
 	// Ask mode.
 	RequiresAgent bool
+	// AllowedAgents is the roster a non-ambient run declares.
+	AllowedAgents []string
 }
 
 // ShippedPhaseBindings resolves every shipped workflow phase that binds a
@@ -65,6 +67,7 @@ func BindPhase(m workflowdef.Manifest, phase workflowdef.PhaseDef) (PhaseBinding
 		Resolved:      resolved,
 		Advance:       string(workflowdef.EffectiveAdvancePolicy(m, phase)),
 		RequiresAgent: m.PhaseRequiresAgent(phase.ID),
+		AllowedAgents: slices.Clone(m.AllowedAgents),
 	}, nil
 }
 
@@ -72,8 +75,9 @@ func BindPhase(m workflowdef.Manifest, phase workflowdef.PhaseDef) (PhaseBinding
 // share recipients.
 func (b PhaseBinding) Key() string {
 	r := b.Resolved
-	return fmt.Sprintf("%s|%s|%s|%t|%t|%s|%t", r.CoordinatorSurface, r.SurfaceTemplate,
-		strings.Join(r.ModeRefs, ","), r.WorkflowInvestigateEligible, r.ProfileResolved, b.Advance, b.RequiresAgent)
+	return fmt.Sprintf("%s|%s|%s|%t|%t|%s|%t|%s", r.CoordinatorSurface, r.SurfaceTemplate,
+		strings.Join(r.ModeRefs, ","), r.WorkflowInvestigateEligible, r.ProfileResolved, b.Advance, b.RequiresAgent,
+		strings.Join(b.AllowedAgents, ","))
 }
 
 // applyPhaseBinding sets the run-context fields the coordinator turn frame

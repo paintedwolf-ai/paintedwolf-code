@@ -326,6 +326,10 @@ func resolveCoordinatorSeed(
 	roots, hasGit, anyGit := buildRootsForTopology(seed.roots)
 	scratch, shared := buildTempPaths(seed.temp)
 	allowlist := slices.Clone(overlay.SpawnAllowlist)
+	// A bound run's roster is the one its manifest declares (SessionPolicy.RosterFor).
+	if seed.binding != nil && len(seed.binding.AllowedAgents) > 0 {
+		allowlist = slices.Clone(seed.binding.AllowedAgents)
+	}
 	if !seed.web {
 		webAgents := map[string]bool{}
 		for _, w := range overlay.WorkerAgents {
