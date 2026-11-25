@@ -366,6 +366,51 @@ func TestAnswerKernelRetriesInterruptedAddFDBeforeSendingResult(t *testing.T) {
 	if gotResp.ID != 44 || gotResp.Val != 0 || gotResp.Error != -int32(unix.EACCES) {
 		t.Fatalf("refusal resp = %+v, want -EACCES", gotResp)
 	}
+
+	seccompIoctl = func(_ int, req uint, _ unsafe.Pointer) (uintptr, unix.Errno) {
+		if req == unix.SECCOMP_IOCTL_NOTIF_ADDFD {
+			return 0, unix.ENOENT
+		}
+		return 0, 0
+	}
+	if answerKernel(9, pathCall{Notification: 45}, pathResult{}, 7) {
+		t.Fatal("a call that ended before its descriptor was installed counted as answered")
+	}
+}
+
+// A restarted exclusive create finds its name free again, and only the file
+// the ended call created is removed.
+func TestInterruptedExclusiveCreateIsUndone(t *testing.T) {
+	dir := t.TempDir()
+	create := func(name string, flags int) (string, int) {
+		path := filepath.Join(dir, name)
+		fd, err := unix.Open(path, flags|unix.O_WRONLY|unix.O_CLOEXEC, 0o600)
+		testutil.FailErr(t, "create "+name, err)
+		t.Cleanup(func() { _ = unix.Close(fd) })
+		return path, fd
+	}
+	exists := func(path string) bool { _, err := os.Lstat(path); return err == nil }
+
+	exclusive := unix.O_CREAT | unix.O_EXCL
+	path, fd := create("probe", exclusive)
+	undoInterruptedCreate(pathCall{Op: callOpen, Flags: uint64(exclusive)}, fd)
+	if exists(path) {
+		t.Fatal("the interrupted exclusive create left its file")
+	}
+
+	plain, plainFD := create("plain", unix.O_CREAT)
+	undoInterruptedCreate(pathCall{Op: callOpen, Flags: uint64(unix.O_CREAT)}, plainFD)
+	if !exists(plain) {
+		t.Fatal("a non-exclusive open was undone")
+	}
+
+	replaced, replacedFD := create("replaced", exclusive)
+	testutil.FailErr(t, "replace the name", os.Remove(replaced))
+	testutil.FailErr(t, "recreate the name", os.WriteFile(replaced, []byte("other"), 0o600))
+	undoInterruptedCreate(pathCall{Op: callOpen, Flags: uint64(exclusive)}, replacedFD)
+	if !exists(replaced) {
+		t.Fatal("a file that replaced the created one was removed")
+	}
 }
 
 func TestPerformerDisconnectRejectsListenerAndForwardedCalls(t *testing.T) {
