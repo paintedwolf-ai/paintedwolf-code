@@ -111,11 +111,8 @@ func parseTagHeader(rawInner string, baseOffset int) (kwOffset int, tag, rest st
 		}
 		tag = fields[1]
 	}
-	rel := strings.Index(rawInner[idx:], tag)
-	if rel < 0 {
-		return baseOffset + idx, tag, ""
-	}
-	kwStart := idx + rel
+	// tag is a field of rawInner after its trim marker and leading space.
+	kwStart := idx + strings.Index(rawInner[idx:], tag)
 	after := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(rawInner[kwStart+len(tag):]), "-"))
 	return baseOffset + kwStart, tag, after
 }

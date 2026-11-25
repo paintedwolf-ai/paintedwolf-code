@@ -85,9 +85,6 @@ func (node *trackedIfNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 }
 
 func siteFromToken(tok *pongo2.Token, kind BranchKind) branchSite {
-	if tok == nil {
-		return branchSite{kind: kind}
-	}
 	return branchSite{
 		filename: tok.Filename,
 		line:     tok.Line,

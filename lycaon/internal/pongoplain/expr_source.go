@@ -5,9 +5,6 @@ import "strings"
 // Atoms lists e's Boolean leaves in source order. not, and and or are
 // connectives; every other node is one atom.
 func (e *Expr) Atoms() []*Expr {
-	if e == nil {
-		return nil
-	}
 	switch e.Kind {
 	case ExprNot:
 		return e.Left.Atoms()
@@ -20,12 +17,7 @@ func (e *Expr) Atoms() []*Expr {
 // Source prints e as Pongo expression text with compound operands
 // parenthesised.
 func (e *Expr) Source() string {
-	if e == nil {
-		return ""
-	}
 	switch e.Kind {
-	case ExprIdent:
-		return e.Ident
 	case ExprLiteral:
 		return e.Literal
 	case ExprNot:
@@ -46,8 +38,9 @@ func (e *Expr) Source() string {
 			out += " else " + e.Right.operand()
 		}
 		return out
+	default: // ExprIdent
+		return e.Ident
 	}
-	return ""
 }
 
 func (e *Expr) operand() string {

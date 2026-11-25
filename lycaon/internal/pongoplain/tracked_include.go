@@ -58,9 +58,6 @@ func (l *composedSetLoader) loadIncluded(baseFilename, rawTarget string) (string
 
 func resolveSetLoader(doc *pongo2.Parser, tok *pongo2.Token) (*composedSetLoader, string) {
 	docErr := doc.Error("", tok)
-	if docErr == nil || docErr.Template == nil {
-		return nil, ""
-	}
 	probeKey := fmt.Sprintf("%s%d", setProbePrefix, setProbeSeq.Add(1))
 	var captured *composedSetLoader
 	setProbeSlots.Store(probeKey, &captured)

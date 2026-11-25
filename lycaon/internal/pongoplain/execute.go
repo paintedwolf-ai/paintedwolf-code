@@ -45,23 +45,12 @@ func (s *executionState) step() {
 	}
 }
 
-func execStateFrom(ctx *pongo2.ExecutionContext) *executionState {
-	if ctx == nil {
-		return nil
-	}
-	state, _ := ctx.Public[execStateKey].(*executionState)
-	return state
-}
-
+// requireExecState refuses a tracked tag rendered outside Execute.
 func requireExecState(ctx *pongo2.ExecutionContext) (*executionState, *pongo2.Error) {
-	if state := execStateFrom(ctx); state != nil {
+	if state, ok := ctx.Public[execStateKey].(*executionState); ok {
 		return state, nil
 	}
-	missing := fmt.Errorf("%w: missing execution state", ErrExecutionLimit)
-	if ctx != nil {
-		return nil, ctx.OrigError(missing, nil)
-	}
-	return nil, &pongo2.Error{Sender: "execution", OrigError: missing}
+	return nil, ctx.OrigError(fmt.Errorf("%w: missing execution state", ErrExecutionLimit), nil)
 }
 
 type boundedWriter struct {
@@ -76,15 +65,6 @@ func (w *boundedWriter) Write(p []byte) (int, error) {
 		panic(executionAbort{err: fmt.Errorf("%w: more than %d bytes", ErrOutputLimit, MaxOutputBytes)})
 	}
 	return w.buf.Write(p)
-}
-
-func (w *boundedWriter) WriteString(s string) (int, error) {
-	w.state.checkContext()
-	w.state.step()
-	if len(s) > MaxOutputBytes-w.buf.Len() {
-		panic(executionAbort{err: fmt.Errorf("%w: more than %d bytes", ErrOutputLimit, MaxOutputBytes)})
-	}
-	return w.buf.WriteString(s)
 }
 
 func wrapPongoError(prefix string, err error) error {
@@ -220,8 +200,6 @@ func (b *contextBudget) normalize(v reflect.Value, depth int) (reflect.Value, er
 		return b.normalizeList(v, depth)
 	case reflect.Struct:
 		return b.normalizeStruct(v, depth)
-	case reflect.Invalid:
-		return reflect.ValueOf(nil), nil
 	default:
 		return reflect.Value{}, fmt.Errorf("%w: unsupported value type %s", ErrContextLimit, v.Type())
 	}
