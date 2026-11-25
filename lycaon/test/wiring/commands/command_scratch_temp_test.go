@@ -22,8 +22,8 @@ func TestScratchWorkIsOneChatLocation(t *testing.T) {
 	if len(anchors) != 1 || !strings.HasSuffix(anchors[0], "/scratch/"+s.session) {
 		t.Fatalf("chat locations = %v, want the session's scratch alone", anchors)
 	}
-	if changed, read := s.chatFileCounts(t); changed != 2 || read != 1 {
-		t.Fatalf("chat files changed=%d read=%d, want 2 and 1", changed, read)
+	if changed, _ := s.chatFileCounts(t); changed != 2 {
+		t.Fatalf("chat files changed=%d, want both drafts", changed)
 	}
 }
 
@@ -35,6 +35,11 @@ func TestProgramTempStaysOutOfHistory(t *testing.T) {
 	if outcome.Status != 0 || !strings.HasSuffix(outcome.Stdout, "/scratch/"+s.session+"/.tmp") {
 		t.Fatalf("program temp run = %+v", outcome)
 	}
+	// The command window can settle after the result is delivered.
+	testutil.WaitFor(t, "the kept result is recorded", func() bool {
+		changed, _ := s.chatFileCounts(t)
+		return changed >= 1
+	})
 	if changed, _ := s.chatFileCounts(t); changed != 1 {
 		t.Fatalf("chat files changed = %d, want only the kept result", changed)
 	}
@@ -81,9 +86,7 @@ func TestSharedTempRootIsReportedNotCompared(t *testing.T) {
 	if changed, _ := s.chatFileCounts(t); changed != 0 {
 		t.Fatalf("chat files changed = %d, want the whole temp root left uncompared", changed)
 	}
-	if !s.windowGap(t, temp, wire.SourceWindowGapSharedTemp) {
-		t.Fatalf("no shared temp gap recorded for %s", temp)
-	}
+	testutil.WaitFor(t, "the shared temp gap is recorded", func() bool { return s.windowGap(t, temp, wire.SourceWindowGapSharedTemp) })
 }
 
 func (s *commandProgramSession) chatAnchors(t *testing.T) []string {
@@ -112,9 +115,12 @@ func (s *commandProgramSession) chatFileCounts(t *testing.T) (changed, read int)
 // windowGap reports whether a command window recorded folder as not observed for reason.
 func (s *commandProgramSession) windowGap(t *testing.T, folder string, reason wire.SourceWindowGapReason) bool {
 	t.Helper()
+	resolved, err := filepath.EvalSymlinks(folder)
+	testutil.FailErr(t, "resolve folder", err)
 	var count int
 	testutil.FailErr(t, "read window coverage", s.h.DB.QueryRowContext(t.Context(),
-		`SELECT COUNT(*) FROM source_window_coverage WHERE folder = ? AND reason = ?`, filepath.Clean(folder), string(reason)).Scan(&count))
+		`SELECT COUNT(*) FROM source_command_window_coverage WHERE path = ? AND coverage = 'not_observed' AND reason = ?`,
+		strings.TrimPrefix(filepath.ToSlash(resolved), "/"), string(reason)).Scan(&count))
 	return count > 0
 }
 

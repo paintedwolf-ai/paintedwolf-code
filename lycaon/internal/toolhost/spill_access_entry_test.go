@@ -60,7 +60,7 @@ func TestSpillChildConsumesThroughNativeReaderPipeline_ACSPILL01(t *testing.T) {
 		"pipe logical":     "cat " + f.rel + " | /bin/cat",
 		"pipe converted":   "cat " + converted + " | /bin/cat",
 		"stdin redirect":   "/bin/cat < " + f.rel,
-		"scratch copy":     "cat " + f.rel + " > @scratch/spill.txt; /bin/cat \"$TMPDIR/spill.txt\"",
+		"scratch copy":     "cat " + f.rel + " > @scratch/spill.txt; /bin/cat \"$SCRATCH_DIR/spill.txt\"",
 		"variable quoted":  "p=" + converted + "; cat \"$p\" | /bin/cat",
 		"from a subfolder": "mkdir sub; cd sub; cat " + f.rel + " | /bin/cat",
 	} {
