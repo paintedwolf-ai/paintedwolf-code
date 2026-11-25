@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -28,10 +29,13 @@ func scanToolRejectEmission(t *testing.T) rejectinventory.Inventory {
 	inv, err := rejectinventory.Scan(filepath.Join(contractcheck.RepoRoot(t), "lycaon"), rejectinventory.Options{
 		Patterns: []string{"./internal/...", "./pkg/..."},
 		Decoded: map[string]rejectinventory.Enumerator{
+			// A refusal carries an OAR decision only when the decision blocks.
 			"github.com/lycaon/lycaon/internal/oarcore.Rule.ID": func() ([]string, error) {
 				var ids []string
 				for _, rule := range toolfixture.StockOARRules(t).All() {
-					ids = append(ids, rule.ID)
+					if rule.Effect == oar.EffectBlock {
+						ids = append(ids, rule.ID)
+					}
 				}
 				return ids, nil
 			},
