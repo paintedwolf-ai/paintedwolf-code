@@ -196,7 +196,12 @@ pending space, AI mark, inline code, and **Show all** control. The sections
 reveal together with one fade when summary generation settles. A running activity
 says its outcome comes after settlement; unavailable sections offer a retry
 without hiding available text. Intent remains visible while settlement requests
-a new summary. **Summary evidence** opens the supporting record in Files.
+a new summary. **Summary evidence** opens the supporting record in Files. The
+page repeats the summary, then lists under each summary line the inputs that
+line was given, each as its name and the text that was sent. Long text is held
+to a few lines with **Show all**, which grows it in place. The only links on
+the page are the activity's own **Input**, **Output** and **Receipt**, which
+open the same tabs as the card.
 
 The projection records each row's receipt scopes as it folds calls: a program
 and the host activity that produced the row, or the whole program when the

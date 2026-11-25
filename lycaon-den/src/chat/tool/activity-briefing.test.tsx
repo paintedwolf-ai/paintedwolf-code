@@ -122,7 +122,7 @@ describe("useActivityBriefingSlots", () => {
       return (
         <div>
           {slots.summary}
-          {slots.evidence}
+          <span data-testid="evidence-record">{slots.evidence?.record_id}</span>
         </div>
       );
     });
@@ -151,6 +151,7 @@ describe("useActivityBriefingSlots", () => {
       snapshot: snapshot({ target_key: "k2", status: "complete" }, { purpose: "Runs the suite.", change: "All passed." }),
     });
     await waitFor(() => expect(view.container.textContent).toContain("All passed."));
+    expect(view.getByTestId("evidence-record").textContent).toBe("rec");
     applyBriefingEvent("p", {
       kind: "snapshot",
       snapshot: snapshot({ target_key: "k2", status: "pending", pending_sections: ["purpose"] }, { change: "Outcome arrived first." }),

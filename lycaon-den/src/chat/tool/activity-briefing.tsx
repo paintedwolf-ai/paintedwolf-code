@@ -1,6 +1,5 @@
 import { Show, createEffect, createMemo, createSignal, type Accessor } from "solid-js";
 import { ActivitySummary, type ActivitySummaryState, type ActivitySummaryText } from "../../briefing/ActivitySummary.tsx";
-import { BriefingEvidenceLink } from "../../briefing/BriefingSummary.tsx";
 import { retryBriefing, useBriefing, type BriefingTarget, type BriefingView } from "../../briefing/briefing-live.ts";
 import { fileSummariesEnabled, fileSummariesSettingKnown } from "../../settings/editor/file-summary-settings.ts";
 import type { ToolBriefingSlots } from "../../components/tool/tool-briefing-slots.ts";
@@ -93,13 +92,12 @@ export function useActivityBriefingSlots(args: Args): ToolBriefingSlots {
   };
   const reference = () => (state().kind === "ready" ? view().snapshot?.result?.evidence_ref : undefined);
   const summaryElement = <Show when={target()}><ActivitySummary state={state()} running={running()} onRetry={retry} /></Show>;
-  const evidenceElement = <Show when={reference()} keyed>{(ref) => <BriefingEvidenceLink reference={ref} />}</Show>;
   return {
     get summary() {
       return target() ? summaryElement : undefined;
     },
     get evidence() {
-      return reference() ? evidenceElement : undefined;
+      return reference();
     },
   };
 }

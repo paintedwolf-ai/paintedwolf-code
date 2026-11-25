@@ -19,14 +19,17 @@ type Props = {
   onRetry: () => void;
 };
 
-/** Each section retains its reserved space until the person expands it. */
-function ActivitySummarySection(props: {
-  id: "intent" | "outcome";
-  label: string;
+/**
+ * One summary line, held to a few lines until the person expands it. A line
+ * still being written reserves that space.
+ */
+export function SummaryLine(props: {
+  id: string;
+  label?: string;
   summary?: ActivitySummaryText;
-  waiting: string;
-  missing: boolean;
-  onRetry: () => void;
+  waiting?: string;
+  missing?: boolean;
+  onRetry?: () => void;
 }) {
   const held = !props.summary?.text;
   let section: HTMLDivElement | undefined;
@@ -64,7 +67,7 @@ function ActivitySummarySection(props: {
       <Show when={!props.summary || props.summary.source === "summarizer"}><BriefingMark /></Show>
       <div class="den-activity-summary__body">
         <p class="den-activity-summary__text" data-expanded={expanded() ? "" : undefined}>
-          <strong class="den-briefing-summary__label">{props.label}:</strong>{" "}
+          <Show when={props.label}>{(label) => <><strong class="den-briefing-summary__label">{label()}:</strong>{" "}</>}</Show>
           <Show when={props.summary?.text} keyed fallback={
             <span class="den-briefing-summary__waiting">
               {props.missing ? briefingCopy.notArrived : props.waiting}
@@ -74,10 +77,10 @@ function ActivitySummarySection(props: {
           </Show>
         </p>
         <p class="den-activity-summary__measure" aria-hidden="true" ref={(el) => (measure = el)}>
-          <strong class="den-briefing-summary__label">{props.label}:</strong>{" "}<BriefingInline text={props.summary?.text ?? ""} />
+          <Show when={props.label}>{(label) => <><strong class="den-briefing-summary__label">{label()}:</strong>{" "}</>}</Show><BriefingInline text={props.summary?.text ?? ""} />
         </p>
         <Show when={props.missing && !props.summary?.text}>
-          <button type="button" class="den-chat-content-link" data-testid="activity-summary-retry" aria-label={`Retry ${props.id} summary`} onClick={() => props.onRetry()}>{briefingCopy.retry}</button>
+          <button type="button" class="den-chat-content-link" data-testid="activity-summary-retry" aria-label={`Retry ${props.id} summary`} onClick={() => props.onRetry?.()}>{briefingCopy.retry}</button>
         </Show>
         <Show when={clamped() && !expanded()}>
           <button type="button" class="den-chat-content-link den-activity-summary__more" data-testid="activity-summary-show-all" aria-label={`Show all ${props.id}`} onClick={() => setExpanded(true)}>{briefingCopy.showAll}</button>
@@ -97,13 +100,13 @@ export function ActivitySummary(props: Props) {
     <div class="den-activity-summary-frame">
       <div class="den-activity-summary" data-testid="activity-summary" data-state={props.state.kind}>
         <div class="den-activity-summary__sections" classList={{ [SUMMARY_FADE_CLASS]: fade() }}>
-          <ActivitySummarySection
+          <SummaryLine
             id="intent" label="Intent" summary={props.state.purpose}
             waiting={briefingCopy.waiting}
             missing={props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.purpose)}
             onRetry={props.onRetry}
           />
-          <ActivitySummarySection
+          <SummaryLine
             id="outcome" label="Outcome" summary={ready()?.change}
             waiting={props.running ? briefingCopy.resultPending : briefingCopy.waiting}
             missing={!props.running && (props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.change))}

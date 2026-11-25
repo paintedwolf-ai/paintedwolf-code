@@ -35,6 +35,7 @@ import { formatSentenceCase } from "../../format/format-sentence-case.ts";
 
 import { TranscriptChickletSummary } from "../transcript/TranscriptChickletSummary.tsx";
 import type { ToolBriefingSlots } from "./tool-briefing-slots.ts";
+import { BriefingEvidenceLink } from "../../briefing/BriefingSummary.tsx";
 
 type Props = {
   part: ToolPartView;
@@ -247,7 +248,7 @@ export function ToolPartShell(props: Props) {
             {props.target}
             {props.slots?.summary}
             {props.children}
-            <Show when={props.slots?.evidence}>{(evidence) => <nav class="den-activity-footer" aria-label="Activity records">{evidence()}</nav>}</Show>
+            <Show when={props.slots?.evidence}>{(evidence) => <nav class="den-activity-footer" aria-label="Activity records"><BriefingEvidenceLink reference={evidence()} /></nav>}</Show>
           </Show>
         </ToolContentProvider>
       </TranscriptDisclosurePanel>

@@ -60,10 +60,61 @@
   }
 }
 
-@utility den-briefing-evidence__section {
+@utility den-briefing-evidence__lead {
   display: grid;
   gap: 8px;
-  margin-top: 16px;
+  min-width: 0;
+}
+
+@utility den-briefing-evidence__inputs {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+@utility den-briefing-evidence__input {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-size: var(--text-den-label);
+}
+
+/* Held to a few lines until expanded; the fade marks text that continues. */
+@utility den-briefing-evidence__body {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  &:not([data-expanded]) {
+    max-height: 10.5rem;
+    overflow: hidden;
+  }
+  &[data-clamped]::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0;
+    height: 2em;
+    background: linear-gradient(to bottom, transparent, var(--den-background));
+    pointer-events: none;
+  }
+}
+
+@utility den-briefing-evidence__prose {
+  margin: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.5;
+  color: var(--den-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+@utility den-briefing-evidence__part-head {
+  font-size: var(--text-den-hint);
+}
+
+@utility den-briefing-evidence__more {
+  justify-self: start;
 }
 
 @utility den-briefing-evidence__facts {
@@ -80,12 +131,6 @@
   }
 }
 
-@utility den-briefing-evidence__sources {
-  margin: 0;
-  padding-left: 1.15em;
-  overflow-wrap: anywhere;
-}
-
 @utility den-briefing-evidence__item {
   display: grid;
   gap: 4px;
@@ -100,10 +145,8 @@
 }
 
 @utility den-briefing-evidence__excerpt {
-  max-height: 16em;
   margin: 0;
   padding: 6px 8px;
-  overflow: auto;
   border-radius: 4px;
   background: var(--den-surface-inset);
   font-family: var(--den-font-mono);

@@ -3,9 +3,11 @@ import type { BriefingRecord, BriefingRecordItem, BriefingRecordSection } from "
 import type { BriefingsClient } from "../api/http-capabilities/briefings.ts";
 import { isApiErrorCode } from "../api/http.ts";
 import { Scrollport } from "../components/primitives/Scrollport.tsx";
-import { BriefingSummary } from "./BriefingSummary.tsx";
+import { ChatContentLink } from "../components/transcript/ChatContentLink.tsx";
+import { SummaryLine } from "./ActivitySummary.tsx";
+import { EvidenceInput } from "./EvidenceInput.tsx";
 import { briefingCopy } from "./briefing-copy.ts";
-import { briefingReturnAnchor } from "./briefing-evidence.ts";
+import { briefingRecordLinks, briefingReturnAnchor } from "./briefing-evidence.ts";
 
 const copy = briefingCopy.evidence;
 
@@ -13,7 +15,7 @@ type Props = { projectId: string; recordId: string; client: BriefingsClient | nu
 
 type Loaded = { record: BriefingRecord } | { missing: true } | { failed: true };
 
-/** A read-only evidence record: what each summary section was given and how it was made. */
+/** A read-only evidence record: the summary, then what each of its sections was given and how it was made. */
 export function BriefingEvidencePage(props: Props) {
   const [loaded] = createResource(
     () => (props.client ? { client: props.client, projectId: props.projectId, recordId: props.recordId } : null),
@@ -36,6 +38,7 @@ export function BriefingEvidencePage(props: Props) {
         <header class="den-walk-page__head">
           <div class="den-walk-page__heading">
             <h1 class="den-walk-page__title">{copy.title}</h1>
+            <Show when={record()} keyed>{(current) => <p class="den-walk-page__note">{copy.disclaimer(copy.method[current.method])}</p>}</Show>
           </div>
           <Show when={back()}>
             {(anchor) => (
@@ -53,64 +56,62 @@ export function BriefingEvidencePage(props: Props) {
             </>
           )}
         </Show>
-        <Show when={record()} keyed>{(current) => <RecordBody record={current} />}</Show>
+        <Show when={record()} keyed>{(current) => <RecordBody record={current} projectId={props.projectId} />}</Show>
       </article>
     </Scrollport>
   );
 }
 
-function RecordBody(props: { record: BriefingRecord }) {
-  const readable = () => props.record.sections.filter((section) => section.available);
-  const items = () => readable().flatMap((section) => section.items ?? []);
-  const sent = () => items().filter((item) => item.inclusion === "included" || item.inclusion === "truncated");
-  const limits = () => items().filter((item) => item.inclusion !== "included");
-  const sources = () => [...new Set(items().flatMap((item) => (item.ref ? [item.revision ? `${item.ref} @ ${item.revision}` : item.ref] : [])))];
+type SummaryLineView = { id: string; label?: string; text: string; source: NonNullable<BriefingRecordSection["result"]>["source"] };
+
+function sectionName(record: BriefingRecord, section: BriefingRecordSection): string {
+  return copy.sectionNames[record.profile_id]?.[section.section_id] ?? section.section_id;
+}
+
+/** A profile with several sections names each line; a single section shows one line per paragraph. */
+function summaryLines(record: BriefingRecord): SummaryLineView[] {
+  const named = record.sections.length > 1;
+  return record.sections.flatMap((section) => {
+    const result = section.available ? section.result : undefined;
+    if (!result) return [];
+    const name = sectionName(record, section);
+    if (named) return [{ id: name.toLowerCase(), label: name, text: result.text, source: result.source }];
+    return result.text.split(/\n\s*\n/).filter((paragraph) => paragraph.trim())
+      .map((paragraph) => ({ id: name.toLowerCase(), text: paragraph.trim(), source: result.source }));
+  });
+}
+
+function RecordBody(props: { record: BriefingRecord; projectId: string }) {
+  const links = () => briefingRecordLinks(props.record.record_id);
   return (
     <>
-      <section class="den-briefing-evidence__section" aria-labelledby="briefing-evidence-summary">
-        <h2 id="briefing-evidence-summary" class="den-walk-page__files-title">{copy.summary}</h2>
-        <For each={props.record.sections}>
-          {(section) => (
-            <Show when={section.available ? section.result : undefined} keyed fallback={<p class="den-walk-page__note">{copy.unavailableSection}</p>}>
-              {(result) => (
-                <BriefingSummary recordId={props.record.record_id}
-                  sections={[{ id: section.section_id, text: result.text, source: result.source }]} />
-              )}
-            </Show>
-          )}
-        </For>
-      </section>
-      <section class="den-briefing-evidence__section" aria-labelledby="briefing-evidence-used">
-        <h2 id="briefing-evidence-used" class="den-walk-page__files-title">{copy.used}</h2>
-        <For each={sent()}>{(item) => <EvidenceItem item={item} />}</For>
-      </section>
-      <section class="den-briefing-evidence__section" aria-labelledby="briefing-evidence-coverage">
-        <h2 id="briefing-evidence-coverage" class="den-walk-page__files-title">{copy.coverage}</h2>
-        <Show when={limits().length > 0} fallback={<p class="den-walk-page__note">{copy.nothingOmitted}</p>}>
-          <dl class="den-briefing-evidence__facts">
-            <For each={limits()}>
-              {(item) => (
-                <>
-                  <dt>{item.key}</dt>
-                  <dd>{copy.inclusion[item.inclusion]}{item.reason ? `: ${item.reason}` : ""}</dd>
-                </>
-              )}
+      <div class="den-briefing-evidence__lead">
+        <div class="den-activity-summary-frame">
+          <div class="den-activity-summary" data-testid="briefing-evidence-summary" data-state="ready">
+            <div class="den-activity-summary__sections">
+              <For each={summaryLines(props.record)}>
+                {(line) => <SummaryLine id={line.id} label={line.label} summary={{ text: line.text, source: line.source }} />}
+              </For>
+            </div>
+          </div>
+        </div>
+        <Show when={links().length > 0}>
+          <nav class="den-action-card__links" aria-label={copy.records} data-testid="briefing-evidence-records">
+            <For each={links()}>
+              {(link) => <ChatContentLink short label={link.label} projectId={props.projectId} document={() => link.document} testId="briefing-evidence-record" />}
             </For>
-          </dl>
+          </nav>
         </Show>
-      </section>
-      <section class="den-briefing-evidence__section" aria-labelledby="briefing-evidence-sources">
-        <h2 id="briefing-evidence-sources" class="den-walk-page__files-title">{copy.sources}</h2>
-        <Show when={sources().length > 0} fallback={<p class="den-walk-page__note">{copy.noSources}</p>}>
-          <ul class="den-briefing-evidence__sources"><For each={sources()}>{(source) => <li><code>{source}</code></li>}</For></ul>
-        </Show>
-      </section>
-      <section class="den-briefing-evidence__section" aria-labelledby="briefing-evidence-generation">
+      </div>
+      <For each={props.record.sections}>{(section) => <SectionInputs record={props.record} section={section} />}</For>
+      <section class="den-walk-page__files" aria-labelledby="briefing-evidence-generation">
         <h2 id="briefing-evidence-generation" class="den-walk-page__files-title">{copy.generation}</h2>
-        <dl class="den-briefing-evidence__facts">
+        <dl class="den-walk-page__meta den-briefing-evidence__facts">
           <dt>Method</dt><dd>{copy.method[props.record.method]}</dd>
           <dt>Profile</dt><dd>{props.record.profile_id} {props.record.profile_version}</dd>
-          <For each={readable()}>{(section) => <GenerationFacts section={section} />}</For>
+          <For each={props.record.sections.filter((section) => section.available)}>
+            {(section) => <GenerationFacts name={sectionName(props.record, section)} section={section} />}
+          </For>
           <dt>Recorded</dt><dd>{new Date(props.record.created_at).toLocaleString()}</dd>
         </dl>
       </section>
@@ -118,23 +119,47 @@ function RecordBody(props: { record: BriefingRecord }) {
   );
 }
 
-function EvidenceItem(props: { item: BriefingRecordItem }) {
+function inputNames(items: readonly BriefingRecordItem[], withReason: boolean): string {
+  return items.map((item) => {
+    const name = (copy.inputNames[item.key] ?? item.key).toLowerCase();
+    return withReason && item.reason ? `${name} (${item.reason})` : name;
+  }).join(", ");
+}
+
+/** What one summary section was given. Every input sent is shown; the rest are named, never listed as inputs. */
+function SectionInputs(props: { record: BriefingRecord; section: BriefingRecordSection }) {
+  const items = () => (props.section.available ? props.section.items ?? [] : []);
+  const sent = () => items().filter((item) => item.inclusion === "included" || item.inclusion === "truncated");
+  const absent = () => items().filter((item) => item.inclusion === "unavailable");
+  const omitted = () => items().filter((item) => item.inclusion === "omitted");
+  const count = () => {
+    const source = props.section.result?.source;
+    if (source === "deterministic") return copy.computedFrom(sent().length);
+    return source === "summarizer" ? copy.writtenFrom(sent().length) : copy.inputCount(sent().length);
+  };
+  const headingId = () => `briefing-evidence-section-${props.section.section_id}`;
   return (
-    <div class="den-briefing-evidence__item" data-inclusion={props.item.inclusion}>
-      <p class="den-briefing-evidence__item-head">
-        <span>{props.item.key}</span>
-        <span class="den-walk-page__note">{copy.inclusion[props.item.inclusion]}</span>
-      </p>
-      <Show when={props.item.text}><pre class="den-briefing-evidence__excerpt">{props.item.text}</pre></Show>
-    </div>
+    <section class="den-walk-page__files" aria-labelledby={headingId()} data-testid="briefing-evidence-section" data-section={props.section.section_id}>
+      <h2 id={headingId()} class="den-walk-page__files-title">
+        {sectionName(props.record, props.section)}
+        <Show when={props.section.available}><span class="den-walk-page__count">{count()}</span></Show>
+      </h2>
+      <Show when={props.section.available} fallback={<p class="den-walk-page__note">{copy.unavailableSection}</p>}>
+        <Show when={sent().length > 0}>
+          <div class="den-briefing-evidence__inputs"><For each={sent()}>{(item) => <EvidenceInput item={item} />}</For></div>
+        </Show>
+        <Show when={omitted().length > 0}><p class="den-walk-page__note" data-testid="briefing-evidence-not-sent">{copy.notSent(inputNames(omitted(), true))}</p></Show>
+        <Show when={absent().length > 0}><p class="den-walk-page__note" data-testid="briefing-evidence-nothing-to-send">{copy.nothingToSend(inputNames(absent(), false))}</p></Show>
+      </Show>
+    </section>
   );
 }
 
-function GenerationFacts(props: { section: BriefingRecordSection }) {
+function GenerationFacts(props: { name: string; section: BriefingRecordSection }) {
   const result = () => props.section.result;
   return (
     <>
-      <dt>{props.section.section_id}</dt>
+      <dt>{props.name}</dt>
       <dd>
         {props.section.template_id} {props.section.template_version}
         <Show when={result()?.model ? result() : undefined}>{(generated) => <> · {generated().provider_id} {generated().model}</>}</Show>
