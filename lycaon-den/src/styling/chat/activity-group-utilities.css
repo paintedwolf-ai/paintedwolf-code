@@ -8,8 +8,6 @@
   border-radius: var(--den-radius);
   background: var(--den-surface);
   overflow: hidden;
-  /* Headers keep their controls at the resting card edge when an open section widens the card. */
-  --den-activity-group-header-slack: max(0px, calc(100% - (var(--den-transcript-card-max, 32rem) - 2px)));
 
   &:has([data-expanded="true"]:not([data-closing])) {
     align-self: stretch;
@@ -79,7 +77,6 @@
     height: 100%;
     min-height: 0;
     padding: 0 var(--den-transcript-card-inset-x);
-    padding-inline-end: calc(var(--den-transcript-card-inset-x) + var(--den-activity-group-header-slack));
     overflow: hidden;
     white-space: nowrap;
   }
@@ -116,10 +113,8 @@
     height: var(--den-transcript-card-row-h);
     min-height: var(--den-transcript-card-row-h);
     padding: 0 var(--den-transcript-card-inset-x);
-    padding-inline-end: calc(var(--den-transcript-card-inset-x) + var(--den-activity-group-header-slack));
     overflow: hidden;
     white-space: nowrap;
-    transition: color var(--den-duration-drawer) var(--den-ease);
   }
 
   && > .den-transcript-link-summary .den-transcript-link-summary-label {
@@ -131,10 +126,6 @@
     flex: 0 0 auto;
   }
 
-  &&[data-expanded="true"]:not([data-closing]) > .den-transcript-disclosure-header {
-    border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
-    color: var(--den-text);
-  }
 }
 
 @utility den-diff-group-hint {
@@ -159,7 +150,6 @@
   && > .den-checkpoint-decision-chicklet__summary {
     height: var(--den-transcript-card-row-h);
     min-height: var(--den-transcript-card-row-h);
-    padding-inline-end: calc(var(--den-transcript-card-inset-x) + var(--den-activity-group-header-slack));
     overflow: hidden;
     white-space: nowrap;
   }
@@ -203,7 +193,6 @@
   && > .den-checkpoint-decision-chicklet__summary {
     height: var(--den-transcript-card-row-h);
     min-height: var(--den-transcript-card-row-h);
-    padding-inline-end: calc(var(--den-transcript-card-inset-x) + var(--den-activity-group-header-slack));
     overflow: hidden;
     white-space: nowrap;
   }
@@ -212,9 +201,6 @@
     height: 100%;
   }
 
-  &&[data-expanded="true"]:not([data-closing]) > .den-checkpoint-decision-chicklet__summary {
-    border-bottom-color: color-mix(in srgb, var(--den-line) 55%, transparent);
-  }
 }
 
 @utility den-activity-group-approvals__resolved {
@@ -289,4 +275,92 @@
     color: var(--den-text);
     text-decoration: underline;
   }
+}
+
+/* Rows inside an open section hang off a guide line; these rules outrank the shared row styles. */
+.den-activity-group-section :is(.den-activity-span-items, .den-activity-group-approvals__list, .den-diff-group-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 8px 8px 17px;
+  padding: 2px 0 2px 8px;
+  border-left: 1px solid var(--den-line);
+}
+
+.den-activity-group-section > [data-expanded="true"] > .den-transcript-disclosure-header {
+  border-bottom-color: transparent;
+}
+
+.den-activity-group-section > * > .den-transcript-disclosure-header .den-activity-span-count {
+  font-size: var(--text-den-compact);
+  font-weight: 500;
+  color: var(--den-text-muted);
+}
+
+.den-activity-group-section .den-tool-part[data-accordion-row],
+.den-activity-group-section .den-diff-group-list .den-file-edit-diff[data-chrome="row"],
+.den-activity-group-section .den-activity-group-approvals__list .den-checkpoint-decision-chicklet--row {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.den-activity-group-section .den-tool-part[data-accordion-row][data-expanded="true"],
+.den-activity-group-section .den-diff-group-list .den-file-edit-diff[data-chrome="row"][data-expanded="true"],
+.den-activity-group-section .den-activity-group-approvals__list .den-checkpoint-decision-chicklet--row[data-expanded="true"] {
+  margin-bottom: 6px;
+}
+
+.den-activity-group-section .den-tool-part[data-accordion-row] .den-tool-part-chicklet,
+.den-activity-group-section .den-diff-group-list .den-file-edit-diff[data-chrome="row"] > .den-file-edit-diff-header,
+.den-activity-group-section .den-activity-group-approvals__list .den-checkpoint-decision-chicklet--row > .den-checkpoint-decision-chicklet__summary {
+  padding-inline: 8px;
+  border-bottom-color: transparent;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.den-activity-group-section .den-tool-part[data-accordion-row]:is(:hover, [data-expanded="true"]) .den-tool-part-chicklet,
+.den-activity-group-section .den-diff-group-list .den-file-edit-diff[data-chrome="row"]:is(:hover, [data-expanded="true"]) > .den-file-edit-diff-header,
+.den-activity-group-section .den-activity-group-approvals__list .den-checkpoint-decision-chicklet--row:is(:hover, [data-expanded="true"]) > .den-checkpoint-decision-chicklet__summary {
+  background: color-mix(in srgb, var(--den-text) 5%, transparent);
+}
+
+.den-activity-group-section .den-tool-part[data-accordion-row][data-expanded="true"] > .den-tool-part-body {
+  padding-inline: 8px;
+}
+
+.den-activity-group-section .den-activity-span-items .den-tool-part-name,
+.den-activity-group-section .den-activity-group-approvals__list .den-decision__label {
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Row marks stay faint until their row is hovered or open. */
+.den-activity-group-section :is(.den-activity-span-items, .den-activity-group-approvals__list, .den-diff-group-list) .den-row-mark {
+  opacity: 0.45;
+}
+
+.den-activity-group-section :is(.den-tool-part, .den-file-edit-diff, .den-checkpoint-decision-chicklet--row):hover > :first-child .den-row-mark,
+.den-activity-group-section :is(.den-tool-part, .den-file-edit-diff, .den-checkpoint-decision-chicklet--row)[data-expanded="true"] > :is(.den-transcript-disclosure-header, .den-file-edit-diff-header) .den-row-mark {
+  opacity: 1;
+}
+
+.den-activity-group-section .den-checkpoint-decision-chicklet--row > .den-transcript-disclosure-header .den-row-mark {
+  margin-inline-start: auto;
+}
+
+.den-activity-group-section .den-checkpoint-decision-chicklet--row[data-expanded="true"] > .den-transcript-disclosure-header .den-row-mark::after {
+  transform: scaleY(0);
+}
+
+/* A finished row's dot carries its status; the text stays for assistive technology. */
+.den-activity-group-section .den-tool-part[data-accordion-row][data-status="done"]:not([data-expanded="true"]) .den-tool-part-outcome {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

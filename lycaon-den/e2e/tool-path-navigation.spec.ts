@@ -168,11 +168,8 @@ modelIndependentWebE2e(`command activities contain long text at narrow card widt
   expect(line!.y).toBeGreaterThanOrEqual(bounds!.y);
   expect(line!.y + line!.height).toBeLessThanOrEqual(bounds!.y + bounds!.height);
   expect(line!.x + line!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
-  // A wider card keeps its header within the resting card width, so its controls do not move.
-  const resting = await page.evaluate(() => 32 * parseFloat(getComputedStyle(document.documentElement).fontSize));
-  expect(line!.x + line!.width).toBeLessThanOrEqual(bounds!.x + resting);
-  if (mixed && width === "12rem") {
-   expect(await sequence.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+  if (mixed) {
+   expect(await sequence.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(width === "12rem");
   }
  }
  if (await group.getAttribute("data-expanded") !== "true") await group.locator(":scope > .den-transcript-disclosure-header").click();

@@ -208,15 +208,14 @@ modelIndependentWebE2e(
     await expect(approvalsToggle).toHaveAttribute("aria-expanded", "false");
 
     // Files edited -> diff -> Show activity opens Activities and mounts the originating tool row.
-    // Opening a section widens the card; the other headers' controls stay where they were.
+    // Opening a section widens the card and every section's chevron follows its right edge.
     const restingCard = (await card.boundingBox())!;
-    const restingApprovals = (await approvalsToggle.boundingBox())!;
     await filesToggle.click();
     await expect(card.getByTestId("diff-group")).not.toHaveAttribute("data-animating", "true");
     const openCard = (await card.boundingBox())!;
-    const openApprovals = (await approvalsToggle.boundingBox())!;
+    const openApprovalsHeader = (await approvalsHeader.boundingBox())!;
     expect(openCard.width).toBeGreaterThan(restingCard.width);
-    expect(openApprovals.x + openApprovals.width).toBe(restingApprovals.x + restingApprovals.width);
+    expect(openCard.x + openCard.width - (openApprovalsHeader.x + openApprovalsHeader.width)).toBeLessThanOrEqual(2);
     const reportDiff = card.getByTestId("file-edit-diff").filter({ hasText: "/external/report.txt" });
     await reportDiff.getByText("/external/report.txt", { exact: true }).click();
     await expect(reportDiff).toHaveAttribute("data-expanded", "true");

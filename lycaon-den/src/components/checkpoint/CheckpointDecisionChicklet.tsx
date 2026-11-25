@@ -296,7 +296,10 @@ export function CheckpointDecisionChicklet(props: Props) {
           <Show when={revokeCtx()} keyed>
             {(ctx) => <RevokeButton grantIds={ctx.grantIds} client={ctx.client} onError={props.onError} />}
           </Show>
-          <span class={embedded() ? "den-disclosure-chevron" : "den-tool-chicklet-caret"} aria-hidden="true" />
+          <span
+            class={chrome() === "row" ? "den-row-mark" : embedded() ? "den-disclosure-chevron" : "den-tool-chicklet-caret"}
+            aria-hidden="true"
+          />
         </TranscriptDisclosureSummary>
         <TranscriptDisclosurePanel
           disclosure={disclosure}
