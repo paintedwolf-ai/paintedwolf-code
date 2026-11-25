@@ -291,6 +291,10 @@ func renderRemainingCoordInjectsForRep(
 				OwnTruncated: true,
 				Files:        []inject.SourceChangeFile{{Path: "only.go", Actor: "user", Op: "modify", At: "14:00 UTC", Effects: 1, WorkingSet: true}},
 			},
+			{
+				OtherFiles: 2, OtherEffects: 2, OtherWorkingSet: true,
+				Files: []inject.SourceChangeFile{{Path: "seen.go", Actor: "user", Op: "modify", At: "14:00 UTC", Effects: 1, WorkingSet: true}},
+			},
 		}
 		for _, br := range scBriefs {
 			scText := inject.RenderSourceChangesBlock(ctx, injRenderer, cr.auth.Reader, "sess-sc", br)
