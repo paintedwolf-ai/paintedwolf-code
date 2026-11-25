@@ -56,12 +56,9 @@ type RuleConditionHit struct {
 	Source   string
 	Atoms    []string
 	Vectors  []*RuleConditionVector
-	// decide recomposes a decision from atom truths.
-	decide func(map[string]bool) bool
+	// Decide gives the condition's decision for atom truths keyed by atom text.
+	Decide func(map[string]bool) bool
 }
-
-// Decide gives the condition's decision for atom truths keyed by atom text.
-func (h *RuleConditionHit) Decide(values map[string]bool) bool { return h.decide(values) }
 
 // ActiveRuleBranchRecorder is the opt-in recorder consulted by rule and next-step evaluation.
 var ActiveRuleBranchRecorder atomic.Pointer[RuleBranchRecorder]
@@ -189,7 +186,7 @@ func (r *RuleBranchRecorder) recordCondition(ruleID, branchID, source string, co
 	key := ruleID + "#" + branchID
 	hit, ok := r.Conditions[key]
 	if !ok {
-		hit = &RuleConditionHit{RuleID: ruleID, BranchID: branchID, Source: source, Atoms: atoms, decide: compiled.DecideFromAtoms}
+		hit = &RuleConditionHit{RuleID: ruleID, BranchID: branchID, Source: source, Atoms: atoms, Decide: compiled.DecideFromAtoms}
 		r.Conditions[key] = hit
 	}
 	for _, v := range hit.Vectors {
