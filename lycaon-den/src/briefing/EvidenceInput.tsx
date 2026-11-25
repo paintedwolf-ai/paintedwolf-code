@@ -9,7 +9,10 @@ const copy = briefingCopy.evidence;
 /** How far past the held height text may run before it is clipped. */
 const HELD_SLACK_PX = 64;
 
-/** One input a summary was given: its name, then the text that was sent. Long text is held until expanded, and can be held again. */
+/**
+ * One input a summary was given: its name, then the text that was sent.
+ * Long text is held until expanded, and can be held again.
+ */
 export function EvidenceInput(props: { item: BriefingRecordItem }) {
   const parts = () => evidenceInputParts(props.item);
   const name = () => copy.inputNames[props.item.key] ?? props.item.key;

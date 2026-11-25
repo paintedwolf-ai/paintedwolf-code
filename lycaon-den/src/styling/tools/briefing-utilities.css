@@ -111,7 +111,8 @@
   min-width: 0;
   &:not([data-expanded]) {
     max-height: 16rem;
-    /* Clipped in height only, never scrollable: an editor inside bleeds to the pane's edges and must not scroll its own text out of view. */
+    /* Clipped in height only, never scrollable: an editor inside reaches past the inset
+       and must not scroll its own text out of view. */
     overflow-x: visible;
     overflow-y: clip;
   }
