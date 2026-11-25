@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -178,6 +179,10 @@ func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase ma
 		writes := cr.state.SessionMode != api.SessionModeAsk && cr.auth.Reader.Held()["command_mutation"]
 		subj = toolvocabtest.SubjectSessionNextTurn(writes)
 		data["session_command_mutation_capable"] = writes
+	}
+	if kick == "coordinator-citation-grounding" {
+		// The closeout retry sets it from the request's reach.
+		data["can_recall"] = cr.auth.Reach.Status("recall") == toolreach.Callable
 	}
 	if err := prompts.MergeCoordinatorKickVarsForTools(data, reader); err != nil {
 		return err
