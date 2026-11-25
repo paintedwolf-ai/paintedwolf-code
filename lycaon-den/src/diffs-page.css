@@ -150,7 +150,7 @@
 }
 
 /* A new or deleted file: one more line of text under its name, with a link. The name line already says which. */
-.den-diffs-section__details {
+.den-diffs-section .den-diffs-section__details {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -237,9 +237,10 @@
 }
 
 /* Revisions wrap to avoid nested scrollframes inside block widgets. */
-.den-diffs-section__strip-content {
+.den-diffs-section .den-diffs-section__strip-content {
   flex-wrap: wrap;
   row-gap: 4px;
+  padding: 4px 0;
 }
 
 .den-diffs-section__strip {
