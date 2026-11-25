@@ -258,36 +258,25 @@ func walkTemplateNodes(
 			if n.Expr != nil {
 				outRefs = n.Expr.Identifiers()
 			}
-			if n.Expr != nil && n.Expr.Kind == pongoplain.ExprTernary {
-				condGuard := GuardClause{Expression: n.RawExpr, Line: n.Line}
-				if n.Expr.Left != nil && n.Expr.Left.Kind == pongoplain.ExprLiteral {
-					emitActionsFromText(names, vocab, reachFacts, family, contribID, packID, deliverySite, n.Line, n.Expr.Left.Literal, outRefs, ancestry, selectors, append(slices.Clone(guards), condGuard), loopVars, emit)
-				}
-				if n.Expr.Right != nil && n.Expr.Right.Kind == pongoplain.ExprLiteral {
-					negGuard := GuardClause{Expression: n.RawExpr, Negated: true, Line: n.Line}
-					emitActionsFromText(names, vocab, reachFacts, family, contribID, packID, deliverySite, n.Line, n.Expr.Right.Literal, outRefs, ancestry, selectors, append(slices.Clone(guards), negGuard), loopVars, emit)
-				}
-			} else {
-				for _, ref := range outRefs {
-					if isOARCallSubstitutionFact(ref) {
-						capFacts, occFacts := partitionTemplateGuardFacts(vocab, reachFacts, selectors, guards, outRefs, loopVars)
-						span := fmt.Sprintf("%s:L%d", contribID, n.Line)
-						act := "call_substitution:" + ref
-						emit(InstructionSite{
-							ID:                fmt.Sprintf("%s|%s|%s|%s", deliverySite, span, strings.Join(ancestry, ">"), act),
-							Family:            family,
-							ContributionID:    contribID,
-							WinnerPackID:      packID,
-							DeliverySite:      deliverySite,
-							SourceSpan:        span,
-							Action:            act,
-							IncludeAncestry:   slices.Clone(ancestry),
-							DeliverySelectors: slices.Clone(selectors),
-							Guards:            slices.Clone(guards),
-							CapabilityFacts:   capFacts,
-							OccurrenceFacts:   occFacts,
-						})
-					}
+			for _, ref := range outRefs {
+				if isOARCallSubstitutionFact(ref) {
+					capFacts, occFacts := partitionTemplateGuardFacts(vocab, reachFacts, selectors, guards, outRefs, loopVars)
+					span := fmt.Sprintf("%s:L%d", contribID, n.Line)
+					act := "call_substitution:" + ref
+					emit(InstructionSite{
+						ID:                fmt.Sprintf("%s|%s|%s|%s", deliverySite, span, strings.Join(ancestry, ">"), act),
+						Family:            family,
+						ContributionID:    contribID,
+						WinnerPackID:      packID,
+						DeliverySite:      deliverySite,
+						SourceSpan:        span,
+						Action:            act,
+						IncludeAncestry:   slices.Clone(ancestry),
+						DeliverySelectors: slices.Clone(selectors),
+						Guards:            slices.Clone(guards),
+						CapabilityFacts:   capFacts,
+						OccurrenceFacts:   occFacts,
+					})
 				}
 			}
 		case pongoplain.NodeIf:

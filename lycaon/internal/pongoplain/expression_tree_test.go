@@ -19,33 +19,47 @@ func TestParseExpressionPrintsEveryKindAsEquivalentSource(t *testing.T) {
 		{`!a`, `not a`, ExprNot, "not"},
 		{`a == 1`, `a == 1`, ExprCompare, "=="},
 		{`a != 'x'`, `a != "x"`, ExprCompare, "!="},
+		{`a <> 1`, `a != 1`, ExprCompare, "!="},
 		{`a <= 2`, `a <= 2`, ExprCompare, "<="},
 		{`a >= 2`, `a >= 2`, ExprCompare, ">="},
 		{`a < 2`, `a < 2`, ExprCompare, "<"},
 		{`a > 2`, `a > 2`, ExprCompare, ">"},
 		{`a in b`, `a in b`, ExprCompare, "in"},
-		{`a not in b`, `a not in b`, ExprCompare, "not in"},
-		{`a + 1`, `a + 1`, ExprCompare, "+"},
-		{`a - 1`, `a - 1`, ExprCompare, "-"},
-		{`a * 2`, `a * 2`, ExprCompare, "*"},
-		{`a / 2`, `a / 2`, ExprCompare, "/"},
-		{`a % 2`, `a % 2`, ExprCompare, "%"},
+		{`a + 1`, `a + 1`, ExprArith, "+"},
+		{`a - 1`, `a - 1`, ExprArith, "-"},
+		{`a * 2`, `a * 2`, ExprArith, "*"},
+		{`a / 2`, `a / 2`, ExprArith, "/"},
+		{`a % 2`, `a % 2`, ExprArith, "%"},
+		{`a ^ 2`, `a ^ 2`, ExprArith, "^"},
 		{`a == -1.5`, `a == -1.5`, ExprCompare, "=="},
-		{`-3`, `-3`, ExprLiteral, ""},
+		{`-3`, `-3`, ExprNeg, "-"},
+		{`-not a`, `-not a`, ExprNeg, "-"},
+		{`+a`, `a`, ExprIdent, ""},
 		{`x|length`, `x|length`, ExprFilter, ""},
 		{`x|default:"y"`, `x|default:"y"`, ExprFilter, ""},
-		{`x|default:(a or b)`, `x|default:(a or b)`, ExprFilter, ""},
-		{`"y" if a else "n"`, `"y" if a else "n"`, ExprTernary, ""},
-		{`"y" if a`, `"y" if a`, ExprTernary, ""},
-		{`("y" if a else "n") == b`, `("y" if a else "n") == b`, ExprCompare, "=="},
+		{`x|default:y . z|upper`, `x|default:y.z|upper`, ExprFilter, ""},
+		{`x|default:1 . 5`, `x|default:1.5`, ExprFilter, ""},
 		{`not (a and b)`, `not (a and b)`, ExprNot, "not"},
 		{`(a or b) and c`, `(a or b) and c`, ExprAnd, "and"},
-		{`a and b and c`, `(a and b) and c`, ExprAnd, "and"},
+		{`a and b or c`, `a and b or c`, ExprAnd, "and"},
+		{`a and (b or c)`, `a and b or c`, ExprAnd, "and"},
+		{`(a and b) or c`, `(a and b) or c`, ExprOr, "or"},
+		{`not a == b`, `not a == b`, ExprCompare, "=="},
+		{`a == b == c`, `a == b == c`, ExprCompare, "=="},
+		{`(a == b) == c`, `(a == b) == c`, ExprCompare, "=="},
+		{`a ^ b ^ c`, `a ^ b ^ c`, ExprArith, "^"},
+		{`(a ^ b) ^ c`, `(a ^ b) ^ c`, ExprArith, "^"},
+		{`a - b - c`, `a - b - c`, ExprArith, "-"},
+		{`a - (b - c)`, `a - (b - c)`, ExprArith, "-"},
+		{`a + (not b)`, `a + (not b)`, ExprArith, "+"},
 		{`a . b`, `a.b`, ExprIdent, ""},
+		{`a.0`, `a.0`, ExprIdent, ""},
+		{`1abc`, `1abc`, ExprIdent, ""},
 		{`"a\"b"`, `"a\"b"`, ExprLiteral, ""},
-		{`True`, `True`, ExprLiteral, ""},
-		{`None`, `None`, ExprLiteral, ""},
-		{`nil`, `nil`, ExprLiteral, ""},
+		{`'a\\b'`, `"a\\b"`, ExprLiteral, ""},
+		{`True`, `True`, ExprIdent, ""},
+		{`None`, `None`, ExprIdent, ""},
+		{`nil`, `nil`, ExprIdent, ""},
 	} {
 		expr, err := ParseExpression(tc.src)
 		if err != nil {
@@ -67,8 +81,9 @@ func TestParseExpressionPrintsEveryKindAsEquivalentSource(t *testing.T) {
 
 func TestParseExpressionFailsClosed(t *testing.T) {
 	for _, src := range []string{
-		"", "   ", `"abc`, `"abc\`, `a @ b`, `a b`, `a or`, `a and`, `not`, `a ==`, `a in`, `a not in`,
-		`a +`, `a|`, `a|b.c`, `a|f:`, `(a`, `(`, `a if`, `a if b else`, `for`, `)`,
+		"", "   ", `"abc`, `"abc\`, `a @ b`, `a b`, `a or`, `a and`, `not`, `a ==`, `a in`,
+		`a +`, `a|`, `a|b.c`, `a|f:`, `(a`, `(`, `)`, `a.`, `in`, `as`, "a\nb", `99999999999999999999`,
+		`a[0]`, `f(a)`, `a.b(c)`,
 	} {
 		if expr, err := ParseExpression(src); err == nil {
 			t.Errorf("ParseExpression(%q) = %+v, want an error", src, expr)
@@ -77,7 +92,7 @@ func TestParseExpressionFailsClosed(t *testing.T) {
 }
 
 func TestExprBooleanSkeletonDecidesFromAtoms(t *testing.T) {
-	expr, err := ParseExpression(`a or not b and c|length > 1 or (x if y else z)`)
+	expr, err := ParseExpression(`a or not b and c|length > 1 or d`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +100,7 @@ func TestExprBooleanSkeletonDecidesFromAtoms(t *testing.T) {
 	for _, atom := range expr.Atoms() {
 		atoms = append(atoms, atom.Source())
 	}
-	if want := []string{"a", "b", "c|length > 1", "x if y else z"}; !slices.Equal(atoms, want) {
+	if want := []string{"a", "b", "c|length > 1", "d"}; !slices.Equal(atoms, want) {
 		t.Fatalf("atoms = %q, want %q", atoms, want)
 	}
 	for _, tc := range []struct {
@@ -96,7 +111,8 @@ func TestExprBooleanSkeletonDecidesFromAtoms(t *testing.T) {
 		{map[string]bool{"a": true}, true},
 		{map[string]bool{"c|length > 1": true}, true},
 		{map[string]bool{"b": true, "c|length > 1": true}, false},
-		{map[string]bool{"b": true, "x if y else z": true}, true},
+		{map[string]bool{"d": true}, true},
+		{map[string]bool{"b": true, "d": true}, false},
 	} {
 		if got := expr.Decide(tc.values); got != tc.want {
 			t.Errorf("Decide(%v) = %v, want %v", tc.values, got, tc.want)
@@ -111,12 +127,13 @@ func TestExprIdentifiersAndOperatorDetection(t *testing.T) {
 		ops    bool
 	}{
 		{`a.b == c|default:d and a.b`, []string{"a.b", "c", "d"}, true},
-		{`x if a else y`, []string{"a", "x", "y"}, true},
+		{`-n + m`, []string{"n", "m"}, true},
+		{`True`, []string{"True"}, false},
+		{`a.0|default:b`, []string{"a.0", "b"}, false},
 		{`a`, []string{"a"}, false},
 		{`a|length`, []string{"a"}, false},
 		{`"s"`, nil, false},
 		{`true`, nil, true},
-		{`x|default:(a == b)`, []string{"x", "a", "b"}, true},
 	} {
 		expr, err := ParseExpression(tc.src)
 		if err != nil {
