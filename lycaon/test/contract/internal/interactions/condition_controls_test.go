@@ -121,10 +121,10 @@ func TestConditionLedgerControls(t *testing.T) {
 		{
 			name: "only_witness_removed", site: siteAnd, atoms: []string{"alpha"},
 			fault: func() *ConditionLedger {
-				return fx.ledger(t, siteAnd, append(diagonal, vec("alpha", false, "beta", true)), nil, nil)
+				return fx.ledger(t, siteAnd, append(diagonal, vec("alpha", true, "beta", false)), nil, nil)
 			},
 			corrected: func() *ConditionLedger {
-				return fx.ledger(t, siteAnd, append(diagonal, vec("alpha", false, "beta", true), vec("alpha", true, "beta", false)), nil, nil)
+				return fx.ledger(t, siteAnd, append(diagonal, vec("alpha", true, "beta", false), vec("alpha", false, "beta", true)), nil, nil)
 			},
 		},
 	} {
