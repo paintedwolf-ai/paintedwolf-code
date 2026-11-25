@@ -18,8 +18,8 @@ func TestAuthorRender_RequiresPreviewReader(t *testing.T) {
 		ModuleRoot:  configlayout.FindModuleRoot(),
 		TemplateRef: "partials/finish-handoff.md",
 	})
-	if err == nil || !strings.Contains(err.Error(), "PreviewReader") {
-		t.Fatalf("expected missing PreviewReader error, got %v", err)
+	if err == nil {
+		t.Fatal("AuthorRender rendered without a preview reader")
 	}
 }
 

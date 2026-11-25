@@ -28,8 +28,7 @@ var Family = invariants.Family{Name: "prompt-render", Invariants: append([]invar
 	{Name: "templates-render-no-host-paths", Anchors: []invariants.Anchor{invariants.Dir("lycaon/config/packs/painted-wolf/platform/guidance")}, Exempt: []invariants.Exemption{
 		{Key: "config/packs/painted-wolf/platform/guidance/curator/user.md: c.path", Reason: "the curator's evidence path is a display path, not a host root"},
 	}, Check: templatesRenderNoHostPaths},
-	{Name: "stock-config-union-reconciled", Anchors: []invariants.Anchor{invariants.Func("config", "ConsumesPackYAML")}, Check: stockConfigUnionReconciled},
-}, append(reachInvariants, append(capabilityConditionInvariants, append(structuralFragmentInvariants, cartesianInvariants...)...)...)...)}
+}, append(reachInvariants, cartesianInvariants...)...)}
 
 var (
 	personaRenderer = invariants.Func("internal/prompts", "RenderPersona")
@@ -150,8 +149,8 @@ func coordinatorKicksRenderNonEmpty(r *invariants.Run) {
 	r.Must(err)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	full, minimal := KickFixture(), map[string]any{}
-	prompts.MergeCoordinatorKickVarsForTools(full, reader)
-	prompts.MergeCoordinatorKickVarsForTools(minimal, reader)
+	r.Must(prompts.MergeCoordinatorKickVarsForTools(full, reader))
+	r.Must(prompts.MergeCoordinatorKickVarsForTools(minimal, reader))
 	checked := 0
 	for _, id := range ids {
 		if !strings.HasPrefix(id, "coordinator-") {

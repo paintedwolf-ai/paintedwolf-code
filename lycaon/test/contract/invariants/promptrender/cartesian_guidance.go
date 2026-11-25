@@ -28,18 +28,20 @@ func runGuidanceAndUtilityRenders(
 	zeroAuth := zeroToolAuthority(cReps[0].auth)
 
 	// RenderWithReach templates across Coordinator and Worker Reach projections and narrowed recall schema.
-	reachAuths := collectDistinctReachAuthorities(s, cReps, wReps)
+	reachAuths, err := collectDistinctReachAuthorities(s, cReps, wReps)
+	if err != nil {
+		return err
+	}
 	for _, ra := range reachAuths {
 		if err := renderReachBoundGuidance(ctx, s, gr, ra.label, ra.auth, sum); err != nil {
 			return err
 		}
 	}
 
-	// RenderWithReader templates: survey/*-specifics and editor/*.
-	for idx, cr := range cReps {
-		if idx >= 12 && cr.auth.Reader.Held()["command"] {
-			continue
-		}
+	// RenderWithReader templates: survey/*-specifics and editor/*, once per
+	// distinct reader.
+	for _, idx := range distinctReaderIndexes(len(cReps), func(i int) prompts.Reader { return cReps[i].auth.Reader }) {
+		cr := cReps[idx]
 		for _, ref := range []string{"survey/grep-specifics", "survey/find-specifics", "survey/read-specifics", "survey/jq-specifics"} {
 			if !cr.auth.Reader.Held()["command"] {
 				continue
@@ -52,7 +54,7 @@ func runGuidanceAndUtilityRenders(
 				return err
 			}
 			sum.InjectAndGuidanceCount++
-			viols, _ := checkClaimsOnce(s, ref+" ("+cr.state.ID+")", out, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
+			viols := checkClaimsOnce(s, ref+" ("+cr.state.ID+")", out, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
 			sum.Violations = append(sum.Violations, viols...)
 		}
 	}
@@ -74,21 +76,16 @@ type labeledAuth struct {
 	auth  hoststate.TurnAuthority
 }
 
-func collectDistinctReachAuthorities(s *Stock, cReps []coordRep, wReps []workerRep) []labeledAuth {
+func collectDistinctReachAuthorities(s *Stock, cReps []coordRep, wReps []workerRep) ([]labeledAuth, error) {
 	var out []labeledAuth
-	for i, cr := range cReps {
-		if i < 16 {
-			out = append(out, labeledAuth{label: cr.state.ID, auth: cr.auth})
-		}
+	for _, i := range distinctReaderIndexes(len(cReps), func(i int) prompts.Reader { return cReps[i].auth.Reader }) {
+		out = append(out, labeledAuth{label: cReps[i].state.ID, auth: cReps[i].auth})
 	}
-	for i, wr := range wReps {
-		if i < 8 {
-			out = append(out, labeledAuth{label: wr.ws.ID, auth: wr.auth})
-		}
+	for _, i := range distinctReaderIndexes(len(wReps), func(i int) prompts.Reader { return wReps[i].auth.Reader }) {
+		out = append(out, labeledAuth{label: wReps[i].ws.ID, auth: wReps[i].auth})
 	}
-	// Also construct a narrowed recall schema authority where history.after_ord & through_ord are accepted
-	// (can_recall_history == true) while history.format enum omits "record" (can_recall_history_record == false)
-	// and query is omitted (can_recall_query == false), so continuation-record & recall/body-missing hit every branch!
+	// Narrowed recall and overlay projections no stock state produces, so the
+	// recall and overlay guidance branches that read those facts render.
 	if len(cReps) > 0 {
 		baseAuth := cReps[0].auth
 		for _, cr := range cReps {
@@ -97,6 +94,7 @@ func collectDistinctReachAuthorities(s *Stock, cReps []coordRep, wReps []workerR
 				break
 			}
 		}
+		var readerErr error
 		mkSyntheticReachAuth := func(offered []string, metas []tools.ToolMeta, schemas map[string]map[string]any) hoststate.TurnAuthority {
 			a := baseAuth
 			a.Offered = offered
@@ -105,7 +103,7 @@ func collectDistinctReachAuthorities(s *Stock, cReps []coordRep, wReps []workerR
 			a.PostLoadSchemas = nil
 			a.Plan = toolsurface.Compile(offered, nil)
 			a.Reach = toolreach.Offered(offered).WithSchemas(schemas)
-			if r, rErr := prompts.NewReader(prompts.ReaderInput{
+			r, rErr := prompts.NewReader(prompts.ReaderInput{
 				ProfileID:        prompts.CoordinatorProfileID,
 				Profiles:         s.Profiles,
 				Plan:             a.Plan,
@@ -114,9 +112,11 @@ func collectDistinctReachAuthorities(s *Stock, cReps []coordRep, wReps []workerR
 				ProjectedSchemas: schemas,
 				RootCount:        1,
 				HasGit:           true,
-			}); rErr == nil {
-				a.Reader = r
+			})
+			if rErr != nil {
+				readerErr = rErr
 			}
+			a.Reader = r
 			return a
 		}
 		partialRecallSchema := map[string]any{
@@ -172,8 +172,11 @@ func collectDistinctReachAuthorities(s *Stock, cReps []coordRep, wReps []workerR
 			map[string]map[string]any{"preview_overlay": previewMeta.ArgsSchema, "instruct_worker": instructMeta.ArgsSchema},
 		)
 		out = append(out, labeledAuth{label: "preview-and-instruct-without-promote", auth: previewNoPromote})
+		if readerErr != nil {
+			return nil, readerErr
+		}
 	}
-	return out
+	return out, nil
 }
 
 func renderReachBoundGuidance(
@@ -255,7 +258,7 @@ func renderReachBoundGuidance(
 		}
 		sum.InjectAndGuidanceCount++
 		if strings.TrimSpace(out) != "" {
-			viols, _ := checkClaimsOnce(s, fmt.Sprintf("guidance/%s[%d] (%s)", tc.ref, i, stateLabel), out, auth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
+			viols := checkClaimsOnce(s, fmt.Sprintf("guidance/%s[%d] (%s)", tc.ref, i, stateLabel), out, auth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
 			sum.Violations = append(sum.Violations, viols...)
 		}
 	}
@@ -300,7 +303,7 @@ func renderEditorActionPrompts(
 			return err
 		}
 		sum.InjectAndGuidanceCount++
-		viols, _ := checkClaimsOnce(s, ref, out, roRep.auth, roRep.ws.ParentSessionMode, roRep.ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
+		viols := checkClaimsOnce(s, ref, out, roRep.auth, roRep.ws.ParentSessionMode, roRep.ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
 		sum.Violations = append(sum.Violations, viols...)
 	}
 	for _, ref := range []string{"editor/add-test", "editor/document", "editor/fix-finding", "editor/inline-edit", "editor/rename-symbol", "editor/rewrite-structurally"} {
@@ -312,7 +315,7 @@ func renderEditorActionPrompts(
 			return err
 		}
 		sum.InjectAndGuidanceCount++
-		viols, _ := checkClaimsOnce(s, ref, out, rwRep.auth, rwRep.ws.ParentSessionMode, rwRep.ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
+		viols := checkClaimsOnce(s, ref, out, rwRep.auth, rwRep.ws.ParentSessionMode, rwRep.ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
 		sum.Violations = append(sum.Violations, viols...)
 	}
 	return nil
@@ -357,7 +360,7 @@ func renderStructuralGuidanceVariants(
 		}
 		sum.InjectAndGuidanceCount++
 		if strings.TrimSpace(out) != "" {
-			viols, _ := checkClaimsOnce(s, fmt.Sprintf("structural-guidance/%s[%d]", tc.ref, i), out, zeroAuth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
+			viols := checkClaimsOnce(s, fmt.Sprintf("structural-guidance/%s[%d]", tc.ref, i), out, zeroAuth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
 			sum.Violations = append(sum.Violations, viols...)
 		}
 	}
@@ -421,7 +424,7 @@ func renderZeroToolUtilityPrompts(
 				return err
 			}
 			sum.InjectAndGuidanceCount++
-			viols, _ := checkClaimsOnce(s, fmt.Sprintf("zero-tool-utility/%s[%d]", ref, dIdx), out, zeroAuth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
+			viols := checkClaimsOnce(s, fmt.Sprintf("zero-tool-utility/%s[%d]", ref, dIdx), out, zeroAuth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
 			sum.Violations = append(sum.Violations, viols...)
 		}
 	}
@@ -438,15 +441,7 @@ func runGateFeedbackRenders(
 	if err != nil {
 		return err
 	}
-	// Find an all-loaded coordinator authority so gate satisfy steps can be checked cleanly,
-	// plus render with matched_signals both non-empty and empty so _gate.md.tmpl hits both branches.
-	var fullCoord hoststate.TurnAuthority
-	for _, cr := range cReps {
-		if cr.state.SessionMode == api.SessionModeAgent && cr.state.Posture == api.SessionPostureBuild && cr.state.Loading == hoststate.LoadingAllLoaded {
-			fullCoord = cr.auth
-			break
-		}
-	}
+	// Render with matched signals present and absent so both gate branches run.
 	leaves := []string{
 		"plan_stub_valid", "hitl_consulted:intake", "evidence_passed:plan_review",
 		"evidence_passed:survey_claims", "evidence_passed:survey_challenged",
@@ -470,7 +465,6 @@ func runGateFeedbackRenders(
 			}
 			if strings.TrimSpace(out) != "" {
 				sum.InjectAndGuidanceCount++
-				_ = fullCoord
 			}
 		}
 	}

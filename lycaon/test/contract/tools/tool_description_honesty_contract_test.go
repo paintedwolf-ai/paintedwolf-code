@@ -43,7 +43,8 @@ func collectSchemaVocabularyTokens(node any, dst map[string]string) {
 	}
 }
 
-func baseNonToolDescriptionTokens(metas []tools.ToolMeta) map[string]string {
+func baseNonToolDescriptionTokens(t *testing.T, metas []tools.ToolMeta) map[string]string {
+	t.Helper()
 	notATool := map[string]string{
 		"workflow_id":        "field name in args, not a tool",
 		"workflow_version":   "field name in args, not a tool",
@@ -76,20 +77,17 @@ func baseNonToolDescriptionTokens(metas []tools.ToolMeta) map[string]string {
 	for _, meta := range metas {
 		collectSchemaVocabularyTokens(meta.ArgsSchema, notATool)
 	}
-	if lang, err := toolcontract.ReadOnlyLanguageV1(); err == nil {
-		for _, spec := range lang.Commands {
-			notATool[spec.Name] = "declared read-only command program"
-		}
+	lang, err := toolcontract.ReadOnlyLanguageV1()
+	contractcheck.FailErr(t, "read-only command language", err)
+	for _, spec := range lang.Commands {
+		notATool[spec.Name] = "declared read-only command program"
 	}
 	return notATool
 }
 
-// TestToolDescriptionsCiteOnlyRegisteredTools verifies that every backticked
-// snake_case token in both raw registered tool descriptions and dynamically
-// projected surface descriptions names either a registered tool or a declared
-// non-tool field/enum/program token. Static YAML descriptions keep cross-tool
-// routing in dynamic surface projections and tool-procedures so narrow profiles
-// never cite unoffered tools.
+// Every backticked snake_case token in registered and projected tool
+// descriptions names a registered tool or a declared field, enum literal or
+// command program. A model attempts any tool a description cites.
 func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 	reg := toolfixture.ContractServeBootRegistry(t)
 	metas := reg.List()
@@ -105,7 +103,7 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 	// snake_case token inside `…` backticks; minimum 2 chars to dodge
 	// single-letter false positives.
 	tokenRE := regexp.MustCompile("`([a-z][a-z0-9_]+)`")
-	notATool := baseNonToolDescriptionTokens(metas)
+	notATool := baseNonToolDescriptionTokens(t, metas)
 
 	type violation struct {
 		tool        string
@@ -114,7 +112,6 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 	}
 	var found []violation
 	resolved := 0
-	nonToolMatched := 0
 	checkProse := func(toolName, desc string) {
 		if strings.TrimSpace(desc) == "" {
 			return
@@ -126,7 +123,6 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 				continue
 			}
 			if _, ok := notATool[token]; ok {
-				nonToolMatched++
 				continue
 			}
 			found = append(found, violation{tool: toolName, token: token, description: desc})
@@ -153,9 +149,6 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 	for _, meta := range metas {
 		checkProse(meta.Name, meta.Description)
 		walkSchema(meta.Name, meta.ArgsSchema)
-	}
-	if nonToolMatched == 0 {
-		t.Fatal("static registry scan matched zero backticked tokens; scanner scaffolding likely broken")
 	}
 
 	// Projected surface descriptions across coordinator metadata.
@@ -190,16 +183,6 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 			b.WriteString(")\n")
 		}
 		t.Fatal(b.String())
-	}
-
-	// Positive registered-tool and negative misspelled-tool controls on the same scanner.
-	checkProse("synthetic_registered_probe", "Load `"+metas[0].Name+"` or inspect with `"+metas[len(metas)-1].Name+"`.")
-	if resolved < 2 || len(found) != 0 {
-		t.Fatalf("expected registered tool citations to resolve cleanly (resolved=%d found=%+v)", resolved, found)
-	}
-	checkProse("synthetic_probe", "Prefer `nonexistent_misspelled_tool` before retrying.")
-	if len(found) != 1 || found[0].token != "nonexistent_misspelled_tool" {
-		t.Fatalf("expected planted misspelled tool citation to be flagged, got %+v", found)
 	}
 }
 

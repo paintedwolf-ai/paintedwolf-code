@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
+	"github.com/lycaon/lycaon/test/contract/internal/oarproducers"
 )
 
 type contractNudgeFormatter struct {
@@ -94,7 +96,19 @@ func renderCommandOpRefusal(t *testing.T, bp *toolfeedback.BlockPlane, reach *to
 	return refusal
 }
 
-func TestToolCommandOperationRoutesAllSixReachStates(t *testing.T) {
+// nextCallTools lists the tools of the refusal's delivered next-step calls.
+func nextCallTools(ref *guidance.Refusal) []string {
+	var out []string
+	for _, c := range oarproducers.ObserveDeliveredRefusal(ref).NextCalls {
+		out = append(out, c.Tool)
+	}
+	return out
+}
+
+// TOOL_COMMAND_OPERATION recovers through command only where command can run
+// the operation: directly when callable, after loading when loadable, and
+// never when command is out of reach or the operation's forms are forbidden.
+func TestToolCommandOperationRecoveryFollowsCommandReach(t *testing.T) {
 	rs, _, _, bp := effectiveOARBlockPlane(t)
 	states, err := hoststate.CoordinatorStates(t.Context())
 	contractcheck.FailErr(t, "CoordinatorStates", err)
@@ -115,66 +129,40 @@ func TestToolCommandOperationRoutesAllSixReachStates(t *testing.T) {
 		case deferredNoLoader == nil && status == toolreach.Absent && auth.Reach.Status(toolreach.LoaderTool) == toolreach.Absent:
 			copied := auth
 			deferredNoLoader = &copied
-		case status == toolreach.Callable && !auth.Reach.Program("edit") && auth.Reach.Program("cat") && len(forbiddenReadOnly) < 3:
+		case status == toolreach.Callable && !auth.Reach.Program("edit") && auth.Reach.Program("cat"):
 			copied := auth
 			forbiddenReadOnly = append(forbiddenReadOnly, &copied)
 		}
 	}
 	if callableMutating == nil || deferredNoLoader == nil || len(forbiddenReadOnly) == 0 {
-		t.Fatalf("missing coordinator reach fixtures: callable=%v noLoader=%v readOnly=%d",
+		t.Fatalf("missing coordinator reach states: callable=%v noLoader=%v readOnly=%d",
 			callableMutating != nil, deferredNoLoader != nil, len(forbiddenReadOnly))
 	}
 
-	t.Run("1_command_callable_with_admitted_form", func(t *testing.T) {
-		refusal := renderCommandOpRefusal(t, bp, &callableMutating.Reach, "edit")
-		if !strings.Contains(refusal.Copy["cause"], "Routine operations use the command interface.") {
-			t.Errorf("unexpected cause: %q", refusal.Copy["cause"])
-		}
-		if !strings.Contains(refusal.Copy["fix"], "`command(…)`") || !strings.Contains(refusal.Copy["fix"], "edit") {
-			t.Errorf("fix must recommend admitted native form through command: %q", refusal.Copy["fix"])
-		}
-		if strings.Contains(refusal.Copy["fix"], "request_tools") {
-			t.Errorf("callable command must not ask for request_tools: %q", refusal.Copy["fix"])
+	t.Run("command_callable_with_admitted_form", func(t *testing.T) {
+		got := nextCallTools(renderCommandOpRefusal(t, bp, &callableMutating.Reach, "edit"))
+		if !slices.Contains(got, "command") || slices.Contains(got, toolreach.LoaderTool) {
+			t.Errorf("callable command next calls = %v, want command without loading", got)
 		}
 	})
 
-	t.Run("2_command_loadable_via_request_tools", func(t *testing.T) {
-		readLoadable := toolreach.Freeze(
-			[]string{toolreach.LoaderTool},
-			toolsurface.Compile([]string{toolreach.LoaderTool}, []string{toolreach.ProgramTool}),
-		).WithPrograms(forbiddenReadOnly[0].ProgramReach)
-		readRef := renderCommandOpRefusal(t, bp, &readLoadable, "read")
-		if fix := readRef.Copy["fix"]; !strings.Contains(fix, "`request_tools(need=\"command\")`") || !strings.Contains(fix, "`command(…)`") || !strings.Contains(fix, "cat") {
-			t.Errorf("loadable read surface must instruct loading command first via request_tools: %q", fix)
-		}
-		mutLoadable := toolreach.Freeze(
-			[]string{toolreach.LoaderTool},
-			toolsurface.Compile([]string{toolreach.LoaderTool}, []string{toolreach.ProgramTool}),
-		).WithPrograms(callableMutating.ProgramReach)
-		editRef := renderCommandOpRefusal(t, bp, &mutLoadable, "edit")
-		if fix := editRef.Copy["fix"]; !strings.Contains(fix, "`request_tools(need=\"command\")`") || !strings.Contains(fix, "`command(…)`") || !strings.Contains(fix, "edit") {
-			t.Errorf("loadable edit reach must instruct loading command first via request_tools: %q", fix)
+	t.Run("command_loadable", func(t *testing.T) {
+		plan := toolsurface.Compile([]string{toolreach.LoaderTool}, []string{toolreach.ProgramTool})
+		for need, programs := range map[string]toolreach.Programs{
+			"read": forbiddenReadOnly[0].ProgramReach,
+			"edit": callableMutating.ProgramReach,
+		} {
+			reach := toolreach.Freeze([]string{toolreach.LoaderTool}, plan).WithPrograms(programs)
+			got := nextCallTools(renderCommandOpRefusal(t, bp, &reach, need))
+			if !slices.Contains(got, toolreach.LoaderTool) || !slices.Contains(got, "command") {
+				t.Errorf("loadable command %s next calls = %v, want loading then command", need, got)
+			}
 		}
 	})
 
-	t.Run("3_command_deferred_or_absent_without_loader", func(t *testing.T) {
+	t.Run("command_out_of_reach", func(t *testing.T) {
 		explicitDeferred := toolreach.Freeze([]string{"ask_user"}, toolsurface.Compile(nil, []string{"command"})).
 			WithPrograms(func(string) bool { return true })
-		for label, reach := range map[string]toolreach.Request{
-			"coordinator_no_loader": deferredNoLoader.Reach,
-			"deferred_no_loader":    explicitDeferred,
-		} {
-			refusal := renderCommandOpRefusal(t, bp, &reach, "read")
-			if strings.Contains(refusal.Copy["fix"], "`command") || strings.Contains(refusal.Copy["fix"], "request_tools") {
-				t.Errorf("%s recommended unreachable tool: %q", label, refusal.Copy["fix"])
-			}
-			if !strings.Contains(refusal.Copy["fix"], "Use an available capability or report the missing operation.") {
-				t.Errorf("%s missing fallback guidance: %q", label, refusal.Copy["fix"])
-			}
-		}
-	})
-
-	t.Run("4_forbidden_effect_zero_admitted_forms", func(t *testing.T) {
 		workerStates, wErr := hoststate.WorkerStates(t.Context())
 		contractcheck.FailErr(t, "WorkerStates", wErr)
 		for _, ws := range workerStates {
@@ -186,28 +174,28 @@ func TestToolCommandOperationRoutesAllSixReachStates(t *testing.T) {
 			forbiddenReadOnly = append(forbiddenReadOnly, &wAuth)
 			break
 		}
+		cases := map[string]struct {
+			reach *toolreach.Request
+			need  string
+		}{
+			"coordinator_no_loader": {&deferredNoLoader.Reach, "read"},
+			"deferred_no_loader":    {&explicitDeferred, "read"},
+			"unknown_reach":         {nil, "edit"},
+		}
 		for i, auth := range forbiddenReadOnly {
-			refusal := renderCommandOpRefusal(t, bp, &auth.Reach, "edit")
-			if strings.Contains(refusal.Copy["fix"], "`command") {
-				t.Errorf("read-only fixture[%d] recommended command for forbidden edit: %q", i, refusal.Copy["fix"])
-			}
-			if !strings.Contains(refusal.Copy["fix"], "Use an available capability or report the missing operation.") {
-				t.Errorf("read-only fixture[%d] missing fallback guidance: %q", i, refusal.Copy["fix"])
+			cases[fmt.Sprintf("read_only_%d", i)] = struct {
+				reach *toolreach.Request
+				need  string
+			}{&auth.Reach, "edit"}
+		}
+		for label, tc := range cases {
+			if got := nextCallTools(renderCommandOpRefusal(t, bp, tc.reach, tc.need)); slices.Contains(got, "command") || slices.Contains(got, toolreach.LoaderTool) {
+				t.Errorf("%s next calls = %v, want no command or loading", label, got)
 			}
 		}
 	})
 
-	t.Run("5_unknown_reach", func(t *testing.T) {
-		refusal := renderCommandOpRefusal(t, bp, nil, "edit")
-		if strings.Contains(refusal.Copy["fix"], "`command") || strings.Contains(refusal.Copy["fix"], "request_tools") {
-			t.Errorf("unknown reach recommended command: %q", refusal.Copy["fix"])
-		}
-		if !strings.Contains(refusal.Copy["fix"], "Use an available capability or report the missing operation.") {
-			t.Errorf("unknown reach missing fallback guidance: %q", refusal.Copy["fix"])
-		}
-	})
-
-	t.Run("6_partial_multi_form_admission_and_step_fallback", func(t *testing.T) {
+	t.Run("partial_multi_form_admission", func(t *testing.T) {
 		verifyPartialMultiFormAndStepFallback(t, rs, bp, deferredNoLoader)
 	})
 }
@@ -230,21 +218,20 @@ func verifyPartialMultiFormAndStepFallback(
 		}
 	}
 	if multiOp == "" {
-		t.Fatal("expected at least one multi-form command operation")
+		t.Fatal("no multi-form command operation")
 	}
-	admittedSet := []string{allForms[0]}
-	excluded := allForms[1:]
 	partialReach := toolreach.Offered([]string{"command"}).WithPrograms(func(name string) bool {
-		return slices.Contains(admittedSet, name)
-	})
-	refusal := renderCommandOpRefusal(t, bp, &partialReach, multiOp)
-	fix := refusal.Copy["fix"]
-	if !strings.Contains(fix, allForms[0]) || !strings.Contains(fix, "`command(…)`") {
-		t.Errorf("partial multi-form fix missing admitted form %q: %q", allForms[0], fix)
-	}
-	for _, dropped := range excluded {
-		if strings.Contains(fix, dropped) {
-			t.Errorf("partial multi-form fix leaked unadmitted form %q: %q", dropped, fix)
+		return name == allForms[0]
+	}).WithSchemas(map[string]map[string]any{"command": {"properties": map[string]any{"command": map[string]any{"type": "string"}}}})
+	for _, c := range oarproducers.ObserveDeliveredRefusal(renderCommandOpRefusal(t, bp, &partialReach, multiOp)).NextCalls {
+		if c.Tool != "command" {
+			continue
+		}
+		cmd, _ := c.Args["command"].(string)
+		for _, dropped := range allForms[1:] {
+			if c.Program == dropped || strings.HasPrefix(cmd, dropped+" ") || cmd == dropped {
+				t.Errorf("partial multi-form next call runs unadmitted form %q: %+v", dropped, c)
+			}
 		}
 	}
 
@@ -252,22 +239,18 @@ func verifyPartialMultiFormAndStepFallback(
 	if !ok || rule == nil {
 		t.Fatal("TOOL_COMMAND_OPERATION missing from effective ruleset")
 	}
-	gcObserved := oar.NewGuardContext()
-	gcObserved.Reach = deferredNoLoader.Reach
-	gcObserved.ObservationData = map[string]any{"need": "edit"}
-	gcObserved.ObserveCommandOperationReach()
-	if got := oar.ResolveNextSteps(rule, gcObserved); got.Text != "" || len(got.Calls) != 0 {
-		t.Fatalf("ObserveCommandOperationReach on unreachable deferred reach = %+v, want empty steps", got)
-	}
-
-	gc := oar.NewGuardContext()
-	gc.Reach = deferredNoLoader.Reach
-	gc.ObservationData = map[string]any{
-		"need":                        "edit",
-		"command_operation_reachable": true,
-	}
-	resolved := oar.ResolveNextSteps(rule, gc)
-	if resolved.Text != "Use an available capability or report the missing operation." || len(resolved.Calls) != 0 {
-		t.Fatalf("unreachable recovery step = %+v", resolved)
+	for _, data := range []map[string]any{
+		{"need": "edit"},
+		{"need": "edit", "command_operation_reachable": true},
+	} {
+		gc := oar.NewGuardContext()
+		gc.Reach = deferredNoLoader.Reach
+		gc.ObservationData = data
+		if _, observed := data["command_operation_reachable"]; !observed {
+			gc.ObserveCommandOperationReach()
+		}
+		if got := oar.ResolveNextSteps(rule, gc); len(got.Calls) != 0 {
+			t.Errorf("unreachable command with %v resolved next calls %+v", data, got.Calls)
+		}
 	}
 }

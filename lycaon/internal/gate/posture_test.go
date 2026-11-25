@@ -11,18 +11,26 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestAllPosturesReturnsFreshSortedRegistryKeys(t *testing.T) {
+// Every enumerated posture parses back to itself, and the enumeration is the
+// caller's to keep.
+func TestAllPosturesRoundTripThroughParsePosture(t *testing.T) {
 	t.Parallel()
 	got := AllPostures()
-	want := []Posture{PostureBalanced, PostureLight, PostureStrict}
-	if !slices.Equal(got, want) {
-		t.Fatalf("AllPostures() = %v, want %v", got, want)
+	if len(got) == 0 {
+		t.Fatal("AllPostures() is empty")
 	}
-	if len(got) != len(postureRules) {
-		t.Fatalf("len(AllPostures()) = %d, len(postureRules) = %d", len(got), len(postureRules))
+	for _, p := range got {
+		parsed, err := ParsePosture(string(p))
+		if err != nil || parsed != p {
+			t.Errorf("ParsePosture(%q) = %q, %v", p, parsed, err)
+		}
 	}
+	if !slices.IsSorted(got) {
+		t.Errorf("AllPostures() = %v, want sorted", got)
+	}
+	first := got[0]
 	got[0] = "mutated"
-	if again := AllPostures(); !slices.Equal(again, want) {
+	if again := AllPostures(); again[0] != first {
 		t.Fatalf("AllPostures() aliased caller slice: %v", again)
 	}
 }

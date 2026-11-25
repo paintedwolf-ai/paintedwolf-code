@@ -6,10 +6,8 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
-	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -106,7 +104,7 @@ func TestCloseoutPreservesCancellationAndIterationContext(t *testing.T) {
 	}
 }
 
-// AC-COMPAT-08: forced final turns read exactly what Closeout sends for their surface.
+// Forced final turns read exactly what Closeout sends for their surface.
 func TestForcedFinalTurnKicksReadWhatCloseoutSends(t *testing.T) {
 	setupanchor.Install()
 	reference := regexp.MustCompile(`(?:\{\{\s*|\{%\s*if\s+)(\w+)`)
@@ -143,92 +141,79 @@ func TestForcedFinalTurnKicksReadWhatCloseoutSends(t *testing.T) {
 	}
 }
 
-func TestTurnNudgesStateSpecificGuidancePairedWitnesses(t *testing.T) {
+// Runway and closeout nudges carry the recipient's mutation capability: the
+// runway reader's write facts and the closeout's mutation-capable value follow
+// the surface, session mode and worker profile.
+func TestTurnNudgesCarryRecipientMutationCapability(t *testing.T) {
 	setupanchor.Install()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
-
 	ledger := turnload.NewLedger()
 	ledger.Activate("mut-coord", []string{"verify"}, "run verification")
-	mutSvc := New(ledger, fixedSpend(true))
-	mutSvc.SetPrompts(engine)
-	mutSvc.SetSurface(fixedSurface("implement_investigate"))
-	mutSess := &api.Session{ID: "mut-coord", Mode: api.SessionModeAgent, WorkspacePath: "/tmp/proj"}
+	agentSess := &api.Session{ID: "mut-coord", Mode: api.SessionModeAgent, WorkspacePath: "/tmp/proj"}
+	askSess := &api.Session{ID: "ro-coord", Mode: api.SessionModeAsk, WorkspacePath: "/tmp/proj"}
 
-	iterMut := mutSvc.IterationRunway(t.Context(), mutSess, "coordinator", 2)
-	if !strings.Contains(iterMut.Content, "Complete the edit or command already in progress and run the verification") ||
-		!strings.Contains(iterMut.Content, "staged command redirect") {
-		t.Fatalf("mutating IterationRunway witness lost write/redirect guidance:\n%s", iterMut.Content)
-	}
-	spendMut := mutSvc.SpendRunway(t.Context(), mutSess, 5.0)
-	if !strings.Contains(spendMut.Content, "finish the edit or command in progress and run the verification") {
-		t.Fatalf("mutating SpendRunway witness lost write/verify guidance:\n%s", spendMut.Content)
-	}
-	mutTurnCloseoutSvc := New(ledger, fixedSpend(true))
-	mutTurnCloseoutSvc.SetPrompts(engine)
-	mutTurnCloseoutSvc.SetSurface(fixedSurface("plan_execute"))
-	closeoutMut := mutTurnCloseoutSvc.Closeout(t.Context(), mutSess, "coordinator", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
-	if !strings.Contains(closeoutMut.Content, "staged command redirect") {
-		t.Fatalf("mutating coordinator TurnCloseout witness lost staged command redirect clause:\n%s", closeoutMut.Content)
+	service := func(surfaceID string) (*Service, *recordedKick) {
+		rec := &recordedKick{}
+		svc := New(ledger, fixedSpend(true))
+		svc.SetPrompts(rec)
+		svc.SetSurface(fixedSurface(surfaceID))
+		return svc, rec
 	}
 
-	roSurfaceAgent := New(turnload.NewLedger(), fixedSpend(true))
-	roSurfaceAgent.SetPrompts(engine)
-	roSurfaceAgent.SetSurface(fixedSurface("orchestrate_plan"))
-	closeoutROAgent := roSurfaceAgent.Closeout(t.Context(), mutSess, "coordinator", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
-	if strings.Contains(closeoutROAgent.Content, "staged command redirect") {
-		t.Fatalf("read-only surface (orchestrate_plan) in Agent mode leaked staged command redirect clause:\n%s", closeoutROAgent.Content)
+	for _, tc := range []struct {
+		surface string
+		sess    *api.Session
+		writes  bool
+	}{
+		{"implement_investigate", agentSess, true},
+		{"observe_investigate", askSess, false},
+	} {
+		svc, rec := service(tc.surface)
+		svc.IterationRunway(t.Context(), tc.sess, "coordinator", 2)
+		iter := rec.reader.Facts()
+		svc.SpendRunway(t.Context(), tc.sess, 5.0)
+		spend := rec.reader.Facts()
+		for name, facts := range map[string]map[string]any{"iterations": iter, "spend": spend} {
+			if facts["profile_has_write_tools"] != tc.writes || facts["profile_command_mutation"] != tc.writes {
+				t.Errorf("%s %s runway: profile_has_write_tools=%v profile_command_mutation=%v, want %t",
+					tc.surface, name, facts["profile_has_write_tools"], facts["profile_command_mutation"], tc.writes)
+			}
+		}
 	}
 
-	roSvc := New(turnload.NewLedger(), fixedSpend(true))
-	roSvc.SetPrompts(engine)
-	roSvc.SetSurface(fixedSurface("observe_investigate"))
-	roSess := &api.Session{ID: "ro-coord", Mode: api.SessionModeAsk, WorkspacePath: "/tmp/proj"}
-
-	iterRO := roSvc.IterationRunway(t.Context(), roSess, "coordinator", 2)
-	if strings.Contains(iterRO.Content, "staged command redirect") || strings.Contains(iterRO.Content, "Complete the edit") {
-		t.Fatalf("read-only IterationRunway witness leaked mutating edit/redirect instructions:\n%s", iterRO.Content)
-	}
-	if !strings.Contains(iterRO.Content, "Wrap up your current read or inspection") {
-		t.Fatalf("read-only IterationRunway witness missing read-only wrap-up instruction:\n%s", iterRO.Content)
-	}
-	spendRO := roSvc.SpendRunway(t.Context(), roSess, 5.0)
-	if strings.Contains(spendRO.Content, "finish the edit") {
-		t.Fatalf("read-only SpendRunway witness leaked mutating edit instructions:\n%s", spendRO.Content)
-	}
-	if !strings.Contains(spendRO.Content, "Wrap up the read or inspection already in flight") {
-		t.Fatalf("read-only SpendRunway witness missing read-only wrap-up instruction:\n%s", spendRO.Content)
-	}
-	roTurnCloseoutSvc := New(turnload.NewLedger(), fixedSpend(true))
-	roTurnCloseoutSvc.SetPrompts(engine)
-	roTurnCloseoutSvc.SetSurface(fixedSurface("orchestrate_plan"))
-	closeoutRO := roTurnCloseoutSvc.Closeout(t.Context(), roSess, "coordinator", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
-	if strings.Contains(closeoutRO.Content, "staged command redirect") {
-		t.Fatalf("read-only coordinator TurnCloseout witness leaked staged command redirect clause:\n%s", closeoutRO.Content)
-	}
-	if !strings.Contains(closeoutRO.Content, "Summarize what earlier turns already established") {
-		t.Fatalf("read-only coordinator TurnCloseout witness missing read-only timeout wrap-up:\n%s", closeoutRO.Content)
+	for _, tc := range []struct {
+		surface string
+		sess    *api.Session
+		capable bool
+	}{
+		{"plan_execute", agentSess, true},
+		{"orchestrate_plan", agentSess, false},
+		{"orchestrate_plan", askSess, false},
+	} {
+		svc, rec := service(tc.surface)
+		svc.Closeout(t.Context(), tc.sess, "coordinator", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
+		if rec.data["session_command_mutation_capable"] != tc.capable {
+			t.Errorf("%s %s closeout session_command_mutation_capable=%v, want %t", tc.surface, tc.sess.Mode, rec.data["session_command_mutation_capable"], tc.capable)
+		}
 	}
 
-	// Worker closeout paired witnesses: implementer (mutating) vs explore_readonly (read-only).
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load profiles", err)
-	workerSvc := New(turnload.NewLedger(), nil)
-	workerSvc.SetPrompts(engine)
-	workerSvc.SetProfiles(readOnlyProfiles{profiles: profiles})
-
-	implChild := &api.Session{ID: "w-impl", ParentSessionID: "mut-coord", AgentType: "implementer", Mode: api.SessionModeAgent, WorkspacePath: "/tmp/proj"}
-	wMut := workerSvc.Closeout(t.Context(), implChild, "implement", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
-	if !strings.Contains(wMut.Content, "staged command redirect") {
-		t.Fatalf("mutating worker closeout witness missing staged command redirect clause:\n%s", wMut.Content)
-	}
-
-	scoutChild := &api.Session{ID: "w-scout", ParentSessionID: "mut-coord", AgentType: "path-explorer", Mode: api.SessionModeAgent, WorkspacePath: "/tmp/proj"}
-	wRO := workerSvc.Closeout(t.Context(), scoutChild, "explore_readonly", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
-	if strings.Contains(wRO.Content, "staged command redirect") {
-		t.Fatalf("read-only worker closeout witness leaked staged command redirect clause:\n%s", wRO.Content)
-	}
-	if !strings.Contains(wRO.Content, "what earlier observations already established") {
-		t.Fatalf("read-only worker closeout witness missing read-only follow-up guidance:\n%s", wRO.Content)
+	for _, tc := range []struct {
+		agent, profile string
+		capable        bool
+	}{
+		{"implementer", "implement", true},
+		{"path-explorer", "explore_readonly", false},
+	} {
+		rec := &recordedKick{}
+		svc := New(turnload.NewLedger(), nil)
+		svc.SetPrompts(rec)
+		svc.SetProfiles(readOnlyProfiles{profiles: profiles})
+		child := &api.Session{ID: "w-" + tc.agent, ParentSessionID: "mut-coord", AgentType: tc.agent, Mode: api.SessionModeAgent, WorkspacePath: "/tmp/proj"}
+		svc.Closeout(t.Context(), child, tc.profile, promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
+		if rec.data["leg_command_mutation_capable"] != tc.capable {
+			t.Errorf("%s worker closeout leg_command_mutation_capable=%v, want %t", tc.agent, rec.data["leg_command_mutation_capable"], tc.capable)
+		}
 	}
 }
 

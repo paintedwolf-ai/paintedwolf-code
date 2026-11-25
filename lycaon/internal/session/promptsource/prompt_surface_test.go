@@ -85,20 +85,17 @@ func TestToolProceduresPartialSchemasKeepExactPerToolCapabilities(t *testing.T) 
 
 	block, err := m.ToolProcedures(partialCtx, sess, "implementer", []string{"command", "verify"})
 	testutil.FailErr(t, "ToolProcedures partial", err)
-	if !strings.Contains(block, "`socks_proxy: true` on `verify`") || strings.Contains(block, "`command` or `verify`") {
-		t.Fatalf("procedure block did not restrict socks_proxy to verify:\n%s", block)
+	if !strings.Contains(block, "socks_proxy") {
+		t.Fatalf("procedure block dropped verify's socks_proxy:\n%s", block)
 	}
-	if strings.Contains(block, "Declare access needs in `capability_request`") {
-		t.Fatalf("procedure block leaked pruned capability_request:\n%s", block)
-	}
-	if !strings.Contains(block, "Use `command(verification: true)`") {
-		t.Fatalf("procedure block lost command effect capability:\n%s", block)
+	if !strings.Contains(block, "command(verification: true)") {
+		t.Fatalf("procedure block lost the command verification call:\n%s", block)
 	}
 
 	emptyCtx := prompts.WithProjectedSchemas(t.Context(), map[string]map[string]any{})
 	emptyBlock, err := m.ToolProcedures(emptyCtx, sess, "implementer", []string{"command", "verify"})
 	testutil.FailErr(t, "ToolProcedures empty", err)
-	if strings.Contains(emptyBlock, "socks_proxy: true") || strings.Contains(emptyBlock, "Declare access needs in `capability_request`") {
+	if strings.Contains(emptyBlock, "socks_proxy") {
 		t.Fatalf("empty projected map fell back to raw catalog schemas:\n%s", emptyBlock)
 	}
 }

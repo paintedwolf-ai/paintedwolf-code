@@ -93,7 +93,7 @@ func runOARNextStepsMatrix(
 			continue
 		}
 		label := fmt.Sprintf("oar/%s:%s (%s)", out.RuleID, out.EventLabel, out.Cell.Label)
-		viols, _ := checkClaimsOnce(s, label, out.ActionCopy, out.Cell.Auth, out.Cell.Mode, out.Cell.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
+		viols := checkClaimsOnce(s, label, out.ActionCopy, out.Cell.Auth, out.Cell.Mode, out.Cell.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
 		sum.Violations = append(sum.Violations, viols...)
 	}
 	return nil
@@ -113,11 +113,11 @@ func EvaluateDeliveredRefusalForTest(
 ) []string {
 	var out []string
 	if strings.TrimSpace(obs.Historical) != "" {
-		viols, _ := checkClaimsOnce(s, label+"#occurrence", obs.Historical, auth, mode, posture, toolvocabtest.SubjectHistoricalObservation(api.MessageOriginHost), nil, nil, resolveNamed, false)
+		viols := checkClaimsOnce(s, label+"#occurrence", obs.Historical, auth, mode, posture, toolvocabtest.SubjectHistoricalObservation(api.MessageOriginHost), nil, nil, resolveNamed, false)
 		out = append(out, viols...)
 	}
 	if strings.TrimSpace(obs.HostActions) != "" {
-		viols, _ := checkClaimsOnce(s, label+"#actions", obs.HostActions, auth, mode, posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, false)
+		viols := checkClaimsOnce(s, label+"#actions", obs.HostActions, auth, mode, posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, false)
 		out = append(out, viols...)
 	}
 	return out

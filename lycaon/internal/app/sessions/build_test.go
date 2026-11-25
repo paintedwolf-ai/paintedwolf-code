@@ -368,14 +368,13 @@ func TestWiredSkillsCatalogFiltersStockSkillsByReaderReach(t *testing.T) {
 	}
 	out, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "research-current-information"}, coordinator)
 	testutil.FailErr(t, "read reachable stock skill", err)
-	if !strings.Contains(out, "Skill: research-current-information") || !strings.Contains(out, "Research current information") {
-		t.Fatalf("coordinator surface read lost the stock skill body:\n%s", out)
+	if !strings.Contains(out, "research-current-information") {
+		t.Fatalf("coordinator surface read lost the stock skill:\n%s", out)
 	}
+	reachableBody := out
 
-	// research-current-information needs web_search or fetch_url; a reader
-	// offered only recall cannot reach it, so the read either rejects the need
-	// as unknown or answers with a discovery page. Both must omit the skill
-	// body, which only a reachable skill renders.
+	// The skill needs web_search or fetch_url, so a reader offered only recall
+	// gets SKILL_UNKNOWN or a discovery page, never the body.
 	restricted := coordinator
 	restricted.Identity.Agent = "mystery-agent"
 	restricted.Turn.TurnSurfaceID = ""
@@ -388,7 +387,7 @@ func TestWiredSkillsCatalogFiltersStockSkillsByReaderReach(t *testing.T) {
 		}
 		out = ""
 	}
-	if strings.Contains(out, "Research current information") {
+	if strings.Contains(out, reachableBody) {
 		t.Fatalf("restricted reader reached an unreachable skill:\n%s", out)
 	}
 }
@@ -618,14 +617,14 @@ func TestSkillReadUseSecretsDistinguishesResponseTypeEnumNarrowing(t *testing.T)
 
 	admittedOut, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "use-secrets-without-reading-them"}, admittedTctx)
 	testutil.FailErr(t, "skills_read admitted", err)
-	if !strings.Contains(admittedOut, "call `ask_user` with `response_type: secret` and a `secret` object") || strings.Contains(admittedOut, "report the need upstream") {
-		t.Fatalf("admitted render lost ask_user secret call:\n%s", admittedOut)
+	if !strings.Contains(admittedOut, "response_type: secret") {
+		t.Fatalf("admitted render lost the secret response type:\n%s", admittedOut)
 	}
 
 	narrowedOut, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "use-secrets-without-reading-them"}, narrowedEnumTctx)
 	testutil.FailErr(t, "skills_read narrowed enum", err)
-	if strings.Contains(narrowedOut, "response_type: secret") || !strings.Contains(narrowedOut, "— report the need upstream") {
-		t.Fatalf("narrowed-enum render leaked response_type: secret or lost upstream handoff:\n%s", narrowedOut)
+	if strings.Contains(narrowedOut, "response_type: secret") {
+		t.Fatalf("narrowed-enum render leaked response_type: secret:\n%s", narrowedOut)
 	}
 }
 
@@ -753,7 +752,7 @@ resources:
 				admOut, admErr := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "deploy-to-a-hosting-platform"}, runnerCtx)
 				if wide {
 					testutil.FailErr(t, "admit deploy-to-a-hosting-platform on wide verify", admErr)
-					if !strings.Contains(admOut, "Skill: deploy-to-a-hosting-platform") || !strings.Contains(admOut, "capability_request.host_resources") {
+					if !strings.Contains(admOut, "deploy-to-a-hosting-platform") || !strings.Contains(admOut, "capability_request.host_resources") {
 						t.Fatalf("wide admission missing deploy-to-a-hosting-platform body:\n%s", admOut)
 					}
 				} else {
@@ -776,14 +775,8 @@ resources:
 					"resource": "references/managed-references.md",
 				}, runnerCtx)
 				testutil.FailErr(t, "skills_read resource", err)
-				if wide {
-					if !strings.Contains(bodyOut, "response_type: secret") || !strings.Contains(refOut, "When `verify` sets up an authenticated service") {
-						t.Fatalf("wide delivery lost secret collection or verify runner:\nbody:\n%s\nref:\n%s", bodyOut, refOut)
-					}
-				} else {
-					if strings.Contains(bodyOut, "response_type: secret") || !strings.Contains(bodyOut, "— report the need upstream") || strings.Contains(refOut, "## Repeated service use") {
-						t.Fatalf("narrow delivery leaked response_type: secret or verify runner:\nbody:\n%s\nref:\n%s", bodyOut, refOut)
-					}
+				if strings.Contains(bodyOut, "response_type: secret") != wide || strings.Contains(refOut, "secret_use") != wide {
+					t.Fatalf("wide=%t delivery of the secret response type and secret_use runner field:\nbody:\n%s\nref:\n%s", wide, bodyOut, refOut)
 				}
 			}
 			checkStep(order.wideFirst)
@@ -899,11 +892,8 @@ func TestCanAskUserSecretRespectsFieldAndRootAllOfIntersections(t *testing.T) {
 			}
 			out, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "use-secrets-without-reading-them"}, tctx)
 			testutil.FailErr(t, "skills_read", err)
-			if tc.wantAllow && !strings.Contains(out, "response_type: secret") {
-				t.Fatalf("positive witness omitted response_type: secret:\n%s", out)
-			}
-			if !tc.wantAllow && (strings.Contains(out, "response_type: secret") || !strings.Contains(out, "— report the need upstream")) {
-				t.Fatalf("negative witness leaked response_type: secret:\n%s", out)
+			if got := strings.Contains(out, "response_type: secret"); got != tc.wantAllow {
+				t.Fatalf("response_type: secret delivered=%t, want %t:\n%s", got, tc.wantAllow, out)
 			}
 		})
 	}

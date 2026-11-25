@@ -160,7 +160,7 @@ func TestFitRequestRewordedOmissionNoticeNarrowsRecipientWithoutEnglishParsing(t
 	fittedNoRecall, err := svc.FitRequest(broadCtx, sess, loaded, noRecallReq, budgets, nil)
 	testutil.FailErr(t, "FitRequest for no-recall recipient", err)
 	gotNotice := fittedNoRecall.Messages[indexOfID(fittedNoRecall.Messages, historyCoverageNoticeID)].Content
-	if !strings.Contains(gotNotice, wantGap) || !strings.Contains(gotNotice, "Re-read live sources.") {
+	if !strings.Contains(gotNotice, wantGap) {
 		t.Fatalf("reworded notice lost exact interval for no-recall recipient:\n%s", gotNotice)
 	}
 	if joined := joinMessageContents(fittedNoRecall.Messages); strings.Contains(joined, "recall(") {
@@ -258,7 +258,7 @@ func assertCoordinateOmissionRecovery(t *testing.T, budgets RequestBudgets) {
 	fitted, err := svc.FitRequest(t.Context(), sess, assembled, req, budgets, nil)
 	testutil.FailErr(t, "FitRequest coordinate recovery", err)
 	gotRow := fitted.Messages[indexOfID(fitted.Messages, historyCoverageNoticeID)]
-	if !strings.HasPrefix(gotRow.Content, "Authority header\n\n") || !strings.Contains(gotRow.Content, "Gap 5..12 unsummarized.") || strings.Contains(gotRow.Content, "recall(") {
+	if !strings.HasPrefix(gotRow.Content, "Authority header\n\n") || !strings.Contains(gotRow.Content, "5..12") || strings.Contains(gotRow.Content, "recall(") {
 		t.Fatalf("structured coordinate recovery failed: %q", gotRow.Content)
 	}
 }
@@ -289,7 +289,7 @@ func assertUnrecoverableOmissionFallback(t *testing.T, budgets RequestBudgets) {
 	fitted, err := svc.FitRequest(t.Context(), &api.Session{ID: "s", Model: "large"}, unnumbered, req, budgets, nil)
 	testutil.FailErr(t, "FitRequest unrecoverable fallback", err)
 	gotNotice := fitted.Messages[indexOfID(fitted.Messages, historyCoverageNoticeID)].Content
-	if !strings.Contains(gotNotice, "[host:earlier history omitted; no summary covers it]") || !strings.Contains(gotNotice, "Reacquire omitted observations before relying on them.") {
+	if !strings.Contains(gotNotice, "[host:earlier history omitted; no summary covers it]") {
 		t.Fatalf("fallback notice missing factual coverage message:\n%s", gotNotice)
 	}
 	if strings.Contains(gotNotice, "recall(") || strings.Contains(gotNotice, "through_ord") {

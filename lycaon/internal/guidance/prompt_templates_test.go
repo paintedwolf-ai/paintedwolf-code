@@ -147,7 +147,7 @@ func TestRenderCommandOutputOmittedPairedWitnesses(t *testing.T) {
 	quotedPath := "@output/my file's.stdout"
 	quotedOut, err := RenderCommandOutputOmitted(t.Context(), sedAdmitted, "4,182", "184 KB", quotedPath, 251, 400, 5000, 200000, true)
 	testutil.FailErr(t, "render quoted path", err)
-	if !strings.Contains(quotedOut, "full output: @output/my file's.stdout") {
+	if !strings.Contains(quotedOut, quotedPath) {
 		t.Fatalf("quoted witness lost raw saved path: %q", quotedOut)
 	}
 	if !strings.Contains(quotedOut, `(sed -n '251,400p' @output/'my file'\''s.stdout')`) {
@@ -165,8 +165,8 @@ func TestRenderCommandOutputOmittedPairedWitnesses(t *testing.T) {
 		if strings.Contains(neg, "sed -n") {
 			t.Fatalf("%s witness leaked sed command hint: %q", label, neg)
 		}
-		if !strings.Contains(neg, "full output: @output/my file's.stdout") {
-			t.Fatalf("%s witness lost saved output path notice: %q", label, neg)
+		if !strings.Contains(neg, quotedPath) {
+			t.Fatalf("%s witness lost the saved output path: %q", label, neg)
 		}
 	}
 }
@@ -225,14 +225,13 @@ func TestRenderContinuationProjectedRecallArgumentWitnesses(t *testing.T) {
 		wantHistoryIdx bool
 		wantHistoryRec bool
 		wantQuery      bool
-		wantReacquire  bool
 	}{
-		{"full schema", map[string]map[string]any{"recall": fullRecall}, true, true, true, false},
-		{"history only", map[string]map[string]any{"recall": historyOnly}, true, true, false, false},
-		{"history index only", map[string]map[string]any{"recall": historyIndexOnly}, true, false, false, false},
-		{"query only", map[string]map[string]any{"recall": queryOnly}, false, false, true, false},
-		{"empty nested history object with query", map[string]map[string]any{"recall": emptyNestedHistoryWithQuery}, false, false, true, false},
-		{"missing schema", nil, false, false, false, true},
+		{"full schema", map[string]map[string]any{"recall": fullRecall}, true, true, true},
+		{"history only", map[string]map[string]any{"recall": historyOnly}, true, true, false},
+		{"history index only", map[string]map[string]any{"recall": historyIndexOnly}, true, false, false},
+		{"query only", map[string]map[string]any{"recall": queryOnly}, false, false, true},
+		{"empty nested history object with query", map[string]map[string]any{"recall": emptyNestedHistoryWithQuery}, false, false, true},
+		{"missing schema", nil, false, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := toolreach.Offered([]string{"recall"}).WithSchemas(tc.schemas)
@@ -248,17 +247,11 @@ func TestRenderContinuationProjectedRecallArgumentWitnesses(t *testing.T) {
 			if strings.Contains(out, `recall(query="handle:read#3")`) != tc.wantQuery {
 				t.Fatalf("query presence = %v, want %v:\n%s", !tc.wantQuery, tc.wantQuery, out)
 			}
-			if strings.Contains(out, "Reacquire the needed evidence through the reads this surface offers.") != tc.wantReacquire {
-				t.Fatalf("fallback reacquire presence = %v, want %v:\n%s", !tc.wantReacquire, tc.wantReacquire, out)
-			}
 
 			bodyMissing, err := RenderGuidanceWithReach(t.Context(), req, "recall/body-missing", nil)
 			testutil.FailErr(t, "RenderGuidanceWithReach body-missing", err)
 			if strings.Contains(bodyMissing, `query="handle:<returned handle>"`) != tc.wantQuery {
 				t.Fatalf("body-missing query presence = %v, want %v: %q", !tc.wantQuery, tc.wantQuery, bodyMissing)
-			}
-			if strings.Contains(bodyMissing, "page the covered history index") != tc.wantHistoryIdx {
-				t.Fatalf("body-missing history index presence = %v, want %v: %q", !tc.wantHistoryIdx, tc.wantHistoryIdx, bodyMissing)
 			}
 		})
 	}

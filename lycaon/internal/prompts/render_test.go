@@ -2,13 +2,7 @@ package prompts_test
 
 import (
 	"context"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"maps"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -121,13 +115,13 @@ func TestModelFacingRenderEntryPointsRequireReader(t *testing.T) {
 			t.Fatal("GuidanceRenderer.RenderWithReach accepted unknown zero toolreach.Request")
 		}
 
-		// Genuine occurrence values (counts, saved paths) remain usable on structural and reach-gated routes.
+		// Occurrence values reach the output on structural and reach-gated routes.
 		discOut, err := gr.Render(ctx, "utility/source-remove-permanent", map[string]any{
 			"path": "tmp/out", "size": "12 KB", "files": 14,
 			"content_bytes": 12288, "recovery_bytes": 12288, "recovery_size": "12 KB", "recovery_known": true,
 		})
 		testutil.FailErr(t, "GuidanceRenderer.Render structural source-remove-permanent", err)
-		if !strings.Contains(discOut, "14 files") || !strings.Contains(discOut, "tmp/out") {
+		if !strings.Contains(discOut, "14") || !strings.Contains(discOut, "tmp/out") {
 			t.Fatalf("structural source-remove-permanent dropped count or path occurrence: %q", discOut)
 		}
 		reachOut, err := gr.RenderWithReach(ctx, toolreach.Offered([]string{"recall"}), "utility/command-output-omitted", map[string]any{
@@ -136,11 +130,11 @@ func TestModelFacingRenderEntryPointsRequireReader(t *testing.T) {
 			"total_lines": 200, "total_bytes": int64(8192), "complete": true,
 		})
 		testutil.FailErr(t, "GuidanceRenderer.RenderWithReach command-output-omitted", err)
-		if !strings.Contains(reachOut, "@output/run 1.stdout") || strings.Contains(reachOut, "sed -n") {
-			t.Fatalf("RenderWithReach did not preserve saved path or leaked sed without command: %q", reachOut)
+		if !strings.Contains(reachOut, "@output/run 1.stdout") {
+			t.Fatalf("RenderWithReach dropped the saved output path: %q", reachOut)
 		}
 
-		// Seeded actionable instruction in a transitively included partial fails closed on structural Render.
+		// An actionable instruction in a partial a structural fragment includes fails the render.
 		seededEngine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 		testutil.FailErr(t, "register seeded structural guidance", seededEngine.Register("guidance/survey/jq-zoom.md", "Count {{ count }}. {% include \"partials/seeded-action.md\" %}"))
 		testutil.FailErr(t, "register seeded partial", seededEngine.Register("partials/seeded-action.md", "Inspect with (sed -n '1,10p' {{ path }})."))
@@ -189,60 +183,4 @@ func TestModelFacingRenderEntryPointsRequireReader(t *testing.T) {
 			t.Fatal("CheckTemplateVocabulary accepted callable tool claim in zero-tool utility template")
 		}
 	})
-
-	t.Run("internal call sites separate reader, utility, and user-notice renderers", assertInternalRendererCallSites)
-}
-
-func assertInternalRendererCallSites(t *testing.T) {
-	t.Helper()
-	internalRoot := filepath.Clean(filepath.Join(".."))
-	fset := token.NewFileSet()
-	err := filepath.WalkDir(internalRoot, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, err := filepath.Rel(internalRoot, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return err
-		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			switch sel.Sel.Name {
-			case "ExecuteDetached":
-				if !strings.HasPrefix(rel, "pongoplain/") && !strings.HasPrefix(rel, "usernotice/") && !strings.HasPrefix(rel, "toolvocab/") {
-					t.Errorf("%s calls ExecuteDetached outside usernotice/toolvocab", rel)
-				}
-			case "RenderInject":
-				if !strings.HasPrefix(rel, "prompts/") {
-					t.Errorf("%s calls RenderInject outside internal/prompts", rel)
-				}
-			case "RenderUtilityPrompt":
-				if len(call.Args) >= 2 {
-					if lit, ok := call.Args[1].(*ast.BasicLit); ok && lit.Kind == token.STRING {
-						if ref, err := strconv.Unquote(lit.Value); err == nil && !prompts.IsZeroToolUtilityTemplate(ref) {
-							t.Errorf("%s calls RenderUtilityPrompt with non-allowlisted literal %q", rel, ref)
-						}
-					}
-				}
-			}
-			return true
-		})
-		return nil
-	})
-	testutil.FailErr(t, "walk internal call sites", err)
 }

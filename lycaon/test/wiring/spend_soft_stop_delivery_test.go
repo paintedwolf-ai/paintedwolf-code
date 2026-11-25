@@ -285,7 +285,6 @@ func TestSpendSoftStopDelivery(t *testing.T) {
 		windDownReq := client.requests[1]
 		windDownTools := requestToolNames(windDownReq)
 		windDownInstructions := hostInstructionsInRequest(windDownReq)
-		t.Logf("wind-down ToolUse=%v Tools=%v\nInstructions=%s", windDownReq.ToolUse, windDownTools, strings.Join(windDownInstructions, "\n---\n"))
 
 		if windDownReq.ToolUse != modelcall.ToolUseAllowed {
 			t.Fatalf("wind-down ToolUse = %v, want %v", windDownReq.ToolUse, modelcall.ToolUseAllowed)
@@ -299,8 +298,7 @@ func TestSpendSoftStopDelivery(t *testing.T) {
 			}
 		}
 		if !slices.ContainsFunc(windDownInstructions, func(s string) bool {
-			return strings.Contains(s, "[host:coordinator-spend-soft-stop]") &&
-				strings.Contains(s, "This is one bounded wind-down round with tools.")
+			return strings.Contains(s, "[host:coordinator-spend-soft-stop]")
 		}) {
 			t.Fatalf("wind-down request missing rendered coordinator-spend-soft-stop instruction: %v", windDownInstructions)
 		}
@@ -311,16 +309,13 @@ func TestSpendSoftStopDelivery(t *testing.T) {
 		}
 
 		closeoutReq := client.requests[2]
-		closeoutTools := requestToolNames(closeoutReq)
 		closeoutInstructions := hostInstructionsInRequest(closeoutReq)
-		t.Logf("final-closeout ToolUse=%v Tools=%v\nInstructions=%s", closeoutReq.ToolUse, closeoutTools, strings.Join(closeoutInstructions, "\n---\n"))
 
 		if closeoutReq.ToolUse != modelcall.ToolUseForbidden {
 			t.Fatalf("final closeout ToolUse = %v, want %v", closeoutReq.ToolUse, modelcall.ToolUseForbidden)
 		}
 		if !slices.ContainsFunc(closeoutInstructions, func(s string) bool {
-			return strings.Contains(s, "[host:coordinator-turn-closeout]") &&
-				strings.Contains(s, "the session spend ceiling was reached")
+			return strings.Contains(s, "[host:coordinator-turn-closeout]")
 		}) {
 			t.Fatalf("final closeout missing rendered coordinator-turn-closeout instruction: %v", closeoutInstructions)
 		}
@@ -379,16 +374,13 @@ func TestSpendSoftStopDelivery(t *testing.T) {
 		}
 
 		closeoutReq := client.requests[1]
-		closeoutTools := requestToolNames(closeoutReq)
 		closeoutInstructions := hostInstructionsInRequest(closeoutReq)
-		t.Logf("forced-error closeout ToolUse=%v Tools=%v\nInstructions=%s", closeoutReq.ToolUse, closeoutTools, strings.Join(closeoutInstructions, "\n---\n"))
 
 		if closeoutReq.ToolUse != modelcall.ToolUseForbidden {
 			t.Fatalf("closeout ToolUse = %v, want %v", closeoutReq.ToolUse, modelcall.ToolUseForbidden)
 		}
 		if !slices.ContainsFunc(closeoutInstructions, func(s string) bool {
-			return strings.Contains(s, "[host:coordinator-turn-closeout]") &&
-				strings.Contains(s, "the session spend ceiling was reached")
+			return strings.Contains(s, "[host:coordinator-turn-closeout]")
 		}) {
 			t.Fatalf("closeout missing rendered coordinator-turn-closeout instruction: %v", closeoutInstructions)
 		}

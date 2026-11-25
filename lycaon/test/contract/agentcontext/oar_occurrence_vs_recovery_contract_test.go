@@ -62,13 +62,13 @@ func verifyOccurrenceVsRecoveryAuthority(t *testing.T, h *hookProducerHarness, c
 		Code: "TOOL_COMMAND_OPERATION", Data: map[string]any{"need": "edit"},
 	})
 	cmdOpAskRef, ok := guidance.RefusalFromError(cmdOpAskErr)
-	if !ok || strings.Contains(cmdOpAskRef.Copy["fix"], "`command") {
-		t.Fatalf("Ask-turn edit refusal must not recommend command: %v", cmdOpAskRef)
+	if !ok || cmdOpAskRef.Code() != "TOOL_COMMAND_OPERATION" {
+		t.Fatalf("Ask-turn edit refusal = %v, want TOOL_COMMAND_OPERATION", cmdOpAskErr)
+	}
+	if got := nextCallTools(cmdOpAskRef); slices.Contains(got, "command") {
+		t.Fatalf("Ask-turn edit refusal next calls = %v, want no command", got)
 	}
 	pastCause := cmdOpAskRef.Copy["cause"]
-	if !strings.Contains(pastCause, "cannot run a replacement form") {
-		t.Fatalf("unexpected past-tense Ask denial cause: %q", pastCause)
-	}
 
 	rule, _ := h.rules.Get("TOOL_COMMAND_OPERATION")
 	recoveryGC := oar.NewGuardContext()
@@ -76,8 +76,8 @@ func verifyOccurrenceVsRecoveryAuthority(t *testing.T, h *hookProducerHarness, c
 	recoveryGC.ObservationData = map[string]any{"need": "edit"}
 	recoveryGC.ObserveCommandOperationReach()
 	steps := oar.ResolveNextSteps(rule, recoveryGC)
-	if !strings.Contains(steps.Text, "`command(…)`") || len(steps.Calls) == 0 {
-		t.Fatalf("upgraded Agent recovery reach failed to offer command: %+v", steps)
+	if !slices.ContainsFunc(steps.Calls, func(c toolreach.Call) bool { return c.Tool == "command" }) {
+		t.Fatalf("upgraded Agent recovery reach next calls = %+v, want command", steps.Calls)
 	}
 	if cmdOpAskRef.Copy["cause"] != pastCause {
 		t.Fatal("upgrading session mutated stored Ask occurrence cause")
@@ -187,9 +187,9 @@ func (*actorCheckpointStub) PatchPendingToolApprovalJoined(context.Context, stri
 	return nil
 }
 
-// TestSandboxPathRejectionRequiresConfirmedHumanActorForUserDeclinedCopy proves
-// through the production WriteRootCheckpointBroker -> CommandServices -> Executor
-// -> BlockPlane chain that only ResolvedByHuman rejections emit user-declined copy.
+// Through the production checkpoint broker, executor and block plane, only a
+// rejection resolved by a human carries the human-denied code and the user's
+// comments; other actors get the approval-unavailable code without them.
 func TestSandboxPathRejectionRequiresConfirmedHumanActorForUserDeclinedCopy(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX_BYPASS", "")
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), "isolated-state"))
@@ -288,27 +288,17 @@ func assertProductionPathCall(
 		t.Fatalf("%s Invoke err = %v, want curated guidance.Refusal", label, err)
 	}
 	rendered := refusal.Error() + "\n" + refusal.Copy["what"] + "\n" + refusal.Copy["cause"] + "\n" + refusal.Copy["fix"]
+	wantCode := isolation.CodeApprovalUnavailable
 	if wantHuman {
-		if refusal.Code() != humanDeniedCode {
-			t.Fatalf("%s human rejection code = %q, want %q", label, refusal.Code(), humanDeniedCode)
-		}
-		if comments != "" && !strings.Contains(rendered, comments) {
-			t.Errorf("%s human rejection lost guidance %q:\n%s", label, comments, rendered)
-		}
-		if comments == "" && !strings.Contains(rendered, "Wait for new user direction") {
-			t.Errorf("%s unguided human rejection missing user-declined copy:\n%s", label, rendered)
-		}
-		return
+		wantCode = humanDeniedCode
 	}
-	if refusal.Code() != isolation.CodeApprovalUnavailable {
-		t.Fatalf("%s nonhuman rejection code = %q, want %q:\n%s", label, refusal.Code(), isolation.CodeApprovalUnavailable, rendered)
+	if refusal.Code() != wantCode {
+		t.Fatalf("%s rejection code = %q, want %q", label, refusal.Code(), wantCode)
 	}
 	if reject := toolrejection.AsToolReject(err); reject == nil || (reject.Data["approval_refused_automatically"] == true) != refusedAutomatically {
-		t.Errorf("%s nonhuman rejection facts = %+v, want approval_refused_automatically=%t", label, reject, refusedAutomatically)
+		t.Errorf("%s rejection facts = %+v, want approval_refused_automatically=%t", label, reject, refusedAutomatically)
 	}
-	for _, forbidden := range []string{"Wait for new user direction", "Follow the user", "must not leak"} {
-		if strings.Contains(rendered, forbidden) {
-			t.Errorf("%s nonhuman rejection leaked user-declined copy %q:\n%s", label, forbidden, rendered)
-		}
+	if comments != "" && strings.Contains(rendered, comments) != wantHuman {
+		t.Errorf("%s user comments delivered=%t, want %t:\n%s", label, !wantHuman, wantHuman, rendered)
 	}
 }

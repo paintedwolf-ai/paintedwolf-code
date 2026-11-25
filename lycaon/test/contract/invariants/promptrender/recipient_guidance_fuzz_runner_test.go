@@ -94,7 +94,9 @@ var loadFuzzEnvOnce = sync.OnceValues(func() (*fuzzWorkerEnv, error) {
 	tools.RegisterRecoveryFacts(ctx, probeGC)
 	for _, hf := range decl.HostFacts {
 		factTypes[hf.Name] = hf.Type
-		_ = probeGC.Ensure(hf.Name)
+		if err := probeGC.Ensure(hf.Name); err != nil {
+			return nil, err
+		}
 	}
 	capFacts := map[string]bool{
 		"command_operation_reachable": true,
@@ -114,7 +116,10 @@ var loadFuzzEnvOnce = sync.OnceValues(func() (*fuzzWorkerEnv, error) {
 		st := *baseStock
 		st.Catalog = ov.Catalog
 		eng := st.Engine()
-		skList, _ := extpacks.LoadEffectiveSkills(ov.Catalog)
+		skList, diags := extpacks.LoadEffectiveSkills(ov.Catalog)
+		if extpacks.HasErrorDiagnostic(diags) {
+			return nil, fmt.Errorf("load skills for overlay %s: %+v", ov.ID, diags)
+		}
 		var eligibleSkills []skills.Skill
 		for _, sk := range skList {
 			if !sk.Project && strings.TrimSpace(sk.Metadata["authoring_reference"]) != "true" {
@@ -235,9 +240,8 @@ func mutateWorkerSeed(d *hoststate.SeedDomains, s hoststate.WorkerSeed, axisSel,
 	return out
 }
 
-// executeFuzzRecipientCase runs one deterministic two-turn recipient case on env
-// (with optional overrideStock for fault-sensitivity controls).
-func executeFuzzRecipientCase(ctx context.Context, env *fuzzWorkerEnv, data []byte, wsDir string, overrideBundle *fuzzOverlayBundle) (FuzzCaseReport, error) {
+// executeFuzzRecipientCase runs one deterministic two-turn recipient case.
+func executeFuzzRecipientCase(ctx context.Context, env *fuzzWorkerEnv, data []byte, wsDir string) (FuzzCaseReport, error) {
 	capped := data
 	if len(capped) > hoststate.SeedByteLength {
 		capped = capped[:hoststate.SeedByteLength]
@@ -277,9 +281,6 @@ func executeFuzzRecipientCase(ctx context.Context, env *fuzzWorkerEnv, data []by
 		rep.TurnACoords = stA.ID
 		rep.TurnBCoords = stB.ID
 		bundle := env.overlays[seedA.OverlayIndex]
-		if overrideBundle != nil {
-			bundle = *overrideBundle
-		}
 		rep.CatalogRevision = bundle.overlay.Catalog.Revision
 		if stA.Excluded || stB.Excluded {
 			reason := stA.ExcludedReason
@@ -321,9 +322,6 @@ func executeFuzzRecipientCase(ctx context.Context, env *fuzzWorkerEnv, data []by
 	rep.TurnACoords = stA.ID
 	rep.TurnBCoords = stB.ID
 	bundle := env.overlays[seedA.OverlayIndex]
-	if overrideBundle != nil {
-		bundle = *overrideBundle
-	}
 	rep.CatalogRevision = bundle.overlay.Catalog.Revision
 	if stA.Excluded || stB.Excluded {
 		reason := stA.ExcludedReason
@@ -365,8 +363,7 @@ func runCoordinatorTwoTurnProperties(
 	case 0:
 		occ := []jobOccKind{occRunning, occExitedOnly, occNoJob}[itemSel%3]
 		rep.SelectedContribution = "coordinator_assembly+command_jobs:" + string(occ)
-		fixedNow := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
-		jobs := fixedJobSnapshots(occ, fixedNow)
+		jobs := fixedJobSnapshots(occ, jobClock)
 
 		warmEng := newMutableCoordFuzzEngine(bundle, stA, authA, jobs)
 		if _, err := assembleCoordTurn(ctx, warmEng, stA, wsDir); err != nil {
@@ -408,7 +405,7 @@ func runCoordinatorTwoTurnProperties(
 				return rep, fmt.Errorf("claim violation on %s: %v", stB.ID, viols[0])
 			}
 		}
-		if err := verifyIndependentJobWaitExpectedActions(bundle.stock.Names, hostBlocksB, jobs, evalAuthB); err != nil {
+		if err := verifyJobGuidanceActions(bundle.stock.Names, hostBlocksB, jobs, evalAuthB); err != nil {
 			rep.FailedProperty = "turn_b_job_occurrence_obligation"
 			return rep, fmt.Errorf("state=%s instruction=command_output: %w", stB.ID, err)
 		}
@@ -461,8 +458,7 @@ func runWorkerTwoTurnProperties(
 	case 0:
 		occ := []jobOccKind{occRunning, occExitedOnly, occNoJob}[itemSel%3]
 		rep.SelectedContribution = "worker_persona+command_jobs:" + stB.AgentID + ":" + string(occ)
-		fixedNow := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
-		jobs := fixedJobSnapshots(occ, fixedNow)
+		jobs := fixedJobSnapshots(occ, jobClock)
 
 		warmCache := hoststate.NewRenderCache()
 		_, err := renderWorkerPromptWithCache(bundle, warmCache, stA, authA)
@@ -489,12 +485,12 @@ func runWorkerTwoTurnProperties(
 			rep.FailedProperty = "worker_turn_b_claim_authority"
 			return rep, fmt.Errorf("worker claim violation on %s: %v", stB.ID, viols[0])
 		}
-		jobBlock := inject.RenderCommandJobsBlock(ctx, bundle.injRender, authB.Reader, authB.Schemas["wait"], "sess-fuzz-w", jobs, nil, fixedNow, "worker:"+stB.AgentID)
+		jobBlock := inject.RenderCommandJobsBlock(ctx, bundle.injRender, authB.Reader, authB.Schemas["wait"], "sess-fuzz-w", jobs, nil, jobClock, "worker:"+stB.AgentID)
 		var blocks []string
 		if jobBlock != "" {
 			blocks = []string{jobBlock}
 		}
-		if err := verifyIndependentJobWaitExpectedActions(bundle.stock.Names, blocks, jobs, authB); err != nil {
+		if err := verifyJobGuidanceActions(bundle.stock.Names, blocks, jobs, authB); err != nil {
 			rep.FailedProperty = "worker_job_occurrence_obligation"
 			return rep, err
 		}
@@ -728,10 +724,10 @@ func renderWorkerPromptWithCache(bundle fuzzOverlayBundle, cache *hoststate.Rend
 	text, _, err := cache.RenderOrReuse(key, func() (string, error) {
 		return prompts.RenderPersona(context.Background(), bundle.engine, st.AgentID, auth.Reader, occ)
 	})
-	if err == nil {
-		_ = cache.CheckAuthority(key, auth.Digest, func() error { return nil })
+	if err != nil {
+		return "", err
 	}
-	return text, err
+	return text, cache.CheckAuthority(key, auth.Digest, func() error { return nil })
 }
 
 func runSkillTwoTurnFuzzCheck(
@@ -773,7 +769,9 @@ func runSkillTwoTurnFuzzCheck(
 		if err != nil {
 			return "", false, err
 		}
-		_ = cache.CheckAuthority(key, auth.Digest, func() error { return nil })
+		if err := cache.CheckAuthority(key, auth.Digest, func() error { return nil }); err != nil {
+			return "", false, err
+		}
 		if viols := promptrender.EvaluateClaimsForTest(bundle.stock, "fuzz/skill/"+sk.Name+" ("+turnID+")", rendered, auth, mode, post, toolvocabtest.SubjectSelfNow(), false); len(viols) > 0 {
 			return "", true, fmt.Errorf("skill %s claim violation on %s: %v", sk.Name, turnID, viols[0])
 		}
@@ -805,6 +803,10 @@ func runSkillTwoTurnFuzzCheck(
 	env.confirmedRuns.Add(1)
 	rep.PropertyExecuted = true
 	return rep, nil
+}
+
+func callsSliceEqual(a, b []toolreach.Call) bool {
+	return slices.EqualFunc(a, b, func(x, y toolreach.Call) bool { return reflect.DeepEqual(x, y) })
 }
 
 type oarFuzzTurnResult struct {
