@@ -29,10 +29,12 @@ func (t Truth) String() string {
 	return "?"
 }
 
-// Vector is one observed evaluation of a guard; Case names what produced it.
+// Vector is one observed evaluation of a guard. Only vectors of one Group
+// pair as a witness; Case names what produced the vector.
 type Vector struct {
 	Atoms    []Truth
 	Decision bool
+	Group    string
 	Case     string
 }
 
@@ -183,7 +185,7 @@ func valueOf(g Guard, v Vector, input string) Truth {
 func findWitness(g Guard, in string, inputs []string) (Witness, bool) {
 	for i, a := range g.Vectors {
 		for _, b := range g.Vectors[i+1:] {
-			if a.Decision == b.Decision {
+			if a.Decision == b.Decision || a.Group != b.Group {
 				continue
 			}
 			va, vb := valueOf(g, a, in), valueOf(g, b, in)

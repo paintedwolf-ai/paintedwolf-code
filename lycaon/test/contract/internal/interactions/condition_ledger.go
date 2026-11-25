@@ -147,30 +147,22 @@ func distinct(atoms []string) []string {
 	return out
 }
 
-// analyzeSite runs the pair search for each recipient that evaluated obs.
+// analyzeSite runs the pair search for each recipient that evaluated obs;
+// vectors pair only within one enclosing include path.
 func (l *ConditionLedger) analyzeSite(site ConditionSite, obs hoststate.ObservedCondition, inputs []string, constraints []AtomConstraint) error {
-	type group struct {
-		guard        independence.Guard
-		unrecomposed int
-	}
-	byRecipient := map[string]map[string]*group{}
+	guards := map[string]*independence.Guard{}
+	unrecomposed := map[string]int{}
 	for _, v := range obs.Vectors {
-		path := strings.Join(v.Path, ">")
-		groups := byRecipient[v.Partition]
-		if groups == nil {
-			groups = map[string]*group{}
-			byRecipient[v.Partition] = groups
-		}
-		g := groups[path]
+		g := guards[v.Partition]
 		if g == nil {
-			g = &group{guard: independence.Guard{Site: path, Source: obs.Source, Atoms: obs.Atoms}}
-			groups[path] = g
+			g = &independence.Guard{Site: site.ID, Source: obs.Source, Atoms: obs.Atoms}
+			guards[v.Partition] = g
 		}
 		if !v.Recomposes {
-			g.unrecomposed++
+			unrecomposed[v.Partition]++
 			continue
 		}
-		g.guard.Vectors = append(g.guard.Vectors, independence.Vector{Atoms: v.Atoms, Decision: v.Decision, Case: v.Case})
+		g.Vectors = append(g.Vectors, independence.Vector{Atoms: v.Atoms, Decision: v.Decision, Group: strings.Join(v.Path, ">"), Case: v.Case})
 	}
 	eval := func(_ string, truths []independence.Truth) (bool, error) {
 		values := make(map[string]bool, len(truths))
@@ -179,51 +171,35 @@ func (l *ConditionLedger) analyzeSite(site ConditionSite, obs hoststate.Observed
 		}
 		return obs.Decide(values), nil
 	}
-	for _, recipient := range sortedKeysOf(boolKeys(byRecipient)) {
-		groups := byRecipient[recipient]
-		cons := constraintsFor(constraints, recipient, inputs)
-		var guards []independence.Guard
-		unrecomposed := 0
-		for _, path := range sortedKeysOf(boolKeys(groups)) {
-			guards = append(guards, groups[path].guard)
-			unrecomposed += groups[path].unrecomposed
-		}
-		res, err := independence.Analyze(guards, eval, cons)
+	for _, recipient := range sortedKeysOf(boolKeys(guards)) {
+		res, err := independence.Analyze([]independence.Guard{*guards[recipient]}, eval, constraintsFor(constraints, recipient, inputs))
 		if err != nil {
 			return fmt.Errorf("%s on %s: %w", site.ID, recipient, err)
 		}
 		l.StaleConstraints = append(l.StaleConstraints, prefixed(site.ID+" on "+recipient+": ", res.Contradicted)...)
+		witnessed := map[string]independence.Witness{}
+		for _, w := range res.Witnesses[site.ID] {
+			witnessed[w.Input] = w
+		}
 		for _, in := range inputs {
 			l.Obligations++
-			if w, path, ok := firstWitness(res, guards, in); ok {
+			if w, ok := witnessed[in]; ok {
 				l.Witnesses = append(l.Witnesses, ConditionWitness{
-					Site: site.ID, Recipient: recipient, Path: path, Atom: in,
+					Site: site.ID, Recipient: recipient, Path: w.With.Group, Atom: in,
 					With: formatVector(obs.Atoms, w.With), WithCase: w.With.Case,
 					Then: formatVector(obs.Atoms, w.Then), ThenCase: w.Then.Case,
 				})
 				continue
 			}
-			var missing []string
-			excluded := ""
-			for _, g := range res.Gaps {
-				if g.Input == in {
-					missing = append(missing, g.Missing...)
-				}
-			}
-			for _, ex := range res.Exclusions {
-				if ex.Input == in && excluded == "" {
-					excluded = ex.Reason
-				}
-			}
-			if len(missing) == 0 && excluded != "" {
-				l.Exclusions = append(l.Exclusions, ConditionExclusion{Site: site.ID, Recipient: recipient, Atom: in, Constraint: excluded})
+			if i := slices.IndexFunc(res.Exclusions, func(ex independence.Exclusion) bool { return ex.Input == in }); i >= 0 {
+				l.Exclusions = append(l.Exclusions, ConditionExclusion{Site: site.ID, Recipient: recipient, Atom: in, Constraint: res.Exclusions[i].Reason})
 				continue
 			}
-			slices.Sort(missing)
-			l.Gaps = append(l.Gaps, ConditionGap{
-				Site: site.ID, SourceSpan: site.SourceSpan, Source: site.Source, Recipient: recipient, Atom: in,
-				Missing: slices.Compact(missing), Unrecomposed: unrecomposed,
-			})
+			gap := ConditionGap{Site: site.ID, SourceSpan: site.SourceSpan, Source: site.Source, Recipient: recipient, Atom: in, Unrecomposed: unrecomposed[recipient]}
+			if i := slices.IndexFunc(res.Gaps, func(g independence.Gap) bool { return g.Input == in }); i >= 0 {
+				gap.Missing = res.Gaps[i].Missing
+			}
+			l.Gaps = append(l.Gaps, gap)
 		}
 	}
 	return nil
@@ -243,17 +219,6 @@ func constraintsFor(all []AtomConstraint, recipient string, inputs []string) ind
 		}
 	}
 	return out
-}
-
-func firstWitness(res independence.Result, guards []independence.Guard, in string) (independence.Witness, string, bool) {
-	for _, g := range guards {
-		for _, w := range res.Witnesses[g.Site] {
-			if w.Input == in {
-				return w, g.Site, true
-			}
-		}
-	}
-	return independence.Witness{}, "", false
 }
 
 func formatVector(atoms []string, v independence.Vector) string {
