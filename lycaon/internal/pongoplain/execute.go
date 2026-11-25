@@ -25,6 +25,9 @@ type executionState struct {
 	includeDepth int
 	includes     int
 	onStep       func(step int)
+	// includePath lists the include tags enclosing the current node, kept
+	// only while a recorder observes conditions.
+	includePath []string
 }
 
 func (s *executionState) checkContext() {

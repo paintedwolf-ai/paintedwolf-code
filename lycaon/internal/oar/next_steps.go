@@ -476,6 +476,7 @@ func (sr stepResolver) resolve(branchPrefix string, stepIndex int, step NextStep
 	applies, err := EvaluateCondition(step.When, gc)
 	if hasGuard && err == nil {
 		recordRuleBranch(ruleID, branchPrefix+".when", stepIndex, gc, applies)
+		observeRuleCondition(ruleID, branchPrefix+".when", step.When, nil, newEvalHolder(gc, nil, nil), gc, applies)
 	}
 	if err != nil || !applies {
 		if resolutions != nil {

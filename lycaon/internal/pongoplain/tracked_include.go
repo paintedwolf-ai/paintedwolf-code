@@ -98,8 +98,10 @@ func (node *trackedIncludeEmptyNode) Execute(ctx *pongo2.ExecutionContext, _ pon
 }
 
 type trackedIncludeNode struct {
-	tpl       *pongo2.Template
-	filename  string
+	tpl      *pongo2.Template
+	filename string
+	// from is the include tag's own file and line.
+	from      string
 	only      bool
 	withPairs []bindingPair
 }
@@ -117,6 +119,10 @@ func (node *trackedIncludeNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	state.includes++
 	if state.includes > MaxCompositionFiles {
 		panic(executionAbort{err: fmt.Errorf("%w: more than %d template includes", ErrComposition, MaxCompositionFiles)})
+	}
+	if rec := ActiveBranchRecorder.Load(); rec != nil && rec.ObserveConditions && !isAtomReplay(ctx) {
+		state.includePath = append(state.includePath, node.from)
+		defer func() { state.includePath = state.includePath[:len(state.includePath)-1] }()
 	}
 
 	includeCtx := make(pongo2.Context)
@@ -198,6 +204,7 @@ func parseTrackedIncludeTag(doc *pongo2.Parser, start *pongo2.Token, arguments *
 		return nil, parserOrigError(doc, loadErr, filenameToken)
 	}
 	includeNode.filename = includedFilename
+	includeNode.from = fmt.Sprintf("%s:L%d", start.Filename, start.Line)
 	includeNode.tpl = includedTpl
 	return includeNode, nil
 }

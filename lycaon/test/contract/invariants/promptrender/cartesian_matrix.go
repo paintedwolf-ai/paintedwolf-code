@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/pongoplain"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
@@ -190,52 +193,31 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 	return sum, nil
 }
 
+// stockTemplateKinds are the catalog kind roots whose Markdown units the
+// composed prompt engine reads as templates.
+var stockTemplateKinds = []string{"agents/prompts/", "shared/partials/", "shared/units/", "shared/archetypes/", "guidance/"}
+
 func registerStockTemplatesInTracker(s *Stock, tracker *hoststate.CoverageTracker) error {
 	for _, id := range s.Catalog.LoadedUnitIDs() {
 		if _, _, archived := extpacks.SplitArchiveUnitID(id); archived {
 			continue
 		}
-		rawBytes, _, ok := s.Catalog.UnitContent(id)
-		if !ok {
+		if !slices.ContainsFunc(stockTemplateKinds, func(kind string) bool { return strings.HasPrefix(id, kind) }) {
 			continue
 		}
-		raw := string(rawBytes)
-		switch {
-		case strings.HasPrefix(id, "agents/prompts/") && strings.HasSuffix(id, ".md"):
-			name := strings.TrimPrefix(id, "agents/prompts/")
-			if err := tracker.RegisterTemplate(id, raw, pongoplain.Composed); err != nil {
-				return err
-			}
-			tracker.RegisterTemplateAlias("agents/"+name, id)
-		case strings.HasPrefix(id, "shared/partials/") && strings.HasSuffix(id, ".md"):
-			name := strings.TrimPrefix(id, "shared/partials/")
-			if err := tracker.RegisterTemplate(id, raw, pongoplain.Composed); err != nil {
-				return err
-			}
-			tracker.RegisterTemplateAlias("partials/"+name, id)
-		case strings.HasPrefix(id, "shared/units/") && strings.HasSuffix(id, ".md"):
-			name := strings.TrimPrefix(id, "shared/units/")
-			body := promptunit.Body(rawBytes)
-			if err := tracker.RegisterTemplate(id, string(body), pongoplain.Composed); err != nil {
-				return err
-			}
-			tracker.RegisterTemplateAlias("units/"+name, id)
-		case strings.HasPrefix(id, "shared/archetypes/") && strings.HasSuffix(id, ".md"):
-			name := strings.TrimPrefix(id, "shared/archetypes/")
-			if err := tracker.RegisterTemplate(id, raw, pongoplain.Composed); err != nil {
-				return err
-			}
-			tracker.RegisterTemplateAlias("archetypes/"+name, id)
-		case strings.HasPrefix(id, "guidance/") && strings.HasSuffix(id, ".md"):
-			rel := strings.TrimPrefix(id, "guidance/")
-			if err := tracker.RegisterTemplate(id, raw, pongoplain.Composed); err != nil {
-				return err
-			}
-			tracker.RegisterTemplateAlias("guidance/"+rel, id)
-			tracker.RegisterTemplateAlias("inject/"+rel, id)
-			tracker.RegisterTemplateAlias("kicks/"+rel, id)
+		at, ok := s.Catalog.UnitPath(id)
+		if !ok || path.Ext(at.String()) != ".md" {
+			continue
+		}
+		raw, _, _ := s.Catalog.UnitContent(id)
+		if strings.HasPrefix(id, "shared/units/") {
+			raw = promptunit.Body(raw)
+		}
+		if err := tracker.RegisterTemplate(id, string(raw), pongoplain.Composed); err != nil {
+			return err
 		}
 	}
+	tracker.AttributeTemplateRefs(func(ref string) (string, bool) { return prompts.TemplateUnitID(s.Catalog, ref) })
 	gateTmplBytes, err := config.Read(config.GateFeedbackTmplDir + "/_gate.md.tmpl")
 	if err != nil {
 		return err

@@ -46,12 +46,15 @@ type BranchHit struct {
 // parsed filename (or Aliases entry) and must access Aliases and Hits under Mu.
 //
 // With ObserveConditions set, each evaluated if or elif arm also records its
-// atoms' values in Conditions.
+// atoms' values in Conditions. Partition, when set, names the group a render's
+// scope belongs to, such as its recipient; vectors of different groups stay
+// apart.
 type BranchRecorder struct {
 	Mu                sync.Mutex
 	Aliases           map[string]string
 	Hits              map[string]*BranchHit
 	ObserveConditions bool
+	Partition         func(scope map[string]any) string
 	Conditions        map[string]*ConditionHit
 }
 

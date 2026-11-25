@@ -28,7 +28,11 @@ type ConditionVector struct {
 	// Recomposes reports that every atom is known and the condition's
 	// connectives over their truths give Decision.
 	Recomposes bool
-	Count      int
+	// Partition is the recorder's group for the render, and Path the include
+	// tags enclosing the arm, outermost first.
+	Partition string
+	Path      []string
+	Count     int
 }
 
 // ConditionHit collects the distinct vectors observed at one if or elif arm.
@@ -108,23 +112,39 @@ func (arm *conditionArm) compile() {
 	})
 }
 
+// armObservation is one evaluation of an arm: its atoms, their values, the
+// partition and include path of the render, and the decision.
+type armObservation struct {
+	atoms      []string
+	values     []Truth
+	decision   bool
+	recomposes bool
+	partition  string
+	path       []string
+}
+
 // observe evaluates each atom of arm in ctx's scope with the production
 // evaluator and reports whether the atoms recompose decision. Atoms of an
 // unparsable condition are not observed.
-func (arm *conditionArm) observe(ctx *pongo2.ExecutionContext, decision bool) ([]string, []Truth, bool) {
+func (arm *conditionArm) observe(ctx *pongo2.ExecutionContext, decision bool, partition func(map[string]any) string) armObservation {
 	arm.compile()
-	if len(arm.atoms) == 0 {
-		return nil, nil, false
-	}
 	scope := pongo2.Context{}
 	for _, layer := range []pongo2.Context{ctx.Shared, ctx.Public, ctx.Private} {
 		for k, v := range layer {
 			scope[k] = v
 		}
 	}
+	obs := armObservation{decision: decision}
+	if partition != nil {
+		obs.partition = partition(scope)
+	}
+	if len(arm.atoms) == 0 {
+		return obs
+	}
 	scope[atomReplayKey] = true
 	scope[execStateKey] = &executionState{ctx: context.Background()}
-	values := make([]Truth, len(arm.tpls))
+	obs.atoms = arm.atoms
+	obs.values = make([]Truth, len(arm.tpls))
 	for i, tpl := range arm.tpls {
 		if tpl == nil {
 			continue
@@ -135,19 +155,20 @@ func (arm *conditionArm) observe(ctx *pongo2.ExecutionContext, decision bool) ([
 		}
 		switch b.String() {
 		case "1":
-			values[i] = True
+			obs.values[i] = True
 		case "0":
-			values[i] = False
+			obs.values[i] = False
 		}
 	}
-	known := make(map[string]bool, len(values))
-	for i, v := range values {
+	known := make(map[string]bool, len(obs.values))
+	for i, v := range obs.values {
 		if v == Unknown {
-			return arm.atoms, values, false
+			return obs
 		}
 		known[arm.atoms[i]] = v == True
 	}
-	return arm.atoms, values, arm.expr.Decide(known) == decision
+	obs.recomposes = arm.expr.Decide(known) == decision
+	return obs
 }
 
 func isAtomReplay(ctx *pongo2.ExecutionContext) bool {
@@ -155,7 +176,7 @@ func isAtomReplay(ctx *pongo2.ExecutionContext) bool {
 	return replay
 }
 
-func (r *BranchRecorder) recordCondition(site branchSite, source string, atoms []string, values []Truth, decision, recomposes bool) {
+func (r *BranchRecorder) recordCondition(site branchSite, source string, obs armObservation) {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
 	if r.Conditions == nil {
@@ -168,14 +189,17 @@ func (r *BranchRecorder) recordCondition(site branchSite, source string, atoms [
 	branchID := branchKey(resolved, site.line, site.col, site.kind)
 	hit, ok := r.Conditions[branchID]
 	if !ok {
-		hit = &ConditionHit{Template: resolved, BranchID: branchID, Line: site.line, Col: site.col, Kind: site.kind, Source: source, Atoms: atoms}
+		hit = &ConditionHit{Template: resolved, BranchID: branchID, Line: site.line, Col: site.col, Kind: site.kind, Source: source, Atoms: obs.atoms}
 		r.Conditions[branchID] = hit
 	}
 	for _, v := range hit.Vectors {
-		if v.Decision == decision && slices.Equal(v.Atoms, values) {
+		if v.Decision == obs.decision && v.Partition == obs.partition && slices.Equal(v.Atoms, obs.values) && slices.Equal(v.Path, obs.path) {
 			v.Count++
 			return
 		}
 	}
-	hit.Vectors = append(hit.Vectors, &ConditionVector{Atoms: values, Decision: decision, Recomposes: recomposes, Count: 1})
+	hit.Vectors = append(hit.Vectors, &ConditionVector{
+		Atoms: obs.values, Decision: obs.decision, Recomposes: obs.recomposes,
+		Partition: obs.partition, Path: slices.Clone(obs.path), Count: 1,
+	})
 }
