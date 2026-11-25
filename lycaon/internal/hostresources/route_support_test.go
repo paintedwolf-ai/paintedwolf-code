@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -34,6 +35,44 @@ func TestContainerDaemonsAreSupportedWhereConfinementReachesSockets(t *testing.T
 				}
 			}
 		})
+	}
+}
+
+func TestLinuxDockerActionResolvesItsDaemonSocket(t *testing.T) {
+	home := t.TempDir()
+	service, err := NewService(t.TempDir())
+	testutil.FailErr(t, "new service", err)
+	service.env.platform = "linux"
+	service.env.homeDir = home
+	service.env.runtimeDir = ""
+	socket := filepath.Join(home, ".docker", "run", "docker.sock")
+	service.env.lookPath = func(name string) (string, error) {
+		if name == "docker" {
+			return "/usr/bin/docker", nil
+		}
+		return "", os.ErrNotExist
+	}
+	service.env.stat = func(path string) (os.FileInfo, error) {
+		if path != socket {
+			return nil, os.ErrNotExist
+		}
+		info, statErr := os.Stat(home)
+		if statErr != nil {
+			return nil, statErr
+		}
+		return fakeFileInfo{FileInfo: info, mode: os.ModeSocket}, nil
+	}
+
+	resolution, unmet := service.ResolveAction(context.Background(), []string{"docker"}, ProjectContext{}, []ExecutionSurface{SurfaceProcessExec})
+	if len(unmet) != 0 {
+		t.Fatalf("docker unmet on linux: %v", unmet)
+	}
+	services := resolution.Connections.LocalServices
+	if len(services) != 1 || services[0].Transport != LocalServiceUnixSocket || services[0].Target != socket {
+		t.Fatalf("local services = %+v, want the discovered daemon socket", services)
+	}
+	if len(resolution.ClientEnv) != 1 || !strings.HasPrefix(resolution.ClientEnv[0], "DOCKER_HOST=") {
+		t.Fatalf("client env = %v, want DOCKER_HOST bound to the reviewed socket", resolution.ClientEnv)
 	}
 }
 
