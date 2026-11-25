@@ -2,7 +2,6 @@ package assembly
 
 import (
 	"context"
-	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -611,7 +610,7 @@ func runCommandJobsAxisCase(
 	targetOffered, targetWaitSchema := projectCommandJobsTarget(t, sess, history, promptLister, implState, tc.webSearch, rootCount)
 	gotReader, gotWaitSchema, err := testPromptSurface(eng).commandJobsReader(t.Context(), sess, true, inject.CoordinatorTurnFrame{}, history, nil)
 	testutil.FailErr(t, "commandJobsReader", err)
-	if !reflect.DeepEqual(gotReader.Offered(), targetOffered) {
+	if !slices.Equal(gotReader.Offered(), targetOffered) {
 		t.Fatalf("commandJobsReader offered = %v, want target request %v", gotReader.Offered(), targetOffered)
 	}
 	if gotReader.Facts()["has_git"] != false || gotReader.WebSearch() != tc.webSearch {

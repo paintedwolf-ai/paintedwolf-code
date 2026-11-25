@@ -117,6 +117,7 @@ func TestCoordinatorRequestReaderMatchesOracle(t *testing.T) {
 		SpawnAllowlist:        roster.Effective,
 		MCPState:              hoststate.MCPNone,
 		TurnProfile:           surface.TurnProfile{SurfaceID: req.Debug.Surface},
+		RunContext:            api.CoordinatorRunContext{AllowedAgents: obs.AllowedAgents},
 		Loaded:                h.Sessions.Manager.Coordinator.Loading.LoadedTools(sess.ID),
 	}
 	auth, err := hoststate.FreezeTurnAuthority(ctx, state)
