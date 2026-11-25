@@ -51,6 +51,7 @@ func runCoordinatorPromptAndProcedureMatrix(
 
 	for idx, cp := range pairs {
 		st, auth := cp.state, cp.auth
+		sum.markCase("coordinator:" + st.ID)
 		if st.SessionMode == api.SessionModeAgent && st.RootCount == 0 && st.WorkflowState == hoststate.WorkflowWorkersInFlight {
 			if st.TurnProfile.SurfaceID != "implement_park" || auth.Reader.Held()["pack_board"] {
 				sum.Violations = append(sum.Violations, fmt.Sprintf("0-root WorkflowWorkersInFlight resolved to surface=%q pack_board=%t", st.TurnProfile.SurfaceID, auth.Reader.Held()["pack_board"]))
@@ -457,6 +458,7 @@ func runWorkerPersonaAndInjectMatrix(
 	}
 	for idx, wp := range pairs {
 		ws, auth := wp.ws, wp.auth
+		sum.markCase("worker:" + ws.ID)
 		mutInAsk := false
 		if ws.ParentSessionMode == api.SessionModeAsk {
 			if mutCapable, ok := prompts.AgentMutationCapable(ws.AgentID); ok && mutCapable {

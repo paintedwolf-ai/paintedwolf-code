@@ -136,5 +136,6 @@ func Compile(source string) (*pongo2.Template, error) {
 		return nil, wrapPongoError("pongoplain: compile", err)
 	}
 	compiledIsolated.Store(source, tpl)
+	NameTemplate(tpl, inlineID)
 	return tpl, nil
 }

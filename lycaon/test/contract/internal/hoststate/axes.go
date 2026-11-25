@@ -193,16 +193,6 @@ func allToolsInSet(names []string, set map[string]bool) bool {
 
 // WorkerAgents loads all worker agents and their tool profiles from eff.
 func WorkerAgents(eff *extpacks.EffectiveCatalog) ([]WorkerAgent, error) {
-	if eff == nil {
-		content, err := extpacks.DiscoverStockContent()
-		if err != nil {
-			return nil, err
-		}
-		eff = extpacks.Resolve(context.Background(), extpacks.ResolveInput{
-			Packs:   content,
-			Desired: extpacks.EmptyDesired(),
-		})
-	}
 	defs, err := agentdef.LoadEffectiveWithCatalog(eff)
 	if err != nil {
 		return nil, fmt.Errorf("load effective agents: %w", err)

@@ -156,8 +156,12 @@ func evalRuleWhen(holder *evalHolder, r *Rule, gc *GuardContext) (bool, error) {
 	} else {
 		ok, err = evalCondition(holder, r.When, gc)
 	}
-	if err == nil && strings.TrimSpace(r.When) != "" {
+	switch {
+	case err == nil && strings.TrimSpace(r.When) != "":
 		recordRuleBranch(r.Qualified(), "when", -1, gc, ok)
+		observeRuleCondition(r.Qualified(), "when", r.When, r.document, holder, gc, ok)
+	case err != nil:
+		observeRuleError(r.Qualified(), "when", r.When, strings.TrimSpace(r.OnError) != "", gc, err)
 	}
 	return ok, err
 }

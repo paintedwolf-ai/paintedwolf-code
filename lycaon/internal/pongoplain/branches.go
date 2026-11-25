@@ -4,8 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
+	"weak"
+
+	"github.com/flosch/pongo2/v6"
 )
 
 // BranchKind classifies a conditional or loop branch in a template.
@@ -46,13 +50,56 @@ type BranchHit struct {
 // parsed filename (or Aliases entry) and must access Aliases and Hits under Mu.
 //
 // With ObserveConditions set, each evaluated if or elif arm also records its
-// atoms' values in Conditions.
+// atoms' values in Conditions. Partition, when set, names the group a render's
+// scope belongs to, such as its recipient; vectors of different groups stay
+// apart. Label, when set, names the case being rendered; each vector keeps the
+// label of its first observation.
 type BranchRecorder struct {
 	Mu                sync.Mutex
 	Aliases           map[string]string
 	Hits              map[string]*BranchHit
 	ObserveConditions bool
+	Partition         func(scope map[string]any) string
+	Label             func() string
 	Conditions        map[string]*ConditionHit
+	// Rendered counts executions of each named template, root or included.
+	Rendered map[string]int
+}
+
+// templateNames names the templates Compile and NameTemplate saw, so a
+// recorder can count their executions. Keys are weak, and an entry leaves the
+// map when its template is collected, so naming never retains a template.
+var templateNames sync.Map
+
+// NameTemplate records the ref a composed set loaded tpl from.
+func NameTemplate(tpl *pongo2.Template, name string) {
+	if tpl == nil || name == "" {
+		return
+	}
+	key := weak.Make(tpl)
+	if _, loaded := templateNames.LoadOrStore(key, name); !loaded {
+		runtime.AddCleanup(tpl, func(k weak.Pointer[pongo2.Template]) { templateNames.Delete(k) }, key)
+	}
+}
+
+func templateName(tpl *pongo2.Template) (string, bool) {
+	name, ok := templateNames.Load(weak.Make(tpl))
+	if !ok {
+		return "", false
+	}
+	return name.(string), true
+}
+
+func (r *BranchRecorder) recordRender(name string) {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+	if r.Rendered == nil {
+		r.Rendered = make(map[string]int)
+	}
+	if alias := r.Aliases[name]; alias != "" {
+		name = alias
+	}
+	r.Rendered[name]++
 }
 
 // ActiveBranchRecorder is the opt-in global recorder consulted by tracked tags.

@@ -122,9 +122,9 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 		}
 	}
 
-	narrowSeeds := buildNarrowWorkerSeeds(domains)
+	narrowSeeds := buildNarrowWorkerSeeds(ctx, domains)
 	for _, seed := range narrowSeeds {
-		ws, rErr := ResolveWorkerSeed(domains, seed)
+		ws, rErr := ResolveWorkerSeed(ctx, domains, seed)
 		if rErr != nil {
 			return nil, rErr
 		}
@@ -133,7 +133,7 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 	return out, nil
 }
 
-func buildNarrowWorkerSeeds(domains *SeedDomains) []WorkerSeed {
+func buildNarrowWorkerSeeds(ctx context.Context, domains *SeedDomains) []WorkerSeed {
 	baseMutating := WorkerSeed{
 		OverlayIndex:      0,
 		AgentID:           "implementer",
@@ -212,7 +212,7 @@ func buildNarrowWorkerSeeds(domains *SeedDomains) []WorkerSeed {
 	addedExcludedPartial := false
 	for _, ag := range stock.WorkerAgents {
 		defs, err := admissibleWorkerDeferredNames(
-			context.Background(), stock, ag.ID, ag.ToolProfile,
+			ctx, stock, ag.ID, ag.ToolProfile,
 			api.SessionPostureBuild, api.SessionModeAgent, 1, true, false,
 		)
 		if err != nil {

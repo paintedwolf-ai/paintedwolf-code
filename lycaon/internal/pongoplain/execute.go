@@ -25,6 +25,9 @@ type executionState struct {
 	includeDepth int
 	includes     int
 	onStep       func(step int)
+	// includePath lists the include tags enclosing the current node, kept
+	// only while a recorder observes conditions.
+	includePath []string
 }
 
 func (s *executionState) checkContext() {
@@ -101,6 +104,11 @@ func executeWithHook(
 	}
 	state := &executionState{ctx: ctx, onStep: onStep}
 	normalized[execStateKey] = state
+	if rec := ActiveBranchRecorder.Load(); rec != nil {
+		if name, ok := templateName(tpl); ok {
+			rec.recordRender(name)
+		}
+	}
 
 	defer func() {
 		if recovered := recover(); recovered != nil {

@@ -1,6 +1,7 @@
 package interactions
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -82,6 +83,8 @@ type HostStateInventoryReport struct {
 	TotalWorkerStates      int                      `json:"total_worker_states"`
 	TotalInstructionSites  int                      `json:"total_instruction_sites"`
 	TotalAnchorSpecs       int                      `json:"total_anchor_specs"`
+	ObservedCoordinators   int                      `json:"observed_coordinators"`
+	ObservedWorkers        int                      `json:"observed_workers"`
 	DomainClasses          []DomainClassRow         `json:"domain_classes"`
 	ReaderFactCoverage     []ReaderFactInventoryRow `json:"reader_fact_coverage"`
 	BoundaryPartitions     []BoundaryPartitionRow   `json:"boundary_partitions"`
@@ -199,7 +202,7 @@ func (inv *HostStateInventory) workerWitness(match func(hoststate.WorkerState, s
 
 // Report derives the coverage report from the production registries, the
 // observed states and the producer join.
-func (inv *HostStateInventory) Report() (*HostStateInventoryReport, error) {
+func (inv *HostStateInventory) Report(ctx context.Context) (*HostStateInventoryReport, error) {
 	in := inv.in
 	if in.Domains == nil || in.Catalog == nil {
 		return nil, fmt.Errorf("domains and effective catalog required")
@@ -218,7 +221,9 @@ func (inv *HostStateInventory) Report() (*HostStateInventoryReport, error) {
 		TotalWorkerStates:      len(in.WorkerStates),
 		TotalInstructionSites:  len(in.Sites),
 		TotalAnchorSpecs:       len(specs),
-		DomainClasses:          inv.domainRows(),
+		ObservedCoordinators:   len(inv.coord),
+		ObservedWorkers:        len(inv.workers),
+		DomainClasses:          inv.domainRows(ctx),
 		ReaderFactCoverage:     inv.readerFactRows(),
 		BoundaryPartitions:     boundaries,
 		MatchedProducerInputs:  in.Producers.Matched,
@@ -228,15 +233,15 @@ func (inv *HostStateInventory) Report() (*HostStateInventoryReport, error) {
 	return rep, nil
 }
 
-func (inv *HostStateInventory) domainRows() []DomainClassRow {
+func (inv *HostStateInventory) domainRows(ctx context.Context) []DomainClassRow {
 	var rows []DomainClassRow
-	rows = append(rows, inv.approvalRows()...)
-	rows = append(rows, inv.sessionModeRows()...)
-	rows = append(rows, inv.postureAndOverlayRows()...)
+	rows = append(rows, inv.approvalRows(ctx)...)
+	rows = append(rows, inv.sessionModeRows(ctx)...)
+	rows = append(rows, inv.postureAndOverlayRows(ctx)...)
 	rows = append(rows, inv.surfaceAndWorkflowRows()...)
-	rows = append(rows, inv.rootAndBranchRows()...)
-	rows = append(rows, inv.loadingAndAgentRows()...)
-	rows = append(rows, inv.envToggleRows()...)
+	rows = append(rows, inv.rootAndBranchRows(ctx)...)
+	rows = append(rows, inv.loadingAndAgentRows(ctx)...)
+	rows = append(rows, inv.envToggleRows(ctx)...)
 	for i := range rows {
 		rows[i] = finalizeRow(rows[i])
 	}

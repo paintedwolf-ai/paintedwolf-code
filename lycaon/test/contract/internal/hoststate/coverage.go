@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/pongoplain"
@@ -101,6 +102,15 @@ type CoverageReport struct {
 	TemplateBranches    []TemplateBranchSummary
 	RuleBranches        []RuleBranchSummary
 	ExpectedZero        []ExpectedZeroBranch
+	// UnattributedRefs are composed template refs with recorded branches that
+	// name no registered unit.
+	UnattributedRefs []string
+	// RenderedTemplates counts registered templates some case executed;
+	// UnrenderedTemplates lists the rest that no production constraint
+	// explains, and ExpectedUnrendered the ones one does.
+	RenderedTemplates   int
+	UnrenderedTemplates []string
+	ExpectedUnrendered  []ExpectedZeroBranch
 	ReachedCells        int
 	ExcludedCells       int
 	ExcludedByReason    map[string]int
@@ -165,6 +175,10 @@ func (r CoverageReport) Validate() error {
 	for _, b := range r.VacuousRuleBranches() {
 		issues = append(issues, fmt.Sprintf("vacuous OAR branch %s#%s (true=%d false=%d)", b.RuleID, b.BranchID, b.TakenTrue, b.TakenFalse))
 	}
+	for _, ref := range r.UnattributedRefs {
+		issues = append(issues, fmt.Sprintf("rendered template %s names no registered unit", ref))
+	}
+	issues = append(issues, r.corpusIssues()...)
 	if len(issues) > 0 {
 		return fmt.Errorf("branch coverage gaps (%d):\n%s", len(issues), strings.Join(issues, "\n"))
 	}
@@ -187,6 +201,9 @@ type CoverageTracker struct {
 	ruleSpecs         map[string][]discoveredRuleBranch
 	expectedZeroTpl   map[string]ExpectedZeroBranch
 	expectedZeroRules map[string]ExpectedZeroBranch
+	resolveRef        func(string) (string, bool)
+	expectUnrendered  map[string]ExpectedZeroBranch
+	currentCase       atomic.Pointer[string]
 	reachedCells      int
 	excludedCells     int
 	excludedWhy       map[string]int
@@ -256,20 +273,12 @@ func (t *CoverageTracker) RegisterTemplate(unitID, source string, profile pongop
 	return nil
 }
 
-// RegisterTemplateAlias maps a composed loader ref (such as "agents/coordinator-core.md"
-// or "kicks/coordinator-closeout.md") to a registered unitID for branch attribution.
-func (t *CoverageTracker) RegisterTemplateAlias(rawFilename, unitID string) {
-	rawFilename = strings.TrimSpace(rawFilename)
-	unitID = strings.TrimSpace(unitID)
-	if rawFilename == "" || unitID == "" {
-		return
-	}
-	t.templateRec.Mu.Lock()
-	if t.templateRec.Aliases == nil {
-		t.templateRec.Aliases = make(map[string]string)
-	}
-	t.templateRec.Aliases[rawFilename] = unitID
-	t.templateRec.Mu.Unlock()
+// AttributeTemplateRefs names the registered unit a composed render's
+// template ref reads, so its hits attribute to that unit.
+func (t *CoverageTracker) AttributeTemplateRefs(resolve func(ref string) (string, bool)) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.resolveRef = resolve
 }
 
 // RegisterRule discovers conditional when and next-steps branches on rule.
@@ -346,7 +355,10 @@ func (t *CoverageTracker) Report() CoverageReport {
 	for k, v := range t.expectedZeroRules {
 		expRuleCopy[k] = v
 	}
+	resolve := t.resolveRef
 	t.mu.Unlock()
+	hits, unattributed := t.attributedHits(tplSpecsCopy, resolve)
+	rendered, unrendered, expectedUnrendered := t.renderCoverage(tplIDs, tplSpecsCopy, resolve)
 
 	var allExp []ExpectedZeroBranch
 	for _, k := range sortedMapKeys(expTplCopy) {
@@ -359,37 +371,73 @@ func (t *CoverageTracker) Report() CoverageReport {
 	return CoverageReport{
 		DiscoveredTemplates: tplIDs,
 		DiscoveredRules:     ruleIDs,
-		TemplateBranches:    t.collectTemplateSummaries(tplIDs, tplSpecsCopy, inlineOwnersCopy, expTplCopy),
+		TemplateBranches:    collectTemplateSummaries(tplIDs, tplSpecsCopy, inlineOwnersCopy, expTplCopy, hits),
 		RuleBranches:        t.collectRuleSummaries(ruleIDs, ruleSpecsCopy, expRuleCopy),
 		ExpectedZero:        allExp,
+		UnattributedRefs:    unattributed,
+		RenderedTemplates:   rendered,
+		UnrenderedTemplates: unrendered,
+		ExpectedUnrendered:  expectedUnrendered,
 		ReachedCells:        reached,
 		ExcludedCells:       excluded,
 		ExcludedByReason:    reasons,
 	}
 }
 
-func (t *CoverageTracker) collectTemplateSummaries(
+// attributedHits keys every recorded template hit by its registered unit:
+// directly, through an inline alias applied at record time, or through the
+// production ref resolution. Hits of one unit read through several refs add up.
+func (t *CoverageTracker) attributedHits(specs map[string][]pongoplain.BranchSpec, resolve func(string) (string, bool)) (map[string][2]int, []string) {
+	t.templateRec.Mu.Lock()
+	defer t.templateRec.Mu.Unlock()
+	out := make(map[string][2]int, len(t.templateRec.Hits))
+	missing := map[string]bool{}
+	for _, hit := range t.templateRec.Hits {
+		unit, ok := attributeTemplate(hit.Template, specs, resolve)
+		if !ok {
+			if !strings.HasPrefix(hit.Template, "inline:") {
+				missing[hit.Template] = true
+			}
+			continue
+		}
+		key := fmt.Sprintf("%s@L%d:C%d:%s", unit, hit.Line, hit.Col, hit.Kind)
+		cur := out[key]
+		out[key] = [2]int{cur[0] + hit.TakenTrue, cur[1] + hit.TakenFalse}
+	}
+	return out, sortedMapKeys(missing)
+}
+
+func attributeTemplate(name string, specs map[string][]pongoplain.BranchSpec, resolve func(string) (string, bool)) (string, bool) {
+	if _, ok := specs[name]; ok {
+		return name, true
+	}
+	if resolve == nil {
+		return "", false
+	}
+	unit, ok := resolve(name)
+	if !ok {
+		return "", false
+	}
+	_, registered := specs[unit]
+	return unit, registered
+}
+
+func collectTemplateSummaries(
 	tplIDs []string,
 	specs map[string][]pongoplain.BranchSpec,
 	inlineOwners map[string]string,
 	expZero map[string]ExpectedZeroBranch,
+	hits map[string][2]int,
 ) []TemplateBranchSummary {
-	t.templateRec.Mu.Lock()
-	defer t.templateRec.Mu.Unlock()
 	var out []TemplateBranchSummary
 	for _, unitID := range tplIDs {
 		owner := inlineOwners[unitID]
 		for _, sp := range specs[unitID] {
 			suffix := fmt.Sprintf("@L%d:C%d:%s", sp.Line, sp.Col, sp.Kind)
 			branchID := unitID + suffix
-			var takenTrue, takenFalse int
-			hit := t.templateRec.Hits[branchID]
-			if hit == nil && owner != "" && owner != unitID {
-				hit = t.templateRec.Hits[owner+suffix]
-			}
-			if hit != nil {
-				takenTrue = hit.TakenTrue
-				takenFalse = hit.TakenFalse
+			taken, ok := hits[branchID]
+			if !ok && owner != "" && owner != unitID {
+				taken = hits[owner+suffix]
 			}
 			ez := expZero[branchID]
 			out = append(out, TemplateBranchSummary{
@@ -400,8 +448,8 @@ func (t *CoverageTracker) collectTemplateSummaries(
 				Col:                sp.Col,
 				Kind:               sp.Kind,
 				Expression:         sp.Expression,
-				TakenTrue:          takenTrue,
-				TakenFalse:         takenFalse,
+				TakenTrue:          taken[0],
+				TakenFalse:         taken[1],
 				ExpectedZero:       ez.Side,
 				ExpectedZeroReason: ez.Reason,
 			})

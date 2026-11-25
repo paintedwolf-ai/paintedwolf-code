@@ -34,17 +34,26 @@ func EvaluateCondition(source string, env *Environment, facts map[string]any, fu
 	if strings.TrimSpace(source) == "" {
 		return true, nil
 	}
-	if err := CheckCondition(source, env); err != nil {
+	rule, err := CompileCondition(source, env)
+	if err != nil {
 		return false, err
+	}
+	return rule.EvaluateCondition(facts, functions)
+}
+
+// CompileCondition checks a standalone condition and returns it as a rule
+// whose condition it is, so its atoms can be listed and evaluated.
+func CompileCondition(source string, env *Environment) (*Rule, error) {
+	if err := CheckCondition(source, env); err != nil {
+		return nil, err
 	}
 	root, err := parseCondition(source)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	_, refs, err := checkCondition(root, env)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	rule := &Rule{When: root, Refs: refs, environment: env}
-	return rule.EvaluateCondition(facts, functions)
+	return &Rule{When: root, Refs: refs, environment: env}, nil
 }

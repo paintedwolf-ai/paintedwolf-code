@@ -306,12 +306,13 @@ func IsBooleanReaderFact(ref string) bool {
 	return false
 }
 
-// ResolveCatalogTemplateUnit resolves a prompt or partial ref to its loaded unit in eff.
+// ResolveCatalogTemplateUnit resolves a template ref to its loaded unit in eff.
 func ResolveCatalogTemplateUnit(eff *extpacks.EffectiveCatalog, templateRef string) (string, extpacks.UnitEffective, bool) {
-	if eff == nil || strings.TrimSpace(templateRef) == "" {
+	id, ok := TemplateUnitID(eff, templateRef)
+	if !ok {
 		return "", extpacks.UnitEffective{}, false
 	}
-	return resolveCatalogIncludeUnit(eff, templateRef)
+	return id, eff.Loaded[id], true
 }
 
 func checkSetBindings(unitID, origin, source string, vocab ReaderFactVocabulary, stock bool) ([]string, error) {
@@ -439,30 +440,6 @@ func checkZeroToolUtilitySource(unitID, origin, source string, vocab ReaderFactV
 		}
 	}
 	return notes, nil
-}
-
-func resolveCatalogIncludeUnit(eff *extpacks.EffectiveCatalog, includeRef string) (string, extpacks.UnitEffective, bool) {
-	ref := strings.TrimSpace(includeRef)
-	var candidates []string
-	switch {
-	case strings.HasPrefix(ref, "partials/"):
-		rest := strings.TrimPrefix(ref, "partials/")
-		candidates = []string{"shared/partials/" + strings.TrimSuffix(rest, ".md"), "shared/partials/" + rest}
-	case strings.HasPrefix(ref, "archetypes/"):
-		rest := strings.TrimPrefix(ref, "archetypes/")
-		candidates = []string{"shared/archetypes/" + strings.TrimSuffix(rest, ".md"), "shared/archetypes/" + rest}
-	case strings.HasPrefix(ref, "agents/"):
-		rest := strings.TrimPrefix(ref, "agents/")
-		candidates = []string{"agents/prompts/" + strings.TrimSuffix(rest, ".md"), "agents/prompts/" + rest}
-	default:
-		candidates = []string{strings.TrimSuffix(ref, ".md"), ref}
-	}
-	for _, id := range candidates {
-		if u, ok := eff.Loaded[id]; ok {
-			return id, u, true
-		}
-	}
-	return "", extpacks.UnitEffective{}, false
 }
 
 func checkStructuralFragmentTransitive(eff *extpacks.EffectiveCatalog, unitID, origin, source string, vocab ReaderFactVocabulary, declared map[string]bool, stock bool, seen map[string]bool) ([]string, error) {

@@ -63,8 +63,9 @@ func (node *trackedIfNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 			site := node.sites[i]
 			rec.record(site.filename, site.line, site.col, site.kind, taken)
 			if rec.ObserveConditions {
-				atoms, values, recomposes := node.arms[i].observe(ctx, taken)
-				rec.recordCondition(site, node.arms[i].source, atoms, values, taken, recomposes)
+				obs := node.arms[i].observe(ctx, taken, rec.Partition)
+				obs.path = state.includePath
+				rec.recordCondition(site, node.arms[i].source, obs)
 			}
 		}
 		if taken {

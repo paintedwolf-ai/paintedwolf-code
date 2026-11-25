@@ -308,12 +308,12 @@ func executeFuzzRecipientCase(ctx context.Context, env *fuzzWorkerEnv, data []by
 	for _, ch := range changes[:numChanges] {
 		seedB = mutateWorkerSeed(env.domains, seedB, ch.Axis, ch.Value)
 	}
-	stA, err := hoststate.ResolveWorkerSeed(env.domains, seedA)
+	stA, err := hoststate.ResolveWorkerSeed(ctx, env.domains, seedA)
 	if err != nil {
 		rep.FailedProperty = "resolve_worker_a"
 		return rep, err
 	}
-	stB, err := hoststate.ResolveWorkerSeed(env.domains, seedB)
+	stB, err := hoststate.ResolveWorkerSeed(ctx, env.domains, seedB)
 	if err != nil {
 		rep.FailedProperty = "resolve_worker_b"
 		return rep, err

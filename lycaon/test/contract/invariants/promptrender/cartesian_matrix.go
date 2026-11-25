@@ -11,12 +11,11 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/agentdef"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/pongoplain"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
+	"github.com/lycaon/lycaon/test/contract/internal/interactions"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
 
@@ -25,6 +24,7 @@ import (
 type CartesianSummary struct {
 	Violations             []string
 	Coverage               hoststate.CoverageReport
+	Conditions             []hoststate.ObservedCondition
 	SkillAudit             SkillSurfaceAudit
 	CoordinatorPromptCount int
 	CoordinatorProcCount   int
@@ -33,6 +33,8 @@ type CartesianSummary struct {
 	InjectAndGuidanceCount int
 	ToolDescriptionCount   int
 	OARRuleEvalCount       int
+	// setCase names the case the following renders belong to.
+	setCase                func(string)
 	CacheHits              int
 	CacheMisses            int
 	FolderlessParkVerified bool
@@ -70,6 +72,12 @@ var (
 		return runCartesianMatrixUncached(ctx, s)
 	})
 )
+
+func (sum *CartesianSummary) markCase(id string) {
+	if sum.setCase != nil {
+		sum.setCase(id)
+	}
+}
 
 func cloneBaseSpawnVars() map[string]any {
 	return maps.Clone(cachedBaseSpawnVars())
@@ -117,6 +125,12 @@ func checkNoDeadOrVacuousBranches(r *invariants.Run) {
 	if err := sum.Coverage.Validate(); err != nil {
 		r.Report("%v", err)
 	}
+	missing, selected, err := missingSelectedTemplates(stock(r))
+	r.Must(err)
+	r.Expect(selected, "templates selected by surface, mode and run-state selectors")
+	for _, ref := range missing {
+		r.Report("selected template %s is not shipped", ref)
+	}
 }
 
 // RunCartesianMatrix executes the prompt, skill, inject, schema and OAR renders across
@@ -141,12 +155,13 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 		tracker.RegisterRule(rule)
 	}
 	registerExpectedZeroBranches(tracker)
+	tracker.ObserveConditions(renderRecipient, occurrenceRecipient)
 
 	restore := tracker.Install()
 	defer restore()
 
 	cache := hoststate.NewRenderCache()
-	sum := &CartesianSummary{}
+	sum := &CartesianSummary{setCase: tracker.SetCase}
 
 	coordStates, err := hoststate.CoordinatorStates(ctx)
 	if err != nil {
@@ -163,9 +178,11 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 		tracker.RecordCell(ws.Excluded, ws.ExcludedReason)
 	}
 
+	sum.markCase("kicks and injects")
 	if err := runKicksAndInjectsMatrix(ctx, s, sum); err != nil {
 		return nil, err
 	}
+	sum.markCase("OAR producers")
 	if err := runOARNextStepsMatrix(ctx, s, oarBundle, coordStates, workerStates, sum); err != nil {
 		return nil, err
 	}
@@ -175,6 +192,7 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 	if err := runWorkerPersonaAndInjectMatrix(ctx, s, cache, sum); err != nil {
 		return nil, err
 	}
+	sum.markCase("skill audit")
 	skillAudit, err := AuditStockSkillSurfaces(ctx, s, cache)
 	if err != nil {
 		return nil, err
@@ -187,55 +205,23 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 	sum.CacheHits = hits
 	sum.CacheMisses = misses
 	sum.Coverage = tracker.Report()
+	sum.Conditions = tracker.Conditions()
 	return sum, nil
 }
 
 func registerStockTemplatesInTracker(s *Stock, tracker *hoststate.CoverageTracker) error {
-	for _, id := range s.Catalog.LoadedUnitIDs() {
-		if _, _, archived := extpacks.SplitArchiveUnitID(id); archived {
-			continue
-		}
-		rawBytes, _, ok := s.Catalog.UnitContent(id)
-		if !ok {
-			continue
-		}
-		raw := string(rawBytes)
-		switch {
-		case strings.HasPrefix(id, "agents/prompts/") && strings.HasSuffix(id, ".md"):
-			name := strings.TrimPrefix(id, "agents/prompts/")
-			if err := tracker.RegisterTemplate(id, raw, pongoplain.Composed); err != nil {
-				return err
-			}
-			tracker.RegisterTemplateAlias("agents/"+name, id)
-		case strings.HasPrefix(id, "shared/partials/") && strings.HasSuffix(id, ".md"):
-			name := strings.TrimPrefix(id, "shared/partials/")
-			if err := tracker.RegisterTemplate(id, raw, pongoplain.Composed); err != nil {
-				return err
-			}
-			tracker.RegisterTemplateAlias("partials/"+name, id)
-		case strings.HasPrefix(id, "shared/units/") && strings.HasSuffix(id, ".md"):
-			name := strings.TrimPrefix(id, "shared/units/")
-			body := promptunit.Body(rawBytes)
-			if err := tracker.RegisterTemplate(id, string(body), pongoplain.Composed); err != nil {
-				return err
-			}
-			tracker.RegisterTemplateAlias("units/"+name, id)
-		case strings.HasPrefix(id, "shared/archetypes/") && strings.HasSuffix(id, ".md"):
-			name := strings.TrimPrefix(id, "shared/archetypes/")
-			if err := tracker.RegisterTemplate(id, raw, pongoplain.Composed); err != nil {
-				return err
-			}
-			tracker.RegisterTemplateAlias("archetypes/"+name, id)
-		case strings.HasPrefix(id, "guidance/") && strings.HasSuffix(id, ".md"):
-			rel := strings.TrimPrefix(id, "guidance/")
-			if err := tracker.RegisterTemplate(id, raw, pongoplain.Composed); err != nil {
-				return err
-			}
-			tracker.RegisterTemplateAlias("guidance/"+rel, id)
-			tracker.RegisterTemplateAlias("inject/"+rel, id)
-			tracker.RegisterTemplateAlias("kicks/"+rel, id)
+	templates, err := interactions.TemplateUnits(s.Catalog)
+	if err != nil {
+		return err
+	}
+	for id, source := range templates {
+		if err := tracker.RegisterTemplate(id, source, pongoplain.Composed); err != nil {
+			return err
 		}
 	}
+	tracker.AttributeTemplateRefs(func(ref string) (string, bool) {
+		return interactions.TemplateIdentity(s.Catalog, templates, ref)
+	})
 	gateTmplBytes, err := config.Read(config.GateFeedbackTmplDir + "/_gate.md.tmpl")
 	if err != nil {
 		return err

@@ -9,6 +9,14 @@ import (
 
 func computeInventoryGaps(rep *HostStateInventoryReport) []InventoryGap {
 	var gaps []InventoryGap
+	for rec, n := range map[string]int{RecipientCoordinator: rep.ObservedCoordinators, RecipientWorker: rep.ObservedWorkers} {
+		if n == 0 {
+			gaps = append(gaps, InventoryGap{Category: "empty_corpus", InputDomain: "observed_states", Recipient: rec, Detail: "no state of this recipient was observed"})
+		}
+	}
+	if len(rep.DomainClasses) == 0 {
+		gaps = append(gaps, InventoryGap{Category: "empty_corpus", InputDomain: "domain_classes", Recipient: "both", Detail: "no production domain row was built"})
+	}
 	for _, r := range rep.DomainClasses {
 		if r.ProductionImpossible {
 			if strings.TrimSpace(r.ImpossibilityReason) == "" {

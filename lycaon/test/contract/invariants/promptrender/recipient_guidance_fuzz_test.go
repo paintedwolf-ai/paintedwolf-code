@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
+	"github.com/lycaon/lycaon/test/contract/internal/independence"
 )
 
 // encodeCoordinatorFuzzBytes encodes a coordinator case with web search on.
@@ -138,10 +139,24 @@ func FuzzRecipientGuidanceAcrossHostStates(f *testing.F) {
 	))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
+		tracker := hoststate.NewCoverageTracker()
+		tracker.ObserveConditions(nil, nil)
+		restore := tracker.Install()
 		rep, runErr := executeFuzzRecipientCase(t.Context(), env, data, t.TempDir())
+		restore()
 		if runErr != nil {
 			t.Fatalf("fuzz recipient guidance failed (property=%s, recipient=%s, A=%s, B=%s, contrib=%s, corpus=%s): %v",
 				rep.FailedProperty, rep.Recipient, rep.TurnACoords, rep.TurnBCoords, rep.SelectedContribution, rep.CorpusHex, runErr)
+		}
+		// An OAR condition's atoms come from the evaluator's own parse, so
+		// fully known atoms always recompose the decision it took.
+		for _, c := range tracker.Conditions() {
+			for _, v := range c.Vectors {
+				if c.Family == "oar" && !slices.Contains(v.Atoms, independence.Unknown) && !v.Recomposes {
+					t.Fatalf("OAR condition %s %q: atoms %v do not recompose decision %t (A=%s, B=%s, corpus=%s)",
+						c.Site, c.Source, v.Atoms, v.Decision, rep.TurnACoords, rep.TurnBCoords, rep.CorpusHex)
+				}
+			}
 		}
 	})
 }

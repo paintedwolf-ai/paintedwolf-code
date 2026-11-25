@@ -25,14 +25,18 @@ func (t Truth) String() string {
 		return "F"
 	case True:
 		return "T"
+	case Unknown:
 	}
 	return "?"
 }
 
-// Vector is one observed evaluation of a guard.
+// Vector is one observed evaluation of a guard. Only vectors of one Group
+// pair as a witness; Case names what produced the vector.
 type Vector struct {
 	Atoms    []Truth
 	Decision bool
+	Group    string
+	Case     string
 }
 
 // Guard is one evaluated condition site with every vector observed there.
@@ -48,6 +52,20 @@ type Guard struct {
 type Implication struct {
 	If, Then string
 	Source   string
+}
+
+// Fixed is a host invariant holding one atom to one value. Source names the
+// production code that establishes it.
+type Fixed struct {
+	Atom   string
+	Value  Truth
+	Source string
+}
+
+// Constraints are the host invariants that rule assignments out.
+type Constraints struct {
+	Implications []Implication
+	Fixed        []Fixed
 }
 
 // Witness is a pair of evaluations that differ only in one input and in the
@@ -83,7 +101,7 @@ type Result struct {
 	Witnesses  map[string][]Witness
 	Exclusions []Exclusion
 	Gaps       []Gap
-	// Contradicted lists implications an observation violates.
+	// Contradicted lists constraints an observation violates.
 	Contradicted []string
 }
 
@@ -91,19 +109,26 @@ type Result struct {
 // input. Two evaluations witness an input when its value differs, every other
 // input holds the same known value, and the decisions differ. Without a
 // witness, an input is excluded only when no assignment satisfying the
-// implications and the guard's own logic admits a pair; otherwise it is a gap
+// constraints and the guard's own logic admits a pair; otherwise it is a gap
 // naming the assignments to observe.
-func Analyze(guards []Guard, eval func(site string, atoms []Truth) (bool, error), implications []Implication) (Result, error) {
+func Analyze(guards []Guard, eval func(site string, atoms []Truth) (bool, error), cons Constraints) (Result, error) {
 	res := Result{Witnesses: map[string][]Witness{}}
-	for _, imp := range implications {
-		for _, g := range guards {
-			for _, v := range g.Vectors {
+	for _, g := range guards {
+		for _, v := range g.Vectors {
+			for _, imp := range cons.Implications {
 				if a, b := valueOf(g, v, imp.If), valueOf(g, v, imp.Then); a == True && b == False {
 					res.Contradicted = append(res.Contradicted, fmt.Sprintf("%s (%s) contradicted at %s", imp.If+" ⇒ "+imp.Then, imp.Source, g.Site))
 				}
 			}
+			for _, f := range cons.Fixed {
+				if got := valueOf(g, v, f.Atom); got != Unknown && got != f.Value {
+					res.Contradicted = append(res.Contradicted, fmt.Sprintf("%s = %s (%s) contradicted at %s", f.Atom, f.Value, f.Source, g.Site))
+				}
+			}
 		}
 	}
+	slices.Sort(res.Contradicted)
+	res.Contradicted = slices.Compact(res.Contradicted)
 	for _, g := range guards {
 		inputs := distinctInputs(g.Atoms)
 		if len(inputs) < 2 {
@@ -114,12 +139,12 @@ func Analyze(guards []Guard, eval func(site string, atoms []Truth) (bool, error)
 				res.Witnesses[g.Site] = append(res.Witnesses[g.Site], w)
 				continue
 			}
-			needed, err := neededAssignments(g, in, inputs, eval, implications)
+			needed, err := neededAssignments(g, in, inputs, eval, cons)
 			if err != nil {
 				return Result{}, err
 			}
 			if len(needed) == 0 {
-				res.Exclusions = append(res.Exclusions, Exclusion{Site: g.Site, Input: in, Reason: constraintReason(in, inputs, implications)})
+				res.Exclusions = append(res.Exclusions, Exclusion{Site: g.Site, Input: in, Reason: constraintReason(in, inputs, cons)})
 				continue
 			}
 			res.Gaps = append(res.Gaps, Gap{Site: g.Site, Source: g.Source, Input: in, Missing: needed})
@@ -161,7 +186,7 @@ func valueOf(g Guard, v Vector, input string) Truth {
 func findWitness(g Guard, in string, inputs []string) (Witness, bool) {
 	for i, a := range g.Vectors {
 		for _, b := range g.Vectors[i+1:] {
-			if a.Decision == b.Decision {
+			if a.Decision == b.Decision || a.Group != b.Group {
 				continue
 			}
 			va, vb := valueOf(g, a, in), valueOf(g, b, in)
@@ -187,40 +212,80 @@ func findWitness(g Guard, in string, inputs []string) (Witness, bool) {
 	return Witness{}, false
 }
 
-// neededAssignments enumerates assignments of the other inputs under which the
-// guard's decision follows in, keeping those the implications allow. Each is
-// printed as the pair of input vectors to observe.
-func neededAssignments(g Guard, in string, inputs []string, eval func(string, []Truth) (bool, error), implications []Implication) ([]string, error) {
-	if len(inputs) > 12 {
+// enumerationBound caps the inputs whose assignments neededAssignments walks.
+const enumerationBound = 20
+
+// maxListed caps the assignments a gap prints.
+const maxListed = 4
+
+// neededAssignments lists the assignments of the other inputs under which the
+// guard's decision follows in and the constraints allow, printed as the pair
+// of input vectors to observe. Flips of observed vectors come first, since
+// one more observation next to an existing one closes the gap; beyond
+// maxListed, the count of the rest is given.
+func neededAssignments(g Guard, in string, inputs []string, eval func(string, []Truth) (bool, error), cons Constraints) ([]string, error) {
+	if len(inputs) > enumerationBound {
 		return nil, fmt.Errorf("%s: %d inputs exceed the enumeration bound", g.Site, len(inputs))
 	}
-	var out []string
 	others := slices.DeleteFunc(slices.Clone(inputs), func(s string) bool { return s == in })
+	var observed, rest []string
+	seen := map[string]bool{}
+	consider := func(assign map[string]Truth, fromObservation bool) error {
+		var decisions [2]bool
+		for k, val := range []Truth{False, True} {
+			assign[in] = val
+			if !allowed(assign, cons) {
+				return nil
+			}
+			d, err := eval(g.Site, atomVector(g.Atoms, assign))
+			if err != nil {
+				return err
+			}
+			decisions[k] = d
+		}
+		if decisions[0] == decisions[1] {
+			return nil
+		}
+		text := formatAssignment(inputs, in, assign)
+		if seen[text] {
+			return nil
+		}
+		seen[text] = true
+		if fromObservation {
+			observed = append(observed, text)
+		} else {
+			rest = append(rest, text)
+		}
+		return nil
+	}
+	for _, v := range g.Vectors {
+		assign := map[string]Truth{}
+		known := true
+		for _, o := range others {
+			if assign[o] = valueOf(g, v, o); assign[o] == Unknown {
+				known = false
+			}
+		}
+		if known {
+			if err := consider(assign, true); err != nil {
+				return nil, err
+			}
+		}
+	}
 	for mask := 0; mask < 1<<len(others); mask++ {
 		assign := map[string]Truth{}
 		for i, o := range others {
 			assign[o] = truthBit(mask, i)
 		}
-		var decisions [2]bool
-		admissible := true
-		for k, val := range []Truth{False, True} {
-			assign[in] = val
-			if !allowed(assign, implications) {
-				admissible = false
-				break
-			}
-			d, err := eval(g.Site, atomVector(g.Atoms, assign))
-			if err != nil {
-				return nil, err
-			}
-			decisions[k] = d
+		if err := consider(assign, false); err != nil {
+			return nil, err
 		}
-		if !admissible || decisions[0] == decisions[1] {
-			continue
-		}
-		out = append(out, formatAssignment(inputs, in, assign))
 	}
-	return out, nil
+	all := slices.Concat(observed, rest)
+	if len(all) > maxListed {
+		return append(all[:maxListed:maxListed], fmt.Sprintf("%d more", len(all)-maxListed)), nil
+	}
+	return all, nil
 }
 
 func truthBit(mask, i int) Truth {
@@ -230,11 +295,16 @@ func truthBit(mask, i int) Truth {
 	return False
 }
 
-func allowed(assign map[string]Truth, implications []Implication) bool {
-	for _, imp := range implications {
+func allowed(assign map[string]Truth, cons Constraints) bool {
+	for _, imp := range cons.Implications {
 		a, aok := assign[imp.If]
 		b, bok := assign[imp.Then]
 		if aok && bok && a == True && b == False {
+			return false
+		}
+	}
+	for _, f := range cons.Fixed {
+		if v, ok := assign[f.Atom]; ok && v != f.Value {
 			return false
 		}
 	}
@@ -261,11 +331,16 @@ func formatAssignment(inputs []string, in string, assign map[string]Truth) strin
 	return "{" + strings.Join(parts, ", ") + "}"
 }
 
-func constraintReason(in string, inputs []string, implications []Implication) string {
+func constraintReason(in string, inputs []string, cons Constraints) string {
 	var used []string
-	for _, imp := range implications {
+	for _, imp := range cons.Implications {
 		if slices.Contains(inputs, imp.If) && slices.Contains(inputs, imp.Then) {
 			used = append(used, imp.If+" ⇒ "+imp.Then+" ("+imp.Source+")")
+		}
+	}
+	for _, f := range cons.Fixed {
+		if slices.Contains(inputs, f.Atom) {
+			used = append(used, f.Atom+" = "+f.Value.String()+" ("+f.Source+")")
 		}
 	}
 	if len(used) == 0 {
