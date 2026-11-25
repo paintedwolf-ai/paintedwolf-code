@@ -4,7 +4,7 @@
 
 **See also:** [Coordination](coordination.md) · [Workflows](workflows.md) · [Session](session.md) · [Authorization](authorization.md) · [Secrets and redaction](secrets.md#protected-user-responses) · [Den](den.md)
 
-**Machine truth:** tool schema at `lycaon/config/packs/painted-wolf/platform/tools/schemas/ask_user.yaml` · admission, mode selection, and rejection codes in `lycaon/internal/workflow/user_input_request.go` · workspace image refs in `lycaon/internal/workflow/ask_user_workspace.go` · answer endpoints under `/v1/sessions/{id}/workflow-runs/{run_id}/feedback/{phase_id}` in `docs/openapi/paths/workflows.yaml`
+**Machine truth:** tool schema at `lycaon/config/packs/painted-wolf/platform/tools/schemas/ask_user.yaml` · admission, mode selection, rejection codes and workspace image refs in [`lycaon/internal/workflow/inputs/`](../lycaon/internal/workflow/inputs) · answer endpoints under `/v1/sessions/{id}/workflow-runs/{run_id}/feedback/{phase_id}` in `docs/openapi/paths/workflows.yaml`
 
 ## Why the question is a tool
 

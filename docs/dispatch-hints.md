@@ -21,7 +21,7 @@ Coordinator and session behavior come from machine state and explicit actions, n
 
 Working directory and environment are per-call `command`/`verify` args, not session state the host infers. Human approval is recorded only through explicit host actions.
 
-`SessionUserTask` (first visible user message) and `SessionForwardedAttachments` (openable attachment locators) in `internal/coordinator/surface/dispatch_hints.go` are structural extraction, not intent classification.
+`SessionForwardedAttachments` (openable attachment locators) in `internal/coordinator/surface/dispatch_hints.go` is structural extraction, not intent classification.
 
 Catalog workflows start only through explicit host actions. Coordinator `state_start` records a proposal and cannot authorize a start. Phase approval uses the ready approve API, which binds the run revision and Blueprint digest. No manifest field contains approval phrases.
 
@@ -34,13 +34,12 @@ The guard is structural, not a name list. `user_text_behavior_closure_ast.go` wa
 | Edge | Rule | Test |
 |------|------|------|
 | User-text parameter → behavior sink | A function taking `userPrompt` / `userMessage` / `message` / `text` must not reach `Emit` | `forbidden-calls/no-user-text-probe-to-behavior-sink` |
-| `maybeQueue*Kick` on the prompt path | Every hook is registered with a trigger class, and no trigger class is NL intent | `TestPromptPathKickHooksRegistered` · `TestKickContractTriggerClassesNotUserText` |
 | `strings.Contains(err.Error(), …)` | Typed errors and `errors.Is` instead of parsing error prose | `forbidden-calls/no-error-text-parsing-in-coordinator-packages` |
 | Coordinator prompt gates | Pongo gate vars are registered or banned; no ad-hoc boolean derived from user text | `TestCoordinatorPromptBooleanGatesRegistered` |
 
 Because the scan matches the shape, a newly written classifier fails it under any name. A user message that discusses build policy (“we do not allow compatibility steps here”) must not queue a kick, set a prompt gate, or dispatch implementers; only an explicit coordinator tool call does that.
 
-**Closed sinks:** `Emit` / `QueueDeferred` and the `CoordinatorPromptGates` merge. **Timing SSOT:** anchors and bindings in [`agent-prompt-template.md`](agent-prompt-template.md). To add an inform at an existing anchor, author a binding under `config/packs/painted-wolf/platform/host/bindings/` (or workflow `injects:`) plus a template under `config/packs/painted-wolf/platform/guidance/`.
+**Closed sinks:** `Emit` / `QueueDeferred`. **Timing SSOT:** anchors and bindings in [`agent-prompt-template.md`](agent-prompt-template.md). To add an inform at an existing anchor, author a binding under `config/packs/painted-wolf/platform/host/bindings/` (or workflow `injects:`) plus a template under `config/packs/painted-wolf/platform/guidance/`.
 
 ## Tool-output routing
 

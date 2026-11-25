@@ -120,7 +120,7 @@ Machine-readable subset: [`schemas/guidance_registry.json`](../schemas/guidance_
 | Check | Where |
 |-------|--------|
 | Every `guard:`/`rule:` hint has `on` + `kind` and loads as OAR | [`oar_catalog_contract_test.go`](../lycaon/test/contract/catalogs/oar_catalog_contract_test.go) |
-| Every `on` resolves to a catalog anchor | same (`ResolveRuleAnchor` + `anchorcatalog.Has`) |
+| Every `on` resolves to a catalog anchor | same (anchor resolution in `coordinator/anchor` + `anchorcatalog.Has`) |
 | Emission sites use registry codes | [`guidance_emission_contract_test.go`](../lycaon/test/contract/architecture/guidance_emission_contract_test.go) |
 | `when` type-checks against the fact env | OAR loader / engine |
 
