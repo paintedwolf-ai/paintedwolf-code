@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
@@ -156,9 +155,8 @@ type ProducerJoin struct {
 
 // JoinInstructionProducers joins every input a discovered site reads to its
 // producer: a traced host write in g, a declared reader fact, an anchor
-// envelope variable, an OAR host fact, or a delivered render in cov that took
-// both arms of the site's guard. Anything else lands in Unmatched.
-func JoinInstructionProducers(sites []InstructionSite, cov *hoststate.CoverageReport, g *ProducerGraph) (ProducerJoin, error) {
+// envelope variable or an OAR host fact. Anything else lands in Unmatched.
+func JoinInstructionProducers(sites []InstructionSite, g *ProducerGraph) (ProducerJoin, error) {
 	specs, err := hoststate.AnchorCatalogSpecs()
 	if err != nil {
 		return ProducerJoin{}, err
@@ -175,7 +173,6 @@ func JoinInstructionProducers(sites []InstructionSite, cov *hoststate.CoverageRe
 			oarFacts[hf.Name] = true
 		}
 	}
-	branches := deliveredBranchIndex(cov)
 	matchedSet, unmatchedSet := map[string]bool{}, map[string]bool{}
 	for _, site := range sites {
 		for _, f := range append(slices.Clone(site.CapabilityFacts), site.OccurrenceFacts...) {
@@ -194,49 +191,9 @@ func JoinInstructionProducers(sites []InstructionSite, cov *hoststate.CoverageRe
 			case anchorVars[short] || oarFacts[short] || oarFacts[f]:
 				matchedSet[f+"@catalog_decl"] = true
 			default:
-				if at, ok := branches.bothArms(site, f); ok {
-					matchedSet[f+"@delivered_branch:"+at] = true
-				} else {
-					unmatchedSet[site.ID+" -> "+f] = true
-				}
+				unmatchedSet[site.ID+" -> "+f] = true
 			}
 		}
 	}
 	return ProducerJoin{Matched: sortedKeysOf(matchedSet), Unmatched: sortedKeysOf(unmatchedSet)}, nil
-}
-
-// branchIndex maps a template and guard line to its delivered branch outcomes.
-type branchIndex map[string]map[int][]hoststate.TemplateBranchSummary
-
-func deliveredBranchIndex(cov *hoststate.CoverageReport) branchIndex {
-	idx := branchIndex{}
-	if cov == nil {
-		return idx
-	}
-	for _, b := range cov.TemplateBranches {
-		key := strings.TrimSuffix(b.Template, ".md")
-		if idx[key] == nil {
-			idx[key] = map[int][]hoststate.TemplateBranchSummary{}
-		}
-		idx[key][b.Line] = append(idx[key][b.Line], b)
-	}
-	return idx
-}
-
-// bothArms finds a guard of site that reads fact and whose branch delivered
-// renders took both ways.
-func (idx branchIndex) bothArms(site InstructionSite, fact string) (string, bool) {
-	tmpl := strings.TrimSuffix(site.ContributionID, ".md")
-	for _, g := range site.Guards {
-		expr, err := pongoplain.ParseExpression(g.Expression)
-		if err != nil || expr == nil || !slices.Contains(expr.Identifiers(), fact) {
-			continue
-		}
-		for _, b := range idx[tmpl][g.Line] {
-			if b.TakenTrue > 0 && b.TakenFalse > 0 {
-				return fmt.Sprintf("%s:L%d", tmpl, g.Line), true
-			}
-		}
-	}
-	return "", false
 }

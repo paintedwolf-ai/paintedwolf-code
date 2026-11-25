@@ -70,7 +70,6 @@ type HostStateInventoryInput struct {
 	Domains           *hoststate.SeedDomains
 	CoordinatorStates []hoststate.CoordinatorState
 	WorkerStates      []hoststate.WorkerState
-	Coverage          *hoststate.CoverageReport
 	Sites             []InstructionSite
 	Producers         ProducerJoin
 }
@@ -225,7 +224,7 @@ func (inv *HostStateInventory) Report() (*HostStateInventoryReport, error) {
 		MatchedProducerInputs:  in.Producers.Matched,
 		UnmatchedProducers:     in.Producers.Unmatched,
 	}
-	rep.UnexplainedGaps = computeInventoryGaps(rep, in.Coverage)
+	rep.UnexplainedGaps = computeInventoryGaps(rep)
 	return rep, nil
 }
 

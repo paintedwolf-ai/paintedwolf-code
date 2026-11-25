@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-
-	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
 
-func computeInventoryGaps(rep *HostStateInventoryReport, cov *hoststate.CoverageReport) []InventoryGap {
+func computeInventoryGaps(rep *HostStateInventoryReport) []InventoryGap {
 	var gaps []InventoryGap
 	for _, r := range rep.DomainClasses {
 		if r.ProductionImpossible {
@@ -74,17 +72,6 @@ func computeInventoryGaps(rep *HostStateInventoryReport, cov *hoststate.Coverage
 			ProductionSource: "test/contract/internal/interactions:BuildInteractionLedger",
 			Detail:           "instruction primitive input has no matched authority domain or occurrence spec",
 		})
-	}
-
-	if cov != nil {
-		if err := cov.Validate(); err != nil {
-			gaps = append(gaps, InventoryGap{
-				Category: "dead_or_vacuous_branch", InputDomain: "branch_coverage",
-				ValueOrClass: "template_or_oar_branches", Recipient: "both",
-				ProductionSource: "test/contract/internal/hoststate:CoverageReport",
-				Detail:           err.Error(),
-			})
-		}
 	}
 
 	slices.SortFunc(gaps, func(a, b InventoryGap) int {

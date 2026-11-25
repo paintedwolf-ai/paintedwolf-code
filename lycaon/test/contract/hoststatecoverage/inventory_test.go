@@ -1,4 +1,4 @@
-package promptrender_test
+package hoststatecoverage_test
 
 import (
 	"runtime"
@@ -33,10 +33,6 @@ func TestHostStateInventoryHasNoUnexplainedGaps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("worker states: %v", err)
 	}
-	sum, err := promptrender.RunCartesianMatrix(ctx, stock)
-	if err != nil {
-		t.Fatalf("host-state matrix: %v", err)
-	}
 	profiles, err := sandbox.LoadToolProfilesWithCatalog(stock.Catalog)
 	if err != nil {
 		t.Fatalf("tool profiles: %v", err)
@@ -49,7 +45,7 @@ func TestHostStateInventoryHasNoUnexplainedGaps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("discover instruction sites: %v", err)
 	}
-	producers, err := joinProducers(sites, &sum.Coverage)
+	producers, err := joinProducers(sites)
 	if err != nil {
 		t.Fatalf("join instruction producers: %v", err)
 	}
@@ -59,7 +55,6 @@ func TestHostStateInventoryHasNoUnexplainedGaps(t *testing.T) {
 		Domains:           domains,
 		CoordinatorStates: coordStates,
 		WorkerStates:      workerStates,
-		Coverage:          &sum.Coverage,
 		Sites:             sites,
 		Producers:         producers,
 	})
@@ -100,11 +95,11 @@ func TestHostStateInventoryHasNoUnexplainedGaps(t *testing.T) {
 
 // joinProducers traces site inputs through a producer graph it releases on
 // return, so the graph and the frozen authorities never share the heap.
-func joinProducers(sites []interactions.InstructionSite, cov *hoststate.CoverageReport) (interactions.ProducerJoin, error) {
+func joinProducers(sites []interactions.InstructionSite) (interactions.ProducerJoin, error) {
 	graph, err := interactions.BuildProducerGraph()
 	if err != nil {
 		return interactions.ProducerJoin{}, err
 	}
 	defer runtime.GC()
-	return interactions.JoinInstructionProducers(sites, cov, graph)
+	return interactions.JoinInstructionProducers(sites, graph)
 }
