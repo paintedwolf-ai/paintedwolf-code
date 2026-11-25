@@ -5,6 +5,7 @@ package capabilitydrift
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/isolation"
@@ -72,7 +73,7 @@ func Contradictions(instructions []Instruction, witnesses []rejectinventory.Witn
 			if w.Recipient != in.Recipient || w.State != in.State || w.Tool != in.Tool {
 				continue
 			}
-			if (toolreach.Call{Tool: w.Tool, Args: w.Inputs}).Text() != in.Call {
+			if strings.Trim((toolreach.Call{Tool: w.Tool, Args: w.Inputs}).Text(), "`") != in.Call {
 				continue
 			}
 			if AdmissionDenial(w) {

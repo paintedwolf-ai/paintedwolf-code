@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
+	"slices"
 )
 
 func isSequence(t types.Type) bool {
@@ -91,6 +92,9 @@ func (s *scan) resolveCallElements(d funcDecl, call *ast.CallExpr, depth int) re
 func (s *scan) resolveSliceField(tn *types.TypeName, field string) resolution {
 	if tn == nil || !s.scansPackage(tn.Pkg()) {
 		return unresolved("sequence field outside the scanned packages")
+	}
+	if key := typeKey(tn) + "." + field; slices.Contains(s.relays, key) {
+		return resolution{outcome: OutcomeForwardedCarrier, upstream: key}
 	}
 	return s.node("elements "+typeKey(tn)+"."+field, func() resolution {
 		var out resolution
