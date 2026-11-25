@@ -2,8 +2,8 @@
 
 Multi-worker topology — delegate to workers; coordinator does not edit product paths directly.
 
-- **Read paths:** {% for g in read_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
-- **Write paths:** {% for g in write_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
+- **Read paths:** `{{ read_globs|join:"`, `" }}`
+- **Write paths:** `{{ write_globs|join:"`, `" }}`
 
 Follow orchestration rules for worker topology and path policy.
 

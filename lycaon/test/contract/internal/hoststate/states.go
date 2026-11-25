@@ -227,6 +227,15 @@ func buildCoordinatorSeeds(
 		}
 	}
 	seeds = append(seeds, buildOverlayAndEnvSeeds(overlays, postures, modes)...)
+	for ovIdx := range overlays {
+		for _, s := range surfaces {
+			seeds = append(seeds, coordinatorSeed{
+				overlayIdx: ovIdx, mode: api.SessionModeAgent, posture: api.SessionPostureBuild, wf: WorkflowActivePhase,
+				surfaceID: s.ID, roots: RootsSingleGit, loading: LoadingAllLoaded, web: true,
+				approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+			})
+		}
+	}
 	return seeds
 }
 
@@ -271,6 +280,16 @@ func buildOverlayAndEnvSeeds(
 								approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
 							})
 						}
+					}
+				}
+				// A removed pack also narrows the worker-lifecycle surfaces.
+				for _, wf := range []WorkflowState{WorkflowWorkersInFlight, WorkflowPendingOverlays} {
+					for _, ld := range []LoadingMode{LoadingFloorOnly, LoadingAllLoaded} {
+						seeds = append(seeds, coordinatorSeed{
+							overlayIdx: ovIdx, mode: mode, posture: p.ID, wf: wf,
+							roots: RootsSingleGit, loading: ld, web: true,
+							approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+						})
 					}
 				}
 			}
