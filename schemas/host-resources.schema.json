@@ -193,7 +193,7 @@
           "items": {
             "type": "string",
             "maxLength": 1024,
-            "pattern": "^\\\\\\\\\\.\\\\pipe\\\\[^\\u0000]+$"
+            "pattern": "^\\\\\\\\\\.\\\\pipe\\\\[^\\x00]+$"
           }
         },
         "capture": { "$ref": "#/$defs/capture" }
