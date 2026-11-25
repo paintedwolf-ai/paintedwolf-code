@@ -162,9 +162,12 @@ func (r *Resolver) Observe(ctx context.Context, sess *api.Session) (Observation,
 		WebSearch:             r.webSearch(),
 		ApprovalPosture:       src.Profiles.ProjectApprovalPosture(ctx, sess),
 		CommandExternalHidden: src.Profiles.CommandExternalHidden(),
-		SessionScratchDir:     src.ToolContext.ScratchDir(ctx, sess),
 		SharedTempLocations:   src.Profiles.WritableSharedTemp(ctx, sess),
 		IsRepo:                isRepo,
+	}
+	// A child the spawn has not created yet has no scratch folder.
+	if strings.TrimSpace(sess.ID) != "" {
+		obs.SessionScratchDir = src.ToolContext.ScratchDir(ctx, sess)
 	}
 	if !sess.IsWorkerChild() {
 		if obs.AllowedAgents, err = r.allowedAgents(ctx, sess); err != nil {
