@@ -157,3 +157,73 @@ func TestSettledStagesBeforeContinuationAreNotNoticedAgain(t *testing.T) {
 		t.Fatalf("refusals the promoting result showed are unshown: %d", unshown)
 	}
 }
+
+func heldRefusalSignal(t *testing.T, tracker *stageTracker) chan struct{} {
+	t.Helper()
+	signal := make(chan struct{}, 4)
+	tracker.onHeldRefusal(func() { signal <- struct{}{} })
+	return signal
+}
+
+func awaitSignal(t *testing.T, signal chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-t.Context().Done():
+		t.Fatal("held refusal did not signal")
+	}
+}
+
+func TestHeldStageRefusalSignalsOnceForAParkedProgram(t *testing.T) {
+	tracker := &stageTracker{}
+	ctx := withStageTracker(t.Context(), tracker)
+	lease := &stageLease{}
+	attachProgramStage(ctx, confinedStage(lease))
+	signal := heldRefusalSignal(t, tracker)
+
+	lease.refuse("/Users/person/.lima/colima/ha.sock")
+	awaitSignal(t, signal)
+	lease.refuse("/Users/person/.lima/colima/ssh.sock")
+	later := &stageLease{}
+	attachProgramStage(ctx, confinedStage(later))
+	later.refuse("/dev/bpf0")
+	if len(signal) != 0 {
+		t.Fatalf("held refusals signalled %d more times", len(signal))
+	}
+}
+
+func TestHeldStageRefusedBeforeTheParkSignals(t *testing.T) {
+	tracker := &stageTracker{}
+	ctx := withStageTracker(t.Context(), tracker)
+	lease := &stageLease{}
+	attachProgramStage(ctx, confinedStage(lease))
+	lease.refuse("/Users/person/.lima/colima/ha.sock")
+	awaitSignal(t, heldRefusalSignal(t, tracker))
+}
+
+func TestStageHeldAfterTheParkSignalsWhenRefused(t *testing.T) {
+	tracker := &stageTracker{}
+	ctx := withStageTracker(t.Context(), tracker)
+	signal := heldRefusalSignal(t, tracker)
+	lease := &stageLease{}
+	lease.refuse("/Users/person/.lima/colima/ha.sock")
+	attachProgramStage(ctx, confinedStage(lease))
+	awaitSignal(t, signal)
+}
+
+func TestHeldRefusalsAfterContinuationBelongToTheJob(t *testing.T) {
+	hooks, notices := refusalNotices()
+	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), hooks)
+	tracker := &stageTracker{}
+	ctx := withStageTracker(t.Context(), tracker)
+	lease := &stageLease{}
+	attachProgramStage(ctx, confinedStage(lease))
+	continueAsJob(t, registry, tracker)
+	signal := heldRefusalSignal(t, tracker)
+
+	lease.refuse("/Users/person/.lima/colima/ha.sock")
+	nextNotice(t, notices)
+	if len(signal) != 0 {
+		t.Fatal("a refusal on a job's stage signalled the park")
+	}
+}

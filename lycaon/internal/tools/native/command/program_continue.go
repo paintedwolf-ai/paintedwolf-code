@@ -20,6 +20,36 @@ type RunningProgramResult struct {
 
 func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluation, ending *programEnding, startedAt time.Time) (string, error) {
 	run := e.run
+	handle, err := r.startProgramJob(ctx, e, ending, startedAt)
+	if err != nil {
+		if !errors.Is(err, errProgramOutputDetached) {
+			r.interruptProgram(ctx, run, ending)
+			go func() {
+				<-ending.done
+				ending.releaseNotices()
+			}()
+		}
+		return "", err
+	}
+	e.call.detach()
+	if out := e.callTC.Effects.Out; out != nil {
+		out.MergeChild(run.tc.Effects.Out.TakeCommitted(), tools.MergeProgram)
+		if projection, err := r.Recorder.ProjectProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, 1); err == nil {
+			out.CommandProgram = &projection.Program
+		}
+	}
+	e.observeRunningConfinement()
+	return runningProgramResult(run, handle)
+}
+
+// errProgramOutputDetached reports a job that started but could not take over
+// the program's output; the job has already interrupted the program.
+var errProgramOutputDetached = errors.New("program output could not follow its job")
+
+// startProgramJob continues a running program as a background job that
+// carries its stages and output, and returns the job's handle.
+func (r *ProgramRuntime) startProgramJob(ctx context.Context, e *programEvaluation, ending *programEnding, startedAt time.Time) (string, error) {
+	run := e.run
 	attached := make(chan error, 1)
 	registry, session := r.Supervisor.Background, run.tc.Identity.SessionID
 	handle, err := e.stages.bind(func(history bgprocess.ProgramHistory) (string, error) {
@@ -48,25 +78,16 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 		}
 	})
 	if err != nil {
-		r.interruptProgram(ctx, run, ending)
-		go func() {
-			<-ending.done
-			ending.releaseNotices()
-		}()
 		return "", err
 	}
 	if err := <-attached; err != nil {
-		return "", err
+		return "", errors.Join(errProgramOutputDetached, err)
 	}
-	e.waits.promoted(func() func() { return r.Supervisor.Background.BeginPersonWait(session, handle) })
-	e.call.detach()
-	if out := e.callTC.Effects.Out; out != nil {
-		out.MergeChild(run.tc.Effects.Out.TakeCommitted(), tools.MergeProgram)
-		if projection, err := r.Recorder.ProjectProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, 1); err == nil {
-			out.CommandProgram = &projection.Program
-		}
-	}
-	e.observeRunningConfinement()
+	e.waits.promoted(func() func() { return registry.BeginPersonWait(session, handle) })
+	return handle, nil
+}
+
+func runningProgramResult(run *programRun, handle string) (string, error) {
 	result, err := surveyjson.Marshal(RunningProgramResult{ProgramID: run.root.Identity.ProgramID, State: "running", Handle: handle})
 	return string(result), err
 }

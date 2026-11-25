@@ -20,6 +20,8 @@ type stageTracker struct {
 	attach  func(bgprocess.ProgramStage) stageSettler
 	held    []*heldStage
 	history bgprocess.ProgramHistory
+	// refused runs once when a held stage reports a refusal.
+	refused func()
 }
 
 type heldStage struct {
@@ -46,13 +48,52 @@ func attachProgramStage(ctx context.Context, stage bgprocess.ProgramStage) stage
 		return func(confine.SandboxRefusals, []confine.EgressHost) {}
 	}
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	if t.attach != nil {
+		defer t.mu.Unlock()
 		return t.attach(stage)
 	}
 	held := &heldStage{stage: stage}
 	t.held = append(t.held, held)
+	t.mu.Unlock()
+	if stage.Lease != nil {
+		stage.Lease.OnRefusal(t.heldRefused)
+		if len(stage.Lease.Refusals().Refusals) > 0 {
+			t.heldRefused()
+		}
+	}
 	return t.settleHeld(held)
+}
+
+// onHeldRefusal runs fn once, on its own goroutine, when a stage held for a
+// job that does not exist yet reports a refusal, including one already reported.
+func (t *stageTracker) onHeldRefusal(fn func()) {
+	t.mu.Lock()
+	if t.attach != nil {
+		t.mu.Unlock()
+		return
+	}
+	t.refused = fn
+	refused := false
+	for _, held := range t.held {
+		refused = refused || (held.stage.Lease != nil && len(held.stage.Lease.Refusals().Refusals) > 0)
+	}
+	t.mu.Unlock()
+	if refused {
+		t.heldRefused()
+	}
+}
+
+func (t *stageTracker) heldRefused() {
+	t.mu.Lock()
+	fn := t.refused
+	if t.attach != nil {
+		fn = nil
+	}
+	t.refused = nil
+	t.mu.Unlock()
+	if fn != nil {
+		go fn()
+	}
 }
 
 func (t *stageTracker) settleHeld(held *heldStage) stageSettler {

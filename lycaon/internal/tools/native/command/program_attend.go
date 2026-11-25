@@ -202,13 +202,14 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 	}
 	e.call.detach()
 	settleCtx := context.WithoutCancel(callCtx)
+	settlement := &parkedSettlement{parked: parked}
 	go func() {
 		<-ending.done
-		r.recordParkedRun(settleCtx, run)
-		r.recordDetachedEffects(settleCtx, run)
-		content, err := ending.content()
-		parked.Settle(settleCtx, content, err)
+		if settlement.claim() {
+			r.settleParked(settleCtx, run, ending, parked)
+		}
 	}()
+	e.stages.onHeldRefusal(func() { r.promoteParked(settleCtx, e, ending, settlement) })
 	if out := e.callTC.Effects.Out; out != nil {
 		out.MergeChild(run.tc.Effects.Out.TakeCommitted(), tools.MergeProgram)
 		if receipt, err := r.Recorder.ActivitySummary(callCtx, run.tc.Identity.SessionID, programID); err == nil {
