@@ -38,7 +38,7 @@ func TestNonHTTPContractSocketAndDirectToolBoundaries(t *testing.T) {
 	} {
 		raw, err := config.Read(config.ToolSchemasDir.Join(tc.tool + ".yaml"))
 		contractcheck.FailErr(t, "read "+tc.tool+" schema", err)
-		entry, err := toolschema.ParseEntry(raw)
+		entry, err := toolschema.ParseEntry(tc.tool, raw)
 		contractcheck.FailErr(t, "parse "+tc.tool+" schema", err)
 		fields := map[string]bool{}
 		for _, path := range toolschema.ArgFieldPaths(entry.Schema) {

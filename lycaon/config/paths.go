@@ -12,29 +12,31 @@ const (
 	StockMeta = StockPacks + "/meta.yaml"
 
 	// Platform pack.
-	Platform            = StockPacks + "/platform"
-	PlatformManifest    = Platform + "/" + PackManifestName
-	PlatformHost        = Platform + "/host"
-	PlatformAgents      = Platform + "/agents"
-	PlatformPrompts     = PlatformAgents + "/prompts"
-	PlatformGuidance    = Platform + "/guidance"
-	PlatformPolicy      = Platform + "/policy"
-	PlatformTools       = Platform + "/tools"
-	NativeTools         = PlatformTools + "/native-tools.yaml"
-	NativeOperations    = PlatformTools + "/native-operations.yaml"
-	LycaonTools         = PlatformTools + "/lycaon-tools.yaml"
-	ToolSchemasDir      = PlatformTools + "/schemas"
-	ToolProfilesDir     = PlatformTools + "/profiles"
-	PlatformShared      = Platform + "/shared"
-	SharedPartials      = PlatformShared + "/partials"
-	SharedArchetypes    = PlatformShared + "/archetypes"
-	PlatformFlows       = Platform + "/workflows"
-	PlatformApprovals   = Platform + "/approvals"
-	EvidenceKinds       = PlatformGuidance + "/evidence-kinds.yaml"
-	GateFeedbackDir     = PlatformGuidance + "/gate-feedback"
-	GateFeedbackTmplDir = Platform + "/guidance/gate-feedback-templates"
-	SharedIntake        = PlatformShared + "/intake"
-	SharedWorkflowDiag  = PlatformShared + "/workflow-diagnostics"
+	Platform         = StockPacks + "/platform"
+	PlatformManifest = Platform + "/" + PackManifestName
+	PlatformHost     = Platform + "/host"
+	PlatformAgents   = Platform + "/agents"
+	PlatformPrompts  = PlatformAgents + "/prompts"
+	PlatformGuidance = Platform + "/guidance"
+	PlatformPolicy   = Platform + "/policy"
+	PlatformTools    = Platform + "/tools"
+	NativeTools      = PlatformTools + "/native-tools.yaml"
+	NativeOperations = PlatformTools + "/native-operations.yaml"
+	// CapabilityRequestFields holds the capability_request field schemas tools share.
+	CapabilityRequestFields = PlatformTools + "/capability-request-fields.yaml"
+	LycaonTools             = PlatformTools + "/lycaon-tools.yaml"
+	ToolSchemasDir          = PlatformTools + "/schemas"
+	ToolProfilesDir         = PlatformTools + "/profiles"
+	PlatformShared          = Platform + "/shared"
+	SharedPartials          = PlatformShared + "/partials"
+	SharedArchetypes        = PlatformShared + "/archetypes"
+	PlatformFlows           = Platform + "/workflows"
+	PlatformApprovals       = Platform + "/approvals"
+	EvidenceKinds           = PlatformGuidance + "/evidence-kinds.yaml"
+	GateFeedbackDir         = PlatformGuidance + "/gate-feedback"
+	GateFeedbackTmplDir     = Platform + "/guidance/gate-feedback-templates"
+	SharedIntake            = PlatformShared + "/intake"
+	SharedWorkflowDiag      = PlatformShared + "/workflow-diagnostics"
 
 	// Platform host shells — operator YAML each subsystem reads by a fixed path.
 	Providers           = PlatformHost + "/providers.yaml"
@@ -168,63 +170,64 @@ const (
 )
 
 var consumedPackYAMLFiles = map[Rel]struct{}{
-	CredentialStoreRead: {},
-	EvidenceKinds:       {},
+	CapabilityRequestFields:                    {},
+	CredentialStoreRead:                        {},
+	EvidenceKinds:                              {},
 	PlatformFlows + "/" + WorkflowRegistryFile: {},
-	Providers:                {},
-	PricingSources:           {},
-	ModelPolicy:              {},
-	Compaction:               {},
-	ComposePolicy:            {},
-	CoordinatorFlow:          {},
-	ContentAuthority:         {},
-	DesignKitUsage:           {},
-	CoordinatorSurface:       {},
-	Decisions:                {},
-	SurfaceProfiles:          {},
-	DistroMCP:                {},
-	MCPRecipes:               {},
-	HostResources:            {},
-	PathScopes:               {},
-	UserPath:                 {},
-	PromptBudgets:            {},
-	ReaderFacts:              {},
-	RenderBudgets:            {},
-	SourceParsing:            {},
-	SessionLimits:            {},
-	SessionPostures:          {},
-	StackRegistryDocs:        {},
-	Workers:                  {},
-	AgentToolProfiles:        {},
-	DisclosurePolicy:         {},
-	ModelContextWindow:       {},
-	Review:                   {},
-	FileBriefing:             {},
-	Summarize:                {},
-	AnchorCatalog:            {},
-	OARProfile:               {},
-	SecurityApprovals:        {},
-	ApprovalOutcomeCodes:     {},
-	SandboxProfile:           {},
-	ScannerCatalog:           {},
-	DetectionActionSemantics: {},
-	DetectionApprovalCorpus:  {},
-	Grounding:                {},
-	ProgressGatedTools:       {},
-	ConsequenceBandPaths:     {},
-	Audit:                    {},
-	PackageExecutionManagers: {},
-	PackageRegistries:        {},
-	SecretPlaceholders:       {},
-	SecretOCRConfusions:      {},
-	WebResearchProviders:     {},
-	WebResearchLimits:        {},
-	ImplementDefaultSpawn:    {},
-	PlanBlueprintFields:      {},
-	SecretMintDefaults:       {},
-	SecretMintAssignments:    {},
-	SecretMintFixtures:       {},
-	SecretMintProvenance:     {},
+	Providers:                                  {},
+	PricingSources:                             {},
+	ModelPolicy:                                {},
+	Compaction:                                 {},
+	ComposePolicy:                              {},
+	CoordinatorFlow:                            {},
+	ContentAuthority:                           {},
+	DesignKitUsage:                             {},
+	CoordinatorSurface:                         {},
+	Decisions:                                  {},
+	SurfaceProfiles:                            {},
+	DistroMCP:                                  {},
+	MCPRecipes:                                 {},
+	HostResources:                              {},
+	PathScopes:                                 {},
+	UserPath:                                   {},
+	PromptBudgets:                              {},
+	ReaderFacts:                                {},
+	RenderBudgets:                              {},
+	SourceParsing:                              {},
+	SessionLimits:                              {},
+	SessionPostures:                            {},
+	StackRegistryDocs:                          {},
+	Workers:                                    {},
+	AgentToolProfiles:                          {},
+	DisclosurePolicy:                           {},
+	ModelContextWindow:                         {},
+	Review:                                     {},
+	FileBriefing:                               {},
+	Summarize:                                  {},
+	AnchorCatalog:                              {},
+	OARProfile:                                 {},
+	SecurityApprovals:                          {},
+	ApprovalOutcomeCodes:                       {},
+	SandboxProfile:                             {},
+	ScannerCatalog:                             {},
+	DetectionActionSemantics:                   {},
+	DetectionApprovalCorpus:                    {},
+	Grounding:                                  {},
+	ProgressGatedTools:                         {},
+	ConsequenceBandPaths:                       {},
+	Audit:                                      {},
+	PackageExecutionManagers:                   {},
+	PackageRegistries:                          {},
+	SecretPlaceholders:                         {},
+	SecretOCRConfusions:                        {},
+	WebResearchProviders:                       {},
+	WebResearchLimits:                          {},
+	ImplementDefaultSpawn:                      {},
+	PlanBlueprintFields:                        {},
+	SecretMintDefaults:                         {},
+	SecretMintAssignments:                      {},
+	SecretMintFixtures:                         {},
+	SecretMintProvenance:                       {},
 	DetectionPackUpstreamDir + "/structured-cloud-actions.yaml": {},
 }
 

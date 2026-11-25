@@ -534,7 +534,7 @@ func readBundledSchemaDir(dir config.Rel) (*toolschema.Config, error) {
 		if err != nil {
 			return nil, err
 		}
-		entry, err := toolschema.ParseEntry(data)
+		entry, err := toolschema.ParseEntry(stem, data)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}

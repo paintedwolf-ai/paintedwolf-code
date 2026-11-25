@@ -1,9 +1,13 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
+	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -112,39 +116,89 @@ func nestedSchema(t *testing.T, schema map[string]any, keys ...string) map[strin
 	return cur
 }
 
-func TestProviderCapabilityFieldsMatchExecutionContract(t *testing.T) {
+func TestCapabilityRequestAcceptsExactlyTheContractFields(t *testing.T) {
 	cfg, _, err := extpacks.LoadEffectiveToolSchemas(contractcheck.StockCatalog(t))
 	contractcheck.FailErr(t, "load effective schemas", err)
-	fields := map[string]toolcontract.Capability{
-		"host_resources":   toolcontract.CapabilityHostResource,
-		"socket_paths":     toolcontract.CapabilitySocket,
-		"direct_ip":        toolcontract.CapabilityDirectIP,
-		"local_listen":     toolcontract.CapabilityLocalListen,
-		"loopback_connect": toolcontract.CapabilityLoopbackConnect,
-		"write_root":       toolcontract.CapabilityWriteRoot,
-		"read_path":        toolcontract.CapabilityReadPath,
-		"credential_store": toolcontract.CapabilityCredentialStore,
+	samples := map[string]any{
+		"host_resources":   []any{"docker"},
+		"socket_paths":     []any{"/tmp/service.sock"},
+		"process_control":  true,
+		"credential_store": true,
+		"host_execution":   true,
+		"direct_ip":        true,
+		"local_listen":     map[string]any{"ports": []any{8080}},
+		"loopback_connect": map[string]any{"ports": []any{8080}},
+		"write_root":       "/tmp/out",
+		"read_path":        "/tmp/in",
 	}
 	for name := range cfg.Tools {
 		contract, ok := toolcontract.Lookup(name)
-		if !ok {
+		supported := contract.CapabilityRequestFields()
+		if !ok || len(supported) == 0 {
 			continue
 		}
 		meta, _ := cfg.ToolMeta(name)
 		properties, _ := meta.ArgsSchema["properties"].(map[string]any)
-		request, _ := properties["capability_request"].(map[string]any)
-		capabilities, _ := request["properties"].(map[string]any)
-		for field, capability := range fields {
-			raw, offered := capabilities[field]
-			if offered != contract.Supports(capability) {
-				t.Errorf("%s capability_request.%s offered=%v, execution supports=%v", name, field, offered, contract.Supports(capability))
+		request, ok := properties["capability_request"].(map[string]any)
+		if !ok {
+			t.Errorf("%s supports %v but declares no capability_request", name, supported)
+			continue
+		}
+		base := map[string]any{}
+		if required, _ := request["required"].([]any); len(required) > 0 {
+			for _, field := range required {
+				base[field.(string)] = samples[field.(string)]
 			}
-			if field == "socket_paths" && offered {
-				socketSchema, _ := raw.(map[string]any)
-				if socketSchema["maxItems"] != confine.MaxSocketGrants {
-					t.Errorf("%s capability_request.socket_paths maxItems = %v, want %d", name, socketSchema["maxItems"], confine.MaxSocketGrants)
-				}
+		}
+		for field, value := range samples {
+			args := maps.Clone(base)
+			args[field] = value
+			err := tools.ValidateToolArgs(request, args)
+			if slices.Contains(supported, field) && err != nil {
+				t.Errorf("%s rejected supported capability_request.%s: %v", name, field, err)
 			}
+			if !slices.Contains(supported, field) && err == nil {
+				t.Errorf("%s accepted capability_request.%s outside its execution contract", name, field)
+			}
+		}
+		if slices.Contains(supported, "socket_paths") {
+			tooMany := make([]any, confine.MaxSocketGrants+1)
+			for i := range tooMany {
+				tooMany[i] = fmt.Sprintf("/tmp/s%d.sock", i)
+			}
+			if err := tools.ValidateToolArgs(request, map[string]any{"socket_paths": tooMany}); err == nil {
+				t.Errorf("%s accepted %d socket paths, confinement grants at most %d", name, len(tooMany), confine.MaxSocketGrants)
+			}
+			if err := tools.ValidateToolArgs(request, map[string]any{"socket_paths": tooMany[:confine.MaxSocketGrants]}); err != nil {
+				t.Errorf("%s rejected %d socket paths: %v", name, confine.MaxSocketGrants, err)
+			}
+		}
+	}
+}
+
+func TestCapabilityRequestNarrowingsHold(t *testing.T) {
+	cfg, _, err := extpacks.LoadEffectiveToolSchemas(contractcheck.StockCatalog(t))
+	contractcheck.FailErr(t, "load effective schemas", err)
+	request := func(tool string) map[string]any {
+		meta, ok := cfg.ToolMeta(tool)
+		if !ok {
+			t.Fatalf("%s schema missing", tool)
+		}
+		properties, _ := meta.ArgsSchema["properties"].(map[string]any)
+		out, _ := properties["capability_request"].(map[string]any)
+		return out
+	}
+	for _, tool := range []string{"wait", "capture_page", "measure_page", "page_open"} {
+		if err := tools.ValidateToolArgs(request(tool), map[string]any{}); err == nil {
+			t.Errorf("%s accepted a capability_request without loopback_connect", tool)
+		}
+		if err := tools.ValidateToolArgs(request(tool), map[string]any{"loopback_connect": map[string]any{"ports": []any{3000, 3000}}}); err == nil {
+			t.Errorf("%s accepted a repeated loopback port", tool)
+		}
+	}
+	for _, tool := range []string{"command", "verify", "terminal_open"} {
+		if err := tools.ValidateToolArgs(request(tool), map[string]any{}); err == nil {
+			t.Errorf("%s accepted an empty capability_request", tool)
 		}
 	}
 }

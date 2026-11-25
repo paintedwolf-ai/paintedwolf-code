@@ -338,7 +338,7 @@ func TestCacheIdentityIgnoresToolPresentationButTracksReplay(t *testing.T) {
 func TestCanonicalRecallKeepsStandingSchemaStableAcrossRecovery(t *testing.T) {
 	raw, err := config.Read(config.ToolSchemasDir + "/recall.yaml")
 	testutil.FailErr(t, "read shipped recall schema", err)
-	entry, err := toolschema.ParseEntry(raw)
+	entry, err := toolschema.ParseEntry("recall", raw)
 	testutil.FailErr(t, "parse shipped recall schema", err)
 	f := newCacheFixture()
 	f.req.Tools = []tools.ToolMeta{{Name: "recall", Description: entry.Description, ArgsSchema: entry.Schema}}

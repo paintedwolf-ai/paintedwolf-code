@@ -59,7 +59,7 @@ func loadSchemaUnits(eff *EffectiveCatalog, prefix string) (*toolschema.Config, 
 			})
 			continue
 		}
-		entry, err := toolschema.ParseEntry(u.Content)
+		entry, err := toolschema.ParseEntry(stem, u.Content)
 		if err != nil {
 			failed = true
 			diags = append(diags, Diagnostic{
