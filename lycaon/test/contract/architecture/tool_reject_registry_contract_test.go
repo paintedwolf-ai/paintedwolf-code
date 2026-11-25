@@ -2,8 +2,6 @@ package contract
 
 import (
 	"fmt"
-
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -12,28 +10,68 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/rules"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/rejectinventory"
+	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
+
+// scanToolRejectEmission inventories the production emission sites. Codes the
+// module copies from shipped OAR rules and posture rules come from those
+// catalogs' production loaders.
+func scanToolRejectEmission(t *testing.T) rejectinventory.Inventory {
+	t.Helper()
+	inv, err := rejectinventory.Scan(filepath.Join(contractcheck.RepoRoot(t), "lycaon"), rejectinventory.Options{
+		Patterns: []string{"./internal/...", "./pkg/..."},
+		Decoded: map[string]rejectinventory.Enumerator{
+			"github.com/lycaon/lycaon/internal/oarcore.Rule.ID": func() ([]string, error) {
+				var ids []string
+				for _, rule := range toolfixture.StockOARRules(t).All() {
+					ids = append(ids, rule.ID)
+				}
+				return ids, nil
+			},
+			"github.com/lycaon/lycaon/internal/rules.RuleOutcome.RejectCode": postureRuleDenyCodes,
+		},
+	})
+	contractcheck.FailErr(t, "scan reject emission sites", err)
+	return inv
+}
+
+// postureRuleDenyCodes lists the deny codes the shipped posture rules declare.
+func postureRuleDenyCodes() ([]string, error) {
+	configs, err := rules.LoadBundledRuleConfigs()
+	if err != nil {
+		return nil, err
+	}
+	var codes []string
+	for _, cfg := range configs {
+		for _, rule := range cfg.Rules {
+			if deny, ok := rule.Then["deny"].(map[string]any); ok {
+				if code, ok := deny["code"].(string); ok {
+					codes = append(codes, code)
+				}
+			}
+		}
+	}
+	return codes, nil
+}
 
 // Every ToolReject code has stock policy copy.
 func TestToolRejectCodesRegisteredInHintRegistry(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
 	cfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
 
-	inv, err := scanToolRejectEmission(lycaonRoot)
-	contractcheck.FailErr(t, "scan ToolReject sites", err)
-	sites := inv.Sites
-
 	missing := map[string][]string{}
-	for _, s := range sites {
-		if _, ok := cfg.HintCodes[s.Code]; ok {
-			continue
+	for _, s := range scanToolRejectEmission(t).Sites {
+		for _, code := range s.Codes {
+			if _, ok := cfg.HintCodes[code]; !ok {
+				missing[code] = append(missing[code], s.Rel+":"+strconv.Itoa(s.Line))
+			}
 		}
-		missing[s.Code] = append(missing[s.Code], s.Rel+":"+strconv.Itoa(s.Line))
 	}
 	if len(missing) == 0 {
 		return
@@ -55,16 +93,14 @@ func TestToolRejectCodesRegisteredInHintRegistry(t *testing.T) {
 	t.Fatal(b.String())
 }
 
-// Every reject emission names its code through a constant, a forwarded
-// parameter, or a local assigned only constants, so the registry and copy
-// checks see every code a handler can emit.
+// Every recognized carrier or forwarder emission, including one whose code is
+// dynamic, resolves to finite codes through its upstream typed producer, so the
+// registry and copy checks see every code a handler can emit.
 func TestToolRejectEmissionCodesResolve(t *testing.T) {
 	t.Parallel()
-	inv, err := scanToolRejectEmission(filepath.Join(contractcheck.RepoRoot(t), "lycaon"))
-	contractcheck.FailErr(t, "scan ToolReject sites", err)
 	var b strings.Builder
-	for _, u := range inv.Unresolved {
-		fmt.Fprintf(&b, "  %s:%d in %s: code %s\n", u.Rel, u.Line, u.Func, u.Expr)
+	for _, u := range scanToolRejectEmission(t).Unresolved {
+		fmt.Fprintf(&b, "  %s:%d in %s (%s): code %s: %s\n", u.Rel, u.Line, u.Func, u.Kind, u.Expr, u.Reason)
 	}
 	if b.Len() > 0 {
 		t.Fatalf("reject emissions with unresolved codes:\n%s", b.String())
@@ -73,68 +109,67 @@ func TestToolRejectEmissionCodesResolve(t *testing.T) {
 
 // TestToolRejectCodesFormatAsStructuredRejectedBlocks checks rendered refusals.
 func TestToolRejectCodesFormatAsStructuredRejectedBlocks(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
 	cfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	formatter := guidance.NewStaticRejectFormatter(cfg)
 
-	inv, err := scanToolRejectEmission(lycaonRoot)
-	contractcheck.FailErr(t, "scan ToolReject sites", err)
-	sites := inv.Sites
-
 	seen := map[string]bool{}
-	for _, s := range sites {
-		if seen[s.Code] {
-			continue
-		}
-		seen[s.Code] = true
-		if _, ok := cfg.HintCodes[s.Code]; !ok {
-			// Covered by TestToolRejectCodesRegisteredInHintRegistry.
-			continue
-		}
-		formatted := toolrejection.FormatDecisionReject(s.Code, map[string]any{
-			"tool": "summarize", "path": "README.md", "profile": "coordinator",
-			"bytes": 10, "cap": 400000, "floor": 200, "detail": "test",
-			"need_one_of": []string{"path", "paths", "pattern", "content"},
-		}, formatter)
-		if formatted == nil {
-			t.Fatalf("%s: FormatDecisionReject returned nil", s.Code)
-		}
-		msg := formatted.Error()
-		if !strings.Contains(msg, "Rejected:") {
-			t.Fatalf("%s: formatted reject must contain Rejected:, got %q", s.Code, msg)
-		}
-		if !strings.Contains(msg, "Code: "+s.Code) {
-			t.Fatalf("%s: formatted reject missing Code line:\n%s", s.Code, msg)
-		}
-		// Refusals include structured copy.
-		if strings.TrimSpace(msg) == s.Code {
-			t.Fatalf("%s: FormatDecisionReject returned bare code (would wire as completed)", s.Code)
-		}
-
-		// Wire metadata comes from the refusal.
-		refusal, ok := guidance.RefusalFromError(formatted)
-		if !ok {
-			t.Fatalf("%s: FormatDecisionReject must return a refusal carrying its code", s.Code)
-		}
-		if refusal.Code() != s.Code {
-			t.Fatalf("%s: refusal code = %q", s.Code, refusal.Code())
-		}
-		tr := guidance.ComposeToolResult(refusal.Body, refusal.Facts, cfg)
-		if tr == nil {
-			t.Fatalf("%s: ComposeToolResult returned nil", s.Code)
-		}
-		if tr.Outcome != api.ToolResultOutcomeRejected {
-			t.Fatalf("%s: outcome = %q want rejected", s.Code, tr.Outcome)
-		}
-		if tr.PrimaryCode() != s.Code {
-			t.Fatalf("%s: tool_result.codes = %v", s.Code, tr.Codes)
+	for _, site := range scanToolRejectEmission(t).Sites {
+		for _, code := range site.Codes {
+			if seen[code] {
+				continue
+			}
+			seen[code] = true
+			if _, ok := cfg.HintCodes[code]; ok {
+				checkStructuredRejectBlock(t, cfg, formatter, code)
+			}
 		}
 	}
 	if len(seen) < 10 {
 		t.Fatalf("expected a substantial ToolReject inventory, got %d unique codes", len(seen))
+	}
+}
+
+func checkStructuredRejectBlock(t *testing.T, cfg *guidance.HintConfig, formatter *guidance.StaticRejectFormatter, code string) {
+	t.Helper()
+	formatted := toolrejection.FormatDecisionReject(code, map[string]any{
+		"tool": "summarize", "path": "README.md", "profile": "coordinator",
+		"bytes": 10, "cap": 400000, "floor": 200, "detail": "test",
+		"need_one_of": []string{"path", "paths", "pattern", "content"},
+	}, formatter)
+	if formatted == nil {
+		t.Fatalf("%s: FormatDecisionReject returned nil", code)
+	}
+	msg := formatted.Error()
+	if !strings.Contains(msg, "Rejected:") {
+		t.Fatalf("%s: formatted reject must contain Rejected:, got %q", code, msg)
+	}
+	if !strings.Contains(msg, "Code: "+code) {
+		t.Fatalf("%s: formatted reject missing Code line:\n%s", code, msg)
+	}
+	// Refusals include structured copy.
+	if strings.TrimSpace(msg) == code {
+		t.Fatalf("%s: FormatDecisionReject returned bare code (would wire as completed)", code)
+	}
+
+	// Wire metadata comes from the refusal.
+	refusal, ok := guidance.RefusalFromError(formatted)
+	if !ok {
+		t.Fatalf("%s: FormatDecisionReject must return a refusal carrying its code", code)
+	}
+	if refusal.Code() != code {
+		t.Fatalf("%s: refusal code = %q", code, refusal.Code())
+	}
+	tr := guidance.ComposeToolResult(refusal.Body, refusal.Facts, cfg)
+	if tr == nil {
+		t.Fatalf("%s: ComposeToolResult returned nil", code)
+	}
+	if tr.Outcome != api.ToolResultOutcomeRejected {
+		t.Fatalf("%s: outcome = %q want rejected", code, tr.Outcome)
+	}
+	if tr.PrimaryCode() != code {
+		t.Fatalf("%s: tool_result.codes = %v", code, tr.Codes)
 	}
 }
 
