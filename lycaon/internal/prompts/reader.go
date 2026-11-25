@@ -132,9 +132,11 @@ func NewReader(host HostFacts, turn TurnProjection) (Reader, error) {
 		return Reader{}, err
 	}
 
+	retained := resolved
+	retained.ProjectedSchemas = nil
 	return Reader{
 		host:        host,
-		turn:        resolved,
+		turn:        retained,
 		profileID:   profileID,
 		surfaceID:   surfaceID,
 		offered:     offered,
@@ -169,6 +171,12 @@ func (r Reader) Restricted(names []string) (Reader, error) {
 	turn.Plan = toolsurface.Compile(kept, nil)
 	turn.Offered = kept
 	turn.Declared = false
+	turn.ProjectedSchemas = make(map[string]map[string]any, len(kept))
+	for _, name := range kept {
+		if schema, ok := r.schemas[name]; ok {
+			turn.ProjectedSchemas[name] = schema
+		}
+	}
 	return NewReader(r.host, turn)
 }
 

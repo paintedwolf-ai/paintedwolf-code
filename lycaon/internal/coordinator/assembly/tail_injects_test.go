@@ -555,6 +555,10 @@ func runCommandJobsAxisCase(
 	t.Helper()
 	profiles := configureCoordinatorTestProfiles(baseProfiles, tc.waitConds, tc.denyJobControl)
 	promptLister := buildProjectedTestPromptLister(profiles, schemas, tc.waitSchemaMode)
+	if promptLister == nil {
+		// A host that lists no tools projects requests without them.
+		promptLister = func(context.Context, *api.Session, string) ([]tools.ToolMeta, error) { return nil, nil }
+	}
 
 	implState := func(context.Context, *api.Session) surface.ImplementSessionState {
 		if tc.workersInFl > 0 {
