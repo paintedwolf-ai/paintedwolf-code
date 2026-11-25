@@ -271,7 +271,7 @@ func TestCoverageTrackerFlagsDeadAndVacuousBranches(t *testing.T) {
 			Steps: []oar.NextStep{{
 				Tool:      "recall",
 				Args:      map[string]any{"query": "x"},
-				Say:       "Call {{ call }}.",
+				Say:       "Call {% if load %}{{ load }}, then {% endif %}{{ call }}.",
 				Otherwise: "Fallback.",
 			}},
 		},

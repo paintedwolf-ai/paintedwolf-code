@@ -3,9 +3,9 @@ steps:
     tool: "terminal_close"
     pick:
       id: "paintedwolf.live_terminal_ids"
-    say: "Use {{ call }} for an existing terminal id."
+    say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }} for an existing terminal id."
   - when: "size(paintedwolf.live_command_handles) > 0"
     tool: "command_stop"
     pick:
       handle: "paintedwolf.live_command_handles"
-    say: "Use {{ call }} for an existing command handle."
+    say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }} for an existing command handle."

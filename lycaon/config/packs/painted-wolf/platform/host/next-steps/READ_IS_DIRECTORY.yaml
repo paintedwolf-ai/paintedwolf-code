@@ -1,14 +1,14 @@
 steps:
   - program: ["ls", "{{ paintedwolf.path }}"]
     complete: true
-    say: "List one level with {{ call }}; use `.` for the repo root."
+    say: "List one level with {% if load %}{{ load }}, then {% endif %}{{ call }}; use `.` for the repo root."
   - program: ["find", "{{ paintedwolf.path }}", "-type", "f"]
     complete: true
-    say: "Use {{ call }} to locate candidate files in the directory tree."
+    say: "Use {% if load %}{{ load }}, then {% endif %}{{ call }} to locate candidate files in the directory tree."
   - program: ["grep", "-rn", "SYMBOL", "{{ paintedwolf.path }}"]
-    say: "To locate a symbol across files, use {{ call }}."
+    say: "To locate a symbol across files, use {% if load %}{{ load }}, then {% endif %}{{ call }}."
   - program: ["cat", "-n", "FILE"]
-    say: "Read a resulting concrete file with {{ call }}."
+    say: "Read a resulting concrete file with {% if load %}{{ load }}, then {% endif %}{{ call }}."
   - program: ["sed", "-n", "A,Bp", "FILE"]
     probe: ["sed", "-n", "1,2p", "FILE"]
-    say: "Read a bounded line range with {{ call }}."
+    say: "Read a bounded line range with {% if load %}{{ load }}, then {% endif %}{{ call }}."
