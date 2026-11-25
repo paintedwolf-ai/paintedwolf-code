@@ -61,26 +61,34 @@ func TestFuzzCorpusSemanticWitnesses(t *testing.T) {
 		}
 	})
 
-	// 028e1c4e90279a32: a coordinator whose catalog has the implement pack
-	// removed still receives its spawn roster when it asks for the observe
-	// investigate surface.
+	// 028e1c4e90279a32: every surface a coordinator whose catalog has the
+	// implement pack removed is admitted to still receives true guidance,
+	// including its spawn roster.
 	t.Run("coordinator_without_the_implement_pack", func(t *testing.T) {
-		seed := hoststate.CoordinatorSeed{
-			OverlayIndex: overlayIndexByID(t, d, "without-implement"), SessionMode: api.SessionModeAgent,
-			Posture: api.SessionPostureBuild, WorkflowState: hoststate.WorkflowAmbientIdle, SurfaceID: "observe_investigate",
-			RootTopology: hoststate.RootsSingleGit, Loading: hoststate.LoadingAllLoaded, WebSearch: true,
-			ApprovalPosture: gate.PostureBalanced, TempState: hoststate.TempScratchOnly, MCPState: hoststate.MCPNone,
-		}
-		st, err := hoststate.ResolveCoordinatorSeed(d, seed)
-		if err != nil || st.Excluded || st.PackOverlayID != "without-implement" {
-			t.Fatalf("resolved %s err=%v, want an admitted coordinator without the implement pack", st.ID, err)
-		}
-		for family := range uint8(3) {
-			raw, err := d.EncodeCoordinator(seed, hoststate.SeedTail{Family: family})
+		admitted := 0
+		for _, surf := range d.Surfaces {
+			seed := hoststate.CoordinatorSeed{
+				OverlayIndex: overlayIndexByID(t, d, "without-implement"), SessionMode: api.SessionModeAgent,
+				Posture: api.SessionPostureBuild, WorkflowState: hoststate.WorkflowAmbientIdle, SurfaceID: surf.ID,
+				RootTopology: hoststate.RootsSingleGit, Loading: hoststate.LoadingAllLoaded, WebSearch: true,
+				ApprovalPosture: gate.PostureBalanced, TempState: hoststate.TempScratchOnly, MCPState: hoststate.MCPNone,
+			}
+			st, err := hoststate.ResolveCoordinatorSeed(d, seed)
+			if err != nil || st.PackOverlayID != "without-implement" {
+				t.Fatalf("resolved %s err=%v, want a coordinator without the implement pack", st.ID, err)
+			}
+			if st.Excluded {
+				continue
+			}
+			admitted++
+			raw, err := d.EncodeCoordinator(seed, hoststate.SeedTail{})
 			if err != nil {
 				t.Fatalf("encode: %v", err)
 			}
 			run(t, raw)
+		}
+		if admitted == 0 {
+			t.Fatal("no surface admits a coordinator without the implement pack")
 		}
 	})
 
