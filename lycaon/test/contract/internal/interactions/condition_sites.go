@@ -257,51 +257,57 @@ func templateConditionSites(family, unitID, packID, source string, profile pongo
 	return arms, nil
 }
 
-// oarConditionSites lists the compiled rule condition and every nested step
-// and alternative guard of each effective rule.
+// oarConditionSites lists the guards of every effective rule of eff.
 func oarConditionSites(eff *extpacks.EffectiveCatalog, schemas *toolschema.Config) ([]ConditionSite, error) {
 	rs, err := loadEffectiveRules(eff, schemas)
 	if err != nil {
 		return nil, err
 	}
+	return RuleConditionSites(rs.All(), func(r *oar.Rule) string {
+		if u, ok := eff.Loaded["policy/"+r.ID]; ok && u.WinnerPackID != "" {
+			return u.WinnerPackID
+		}
+		return "stock"
+	})
+}
+
+// RuleConditionSites lists each rule's compiled condition and every nested
+// step and alternative guard, attributed to the pack packOf names.
+func RuleConditionSites(rules []*oar.Rule, packOf func(*oar.Rule) string) ([]ConditionSite, error) {
 	env, err := oar.InstalledEngineDeclaration().Environment()
 	if err != nil {
 		return nil, err
 	}
 	var out []ConditionSite
-	add := func(rule *oar.Rule, branch, source, packID string) {
+	add := func(rule *oar.Rule, branch, source string) {
 		site := ConditionSite{
 			ID: rule.Qualified() + "#" + branch, Family: "oar", ContributionID: "policy/" + rule.ID,
-			WinnerPackID: packID, SourceSpan: "policy/" + rule.ID + ":" + branch, Source: source,
+			WinnerPackID: packOf(rule), SourceSpan: "policy/" + rule.ID + ":" + branch, Source: source,
 		}
 		if compiled, err := oarcore.CompileCondition(source, env); err == nil {
 			site.Atoms = compiled.Atoms()
 		}
 		out = append(out, site)
 	}
-	var steps func(rule *oar.Rule, prefix, packID string, list []oar.NextStep)
-	steps = func(rule *oar.Rule, prefix, packID string, list []oar.NextStep) {
+	var steps func(rule *oar.Rule, prefix string, list []oar.NextStep)
+	steps = func(rule *oar.Rule, prefix string, list []oar.NextStep) {
 		for i, st := range list {
 			p := fmt.Sprintf("%s[%d]", prefix, i)
 			if strings.TrimSpace(st.When) != "" {
-				add(rule, p+".when", st.When, packID)
+				add(rule, p+".when", st.When)
 			}
-			steps(rule, p+".or", packID, st.Or)
+			steps(rule, p+".or", st.Or)
 		}
 	}
-	for _, rule := range rs.All() {
+	for _, rule := range rules {
 		if rule == nil {
 			continue
 		}
-		packID := "stock"
-		if u, ok := eff.Loaded["policy/"+rule.ID]; ok && u.WinnerPackID != "" {
-			packID = u.WinnerPackID
-		}
 		if strings.TrimSpace(rule.When) != "" {
-			add(rule, "when", rule.When, packID)
+			add(rule, "when", rule.When)
 		}
 		if rule.NextSteps != nil {
-			steps(rule, "steps", packID, rule.NextSteps.Steps)
+			steps(rule, "steps", rule.NextSteps.Steps)
 		}
 	}
 	return out, nil

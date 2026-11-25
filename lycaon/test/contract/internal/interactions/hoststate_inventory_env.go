@@ -14,7 +14,7 @@ func (inv *HostStateInventory) loadingAndAgentRows() []DomainClassRow {
 	partly := func(obs stateObservation) bool { return len(obs.Activated) > 0 && len(obs.Remaining) > 0 }
 	for _, ld := range d.LoadingModes {
 		c := row("deferred_tool_loading", "internal/coordinator/promptloop:compileRuntimeToolPlan", string(ld), RecipientCoordinator)
-		c.FuzzSelectable = coordinatorSelectable(d, func(s *hoststate.CoordinatorSeed) { s.Loading = ld })
+		c.FuzzSelectable = coordinatorResolvesTo(d, func(s *hoststate.CoordinatorSeed) { s.Loading = ld }, func(st hoststate.CoordinatorState) bool { return st.Loading == ld })
 		if st, obs, ok := inv.coordWitness(func(st hoststate.CoordinatorState, obs stateObservation) bool {
 			return st.Loading == ld && (ld != hoststate.LoadingPartlyLoaded || partly(obs))
 		}); ok {
@@ -24,7 +24,7 @@ func (inv *HostStateInventory) loadingAndAgentRows() []DomainClassRow {
 	}
 	for _, ld := range d.WorkerLoadings {
 		w := row("deferred_tool_loading", "internal/coordinator/promptloop/worker_tool_plan.go:compileWorkerToolPlan", string(ld), RecipientWorker)
-		w.FuzzSelectable = workerSelectable(d, func(s *hoststate.WorkerSeed) { s.Loading = ld })
+		w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { s.Loading = ld }, func(ws hoststate.WorkerState) bool { return ws.Loading == ld })
 		if ws, obs, ok := inv.workerWitness(func(ws hoststate.WorkerState, obs stateObservation) bool {
 			return ws.Loading == ld && (ld != hoststate.WorkerLoadingPartlyLoaded || partly(obs))
 		}); ok {
@@ -37,7 +37,7 @@ func (inv *HostStateInventory) loadingAndAgentRows() []DomainClassRow {
 	}
 	for _, ag := range d.Overlays[0].WorkerAgents {
 		a := row("worker_agent_profile", "internal/agentdef:LoadEffectiveWithCatalog", ag.ID+":"+ag.ToolProfile, RecipientWorker)
-		a.FuzzSelectable = workerSelectable(d, func(s *hoststate.WorkerSeed) { s.AgentID = ag.ID })
+		a.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { s.AgentID = ag.ID }, func(ws hoststate.WorkerState) bool { return ws.AgentID == ag.ID })
 		if ws, _, ok := inv.workerWitness(func(ws hoststate.WorkerState, _ stateObservation) bool { return ws.AgentID == ag.ID }); ok {
 			a = a.witness(ws.ID, ag.ID, "profile="+ws.ToolProfile)
 		}
@@ -91,14 +91,14 @@ func (inv *HostStateInventory) envToggleRows() []DomainClassRow {
 		for _, b := range []bool{false, true} {
 			val := fmt.Sprintf("%t", b)
 			c := row(tg.domain, tg.source, val, RecipientCoordinator)
-			c.FuzzSelectable = coordinatorSelectable(d, func(s *hoststate.CoordinatorSeed) { tg.coord(s, b) })
+			c.FuzzSelectable = coordinatorResolvesTo(d, func(s *hoststate.CoordinatorSeed) { tg.coord(s, b) }, func(st hoststate.CoordinatorState) bool { return tg.coordState(st) == b })
 			if st, _, ok := inv.coordWitness(func(st hoststate.CoordinatorState, obs stateObservation) bool {
 				return tg.coordState(st) == b && tg.delivered(obs) == b
 			}); ok {
 				c = c.witness(st.ID, val, "reader="+val)
 			}
 			w := row(tg.domain, tg.source, val, RecipientWorker)
-			w.FuzzSelectable = workerSelectable(d, func(s *hoststate.WorkerSeed) { tg.worker(s, b) })
+			w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { tg.worker(s, b) }, func(ws hoststate.WorkerState) bool { return tg.workerState(ws) == b })
 			if ws, _, ok := inv.workerWitness(func(ws hoststate.WorkerState, obs stateObservation) bool {
 				return tg.workerState(ws) == b && tg.delivered(obs) == b
 			}); ok {
@@ -109,7 +109,7 @@ func (inv *HostStateInventory) envToggleRows() []DomainClassRow {
 	}
 	for _, tmp := range d.TempStates {
 		c := row("temp_roots", "internal/session/profiles:WritableSharedTemp", string(tmp), RecipientCoordinator)
-		c.FuzzSelectable = coordinatorSelectable(d, func(s *hoststate.CoordinatorSeed) { s.TempState = tmp })
+		c.FuzzSelectable = coordinatorResolvesTo(d, func(s *hoststate.CoordinatorSeed) { s.TempState = tmp }, func(st hoststate.CoordinatorState) bool { return st.TempState == tmp })
 		if st, _, ok := inv.coordWitness(func(st hoststate.CoordinatorState, _ stateObservation) bool { return st.TempState == tmp }); ok {
 			c = c.witness(st.ID, string(tmp), fmt.Sprintf("scratch=%t shared=%d", st.SessionScratchDir != "", len(st.SharedTempLocations)))
 		}
@@ -117,7 +117,7 @@ func (inv *HostStateInventory) envToggleRows() []DomainClassRow {
 	}
 	for _, tmp := range d.TempStates {
 		w := row("temp_roots", "internal/session/profiles:WritableSharedTemp", string(tmp), RecipientWorker)
-		w.FuzzSelectable = workerSelectable(d, func(s *hoststate.WorkerSeed) { s.TempState = tmp })
+		w.FuzzSelectable = workerResolvesTo(d, func(s *hoststate.WorkerSeed) { s.TempState = tmp }, func(ws hoststate.WorkerState) bool { return ws.TempState == tmp })
 		if ws, _, ok := inv.workerWitness(func(ws hoststate.WorkerState, _ stateObservation) bool { return ws.TempState == tmp }); ok {
 			w = w.witness(ws.ID, string(tmp), fmt.Sprintf("scratch=%t shared=%d", ws.SessionScratchDir != "", len(ws.SharedTempLocations)))
 		}
@@ -125,7 +125,7 @@ func (inv *HostStateInventory) envToggleRows() []DomainClassRow {
 	}
 	for _, mcp := range d.MCPStates {
 		c := row("mcp_attachment", "internal/tools:PlanMCPTools", string(mcp), RecipientCoordinator)
-		c.FuzzSelectable = coordinatorSelectable(d, func(s *hoststate.CoordinatorSeed) { s.MCPState = mcp })
+		c.FuzzSelectable = coordinatorResolvesTo(d, func(s *hoststate.CoordinatorSeed) { s.MCPState = mcp }, func(st hoststate.CoordinatorState) bool { return st.MCPState == mcp })
 		if st, _, ok := inv.coordWitness(func(st hoststate.CoordinatorState, _ stateObservation) bool { return st.MCPState == mcp }); ok {
 			c = c.witness(st.ID, string(mcp), "mcp="+string(st.MCPState))
 		}
@@ -194,10 +194,6 @@ func coordinatorResolvesTo(d *hoststate.SeedDomains, mutate func(*hoststate.Coor
 	return false
 }
 
-func coordinatorSelectable(d *hoststate.SeedDomains, mutate func(*hoststate.CoordinatorSeed)) bool {
-	return coordinatorResolvesTo(d, mutate, func(hoststate.CoordinatorState) bool { return true })
-}
-
 // workerResolvesTo is coordinatorResolvesTo for worker seeds, starting from
 // every agent of the overlay a mutation selects.
 func workerResolvesTo(d *hoststate.SeedDomains, mutate func(*hoststate.WorkerSeed), accept func(hoststate.WorkerState) bool) bool {
@@ -219,8 +215,4 @@ func workerResolvesTo(d *hoststate.SeedDomains, mutate func(*hoststate.WorkerSee
 		}
 	}
 	return false
-}
-
-func workerSelectable(d *hoststate.SeedDomains, mutate func(*hoststate.WorkerSeed)) bool {
-	return workerResolvesTo(d, mutate, func(hoststate.WorkerState) bool { return true })
 }

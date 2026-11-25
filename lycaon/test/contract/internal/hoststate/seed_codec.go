@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/lycaon/lycaon/internal/gate"
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -103,12 +104,48 @@ func (d *SeedDomains) Validate() error {
 			return err
 		}
 	}
+	for _, dom := range []struct {
+		name string
+		keys []string
+	}{
+		{"overlays", keysOf(d.Overlays, func(o PackOverlay) string { return o.ID })},
+		{"session postures", keysOf(d.Postures, func(p sessionprofiles.PostureSpec) string { return string(p.ID) })},
+		{"surfaces", keysOf(d.Surfaces, func(s SurfaceInfo) string { return s.ID })},
+		{"session modes", keysOf(d.SessionModes, func(m api.SessionMode) string { return string(m) })},
+		{"workflow states", keysOf(d.WorkflowStates, func(w WorkflowState) string { return string(w) })},
+		{"root topologies", keysOf(d.RootTopologies, func(r RootTopology) string { return string(r) })},
+		{"loading modes", keysOf(d.LoadingModes, func(l LoadingMode) string { return string(l) })},
+		{"approval postures", keysOf(d.ApprovalPostures, func(p gate.Posture) string { return string(p) })},
+		{"temp states", keysOf(d.TempStates, func(t TempState) string { return string(t) })},
+		{"MCP states", keysOf(d.MCPStates, func(m MCPState) string { return string(m) })},
+		{"worker branches", keysOf(d.WorkerBranches, func(b WorkerBranchView) string { return string(b) })},
+		{"worker loadings", keysOf(d.WorkerLoadings, func(l WorkerLoadingMode) string { return string(l) })},
+	} {
+		seen := map[string]bool{}
+		for _, k := range dom.keys {
+			if k == "" {
+				return fmt.Errorf("seed domain %s has an unset member", dom.name)
+			}
+			if seen[k] {
+				return fmt.Errorf("seed domain %s lists %s twice; only the first is selectable", dom.name, k)
+			}
+			seen[k] = true
+		}
+	}
 	for _, ov := range d.Overlays {
 		if len(ov.WorkerAgents) > maxByteDomain {
 			return fmt.Errorf("overlay %s has %d worker agents; a seed byte selects at most %d", ov.ID, len(ov.WorkerAgents), maxByteDomain)
 		}
 	}
 	return nil
+}
+
+func keysOf[T any](values []T, key func(T) string) []string {
+	out := make([]string, len(values))
+	for i, v := range values {
+		out[i] = key(v)
+	}
+	return out
 }
 
 func checkByteDomain(name string, size int) error {
