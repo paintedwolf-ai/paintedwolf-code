@@ -178,7 +178,9 @@ func (inv *inventory) rootAndBranchRows() []DomainClassRow {
 			c := row("workspace_roots_multi_git", src, cls, RecipientCoordinator)
 			for _, rt := range d.RootTopologies {
 				c.FuzzSelectable = c.FuzzSelectable || coordinatorResolvesTo(d, func(s *hoststate.CoordinatorSeed) { s.RootTopology = rt },
-					func(st hoststate.CoordinatorState) bool { return st.RootCount >= 2 && st.HasGit == pGit && st.HasAnyGitRoot == aGit })
+					func(st hoststate.CoordinatorState) bool {
+						return st.RootCount >= 2 && st.HasGit == pGit && st.HasAnyGitRoot == aGit
+					})
 			}
 			if st, obs, ok := inv.coordWitness(func(_ hoststate.CoordinatorState, obs stateObservation) bool { return match(obs) }); ok {
 				c = c.witness(st.ID, string(st.RootTopology), fmt.Sprintf("has_git=%t has_any_git_root=%t", obs.HasGit, obs.HasAnyGitRoot))
