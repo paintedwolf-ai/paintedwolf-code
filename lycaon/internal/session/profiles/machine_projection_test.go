@@ -17,11 +17,11 @@ func TestProjectedSurfaceDoesNotDeliverPostureChanges(t *testing.T) {
 		commandExternalHidden: func() bool { return true },
 	}
 	sess := &api.Session{ID: "chat"}
-	projected := service.promptSurface(t.Context(), sess, nil, hostresources.Snapshot{}, nil, false, false)
+	projected := service.promptSurface(t.Context(), sess, nil, hostresources.Snapshot{}, hostresources.Reach{}, false, false)
 	if posture != 0 || external != 0 {
 		t.Fatal("projection delivered a posture observation")
 	}
-	normal := service.PromptSurface(t.Context(), sess, nil, hostresources.Snapshot{}, nil, false)
+	normal := service.PromptSurface(t.Context(), sess, nil, hostresources.Snapshot{}, hostresources.Reach{}, false)
 	if projected.Fingerprint != normal.Fingerprint || !projected.CommandExternalHidden {
 		t.Fatal("projection differs from normal prompt surface")
 	}

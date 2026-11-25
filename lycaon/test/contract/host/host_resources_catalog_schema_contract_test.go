@@ -76,3 +76,26 @@ func catalogInstance(t *testing.T, data []byte) any {
 	contractcheck.FailErr(t, "decode catalog json", err)
 	return inst
 }
+
+func TestBundledHostResourceUsesNameCatalogResources(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), "lycaon", "config", "packs", "painted-wolf", "platform", "host", "host-resources.yaml"))
+	contractcheck.FailErr(t, "read bundled catalog", err)
+	catalog, err := hostresources.ParseCatalog(data, "built-in")
+	contractcheck.FailErr(t, "parse bundled catalog", err)
+	ids := map[string]bool{}
+	for _, def := range catalog.Resources {
+		ids[def.ID] = true
+	}
+	for _, def := range catalog.Resources {
+		for _, realization := range def.Realizations {
+			for _, use := range realization.Uses {
+				for _, id := range use.Requires.AnyResource {
+					if !ids[id] || id == def.ID {
+						t.Errorf("%s use %s runs through %q, which is not another catalog resource", def.ID, use.ID, id)
+					}
+				}
+			}
+		}
+	}
+}

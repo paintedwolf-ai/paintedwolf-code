@@ -255,7 +255,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	}
 
 	// Turn 1: device posture is balanced and no repository overlay exists.
-	surface1 := prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, nil, true)
+	surface1 := prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, hostresources.Reach{}, true)
 	if surface1.Posture != gate.PostureBalanced {
 		t.Fatalf("turn 1 posture = %q want balanced", surface1.Posture)
 	}
@@ -270,7 +270,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	testutil.FailErr(t, "write repository approvals.yaml", os.WriteFile(overlayPath, []byte("approval_posture: strict\n"), 0o600))
 
 	// Turn 2: effective posture reads strict from the repository overlay, updates prompt copy, and queues one notice.
-	surface2 := prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, nil, true)
+	surface2 := prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, hostresources.Reach{}, true)
 	if surface2.Posture != gate.PostureStrict {
 		t.Fatalf("turn 2 posture = %q want strict", surface2.Posture)
 	}
@@ -290,7 +290,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 
 	// Turn 3: hiding the external selector queues project.posture.changed; reverting before consumption drops it.
 	externalHidden = true
-	_ = prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, nil, true)
+	_ = prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, hostresources.Reach{}, true)
 	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != "coordinator-posture-changed" {
 		t.Fatalf("pending kick after external hidden = %q want coordinator-posture-changed", got)
 	}
@@ -303,9 +303,9 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 
 	// Toggle true -> false -> true before consumption drops the no-op notice.
 	externalHidden = false
-	_ = prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, nil, true)
+	_ = prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, hostresources.Reach{}, true)
 	externalHidden = true
-	_ = prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, nil, true)
+	_ = prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, hostresources.Reach{}, true)
 	if _, ok := kicks.PeekPendingKickID(sess.ID); ok {
 		t.Fatal("reverted external selector visibility left a pending notice")
 	}

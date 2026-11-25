@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/hostresources"
+
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
@@ -85,7 +87,7 @@ func mergeCoordinatorPromptVarsForTripartite(
 		sessionPath = sess.WorkspacePath
 	}
 	mergeFixtureWorkspaceRoot(t, vars, sessionPath)
-	mergePromptBudgetHostResources(t, vars)
+	mergePromptBudgetHostResources(t, vars, hostresources.RoleCoordinator)
 	err := prompts.MergeCoordinatorPromptVars(
 		profile.SurfaceID,
 		prompts.ExecutionModePromptTransition{

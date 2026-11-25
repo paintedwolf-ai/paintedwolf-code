@@ -18,6 +18,7 @@ func (surface AgentPromptSurface) CacheFingerprint() string {
 		Skills                []AgentSkillView
 		HostResources         []AgentHostResourceView
 		HostResourcesOmitted  int
+		HostUnconfined        bool
 		SessionScratchDir     string
 		SharedTempLocations   []string
 		ReviewsConfinedWrites bool
@@ -28,6 +29,7 @@ func (surface AgentPromptSurface) CacheFingerprint() string {
 		catalog,
 		surface.HostResources,
 		surface.HostResourcesOmitted,
+		surface.HostUnconfined,
 		surface.SessionScratchDir,
 		surface.SharedTempLocations,
 		surface.Posture.ReviewsConfinedWrites(),

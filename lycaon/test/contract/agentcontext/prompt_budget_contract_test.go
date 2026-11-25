@@ -3,6 +3,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"cmp"
@@ -150,7 +151,7 @@ func measurePromptBudgets(t *testing.T, root string, reg *PromptBudgetRegistry) 
 			requirePromptBudgetSkillAvailability(t, personaExtra, "worker persona "+id)
 		}
 		if writeAgentForBudget(t, id) {
-			mergePromptBudgetHostResources(t, personaExtra)
+			mergePromptBudgetHostResources(t, personaExtra, hostresources.RoleWorker)
 			requirePromptBudgetHostResources(t, personaExtra, "worker persona "+id)
 		}
 		reader, err := prompts.DeclaredReader(nil, id)
@@ -183,7 +184,7 @@ func measurePromptBudgets(t *testing.T, root string, reg *PromptBudgetRegistry) 
 			for k, v := range vars {
 				renderVars[k] = v
 			}
-			mergePromptBudgetHostResources(t, renderVars)
+			mergePromptBudgetHostResources(t, renderVars, promptBudgetRole(id))
 			requirePromptBudgetHostResources(t, renderVars, "agent template "+id)
 		}
 		rendered, err := engine.Render(context.Background(), ref, renderVars)

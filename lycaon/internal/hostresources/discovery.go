@@ -102,6 +102,11 @@ func discover(ctx context.Context, def Definition, env discoveryEnvironment) (ve
 	return evaluate(ctx, realization.Discover, env), realization
 }
 
+// RealizationFor is the definition's realization on platform, or nil.
+func (d Definition) RealizationFor(platform string) *Realization {
+	return realizationForPlatform(d.Realizations, platform)
+}
+
 func realizationForPlatform(realizations []Realization, platform string) *Realization {
 	for i := range realizations {
 		if len(realizations[i].Platforms) == 0 || stringSetIncludes(realizations[i].Platforms, platform) {

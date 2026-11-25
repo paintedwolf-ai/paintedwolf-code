@@ -14,7 +14,7 @@ func TestProjectAmbientWriteAgentSeesOmitAllowPresence(t *testing.T) {
 	}
 	plan := ProjectAmbient(AmbientInput{
 		Snapshot:        Snapshot{Resources: []State{docker}},
-		Surfaces:        []ExecutionSurface{SurfaceProcessExec},
+		Reach:           Reach{Surfaces: []ExecutionSurface{SurfaceProcessExec}},
 		MutationCapable: true,
 	})
 	if len(plan.Resources) != 1 || plan.Resources[0].ID != "docker" {
@@ -31,7 +31,7 @@ func TestProjectAmbientReadAgentHidesOmitAllow(t *testing.T) {
 	}
 	plan := ProjectAmbient(AmbientInput{
 		Snapshot:        Snapshot{Resources: []State{docker}},
-		Surfaces:        []ExecutionSurface{SurfaceProcessExec},
+		Reach:           Reach{Surfaces: []ExecutionSurface{SurfaceProcessExec}},
 		MutationCapable: false,
 	})
 	if len(plan.Resources) != 0 {
@@ -54,7 +54,7 @@ func TestProjectAmbientWriteAgentSkipsUnsupportedAndUnavailableOmit(t *testing.T
 	}
 	plan := ProjectAmbient(AmbientInput{
 		Snapshot:        Snapshot{Resources: []State{unsupported, missing}},
-		Surfaces:        []ExecutionSurface{SurfaceProcessExec},
+		Reach:           Reach{Surfaces: []ExecutionSurface{SurfaceProcessExec}},
 		MutationCapable: true,
 	})
 	if len(plan.Resources) != 0 {
@@ -83,7 +83,7 @@ func TestProjectAmbientGuidanceAndPolicyStillSurface(t *testing.T) {
 	}
 	plan := ProjectAmbient(AmbientInput{
 		Snapshot:        Snapshot{Resources: []State{advertiseMissing, avoid, denied}},
-		Surfaces:        []ExecutionSurface{SurfaceProcessExec},
+		Reach:           Reach{Surfaces: []ExecutionSurface{SurfaceProcessExec}},
 		MutationCapable: false,
 	})
 	if len(plan.Resources) != 3 {
@@ -103,7 +103,7 @@ func TestProjectAmbientRequiresMatchingSurfaces(t *testing.T) {
 	}
 	plan := ProjectAmbient(AmbientInput{
 		Snapshot:        Snapshot{Resources: []State{docker}},
-		Surfaces:        nil,
+		Reach:           Reach{},
 		MutationCapable: true,
 	})
 	if len(plan.Resources) != 0 {
@@ -123,7 +123,7 @@ func TestProjectAmbientBudgetCountsOmitted(t *testing.T) {
 	}
 	selected := selectAmbient(AmbientInput{
 		Snapshot:        Snapshot{Resources: resources},
-		Surfaces:        []ExecutionSurface{SurfaceProcessExec},
+		Reach:           Reach{Surfaces: []ExecutionSurface{SurfaceProcessExec}},
 		MutationCapable: true,
 	})
 	sortAmbient(selected)

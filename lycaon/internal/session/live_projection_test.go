@@ -240,15 +240,15 @@ func TestPromptSurfaceWriteAgentSeesOmitAllowPresence(t *testing.T) {
 		Access: hostresources.AccessAllow, Prompt: hostresources.PromptOmit,
 		Surfaces: []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec},
 	}}}
-	surfaces := []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec}
-	write := mgr.PromptSurface(context.Background(), sess, nil, snapshot, surfaces, true)
+	reach := hostresources.Reach{Surfaces: []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec}}
+	write := mgr.PromptSurface(context.Background(), sess, nil, snapshot, reach, true)
 	if len(write.HostResources) != 1 || write.HostResources[0].ID != "docker" {
 		t.Fatalf("write-agent surface = %#v", write.HostResources)
 	}
 	if write.HostResources[0].Category != "Containers" {
 		t.Fatalf("category = %q", write.HostResources[0].Category)
 	}
-	read := mgr.PromptSurface(context.Background(), sess, nil, snapshot, surfaces, false)
+	read := mgr.PromptSurface(context.Background(), sess, nil, snapshot, reach, false)
 	if len(read.HostResources) != 0 {
 		t.Fatalf("read-only surface = %#v", read.HostResources)
 	}

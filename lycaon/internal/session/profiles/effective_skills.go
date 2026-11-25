@@ -28,14 +28,14 @@ func (m *Service) EffectiveSkills(ctx context.Context, projectID string, roots [
 		projectDir = roots[0]
 	}
 	snapshot := m.hostResourceSnapshot(ctx, hostresources.ProjectContext{ID: projectID, Dir: projectDir}, nil)
-	return m.effectiveSkillsForSurfaces(ctx, projectID, roots, nil, snapshot)
+	return m.effectiveSkillsForReach(ctx, projectID, roots, hostresources.Reach{}, snapshot)
 }
 
-func (m *Service) effectiveSkillsForSurfaces(
+func (m *Service) effectiveSkillsForReach(
 	ctx context.Context,
 	projectID string,
 	roots []string,
-	surfaces []hostresources.ExecutionSurface,
+	reach hostresources.Reach,
 	snapshot hostresources.Snapshot,
 ) ([]skills.Skill, []extpacks.Diagnostic) {
 	if m == nil {
@@ -49,7 +49,7 @@ func (m *Service) effectiveSkillsForSurfaces(
 	}
 	device, diags := extpacks.LoadEffectiveSkills(eff)
 	if m.skillsGate == nil || !m.skillsGate.Applies(ctx, projectID) {
-		return applySkillHostResources(device, diags, snapshot, surfaces)
+		return applySkillHostResources(device, diags, snapshot, reach)
 	}
 	if len(roots) == 0 && m.projects != nil && projectID != "" {
 		if p, err := m.projects.Get(ctx, projectID); err == nil {
@@ -58,5 +58,5 @@ func (m *Service) effectiveSkillsForSurfaces(
 	}
 	projectSkills, notes := m.skillsCache.Discover(roots)
 	loaded, combinedDiags := extpacks.CombineSkills(device, diags, projectSkills, notes)
-	return applySkillHostResources(loaded, combinedDiags, snapshot, surfaces)
+	return applySkillHostResources(loaded, combinedDiags, snapshot, reach)
 }

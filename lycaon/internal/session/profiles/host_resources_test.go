@@ -44,16 +44,16 @@ resources:
 	service, err := hostresources.NewService(t.TempDir())
 	testutil.FailErr(t, "new host resources service", err)
 	snapshot := service.SnapshotFor(context.Background(), false, hostresources.ProjectContext{}, nil)
-	surfaces := []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec}
+	reach := hostresources.Reach{Surfaces: []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec}}
 	loaded, diags := applySkillHostResources([]skills.Skill{
 		{Name: "plain", Metadata: map[string]string{}, Body: "plain"},
 		{Name: "ready", UnitID: "skills/ready", Metadata: map[string]string{"host_resources": "present"}, Body: "ready"},
 		{Name: "hidden", UnitID: "skills/hidden", Metadata: map[string]string{"host_resources": "absent"}, Body: "hidden"},
-	}, nil, snapshot, surfaces)
+	}, nil, snapshot, reach)
 	if len(loaded) != 2 || len(diags) != 1 {
 		t.Fatalf("loaded=%#v diags=%#v", loaded, diags)
 	}
-	if loaded[1].Name != "ready" || !strings.Contains(loaded[1].Body, "routes=proxy") {
+	if loaded[1].Name != "ready" || !strings.Contains(loaded[1].Body, "`present`") || !strings.HasSuffix(loaded[1].Body, "\n\nready") {
 		t.Fatalf("decorated skill = %#v", loaded[1])
 	}
 	if diags[0].UnitID != "skills/hidden" {
@@ -63,7 +63,7 @@ resources:
 	grouped, groupDiags := applySkillHostResources([]skills.Skill{
 		{Name: "either", UnitID: "skills/either", Metadata: map[string]string{"host_resources": "present|absent"}, Body: "either"},
 		{Name: "neither", UnitID: "skills/neither", Metadata: map[string]string{"host_resources": "absent|missing"}, Body: "neither"},
-	}, nil, snapshot, surfaces)
+	}, nil, snapshot, reach)
 	if len(grouped) != 1 || len(groupDiags) != 1 {
 		t.Fatalf("grouped=%#v diags=%#v", grouped, groupDiags)
 	}
