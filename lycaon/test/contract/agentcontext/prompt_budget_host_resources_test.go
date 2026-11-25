@@ -2,6 +2,7 @@ package contract
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,6 +40,16 @@ func promptBudgetHostResourceVars(t *testing.T, role hostresources.AgentRole) ma
 	return prompts.AgentPromptSurfaceTemplateVars(surface)
 }
 
+// promptBudgetRealization is def's realization on platform, as discovery selects it.
+func promptBudgetRealization(def hostresources.Definition, platform string) *hostresources.Realization {
+	for i := range def.Realizations {
+		if len(def.Realizations[i].Platforms) == 0 || slices.Contains(def.Realizations[i].Platforms, platform) {
+			return &def.Realizations[i]
+		}
+	}
+	return nil
+}
+
 // promptBudgetRosterBytes sizes a plan's prompt rows to pick the widest platform.
 func promptBudgetRosterBytes(plan hostresources.AmbientPlan) int {
 	raw, _ := json.Marshal(profiles.HostResourceViews(plan))
@@ -48,7 +59,7 @@ func promptBudgetRosterBytes(plan hostresources.AmbientPlan) int {
 func promptBudgetAmbientPlan(catalog hostresources.Catalog, platform string, role hostresources.AgentRole) hostresources.AmbientPlan {
 	resources := make([]hostresources.State, 0, len(catalog.Resources))
 	for _, def := range catalog.Resources {
-		realization := def.RealizationFor(platform)
+		realization := promptBudgetRealization(def, platform)
 		if realization == nil {
 			continue
 		}
