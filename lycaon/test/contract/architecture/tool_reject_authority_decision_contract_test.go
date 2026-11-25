@@ -3,6 +3,8 @@ package contract
 import (
 	"fmt"
 	"testing"
+
+	"github.com/lycaon/lycaon/test/contract/internal/rejectinventory"
 )
 
 // Every structured authority refusal (an isolation outcome or a policy or
@@ -35,7 +37,9 @@ func TestAuthorityRefusalDecisionsResolve(t *testing.T) {
 	if authority == 0 {
 		t.Fatal("inventory found no structured authority refusals")
 	}
-	t.Logf("structured authority refusals: %d sites, %d decision routes, %d unresolved inputs", authority, routes, len(unresolved))
+	unwitnessed := rejectinventory.UnwitnessedDecisions(inv, func(rejectinventory.Site) bool { return true }, nil)
+	t.Logf("structured authority refusals: %d sites, %d decision routes, %d unresolved inputs, %d sites without a recorded witness",
+		authority, routes, len(unresolved), len(unwitnessed))
 	for _, u := range unresolved {
 		t.Errorf("unresolved authority decision: %s", u)
 	}
