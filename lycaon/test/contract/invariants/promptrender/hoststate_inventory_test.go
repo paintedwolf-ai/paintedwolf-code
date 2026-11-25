@@ -1,6 +1,7 @@
 package promptrender_test
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -44,45 +45,45 @@ func TestHostStateInventoryHasNoUnexplainedGaps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tool vocabulary: %v", err)
 	}
-	graph, err := interactions.DefaultProducerGraph()
-	if err != nil {
-		t.Fatalf("producer graph: %v", err)
-	}
-	sites, err := interactions.DiscoverCatalogInstructionsWithGraph(stock.Catalog, stock.Schemas, names, graph)
+	sites, err := interactions.DiscoverCatalogInstructionsWithGraph(stock.Catalog, stock.Schemas, names, nil)
 	if err != nil {
 		t.Fatalf("discover instruction sites: %v", err)
 	}
+	producers, err := joinProducers(sites, &sum.Coverage)
+	if err != nil {
+		t.Fatalf("join instruction producers: %v", err)
+	}
 
-	coordAuth := make(map[string]hoststate.TurnAuthority, len(coordStates))
+	inv := interactions.NewHostStateInventory(interactions.HostStateInventoryInput{
+		Catalog:           stock.Catalog,
+		Domains:           domains,
+		CoordinatorStates: coordStates,
+		WorkerStates:      workerStates,
+		Coverage:          &sum.Coverage,
+		Sites:             sites,
+		Producers:         producers,
+	})
 	for _, st := range coordStates {
 		if st.Excluded {
 			continue
 		}
-		if coordAuth[st.ID], err = hoststate.FreezeTurnAuthority(ctx, st); err != nil {
+		auth, err := hoststate.FreezeTurnAuthority(ctx, st)
+		if err != nil {
 			t.Fatalf("coordinator authority %s: %v", st.ID, err)
 		}
+		inv.ObserveCoordinator(st, auth)
 	}
-	workerAuth := make(map[string]hoststate.TurnAuthority, len(workerStates))
 	for _, ws := range workerStates {
 		if ws.Excluded {
 			continue
 		}
-		if workerAuth[ws.ID], err = hoststate.FreezeWorkerAuthority(ctx, ws); err != nil {
+		auth, err := hoststate.FreezeWorkerAuthority(ctx, ws)
+		if err != nil {
 			t.Fatalf("worker authority %s: %v", ws.ID, err)
 		}
+		inv.ObserveWorker(ws, auth)
 	}
-
-	rep, err := interactions.BuildHostStateInventory(interactions.HostStateInventoryInput{
-		Catalog:                stock.Catalog,
-		Domains:                domains,
-		CoordinatorStates:      coordStates,
-		WorkerStates:           workerStates,
-		CoordinatorAuthorities: coordAuth,
-		WorkerAuthorities:      workerAuth,
-		Coverage:               &sum.Coverage,
-		Sites:                  sites,
-		Graph:                  graph,
-	})
+	rep, err := inv.Report()
 	if err != nil {
 		t.Fatalf("build inventory: %v", err)
 	}
@@ -95,4 +96,15 @@ func TestHostStateInventoryHasNoUnexplainedGaps(t *testing.T) {
 	if err := rep.ValidateZeroUnexplainedGaps(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// joinProducers traces site inputs through a producer graph it releases on
+// return, so the graph and the frozen authorities never share the heap.
+func joinProducers(sites []interactions.InstructionSite, cov *hoststate.CoverageReport) (interactions.ProducerJoin, error) {
+	graph, err := interactions.BuildProducerGraph()
+	if err != nil {
+		return interactions.ProducerJoin{}, err
+	}
+	defer runtime.GC()
+	return interactions.JoinInstructionProducers(sites, cov, graph)
 }

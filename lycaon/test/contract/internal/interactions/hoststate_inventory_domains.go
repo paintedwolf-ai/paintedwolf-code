@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
 
-func (inv *inventory) approvalRows() []DomainClassRow {
+func (inv *HostStateInventory) approvalRows() []DomainClassRow {
 	const src = "internal/gate/posture.go:AllPostures"
 	d := inv.in.Domains
 	var rows []DomainClassRow
@@ -38,7 +38,7 @@ func askReadOnly(s *hoststate.WorkerSeed) {
 	s.BranchView = hoststate.BranchMainGit
 }
 
-func (inv *inventory) sessionModeRows() []DomainClassRow {
+func (inv *HostStateInventory) sessionModeRows() []DomainClassRow {
 	const src = "pkg/api/session_mode.generated.go:AllSessionModeValues"
 	d := inv.in.Domains
 	var rows []DomainClassRow
@@ -89,7 +89,7 @@ func (inv *inventory) sessionModeRows() []DomainClassRow {
 	return rows
 }
 
-func (inv *inventory) postureAndOverlayRows() []DomainClassRow {
+func (inv *HostStateInventory) postureAndOverlayRows() []DomainClassRow {
 	d := inv.in.Domains
 	var rows []DomainClassRow
 	for _, p := range d.Postures {
@@ -131,7 +131,7 @@ func (inv *inventory) postureAndOverlayRows() []DomainClassRow {
 	return rows
 }
 
-func (inv *inventory) surfaceAndWorkflowRows() []DomainClassRow {
+func (inv *HostStateInventory) surfaceAndWorkflowRows() []DomainClassRow {
 	d := inv.in.Domains
 	var rows []DomainClassRow
 	for _, s := range d.Surfaces {
@@ -159,7 +159,7 @@ func (inv *inventory) surfaceAndWorkflowRows() []DomainClassRow {
 	return rows
 }
 
-func (inv *inventory) rootAndBranchRows() []DomainClassRow {
+func (inv *HostStateInventory) rootAndBranchRows() []DomainClassRow {
 	const src = "internal/session/readerfacts/resolver.go:gitFacts"
 	d := inv.in.Domains
 	var rows []DomainClassRow

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
 
@@ -63,18 +64,15 @@ type InventoryGap struct {
 	Detail           string `json:"detail"`
 }
 
-// HostStateInventoryInput holds the candidate sources and the authorities
-// actually resolved for each generated state.
+// HostStateInventoryInput holds the candidate sources the inventory joins.
 type HostStateInventoryInput struct {
-	Catalog                *extpacks.EffectiveCatalog
-	Domains                *hoststate.SeedDomains
-	CoordinatorStates      []hoststate.CoordinatorState
-	WorkerStates           []hoststate.WorkerState
-	CoordinatorAuthorities map[string]hoststate.TurnAuthority
-	WorkerAuthorities      map[string]hoststate.TurnAuthority
-	Coverage               *hoststate.CoverageReport
-	Sites                  []InstructionSite
-	Graph                  *ProducerGraph
+	Catalog           *extpacks.EffectiveCatalog
+	Domains           *hoststate.SeedDomains
+	CoordinatorStates []hoststate.CoordinatorState
+	WorkerStates      []hoststate.WorkerState
+	Coverage          *hoststate.CoverageReport
+	Sites             []InstructionSite
+	Producers         ProducerJoin
 }
 
 // HostStateInventoryReport joins current authority inputs, reader facts,
@@ -136,30 +134,52 @@ func observe(loaded map[string]bool, auth hoststate.TurnAuthority) stateObservat
 	return obs
 }
 
-// inventory indexes the resolved states with their observations.
-type inventory struct {
+// HostStateInventory accumulates what each state's production Reader
+// delivers; it keeps observations and fact classes, never the Readers.
+type HostStateInventory struct {
 	in      HostStateInventoryInput
 	coord   map[string]stateObservation
 	workers map[string]stateObservation
+	// classes maps recipient, fact and value class to the first witness state.
+	classes map[string]map[string]map[string]string
 }
 
-func newInventory(in HostStateInventoryInput) *inventory {
-	inv := &inventory{in: in, coord: map[string]stateObservation{}, workers: map[string]stateObservation{}}
-	for _, st := range in.CoordinatorStates {
-		if auth, ok := in.CoordinatorAuthorities[st.ID]; ok && !st.Excluded {
-			inv.coord[st.ID] = observe(st.Loaded, auth)
+// NewHostStateInventory starts an inventory over in.
+func NewHostStateInventory(in HostStateInventoryInput) *HostStateInventory {
+	return &HostStateInventory{
+		in: in, coord: map[string]stateObservation{}, workers: map[string]stateObservation{},
+		classes: map[string]map[string]map[string]string{RecipientCoordinator: {}, RecipientWorker: {}},
+	}
+}
+
+// ObserveCoordinator records the authority resolved for st.
+func (inv *HostStateInventory) ObserveCoordinator(st hoststate.CoordinatorState, auth hoststate.TurnAuthority) {
+	inv.coord[st.ID] = observe(st.Loaded, auth)
+	inv.recordClasses(RecipientCoordinator, st.ID, auth.Reader.Facts())
+}
+
+// ObserveWorker records the authority resolved for ws.
+func (inv *HostStateInventory) ObserveWorker(ws hoststate.WorkerState, auth hoststate.TurnAuthority) {
+	inv.workers[ws.ID] = observe(ws.Loaded, auth)
+	inv.recordClasses(RecipientWorker, ws.ID, auth.Reader.Facts())
+}
+
+func (inv *HostStateInventory) recordClasses(rec, stateID string, facts map[string]any) {
+	for name := range prompts.DeclaredReaderFactScalars() {
+		cls := classifyFactValue(facts, name)
+		byClass := inv.classes[rec][name]
+		if byClass == nil {
+			byClass = map[string]string{}
+			inv.classes[rec][name] = byClass
+		}
+		if _, ok := byClass[cls]; !ok {
+			byClass[cls] = stateID
 		}
 	}
-	for _, ws := range in.WorkerStates {
-		if auth, ok := in.WorkerAuthorities[ws.ID]; ok && !ws.Excluded {
-			inv.workers[ws.ID] = observe(ws.Loaded, auth)
-		}
-	}
-	return inv
 }
 
 // coordWitness returns the first delivered coordinator state match accepts.
-func (inv *inventory) coordWitness(match func(hoststate.CoordinatorState, stateObservation) bool) (hoststate.CoordinatorState, stateObservation, bool) {
+func (inv *HostStateInventory) coordWitness(match func(hoststate.CoordinatorState, stateObservation) bool) (hoststate.CoordinatorState, stateObservation, bool) {
 	for _, st := range inv.in.CoordinatorStates {
 		if obs, ok := inv.coord[st.ID]; ok && match(st, obs) {
 			return st, obs, true
@@ -169,7 +189,7 @@ func (inv *inventory) coordWitness(match func(hoststate.CoordinatorState, stateO
 }
 
 // workerWitness returns the first delivered worker state match accepts.
-func (inv *inventory) workerWitness(match func(hoststate.WorkerState, stateObservation) bool) (hoststate.WorkerState, stateObservation, bool) {
+func (inv *HostStateInventory) workerWitness(match func(hoststate.WorkerState, stateObservation) bool) (hoststate.WorkerState, stateObservation, bool) {
 	for _, ws := range inv.in.WorkerStates {
 		if obs, ok := inv.workers[ws.ID]; ok && match(ws, obs) {
 			return ws, obs, true
@@ -178,41 +198,38 @@ func (inv *inventory) workerWitness(match func(hoststate.WorkerState, stateObser
 	return hoststate.WorkerState{}, stateObservation{}, false
 }
 
-// BuildHostStateInventory derives the coverage report from production
-// registries, the resolved states, their Readers and the discovered sites.
-func BuildHostStateInventory(in HostStateInventoryInput) (*HostStateInventoryReport, error) {
+// Report derives the coverage report from the production registries, the
+// observed states and the producer join.
+func (inv *HostStateInventory) Report() (*HostStateInventoryReport, error) {
+	in := inv.in
 	if in.Domains == nil || in.Catalog == nil {
 		return nil, fmt.Errorf("domains and effective catalog required")
 	}
-	inv := newInventory(in)
 	specs, err := hoststate.AnchorCatalogSpecs()
 	if err != nil {
 		return nil, err
 	}
-	factRows := inv.readerFactRows()
 	boundaries, err := buildBoundaryPartitions(specs, in.Sites)
 	if err != nil {
 		return nil, err
 	}
-	matched, unmatched := joinInstructionProducers(in, specs)
-	rows := inv.domainRows()
 	rep := &HostStateInventoryReport{
 		CatalogRevision:        in.Catalog.Revision,
 		TotalCoordinatorStates: len(in.CoordinatorStates),
 		TotalWorkerStates:      len(in.WorkerStates),
 		TotalInstructionSites:  len(in.Sites),
 		TotalAnchorSpecs:       len(specs),
-		DomainClasses:          rows,
-		ReaderFactCoverage:     factRows,
+		DomainClasses:          inv.domainRows(),
+		ReaderFactCoverage:     inv.readerFactRows(),
 		BoundaryPartitions:     boundaries,
-		MatchedProducerInputs:  matched,
-		UnmatchedProducers:     unmatched,
+		MatchedProducerInputs:  in.Producers.Matched,
+		UnmatchedProducers:     in.Producers.Unmatched,
 	}
 	rep.UnexplainedGaps = computeInventoryGaps(rep, in.Coverage)
 	return rep, nil
 }
 
-func (inv *inventory) domainRows() []DomainClassRow {
+func (inv *HostStateInventory) domainRows() []DomainClassRow {
 	var rows []DomainClassRow
 	rows = append(rows, inv.approvalRows()...)
 	rows = append(rows, inv.sessionModeRows()...)

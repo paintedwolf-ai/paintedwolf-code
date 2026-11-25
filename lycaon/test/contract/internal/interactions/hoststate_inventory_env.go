@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
 
-func (inv *inventory) loadingAndAgentRows() []DomainClassRow {
+func (inv *HostStateInventory) loadingAndAgentRows() []DomainClassRow {
 	d := inv.in.Domains
 	var rows []DomainClassRow
 	partly := func(obs stateObservation) bool { return len(obs.Activated) > 0 && len(obs.Remaining) > 0 }
@@ -84,7 +84,7 @@ var envToggles = []envToggle{
 	},
 }
 
-func (inv *inventory) envToggleRows() []DomainClassRow {
+func (inv *HostStateInventory) envToggleRows() []DomainClassRow {
 	d := inv.in.Domains
 	var rows []DomainClassRow
 	for _, tg := range envToggles {
