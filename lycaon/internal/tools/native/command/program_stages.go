@@ -55,17 +55,33 @@ func attachProgramStage(ctx context.Context, stage bgprocess.ProgramStage) stage
 	held := &heldStage{stage: stage}
 	t.held = append(t.held, held)
 	t.mu.Unlock()
-	if stage.Lease != nil {
-		stage.Lease.OnRefusal(t.heldRefused)
-		if len(stage.Lease.Refusals().Refusals) > 0 {
+	if lease := stage.Lease; lease != nil {
+		lease.OnRefusal(func() {
+			if actionable(lease.Refusals()) {
+				t.heldRefused()
+			}
+		})
+		if actionable(lease.Refusals()) {
 			t.heldRefused()
 		}
 	}
 	return t.settleHeld(held)
 }
 
+// actionable reports a refusal some capability request opens. A floor no
+// approval opens gives a parked program nothing to recover with.
+func actionable(refusals confine.SandboxRefusals) bool {
+	for _, refusal := range refusals.Refusals {
+		if refusal.Recovery != "" && refusal.Recovery != confine.RecoverNone {
+			return true
+		}
+	}
+	return false
+}
+
 // onHeldRefusal runs fn once, on its own goroutine, when a stage held for a
-// job that does not exist yet reports a refusal, including one already reported.
+// job that does not exist yet reports an actionable refusal, including one
+// already reported.
 func (t *stageTracker) onHeldRefusal(fn func()) {
 	t.mu.Lock()
 	if t.attach != nil {
@@ -75,7 +91,7 @@ func (t *stageTracker) onHeldRefusal(fn func()) {
 	t.refused = fn
 	refused := false
 	for _, held := range t.held {
-		refused = refused || (held.stage.Lease != nil && len(held.stage.Lease.Refusals().Refusals) > 0)
+		refused = refused || (held.stage.Lease != nil && actionable(held.stage.Lease.Refusals()))
 	}
 	t.mu.Unlock()
 	if refused {

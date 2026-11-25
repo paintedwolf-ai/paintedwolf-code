@@ -227,3 +227,24 @@ func TestHeldRefusalsAfterContinuationBelongToTheJob(t *testing.T) {
 		t.Fatal("a refusal on a job's stage signalled the park")
 	}
 }
+
+func TestFloorRefusalOnAHeldStageDoesNotSignal(t *testing.T) {
+	tracker := &stageTracker{}
+	ctx := withStageTracker(t.Context(), tracker)
+	signal := heldRefusalSignal(t, tracker)
+	lease := &stageLease{}
+	attachProgramStage(ctx, confinedStage(lease))
+	lease.mu.Lock()
+	lease.refusals = append(lease.refusals, confine.SandboxRefusal{Operation: "file-read-data", Target: "/proc/kcore", Count: 1, Recovery: confine.RecoverNone})
+	listeners := append([]func(){}, lease.listeners...)
+	lease.mu.Unlock()
+	for _, listen := range listeners {
+		listen()
+	}
+	tracker.mu.Lock()
+	armed := tracker.refused != nil
+	tracker.mu.Unlock()
+	if !armed || len(signal) != 0 {
+		t.Fatal("a floor refusal no capability opens signalled the park")
+	}
+}
