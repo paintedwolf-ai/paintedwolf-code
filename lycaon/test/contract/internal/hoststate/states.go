@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -121,6 +122,7 @@ type coordinatorSeed struct {
 	approval   gate.Posture
 	temp       TempState
 	mcp        MCPState
+	binding    *PhaseBinding
 }
 
 var (
@@ -160,7 +162,12 @@ func CoordinatorStates(ctx context.Context) ([]CoordinatorState, error) {
 		surfMap[s.ID] = s.Surface
 	}
 
+	bindings, err := ShippedPhaseBindings()
+	if err != nil {
+		return nil, err
+	}
 	seeds := buildCoordinatorSeeds(overlays, postures, surfaces)
+	seeds = append(seeds, buildPhaseBindingSeeds(postures, bindings)...)
 	planCache := make(map[string]toolsurface.Plan, 64)
 	seen := make(map[string]bool, len(seeds))
 	out := make([]CoordinatorState, 0, len(seeds))
@@ -219,6 +226,29 @@ func buildCoordinatorSeeds(
 		}
 	}
 	seeds = append(seeds, buildOverlayAndEnvSeeds(overlays, postures, modes)...)
+	return seeds
+}
+
+// buildPhaseBindingSeeds adds an active phase for every shipped workflow
+// binding, so bound surface templates, mode refs and advance policies render.
+func buildPhaseBindingSeeds(postures []sessionprofiles.PostureSpec, bindings []PhaseBinding) []coordinatorSeed {
+	var seeds []coordinatorSeed
+	for i := range bindings {
+		b := &bindings[i]
+		for _, mode := range api.AllSessionModeValues() {
+			for _, p := range postures {
+				for _, rt := range []RootTopology{RootsNone, RootsSingleGit, RootsDualNonGitFirst} {
+					for _, ld := range []LoadingMode{LoadingFloorOnly, LoadingAllLoaded} {
+						seeds = append(seeds, coordinatorSeed{
+							mode: mode, posture: p.ID, wf: WorkflowActivePhase, surfaceID: b.Resolved.CoordinatorSurface,
+							roots: rt, loading: ld, web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+							binding: b,
+						})
+					}
+				}
+			}
+		}
+	}
 	return seeds
 }
 
@@ -318,6 +348,9 @@ func resolveCoordinatorSeed(
 		overlay.ID, seed.mode, seed.posture, seed.wf, seed.surfaceID, tp.SurfaceID,
 		seed.roots, seed.loading, seed.web, seed.vision, seed.extHidden, seed.approval, seed.temp, seed.mcp,
 	)
+	if seed.binding != nil {
+		id += "/bind=" + seed.binding.WorkflowID + ":" + seed.binding.PhaseID
+	}
 	return CoordinatorState{
 		ID: id, PackOverlayID: overlay.ID, SessionMode: seed.mode, Posture: seed.posture,
 		WorkflowState: seed.wf, RequestedSurfaceID: seed.surfaceID, RootTopology: seed.roots,
@@ -352,8 +385,38 @@ func coordinatorRunInputs(seed coordinatorSeed, allowlist []string) (api.Coordin
 		if seed.surfaceID == "workflow_compose" {
 			runCtx.HasComposeDraft = true
 		}
+		if seed.binding != nil {
+			applyPhaseBinding(&runCtx, *seed.binding)
+		}
 	}
 	return runCtx, st
+}
+
+// RunStateVariants returns st under each active run state, its turn profile
+// re-resolved by the production selector. Run-state fields do not enter tool
+// projection, so the variants share st's authority.
+func RunStateVariants(st CoordinatorState) ([]CoordinatorState, error) {
+	if strings.TrimSpace(st.RunContext.RunID) == "" {
+		return nil, nil
+	}
+	sess := &api.Session{Mode: st.SessionMode, Posture: st.Posture}
+	if len(st.Roots) > 0 {
+		sess.WorkspacePath = st.Roots[0].Ref.Path
+	}
+	contexts := ActiveRunStateContexts(st.RunContext)
+	out := make([]CoordinatorState, 0, len(contexts))
+	for _, runCtx := range contexts {
+		v := st
+		v.RunContext = runCtx
+		v.TurnProfile = surface.ResolveTurnProfile(runCtx, sess, st.History, st.ImplementState)
+		if v.TurnProfile.SurfaceID != st.TurnProfile.SurfaceID {
+			return nil, fmt.Errorf("%s: run state %q resolved surface %q, want %q", st.ID,
+				surface.ResolveRunStateOverlay(runCtx), v.TurnProfile.SurfaceID, st.TurnProfile.SurfaceID)
+		}
+		v.ID = st.ID + "/run=" + string(surface.ResolveRunStateOverlay(runCtx))
+		out = append(out, v)
+	}
+	return out, nil
 }
 
 func surfaceTemplatesLoadedInCatalog(overlay PackOverlay, tp surface.TurnProfile) bool {

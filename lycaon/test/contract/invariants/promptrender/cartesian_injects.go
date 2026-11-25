@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/packboard"
@@ -296,12 +297,16 @@ func renderRemainingCoordInjectsForRep(
 		}
 	}
 
-	// transition.md
-	for _, entered := range []string{"investigate", "orchestrate", "wrapup"} {
-		trText, err := injRenderer.RenderWithReader(ctx, cr.auth.Reader, "transition", map[string]any{
-			"execution_mode_entered": entered,
-			"execution_mode_left":    "investigate",
-		})
+	for _, tr := range modeTransitionsInto(cr.state) {
+		occ := map[string]any{}
+		if err := prompts.MergeCoordinatorPromptVars(cr.state.TurnProfile.SurfaceID, prompts.ExecutionModePromptTransition{
+			ExecutionModePrevious: tr.ExecutionModePrevious,
+			ExecutionModeEntered:  tr.ExecutionModeEntered,
+			ExecutionModeLeft:     tr.ExecutionModeLeft,
+		}, "", occ); err != nil {
+			return err
+		}
+		trText, err := anchor.RenderInformWithReader(ctx, anchor.InjectTransition, anchor.MatchContext{Surface: "coordinator", SessionID: "sess-tr"}, injRenderer, cr.auth.Reader, occ)
 		if err != nil {
 			return err
 		}
@@ -312,4 +317,29 @@ func renderRemainingCoordInjectsForRep(
 		}
 	}
 	return nil
+}
+
+// modeTransitionsInto computes, for st's surface, the transition the host
+// injects after each prior execution-mode family, and on an active run after
+// each mode a phase entry can force.
+func modeTransitionsInto(st hoststate.CoordinatorState) []surface.TransitionVars {
+	current := surface.ExecutionModeFamily(st.TurnProfile.SurfaceID)
+	families := []string{"", surface.ExecutionModeFamilyInvestigate, surface.ExecutionModeFamilyOrchestrate, surface.ExecutionModeFamilyWrapup}
+	causes := [][]surface.ModeTransitionCause{nil}
+	if st.RunContext.RunID != "" {
+		for _, mode := range families {
+			if workflowdef.IsForceExecutionMode(mode) {
+				causes = append(causes, []surface.ModeTransitionCause{{Kind: surface.ModeTransitionCausePhaseHook, Mode: mode}})
+			}
+		}
+	}
+	var out []surface.TransitionVars
+	for _, previous := range families {
+		for _, c := range causes {
+			if tr := surface.ComputeModeTransition(previous, current, c); inject.ShouldRenderTransitionInject(tr) {
+				out = append(out, tr)
+			}
+		}
+	}
+	return out
 }

@@ -7,17 +7,16 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 	"github.com/lycaon/lycaon/test/contract/internal/interactions"
 )
 
 // runStateContexts are run contexts that make ResolveRunStateOverlay select
 // each overlay, built from the typed fields it reads.
-var runStateContexts = []api.CoordinatorRunContext{
-	{},
-	{RunID: "fixture-run", PendingFeedback: &api.PendingFeedback{}},
-	{RunID: "fixture-run", FailedLeaves: []string{"fixture-leaf"}},
-	{RunID: "fixture-run", RunStatus: string(api.WorkflowRunStatusRunning)},
-}
+var runStateContexts = append(
+	[]api.CoordinatorRunContext{{}},
+	hoststate.ActiveRunStateContexts(api.CoordinatorRunContext{RunID: "fixture-run"})...,
+)
 
 // SelectedTemplateRefs lists, for every catalog surface, session mode and run
 // state overlay, the surface and mode templates the production turn profile

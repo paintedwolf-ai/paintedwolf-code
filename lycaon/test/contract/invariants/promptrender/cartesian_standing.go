@@ -43,6 +43,7 @@ func runCoordinatorPromptAndProcedureMatrix(
 		return err
 	}
 	checkedToolDescAuth := map[string]bool{}
+	runStateAuthChecked := map[string]bool{}
 	bundles := map[string]overlayEngineBundle{}
 	pairs, err := cachedCoordinatorPairs()
 	if err != nil {
@@ -78,6 +79,9 @@ func runCoordinatorPromptAndProcedureMatrix(
 		resolveNamed := resolver.forCoordinatorState(st)
 
 		if err := renderAndCheckCoordinatorStandingPrompt(ctx, s, bundle.engine, bundle.unitCat, st, auth, skillsList, idx, resolveNamed, cache, sum); err != nil {
+			return err
+		}
+		if err := renderRunStateVariants(ctx, s, bundle, st, auth, skillsList, idx, resolveNamed, cache, runStateAuthChecked, sum); err != nil {
 			return err
 		}
 		if err := renderAndCheckToolProcedures(ctx, s, bundle.inj, "coord:"+st.ID, st.Overlay.Catalog.Revision, auth, st.SessionMode, st.Posture, resolveNamed, cache, sum); err != nil {
@@ -123,7 +127,8 @@ func renderAndCheckCoordinatorStandingPrompt(
 		return err
 	}
 	unitIDs := selectedUnitIDs(unitCat, auth.Reader.Selection())
-	rKey := renderCacheKeyForVars("standing:"+st.TurnProfile.SurfaceID+":"+s.Site, engineRev(s, st.Overlay), unitIDs, vars)
+	templates := append([]string{st.TurnProfile.SurfaceTemplate}, st.TurnProfile.ModeRefs...)
+	rKey := renderCacheKeyForVars("standing:"+strings.Join(templates, ",")+":"+s.Site, engineRev(s, st.Overlay), unitIDs, vars)
 	promptText, _, err := cache.RenderOrReuse(rKey, func() (string, error) {
 		return renderStandingFromVars(ctx, engine, unitCat, st.TurnProfile, auth.Reader.Selection(), vars)
 	})
@@ -135,6 +140,47 @@ func renderAndCheckCoordinatorStandingPrompt(
 	checkClaimsCached(cache, rKey, auth.Digest, func(v string) { sum.Violations = append(sum.Violations, v) }, func() []string {
 		return checkClaimsOnce(s, label, promptText, auth, st.SessionMode, st.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 	})
+	return nil
+}
+
+// renderRunStateVariants renders st's standing prompt under each active run
+// state. Once per authority it checks that the run state left the frozen
+// authority unchanged, so the variants are checked against auth.
+func renderRunStateVariants(
+	ctx context.Context,
+	s *Stock,
+	bundle overlayEngineBundle,
+	st hoststate.CoordinatorState,
+	auth hoststate.TurnAuthority,
+	skillsList []skills.Skill,
+	variantIdx int,
+	resolveNamed func(string) (toolvocabtest.ActorAuthority, error),
+	cache *hoststate.RenderCache,
+	authChecked map[string]bool,
+	sum *CartesianSummary,
+) error {
+	variants, err := hoststate.RunStateVariants(st)
+	if err != nil || len(variants) == 0 {
+		return err
+	}
+	if !authChecked[auth.Digest] {
+		authChecked[auth.Digest] = true
+		for _, v := range variants {
+			vAuth, fErr := hoststate.FreezeTurnAuthority(ctx, v)
+			if fErr != nil {
+				return fErr
+			}
+			if vAuth.Digest != auth.Digest || vAuth.Reader.Fingerprint() != auth.Reader.Fingerprint() {
+				sum.Violations = append(sum.Violations, fmt.Sprintf("%s: the run state changed the turn authority", v.ID))
+			}
+		}
+	}
+	for _, v := range variants {
+		sum.markCase("coordinator:" + v.ID)
+		if err := renderAndCheckCoordinatorStandingPrompt(ctx, s, bundle.engine, bundle.unitCat, v, auth, skillsList, variantIdx, resolveNamed, cache, sum); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
