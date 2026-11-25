@@ -81,7 +81,6 @@ var doorExemptions = []invariants.Exemption{
 	{Key: "internal/scalefixture/tree.go", Reason: "disposable scale and benchmark fixture trees in a directory the caller owns; half a million files need no per-file durability"},
 
 	// The door stages a whole replacement; it cannot express an append.
-	{Key: "internal/blueprint/manager_impl.go", Reason: "append-only critic evidence log"},
 	{Key: "internal/debugretention/writer.go", Reason: "bounded append stream truncates in place at a configured diagnostic cap"},
 	{Key: "internal/inspector/jsonl_store.go", Reason: "append-only evidence journal"},
 
