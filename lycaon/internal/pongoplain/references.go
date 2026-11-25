@@ -137,10 +137,8 @@ func splitSetAssignment(rest string) (name, expr string, ok bool) {
 		if strings.Contains(ident, ".") || !followedBySingleAssign(rest, loc[0], loc[1]) {
 			continue
 		}
+		// followedBySingleAssign guarantees the '=' after the name.
 		eqRel := strings.IndexByte(rest[loc[1]:], '=')
-		if eqRel < 0 {
-			return "", "", false
-		}
 		return ident, strings.TrimSpace(rest[loc[1]+eqRel+1:]), true
 	}
 	return "", "", false

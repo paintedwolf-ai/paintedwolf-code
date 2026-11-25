@@ -66,9 +66,6 @@ func InlineTemplateID(source string) string {
 }
 
 func (r *BranchRecorder) record(filename string, line, col int, kind BranchKind, taken bool) {
-	if r == nil {
-		return
-	}
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
 	if r.Hits == nil {

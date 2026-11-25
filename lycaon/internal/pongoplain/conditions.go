@@ -2,6 +2,7 @@ package pongoplain
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,9 +63,6 @@ func tokenSource(p *pongo2.Parser) string {
 	var prev *pongo2.Token
 	for i := 0; i < p.Count(); i++ {
 		tok := p.Get(i)
-		if tok == nil {
-			continue
-		}
 		text := tok.Val
 		if tok.Typ == pongo2.TokenString {
 			text = strconv.Quote(tok.Val)
@@ -174,22 +172,10 @@ func (r *BranchRecorder) recordCondition(site branchSite, source string, atoms [
 		r.Conditions[branchID] = hit
 	}
 	for _, v := range hit.Vectors {
-		if v.Decision == decision && slicesEqualTruth(v.Atoms, values) {
+		if v.Decision == decision && slices.Equal(v.Atoms, values) {
 			v.Count++
 			return
 		}
 	}
 	hit.Vectors = append(hit.Vectors, &ConditionVector{Atoms: values, Decision: decision, Recomposes: recomposes, Count: 1})
-}
-
-func slicesEqualTruth(a, b []Truth) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

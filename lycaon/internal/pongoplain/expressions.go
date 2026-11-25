@@ -186,9 +186,7 @@ func ParseTemplateTree(source string) (*TemplateTree, error) {
 			appendNode(&TemplateNode{Kind: NodeOutput, Line: line, RawExpr: raw, Expr: expr})
 			continue
 		}
-		if !strings.HasPrefix(region, "{%") {
-			continue
-		}
+		// The remaining region kind is a control tag.
 		body := trimDelimiters(region, "{%", "%}")
 		fields := strings.Fields(body)
 		if len(fields) == 0 {
