@@ -1,6 +1,6 @@
 ## Feedback vs decision phases
 
-- **Feedback phases** (`feedback_phases` in run context): call `workflow_user_feedback` for pending `phase_id` + prompt. A host question card is already in the transcript — **wait for the card** (or POST …/feedback/{phase_id}); do not re-ask in chat. Coordinator prose does not satisfy the gate.
+- **Feedback phases** (`feedback_phases` in run context): `pending_feedback` in the `## Workflow` block names the pending phase and its prompt. A host question card is already in the transcript — **wait for the card** (or POST …/feedback/{phase_id}); do not re-ask in chat. Coordinator prose does not satisfy the gate.
 - **Decision phases** (`decision_phases`): structured choices; record via HITL/decision APIs — never mark complete in chat prose alone.
 
 When a tool call is blocked in **spec posture**, read the compact block — `Cause:` / `Fix:` / `Code:` — and branch on **`Code:`**; never infer meaning from free-form error text. Other rejects are `Rejected:` / `Fix:` / `Code:`.

@@ -98,6 +98,7 @@ type CoordinatorState struct {
 	SpawnAllowlist      []string
 
 	RunContext     api.CoordinatorRunContext
+	PhaseBinding   *PhaseBinding
 	ImplementState surface.ImplementSessionState
 	History        []api.Message
 	TurnProfile    surface.TurnProfile
@@ -359,7 +360,7 @@ func resolveCoordinatorSeed(
 		TempState: seed.temp, MCPState: seed.mcp, Roots: roots, RootCount: len(roots),
 		HasGit: hasGit, HasAnyGitRoot: anyGit, SessionScratchDir: scratch,
 		SharedTempLocations: shared, SpawnAllowlist: allowlist,
-		RunContext: runCtx, ImplementState: implState, History: history,
+		RunContext: runCtx, PhaseBinding: seed.binding, ImplementState: implState, History: history,
 		TurnProfile: tp, Plan: plan, Loaded: loaded, Overlay: overlay,
 		Excluded: excludedReason != "", ExcludedReason: excludedReason,
 	}, nil

@@ -36,29 +36,40 @@ func ShippedPhaseBindings() ([]PhaseBinding, error) {
 	for _, id := range ids {
 		m := manifests[id]
 		for _, phase := range m.PhaseDefs {
-			resolved, err := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID)
+			b, err := BindPhase(m, phase)
 			if err != nil {
 				return nil, err
 			}
-			if resolved.CoordinatorSurface == "" {
+			if b.Resolved.CoordinatorSurface == "" || seen[b.Key()] {
 				continue
 			}
-			b := PhaseBinding{
-				WorkflowID: m.ID,
-				PhaseID:    phase.ID,
-				Resolved:   resolved,
-				Advance:    string(workflowdef.EffectiveAdvancePolicy(m, phase)),
-			}
-			key := fmt.Sprintf("%s|%s|%s|%t|%t|%s", resolved.CoordinatorSurface, resolved.SurfaceTemplate,
-				strings.Join(resolved.ModeRefs, ","), resolved.WorkflowInvestigateEligible, resolved.ProfileResolved, b.Advance)
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
+			seen[b.Key()] = true
 			out = append(out, b)
 		}
 	}
 	return out, nil
+}
+
+// BindPhase resolves phase's coordinator surface binding and advance policy.
+func BindPhase(m workflowdef.Manifest, phase workflowdef.PhaseDef) (PhaseBinding, error) {
+	resolved, err := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID)
+	if err != nil {
+		return PhaseBinding{}, err
+	}
+	return PhaseBinding{
+		WorkflowID: m.ID,
+		PhaseID:    phase.ID,
+		Resolved:   resolved,
+		Advance:    string(workflowdef.EffectiveAdvancePolicy(m, phase)),
+	}, nil
+}
+
+// Key identifies the turn inputs a binding sets, so phases that bind alike
+// share recipients.
+func (b PhaseBinding) Key() string {
+	r := b.Resolved
+	return fmt.Sprintf("%s|%s|%s|%t|%t|%s", r.CoordinatorSurface, r.SurfaceTemplate,
+		strings.Join(r.ModeRefs, ","), r.WorkflowInvestigateEligible, r.ProfileResolved, b.Advance)
 }
 
 // applyPhaseBinding sets the run-context fields the coordinator turn frame

@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
@@ -265,52 +264,6 @@ func (k *kickSweep) workerKick(ctx context.Context, kick string, envBase map[str
 		}
 		return checkClaimsOnce(k.s, label, text, target, wr.ws.ParentSessionMode, wr.ws.Posture, subj, followup, nil, nil, true)
 	})
-	return nil
-}
-
-// phaseKicks renders every workflow phase.entered kick on every stock
-// recipient of the phase's coordinator surface; the further fixtures run on
-// build posture.
-func (k *kickSweep) phaseKicks(ctx context.Context, wfReg *workflowdef.Registry, reps []coordRep) error {
-	bySurface := map[string][]coordRep{}
-	for _, cr := range reps {
-		if cr.state.PackOverlayID == "stock" {
-			bySurface[cr.state.TurnProfile.SurfaceID] = append(bySurface[cr.state.TurnProfile.SurfaceID], cr)
-		}
-	}
-	variants := phaseKickVariants()
-	for _, wfKey := range sortedKeys(wfReg.All()) {
-		m := wfReg.All()[wfKey]
-		surfaces := map[string]string{}
-		for _, p := range m.PhaseDefs {
-			surfaces[p.ID] = p.CoordinatorSurface
-		}
-		for _, in := range m.Injects {
-			if in.On != "phase.entered" || in.Selector.Phase == nil {
-				continue
-			}
-			surfID := surfaces[*in.Selector.Phase]
-			for _, cr := range bySurface[surfID] {
-				for vIdx, pv := range variants {
-					if vIdx > 0 && cr.state.Posture != api.SessionPostureBuild {
-						continue
-					}
-					data := maps.Clone(pv)
-					if err := prompts.MergeCoordinatorKickVarsForTools(data, cr.auth.Reader); err != nil {
-						return err
-					}
-					text, rKey, err := k.render(ctx, "phasekick:", in.Render, cr.auth.Reader, data)
-					if err != nil {
-						return err
-					}
-					label := fmt.Sprintf("%s phase %s kick %s on %s (%s)", wfKey, *in.Selector.Phase, in.Render, surfID, cr.state.ID)
-					checkClaimsCached(k.cache, rKey, cr.auth.Digest, k.report, func() []string {
-						return checkClaimsOnce(k.s, label, text, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
-					})
-				}
-			}
-		}
-	}
 	return nil
 }
 
