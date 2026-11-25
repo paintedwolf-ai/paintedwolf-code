@@ -162,13 +162,18 @@ describe("BriefingEvidencePage", () => {
   });
 
   it("offers Show all only on an input taller than its held height; it grows in place and can be held again", async () => {
-    stubLayout((body) => (body.textContent?.includes("SUPPLIED_INTENT") ? 400 : 40));
+    // 400 is far past the held height of 100; 140 is past it by less than the slack; 40 is under it.
+    stubLayout((body) => (body.textContent?.includes("SUPPLIED_INTENT") ? 400 : body.textContent?.includes("Completed") ? 140 : 40));
     const page = await shown();
     const controls = () => [...page.querySelectorAll<HTMLElement>('[data-testid="briefing-evidence-show-all"]')];
     await waitFor(() => expect(controls()).toHaveLength(1));
     const long = section(page, "purpose").querySelector<HTMLElement>('[data-key="user_intent"]')!;
     expect(long.contains(controls()[0]!)).toBe(true);
     expect(long.querySelector(".den-briefing-evidence__body")?.hasAttribute("data-clamped")).toBe(true);
+    // Text a little taller than the held height is shown whole, with no control.
+    const nearly = section(page, "outcome").querySelector<HTMLElement>('[data-key="state"] .den-briefing-evidence__body')!;
+    expect(nearly.hasAttribute("data-expanded")).toBe(true);
+    expect(nearly.hasAttribute("data-clamped")).toBe(false);
 
     fireEvent.click(controls()[0]!);
     const body = long.querySelector(".den-briefing-evidence__body")!;

@@ -6,6 +6,9 @@ import { evidenceInputIsProse, evidenceInputParts } from "./evidence-inputs.ts";
 
 const copy = briefingCopy.evidence;
 
+/** How far past the held height text may run before it is clipped. */
+const HELD_SLACK_PX = 64;
+
 /** One input a summary was given: its name, then the text that was sent. Long text is held until expanded, and can be held again. */
 export function EvidenceInput(props: { item: BriefingRecordItem }) {
   const parts = () => evidenceInputParts(props.item);
@@ -17,6 +20,7 @@ export function EvidenceInput(props: { item: BriefingRecordItem }) {
   let body: HTMLDivElement | undefined;
   const [overflows, setOverflows] = createSignal(false);
   const [expanded, setExpanded] = createSignal(false);
+  const [fits, setFits] = createSignal(false);
   let root: HTMLDivElement | undefined;
   // Collapsing a long input keeps it on screen, so the reader is not left below where it ended.
   const toggle = () => {
@@ -28,8 +32,14 @@ export function EvidenceInput(props: { item: BriefingRecordItem }) {
     const el = body;
     if (!el || typeof ResizeObserver === "undefined") return;
     // The held height is a style rule, so overflow is read from the element, never computed from text.
+    // Text only a little taller than the held height is shown whole: a control that reveals a line or two is noise.
+    let held = 0;
     const check = () => {
-      if (!expanded() && el.clientHeight > 0) setOverflows(el.scrollHeight > el.clientHeight + 1);
+      if (expanded() || el.clientHeight === 0) return;
+      if (!fits()) held = el.clientHeight;
+      const over = el.scrollHeight - held;
+      setFits(over > 1 && over <= HELD_SLACK_PX);
+      setOverflows(over > HELD_SLACK_PX);
     };
     const observer = new ResizeObserver(check);
     observer.observe(el);
@@ -45,7 +55,7 @@ export function EvidenceInput(props: { item: BriefingRecordItem }) {
       <div
         ref={(el) => (body = el)}
         class="den-briefing-evidence__body"
-        data-expanded={expanded() ? "" : undefined}
+        data-expanded={expanded() || fits() ? "" : undefined}
         data-clamped={overflows() && !expanded() ? "" : undefined}
       >
         <For each={parts()}>
