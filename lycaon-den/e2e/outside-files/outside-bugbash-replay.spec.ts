@@ -83,11 +83,6 @@ webE2e("home and shared temp redirects reach Files and Review", async ({ page, r
     expect(paths).toContain(home.slice(1));
     expect(paths).toContain(shared.slice(1));
 
-    await page.getByTestId("project-files-entry").click();
-    const tree = page.getByTestId("files-tree");
-    await expect(tree.getByTestId("files-tree-outside-section")).toHaveText("Outside project");
-    await expect(tree.getByTestId("files-tree-dir").filter({ hasText: path.basename(folder) })).toBeVisible();
-
     const group = liveChatStage(page).getByTestId("diff-group").first();
     await group.getByTestId("diff-group-files").click();
     const card = group.getByTestId("file-edit-diff").filter({ hasText: home }).first();
@@ -98,6 +93,10 @@ webE2e("home and shared temp redirects reach Files and Review", async ({ page, r
     await card.getByTestId("source-path-link").click();
     expect((await opened).ok()).toBe(true);
     await expect(page.getByTestId("files-editor-host").filter({ visible: true }).locator(".cm-content")).toContainText("first");
+
+    const tree = page.getByTestId("files-tree");
+    await expect(tree.getByTestId("files-tree-outside-section")).toHaveText("Outside project");
+    await expect(tree.getByTestId("files-tree-dir").filter({ hasText: path.basename(folder) })).toBeVisible();
   } finally {
     rmSync(folder, { recursive: true, force: true });
     rmSync(shared, { force: true });
