@@ -18,9 +18,10 @@ var runStateContexts = append(
 	hoststate.ActiveRunStateContexts(api.CoordinatorRunContext{RunID: "fixture-run"})...,
 )
 
-// SelectedTemplateRefs lists, for every catalog surface, session mode and run
-// state overlay, the surface and mode templates the production turn profile
-// selects, so names composed at runtime are derived from their selectors.
+// SelectedTemplateRefs lists, for every catalog surface and shipped phase
+// binding, session mode and run state overlay, the surface and mode templates
+// the production turn profile selects, so names composed at runtime are
+// derived from their selectors.
 func SelectedTemplateRefs() ([]string, error) {
 	cat, err := surfacecatalog.Load()
 	if err != nil {
@@ -32,18 +33,34 @@ func SelectedTemplateRefs() ([]string, error) {
 			refs = append(refs, ref)
 		}
 	}
-	for _, surfID := range cat.SurfaceIDs() {
+	selectAll := func(surfID string, contexts []api.CoordinatorRunContext) error {
 		for _, mode := range api.AllSessionModeValues() {
-			for _, runCtx := range runStateContexts {
+			for _, runCtx := range contexts {
 				profile, err := selectProfile(surfID, runCtx, &api.Session{Mode: mode})
 				if err != nil {
-					return nil, err
+					return err
 				}
 				add(profile.SurfaceTemplate)
 				for _, modeRef := range profile.ModeRefs {
 					add(surface.ModeTemplateRef(modeRef))
 				}
 			}
+		}
+		return nil
+	}
+	for _, surfID := range cat.SurfaceIDs() {
+		if err := selectAll(surfID, runStateContexts); err != nil {
+			return nil, err
+		}
+	}
+	bindings, err := hoststate.ShippedPhaseBindings()
+	if err != nil {
+		return nil, err
+	}
+	for _, b := range bindings {
+		bound := b.RunContext()
+		if err := selectAll(b.Resolved.CoordinatorSurface, append([]api.CoordinatorRunContext{bound}, hoststate.ActiveRunStateContexts(bound)...)); err != nil {
+			return nil, err
 		}
 	}
 	slices.Sort(refs)

@@ -80,6 +80,13 @@ func (b PhaseBinding) Key() string {
 		strings.Join(b.AllowedAgents, ","))
 }
 
+// RunContext returns an active run's context in the bound phase.
+func (b PhaseBinding) RunContext() api.CoordinatorRunContext {
+	runCtx := api.CoordinatorRunContext{RunID: "run-phase-1"}
+	applyPhaseBinding(&runCtx, b)
+	return runCtx
+}
+
 // applyPhaseBinding sets the run-context fields the coordinator turn frame
 // derives from a bound workflow phase.
 func applyPhaseBinding(runCtx *api.CoordinatorRunContext, b PhaseBinding) {
