@@ -157,6 +157,7 @@ func templateTruths(in []pongoplain.Truth) []independence.Truth {
 			out[i] = independence.True
 		case pongoplain.False:
 			out[i] = independence.False
+		case pongoplain.Unknown:
 		}
 	}
 	return out
@@ -170,6 +171,7 @@ func ruleTruths(in []oarcore.Truth) []independence.Truth {
 			out[i] = independence.True
 		case oarcore.False:
 			out[i] = independence.False
+		case oarcore.Unknown:
 		}
 	}
 	return out

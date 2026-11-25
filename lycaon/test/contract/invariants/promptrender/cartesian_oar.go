@@ -87,7 +87,7 @@ func runOARNextStepsMatrix(
 	}
 	sum.OARRuleEvalCount += harness.EvalCount
 
-	allOutcomes := append(rejOutcomes, hookOutcomes...)
+	allOutcomes := slices.Concat(rejOutcomes, hookOutcomes)
 	for _, out := range allOutcomes {
 		if !out.CheckClaims || strings.TrimSpace(out.ActionCopy) == "" {
 			continue

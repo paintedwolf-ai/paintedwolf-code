@@ -25,6 +25,7 @@ func (t Truth) String() string {
 		return "F"
 	case True:
 		return "T"
+	case Unknown:
 	}
 	return "?"
 }
@@ -280,7 +281,7 @@ func neededAssignments(g Guard, in string, inputs []string, eval func(string, []
 			return nil, err
 		}
 	}
-	all := append(observed, rest...)
+	all := slices.Concat(observed, rest)
 	if len(all) > maxListed {
 		return append(all[:maxListed:maxListed], fmt.Sprintf("%d more", len(all)-maxListed)), nil
 	}

@@ -14,8 +14,8 @@ import (
 // every byte string decodes and every member is reachable from one byte.
 const (
 	SeedCodecVersion uint8 = 1
-	SeedByteLength         = 21
-	maxByteDomain          = 256
+	SeedByteLength   int   = 21
+	maxByteDomain    int   = 256
 )
 
 const (

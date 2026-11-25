@@ -251,6 +251,7 @@ func templateConditionSites(family, unitID, packID, source string, profile pongo
 				if onInclude != nil {
 					onInclude(n.Line, n.IncludeRef)
 				}
+			case pongoplain.NodeText, pongoplain.NodeOutput, pongoplain.NodeSet:
 			}
 		}
 	}

@@ -322,6 +322,7 @@ func walkTemplateNodes(
 				incPack = incUnit.WinnerPackID
 			}
 			walkTemplateContribution(eff, names, vocab, reachFacts, family, incID, incPack, deliverySite, string(incUnit.Content), nextAncestry, selectors, guards, nextStack, emit)
+		case pongoplain.NodeSet:
 		}
 	}
 }
