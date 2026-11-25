@@ -33,8 +33,8 @@ type CallExample struct {
 	HasPlaceholder bool
 }
 
-// AttributedClaimIssue reports a call or standalone schema claim rejected by
-// its attributed tool's projected schema or turn offer set.
+// AttributedClaimIssue reports a call or tool.path claim rejected by its
+// tool's projected schema or turn offer set.
 type AttributedClaimIssue struct {
 	Tool            string
 	AttributedTools []string
@@ -53,32 +53,19 @@ type placeholderValue struct {
 }
 
 var (
-	callOpenRe       = regexp.MustCompile(`\b([a-z][a-z0-9_]*)\(`)
 	dottedToolPathRe = regexp.MustCompile("`([a-z][a-z0-9_]*)\\.([a-z_][a-z0-9_]*(?:\\[\\])?(?:\\.[a-z_][a-z0-9_]*(?:\\[\\])?)*)(?:\\s*[:=]\\s*([^`]+))?`")
 	numRangeRe       = regexp.MustCompile(`^[0-9]+\s*[–-]\s*[0-9]+$`)
 	identPathRe      = regexp.MustCompile(`^[a-z_][a-z0-9_]*(?:\[\])?(?:\.[a-z_][a-z0-9_]*(?:\[\])?)*$`)
 	bareArgIdentRe   = regexp.MustCompile(`^[a-z][a-z0-9_.-]*$`)
-	boundPrepToRe    = regexp.MustCompile(`\b(?:on|to|in|for)\s+(?:\*\*)?` + "`?" + `([a-z][a-z0-9_]*)` + "`?")
-	boundVerbWithRe  = regexp.MustCompile(`(?i)\b(?:call|run|use|invoke|pass)\s+(?:\*\*)?` + "`?" + `([a-z][a-z0-9_]*)` + "`?" + `(?:\*\*)?\s+with\b`)
 )
 
-// ParseCallExamples parses structured call examples attributed to known tools.
+// ParseCallExamples parses the call expressions in text that name known tools.
 func ParseCallExamples(c *toolvocab.Catalog, text string) []CallExample {
 	var out []CallExample
-	for _, loc := range callOpenRe.FindAllStringSubmatchIndex(text, -1) {
-		tool := text[loc[2]:loc[3]]
-		if c == nil || !c.KnownName(tool) {
-			continue
-		}
-		body, ok := balancedCallBody(text[loc[1]:])
-		if !ok {
-			continue
-		}
-		line := 1 + strings.Count(text[:loc[0]], "\n")
-		callEnd := loc[1] + len(body) + 1
-		if ex, valid := parseCallBody(tool, text[loc[0]:callEnd], body, line); valid {
-			ex.Start = loc[0]
-			ex.End = callEnd
+	for _, call := range toolvocab.Calls(c, text) {
+		line := 1 + strings.Count(text[:call.Start], "\n")
+		if ex, valid := parseCallBody(call.Tool, text[call.Start:call.End], call.Body, line); valid {
+			ex.Start, ex.End = call.Start, call.End
 			out = append(out, ex)
 		}
 	}
@@ -144,37 +131,70 @@ func UnacceptedArgs(c *toolvocab.Catalog, text string, schema func(tool string) 
 	return sortArgClaims(seen)
 }
 
-// ValidateAttributedClaims validates tool call examples, tool.path references,
-// and standalone backticked schema paths/assignments against offered tools and
-// their exact projected schemas.
+// ValidateAttributedClaims validates call expressions and backticked
+// tool.path references against offered tools and their projected schemas.
 func ValidateAttributedClaims(
 	c *toolvocab.Catalog,
-	idx *PrunableSchemaIndex,
 	text string,
 	offered map[string]bool,
 	schema func(tool string) (map[string]any, bool),
 ) []AttributedClaimIssue {
 	var issues []AttributedClaimIssue
-	for _, sent := range splitActiveSentences(text) {
-		for _, ex := range ParseCallExamples(c, sent.sentence) {
-			if isClaimSpanNegated(sent.sentence, ex.Start, ex.End) {
-				continue
-			}
-			ex.Line = sent.line
-			if offered != nil && !offered[ex.Tool] {
-				issues = append(issues, AttributedClaimIssue{
-					Tool: ex.Tool, AttributedTools: []string{ex.Tool}, Span: ex.Raw, Line: ex.Line,
-					Reason: fmt.Sprintf("tool %q is not offered", ex.Tool),
-				})
-				continue
-			}
-			if s, ok := schema(ex.Tool); ok {
-				issues = append(issues, validateCallAgainstSchema(ex, s)...)
-			}
+	for _, ex := range ParseCallExamples(c, text) {
+		if offered != nil && !offered[ex.Tool] {
+			issues = append(issues, AttributedClaimIssue{
+				Tool: ex.Tool, AttributedTools: []string{ex.Tool}, Span: ex.Raw, Line: ex.Line,
+				Reason: fmt.Sprintf("tool %q is not offered", ex.Tool),
+			})
+			continue
 		}
-		issues = append(issues, validateStandaloneBackticks(c, idx, sent, offered, schema)...)
+		if s, ok := schema(ex.Tool); ok {
+			issues = append(issues, validateCallAgainstSchema(ex, s)...)
+		}
+	}
+	for _, bs := range ExtractInlineBackticks(text) {
+		head, rest, ok := toolPathSpan(c, bs.Span)
+		if !ok {
+			continue
+		}
+		if offered != nil && !offered[head] {
+			issues = append(issues, AttributedClaimIssue{Tool: head, AttributedTools: []string{head}, Span: bs.Span, Line: bs.Line, Reason: fmt.Sprintf("tool %q is not offered", head)})
+			continue
+		}
+		if s, ok := schema(head); ok {
+			issues = append(issues, validateToolPath(head, s, rest, bs.Span, bs.Line)...)
+		}
 	}
 	return deduplicateIssues(issues)
+}
+
+// toolPathSpan splits a backticked `tool.path` or `tool.path=value` span.
+func toolPathSpan(c *toolvocab.Catalog, span string) (tool, rest string, ok bool) {
+	raw := strings.TrimSpace(span)
+	if strings.Contains(raw, "(") {
+		return "", "", false
+	}
+	head, rest, hasDot := strings.Cut(raw, ".")
+	if !hasDot || c == nil || !c.KnownName(head) {
+		return "", "", false
+	}
+	return head, rest, true
+}
+
+func validateToolPath(tool string, s map[string]any, rest, span string, line int) []AttributedClaimIssue {
+	p, val, hasVal, ell := splitPathAndOptionalValue(rest)
+	if !schemaAcceptsPath(s, p) {
+		rep := missingPathHead(s, p)
+		return []AttributedClaimIssue{{Tool: tool, AttributedTools: []string{tool}, Path: rep, Span: span, Line: line, Reason: fmt.Sprintf("%s projected schema lacks %q", tool, rep)}}
+	}
+	if !hasVal || ell {
+		return nil
+	}
+	issues := validateValueAtPath(tool, s, p, val, line)
+	for i := range issues {
+		issues[i].Span = span
+	}
+	return issues
 }
 
 // ValidateCallExample validates one parsed CallExample against a projected schema.
@@ -310,69 +330,6 @@ func validateValueAtPath(tool string, rootSchema map[string]any, path string, va
 	return nil
 }
 
-func validateStandaloneBackticks(
-	c *toolvocab.Catalog,
-	idx *PrunableSchemaIndex,
-	sent sentenceContext,
-	offered map[string]bool,
-	schema func(tool string) (map[string]any, bool),
-) []AttributedClaimIssue {
-	var issues []AttributedClaimIssue
-	for _, bs := range ExtractInlineBackticks(sent.sentence) {
-		if isClaimSpanNegated(sent.sentence, bs.Start, bs.End) {
-			continue
-		}
-		raw := strings.TrimSpace(bs.Span)
-		if raw == "" || strings.Contains(raw, "(") {
-			continue
-		}
-		if head, rest, hasDot := strings.Cut(raw, "."); hasDot && c != nil && c.KnownName(head) {
-			p, val, hasVal, ell := splitPathAndOptionalValue(rest)
-			if offered != nil && !offered[head] {
-				issues = append(issues, AttributedClaimIssue{Tool: head, AttributedTools: []string{head}, Path: p, Span: raw, Line: sent.line, Reason: fmt.Sprintf("tool %q is not offered", head)})
-				continue
-			}
-			if s, ok := schema(head); ok {
-				if !schemaAcceptsPath(s, p) {
-					issues = append(issues, AttributedClaimIssue{Tool: head, AttributedTools: []string{head}, Path: p, Span: raw, Line: sent.line, Reason: fmt.Sprintf("%s projected schema lacks %q", head, p)})
-				} else if hasVal && !ell {
-					for _, iss := range validateValueAtPath(head, s, p, val, sent.line) {
-						iss.Span = raw
-						issues = append(issues, iss)
-					}
-				}
-			}
-			continue
-		}
-		if idx == nil {
-			continue
-		}
-		claimPath, val, hasVal, ok := parseStandaloneSchemaClaim(c, idx, sent, raw)
-		if !ok {
-			continue
-		}
-		attributed := resolveAttributedTools(c, idx, sent, raw, claimPath, hasVal, val)
-		if len(attributed) == 0 {
-			continue
-		}
-		if !anyAttributedToolAccepts(attributed, claimPath, hasVal, val, offered, schema) {
-			valStr, _ := concreteStringOrIdent(val)
-			if b, isBool := val.(bool); isBool {
-				valStr = strconv.FormatBool(b)
-			}
-			primary := ""
-			if len(attributed) == 1 {
-				primary = attributed[0]
-			}
-			issues = append(issues, AttributedClaimIssue{
-				Tool: primary, AttributedTools: attributed, Path: claimPath, Value: valStr, Span: raw, Line: sent.line,
-				Reason: fmt.Sprintf("standalone claim %q rejected for attributed tool(s) %v", raw, attributed),
-			})
-		}
-	}
-	return issues
-}
-
 func sortArgClaims(seen map[ArgClaim]bool) []ArgClaim {
 	if len(seen) == 0 {
 		return nil
@@ -474,71 +431,6 @@ func splitPathAndOptionalValue(rest string) (path string, val any, hasVal bool, 
 	return normalizeSchemaPath(rest), nil, false, false
 }
 
-func explicitPrepositionTool(sentence, rawSpan string) string {
-	cat := toolvocab.StockCatalog()
-	if cat == nil {
-		return ""
-	}
-	idx := strings.Index(sentence, "`"+rawSpan+"`")
-	if idx < 0 {
-		return ""
-	}
-	end := idx + len(rawSpan) + 2
-	cStart, cEnd := enclosingSubClause(sentence, idx, end)
-	after := sentence[end:max(end, cEnd)]
-	if len(after) > 40 {
-		after = after[:40]
-	}
-	if m := boundPrepToRe.FindStringSubmatch(after); len(m) == 2 && cat.KnownName(m[1]) {
-		return m[1]
-	}
-	if m := boundVerbWithRe.FindAllStringSubmatch(sentence[min(idx, cStart):idx], -1); len(m) > 0 {
-		if cand := m[len(m)-1][1]; cat.KnownName(cand) {
-			return cand
-		}
-	}
-	return ""
-}
-
-func isPrunableEnumValue(idx *PrunableSchemaIndex, normPath string, val any) bool {
-	lit, ok := concreteStringOrIdent(val)
-	if !ok {
-		return false
-	}
-	for _, owner := range idx.AllOwners(normPath) {
-		if idx.IsPrunableEnum(owner, normPath, lit) {
-			return true
-		}
-	}
-	return false
-}
-
-func compatibleBaseOwners(idx *PrunableSchemaIndex, path string, hasVal bool, val any) []string {
-	owners := idx.AllOwners(path)
-	if !hasVal {
-		return owners
-	}
-	var out []string
-	for _, t := range owners {
-		if base, ok := idx.BaseSchema(t); ok && len(validateValueAtPath(t, base, path, val, 0)) == 0 {
-			out = append(out, t)
-		}
-	}
-	return out
-}
-
-func intersectSorted(a, b []string) []string {
-	setB := stringSliceSet(b)
-	var out []string
-	for _, item := range a {
-		if setB[item] && !slices.Contains(out, item) {
-			out = append(out, item)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
 func deduplicateIssues(issues []AttributedClaimIssue) []AttributedClaimIssue {
 	type key struct{ tool, path, val, span string }
 	seen := map[key]bool{}
@@ -551,26 +443,6 @@ func deduplicateIssues(issues []AttributedClaimIssue) []AttributedClaimIssue {
 		}
 	}
 	return out
-}
-
-func balancedCallBody(rest string) (string, bool) {
-	end := -1
-	failed := false
-	walkTopLevel(rest, func(idx int, ch byte) bool {
-		if ch == ')' {
-			end = idx
-			return false
-		}
-		if ch == '\n' {
-			failed = true
-			return false
-		}
-		return true
-	})
-	if failed || end < 0 {
-		return "", false
-	}
-	return rest[:end], true
 }
 
 func splitTopLevel(s string, sep byte) []string {

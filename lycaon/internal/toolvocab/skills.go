@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io/fs"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
@@ -18,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -640,10 +642,19 @@ func evalSkillRenderedReach(
 	if desc := strings.TrimSpace(sk.Description); desc != "" {
 		checkText = desc + "\n" + rendered
 	}
-	if offered["request_tools"] && len(requestable) > 0 {
-		checkText = maskLoaderSequencedMentions(checkText, requestable)
+	reachable := offered
+	if offered[toolreach.LoaderTool] && len(requestable) > 0 {
+		reachable = maps.Clone(offered)
+		for _, name := range requestable {
+			reachable[name] = true
+		}
+		for _, call := range UnheldCalls(c, checkText, offered, requestable) {
+			if !slices.Contains(anyOf, call.Tool) {
+				return false
+			}
+		}
 	}
-	for _, name := range UnreachableNames(c, checkText, offered) {
+	for _, name := range UnreachableNames(c, checkText, reachable) {
 		if !slices.Contains(anyOf, name) {
 			return false
 		}
@@ -657,22 +668,6 @@ func evalSkillRenderedReach(
 		}
 	}
 	return false
-}
-
-var loaderSequencedMentionRE = regexp.MustCompile("(?i)\\bload\\s+`([a-z0-9_]+)`\\s+via\\s+`request_tools\\(|`([a-z0-9_]+)`\\s+after\\s+(?:loading\\s+it\\s+with\\s+)?`request_tools\\(")
-
-func maskLoaderSequencedMentions(text string, requestable []string) string {
-	return loaderSequencedMentionRE.ReplaceAllStringFunc(text, func(m string) string {
-		sub := loaderSequencedMentionRE.FindStringSubmatch(m)
-		target := sub[1]
-		if target == "" {
-			target = sub[2]
-		}
-		if slices.Contains(requestable, target) {
-			return "Load via `request_tools("
-		}
-		return m
-	})
 }
 
 // SkillToolsOffered reports whether offered covers every tool, operation, and
