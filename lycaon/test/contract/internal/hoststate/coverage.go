@@ -105,9 +105,15 @@ type CoverageReport struct {
 	// UnattributedRefs are composed template refs with recorded branches that
 	// name no registered unit.
 	UnattributedRefs []string
-	ReachedCells     int
-	ExcludedCells    int
-	ExcludedByReason map[string]int
+	// RenderedTemplates counts registered templates some case executed;
+	// UnrenderedTemplates lists the rest that no production constraint
+	// explains, and ExpectedUnrendered the ones one does.
+	RenderedTemplates   int
+	UnrenderedTemplates []string
+	ExpectedUnrendered  []ExpectedZeroBranch
+	ReachedCells        int
+	ExcludedCells       int
+	ExcludedByReason    map[string]int
 }
 
 // DeadTemplateBranches returns all template branches with 0 runtime evaluations.
@@ -172,6 +178,7 @@ func (r CoverageReport) Validate() error {
 	for _, ref := range r.UnattributedRefs {
 		issues = append(issues, fmt.Sprintf("rendered template %s names no registered unit", ref))
 	}
+	issues = append(issues, r.corpusIssues()...)
 	if len(issues) > 0 {
 		return fmt.Errorf("branch coverage gaps (%d):\n%s", len(issues), strings.Join(issues, "\n"))
 	}
@@ -195,6 +202,7 @@ type CoverageTracker struct {
 	expectedZeroTpl   map[string]ExpectedZeroBranch
 	expectedZeroRules map[string]ExpectedZeroBranch
 	resolveRef        func(string) (string, bool)
+	expectUnrendered  map[string]ExpectedZeroBranch
 	currentCase       atomic.Pointer[string]
 	reachedCells      int
 	excludedCells     int
@@ -350,6 +358,7 @@ func (t *CoverageTracker) Report() CoverageReport {
 	resolve := t.resolveRef
 	t.mu.Unlock()
 	hits, unattributed := t.attributedHits(tplSpecsCopy, resolve)
+	rendered, unrendered, expectedUnrendered := t.renderCoverage(tplIDs, tplSpecsCopy, resolve)
 
 	var allExp []ExpectedZeroBranch
 	for _, k := range sortedMapKeys(expTplCopy) {
@@ -366,6 +375,9 @@ func (t *CoverageTracker) Report() CoverageReport {
 		RuleBranches:        t.collectRuleSummaries(ruleIDs, ruleSpecsCopy, expRuleCopy),
 		ExpectedZero:        allExp,
 		UnattributedRefs:    unattributed,
+		RenderedTemplates:   rendered,
+		UnrenderedTemplates: unrendered,
+		ExpectedUnrendered:  expectedUnrendered,
 		ReachedCells:        reached,
 		ExcludedCells:       excluded,
 		ExcludedByReason:    reasons,

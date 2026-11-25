@@ -83,6 +83,8 @@ type HostStateInventoryReport struct {
 	TotalWorkerStates      int                      `json:"total_worker_states"`
 	TotalInstructionSites  int                      `json:"total_instruction_sites"`
 	TotalAnchorSpecs       int                      `json:"total_anchor_specs"`
+	ObservedCoordinators   int                      `json:"observed_coordinators"`
+	ObservedWorkers        int                      `json:"observed_workers"`
 	DomainClasses          []DomainClassRow         `json:"domain_classes"`
 	ReaderFactCoverage     []ReaderFactInventoryRow `json:"reader_fact_coverage"`
 	BoundaryPartitions     []BoundaryPartitionRow   `json:"boundary_partitions"`
@@ -219,6 +221,8 @@ func (inv *HostStateInventory) Report(ctx context.Context) (*HostStateInventoryR
 		TotalWorkerStates:      len(in.WorkerStates),
 		TotalInstructionSites:  len(in.Sites),
 		TotalAnchorSpecs:       len(specs),
+		ObservedCoordinators:   len(inv.coord),
+		ObservedWorkers:        len(inv.workers),
 		DomainClasses:          inv.domainRows(ctx),
 		ReaderFactCoverage:     inv.readerFactRows(),
 		BoundaryPartitions:     boundaries,

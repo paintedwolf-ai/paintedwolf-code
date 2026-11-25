@@ -104,6 +104,11 @@ func executeWithHook(
 	}
 	state := &executionState{ctx: ctx, onStep: onStep}
 	normalized[execStateKey] = state
+	if rec := ActiveBranchRecorder.Load(); rec != nil {
+		if name, ok := templateNames.Load(tpl); ok {
+			rec.recordRender(name.(string))
+		}
+	}
 
 	defer func() {
 		if recovered := recover(); recovered != nil {

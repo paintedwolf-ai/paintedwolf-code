@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"github.com/flosch/pongo2/v6"
 )
 
 // BranchKind classifies a conditional or loop branch in a template.
@@ -58,6 +60,31 @@ type BranchRecorder struct {
 	Partition         func(scope map[string]any) string
 	Label             func() string
 	Conditions        map[string]*ConditionHit
+	// Rendered counts executions of each named template, root or included.
+	Rendered map[string]int
+}
+
+// templateNames names the templates Compile and NameTemplate saw, so a
+// recorder can count their executions.
+var templateNames sync.Map
+
+// NameTemplate records the ref a composed set loaded tpl from.
+func NameTemplate(tpl *pongo2.Template, name string) {
+	if tpl != nil && name != "" {
+		templateNames.Store(tpl, name)
+	}
+}
+
+func (r *BranchRecorder) recordRender(name string) {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+	if r.Rendered == nil {
+		r.Rendered = make(map[string]int)
+	}
+	if alias := r.Aliases[name]; alias != "" {
+		name = alias
+	}
+	r.Rendered[name]++
 }
 
 // ActiveBranchRecorder is the opt-in global recorder consulted by tracked tags.

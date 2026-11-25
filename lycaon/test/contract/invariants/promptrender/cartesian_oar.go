@@ -469,7 +469,7 @@ func EvaluateOARRuleWithReachForTest(
 		tools.RegisterRecoveryFacts(cctx, gc)
 		res, eErr := harness.Pipeline.EvaluateBlock(cctx, rule.Anchor, gc)
 		if eErr != nil || res == nil || res.Decision == nil {
-			return "", fmt.Errorf("rule %s produced no decision: %v", ruleID, eErr)
+			return "", fmt.Errorf("rule %s produced no decision: %w", ruleID, eErr)
 		}
 		return strings.TrimSpace(res.Decision.Copy["cause"] + " " + res.Decision.Copy["fix"]), nil
 	}

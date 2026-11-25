@@ -76,6 +76,9 @@ type ConditionLedger struct {
 	// outcome; EvaluatorErrors are the rest.
 	HandledErrors   []string `json:"handled_errors,omitempty"`
 	EvaluatorErrors []string `json:"evaluator_errors,omitempty"`
+	// Observed counts the observed guard vectors by family and by recipient.
+	ObservedFamilies   map[string]int `json:"observed_families"`
+	ObservedRecipients map[string]int `json:"observed_recipients"`
 }
 
 // BuildConditionLedger joins discovered guards with their observed
@@ -96,7 +99,13 @@ func BuildConditionLedger(sites []ConditionSite, observed []hoststate.ObservedCo
 			byID[o.Site] = ConditionSite{ID: o.Site, Family: o.Family, SourceSpan: o.Site, Source: o.Source, Atoms: o.Atoms}
 		}
 	}
-	l := &ConditionLedger{}
+	l := &ConditionLedger{ObservedFamilies: map[string]int{}, ObservedRecipients: map[string]int{}}
+	for _, o := range observed {
+		for _, v := range o.Vectors {
+			l.ObservedFamilies[o.Family]++
+			l.ObservedRecipients[v.Partition]++
+		}
+	}
 	for _, id := range sortedKeysOf(boolKeys(byID)) {
 		site := byID[id]
 		l.Sites = append(l.Sites, site)
@@ -242,6 +251,9 @@ func prefixed(prefix string, in []string) []string {
 // site, atom, recipient and missing vectors.
 func (l *ConditionLedger) ValidateZeroUnexplainedGaps() error {
 	var issues []string
+	if len(l.Sites) == 0 || len(l.ObservedFamilies) == 0 {
+		issues = append(issues, "the ledger judged no observed guard")
+	}
 	for _, g := range l.Gaps {
 		issues = append(issues, g.String())
 	}
@@ -255,4 +267,24 @@ func (l *ConditionLedger) ValidateZeroUnexplainedGaps() error {
 		return nil
 	}
 	return fmt.Errorf("condition independence gaps (%d):\n%s", len(issues), strings.Join(issues, "\n"))
+}
+
+// RequireObserved fails unless every named guard family and recipient has at
+// least one observed evaluation, so a registered kind cannot pass unjudged.
+func (l *ConditionLedger) RequireObserved(families, recipients []string) error {
+	var missing []string
+	for _, f := range families {
+		if l.ObservedFamilies[f] == 0 {
+			missing = append(missing, "family "+f)
+		}
+	}
+	for _, r := range recipients {
+		if l.ObservedRecipients[r] == 0 {
+			missing = append(missing, "recipient "+r)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("no observed guard for %s", strings.Join(missing, ", "))
+	}
+	return nil
 }

@@ -125,6 +125,12 @@ func checkNoDeadOrVacuousBranches(r *invariants.Run) {
 	if err := sum.Coverage.Validate(); err != nil {
 		r.Report("%v", err)
 	}
+	missing, selected, err := missingSelectedTemplates(stock(r))
+	r.Must(err)
+	r.Expect(selected, "templates selected by surface, mode and run-state selectors")
+	for _, ref := range missing {
+		r.Report("selected template %s is not shipped", ref)
+	}
 }
 
 // RunCartesianMatrix executes the prompt, skill, inject, schema and OAR renders across
