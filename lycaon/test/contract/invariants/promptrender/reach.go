@@ -262,9 +262,16 @@ func coordinatorKicksNameOnlyOffered(r *invariants.Run) {
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
 	r.Must(err)
 	sweep := newKickSweep(stock(r), hoststate.NewRenderCache(), func(v string) { r.Report("%s", v) })
-	sweep.envelopes = kickEnvelopeVariants
+	sweep.envelopes = canonicalKickEnvelope
 	r.Must(sweep.coordinatorKicks(context.Background(), anchorReg, informKickIDs(anchorReg, "coordinator-", "session-agent-enabled"), reps))
 	r.Expect(sweep.rendered, "coordinator kick renders")
+}
+
+// canonicalKickEnvelope is the one fixture the reach invariants render for
+// every recipient; the host-state matrix renders the anchor and occurrence
+// variants.
+func canonicalKickEnvelope(reg *anchor.Registry, kick string) []map[string]any {
+	return kickEnvelopeVariants(reg, kick)[:1]
 }
 
 func kickEnvelopeVariants(reg *anchor.Registry, kick string) []map[string]any {
@@ -342,7 +349,7 @@ func workerKicksNameOnlyOffered(r *invariants.Run) {
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
 	r.Must(err)
 	sweep := newKickSweep(stock(r), hoststate.NewRenderCache(), func(v string) { r.Report("%s", v) })
-	sweep.envelopes = kickEnvelopeVariants
+	sweep.envelopes = canonicalKickEnvelope
 	r.Must(sweep.workerKicks(context.Background(), anchorReg, informKickIDs(anchorReg, "worker-"), reps))
 	r.Expect(sweep.rendered, "worker kick renders")
 }
