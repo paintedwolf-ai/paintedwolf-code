@@ -5,7 +5,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
 import type { CheckpointListResponse, SessionTranscriptPage, SourceWalkResponse, ToolResult } from "../../src/api/types.ts";
 import {
   apiJson, apiPostPrompt, bootstrapActiveProject, e2eTempDir, e2eUniqueLabel,
-  settledChatSessionId, waitForChatComposerReady, webE2e,
+  liveChatStage, settledChatSessionId, waitForChatComposerReady, webE2e,
 } from "../helpers.ts";
 import { manualHarnessTools } from "../manual-harness-tools.ts";
 
@@ -86,13 +86,16 @@ webE2e("home and shared temp redirects reach Files and Review", async ({ page, r
     await page.getByTestId("project-files-entry").click();
     const tree = page.getByTestId("files-tree");
     await expect(tree.getByTestId("files-tree-outside-section")).toHaveText("Outside project");
-    const location = tree.getByTestId("files-tree-dir").filter({ hasText: path.basename(folder) });
-    await expect(location).toBeVisible();
-    const toggle = location.getByTestId("files-tree-dir-toggle");
-    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(tree.getByTestId("files-tree-dir").filter({ hasText: path.basename(folder) })).toBeVisible();
+
+    const group = liveChatStage(page).getByTestId("diff-group").first();
+    await group.getByTestId("diff-group-files").click();
+    const card = group.getByTestId("file-edit-diff").filter({ hasText: home }).first();
+    const disclosure = card.getByTestId("file-edit-diff-toggle");
+    if (await disclosure.getAttribute("aria-expanded") !== "true") await disclosure.click();
     const opened = page.waitForResponse((response) => new URL(response.url()).pathname === `/v1/projects/${project.id}/editor-documents` &&
       response.request().method() === "POST" && Boolean(response.request().postDataJSON().file_id));
-    await tree.getByTestId("files-tree-file").filter({ hasText: "a.txt" }).dblclick();
+    await card.getByTestId("source-path-link").click();
     expect((await opened).ok()).toBe(true);
     await expect(page.getByTestId("files-editor-host").filter({ visible: true }).locator(".cm-content")).toContainText("first");
   } finally {
