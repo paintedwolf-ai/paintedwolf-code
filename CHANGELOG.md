@@ -9,10 +9,33 @@ for the host/desktop stream (`VERSION` + `v*` git tags). See
 
 ## [1.0.3-rc2]
 
+### Added
+
+- An included local model runs on the device with no provider account; load it from Settings → AI providers.
+- The Doubleword provider.
+- A **Pretty** line layout beside **Off** and **Wrap** formats files and chat content for reading without changing them.
+- `pw token print` prints the bearer token for a standalone engine.
+
 ### Changed
 
+- Agent commands run in a built-in portable shell with native utilities, the same on macOS and Linux.
+- Any folder can be attached to a project; folders agents may not use show as editor only.
+- An agent's Git uses a saved credential only after you approve it for that recipient.
+- Network approvals ask once per destination.
+- MCP credentials and the standalone engine token are kept in the encrypted credential vault, never in configuration files.
+- Document undo is part of the file history timeline.
+- Agent activity stays visible, marked as past, after it ends.
+- A refused socket names the host resource behind it.
+- The shortcut list shows only shortcuts this platform can change.
+- Permitted tools and skills stay available when the local decision model is unavailable.
 - Source snapshots share unchanged content across roots while preserving each observation's history and metadata.
 - Database upgrades rebuild retained history into a verified replacement, preserving a complete recovery snapshot and resuming interrupted publication safely.
+
+### Security
+
+- Managed secrets reach `curl` only through its request slots.
+- Web research keeps its limits on every request it sends.
+- A client certificate is presented only to its own origin.
 
 ## [1.0.3-rc1]
 
