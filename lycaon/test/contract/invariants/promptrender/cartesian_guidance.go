@@ -350,6 +350,7 @@ func renderStructuralGuidanceVariants(
 		{"survey/jq-zoom", map[string]any{"bytes": 8000}},
 		{"utility/catalog-discovery", map[string]any{"total": 0, "has_more": false}},
 		{"utility/catalog-discovery", map[string]any{"total": 5, "has_more": true}},
+		{"utility/catalog-discovery", map[string]any{"total": 3, "has_more": false}},
 		{"utility/source-remove-permanent", map[string]any{"files": 1, "recovery_known": false, "recovery_bytes": 0, "content_bytes": 100}},
 		{"utility/source-remove-permanent", map[string]any{"files": 2, "recovery_known": true, "recovery_bytes": 50, "content_bytes": 100}},
 		{"utility/source-remove-permanent", map[string]any{"files": 2, "recovery_known": true, "recovery_bytes": 100, "content_bytes": 100}},
