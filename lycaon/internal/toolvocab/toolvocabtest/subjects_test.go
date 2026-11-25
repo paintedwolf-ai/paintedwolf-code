@@ -81,10 +81,10 @@ func TestClaimSubjectsEvaluateAgainstTargetActorReader(t *testing.T) {
 		Posture:     api.SessionPostureBuild,
 	}
 
-	t.Run("SubjectSelfRequestable admits loadable tool and rejects non-requestable edit", func(t *testing.T) {
+	t.Run("request_tools calls name requestable tools on an offered loader", func(t *testing.T) {
 		valid := toolvocabtest.EvaluateClaimBlock(baseCtx, toolvocabtest.ClaimBlock{
 			Label:   "valid-loader",
-			Subject: toolvocabtest.SubjectSelfRequestable(),
+			Subject: toolvocabtest.SubjectSelfNow(),
 			Text:    "Load verification with `request_tools(need=\"verify\")`.",
 		})
 		if len(valid) > 0 {
@@ -93,11 +93,11 @@ func TestClaimSubjectsEvaluateAgainstTargetActorReader(t *testing.T) {
 
 		invalid := toolvocabtest.EvaluateClaimBlock(baseCtx, toolvocabtest.ClaimBlock{
 			Label:   "invalid-edit-loader",
-			Subject: toolvocabtest.SubjectSelfRequestable(),
-			Text:    "Load editing via `request_tools(need=\"edit\")`.",
+			Subject: toolvocabtest.SubjectSelfNow(),
+			Text:    "Call `request_tools(need=\"complete_leg\")`.",
 		})
 		if len(invalid) == 0 {
-			t.Fatal("expected request_tools(need=\"edit\") to fail when edit is not in Requestable()")
+			t.Fatal("expected request_tools(need=\"complete_leg\") to fail when complete_leg is not in Requestable()")
 		}
 
 		noLoaderAuth := toolvocabtest.AuthorityFromReaderAndMetas(coordAskReader, nil, nil)
@@ -106,11 +106,11 @@ func TestClaimSubjectsEvaluateAgainstTargetActorReader(t *testing.T) {
 		if !slicesContains(coordAskReader.Offered(), "request_tools") {
 			unoffered := toolvocabtest.EvaluateClaimBlock(noLoaderCtx, toolvocabtest.ClaimBlock{
 				Label:   "loader-unoffered",
-				Subject: toolvocabtest.SubjectSelfRequestable(),
+				Subject: toolvocabtest.SubjectSelfNow(),
 				Text:    "Call `request_tools(need=\"verify\")`.",
 			})
 			if len(unoffered) == 0 {
-				t.Fatal("expected SubjectSelfRequestable to fail when request_tools is not offered")
+				t.Fatal("expected a request_tools call to fail when request_tools is not offered")
 			}
 		}
 	})
@@ -138,13 +138,13 @@ func TestClaimSubjectsEvaluateAgainstTargetActorReader(t *testing.T) {
 			t.Fatal("expected mutating implementer roster entry in Ask mode to fail")
 		}
 
-		roWritePromiseFail := toolvocabtest.EvaluateClaimBlock(askCtx, toolvocabtest.ClaimBlock{
-			Label:   "roster-path-explorer-write-promise",
+		roUnreachable := toolvocabtest.EvaluateClaimBlock(askCtx, toolvocabtest.ClaimBlock{
+			Label:   "roster-path-explorer-unreachable",
 			Subject: toolvocabtest.SubjectNamedAgent("path-explorer"),
-			Text:    "Writes project files and applies changes with scope.mode write.",
+			Text:    "Lands results with `promote_overlay`.",
 		})
-		if len(roWritePromiseFail) == 0 {
-			t.Fatal("expected write promise on read-only path-explorer in Ask mode to fail")
+		if !hasViolationClaim(roUnreachable, "promote_overlay") {
+			t.Fatalf("expected a roster entry naming a tool path-explorer cannot reach to fail, got %+v", roUnreachable)
 		}
 
 		roValidPass := toolvocabtest.EvaluateClaimBlock(askCtx, toolvocabtest.ClaimBlock{
@@ -197,7 +197,7 @@ func testDeferredAndHistoricalSubjects(
 		mutLegCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(closeoutSelfReader, nil, nil)
 		mutLegCtx.FollowupLeg = &implAuth
 		if got := toolvocabtest.EvaluateClaimBlock(mutLegCtx, toolvocabtest.ClaimBlock{
-			Label: "worker-closeout-implementer", Subject: toolvocabtest.SubjectFollowupLeg(), Text: workerCloseout,
+			Label: "worker-closeout-implementer", Subject: toolvocabtest.SubjectFollowupLeg(true), Text: workerCloseout,
 		}); len(got) > 0 {
 			t.Fatalf("expected worker-closeout follow-up advice to pass for mutating implementer leg, got %+v", got)
 		}
@@ -206,7 +206,7 @@ func testDeferredAndHistoricalSubjects(
 		roLegCtx.SessionMode = api.SessionModeAsk
 		roLegCtx.FollowupLeg = &roWorkerAuth
 		if got := toolvocabtest.EvaluateClaimBlock(roLegCtx, toolvocabtest.ClaimBlock{
-			Label: "worker-closeout-readonly", Subject: toolvocabtest.SubjectFollowupLeg(), Text: workerCloseout,
+			Label: "worker-closeout-readonly", Subject: toolvocabtest.SubjectFollowupLeg(true), Text: workerCloseout,
 		}); len(got) == 0 {
 			t.Fatal("expected mutating worker-closeout follow-up advice to fail for read-only worker leg")
 		}
@@ -217,7 +217,7 @@ func testDeferredAndHistoricalSubjects(
 		})
 		testutil.FailErr(t, "render worker-closeout readonly", roErr)
 		if got := toolvocabtest.EvaluateClaimBlock(roLegCtx, toolvocabtest.ClaimBlock{
-			Label: "worker-closeout-readonly-gated", Subject: toolvocabtest.SubjectFollowupLeg(), Text: workerCloseoutRO,
+			Label: "worker-closeout-readonly-gated", Subject: toolvocabtest.SubjectFollowupLeg(false), Text: workerCloseoutRO,
 		}); len(got) > 0 {
 			t.Fatalf("expected gated worker-closeout follow-up advice to pass for read-only worker leg, got %+v", got)
 		}
@@ -247,7 +247,7 @@ func testDeferredAndHistoricalSubjects(
 		nextTurnAgentCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(zeroSelfReader, nil, nil)
 		nextTurnAgentCtx.SessionNextTurn = &mutCoordAuth
 		if got := toolvocabtest.EvaluateClaimBlock(nextTurnAgentCtx, toolvocabtest.ClaimBlock{
-			Label: "coord-closeout-agent", Subject: toolvocabtest.SubjectSessionNextTurn(), Text: coordCloseout,
+			Label: "coord-closeout-agent", Subject: toolvocabtest.SubjectSessionNextTurn(true), Text: coordCloseout,
 		}); len(got) > 0 {
 			t.Fatalf("expected coordinator-turn-closeout next-turn advice to pass in mutating Agent session, got %+v", got)
 		}
@@ -256,7 +256,7 @@ func testDeferredAndHistoricalSubjects(
 		nextTurnAskCtx.SessionMode = api.SessionModeAsk
 		nextTurnAskCtx.SessionNextTurn = &askCoordAuth
 		if got := toolvocabtest.EvaluateClaimBlock(nextTurnAskCtx, toolvocabtest.ClaimBlock{
-			Label: "coord-closeout-ask", Subject: toolvocabtest.SubjectSessionNextTurn(), Text: coordCloseout,
+			Label: "coord-closeout-ask", Subject: toolvocabtest.SubjectSessionNextTurn(true), Text: coordCloseout,
 		}); len(got) == 0 {
 			t.Fatal("expected mutating coordinator-turn-closeout next-turn advice to fail in Ask mode")
 		}
@@ -267,23 +267,15 @@ func testDeferredAndHistoricalSubjects(
 		})
 		testutil.FailErr(t, "render coordinator-turn-closeout ask", caErr)
 		if got := toolvocabtest.EvaluateClaimBlock(nextTurnAskCtx, toolvocabtest.ClaimBlock{
-			Label: "coord-closeout-ask-gated", Subject: toolvocabtest.SubjectSessionNextTurn(), Text: coordCloseoutAsk,
+			Label: "coord-closeout-ask-gated", Subject: toolvocabtest.SubjectSessionNextTurn(false), Text: coordCloseoutAsk,
 		}); len(got) > 0 {
 			t.Fatalf("expected gated coordinator-turn-closeout next-turn advice to pass in Ask mode, got %+v", got)
 		}
 	})
 
-	t.Run("SubjectProhibition and SubjectHistoricalObservation", func(t *testing.T) {
+	t.Run("SubjectHistoricalObservation", func(t *testing.T) {
 		askCtx := baseCtx
 		askCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(coordAskReader, nil, nil)
-
-		if got := toolvocabtest.EvaluateClaimBlock(askCtx, toolvocabtest.ClaimBlock{
-			Label:   "prohibition",
-			Subject: toolvocabtest.SubjectProhibition(),
-			Text:    "Do not call `promote_overlay` or `restore_version` on this turn.",
-		}); len(got) > 0 {
-			t.Fatalf("expected explicit prohibition to pass, got %+v", got)
-		}
 
 		if got := toolvocabtest.EvaluateClaimBlock(askCtx, toolvocabtest.ClaimBlock{
 			Label:   "user-quoted",
@@ -311,7 +303,7 @@ func testDeferredAndHistoricalSubjects(
 	})
 }
 
-func TestClaimLevelNegationAndRequestToolsBinding(t *testing.T) {
+func TestClaimGrammarReadsMentionsAndLoaderCalls(t *testing.T) {
 	eff, err := extpacks.CatalogForConsumers()
 	testutil.FailErr(t, "catalog", err)
 	stockSchemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
@@ -321,8 +313,9 @@ func TestClaimLevelNegationAndRequestToolsBinding(t *testing.T) {
 	vocab, err := toolvocabtest.NewBacktickVocab(eff)
 	testutil.FailErr(t, "vocab", err)
 
+	editSchema := map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}}
 	mergedSchemas, err := toolschema.Merge(stockSchemas, toolschema.ConfigFromEntries(map[string]toolschema.Entry{
-		"edit": {Description: "Edit file", Schema: map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}}},
+		"edit": {Description: "Edit file", Schema: editSchema},
 	}))
 	testutil.FailErr(t, "merge edit schema", err)
 	customProfiles := []sandbox.ToolProfile{{
@@ -357,79 +350,67 @@ func TestClaimLevelNegationAndRequestToolsBinding(t *testing.T) {
 	}
 
 	evalCtx := toolvocabtest.ClaimEvaluationContext{
-		Catalog:     catalog,
-		Prunable:    prunable,
-		Vocab:       vocab,
-		Self:        toolvocabtest.AuthorityFromReaderAndMetas(readerWithEditReq, nil, metas),
+		Catalog:  catalog,
+		Prunable: prunable,
+		Vocab:    vocab,
+		Self: toolvocabtest.AuthorityFromReaderAndMetas(readerWithEditReq, nil, metas,
+			toolvocabtest.WithPostLoadAuthority(map[string]map[string]any{"edit": editSchema}, nil)),
 		SessionMode: api.SessionModeAgent,
 		Posture:     api.SessionPostureBuild,
 	}
 
-	t.Run("affirmative without phrase fails and compound prohibition catches unnegated claim", func(t *testing.T) {
-		gotWithoutDelay := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
-			Label:   "affirmative-without-delay",
-			Subject: toolvocabtest.SubjectSelfNow(),
-			Text:    "Use `edit` without delay.",
-		})
-		if !hasViolationClaim(gotWithoutDelay, "edit") {
-			t.Fatalf("expected 'Use `edit` without delay.' to fail naming edit, got %+v", gotWithoutDelay)
-		}
+	eval := func(ctx toolvocabtest.ClaimEvaluationContext, text string) []toolvocabtest.SubjectViolation {
+		return toolvocabtest.EvaluateClaimBlock(ctx, toolvocabtest.ClaimBlock{Label: "grammar", Subject: toolvocabtest.SubjectSelfNow(), Text: text})
+	}
 
-		gotCompound := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
-			Label:   "compound-prohibition-and-use",
-			Subject: toolvocabtest.SubjectSelfNow(),
-			Text:    "Do not call `delete_file`, and use `edit` now.",
-		})
-		if hasViolationClaim(gotCompound, "delete_file") || !hasViolationClaim(gotCompound, "edit") {
-			t.Fatalf("expected delete_file excused and edit rejected, got %+v", gotCompound)
-		}
-	})
-
-	t.Run("real prohibitions pass without excusing surrounding unoffered claims", func(t *testing.T) {
-		for _, prose := range []string{
-			"Do not call `edit` on this surface.",
-			"Do not repeat `edit`; use what this request offers or report the constraint.",
-			"`edit` is not available on this turn.",
-			"Run `command` without `verification: true`.",
+	t.Run("a mention of an unreachable tool fails whatever its polarity", func(t *testing.T) {
+		for _, text := range []string{
+			"Call `promote_overlay` now.",
+			"Never call `promote_overlay`.",
+			"`promote_overlay` is not available on this turn.",
 		} {
-			if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
-				Label:   "real-prohibition",
-				Subject: toolvocabtest.SubjectSelfNow(),
-				Text:    prose,
-			}); len(got) > 0 {
-				t.Fatalf("expected prohibition %q to pass, got %+v", prose, got)
+			if got := eval(evalCtx, text); !hasViolationClaim(got, "promote_overlay") {
+				t.Fatalf("%q: want promote_overlay violation, got %+v", text, got)
 			}
 		}
+	})
 
-		nearbyInvalid := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
-			Label:   "do-not-repeat-followed-by-unoffered-retry",
-			Subject: toolvocabtest.SubjectSelfNow(),
-			Text:    "Do not repeat `delete_file`; retry `edit` on this turn.",
-		})
-		if hasViolationClaim(nearbyInvalid, "delete_file") || !hasViolationClaim(nearbyInvalid, "edit") {
-			t.Fatalf("expected Do not repeat to excuse delete_file while still failing unoffered retry edit, got %+v", nearbyInvalid)
+	t.Run("a mention of an offered or requestable tool passes whatever its polarity", func(t *testing.T) {
+		for _, text := range []string{
+			"Do not call `edit` on this surface.",
+			"Use `edit` once loaded.",
+			"Do not repeat `command`.",
+		} {
+			if got := eval(evalCtx, text); len(got) > 0 {
+				t.Fatalf("%q: want no violations, got %+v", text, got)
+			}
 		}
 	})
 
-	t.Run("request_tools binds only to its requested target and rejects immediate use of another tool", func(t *testing.T) {
-		mixed := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
-			Label:   "mixed-loader-and-immediate-verify",
-			Subject: toolvocabtest.SubjectSelfNow(),
-			Text:    "Call `request_tools(need=\"edit\")` to load editing, and run `verify` now.",
-		})
-		if !hasViolationClaim(mixed, "verify") {
-			t.Fatalf("expected unoffered verify to fail alongside request_tools(need=\"edit\"), got %+v", mixed)
+	t.Run("a call to a requestable tool needs an earlier exact request_tools call in its block", func(t *testing.T) {
+		for _, text := range []string{
+			"Call `request_tools(need=\"edit\")`, then `edit(path=\"a.go\")`.",
+			"1. `request_tools(need=\"edit\")`\n   then `edit(path=\"a.go\")`",
+		} {
+			if got := eval(evalCtx, text); len(got) > 0 {
+				t.Fatalf("%q: want no violations, got %+v", text, got)
+			}
 		}
-
-		validSpecific := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
-			Label:   "valid-specific-loading-advice",
-			Subject: toolvocabtest.SubjectSelfNow(),
-			Text:    "Load `edit` via `request_tools(need=\"edit\")` before calling `edit`.",
-		})
-		if len(validSpecific) > 0 {
-			t.Fatalf("expected valid specific loading advice for edit to pass, got %+v", validSpecific)
+		for _, text := range []string{
+			"Call `edit(path=\"a.go\")`.",
+			"Call `edit(path=\"a.go\")` after `request_tools(need=\"edit\")`.",
+			"Call `request_tools(need=\"verify\")`, then `edit(path=\"a.go\")`.",
+			"Call `request_tools(need=\"edit file contents\")`, then `edit(path=\"a.go\")`.",
+			"Call `request_tools(need=\"edit\")`.\n\nThen `edit(path=\"a.go\")`.",
+			"- `request_tools(need=\"edit\")`\n- `edit(path=\"a.go\")`",
+		} {
+			if got := eval(evalCtx, text); !hasViolationClaim(got, "edit") {
+				t.Fatalf("%q: want edit violation, got %+v", text, got)
+			}
 		}
+	})
 
+	t.Run("request_tools must name a requestable tool", func(t *testing.T) {
 		planWithoutEdit := toolsurface.Compile([]string{"command", "request_tools"}, []string{"verify"})
 		readerWithoutEdit, rErr := prompts.NewReader(prompts.HostFacts{
 			Profiles:  customProfiles,
@@ -443,13 +424,11 @@ func TestClaimLevelNegationAndRequestToolsBinding(t *testing.T) {
 		testutil.FailErr(t, "reader without edit", rErr)
 		noEditCtx := evalCtx
 		noEditCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(readerWithoutEdit, nil, metas)
-		invalidTarget := toolvocabtest.EvaluateClaimBlock(noEditCtx, toolvocabtest.ClaimBlock{
-			Label:   "unrequestable-edit-loader",
-			Subject: toolvocabtest.SubjectSelfNow(),
-			Text:    "Load `edit` via `request_tools(need=\"edit\")` before calling `edit`.",
-		})
-		if len(invalidTarget) == 0 {
-			t.Fatal("expected loading unrequestable edit to fail")
+		if got := eval(noEditCtx, "Call `request_tools(need=\"edit\")`."); len(got) == 0 {
+			t.Fatal("loading an unrequestable tool passed")
+		}
+		if got := eval(noEditCtx, "Call `request_tools(need=\"verify\")`."); len(got) > 0 {
+			t.Fatalf("loading a requestable tool failed: %+v", got)
 		}
 	})
 }
@@ -662,6 +641,16 @@ func TestPostLoadCommandModeAdmission(t *testing.T) {
 	} {
 		if got := toolvocabtest.EvaluateClaimBlock(roCtx, toolvocabtest.ClaimBlock{Label: "unavailable-mut-mode", Subject: toolvocabtest.SubjectSelfNow(), Text: unavailable}); len(got) == 0 {
 			t.Fatalf("expected unavailable mutating command mode %q to fail after read-only command load", unavailable)
+		}
+	}
+
+	for _, unloaded := range []string{
+		"Run `git status`.",
+		"Run `git status`, then `request_tools(need=\"command\")`.",
+		"`request_tools(need=\"command\")`\n\nRun `git status`.",
+	} {
+		if got := toolvocabtest.EvaluateClaimBlock(roCtx, toolvocabtest.ClaimBlock{Label: "unloaded-command-span", Subject: toolvocabtest.SubjectSelfNow(), Text: unloaded}); len(got) == 0 {
+			t.Fatalf("expected command span %q without an earlier loader in its block to fail", unloaded)
 		}
 	}
 }

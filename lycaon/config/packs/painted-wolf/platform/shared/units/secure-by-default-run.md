@@ -10,5 +10,5 @@ hosts: [coordinator, worker]
 ---
 **Keep credentials and files protected.**
 - Secrets on command lines — `SECRET=… cmd` is recorded verbatim in the session, approval card, and access record, and a value you compose may evade screening. Use a managed secret reference when the host should generate the value; otherwise pass credentials through environment/config or a file.{% if profile_has_command and profile_command_network_egress != false %} Native `curl` accepts protected references in credential, header and body fields.{% endif %}
-- Widening file modes to "fix it" — no `chmod 777` or world-writable secret paths.
+- Widening file modes to "fix it" — no world-writable modes or secret paths.
 - Logging secrets — do not dump Authorization headers, cookies, tokens, or password fields into logs or debug prints.

@@ -173,46 +173,25 @@ func TestCheckerRefinementsValidAndNearbyInvalidPairs(t *testing.T) {
 		invalid string
 	}{
 		{
-			name:    "in_command_program_context_vs_foreign_schema_field",
-			ctxVal:  buildCtx,
-			ctxInv:  buildCtx,
-			valid:   "Run `outline` in `command` to inspect file symbols.",
-			invalid: "Pass `questions` in `command` to ask the user.",
-		},
-		{
-			name:    "host_resource_cli_kind_in_command_vs_key_value_schema_claim",
-			ctxVal:  buildCtx,
-			ctxInv:  buildCtx,
-			valid:   "Run `kubectl`, `helm`, or `kind` in `command` and declare the id in `capability_request.host_resources` on that call.",
-			invalid: "Set `kind: \"process_done\"` in `command` when waiting.",
-		},
-		{
-			name:    "single_enum_path_for_literal_admitted_vs_narrowed",
-			ctxVal:  buildCtx,
-			ctxInv:  buildCtx,
-			valid:   "Use `wait` with `http_ready` for readiness.",
-			invalid: "Use `wait` with `process_done` for readiness.",
-		},
-		{
-			name:    "nested_property_suffix_admitted_vs_pruned_on_readonly",
-			ctxVal:  buildCtx,
-			ctxInv:  roGitCtx,
-			valid:   "Request `local_listen` on `command` when starting a dev server.",
-			invalid: "Request `local_listen` on `command` when starting a dev server.",
-		},
-		{
-			name:    "unknown_preposition_target_vs_known_tool_missing_field",
-			ctxVal:  buildCtx,
-			ctxInv:  buildCtx,
-			valid:   "Keep `state` on `session` when resuming.",
-			invalid: "Pass `nonexistent_field` on `recall` when querying.",
-		},
-		{
-			name:    "negation_no_span_and_will_not_stand_in_vs_affirmative_unoffered",
+			name:    "a_mention_claims_reach_whatever_its_polarity",
 			ctxVal:  roGitCtx,
 			ctxInv:  roGitCtx,
-			valid:   "This surface has no `verify`, `survey_repo` will not stand in for exact source reads, and do not open with `fetch_url`.",
-			invalid: "This surface offers `verify`, `survey_repo` stands in for source reads, and open with `fetch_url`.",
+			valid:   "Do not call `recall` here.",
+			invalid: "Do not call `verify` here.",
+		},
+		{
+			name:    "a_bare_field_span_claims_nothing_but_a_call_argument_does",
+			ctxVal:  buildCtx,
+			ctxInv:  buildCtx,
+			valid:   "Pass `questions` in `command` to ask the user.",
+			invalid: "Call `recall(nonexistent_field=1)` when querying.",
+		},
+		{
+			name:    "call_argument_enum_admitted_vs_narrowed",
+			ctxVal:  buildCtx,
+			ctxInv:  buildCtx,
+			valid:   "Call `wait(conditions=[{\"kind\":\"http_ready\"}], …)` for readiness.",
+			invalid: "Call `wait(conditions=[{\"kind\":\"process_done\"}], …)` for readiness.",
 		},
 		{
 			name:    "angle_placeholder_vs_unquoted_output_redirect_on_readonly",
@@ -236,11 +215,25 @@ func TestCheckerRefinementsValidAndNearbyInvalidPairs(t *testing.T) {
 			invalid: "Scope the CA bundle with `git -c http.sslCAInfo=ca.pem` in `command`.",
 		},
 		{
-			name:    "after_loading_it_with_loader_requestable_vs_unrequestable",
+			name:    "loader_before_call_requestable_vs_unrequestable",
 			ctxVal:  buildCtx,
 			ctxInv:  roGitCtx,
-			valid:   "Run `verify(…)` after loading it with `request_tools(need=\"verify\")`.",
-			invalid: "Run `verify(…)` after loading it with `request_tools(need=\"verify\")`.",
+			valid:   "Call `request_tools(need=\"verify\")`, then `verify(…)`.",
+			invalid: "Call `request_tools(need=\"verify\")`, then `verify(…)`.",
+		},
+		{
+			name:    "loader_must_precede_the_call_in_its_block",
+			ctxVal:  buildCtx,
+			ctxInv:  buildCtx,
+			valid:   "- `request_tools(need=\"verify\")` then `verify(…)`",
+			invalid: "- `verify(…)` after `request_tools(need=\"verify\")`",
+		},
+		{
+			name:    "loader_in_another_block_does_not_hold_the_tool",
+			ctxVal:  buildCtx,
+			ctxInv:  buildCtx,
+			valid:   "Mention `verify` freely.\n\nCall `request_tools(need=\"verify\")` and `verify(…)`.",
+			invalid: "Call `request_tools(need=\"verify\")`.\n\nCall `verify(…)`.",
 		},
 	}
 
@@ -266,9 +259,10 @@ func TestCheckerRefinementsValidAndNearbyInvalidPairs(t *testing.T) {
 		}
 	})
 
-	t.Run("skill_admission_loader_sequenced_requestable_vs_unrequestable_or_unsequenced", func(t *testing.T) {
-		skSequenced := skills.Parse("seq-probe", []byte("---\nname: seq-probe\ndescription: Sequenced loader probe.\n---\nLoad `command` via `request_tools(need: \"stage and commit git changes\")`.\n"))
-		skUnsequenced := skills.Parse("unseq-probe", []byte("---\nname: unseq-probe\ndescription: Unsequenced probe.\n---\nRun `command` directly without loading.\n"))
+	t.Run("skill_admission_reads_mentions_and_loader_calls", func(t *testing.T) {
+		skSequenced := skills.Parse("seq-probe", []byte("---\nname: seq-probe\ndescription: Sequenced loader probe.\n---\nCall `request_tools(need=\"command\")`, then `command(command=\"git status\")`.\n"))
+		skUnsequenced := skills.Parse("unseq-probe", []byte("---\nname: unseq-probe\ndescription: Unsequenced probe.\n---\nRun `command(command=\"git status\")` directly.\n"))
+		skMention := skills.Parse("mention-probe", []byte("---\nname: mention-probe\ndescription: Mention probe.\n---\nInspection runs in `command`.\n"))
 
 		defPlan := toolsurface.Compile([]string{"request_tools", "recall"}, []string{"command"})
 		defReader, err := prompts.NewReader(prompts.HostFacts{
@@ -304,6 +298,9 @@ func TestCheckerRefinementsValidAndNearbyInvalidPairs(t *testing.T) {
 		}
 		if toolvocab.SkillToolsOfferedForReader(skUnsequenced.Skill, defReader) {
 			t.Fatal("nearby invalid unsequenced deferred-tool skill passed without loader")
+		}
+		if !toolvocab.SkillToolsOfferedForReader(skMention.Skill, defReader) {
+			t.Fatal("a mention of a requestable tool was rejected")
 		}
 	})
 }

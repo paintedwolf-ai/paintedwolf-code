@@ -18,7 +18,7 @@ One row per artifact. State what each proves; leave a column empty rather than c
 |---|---|---|---|---|---|---|
 | darwin/arm64 | app-2.4.0-darwin-arm64.tar.gz | 41.2 MB | `3f1c…` | yes | signed, notarized | attestation `…` |
 
-{% if profile_has_command %}Compute digests over the exact files you hand off (`sha256sum <file>` in `command`).{% elif profile_can_request.command %}Load `command` via `request_tools(need="command")` to compute SHA-256 digests over the exact files you hand off.{% else %}Record SHA-256 digests only when already captured in build evidence; otherwise leave the column empty.{% endif %} Rebuilding an artifact gives it a new identity and new rows.
+{% if profile_has_command %}Compute digests over the exact files you hand off (`sha256sum <file>` in `command`).{% elif profile_can_request.command %}Call `request_tools(need="command")` to compute SHA-256 digests over the exact files you hand off.{% else %}Record SHA-256 digests only when already captured in build evidence; otherwise leave the column empty.{% endif %} Rebuilding an artifact gives it a new identity and new rows.
 
 ## Handoff
 

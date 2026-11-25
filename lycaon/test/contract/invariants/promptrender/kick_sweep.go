@@ -166,8 +166,9 @@ func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase ma
 		reader = closeR
 		active := cr.auth.ActorAuthority()
 		nextTurn = &active
-		subj = toolvocabtest.SubjectSessionNextTurn()
-		data["session_command_mutation_capable"] = cr.state.SessionMode != api.SessionModeAsk && cr.auth.Reader.Held()["command_mutation"]
+		writes := cr.state.SessionMode != api.SessionModeAsk && cr.auth.Reader.Held()["command_mutation"]
+		subj = toolvocabtest.SubjectSessionNextTurn(writes)
+		data["session_command_mutation_capable"] = writes
 	}
 	if err := prompts.MergeCoordinatorKickVarsForTools(data, reader); err != nil {
 		return err
@@ -235,8 +236,9 @@ func (k *kickSweep) workerKick(ctx context.Context, kick string, envBase map[str
 		if kick == "worker-closeout" {
 			active := wr.auth.ActorAuthority()
 			followup = &active
-			subj = toolvocabtest.SubjectFollowupLeg()
-			data["leg_command_mutation_capable"] = wr.ws.ParentSessionMode != api.SessionModeAsk && wr.auth.Reader.Held()["command_mutation"]
+			writes := wr.ws.ParentSessionMode != api.SessionModeAsk && wr.auth.Reader.Held()["command_mutation"]
+			subj = toolvocabtest.SubjectFollowupLeg(writes)
+			data["leg_command_mutation_capable"] = writes
 		}
 	}
 	text, rKey, err := k.render(ctx, "wkick:", kick, reader, data)

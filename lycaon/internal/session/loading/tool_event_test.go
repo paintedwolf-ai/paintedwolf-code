@@ -144,9 +144,9 @@ func TestReadSkillForToolDistinguishesProjectedSchemasBothOrders(t *testing.T) {
 	}
 }
 
-// A tool event reads the reach of the request that carried the call: a
-// deferred tool the request did not offer admits no skill, and a call without
-// a request Reader preloads nothing.
+// A tool event reads the reach of the request that carried the call: a tool
+// the request neither offers nor defers admits no skill, a deferred tool is
+// reachable, and a call without a request Reader preloads nothing.
 func TestReadSkillForToolReadsTheCarryingRequest(t *testing.T) {
 	roster := []skills.Skill{{
 		Name:        "review-accessibility",
@@ -172,11 +172,12 @@ func TestReadSkillForToolReadsTheCarryingRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		turn tools.InvocationTurn
-		want bool
+		want string
 	}{
-		{"deferred", requestTurn(t, toolsurface.Compile([]string{"command", "request_tools", "page_open"}, []string{"measure_page"}), nil), false},
-		{"offered", requestTurn(t, toolsurface.Compile([]string{"command", "request_tools", "page_open", "measure_page"}, nil), nil), true},
-		{"no reader", tools.InvocationTurn{TurnOfferedToolNames: []string{"page_open", "measure_page"}}, false},
+		{"absent", requestTurn(t, toolsurface.Compile([]string{"command", "request_tools", "page_open"}, nil), nil), ""},
+		{"deferred", requestTurn(t, toolsurface.Compile([]string{"command", "request_tools", "page_open"}, []string{"measure_page"}), nil), "Use `measure_page` and `page_open` (missing)."},
+		{"offered", requestTurn(t, toolsurface.Compile([]string{"command", "request_tools", "page_open", "measure_page"}, nil), nil), "Use `measure_page` and `page_open` (ready)."},
+		{"no reader", tools.InvocationTurn{TurnOfferedToolNames: []string{"page_open", "measure_page"}}, ""},
 	} {
 		m.Ledger.BeginTurn(sess.ID, turnload.TurnOpening{OpeningMessageID: "m-" + tc.name, Request: "Audit accessibility", Loadable: []string{"page_open", "measure_page"}}, turnload.Decision{})
 		m.ObserveToolCall(t.Context(), sess, tools.ToolContext{
@@ -184,11 +185,11 @@ func TestReadSkillForToolReadsTheCarryingRequest(t *testing.T) {
 			Turn:     tc.turn,
 		}, "page_open")
 		got := m.SkillPreload(sess.ID)
-		if (got != nil) != tc.want {
-			t.Fatalf("%s: preload = %+v, want preloaded %v", tc.name, got, tc.want)
+		if (got != nil) != (tc.want != "") {
+			t.Fatalf("%s: preload = %+v, want body %q", tc.name, got, tc.want)
 		}
-		if tc.want && got.Body != "Use `measure_page` and `page_open` (ready)." {
-			t.Fatalf("%s: preload body = %q", tc.name, got.Body)
+		if got != nil && got.Body != tc.want {
+			t.Fatalf("%s: preload body = %q, want %q", tc.name, got.Body, tc.want)
 		}
 	}
 }

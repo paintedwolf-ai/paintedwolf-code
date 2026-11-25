@@ -59,7 +59,7 @@ func TestUnacceptedArgsChecksArgumentsAttributedToATool(t *testing.T) {
 	}
 }
 
-func TestAttributedCallValidationCatchesNestedEnumAndCrossToolErrors(t *testing.T) {
+func TestAttributedClaimsComeFromCallsAndToolPaths(t *testing.T) {
 	eff, err := extpacks.CatalogForConsumers()
 	testutil.FailErr(t, "catalog for consumers", err)
 	profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
@@ -68,8 +68,6 @@ func TestAttributedCallValidationCatchesNestedEnumAndCrossToolErrors(t *testing.
 	testutil.FailErr(t, "load schemas", err)
 	catalog, err := toolvocab.NewCatalog(rawSchemas, profiles, toolvocab.Provenance{})
 	testutil.FailErr(t, "new catalog", err)
-	prunable, err := toolvocabtest.DiscoverPrunableSchemaIndex(t.Context(), eff)
-	testutil.FailErr(t, "discover prunable", err)
 
 	baseSchema := func(name string) map[string]any {
 		m, ok := rawSchemas.ToolMeta(name)
@@ -116,10 +114,6 @@ func TestAttributedCallValidationCatchesNestedEnumAndCrossToolErrors(t *testing.
 			text: "Park with `wait(conditions=[{\"kind\":\"process_done\"}], …)`.",
 		},
 		{
-			name: "standalone wait kind object narrowed",
-			text: "Resume on `{\"kind\": \"process_done\"}`.",
-		},
-		{
 			name: "ask_user narrowed secret enum in partial call",
 			text: "Request key via `ask_user(response_type=\"secret\", …)`.",
 		},
@@ -128,20 +122,8 @@ func TestAttributedCallValidationCatchesNestedEnumAndCrossToolErrors(t *testing.
 			text: "Request key via `ask_user({\"prompt\":\"Key?\",\"secret\":{\"name\":\"api_key\"}})`.",
 		},
 		{
-			name: "standalone ask_user response_type secret in Ask mode",
-			text: "Call `ask_user` with `response_type: secret`.",
-		},
-		{
 			name: "conflicting verification boolean on complete_leg",
 			text: "Finish with `complete_leg(leg_status=\"complete\", brief=\"done\", verification=true)`.",
-		},
-		{
-			name: "standalone verification true not excused by complete_leg when command is read-only",
-			text: "Run the check with `verification: true`.",
-		},
-		{
-			name: "cross-tool secret_use attributed to read-only command not excused by verify",
-			text: "Run `command` with `secret_use.services`.",
 		},
 		{
 			name: "cross-tool capability_request attributed to page_open rejects local_listen",
@@ -156,17 +138,21 @@ func TestAttributedCallValidationCatchesNestedEnumAndCrossToolErrors(t *testing.
 			text: "Ask via `ask_user({\"response_type\":\"text\"})`.",
 		},
 		{
-			name: "affirmative without phrase does not excuse pruned argument",
-			text: "Run `command` with `verification: true` without delay.",
+			name: "tool path the projected schema lacks",
+			text: "Set `command.verification` on the call.",
 		},
 		{
-			name: "compound sentence negated verify does not excuse pruned secret_use on read-only command",
-			text: "Do not call `verify`, and run `command` with `secret_use.services`.",
+			name: "call to a tool the turn does not offer",
+			text: "Call `promote_overlay(overlay_id=\"j1\")`.",
+		},
+		{
+			name: "pruned argument in a prohibited call",
+			text: "Never call `command(command=\"ls\", verification=true)`.",
 		},
 	}
 	for _, tc := range failingCases {
 		t.Run(tc.name, func(t *testing.T) {
-			issues := toolvocabtest.ValidateAttributedClaims(catalog, prunable, tc.text, offered, lookup)
+			issues := toolvocabtest.ValidateAttributedClaims(catalog, tc.text, offered, lookup)
 			if len(issues) == 0 {
 				t.Fatalf("expected schema validation failure for %q, got none", tc.text)
 			}
@@ -182,10 +168,6 @@ func TestAttributedCallValidationCatchesNestedEnumAndCrossToolErrors(t *testing.
 			text: "Park with `wait(timeout_ms=30000, conditions=[{\"kind\":\"http_ready\",\"url\":\"http://127.0.0.1:8080/health\"}])`.",
 		},
 		{
-			name: "verify accepts secret_use.services even when command is read-only",
-			text: "Run `verify` with `secret_use.services`.",
-		},
-		{
 			name: "complete_leg accepts verification object",
 			text: "Finish via `complete_leg(leg_status=\"complete\", brief=\"done\", verification={\"method\":\"targeted\",\"reason\":\"unit tests passed\"})`.",
 		},
@@ -194,17 +176,13 @@ func TestAttributedCallValidationCatchesNestedEnumAndCrossToolErrors(t *testing.
 			text: "Clarify with `ask_user(prompt=\"Which target?\", response_type=\"text\")`.",
 		},
 		{
-			name: "prohibition mentioning pruned argument is exempt",
-			text: "Do not pass `capability_request.local_listen` on `command` here.",
-		},
-		{
-			name: "without directly governing pruned argument is exempt",
-			text: "Run `command` without `verification: true`.",
+			name: "argument spans outside a call claim nothing",
+			text: "Run `command` with `verification: true`, `secret_use.services`, and `response_type: secret`.",
 		},
 	}
 	for _, tc := range passingCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if issues := toolvocabtest.ValidateAttributedClaims(catalog, prunable, tc.text, offered, lookup); len(issues) > 0 {
+			if issues := toolvocabtest.ValidateAttributedClaims(catalog, tc.text, offered, lookup); len(issues) > 0 {
 				t.Fatalf("unexpected validation issues for %q: %+v", tc.text, issues)
 			}
 		})

@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -18,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -103,9 +101,9 @@ func checkClaimsOnce(
 			rev = s.Catalog.Revision
 		}
 		memoKey = fmt.Sprintf(
-			"%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%t|%t",
+			"%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%t|%t|%t",
 			hex.EncodeToString(sum[:]), s.Site, rev, semanticClaimAuthorityKey(auth),
-			labelMemoClass(label), mode, posture, subject.Kind, subject.Modality, subject.AgentID,
+			labelMemoClass(label), mode, posture, subject.Kind, subject.Modality, subject.AgentID, subject.Writes,
 			checkBackticks, resolveNamed != nil,
 		)
 		if cached, ok := claimEvalMemo.Load(memoKey); ok {
@@ -467,65 +465,23 @@ func skillsNameOnlyOffered(r *invariants.Run) {
 	}
 }
 
-var backtickedIdent = regexp.MustCompile("`([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)`")
-
-type fieldIndex struct {
-	byTool map[string]map[string]bool
-	union  map[string]bool
-}
-
-func newFieldIndex(schemas *toolschema.Config) fieldIndex {
-	idx := fieldIndex{byTool: map[string]map[string]bool{}, union: map[string]bool{}}
-	for name := range schemas.Tools {
-		meta, ok := schemas.ToolMeta(name)
-		if !ok {
-			continue
-		}
-		fields := map[string]bool{}
-		for _, path := range toolschema.ArgFieldPaths(meta.ArgsSchema) {
-			head, _, _ := strings.Cut(path, ".")
-			for _, p := range []string{path, head} {
-				fields[p] = true
-				idx.union[p] = true
-			}
-		}
-		idx.byTool[name] = fields
-	}
-	return idx
-}
-
-func (idx fieldIndex) unschemaed(tool, text string) []string {
-	named := map[string]bool{tool: true}
-	var claims []string
-	for _, m := range backtickedIdent.FindAllStringSubmatch(text, -1) {
-		head, _, _ := strings.Cut(m[1], ".")
-		if _, isTool := idx.byTool[head]; isTool {
-			named[head] = true
-		} else if idx.union[m[1]] {
-			claims = append(claims, m[1])
-		}
-	}
-	var bad []string
-	for _, claim := range claims {
-		if !slices.ContainsFunc(sortedKeys(named), func(t string) bool { return idx.byTool[t][claim] }) && !slices.Contains(bad, claim) {
-			bad = append(bad, claim)
-		}
-	}
-	slices.Sort(bad)
-	return bad
-}
-
+// rejectCopyNamesOnlySchemaFields checks the argument claims rejection copy
+// makes, which come only from call expressions and tool.path spans.
 func rejectCopyNamesOnlySchemaFields(r *invariants.Run) {
-	idx := newFieldIndex(stock(r).Schemas)
+	s := stock(r)
+	schemaOf := func(tool string) (map[string]any, bool) {
+		meta, ok := s.Schemas.ToolMeta(tool)
+		return meta.ArgsSchema, ok
+	}
 	cfg := invariants.HintConfig(r.Corpus)
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(stock(r).Engine()))
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(s.Engine()))
 	formatter := guidance.NewStaticRejectFormatter(cfg)
 	checked := 0
 	for _, code := range sortedKeys(cfg.HintCodes) {
 		entry := cfg.HintCodes[code]
 		for _, tool := range entry.Tools {
 			tool = strings.TrimSpace(tool)
-			if _, ok := idx.byTool[tool]; !ok {
+			if _, ok := schemaOf(tool); !ok {
 				continue
 			}
 			checked++
@@ -537,15 +493,13 @@ func rejectCopyNamesOnlySchemaFields(r *invariants.Run) {
 					texts = append(texts, rendered)
 				}
 			}
-			for _, field := range idx.unschemaed(tool, strings.Join(texts, "\n")) {
-				r.Report("%s rendered for %s names `%s`, which %s does not accept", code, tool, field, tool)
+			for _, claim := range toolvocabtest.UnacceptedArgs(s.Names, strings.Join(texts, "\n"), schemaOf) {
+				r.Report("%s rendered for %s gives %s argument `%s`, which %s does not accept", code, tool, claim.Tool, claim.Arg, claim.Tool)
 			}
 		}
 	}
 	r.Expect(checked, "rejection cards with a tool selector")
 }
-
-var phaseExitCall = regexp.MustCompile("((?i:do not |never ))?call `([a-z_]+)`")
 
 func phaseExitsAreCallable(r *invariants.Run) {
 	s := stock(r)
@@ -589,13 +543,12 @@ func phaseExitsAreCallable(r *invariants.Run) {
 			text, err := engine.Render(context.Background(), "guidance/active-workflow.md", vars)
 			r.Must(err)
 			seen := map[string]bool{}
-			for _, match := range phaseExitCall.FindAllStringSubmatch(text, -1) {
-				name := match[2]
-				if match[1] != "" || seen[name] || !grants[name] || slices.Contains(wire, name) {
+			for _, name := range toolvocab.ToolsIn(s.Names, text) {
+				if seen[name] || !grants[name] || slices.Contains(wire, name) {
 					continue
 				}
 				seen[name] = true
-				r.Report("%s exit step calls `%s`, which that surface does not offer", label, name)
+				r.Report("%s exit copy names `%s`, which that surface does not offer", label, name)
 			}
 		}
 	}

@@ -1,4 +1,4 @@
-Decompose the user's security ask into a threat model, then a falsification-oriented fan-out, before any workers run. The host has already collected the security scans bound to this run. Do not run `scan_pack` for this pack and do not `wait(scan_done)`.
+Decompose the user's security ask into a threat model, then a falsification-oriented fan-out, before any workers run. The host has already collected the security scans bound to this run. Do not run `scan_pack` for this pack and do not wait for scans to finish.
 
 1. Take the survey-ladder first move (named area → **`summarize`**; unknown destination → **`survey_repo`**). Read `SECURITY.md`, deploy docs, or auth/entry-point code if they exist. Do **not** dispatch workers in this phase.
 2. Orient on `obligations.scan.scan_ids` and `per_scan`; they are the exact run-bound set. Pass that array to `scan_summary` and `scan_query`. Do not call `scan_list` to rediscover scans or follow newer project-ambient work. Read execution and coverage status separately. Completed scans with partial coverage have usable results and disclosed limitations. A successful empty scan is a negative result, not proof of safety.

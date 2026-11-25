@@ -146,10 +146,10 @@ func TestBoardOrientationRefreshesAtomicTurnFrameBeforeRender(t *testing.T) {
 	for _, msg := range msgs {
 		joined += msg.Content + "\n"
 	}
-	if strings.Contains(joined, "phase 1/2 — `boot`") || strings.Contains(joined, "board phase=boot") {
+	if strings.Contains(joined, "phase 1/2 — boot") || strings.Contains(joined, "board phase=boot") {
 		t.Fatalf("prompt retained stale boot revision:\n%s", joined)
 	}
-	if !strings.Contains(joined, "phase 2/2 — `work`") || !strings.Contains(joined, "board phase=work") {
+	if !strings.Contains(joined, "phase 2/2 — work") || !strings.Contains(joined, "board phase=work") {
 		t.Fatalf("prompt missing refreshed work revision:\n%s", joined)
 	}
 }

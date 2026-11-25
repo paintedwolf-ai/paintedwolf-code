@@ -1,20 +1,20 @@
 <!-- lycaon-workflow-runtime:v1 -->
 ## Workflow
 
-User limits apply: `ask_user` before conflicting action. `topology` defines the shape; each **gate leaf** must pass.
+User limits apply: {% if profile_has_ask_user or profile_can_request.ask_user %}`ask_user` before conflicting action{% else %}stop before conflicting action{% endif %}. `topology` defines the shape; each **gate leaf** must pass.
 
 {% if workflow_id %}- **workflow**: `{{ workflow_id }}`{% if workflow_version %}@{{ workflow_version }}{% endif %}
 {% endif %}{% if run_id %}- **run_id**: `{{ run_id }}`
 {% endif %}{% if run_status %}- **run_status**: `{{ run_status }}`
 {% endif %}{% if request %}- **request**: `{{ request.status }}`{% if request.text %} — {{ request.text }}{% endif %}{% if request.source %} (`{{ request.source }}`){% endif %}
 {% endif %}{% if topology %}- **topology**: `{{ topology }}`
-{% endif %}{% if topology_phase_id %}- **topology_phase_id**: `{{ topology_phase_id }}`
+{% endif %}{% if topology_phase_id %}- **topology_phase_id**: {{ topology_phase_id }}
 {% endif %}{% if allowed_agents %}- **allowed_agents**: {% for agent in allowed_agents %}`{{ agent }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
 {% endif %}{% if excluded_agents %}- **unavailable this turn**: {% for agent in excluded_agents %}`{{ agent.name }}` ({{ agent.code }}){% if not forloop.Last %}, {% endif %}{% endfor %} — do not dispatch these
-{% endif %}{% if requires_isolation %}- **requires_isolation**: true — every write worker runs in its own isolated workspace and lands through `promote_overlay`; do not edit product paths inline on this run
+{% endif %}{% if requires_isolation %}- **requires_isolation**: true — every write worker runs in its own isolated workspace{% if profile_has_promote_overlay or profile_can_request.promote_overlay %} and lands through `promote_overlay`{% endif %}; do not edit product paths inline on this run
 {% endif %}{% if failed_leaves %}- **failed_leaves**: {% for leaf in failed_leaves %}`{{ leaf }}`{% if not forloop.Last %}, {% endif %}{% endfor %} — these gate leaves were evaluated and did not pass. Produce the evidence each one names; {% if phase_exit.coordinator_advances %}do not call `workflow_advance` until they do, and {% endif %}do not claim the phase is done in chat
 {% endif %}{% if unsatisfied_gate_leaves and not failed_leaves %}- **unsatisfied_gate_leaves**: {% for leaf in unsatisfied_gate_leaves %}`{{ leaf }}`{% if not forloop.Last %}, {% endif %}{% endfor %} — not yet satisfied, and not yet failed. The phase work below is what satisfies them
-{% endif %}{% if pending_feedback %}- **pending_feedback**: phase `{{ pending_feedback.phase_id }}`{% if pending_feedback.prompt %} — "{{ pending_feedback.prompt }}"{% endif %}
+{% endif %}{% if pending_feedback %}- **pending_feedback**: phase {{ pending_feedback.phase_id }}{% if pending_feedback.prompt %} — "{{ pending_feedback.prompt }}"{% endif %}
 {% endif %}{% if feedback_phases %}- **feedback_phases**: {{ feedback_phases|join:", " }}
 {% endif %}{% if decision_phases %}- **decision_phases**: {{ decision_phases|join:", " }}
 {% endif %}{% if blueprint_approval %}- **blueprint_approval**: `{{ blueprint_approval.status }}`{% if blueprint_approval.origin %} ({{ blueprint_approval.origin }}{% if blueprint_approval.parent_run_id %} from parent run `{{ blueprint_approval.parent_run_id }}`{% endif %}){% endif %}
@@ -22,7 +22,7 @@ User limits apply: `ask_user` before conflicting action. `topology` defines the 
 {% if blueprint_approval and blueprint_approval.status == "approved" %}
 ### Approved Blueprint execution
 
-The user already approved the exact bound Blueprint and this child inherited that approval from its parent workflow. Execute the approved Blueprint now. Do not ask the user to approve it again; `ask_user` is only for genuinely new information that the approved Blueprint does not resolve.
+The user already approved the exact bound Blueprint and this child inherited that approval from its parent workflow. Execute the approved Blueprint now. Do not ask the user to approve it again{% if profile_has_ask_user or profile_can_request.ask_user %}; `ask_user` is only for genuinely new information that the approved Blueprint does not resolve{% endif %}.
 {% elif blueprint_approval and blueprint_approval.status == "invalid" %}
 ### Blueprint approval invalid
 
@@ -31,9 +31,9 @@ The inherited Blueprint no longer matches the parent's approval. Do not mutate p
 {% if phases %}
 ### Workflow phases
 {% if phase_total %}
-You are at phase {{ phase_index }}/{{ phase_total }} — `{{ current_phase }}`{% if complete_when and not current_phase_gates %} (completes on `{{ complete_when }}`){% endif %}.
+You are at phase {{ phase_index }}/{{ phase_total }} — {{ current_phase }}{% if complete_when and not current_phase_gates %} (completes on `{{ complete_when }}`){% endif %}.
 {% endif %}
-{% for phase in phases %}- `{{ phase.id }}`{% if phase.is_current %} (current){% endif %}{% if phase.terminal %} · terminal{% endif %}
+{% for phase in phases %}- {{ phase.id }}{% if phase.is_current %} (current){% endif %}{% if phase.terminal %} · terminal{% endif %}
 {% endfor %}{% if current_phase_gates %}
 Gates:{% for g in current_phase_gates %} [{% if g.satisfied %}x{% else %} {% endif %}] `{{ g.id }}`{% endfor %}
 {% endif %}{% if fanout_plan %}
@@ -59,7 +59,7 @@ This is the last phase. There is no further advance to call.
 {% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_outline %} with `verdict` shaped `{{ phase_exit.verdict_outline }}` (the first `verdict` value is terminal; the tool schema gives each member's type); arrays may be empty when no entry exists{% endif %}. Only that call records a verdict.{% if phase_exit.review_loop_key %}
 {% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. {% if phase_exit.followup_attempts %}A non-terminal verdict registers open questions; start their `workflow_work_id` for focused investigation ({{ phase_exit.followup_attempts }} completed attempts each).{% else %}A non-terminal verdict runs the loop again{% if phase_exit.review_loop_cap %}, up to {{ phase_exit.review_loop_cap }} time(s){% endif %}.{% endif %}{% endif %}
 {% elif phase_exit.kind == "human_approval" %}
-End the turn. The user approves the bound document themselves — chat prose is not approval, and `workflow_advance` will not stand in for it. Treat any message they send meanwhile as revision feedback on that document.
+End the turn. The user approves the bound document themselves — chat prose is not approval{% if profile_has_workflow_advance or profile_can_request.workflow_advance %}, and `workflow_advance` will not stand in for it{% endif %}. Treat any message they send meanwhile as revision feedback on that document.
 {% elif phase_exit.kind == "invoke" %}
 Wait for the child workflow {% if phase_exit.invoke_workflow_id %}`{{ phase_exit.invoke_workflow_id }}` {% endif %}to finish (`child_run_complete`).
 {% elif phase_exit.open_gates or phase_exit.dormant_gates %}{% if phase_exit.open_gates %}
@@ -79,7 +79,7 @@ The host advances on its own once the gates pass.
 {% for arm in phase_exit.choice_transitions %}- `{{ arm.id }}` — {{ arm.label }}{% if arm.coordinator_may_fire %}: `workflow_transition(transition_id="{{ arm.id }}")`{% else %}: {% if arm.actors %}{% for a in arm.actors %}{{ a }}{% if not forloop.Last %}, {% endif %}{% endfor %}{% else %}the user{% endif %} takes this one — you cannot fire it{% endif %}
 {% endfor %}{% endif %}{% if phase_exit.depth_param %}
 Depth parameter: `{{ phase_exit.depth_param }}`.
-{% endif %}{% endif %}{% if next_phase %}Next: `{{ next_phase }}`.
+{% endif %}{% endif %}{% if next_phase %}Next: {{ next_phase }}.
 {% endif %}
 {% endif %}
 {% if coordinator_brief %}

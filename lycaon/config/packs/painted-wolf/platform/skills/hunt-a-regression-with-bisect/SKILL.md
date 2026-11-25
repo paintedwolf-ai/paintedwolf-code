@@ -15,7 +15,7 @@ Use this workflow to turn "it broke sometime" into the exact commit, mechanicall
 4. Capture `git bisect log` as the evidence trail, and when the culprit commit is named, read its diff and explain *why* it breaks the behavior. A bisect that ends at a commit nobody can explain is not finished — re-check the endpoints and the script.
 5. Always end with `git bisect reset` — including on failure and interruption — so the working tree returns to where the user left it. An interrupted `git bisect run` leaves the session recorded and names the reset to run; `git status` shows a session left by an earlier turn.
 6. Report the culprit commit, the mechanism of the breakage, and the bisect log. The fix is a separate decision made on that evidence.
-{% else %}{% if can_request_git_bisect %}Load `command` via `request_tools(need: "run git bisect")` first to run the search directly; otherwise:
+{% else %}{% if can_request_git_bisect %}Call `request_tools(need="command")` first to run the search directly; otherwise:
 {% endif %}1. Establish the two endpoints from evidence you already hold: the last state where the behavior is verifiably good and the first where it is verifiably bad. This environment cannot check out or execute history directly, so anchor both endpoints in your report.
 2. Write the check as a script that exits 0 on good, non-zero on bad, and 125 when the state cannot be judged, and include it verbatim in your report so the search is repeatable.
 3. Include the endpoints, the script, and the failing behavior in your report for the coordinator to run the bisect; the fix remains a separate decision made on that evidence.

@@ -7,7 +7,7 @@ description: When the user asks to commit, split the working tree into coherent 
 
 **Entry check:** the user asked for the work to be committed; committing is never implicit.
 
-{% if can_git_commit %}Use native Git commands in `command` for inspection, staging, and commits;{% elif can_request_git_commit %}Load `command` via `request_tools(need: "stage and commit git changes")`, then use native Git commands for inspection, staging, and commits;{% else %}Prepare and report the planned commit groups for the coordinator to commit;{% endif %} each operation retains host review and attribution.
+{% if can_git_commit %}Use native Git commands in `command` for inspection, staging, and commits;{% elif can_request_git_commit %}Call `request_tools(need="command")`, then use native Git commands in `command` for inspection, staging, and commits;{% else %}Prepare and report the planned commit groups for the coordinator to commit;{% endif %} each operation retains host review and attribution.
 
 ## Mechanics
 
