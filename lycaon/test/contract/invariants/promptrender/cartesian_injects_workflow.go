@@ -302,17 +302,6 @@ func renderStructuralInjectVariants(
 		{"scan-guidance-ephemeral", map[string]any{"summaries": []map[string]any{{"rule": "R1", "fix": "Validate input.", "count": 2}, {"rule": "R2", "count": 1}}}},
 		{"synthesis-evidence", map[string]any{"execution_observations": "1 test run passed."}},
 		{"synthesis-evidence", map[string]any{}},
-		{"view-context", map[string]any{
-			"folder": "src/", "search_query": "main", "search_hit": "src/main.go:10",
-			"editors": []map[string]any{
-				{"path": "a.go", "unsaved": true, "selected": true, "start_line": 1, "end_line": 5},
-				{"path": "b.go", "unsaved": false, "selected": false, "cursor": true, "line": 3},
-				{"path": "c.go", "selected": true, "start_line": 8, "end_line": 8},
-			},
-			"diffs":    []map[string]any{{"path": "a.go"}},
-			"findings": []map[string]any{{"rule_id": "R1", "level": "high", "location": "a.go:4"}, {"rule_id": "R2", "level": "low"}},
-		}},
-		{"view-context", map[string]any{}},
 		{"worker-messages", map[string]any{"recipient": "coordinator", "message_count": 2, "has_needs_reply": true, "more": 1, "messages": []map[string]any{{"from": "w1", "body": "Ready."}}}},
 		{"worker-messages", map[string]any{"recipient": "worker", "message_count": 1, "has_needs_reply": false, "more": 0}},
 		{"worker-round", map[string]any{"has_brief": true, "instruction_count": 2, "workspace": "refreshed", "prior_change": "shelved", "earlier_results": []string{"r1", "r2"}}},
@@ -331,7 +320,40 @@ func renderStructuralInjectVariants(
 			sum.Violations = append(sum.Violations, viols...)
 		}
 	}
+	for i, view := range viewContextVariants() {
+		out := inject.RenderViewContextBlock(ctx, injRenderer, "sess-view", view)
+		sum.InjectAndGuidanceCount++
+		if out != "" {
+			viols := checkClaimsOnce(s, fmt.Sprintf("structural-inject/view-context[%d]", i), out, zeroAuth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
+			sum.Violations = append(sum.Violations, viols...)
+		}
+	}
 	return nil
+}
+
+// viewContextVariants are views a prompt can carry: every editor selection
+// shape with a folder, a search hit and findings; a hitless search alone; and
+// nothing in view.
+func viewContextVariants() []api.ViewContext {
+	at := func(path string, line int) *api.ViewLocation {
+		return &api.ViewLocation{Path: path, DisplayPath: path, Line: line}
+	}
+	return []api.ViewContext{
+		{
+			Editors: []api.ViewEditor{
+				{DisplayPath: "a.go", Unsaved: true, Selection: &api.ViewSelection{StartLine: 1, EndLine: 5}},
+				{DisplayPath: "b.go", Selection: &api.ViewSelection{StartLine: 3, EndLine: 3, Cursor: true}},
+				{DisplayPath: "c.go", Selection: &api.ViewSelection{StartLine: 8, EndLine: 8}},
+				{DisplayPath: "d.go"},
+			},
+			Diffs:    []api.ViewPath{{DisplayPath: "a.go"}},
+			Folder:   &api.ViewPath{DisplayPath: "src/"},
+			Search:   &api.ViewSearch{Query: "main", Hit: at("src/main.go", 10)},
+			Findings: []api.ViewFinding{{RuleID: "R1", Level: api.FindingLevel("high"), Location: at("a.go", 4)}, {RuleID: "R2", Level: api.FindingLevel("low")}},
+		},
+		{Search: &api.ViewSearch{Query: "main"}},
+		{},
+	}
 }
 
 // executionStateRich is execution-state data in the row shape
