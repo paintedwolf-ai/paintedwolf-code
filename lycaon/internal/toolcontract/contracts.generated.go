@@ -333,6 +333,9 @@ var compiledMultiRoot = map[string]MultiRootCapability{
 
 // Retired tools whose successor is content rather than a call.
 var compiledRetiredToContent = map[string]string{
+	"parse_evaluation":       "paintedwolf.command_json_programs",
+	"parse_extract_json":     "paintedwolf.command_json_programs",
+	"parse_validate":         "paintedwolf.command_json_programs",
 	"state_close":            "paintedwolf.workflow_run_exit",
 	"state_query":            "paintedwolf.workflow_run_context",
 	"surface_note":           "paintedwolf.markdown_note",
