@@ -50,6 +50,20 @@ type Implication struct {
 	Source   string
 }
 
+// Fixed is a host invariant holding one atom to one value. Source names the
+// production code that establishes it.
+type Fixed struct {
+	Atom   string
+	Value  Truth
+	Source string
+}
+
+// Constraints are the host invariants that rule assignments out.
+type Constraints struct {
+	Implications []Implication
+	Fixed        []Fixed
+}
+
 // Witness is a pair of evaluations that differ only in one input and in the
 // decision.
 type Witness struct {
@@ -83,7 +97,7 @@ type Result struct {
 	Witnesses  map[string][]Witness
 	Exclusions []Exclusion
 	Gaps       []Gap
-	// Contradicted lists implications an observation violates.
+	// Contradicted lists constraints an observation violates.
 	Contradicted []string
 }
 
@@ -91,19 +105,26 @@ type Result struct {
 // input. Two evaluations witness an input when its value differs, every other
 // input holds the same known value, and the decisions differ. Without a
 // witness, an input is excluded only when no assignment satisfying the
-// implications and the guard's own logic admits a pair; otherwise it is a gap
+// constraints and the guard's own logic admits a pair; otherwise it is a gap
 // naming the assignments to observe.
-func Analyze(guards []Guard, eval func(site string, atoms []Truth) (bool, error), implications []Implication) (Result, error) {
+func Analyze(guards []Guard, eval func(site string, atoms []Truth) (bool, error), cons Constraints) (Result, error) {
 	res := Result{Witnesses: map[string][]Witness{}}
-	for _, imp := range implications {
-		for _, g := range guards {
-			for _, v := range g.Vectors {
+	for _, g := range guards {
+		for _, v := range g.Vectors {
+			for _, imp := range cons.Implications {
 				if a, b := valueOf(g, v, imp.If), valueOf(g, v, imp.Then); a == True && b == False {
 					res.Contradicted = append(res.Contradicted, fmt.Sprintf("%s (%s) contradicted at %s", imp.If+" ⇒ "+imp.Then, imp.Source, g.Site))
 				}
 			}
+			for _, f := range cons.Fixed {
+				if got := valueOf(g, v, f.Atom); got != Unknown && got != f.Value {
+					res.Contradicted = append(res.Contradicted, fmt.Sprintf("%s = %s (%s) contradicted at %s", f.Atom, f.Value, f.Source, g.Site))
+				}
+			}
 		}
 	}
+	slices.Sort(res.Contradicted)
+	res.Contradicted = slices.Compact(res.Contradicted)
 	for _, g := range guards {
 		inputs := distinctInputs(g.Atoms)
 		if len(inputs) < 2 {
@@ -114,12 +135,12 @@ func Analyze(guards []Guard, eval func(site string, atoms []Truth) (bool, error)
 				res.Witnesses[g.Site] = append(res.Witnesses[g.Site], w)
 				continue
 			}
-			needed, err := neededAssignments(g, in, inputs, eval, implications)
+			needed, err := neededAssignments(g, in, inputs, eval, cons)
 			if err != nil {
 				return Result{}, err
 			}
 			if len(needed) == 0 {
-				res.Exclusions = append(res.Exclusions, Exclusion{Site: g.Site, Input: in, Reason: constraintReason(in, inputs, implications)})
+				res.Exclusions = append(res.Exclusions, Exclusion{Site: g.Site, Input: in, Reason: constraintReason(in, inputs, cons)})
 				continue
 			}
 			res.Gaps = append(res.Gaps, Gap{Site: g.Site, Source: g.Source, Input: in, Missing: needed})
@@ -190,7 +211,7 @@ func findWitness(g Guard, in string, inputs []string) (Witness, bool) {
 // neededAssignments enumerates assignments of the other inputs under which the
 // guard's decision follows in, keeping those the implications allow. Each is
 // printed as the pair of input vectors to observe.
-func neededAssignments(g Guard, in string, inputs []string, eval func(string, []Truth) (bool, error), implications []Implication) ([]string, error) {
+func neededAssignments(g Guard, in string, inputs []string, eval func(string, []Truth) (bool, error), cons Constraints) ([]string, error) {
 	if len(inputs) > 12 {
 		return nil, fmt.Errorf("%s: %d inputs exceed the enumeration bound", g.Site, len(inputs))
 	}
@@ -205,7 +226,7 @@ func neededAssignments(g Guard, in string, inputs []string, eval func(string, []
 		admissible := true
 		for k, val := range []Truth{False, True} {
 			assign[in] = val
-			if !allowed(assign, implications) {
+			if !allowed(assign, cons) {
 				admissible = false
 				break
 			}
@@ -230,11 +251,16 @@ func truthBit(mask, i int) Truth {
 	return False
 }
 
-func allowed(assign map[string]Truth, implications []Implication) bool {
-	for _, imp := range implications {
+func allowed(assign map[string]Truth, cons Constraints) bool {
+	for _, imp := range cons.Implications {
 		a, aok := assign[imp.If]
 		b, bok := assign[imp.Then]
 		if aok && bok && a == True && b == False {
+			return false
+		}
+	}
+	for _, f := range cons.Fixed {
+		if v, ok := assign[f.Atom]; ok && v != f.Value {
 			return false
 		}
 	}
@@ -261,11 +287,16 @@ func formatAssignment(inputs []string, in string, assign map[string]Truth) strin
 	return "{" + strings.Join(parts, ", ") + "}"
 }
 
-func constraintReason(in string, inputs []string, implications []Implication) string {
+func constraintReason(in string, inputs []string, cons Constraints) string {
 	var used []string
-	for _, imp := range implications {
+	for _, imp := range cons.Implications {
 		if slices.Contains(inputs, imp.If) && slices.Contains(inputs, imp.Then) {
 			used = append(used, imp.If+" ⇒ "+imp.Then+" ("+imp.Source+")")
+		}
+	}
+	for _, f := range cons.Fixed {
+		if slices.Contains(inputs, f.Atom) {
+			used = append(used, f.Atom+" = "+f.Value.String()+" ("+f.Source+")")
 		}
 	}
 	if len(used) == 0 {

@@ -33,7 +33,7 @@ var reachInvariants = []invariants.Invariant{
 	{Name: "phase-kicks-name-only-their-surface-tools", Anchors: []invariants.Anchor{kickRenderer, phaseSurfaceResolver}, Check: phaseKicksNameOnlyTheirSurface},
 	{Name: "worker-kicks-name-only-offered-tools", Anchors: []invariants.Anchor{kickRenderer}, Check: workerKicksNameOnlyOffered},
 	{Name: "worker-personas-name-only-offered-tools", Anchors: []invariants.Anchor{personaRenderer}, Check: workerPersonasNameOnlyOffered},
-	{Name: "skills-name-only-offered-tools", Anchors: []invariants.Anchor{invariants.Func("internal/toolvocab", "SkillToolsOffered"), invariants.Func("internal/toolvocab", "SkillToolsOfferedForReader")}, Check: skillsNameOnlyOffered},
+	{Name: "skills-name-only-offered-tools", Anchors: []invariants.Anchor{invariants.Func("internal/toolvocab", "SkillToolsOfferedForReader")}, Check: skillsNameOnlyOffered},
 	{Name: "reject-copy-names-only-schema-fields", Anchors: []invariants.Anchor{invariants.Func("internal/guidance", "NewStaticRejectFormatter")}, Check: rejectCopyNamesOnlySchemaFields},
 	{Name: "phase-exits-are-callable-on-their-surface", Anchors: []invariants.Anchor{phaseSurfaceResolver, invariants.Func("internal/workflow/presentation", "ProjectPhaseExit")}, Check: phaseExitsAreCallable},
 }

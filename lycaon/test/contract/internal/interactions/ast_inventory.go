@@ -465,22 +465,7 @@ func discoverOARRuleInstructions(
 	schemas *toolschema.Config,
 	names *toolvocab.Catalog,
 ) ([]InstructionSite, error) {
-	moduleRoot := configlayout.FindModuleRoot()
-	repoRoot := filepath.Dir(moduleRoot)
-	schemaDir := filepath.Join(repoRoot, "schemas")
-	if err := anchorcatalog.InstallBundled(); err != nil {
-		return nil, err
-	}
-	if err := oar.InstallEngineDeclarationBundled(schemaDir); err != nil {
-		return nil, err
-	}
-	loader, err := oar.NewLoader(schemaDir)
-	if err != nil {
-		return nil, err
-	}
-	loader.SetToolSchemas(schemas)
-	loader.SetDetectors(oar.HostDetectors(nil))
-	rs, err := loader.LoadEffectivePolicyWithCatalog(eff)
+	rs, err := loadEffectiveRules(eff, schemas)
 	if err != nil {
 		return nil, err
 	}
@@ -520,6 +505,25 @@ func discoverOARRuleInstructions(
 		}
 	}
 	return sites, nil
+}
+
+// loadEffectiveRules compiles eff's effective OAR policy with the bundled
+// engine declaration and anchor catalog.
+func loadEffectiveRules(eff *extpacks.EffectiveCatalog, schemas *toolschema.Config) (*oar.RuleSet, error) {
+	schemaDir := filepath.Join(filepath.Dir(configlayout.FindModuleRoot()), "schemas")
+	if err := anchorcatalog.InstallBundled(); err != nil {
+		return nil, err
+	}
+	if err := oar.InstallEngineDeclarationBundled(schemaDir); err != nil {
+		return nil, err
+	}
+	loader, err := oar.NewLoader(schemaDir)
+	if err != nil {
+		return nil, err
+	}
+	loader.SetToolSchemas(schemas)
+	loader.SetDetectors(oar.HostDetectors(nil))
+	return loader.LoadEffectivePolicyWithCatalog(eff)
 }
 
 func walkOARSteps(

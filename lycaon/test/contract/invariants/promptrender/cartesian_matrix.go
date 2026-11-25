@@ -5,21 +5,17 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path"
 	"reflect"
-	"slices"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/agentdef"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/pongoplain"
-	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
+	"github.com/lycaon/lycaon/test/contract/internal/interactions"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
 
@@ -28,6 +24,7 @@ import (
 type CartesianSummary struct {
 	Violations             []string
 	Coverage               hoststate.CoverageReport
+	Conditions             []hoststate.ObservedCondition
 	SkillAudit             SkillSurfaceAudit
 	CoordinatorPromptCount int
 	CoordinatorProcCount   int
@@ -144,6 +141,7 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 		tracker.RegisterRule(rule)
 	}
 	registerExpectedZeroBranches(tracker)
+	tracker.ObserveConditions(renderRecipient, occurrenceRecipient)
 
 	restore := tracker.Install()
 	defer restore()
@@ -190,34 +188,23 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 	sum.CacheHits = hits
 	sum.CacheMisses = misses
 	sum.Coverage = tracker.Report()
+	sum.Conditions = tracker.Conditions()
 	return sum, nil
 }
 
-// stockTemplateKinds are the catalog kind roots whose Markdown units the
-// composed prompt engine reads as templates.
-var stockTemplateKinds = []string{"agents/prompts/", "shared/partials/", "shared/units/", "shared/archetypes/", "guidance/"}
-
 func registerStockTemplatesInTracker(s *Stock, tracker *hoststate.CoverageTracker) error {
-	for _, id := range s.Catalog.LoadedUnitIDs() {
-		if _, _, archived := extpacks.SplitArchiveUnitID(id); archived {
-			continue
-		}
-		if !slices.ContainsFunc(stockTemplateKinds, func(kind string) bool { return strings.HasPrefix(id, kind) }) {
-			continue
-		}
-		at, ok := s.Catalog.UnitPath(id)
-		if !ok || path.Ext(at.String()) != ".md" {
-			continue
-		}
-		raw, _, _ := s.Catalog.UnitContent(id)
-		if strings.HasPrefix(id, "shared/units/") {
-			raw = promptunit.Body(raw)
-		}
-		if err := tracker.RegisterTemplate(id, string(raw), pongoplain.Composed); err != nil {
+	templates, err := interactions.TemplateUnits(s.Catalog)
+	if err != nil {
+		return err
+	}
+	for id, source := range templates {
+		if err := tracker.RegisterTemplate(id, source, pongoplain.Composed); err != nil {
 			return err
 		}
 	}
-	tracker.AttributeTemplateRefs(func(ref string) (string, bool) { return prompts.TemplateUnitID(s.Catalog, ref) })
+	tracker.AttributeTemplateRefs(func(ref string) (string, bool) {
+		return interactions.TemplateIdentity(s.Catalog, templates, ref)
+	})
 	gateTmplBytes, err := config.Read(config.GateFeedbackTmplDir + "/_gate.md.tmpl")
 	if err != nil {
 		return err
