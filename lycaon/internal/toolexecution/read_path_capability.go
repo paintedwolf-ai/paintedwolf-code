@@ -2,6 +2,7 @@ package toolexecution
 
 import (
 	"context"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -36,23 +37,24 @@ func (e *Boundary) preflightReadPath(ctx context.Context, tool string, args map[
 
 // ReviewRedirectRead asks for an input redirect or sourced script the way a
 // native read of the same file asks, then for protected-read access when the
-// file needs it.
+// file needs it. A refusal returns tc unchanged.
 func (e *Boundary) ReviewRedirectRead(ctx context.Context, tc tools.ToolContext, operator, path string) (tools.ToolContext, error) {
 	args := map[string]any{"command": operator + " " + path}
 	access, err := e.reviewOutsideRead(ctx, tc, args, path)
 	if err != nil {
 		return tc, err
 	}
-	tc.Files.ApprovedFileAccess = append(tc.Files.ApprovedFileAccess, access...)
-	if err := e.authorizeReadPath(ctx, "command", args, &tc, path); err != nil {
+	reviewed := tc
+	reviewed.Files.ApprovedFileAccess = append(slices.Clone(tc.Files.ApprovedFileAccess), access...)
+	if err := e.authorizeReadPath(ctx, "command", args, &reviewed, path); err != nil {
 		return tc, err
 	}
 	if e.sessionReadOverlay != nil {
-		tc.Files.SessionReadPaths = append([]string(nil), e.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)
+		reviewed.Files.SessionReadPaths = append([]string(nil), e.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)
 	}
 	// A single-use approval installs no session grant but covers this open.
-	tc.Files.SessionReadPaths = append(tc.Files.SessionReadPaths, path)
-	return tc, nil
+	reviewed.Files.SessionReadPaths = append(slices.Clone(reviewed.Files.SessionReadPaths), path)
+	return reviewed, nil
 }
 
 // reviewOutsideRead evaluates one outside file read through the action gate
