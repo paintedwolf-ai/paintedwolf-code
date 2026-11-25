@@ -49,7 +49,7 @@ func (m *Service) effectiveSkillsForReach(
 	}
 	device, diags := extpacks.LoadEffectiveSkills(eff)
 	if m.skillsGate == nil || !m.skillsGate.Applies(ctx, projectID) {
-		return applySkillHostResources(device, diags, snapshot, reach)
+		return applySkillHostResources(ctx, device, diags, snapshot, reach)
 	}
 	if len(roots) == 0 && m.projects != nil && projectID != "" {
 		if p, err := m.projects.Get(ctx, projectID); err == nil {
@@ -58,5 +58,5 @@ func (m *Service) effectiveSkillsForReach(
 	}
 	projectSkills, notes := m.skillsCache.Discover(roots)
 	loaded, combinedDiags := extpacks.CombineSkills(device, diags, projectSkills, notes)
-	return applySkillHostResources(loaded, combinedDiags, snapshot, reach)
+	return applySkillHostResources(ctx, loaded, combinedDiags, snapshot, reach)
 }

@@ -45,7 +45,7 @@ resources:
 	testutil.FailErr(t, "new host resources service", err)
 	snapshot := service.SnapshotFor(context.Background(), false, hostresources.ProjectContext{}, nil)
 	reach := hostresources.Reach{Surfaces: []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec}}
-	loaded, diags := applySkillHostResources([]skills.Skill{
+	loaded, diags := applySkillHostResources(t.Context(), []skills.Skill{
 		{Name: "plain", Metadata: map[string]string{}, Body: "plain"},
 		{Name: "ready", UnitID: "skills/ready", Metadata: map[string]string{"host_resources": "present"}, Body: "ready"},
 		{Name: "hidden", UnitID: "skills/hidden", Metadata: map[string]string{"host_resources": "absent"}, Body: "hidden"},
@@ -60,7 +60,7 @@ resources:
 		t.Fatalf("diagnostic = %#v", diags[0])
 	}
 
-	grouped, groupDiags := applySkillHostResources([]skills.Skill{
+	grouped, groupDiags := applySkillHostResources(t.Context(), []skills.Skill{
 		{Name: "either", UnitID: "skills/either", Metadata: map[string]string{"host_resources": "present|absent"}, Body: "either"},
 		{Name: "neither", UnitID: "skills/neither", Metadata: map[string]string{"host_resources": "absent|missing"}, Body: "neither"},
 	}, nil, snapshot, reach)
@@ -89,9 +89,9 @@ func TestSkillHeaderListsOnlyUsesTheSurfaceCanTake(t *testing.T) {
 	snapshot := hostresources.Snapshot{Resources: []hostresources.State{colima}}
 	skill := skills.Skill{Name: "containers", Body: "body"}
 	resolved := map[string]hostresources.State{"colima": colima}
-	coordinator, err := decorateSkillWithHostResources(skill, resolved, snapshot, hostresources.Reach{Role: hostresources.RoleCoordinator, Offered: []string{"host_execution"}})
+	coordinator, err := decorateSkillWithHostResources(t.Context(), skill, resolved, snapshot, hostresources.Reach{Role: hostresources.RoleCoordinator, Offered: []string{"host_execution"}})
 	testutil.FailErr(t, "decorate for coordinator", err)
-	worker, err := decorateSkillWithHostResources(skill, resolved, snapshot, hostresources.Reach{Role: hostresources.RoleWorker, Offered: []string{"host_execution"}})
+	worker, err := decorateSkillWithHostResources(t.Context(), skill, resolved, snapshot, hostresources.Reach{Role: hostresources.RoleWorker, Offered: []string{"host_execution"}})
 	testutil.FailErr(t, "decorate for worker", err)
 	if !strings.Contains(coordinator.Body, "VM start") {
 		t.Fatalf("coordinator header omits a use it can take:\n%s", coordinator.Body)

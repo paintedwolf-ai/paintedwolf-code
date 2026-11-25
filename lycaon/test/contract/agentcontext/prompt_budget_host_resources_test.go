@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -26,7 +27,7 @@ func promptBudgetHostResourceVars(t *testing.T, role hostresources.AgentRole) ma
 	var widestUnconfined bool
 	for _, platform := range []string{"macos", "linux", "windows"} {
 		plan := promptBudgetAmbientPlan(catalog, platform, role)
-		if plan.Cost() > widest.Cost() {
+		if promptBudgetRosterBytes(plan) > promptBudgetRosterBytes(widest) {
 			widest, widestUnconfined = plan, platform == "windows"
 		}
 	}
@@ -36,6 +37,12 @@ func promptBudgetHostResourceVars(t *testing.T, role hostresources.AgentRole) ma
 		HostUnconfined:       widestUnconfined,
 	}
 	return prompts.AgentPromptSurfaceTemplateVars(surface)
+}
+
+// promptBudgetRosterBytes sizes a plan's prompt rows to pick the widest platform.
+func promptBudgetRosterBytes(plan hostresources.AmbientPlan) int {
+	raw, _ := json.Marshal(profiles.HostResourceViews(plan))
+	return len(raw)
 }
 
 func promptBudgetAmbientPlan(catalog hostresources.Catalog, platform string, role hostresources.AgentRole) hostresources.AmbientPlan {

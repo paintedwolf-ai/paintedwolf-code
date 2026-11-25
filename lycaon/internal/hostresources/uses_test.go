@@ -110,8 +110,8 @@ func TestUsesAnnotateRowsWithoutDecidingThem(t *testing.T) {
 	if len(coordinator.Resources) != 1 || len(coordinator.Resources[0].Uses) != 1 {
 		t.Fatalf("coordinator plan = %+v", coordinator.Resources)
 	}
-	if coordinator.Cost() <= worker.Cost() {
-		t.Fatalf("a rendered use costs nothing: coordinator %d, worker %d", coordinator.Cost(), worker.Cost())
+	if ambientLineCost(coordinator.Resources[0]) <= ambientLineCost(worker.Resources[0]) {
+		t.Fatal("a rendered use costs nothing in the roster budget")
 	}
 }
 

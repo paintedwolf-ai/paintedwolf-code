@@ -46,15 +46,6 @@ type AmbientPlan struct {
 	Omitted   int
 }
 
-// Cost is the plan's estimated prompt runes.
-func (p AmbientPlan) Cost() int {
-	cost := 0
-	for _, view := range p.Resources {
-		cost += ambientLineCost(view)
-	}
-	return cost
-}
-
 // AmbientInput configures one prompt-surface projection.
 type AmbientInput struct {
 	Snapshot Snapshot

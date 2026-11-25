@@ -1,6 +1,7 @@
 package profiles
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -25,6 +26,7 @@ func (m *Service) SetHostResources(service *hostresources.Service) {
 }
 
 func applySkillHostResources(
+	ctx context.Context,
 	loaded []skills.Skill,
 	diags []extpacks.Diagnostic,
 	snapshot hostresources.Snapshot,
@@ -94,7 +96,7 @@ func applySkillHostResources(
 			))
 			continue
 		}
-		decorated, err := decorateSkillWithHostResources(skill, chosen, snapshot, reach)
+		decorated, err := decorateSkillWithHostResources(ctx, skill, chosen, snapshot, reach)
 		if err != nil {
 			diags = append(diags, skillHostResourceDiagnostic(extpacks.DiagSkillHostResourcesInvalid, skill, err.Error()))
 			continue
@@ -120,7 +122,7 @@ func skillHostResourcesTemplate() (*pongo2.Template, error) {
 
 // decorateSkillWithHostResources prepends the skill's resolved host resources,
 // with the uses this surface can take, to its body.
-func decorateSkillWithHostResources(skill skills.Skill, resolved map[string]hostresources.State, snapshot hostresources.Snapshot, reach hostresources.Reach) (skills.Skill, error) {
+func decorateSkillWithHostResources(ctx context.Context, skill skills.Skill, resolved map[string]hostresources.State, snapshot hostresources.Snapshot, reach hostresources.Reach) (skills.Skill, error) {
 	tpl, err := skillHostResourcesTemplate()
 	if err != nil {
 		return skill, fmt.Errorf("skill host-resource header: %w", err)
@@ -148,7 +150,7 @@ func decorateSkillWithHostResources(skill skills.Skill, resolved map[string]host
 			})
 		}
 	}
-	header, err := pongoplain.ExecuteDetached(tpl, map[string]any{"resources": resources, "uses": uses})
+	header, err := pongoplain.Execute(ctx, tpl, map[string]any{"resources": resources, "uses": uses})
 	if err != nil {
 		return skill, fmt.Errorf("skill host-resource header: %w", err)
 	}
