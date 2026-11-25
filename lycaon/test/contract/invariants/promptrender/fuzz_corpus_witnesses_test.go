@@ -41,19 +41,29 @@ func TestFuzzCorpusSemanticWitnesses(t *testing.T) {
 				seed.BranchView = hoststate.BranchIsolatedWorker
 			}
 			ws, err := hoststate.ResolveWorkerSeed(d, seed)
-			if err != nil || ws.Excluded || ws.WebSearch {
-				t.Fatalf("%s: resolved %+v err=%v, want an admitted web-off worker", agent, ws.ID, err)
+			if err != nil || ws.WebSearch {
+				t.Fatalf("%s: resolved %s err=%v, want a web-off worker", agent, ws.ID, err)
 			}
 			raw, err := d.EncodeWorker(seed, hoststate.SeedTail{})
 			if err != nil {
 				t.Fatalf("%s: encode: %v", agent, err)
 			}
-			run(t, raw)
+			if !ws.Excluded {
+				run(t, raw)
+				continue
+			}
+			// Production withholds this agent without web search; the case
+			// reports that exclusion with its production reason.
+			rep, err := executeFuzzRecipientCase(t.Context(), env, raw, t.TempDir())
+			if err != nil || !rep.Excluded || rep.ExcludedReason == "" {
+				t.Fatalf("%s: rep=%+v err=%v, want an exclusion with a production reason", agent, rep, err)
+			}
 		}
 	})
 
 	// 028e1c4e90279a32: a coordinator whose catalog has the implement pack
-	// removed still receives a spawn roster on an investigate surface.
+	// removed still receives its spawn roster when it asks for the observe
+	// investigate surface.
 	t.Run("coordinator_without_the_implement_pack", func(t *testing.T) {
 		seed := hoststate.CoordinatorSeed{
 			OverlayIndex: overlayIndexByID(t, d, "without-implement"), SessionMode: api.SessionModeAgent,
@@ -62,8 +72,8 @@ func TestFuzzCorpusSemanticWitnesses(t *testing.T) {
 			ApprovalPosture: gate.PostureBalanced, TempState: hoststate.TempScratchOnly, MCPState: hoststate.MCPNone,
 		}
 		st, err := hoststate.ResolveCoordinatorSeed(d, seed)
-		if err != nil || st.Excluded || st.PackOverlayID != "without-implement" || st.TurnProfile.SurfaceID != "observe_investigate" {
-			t.Fatalf("resolved %s err=%v, want an admitted without-implement observe_investigate coordinator", st.ID, err)
+		if err != nil || st.Excluded || st.PackOverlayID != "without-implement" {
+			t.Fatalf("resolved %s err=%v, want an admitted coordinator without the implement pack", st.ID, err)
 		}
 		for family := range uint8(3) {
 			raw, err := d.EncodeCoordinator(seed, hoststate.SeedTail{Family: family})

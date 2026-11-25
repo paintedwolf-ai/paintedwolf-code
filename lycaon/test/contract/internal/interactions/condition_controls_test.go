@@ -184,8 +184,8 @@ func newControlFixture(t *testing.T) *controlFixture {
 
 	templates, err := TemplateUnits(eff)
 	contractcheck.FailErr(t, "template units", err)
-	sites, err := DiscoverConditionSites(eff, nil)
-	contractcheck.FailErr(t, "discover condition sites", err)
+	sites, err := templateConditionSitesOf(eff)
+	contractcheck.FailErr(t, "discover template condition sites", err)
 	rule := &oar.Rule{
 		ID: "CTL_AND", Kind: oar.KindPolicy, Anchor: oar.AnchorToolPreInvoke, Effect: oar.EffectBlock,
 		When: `paintedwolf.session_mode == "ask" && tool == "command"`,

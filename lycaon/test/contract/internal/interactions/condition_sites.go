@@ -127,6 +127,21 @@ func TemplateIdentity(eff *extpacks.EffectiveCatalog, templates map[string]strin
 // OAR rules of eff and returns every guard with its atoms, whether or not the
 // text it guards names an action.
 func DiscoverConditionSites(eff *extpacks.EffectiveCatalog, schemas *toolschema.Config) ([]ConditionSite, error) {
+	sites, err := templateConditionSitesOf(eff)
+	if err != nil {
+		return nil, err
+	}
+	ruleSites, err := oarConditionSites(eff, schemas)
+	if err != nil {
+		return nil, err
+	}
+	sites = append(sites, ruleSites...)
+	slices.SortFunc(sites, func(a, b ConditionSite) int { return strings.Compare(a.ID, b.ID) })
+	return sites, nil
+}
+
+// templateConditionSitesOf lists the guards of eff's templates and skills.
+func templateConditionSitesOf(eff *extpacks.EffectiveCatalog) ([]ConditionSite, error) {
 	var sites []ConditionSite
 	includers := map[string][]string{}
 	units, err := TemplateUnits(eff)
@@ -175,11 +190,6 @@ func DiscoverConditionSites(eff *extpacks.EffectiveCatalog, schemas *toolschema.
 		}
 	}
 
-	ruleSites, err := oarConditionSites(eff, schemas)
-	if err != nil {
-		return nil, err
-	}
-	sites = append(sites, ruleSites...)
 	slices.SortFunc(sites, func(a, b ConditionSite) int { return strings.Compare(a.ID, b.ID) })
 	return sites, nil
 }
