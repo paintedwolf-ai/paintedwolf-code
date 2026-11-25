@@ -247,28 +247,20 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 		visible = append(visible, remaining...)
 	}
 	rootCount := 1
-	hasGit := false
+	var rows []map[string]any
+	var activePath string
 	if m != nil && m.Workspace != nil && sess != nil {
-		var rows []map[string]any
-		var activePath string
 		rows, rootCount, activePath, _ = m.Workspace.PromptRootRows(ctx, sess)
-		if strings.TrimSpace(activePath) != "" {
-			_, hasGit = gitrepo.Discover(strings.TrimSpace(activePath))
-		}
-		if !hasGit {
-			for _, r := range rows {
-				if dir, _ := r["path"].(string); strings.TrimSpace(dir) != "" {
-					if _, ok := gitrepo.Discover(strings.TrimSpace(dir)); ok {
-						hasGit = true
-						break
-					}
-				}
-			}
-		}
 	}
-	if !hasGit && sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
-		_, hasGit = gitrepo.Discover(strings.TrimSpace(sess.WorkspacePath))
+	dirs := []string{activePath}
+	for _, r := range rows {
+		dir, _ := r["path"].(string)
+		dirs = append(dirs, dir)
 	}
+	if sess != nil {
+		dirs = append(dirs, sess.WorkspacePath)
+	}
+	hasGit := gitrepo.AnyDiscovered(dirs...)
 	return prompts.NewReader(prompts.ReaderInput{
 		ProfileID: resolvedProfileID,
 		SurfaceID: surfaceID,

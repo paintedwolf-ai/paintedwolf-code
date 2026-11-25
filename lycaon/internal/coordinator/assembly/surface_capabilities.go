@@ -282,25 +282,16 @@ func (e *promptSurface) turnReader(
 	return reader, nil
 }
 
+// workspaceRowsHaveGit reports whether the active folder, an attached root or
+// the session's workspace is in Git.
 func workspaceRowsHaveGit(roots []map[string]any, activePath string, sess *api.Session) bool {
-	if dir := strings.TrimSpace(activePath); dir != "" {
-		if _, ok := gitrepo.Discover(dir); ok {
-			return true
-		}
-	}
+	dirs := []string{activePath}
 	for _, r := range roots {
-		if dir, _ := r["path"].(string); strings.TrimSpace(dir) != "" {
-			if _, ok := gitrepo.Discover(strings.TrimSpace(dir)); ok {
-				return true
-			}
-		}
+		dir, _ := r["path"].(string)
+		dirs = append(dirs, dir)
 	}
 	if sess != nil {
-		if dir := strings.TrimSpace(sess.WorkspacePath); dir != "" {
-			if _, ok := gitrepo.Discover(dir); ok {
-				return true
-			}
-		}
+		dirs = append(dirs, sess.WorkspacePath)
 	}
-	return false
+	return gitrepo.AnyDiscovered(dirs...)
 }

@@ -92,18 +92,9 @@ func profileIDForSurface(tctx tools.ToolContext) string {
 }
 
 func skillReaderHasGit(tctx tools.ToolContext) bool {
-	for _, dir := range []string{strings.TrimSpace(tctx.ActiveRootPath()), strings.TrimSpace(tctx.Source.WorkerBranchRoot)} {
-		if dir == "" {
-			continue
-		}
-		if _, ok := gitrepo.Discover(dir); ok {
-			return true
-		}
-	}
+	dirs := []string{strings.TrimSpace(tctx.ActiveRootPath()), strings.TrimSpace(tctx.Source.WorkerBranchRoot)}
 	for _, r := range tctx.Source.Roots {
-		if _, ok := gitrepo.Discover(strings.TrimSpace(r.Path)); ok {
-			return true
-		}
+		dirs = append(dirs, r.Path)
 	}
-	return false
+	return gitrepo.AnyDiscovered(dirs...)
 }

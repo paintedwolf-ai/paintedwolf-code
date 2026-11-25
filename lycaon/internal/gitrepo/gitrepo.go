@@ -34,6 +34,20 @@ func IsRoot(dir string) bool {
 	return err == nil
 }
 
+// AnyDiscovered reports whether any of dirs lies in a Git repository. Blank
+// entries are skipped.
+func AnyDiscovered(dirs ...string) bool {
+	for _, dir := range dirs {
+		if dir = strings.TrimSpace(dir); dir == "" {
+			continue
+		}
+		if _, ok := Discover(dir); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // Discover returns the repository containing dir, walking up to the filesystem root.
 // The second result is false when no ancestor holds a .git entry.
 func Discover(dir string) (Repo, bool) {
