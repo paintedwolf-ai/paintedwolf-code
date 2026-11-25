@@ -77,9 +77,9 @@ func runCoordinatorPromptAndProcedureMatrix(
 			bundles[bKey] = bundle
 		}
 		resolveNamed := resolver.forCoordinatorState(st)
-		stSkills, err := overlaySkills(s, st.Overlay)
-		if err != nil {
-			return err
+		stSkills, sErr := overlaySkills(s, st.Overlay)
+		if sErr != nil {
+			return sErr
 		}
 
 		if err := renderAndCheckCoordinatorStandingPrompt(ctx, s, bundle.engine, bundle.unitCat, st, auth, stSkills, idx, resolveNamed, cache, sum); err != nil {

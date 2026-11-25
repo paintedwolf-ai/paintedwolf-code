@@ -227,6 +227,7 @@ func buildCoordinatorSeeds(
 		}
 	}
 	seeds = append(seeds, buildOverlayAndEnvSeeds(overlays, postures, modes)...)
+	// Each removed pack also meets every active phase surface.
 	for ovIdx := range overlays {
 		for _, s := range surfaces {
 			seeds = append(seeds, coordinatorSeed{

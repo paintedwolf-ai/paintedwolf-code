@@ -398,8 +398,8 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 				continue
 			}
 		}
-		wSkills, err := overlaySkills(s, ws.Overlay)
-		r.Must(err)
+		wSkills, sErr := overlaySkills(s, ws.Overlay)
+		r.Must(sErr)
 		occ := workerPersonaOccurrence(auth.Reader, wSkills)
 		fullVars, err := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
 		r.Must(err)
