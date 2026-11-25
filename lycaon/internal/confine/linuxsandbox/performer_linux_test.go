@@ -393,13 +393,13 @@ func TestInterruptedExclusiveCreateIsUndone(t *testing.T) {
 
 	exclusive := unix.O_CREAT | unix.O_EXCL
 	path, fd := create("probe", exclusive)
-	undoInterruptedCreate(pathCall{Op: callOpen, Flags: exclusive}, fd)
+	undoInterruptedCreate(pathCall{Op: callOpen, Flags: uint64(exclusive)}, fd)
 	if exists(path) {
 		t.Fatal("the interrupted exclusive create left its file")
 	}
 
 	plain, plainFD := create("plain", unix.O_CREAT)
-	undoInterruptedCreate(pathCall{Op: callOpen, Flags: unix.O_CREAT}, plainFD)
+	undoInterruptedCreate(pathCall{Op: callOpen, Flags: uint64(unix.O_CREAT)}, plainFD)
 	if !exists(plain) {
 		t.Fatal("a non-exclusive open was undone")
 	}
@@ -407,7 +407,7 @@ func TestInterruptedExclusiveCreateIsUndone(t *testing.T) {
 	replaced, replacedFD := create("replaced", exclusive)
 	testutil.FailErr(t, "replace the name", os.Remove(replaced))
 	testutil.FailErr(t, "recreate the name", os.WriteFile(replaced, []byte("other"), 0o600))
-	undoInterruptedCreate(pathCall{Op: callOpen, Flags: exclusive}, replacedFD)
+	undoInterruptedCreate(pathCall{Op: callOpen, Flags: uint64(exclusive)}, replacedFD)
 	if !exists(replaced) {
 		t.Fatal("a file that replaced the created one was removed")
 	}
