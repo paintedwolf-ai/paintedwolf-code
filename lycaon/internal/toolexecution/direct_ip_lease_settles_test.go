@@ -111,6 +111,10 @@ func (m *cardCountingHITL) RequestCheckpoint(context.Context, hitl.CheckpointReq
 	return &hitl.CheckpointResponse{Status: hitl.DecisionStatusRejected}, nil
 }
 
+func (*cardCountingHITL) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
 // A live quiet answers the direct-network ask without a card, so the
 // executor itself issues the once-permit and the action is authorized.
 func TestQuietedDirectIPAskIssuesTheOncePermit(t *testing.T) {

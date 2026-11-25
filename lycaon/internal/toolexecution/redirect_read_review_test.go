@@ -64,7 +64,7 @@ func TestRedirectReadReviewInstallsOnlyApprovedAccess(t *testing.T) {
 				tc.result.FileAccess = access
 			}
 			var seen hitl.ProposedAction
-			cards := &rejectHITL{}
+			cards := &cardCountingHITL{}
 			e := NewExecutor(nil, nil, "implement")
 			e.Approvals.checkpointMgr = cards
 			if !tc.noGate {
@@ -78,8 +78,8 @@ func TestRedirectReadReviewInstallsOnlyApprovedAccess(t *testing.T) {
 				Source:     tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root"},
 			}
 			got, err := e.Boundary.ReviewRedirectRead(t.Context(), toolCtx, "<", path)
-			if (cards.checkpointID != "") != tc.wantCard {
-				t.Fatalf("card raised = %q, want card %v", cards.checkpointID, tc.wantCard)
+			if (cards.requested > 0) != tc.wantCard {
+				t.Fatalf("cards raised = %d, want card %v", cards.requested, tc.wantCard)
 			}
 			if tc.wantCode != "" {
 				var reject *toolrejection.ToolReject
