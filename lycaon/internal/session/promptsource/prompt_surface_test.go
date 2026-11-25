@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/loading"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -64,19 +65,19 @@ func TestProcedureReaderNarrowsAskModeAcrossPosturesAndZeroesEmptyStoredPosture(
 		api.SessionPostureBuild,
 		api.SessionPostureOrchestrate,
 	} {
-		mem := store.NewMemory()
+		mem := storetest.New(t, "proj-1")
 		ask := api.SessionModeAsk
-		sess, err := mem.Create(t.Context(), api.CreateSessionRequest{
+		sess, err := mem.Sessions.Create(t.Context(), api.CreateSessionRequest{
 			Mode:    &ask,
 			Posture: posture,
 		}, "proj-1")
 		testutil.FailErr(t, "create session", err)
 
-		prof := profiles.New(mem, nil, nil)
+		prof := profiles.New(mem.Sessions, nil, nil)
 		prof.SetPostureRegistry(postures)
 		m := &Context{
 			Profiles: prof,
-			Sessions: mem,
+			Sessions: mem.Sessions,
 		}
 		reader, err := m.procedureReader(t.Context(), &api.Session{
 			ID:      sess.ID,
@@ -97,7 +98,7 @@ func TestProcedureReaderNarrowsAskModeAcrossPosturesAndZeroesEmptyStoredPosture(
 		}
 
 		// Even if the store upgrades to Agent, a round bound to Ask keeps procedureReader read-only.
-		_, err = mem.SetMode(t.Context(), sess.ID, api.SessionModeAgent)
+		_, err = mem.Sessions.SetMode(t.Context(), sess.ID, api.SessionModeAgent)
 		testutil.FailErr(t, "upgrade store to agent", err)
 		roundCtx := hostctx.WithRoundMode(t.Context(), sess.ID, api.SessionModeAsk)
 		roundReader, err := m.procedureReader(roundCtx, &api.Session{

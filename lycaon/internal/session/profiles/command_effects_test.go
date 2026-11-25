@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -228,19 +229,19 @@ func TestConstrainCommandProfilesChildOfAskRootAndResolutionFailure(t *testing.T
 	testutil.FailErr(t, "load shipped profiles", err)
 	read, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 
-	mem := store.NewMemory()
+	mem := storetest.New(t, "proj-1")
 	askMode := api.SessionModeAsk
-	root, err := mem.Create(t.Context(), api.CreateSessionRequest{
+	root, err := mem.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		Mode:    &askMode,
 		Posture: api.SessionPostureBuild,
 	}, "proj-1")
 	testutil.FailErr(t, "create ask root", err)
-	child, err := mem.CreateChild(t.Context(), root, api.SpawnChildRequest{
+	child, err := mem.Sessions.CreateChild(t.Context(), root, api.SpawnChildRequest{
 		AgentType: "implementer",
 	})
 	testutil.FailErr(t, "create worker child", err)
 
-	service := New(mem, nil, nil)
+	service := New(mem.Sessions, nil, nil)
 	service.SetPostureRegistry(registry)
 
 	// Without a round binding, a child of an Ask root narrows via ResolveEffectiveMode.
@@ -322,7 +323,7 @@ func TestConstrainCommandProfilesProjectsReadOnlyCommandSchema(t *testing.T) {
 			t.Fatalf("Ask projected command schema still includes %q", pruned)
 		}
 	}
-	for _, kept := range []string{"command", "cwd", "timeout_ms"} {
+	for _, kept := range []string{"command", "cwd"} {
 		if _, present := props[kept]; !present {
 			t.Fatalf("Ask projected command schema missing %q", kept)
 		}

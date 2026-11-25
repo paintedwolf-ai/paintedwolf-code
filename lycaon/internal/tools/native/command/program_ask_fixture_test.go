@@ -434,7 +434,7 @@ func (p askRedirectPublication) OpenInput(_ context.Context, dest commandprogram
 
 func (p askRedirectPublication) Open(ctx context.Context, dest commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
 	targetAbs := filepath.Join(p.paths.Cwd().Abs, filepath.FromSlash(dest.Target.Value))
-	write, err := p.admit(ctx, dest, targetAbs, dest.Target.Value)
+	write, err := p.admit.Begin(ctx, dest, tools.CommandOutputTarget{Path: targetAbs, DisplayPath: dest.Target.Value})
 	if err != nil {
 		return nil, err
 	}

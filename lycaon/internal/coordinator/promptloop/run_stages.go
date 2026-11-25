@@ -48,7 +48,7 @@ type promptLoopTurnState struct {
 	proseFinish                 bool
 	agentEnabledNoticeDelivered bool
 	coordinatorFrame            inject.CoordinatorTurnFrame
-	machine          inject.Machine
+	machine                     inject.Machine
 
 	turnStreamState
 	turnBatchState

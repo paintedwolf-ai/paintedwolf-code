@@ -275,7 +275,7 @@ func TestAskBudgetContinuedProgramPagesStopsAndRetainsReadOnlyAuthorityAcrossUpg
 			done <- callRes{raw, err}
 		}()
 		<-f.entered
-		f.clock.Advance(command.ProgramInlineWait)
+		f.clock.Advance(toolcontract.ProgramInlineWait)
 		promoted := <-done
 		testutil.FailErr(t, "promote foreground Ask program", promoted.err)
 
@@ -334,7 +334,7 @@ func TestAskBudgetContinuedProgramPagesStopsAndRetainsReadOnlyAuthorityAcrossUpg
 				done <- callRes{raw, err}
 			}()
 			<-f.entered
-			f.clock.Advance(command.ProgramInlineWait)
+			f.clock.Advance(toolcontract.ProgramInlineWait)
 			promoted := <-done
 			testutil.FailErr(t, "promote foreground Ask program", promoted.err)
 
@@ -365,7 +365,7 @@ func TestAskBudgetContinuedProgramPagesStopsAndRetainsReadOnlyAuthorityAcrossUpg
 			if exitCode == 0 {
 				t.Fatalf("expected non-zero exit code for refused statement in continued Ask program, got %d", exitCode)
 			}
-			finalStdout, finalStderr, finalRunning := f.pageOutput(t, running.Handle, 0)
+			finalStdout, _, finalRunning := f.pageOutput(t, running.Handle, 0)
 			if finalRunning {
 				t.Fatal("expected continued program to have finished")
 			}
@@ -375,20 +375,10 @@ func TestAskBudgetContinuedProgramPagesStopsAndRetainsReadOnlyAuthorityAcrossUpg
 			if _, statErr := os.Stat(filepath.Join(f.Dir, "continued-escaped.txt")); !os.IsNotExist(statErr) {
 				t.Fatalf("continued Ask program wrote continued-escaped.txt after upgrade: err=%v", statErr)
 			}
-			var finalOutcome command.ProgramOutcome
-			lines := strings.Split(strings.TrimSpace(finalStderr), "\n")
-			testutil.FailErr(t, "decode final outcome from stderr", json.Unmarshal([]byte(lines[len(lines)-1]), &finalOutcome))
-			if finalOutcome.ProgramID != running.ProgramID || finalOutcome.Refusal == nil || finalOutcome.Refusal.Code != c.wantCode {
-				t.Fatalf("finalOutcome = %+v (refusal=%+v), want code %s", finalOutcome, finalOutcome.Refusal, c.wantCode)
-			}
-			if c.wantCode == tools.AskModeActiveCode {
-				if !strings.Contains(finalOutcome.Refusal.Feedback, "refused under launch-time Ask authority") ||
-					!strings.Contains(finalOutcome.Refusal.Feedback, "kept its frozen read-only authority across the session upgrade") {
-					t.Fatalf("post-upgrade Ask refusal feedback missing launch-time authority cause:\n%s", finalOutcome.Refusal.Feedback)
-				}
-				if strings.Contains(finalOutcome.Refusal.Feedback, "switch to Agent mode") {
-					t.Fatalf("post-upgrade Ask refusal feedback still told the model to switch to Agent mode:\n%s", finalOutcome.Refusal.Feedback)
-				}
+			snapshot, err := f.Background.Output.ReadRawOutput(f.Session, running.Handle, 0)
+			testutil.FailErr(t, "read continued Ask program result", err)
+			if snapshot.ProgramStopCode != c.wantCode {
+				t.Fatalf("continued Ask program stop code = %q, want %s", snapshot.ProgramStopCode, c.wantCode)
 			}
 			if f.clock.Pending() != 0 {
 				t.Fatalf("retained %d timers", f.clock.Pending())

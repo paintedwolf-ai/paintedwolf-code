@@ -121,23 +121,23 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 	ctx = testdbseed.OwnerCaller(t, ctx, sqlDB1)
 	st1 := store.NewSQL(sqlDB1)
 	ask := api.SessionModeAsk
-	sess, err := st1.Create(ctx, api.CreateSessionRequest{Mode: &ask, Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st1.Sessions.Create(ctx, api.CreateSessionRequest{Mode: &ask, Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create Ask session", err)
-	_, err = st1.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
+	_, err = st1.Turns.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "latch Ask turn start", err)
-	testutil.FailErr(t, "append turn 1 messages", st1.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append turn 1 messages", st1.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "inspect in Ask"},
 		api.Message{ID: "a1", Role: api.MessageRoleAssistant, Origin: api.MessageOriginModel, Content: "Ask reply"},
 	))
-	_, err = st1.SetMode(ctx, sess.ID, api.SessionModeAgent)
+	_, err = st1.Sessions.SetMode(ctx, sess.ID, api.SessionModeAgent)
 	testutil.FailErr(t, "upgrade Ask -> Agent between turns", err)
 
 	// Also create an ordinary Agent session (switched from Ask before starting) to verify it never gets a notice.
-	ordinary, err := st1.Create(ctx, api.CreateSessionRequest{Mode: &ask, Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	ordinary, err := st1.Sessions.Create(ctx, api.CreateSessionRequest{Mode: &ask, Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create unstarted Ask session", err)
-	_, err = st1.SetMode(ctx, ordinary.ID, api.SessionModeAgent)
+	_, err = st1.Sessions.SetMode(ctx, ordinary.ID, api.SessionModeAgent)
 	testutil.FailErr(t, "switch unstarted session to Agent", err)
-	_, err = st1.BeginTurn(ctx, store.TurnStart{SessionID: ordinary.ID, ProjectID: ordinary.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
+	_, err = st1.Turns.BeginTurn(ctx, store.TurnStart{SessionID: ordinary.ID, ProjectID: ordinary.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "start ordinary Agent turn", err)
 
 	testutil.FailErr(t, "close store before next turn", sqlDB1.Close())
@@ -146,7 +146,7 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 	sqlDB2 := testdbfixture.OpenPath(t, dbPath)
 	ctx = testdbseed.OwnerCaller(t, ctx, sqlDB2)
 	st2 := store.NewSQL(sqlDB2)
-	reopenedSess, err := st2.Get(ctx, sess.ID)
+	reopenedSess, err := st2.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get reopened session", err)
 	if reopenedSess.Mode != api.SessionModeAgent {
 		t.Fatalf("reopened session mode = %s, want agent", reopenedSess.Mode)
@@ -190,13 +190,13 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 						return appendErr
 					}
 				}
-				return st2.AppendMessages(ctx, sessionID, msgs...)
+				return st2.Transcript.AppendMessages(ctx, sessionID, msgs...)
 			},
 		},
 	})
 
 	// 3. First attempt after reopen fails when appending session.mode.agent_enabled.
-	historyBefore, err := st2.GetMessages(ctx, reopenedSess.ID)
+	historyBefore, err := st2.Transcript.GetMessages(ctx, reopenedSess.ID)
 	testutil.FailErr(t, "load history before failed attempt", err)
 	_, err = loop.Run(ctx, PromptRunInput{
 		SessionID:  reopenedSess.ID,
@@ -214,7 +214,7 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 
 	// 4. Retry succeeds and delivers session.mode.agent_enabled once in the first eligible request.
 	failNoticeAppend = false
-	historyRetry, err := st2.GetMessages(ctx, reopenedSess.ID)
+	historyRetry, err := st2.Transcript.GetMessages(ctx, reopenedSess.ID)
 	testutil.FailErr(t, "load history for retry", err)
 	_, err = loop.Run(ctx, PromptRunInput{
 		SessionID:  reopenedSess.ID,
@@ -241,7 +241,7 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 	}
 
 	// 5. Subsequent turn on the upgraded session does not re-emit the notice.
-	historyNext, err := st2.GetMessages(ctx, reopenedSess.ID)
+	historyNext, err := st2.Transcript.GetMessages(ctx, reopenedSess.ID)
 	testutil.FailErr(t, "load history for later turn", err)
 	if got := countSignal(historyNext); got != 1 {
 		t.Fatalf("persisted transcript notices = %d, want 1", got)
@@ -254,7 +254,7 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 		UserPrompt: "Second Agent turn",
 	})
 	testutil.FailErr(t, "run second Agent turn", err)
-	historyAfterSecond, err := st2.GetMessages(ctx, reopenedSess.ID)
+	historyAfterSecond, err := st2.Transcript.GetMessages(ctx, reopenedSess.ID)
 	testutil.FailErr(t, "load history after second Agent turn", err)
 	if got := countSignal(historyAfterSecond); got != 1 {
 		t.Fatalf("persisted transcript notices after second Agent turn = %d, want 1", got)
@@ -270,7 +270,7 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 	if got := countSignal(compactedWindow); got != 0 || countSignal(turnState.history) != 0 {
 		t.Fatalf("compacted window still contains notice: %d", got)
 	}
-	authAfterDeliver, err := st2.ResolveEffectiveMode(ctx, reopenedSess.ID)
+	authAfterDeliver, err := st2.Sessions.ResolveEffectiveMode(ctx, reopenedSess.ID)
 	testutil.FailErr(t, "resolve authority after notice delivery", err)
 	if !authAfterDeliver.UpgradedFromAsk || !authAfterDeliver.AgentNoticeDelivered {
 		t.Fatalf("authority after notice delivery = %+v, want UpgradedFromAsk=true AgentNoticeDelivered=true", authAfterDeliver)
@@ -290,14 +290,14 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 	if got := countSignal(requests[len(requests)-1]); got != 0 {
 		t.Fatalf("compacted-window request re-emitted notice %d times, want 0", got)
 	}
-	historyAfterCompacted, err := st2.GetMessages(ctx, reopenedSess.ID)
+	historyAfterCompacted, err := st2.Transcript.GetMessages(ctx, reopenedSess.ID)
 	testutil.FailErr(t, "load history after compacted turn", err)
 	if got := countSignal(historyAfterCompacted); got != 1 {
 		t.Fatalf("persisted transcript notices after compacted turn = %d, want 1", got)
 	}
 
 	// 7. Ordinary Agent session never receives session.mode.agent_enabled.
-	reopenedOrdinary, err := st2.Get(ctx, ordinary.ID)
+	reopenedOrdinary, err := st2.Sessions.Get(ctx, ordinary.ID)
 	testutil.FailErr(t, "get reopened ordinary session", err)
 	_, err = loop.Run(ctx, PromptRunInput{
 		SessionID:  reopenedOrdinary.ID,
@@ -307,7 +307,7 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 		UserPrompt: "Ordinary Agent turn",
 	})
 	testutil.FailErr(t, "run ordinary Agent turn", err)
-	ordinaryMsgs, err := st2.GetMessages(ctx, reopenedOrdinary.ID)
+	ordinaryMsgs, err := st2.Transcript.GetMessages(ctx, reopenedOrdinary.ID)
 	testutil.FailErr(t, "load ordinary session messages", err)
 	if got := countSignal(ordinaryMsgs); got != 0 {
 		t.Fatalf("ordinary Agent session notices = %d, want 0", got)

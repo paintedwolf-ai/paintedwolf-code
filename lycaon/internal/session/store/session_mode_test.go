@@ -197,26 +197,26 @@ func TestSessionModeAskToAgentUpgradePersistsAcrossSQLReopenAndIgnoresPreStartSw
 
 	ask := api.SessionModeAsk
 	// 1. An unstarted Ask chat switched to Agent before any turn begins is an ordinary Agent chat, not an upgrade.
-	ordinary, err := st.Create(ctx, api.CreateSessionRequest{Mode: &ask}, testdbseed.DefaultProjectID)
+	ordinary, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Mode: &ask}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create unstarted Ask session", err)
-	_, err = st.SetMode(ctx, ordinary.ID, api.SessionModeAgent)
+	_, err = st.Sessions.SetMode(ctx, ordinary.ID, api.SessionModeAgent)
 	testutil.FailErr(t, "switch unstarted Ask session to Agent", err)
-	_, _, err = st.PutPromptSubmission(ctx, modePrompt(ordinary, nil))
+	_, _, err = st.Submissions.PutPromptSubmission(ctx, modePrompt(ordinary, nil))
 	testutil.FailErr(t, "start ordinary Agent session", err)
-	ordAuth, err := st.ResolveEffectiveMode(ctx, ordinary.ID)
+	ordAuth, err := st.Sessions.ResolveEffectiveMode(ctx, ordinary.ID)
 	testutil.FailErr(t, "read ordinary Agent authority", err)
 	if ordAuth.UpgradedFromAsk {
 		t.Fatalf("unstarted Ask->Agent switch marked UpgradedFromAsk: %+v", ordAuth)
 	}
 
 	// 2. A started Ask chat switched to Agent records durable UpgradedFromAsk evidence that survives DB reopen.
-	startedAsk, err := st.Create(ctx, api.CreateSessionRequest{Mode: &ask}, testdbseed.DefaultProjectID)
+	startedAsk, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Mode: &ask}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create started Ask session", err)
-	_, _, err = st.PutPromptSubmission(ctx, modePrompt(startedAsk, &ask))
+	_, _, err = st.Submissions.PutPromptSubmission(ctx, modePrompt(startedAsk, &ask))
 	testutil.FailErr(t, "admit first Ask prompt", err)
-	_, err = st.SetMode(ctx, startedAsk.ID, api.SessionModeAgent)
+	_, err = st.Sessions.SetMode(ctx, startedAsk.ID, api.SessionModeAgent)
 	testutil.FailErr(t, "upgrade started Ask session to Agent", err)
-	upAuth, err := st.ResolveEffectiveMode(ctx, startedAsk.ID)
+	upAuth, err := st.Sessions.ResolveEffectiveMode(ctx, startedAsk.ID)
 	testutil.FailErr(t, "read upgraded authority before reopen", err)
 	if !upAuth.UpgradedFromAsk || upAuth.AgentNoticeDelivered || upAuth.Mode != api.SessionModeAgent || !upAuth.Started {
 		t.Fatalf("upgraded authority before reopen = %+v", upAuth)
@@ -225,12 +225,12 @@ func TestSessionModeAskToAgentUpgradePersistsAcrossSQLReopenAndIgnoresPreStartSw
 
 	reopenedDB := testdbfixture.OpenPath(t, dbPath)
 	reopenedStore := NewSQL(reopenedDB)
-	reopenedAuth, err := reopenedStore.ResolveEffectiveMode(ctx, startedAsk.ID)
+	reopenedAuth, err := reopenedStore.Sessions.ResolveEffectiveMode(ctx, startedAsk.ID)
 	testutil.FailErr(t, "read upgraded authority after reopen", err)
 	if !reopenedAuth.UpgradedFromAsk || reopenedAuth.AgentNoticeDelivered || reopenedAuth.Mode != api.SessionModeAgent || !reopenedAuth.Started {
 		t.Fatalf("upgraded authority after reopen = %+v", reopenedAuth)
 	}
-	testutil.FailErr(t, "append agent_enabled notice", reopenedStore.AppendMessages(ctx, startedAsk.ID, api.Message{
+	testutil.FailErr(t, "append agent_enabled notice", reopenedStore.Transcript.AppendMessages(ctx, startedAsk.ID, api.Message{
 		ID:           AgentEnabledMessageID(startedAsk.ID),
 		Role:         api.MessageRoleUser,
 		Origin:       api.MessageOriginHost,
@@ -238,7 +238,7 @@ func TestSessionModeAskToAgentUpgradePersistsAcrossSQLReopenAndIgnoresPreStartSw
 		HostSignalID: agentModeEnabledSignalID,
 		Content:      "[host:session-agent-enabled]\nAgent mode is now active.",
 	}))
-	deliveredAuth, err := reopenedStore.ResolveEffectiveMode(ctx, startedAsk.ID)
+	deliveredAuth, err := reopenedStore.Sessions.ResolveEffectiveMode(ctx, startedAsk.ID)
 	testutil.FailErr(t, "read authority after notice delivery", err)
 	if !deliveredAuth.UpgradedFromAsk || !deliveredAuth.AgentNoticeDelivered {
 		t.Fatalf("authority after notice delivery = %+v", deliveredAuth)
@@ -246,7 +246,7 @@ func TestSessionModeAskToAgentUpgradePersistsAcrossSQLReopenAndIgnoresPreStartSw
 	if _, err := reopenedDB.ExecContext(ctx, "UPDATE sessions SET upgraded_from_ask = 0 WHERE id = ?", startedAsk.ID); err == nil {
 		t.Fatal("SQLite accepted resetting upgraded_from_ask on a started session")
 	}
-	reopenedOrd, err := reopenedStore.ResolveEffectiveMode(ctx, ordinary.ID)
+	reopenedOrd, err := reopenedStore.Sessions.ResolveEffectiveMode(ctx, ordinary.ID)
 	testutil.FailErr(t, "read ordinary authority after reopen", err)
 	if reopenedOrd.UpgradedFromAsk || reopenedOrd.AgentNoticeDelivered {
 		t.Fatalf("ordinary Agent session marked UpgradedFromAsk after reopen: %+v", reopenedOrd)

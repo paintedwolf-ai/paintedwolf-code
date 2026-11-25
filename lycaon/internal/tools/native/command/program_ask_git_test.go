@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,7 +67,7 @@ func TestAskHermeticGitReadsLinkedWorktreeUnbornBranchAndManagedView(t *testing.
 
 	fLinked := newAskComposedFixture(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
-	_, err = confine.StartEgressBroker(t.TempDir())
+	_, err = confine.StartEgressBroker(t.TempDir(), net.Listen)
 	testutil.FailErr(t, "start egress broker", err)
 	var egressMu sync.Mutex
 	var egressAttempts []string
