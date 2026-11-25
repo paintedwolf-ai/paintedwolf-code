@@ -22,9 +22,9 @@ import (
 const guidanceDir = "lycaon/config/packs/painted-wolf/platform/guidance/"
 
 var templateTree = map[string]string{
-	guidanceDir + "coordinator-roots-changed.md":                                      "Roots changed: {{ root.label }}.\n",
-	guidanceDir + "editor/inline-edit.md":                                             "Editing {{ path }}.\n",
-	guidanceDir + "curator/user.md":                                                   "Evidence at {{ c.path }}.\n",
+	guidanceDir + "coordinator-roots-changed.md":                                   "Roots changed: {{ root.label }}.\n",
+	guidanceDir + "editor/inline-edit.md":                                          "Editing {{ path }}.\n",
+	guidanceDir + "curator/user.md":                                                "Evidence at {{ c.path }}.\n",
 	"lycaon/config/packs/painted-wolf/platform/shared/partials/command-surface.md": "{% if session_scratch_dir %}scratch{% endif %}\n",
 }
 
