@@ -93,7 +93,6 @@ tools:
   git_log:       { produces_evidence: { kind: git } }
   git_show:      { produces_evidence: { kind: git } }
   git_blame:     { produces_evidence: { kind: git } }
-  inspect_source: { produces_evidence: { kind: git } }
   source_history: { produces_evidence: { kind: provenance } }
   scan_pack:     { produces_evidence: { kind: scan } }
   scan_list:     { produces_evidence: { kind: scan } }

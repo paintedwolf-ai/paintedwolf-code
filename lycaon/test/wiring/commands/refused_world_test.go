@@ -575,7 +575,7 @@ func describeWitness(t *testing.T, s *commandProgramSession, w refusalWitness) s
 
 // programEntry reports a tool whose result is a command program outcome.
 func programEntry(tool string) bool {
-	return tool == "command" || tool == "verify" || tool == "code_rewrite" || tool == "summarize" || tool == "survey_repo" || tool == "inspect_source"
+	return tool == "command" || tool == "verify" || tool == "code_rewrite" || tool == "summarize" || tool == "survey_repo"
 }
 
 func findWitnessResult(t *testing.T, s *commandProgramSession) (*wire.ToolResult, bool) {
@@ -668,7 +668,6 @@ func pathTemplates() []pathTemplate {
 		{covers: "view_video", tool: "view_video", args: map[string]any{"path": "{f}"}},
 		{covers: "summarize", tool: "summarize", args: map[string]any{"path": "{f}"}},
 		{covers: "survey_repo", tool: "survey_repo", args: map[string]any{"bundle": "layout_overview", "path": "{d}"}},
-		{covers: "inspect_source", tool: "inspect_source", args: map[string]any{"operation": "read", "path": "{f}"}},
 	}
 }
 
@@ -848,9 +847,6 @@ func runPathCell(t *testing.T, host *programHost, template refusalProject, tpl p
 	}
 	config := &llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: "run the program", FollowUpText: "Done."}}}
 	s = host.withClientAt(t, project.project, llm.NewMockProvider(config), wire.CreateSessionRequest{}, "")
-	if tpl.tool == "inspect_source" {
-		testutil.FailErr(t, "bind read-only profile", s.h.Sessions.Manager.Chats.SetAgentType(t.Context(), s.session, "path-explorer"))
-	}
 	s.h.SeedProgress(t, t.Context(), s.session)
 	// An escape can reach only the outside tree and its repository.
 	beforeTree, beforeGit := treeEntries(t, project.outside), gitDigest(t, project.outside)
