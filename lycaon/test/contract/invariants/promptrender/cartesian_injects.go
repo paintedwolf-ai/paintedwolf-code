@@ -17,6 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
+	"github.com/lycaon/lycaon/internal/workerroster"
+	"github.com/lycaon/lycaon/internal/workerstate"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
@@ -163,6 +165,15 @@ func runCoordinatorInjectRenders(
 			{
 				Reader: cr.auth.Reader, ProgressMissing: true, VerifyRequired: false, WorkersOmitted: 1,
 				Workers: nil,
+			},
+			{
+				Reader: cr.auth.Reader, WorkersOmitted: 1,
+				Workers: workerroster.Roster{Rows: []workerroster.Row{{
+					Name: "w-solo", Agent: "implementer", State: workerstate.Working, About: "Second round",
+					Result:  &workerroster.Result{Handle: "res-2", Disposition: "open"},
+					Changed: workerroster.Paths{Shown: []string{"a.go"}},
+					Read:    workerroster.Paths{Shown: []string{"a.go"}},
+				}}}.Vars(),
 			},
 		}
 		for tIdx, tsIn := range tsInputs {
