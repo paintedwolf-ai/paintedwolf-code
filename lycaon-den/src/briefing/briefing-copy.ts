@@ -9,7 +9,6 @@ export const briefingCopy = {
   evidenceLinkName: "Open summary evidence in Files",
   evidence: {
     title: "Summary evidence",
-    summary: "Summary",
     generation: "Generation details",
     records: "Activity records",
     disclaimer: (method: string) => `${method}. It can be incomplete or wrong.`,

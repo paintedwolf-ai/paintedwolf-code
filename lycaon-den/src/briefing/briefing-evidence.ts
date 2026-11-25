@@ -3,7 +3,7 @@ import type { ChatContentDocument } from "../chat/transcript/content/chat-conten
 import { openFilesSurface } from "../platform/navigation/open-files-surface.ts";
 
 /** Where focus returns after reading evidence: a label and the element to focus. */
-export type BriefingReturnAnchor = { label: string; focus: () => void };
+type BriefingReturnAnchor = { label: string; focus: () => void };
 
 /** A document the summarized activity already offers, such as its input or receipt. */
 export type BriefingRecordLink = { label: string; document: ChatContentDocument };

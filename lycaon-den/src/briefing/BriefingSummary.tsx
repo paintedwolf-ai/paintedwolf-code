@@ -2,7 +2,7 @@ import { For, Show, createEffect, on, type JSX } from "solid-js";
 import type { BriefingEvidenceRef, BriefingSnapshot, BriefingSummarySection } from "../api/types.ts";
 import { announce } from "../platform/interaction/announcer.tsx";
 import { briefingCopy } from "./briefing-copy.ts";
-import { openBriefingEvidence, type BriefingRecordLink, type BriefingReturnAnchor } from "./briefing-evidence.ts";
+import { openBriefingEvidence, type BriefingRecordLink } from "./briefing-evidence.ts";
 import { splitBriefingInline } from "./briefing-inline.ts";
 import { SUMMARY_FADE_CLASS, claimSummaryFade, markSummaryShown } from "./summary-fade.ts";
 
@@ -129,7 +129,6 @@ export function BriefingSummary(props: Props) {
  */
 export function BriefingEvidenceLink(props: {
   reference: BriefingEvidenceRef;
-  returnAnchor?: BriefingReturnAnchor;
   /** Documents the summarized activity offers, read when the link is used. */
   records?: () => readonly BriefingRecordLink[];
 }) {
@@ -139,7 +138,7 @@ export function BriefingEvidenceLink(props: {
       class="den-briefing-evidence-link"
       aria-label={briefingCopy.evidenceLinkName}
       data-testid="briefing-evidence-link"
-      onClick={() => openBriefingEvidence(props.reference, props.returnAnchor, props.records?.())}
+      onClick={() => openBriefingEvidence(props.reference, undefined, props.records?.())}
     >
       {briefingCopy.evidenceLink}
     </button>

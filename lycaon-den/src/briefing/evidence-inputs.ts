@@ -4,7 +4,7 @@ import { briefingCopy } from "./briefing-copy.ts";
 const copy = briefingCopy.evidence;
 
 /** One block of an input: an optional two-part caption, then the text. */
-export type EvidenceInputPart = { head?: readonly [string, string]; text: string };
+type EvidenceInputPart = { head?: readonly [string, string]; text: string };
 
 const PROSE_KEYS: ReadonlySet<string> = new Set([
   "user_intent", "worker_brief", "tracked_plan", "assistant_note", "assistant_reasoning", "phase_scope",
