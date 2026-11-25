@@ -13,7 +13,7 @@ import (
 // resolveImplementations resolves an interface method through the method of
 // every scanned named type that implements the interface. An implementation
 // outside the scanned packages leaves the call unresolved.
-func (s *scan) resolveImplementations(iface *types.Interface, method *types.Func, index, depth int) resolution {
+func (s *scan) resolveImplementations(iface *types.Interface, method *types.Func, index int) resolution {
 	var out resolution
 	found := false
 	for _, p := range s.pkgs {
@@ -44,7 +44,7 @@ func (s *scan) resolveImplementations(iface *types.Interface, method *types.Func
 				continue
 			}
 			found = true
-			r := s.resolveReturns(decl, index, depth+1)
+			r := s.resolveReturns(decl, index)
 			if r.outcome == OutcomeUnresolved {
 				r.reason = fmt.Sprintf("%s (implementation %s)", r.reason, impl.FullName())
 			}

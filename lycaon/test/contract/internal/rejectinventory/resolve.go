@@ -86,7 +86,7 @@ func (s *scan) resolve(d funcDecl, expr ast.Expr, depth int) resolution {
 	switch e := expr.(type) {
 	case *ast.SelectorExpr:
 		if sel, ok := p.TypesInfo.Selections[e]; ok && sel.Kind() == types.FieldVal {
-			return s.resolveFieldRead(declaringType(sel), e.Sel.Name, depth)
+			return s.resolveFieldRead(declaringType(sel), e.Sel.Name)
 		}
 	case *ast.IndexExpr:
 		if tv, ok := p.TypesInfo.Types[e.X]; ok && isSequence(tv.Type) {
@@ -120,14 +120,14 @@ func (s *scan) resolveCall(d funcDecl, call *ast.CallExpr, index, depth int) res
 		return unresolved("call of a function value")
 	}
 	if callee, ok := s.decls[fn.FullName()]; ok {
-		return s.resolveReturns(callee, index, depth+1)
+		return s.resolveReturns(callee, index)
 	}
 	if index == 0 && len(call.Args) == 1 && stringToString(fn) {
 		return s.resolve(d, call.Args[0], depth+1)
 	}
 	if sig, ok := fn.Type().(*types.Signature); ok && sig.Recv() != nil {
 		if iface, ok := sig.Recv().Type().Underlying().(*types.Interface); ok {
-			return s.resolveImplementations(iface, fn, index, depth)
+			return s.resolveImplementations(iface, fn, index)
 		}
 	}
 	return unresolved("callee " + fn.FullName() + " is outside the scanned packages")
@@ -136,7 +136,7 @@ func (s *scan) resolveCall(d funcDecl, call *ast.CallExpr, index, depth int) res
 // resolveFieldRead resolves a field read. A carrier's code forwards that
 // carrier's emission; any other struct field resolves through every producer
 // that writes it.
-func (s *scan) resolveFieldRead(tn *types.TypeName, field string, depth int) resolution {
+func (s *scan) resolveFieldRead(tn *types.TypeName, field string) resolution {
 	if tn == nil {
 		return unresolved("field read on an unnamed type")
 	}
@@ -147,7 +147,7 @@ func (s *scan) resolveFieldRead(tn *types.TypeName, field string, depth int) res
 }
 
 // resolveReturns resolves result index of every return in d.
-func (s *scan) resolveReturns(d funcDecl, index, _ int) resolution {
+func (s *scan) resolveReturns(d funcDecl, index int) resolution {
 	return s.node(fmt.Sprintf("returns %s#%d", funcKey(d), index), func() resolution { return s.returnsOf(d, index) })
 }
 

@@ -162,7 +162,7 @@ type scriptedModel struct {
 	requests []modelcall.CompletionRequest
 }
 
-func (m *scriptedModel) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
+func (m *scriptedModel) Complete(_ context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.requests = append(m.requests, req)
