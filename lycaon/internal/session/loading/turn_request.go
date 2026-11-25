@@ -41,6 +41,17 @@ func (m *Service) Request(ctx context.Context, in promptinput.Input, history []a
 	return opening, text, true
 }
 
+// HasRequest reports whether the chat holds a request a host turn could
+// continue: a user instruction or a workflow's resolved request. A worker
+// leg's request is its job brief, which every leg carries.
+func (m *Service) HasRequest(ctx context.Context, sess *api.Session, history []api.Message) bool {
+	if sess == nil || sess.IsWorkerChild() {
+		return true
+	}
+	opening, text := RequestOpening(history, m.ResolvedRequest(ctx, sess))
+	return opening != "" && text != ""
+}
+
 func RequestOpening(history []api.Message, request workflowfacts.ResolvedWorkflowRequest) (string, string) {
 	for i := len(history) - 1; i >= 0; i-- {
 		msg := history[i]

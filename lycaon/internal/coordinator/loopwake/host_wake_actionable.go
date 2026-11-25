@@ -93,19 +93,28 @@ type HostWakeActionableDeps struct {
 	// WorkflowObligationsOpen reports unmet phase gates on the active running
 	// workflow; open obligations keep every host wake actionable.
 	WorkflowObligationsOpen func(ctx context.Context, sessionID string) bool
+	// HasRequest reports whether the chat holds a request a turn could serve.
+	HasRequest func(ctx context.Context, sessionID string, history []api.Message) bool
 }
 
 // BuildHostWakeActionable returns a LoopDeps.HostWakeActionable closure.
 func BuildHostWakeActionable(deps HostWakeActionableDeps) func(ctx context.Context, in HostWakeActionableInput) bool {
 	return func(ctx context.Context, in HostWakeActionableInput) bool {
+		var msgs []api.Message
+		if deps.GetMessages != nil {
+			var err error
+			if msgs, err = deps.GetMessages(ctx, in.SessionID); err != nil {
+				return true
+			}
+		}
+		// A turn without a request takes no load decision and has nothing to answer.
+		if deps.HasRequest != nil && !deps.HasRequest(ctx, in.SessionID, msgs) {
+			return false
+		}
 		if deps.WorkflowObligationsOpen != nil && deps.WorkflowObligationsOpen(ctx, in.SessionID) {
 			return true
 		}
 		if deps.GetMessages == nil {
-			return true
-		}
-		msgs, err := deps.GetMessages(ctx, in.SessionID)
-		if err != nil {
 			return true
 		}
 		state := surface.ImplementSessionState{}

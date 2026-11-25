@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/execution"
 	"github.com/lycaon/lycaon/internal/session/guidancedelivery"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
+	"github.com/lycaon/lycaon/internal/session/loading"
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/submissions"
 	"github.com/lycaon/lycaon/internal/session/turnadmission"
@@ -35,6 +36,7 @@ type Loop struct {
 	Grounding       Grounding
 	Guidance        *guidancedelivery.Service
 	Limits          *sessionlimits.Service
+	Loading         *loading.Service
 	Processes       *processcontrol.Service
 	Runtime         *coordinator.Runtime
 	ScanInFlight    func(context.Context, string) bool
@@ -98,6 +100,16 @@ func (m *Loop) Build() loopwake.LoopDeps {
 				return m.ActiveRuns.ActiveBySession(ctx, sessionID)
 			},
 			WorkflowObligationsOpen: m.Guidance.WorkflowObligationsOpen,
+			HasRequest: func(ctx context.Context, sessionID string, history []api.Message) bool {
+				if m == nil || m.Loading == nil {
+					return true
+				}
+				sess, err := m.SessionStore.Get(ctx, sessionID)
+				if err != nil || sess == nil {
+					return true
+				}
+				return m.Loading.HasRequest(ctx, sess, history)
+			},
 		}),
 		LoopWakeSignalDeps: loopwake.LoopWakeSignalDeps{
 			HostTurnBlocked:  m.Turns.HostTurnBlocked,
