@@ -33,6 +33,8 @@ type CartesianSummary struct {
 	InjectAndGuidanceCount int
 	ToolDescriptionCount   int
 	OARRuleEvalCount       int
+	// setCase names the case the following renders belong to.
+	setCase                func(string)
 	CacheHits              int
 	CacheMisses            int
 	FolderlessParkVerified bool
@@ -70,6 +72,12 @@ var (
 		return runCartesianMatrixUncached(ctx, s)
 	})
 )
+
+func (sum *CartesianSummary) markCase(id string) {
+	if sum.setCase != nil {
+		sum.setCase(id)
+	}
+}
 
 func cloneBaseSpawnVars() map[string]any {
 	return maps.Clone(cachedBaseSpawnVars())
@@ -147,7 +155,7 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 	defer restore()
 
 	cache := hoststate.NewRenderCache()
-	sum := &CartesianSummary{}
+	sum := &CartesianSummary{setCase: tracker.SetCase}
 
 	coordStates, err := hoststate.CoordinatorStates(ctx)
 	if err != nil {
@@ -164,9 +172,11 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 		tracker.RecordCell(ws.Excluded, ws.ExcludedReason)
 	}
 
+	sum.markCase("kicks and injects")
 	if err := runKicksAndInjectsMatrix(ctx, s, sum); err != nil {
 		return nil, err
 	}
+	sum.markCase("OAR producers")
 	if err := runOARNextStepsMatrix(ctx, s, oarBundle, coordStates, workerStates, sum); err != nil {
 		return nil, err
 	}
@@ -176,6 +186,7 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 	if err := runWorkerPersonaAndInjectMatrix(ctx, s, cache, sum); err != nil {
 		return nil, err
 	}
+	sum.markCase("skill audit")
 	skillAudit, err := AuditStockSkillSurfaces(ctx, s, cache)
 	if err != nil {
 		return nil, err

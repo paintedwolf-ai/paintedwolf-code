@@ -30,7 +30,9 @@ type ConditionWitness struct {
 	Path      string `json:"path,omitempty"`
 	Atom      string `json:"atom"`
 	With      string `json:"with"`
+	WithCase  string `json:"with_case,omitempty"`
 	Then      string `json:"then"`
+	ThenCase  string `json:"then_case,omitempty"`
 }
 
 // ConditionExclusion is an atom whose every independence pair the guard's
@@ -157,7 +159,7 @@ func (l *ConditionLedger) analyzeSite(site ConditionSite, obs hoststate.Observed
 			g.unrecomposed++
 			continue
 		}
-		g.guard.Vectors = append(g.guard.Vectors, independence.Vector{Atoms: v.Atoms, Decision: v.Decision})
+		g.guard.Vectors = append(g.guard.Vectors, independence.Vector{Atoms: v.Atoms, Decision: v.Decision, Case: v.Case})
 	}
 	eval := func(_ string, truths []independence.Truth) (bool, error) {
 		values := make(map[string]bool, len(truths))
@@ -185,7 +187,8 @@ func (l *ConditionLedger) analyzeSite(site ConditionSite, obs hoststate.Observed
 			if w, path, ok := firstWitness(res, guards, in); ok {
 				l.Witnesses = append(l.Witnesses, ConditionWitness{
 					Site: site.ID, Recipient: recipient, Path: path, Atom: in,
-					With: formatVector(obs.Atoms, w.With), Then: formatVector(obs.Atoms, w.Then),
+					With: formatVector(obs.Atoms, w.With), WithCase: w.With.Case,
+					Then: formatVector(obs.Atoms, w.Then), ThenCase: w.Then.Case,
 				})
 				continue
 			}

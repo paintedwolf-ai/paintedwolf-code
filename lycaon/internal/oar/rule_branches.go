@@ -25,12 +25,14 @@ type RuleBranchHit struct {
 // load and skips recording when nil.
 //
 // With ObserveConditions set, each production evaluation of a guarded branch
-// also records its atoms' values in Conditions, grouped by Partition.
+// also records its atoms' values in Conditions, grouped by Partition; each
+// vector keeps the Label of its first observation.
 type RuleBranchRecorder struct {
 	Mu                sync.Mutex
 	Hits              map[string]*RuleBranchHit
 	ObserveConditions bool
 	Partition         func(gc *GuardContext) string
+	Label             func() string
 	Conditions        map[string]*RuleConditionHit
 }
 
@@ -42,6 +44,7 @@ type RuleConditionVector struct {
 	Decision   bool
 	Recomposes bool
 	Partition  string
+	Label      string
 	Count      int
 }
 
@@ -195,5 +198,9 @@ func (r *RuleBranchRecorder) recordCondition(ruleID, branchID, source string, co
 			return
 		}
 	}
-	hit.Vectors = append(hit.Vectors, &RuleConditionVector{Atoms: truths, Decision: decision, Recomposes: recomposes, Partition: partition, Count: 1})
+	v := &RuleConditionVector{Atoms: truths, Decision: decision, Recomposes: recomposes, Partition: partition, Count: 1}
+	if r.Label != nil {
+		v.Label = r.Label()
+	}
+	hit.Vectors = append(hit.Vectors, v)
 }

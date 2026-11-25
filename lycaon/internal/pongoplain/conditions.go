@@ -32,7 +32,9 @@ type ConditionVector struct {
 	// tags enclosing the arm, outermost first.
 	Partition string
 	Path      []string
-	Count     int
+	// Label names the case of the first evaluation that gave this vector.
+	Label string
+	Count int
 }
 
 // ConditionHit collects the distinct vectors observed at one if or elif arm.
@@ -198,8 +200,12 @@ func (r *BranchRecorder) recordCondition(site branchSite, source string, obs arm
 			return
 		}
 	}
-	hit.Vectors = append(hit.Vectors, &ConditionVector{
+	v := &ConditionVector{
 		Atoms: obs.values, Decision: obs.decision, Recomposes: obs.recomposes,
 		Partition: obs.partition, Path: slices.Clone(obs.path), Count: 1,
-	})
+	}
+	if r.Label != nil {
+		v.Label = r.Label()
+	}
+	hit.Vectors = append(hit.Vectors, v)
 }

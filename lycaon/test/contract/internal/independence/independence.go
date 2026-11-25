@@ -29,10 +29,11 @@ func (t Truth) String() string {
 	return "?"
 }
 
-// Vector is one observed evaluation of a guard.
+// Vector is one observed evaluation of a guard; Case names what produced it.
 type Vector struct {
 	Atoms    []Truth
 	Decision bool
+	Case     string
 }
 
 // Guard is one evaluated condition site with every vector observed there.
@@ -208,40 +209,80 @@ func findWitness(g Guard, in string, inputs []string) (Witness, bool) {
 	return Witness{}, false
 }
 
-// neededAssignments enumerates assignments of the other inputs under which the
-// guard's decision follows in, keeping those the implications allow. Each is
-// printed as the pair of input vectors to observe.
+// enumerationBound caps the inputs whose assignments neededAssignments walks.
+const enumerationBound = 20
+
+// maxListed caps the assignments a gap prints.
+const maxListed = 4
+
+// neededAssignments lists the assignments of the other inputs under which the
+// guard's decision follows in and the constraints allow, printed as the pair
+// of input vectors to observe. Flips of observed vectors come first, since
+// one more observation next to an existing one closes the gap; beyond
+// maxListed, the count of the rest is given.
 func neededAssignments(g Guard, in string, inputs []string, eval func(string, []Truth) (bool, error), cons Constraints) ([]string, error) {
-	if len(inputs) > 12 {
+	if len(inputs) > enumerationBound {
 		return nil, fmt.Errorf("%s: %d inputs exceed the enumeration bound", g.Site, len(inputs))
 	}
-	var out []string
 	others := slices.DeleteFunc(slices.Clone(inputs), func(s string) bool { return s == in })
+	var observed, rest []string
+	seen := map[string]bool{}
+	consider := func(assign map[string]Truth, fromObservation bool) error {
+		var decisions [2]bool
+		for k, val := range []Truth{False, True} {
+			assign[in] = val
+			if !allowed(assign, cons) {
+				return nil
+			}
+			d, err := eval(g.Site, atomVector(g.Atoms, assign))
+			if err != nil {
+				return err
+			}
+			decisions[k] = d
+		}
+		if decisions[0] == decisions[1] {
+			return nil
+		}
+		text := formatAssignment(inputs, in, assign)
+		if seen[text] {
+			return nil
+		}
+		seen[text] = true
+		if fromObservation {
+			observed = append(observed, text)
+		} else {
+			rest = append(rest, text)
+		}
+		return nil
+	}
+	for _, v := range g.Vectors {
+		assign := map[string]Truth{}
+		known := true
+		for _, o := range others {
+			if assign[o] = valueOf(g, v, o); assign[o] == Unknown {
+				known = false
+			}
+		}
+		if known {
+			if err := consider(assign, true); err != nil {
+				return nil, err
+			}
+		}
+	}
 	for mask := 0; mask < 1<<len(others); mask++ {
 		assign := map[string]Truth{}
 		for i, o := range others {
 			assign[o] = truthBit(mask, i)
 		}
-		var decisions [2]bool
-		admissible := true
-		for k, val := range []Truth{False, True} {
-			assign[in] = val
-			if !allowed(assign, cons) {
-				admissible = false
-				break
-			}
-			d, err := eval(g.Site, atomVector(g.Atoms, assign))
-			if err != nil {
-				return nil, err
-			}
-			decisions[k] = d
+		if err := consider(assign, false); err != nil {
+			return nil, err
 		}
-		if !admissible || decisions[0] == decisions[1] {
-			continue
-		}
-		out = append(out, formatAssignment(inputs, in, assign))
 	}
-	return out, nil
+	all := append(observed, rest...)
+	if len(all) > maxListed {
+		return append(all[:maxListed:maxListed], fmt.Sprintf("%d more", len(all)-maxListed)), nil
+	}
+	return all, nil
 }
 
 func truthBit(mask, i int) Truth {

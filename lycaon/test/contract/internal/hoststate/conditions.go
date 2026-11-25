@@ -11,14 +11,16 @@ import (
 )
 
 // ObservedVector is one distinct evaluation of a guard: its atoms' truths, the
-// decision the production evaluator took, the recipient partition and the
-// include tags enclosing the guard, outermost first, as unit:line.
+// decision the production evaluator took, the recipient partition, the
+// include tags enclosing the guard, outermost first, as unit:line, and the
+// case that first produced it.
 type ObservedVector struct {
 	Atoms      []independence.Truth
 	Decision   bool
 	Recomposes bool
 	Partition  string
 	Path       []string
+	Case       string
 	Count      int
 }
 
@@ -39,7 +41,18 @@ type ObservedCondition struct {
 func (t *CoverageTracker) ObserveConditions(templatePartition func(map[string]any) string, rulePartition func(*oar.GuardContext) string) {
 	t.templateRec.ObserveConditions, t.templateRec.Partition = true, templatePartition
 	t.ruleRec.ObserveConditions, t.ruleRec.Partition = true, rulePartition
+	label := func() string {
+		if id := t.currentCase.Load(); id != nil {
+			return *id
+		}
+		return ""
+	}
+	t.templateRec.Label, t.ruleRec.Label = label, label
 }
+
+// SetCase names the case whose renders and occurrences follow, so observed
+// vectors carry the state that produced them.
+func (t *CoverageTracker) SetCase(id string) { t.currentCase.Store(&id) }
 
 // Conditions returns every observed guard, template guards keyed by their
 // registered unit like Report's branches.
@@ -69,7 +82,7 @@ func (t *CoverageTracker) Conditions() []ObservedCondition {
 		for _, v := range hit.Vectors {
 			oc.Vectors = mergeVector(oc.Vectors, ObservedVector{
 				Atoms: templateTruths(v.Atoms), Decision: v.Decision, Recomposes: v.Recomposes,
-				Partition: v.Partition, Path: attributePath(v.Path, specs, resolve), Count: v.Count,
+				Partition: v.Partition, Path: attributePath(v.Path, specs, resolve), Case: v.Label, Count: v.Count,
 			})
 		}
 	}
@@ -84,7 +97,7 @@ func (t *CoverageTracker) Conditions() []ObservedCondition {
 		for _, v := range hit.Vectors {
 			oc.Vectors = append(oc.Vectors, ObservedVector{
 				Atoms: ruleTruths(v.Atoms), Decision: v.Decision, Recomposes: v.Recomposes,
-				Partition: v.Partition, Count: v.Count,
+				Partition: v.Partition, Case: v.Label, Count: v.Count,
 			})
 		}
 		out = append(out, oc)

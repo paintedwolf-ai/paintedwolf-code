@@ -48,13 +48,15 @@ type BranchHit struct {
 // With ObserveConditions set, each evaluated if or elif arm also records its
 // atoms' values in Conditions. Partition, when set, names the group a render's
 // scope belongs to, such as its recipient; vectors of different groups stay
-// apart.
+// apart. Label, when set, names the case being rendered; each vector keeps the
+// label of its first observation.
 type BranchRecorder struct {
 	Mu                sync.Mutex
 	Aliases           map[string]string
 	Hits              map[string]*BranchHit
 	ObserveConditions bool
 	Partition         func(scope map[string]any) string
+	Label             func() string
 	Conditions        map[string]*ConditionHit
 }
 

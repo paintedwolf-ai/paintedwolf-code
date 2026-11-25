@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/pongoplain"
@@ -194,6 +195,7 @@ type CoverageTracker struct {
 	expectedZeroTpl   map[string]ExpectedZeroBranch
 	expectedZeroRules map[string]ExpectedZeroBranch
 	resolveRef        func(string) (string, bool)
+	currentCase       atomic.Pointer[string]
 	reachedCells      int
 	excludedCells     int
 	excludedWhy       map[string]int
