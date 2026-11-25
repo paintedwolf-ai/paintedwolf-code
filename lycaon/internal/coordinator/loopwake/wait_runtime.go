@@ -29,6 +29,9 @@ type sessionSleep struct {
 	processHandles   []string
 	workerHandles    []string
 	watchHandles     []string
+	// refusalHandles are commands whose refusal ends the sleep though their
+	// exit reaches it through a watch.
+	refusalHandles []string
 	// mover identifies who may end the sleep.
 	mover SleepMover
 	// caller is the tool call that parked the session, if one did.
@@ -66,6 +69,7 @@ type sleepArm struct {
 	processHandles []string
 	workerHandles  []string
 	watchHandles   []string
+	refusalHandles []string
 	mover          SleepMover
 	caller         waitCaller
 }

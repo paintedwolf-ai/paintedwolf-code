@@ -194,3 +194,23 @@ func TestLoopSubscriptionFiltersPerJobWake(t *testing.T) {
 		t.Fatal("sleep should stay armed when per-job wake not subscribed")
 	}
 }
+
+func TestWatchedProcessRefusalEndsTheWaitButItsExitWaitsForTheWatch(t *testing.T) {
+	triggers := []WaitTrigger{WaitTriggerTimer}
+	refused := waitMatchInput{Wake: anchor.ProcessRefused, Subject: "cmd", RefusalHandles: []string{"cmd"}}
+	if !waitEventMatches(triggers, refused) {
+		t.Fatal("a watched command's refusal did not match the wait")
+	}
+	condition, ok := waitConditionForWake(triggers, refused)
+	if !ok || condition.Kind != string(WaitTriggerProcessDone) || condition.Outcome != "refused" || len(condition.Handles) != 1 || condition.Handles[0] != "cmd" {
+		t.Fatalf("refusal condition = %+v ok=%v", condition, ok)
+	}
+	finished := waitMatchInput{Wake: anchor.ProcessFinished, Subject: "cmd", RefusalHandles: []string{"cmd"}}
+	if waitEventMatches(triggers, finished) {
+		t.Fatal("a watched command's exit ended the wait outside its watch")
+	}
+	other := waitMatchInput{Wake: anchor.ProcessRefused, Subject: "other", RefusalHandles: []string{"cmd"}}
+	if waitEventMatches(triggers, other) {
+		t.Fatal("an unrelated command's refusal matched the wait")
+	}
+}

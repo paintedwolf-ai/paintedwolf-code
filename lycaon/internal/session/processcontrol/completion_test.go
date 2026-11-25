@@ -30,6 +30,8 @@ type completionFixture struct {
 	envelopes []anchor.Envelope
 	dropped   []string
 	waiting   bool
+	// watched is a command the parked wait watches rather than names.
+	watched string
 }
 
 func (*completionFixture) Get(context.Context, string) (*api.Session, error) {
@@ -66,6 +68,9 @@ func (f *completionFixture) DropSubject(_ string, _ anchor.ID, subject string) b
 }
 func (f *completionFixture) SessionSleepingOnProcess(_, handle string) bool {
 	return f.waiting && handle == "handle"
+}
+func (f *completionFixture) SessionSleepingOnRefusal(sessionID, handle string) bool {
+	return f.SessionSleepingOnProcess(sessionID, handle) || (f.waiting && handle == f.watched)
 }
 func (f *completionFixture) NudgeProcessFinished(context.Context, string, string, anchor.Envelope) {
 	f.wakes = append(f.wakes, anchor.ProcessFinished)
@@ -264,6 +269,23 @@ func TestTwoUserStoppedCommandsBetweenTurnsQueueSeparatelyWithCommandLinesAndRea
 	}
 	if f.envelopes[1].Subject != "bg-2" || !strings.Contains(f.envelopes[1].CommandCompletionDigest, "termination=stopped_by_user") || !strings.Contains(f.envelopes[1].CommandCompletionDigest, "command=tail -f app.log") {
 		t.Fatalf("second envelope = %+v", f.envelopes[1])
+	}
+}
+
+func TestWatchedProcessRefusalWakesTheWaitButItsExitDoesNot(t *testing.T) {
+	f := &completionFixture{waiting: true, watched: "watched"}
+	service := New(f, f, f, f)
+	service.SetLoop(f, f)
+	now := time.Now()
+	service.HandleCommandRefusal(t.Context(), bgprocess.RefusalNotice{SessionID: "session", Handle: "watched", OriginTool: "command", StartedAt: now, Unshown: 1})
+	if len(f.wakes) != 1 || f.wakes[0] != anchor.ProcessRefused || len(f.emitted) != 0 {
+		t.Fatalf("watched refusal wakes=%v emitted=%v, want one refusal wake", f.wakes, f.emitted)
+	}
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "watched", OriginTool: "command", FinishedAt: now})
+	for _, wake := range f.wakes[1:] {
+		if wake == anchor.ProcessFinished {
+			t.Fatalf("watched exit woke the wait directly: %v", f.wakes)
+		}
 	}
 }
 

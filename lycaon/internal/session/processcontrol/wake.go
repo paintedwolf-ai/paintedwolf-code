@@ -24,14 +24,20 @@ func (m *Service) nudgeProcessWait(ctx context.Context, sessionID, handle string
 		return false
 	}
 	waits, nudges := m.waits, m.nudges
-	if waits == nil || nudges == nil || !waits.SessionSleepingOnProcess(sessionID, handle) {
+	if waits == nil || nudges == nil {
 		return false
 	}
 	if wake == anchor.ProcessRefused {
+		if !waits.SessionSleepingOnRefusal(sessionID, handle) {
+			return false
+		}
 		nudges.NudgeProcessRefused(ctx, sessionID, handle, env)
-	} else {
-		nudges.NudgeProcessFinished(ctx, sessionID, handle, env)
+		return true
 	}
+	if !waits.SessionSleepingOnProcess(sessionID, handle) {
+		return false
+	}
+	nudges.NudgeProcessFinished(ctx, sessionID, handle, env)
 	return true
 }
 

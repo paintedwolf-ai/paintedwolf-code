@@ -69,6 +69,7 @@ func (l *Waits) ForgetSession(ctx context.Context, sessionID string) {
 			st.waitTriggers = nil
 			st.processHandles = nil
 			st.workerHandles = nil
+			st.refusalHandles = nil
 			closed, hadLease := closeWaitLeaseLocked(st, sessionID)
 			st.mu.Unlock()
 			if hadLease {

@@ -3,6 +3,7 @@ package loopwake
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -48,6 +49,22 @@ func (l *WaitDeliveries) NotifyWatchLeaseResolved(ctx context.Context, sessionID
 		l.Subscriptions.Waits.breakSleep(ctx, sessionID, winner.Kind, false)
 	}
 	l.runWaitResumeAsync(ctx, sessionID)
+}
+
+// watchedCommands are the commands behind the process_done watches among
+// watchHandles.
+func (l *WaitSubscriptions) watchedCommands(ctx context.Context, sessionID string, watchHandles []string) []string {
+	store := l.WatchStore()
+	if store == nil || len(watchHandles) == 0 {
+		return nil
+	}
+	var out []string
+	for command, watchHandle := range store.WatchedCommandHandles(ctx, sessionID) {
+		if slices.Contains(watchHandles, watchHandle) {
+			out = append(out, command)
+		}
+	}
+	return out
 }
 
 func watchHandlesFromConditions(conditions []awaitstore.Condition) []string {
@@ -184,8 +201,9 @@ func executeWatchWait(ctx context.Context, loop *WaitSubscriptions, deps WaitToo
 	loop.Waits.enterSleep(ctx, sessionID, sleepArm{
 		until: until, untilComplete: request.UntilComplete, reason: request.Reason,
 		triggers: sleepTriggers, processHandles: request.ProcessHandles, workerHandles: request.WorkerHandles,
-		watchHandles: request.WatchHandles,
-		mover:        SleepMoverHost, caller: waitCaller{tool: "wait", toolCallID: tctx.Identity.ToolCallID},
+		watchHandles:   request.WatchHandles,
+		refusalHandles: loop.watchedCommands(ctx, sessionID, request.WatchHandles),
+		mover:          SleepMoverHost, caller: waitCaller{tool: "wait", toolCallID: tctx.Identity.ToolCallID},
 	})
 	loop.Waits.MarkWaitCalled(sessionID)
 	if tctx.Effects.Out != nil {
