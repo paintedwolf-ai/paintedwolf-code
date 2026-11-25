@@ -60,10 +60,34 @@
   }
 }
 
+/* The page fills its tab; the layout control sits at the bottom edge as in every Files reader. */
+@utility den-briefing-evidence-frame {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* As wide as the pane inside the stage inset; sentences hold a reading width of their own. */
+@utility den-briefing-evidence {
+  /* How far an editor card stops short of the pane's edges. */
+  --den-evidence-edge: 8px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  padding: 28px var(--den-stage-inset-x) 48px;
+}
+
 @utility den-briefing-evidence__lead {
   display: grid;
   gap: 8px;
   min-width: 0;
+  & .den-activity-summary-frame {
+    max-width: 46rem;
+  }
 }
 
 @utility den-briefing-evidence__inputs {
@@ -86,13 +110,19 @@
   gap: 8px;
   min-width: 0;
   &:not([data-expanded]) {
-    max-height: 10.5rem;
-    overflow: hidden;
+    max-height: 16rem;
+    /* Clipped in height only, never scrollable: an editor inside bleeds to the pane's edges and must not scroll its own text out of view. */
+    overflow-x: visible;
+    overflow-y: clip;
   }
   &[data-clamped]::after {
     content: "";
     position: absolute;
-    inset: auto 0 0;
+    z-index: 1;
+    inset: auto calc(var(--den-evidence-edge) - var(--den-stage-inset-x)) 0;
+    border: 1px solid var(--den-border);
+    border-top: 0;
+    border-radius: 0 0 var(--den-radius) var(--den-radius);
     height: 2em;
     background: linear-gradient(to bottom, transparent, var(--den-background));
     pointer-events: none;
@@ -100,6 +130,7 @@
 }
 
 @utility den-briefing-evidence__prose {
+  max-width: 46rem;
   margin: 0;
   font-size: var(--text-den-body);
   line-height: 1.5;
@@ -144,16 +175,17 @@
   margin: 0;
 }
 
-@utility den-briefing-evidence__excerpt {
-  margin: 0;
-  padding: 6px 8px;
-  border-radius: 4px;
-  background: var(--den-surface-inset);
-  font-family: var(--den-font-mono);
-  font-size: var(--text-den-hint);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: text;
+/*
+ * An outlined card reaching almost to the pane's edges, as tall as its text. Nothing is added inside the
+ * editor: diffs colour the text and the knowing gutter tints the gutter.
+ */
+@utility den-briefing-evidence__editor {
+  min-width: 0;
+  margin-block: 6px;
+  margin-inline: calc(var(--den-evidence-edge) - var(--den-stage-inset-x));
+  overflow: hidden;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius);
 }
 
 @utility den-walk-briefing-area {

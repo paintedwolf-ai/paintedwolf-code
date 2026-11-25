@@ -3,6 +3,7 @@ import type { BriefingRecord, BriefingRecordItem, BriefingRecordSection } from "
 import type { BriefingsClient } from "../api/http-capabilities/briefings.ts";
 import { isApiErrorCode } from "../api/http.ts";
 import { Scrollport } from "../components/primitives/Scrollport.tsx";
+import { LineLayoutControl } from "../files/editor/FilesEditorChrome.tsx";
 import { ChatContentLink } from "../components/transcript/ChatContentLink.tsx";
 import { SummaryLine } from "./ActivitySummary.tsx";
 import { EvidenceInput } from "./EvidenceInput.tsx";
@@ -33,8 +34,9 @@ export function BriefingEvidencePage(props: Props) {
   };
   const back = () => briefingReturnAnchor(props.recordId);
   return (
+    <div class="den-briefing-evidence-frame">
     <Scrollport class="den-files-info__body" data-testid="briefing-evidence-page">
-      <article class="den-walk-page__article den-briefing-evidence">
+      <article class="den-briefing-evidence">
         <header class="den-walk-page__head">
           <div class="den-walk-page__heading">
             <h1 class="den-walk-page__title">{copy.title}</h1>
@@ -59,6 +61,11 @@ export function BriefingEvidencePage(props: Props) {
         <Show when={record()} keyed>{(current) => <RecordBody record={current} projectId={props.projectId} />}</Show>
       </article>
     </Scrollport>
+    <div class="den-files-editor__status" data-files-ctx="no-menu">
+      <span class="den-files-editor__status-spacer" />
+      <LineLayoutControl />
+    </div>
+    </div>
   );
 }
 

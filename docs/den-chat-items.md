@@ -198,10 +198,14 @@ says its outcome comes after settlement; unavailable sections offer a retry
 without hiding available text. Intent remains visible while settlement requests
 a new summary. **Summary evidence** opens the supporting record in Files. The
 page repeats the summary, then lists under each summary line the inputs that
-line was given, each as its name and the text that was sent. Long text is held
-to a few lines with **Show all**, which grows it in place. The only links on
-the page are the activity's own **Input**, **Output** and **Receipt**, which
-open the same tabs as the card.
+line was given. Sentences read as page text. Commands, output, diffs and other
+literal text sit in the Files read-only editor, in outlined blocks that reach
+almost to the pane's edges and follow **Off**, **Wrap** or **Pretty** from the
+control at the page's bottom edge. No block scrolls in height: the page is the
+only thing that does. A long input is held to a fixed height with **Show all**,
+which grows it in place, and **Show less** holds it again. The only links on the
+page are the activity's own **Input**, **Output** and **Receipt**, which open
+the same tabs as the card.
 
 The projection records each row's receipt scopes as it folds calls: a program
 and the host activity that produced the row, or the whole program when the

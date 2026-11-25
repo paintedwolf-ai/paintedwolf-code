@@ -1,6 +1,6 @@
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 import { EditorView } from "@codemirror/view";
-import { Compartment, EditorState, StateEffect } from "@codemirror/state";
+import { StateEffect } from "@codemirror/state";
 import type { LycaonClient } from "../../api/client.ts";
 import { chatContentDocumentKey, type ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
 import type { ChatContentAccess, ChatContentMatch } from "../../chat/transcript/content/chat-content-reader.ts";
@@ -12,15 +12,11 @@ import { useChatProcessText } from "./chat-process-text.ts";
 import { bindFindableView } from "../../find/use-findable-view.ts";
 import { activateFindableViewForEditor, findController, openFind, setFindCaseSensitive, setFindQuery } from "../../find/find-controller.ts";
 import { openGotoLine } from "../../find/goto-line-controller.ts";
-import { createSourceEditorState, applyEditorDisplayPrefs } from "../../components/source/editor/codemirror-theme.ts";
 import { editorDisplayPrefs } from "../../components/source/editor/editor-display-prefs.ts";
 import { ChatContentEditor } from "../editor/chat-content-editor.ts";
+import { createReadonlyTextEditor } from "../../components/source/reader/readonly-text-editor.ts";
 import { ReadonlyFilesDocument } from "../editor/ReadonlyFilesDocument.tsx";
 import { editorPrettyPref } from "../../settings/editor/editor-prefs.ts";
-import {
-  applyPrettyConfig,
-  createPrettyExtension,
-} from "../../components/source/pretty/pretty-layout.ts";
 import type { PrettyConfig } from "../../components/source/pretty/pretty-rescan.ts";
 import { copyTextToClipboard } from "../../utils/clipboard.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
@@ -221,40 +217,17 @@ function InlineChatContent(props: {
     ...(props.document.language ? { languageHint: props.document.language } : {}),
     ...(props.lineWidth ? { lineWidth: props.lineWidth } : {}),
   });
-  let editor: EditorView | undefined;
-  const redactions = new Compartment();
-  createEffect(() => {
-    const host = parent(); if (!host) return;
-    const value = untrack(rawText);
-    const language = untrack(() => props.languageExtension) ?? undefined;
-    const view = new EditorView({ parent: host, state: createSourceEditorState({ surface: "diff-viewer", doc: value, language, ...untrack(editorDisplayPrefs), editable: false, scrollPastEnd: false, commandBridge: true,
-      extensions: [
-        EditorState.lineSeparator.of("\n"),
-        redactions.of(buildRawRedactionExtension(value, untrack(redactionSpans))),
-        createPrettyExtension(untrack(prettyConfig)),
-      ],
-    }) });
-    editor = view;
-    const stopRestore = untrack(() => props.restorePlace(view));
-    if (stopRestore) view.dispatch({ effects: StateEffect.appendConfig.of(
-      EditorView.updateListener.of(update => { if (update.selectionSet) stopRestore(); }),
-    ) });
-    props.onEditor(view);
-    onCleanup(() => { stopRestore?.(); view.destroy(); if (editor === view) editor = undefined; props.onEditor(undefined); });
+  createReadonlyTextEditor({
+    parent, surface: "diff-viewer", text: rawText, language: () => props.languageExtension, pretty: prettyConfig, commandBridge: true,
+    marks: () => buildRawRedactionExtension(rawText(), redactionSpans()),
+    onEditor: view => {
+      const stopRestore = props.restorePlace(view);
+      if (stopRestore) view.dispatch({ effects: StateEffect.appendConfig.of(
+        EditorView.updateListener.of(update => { if (update.selectionSet) stopRestore(); }),
+      ) });
+      props.onEditor(view);
+      return () => { stopRestore?.(); props.onEditor(undefined); };
+    },
   });
-  createEffect(() => {
-    const value = rawText(), view = editor; if (!view) return;
-    const effects = [redactions.reconfigure(buildRawRedactionExtension(value, redactionSpans()))];
-    const previous = view.state.doc.toString();
-    if (previous === value) view.dispatch({ effects });
-    else {
-      let from = 0, to = previous.length, end = value.length;
-      while (from < to && from < end && previous[from] === value[from]) from++;
-      while (to > from && end > from && previous[to - 1] === value[end - 1]) { to--; end--; }
-      view.dispatch({ changes: { from, to, insert: value.slice(from, end) }, effects });
-    }
-    applyPrettyConfig(view, prettyConfig());
-  });
-  createEffect(() => { const prefs = editorDisplayPrefs(); if (editor) applyEditorDisplayPrefs(editor, prefs); });
   return <div class="den-source-reader__editors"><div class="den-source-reader__editor" ref={setParent} /></div>;
 }

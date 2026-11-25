@@ -1,3 +1,4 @@
+import { EditorView } from "@codemirror/view";
 import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BriefingRecord, BriefingRecordItem } from "../api/types.ts";
@@ -60,6 +61,10 @@ async function shown(value: BriefingRecord = record): Promise<HTMLElement> {
   return page;
 }
 
+/** The text each editor block under an element holds. */
+const editorTexts = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>('[data-testid="briefing-evidence-text"] .cm-editor')]
+  .map((editor) => EditorView.findFromDOM(editor)?.state.doc.toString());
+
 const section = (page: HTMLElement, id: string) => page.querySelector<HTMLElement>(`[data-testid="briefing-evidence-section"][data-section="${id}"]`)!;
 const inputKeys = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>('[data-testid="briefing-evidence-input"]')].map((input) => input.dataset.key);
 
@@ -83,6 +88,9 @@ describe("BriefingEvidencePage", () => {
     expect(inputKeys(section(page, "change"))).toEqual([]);
     expect(inputKeys(page)).toHaveLength(3);
     expect(section(page, "purpose").textContent).toContain("SUPPLIED_INTENT");
+    // Sentences are page text; only literal inputs are editors.
+    expect(editorTexts(section(page, "purpose").querySelector<HTMLElement>('[data-key="user_intent"]')!)).toEqual([]);
+    expect(within(page.parentElement!.closest(".den-briefing-evidence-frame") as HTMLElement).getByTestId("files-editor-line-layout")).toBeTruthy();
 
     const purpose = within(section(page, "purpose"));
     expect(purpose.getByTestId("briefing-evidence-nothing-to-send").textContent).toBe(copy.nothingToSend(copy.inputNames.tracked_plan!.toLowerCase()));
@@ -95,7 +103,8 @@ describe("BriefingEvidencePage", () => {
     const page = await shown();
     const cut = section(page, "purpose").querySelector<HTMLElement>('[data-key="recent_results"]')!;
     expect(cut.dataset.inclusion).toBe("truncated");
-    expect(cut.querySelector("pre")?.textContent).toBe(record.sections[0]!.items![1]!.text);
+    expect(editorTexts(cut)).toEqual([record.sections[0]!.items![1]!.text]);
+    expect(cut.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("false");
     expect(cut.textContent).toContain(copy.sentInPart);
   });
 
@@ -140,7 +149,7 @@ describe("BriefingEvidencePage", () => {
     expect(section(page, "purpose").querySelector("h2 .den-walk-page__count")?.textContent).toBe(copy.inputCount(1));
     const input = section(page, "purpose").querySelector<HTMLElement>('[data-key="recent_results"]')!;
     expect([...input.querySelectorAll(".den-briefing-evidence__part-head")].map((head) => head.textContent)).toEqual(["commandcompleted", "readfailed"]);
-    expect([...input.querySelectorAll("pre")].map((block) => block.textContent)).toEqual(["ok", "no"]);
+    expect(editorTexts(input)).toEqual(["ok", "no"]);
     expect(input.querySelector(".den-briefing-evidence__item-head")?.textContent).toContain(copy.resultCount(2));
   });
 
@@ -152,7 +161,7 @@ describe("BriefingEvidencePage", () => {
     expect(page.querySelector(".den-briefing-evidence__body[data-clamped]")).toBeNull();
   });
 
-  it("offers Show all only on an input taller than its held height, and it grows in place", async () => {
+  it("offers Show all only on an input taller than its held height; it grows in place and can be held again", async () => {
     stubLayout((body) => (body.textContent?.includes("SUPPLIED_INTENT") ? 400 : 40));
     const page = await shown();
     const controls = () => [...page.querySelectorAll<HTMLElement>('[data-testid="briefing-evidence-show-all"]')];
@@ -162,10 +171,16 @@ describe("BriefingEvidencePage", () => {
     expect(long.querySelector(".den-briefing-evidence__body")?.hasAttribute("data-clamped")).toBe(true);
 
     fireEvent.click(controls()[0]!);
-    expect(controls()).toHaveLength(0);
     const body = long.querySelector(".den-briefing-evidence__body")!;
     expect(body.hasAttribute("data-expanded")).toBe(true);
     expect(body.hasAttribute("data-clamped")).toBe(false);
+    expect(controls().map((control) => control.getAttribute("aria-expanded"))).toEqual(["true"]);
+
+    // A grown input can be held again; however large it is, the page gets its length back.
+    fireEvent.click(controls()[0]!);
+    expect(body.hasAttribute("data-expanded")).toBe(false);
+    expect(body.hasAttribute("data-clamped")).toBe(true);
+    expect(controls().map((control) => control.getAttribute("aria-expanded"))).toEqual(["false"]);
     expect(openFilesSurface).not.toHaveBeenCalled();
   });
 

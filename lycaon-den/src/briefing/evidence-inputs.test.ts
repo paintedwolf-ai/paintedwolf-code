@@ -20,7 +20,7 @@ const stored: Record<string, string> = {
 };
 
 describe("evidenceInputParts", () => {
-  it("lays out each call, result and receipt as its own block", () => {
+  it("splits each call, result and receipt into its own block of stored text", () => {
     expect(evidenceInputParts({ key: "recent_results", text: stored.recent_results })).toEqual([
       { head: ["command", "rejected"], text: "Rejected: not literal arguments" },
       { head: ["command", "completed"], text: "ok\n" },
@@ -34,29 +34,32 @@ describe("evidenceInputParts", () => {
     ]);
   });
 
-  it("keeps every argument when a call has more than a command", () => {
-    const args = { path: "a.go", content: "package app" };
-    const [part] = evidenceInputParts({ key: "action", text: `tool=write\nargs=${JSON.stringify(args)}` });
-    expect(part?.head?.[0]).toBe("write");
-    expect(JSON.parse(part?.text ?? "")).toEqual(args);
+  it("keeps a call's arguments as stored when it has more than a command", () => {
+    const args = JSON.stringify({ path: "a.go", content: "package app" });
+    expect(evidenceInputParts({ key: "action", text: `tool=write\nargs=${args}` })).toEqual([{ head: ["write", ""], text: args, language: "json" }]);
   });
 
-  it("indents structured text of any other key without changing its value", () => {
-    const [part] = evidenceInputParts({ key: "file", text: stored.file });
-    expect(JSON.parse(part?.text ?? "")).toEqual(JSON.parse(stored.file!));
+  it("separates a tool result's status line from its value, and only then", () => {
+    const value = JSON.stringify({ state: "completed", status: 0 });
+    expect(evidenceInputParts({ key: "call_result", text: `completed: [command#4]\n${value}` })).toEqual([{ head: ["completed: [command#4]", ""], text: value, language: "json" }]);
+    for (const other of ["completed: no value follows", `completed\n${value.slice(0, 9)}`, value]) {
+      expect(evidenceInputParts({ key: "call_result", text: other })[0]?.text).toBe(other);
+    }
+  });
+
+  it("names the language of text that is one whole JSON value, and of nothing else", () => {
+    expect(evidenceInputParts({ key: "file", text: stored.file })).toEqual([{ text: stored.file, language: "json" }]);
+    expect(evidenceInputParts({ key: "file", text: stored.file!.slice(0, -1) })).toEqual([{ text: stored.file!.slice(0, -1) }]);
     expect(evidenceInputParts({ key: "never_listed", text: "plain" })).toEqual([{ text: "plain" }]);
+    expect(evidenceInputParts({ key: "diffs", text: "--- \n+++ a.go\n@@ -1,0 +1 @@\n+ package app" })).toEqual([{ text: "--- \n+++ a.go\n@@ -1,0 +1 @@\n+ package app", language: "diff" }]);
     expect(evidenceInputParts({ key: "state" })).toEqual([]);
   });
 
-  it("shows a listed key holding some other value by that value, never dropping it", () => {
-    for (const key of ["recent_results", "receipts"]) {
-      const [part] = evidenceInputParts({ key, text: '{"other":1}' });
-      expect(part?.head).toBeUndefined();
-      expect(JSON.parse(part?.text ?? "")).toEqual({ other: 1 });
+  it("shows a listed key holding some other value exactly as stored, never dropping it", () => {
+    for (const [key, other] of [["recent_results", '{"other":1}'], ["recent_results", '[{"other":1}]'], ["receipts", '{"other":1}'], ["receipts", "[1]\n[2]"], ["action", "tool=command\nargs=[1]"]] as const) {
+      const parts = evidenceInputParts({ key, text: other });
+      expect(parts.map((part) => [part.head, part.text]), `${key} ${other}`).toEqual([[undefined, other]]);
     }
-    expect(evidenceInputParts({ key: "recent_results", text: '[{"other":1}]' })[0]?.head).toBeUndefined();
-    expect(evidenceInputParts({ key: "receipts", text: "[1]\n[2]" })).toEqual([{ text: "[1]\n[2]" }]);
-    expect(evidenceInputParts({ key: "action", text: "tool=command\nargs=[1]" })).toEqual([{ text: "tool=command\nargs=[1]" }]);
   });
 
   it("shows text cut at any point exactly as stored unless the cut left it whole", () => {

@@ -4,6 +4,7 @@ export const briefingCopy = {
   notArrived: "Summary did not arrive.",
   retry: "Try again",
   showAll: "Show all",
+  showLess: "Show less",
   resultPending: "Result once it settles.",
   evidenceLink: "Summary evidence",
   evidenceLinkName: "Open summary evidence in Files",
