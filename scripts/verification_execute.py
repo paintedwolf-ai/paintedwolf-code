@@ -22,6 +22,9 @@ from verification_lifecycle.completion import Publisher
 from verification_cache import Maintenance
 from verification_state import read_json, read_state, write_json
 
+if os.name != "nt":
+    from verification_lifecycle.run_lease import operation_temp, temp_environment
+
 MAX_ADDED_PACKAGES = 16
 
 
@@ -322,6 +325,10 @@ class Executor:
             env["PW_TEST_RESOURCE_FD"] = str(reservation.file.fileno())
             options = child_options()
             options["pass_fds"] = (*options.get("pass_fds", ()), reservation.file.fileno())
+            if os.name != "nt":
+                temp, temp_lease = files.enter_context(operation_temp("stage"))
+                env = temp_environment(env, temp)
+                options["pass_fds"] = (*options["pass_fds"], temp_lease)
             output = files.enter_context(log.open("wb"))
             error_output = files.enter_context(errors.open("wb")) if errors else subprocess.STDOUT
             child = None

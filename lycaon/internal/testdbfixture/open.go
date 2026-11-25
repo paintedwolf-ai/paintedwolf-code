@@ -3,7 +3,6 @@ package testdbfixture
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,18 +14,21 @@ import (
 )
 
 var (
-	templateOnce sync.Once
-	templateFile string
-	templateErr  error
+	templateOnce  sync.Once
+	templateImage []byte
+	templateErr   error
 )
 
-func ensureTemplate() (string, error) {
+// migratedImage builds one migrated database per test process and keeps only its bytes,
+// so no file outlives the process.
+func migratedImage() ([]byte, error) {
 	templateOnce.Do(func() {
 		dir, err := os.MkdirTemp("", "lycaon-testdb-template-*")
 		if err != nil {
 			templateErr = err
 			return
 		}
+		defer func() { _ = os.RemoveAll(dir) }()
 		path := filepath.Join(dir, "template.db")
 		store, err := db.OpenWithOptions(context.Background(), path, db.UpgradeHooks{}, db.StoreOptions{FastTestSync: true})
 		if err != nil {
@@ -37,33 +39,16 @@ func ensureTemplate() (string, error) {
 			templateErr = err
 			return
 		}
-		templateFile = path
+		templateImage, templateErr = os.ReadFile(path)
 	})
-	return templateFile, templateErr
+	return templateImage, templateErr
 }
 
-func cloneTemplate(src, dst string) (err error) {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-
+func writeImage(image []byte, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 		return err
 	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := out.Close(); err == nil {
-			err = closeErr
-		}
-	}()
-
-	_, err = io.Copy(out, in)
-	return err
+	return os.WriteFile(dst, image, 0o600)
 }
 
 // Open creates a database below t.TempDir and registers its close operation.
@@ -76,8 +61,8 @@ func Open(t testing.TB, name string) *db.Store {
 func OpenPath(t testing.TB, path string) *db.Store {
 	t.Helper()
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if tmpl, tmplErr := ensureTemplate(); tmplErr == nil {
-			_ = cloneTemplate(tmpl, path)
+		if image, imageErr := migratedImage(); imageErr == nil {
+			_ = writeImage(image, path)
 		}
 	}
 	store, err := db.OpenWithOptions(context.Background(), path, db.UpgradeHooks{}, db.StoreOptions{FastTestSync: true})
