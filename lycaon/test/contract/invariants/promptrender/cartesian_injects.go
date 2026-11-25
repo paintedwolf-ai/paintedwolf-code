@@ -128,6 +128,8 @@ func runCoordinatorInjectRenders(
 
 		// command-jobs: running, exited and held; exited only; running only.
 		jobSets := [][]bgprocess.JobSnapshot{jobsBoth, jobsBoth[1:], jobsBoth[:1]}
+		// Live jobs and held calls project their control tools onto the turn.
+		jobAuths := map[bool]hoststate.TurnAuthority{}
 		for jIdx, jobs := range jobSets {
 			var held []heldcall.Running
 			if jIdx == 0 {
@@ -135,10 +137,13 @@ func runCoordinatorInjectRenders(
 			} else if !firstOfReader[idx] {
 				continue
 			}
-			// Live jobs and held calls project their control tools onto the turn.
-			jobAuth, err := hoststate.FreezeTurnAuthorityWithResources(ctx, cr.state, toolcontract.ResourcePresence{CommandJobs: true, HeldCalls: len(held) > 0})
-			if err != nil {
-				return err
+			jobAuth, ok := jobAuths[len(held) > 0]
+			if !ok {
+				a, err := hoststate.FreezeTurnAuthorityWithResources(ctx, cr.state, toolcontract.ResourcePresence{CommandJobs: true, HeldCalls: len(held) > 0})
+				if err != nil {
+					return err
+				}
+				jobAuth, jobAuths[len(held) > 0] = a, a
 			}
 			cmdBlock := inject.RenderCommandJobsBlock(ctx, injRenderer, jobAuth.Reader, jobAuth.Schemas["wait"], "sess-inj", jobs, held, now, "coordinator")
 			if cmdBlock != "" {
