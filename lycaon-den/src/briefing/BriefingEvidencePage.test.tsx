@@ -126,6 +126,32 @@ describe("BriefingEvidencePage", () => {
     expect(section(page, "digest").querySelector(".den-walk-page__name")?.textContent).toBe("later_key");
   });
 
+  it("captions each stored result, and counts a section made neither way by its inputs alone", async () => {
+    const results = JSON.stringify([{ tool: "command", outcome: "completed", content: "ok" }, { tool: "read", outcome: "failed", content: "no" }]);
+    const other: BriefingRecord = {
+      ...record, record_id: hash("f"),
+      sections: [{
+        section_id: "purpose", manifest_hash: hash("a"), available: true, template_id: "t", template_version: "1",
+        result: { ...result("purpose", "Held text.", "summarizer"), source: "fallback" },
+        items: [item("recent_results", "included", results)],
+      }, record.sections[1]!],
+    };
+    const page = await shown(other);
+    expect(section(page, "purpose").querySelector("h2 .den-walk-page__count")?.textContent).toBe(copy.inputCount(1));
+    const input = section(page, "purpose").querySelector<HTMLElement>('[data-key="recent_results"]')!;
+    expect([...input.querySelectorAll(".den-briefing-evidence__part-head")].map((head) => head.textContent)).toEqual(["commandcompleted", "readfailed"]);
+    expect([...input.querySelectorAll("pre")].map((block) => block.textContent)).toEqual(["ok", "no"]);
+    expect(input.querySelector(".den-briefing-evidence__item-head")?.textContent).toContain(copy.resultCount(2));
+  });
+
+  it("shows every input whole with no control where layout cannot be observed", async () => {
+    vi.stubGlobal("ResizeObserver", undefined);
+    const page = await shown();
+    expect(inputKeys(page)).toHaveLength(3);
+    expect(page.querySelectorAll('[data-testid="briefing-evidence-show-all"]')).toHaveLength(0);
+    expect(page.querySelector(".den-briefing-evidence__body[data-clamped]")).toBeNull();
+  });
+
   it("offers Show all only on an input taller than its held height, and it grows in place", async () => {
     stubLayout((body) => (body.textContent?.includes("SUPPLIED_INTENT") ? 400 : 40));
     const page = await shown();

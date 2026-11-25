@@ -48,6 +48,17 @@ describe("evidenceInputParts", () => {
     expect(evidenceInputParts({ key: "state" })).toEqual([]);
   });
 
+  it("shows a listed key holding some other value by that value, never dropping it", () => {
+    for (const key of ["recent_results", "receipts"]) {
+      const [part] = evidenceInputParts({ key, text: '{"other":1}' });
+      expect(part?.head).toBeUndefined();
+      expect(JSON.parse(part?.text ?? "")).toEqual({ other: 1 });
+    }
+    expect(evidenceInputParts({ key: "recent_results", text: '[{"other":1}]' })[0]?.head).toBeUndefined();
+    expect(evidenceInputParts({ key: "receipts", text: "[1]\n[2]" })).toEqual([{ text: "[1]\n[2]" }]);
+    expect(evidenceInputParts({ key: "action", text: "tool=command\nargs=[1]" })).toEqual([{ text: "tool=command\nargs=[1]" }]);
+  });
+
   it("shows text cut at any point exactly as stored unless the cut left it whole", () => {
     for (const [key, whole] of Object.entries(stored)) {
       for (let end = 1; end < whole.length; end++) {

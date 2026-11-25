@@ -26,8 +26,8 @@ function text(value: unknown): string {
 
 function recentResults(stored: string): EvidenceInputPart[] | undefined {
   const parsed: unknown = JSON.parse(stored);
-  if (!Array.isArray(parsed) || !parsed.every(isRecord)) return undefined;
-  return parsed.map((result) => ({ head: [text(result.tool ?? ""), text(result.outcome ?? "")], text: text(result.content ?? "") }));
+  if (!Array.isArray(parsed) || !parsed.every((result) => isRecord(result) && typeof result.tool === "string")) return undefined;
+  return (parsed as Record<string, unknown>[]).map((result) => ({ head: [text(result.tool), text(result.outcome ?? "")], text: text(result.content ?? "") }));
 }
 
 const ACTION_PREFIX = "tool=";
@@ -49,10 +49,10 @@ function action(stored: string): EvidenceInputPart[] | undefined {
 
 function receipts(stored: string): EvidenceInputPart[] | undefined {
   const rows = stored.split("\n").filter((line) => line.trim()).map((line): unknown => JSON.parse(line));
-  if (rows.length === 0 || !rows.every(isRecord)) return undefined;
-  return rows.map((row) => ({
+  if (rows.length === 0 || !rows.every((row) => isRecord(row) && typeof row.command === "string")) return undefined;
+  return (rows as Record<string, unknown>[]).map((row) => ({
     head: [text(row.state ?? ""), typeof row.status_code === "number" ? copy.exitStatus(row.status_code) : ""],
-    text: text(row.command ?? ""),
+    text: text(row.command),
   }));
 }
 

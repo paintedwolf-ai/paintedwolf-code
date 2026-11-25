@@ -53,6 +53,25 @@ describe("ToolPartShell open-state persistence", () => {
 
   });
 
+  it("offers the summary's evidence under an opened activity only when it has a record", () => {
+    const withRecord = render(() => (
+      <TranscriptViewportProvider value={controller}>
+        <ToolPartShell part={part("tc-evidence")} layout="chat" sessionId="s1" slots={{ evidence: { project_id: "p", record_id: "r" } }}>body</ToolPartShell>
+      </TranscriptViewportProvider>
+    ));
+    fireEvent.click(withRecord.container.querySelector(".den-transcript-disclosure-header")!);
+    expect(withRecord.container.querySelector('.den-activity-footer [data-testid="briefing-evidence-link"]')).toBeTruthy();
+    withRecord.unmount();
+
+    const without = render(() => (
+      <TranscriptViewportProvider value={controller}>
+        <ToolPartShell part={part("tc-no-evidence")} layout="chat" sessionId="s1">body</ToolPartShell>
+      </TranscriptViewportProvider>
+    ));
+    fireEvent.click(without.container.querySelector(".den-transcript-disclosure-header")!);
+    expect(without.container.querySelector(".den-activity-footer")).toBeNull();
+  });
+
   it("starts closed for a fresh chicklet", () => {
     const { container } = render(() => (
       <TranscriptViewportProvider value={controller}>
