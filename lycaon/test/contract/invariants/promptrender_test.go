@@ -96,8 +96,9 @@ func TestPromptRenderReachFailsOnASeededTemplate(t *testing.T) {
 		"seeded argument": {overlay: staleArg, want: violates, names: []string{"wait_ms", "ask_user"}},
 		"own argument":    {overlay: ownArg, want: passes},
 	} {
+		// Sequential: each case sweeps every kick on every surface, and parallel
+		// sweeps multiply the package's peak memory.
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 			files := with(anchors, map[string]string{overlay: tc.overlay})
 			res := invariants.Evaluate(fixture(t, files), kicks)
 			expect(t, res, tc.want, 0)
