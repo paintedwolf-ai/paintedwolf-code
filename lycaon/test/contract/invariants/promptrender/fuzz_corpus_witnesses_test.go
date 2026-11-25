@@ -61,34 +61,37 @@ func TestFuzzCorpusSemanticWitnesses(t *testing.T) {
 		}
 	})
 
-	// 028e1c4e90279a32: every surface a coordinator whose catalog has the
-	// implement pack removed is admitted to still receives true guidance,
-	// including its spawn roster.
+	// 028e1c4e90279a32: every coordinator state the matrix admits without the
+	// implement pack still receives true guidance, including its spawn roster.
 	t.Run("coordinator_without_the_implement_pack", func(t *testing.T) {
-		admitted := 0
-		for _, surf := range d.Surfaces {
-			seed := hoststate.CoordinatorSeed{
-				OverlayIndex: overlayIndexByID(t, d, "without-implement"), SessionMode: api.SessionModeAgent,
-				Posture: api.SessionPostureBuild, WorkflowState: hoststate.WorkflowAmbientIdle, SurfaceID: surf.ID,
-				RootTopology: hoststate.RootsSingleGit, Loading: hoststate.LoadingAllLoaded, WebSearch: true,
-				ApprovalPosture: gate.PostureBalanced, TempState: hoststate.TempScratchOnly, MCPState: hoststate.MCPNone,
-			}
-			st, err := hoststate.ResolveCoordinatorSeed(d, seed)
-			if err != nil || st.PackOverlayID != "without-implement" {
-				t.Fatalf("resolved %s err=%v, want a coordinator without the implement pack", st.ID, err)
-			}
-			if st.Excluded {
+		states, err := hoststate.CoordinatorStates(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		ran := map[string]bool{}
+		for _, st := range states {
+			if st.Excluded || st.PackOverlayID != "without-implement" || ran[st.TurnProfile.SurfaceID] {
 				continue
 			}
-			admitted++
+			ran[st.TurnProfile.SurfaceID] = true
+			seed := hoststate.CoordinatorSeed{
+				OverlayIndex: overlayIndexByID(t, d, st.PackOverlayID), SessionMode: st.SessionMode, Posture: st.Posture,
+				WorkflowState: st.WorkflowState, SurfaceID: st.RequestedSurfaceID, RootTopology: st.RootTopology,
+				Loading: st.Loading, WebSearch: st.WebSearch, Vision: st.Vision, CommandExternalHidden: st.CommandExternalHidden,
+				ApprovalPosture: st.ApprovalPosture, TempState: st.TempState, MCPState: st.MCPState,
+			}
+			resolved, err := hoststate.ResolveCoordinatorSeed(d, seed)
+			if err != nil || resolved.Excluded || resolved.PackOverlayID != "without-implement" {
+				t.Fatalf("seed for %s resolved to %s err=%v, want the same admitted overlay", st.ID, resolved.ID, err)
+			}
 			raw, err := d.EncodeCoordinator(seed, hoststate.SeedTail{})
 			if err != nil {
-				t.Fatalf("encode: %v", err)
+				t.Fatalf("encode %s: %v", st.ID, err)
 			}
 			run(t, raw)
 		}
-		if admitted == 0 {
-			t.Fatal("no surface admits a coordinator without the implement pack")
+		if len(ran) == 0 {
+			t.Fatal("the matrix admits no coordinator without the implement pack")
 		}
 	})
 
