@@ -16,6 +16,9 @@ type PhaseBinding struct {
 	PhaseID    string
 	Resolved   workflowdef.ResolvedSurfaceBinding
 	Advance    string
+	// RequiresAgent is the admission fact that refuses entering the phase in
+	// Ask mode.
+	RequiresAgent bool
 }
 
 // ShippedPhaseBindings resolves every shipped workflow phase that binds a
@@ -57,10 +60,11 @@ func BindPhase(m workflowdef.Manifest, phase workflowdef.PhaseDef) (PhaseBinding
 		return PhaseBinding{}, err
 	}
 	return PhaseBinding{
-		WorkflowID: m.ID,
-		PhaseID:    phase.ID,
-		Resolved:   resolved,
-		Advance:    string(workflowdef.EffectiveAdvancePolicy(m, phase)),
+		WorkflowID:    m.ID,
+		PhaseID:       phase.ID,
+		Resolved:      resolved,
+		Advance:       string(workflowdef.EffectiveAdvancePolicy(m, phase)),
+		RequiresAgent: m.PhaseRequiresAgent(phase.ID),
 	}, nil
 }
 
@@ -68,8 +72,8 @@ func BindPhase(m workflowdef.Manifest, phase workflowdef.PhaseDef) (PhaseBinding
 // share recipients.
 func (b PhaseBinding) Key() string {
 	r := b.Resolved
-	return fmt.Sprintf("%s|%s|%s|%t|%t|%s", r.CoordinatorSurface, r.SurfaceTemplate,
-		strings.Join(r.ModeRefs, ","), r.WorkflowInvestigateEligible, r.ProfileResolved, b.Advance)
+	return fmt.Sprintf("%s|%s|%s|%t|%t|%s|%t", r.CoordinatorSurface, r.SurfaceTemplate,
+		strings.Join(r.ModeRefs, ","), r.WorkflowInvestigateEligible, r.ProfileResolved, b.Advance, b.RequiresAgent)
 }
 
 // applyPhaseBinding sets the run-context fields the coordinator turn frame

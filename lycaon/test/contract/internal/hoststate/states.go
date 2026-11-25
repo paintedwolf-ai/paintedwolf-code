@@ -471,6 +471,10 @@ func coordinatorExclusionReason(
 		if seed.mode == api.SessionModeAsk && reqRow.RequiresAgent {
 			return "requires_agent_surface_rejected_in_ask_mode"
 		}
+		// internal/workflow/phases/ask_mode.go:checkAskPhase refuses entering it.
+		if seed.mode == api.SessionModeAsk && seed.binding != nil && seed.binding.RequiresAgent {
+			return "requires_agent_phase_rejected_in_ask_mode"
+		}
 		if seed.roots == RootsNone && !slices.Contains(folderless, seed.surfaceID) {
 			return "workflow_phase_surface_requires_project_root"
 		}
