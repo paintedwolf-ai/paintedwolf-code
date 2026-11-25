@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/heldcall"
-	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -93,7 +92,7 @@ func renderJobGuidanceForRep(t *testing.T, s *promptrender.Stock, rep jobWaitAut
 		}
 		overlay = overlays[0]
 	}
-	exec, narrowed, err := hoststate.ExecutorForOverlay(
+	_, narrowed, err := hoststate.ExecutorForOverlay(
 		overlay, cs.Posture, false, cs.WebSearch, cs.CommandExternalHidden, cs.MCPState,
 	)
 	if err != nil {
@@ -145,15 +144,6 @@ func renderJobGuidanceForRep(t *testing.T, s *promptrender.Stock, rep jobWaitAut
 				SessionScratchDir:     cs.SessionScratchDir,
 				SharedTempLocations:   cs.SharedTempLocations,
 			}
-		},
-		PromptToolLister: func(ctx context.Context, _ *api.Session, profileID string) ([]tools.ToolMeta, error) {
-			if len(rep.overrideMetas) > 0 {
-				return slices.Clone(rep.overrideMetas), nil
-			}
-			return exec.Metadata.List(ctx, platform.ToolFilter{
-				ProfileID:        profileID,
-				ProjectRootCount: cs.RootCount,
-			})
 		},
 		WebSearchEnabled: func() bool { return cs.WebSearch },
 		WorkspaceRoots: func(_ context.Context, s2 *api.Session) ([]map[string]any, int, string, int) {

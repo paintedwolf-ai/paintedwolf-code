@@ -25,7 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/oarcore"
-	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -610,19 +609,6 @@ func newMutableCoordFuzzEngine(bundle fuzzOverlayBundle, st hoststate.Coordinato
 			m.mu.Unlock()
 			return hoststate.NormalizeCoordinatorRunContext(cur, sess, []api.Message{{Role: api.MessageRoleUser, Content: "Proceed with current inspection."}})
 		}},
-		PromptToolLister: func(ctx context.Context, _ *api.Session, profileID string) ([]tools.ToolMeta, error) {
-			m.mu.Lock()
-			cur := m.st
-			m.mu.Unlock()
-			exec, _, err := hoststate.ExecutorForOverlay(cur.Overlay, cur.Posture, false, cur.WebSearch, cur.CommandExternalHidden, cur.MCPState)
-			if err != nil {
-				return nil, err
-			}
-			return exec.Metadata.List(ctx, platform.ToolFilter{
-				ProfileID:        profileID,
-				ProjectRootCount: cur.RootCount,
-			})
-		},
 		WebSearchEnabled: func() bool {
 			m.mu.Lock()
 			defer m.mu.Unlock()

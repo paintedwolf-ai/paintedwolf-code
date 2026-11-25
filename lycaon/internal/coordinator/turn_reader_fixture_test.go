@@ -1,6 +1,7 @@
 package coordinator_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
@@ -8,16 +9,23 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// withFixtureReader projects the fixture's requests for runtimes built
-// without a prompt loop.
+// withFixtureReader projects the fixture's declared requests for runtimes
+// built without a prompt loop.
 func withFixtureReader(deps assembly.AssemblyDeps) assembly.AssemblyDeps {
+	return withListedFixtureReader(deps, nil)
+}
+
+// withListedFixtureReader projects requests offering what lister lists.
+func withListedFixtureReader(deps assembly.AssemblyDeps, lister func(context.Context, *api.Session, string) ([]tools.ToolMeta, error)) assembly.AssemblyDeps {
 	if deps.TurnReader != nil {
 		return deps
 	}
 	f := turnreadertest.Fixture{
-		Lister:         deps.PromptToolLister,
+		Lister:         lister,
 		View:           deps.SessionView,
 		WebSearch:      deps.WebSearchEnabled,
 		Roots:          deps.WorkspaceRoots,

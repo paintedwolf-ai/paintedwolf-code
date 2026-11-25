@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -109,17 +108,14 @@ func buildRecipientEngine(
 ) *assembly.AssemblyEngine {
 	pe := s.Engine()
 	deps := assembly.AssemblyDeps{
-		Prompts:          pe,
-		Injects:          prompts.NewInjectRenderer(pe),
+		Prompts: pe,
+		Injects: prompts.NewInjectRenderer(pe),
 		TurnReader: func(context.Context, *api.Session, []api.Message, inject.CoordinatorTurnFrame) (prompts.Reader, error) {
 			return auth.Reader, nil
 		},
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: staticCoordFrame{ctx: runCtx},
 		Selection:        staticSelection{loaded: loadedSetFromOffered(auth.Offered)},
-		PromptToolLister: func(context.Context, *api.Session, string) ([]tools.ToolMeta, error) {
-			return slices.Clone(auth.Metas), nil
-		},
 		WebSearchEnabled: func() bool { return true },
 		WorkspaceRoots: func(_ context.Context, sess *api.Session) ([]map[string]any, int, string, int) {
 			if sess == nil || strings.TrimSpace(sess.WorkspacePath) == "" {

@@ -9,21 +9,30 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// withTestTurnReader binds the fixture's request projection.
+// toolLister lists the tools a fixture offers a profile.
+type toolLister = func(ctx context.Context, sess *api.Session, profileID string) ([]tools.ToolMeta, error)
+
+// withTestTurnReader binds the fixture's declared request projection.
 func withTestTurnReader(deps AssemblyDeps) AssemblyDeps {
+	return withListedTurnReader(deps, nil)
+}
+
+// withListedTurnReader binds a request projection offering what lister lists.
+func withListedTurnReader(deps AssemblyDeps, lister toolLister) AssemblyDeps {
 	if deps.TurnReader != nil {
 		return deps
 	}
-	deps.TurnReader = fixture(deps).TurnReader
+	deps.TurnReader = fixture(deps, lister).TurnReader
 	return deps
 }
 
-func fixture(deps AssemblyDeps) turnreadertest.Fixture {
+func fixture(deps AssemblyDeps, lister toolLister) turnreadertest.Fixture {
 	f := turnreadertest.Fixture{
-		Lister:         deps.PromptToolLister,
+		Lister:         lister,
 		View:           deps.SessionView,
 		WebSearch:      deps.WebSearchEnabled,
 		Roots:          deps.WorkspaceRoots,

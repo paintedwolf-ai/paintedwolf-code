@@ -38,18 +38,17 @@ func TestSessionViewAgentProfileDrivesTemplateAndToolSurface(t *testing.T) {
 	const agentID = "team-reviewer"
 	const profileID = "review_readonly"
 	engine := &AssemblyEngine{}
-	engine.SetDeps(withTestTurnReader(AssemblyDeps{
+	engine.SetDeps(withListedTurnReader(AssemblyDeps{
 		SessionView: func(context.Context, *api.Session) *catalogview.View {
 			return &catalogview.View{AgentProfiles: []agentdef.Profile{{
 				ID: agentID, ToolProfile: profileID, SystemPromptTemplate: "agents/team-reviewer.md",
 			}}}
 		},
-		PromptToolLister: func(_ context.Context, _ *api.Session, got string) ([]tools.ToolMeta, error) {
-			if got != profileID {
-				t.Fatalf("profileID = %q want %q", got, profileID)
-			}
-			return []tools.ToolMeta{{Name: "read"}}, nil
-		},
+	}, func(_ context.Context, _ *api.Session, got string) ([]tools.ToolMeta, error) {
+		if got != profileID {
+			t.Fatalf("profileID = %q want %q", got, profileID)
+		}
+		return []tools.ToolMeta{{Name: "read"}}, nil
 	}))
 	sess := &api.Session{ID: "child", ParentSessionID: "parent", AgentType: agentID}
 	ref, err := testPromptSurface(engine).resolveSystemPromptRef(context.Background(), sess)

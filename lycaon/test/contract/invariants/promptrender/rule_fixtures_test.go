@@ -1,12 +1,13 @@
 package promptrender_test
 
 import (
-	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/test/contract/invariants/invariantstest"
 
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/skills"

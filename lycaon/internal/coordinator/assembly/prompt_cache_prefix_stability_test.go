@@ -36,11 +36,10 @@ func prefixStabilityEngine(t *testing.T) *AssemblyEngine {
 			CurrentPhase:  "work",
 			AllowedAgents: spawn.AmbientAllowedAgents(),
 		}},
-		PromptToolLister: prompttest.CoordinatorTools,
-		WorkspaceRoots:   prefixStabilityWorkspaceRoots(),
+		WorkspaceRoots: prefixStabilityWorkspaceRoots(),
 	}
 	eng := &AssemblyEngine{}
-	eng.SetDeps(withTestTurnReader(deps))
+	eng.SetDeps(withListedTurnReader(deps, prompttest.CoordinatorTools))
 	return eng
 }
 

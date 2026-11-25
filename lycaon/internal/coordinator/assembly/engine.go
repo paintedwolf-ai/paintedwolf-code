@@ -19,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -53,9 +52,6 @@ type BoardPrependHook interface {
 	BoardInjectHash(sessionID string) string
 	InvalidateOrientation(sessionID string)
 }
-
-// PromptToolLister returns prompt-visible tool metas for this session turn.
-type PromptToolLister func(ctx context.Context, sess *api.Session, profileID string) ([]tools.ToolMeta, error)
 
 // BoardOrientReadyRecorder marks recon_or_board_ready after pack-board inject.
 type BoardOrientReadyRecorder interface {
@@ -132,7 +128,6 @@ type AssemblyDeps struct {
 	Board            BoardPrependHook
 	BoardOrientReady BoardOrientReadyRecorder
 	EnrichHistory    func(sessionID string, history []api.Message) []api.Message
-	PromptToolLister PromptToolLister
 	// TurnReader projects a request through the live turn pipeline; the
 	// runtime binds it.
 	TurnReader TurnReaderSource

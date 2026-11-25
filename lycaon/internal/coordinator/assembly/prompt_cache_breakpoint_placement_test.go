@@ -119,11 +119,13 @@ func TestPromptCacheBreakpointPlacementTable(t *testing.T) {
 	cases := []struct {
 		name          string
 		deps          AssemblyDeps
+		lister        toolLister
 		sess          *api.Session
 		requireMarker bool
 	}{
 		{
-			name: "implement_build_coordinator",
+			name:   "implement_build_coordinator",
+			lister: prompttest.CoordinatorTools,
 			deps: AssemblyDeps{
 				Prompts: pe,
 				Injects: inj,
@@ -131,8 +133,7 @@ func TestPromptCacheBreakpointPlacementTable(t *testing.T) {
 				CoordinatorFrame: prefixStabilityCoordCtx{ctx: api.CoordinatorRunContext{
 					AllowedAgents: spawn.AmbientAllowedAgents(),
 				}},
-				PromptToolLister: prompttest.CoordinatorTools,
-				WorkspaceRoots:   prefixStabilityWorkspaceRoots(),
+				WorkspaceRoots: prefixStabilityWorkspaceRoots(),
 			},
 			sess: &api.Session{
 				ID: "bp-build", Posture: api.SessionPostureBuild,
@@ -141,7 +142,8 @@ func TestPromptCacheBreakpointPlacementTable(t *testing.T) {
 			requireMarker: true,
 		},
 		{
-			name: "workflow_session_run_context",
+			name:   "workflow_session_run_context",
+			lister: prompttest.CoordinatorTools,
 			deps: AssemblyDeps{
 				Prompts: pe,
 				Injects: inj,
@@ -150,8 +152,7 @@ func TestPromptCacheBreakpointPlacementTable(t *testing.T) {
 					WorkflowID: "implement", CurrentPhase: "work",
 					AllowedAgents: spawn.AmbientAllowedAgents(),
 				}},
-				PromptToolLister: prompttest.CoordinatorTools,
-				WorkspaceRoots:   prefixStabilityWorkspaceRoots(),
+				WorkspaceRoots: prefixStabilityWorkspaceRoots(),
 			},
 			sess: &api.Session{
 				ID: "bp-workflow", Posture: api.SessionPostureBuild,
@@ -183,7 +184,7 @@ func TestPromptCacheBreakpointPlacementTable(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			eng := &AssemblyEngine{}
-			eng.SetDeps(withTestTurnReader(tc.deps))
+			eng.SetDeps(withListedTurnReader(tc.deps, tc.lister))
 			eng.BeginPromptTurn(tc.sess.ID, "")
 			msgs, err := eng.BuildCompletionMessages(context.Background(), tc.sess, []api.Message{
 				{Role: api.MessageRoleUser, Content: "continue"},

@@ -131,14 +131,13 @@ func TestBoardOrientationRefreshesAtomicTurnFrameBeforeRender(t *testing.T) {
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
 	source := &advancingTurnFrameSource{phase: "boot", revision: 1}
 	eng := &AssemblyEngine{}
-	eng.SetDeps(withTestTurnReader(AssemblyDeps{
+	eng.SetDeps(withListedTurnReader(AssemblyDeps{
 		Prompts: pe, Injects: prompts.NewInjectRenderer(pe),
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: source,
 		Board:            advancingBoard{},
 		BoardOrientReady: advancingOrientRecorder{source: source},
-		PromptToolLister: prompttest.CoordinatorTools,
-	}))
+	}, prompttest.CoordinatorTools))
 	sess := &api.Session{ID: "atomic-frame", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	eng.BeginPromptTurn(sess.ID, "")
 	msgs, err := eng.BuildCompletionMessages(context.Background(), sess, nil, nil)
@@ -189,14 +188,13 @@ func TestBoardOrientationRecordsInjectForRefreshedRun(t *testing.T) {
 	source := &childStartTurnFrameSource{runID: "parent", phase: "execute"}
 	recorder := &childStartOrientRecorder{source: source}
 	eng := &AssemblyEngine{}
-	eng.SetDeps(withTestTurnReader(AssemblyDeps{
+	eng.SetDeps(withListedTurnReader(AssemblyDeps{
 		Prompts: pe, Injects: prompts.NewInjectRenderer(pe),
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: source,
 		Board:            advancingBoard{},
 		BoardOrientReady: recorder,
-		PromptToolLister: prompttest.CoordinatorTools,
-	}))
+	}, prompttest.CoordinatorTools))
 	sess := &api.Session{ID: "child-start-frame", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	eng.BeginPromptTurn(sess.ID, "")
 	msgs, err := eng.BuildCompletionMessages(context.Background(), sess, nil, nil)
@@ -358,7 +356,7 @@ func buildProjectedTestPromptLister(
 	profiles []sandbox.ToolProfile,
 	schemas *toolschema.Config,
 	waitSchemaMode string,
-) PromptToolLister {
+) toolLister {
 	if waitSchemaMode == "no_lister" {
 		return nil
 	}
@@ -415,7 +413,7 @@ func projectCommandJobsTarget(
 	t *testing.T,
 	sess *api.Session,
 	history []api.Message,
-	promptLister PromptToolLister,
+	promptLister toolLister,
 	implState func(context.Context, *api.Session) surface.ImplementSessionState,
 	webSearch bool,
 	rootCount int,
@@ -585,19 +583,18 @@ func runCommandJobsAxisCase(
 	}
 
 	eng := &AssemblyEngine{}
-	eng.SetDeps(withTestTurnReader(AssemblyDeps{
+	eng.SetDeps(withListedTurnReader(AssemblyDeps{
 		Prompts:               pe,
 		Injects:               prompts.NewInjectRenderer(pe),
 		Limits:                func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		ImplementSessionState: implState,
 		WebSearchEnabled:      func() bool { return tc.webSearch },
 		CommandJobs:           func(string) []bgprocess.JobSnapshot { return liveJobs },
-		PromptToolLister:      promptLister,
 		WorkspaceRoots:        rootsFn,
 		SessionView: func(context.Context, *api.Session) *catalogview.View {
 			return (&catalogview.View{ToolSchemas: schemas}).WithToolProfiles(profiles)
 		},
-	}))
+	}, promptLister))
 
 	sess := &api.Session{
 		ID:            "cmd-jobs-" + strings.ReplaceAll(tc.name, " ", "-"),
@@ -630,7 +627,7 @@ func runCommandJobsAxisCase(
 
 type fixtureToolLister struct {
 	sess *api.Session
-	list PromptToolLister
+	list toolLister
 }
 
 func (l fixtureToolLister) List(ctx context.Context, filter platform.ToolFilter) ([]tools.ToolMeta, error) {

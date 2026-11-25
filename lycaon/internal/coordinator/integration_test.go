@@ -366,9 +366,8 @@ func TestSessionPromptCacheSecondIterationKeepsRunContext(t *testing.T) {
 		Injects:          prompts.NewInjectRenderer(pe),
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: stubCoordCtx{ctx: api.CoordinatorRunContext{WorkflowID: "wf-1", CoordinatorBrief: "b"}},
-		PromptToolLister: prompttest.CoordinatorTools,
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withFixtureReader(deps) }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	sess := &api.Session{ID: "s1", AgentType: orchestration.ProfileCoordinator, Posture: api.SessionPostureSpec, WorkspacePath: t.TempDir()}
 	ctx := context.Background()
 	rt.BeginPromptTurn("s1", "")
@@ -395,11 +394,10 @@ func TestAssemblyImplementSpawnInjectWithoutWorkflow(t *testing.T) {
 		CoordinatorFrame: stubCoordCtx{ctx: api.CoordinatorRunContext{
 			AllowedAgents: spawn.AmbientAllowedAgents(),
 		}},
-		PromptToolLister: prompttest.CoordinatorTools,
-		WorkspaceRoots:   stubWorkspaceRootsOne(),
-		Selection:        workerToolSelection{},
+		WorkspaceRoots: stubWorkspaceRootsOne(),
+		Selection:      workerToolSelection{},
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withFixtureReader(deps) }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	workspace := t.TempDir()
 	testutil.FailErr(t, "write project fixture", os.WriteFile(filepath.Join(workspace, "README.md"), []byte("# fixture\n"), 0o600))
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: workspace}
@@ -432,11 +430,10 @@ func TestAssemblyWorkflowSessionIncludesSpawnRoster(t *testing.T) {
 			CurrentPhase:  "work",
 			AllowedAgents: spawn.AmbientAllowedAgents(),
 		}},
-		PromptToolLister: prompttest.CoordinatorTools,
-		WorkspaceRoots:   stubWorkspaceRootsOne(),
-		Selection:        workerToolSelection{},
+		WorkspaceRoots: stubWorkspaceRootsOne(),
+		Selection:      workerToolSelection{},
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withFixtureReader(deps) }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	workspace := t.TempDir()
 	testutil.FailErr(t, "write project fixture", os.WriteFile(filepath.Join(workspace, "README.md"), []byte("# fixture\n"), 0o600))
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: workspace}
@@ -474,11 +471,10 @@ func TestAssemblyImplementSpawnInjectEveryIteration(t *testing.T) {
 		CoordinatorFrame: stubCoordCtx{ctx: api.CoordinatorRunContext{
 			AllowedAgents: spawn.AmbientAllowedAgents(),
 		}},
-		PromptToolLister: prompttest.CoordinatorTools,
-		WorkspaceRoots:   stubWorkspaceRootsOne(),
-		Selection:        workerToolSelection{},
+		WorkspaceRoots: stubWorkspaceRootsOne(),
+		Selection:      workerToolSelection{},
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withFixtureReader(deps) }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	workspace := t.TempDir()
 	testutil.FailErr(t, "write project fixture", os.WriteFile(filepath.Join(workspace, "README.md"), []byte("# fixture\n"), 0o600))
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: workspace}
@@ -590,9 +586,8 @@ func TestBoardInjectHashViaAssembly(t *testing.T) {
 		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 		CoordinatorFrame: stubCoordCtx{ctx: api.CoordinatorRunContext{WorkflowID: "plan", CurrentPhase: "stub"}},
 		Board:            boardEng,
-		PromptToolLister: prompttest.CoordinatorTools,
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withFixtureReader(deps) }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	sess := &api.Session{ID: "s1", ProjectID: testdbseed.DefaultProjectID, Posture: api.SessionPostureSpec, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	if err := os.WriteFile(filepath.Join(sess.WorkspacePath, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
@@ -702,9 +697,8 @@ func TestTransitionInjectOncePerPromptTurn(t *testing.T) {
 		ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
 			return surface.ImplementSessionState{WorkersInFlight: 1, PendingOverlayIDs: []string{}}
 		},
-		PromptToolLister: prompttest.CoordinatorTools,
 	}
-	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withFixtureReader(deps) }})
+	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return withListedFixtureReader(deps, prompttest.CoordinatorTools) }})
 	// AgentType enables coordinator tail injects.
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	ctx := context.Background()
