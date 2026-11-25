@@ -85,7 +85,7 @@ func (p *Profile) Resolve(ctx context.Context, target briefing.Target) (briefing
 	}
 	return briefing.Request{
 		ProjectID: target.ProjectID, ProjectDir: target.ProjectDir, ProfileID: ProfileID, Version: profileVersion,
-		TargetKey: handle, TargetKind: "worker_result", TargetJSON: string(canonical), ScopeFingerprint: handle,
+		TargetKey: handle, TargetKind: "worker", TargetJSON: string(canonical), ScopeFingerprint: handle,
 		Manual: target.Manual, Policy: p.Policy(), Sections: []briefing.SectionPlan{section},
 	}, nil
 }
