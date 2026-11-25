@@ -7,9 +7,6 @@ import (
 	"go/token"
 	"go/types"
 	"slices"
-	"strings"
-
-	"golang.org/x/tools/go/packages"
 )
 
 // Outcome classifies how an emission's code was established.
@@ -136,53 +133,6 @@ func (s *scan) resolveCall(d funcDecl, call *ast.CallExpr, index, depth int) res
 	return unresolved("callee " + fn.FullName() + " is outside the scanned packages")
 }
 
-// resolveImplementations resolves an interface method through the method of
-// every scanned named type that implements the interface. An implementation
-// outside the scanned packages leaves the call unresolved.
-func (s *scan) resolveImplementations(iface *types.Interface, method *types.Func, index, depth int) resolution {
-	var out resolution
-	found := false
-	for _, p := range s.pkgs {
-		scope := p.Types.Scope()
-		for _, name := range scope.Names() {
-			tn, ok := scope.Lookup(name).(*types.TypeName)
-			if !ok || tn.IsAlias() {
-				continue
-			}
-			if _, isIface := tn.Type().Underlying().(*types.Interface); isIface {
-				continue
-			}
-			ptr := types.NewPointer(tn.Type())
-			if !types.Implements(tn.Type(), iface) && !types.Implements(ptr, iface) {
-				continue
-			}
-			sel := types.NewMethodSet(ptr).Lookup(method.Pkg(), method.Name())
-			if sel == nil {
-				continue
-			}
-			impl, ok := sel.Obj().(*types.Func)
-			if !ok {
-				continue
-			}
-			decl, ok := s.decls[impl.FullName()]
-			if !ok {
-				out.merge(unresolved("implementation " + impl.FullName() + " has no scanned body"))
-				continue
-			}
-			found = true
-			r := s.resolveReturns(decl, index, depth+1)
-			if r.outcome == OutcomeUnresolved {
-				r.reason = fmt.Sprintf("%s (implementation %s)", r.reason, impl.FullName())
-			}
-			out.merge(r)
-		}
-	}
-	if !found {
-		return unresolved("interface method " + method.FullName() + " has no scanned implementation")
-	}
-	return out
-}
-
 // resolveFieldRead resolves a field read. A carrier's code forwards that
 // carrier's emission; any other struct field resolves through every producer
 // that writes it.
@@ -194,75 +144,6 @@ func (s *scan) resolveFieldRead(tn *types.TypeName, field string, depth int) res
 		return resolution{outcome: OutcomeForwardedCarrier, upstream: typeKey(tn)}
 	}
 	return s.resolveFieldProducers(tn, field)
-}
-
-// stringToString reports a function outside the module that maps one string
-// to another, such as strings.TrimSpace; it keeps its argument's origin.
-func stringToString(fn *types.Func) bool {
-	sig, ok := fn.Type().(*types.Signature)
-	if !ok || sig.Recv() != nil || sig.Params().Len() != 1 || sig.Results().Len() != 1 {
-		return false
-	}
-	isString := func(t types.Type) bool {
-		b, ok := t.Underlying().(*types.Basic)
-		return ok && b.Info()&types.IsString != 0
-	}
-	return fn.Pkg() != nil && !strings.HasPrefix(fn.Pkg().Path(), "github.com/lycaon/") &&
-		isString(sig.Params().At(0).Type()) && isString(sig.Results().At(0).Type())
-}
-
-// resolveMapValues resolves a lookup in a package-level map whose literal
-// initializer holds only constant values.
-func (s *scan) resolveMapValues(p *packages.Package, e *ast.IndexExpr) resolution {
-	id, ok := ast.Unparen(e.X).(*ast.Ident)
-	if !ok {
-		return unresolved("index into a non-identifier")
-	}
-	obj, ok := p.TypesInfo.Uses[id].(*types.Var)
-	if !ok || obj.Parent() != obj.Pkg().Scope() {
-		return unresolved("index into a non-package map")
-	}
-	for _, f := range p.Syntax {
-		for _, decl := range f.Decls {
-			gen, ok := decl.(*ast.GenDecl)
-			if !ok {
-				continue
-			}
-			for _, spec := range gen.Specs {
-				vs, ok := spec.(*ast.ValueSpec)
-				if !ok {
-					continue
-				}
-				for i, name := range vs.Names {
-					if p.TypesInfo.Defs[name] != obj || i >= len(vs.Values) {
-						continue
-					}
-					return constMapValues(p, vs.Values[i])
-				}
-			}
-		}
-	}
-	return unresolved("map has no literal initializer")
-}
-
-func constMapValues(p *packages.Package, init ast.Expr) resolution {
-	lit, ok := ast.Unparen(init).(*ast.CompositeLit)
-	if !ok {
-		return unresolved("map initializer is not a literal")
-	}
-	var codes []string
-	for _, elt := range lit.Elts {
-		kv, ok := elt.(*ast.KeyValueExpr)
-		if !ok {
-			return unresolved("map literal element without key")
-		}
-		tv, ok := p.TypesInfo.Types[kv.Value]
-		if !ok || tv.Value == nil || tv.Value.Kind() != constant.String {
-			return unresolved("map literal holds a non-constant value")
-		}
-		codes = append(codes, constant.StringVal(tv.Value))
-	}
-	return resolution{codes: codes}
 }
 
 // resolveReturns resolves result index of every return in d.
@@ -391,24 +272,6 @@ func (s *scan) resolveParam(d funcDecl, idx int) resolution {
 		}
 		return out
 	})
-}
-
-// declaringType returns the struct that declares a selected field, following
-// embedded fields.
-func declaringType(sel *types.Selection) *types.TypeName {
-	t := sel.Recv()
-	index := sel.Index()
-	for _, i := range index[:len(index)-1] {
-		if ptr, ok := t.(*types.Pointer); ok {
-			t = ptr.Elem()
-		}
-		st, ok := t.Underlying().(*types.Struct)
-		if !ok {
-			return nil
-		}
-		t = st.Field(i).Type()
-	}
-	return namedOf(t)
 }
 
 // resolveTuple resolves element i of a multi-value right-hand side: a comma-ok

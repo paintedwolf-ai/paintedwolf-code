@@ -110,3 +110,21 @@ func (s *scan) collectFieldWrites(tn *types.TypeName, field string) []fieldWrite
 	}
 	return writes
 }
+
+// declaringType returns the struct that declares a selected field, following
+// embedded fields.
+func declaringType(sel *types.Selection) *types.TypeName {
+	t := sel.Recv()
+	index := sel.Index()
+	for _, i := range index[:len(index)-1] {
+		if ptr, ok := t.(*types.Pointer); ok {
+			t = ptr.Elem()
+		}
+		st, ok := t.Underlying().(*types.Struct)
+		if !ok {
+			return nil
+		}
+		t = st.Field(i).Type()
+	}
+	return namedOf(t)
+}

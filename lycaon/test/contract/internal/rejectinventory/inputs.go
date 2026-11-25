@@ -46,6 +46,8 @@ func (s *scan) inputsOf(d funcDecl, expr ast.Expr, depth int) []Input {
 		case *ast.SelectorExpr:
 			if sel, ok := info.Selections[x]; ok {
 				add(x, selectionProducer(sel), true)
+				// The receiver's producer decides which value the field is read from.
+				walk(x.X)
 				return
 			}
 			switch obj := info.Uses[x.Sel].(type) {
