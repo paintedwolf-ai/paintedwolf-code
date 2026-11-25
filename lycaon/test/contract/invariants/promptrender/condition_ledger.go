@@ -39,7 +39,11 @@ var conditionConstraints = []interactions.AtomConstraint{
 		Source: "test/contract/invariants/promptrender/condition_ledger.go:renderRecipient partitions renders by is_coordinator"},
 	{Atom: "is_coordinator", Recipient: interactions.RecipientWorker, Fixed: true, Value: independence.False,
 		Source: "test/contract/invariants/promptrender/condition_ledger.go:renderRecipient partitions renders by is_coordinator"},
+	{Atom: "has_git", Implies: "has_any_git_root", Recipient: interactions.RecipientCoordinator, Source: srcGitFacts},
+	{Atom: "has_git", Implies: "has_any_git_root", Recipient: interactions.RecipientWorker, Source: srcGitFacts},
 }
+
+const srcGitFacts = "internal/session/readerfacts/resolver.go:gitFacts starts hasAnyGit at hasGit, so the any-root fact includes the primary root"
 
 // StockConditionLedger discovers every stock guard and joins it with the
 // atom observations of the host-state matrix.
