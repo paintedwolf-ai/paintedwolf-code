@@ -65,7 +65,9 @@ type sandboxAskResolution struct {
 	Denied        bool
 	HumanDeclined bool
 	DenialCause   isolation.PathDenialCause
-	UserGuidance  string
+	// ResolvedBy names who ended a rejection no person decided.
+	ResolvedBy   string
+	UserGuidance string
 }
 
 // awaitSandboxAsk runs one ask from guard to settled checkpoint.
@@ -160,12 +162,12 @@ func sandboxAskAnswer(final *hitl.CheckpointResponse) sandboxAskResolution {
 	authorized := hitl.CheckpointAuthorizes(final)
 	rejected := final != nil && final.Status == hitl.DecisionStatusRejected
 	humanDeclined := rejected && final.ResolvedBy == authzledger.ResolvedByHuman
-	cause := isolation.PathDenialNone
+	cause, resolvedBy := isolation.PathDenialNone, ""
 	switch {
 	case humanDeclined:
 		cause = isolation.PathDenialUserDeclined
 	case rejected:
-		cause = isolation.PathDenialNonHumanRejected
+		cause, resolvedBy = isolation.PathDenialNonHumanRejected, final.ResolvedBy
 	}
 	guidance := ""
 	if humanDeclined {
@@ -178,6 +180,7 @@ func sandboxAskAnswer(final *hitl.CheckpointResponse) sandboxAskResolution {
 		Denied:        rejected,
 		HumanDeclined: humanDeclined,
 		DenialCause:   cause,
+		ResolvedBy:    resolvedBy,
 		UserGuidance:  guidance,
 	}
 }

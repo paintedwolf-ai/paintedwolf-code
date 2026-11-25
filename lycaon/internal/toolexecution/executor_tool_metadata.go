@@ -81,7 +81,10 @@ func (e *Metadata) enrichToolMeta(ctx context.Context, meta tools.ToolMeta, filt
 	switch meta.Name {
 	case "wait":
 		if source, ok := e.policy.(interface{ WaitConditions(string) []string }); ok {
-			meta.ArgsSchema = toolschema.PruneWaitConditionSchema(meta.ArgsSchema, source.WaitConditions(profileID))
+			meta.ArgsSchema = toolschema.NarrowToolSchema("wait", meta.ArgsSchema, toolschema.ProjectOptions{
+				PruneWaitConditions: true,
+				WaitConditions:      source.WaitConditions(profileID),
+			})
 		}
 	case "command":
 		if len(meta.DescriptionEffects) == 0 {

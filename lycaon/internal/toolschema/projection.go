@@ -2,6 +2,7 @@ package toolschema
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -69,36 +70,50 @@ func PruneWaitConditionSchema(schema map[string]any, allowed []string) map[strin
 	return cloned
 }
 
+// AskUserAcceptsSecret reports whether an ask_user schema can request a secret:
+// it declares the secret field and its response_type enum admits "secret".
+func AskUserAcceptsSecret(schema map[string]any) bool {
+	return SchemaAcceptsField(schema, "secret") && SchemaAcceptsEnumValue(schema, "response_type", "secret")
+}
+
 // PruneAskUserSchema narrows ask_user for Ask-mode turns by removing secret prompts.
 func PruneAskUserSchema(schema map[string]any) map[string]any {
 	cloned := cloneSchemaMap(schema)
 	properties, _ := cloned["properties"].(map[string]any)
 	if response, ok := properties["response_type"].(map[string]any); ok {
-		response["enum"] = []any{"text", "single_choice", "multi_choice"}
-		response["description"] = "Kind of response. Defaults to text."
+		if values, ok := response["enum"].([]any); ok {
+			response["enum"] = slices.DeleteFunc(values, func(v any) bool { return v == "secret" })
+		}
 	}
 	delete(properties, "secret")
 	return cloned
 }
 
-// ProjectToolArgsSchema runs the production schema narrowing pipeline for toolName.
-func ProjectToolArgsSchema(toolName string, rawSchema map[string]any, opts ProjectOptions) map[string]any {
-	cur := rawSchema
+// NarrowToolSchema applies the host-state narrowing for toolName: read-only
+// command, the profile's wait conditions, and Ask-mode ask_user. Tool metadata
+// and reader facts both narrow through it.
+func NarrowToolSchema(toolName string, rawSchema map[string]any, opts ProjectOptions) map[string]any {
 	switch strings.TrimSpace(toolName) {
 	case "command":
 		if opts.CommandReadOnly {
-			cur = PruneCommandReadOnlySchema(cur)
+			return PruneCommandReadOnlySchema(rawSchema)
 		}
 	case "wait":
 		if opts.PruneWaitConditions {
-			cur = PruneWaitConditionSchema(cur, opts.WaitConditions)
+			return PruneWaitConditionSchema(rawSchema, opts.WaitConditions)
 		}
 	case "ask_user":
 		if opts.AskMode {
-			cur = PruneAskUserSchema(cur)
+			return PruneAskUserSchema(rawSchema)
 		}
 	}
-	return ProjectArgsSchema(cur)
+	return rawSchema
+}
+
+// ProjectToolArgsSchema narrows toolName's schema and projects it into the
+// provider-bound request schema.
+func ProjectToolArgsSchema(toolName string, rawSchema map[string]any, opts ProjectOptions) map[string]any {
+	return ProjectArgsSchema(NarrowToolSchema(toolName, rawSchema, opts))
 }
 
 // SchemaAcceptsField reports whether an already-projected request schema

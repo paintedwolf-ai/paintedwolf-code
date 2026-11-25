@@ -127,7 +127,9 @@ func (node *trackedIncludeNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		includeCtx.Update(ctx.Public)
 		includeCtx.Update(ctx.Private)
 	}
-	state.step(1 + len(includeCtx))
+	// MaxCompositionFiles and the context entry limits bound the copy above, so
+	// the include spends one step and its body spends its own.
+	state.step(1)
 
 	for _, pair := range node.withPairs {
 		state.step(1)

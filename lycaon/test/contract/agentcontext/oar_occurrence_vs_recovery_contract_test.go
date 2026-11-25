@@ -242,19 +242,19 @@ func TestSandboxPathRejectionRequiresConfirmedHumanActorForUserDeclinedCopy(t *t
 				"command":            "ls",
 				"snapshot_capture":   map[string]any{},
 				"capability_request": map[string]any{"write_root": outsideWrite},
-			}, isolation.CodeWriteRootDenied, actor.human, actor.comments)
+			}, isolation.CodeWriteRootDenied, actor.human, actor.comments, actor.resolvedBy == authzledger.ResolvedBySystemDeny)
 
 			assertProductionPathCall(t, host, projectDir, "read_path", map[string]any{
 				"command":            "ls",
 				"snapshot_capture":   map[string]any{},
 				"capability_request": map[string]any{"read_path": keyPath},
-			}, isolation.CodeReadPathDenied, actor.human, actor.comments)
+			}, isolation.CodeReadPathDenied, actor.human, actor.comments, actor.resolvedBy == authzledger.ResolvedBySystemDeny)
 
 			assertProductionPathCall(t, host, projectDir, "multi_read_path", map[string]any{
 				"command":            "ls",
 				"snapshot_capture":   map[string]any{},
 				"capability_request": map[string]any{"read_path": []any{keyPath, certPath}},
-			}, isolation.CodeReadPathDenied, actor.human, actor.comments)
+			}, isolation.CodeReadPathDenied, actor.human, actor.comments, actor.resolvedBy == authzledger.ResolvedBySystemDeny)
 		})
 	}
 }
@@ -267,6 +267,7 @@ func assertProductionPathCall(
 	humanDeniedCode string,
 	wantHuman bool,
 	comments string,
+	refusedAutomatically bool,
 ) {
 	t.Helper()
 	tc := tools.ToolContext{
@@ -302,8 +303,8 @@ func assertProductionPathCall(
 	if refusal.Code() != isolation.CodeApprovalUnavailable {
 		t.Fatalf("%s nonhuman rejection code = %q, want %q:\n%s", label, refusal.Code(), isolation.CodeApprovalUnavailable, rendered)
 	}
-	if !strings.Contains(rendered, "rejected without a confirmed user decision") {
-		t.Errorf("%s nonhuman rejection missing neutral cause:\n%s", label, rendered)
+	if reject := toolrejection.AsToolReject(err); reject == nil || (reject.Data["approval_refused_automatically"] == true) != refusedAutomatically {
+		t.Errorf("%s nonhuman rejection facts = %+v, want approval_refused_automatically=%t", label, reject, refusedAutomatically)
 	}
 	for _, forbidden := range []string{"Wait for new user direction", "Follow the user", "must not leak"} {
 		if strings.Contains(rendered, forbidden) {

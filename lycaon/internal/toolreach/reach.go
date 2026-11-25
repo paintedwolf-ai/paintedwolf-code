@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
@@ -118,13 +119,34 @@ func (r Request) AcceptsField(tool, dottedPath string) bool {
 	return ok && toolschema.SchemaAcceptsField(schema, dottedPath)
 }
 
-// AcceptsEnumValue reports whether tool's projected schema admits dottedPath and value.
-func (r Request) AcceptsEnumValue(tool, dottedPath, value string) bool {
+// AcceptsStringValue reports whether tool's projected schema admits dottedPath
+// with value; a string field without enum or const admits any value.
+func (r Request) AcceptsStringValue(tool, dottedPath, value string) bool {
 	if r.Status(tool) == Absent {
 		return false
 	}
 	schema, ok := r.ToolSchema(tool)
 	return ok && toolschema.SchemaAdmitsStringValue(schema, dottedPath, value)
+}
+
+// AcceptsEnumValue reports whether tool's projected schema declares dottedPath
+// with an enum or const that admits value.
+func (r Request) AcceptsEnumValue(tool, dottedPath, value string) bool {
+	if r.Status(tool) == Absent {
+		return false
+	}
+	schema, ok := r.ToolSchema(tool)
+	return ok && toolschema.SchemaAcceptsEnumValue(schema, dottedPath, value)
+}
+
+// AskUserAcceptsSecret reports whether ask_user is reachable and its projected
+// schema can request a secret response.
+func (r Request) AskUserAcceptsSecret() bool {
+	if r.Status("ask_user") == Absent {
+		return false
+	}
+	schema, ok := r.ToolSchema("ask_user")
+	return ok && toolschema.AskUserAcceptsSecret(schema)
 }
 
 // Program reports whether a native program can enter the reader's next call.
@@ -164,6 +186,14 @@ type Call struct {
 	// Program names the native program a command call runs.
 	Program string `json:"program,omitempty"`
 	words   []string
+	probe   []string
+}
+
+// WithProbe sets the invocation reach checks in place of the shown words, for a
+// call whose words carry placeholders the reader replaces.
+func (c Call) WithProbe(words ...string) Call {
+	c.probe = slices.Clone(words)
+	return c
 }
 
 // ProgramCall builds a command call that runs one native program invocation.
@@ -182,13 +212,24 @@ var plainWord = regexp.MustCompile(`^[A-Za-z0-9_./:=@%+,-]+$`)
 func QuoteProgram(words []string) string {
 	quoted := make([]string, len(words))
 	for i, word := range words {
-		if plainWord.MatchString(word) {
-			quoted[i] = word
-			continue
-		}
-		quoted[i] = "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
+		quoted[i] = quoteWord(word)
 	}
 	return strings.Join(quoted, " ")
+}
+
+// quoteWord keeps a session address's @label/ prefix unquoted so it still
+// resolves, and quotes any other @-word so it cannot be read as one.
+func quoteWord(word string) string {
+	if area, rel, ok := projectroot.SessionAddress(word); ok {
+		if rel == "" {
+			return "@" + area
+		}
+		return "@" + area + "/" + quoteWord(rel)
+	}
+	if plainWord.MatchString(word) && !strings.HasPrefix(word, "@") {
+		return word
+	}
+	return "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
 }
 
 // Text renders the call the way copy shows it.
@@ -370,14 +411,14 @@ func callArgsAdmitted(r Request, prefix, tool string, args map[string]any) bool 
 					if !callArgsAdmitted(r, path, tool, em) {
 						return false
 					}
-				} else if es, isStr := elem.(string); isStr && !r.AcceptsEnumValue(tool, path, es) {
+				} else if es, isStr := elem.(string); isStr && !r.AcceptsStringValue(tool, path, es) {
 					return false
 				}
 			}
 			continue
 		}
 		if s, ok := val.(string); ok {
-			if !r.AcceptsEnumValue(tool, path, s) {
+			if !r.AcceptsStringValue(tool, path, s) {
 				return false
 			}
 		} else if !r.AcceptsField(tool, path) {

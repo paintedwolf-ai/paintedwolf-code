@@ -161,10 +161,11 @@ func ParseTemplateTree(source string) (*TemplateTree, error) {
 	}
 
 	locs := templateRegion.FindAllStringIndex(source, -1)
+	lines := newLineCursor(source)
 	cursor := 0
 	for _, loc := range locs {
 		if loc[0] > cursor {
-			line, _ := lineColAt(source, cursor)
+			line, _ := lines.at(cursor)
 			appendNode(&TemplateNode{Kind: NodeText, Line: line, Text: source[cursor:loc[0]]})
 		}
 		cursor = loc[1]
@@ -172,7 +173,7 @@ func ParseTemplateTree(source string) (*TemplateTree, error) {
 		if isOpaqueRegion(region) {
 			continue
 		}
-		line, _ := lineColAt(source, loc[0])
+		line, _ := lines.at(loc[0])
 		if strings.HasPrefix(region, "{{") {
 			raw := trimDelimiters(region, "{{", "}}")
 			if raw == "" {
@@ -200,7 +201,7 @@ func ParseTemplateTree(source string) (*TemplateTree, error) {
 		}
 	}
 	if cursor < len(source) {
-		line, _ := lineColAt(source, cursor)
+		line, _ := lines.at(cursor)
 		appendNode(&TemplateNode{Kind: NodeText, Line: line, Text: source[cursor:]})
 	}
 	if len(stack) > 0 {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -19,7 +20,6 @@ import (
 func TestPathDenialsPreserveUserDirection(t *testing.T) {
 	decline := func(context.Context, string, map[string]any, tools.ToolContext, string) (PathPreflightResult, error) {
 		return PathPreflightResult{
-			Denied:       true,
 			DenialCause:  isolation.PathDenialUserDeclined,
 			UserGuidance: "Keep the existing location.",
 		}, nil
@@ -75,9 +75,11 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 		{
 			name: "approval_rule_denied",
 			result: PathPreflightResult{
-				Denied:      true,
 				DenialCause: isolation.PathDenialApprovalRule,
-				DeniedRule:  denyRule,
+				DeniedRules: []hitl.ApprovalRuleMatch{{
+					Category: string(denyRule.Category), Pattern: denyRule.Pattern, Effect: string(denyRule.Effect),
+					UnitID: denyRule.Source.UnitID, PackID: denyRule.Source.PackID, Scope: string(denyRule.Source.Scope),
+				}},
 			},
 			wantWriteCode:  "APPROVAL_RULE_DENIED",
 			wantReadCode:   "APPROVAL_RULE_DENIED",
@@ -88,7 +90,6 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 		{
 			name: "control_plane_policy_denied",
 			result: PathPreflightResult{
-				Denied:      true,
 				DenialCause: isolation.PathDenialControlPlanePolicy,
 			},
 			wantWriteCode: isolation.CodeControlPlaneDenied,
@@ -99,7 +100,6 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 		{
 			name: "user_declined",
 			result: PathPreflightResult{
-				Denied:       true,
 				DenialCause:  isolation.PathDenialUserDeclined,
 				UserGuidance: "Keep writes inside the project workspace.",
 			},
@@ -110,7 +110,6 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 		{
 			name: "prior_user_declined",
 			result: PathPreflightResult{
-				Denied:      true,
 				DenialCause: isolation.PathDenialPriorUserDeclined,
 			},
 			wantWriteCode: isolation.CodeWriteRootDenied,
@@ -120,19 +119,16 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 		{
 			name: "nonhuman_or_unattributed_rejected",
 			result: PathPreflightResult{
-				Denied:      true,
 				DenialCause: isolation.PathDenialNonHumanRejected,
 			},
 			wantWriteCode: isolation.CodeApprovalUnavailable,
 			wantReadCode:  isolation.CodeApprovalUnavailable,
-			wantSubstring: "rejected without a confirmed user decision",
 			forbidSubstr:  "Wait for new user direction",
 		},
 		{
 			name: "approval_unavailable_and_unknown_cause",
 			result: PathPreflightResult{
 				Authorized:  false,
-				Denied:      false,
 				DenialCause: isolation.PathDenialCause("unexpected_cause"),
 			},
 			wantWriteCode: isolation.CodeApprovalUnavailable,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/platform"
@@ -19,6 +20,7 @@ type ProgramSurface struct {
 	selection NativeOperationSelection
 	allowed   toolcontract.CommandEffects
 	profile   string
+	table     *frozenProgramTable
 }
 
 // Effects returns the command effects admitted on this program surface.
@@ -39,41 +41,26 @@ func (s ProgramSurface) AllowsEffects(effects toolcontract.CommandEffects) bool 
 	return s.allowed.Allows(effects)
 }
 
-// ProgramTable projects this frozen program surface into a toolreach.ProgramTable.
-func (s ProgramSurface) ProgramTable() *toolreach.ProgramTable {
-	catalog, err := toolcontract.ReadOnlyLanguageV1()
-	if err != nil {
-		return nil
+// ProgramTable returns the program and effect-mode admission the turn guard
+// computes for this surface's profile and surface, built once per surface.
+func (s ProgramSurface) ProgramTable(ctx context.Context) (*toolreach.ProgramTable, error) {
+	if s.table == nil {
+		return nil, fmt.Errorf("program surface has no frozen admission")
 	}
-	cmdPermitted := map[string]bool{}
-	for _, def := range s.selection.definitions {
-		facts := def.ReadOnlyFacts()
-		if s.selection.identityDenied[facts.Identity] {
-			continue
-		}
-		denied := s.selection.denied[facts.Identity]
-		for _, cmd := range facts.Commands {
-			if !denied[cmd.Name] {
-				cmdPermitted[cmd.Name] = true
-			}
-		}
-	}
-	reachable := make(map[string]bool, len(catalog.Commands))
-	modeReach := make(map[string]map[string]bool, len(catalog.Commands))
-	for _, spec := range catalog.Commands {
-		permitted := cmdPermitted[spec.Name]
-		modes := make(map[string]bool, len(spec.Effects))
-		anyAllowed := false
-		for _, req := range spec.Effects {
-			eff, err := req.CommandEffects(&s.allowed)
-			ok := permitted && err == nil && s.allowed.Allows(eff)
-			modes[req.Mode] = ok
-			anyAllowed = anyAllowed || ok
-		}
-		modeReach[spec.Name] = modes
-		reachable[spec.Name] = anyAllowed
-	}
-	return toolreach.NewProgramTable(reachable, modeReach)
+	return s.table.get(ctx)
+}
+
+// frozenProgramTable builds a surface's admission table at most once.
+type frozenProgramTable struct {
+	once  sync.Once
+	build func(context.Context) (*toolreach.ProgramTable, error)
+	table *toolreach.ProgramTable
+	err   error
+}
+
+func (f *frozenProgramTable) get(ctx context.Context) (*toolreach.ProgramTable, error) {
+	f.once.Do(func() { f.table, f.err = f.build(ctx) })
+	return f.table, f.err
 }
 
 // ValidateOperation admits already compiled immutable effect metadata. It is
@@ -131,7 +118,10 @@ func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.Too
 	if err != nil {
 		return ProgramSurface{}, err
 	}
-	return ProgramSurface{selection: selection, allowed: allowed, profile: filter.ProfileID}, nil
+	table := &frozenProgramTable{build: func(ctx context.Context) (*toolreach.ProgramTable, error) {
+		return e.ProgramTable(ctx, filter)
+	}}
+	return ProgramSurface{selection: selection, allowed: allowed, profile: filter.ProfileID, table: table}, nil
 }
 
 // ProgramReach freezes which native programs a profile and surface admit.

@@ -6,8 +6,9 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
-	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -66,24 +67,13 @@ func (e *Boundary) reviewWriteRoot(ctx context.Context, tool string, args map[st
 	return nil
 }
 
-func approvalRuleDeniedReject(tool, profileID, path, cmd string, rule *settings.ApprovalRule) *toolrejection.ToolReject {
-	data := map[string]any{"tool": tool, "profile": profileID}
-	if path != "" {
-		data["path"] = path
-	}
-	if cmd != "" {
+func approvalRuleDeniedReject(tool, profileID, path, cmd string, rules []hitl.ApprovalRuleMatch) *toolrejection.ToolReject {
+	data := denyRejectData(platform.PolicyContext{ToolName: tool, ProfileID: profileID}, &hitl.ApprovalResult{DenySubject: path, MatchedRules: rules})
+	if _, ruleCommand := data["command"]; !ruleCommand && cmd != "" {
 		data["command"] = cmd
 	}
-	if rule != nil {
-		data["rule_unit_id"] = rule.Source.UnitID
-		data["rule_pack_id"] = rule.Source.PackID
-		data["rule_scope"] = string(rule.Source.Scope)
-		data["rule_category"] = string(rule.Category)
-		data["rule_pattern"] = rule.Pattern
-		data["rule_match_count"] = "1"
-	}
 	return &toolrejection.ToolReject{
-		Code:         "APPROVAL_RULE_DENIED",
+		Code:         hitl.CodeApprovalRuleDenied,
 		Data:         data,
 		FailureClass: api.FailureClassPolicyRejection,
 	}
@@ -96,34 +86,18 @@ func pathPreflightReject(
 	capability, path, deniedCode string,
 	res PathPreflightResult,
 ) *toolrejection.ToolReject {
-	if res.DenialCause == isolation.PathDenialApprovalRule || res.DeniedRule != nil {
-		return approvalRuleDeniedReject(tool, tc.Identity.Agent, path, commandsurface.PrimaryCommandLine(args, nil), res.DeniedRule)
-	}
 	switch res.DenialCause {
+	case isolation.PathDenialApprovalRule:
+		return approvalRuleDeniedReject(tool, tc.Identity.Agent, path, commandsurface.PrimaryCommandLine(args, nil), res.DeniedRules)
 	case isolation.PathDenialControlPlanePolicy:
 		return &toolrejection.ToolReject{
 			Code: isolation.CodeControlPlaneDenied,
 			Data: map[string]any{"path": path, "capability": capability},
 		}
-	case isolation.PathDenialUserDeclined, isolation.PathDenialPriorUserDeclined:
-		data := map[string]any{"path": path}
-		if res.UserGuidance != "" {
-			data[toolrejection.UserGuidanceKey] = res.UserGuidance
-		}
-		return &toolrejection.ToolReject{Code: deniedCode, Data: data}
-	case isolation.PathDenialNonHumanRejected:
-		return &toolrejection.ToolReject{
-			Code: isolation.CodeApprovalUnavailable,
-			Data: map[string]any{
-				"path":   path,
-				"reason": "The approval request was rejected without a confirmed user decision.",
-			},
-		}
-	case isolation.PathDenialNone:
-		return &toolrejection.ToolReject{
-			Code: isolation.CodeApprovalUnavailable,
-			Data: map[string]any{"path": path, "reason": "approval did not install authority"},
-		}
+	case isolation.PathDenialUserDeclined, isolation.PathDenialPriorUserDeclined, isolation.PathDenialNonHumanRejected:
+		reject := approvalRefusalReject(deniedCode, res.DenialCause, res.ApprovalResolvedBy, res.UserGuidance)
+		reject.Data["path"] = path
+		return reject
 	default:
 		return &toolrejection.ToolReject{
 			Code: isolation.CodeApprovalUnavailable,

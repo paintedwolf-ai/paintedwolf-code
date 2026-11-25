@@ -26,7 +26,7 @@ func (o Outcome) Retryable() bool {
 	return o.Disposition == DispositionRetry
 }
 
-// PathDenialCause classifies why a path preflight refused authority.
+// PathDenialCause classifies why a preflight refused path or local-network authority.
 type PathDenialCause string
 
 const (

@@ -18,7 +18,6 @@ var (
 	nativeMutationTools      []string
 	nativeWriteTools         []string
 	nativeSecretTools        []string
-	nativeWebResearchTools   []string
 	nativeProgressGatedTools []string
 	nativeOperationSet       map[string]bool
 	commandGatedByOperations bool
@@ -45,11 +44,8 @@ func loadNativeToolFamilies() {
 			if !ok {
 				continue
 			}
-			switch contract.Owner {
-			case "secrets":
+			if contract.Owner == "secrets" {
 				nativeSecretTools = append(nativeSecretTools, name)
-			case "web_research":
-				nativeWebResearchTools = append(nativeWebResearchTools, name)
 			}
 		}
 		for _, name := range progress.GatedToolOrder() {
@@ -406,27 +402,6 @@ func scanDrilldownToolsForCheck(enabled map[string]bool) []string {
 		}
 	}
 	return out
-}
-
-// AgentFetchesURLs resolves an agent's URL retrieval capability.
-func AgentFetchesURLs(agentType string) (fetches bool, ok bool) {
-	loadNativeToolFamilies()
-	_, profiles, profileID, _ := loadAgentSurfaceForCheck(agentType)
-	if profileID == "" {
-		return false, false
-	}
-	for _, p := range profiles {
-		if p.ID != profileID {
-			continue
-		}
-		for _, tool := range nativeWebResearchTools {
-			if p.ToolAllowed(tool) {
-				return true, true
-			}
-		}
-		return false, true
-	}
-	return false, false
 }
 
 // profileHasRetrievalTool detects tools that can import content.

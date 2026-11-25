@@ -297,7 +297,7 @@ func TestCredentialAdvisoriesDistinguishWeakAndOtherLiterals(t *testing.T) {
 }
 
 func TestCredentialRemediesUseOfferedToolSnapshot(t *testing.T) {
-	askSchemas := map[string]map[string]any{"ask_user": {"properties": map[string]any{"response_type": map[string]any{"type": "string", "enum": []string{"text", "choice", "secret"}}}}}
+	askSchemas := map[string]map[string]any{"ask_user": {"properties": map[string]any{"response_type": map[string]any{"type": "string", "enum": []string{"text", "choice", "secret"}}, "secret": map[string]any{"type": "object"}}}}
 	for _, offered := range []bool{false, true} {
 		mgr, _ := newWeakSecretMintGuidanceManager(t)
 		var names []string
@@ -328,7 +328,7 @@ func TestCredentialAdvisoriesKeepDistinctValueSubjects(t *testing.T) {
 }
 
 func TestCredentialRemediesDiscoverDeferredTools(t *testing.T) {
-	askSchemas := map[string]map[string]any{"ask_user": {"properties": map[string]any{"response_type": map[string]any{"type": "string", "enum": []string{"text", "choice", "secret"}}}}}
+	askSchemas := map[string]map[string]any{"ask_user": {"properties": map[string]any{"response_type": map[string]any{"type": "string", "enum": []string{"text", "choice", "secret"}}, "secret": map[string]any{"type": "object"}}}}
 	for _, value := range []string{"password", "A123456789012345"} {
 		for _, loaded := range []bool{false, true} {
 			mgr, _ := newWeakSecretMintGuidanceManager(t)

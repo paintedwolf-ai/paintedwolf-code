@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -41,6 +42,9 @@ type NextStep struct {
 	// Program is a native program as words, each a copy template. The host quotes
 	// it and checks the program as well as the command tool.
 	Program []string `yaml:"program,omitempty"`
+	// Probe is the invocation the host checks for reach when Program shows the
+	// reader placeholder words such as a line range. It names the same program.
+	Probe []string `yaml:"probe,omitempty"`
 	// Pick maps dotted argument paths to list facts; the reader needs one entry.
 	Pick map[string]string `yaml:"pick,omitempty"`
 	// Complete says Args is the whole call rather than a shape to finish.
@@ -128,6 +132,9 @@ func (l *Loader) validateNextStep(step NextStep, known map[string]bool, selector
 		if !nativeProgramKnown(step.Program[0]) {
 			return fmt.Errorf("%s: %q is not a native program", where, step.Program[0])
 		}
+	}
+	if len(step.Probe) > 0 && (len(step.Program) == 0 || step.Probe[0] != step.Program[0]) {
+		return fmt.Errorf("%s: probe must check the step's own program", where)
 	}
 	if err := rejectDecisionNextSteps(where, "when", step.When); err != nil {
 		return err
@@ -258,6 +265,7 @@ func nextStepRefs(step NextStep) ([]string, error) {
 		}
 	}
 	templates := append([]string{step.Say, step.Otherwise}, step.Program...)
+	templates = append(templates, step.Probe...)
 	for _, value := range step.Args {
 		templates = collectArgTemplates(templates, value)
 	}
@@ -304,6 +312,8 @@ const (
 	StepOutcomeOmitted          StepResolutionOutcome = "omitted"
 	StepOutcomeDisabled         StepResolutionOutcome = "disabled"
 	StepOutcomeUnselected       StepResolutionOutcome = "unselected"
+	// StepOutcomeFactsUnavailable is a step left out because its facts could not be assembled.
+	StepOutcomeFactsUnavailable StepResolutionOutcome = "facts_unavailable"
 )
 
 // StepResolution records pre-concatenation provenance for one step or alternative.
@@ -320,26 +330,36 @@ type StepResolution struct {
 	RenderedText  string
 }
 
-// ResolvedSteps is one occurrence's reachable steps.
+// ResolvedSteps is one occurrence's reachable steps. Err joins the fact
+// failures of steps that were omitted because their facts could not be assembled.
 type ResolvedSteps struct {
 	Text        string
 	Calls       []toolreach.Call
 	Resolutions []StepResolution
+	Err         error
 }
 
-func assembleNextStepFacts(steps []NextStep, gc *GuardContext) {
-	for _, step := range steps {
-		if refs, err := nextStepRefs(step); err == nil && len(refs) > 0 {
-			_ = AssembleFacts(gc, refs)
+// assembleNextStepFacts gathers each step's facts and returns, keyed by branch
+// prefix, the steps whose facts could not be assembled. A step with a missing
+// fact would read it as absent, so it is omitted rather than resolved.
+func assembleNextStepFacts(prefix string, steps []NextStep, gc *GuardContext, failed map[string]error) {
+	for i, step := range steps {
+		branch := fmt.Sprintf("%s[%d]", prefix, i)
+		refs, err := nextStepRefs(step)
+		if err == nil {
+			err = AssembleFacts(gc, refs)
 		}
-		if len(step.Or) > 0 {
-			assembleNextStepFacts(step.Or, gc)
+		if err != nil {
+			failed[branch] = fmt.Errorf("next step %s: %w", branch, err)
+			continue
 		}
+		assembleNextStepFacts(branch+".or", step.Or, gc, failed)
 	}
 }
 
 // ResolveNextSteps checks a rule's steps against the occurrence's frozen request.
-// A step the request cannot reach is left out, or replaced by its Otherwise.
+// A step the request cannot reach is left out, or replaced by its Otherwise. A
+// step whose facts could not be assembled is left out and reported in Err.
 func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
 	var out ResolvedSteps
 	if r == nil || r.NextSteps == nil || gc == nil {
@@ -349,17 +369,20 @@ func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
 	if hasActiveNextStepObserver(r, gc) {
 		resolutions = &out.Resolutions
 	}
-	assembleNextStepFacts(r.NextSteps.Steps, gc)
+	failed := map[string]error{}
+	assembleNextStepFacts("steps", r.NextSteps.Steps, gc, failed)
 	facts := activation(gc)
+	resolver := stepResolver{rule: r, gc: gc, facts: facts, resolutions: resolutions, failed: failed}
 	var sentences []string
 	for i, step := range r.NextSteps.Steps {
-		text, calls := resolveStep(r, fmt.Sprintf("steps[%d]", i), i, step, gc, facts, resolutions)
+		text, calls := resolver.resolve(fmt.Sprintf("steps[%d]", i), i, step)
 		if strings.TrimSpace(text) != "" {
 			sentences = append(sentences, text)
 		}
 		out.Calls = append(out.Calls, calls...)
 	}
 	out.Text = strings.Join(sentences, " ")
+	out.Err = resolver.joinedFailures()
 	if resolutions != nil {
 		recordResolvedNextSteps(r, gc, out)
 	}
@@ -382,8 +405,48 @@ func appendUnselectedAlternatives(r *Rule, parentPrefix string, startIdx int, al
 	}
 }
 
-func resolveStep(r *Rule, branchPrefix string, stepIndex int, step NextStep, gc *GuardContext, facts map[string]any, resolutions *[]StepResolution) (string, []toolreach.Call) {
+// stepResolver resolves one rule's steps against assembled facts.
+type stepResolver struct {
+	rule        *Rule
+	gc          *GuardContext
+	facts       map[string]any
+	resolutions *[]StepResolution
+	failed      map[string]error
+}
+
+func (sr stepResolver) joinedFailures() error {
+	if len(sr.failed) == 0 {
+		return nil
+	}
+	branches := make([]string, 0, len(sr.failed))
+	for branch := range sr.failed {
+		branches = append(branches, branch)
+	}
+	sort.Strings(branches)
+	errs := make([]error, len(branches))
+	for i, branch := range branches {
+		errs[i] = sr.failed[branch]
+	}
+	return errors.Join(errs...)
+}
+
+func (sr stepResolver) resolve(branchPrefix string, stepIndex int, step NextStep) (string, []toolreach.Call) {
+	r, gc, facts, resolutions := sr.rule, sr.gc, sr.facts, sr.resolutions
 	ruleID := r.Qualified()
+	if _, unavailable := sr.failed[branchPrefix]; unavailable {
+		if resolutions != nil {
+			*resolutions = append(*resolutions, StepResolution{
+				QualifiedRule: ruleID,
+				Anchor:        r.Anchor,
+				RuleID:        r.ID,
+				BranchPrefix:  branchPrefix,
+				HasGuard:      strings.TrimSpace(step.When) != "",
+				Outcome:       StepOutcomeFactsUnavailable,
+			})
+			appendUnselectedAlternatives(r, branchPrefix, 0, step.Or, resolutions)
+		}
+		return "", nil
+	}
 	hasGuard := strings.TrimSpace(step.When) != ""
 	applies, err := EvaluateCondition(step.When, gc)
 	if hasGuard && err == nil {
@@ -453,7 +516,7 @@ func resolveStep(r *Rule, branchPrefix string, stepIndex int, step NextStep, gc 
 		})
 	}
 	for j, alternative := range step.Or {
-		if text, calls := resolveStep(r, fmt.Sprintf("%s.or[%d]", branchPrefix, j), stepIndex, alternative, gc, facts, resolutions); strings.TrimSpace(text) != "" {
+		if text, calls := sr.resolve(fmt.Sprintf("%s.or[%d]", branchPrefix, j), stepIndex, alternative); strings.TrimSpace(text) != "" {
 			if resolutions != nil {
 				appendUnselectedAlternatives(r, branchPrefix, j+1, step.Or[j+1:], resolutions)
 			}
@@ -479,14 +542,18 @@ func sequenceText(sequence []toolreach.Call) string {
 // program missing a value, which the reader could not submit as written.
 func stepCall(step NextStep, gc *GuardContext, facts map[string]any) (toolreach.Call, bool) {
 	if len(step.Program) > 0 {
-		words := make([]string, len(step.Program))
-		for i, source := range step.Program {
-			words[i] = oarcore.RenderCopy(source, facts)
-			if words[i] == "" {
-				return toolreach.Call{}, false
-			}
+		words, ok := renderProgramWords(step.Program, facts)
+		if !ok {
+			return toolreach.Call{}, false
 		}
 		call := toolreach.ProgramCall(words...)
+		if len(step.Probe) > 0 {
+			probe, ok := renderProgramWords(step.Probe, facts)
+			if !ok {
+				return toolreach.Call{}, false
+			}
+			call = call.WithProbe(probe...)
+		}
 		call.Partial = !step.Complete
 		return call, true
 	}
@@ -517,6 +584,18 @@ func stepCall(step NextStep, gc *GuardContext, facts map[string]any) (toolreach.
 		call.Partial = true
 	}
 	return call, true
+}
+
+// renderProgramWords renders each word; a word that renders empty leaves no program.
+func renderProgramWords(sources []string, facts map[string]any) ([]string, bool) {
+	words := make([]string, len(sources))
+	for i, source := range sources {
+		words[i] = oarcore.RenderCopy(source, facts)
+		if words[i] == "" {
+			return nil, false
+		}
+	}
+	return words, true
 }
 
 // resolveStepArg keeps a whole-value binding's type and interpolates nested maps and slices.

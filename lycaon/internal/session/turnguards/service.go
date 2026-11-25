@@ -141,7 +141,8 @@ func (m *Service) ProgramReach(ctx context.Context, profileID, surfaceID string)
 	return programs
 }
 
-// ProgramTable freezes a model turn's native programs and effect modes.
+// ProgramTable freezes a model turn's native programs and effect modes. A
+// failure reaches none: no answer is no evidence that a program can run.
 func (m *Service) ProgramTable(ctx context.Context, profileID, surfaceID string) *toolreach.ProgramTable {
 	source, ok := m.toolLister.(interface {
 		ProgramTable(context.Context, platform.ToolFilter) (*toolreach.ProgramTable, error)

@@ -158,12 +158,12 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	if b.Rule != nil {
 		rule, matched := b.Rule(ctx, in.ProjectID, projectDir, proposed)
 		if matched && rule.Effect == settings.ApprovalEffectDeny {
-			b.recordRuleDeny(ctx, invokingSessionID, in, proposed, rule)
-			deniedRule := rule
+			matches := []hitl.ApprovalRuleMatch{approvalRuleMatch(rule)}
+			b.recordRuleDeny(ctx, invokingSessionID, in.ProjectDir, "write_root", map[string]any{"proposed_write_root": proposed}, matches)
 			return command.SandboxWriteRootResult{
 				Denied:            true,
 				DenialCause:       isolation.PathDenialApprovalRule,
-				DeniedRule:        &deniedRule,
+				DeniedRules:       matches,
 				ProposedWriteRoot: proposed,
 			}, nil
 		}
@@ -244,12 +244,13 @@ func (b *WriteRootCheckpointBroker) raiseWriteRootCard(
 		}
 	}
 	return command.SandboxWriteRootResult{
-		Raised:            resolved.Raised,
-		Authorized:        resolved.Authorized,
-		Denied:            resolved.Denied,
-		DenialCause:       cause,
-		ProposedWriteRoot: proposed,
-		UserGuidance:      resolved.UserGuidance,
+		Raised:             resolved.Raised,
+		Authorized:         resolved.Authorized,
+		Denied:             resolved.Denied,
+		DenialCause:        cause,
+		ApprovalResolvedBy: resolved.ResolvedBy,
+		ProposedWriteRoot:  proposed,
+		UserGuidance:       resolved.UserGuidance,
 	}, nil
 }
 
@@ -404,25 +405,27 @@ func approvalRuleMatch(rule settings.ApprovalRule) hitl.ApprovalRuleMatch {
 	}
 }
 
+// recordRuleDeny records a declared path a deny rule refused before any card.
 func (b *WriteRootCheckpointBroker) recordRuleDeny(
 	ctx context.Context,
-	sessionID string,
-	in command.SandboxWriteRootAsk,
-	proposed string,
-	rule settings.ApprovalRule,
+	sessionID, projectDir, tool string,
+	args map[string]any,
+	matches []hitl.ApprovalRuleMatch,
 ) {
 	if b == nil || b.Authz == nil {
 		return
 	}
-	match := approvalRuleMatch(rule)
-	b.Authz.AppendToolDenied(ctx, authzledger.ToolDeniedRecord{
-		SessionID: sessionID, Tool: "write_root", ProjectDir: in.ProjectDir,
-		Args:        map[string]any{"proposed_write_root": proposed},
-		BlockReason: "APPROVAL_RULE_DENIED", RejectCode: "APPROVAL_RULE_DENIED",
-		ApprovalRules: []authzledger.ApprovalRuleCitation{{
+	citations := make([]authzledger.ApprovalRuleCitation, 0, len(matches))
+	for _, match := range matches {
+		citations = append(citations, authzledger.ApprovalRuleCitation{
 			Category: match.Category, Pattern: match.Pattern, Effect: match.Effect,
 			UnitID: match.UnitID, PackID: match.PackID, Scope: match.Scope,
-		}},
+		})
+	}
+	b.Authz.AppendToolDenied(ctx, authzledger.ToolDeniedRecord{
+		SessionID: sessionID, Tool: tool, ProjectDir: projectDir, Args: args,
+		BlockReason: hitl.CodeApprovalRuleDenied, RejectCode: hitl.CodeApprovalRuleDenied,
+		ApprovalRules: citations,
 	})
 }
 

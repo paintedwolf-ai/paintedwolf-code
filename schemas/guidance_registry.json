@@ -1081,7 +1081,7 @@
       "summary": "The bundled Git engine is unavailable."
     },
     "GIT_INTERNALS_WRITE_DENIED": {
-      "branch_instruction": "{% if paintedwolf.command_git_config_reachable %}Inspect settings with `git config --list` or `git config --get` inside command and ask{% else %}Ask{% endif %} the user to apply `.git` changes in their terminal; do not retry the write",
+      "branch_instruction": "{% if paintedwolf.command_git_config_reachable %}Inspect settings with `git config --list` or `git config --get \u003ckey\u003e` inside command and ask{% else %}Ask{% endif %} the user to apply `.git` changes in their terminal; do not retry the write",
       "category": "recoverable",
       "emit": "guard:git_internals_write",
       "summary": "Cannot write {{ paintedwolf.path }} — repository git internals ({{ paintedwolf.class }}) are not writable via native tools."
@@ -2325,10 +2325,10 @@
       "summary": "{{ paintedwolf.path }} names folder {{ paintedwolf.root_label }}, which was {{ paintedwolf.root_status }}."
     },
     "SANDBOX_APPROVAL_UNAVAILABLE": {
-      "branch_instruction": "Branch on Code; do not report the requested effect as forbidden",
+      "branch_instruction": "{% if paintedwolf.approval_refused_automatically %}Branch on Code; report the policy refusal, not a decision by the person{% else %}Branch on Code; do not report the requested effect as forbidden{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox_approval",
-      "summary": "The requested capability could not reach its approval boundary."
+      "summary": "The requested capability was not approved, and no person declined it."
     },
     "SANDBOX_BOUNDARY_REFUSED": {
       "category": "recoverable",

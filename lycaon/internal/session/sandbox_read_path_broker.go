@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/confine"
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
-	"github.com/lycaon/lycaon/internal/settings"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -38,31 +38,34 @@ func (b *WriteRootCheckpointBroker) AuthorizeRead(ctx context.Context, in comman
 			ProposedReadPath: proposed,
 		}, nil
 	}
-	if confine.PathAtOrUnder(proposed, in.SessionScratchRoot) || !b.readPathNeedsApproval(proposed, in.ReadDenyPaths) {
-		// Nothing denies this read; the declaration needs no grant.
+	if confine.PathAtOrUnder(proposed, in.SessionScratchRoot) {
 		return command.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
 	}
 	invokingSessionID, rootSessionID := askSessionIDs(ctx, b.Store, in.SessionID, in.ParentSessionID)
 	projectDir := strings.TrimSpace(in.ProjectDir)
+	// Deny rules apply before any shortcut; an unevaluated rule set grants nothing.
 	if b.Authority != nil {
-		evalRes, evalErr := b.Authority.Evaluate(ctx, hitl.ProposedAction{
+		evalRes, err := b.Authority.Evaluate(ctx, hitl.ProposedAction{
 			Invocation: hitl.ActionInvocation{Files: []string{proposed}},
 			Scope:      hitl.ActionScope{ProjectID: in.ProjectID, ProjectDir: projectDir, SessionID: invokingSessionID, RootSessionID: rootSessionID},
 		})
-		if evalErr == nil && evalRes != nil && evalRes.Denied && len(evalRes.MatchedRules) > 0 {
-			m := evalRes.MatchedRules[0]
+		if err != nil {
+			return out, err
+		}
+		if evalRes != nil && evalRes.Denied && len(evalRes.MatchedRules) > 0 {
+			matches := append([]hitl.ApprovalRuleMatch(nil), evalRes.MatchedRules...)
+			b.recordRuleDeny(ctx, invokingSessionID, projectDir, "read_path", map[string]any{"proposed_read_path": proposed}, matches)
 			return command.SandboxReadPathResult{
-				Denied:      true,
-				DenialCause: isolation.PathDenialApprovalRule,
-				DeniedRule: &settings.ApprovalRule{
-					Category: settings.ApprovalCategory(m.Category),
-					Pattern:  m.Pattern,
-					Effect:   settings.ApprovalEffect(m.Effect),
-					Source:   settings.ApprovalRuleSource{Scope: settings.ApprovalRuleScope(m.Scope), PackID: m.PackID, UnitID: m.UnitID},
-				},
+				Denied:           true,
+				DenialCause:      isolation.PathDenialApprovalRule,
+				DeniedRules:      matches,
 				ProposedReadPath: proposed,
 			}, nil
 		}
+	}
+	if !b.readPathNeedsApproval(proposed, in.ReadDenyPaths) {
+		// No protection covers this read; the declaration needs no grant.
+		return command.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
 	}
 	if sessionOverlayHasExact(b.ReadRuntime, rootSessionID, proposed) {
 		return command.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
@@ -152,7 +155,8 @@ func (b *WriteRootCheckpointBroker) raiseReadPathCard(
 	}
 	return command.SandboxReadPathResult{
 		Raised: resolved.Raised, Authorized: resolved.Authorized, Denied: resolved.Denied,
-		DenialCause: cause, ProposedReadPath: proposed, UserGuidance: resolved.UserGuidance,
+		DenialCause: cause, ApprovalResolvedBy: resolved.ResolvedBy,
+		ProposedReadPath: proposed, UserGuidance: resolved.UserGuidance,
 	}, nil
 }
 

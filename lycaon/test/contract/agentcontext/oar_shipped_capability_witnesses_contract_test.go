@@ -282,6 +282,7 @@ func TestShippedOARChangedAuthorityAndRecoveryWitnesses(t *testing.T) {
 			"ask_user": {
 				"properties": map[string]any{
 					"response_type": map[string]any{"type": "string", "enum": []string{"text", "choice", "secret"}},
+					"secret":        map[string]any{"type": "object"},
 				},
 			},
 		}

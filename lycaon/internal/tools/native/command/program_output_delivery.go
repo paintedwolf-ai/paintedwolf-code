@@ -266,7 +266,8 @@ func programRunOutputReach(ctx context.Context, run *programRun) toolreach.Reque
 	}
 	table := run.tc.Turn.TurnPrograms
 	if table == nil {
-		table = run.surface.ProgramTable()
+		// A failure reaches none: no answer is no evidence that a program can run.
+		table, _ = run.surface.ProgramTable(ctx)
 	}
 	return toolreach.Freeze(run.tc.Turn.TurnOfferedToolNames, run.tc.Turn.TurnToolPlan).
 		WithProgramTable(table).

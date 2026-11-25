@@ -113,16 +113,8 @@ func (r Request) ProgramInvocation(words ...string) bool {
 }
 
 func probeWords(call Call) []string {
-	if !call.Partial {
-		return call.words
+	if len(call.probe) > 0 {
+		return call.probe
 	}
-	out := make([]string, len(call.words))
-	for i, w := range call.words {
-		if w == "A,Bp" {
-			out[i] = "1,2p"
-		} else {
-			out[i] = w
-		}
-	}
-	return out
+	return call.words
 }

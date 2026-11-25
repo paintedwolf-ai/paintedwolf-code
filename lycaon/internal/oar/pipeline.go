@@ -183,13 +183,18 @@ func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder,
 			}
 			continue
 		}
-		res.Trace.Add(TraceEntry{Rule: r.Qualified(), Stage: stage, Outcome: outcome, Effect: r.Effect})
 		if observedOnly(outcome) {
+			res.Trace.Add(TraceEntry{Rule: r.Qualified(), Stage: stage, Outcome: outcome, Effect: r.Effect})
 			restoreRuleDetector()
 			continue
 		}
 		d := decisionFromRule(r, gc, nil)
 		restoreRuleDetector()
+		fired := TraceEntry{Rule: r.Qualified(), Stage: stage, Outcome: outcome, Effect: r.Effect}
+		if d.NextStepsErr != nil {
+			fired.Error = d.NextStepsErr.Error()
+		}
+		res.Trace.Add(fired)
 		event := OnFireEvent{
 			SessionID: gc.Session.SessionID,
 			Rule:      r.Qualified(),

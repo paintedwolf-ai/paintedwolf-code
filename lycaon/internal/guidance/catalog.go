@@ -3,12 +3,9 @@ package guidance
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolreach"
 )
@@ -36,30 +33,6 @@ const (
 	SurveyGrepScopeDenseRef        = "survey/grep-scope-dense"
 )
 
-var (
-	fallbackGuidanceOnce     sync.Once
-	fallbackGuidanceRenderer *prompts.GuidanceRenderer
-	plainCommandOperandRe    = regexp.MustCompile(`^[A-Za-z0-9_./:-]+$`)
-)
-
-// QuoteCommandPath formats path as one command-language-v1 operand while
-// keeping leading @label/ session addresses unquoted so they resolve.
-func QuoteCommandPath(path string) string {
-	if area, rel, ok := projectroot.SessionAddress(path); ok {
-		if rel == "" {
-			return "@" + area
-		}
-		if plainCommandOperandRe.MatchString(rel) {
-			return "@" + area + "/" + rel
-		}
-		return "@" + area + "/'" + strings.ReplaceAll(rel, "'", `'\''`) + "'"
-	}
-	if path != "" && !strings.HasPrefix(path, "-") && !strings.HasPrefix(path, "@") && plainCommandOperandRe.MatchString(path) {
-		return path
-	}
-	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
-}
-
 // RenderCommandOutputOmitted renders the bounded command output notice against the turn's frozen reach.
 func RenderCommandOutputOmitted(ctx context.Context, reach toolreach.Request, omittedLines, omittedSize, outputPath string, nextLine, endLine, totalLines int, totalBytes int64, complete bool) (string, error) {
 	data := map[string]any{
@@ -69,28 +42,18 @@ func RenderCommandOutputOmitted(ctx context.Context, reach toolreach.Request, om
 		"total_bytes":        totalBytes,
 		"omitted_size":       omittedSize,
 		"output_path":        outputPath,
-		"quoted_output_path": QuoteCommandPath(outputPath),
+		"quoted_output_path": toolreach.QuoteProgram([]string{outputPath}),
 		"next_line":          nextLine,
 		"end_line":           endLine,
 	}
 	block, err := RenderGuidanceWithReach(ctx, reach, UtilityCommandOutputOmittedRef, data)
-	if err == nil && block != "" {
-		return block, nil
+	if err != nil {
+		return "", err
 	}
-	if !reach.Known() {
-		return "", fmt.Errorf("command-output-omitted requires a known toolreach.Request")
+	if block == "" {
+		return "", fmt.Errorf("%s rendered no notice", UtilityCommandOutputOmittedRef)
 	}
-	fallbackGuidanceOnce.Do(func() {
-		fallbackGuidanceRenderer = prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	})
-	raw, renderErr := fallbackGuidanceRenderer.RenderWithReach(ctx, reach, UtilityCommandOutputOmittedRef, data)
-	if renderErr != nil {
-		if err != nil {
-			return "", err
-		}
-		return "", renderErr
-	}
-	return strings.TrimSpace(raw), nil
+	return block, nil
 }
 
 // RenderTodayLine renders the date-awareness preamble for lite-model calls.

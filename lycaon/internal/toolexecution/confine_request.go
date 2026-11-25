@@ -6,17 +6,17 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
-	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // PathPreflightResult is the structured outcome of a write-root or read-path preflight.
 type PathPreflightResult struct {
-	Authorized   bool
-	Denied       bool
-	DenialCause  isolation.PathDenialCause
-	DeniedRule   *settings.ApprovalRule
-	UserGuidance string
+	Authorized  bool
+	DenialCause isolation.PathDenialCause
+	// ApprovalResolvedBy names who ended a rejected approval no person decided.
+	ApprovalResolvedBy string
+	DeniedRules        []hitl.ApprovalRuleMatch
+	UserGuidance       string
 }
 
 // SessionWriteRootOverlay returns the session tree’s approved write paths.

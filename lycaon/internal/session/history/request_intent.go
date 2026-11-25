@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/toolreach"
@@ -125,7 +126,7 @@ func resolveExistingOmissionBounds(view *store.CompactionView, source, rows []ap
 }
 
 func preserveAuthorityNoticePrefix(existing, replacement api.Message) api.Message {
-	if len(existing.ContentParts) == 0 || existing.ContentParts[0].Source != "content_authority_notice" {
+	if len(existing.ContentParts) == 0 || existing.ContentParts[0].Source != transcript.ContentAuthorityNoticeSource {
 		return replacement
 	}
 	authPart := existing.ContentParts[0]

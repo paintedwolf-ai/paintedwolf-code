@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestDiscoveryGuidanceFollowsAvailableContinuation(t *testing.T) {
@@ -185,28 +186,52 @@ func TestRegisterRecoveryFactsTaskAndSurfaceSnapshotHandles(t *testing.T) {
 		testutil.FailErr(t, "AssembleFacts", oar.AssembleFacts(gc, refs))
 		return gc.ObservationData
 	}
-
-	none := eval(toolreach.Offered([]string{"recall"}), nil)
-	if none["task_callable"] != false || none["surface_snapshot_handles"] != "" {
-		t.Fatalf("none = %+v", none)
+	for _, tc := range []struct {
+		name      string
+		req       toolreach.Request
+		turnTools []string
+		task      bool
+		handles   []string
+	}{
+		{"none", toolreach.Offered([]string{"recall"}), nil, false, []string{}},
+		{"page and task", toolreach.Offered([]string{"capture_page", "task"}), nil, true, []string{"page#"}},
+		{"turn tools are not reach", toolreach.Offered([]string{"capture_page", "terminal_open"}), []string{"task"}, false, []string{"page#", "terminal_session#"}},
+		{"all kinds", toolreach.Offered([]string{"capture_page", "command", "terminal_open"}).
+			WithPrograms(func(name string) bool { return name == "external" }), nil, false, []string{"page#", "tui#", "terminal_session#"}},
+	} {
+		got := eval(tc.req, tc.turnTools)
+		if got["task_callable"] != tc.task || !slices.Equal(got["surface_snapshot_handles"].([]string), tc.handles) {
+			t.Errorf("%s: facts = %+v, want task_callable=%t handles=%v", tc.name, got, tc.task, tc.handles)
+		}
 	}
+}
 
-	one := eval(toolreach.Offered([]string{"capture_page", "task"}), nil)
-	if one["task_callable"] != true || one["surface_snapshot_handles"] != "page#" {
-		t.Fatalf("one = %+v", one)
-	}
-
-	two := eval(toolreach.Offered([]string{"capture_page", "terminal_open"}), []string{"task"})
-	if two["task_callable"] != true || two["surface_snapshot_handles"] != "page# or terminal_session#" {
-		t.Fatalf("two = %+v", two)
-	}
-
-	three := eval(
-		toolreach.Offered([]string{"capture_page", "command", "terminal_open"}).
-			WithPrograms(func(name string) bool { return name == "external" }),
-		nil,
-	)
-	if three["surface_snapshot_handles"] != "page#, tui# or terminal_session#" {
-		t.Fatalf("three = %+v", three)
+func TestRegisterRecoveryFactsAskUserSecretFollowsModeAndSchema(t *testing.T) {
+	secretSchema := map[string]any{"type": "object", "properties": map[string]any{
+		"response_type": map[string]any{"type": "string", "enum": []any{"text", "secret"}},
+		"secret":        map[string]any{"type": "object"},
+	}}
+	textOnly := map[string]any{"type": "object", "properties": map[string]any{
+		"response_type": map[string]any{"type": "string"},
+		"secret":        map[string]any{"type": "object"},
+	}}
+	for _, tc := range []struct {
+		name   string
+		mode   string
+		schema map[string]any
+		want   bool
+	}{
+		{"agent mode secret enum", string(api.SessionModeAgent), secretSchema, true},
+		{"ask mode", string(api.SessionModeAsk), secretSchema, false},
+		{"unconstrained response type", string(api.SessionModeAgent), textOnly, false},
+	} {
+		gc := oar.NewGuardContext()
+		gc.Session.SessionMode = tc.mode
+		req := toolreach.Offered([]string{"ask_user"}).WithSchemas(map[string]map[string]any{"ask_user": tc.schema})
+		RegisterRecoveryFacts(toolreach.WithRequest(t.Context(), req), gc)
+		testutil.FailErr(t, "AssembleFacts", oar.AssembleFacts(gc, []string{"paintedwolf.ask_user_secret_allowed"}))
+		if got := gc.ObservationData["ask_user_secret_allowed"]; got != tc.want {
+			t.Errorf("%s: ask_user_secret_allowed = %v, want %t", tc.name, got, tc.want)
+		}
 	}
 }

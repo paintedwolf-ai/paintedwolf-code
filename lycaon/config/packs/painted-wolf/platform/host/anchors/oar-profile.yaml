@@ -420,8 +420,8 @@ host_facts:
    type: bool
    observation: True when task is callable on the frozen turn request.
  - name: paintedwolf.surface_snapshot_handles
-   type: string
-   observation: Conjunction of runtime surface snapshot handle kinds (page#, tui#, terminal_session#) mintable by tools callable on the frozen turn request, or empty when none is callable.
+   type: list<string>
+   observation: Runtime surface snapshot handle prefixes (page#, tui#, terminal_session#) that tools callable on the frozen turn request can mint; empty when none is callable.
  - name: paintedwolf.repo_known_empty
    type: bool
  - name: paintedwolf.last_audit_ungrounded
@@ -569,6 +569,18 @@ host_facts:
    type: string
  - name: paintedwolf.rejection_field
    type: string
+ - name: paintedwolf.approval_refused_automatically
+   type: bool
+   observation: True when a host policy or system deny ended an approval request without a person's decision.
+ - name: paintedwolf.approval_stopped_by_user
+   type: bool
+   observation: True when the person stopped the run before deciding an approval request.
+ - name: paintedwolf.approval_stopped_by_host
+   type: bool
+   observation: True when the session stopped without a person before an approval request was decided.
+ - name: paintedwolf.approval_expired
+   type: bool
+   observation: True when an approval request expired before anyone decided it.
  - name: paintedwolf.shell_metacharacters
    type: bool
  - name: paintedwolf.reissue_via_command

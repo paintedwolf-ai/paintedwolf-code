@@ -83,9 +83,7 @@ func (gc *GuardContext) ObserveCommandOperationReach() {
 			admitted = append(admitted, form)
 		}
 	}
-	status := gc.Reach.Status(toolreach.ProgramTool)
-	commandReachable := status == toolreach.Callable ||
-		(status == toolreach.Loadable && gc.Reach.Status(toolreach.LoaderTool) == toolreach.Callable)
+	commandReachable := gc.Reach.Status(toolreach.ProgramTool) != toolreach.Absent
 	gc.setObservationFact("admitted_command_forms", admitted)
 	gc.setObservationFact("command_operation_reachable", commandReachable && len(admitted) > 0)
 }
