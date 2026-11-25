@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -110,5 +111,33 @@ func TestObserveModeUpgradeCoversMidTurnBetweenTurnAndRestart(t *testing.T) {
 	}}
 	if !restarted.observeModeUpgrade(coord, "restarted-session", api.SessionModeAgent, api.SessionModeAgent, priorAskHistory) {
 		t.Fatal("restarted process with prior Ask rejection must emit upgrade notice once")
+	}
+	announced := append(slices.Clone(priorAskHistory), stamped...)
+	if (&promptContext{}).observeModeUpgrade(coord, "restarted-announced", api.SessionModeAgent, api.SessionModeAgent, announced) {
+		t.Fatal("restarted process must not repeat a notice already given after the Ask rejection")
+	}
+	reAsked := append(slices.Clone(announced), priorAskHistory...)
+	if !(&promptContext{}).observeModeUpgrade(coord, "restarted-reasked", api.SessionModeAgent, api.SessionModeAgent, reAsked) {
+		t.Fatal("restarted process must announce an Ask rejection newer than the last notice")
+	}
+}
+
+// Switching back to Ask and then to Agent again is a new upgrade, even after
+// an earlier one was announced in the same history.
+func TestObserveModeUpgradeAnnouncesEverySwitch(t *testing.T) {
+	pc := &promptContext{Deps: ContextDeps{ContextSurfaceDeps: ContextSurfaceDeps{SwapObservedSessionMode: observedModes()}}}
+	coord := &api.Session{ID: "coord", AgentType: "coordinator"}
+	stamped := []api.Message{{HostSignalID: anchor.SessionAgentEnabled.String()}}
+	if !pc.observeModeUpgrade(coord, "s", api.SessionModeAsk, api.SessionModeAgent, nil) {
+		t.Fatal("first Ask->Agent switch must be announced")
+	}
+	if pc.observeModeUpgrade(coord, "s", api.SessionModeAgent, api.SessionModeAgent, stamped) {
+		t.Fatal("the round after an announced switch must not repeat it")
+	}
+	if pc.observeModeUpgrade(coord, "s", api.SessionModeAsk, api.SessionModeAsk, stamped) {
+		t.Fatal("an Ask round is not an upgrade")
+	}
+	if !pc.observeModeUpgrade(coord, "s", api.SessionModeAgent, api.SessionModeAgent, stamped) {
+		t.Fatal("a second Ask->Agent switch must be announced despite the earlier notice")
 	}
 }

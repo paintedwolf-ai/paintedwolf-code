@@ -118,27 +118,26 @@ func (l *promptContext) observeModeUpgrade(
 		return false
 	}
 	prevObserved, hadObserved := l.swapObservedMode(sessionID, current)
-	if current != api.SessionModeAgent || hasAgentEnabledSignal(history) {
+	if current != api.SessionModeAgent {
 		return false
 	}
+	// An observed switch is authoritative, so each Ask->Agent switch is announced.
 	if previous == api.SessionModeAsk || (hadObserved && prevObserved == api.SessionModeAsk) {
 		return true
 	}
-	return !hadObserved && historyHadAskRejection(history)
+	return !hadObserved && askRejectedSinceAgentEnabled(history)
 }
 
-func hasAgentEnabledSignal(history []api.Message) bool {
-	want := anchor.SessionAgentEnabled.String()
-	for _, msg := range history {
-		if msg.HostSignalID == want {
-			return true
+// askRejectedSinceAgentEnabled reports an Ask-mode rejection newer than the
+// latest agent-enabled notice, which a process that observed no mode reads as
+// an unannounced upgrade.
+func askRejectedSinceAgentEnabled(history []api.Message) bool {
+	enabled := anchor.SessionAgentEnabled.String()
+	for i := len(history) - 1; i >= 0; i-- {
+		msg := history[i]
+		if msg.HostSignalID == enabled {
+			return false
 		}
-	}
-	return false
-}
-
-func historyHadAskRejection(history []api.Message) bool {
-	for _, msg := range history {
 		if msg.ToolResult != nil && slices.Contains(msg.ToolResult.Codes, tools.AskModeActiveCode) {
 			return true
 		}

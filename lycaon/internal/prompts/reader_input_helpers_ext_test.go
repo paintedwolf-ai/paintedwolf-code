@@ -1,9 +1,6 @@
 package prompts_test
 
 import (
-	"strings"
-
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
