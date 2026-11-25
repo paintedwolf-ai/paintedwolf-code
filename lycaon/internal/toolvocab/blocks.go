@@ -73,10 +73,18 @@ var callOpen = regexp.MustCompile(`\b([a-z][a-z0-9_]*)\(`)
 // Calls lists the call expressions in text that name a known tool. A call's
 // argument list must close on the line it opens.
 func Calls(c *Catalog, text string) []Call {
+	if c == nil {
+		return nil
+	}
+	return CallsOf(c.KnownName, text)
+}
+
+// CallsOf lists the call expressions in text whose tool name known accepts.
+func CallsOf(known func(string) bool, text string) []Call {
 	var out []Call
 	for _, loc := range callOpen.FindAllStringSubmatchIndex(text, -1) {
 		tool := text[loc[2]:loc[3]]
-		if c == nil || !c.KnownName(tool) {
+		if !known(tool) {
 			continue
 		}
 		if n, ok := callBodyLen(text[loc[1]:]); ok {
