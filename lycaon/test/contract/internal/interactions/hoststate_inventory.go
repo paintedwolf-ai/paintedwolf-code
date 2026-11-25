@@ -103,20 +103,20 @@ type HostStateInventoryInput struct {
 // HostStateInventoryReport summarizes current authority domains, reader facts,
 // envelope boundary partitions, producer joins, and unexplained gaps.
 type HostStateInventoryReport struct {
-	SourceCommit            string                   `json:"source_commit"`
-	SourceTree              string                   `json:"source_tree"`
-	ConstructorSetLabel     string                   `json:"constructor_set_label"`
-	CatalogRevision         string                   `json:"catalog_revision"`
-	TotalCoordinatorStates  int                      `json:"total_coordinator_states"`
-	TotalWorkerStates       int                      `json:"total_worker_states"`
-	TotalInstructionSites   int                      `json:"total_instruction_sites"`
-	TotalAnchorSpecs        int                      `json:"total_anchor_specs"`
-	DomainClasses           []DomainClassRow         `json:"domain_classes"`
-	ReaderFactCoverage      []ReaderFactInventoryRow `json:"reader_fact_coverage"`
-	BoundaryPartitions      []BoundaryPartitionRow   `json:"boundary_partitions"`
-	MatchedProducerInputs   []string                 `json:"matched_producer_inputs"`
-	UnmatchedProducers      []string                 `json:"unmatched_producers,omitempty"`
-	UnexplainedGaps         []InventoryGap           `json:"unexplained_gaps,omitempty"`
+	SourceCommit           string                   `json:"source_commit"`
+	SourceTree             string                   `json:"source_tree"`
+	ConstructorSetLabel    string                   `json:"constructor_set_label"`
+	CatalogRevision        string                   `json:"catalog_revision"`
+	TotalCoordinatorStates int                      `json:"total_coordinator_states"`
+	TotalWorkerStates      int                      `json:"total_worker_states"`
+	TotalInstructionSites  int                      `json:"total_instruction_sites"`
+	TotalAnchorSpecs       int                      `json:"total_anchor_specs"`
+	DomainClasses          []DomainClassRow         `json:"domain_classes"`
+	ReaderFactCoverage     []ReaderFactInventoryRow `json:"reader_fact_coverage"`
+	BoundaryPartitions     []BoundaryPartitionRow   `json:"boundary_partitions"`
+	MatchedProducerInputs  []string                 `json:"matched_producer_inputs"`
+	UnmatchedProducers     []string                 `json:"unmatched_producers,omitempty"`
+	UnexplainedGaps        []InventoryGap           `json:"unexplained_gaps,omitempty"`
 }
 
 // BuildHostStateInventory derives the host-state coverage report from current
@@ -635,22 +635,30 @@ func buildEnvToggleRows(in HostStateInventoryInput) []DomainClassRow {
 		val := fmt.Sprintf("%t", b)
 		rows = append(rows,
 			checkBoolToggle(in, "web_search", "internal/coordinator/promptloop:webSearchEnabled", val, "coordinator",
-				func(st hoststate.CoordinatorState, obs DeliveredStateObservation) bool { return st.WebSearch == b && obs.WebSearchEnabled == b },
+				func(st hoststate.CoordinatorState, obs DeliveredStateObservation) bool {
+					return st.WebSearch == b && obs.WebSearchEnabled == b
+				},
 				func(s *hoststate.CoordinatorSeed) { s.WebSearch = b }, nil),
 			checkBoolToggle(in, "web_search", "internal/coordinator/promptloop:webSearchEnabled", val, "worker", nil, nil,
 				workerToggleSpec{
-					match: func(ws hoststate.WorkerState, obs DeliveredStateObservation) bool { return ws.WebSearch == b && obs.WebSearchEnabled == b },
+					match: func(ws hoststate.WorkerState, obs DeliveredStateObservation) bool {
+						return ws.WebSearch == b && obs.WebSearchEnabled == b
+					},
 					mutate: func(s *hoststate.WorkerSeed) {
 						s.AgentID = "implementer"
 						s.WebSearch = b
 					},
 				}),
 			checkBoolToggle(in, "vision", "internal/prompts:Reader.WithVision", val, "coordinator",
-				func(st hoststate.CoordinatorState, obs DeliveredStateObservation) bool { return st.Vision == b && obs.VisionEnabled == b },
+				func(st hoststate.CoordinatorState, obs DeliveredStateObservation) bool {
+					return st.Vision == b && obs.VisionEnabled == b
+				},
 				func(s *hoststate.CoordinatorSeed) { s.Vision = b }, nil),
 			checkBoolToggle(in, "vision", "internal/prompts:Reader.WithVision", val, "worker", nil, nil,
 				workerToggleSpec{
-					match:  func(ws hoststate.WorkerState, obs DeliveredStateObservation) bool { return ws.Vision == b && obs.VisionEnabled == b },
+					match: func(ws hoststate.WorkerState, obs DeliveredStateObservation) bool {
+						return ws.Vision == b && obs.VisionEnabled == b
+					},
 					mutate: func(s *hoststate.WorkerSeed) { s.Vision = b },
 				}),
 			checkBoolToggle(in, "command_external_hidden", "internal/session/profiles:CommandExternalHidden", val, "coordinator",
@@ -833,7 +841,7 @@ func workerMultiGitFuzzSelectable(d *hoststate.SeedDomains, pGit, aGit bool) boo
 			st, err := hoststate.ResolveWorkerSeed(d, hoststate.WorkerSeed{
 				AgentID: "implementer", Posture: api.SessionPostureBuild,
 				BranchView: bv, RootCount: 2, SecondaryRootGit: secGit,
-				Loading: hoststate.WorkerLoadingStickyOnly,
+				Loading:           hoststate.WorkerLoadingStickyOnly,
 				ParentSessionMode: api.SessionModeAgent, WebSearch: true, ApprovalPosture: gate.PostureBalanced,
 			})
 			if err == nil && !st.Excluded && st.RootCount >= 2 && st.HasGit == pGit && st.HasAnyGitRoot == aGit {
@@ -904,11 +912,11 @@ func buildReaderFactRows(in HostStateInventoryInput) ([]ReaderFactInventoryRow, 
 				witnesses = append(witnesses, seen[k])
 			}
 			out = append(out, ReaderFactInventoryRow{
-				FactName:        name,
-				FactType:        "reader_scalar",
-				Recipient:       rec,
-				ObservedClasses: classes,
-				WitnessStateIDs: witnesses,
+				FactName:         name,
+				FactType:         "reader_scalar",
+				Recipient:        rec,
+				ObservedClasses:  classes,
+				WitnessStateIDs:  witnesses,
 				ConstraintReason: readerFactSingleClassReason(name, rec, classes),
 			})
 		}
