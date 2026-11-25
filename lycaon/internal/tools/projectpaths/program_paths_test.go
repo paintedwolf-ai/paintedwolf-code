@@ -6,13 +6,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -126,8 +128,8 @@ func TestProgramPathConversionDoesNotRecordOrGrantMutation(t *testing.T) {
 	}
 	tmp, err := p.TemporaryDirectory(t.Context())
 	testutil.FailErr(t, "session temporary directory", err)
-	if tmp != root {
-		t.Fatalf("temporary directory=%q want %q", tmp, root)
+	if want := enginepaths.ProgramTempUnder(root); tmp != want {
+		t.Fatalf("temporary directory=%q want %q", tmp, want)
 	}
 }
 
