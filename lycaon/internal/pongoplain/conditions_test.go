@@ -6,7 +6,7 @@ import (
 )
 
 func TestExprAtomsPrintAsEvaluableSource(t *testing.T) {
-	expr, err := ParseExpression(`a and not (b.c or d == "x") and e|length > 2 and f not in g`)
+	expr, err := ParseExpression(`a and not (b.c or d == "x") and e|length > 2 and f in g`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -14,11 +14,11 @@ func TestExprAtomsPrintAsEvaluableSource(t *testing.T) {
 	for _, atom := range expr.Atoms() {
 		got = append(got, atom.Source())
 	}
-	want := []string{"a", "b.c", `d == "x"`, "e|length > 2", "f not in g"}
+	want := []string{"a", "b.c", `d == "x"`, "e|length > 2", "f in g"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("atoms = %q, want %q", got, want)
 	}
-	all := map[string]bool{"a": true, "e|length > 2": true, "f not in g": true}
+	all := map[string]bool{"a": true, "e|length > 2": true, "f in g": true}
 	if !expr.Decide(all) {
 		t.Fatal("Decide: a and not (false or false) and true and true should hold")
 	}

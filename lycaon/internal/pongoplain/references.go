@@ -150,10 +150,11 @@ func isOpaqueRegion(region string) bool {
 		strings.Contains(region, "endverbatim")
 }
 
+// trimDelimiters strips a region's delimiters. A whitespace-trim marker is
+// part of the delimiter only when adjacent to it, so {{ -x }} keeps its sign.
 func trimDelimiters(region, open, close string) string {
 	body := strings.TrimPrefix(region, open)
 	body = strings.TrimSuffix(body, close)
-	body = strings.TrimSpace(body)
 	body = strings.TrimPrefix(body, "-")
 	body = strings.TrimSuffix(body, "-")
 	return strings.TrimSpace(body)

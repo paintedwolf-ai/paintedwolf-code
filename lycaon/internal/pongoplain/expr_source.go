@@ -2,8 +2,9 @@ package pongoplain
 
 import "strings"
 
-// Atoms lists e's Boolean leaves in source order. not, and and or are
-// connectives; every other node is one atom.
+// Atoms lists e's Boolean leaves in source order. and, or and a not at
+// Boolean level are connectives; every other node, including a not inside a
+// comparison or arithmetic operand, is one atom.
 func (e *Expr) Atoms() []*Expr {
 	switch e.Kind {
 	case ExprNot:
@@ -14,41 +15,83 @@ func (e *Expr) Atoms() []*Expr {
 	return []*Expr{e}
 }
 
-// Source prints e as Pongo expression text with compound operands
-// parenthesised.
+// Grammar levels, loosest first, following pongo2's parser functions.
+const (
+	levelExpression = iota
+	levelRelational
+	levelSimple
+	levelTerm
+	levelPower
+	levelFactor
+)
+
+func (e *Expr) level() int {
+	switch e.Kind {
+	case ExprAnd, ExprOr:
+		return levelExpression
+	case ExprCompare:
+		return levelRelational
+	case ExprNot, ExprNeg:
+		return levelSimple
+	case ExprArith:
+		switch e.Op {
+		case "+", "-":
+			return levelSimple
+		case "^":
+			return levelPower
+		}
+		return levelTerm
+	}
+	return levelFactor
+}
+
+// Source prints e as Pongo expression text that pongo2 parses into the same
+// tree, parenthesising an operand only where its grammar position requires.
 func (e *Expr) Source() string {
 	switch e.Kind {
 	case ExprLiteral:
 		return e.Literal
-	case ExprNot:
-		return "not " + e.Left.operand()
-	case ExprAnd, ExprOr, ExprCompare:
-		return e.Left.operand() + " " + e.Op + " " + e.Right.operand()
-	case ExprFilter:
-		var b strings.Builder
-		b.WriteString(e.Left.operand())
-		b.WriteString("|" + e.FilterName)
-		if e.FilterArg != nil {
-			b.WriteString(":" + e.FilterArg.operand())
-		}
-		return b.String()
-	case ExprTernary:
-		out := e.Left.operand() + " if " + e.Cond.operand()
-		if e.Right != nil {
-			out += " else " + e.Right.operand()
-		}
-		return out
-	default: // ExprIdent
+	case ExprIdent:
 		return e.Ident
+	case ExprNot:
+		return "not " + e.Left.at(levelTerm)
+	case ExprNeg:
+		// pongo2 reads the sign before not, so -not x needs no parentheses.
+		if e.Left.Kind == ExprNot {
+			return "-" + e.Left.Source()
+		}
+		return "-" + e.Left.at(levelTerm)
+	case ExprAnd, ExprOr:
+		return e.Left.at(levelRelational) + " " + e.Op + " " + e.Right.at(levelExpression)
+	case ExprCompare:
+		if e.Op == "in" {
+			return e.Left.at(levelSimple) + " in " + e.Right.at(levelSimple)
+		}
+		return e.Left.at(levelSimple) + " " + e.Op + " " + e.Right.at(levelRelational)
+	case ExprArith:
+		switch e.level() {
+		case levelSimple:
+			return e.Left.at(levelSimple) + " " + e.Op + " " + e.Right.at(levelTerm)
+		case levelTerm:
+			return e.Left.at(levelTerm) + " " + e.Op + " " + e.Right.at(levelPower)
+		}
+		return e.Left.at(levelFactor) + " ^ " + e.Right.at(levelPower)
 	}
+	var b strings.Builder
+	b.WriteString(e.Left.Source())
+	b.WriteString("|" + e.FilterName)
+	if e.FilterArg != nil {
+		b.WriteString(":" + e.FilterArg.Source())
+	}
+	return b.String()
 }
 
-func (e *Expr) operand() string {
-	switch e.Kind {
-	case ExprIdent, ExprLiteral, ExprFilter:
-		return e.Source()
+// at prints e for a grammar position that accepts level min or tighter.
+func (e *Expr) at(min int) string {
+	if e.level() < min {
+		return "(" + e.Source() + ")"
 	}
-	return "(" + e.Source() + ")"
+	return e.Source()
 }
 
 // Decide evaluates e's Boolean skeleton with each atom's truth read from
