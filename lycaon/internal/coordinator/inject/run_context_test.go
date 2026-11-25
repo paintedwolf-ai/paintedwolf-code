@@ -102,13 +102,13 @@ func TestActiveWorkflowInjectRendersFlowBrief(t *testing.T) {
 	}
 	block := renderTestActiveWorkflow(t, runCtx, snap, nil, nil)
 	for _, want := range []string{
-		"phase 2/3 — `review`",
+		"phase 2/3 — review",
 		"· terminal",
 		"Gates:",
 		"[ ] `evidence_passed:plan_review`",
 		"### Phase exit",
 		"call `workflow_advance`",
-		"Next: `approve`",
+		"Next: approve",
 	} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)

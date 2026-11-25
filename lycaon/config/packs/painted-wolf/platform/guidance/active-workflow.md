@@ -1,7 +1,7 @@
 <!-- lycaon-workflow-runtime:v1 -->
 ## Workflow
 
-User limits apply: `ask_user` before conflicting action. `topology` defines the shape; each **gate leaf** must pass.
+User limits apply: {% if profile_has_ask_user or profile_can_request.ask_user %}`ask_user` before conflicting action{% else %}stop before conflicting action{% endif %}. `topology` defines the shape; each **gate leaf** must pass.
 
 {% if workflow_id %}- **workflow**: `{{ workflow_id }}`{% if workflow_version %}@{{ workflow_version }}{% endif %}
 {% endif %}{% if run_id %}- **run_id**: `{{ run_id }}`
@@ -22,7 +22,7 @@ User limits apply: `ask_user` before conflicting action. `topology` defines the 
 {% if blueprint_approval and blueprint_approval.status == "approved" %}
 ### Approved Blueprint execution
 
-The user already approved the exact bound Blueprint and this child inherited that approval from its parent workflow. Execute the approved Blueprint now. Do not ask the user to approve it again; `ask_user` is only for genuinely new information that the approved Blueprint does not resolve.
+The user already approved the exact bound Blueprint and this child inherited that approval from its parent workflow. Execute the approved Blueprint now. Do not ask the user to approve it again{% if profile_has_ask_user or profile_can_request.ask_user %}; `ask_user` is only for genuinely new information that the approved Blueprint does not resolve{% endif %}.
 {% elif blueprint_approval and blueprint_approval.status == "invalid" %}
 ### Blueprint approval invalid
 
@@ -59,7 +59,7 @@ This is the last phase. There is no further advance to call.
 {% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_outline %} with `verdict` shaped `{{ phase_exit.verdict_outline }}` (the first `verdict` value is terminal; the tool schema gives each member's type); arrays may be empty when no entry exists{% endif %}. Only that call records a verdict.{% if phase_exit.review_loop_key %}
 {% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. {% if phase_exit.followup_attempts %}A non-terminal verdict registers open questions; start their `workflow_work_id` for focused investigation ({{ phase_exit.followup_attempts }} completed attempts each).{% else %}A non-terminal verdict runs the loop again{% if phase_exit.review_loop_cap %}, up to {{ phase_exit.review_loop_cap }} time(s){% endif %}.{% endif %}{% endif %}
 {% elif phase_exit.kind == "human_approval" %}
-End the turn. The user approves the bound document themselves — chat prose is not approval, and `workflow_advance` will not stand in for it. Treat any message they send meanwhile as revision feedback on that document.
+End the turn. The user approves the bound document themselves — chat prose is not approval{% if profile_has_workflow_advance or profile_can_request.workflow_advance %}, and `workflow_advance` will not stand in for it{% endif %}. Treat any message they send meanwhile as revision feedback on that document.
 {% elif phase_exit.kind == "invoke" %}
 Wait for the child workflow {% if phase_exit.invoke_workflow_id %}`{{ phase_exit.invoke_workflow_id }}` {% endif %}to finish (`child_run_complete`).
 {% elif phase_exit.open_gates or phase_exit.dormant_gates %}{% if phase_exit.open_gates %}

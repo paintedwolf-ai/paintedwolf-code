@@ -94,10 +94,10 @@ func TestClaimSubjectsEvaluateAgainstTargetActorReader(t *testing.T) {
 		invalid := toolvocabtest.EvaluateClaimBlock(baseCtx, toolvocabtest.ClaimBlock{
 			Label:   "invalid-edit-loader",
 			Subject: toolvocabtest.SubjectSelfNow(),
-			Text:    "Load editing via `request_tools(need=\"edit\")`.",
+			Text:    "Call `request_tools(need=\"complete_leg\")`.",
 		})
 		if len(invalid) == 0 {
-			t.Fatal("expected request_tools(need=\"edit\") to fail when edit is not in Requestable()")
+			t.Fatal("expected request_tools(need=\"complete_leg\") to fail when complete_leg is not in Requestable()")
 		}
 
 		noLoaderAuth := toolvocabtest.AuthorityFromReaderAndMetas(coordAskReader, nil, nil)

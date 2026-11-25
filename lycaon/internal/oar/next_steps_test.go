@@ -115,8 +115,8 @@ func TestResolveNextStepsLoadsADeferredCallFirst(t *testing.T) {
 	if len(got.Calls) != 2 || got.Calls[0].Tool != toolreach.LoaderTool || got.Calls[1].Tool != "recall" {
 		t.Fatalf("calls = %+v", got.Calls)
 	}
-	if !strings.Contains(got.Text, "after loading it with") {
-		t.Fatalf("text = %q", got.Text)
+	if loader, call := strings.Index(got.Text, got.Calls[0].Text()), strings.Index(got.Text, got.Calls[1].Text()); loader < 0 || call < loader {
+		t.Fatalf("text = %q, want the loader call before the call it enables", got.Text)
 	}
 }
 

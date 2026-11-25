@@ -531,11 +531,13 @@ func (sr stepResolver) resolve(branchPrefix string, stepIndex int, step NextStep
 	return otherwise, nil
 }
 
+// sequenceText renders the loader call before the call it enables, the order
+// in which the reader must make them.
 func sequenceText(sequence []toolreach.Call) string {
 	if len(sequence) == 1 {
 		return sequence[0].Text()
 	}
-	return sequence[1].Text() + " after loading it with " + sequence[0].Text()
+	return sequence[0].Text() + ", then " + sequence[1].Text()
 }
 
 // stepCall builds the step's call. It reports false for a complete call or a
