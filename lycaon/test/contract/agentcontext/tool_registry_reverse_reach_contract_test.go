@@ -6,6 +6,9 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -89,6 +92,10 @@ func TestRegisteredCapabilitiesJoinRecipientReach(t *testing.T) {
 	operations, err := toolcontract.CommandOperations()
 	contractcheck.FailErr(t, "CommandOperations", err)
 	forms := operationForms(t)
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "LoadToolProfiles", err)
+	surfaces, err := surfacecatalog.Load()
+	contractcheck.FailErr(t, "surfacecatalog.Load", err)
 
 	var violations []string
 	for _, meta := range reg.List() {
@@ -107,9 +114,12 @@ func TestRegisteredCapabilitiesJoinRecipientReach(t *testing.T) {
 		if reached {
 			continue
 		}
-		if reason := withheldReason(name, recipients); reason == "" {
+		reason := withheldReason(name, profiles, surfaces)
+		if reason == "" {
 			violations = append(violations, fmt.Sprintf("registered definition %s is never offered or loadable at a swept recipient, and no production fact withholds it", name))
+			continue
 		}
+		t.Logf("withheld definition %s: %s", name, reason)
 	}
 
 	for _, op := range operations {
@@ -147,7 +157,26 @@ func modeReached(recipients []recipientReach, command, mode string) bool {
 }
 
 // withheldReason names the production fact that keeps a registered definition
-// off every swept request, or "" when none does.
-func withheldReason(name string, recipients []recipientReach) string {
+// off every request, or "" when none does: no tool profile admits it, or only
+// the coordinator profile does and no coordinator surface lists it.
+func withheldReason(name string, profiles []sandbox.ToolProfile, surfaces surfacecatalog.Catalog) string {
+	var admitting []string
+	for _, p := range profiles {
+		if p.ToolAllowed(name) {
+			admitting = append(admitting, p.ID)
+		}
+	}
+	switch {
+	case len(admitting) == 0:
+		return "no tool profile admits it"
+	case len(admitting) == 1 && admitting[0] == prompts.CoordinatorProfileID:
+		for _, id := range surfaces.SurfaceIDs() {
+			surface, err := surfaces.Surface(id)
+			if err != nil || slices.Contains(surface.FloorTools(), name) || slices.Contains(surface.LoadableTools(), name) {
+				return ""
+			}
+		}
+		return "only the coordinator profile admits it and no coordinator surface lists it"
+	}
 	return ""
 }

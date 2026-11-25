@@ -34,6 +34,7 @@ func scanToolRejectEmission(t *testing.T) rejectinventory.Inventory {
 				return ids, nil
 			},
 			"github.com/lycaon/lycaon/internal/rules.RuleOutcome.RejectCode": postureRuleDenyCodes,
+			"github.com/lycaon/lycaon/internal/rules.RuleOutcome.Code":       postureRuleDenyCodes,
 		},
 	})
 	contractcheck.FailErr(t, "scan reject emission sites", err)

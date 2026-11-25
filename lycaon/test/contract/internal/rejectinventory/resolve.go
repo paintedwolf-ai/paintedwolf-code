@@ -350,7 +350,11 @@ func (s *scan) localValues(d funcDecl, id *ast.Ident, obj *types.Var, depth int)
 		case *ast.RangeStmt:
 			if v, ok := st.Value.(*ast.Ident); ok && p.TypesInfo.Defs[v] == obj {
 				assigned = true
-				out.merge(unresolved("range value"))
+				if tv, ok := p.TypesInfo.Types[st.X]; ok && isSequence(tv.Type) {
+					out.merge(s.resolveElements(d, st.X, depth+1))
+				} else {
+					out.merge(unresolved("range value over a non-sequence"))
+				}
 			}
 		}
 		return true
