@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
@@ -245,7 +246,7 @@ func refusalEndsWait(set map[WaitTrigger]struct{}, in waitMatchInput) bool {
 	if _, ok := set[WaitTriggerProcessDone]; ok && handleMatches(in.ProcessHandles, in.Subject) {
 		return true
 	}
-	return handleMatches(in.RefusalHandles, in.Subject)
+	return slices.Contains(in.RefusalHandles, strings.TrimSpace(in.Subject))
 }
 
 // runningWorkerCondition finds the worker subscription a wake about running

@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -334,7 +335,7 @@ func (l *Waits) SessionSleepingOnRefusal(sessionID, handle string) bool {
 	if l.SessionSleepingOnProcess(sessionID, handle) {
 		return true
 	}
-	return l.IsSleeping(sessionID) && handleMatches(l.activeRefusalHandles(sessionID), handle)
+	return l.IsSleeping(sessionID) && slices.Contains(l.activeRefusalHandles(sessionID), strings.TrimSpace(handle))
 }
 func (l *Waits) activeRefusalHandles(sessionID string) []string {
 	st := l.sleep.state(sessionID)
