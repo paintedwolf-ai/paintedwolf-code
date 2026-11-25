@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -122,7 +123,6 @@ func runCoordinatorInjectRenders(
 	}
 	for idx, cr := range cReps {
 		resolveNamed := resolver.forCoordinatorState(cr.state)
-		waitSchema := cr.auth.Schemas["wait"]
 
 		// command-jobs (running+exited+held and exited-only).
 		for _, withRunning := range []bool{true, false} {
@@ -135,10 +135,15 @@ func runCoordinatorInjectRenders(
 			} else {
 				jobs = jobsBoth[1:]
 			}
-			cmdBlock := inject.RenderCommandJobsBlock(ctx, injRenderer, cr.auth.Reader, waitSchema, "sess-inj", jobs, held, now, "coordinator")
+			// Live jobs and held calls project their control tools onto the turn.
+			jobAuth, err := hoststate.FreezeTurnAuthorityWithResources(ctx, cr.state, toolcontract.ResourcePresence{CommandJobs: true, HeldCalls: len(held) > 0})
+			if err != nil {
+				return err
+			}
+			cmdBlock := inject.RenderCommandJobsBlock(ctx, injRenderer, jobAuth.Reader, jobAuth.Schemas["wait"], "sess-inj", jobs, held, now, "coordinator")
 			if cmdBlock != "" {
 				sum.InjectAndGuidanceCount++
-				viols := checkClaimsOnce(s, "inject/command-jobs ("+cr.state.ID+")", cmdBlock, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+				viols := checkClaimsOnce(s, "inject/command-jobs ("+cr.state.ID+")", cmdBlock, jobAuth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 				sum.Violations = append(sum.Violations, viols...)
 			}
 		}

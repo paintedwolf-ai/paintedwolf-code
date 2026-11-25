@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -152,6 +153,15 @@ func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase ma
 	}
 	if !kickOccurrenceProducible(kick, envBase, cr.auth.Reader, cr.auth.Offered) {
 		return nil
+	}
+	if kick == "coordinator-process-finished" {
+		// The settled handle stays live, so its control tools stay projected.
+		_, held := envBase["held_call_handle"]
+		auth, err := hoststate.FreezeTurnAuthorityWithResources(ctx, cr.state, toolcontract.ResourcePresence{CommandJobs: !held, HeldCalls: held})
+		if err != nil {
+			return err
+		}
+		cr.auth = auth
 	}
 	reader := cr.auth.Reader
 	subj := toolvocabtest.SubjectSelfNow()
