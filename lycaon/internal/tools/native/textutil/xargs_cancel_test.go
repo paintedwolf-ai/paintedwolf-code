@@ -73,7 +73,7 @@ func TestXargsEarlyConsumerClosesBlockedInputAndActiveChildren(t *testing.T) {
 			inv.ports.Nested = children
 			budget, err := commandprogram.NewByteBudget("fixture", 1024)
 			testutil.FailErr(t, "open actual output endpoint", err)
-			output, err := commandprogram.NewBytePipe(ctx, budget)
+			output, err := commandprogram.NewBytePipe(ctx, budget, nil)
 			testutil.FailErr(t, "open actual output endpoint", err)
 			testutil.FailErr(t, "close satisfied output consumer", output.CloseConsumer())
 			inv.out = nativeutility.NewOutput(ctx, output, "stream_throughput_bytes", inv.limit("stream_throughput_bytes"))

@@ -20,6 +20,7 @@ type output struct {
 	maximum, written int64
 	// printedLine is the number just printed for the next literal bytes.
 	printedLine int64
+	projection  *commandprogram.InputProjection
 }
 
 func newOutput(ctx context.Context, w io.Writer, maximum int64) *output {
@@ -52,6 +53,9 @@ func (o *output) literal(in *input, p []byte, offset int64) error {
 		return err
 	}
 	if o.mappings == nil || in.pin == nil {
+		if o.mappings != nil && in.stdin {
+			o.projection.Copied(offset, outStart, int64(len(p)))
+		}
 		o.printedLine = 0
 		return nil
 	}
@@ -66,6 +70,23 @@ func (o *output) literal(in *input, p []byte, offset int64) error {
 	}
 	o.pending = &next
 	return nil
+}
+
+// mapStdin carries mapped stdin through the line window that run writes.
+func (o *output) mapStdin(ctx context.Context, input io.Reader, memory *toolcontract.ProgramMemory, run func() error) error {
+	if o.mappings == nil {
+		return run()
+	}
+	o.projection = commandprogram.NewInputProjection(ctx, input, memory)
+	defer func() { o.projection = nil }()
+	err := run()
+	if err == nil {
+		err = o.flush()
+	}
+	if err == nil {
+		err = o.projection.Record(o.mappings)
+	}
+	return err
 }
 
 // flush records the mapping still being extended.

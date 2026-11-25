@@ -192,7 +192,7 @@ func TestSortMergePreservesEndpointAndIndependentCloseFailure(t *testing.T) {
 			inv := &invocation{ctx: t.Context(), owners: h.owners, ports: h.ports()}
 			budget, err := commandprogram.NewByteBudget("fixture", 1024)
 			testutil.FailErr(t, "admit byte stream", err)
-			output, err := commandprogram.NewBytePipe(t.Context(), budget)
+			output, err := commandprogram.NewBytePipe(t.Context(), budget, nil)
 			testutil.FailErr(t, "open byte stream", err)
 			testutil.FailErr(t, "close satisfied consumer", output.CloseConsumer())
 			reader := &mergeCloseReader{}

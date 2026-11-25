@@ -249,7 +249,7 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 				return false, err
 			}
 			defer replaced.close()
-			return true, r.writeRecord(prefix(line.Start), replaced.bytes, nil, 0, 0)
+			return true, r.writeRecord(prefix(line.Start), replaced.bytes, nil, -1, 0)
 		}
 		return true, r.writeRecord(prefix(line.Start), record, pin, line.Start, printed)
 	}
@@ -265,27 +265,35 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 			if err := replacement.replacement(*r.replace, record, groups); err != nil {
 				return err
 			}
-			return r.writeRecord(prefix(line.Start+groups[0]), replacement.bytes, nil, 0, 0)
+			return r.writeRecord(prefix(line.Start+groups[0]), replacement.bytes, nil, -1, 0)
 		}
 		return r.writeRecord(prefix(line.Start+groups[0]), record[groups[0]:groups[1]], pin, line.Start+groups[0], printed)
 	})
 	return wrote, err
 }
 
-// writeRecord prints one output record; text copied from a pinned capture
-// at offset is mapped back to it, with the line number printed beside it.
+// writeRecord prints one output record. Text copied from the input at
+// offset maps back to it, with the line number printed beside it; a negative
+// offset marks generated text.
 func (r *grepRun) writeRecord(prefix string, text []byte, pin *toolcontract.SourcePin, offset int, printed int64) error {
-	if err := r.inv.out.text(prefix); err != nil {
+	out := r.inv.out
+	if err := out.text(prefix); err != nil {
 		return err
 	}
-	r.inv.out.printedLine = printed
-	if err := r.inv.out.literal(pin, text, int64(offset)); err != nil {
-		return err
+	if offset < 0 {
+		if _, err := out.Write(text); err != nil {
+			return err
+		}
+	} else {
+		out.printedLine = printed
+		if err := out.literal(pin, text, int64(offset)); err != nil {
+			return err
+		}
 	}
 	if r.scan.NullData {
-		return r.inv.out.text("\x00")
+		return out.text("\x00")
 	}
-	return r.inv.out.text("\n")
+	return out.text("\n")
 }
 
 // nameEnd is what follows a file name: NUL under -Z, otherwise sep.

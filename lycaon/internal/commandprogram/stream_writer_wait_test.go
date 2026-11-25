@@ -18,16 +18,16 @@ func TestConcurrentPipeWritersExposeSerializationWait(t *testing.T) {
 	defer endSecond()
 	budget, err := NewByteBudget("stream_bytes", 100)
 	testutil.FailErr(t, "pipe budget", err)
-	pipe, err := NewBytePipe(t.Context(), budget)
+	pipe, err := NewBytePipe(t.Context(), budget, nil)
 	testutil.FailErr(t, "pipe", err)
 	type result struct {
 		n   int
 		err error
 	}
 	a, b := make(chan result, 1), make(chan result, 1)
-	go func() { n, err := pipe.write([]byte("ab"), first); a <- result{n, err} }()
+	go func() { n, _, err := pipe.write([]byte("ab"), first); a <- result{n, err} }()
 	awaitPipeState(t, pipe.stream, func(p *pipeRendezvous) bool { return len(p.writers) == 1 })
-	go func() { n, err := pipe.write([]byte("cde"), second); b <- result{n, err} }()
+	go func() { n, _, err := pipe.write([]byte("cde"), second); b <- result{n, err} }()
 	awaitPipeState(t, pipe.stream, func(p *pipeRendezvous) bool { return len(p.writerQueue) == 1 })
 	sleeping := blockActivity(t, root, WaitState{Until: root.Now().Add(time.Minute), Statement: "sleep 60"})
 	observed.mu.Lock()
@@ -62,7 +62,7 @@ func TestCanceledPipeReadDoesNotPublishAWait(t *testing.T) {
 	defer restore()
 	budget, err := NewByteBudget("stream_bytes", 100)
 	testutil.FailErr(t, "pipe budget", err)
-	pipe, err := NewBytePipe(t.Context(), budget)
+	pipe, err := NewBytePipe(t.Context(), budget, nil)
 	testutil.FailErr(t, "pipe", err)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

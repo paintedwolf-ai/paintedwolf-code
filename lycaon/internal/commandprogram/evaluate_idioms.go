@@ -18,7 +18,8 @@ type procSubstPipeWriter struct {
 }
 
 func (w procSubstPipeWriter) Write(p []byte) (int, error) {
-	return w.pipe.write(p, w.wait)
+	n, _, err := w.pipe.write(p, w.wait)
+	return n, err
 }
 
 func (w procSubstPipeWriter) WithActivity(activity *ExecutionWait) io.Writer {
@@ -122,7 +123,7 @@ func (e *evaluation) ProcessSubstitute(ctx context.Context, scope ExpansionScope
 	activity, _ := f.wait.Fork()
 	var pipe *BytePipe
 	if err == nil {
-		pipe, err = NewBytePipe(subCtx, budget)
+		pipe, err = NewBytePipe(subCtx, budget, nil)
 	}
 	if err != nil {
 		cancel()

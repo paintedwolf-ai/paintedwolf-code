@@ -74,7 +74,9 @@ func (r *grepRun) searchStdin() error {
 	if r.tabs {
 		err = r.searchAlignedStdin()
 	} else {
-		err = r.searchStream(label, r.inv.input, r.inv.owners.streamBytes(), 0, -1, nil, r.forcedNames(false))
+		err = r.inv.out.mapStdin(r.inv.ctx, r.inv.input, r.inv.owners.Revisions.Memory, func() error {
+			return r.searchStream(label, r.inv.input, r.inv.owners.streamBytes(), 0, -1, nil, r.forcedNames(false))
+		})
 	}
 	if errors.Is(err, errQuietMatch) {
 		r.stopped = true

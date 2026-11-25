@@ -112,7 +112,7 @@ func runHead(inv *invocation) error {
 			in.close()
 			return err
 		}
-		err = headInput(inv, in, w)
+		err = inv.runWindow(in, w, headInput)
 		in.close()
 		if err != nil {
 			return err
@@ -122,6 +122,15 @@ func runHead(inv *invocation) error {
 }
 
 var errWindowDone = errors.New("window complete")
+
+// runWindow runs one head or tail input. A line window of stdin copies whole
+// input lines, so the producer's mappings carry through it.
+func (inv *invocation) runWindow(in *input, w window, run func(*invocation, *input, window) error) error {
+	if !in.stdin || w.bytes || in.stream == nil {
+		return run(inv, in, w)
+	}
+	return inv.out.mapStdin(inv.ctx, in.stream, inv.owners.Revisions.Memory, func() error { return run(inv, in, w) })
+}
 
 func headInput(inv *invocation, in *input, w window) error {
 	if w.bytes {
@@ -188,7 +197,7 @@ func runTail(inv *invocation) error {
 		if err := labels.write(in.label); err != nil {
 			return err
 		}
-		if err := tailInput(inv, in, w); err != nil {
+		if err := inv.runWindow(in, w, tailInput); err != nil {
 			return err
 		}
 	}

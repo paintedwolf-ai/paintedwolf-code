@@ -288,6 +288,9 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker, frame *grepWorkerFr
 	} else {
 		err = local.searchFileLive(job.entry, job.names, job.walked)
 	}
+	if drained := inv.out.drain(); err == nil {
+		err = drained
+	}
 	if flushErr := inv.out.flush(); err == nil {
 		err = flushErr
 	}

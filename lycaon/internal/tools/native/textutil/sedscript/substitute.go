@@ -62,7 +62,7 @@ func (s *substitution) apply(m *Machine) error {
 		return err
 	}
 	m.space.swapScratch()
-	m.stream.pin = nil
+	m.stream.origin = recordOrigin{}
 	m.stream.replaced = true
 	if s.print {
 		if err := m.stream.out.emit(m.space.pattern, m.config.Delimiter, m.stream.terminated); err != nil {

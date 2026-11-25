@@ -175,6 +175,9 @@ func (o *Output) Flush() error {
 // Written reports the bytes accepted so far.
 func (o *Output) Written() int64 { return o.written }
 
+// MapsSources reports whether the endpoint retains source mappings.
+func (o *Output) MapsSources() bool { return o.mappings != nil }
+
 // RecordSourceMapping forwards source-mapping spans when the underlying writer
 // records them.
 func (o *Output) RecordSourceMapping(m toolcontract.StreamSourceMapping) error {

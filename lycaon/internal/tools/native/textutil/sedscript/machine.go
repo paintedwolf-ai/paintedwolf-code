@@ -67,11 +67,18 @@ type inputState struct {
 	aheadOK    bool
 	line       int
 	source     string
-	pin        *toolcontract.SourcePin
-	offset     int64
+	origin     recordOrigin
 	terminated bool
 	replaced   bool
 	steps      int64
+}
+
+// recordOrigin locates an unmodified pattern space in its input. pin is nil
+// for standard input; exact is false once the pattern space changes.
+type recordOrigin struct {
+	exact  bool
+	pin    *toolcontract.SourcePin
+	offset int64
 }
 
 // output is one destination; pending records that the last record written
@@ -173,7 +180,7 @@ func (m *Machine) Stream(in Input, out io.Writer) (_ bool, finalErr error) {
 			return false, err
 		}
 		if (end == endCycle || end == endQuit) && !m.config.Quiet {
-			if err := m.stream.out.emitRecord(m.space.pattern, m.config.Delimiter, m.stream.terminated, m.stream.pin, m.stream.offset); err != nil {
+			if err := m.stream.out.emitRecord(m.space.pattern, m.config.Delimiter, m.stream.terminated, m.stream.origin); err != nil {
 				return false, err
 			}
 		}
@@ -222,10 +229,10 @@ func (m *Machine) next(appending bool) (bool, error) {
 	var err error
 	if appending {
 		err = m.space.join(&m.space.pattern, m.config.Delimiter, record.Text)
-		m.stream.pin = nil
+		m.stream.origin = recordOrigin{}
 	} else {
 		err = m.space.assign(&m.space.pattern, record.Text)
-		m.stream.pin, m.stream.offset = record.Pin, record.Offset
+		m.stream.origin = recordOrigin{exact: true, pin: record.Pin, offset: record.Offset}
 	}
 	if err != nil {
 		return false, err
@@ -252,8 +259,8 @@ func (s *inputState) step(ctx context.Context, limit int64) error {
 
 // emitRecord writes one record to an output, recording a source mapping when
 // the record is unmodified and the output accepts literal mappings.
-func (o *output) emitRecord(record []byte, delimiter byte, terminated bool, pin *toolcontract.SourcePin, offset int64) error {
-	if o.writeLiteral == nil || pin == nil {
+func (o *output) emitRecord(record []byte, delimiter byte, terminated bool, origin recordOrigin) error {
+	if o.writeLiteral == nil || !origin.exact {
 		return o.emit(record, delimiter, terminated)
 	}
 	if o.pending {
@@ -264,12 +271,12 @@ func (o *output) emitRecord(record []byte, delimiter byte, terminated bool, pin 
 	}
 	if !terminated {
 		o.pending = true
-		return o.writeLiteral(pin, record, offset)
+		return o.writeLiteral(origin.pin, record, origin.offset)
 	}
-	if err := o.writeLiteral(pin, record, offset); err != nil {
+	if err := o.writeLiteral(origin.pin, record, origin.offset); err != nil {
 		return err
 	}
-	return o.writeLiteral(pin, []byte{delimiter}, offset+int64(len(record)))
+	return o.writeLiteral(origin.pin, []byte{delimiter}, origin.offset+int64(len(record)))
 }
 
 // emit writes one record to an output. A record that lacked its delimiter is

@@ -1,13 +1,31 @@
 package commandprogram
 
-import "io"
+import (
+	"context"
+	"io"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
+)
 
 type pipeProducer struct {
 	pipe *BytePipe
 	wait *ExecutionWait
 }
 
-func (p pipeProducer) Write(b []byte) (int, error) { return p.pipe.write(b, p.wait) }
+func (p pipeProducer) Write(b []byte) (int, error) {
+	n, _, err := p.pipe.write(b, p.wait)
+	return n, err
+}
+
+func (p pipeProducer) WriteLocated(b []byte) (int, int64, error) { return p.pipe.write(b, p.wait) }
+
+func (p pipeProducer) RecordSourceMapping(m toolcontract.StreamSourceMapping) error {
+	return p.pipe.RecordSourceMapping(m)
+}
+
+func (p pipeProducer) MappingAdmission() (context.Context, *toolcontract.ProgramMemory) {
+	return p.pipe.MappingAdmission()
+}
 
 // WithActivity binds inherited endpoints to the activity that now uses them.
 // The rendezvous reports only actual blocking, after checking readiness.

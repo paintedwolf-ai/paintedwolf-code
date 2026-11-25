@@ -171,6 +171,10 @@ func TestCommandReadsRecordDeliveredLinesOnly(t *testing.T) {
 			source: `rg needle notes.txt`,
 			want:   []agentpresence.Span{{StartLine: 3, EndLine: 3}, {StartLine: 17, EndLine: 17}},
 		},
+		"a line-selecting filter preserves delivered lines": {
+			source: `cat notes.txt | head -n 5`,
+			want:   []agentpresence.Span{{StartLine: 1, EndLine: 5}},
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newCaptureFixture(t)
@@ -199,12 +203,12 @@ func TestCommandReadsRecordDeliveredLinesOnly(t *testing.T) {
 	}
 }
 
-// Text that reaches the model through a later stage carries no source lines,
+// Text rewritten by a later stage carries no source lines,
 // so it is stated as no read rather than as the whole file.
 func TestCommandReadsThroughAnotherStageRecordNoRead(t *testing.T) {
 	f := newCaptureFixture(t)
 	f.seed(t, f.Dir, "notes.txt", numberedLines(20))
-	if out := f.run(t, `cat notes.txt | head -n 5`); len(out.SourceReads) != 0 || out.SourceContext != nil {
+	if out := f.run(t, `cat notes.txt | sed 's/plain/changed/'`); len(out.SourceReads) != 0 || out.SourceContext != nil {
 		t.Fatalf("recorded reads %+v and context %+v for piped text", out.SourceReads, out.SourceContext)
 	}
 }

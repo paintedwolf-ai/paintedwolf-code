@@ -98,6 +98,8 @@ type sedRun struct {
 	word    commandprogram.Field
 	machine *sedscript.Machine
 	stages  map[string]commandprogram.StagedOutput
+	// stdin carries mapped stdin through records sed prints unchanged.
+	stdin *commandprogram.InputProjection
 }
 
 func (r *sedRun) execute(script sedSource) error {
@@ -121,7 +123,45 @@ func (r *sedRun) execute(script sedSource) error {
 	if inv.status != 0 {
 		inv.status = 2
 	}
-	if !inv.flag("-s") {
+	if !inv.out.MapsSources() || !readsStdin(sources) {
+		return r.stream(sources)
+	}
+	r.stdin = commandprogram.NewInputProjection(inv.ctx, inv.streams.Input, inv.ports.Memory)
+	err = r.stream(sources)
+	if err == nil {
+		err = inv.out.Flush()
+	}
+	if err == nil {
+		err = r.stdin.Record(inv.out)
+	}
+	return err
+}
+
+func readsStdin(sources []source) bool {
+	for _, s := range sources {
+		if s.name == "-" {
+			return true
+		}
+	}
+	return false
+}
+
+// writeLiteral writes an unchanged record; a nil pin means stdin.
+func (r *sedRun) writeLiteral(pin *toolcontract.SourcePin, p []byte, offset int64) error {
+	out := r.inv.out
+	if pin != nil {
+		return out.WriteLiteral(pin, p, offset)
+	}
+	start := out.Written()
+	if _, err := out.Write(p); err != nil {
+		return err
+	}
+	r.stdin.Copied(offset, start, int64(len(p)))
+	return nil
+}
+
+func (r *sedRun) stream(sources []source) error {
+	if !r.inv.flag("-s") {
 		input := r.input(sources)
 		_, err := r.machine.Stream(input, nil)
 		input.Close()
@@ -155,7 +195,7 @@ func (r *sedRun) config() (sedscript.Config, error) {
 	return sedscript.Config{
 		Quiet: inv.flag("-n") || r.program.Quiet(), Delimiter: delimiter,
 		SpaceLimit: inv.limit("record_bytes"), StepLimit: inv.limit("query_work_steps"), Reserve: inv.reserve,
-		Stdout: inv.out, WriteLiteral: inv.out.WriteLiteral, Stderr: inv.streams.Error, Writers: writers, OpenFile: files,
+		Stdout: inv.out, WriteLiteral: r.writeLiteral, Stderr: inv.streams.Error, Writers: writers, OpenFile: files,
 	}, nil
 }
 

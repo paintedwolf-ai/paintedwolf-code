@@ -122,7 +122,7 @@ func classifyOutputStream(w io.Writer) outputStreamClass {
 	if w == nil || w == io.Discard {
 		return outputStreamClass{}
 	}
-	if newChildStreamView(w) != nil {
+	if _, ok := locatedRoot(w).(*programStream); ok {
 		return outputStreamClass{topLevel: true}
 	}
 	if staged, ok := w.(*trackedStagedOutput); ok {
@@ -169,17 +169,10 @@ func countProducerStream(sink io.Writer) (io.Writer, *countingStreamWriter) {
 	return counter, counter
 }
 
-// Located writers return coordinates in their own mapping domain. Nested views
-// compose those coordinates, including writes interleaved by other children.
-type locatedSourceWriter interface {
-	writeLocated([]byte) (int, int64, error)
-	RecordSourceMapping(toolcontract.StreamSourceMapping) error
-}
-
 type outputWriteSpan struct{ local, global, length int64 }
 
 type childStreamView struct {
-	target   locatedSourceWriter
+	target   commandprogram.LocatedWriter
 	ctx      context.Context
 	memory   *toolcontract.ProgramMemory
 	copy     io.Writer
@@ -190,26 +183,47 @@ type childStreamView struct {
 	disabled bool
 }
 
+// newChildStreamView gives one child its own mapping coordinates over a shared
+// located stream: a top-level program stream or a pipe.
 func newChildStreamView(writer io.Writer) *childStreamView {
-	switch source := writer.(type) {
-	case *programStream:
-		return &childStreamView{target: source, ctx: source.ctx, memory: source.mappings.memory}
-	case *childStreamView:
-		return &childStreamView{target: source, ctx: source.ctx, memory: source.memory}
-	case countingMappedWriter:
-		return newChildStreamView(source.counter.w)
-	default:
+	if counted, ok := writer.(countingMappedWriter); ok {
+		return newChildStreamView(counted.counter.w)
+	}
+	source, ok := writer.(commandprogram.LocatedWriter)
+	if !ok {
 		return nil
+	}
+	ctx, memory := source.MappingAdmission()
+	return &childStreamView{target: source, ctx: ctx, memory: memory}
+}
+
+// locatedRoot is the stream beneath any child views and counters.
+func locatedRoot(writer io.Writer) io.Writer {
+	for {
+		switch w := writer.(type) {
+		case countingMappedWriter:
+			writer = w.counter.w
+		case *childStreamView:
+			writer = w.target
+		default:
+			return writer
+		}
 	}
 }
 
-func (v *childStreamView) Write(p []byte) (int, error) { n, _, err := v.writeLocated(p); return n, err }
+func (v *childStreamView) MappingAdmission() (context.Context, *toolcontract.ProgramMemory) {
+	return v.ctx, v.memory
+}
 
-func (v *childStreamView) writeLocated(p []byte) (int, int64, error) {
+func (v *childStreamView) Write(p []byte) (int, error) { n, _, err := v.WriteLocated(p); return n, err }
+
+// WriteLocated returns the offset in this view; the target's offset is kept
+// to rebase the mappings this child records.
+func (v *childStreamView) WriteLocated(p []byte) (int, int64, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	local := v.size
-	n, start, err := v.target.writeLocated(p)
+	n, start, err := v.target.WriteLocated(p)
 	if n > 0 {
 		if !v.disabled && v.memory != nil {
 			span := outputWriteSpan{local: local, global: start, length: int64(n)}

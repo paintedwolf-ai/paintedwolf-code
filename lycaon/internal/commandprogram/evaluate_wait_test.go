@@ -171,7 +171,7 @@ func TestInheritedPipeEndpointUsesTheCurrentActivity(t *testing.T) {
 	defer child.finish()
 	budget, err := NewByteBudget("stream_bytes", 20)
 	testutil.FailErr(t, "pipe budget", err)
-	pipe, err := NewBytePipe(t.Context(), budget)
+	pipe, err := NewBytePipe(t.Context(), budget, nil)
 	testutil.FailErr(t, "pipe", err)
 	defer pipe.CloseConsumer()
 	inherited := Streams{Input: pipeConsumer{pipe: pipe, wait: parent}}
@@ -210,7 +210,7 @@ func TestCanceledStreamReadKeepsItsEndpointUsable(t *testing.T) {
 	_, activity, _ := newWaitActivities(t)
 	budget, err := NewByteBudget("stream_bytes", 100)
 	testutil.FailErr(t, "pipe budget", err)
-	pipe, err := NewBytePipe(t.Context(), budget)
+	pipe, err := NewBytePipe(t.Context(), budget, nil)
 	testutil.FailErr(t, "pipe", err)
 	defer pipe.CloseConsumer()
 	input := pipeConsumer{pipe: pipe, wait: activity}
@@ -241,7 +241,7 @@ func TestZeroTimeReadinessIncludesEOFAndDoesNotConsumeBytes(t *testing.T) {
 	}
 	budget, err := NewByteBudget("stream_bytes", 100)
 	testutil.FailErr(t, "pipe budget", err)
-	pipe, err := NewBytePipe(t.Context(), budget)
+	pipe, err := NewBytePipe(t.Context(), budget, nil)
 	testutil.FailErr(t, "pipe", err)
 	input := pipe.ConsumerEnd()
 	if inputReady(input) {

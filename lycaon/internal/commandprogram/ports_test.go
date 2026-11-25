@@ -38,7 +38,7 @@ func TestOperationRequestBindsPlanNodeToChildInvocation(t *testing.T) {
 func TestBytePipeConsumerEndClosesAsConsumerStop(t *testing.T) {
 	budget, err := NewByteBudget("stream_bytes", 1<<20)
 	testutil.FailErr(t, "create byte budget", err)
-	pipe, err := NewBytePipe(t.Context(), budget)
+	pipe, err := NewBytePipe(t.Context(), budget, nil)
 	testutil.FailErr(t, "create byte pipe", err)
 	streams := Streams{Input: pipe.ConsumerEnd()}
 	written := make(chan error, 1)

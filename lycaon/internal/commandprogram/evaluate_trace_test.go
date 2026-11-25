@@ -28,7 +28,7 @@ func TestRetainedEndpointDiagnosticUsesTraceBudget(t *testing.T) {
 	if err != nil {
 		testutil.FailErr(t, "prepare invocation boundary", err)
 	}
-	pipe, err := NewBytePipe(t.Context(), budget)
+	pipe, err := NewBytePipe(t.Context(), budget, nil)
 	if err != nil {
 		testutil.FailErr(t, "prepare invocation boundary", err)
 	}
