@@ -113,7 +113,8 @@ var loadFuzzEnvOnce = sync.OnceValues(func() (*fuzzWorkerEnv, error) {
 
 	bundles := make([]fuzzOverlayBundle, 0, len(domains.Overlays))
 	for _, ov := range domains.Overlays {
-		st := baseStock.WithCatalog(ov.Catalog)
+		st := *baseStock
+		st.Catalog = ov.Catalog
 		eng := st.Engine()
 		skList, diags := extpacks.LoadEffectiveSkills(ov.Catalog)
 		if extpacks.HasErrorDiagnostic(diags) {
@@ -154,7 +155,7 @@ var loadFuzzEnvOnce = sync.OnceValues(func() (*fuzzWorkerEnv, error) {
 		})
 		bundles = append(bundles, fuzzOverlayBundle{
 			overlay:   ov,
-			stock:     st,
+			stock:     &st,
 			engine:    eng,
 			injRender: prompts.NewInjectRenderer(eng),
 			skills:    eligibleSkills,

@@ -52,18 +52,22 @@ type memoizedClaimResult struct {
 	diags []toolvocabtest.BacktickSpan
 }
 
-var workerOccByReaderFP sync.Map
+var (
+	claimEvalMemo       sync.Map
+	claimAuthKeyMemo    sync.Map
+	workerOccByReaderFP sync.Map
+)
 
-func (s *Stock) semanticClaimAuthorityKey(auth hoststate.TurnAuthority) string {
+func semanticClaimAuthorityKey(auth hoststate.TurnAuthority) string {
 	rawKey := auth.Digest + "|" + auth.Reader.Fingerprint()
-	if cached, ok := s.claimAuthKeys.Load(rawKey); ok {
+	if cached, ok := claimAuthKeyMemo.Load(rawKey); ok {
 		return cached.(string)
 	}
 	postKey := hoststate.RenderCacheKey("claim-postload", "", nil, map[string]any{
 		"post": auth.PostLoadSchemas,
 	})
 	sem := rawKey + "|" + postKey
-	s.claimAuthKeys.Store(rawKey, sem)
+	claimAuthKeyMemo.Store(rawKey, sem)
 	return sem
 }
 
@@ -100,11 +104,11 @@ func checkClaimsOnce(
 		}
 		memoKey = fmt.Sprintf(
 			"%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%t|%t",
-			hex.EncodeToString(sum[:]), s.Site, rev, s.semanticClaimAuthorityKey(auth),
+			hex.EncodeToString(sum[:]), s.Site, rev, semanticClaimAuthorityKey(auth),
 			labelMemoClass(label), mode, posture, subject.Kind, subject.Modality, subject.AgentID,
 			checkBackticks, resolveNamed != nil,
 		)
-		if cached, ok := s.claimResults.Load(memoKey); ok {
+		if cached, ok := claimEvalMemo.Load(memoKey); ok {
 			res := cached.(memoizedClaimResult)
 			return formatClaimViolations(label, text, res.viols, res.diags)
 		}
@@ -130,7 +134,7 @@ func checkClaimsOnce(
 		diags = s.Vocab.CheckProse(label, text)
 	}
 	if memoKey != "" {
-		s.claimResults.Store(memoKey, memoizedClaimResult{viols: viols, diags: diags})
+		claimEvalMemo.Store(memoKey, memoizedClaimResult{viols: viols, diags: diags})
 	}
 	return formatClaimViolations(label, text, viols, diags)
 }

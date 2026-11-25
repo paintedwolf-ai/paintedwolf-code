@@ -41,20 +41,6 @@ type Stock struct {
 	// Site is the checkout's distribution prompt overlay, which a render
 	// reads before the bundled templates.
 	Site string
-
-	// Claim results for this corpus; their keys include Site, so no other
-	// corpus can reuse them.
-	claimResults  sync.Map
-	claimAuthKeys sync.Map
-}
-
-// WithCatalog is this stock read through another effective catalog, with
-// its own claim results.
-func (s *Stock) WithCatalog(c *extpacks.EffectiveCatalog) *Stock {
-	return &Stock{
-		Catalog: c, Profiles: s.Profiles, Schemas: s.Schemas, Names: s.Names,
-		Prunable: s.Prunable, Vocab: s.Vocab, Site: s.Site,
-	}
 }
 
 // Engine renders the stock templates under the checkout's site overlay.
