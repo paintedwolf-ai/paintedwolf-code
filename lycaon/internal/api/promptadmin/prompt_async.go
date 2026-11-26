@@ -3,6 +3,7 @@ package promptadmin
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 
 	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/noticeerr"

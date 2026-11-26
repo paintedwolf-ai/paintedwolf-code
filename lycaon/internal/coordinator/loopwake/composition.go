@@ -1,6 +1,9 @@
 package loopwake
 
+import "github.com/lycaon/lycaon/internal/actionoutcome"
+
 type LoopEngine struct {
+	Outcomes      actionoutcome.Sessions
 	Subscriptions *WaitSubscriptions
 	Deliveries    *WaitDeliveries
 	Policy        *HostWakePolicy

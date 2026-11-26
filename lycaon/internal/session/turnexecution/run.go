@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"log/slog"
 	"runtime/debug"
 	"strings"
@@ -89,6 +90,7 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 	if err != nil {
 		return nil, err
 	}
+	ctx, outcome := actionoutcome.BeginTurn(ctx, m.Coordinator.CoordinatorLoop().Outcomes.For(id).Turns, id, turnExecution.Turn.ID)
 	defer m.Execution.ClaimTurn(sess.ProjectID, turnExecution.Turn.ID)()
 	finishPromptExecution := m.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(ctx, id)
 	defer finishPromptExecution()

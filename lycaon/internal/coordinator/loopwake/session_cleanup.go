@@ -24,6 +24,7 @@ func (l *LoopEngine) ForgetSession(ctx context.Context, sessionID string) {
 	l.Observations.ForgetSession(sessionID)
 	l.Deliveries.ForgetSession(sessionID)
 	l.Deliveries.TakeEndedWaits(sessionID)
+	l.Outcomes.Forget(sessionID)
 }
 func (l *WaitSubscriptions) InterruptSession(ctx context.Context, sessionID string) {
 	if store := l.durableWaitStore(); store != nil {
