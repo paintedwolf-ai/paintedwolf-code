@@ -76,7 +76,7 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 	}
 
 	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
-	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg:"+sess.ID, anchor.Envelope{})
+	ticket := mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg:"+sess.ID, anchor.Envelope{})
 	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(sess.ID); !ok {
 		t.Fatal("expected deferred loop wake while prompt execution is active")
 	}
@@ -269,7 +269,7 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	testutil.FailErr(t, "set session busy", st.Sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy))
 
 	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
-	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
+	ticket := mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
 		"leg:"+sess.ID, anchor.Envelope{})
 	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(sess.ID); !ok {
 		t.Fatal("expected a deferred loop wake while prompt execution is active")
@@ -277,6 +277,11 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	finishExecution()
 	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 
+	wake, err := ticket.Await(t.Context())
+	testutil.FailErr(t, "await leg completion", err)
+	if wake.State != wire.WakeStateDelivered {
+		t.Fatalf("leg completion wake = %+v", wake)
+	}
 	mgr.Coordinator.WaitForTurns(ctx)
 	select {
 	case err = <-reported:
