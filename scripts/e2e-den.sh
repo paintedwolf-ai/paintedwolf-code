@@ -155,37 +155,27 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
   fi
 fi
 
-owned_prepared=""
+# shellcheck source=artifact-paths.sh
+source "${ROOT}/scripts/artifact-paths.sh"
+
+owned_state_dir=""
 owned_socket_dir=""
-cleanup_done=0
-cleanup() {
-  if [[ "${cleanup_done}" == "1" ]]; then
-    return
-  fi
-  cleanup_done=1
-  bash "${E2E_DIR}/docker-stack-down.sh" || true
-  if [[ -n "${owned_prepared}" ]]; then
-    rm -rf "${owned_prepared}"
-  fi
-  if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${LYCAON_E2E_STATE_DIR:-}" ]]; then
-    rm -rf "${LYCAON_E2E_STATE_DIR}"
-  fi
-  if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${owned_socket_dir}" ]]; then
-    rm -rf "${owned_socket_dir}"
-  fi
-  if [[ "${LYCAON_E2E_KEEP_ARTIFACTS:-0}" != "1" ]]; then
-    rm -rf "${LYCAON_E2E_OUTPUT_DIR:-${ROOT}/lycaon-den/test-results}"
-    if [[ -z "${LYCAON_E2E_OUTPUT_DIR:-}" ]]; then
-      rm -rf "${ROOT}/lycaon-den/playwright-report"
+owned_prepared=""
+setup_cleanup() {
+  if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" ]]; then
+    if [[ -n "${owned_state_dir}" ]]; then
+      rm -rf "${owned_state_dir}"
+    fi
+    if [[ -n "${owned_socket_dir}" ]]; then
+      rm -rf "${owned_socket_dir}"
     fi
   fi
 }
-trap cleanup EXIT INT TERM
+trap setup_cleanup EXIT INT TERM
 
-# shellcheck source=artifact-paths.sh
-source "${ROOT}/scripts/artifact-paths.sh"
 mkdir -p "${PW_ARTIFACT_ROOT}/e2e-state"
-export LYCAON_E2E_STATE_DIR="$(mktemp -d "${PW_ARTIFACT_ROOT}/e2e-state/run.XXXXXX")"
+owned_state_dir="$(mktemp -d "${PW_ARTIFACT_ROOT}/e2e-state/run.XXXXXX")"
+export LYCAON_E2E_STATE_DIR="${owned_state_dir}"
 # Unix socket addresses are capped at 103 bytes; keep sockets in a short per-run
 # directory that the sidecar container bind-mounts at the identical resolved path.
 owned_socket_dir="$(mktemp -d /tmp/pw-s.XXXXXX)"
@@ -202,11 +192,37 @@ FIXTURE_SRC="${ROOT}/lycaon/test/fixtures/e2e/minimal-go-project"
 export LYCAON_E2E_PROJECT_DIR="${LYCAON_E2E_STATE_DIR}/minimal-go-project"
 mkdir -p "${LYCAON_E2E_PROJECT_DIR}"
 cp -R "${FIXTURE_SRC}/." "${LYCAON_E2E_PROJECT_DIR}/"
-export LYCAON_E2E_PROJECT_DIR="$(cd "${LYCAON_E2E_PROJECT_DIR}" && pwd -P)"
+project_dir="$(cd "${LYCAON_E2E_PROJECT_DIR}" && pwd -P)"
+export LYCAON_E2E_PROJECT_DIR="${project_dir}"
 CONFIG_FIXTURE="${ROOT}/lycaon/test/fixtures/e2e/config"
 export LYCAON_E2E_CONFIG_DIR="${LYCAON_E2E_STATE_DIR}/config"
 mkdir -p "${LYCAON_E2E_CONFIG_DIR}"
 cp "${CONFIG_FIXTURE}/providers.local.yaml" "${CONFIG_FIXTURE}/model-policy.yaml" "${LYCAON_E2E_CONFIG_DIR}/"
+
+cleanup_done=0
+cleanup() {
+  if [[ "${cleanup_done}" == "1" ]]; then
+    return
+  fi
+  cleanup_done=1
+  bash "${E2E_DIR}/docker-stack-down.sh" || true
+  if [[ -n "${owned_prepared}" ]]; then
+    rm -rf "${owned_prepared}"
+  fi
+  if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${owned_state_dir}" ]]; then
+    rm -rf "${owned_state_dir}"
+  fi
+  if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${owned_socket_dir}" ]]; then
+    rm -rf "${owned_socket_dir}"
+  fi
+  if [[ "${LYCAON_E2E_KEEP_ARTIFACTS:-0}" != "1" ]]; then
+    rm -rf "${LYCAON_E2E_OUTPUT_DIR:-${ROOT}/lycaon-den/test-results}"
+    if [[ -z "${LYCAON_E2E_OUTPUT_DIR:-}" ]]; then
+      rm -rf "${ROOT}/lycaon-den/playwright-report"
+    fi
+  fi
+}
+trap cleanup EXIT INT TERM
 
 if [[ -z "${LYCAON_E2E_PREPARED_DIR:-}" ]]; then
   owned_prepared="$(mktemp -d "${PW_ARTIFACT_ROOT}/e2e-state/prepared.XXXXXX")"
