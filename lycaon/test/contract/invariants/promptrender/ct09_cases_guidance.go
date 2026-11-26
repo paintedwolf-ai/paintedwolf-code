@@ -39,6 +39,7 @@ type guidanceRender struct {
 	posture       api.SessionPosture
 	backticks     bool
 	recipientless bool
+	resolveNamed  func(string) (toolvocabtest.ActorAuthority, error)
 }
 
 type guidanceCaseEnv struct {
@@ -145,7 +146,7 @@ func runGuidanceCaseSweep(ctx context.Context, s *Stock, sum *CartesianSummary) 
 			if r.recipientless {
 				continue
 			}
-			sum.Violations = append(sum.Violations, checkClaimsOnce(s, id, r.text, r.auth, r.mode, r.posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, r.backticks)...)
+			sum.Violations = append(sum.Violations, checkClaimsOnce(s, id, r.text, r.auth, r.mode, r.posture, toolvocabtest.SubjectSelfNow(), nil, nil, r.resolveNamed, r.backticks)...)
 		}
 	}
 	return nil

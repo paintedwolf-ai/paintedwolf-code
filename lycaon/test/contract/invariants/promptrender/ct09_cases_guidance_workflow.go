@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/casegen"
@@ -36,7 +37,12 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 		indexKnob("complete_when", []string{"complete_when", "phase_exit.complete_when"}, []string{"none", "set"}),
 		indexKnob("blueprint", []string{"blueprint_approval", "blueprint_approval.status == \"approved\""}, []string{"none", "approved", "invalid"}),
 		indexKnob("isolation", []string{"requires_isolation"}, []string{"no", "yes"}),
+		indexKnob("request", []string{"request", "request.text", "request.source"}, []string{"none", "status", "text"}),
+		indexKnob("roster", []string{"excluded_agents"}, []string{"none", "web-off", "web-off-coordinator"}),
+		indexKnob("feedback", []string{"pending_feedback", "pending_feedback.prompt"}, []string{"none", "open", "prompt"}),
+		indexKnob("report", []string{"report_document_enabled", "report_rating"}, []string{"none", "unrated", "rated"}),
 	}
+	resolvers := map[int]func(string) (toolvocabtest.ActorAuthority, error){}
 	return []guidanceCase{{
 		unit: "guidance/active-workflow", recipient: interactions.RecipientCoordinator, knobs: knobs,
 		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
@@ -80,11 +86,49 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 			case 2:
 				snap.BlueprintApproval = &inject.BlueprintApprovalView{Status: "invalid", Origin: "inherited", ParentRunID: "run-parent"}
 			}
-			block, err := inject.RenderActiveWorkflowInject(ctx, e.inj, cr.auth.Reader, "sess-wf-ct09", inject.CoordinatorTurnFrame{RunContext: runCtx, Runtime: snap}, nil, nil, nil)
+			switch knobValue[int](knobs, set, "request") {
+			case 1:
+				runCtx.Request = &api.WorkflowRequestState{Status: "active", Sequence: 1}
+			case 2:
+				runCtx.Request = &api.WorkflowRequestState{Status: "active", Text: "Draft the plan", Source: "user", Sequence: 1}
+			}
+			var roster *inject.AgentRoster
+			// The declared rosters name agents ResolveAgentRoster excludes with web
+			// search off: a non-worker and an external-source worker.
+			declared := [][]string{nil, {"skeptic", "web-researcher"}, {"skeptic", "web-researcher", "coordinator"}}[knobValue[int](knobs, set, "roster")]
+			if declared != nil {
+				r := inject.ResolveAgentRoster(cr.state.TurnProfile.SurfaceID, declared, cr.state.RootCount, false, false)
+				roster = &r
+			}
+			switch knobValue[int](knobs, set, "feedback") {
+			case 1:
+				runCtx.PendingFeedback = &api.PendingFeedback{PhaseID: "draft"}
+			case 2:
+				runCtx.PendingFeedback = &api.PendingFeedback{PhaseID: "draft", Prompt: "Which scope first?"}
+			}
+			switch knobValue[int](knobs, set, "report") {
+			case 1:
+				snap.ReportDocumentEnabled = true
+			case 2:
+				snap.ReportDocumentEnabled = true
+				snap.ReportRating = &inject.ReportRatingView{Question: "Overall risk?", Levels: "high, low", Dimensions: []string{"auth", "crypto"}, Questions: "auth: high|low"}
+			}
+			idx := knobValue[int](knobs, set, "rep")
+			resolve, ok := resolvers[idx]
+			if !ok {
+				var err error
+				if resolve, err = CoordinatorNamedAgentResolver(ctx, e.s, cr.state); err != nil {
+					return guidanceRender{}, err
+				}
+				resolvers[idx] = resolve
+			}
+			block, err := inject.RenderActiveWorkflowInject(ctx, e.inj, cr.auth.Reader, "sess-wf-ct09", inject.CoordinatorTurnFrame{RunContext: runCtx, Roster: roster, Runtime: snap}, nil, nil, nil)
 			if err != nil {
 				return guidanceRender{}, err
 			}
-			return coordinatorRender(block, cr), nil
+			r := coordinatorRender(block, cr)
+			r.resolveNamed = resolve
+			return r, nil
 		},
 	}}, nil
 }
