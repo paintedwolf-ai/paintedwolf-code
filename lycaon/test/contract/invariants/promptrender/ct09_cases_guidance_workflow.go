@@ -35,7 +35,9 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 		return nil, err
 	}
 	reps := coordinatorRepsBy(pairs,
-		func(cr coordRep) bool { return cr.state.TurnProfile.WorkflowActive },
+		func(cr coordRep) bool {
+			return cr.state.TurnProfile.WorkflowActive || slices.Contains(cr.auth.Offered, "promote_overlay")
+		},
 		func(cr coordRep) string { return offers(cr.auth, "promote_overlay", "ask_user", "workflow_advance") })
 	if len(reps) == 0 {
 		return nil, fmt.Errorf("no stock coordinator on an active run")

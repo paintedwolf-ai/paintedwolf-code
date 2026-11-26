@@ -11,4 +11,4 @@ deny_tools:
   - command
 read_scope: coordinator_product_read
 write_scope: coordinator_orchestration
-wait_conditions: [all_workers_idle]
+wait_conditions: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready]

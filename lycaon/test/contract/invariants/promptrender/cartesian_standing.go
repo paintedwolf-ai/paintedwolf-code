@@ -549,6 +549,11 @@ func runWorkerPersonaAndInjectMatrix(
 				withResources["finish_note"] = "Return evidence handles in complete_leg."
 				variants = append(variants, withResources)
 			}
+			if readerFact(auth.Reader, "can_request_command_verify") {
+				withVerify := maps.Clone(plain)
+				withVerify["verify_command"] = "go test ./..."
+				variants = append(variants, withVerify)
+			}
 			for vIdx, occ := range variants {
 				fullVars, vErr := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
 				if vErr != nil {
