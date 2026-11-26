@@ -135,7 +135,7 @@ func linkedOperationFact(ctx context.Context, recorder *invocation.SQLRecorder, 
 		return link
 	}
 	for _, pin := range pins {
-		if pin.Role == toolcontract.ExecutionRevisionDestination {
+		if pin.Role == toolcontract.DestinationRevision {
 			src := cmddiag.RedactReference(pin.RootID + ":" + pin.Path)
 			link.SourceID = src
 			link.ExpectedSourceID = src

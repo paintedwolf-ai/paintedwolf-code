@@ -123,4 +123,15 @@ func TestProgramDiagnosticsSaturatedQueuePreservesProductExecution(t *testing.T)
 	if obs.Stats().Dropped == 0 {
 		t.Fatal("expected saturated observer to record drops")
 	}
+	mu.Lock()
+	defer mu.Unlock()
+	sawOverflow := false
+	for _, f := range findings {
+		if f.RuleID == cmddiag.RuleCaptureOverflow && f.Disposition == cmddiag.DispositionOverflow {
+			sawOverflow = true
+		}
+	}
+	if !sawOverflow {
+		t.Fatalf("expected capture_overflow finding under saturation, got %+v", findings)
+	}
 }
