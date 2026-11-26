@@ -2,8 +2,8 @@ package reenter
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/actionoutcome"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"

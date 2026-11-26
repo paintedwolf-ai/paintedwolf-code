@@ -2,11 +2,12 @@ package loopwake
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestPostTurnDrainRetiresWakesNudgedBeforeTurnStart(t *testing.T) {

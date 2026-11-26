@@ -2,14 +2,14 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/actionoutcome"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type HostTurnsDeps struct {

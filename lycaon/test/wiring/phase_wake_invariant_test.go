@@ -8,9 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
-
 	"github.com/lycaon/lycaon/internal/actionoutcome"
+	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"

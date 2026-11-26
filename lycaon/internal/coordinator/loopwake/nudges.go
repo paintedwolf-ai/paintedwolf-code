@@ -2,12 +2,12 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/pkg/api"

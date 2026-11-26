@@ -3,9 +3,9 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"

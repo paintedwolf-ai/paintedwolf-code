@@ -3,12 +3,12 @@ package lifecycle
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/internal/observability"

@@ -1,13 +1,13 @@
 package loopwake
 
 import (
-	"github.com/lycaon/lycaon/internal/actionoutcome"
-	"github.com/lycaon/lycaon/pkg/api"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // pendingLoopWake preserves wake ordering across prompt execution.

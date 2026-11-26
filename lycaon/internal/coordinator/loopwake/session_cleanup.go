@@ -2,9 +2,10 @@ package loopwake
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 func (l *LoopEngine) ForgetSession(ctx context.Context, sessionID string) {

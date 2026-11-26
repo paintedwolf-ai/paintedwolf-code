@@ -2,15 +2,16 @@ package loopwake
 
 import (
 	"context"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func TestLoopDefersPhaseAdvancedWhileWorkersInFlight(t *testing.T) {

@@ -2,13 +2,13 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/workscope"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type WaitsDeps struct {

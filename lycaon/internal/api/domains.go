@@ -1,10 +1,9 @@
 package api
 
 import (
-	"time"
-
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/agentpresence"

@@ -2,12 +2,13 @@ package loopwake
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func TestOnTurnCompleteHostProseOnlyDoesNotAutoPark(t *testing.T) {

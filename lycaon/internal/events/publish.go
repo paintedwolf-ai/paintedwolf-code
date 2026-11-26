@@ -3,7 +3,6 @@ package events
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/messageview"
 	"log/slog"
 	"strings"
 	"sync"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

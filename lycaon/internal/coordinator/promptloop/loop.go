@@ -3,7 +3,6 @@ package promptloop
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"math"
 	"strings"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"

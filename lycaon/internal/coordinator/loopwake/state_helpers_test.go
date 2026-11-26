@@ -2,10 +2,11 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func interruptedUntilForTest(l *Waits, sessionID string) time.Time {

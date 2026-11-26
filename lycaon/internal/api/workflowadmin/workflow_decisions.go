@@ -2,11 +2,11 @@ package workflowadmin
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/observability"

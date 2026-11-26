@@ -1,11 +1,12 @@
 package loopwake
 
 import (
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestForgetSessionReleasesAllSessionState(t *testing.T) {

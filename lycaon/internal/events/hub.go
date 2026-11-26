@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/pkg/api"
 )

@@ -2,10 +2,10 @@ package workerruntime
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"log/slog"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/reenter"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"

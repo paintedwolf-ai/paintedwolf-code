@@ -2,10 +2,10 @@ package api
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"net/http"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/diagnostics"
 	"github.com/lycaon/lycaon/internal/preflight"
 	wire "github.com/lycaon/lycaon/pkg/api"

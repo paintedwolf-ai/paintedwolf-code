@@ -2,15 +2,16 @@ package loopwake
 
 import (
 	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func TestTerminalAcknowledgementSettlesOnlySubscribedCoordinatorWaits(t *testing.T) {
