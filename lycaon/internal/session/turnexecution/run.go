@@ -99,7 +99,9 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 	ctx = workercontext.WithJob(ctx, in.WorkerJobID)
 	finalOutputID, closeoutID := "", ""
 	defer func() {
+		outcomeErr := runErr
 		if err := m.Turns.Finish(context.WithoutCancel(ctx), turnExecution, finalOutputID, resp, runErr); err != nil {
+			outcomeErr = err
 			resp = nil
 			runErr = errors.Join(runErr, err)
 		}
@@ -109,7 +111,7 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 		} else if m.Settlement.Disposition(true) == api.SessionIdleDispositionInterrupted {
 			cancelledBy = api.TurnCancellationSourceShutdown
 		}
-		outcome.Finish(resp, runErr, cancelledBy)
+		outcome.Finish(resp, outcomeErr, cancelledBy)
 	}()
 
 	if err := m.Chats.UnarchiveOnPrompt(ctx, sess); err != nil {

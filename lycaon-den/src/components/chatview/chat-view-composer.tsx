@@ -169,7 +169,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
   const sendWithStreamFollow = async (
     payload: import("./Composer.tsx").ComposerSendPayload,
   ): Promise<boolean | void> => {
-    if (payload.recovery) return sendPromptWithStreamFollow(payload);
+    if (payload.recovery || payload.recoveryContinuationId) return sendPromptWithStreamFollow(payload);
     const pending = pendingAsk();
     if (pending) {
       // The draft survives while the question dock mounts.
