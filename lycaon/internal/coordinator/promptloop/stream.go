@@ -488,6 +488,9 @@ func attachStreamObservers(
 	loopProgress func() *api.CoordinatorLoopProgress,
 ) context.Context {
 	ctx = llm.WithDispatchObserver(ctx, func() {
+		if isCoordinatorTurn {
+			actionoutcome.Dispatch(ctx)
+		}
 		finishPreparing()
 		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
 			return

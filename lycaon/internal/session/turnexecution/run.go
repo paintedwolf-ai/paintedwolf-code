@@ -101,6 +101,7 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 			resp = nil
 			runErr = errors.Join(runErr, err)
 		}
+		outcome.Finish(resp, runErr, api.TurnCancellationSourceHost)
 	}()
 
 	if err := m.Chats.UnarchiveOnPrompt(ctx, sess); err != nil {

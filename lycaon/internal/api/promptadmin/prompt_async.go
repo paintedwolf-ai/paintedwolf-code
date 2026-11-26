@@ -5,8 +5,6 @@ import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/actionoutcome"
 
-	"github.com/lycaon/lycaon/internal/httpclient"
-	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/observability"
 	sessionexecution "github.com/lycaon/lycaon/internal/session/execution"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
@@ -48,17 +46,7 @@ func renderPromptHostError(catalog *usernotice.Catalog, err error, hasProgress b
 }
 
 func promptHostErrorCode(err error) wire.NoticeCode {
-	if err == nil {
-		return wire.NoticeCodePromptFailed
-	}
-	if code, ok := noticeerr.CodeOf(err); ok {
-		return code
-	}
-	// Transport reachability is a predicate over the chain, not one error type.
-	if httpclient.Unreachable(err) {
-		return wire.NoticeCodeProviderUnreachable
-	}
-	return wire.NoticeCodePromptFailed
+	return actionoutcome.PromptFailureCode(err)
 }
 
 func shouldPublishPromptHostError(err error) bool {
