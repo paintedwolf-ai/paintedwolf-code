@@ -43,6 +43,7 @@ type Deps struct {
 	SessionView    *sessionview.Projector
 	Git            *gitadmin.Handler
 	Prompt         *promptadmin.Handler
+	PythonEvidence PythonEvidenceReader
 }
 
 type Handler struct {
@@ -108,6 +109,7 @@ type Transcript struct {
 	Events          events.ReplayHub
 	Invocations     invocation.Recorder
 	Projects        project.Registry
+	PythonEvidence  PythonEvidenceReader
 	Sessions        *session.Host
 	SessionStore    sessionstore.SessionRepository
 	TranscriptStore sessionstore.TranscriptRepository
@@ -130,6 +132,6 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 	h.Navigation = &Navigation{Branches: deps.Branches, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, Workers: deps.Workers, responses: responses, sourceWorkspace: deps.Sources.Workspace}
 	h.Recovery = &Recovery{Sessions: deps.Sessions, responses: responses}
 	h.Rewind = &Rewind{Sessions: deps.Sessions, responses: responses}
-	h.Transcript = &Transcript{Events: deps.Events, Invocations: deps.Invocations, Projects: deps.Projects, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, TranscriptStore: deps.Store.Transcript, responses: responses}
+	h.Transcript = &Transcript{Events: deps.Events, Invocations: deps.Invocations, Projects: deps.Projects, PythonEvidence: deps.PythonEvidence, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, TranscriptStore: deps.Store.Transcript, responses: responses}
 	return h
 }

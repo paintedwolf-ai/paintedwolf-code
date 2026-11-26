@@ -14,7 +14,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
+	"github.com/lycaon/lycaon/internal/api/sessionadmin"
 	"github.com/lycaon/lycaon/internal/pagecursor"
+	"github.com/lycaon/lycaon/internal/pythonevidence"
 	"github.com/lycaon/lycaon/internal/session/store"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -368,7 +370,8 @@ func (s *Artifacts) HandleSessionArtifact(w http.ResponseWriter, r *http.Request
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "artifact id required")
 		return
 	}
-	if _, err := s.sessionStore.Get(r.Context(), sessionID); err != nil {
+	sess, err := s.sessionStore.Get(r.Context(), sessionID)
+	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "This chat no longer exists.")
 			return
@@ -379,6 +382,20 @@ func (s *Artifacts) HandleSessionArtifact(w http.ResponseWriter, r *http.Request
 	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
 	res := s.visualStore.Resolve(r.Context(), root, artifactID)
 	if !res.IsPresent() {
+		if s.pythonEvidence != nil && res.Reason() == visual.AbsenceNotFound {
+			data, pyErr := s.pythonEvidence.ReadPythonRetainedOutput(r.Context(), sessionadmin.ViewerScopeForSession(sess), artifactID)
+			if pyErr == nil {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				w.WriteHeader(http.StatusOK)
+				// #nosec G705 -- screened retained python output bytes are the response body.
+				_, _ = w.Write(data)
+				return
+			}
+			if errors.Is(pyErr, pythonevidence.ErrAccessDenied) {
+				s.responses.Fail(w, wire.ApiErrorCodeArtifactForeign, "retained output belongs to another session or worker")
+				return
+			}
+		}
 		switch res.Reason() {
 		case visual.AbsenceForeign:
 			s.responses.Fail(w, wire.ApiErrorCodeArtifactForeign, res.Note())

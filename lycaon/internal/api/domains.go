@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/scanadmin"
+	"github.com/lycaon/lycaon/internal/api/sessionadmin"
 	"github.com/lycaon/lycaon/internal/attention"
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/browser/preview"
@@ -68,6 +69,7 @@ type Activity struct {
 
 type Artifacts struct {
 	projectRegistry project.Registry
+	pythonEvidence  sessionadmin.PythonEvidenceReader
 	responses       *httpio.Responder
 	sessionStore    sessionstore.SessionRepository
 	transcriptStore sessionstore.TranscriptRepository
@@ -167,7 +169,7 @@ type Workers struct {
 
 func composeDomains(s *Server, deps Dependencies) {
 	s.Routes.Activity = &Activity{attachmentCaps: s.Admin.Prompt.Submission.Caps, ShuttingDown: s.ShuttingDown, editorClients: s.Sources.Editor.EditorClients, agentPresence: deps.Source.AgentPresence, attention: deps.Host.Attention, costTracker: deps.Providers.CostTracker, dataDir: s.dataDir, events: s.events, eventHeartbeatInterval: deps.Host.EventHeartbeatInterval, healthPayload: s.healthPayload, hostIdentity: deps.Host.HostIdentity, hostResources: deps.Host.HostResources, preflightEnv: deps.Host.PreflightEnv, projectLiveness: deps.Source.ProjectLiveness, projectRegistry: deps.Core.Projects, responses: &s.responses, scheduleSourceWatch: s.Sources.Watch.ScheduleSourceWatch, sessionStore: deps.Core.Store.Sessions, settingsSvc: deps.Core.Settings}
-	s.Routes.Artifacts = &Artifacts{projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, visualStore: deps.Source.VisualStore}
+	s.Routes.Artifacts = &Artifacts{projectRegistry: deps.Core.Projects, pythonEvidence: deps.Core.PythonEvidence, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, visualStore: deps.Source.VisualStore}
 	s.Routes.Conversation = &Conversation{ShuttingDown: s.ShuttingDown, preview: deps.Host.Preview, progressStore: deps.Source.ProgressStore, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, sessions: s.sessions}
 	var findingIgnores *scancadence.IgnoreService
 	if deps.Scans.ScanCadence != nil {

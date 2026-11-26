@@ -370,8 +370,11 @@ next(r.iter_content(chunk_size=64))`,
 		if streamAdm.Record.Outcome.Succeeded {
 			t.Fatalf("persisted /stream HTTP admission unexpectedly succeeded: %+v", streamAdm.Record.Outcome)
 		}
+		// Compare host-read bytes (Outcome.BytesTransferred) against the guest-delivered
+		// lower bound confirmed on stdout (CHUNK_RECEIVED:64): host-read bytes must be
+		// at least the guest-delivered chunk length.
 		if streamAdm.Record.Outcome.BytesTransferred < int64(len(firstChunk)) {
-			t.Fatalf("persisted /stream BytesTransferred = %d, want >= %d (guest received 64B chunk)", streamAdm.Record.Outcome.BytesTransferred, len(firstChunk))
+			t.Fatalf("persisted /stream host-read BytesTransferred = %d, want >= %d (guest-delivered chunk lower bound)", streamAdm.Record.Outcome.BytesTransferred, len(firstChunk))
 		}
 		if streamAdm.Record.Outcome.Error == "" {
 			t.Fatalf("persisted /stream HTTP admission missing cancellation error: %+v", streamAdm.Record.Outcome)

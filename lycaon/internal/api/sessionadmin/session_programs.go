@@ -16,7 +16,8 @@ var programLimitBounds = httpio.MustPageLimit(20, 1, 100)
 
 func (s *Transcript) HandleGetCommandProgramReceipt(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if _, err := s.SessionStore.Get(r.Context(), sessionID); err != nil {
+	sess, err := s.SessionStore.Get(r.Context(), sessionID)
+	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
 			return
@@ -34,12 +35,16 @@ func (s *Transcript) HandleGetCommandProgramReceipt(w http.ResponseWriter, r *ht
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	result, err := reader.ReadProgramActivityPage(r.Context(), sessionID, chi.URLParam(r, "program_id"), r.URL.Query().Get("activity_id"), query.Cursor, query.Limit)
+	programID := chi.URLParam(r, "program_id")
+	result, err := reader.ReadProgramActivityPage(r.Context(), sessionID, programID, r.URL.Query().Get("activity_id"), query.Cursor, query.Limit)
 	if err != nil {
 		switch {
 		case errors.Is(err, pagecursor.ErrInvalid), errors.Is(err, pagecursor.ErrExpired):
 			s.responses.PageCursorError(w, r, "cursor", err)
 		case errors.Is(err, invocation.ErrProgramNotFound):
+			if s.servePythonProgramReceipt(w, r, sess, programID) {
+				return
+			}
 			s.responses.Fail(w, wire.ApiErrorCodeCommandProgramNotFound, "command program not found")
 		default:
 			s.responses.InternalError(w, r, err)
