@@ -382,6 +382,16 @@ func TestBB04M05MultiRootAndGitIsolation(t *testing.T) {
 	}
 }
 
+type bb04LoopbackGate struct{}
+
+func (bb04LoopbackGate) Await(_ context.Context, ask tools.LoopbackConnectAsk) (tools.LoopbackConnectResult, error) {
+	return tools.LoopbackConnectResult{Authorized: true, Ports: append([]uint16(nil), ask.Ports...)}, nil
+}
+
+func (bb04LoopbackGate) SessionLoopbackGrant(context.Context, string, string) (bool, []uint16) {
+	return true, nil
+}
+
 // TestBB04M06LoopbackHTTPFixture exercises M06 using a fixture-chosen ephemeral
 // loopback port and an independent server-side request log:
 //  1. Successful download writes exact bytes and records 1 request.
@@ -398,6 +408,7 @@ func TestBB04M06LoopbackHTTPFixture(t *testing.T) {
 	}})
 	f.Runtime.Boundary = b
 	f.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(b), f.Runtime.Registry, "fixture")
+	f.Runtime.Executor.Capabilities.SetLoopbackConnectGate(bb04LoopbackGate{})
 	owners, err := (programOwnerTools{
 		http:     httpaction.Deps{Boundary: b},
 		boundary: b,
