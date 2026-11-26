@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
