@@ -220,7 +220,8 @@ describe("SessionTranscript virtual window", () => {
     reconcile.mockRestore();
   });
 
-  it("coalesces repeated off-tail extent changes into one deferred frame while pinned-tail reconciles before paint", async () => {
+  it("coalesces repeated off-tail extent changes into one deferred frame while pinned-tail geometry transitions reconcile before paint", async () => {
+    geometry.width = 640;
     const message = (index: number): Message => ({
       id: `coalesce-${index}`, role: "user", origin: "user", authority: "user",
       trust_tier: "trusted", content: `row ${index}`,
@@ -247,20 +248,25 @@ describe("SessionTranscript virtual window", () => {
     await new Promise(requestAnimationFrame);
     expect(notify).toHaveBeenCalledOnce();
 
-    // Pinned to live tail: burst extent changes coalesce into one pre-paint microtask without scheduling a frame.
+    // Pinned to live tail during a geometry transition: burst extent changes coalesce into one pre-paint microtask without scheduling a frame.
     notify.mockClear();
     schedule.mockClear();
     motion.tail.setTailPin(() => true);
-    for (let i = 0; i < 3; i += 1) {
-      setMessages((previous) => [...previous, message(45 + i)]);
+    try {
+      setTranscriptSpacing({ ...DEFAULT_TRANSCRIPT_SPACING, messageGap: 2 });
+      for (let i = 0; i < 3; i += 1) {
+        setMessages((previous) => [...previous, message(45 + i)]);
+      }
+      expect(schedule).not.toHaveBeenCalled();
+      expect(notify).not.toHaveBeenCalled();
+      await Promise.resolve();
+      expect(notify).toHaveBeenCalledOnce();
+      expect(schedule).not.toHaveBeenCalled();
+    } finally {
+      setTranscriptSpacing(DEFAULT_TRANSCRIPT_SPACING);
+      notify.mockRestore();
+      schedule.mockRestore();
     }
-    expect(schedule).not.toHaveBeenCalled();
-    expect(notify).not.toHaveBeenCalled();
-    await Promise.resolve();
-    expect(notify).toHaveBeenCalledOnce();
-    expect(schedule).not.toHaveBeenCalled();
-    notify.mockRestore();
-    schedule.mockRestore();
   });
 
   it("renders the virtual window in normal flow when layout is unavailable", async () => {

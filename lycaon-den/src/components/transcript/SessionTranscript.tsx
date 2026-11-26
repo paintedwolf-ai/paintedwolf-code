@@ -7,7 +7,7 @@ import {
 import { createTranscriptGeometry } from "../../chat/transcript/layout/transcript-geometry.ts";
 import type { TranscriptSeam } from "../../chat/transcript/layout/transcript-spacing.ts";
 import { scrollportMotionForViewport } from "../../platform/scrolling/scrollport-motion.ts";
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 import { KeyedIndex } from "../keyed-index.tsx";
 import type { WorkerTranscriptCache } from "../../chat/worker/worker-transcript.ts";
 import type { SlotContent } from "../../ui/slot-content.ts";
@@ -414,10 +414,37 @@ export function SessionTranscript(props: Props) {
 
   // Window swaps preserve extent; resize observations report content growth.
   const virtualExtent = createMemo(() => virtualizer.getTotalSize());
+  let geometryTransitionActive = false;
+  let geometryTransitionFrame: number | undefined;
   let pinnedReconcilePending = false;
+  const clearGeometryTransition = () => {
+    geometryTransitionActive = false;
+    if (geometryTransitionFrame !== undefined) {
+      cancelAnimationFrame(geometryTransitionFrame);
+      geometryTransitionFrame = undefined;
+    }
+  };
   onCleanup(() => {
     pinnedReconcilePending = false;
+    clearGeometryTransition();
   });
+  createEffect(
+    on(
+      () => [geometry.key(), geometry.origin()] as const,
+      () => {
+        if (layout() !== "chat") return;
+        geometryTransitionActive = true;
+        if (geometryTransitionFrame !== undefined) {
+          cancelAnimationFrame(geometryTransitionFrame);
+        }
+        geometryTransitionFrame = requestAnimationFrame(() => {
+          geometryTransitionFrame = undefined;
+          geometryTransitionActive = false;
+        });
+      },
+      { defer: true },
+    ),
+  );
   createEffect(() => {
     if (layout() !== "chat") return;
     virtualExtent();
@@ -425,7 +452,7 @@ export function SessionTranscript(props: Props) {
     if (!scroller) return;
     const motion = scrollportMotionForViewport(scroller);
     if (!motion) return;
-    if (motion.tail.pinControlsOffset() && scroller.isConnected) {
+    if (geometryTransitionActive && motion.tail.pinControlsOffset() && scroller.isConnected) {
       if (pinnedReconcilePending) return;
       pinnedReconcilePending = true;
       queueMicrotask(() => {
