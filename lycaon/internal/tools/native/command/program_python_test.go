@@ -163,7 +163,7 @@ func TestCommandLanguagePythonDispatchesToPortablePythonNeverHostFallback(t *tes
 		testutil.FailErr(t, "Call python3 via command-language", err)
 	}
 	if runner.count() != 1 {
-		t.Fatalf("portable runner calls = %d, want 1", runner.count())
+		t.Fatalf("portable runner calls = %d, want 1 (out=%s)", runner.count(), out)
 	}
 	got := runner.last()
 	if got.Mode != pythonruntime.ModeCode || got.Code != "import sys; print(sys.platform)" || !slices.Equal(got.Args, []string{"--extra-arg", "42"}) {

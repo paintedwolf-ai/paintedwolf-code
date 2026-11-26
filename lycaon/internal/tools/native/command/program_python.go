@@ -159,7 +159,6 @@ func refusePythonToolRequired(ctx context.Context, d *ProgramDispatcher, request
 
 func pythonNativeOperation(spec toolcontract.CommandSpecification, runner PythonRunner, run *programRun) NativeOperation {
 	return NativeOperation{
-		Tool:        spec.Name,
 		ClosedForms: true,
 		Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (NativePrepared, error) {
 			argv := request.Argv.Values()
@@ -172,7 +171,6 @@ func pythonNativeOperation(spec toolcontract.CommandSpecification, runner Python
 			return NativePrepared{
 				Mode:   mode,
 				Review: review,
-				Tool:   spec.Name,
 				Invoke: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 					return runManagedPython(ctx, spec.Name, runner, frame, tc, request, streams, func(req *PythonExecutionRequest) error {
 						switch parsed.Mode {
@@ -212,7 +210,6 @@ func pythonNativeOperation(spec toolcontract.CommandSpecification, runner Python
 
 func pytestNativeOperation(spec toolcontract.CommandSpecification, runner PythonRunner, run *programRun) NativeOperation {
 	return NativeOperation{
-		Tool:        spec.Name,
 		ClosedForms: true,
 		Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (NativePrepared, error) {
 			argv := request.Argv.Values()
@@ -222,7 +219,6 @@ func pytestNativeOperation(spec toolcontract.CommandSpecification, runner Python
 			return NativePrepared{
 				Mode:   mode,
 				Review: review,
-				Tool:   spec.Name,
 				Invoke: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 					return runManagedPython(ctx, spec.Name, runner, frame, tc, request, streams, func(req *PythonExecutionRequest) error {
 						req.Mode = pythonruntime.ModeModule
@@ -238,7 +234,6 @@ func pytestNativeOperation(spec toolcontract.CommandSpecification, runner Python
 
 func markdownItNativeOperation(spec toolcontract.CommandSpecification, runner PythonRunner, run *programRun) NativeOperation {
 	return NativeOperation{
-		Tool:        spec.Name,
 		ClosedForms: true,
 		Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (NativePrepared, error) {
 			argv := request.Argv.Values()
@@ -247,7 +242,6 @@ func markdownItNativeOperation(spec toolcontract.CommandSpecification, runner Py
 			return NativePrepared{
 				Mode:   "default",
 				Review: review,
-				Tool:   spec.Name,
 				Invoke: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 					return runManagedPython(ctx, spec.Name, runner, frame, tc, request, streams, func(req *PythonExecutionRequest) error {
 						req.Mode = pythonruntime.ModeCLI

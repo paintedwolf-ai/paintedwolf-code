@@ -441,22 +441,14 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 		active = append(active, offeredProgramDefinition(programPublicationTool, write.Operation, nil))
 	}
 	seen := map[string]bool{external.ReadOnlyFacts().Identity: true, programPublicationTool: true}
-	for name, operation := range natives {
+	for _, operation := range natives {
 		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
 			if tool == "" || seen[tool] {
 				continue
 			}
 			seen[tool] = true
 			if definition, ok := r.Registry.Operation(tool); ok {
-				if spec, hasSpec := run.catalogCommand(tool); tool == name && hasSpec && !definitionHasCommand(definition.Operation, tool) {
-					catDef, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
-					if err != nil {
-						return nil, nil, nil, err
-					}
-					active = append(active, catDef)
-				} else {
-					active = append(active, offeredProgramDefinition(tool, definition.Operation, operation.SecretSlots))
-				}
+				active = append(active, offeredProgramDefinition(tool, definition.Operation, operation.SecretSlots))
 			} else if spec, ok := run.catalogCommand(tool); ok {
 				definition, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
 				if err != nil {
