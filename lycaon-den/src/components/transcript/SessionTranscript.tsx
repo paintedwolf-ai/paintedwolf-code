@@ -5,7 +5,7 @@ import {
   type TranscriptDisclosureKey,
 } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { createTranscriptGeometry } from "../../chat/transcript/layout/transcript-geometry.ts";
-import type { TranscriptSeam } from "../../chat/transcript/layout/transcript-spacing.ts";
+import { transcriptSpacing, type TranscriptSeam } from "../../chat/transcript/layout/transcript-spacing.ts";
 import { scrollportMotionForViewport } from "../../platform/scrolling/scrollport-motion.ts";
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 import { KeyedIndex } from "../keyed-index.tsx";
@@ -430,7 +430,7 @@ export function SessionTranscript(props: Props) {
   });
   createEffect(
     on(
-      () => [geometry.key(), geometry.origin()] as const,
+      () => [geometry.key(), geometry.origin(), transcriptSpacing()] as const,
       () => {
         if (layout() !== "chat") return;
         geometryTransitionActive = true;
