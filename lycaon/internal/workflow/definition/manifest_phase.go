@@ -498,12 +498,39 @@ func copyObligationDefs(in []ObligationDef) []ObligationDef {
 		if len(ob.Params) > 0 {
 			params := make(map[string]any, len(ob.Params))
 			for k, v := range ob.Params {
-				params[k] = v
+				params[k] = cloneObligationParamValue(v)
 			}
 			out[i].Params = params
 		}
 	}
 	return out
+}
+
+func cloneObligationParamValue(v any) any {
+	switch typed := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for k, val := range typed {
+			out[k] = cloneObligationParamValue(val)
+		}
+		return out
+	case map[string]string:
+		out := make(map[string]string, len(typed))
+		for k, val := range typed {
+			out[k] = val
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, val := range typed {
+			out[i] = cloneObligationParamValue(val)
+		}
+		return out
+	case []string:
+		return append([]string(nil), typed...)
+	default:
+		return v
+	}
 }
 
 func mergeOnReenter(parent, child PhaseOnReenter) PhaseOnReenter {

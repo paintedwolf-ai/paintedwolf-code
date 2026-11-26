@@ -33,25 +33,68 @@ func TestRunSnapshotRejectsUnknownShapes(t *testing.T) {
 }
 
 func TestDecodeRunManifestCacheReturnsDetachedClone(t *testing.T) {
-	reg, err := RegistryFromDirs("")
-	testutil.FailErr(t, "load catalog", err)
-	for _, m := range reg.All() {
-		if len(m.Phases) == 0 {
-			continue
-		}
-		raw, err := EncodeRunManifest(m)
-		testutil.FailErr(t, "encode run manifest", err)
-		first, err := DecodeRunManifest(raw)
-		testutil.FailErr(t, "first decode", err)
-		originalPhase := first.Phases[0]
-		first.Phases[0] = "mutated-phase"
-
-		second, err := DecodeRunManifest(raw)
-		testutil.FailErr(t, "second decode", err)
-		if second.Phases[0] != originalPhase {
-			t.Fatalf("cache leaked caller mutation: got %q, want %q", second.Phases[0], originalPhase)
-		}
-		return
+	original := Manifest{
+		ID:      "clone-audit",
+		Version: "1.0.0",
+		Phases:  []string{"plan"},
+		PhaseDefs: []PhaseDef{
+			{
+				ID: "plan",
+				Explain: &PhaseExplain{
+					Summary: "Original summary",
+					Body:    "Original body",
+				},
+				OnEnter: PhaseOnEnter{
+					RequestUserFeedback: &UserFeedbackPrompt{
+						Prompt:      "Approve?",
+						Options:     []string{"yes", "no"},
+						ArtifactIDs: []string{"art-1"},
+						Secret: &SecretInputSpec{
+							Name:               "API_TOKEN",
+							Purpose:            "auth",
+							Scope:              "session",
+							AgentUseTTLSeconds: 60,
+						},
+					},
+					Obligations: []ObligationDef{
+						{
+							Kind: "check",
+							Params: map[string]any{
+								"nested": map[string]any{"key": "orig"},
+								"items":  []any{"a", "b"},
+							},
+						},
+					},
+				},
+				ContentReview: &PhaseContentReview{
+					Tools: []string{"edit"},
+					Paths: []string{"src/"},
+				},
+			},
+		},
 	}
-	t.Fatal("no bundled workflow with phases found")
+
+	raw, err := EncodeRunManifest(original)
+	testutil.FailErr(t, "encode run manifest", err)
+
+	first, err := DecodeRunManifest(raw)
+	testutil.FailErr(t, "first decode", err)
+
+	// Mutate every nested mutable field on the first decoded manifest.
+	first.Phases[0] = "mutated-phase"
+	first.PhaseDefs[0].Explain.Summary = "Mutated summary"
+	first.PhaseDefs[0].Explain.Body = "Mutated body"
+	first.PhaseDefs[0].OnEnter.RequestUserFeedback.Options[0] = "mutated-opt"
+	first.PhaseDefs[0].OnEnter.RequestUserFeedback.ArtifactIDs[0] = "mutated-art"
+	first.PhaseDefs[0].OnEnter.RequestUserFeedback.Secret.Name = "MUTATED_SECRET"
+	first.PhaseDefs[0].OnEnter.Obligations[0].Params["nested"].(map[string]any)["key"] = "mutated"
+	first.PhaseDefs[0].OnEnter.Obligations[0].Params["items"].([]any)[0] = "mutated-item"
+	first.PhaseDefs[0].ContentReview.Tools[0] = "mutated-tool"
+
+	second, err := DecodeRunManifest(raw)
+	testutil.FailErr(t, "second decode", err)
+
+	if diff := cmp.Diff(original, second, cmpopts.EquateEmpty()); diff != "" {
+		t.Fatalf("cache leaked caller mutation on re-decode:\n%s", diff)
+	}
 }

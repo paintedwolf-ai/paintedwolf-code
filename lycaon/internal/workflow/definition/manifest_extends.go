@@ -253,6 +253,10 @@ func clonePhaseDefs(in []PhaseDef) []PhaseDef {
 			value := *in[i].OnEnter.RequestUserFeedback
 			value.Options = append([]string(nil), value.Options...)
 			value.ArtifactIDs = append([]string(nil), value.ArtifactIDs...)
+			if value.Secret != nil {
+				secret := *value.Secret
+				value.Secret = &secret
+			}
 			out[i].OnEnter.RequestUserFeedback = &value
 		}
 		out[i].OnEnter.Obligations = copyObligationDefs(in[i].OnEnter.Obligations)
@@ -279,6 +283,10 @@ func clonePhaseDefs(in []PhaseDef) []PhaseDef {
 		}
 		if in[i].ReviewLoop != nil {
 			out[i].ReviewLoop = cloneReviewLoop(in[i].ReviewLoop)
+		}
+		if in[i].Explain != nil {
+			value := *in[i].Explain
+			out[i].Explain = &value
 		}
 	}
 	return out
