@@ -206,3 +206,38 @@ func TestFixedFactsAndZeroUnlessFollowTheProducer(t *testing.T) {
 		t.Fatal("constraint without its gate atom")
 	}
 }
+
+// groupedProducer evaluates `a && b` once on each of two include paths; b
+// reaches the guard only on path p2.
+type groupedProducer struct{}
+
+func (groupedProducer) Knobs(string, string) []Knob { return toyKnobs[:2] }
+
+func (groupedProducer) Run(_ context.Context, _, _, _ string, knobs []Knob, s Setting) ([]Vector, error) {
+	a, b := s.Value(knobs[0]).(bool), s.Value(knobs[1]).(bool)
+	t := func(v bool) independence.Truth {
+		if v {
+			return independence.True
+		}
+		return independence.False
+	}
+	return []Vector{
+		{Truths: map[string]independence.Truth{"a": t(a), "b": independence.False}, Decision: false, Evaluated: true, Group: "p1"},
+		{Truths: map[string]independence.Truth{"a": t(a), "b": t(b)}, Decision: a && b, Evaluated: true, Group: "p2"},
+	}, nil
+}
+
+// A pair comes from one include path.
+func TestGeneratePairsWithinOneGroup(t *testing.T) {
+	outcomes, err := Generate(t.Context(), groupedProducer{}, []Target{{
+		Site: "g", Recipient: "coordinator", Input: "a",
+		Needs:      []map[string]independence.Truth{{"b": independence.True}},
+		References: toyRefs,
+	}}, Budget{PerTarget: 20, Total: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := outcomes[0]; !o.Found || !strings.Contains(o.With.Vector, "b=T") || !strings.Contains(o.Then.Vector, "b=T") {
+		t.Fatalf("outcome = %+v", outcomes[0])
+	}
+}

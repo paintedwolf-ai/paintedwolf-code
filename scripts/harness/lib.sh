@@ -106,7 +106,10 @@ harness_up() {
 
   harness_reap_stale_states "${TMPDIR:-/tmp}"
   if [[ -z "${LYCAON_E2E_STATE_DIR:-}" ]]; then
-    LYCAON_E2E_STATE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/lycaon-harness.XXXXXX")"
+    local state_base="${TMPDIR:-/tmp}"
+    # Kept state must outlive a scheduled run's own temp directory.
+    [[ "${HARNESS_KEEP_STATE:-0}" == "1" ]] && state_base="${PW_HOST_TMPDIR:-${state_base}}"
+    LYCAON_E2E_STATE_DIR="$(mktemp -d "${state_base}/lycaon-harness.XXXXXX")"
     export LYCAON_E2E_STATE_DIR
   fi
   mkdir -p "${LYCAON_E2E_STATE_DIR}"

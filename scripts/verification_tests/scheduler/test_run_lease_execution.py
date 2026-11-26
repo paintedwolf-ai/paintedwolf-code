@@ -6,11 +6,50 @@ import os
 from pathlib import Path
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
 
 from verification_lifecycle import run_lease
+
+
+class OperationTempExecution(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve() / "runs"
+        for patcher in (mock.patch.object(run_lease, "mount_points", return_value=[]),
+                        mock.patch.object(run_lease, "HOLDERS_EXIT_SECONDS", 0)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_an_operation_that_exits_takes_its_temp_with_it(self):
+        with run_lease.operation_temp("stage", self.root) as (temp, _):
+            (temp / "go-build1" / "b001").mkdir(parents=True)
+            (temp / "go-build1" / "b001" / "pkg.test").write_bytes(b"binary")
+        self.assertEqual(list(self.root.iterdir()), [self.root / ".collection.lock"])
+
+    def test_a_killed_descendant_releases_its_temp_to_the_next_collection(self):
+        with run_lease.operation_temp("stage", self.root) as (temp, lease):
+            holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], pass_fds=(lease,))
+            self.addCleanup(holder.kill)
+            (temp / "go-build1").mkdir()
+        self.assertTrue((temp / "go-build1").exists(), "temp was removed under a live descendant")
+        run_lease.prune(self.root)
+        self.assertTrue(temp.exists(), "collection removed a held run")
+        holder.kill()
+        holder.wait()
+        run_lease.prune(self.root)
+        self.assertFalse(temp.parent.exists())
+
+    def test_operation_environment_points_go_and_temp_into_the_run_and_keeps_the_host_temp(self):
+        run = Path("/runs/stage.lease.x/tmp")
+        environment = run_lease.temp_environment({"TMPDIR": "/host", "GOTMPDIR": "/configured"}, run)
+        self.assertEqual((environment["TMPDIR"], environment["GOTMPDIR"], environment["PW_HOST_TMPDIR"]),
+                         (str(run), str(run), "/host"))
+        nested = run_lease.temp_environment(environment, Path("/runs/run.lease.y/tmp"))
+        self.assertEqual(nested["PW_HOST_TMPDIR"], "/host")
 
 
 class TestRunPruneExecution(unittest.TestCase):

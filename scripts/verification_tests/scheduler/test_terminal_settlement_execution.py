@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 import verification_lifecycle.custody as custody
 import verification_lifecycle.terminal as lifetime
+if os.name != "nt":
+    from verification_lifecycle import run_lease
 from verification_health import owner_identity
 from verification_resources import Reservation, entries as reservations
 from verification_execute import Executor
@@ -151,6 +153,30 @@ class TerminalProcessTests(TerminalFixture):
         self.assertFalse(thread.is_alive())
         self.assertEqual(result, [True], "an unverified cleanup later recovered into a pass")
         self.assertTrue(cap.entry["terminal_settlement"]["unverified"])
+
+    def test_a_stage_builds_in_leased_temp_that_leaves_with_it(self):
+        batch = self.capability("lease")
+        directory = self.root / "batch"
+        directory.mkdir()
+        plan = {"batch": {"ticket": batch.entry["ticket"], "workers": 1, "members": ["request"]},
+                "requests": [{"ticket": "request", "order": 1}]}
+        (directory / "plan.json").write_text(json.dumps(plan))
+        producer = ("import json, os, tempfile\nfrom pathlib import Path\n"
+                    "Path(tempfile.gettempdir(), 'go-build1', 'b001').mkdir(parents=True)\n"
+                    "print(json.dumps([os.environ['TMPDIR'], os.environ['GOTMPDIR']]))")
+        log = directory / "stage.log"
+        with patch.dict(os.environ, PW_SOURCE_SNAPSHOT_COMMIT="c" * 40,
+                        PW_TEST_EXECUTION_FD=str(batch.file.fileno())):
+            executor = Executor(self.queue, directory)
+            spec = {"locks": ["fixture"], "workers": 1}
+            with Reservation(self.queue, execution.lock_file, batch.entry["ticket"], "fixture", spec, 1) as cap, \
+                    patch.object(executor, "interested", return_value=True):
+                code = executor.run_command([sys.executable, "-c", producer], log, ["request"], reservation=cap)
+        self.assertEqual(code, 0, log.read_text())
+        temp, go_temp = json.loads(log.read_text())
+        self.assertEqual(go_temp, temp)
+        self.assertEqual(Path(temp).parent.parent.resolve(), run_lease.RUN_ROOT.resolve())
+        self.assertFalse(Path(temp).parent.exists())
 
     def test_exception_cleanup_cannot_manufacture_stage_terminal_authority(self):
         batch = self.capability("lease")

@@ -96,7 +96,9 @@ def main() -> int:
 
     env = os.environ.copy()
     created = not env.get("LYCAON_E2E_STATE_DIR")
-    state = Path(env.get("LYCAON_E2E_STATE_DIR") or tempfile.mkdtemp(prefix="lycaon-harness.")).resolve()
+    # Kept state must outlive a scheduled run's own temp directory.
+    base = env.get("PW_HOST_TMPDIR") if env.get("HARNESS_KEEP_STATE") == "1" else None
+    state = Path(env.get("LYCAON_E2E_STATE_DIR") or tempfile.mkdtemp(prefix="lycaon-harness.", dir=base)).resolve()
     token = secrets.token_hex(24)
     env.update(LYCAON_E2E_STATE_DIR=str(state), HARNESS_SUPERVISOR_PID=str(os.getpid()),
                HARNESS_SUPERVISOR_TOKEN=token)
