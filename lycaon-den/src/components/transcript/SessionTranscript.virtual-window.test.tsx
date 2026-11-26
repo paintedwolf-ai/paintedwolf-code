@@ -248,20 +248,14 @@ describe("SessionTranscript virtual window", () => {
     await new Promise(requestAnimationFrame);
     expect(notify).toHaveBeenCalledOnce();
 
-    // Pinned to live tail during a geometry transition: burst extent changes coalesce into one pre-paint microtask without scheduling a frame.
+    // Pinned to live tail during a geometry transition: reconciles synchronously without scheduling a frame.
     notify.mockClear();
     schedule.mockClear();
     motion.tail.setTailPin(() => true);
     try {
       setTranscriptSpacing({ ...DEFAULT_TRANSCRIPT_SPACING, messageGap: 2 });
-      for (let i = 0; i < 3; i += 1) {
-        setMessages((previous) => [...previous, message(45 + i)]);
-      }
       expect(schedule).not.toHaveBeenCalled();
-      expect(notify).not.toHaveBeenCalled();
-      await Promise.resolve();
       expect(notify).toHaveBeenCalledOnce();
-      expect(schedule).not.toHaveBeenCalled();
     } finally {
       setTranscriptSpacing(DEFAULT_TRANSCRIPT_SPACING);
       notify.mockRestore();

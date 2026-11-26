@@ -416,7 +416,6 @@ export function SessionTranscript(props: Props) {
   const virtualExtent = createMemo(() => virtualizer.getTotalSize());
   let geometryTransitionActive = false;
   let geometryTransitionFrame: number | undefined;
-  let pinnedReconcilePending = false;
   const clearGeometryTransition = () => {
     geometryTransitionActive = false;
     if (geometryTransitionFrame !== undefined) {
@@ -424,10 +423,7 @@ export function SessionTranscript(props: Props) {
       geometryTransitionFrame = undefined;
     }
   };
-  onCleanup(() => {
-    pinnedReconcilePending = false;
-    clearGeometryTransition();
-  });
+  onCleanup(clearGeometryTransition);
   createEffect(
     on(
       () => [geometry.key(), geometry.origin(), transcriptSpacing()] as const,
@@ -453,15 +449,7 @@ export function SessionTranscript(props: Props) {
     const motion = scrollportMotionForViewport(scroller);
     if (!motion) return;
     if (geometryTransitionActive && motion.tail.pinControlsOffset() && scroller.isConnected) {
-      if (pinnedReconcilePending) return;
-      pinnedReconcilePending = true;
-      queueMicrotask(() => {
-        if (!pinnedReconcilePending) return;
-        pinnedReconcilePending = false;
-        if (scroller.isConnected && motion.tail.pinControlsOffset()) {
-          motion.notifyLayoutMutated();
-        }
-      });
+      motion.notifyLayoutMutated();
       return;
     }
     motion.scheduleLayoutReconcile();
