@@ -264,7 +264,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 			admitted = append(admitted, sk)
 			if overlayID == "stock" {
 				audit.StockDeliveredSkills[sk.Name] = true
-				if recordImplement {
+				if recordImplement && !slices.Equal(sk.AnyOfTools(), []string{"command"}) {
 					audit.StockImplementSkills[sk.Name] = true
 				}
 			}

@@ -621,7 +621,9 @@ func evalSkillRenderedReach(
 				return false
 			}
 		}
-		if !offered[toolreach.ProgramTool] && slices.Contains(requestable, toolreach.ProgramTool) && !slices.Contains(anyOf, toolreach.ProgramTool) {
+		if !offered[toolreach.ProgramTool] && slices.Contains(requestable, toolreach.ProgramTool) &&
+			!slices.Contains(anyOf, toolreach.ProgramTool) &&
+			strings.TrimSpace(sk.Metadata["authoring_reference"]) != "true" {
 			if len(UnloadedCommandSpans(c, checkText)) > 0 {
 				return false
 			}
