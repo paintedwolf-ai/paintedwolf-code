@@ -28,3 +28,20 @@ func WakeResult(reason api.WakeReason) Result {
 	}
 	return r
 }
+
+func reasonState(reason api.WakeReason) api.WakeState {
+	switch reason {
+	case api.WakeReasonWorkerCycle, api.WakeReasonPromptActive, api.WakeReasonTurnBlocked:
+		return api.WakeStateDeferred
+	case api.WakeReasonHumanApprovalAwaiting, api.WakeReasonHostObligationHeld, api.WakeReasonPendingUserInput, api.WakeReasonActiveHold:
+		return api.WakeStateHeld
+	case api.WakeReasonWorkflowTerminal, api.WakeReasonNonActionable, api.WakeReasonBatchClosed, api.WakeReasonTurnRearm, api.WakeReasonNoRequest:
+		return api.WakeStateSkipped
+	case api.WakeReasonLoopDisabled, api.WakeReasonWrongSessionRole, api.WakeReasonEscalated, api.WakeReasonPolicyDenied:
+		return api.WakeStateDenied
+	case api.WakeReasonStaleBatch, api.WakeReasonPrecedenceBusy, api.WakeReasonJobTerminal, api.WakeReasonBudgetExhausted, api.WakeReasonSessionClosed, api.WakeReasonSessionMissing, api.WakeReasonNoActiveRun, api.WakeReasonLookupFailed, api.WakeReasonPromptInterrupted, api.WakeReasonUserStopped, api.WakeReasonRewound, api.WakeReasonTurnSettled, api.WakeReasonDefect:
+		return api.WakeStateDropped
+	default:
+		return ""
+	}
+}

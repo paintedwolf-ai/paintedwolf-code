@@ -69,6 +69,22 @@ func (t *Ticket) Record(state api.WakeState, reason api.WakeReason, turnID, leas
 	if t.ack != nil {
 		t.ack.Store(true)
 	}
+	step := WakeStep{state, reason}
+	valid := false
+	switch state {
+	case api.WakeStateDelivered, api.WakeStateConsumed:
+		valid = reason == "" && turnID != ""
+	case api.WakeStateRoutedToWait:
+		valid = reason == "" && leaseID != ""
+	case api.WakeStateQueued:
+		valid = reason == ""
+	default:
+		valid = state != "" && reasonState(reason) == state
+	}
+	if !valid {
+		state, reason = api.WakeStateDropped, api.WakeReasonDefect
+		defer t.reportDefect(step, "invalid wake transition")
+	}
 	terminal := state != api.WakeStateQueued && state != api.WakeStateDeferred
 	ok := t.history.Change(t.key, func(r WakeRecord) (WakeRecord, bool) {
 		r.Steps = append(slices.Clip(r.Steps), WakeStep{state, reason})
@@ -102,8 +118,8 @@ func (t *Ticket) RefuseBeforeAdmission(reason api.WakeReason) {
 		t.ack.Store(true)
 	}
 	if t.history.Change(t.key, func(r WakeRecord) (WakeRecord, bool) {
-		r.Steps = append(slices.Clip(r.Steps), WakeStep{api.WakeStateDropped, reason})
-		r.State = api.WakeStateDropped
+		r.State = reasonState(reason)
+		r.Steps = append(slices.Clip(r.Steps), WakeStep{r.State, reason})
 		r.Reason = reason
 		return r, true
 	}) {
