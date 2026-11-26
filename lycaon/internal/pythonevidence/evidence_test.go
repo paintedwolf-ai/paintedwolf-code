@@ -419,12 +419,12 @@ func TestRetainedArtifactStoreBoundsAndExchange(t *testing.T) {
 		t.Fatalf("secret leaked into retained artifact data")
 	}
 
-	// Command produces a second 16-byte artifact (total = 48 <= 48).
+	// Command produces a second 11-byte artifact (total = 43 <= 48).
 	sum2, err := store.Put(PutRequest{
 		ExecutionID: "exec-art-1",
 		Producer:    ProducerCommand,
 		MediaType:   "application/json",
-		Data:        []byte(`{"ok":true,"n":1}`),
+		Data:        []byte(`{"ok":true}`),
 	})
 	testutil.FailErr(t, "Put command artifact", err)
 	if sum2.Producer != ProducerCommand {
