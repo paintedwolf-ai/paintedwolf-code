@@ -22,17 +22,16 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/testutil/mappedfile"
 )
 
 func TestMain(m *testing.M) {
+	mappedfile.ServeIfChild()
 	if path := os.Getenv("NFSDARWIN_LOCK_PROBE"); path != "" {
 		os.Exit(runLockProbe(path, os.Getenv("NFSDARWIN_LOCK_START")))
 	}
 	if os.Getenv("NFSDARWIN_ONE_SLOT_PROBE") != "" {
 		os.Exit(runOneSlotWorkflow())
-	}
-	if path := os.Getenv("NFSDARWIN_MMAP_PROBE"); path != "" {
-		os.Exit(runMappedWriter(path))
 	}
 	if tmp := os.Getenv("NFSDARWIN_ENGINE_PROBE"); tmp != "" {
 		os.Exit(runEngineHoldingAMount(tmp))
