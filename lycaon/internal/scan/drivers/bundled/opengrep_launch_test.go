@@ -34,4 +34,7 @@ func TestOpengrepLaunchesAsConfinedBundledScanner(t *testing.T) {
 	if slices.Contains(box.Roots, projectDir) || len(box.ReadRoots) == 0 {
 		t.Fatalf("confinement roots = %v read roots = %v, want the project read-only", box.Roots, box.ReadRoots)
 	}
+	if cacheDir := runFiles.cache(); cacheDir != runFiles.dir() && !slices.Contains(box.GrantedWriteRoots, cacheDir) {
+		t.Fatalf("confinement granted write roots = %v, want persistent cache %q", box.GrantedWriteRoots, cacheDir)
+	}
 }

@@ -228,11 +228,12 @@ func (o *OpenGrepScanner) consoleTail(console []byte) string {
 	}, console)
 }
 
-// CLI state stays inside the jail output root.
+// CLI state stays inside the jail output root while XDG_CACHE_HOME points at
+// the persistent engine runtime cache.
 func opengrepSubprocessEnv(files opengrepRunFiles) []string {
 	out := append([]string(nil), os.Environ()...)
 	pins := map[string]string{
-		"XDG_CACHE_HOME":             files.dir(),
+		"XDG_CACHE_HOME":             files.cache(),
 		"TMPDIR":                     files.dir(),
 		"TMP":                        files.dir(),
 		"TEMP":                       files.dir(),
@@ -305,9 +306,14 @@ func filterNonCode(ctx context.Context, result *scanoutput.Result, project strin
 	return nil
 }
 
-// opengrepLaunch confines OpenGrep to reading the project and writing its run files.
+// opengrepLaunch confines OpenGrep to reading the project and writing its run files
+// and persistent runtime cache.
 func opengrepLaunch(projectDir string, runFiles opengrepRunFiles) (exec.LaunchPlan, error) {
-	confinement, err := scan.BundledScannerConfinement(projectDir, runFiles.workspace)
+	var extraWriteRoots []string
+	if cacheDir := runFiles.cache(); cacheDir != "" && cacheDir != runFiles.dir() {
+		extraWriteRoots = []string{cacheDir}
+	}
+	confinement, err := scan.BundledScannerConfinement(projectDir, runFiles.workspace, extraWriteRoots...)
 	if err != nil {
 		return exec.LaunchPlan{}, err
 	}

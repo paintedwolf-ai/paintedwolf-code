@@ -126,13 +126,18 @@ func TestOpengrepTempCleanupRemovesFile(t *testing.T) {
 }
 
 func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
+	xdgCache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", xdgCache)
+	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(key, t.TempDir())
+	}
 	files, cleanup, err := newOpengrepRunFiles()
 	testutil.FailErr(t, "newOpengrepRunFiles", err)
 	defer cleanup()
 
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(string(filepath.Separator), "custom", "cache"))
-	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
-		t.Setenv(key, t.TempDir())
+	wantCache := filepath.Join(xdgCache, "paintedwolf")
+	if files.cache() != wantCache || files.cache() == files.dir() {
+		t.Fatalf("cache = %q (dir = %q), want persistent cache %q", files.cache(), files.dir(), wantCache)
 	}
 	got := make(map[string]string)
 	for _, assignment := range opengrepSubprocessEnv(files) {
@@ -142,7 +147,7 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 		}
 	}
 	want := map[string]string{
-		"XDG_CACHE_HOME":             files.dir(),
+		"XDG_CACHE_HOME":             wantCache,
 		"TMPDIR":                     files.dir(),
 		"TMP":                        files.dir(),
 		"TEMP":                       files.dir(),
@@ -155,5 +160,22 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 		if got[key] != value {
 			t.Fatalf("%s = %q, want %q", key, got[key], value)
 		}
+	}
+	cleanup()
+	if _, err := os.Stat(wantCache); err != nil {
+		t.Fatalf("persistent cache removed by per-run cleanup: %v", err)
+	}
+}
+
+func TestOpengrepCacheDirFallsBackWhenCacheRootInvalid(t *testing.T) {
+	cfgDir, err := configdir.UserConfigDir()
+	testutil.FailErr(t, "resolve user config dir", err)
+	t.Setenv("XDG_CACHE_HOME", cfgDir)
+	files, cleanup, err := newOpengrepRunFiles()
+	testutil.FailErr(t, "newOpengrepRunFiles", err)
+	defer cleanup()
+
+	if files.cache() != files.dir() {
+		t.Fatalf("control-plane XDG_CACHE_HOME resolved to %q, want fallback %q", files.cache(), files.dir())
 	}
 }
