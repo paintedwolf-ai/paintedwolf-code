@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/testutil/mappedfile"
 	"golang.org/x/sys/unix"
 )
 
@@ -237,17 +238,9 @@ func TestInaccessibleDirtyFileDoesNotWedgeCheckpointAndIsFlushed(t *testing.T) {
 	want := []byte("flushed-by-syncfs\n")
 	v := prepareMountedView(t, fuselinux.Config{}, "view-inaccessible", map[string]string{"mapped": strings.Repeat("0", len(want))})
 	path := filepath.Join(v.mnt, "mapped")
-	f, err := os.OpenFile(path, os.O_RDWR, 0)
-	if err != nil {
-		t.Fatalf("open: %v", err)
+	if err := mappedfile.Map(t, path, len(want)).Write(want); err != nil {
+		t.Fatalf("write mapping: %v", err)
 	}
-	defer func() { _ = f.Close() }()
-	mapped, err := syscall.Mmap(int(f.Fd()), 0, len(want), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
-	if err != nil {
-		t.Fatalf("mmap: %v", err)
-	}
-	defer func() { _ = syscall.Munmap(mapped) }()
-	copyToMapping(mapped, want)
 	if err := os.Chmod(path, 0o000); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}

@@ -81,6 +81,16 @@ func TestPlanImplementPhaseInvokesImplementChild(t *testing.T) {
 	if !ok || childRequest.Text != "test request" || childRequest.Source != "inherited" {
 		t.Fatalf("child request = %+v ok=%v", childRequest, ok)
 	}
+	// An inherited request still opens where the parent's start opened it, so
+	// host turns on the child have a request to continue.
+	parentStart := parentRow.StartMessageID
+	if parentStart == "" || active.StartMessageID != "" {
+		t.Fatalf("fixture start messages: parent %q child %q", parentStart, active.StartMessageID)
+	}
+	resolved := mgr.Policy.ResolvedRequest(ctx, sess.ID)
+	if resolved.RunID != active.ID || resolved.OpeningMessageID != parentStart || resolved.Text != "test request" {
+		t.Fatalf("child resolved request = %+v, want run %q opened at %q", resolved, active.ID, parentStart)
+	}
 	snapshot := mgr.Snapshots.Project(ctx, active, childManifest, childVars)
 	if snapshot.BlueprintBody == "" || snapshot.Blueprint == nil || snapshot.Blueprint.Path != parent.BlueprintPath {
 		t.Fatalf("child runtime Blueprint = %+v body=%q", snapshot.Blueprint, snapshot.BlueprintBody)
