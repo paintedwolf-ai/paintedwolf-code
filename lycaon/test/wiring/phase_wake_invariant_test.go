@@ -48,6 +48,9 @@ func TestEveryAnnouncedPhaseTransitionWakesTheCoordinator(t *testing.T) {
 	if cases == 0 {
 		t.Fatal("no shipped workflow announces a phase transition")
 	}
+	if n := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Outcomes.Violations(); n != 0 {
+		t.Fatalf("%d host wakes were decided twice or left without an outcome", n)
+	}
 }
 
 // Fixture preparation walks runs with the coordinator loop off, so only the
@@ -114,47 +117,41 @@ func (d *phaseWakeDriver) check(t *testing.T, edge phaseEdge, n int) {
 		run = d.move(t, run, step)
 	}
 	d.prepare(t, run, edge)
-	d.settle(t)
 
 	loop := d.h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop()
 	requests := len(d.h.Recording.AllRequests())
-	turns := deliveredPhaseWakes(loop.Activity(d.ctx, d.sess.ID))
 	holds := declaredHolds(d.catalog, d.manifest, edge.to)
+	step := fmt.Sprintf("the %s wake", edge)
+	watch := WatchWakes(t, d.h.ServeApp, d.sess.ID)
+	seen := lastWakeSeq(loop.Nudges.Outcomes.Ledger(d.sess.ID))
 	d.limits.enabled.Store(true)
 	d.move(t, run, edge)
 
-	delivered := func() bool {
-		return len(d.h.Recording.AllRequests()) > requests && deliveredPhaseWakes(loop.Activity(d.ctx, d.sess.ID)) > turns
-	}
-	held := func() bool {
-		if len(loop.Activity(d.ctx, d.sess.ID).Busy) != 0 {
-			return false
+	// A declared hold parks the wake in admission, or the host parks the
+	// session without announcing one. Either way the hold must be in effect.
+	if allow, reason, err := loop.Admission.ShouldLoopWake(d.ctx, d.sess.ID, anchor.PhaseAdvanced); err == nil && !allow && holds[reason] {
+		for _, outcome := range loop.Nudges.Outcomes.Ledger(d.sess.ID) {
+			if outcome.Seq <= seen || outcome.Turn != "" || outcome.Wake != anchor.PhaseAdvanced {
+				continue
+			}
+			if outcome.Result != loopwake.WakeDelivered && (outcome.Result != loopwake.WakeParked || outcome.Reason != "denied") {
+				t.Fatalf("%s under declared hold %s: %s %s: %s\n%s", step, reason, outcome.Wake, outcome.Result, outcome.Reason, watch.Report())
+			}
 		}
-		allow, reason, err := loop.Admission.ShouldLoopWake(d.ctx, d.sess.ID, anchor.PhaseAdvanced)
-		return err == nil && !allow && holds[reason]
+		return
 	}
-	step := fmt.Sprintf("the %s wake reaches a coordinator turn or a declared hold %v", edge, sortedKeys(holds))
-	WaitForSessionProgress(t, d.h.ServeApp, d.sess.ID, step, func() bool { return delivered() || held() })
-	d.settle(t)
+	watch.AwaitCompletedTurn(t, step, anchor.PhaseAdvanced)
+	if len(d.h.Recording.AllRequests()) <= requests {
+		t.Fatalf("%s completed a turn without a model request\n%s", step, watch.Report())
+	}
 }
 
-func deliveredPhaseWakes(activity loopwake.SessionActivity) int {
-	n := 0
-	for _, decision := range activity.Decisions {
-		if decision.Wake == anchor.PhaseAdvanced && decision.Outcome == "run_prompt" {
-			n++
-		}
+func lastWakeSeq(ledger []loopwake.WakeOutcome) uint64 {
+	var seq uint64
+	for _, outcome := range ledger {
+		seq = max(seq, outcome.Seq)
 	}
-	return n
-}
-
-// settle waits until no host work on the session can still move it.
-func (d *phaseWakeDriver) settle(t *testing.T) {
-	t.Helper()
-	loop := d.h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop()
-	WaitForSessionProgress(t, d.h.ServeApp, d.sess.ID, "the session settles", func() bool {
-		return len(loop.Activity(d.ctx, d.sess.ID).Busy) == 0
-	})
+	return seq
 }
 
 func (d *phaseWakeDriver) start(t *testing.T, n int) *wire.WorkflowRun {
@@ -177,7 +174,6 @@ func (d *phaseWakeDriver) start(t *testing.T, n int) *wire.WorkflowRun {
 	if run == nil || run.WorkflowID != d.manifest.ID {
 		t.Fatalf("active run = %+v, want a %s run", run, d.manifest.ID)
 	}
-	d.settle(t)
 	return d.reload(t, run.ID)
 }
 
