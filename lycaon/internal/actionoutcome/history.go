@@ -77,6 +77,11 @@ func (h *History[T]) Retire(settle func(T) T) {
 func (h *History[T]) Await(ctx context.Context, id string) (T, error) {
 	h.mu.Lock()
 	e := h.records[id]
+	if e != nil && e.terminal {
+		v := e.value
+		h.mu.Unlock()
+		return v, nil
+	}
 	h.mu.Unlock()
 	var zero T
 	if e == nil {

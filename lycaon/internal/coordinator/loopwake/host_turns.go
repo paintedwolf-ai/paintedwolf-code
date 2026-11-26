@@ -2,13 +2,17 @@ package loopwake
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/session/lifecycle"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -96,16 +100,27 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 	deps := l.loopDeps()
 	if deps.RunPrompt != nil {
 		_, err := deps.RunPrompt(actionoutcome.WithTicket(ctx, pending.ticket), sessionID)
-		if err != nil {
-			pending.ticket.RefuseBeforeAdmission(api.WakeReasonPolicyDenied)
-		} else {
-			pending.ticket.RefuseBeforeAdmission(api.WakeReasonTurnSettled)
-		}
+		pending.ticket.RefuseBeforeAdmission(preAdmissionReason(err))
 	} else {
 		pending.ticket.Record(api.WakeStateDropped, api.WakeReasonDefect, "", "")
 	}
 	return true
 }
+func preAdmissionReason(err error) api.WakeReason {
+	switch {
+	case err == nil, errors.Is(err, context.Canceled):
+		return api.WakeReasonTurnSettled
+	case errors.Is(err, store.ErrSessionNotFound):
+		return api.WakeReasonSessionMissing
+	case errors.Is(err, lifecycle.ErrStopping):
+		return api.WakeReasonUserStopped
+	}
+	if _, ok := noticeerr.CodeOf(err); ok {
+		return api.WakeReasonPolicyDenied
+	}
+	return api.WakeReasonLookupFailed
+}
+
 func (l *HostTurns) releasePromptActiveAndRedrain(ctx context.Context, sessionID string) {
 	l.promptActive.Delete(sessionID)
 	l.Nudges.schedulePendingDrain(ctx, sessionID, true)
