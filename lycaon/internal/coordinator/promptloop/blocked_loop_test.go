@@ -123,7 +123,7 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 	if closeout.Reason != promptloop.TurnCloseoutBlockedLoop || closeout.BlockedTool != "read" || closeout.BlockedCode != "DOOM_LOOP_REPEAT" || closeout.BlockedCount < promptloop.BlockedLoopRejectCap {
 		t.Fatalf("closeout cause = %+v", closeout)
 	}
-	if want := "`read` was refused " + strconv.Itoa(closeout.BlockedCount) + " times in a row (DOOM_LOOP_REPEAT)"; closeout.Text() != want {
+	if want := "the read call was refused " + strconv.Itoa(closeout.BlockedCount) + " times in a row (DOOM_LOOP_REPEAT)"; closeout.Text() != want {
 		t.Fatalf("closeout text = %q, want %q", closeout.Text(), want)
 	}
 
@@ -192,7 +192,7 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	if !errors.As(err, &miss) {
 		t.Fatalf("final-turn tool call reported as %v, want ProseTurnToolCallError", err)
 	}
-	if len(miss.Tools) != 1 || miss.Tools[0] != "read" || !strings.Contains(miss.CloseoutReason, "`read` was refused") {
+	if len(miss.Tools) != 1 || miss.Tools[0] != "read" || !strings.Contains(miss.CloseoutReason, "the read call was refused") {
 		t.Fatalf("miss = %+v", miss)
 	}
 	if _, empty := failure.AsProviderEmptyCompletion(err); empty {
