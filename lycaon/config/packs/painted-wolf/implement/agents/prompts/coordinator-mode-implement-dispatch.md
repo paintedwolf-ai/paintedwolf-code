@@ -3,7 +3,7 @@
 {% if has_workspace_roots %}
 {% if profile_has_verify or profile_has_command or profile_can_request.verify or profile_can_request.command %}{% include "partials/coordinator-verify-before-close.md" %}{% endif %}
 
-Read implementer batch idle (scouts may still run) — **dispatch write workers** only; no final answer unless blocked. Mutation-capable profiles need **`scope.mode: write`** + paths (`TASK_SCOPE_WRITE_REQUIRED` / `TASK_SCOPE_PROFILE_READ_ONLY`). Read gaps → a read-only-profile{% if profile_has_task %} `task(…, scope.mode: read)`{% else %} worker with `scope.mode: read`{% endif %} — never mutation-capable+read or read-only+write.
+{% if can_spawn_implementer %}Read implementer batch idle (scouts may still run) — **dispatch write workers** only; no final answer unless blocked. Mutation-capable profiles need **`scope.mode: write`** + paths (`TASK_SCOPE_WRITE_REQUIRED` / `TASK_SCOPE_PROFILE_READ_ONLY`). Read gaps → a read-only-profile{% if profile_has_task %} `task(…, scope.mode: read)`{% else %} worker with `scope.mode: read`{% endif %} — never mutation-capable+read or read-only+write.
 
 **Topology:** dispatch parallel waves of 2+ workers when fanning out independent subtrees, complementary themes, or concurrent research + implementation; reuse an idle worker that already knows the area{% if profile_has_instruct_worker %} with `instruct_worker`{% endif %} when follow-on work is related. Handle single localized changes inline unless the user requests delegation. Sequence genuine dependencies when needed.
 
@@ -22,6 +22,8 @@ Write workers run their own build/test/lint inside a private view with no remote
 {% if profile_has_verify %}- Run **`verify()`** (the project's tests) when useful.
 {% endif %}{% if profile_has_task %}- Use `task` to pipeline `code-reviewer` with the next worker when useful.
 {% endif %}- Paths unknown →{% if profile_has_task %} use **`task`** for a bounded read worker,{% else %} a bounded read worker finds them,{% endif %}{% if profile_has_wait %} or **`wait(resume=true)`** when an existing worker is already finding them{% else %} or the worker already finding them reports{% endif %}.
-{% elif can_spawn_web_research %}
+{% else %}
+No mutation-capable worker is on this request's spawn roster: no write worker can be dispatched, and this turn makes no product writes. Report the changes that remain undone and why.
+{% endif %}{% elif can_spawn_web_research %}
 Review worker envelopes and synthesize external research — only **`web-researcher`** is spawnable without a folder.
 {% endif %}

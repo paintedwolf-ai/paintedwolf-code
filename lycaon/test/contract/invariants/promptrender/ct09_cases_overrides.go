@@ -112,9 +112,13 @@ func skillReaderSeeds() ([]hoststate.CustomizationSeed, error) {
 }
 
 // zeroRootSeeds are folderless turns, where web-researcher is the only
-// worker a coordinator may spawn: ambient, and every shipped and project
-// phase binding.
+// worker a coordinator may spawn: ambient, every folderless surface, and
+// every shipped and project phase binding.
 func zeroRootSeeds() ([]hoststate.CustomizationSeed, error) {
+	folderless, err := hoststate.FolderlessSurfaces()
+	if err != nil {
+		return nil, err
+	}
 	shipped, err := hoststate.ShippedPhaseBindings()
 	if err != nil {
 		return nil, err
@@ -126,6 +130,14 @@ func zeroRootSeeds() ([]hoststate.CustomizationSeed, error) {
 	out := []hoststate.CustomizationSeed{
 		ambientSeed(api.SessionPostureBuild, hoststate.WorkflowAmbientIdle, hoststate.RootsNone, hoststate.LoadingAllLoaded),
 		ambientSeed(api.SessionPostureOrchestrate, hoststate.WorkflowAmbientIdle, hoststate.RootsNone, hoststate.LoadingAllLoaded),
+	}
+	for _, surfaceID := range folderless {
+		for _, mode := range api.AllSessionModeValues() {
+			out = append(out, hoststate.CustomizationSeed{
+				Mode: mode, Posture: api.SessionPostureBuild, Workflow: hoststate.WorkflowActivePhase,
+				SurfaceID: surfaceID, Roots: hoststate.RootsNone, Loading: hoststate.LoadingAllLoaded,
+			})
+		}
 	}
 	bindings := slices.Concat(shipped, project)
 	for i := range bindings {
