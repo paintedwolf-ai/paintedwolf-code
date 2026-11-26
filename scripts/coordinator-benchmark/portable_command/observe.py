@@ -175,10 +175,15 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
 
     msgs_by_call = {m['tool_result_call_id']: parse_tool_result(m) for m in audit['tool_result_messages']}
     progs_by_receipt = {p['parent_receipt_id']: p for p in audit['invocation_programs']}
-    receipts_by_call = {r['tool_call_id']: r for r in audit['invocation_receipts']}
     progress_receipts = [r for r in audit['invocation_receipts'] if r['tool_name'] == 'update_progress' and r['owner'] == 'progress']
     cmd_receipts = [r for r in audit['invocation_receipts'] if r['tool_name'] == 'command']
-    unexpected_receipts = [r for r in audit['invocation_receipts'] if r['tool_call_id'] not in expected_calls]
+    receipts_by_call = {r['tool_call_id']: r for r in audit['invocation_receipts'] if r['tool_name'] != 'update_progress'}
+    has_progress_turn = any('progress_update' in t for t in case.get('turns') or ())
+    unexpected_receipts = [
+        r for r in audit['invocation_receipts']
+        if r['tool_call_id'] not in expected_calls
+        and not (has_progress_turn and r['tool_name'] == 'update_progress' and r['owner'] == 'progress')
+    ]
     unexpected_cmd = [r for r in cmd_receipts if r['tool_call_id'] not in expected_calls]
 
     cmd_invocations, last_payload, last_raw, last_prog = [], {}, {}, None

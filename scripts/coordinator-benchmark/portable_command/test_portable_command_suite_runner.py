@@ -35,15 +35,20 @@ class ProbeFakeApp(FakeApp):
         db = sqlite3.connect(self.directory / 'store.db')
         for idx, tc in enumerate(calls, start=1):
             cid = tc['id']
+            prog_text = ((tc.get('args') or {}).get('progress_update') or {}).get('content', '')
             if self.reject:
-                db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','rejected',0)", ('rcpt-cmd', self.session_id, cid))
+                db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','rejected',0)", (f'rcpt-{cid}', self.session_id, cid))
                 res = {'outcome': 'rejected', 'codes': ['COMMAND_ARGS_INVALID'], 'content': json.dumps({'refusal': {'code': 'COMMAND_ARGS_INVALID'}})}
+            elif self.native_progress and '- [ ]' not in prog_text:
+                db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','rejected',0)", (f'rcpt-{cid}', self.session_id, cid))
+                res = {'outcome': 'rejected', 'codes': ['PROGRESS_NO_OPEN_STEP'], 'content': json.dumps({'refusal': {'code': 'PROGRESS_NO_OPEN_STEP'}})}
             else:
-                db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','completed',1)", ('rcpt-cmd', self.session_id, cid))
+                db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','completed',1)", (f'rcpt-cmd-{cid}', self.session_id, cid))
+                db.execute("INSERT INTO invocation_programs VALUES (?,?,'completed',0,'')", (f'prog-{cid}', f'rcpt-cmd-{cid}'))
                 if self.native_progress:
-                    db.execute("INSERT INTO invocation_receipts VALUES ('rcpt-prog',?,?, 'update_progress','progress','completed',1)", (self.session_id, cid))
+                    db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'update_progress','progress','completed',1)", (f'rcpt-prog-{cid}', self.session_id, cid))
                 res = {'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'status': 0, 'state': 'completed'})}
-            db.execute("INSERT INTO messages VALUES (?,?,?,'tool',?,?)", (f'msg-{cid}', self.session_id, idx, cid, json.dumps(res)))
+            db.execute("INSERT INTO messages VALUES (?,?,?,'tool',?,?)", (f'msg-{cid}', self.session_id, self.turn * 10 + idx, cid, json.dumps(res)))
         db.commit()
         db.close()
 
@@ -102,12 +107,16 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             self.assertEqual(r1['envelope_status'], 'accepted_without_progress_receipt')
             self.assertFalse(r1['native_envelope_qualified'])
             self.assertFalse(r1['sibling_fallback_used'])
-            self.assertEqual([c['name'] for c in app_no_prop[0].recorded_calls], ['command'])
-            self.assertIn('progress_update', app_no_prop[0].recorded_calls[0]['args'])
+            self.assertEqual([c['name'] for c in app_no_prop[0].recorded_calls], ['command', 'command'])
+            self.assertIn('- [ ]', app_no_prop[0].recorded_calls[0]['args']['progress_update']['content'])
+            self.assertNotIn('- [ ]', app_no_prop[0].recorded_calls[1]['args']['progress_update']['content'])
             self.assertTrue((root / 'p1' / 'envelope-probe.json').is_file())
             self.assertTrue(r2['schema_has_progress_update'])
             self.assertEqual(r2['envelope_status'], 'supported')
             self.assertTrue(r2['native_envelope_qualified'])
+            self.assertTrue(r2['independent_receipts'])
+            self.assertEqual(r2['all_checked_refusal_code'], 'PROGRESS_NO_OPEN_STEP')
+            self.assertTrue(r2['all_checked_control']['benign_refusal_verified'])
             self.assertEqual(r3['envelope_status'], 'unavailable')
             self.assertFalse(r3['native_envelope_qualified'])
 
@@ -120,10 +129,11 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
                 if case['id'] == 'draft-read-transform':
                     raise RuntimeError('simulated setup failure')
                 gaps = {'same-file-transform': ['missing_observation:bounded_visits:filesystem_owner']}.get(case['id'], [])
+                batches = [{'envelope_mode': 'sibling_update_progress'}] if case['id'] == 'first-mutation' else []
                 return {
                     'case_id': case['id'], 'session_id': f"sess-{case['id']}",
                     'grade': {'qualification': 'native-runtime', 'passed': case['id'] == 'first-mutation', 'dimensions': {'artifacts': True}},
-                    'audit': {'observation_gaps': gaps},
+                    'audit': {'observation_gaps': gaps, 'turn_batches': batches},
                 }
 
             report = suite_runner.run_suite(

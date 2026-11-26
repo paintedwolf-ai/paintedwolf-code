@@ -43,6 +43,8 @@ def main(argv=None, *, runner=run_case, suite_runner=run_suite, envelope_prober=
             'command_schema_properties': report['command_schema_properties'],
             'envelope_status': report['envelope_status'],
             'native_envelope_qualified': report['native_envelope_qualified'],
+            'independent_receipts': report.get('independent_receipts'),
+            'all_checked_refusal_code': report.get('all_checked_refusal_code'),
             'sibling_fallback_used': report['sibling_fallback_used'],
         }
         print(json.dumps(summary, indent=2, sort_keys=True))

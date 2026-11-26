@@ -118,6 +118,8 @@ class FakeApp:
                 db.execute("INSERT INTO messages VALUES (?,?,?,'tool',?,?)", (f'msg-{cid}', self.session_id, self.turn * 10 + idx, cid, json.dumps({'outcome': 'completed', 'content': '{}'})))
             elif name == 'command' and self.mode in {'publish', 'missing-pub', 'injected-extra'}:
                 (self.project_root / 'result.txt').write_bytes(b'created\n')
+                if 'progress_update' in (tc.get('args') or {}):
+                    db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'update_progress','progress','completed',1)", (f'rcpt-prog-{cid}', self.session_id, cid))
                 db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','completed',1)", ('rcpt-cmd', self.session_id, cid))
                 if self.mode == 'injected-extra':
                     db.execute("INSERT INTO invocation_receipts VALUES ('rcpt-extra',?,'unissued-call-id','command','processes','completed',1)", (self.session_id,))
@@ -156,7 +158,8 @@ class PortableCommandHarnessTests(unittest.TestCase):
                     app_factory=lambda d: FakeApp(d, mode='publish'), sse_factory=FakeSSE,
                 )
             self.assertTrue(res['grade']['passed'])
-            self.assertEqual(res['audit']['turn_batches'][0]['batch_plan'], ['update_progress', 'command'])
+            self.assertEqual(res['audit']['turn_batches'][0]['batch_plan'], ['command'])
+            self.assertEqual(res['audit']['turn_batches'][0]['envelope_mode'], 'native_command_envelope')
             bundle_path = root / 'export' / 'sanitized-fixture.json'
             self.assertEqual(harness.resolve_case(str(bundle_path))['id'], 'first-mutation')
             for mutate in (
