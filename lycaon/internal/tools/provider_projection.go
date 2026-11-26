@@ -39,6 +39,15 @@ func PruneCommandReadOnlySchema(schema map[string]any) map[string]any {
 	return out
 }
 
+// PruneCommandProgressSchema removes the optional progress_update parameter
+// from the command schema when update_progress is not offered.
+func PruneCommandProgressSchema(schema map[string]any) map[string]any {
+	out := projectArgsSchema(schema)
+	props, _ := out["properties"].(map[string]any)
+	delete(props, "progress_update")
+	return out
+}
+
 func projectArgsSchema(schema map[string]any) map[string]any {
 	if schema == nil {
 		return map[string]any{"type": "object"}

@@ -100,6 +100,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 		UncertainEffects:         projection.UncertainEffects,
 		NativeGaps:               projection.NativeGaps,
 		OmittedNonzeroExecutions: projection.OmittedNonzero,
+		ProgressUpdate:           run.progressOutcome,
 	}
 
 	for _, child := range projection.Nonzero {

@@ -137,5 +137,5 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	expected, _ := resolved["expected_revision"].(string)
 	token, _ := resolved["reconciliation_token"].(string)
 	result.Outcome, err = author.ExpectRevision(expected).ExpectItemIDsFromArgs(resolved).ExpectReconciliation(token).Apply(ctx, store, current.RootSessionID, reconciler)
-	return result, progressOwnerError(err)
+	return result, progressOwnerErrorForRoot(current.RootSessionID, err)
 }

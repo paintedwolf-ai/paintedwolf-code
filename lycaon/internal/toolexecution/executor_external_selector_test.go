@@ -68,6 +68,28 @@ func TestCommandSchemaOffersExternalOnlyWhenNotHidden(t *testing.T) {
 	if !slices.Contains(parts(), "external_exec_selector") {
 		t.Fatalf("offered selector missing from DescriptionParts: %v", parts())
 	}
+	hasProgressUpdate := func(profileID string) bool {
+		metas, err := rt.Executor.Metadata.List(t.Context(), platform.ToolFilter{ProfileID: profileID, ProjectRootCount: 1})
+		testutil.FailErr(t, "list tools for "+profileID, err)
+		for _, meta := range metas {
+			if meta.Name == "command" {
+				props, _ := meta.ArgsSchema["properties"].(map[string]any)
+				_, ok := props["progress_update"]
+				return ok
+			}
+		}
+		t.Fatalf("command not listed for %s", profileID)
+		return false
+	}
+	if !hasProgressUpdate("coordinator") {
+		t.Fatal("coordinator command schema must offer progress_update")
+	}
+	if hasProgressUpdate("implement") {
+		t.Fatal("implement command schema must prune progress_update when update_progress is unoffered")
+	}
+	if hasProgressUpdate("explore_readonly") {
+		t.Fatal("explore_readonly command schema must prune progress_update when update_progress is unoffered")
+	}
 	readOnlyMetas, err := rt.Executor.Metadata.List(t.Context(), platform.ToolFilter{ProfileID: "explore_readonly", ProjectRootCount: 1})
 	testutil.FailErr(t, "list read-only tools", err)
 	for _, meta := range readOnlyMetas {
