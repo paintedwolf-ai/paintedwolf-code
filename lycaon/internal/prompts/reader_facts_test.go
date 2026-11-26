@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 func expectedReaderFactKeySet(t *testing.T, eff *extpacks.EffectiveCatalog) (topKeys map[string]bool, nestedKeys map[string]map[string]bool) {
@@ -60,6 +61,10 @@ func expectedReaderFactKeySet(t *testing.T, eff *extpacks.EffectiveCatalog) (top
 				}
 			case "evidence_kinds":
 				maps.Copy(sub, vocab.EvidenceKinds)
+			case "command_programs":
+				for _, program := range toolcontract.DeclaredCommandPrograms() {
+					sub[program] = true
+				}
 			}
 			nestedKeys[fam.Prefix] = sub
 			continue

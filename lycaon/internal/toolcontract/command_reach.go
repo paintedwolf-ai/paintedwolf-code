@@ -1,7 +1,9 @@
 package toolcontract
 
 import (
+	"maps"
 	"regexp"
+	"slices"
 	"sync"
 )
 
@@ -210,6 +212,23 @@ func (t *commandReachTables) formDenied(form string, held map[string]bool) bool 
 		}
 	}
 	return false
+}
+
+// DeclaredCommandPrograms returns the command language's declared program
+// names, sorted.
+func DeclaredCommandPrograms() []string {
+	lang := loadCommandReachTables()
+	if lang == nil {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(lang.commands))
+}
+
+// IsDeclaredCommandProgram reports whether name is a declared program of the
+// command language.
+func IsDeclaredCommandProgram(name string) bool {
+	lang := loadCommandReachTables()
+	return lang != nil && lang.commands[name]
 }
 
 // CommandFormToolOf returns the dual-state tool that gates a command form, or

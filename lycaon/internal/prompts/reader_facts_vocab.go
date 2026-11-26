@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -255,6 +256,10 @@ func (v ReaderFactVocabulary) AllowsReference(ref string) bool {
 			}
 		case "skills":
 			if v.Skills[member] {
+				return true
+			}
+		case "command_programs":
+			if toolcontract.IsDeclaredCommandProgram(member) {
 				return true
 			}
 		}
