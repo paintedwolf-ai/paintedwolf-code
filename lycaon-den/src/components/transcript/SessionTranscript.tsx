@@ -7,7 +7,7 @@ import {
 import { createTranscriptGeometry } from "../../chat/transcript/layout/transcript-geometry.ts";
 import type { TranscriptSeam } from "../../chat/transcript/layout/transcript-spacing.ts";
 import { scrollportMotionForViewport } from "../../platform/scrolling/scrollport-motion.ts";
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 import { KeyedIndex } from "../keyed-index.tsx";
 import type { WorkerTranscriptCache } from "../../chat/worker/worker-transcript.ts";
 import type { SlotContent } from "../../ui/slot-content.ts";
@@ -412,16 +412,31 @@ export function SessionTranscript(props: Props) {
     },
   );
 
-  // Window swaps preserve extent; reconcile runway and extent changes before paint.
+  // Window swaps preserve extent; resize observations report content growth.
   const virtualExtent = createMemo(() => virtualizer.getTotalSize());
   createEffect(() => {
     if (layout() !== "chat") return;
     virtualExtent();
-    virtualRunway();
     const scroller = scrollHostEl();
     if (!scroller) return;
-    scrollportMotionForViewport(scroller)?.notifyLayoutMutated();
+    scrollportMotionForViewport(scroller)?.scheduleLayoutReconcile();
   });
+
+  // Typography and spacing changes shift row metrics and origin in the same frame;
+  // reconcile the live tail before paint so the runway update does not flicker.
+  createEffect(
+    on(
+      () => [geometry.key(), geometry.origin()] as const,
+      () => {
+        if (layout() !== "chat") return;
+        virtualRunway();
+        const scroller = scrollHostEl();
+        if (!scroller || !scroller.isConnected || scroller.clientHeight <= 0) return;
+        scrollportMotionForViewport(scroller)?.notifyLayoutMutated();
+      },
+      { defer: true },
+    ),
+  );
 
   createEffect(() => {
     if (layout() !== "chat") return;

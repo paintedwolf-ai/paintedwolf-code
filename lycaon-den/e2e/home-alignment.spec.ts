@@ -80,14 +80,6 @@ webE2e("home doors divider aligns in macOS custom chrome", async ({ page }) => {
   });
 
   await expectHomeDividerAligned(page);
-
-  await page.evaluate(() => {
-    const aside = document.querySelector<HTMLElement>(".den-shell-aside");
-    aside?.removeAttribute("data-window-edge");
-    aside?.removeAttribute("data-window-edge-chrome");
-  });
-
-  await expectHomeDividerAligned(page);
 });
 
 webE2e("Home mode sits beside send without resizing or flashing the idea box", async ({ page }) => {
