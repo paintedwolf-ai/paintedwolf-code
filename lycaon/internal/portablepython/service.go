@@ -262,11 +262,12 @@ type ToolRequest struct {
 	Env    map[string]string
 	Stdin  io.Reader
 
-	// Workspace backing: supply either Store (+ RootSpecs) or Roots (+ optional Editor).
-	Store     pythondocuments.DocumentStore
-	RootSpecs []pythondocuments.RootSpec
-	Roots     []pythondocuments.HostRootConfig
-	Editor    pythondocuments.EditorBridge
+	// Workspace backing: supply either Store (+ RootSpecs) or Roots (+ optional Editor / MutationDoor).
+	Store        pythondocuments.DocumentStore
+	RootSpecs    []pythondocuments.RootSpec
+	Roots        []pythondocuments.HostRootConfig
+	Editor       pythondocuments.EditorBridge
+	MutationDoor pythondocuments.MutationDoor
 
 	// Admission & authority configuration.
 	AllowedRoots   []string
@@ -561,7 +562,11 @@ func buildDocumentStore(req ToolRequest) (pythondocuments.DocumentStore, []pytho
 		}
 		return mem, specs
 	}
-	store := pythondocuments.NewHostDocumentStore(req.Roots, req.Editor)
+	door := req.MutationDoor
+	if door == nil {
+		door = newFSEffectMutationDoor(req.Roots)
+	}
+	store := pythondocuments.NewHostDocumentStore(req.Roots, req.Editor, door)
 	specs := req.RootSpecs
 	if len(specs) == 0 {
 		specs = make([]pythondocuments.RootSpec, 0, len(req.Roots))

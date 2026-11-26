@@ -406,9 +406,14 @@ func TestDurableRestartReconciliation(t *testing.T) {
 	})
 
 	ctx1, cancel1 := context.WithCancel(context.Background())
-	t.Cleanup(cancel1)
+	admitDone := make(chan struct{})
+	t.Cleanup(func() {
+		cancel1()
+		<-admitDone
+	})
 
 	go func() {
+		defer close(admitDone)
 		_, _ = obs1.Admit(ctx1, pythonruntime.ReachedOperation{
 			OperationID: "op-durable-write",
 			Family:      pythonruntime.EffectFilesystemWrite,
