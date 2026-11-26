@@ -286,34 +286,76 @@ class AdmissionTests(unittest.TestCase):
         spec.loader.exec_module(wrapper)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            report_path = root / 'report.json'
+            release_fifo = root / 'release.fifo'
+            os.mkfifo(release_fifo)
+            alloc_bytes = 48 * 1024 * 1024
             fixture = root / 'with_helper.py'
             fixture.write_text(
                 f'#!{sys.executable}\n'
-                'import os, sys, time\n'
+                'import json, os, resource\n'
+                'from pathlib import Path\n'
+                'def self_vmhwm():\n'
+                '    for line in Path("/proc/self/status").read_text().splitlines():\n'
+                '        if line.startswith("VmHWM:"):\n'
+                '            return int(line.split()[1]) * 1024\n'
+                '    raise RuntimeError("VmHWM missing")\n'
+                'read_fd, write_fd = os.pipe()\n'
                 'pid = os.fork()\n'
                 'if pid == 0:\n'
-                '    buf = bytearray(48 * 1024 * 1024)\n'
+                '    os.close(read_fd)\n'
+                f'    buf = bytearray({alloc_bytes})\n'
                 '    for i in range(0, len(buf), 4096):\n'
                 '        buf[i] = 1\n'
+                '    os.write(write_fd, str(self_vmhwm()).encode())\n'
+                '    os.close(write_fd)\n'
                 '    os._exit(0)\n'
-                'os.waitpid(pid, 0)\n'
+                'os.close(write_fd)\n'
+                'helper_hwm = int(os.read(read_fd, 64).decode())\n'
+                'os.close(read_fd)\n'
+                '_, wait_status = os.waitpid(pid, 0)\n'
+                'children_ru_maxrss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss * 1024\n'
+                'report = {"helper_exit": os.waitstatus_to_exitcode(wait_status),\n'
+                '          "helper_hwm": helper_hwm, "self_hwm": self_vmhwm(),\n'
+                '          "children_ru_maxrss": children_ru_maxrss}\n'
+                f'tmp = Path({str(report_path)!r} + ".tmp")\n'
+                'tmp.write_text(json.dumps(report))\n'
+                f'tmp.replace({str(report_path)!r})\n'
                 'print("ready", flush=True)\n'
-                'time.sleep(0.1)\n'
+                f'Path({str(release_fifo)!r}).read_text()\n'
             )
             fixture.chmod(0o755)
+            orig_proc_status_memory = resources.proc_status_memory
+            released = False
+
+            def synchronized_proc_status_memory(pid):
+                nonlocal released
+                rss, hwm = orig_proc_status_memory(pid)
+                if not released and report_path.exists() and hwm is not None:
+                    released = True
+                    with open(release_fifo, 'w') as stream:
+                        stream.write('go')
+                return rss, hwm
+
             limit = 256 * 1024 * 1024
-            with tempfile.NamedTemporaryFile(dir=root) as owner:
+            with tempfile.NamedTemporaryFile(dir=root) as owner, \
+                    patch.object(resources, 'proc_status_memory', side_effect=synchronized_proc_status_memory):
                 status, _, _, violation, leaked, memory = wrapper.execute(
                     str(fixture), [], {'PATH': os.environ['PATH']}, owner, False, lambda: {}, limit)
             self.assertEqual(os.waitstatus_to_exitcode(status), 0)
             self.assertIsNone(violation)
             self.assertEqual(leaked, {})
+            self.assertTrue(released)
+            report = json.loads(report_path.read_text())
+            self.assertEqual(report['helper_exit'], 0)
+            self.assertGreaterEqual(report['helper_hwm'], alloc_bytes)
+            self.assertGreaterEqual(report['children_ru_maxrss'], alloc_bytes)
             self.assertEqual(memory['source'], 'proc_vmhwm')
             self.assertTrue(memory['lower_bound'])
             self.assertIsInstance(memory['peak_bytes'], int)
-            self.assertGreater(memory['peak_bytes'], 0)
-            # The reaped 48 MiB helper must not inflate the test process's own per-PID peak.
-            self.assertLess(memory['peak_bytes'], 32 * 1024 * 1024)
+            self.assertGreaterEqual(memory['peak_bytes'], report['self_hwm'])
+            self.assertLess(memory['peak_bytes'], report['helper_hwm'])
+            self.assertLess(memory['peak_bytes'], report['children_ru_maxrss'])
 
     def test_stage_publish_carries_package_memory_for_passing_and_failing_packages(self):
         from contextlib import nullcontext

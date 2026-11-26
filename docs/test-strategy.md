@@ -1451,7 +1451,7 @@ Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
 unscaled Go heap ceiling, so the collector reclaims Go garbage before the ceiling
 instead of letting the heap expand with the detector's shadow memory, and the
 guard measures retained memory rather than collector slack.
-Failure identifies the package, measured bytes, and bound. Every executed Linux package records its peak RSS, ceiling, ratio, and measurement source in the verification receipt regardless of outcome, and the CI step summary lists the ten packages closest to their ceiling. Security and wiring suites additionally
+Failure identifies the package, measured bytes, and bound. Every executed Linux package records its ceiling, measurement source, and observed per-PID peak RSS and ratio (labelled as a lower bound, or marked unavailable with null peak and ratio if the process exits before observation) in the verification receipt regardless of outcome, and the CI step summary lists the ten packages closest to their ceiling. Security and wiring suites additionally
 check retained heap and goroutine growth after cleanup through
 `internal/testutil/resourceguard`. These guards detect resource regressions;
 they do not replace the host-release reachability guard or lifecycle repair in
