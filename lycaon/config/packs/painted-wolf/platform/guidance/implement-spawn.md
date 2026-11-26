@@ -10,7 +10,7 @@ No project folder is attached — attach a folder to enable codebase scouts and 
 {% elif repo_known_empty %}
 Board reports **`Repo: empty · no files yet · skip read scouts`** — project-tree survey workers are off this roster (`REPO_EMPTY_READ_ONLY_WORKER`). {% if execution_mode == "investigate" %}Keep a sequential runtime workflow inline on investigate unless the user requests delegation. {% if profile_has_command %}Use `command` for file, HTTP, and process operations.{% else %}Use native file and HTTP tools for operations they represent.{% endif %} {% endif %}Pick routine defaults the user left unspecified. Prefer delegating bounded work that can proceed independently or needs a substantial specialist leg.{% if can_spawn_web_research %} Use **`web-researcher`** for substantial external research that informs a later build.{% endif %}
 {% else %}
-Worker dispatch allowlist{% if surface_id %} ({{ surface_id }}){% endif %}; else `DISALLOWED_AGENT`.
+Worker dispatch allowlist ({{ surface_id }}); else `DISALLOWED_AGENT`.
 {% endif %}
 
 {% for a in spawn_agents %}

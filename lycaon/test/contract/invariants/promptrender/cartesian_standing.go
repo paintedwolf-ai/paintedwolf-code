@@ -43,6 +43,7 @@ func runCoordinatorPromptAndProcedureMatrix(
 		return err
 	}
 	checkedToolDescAuth := map[string]bool{}
+	runStateAuthChecked := map[string]bool{}
 	bundles := map[string]overlayEngineBundle{}
 	pairs, err := cachedCoordinatorPairs()
 	if err != nil {
@@ -76,8 +77,15 @@ func runCoordinatorPromptAndProcedureMatrix(
 			bundles[bKey] = bundle
 		}
 		resolveNamed := resolver.forCoordinatorState(st)
+		stSkills, sErr := overlaySkills(s, st.Overlay)
+		if sErr != nil {
+			return sErr
+		}
 
-		if err := renderAndCheckCoordinatorStandingPrompt(ctx, s, bundle.engine, bundle.unitCat, st, auth, skillsList, idx, resolveNamed, cache, sum); err != nil {
+		if err := renderAndCheckCoordinatorStandingPrompt(ctx, s, bundle.engine, bundle.unitCat, st, auth, stSkills, idx, resolveNamed, cache, sum); err != nil {
+			return err
+		}
+		if err := renderRunStateVariants(ctx, s, bundle, st, auth, stSkills, idx, resolveNamed, cache, runStateAuthChecked, sum); err != nil {
 			return err
 		}
 		if err := renderAndCheckToolProcedures(ctx, s, bundle.inj, "coord:"+st.ID, st.Overlay.Catalog.Revision, auth, st.SessionMode, st.Posture, resolveNamed, cache, sum); err != nil {
@@ -123,7 +131,8 @@ func renderAndCheckCoordinatorStandingPrompt(
 		return err
 	}
 	unitIDs := selectedUnitIDs(unitCat, auth.Reader.Selection())
-	rKey := renderCacheKeyForVars("standing:"+st.TurnProfile.SurfaceID+":"+s.Site, engineRev(s, st.Overlay), unitIDs, vars)
+	templates := append([]string{st.TurnProfile.SurfaceTemplate}, st.TurnProfile.ModeRefs...)
+	rKey := renderCacheKeyForVars("standing:"+strings.Join(templates, ",")+":"+s.Site, engineRev(s, st.Overlay), unitIDs, vars)
 	promptText, _, err := cache.RenderOrReuse(rKey, func() (string, error) {
 		return renderStandingFromVars(ctx, engine, unitCat, st.TurnProfile, auth.Reader.Selection(), vars)
 	})
@@ -135,6 +144,47 @@ func renderAndCheckCoordinatorStandingPrompt(
 	checkClaimsCached(cache, rKey, auth.Digest, func(v string) { sum.Violations = append(sum.Violations, v) }, func() []string {
 		return checkClaimsOnce(s, label, promptText, auth, st.SessionMode, st.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 	})
+	return nil
+}
+
+// renderRunStateVariants renders st's standing prompt under each active run
+// state. Once per authority it checks that the run state left the frozen
+// authority unchanged, so the variants are checked against auth.
+func renderRunStateVariants(
+	ctx context.Context,
+	s *Stock,
+	bundle overlayEngineBundle,
+	st hoststate.CoordinatorState,
+	auth hoststate.TurnAuthority,
+	skillsList []skills.Skill,
+	variantIdx int,
+	resolveNamed func(string) (toolvocabtest.ActorAuthority, error),
+	cache *hoststate.RenderCache,
+	authChecked map[string]bool,
+	sum *CartesianSummary,
+) error {
+	variants, err := hoststate.RunStateVariants(st)
+	if err != nil || len(variants) == 0 {
+		return err
+	}
+	if !authChecked[auth.Digest] {
+		authChecked[auth.Digest] = true
+		for _, v := range variants {
+			vAuth, fErr := hoststate.FreezeTurnAuthority(ctx, v)
+			if fErr != nil {
+				return fErr
+			}
+			if vAuth.Digest != auth.Digest || vAuth.Reader.Fingerprint() != auth.Reader.Fingerprint() {
+				sum.Violations = append(sum.Violations, fmt.Sprintf("%s: the run state changed the turn authority", v.ID))
+			}
+		}
+	}
+	for _, v := range variants {
+		sum.markCase("coordinator:" + v.ID)
+		if err := renderAndCheckCoordinatorStandingPrompt(ctx, s, bundle.engine, bundle.unitCat, v, auth, skillsList, variantIdx, resolveNamed, cache, sum); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -180,7 +230,7 @@ func buildCoordinatorStandingVars(
 var admittedSkillVarsMemo sync.Map
 
 func mergeAdmittedSkillsIntoVars(occ map[string]any, reader prompts.Reader, skillsList []skills.Skill) {
-	mKey := fmt.Sprintf("%s|%d", reader.Fingerprint(), len(skillsList))
+	mKey := reader.Fingerprint() + "|" + skillsKey(skillsList)
 	if cached, ok := admittedSkillVarsMemo.Load(mKey); ok {
 		maps.Copy(occ, cached.(map[string]any))
 		return
@@ -447,10 +497,6 @@ func runWorkerPersonaAndInjectMatrix(
 ) error {
 	engine := s.Engine()
 	injRenderer := prompts.NewInjectRenderer(engine)
-	skillsList, err := StockSkills(s)
-	if err != nil {
-		return err
-	}
 	checkedDesc := map[string]bool{}
 	pairs, err := cachedWorkerPairs()
 	if err != nil {
@@ -471,7 +517,11 @@ func runWorkerPersonaAndInjectMatrix(
 			wRev = ws.Overlay.Catalog.Revision
 		}
 		if !mutInAsk {
-			occ := workerPersonaOccurrence(auth.Reader, skillsList)
+			wSkills, sErr := overlaySkills(s, ws.Overlay)
+			if sErr != nil {
+				return sErr
+			}
+			occ := workerPersonaOccurrence(auth.Reader, wSkills)
 			if idx%2 == 0 {
 				occ["agent_host_resources"] = []map[string]any{
 					{"category": "Runtime", "resources": []map[string]any{{"id": "python3", "access": "allow"}}},

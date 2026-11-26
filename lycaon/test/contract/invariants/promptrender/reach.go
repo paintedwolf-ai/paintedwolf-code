@@ -206,11 +206,13 @@ var (
 		if err != nil {
 			return nil, err
 		}
+		// The digest omits reader facts such as root count, so a recipient
+		// is distinct by authority and reader.
 		seen := map[string]bool{}
 		var out []coordRep
 		for _, p := range pairs {
-			if !seen[p.auth.Digest] {
-				seen[p.auth.Digest] = true
+			if key := p.auth.Digest + "|" + p.auth.Reader.Fingerprint(); !seen[key] {
+				seen[key] = true
 				out = append(out, p)
 			}
 		}
@@ -243,8 +245,8 @@ var (
 		seen := map[string]bool{}
 		var out []workerRep
 		for _, p := range pairs {
-			if !seen[p.auth.Digest] {
-				seen[p.auth.Digest] = true
+			if key := p.auth.Digest + "|" + p.auth.Reader.Fingerprint(); !seen[key] {
+				seen[key] = true
 				out = append(out, p)
 			}
 		}
@@ -329,15 +331,17 @@ func closeoutTurnReader(st hoststate.CoordinatorState, worker bool) (prompts.Rea
 	})
 }
 
-// phaseKicksNameOnlyTheirSurface verifies workflow phase.entered kicks across
-// the coordinator host states of each phase's surface.
+// phaseKicksNameOnlyTheirSurface verifies workflow-event kicks across the
+// coordinator host states bound to each phase.
 func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
 	reg, err := workflowdef.RegistryFromDirs("")
+	r.Must(err)
+	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
 	r.Must(err)
 	pairs, err := cachedCoordinatorPairs()
 	r.Must(err)
 	sweep := newKickSweep(stock(r), hoststate.NewRenderCache(), func(v string) { r.Report("%s", v) })
-	r.Must(sweep.phaseKicks(context.Background(), reg, pairs))
+	r.Must(sweep.phaseKicks(context.Background(), reg, anchorReg, pairs))
 	r.Expect(sweep.rendered, "phase kick renders")
 }
 
@@ -385,8 +389,6 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 	cache := hoststate.NewRenderCache()
 	workerPairs, err := cachedWorkerPairs()
 	r.Must(err)
-	skillsList, err := StockSkills(s)
-	r.Must(err)
 
 	checked := 0
 	for _, wp := range workerPairs {
@@ -396,7 +398,9 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 				continue
 			}
 		}
-		occ := workerPersonaOccurrence(auth.Reader, skillsList)
+		wSkills, sErr := overlaySkills(s, ws.Overlay)
+		r.Must(sErr)
+		occ := workerPersonaOccurrence(auth.Reader, wSkills)
 		fullVars, err := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
 		r.Must(err)
 		rKey := renderCacheKeyForVars("persona:"+ws.AgentID+":"+s.Site, s.Catalog.Revision, nil, fullVars)
@@ -416,6 +420,7 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 func workerPersonaOccurrence(reader prompts.Reader, skillsList []skills.Skill) map[string]any {
 	fp := reader.Fingerprint()
 	if fp != "" {
+		fp += "|" + skillsKey(skillsList)
 		if cached, ok := workerOccByReaderFP.Load(fp); ok {
 			return maps.Clone(cached.(map[string]any))
 		}

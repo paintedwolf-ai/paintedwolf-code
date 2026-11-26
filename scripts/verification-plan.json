@@ -1314,7 +1314,7 @@
       "targets": [
         "test:full"
       ],
-      "minutes": 150,
+      "minutes": 240,
       "profiles": [
         "check",
         "release",
@@ -1459,7 +1459,7 @@
       "targets": [
         "test:race"
       ],
-      "minutes": 150,
+      "minutes": 240,
       "profiles": [
         "nightly"
       ],
@@ -1578,7 +1578,7 @@
       "targets": [
         "test:race"
       ],
-      "minutes": 90,
+      "minutes": 240,
       "profiles": [
         "integration"
       ],

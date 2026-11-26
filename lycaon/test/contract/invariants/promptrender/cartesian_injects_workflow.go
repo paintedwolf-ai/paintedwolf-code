@@ -68,14 +68,11 @@ func renderActiveWorkflowInjectVariants(
 	if err != nil {
 		return err
 	}
-	bySurface := map[string]coordRep{}
-	for _, cr := range cReps {
-		if cr.state.PackOverlayID == "stock" && cr.state.SessionMode == api.SessionModeAgent && cr.state.Posture == api.SessionPostureBuild && cr.state.Loading == hoststate.LoadingAllLoaded {
-			if _, exists := bySurface[cr.state.TurnProfile.SurfaceID]; !exists {
-				bySurface[cr.state.TurnProfile.SurfaceID] = cr
-			}
-		}
+	pairs, err := cachedCoordinatorPairs()
+	if err != nil {
+		return err
 	}
+	byBinding := boundRecipients(pairs)
 	for _, key := range sortedKeys(wfReg.All()) {
 		m := wfReg.All()[key]
 		var rows []inject.WorkflowPhaseRow
@@ -83,24 +80,28 @@ func renderActiveWorkflowInjectVariants(
 			rows = append(rows, inject.WorkflowPhaseRow{ID: p.ID, CompleteWhen: p.CompleteWhen, Next: p.Next, Terminal: p.Terminal})
 		}
 		for _, p := range m.PhaseDefs {
-			surfID := p.CoordinatorSurface
-			cr, ok := bySurface[surfID]
-			if !ok {
-				continue
+			b, bErr := hoststate.BindPhase(m, p)
+			if bErr != nil {
+				return bErr
 			}
 			exit := workflowpresentation.ProjectPhaseExit(m, p, nil, nil).InjectView()
-			fr := inject.CoordinatorTurnFrame{
-				RunContext: api.CoordinatorRunContext{WorkflowID: m.ID, WorkflowVersion: m.Version, CurrentPhase: p.ID, RunID: "run-cat", RunStatus: "running"},
-				Runtime:    inject.WorkflowRuntimeSnapshot{Phases: rows, PhaseExit: exit},
+			for _, cr := range byBinding[b.Key()] {
+				runCtx := cr.state.RunContext
+				runCtx.WorkflowID, runCtx.WorkflowVersion, runCtx.CurrentPhase = m.ID, m.Version, p.ID
+				runCtx.RunStatus = string(api.WorkflowRunStatusRunning)
+				fr := inject.CoordinatorTurnFrame{
+					RunContext: runCtx,
+					Runtime:    inject.WorkflowRuntimeSnapshot{Phases: rows, PhaseExit: exit},
+				}
+				block, rErr := inject.RenderActiveWorkflowInject(ctx, injRenderer, cr.auth.Reader, "sess-wf-cat", fr, nil, nil, gateCfg)
+				if rErr != nil {
+					return rErr
+				}
+				sum.InjectAndGuidanceCount++
+				resolveNamed := resolver.forCoordinatorState(cr.state)
+				viols := checkClaimsOnce(s, fmt.Sprintf("inject/active-workflow/%s/%s (%s)", m.ID, p.ID, cr.state.ID), block, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+				sum.Violations = append(sum.Violations, viols...)
 			}
-			block, rErr := inject.RenderActiveWorkflowInject(ctx, injRenderer, cr.auth.Reader, "sess-wf-cat", fr, nil, nil, gateCfg)
-			if rErr != nil {
-				return rErr
-			}
-			sum.InjectAndGuidanceCount++
-			resolveNamed := resolver.forCoordinatorState(cr.state)
-			viols := checkClaimsOnce(s, fmt.Sprintf("inject/active-workflow/%s/%s", m.ID, p.ID), block, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
-			sum.Violations = append(sum.Violations, viols...)
 		}
 	}
 	return renderWorkflowFramesOnBoundSurfaces(ctx, s, injRenderer, wfReg, cReps, gateCfg, hintCfg, resolver, sum)
@@ -294,28 +295,13 @@ func renderStructuralInjectVariants(
 		{"agents-md", map[string]any{"mode": "none"}},
 		{"blueprint", map[string]any{"blueprint_path": "plan.md", "frontmatter": []map[string]any{{"key": "goal", "value": "ship"}}, "body": "## Goal\nShip."}},
 		{"blueprint", map[string]any{"body": "Plain blueprint."}},
-		{"execution-state", map[string]any{
-			"view": "instructions", "declared_command": "./task test:digest",
-			"operations":         []map[string]any{{"tool": "edit", "path": "a.go", "command": "edit", "invoked": true, "checklist_after": true, "tool_request_after": true}, {"tool": "write"}},
-			"operations_omitted": 1,
-			"executions":         []map[string]any{{"code": "PASS", "command": "./task test:short", "cwd": "@primary", "resolvable": true, "source_verdict": "clean", "source_revision": "abc", "source_root_digest": "def"}, {"summary": "min"}},
-			"executions_omitted": 1,
-		}},
-		{"execution-state", map[string]any{"view": "summary"}},
+		{"execution-state", executionStateRich("instructions")},
+		{"execution-state", executionStateRich("observations")},
+		{"execution-state", map[string]any{"view": "instructions", "executions": []map[string]any{{"tool": "verify", "call_id": "c-3", "status": "failed"}}}},
+		{"execution-state", map[string]any{"view": "observations", "executions": []map[string]any{{"tool": "verify", "call_id": "c-3", "status": "failed"}}}},
 		{"scan-guidance-ephemeral", map[string]any{"summaries": []map[string]any{{"rule": "R1", "fix": "Validate input.", "count": 2}, {"rule": "R2", "count": 1}}}},
 		{"synthesis-evidence", map[string]any{"execution_observations": "1 test run passed."}},
 		{"synthesis-evidence", map[string]any{}},
-		{"view-context", map[string]any{
-			"folder": "src/", "search_query": "main", "search_hit": "src/main.go:10",
-			"editors": []map[string]any{
-				{"path": "a.go", "unsaved": true, "selected": true, "start_line": 1, "end_line": 5},
-				{"path": "b.go", "unsaved": false, "selected": false, "cursor": true, "line": 3},
-				{"path": "c.go", "selected": true, "start_line": 8, "end_line": 8},
-			},
-			"diffs":    []map[string]any{{"path": "a.go"}},
-			"findings": []map[string]any{{"rule_id": "R1", "level": "high", "location": "a.go:4"}, {"rule_id": "R2", "level": "low"}},
-		}},
-		{"view-context", map[string]any{}},
 		{"worker-messages", map[string]any{"recipient": "coordinator", "message_count": 2, "has_needs_reply": true, "more": 1, "messages": []map[string]any{{"from": "w1", "body": "Ready."}}}},
 		{"worker-messages", map[string]any{"recipient": "worker", "message_count": 1, "has_needs_reply": false, "more": 0}},
 		{"worker-round", map[string]any{"has_brief": true, "instruction_count": 2, "workspace": "refreshed", "prior_change": "shelved", "earlier_results": []string{"r1", "r2"}}},
@@ -334,7 +320,59 @@ func renderStructuralInjectVariants(
 			sum.Violations = append(sum.Violations, viols...)
 		}
 	}
+	for i, view := range viewContextVariants() {
+		out := inject.RenderViewContextBlock(ctx, injRenderer, "sess-view", view)
+		sum.InjectAndGuidanceCount++
+		if out != "" {
+			viols := checkClaimsOnce(s, fmt.Sprintf("structural-inject/view-context[%d]", i), out, zeroAuth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
+			sum.Violations = append(sum.Violations, viols...)
+		}
+	}
 	return nil
+}
+
+// viewContextVariants are views a prompt can carry: every editor selection
+// shape with a folder, a search hit and findings; a hitless search alone; and
+// nothing in view.
+func viewContextVariants() []api.ViewContext {
+	at := func(path string, line int) *api.ViewLocation {
+		return &api.ViewLocation{Path: path, DisplayPath: path, Line: line}
+	}
+	return []api.ViewContext{
+		{
+			Editors: []api.ViewEditor{
+				{DisplayPath: "a.go", Unsaved: true, Selection: &api.ViewSelection{StartLine: 1, EndLine: 5}},
+				{DisplayPath: "b.go", Selection: &api.ViewSelection{StartLine: 3, EndLine: 3, Cursor: true}},
+				{DisplayPath: "c.go", Selection: &api.ViewSelection{StartLine: 8, EndLine: 8}},
+				{DisplayPath: "d.go"},
+			},
+			Diffs:    []api.ViewPath{{DisplayPath: "a.go"}},
+			Folder:   &api.ViewPath{DisplayPath: "src/"},
+			Search:   &api.ViewSearch{Query: "main", Hit: at("src/main.go", 10)},
+			Findings: []api.ViewFinding{{RuleID: "R1", Level: api.FindingLevel("high"), Location: at("a.go", 4)}, {RuleID: "R2", Level: api.FindingLevel("low")}},
+		},
+		{Search: &api.ViewSearch{Query: "main"}},
+		{},
+	}
+}
+
+// executionStateRich is execution-state data in the row shape
+// inject.RenderExecutionStateMessage projects, for one of the two views it
+// renders: a fully populated row and a sparse row in each list.
+func executionStateRich(view string) map[string]any {
+	return map[string]any{
+		"view": view, "declared_command": "./task test:digest",
+		"operations": []map[string]any{
+			{"tool": "edit", "call_id": "c-1", "path": "a.go", "command": "edit", "invoked": true, "code": "PATH_DENIED", "checklist_after": true, "tool_request_after": true},
+			{"tool": "write", "call_id": "c-2", "code": "PATH_DENIED"},
+		},
+		"operations_omitted": 1,
+		"executions": []map[string]any{
+			{"tool": "command", "call_id": "c-4", "status": "completed", "invoked": true, "code": "PASS", "command": "./task test:short", "cwd": "@primary", "resolvable": "task", "source_verdict": "clean", "source_revision": "abc", "source_root_digest": "def"},
+			{"tool": "verify", "call_id": "c-5", "status": "failed"},
+		},
+		"executions_omitted": 1,
+	}
 }
 
 func runWorkerInjectRenders(
@@ -410,7 +448,7 @@ func workerLegContexts(offered []string) []inject.WorkerLegContext {
 			LegID: "leg-1", AgentType: "implementer", WorkflowID: "implement", PhaseID: "execute",
 			TopologyPattern: "fanout", RequiresIsolation: true,
 			FailedLeaves:       manyLeaves,
-			CompletionCriteria: []string{"Tests pass"},
+			CompletionCriteria: append([]string{"Tests pass"}, manyLeaves...),
 			LegTools:           offered,
 			Checklist:          []string{"Inspect target", "Verify"},
 			ScanDigest:         []string{"0 critical findings"},
