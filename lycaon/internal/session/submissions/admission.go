@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/promptresult"
@@ -377,7 +378,7 @@ func (m *Service) RunClaimedLocked(ctx context.Context, submissionID string, loc
 		m.publishClosedWithoutTurn(context.WithoutCancel(ctx), row)
 		var drainErr error
 		if !DispatchLoopActive(ctx) {
-			drainErr = m.DrainPromptSubmissions(context.WithoutCancel(ctx), row.SessionID)
+			drainErr = m.DrainPromptSubmissions(actionoutcome.IndependentWork(context.WithoutCancel(ctx)), row.SessionID)
 		}
 		return nil, errors.Join(err, drainErr)
 	}
@@ -395,7 +396,7 @@ func (m *Service) RunClaimedLocked(ctx context.Context, submissionID string, loc
 		m.publishClosedWithoutTurn(context.WithoutCancel(ctx), row)
 	}
 	if !DispatchLoopActive(ctx) && (row.Origin == store.PromptSubmissionOriginUser || !UserReceiptOpen(ctx)) {
-		if drainErr := m.DrainPromptSubmissions(context.WithoutCancel(ctx), row.SessionID); drainErr != nil {
+		if drainErr := m.DrainPromptSubmissions(actionoutcome.IndependentWork(context.WithoutCancel(ctx)), row.SessionID); drainErr != nil {
 			return nil, errors.Join(runErr, drainErr)
 		}
 	}

@@ -54,6 +54,15 @@ type leaseWitness struct {
 func WithLease(ctx context.Context, id string, delivery *Handoff) context.Context {
 	return context.WithValue(ctx, leaseKey{}, leaseWitness{id, delivery})
 }
+
+// IndependentWork starts a separate wake or submission on the same host.
+func IndependentWork(ctx context.Context) context.Context {
+	ctx = context.WithValue(ctx, actionKey{}, (*Action)(nil))
+	ctx = WithTicket(ctx, nil)
+	ctx = context.WithValue(ctx, turnContextKey{}, (*Turn)(nil))
+	return context.WithValue(ctx, leaseKey{}, leaseWitness{})
+}
+
 func CurrentTurn(ctx context.Context) *Turn { t, _ := ctx.Value(turnContextKey{}).(*Turn); return t }
 
 func (t *Ticket) Consumed(turn *Turn) {

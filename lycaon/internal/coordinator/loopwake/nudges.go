@@ -197,26 +197,26 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 	l.schedulePendingDrain(ctx, sessionID, false)
 }
 func (l *Nudges) NudgeScanFinished(ctx context.Context, sessionID, scanID string, env anchor.Envelope) {
-	l.Nudge(ctx, sessionID, anchor.ScanFinished, anchor.ScanFinished, scanID, env)
+	_ = l.Nudge(ctx, sessionID, anchor.ScanFinished, anchor.ScanFinished, scanID, env)
 }
 func (l *Nudges) NudgeProcessFinished(ctx context.Context, sessionID, handle string, env anchor.Envelope) {
-	l.Nudge(ctx, sessionID, anchor.ProcessFinished, anchor.ProcessFinished, handle, env)
+	_ = l.Nudge(ctx, sessionID, anchor.ProcessFinished, anchor.ProcessFinished, handle, env)
 }
 func (l *Nudges) NudgeProcessRefused(ctx context.Context, sessionID, handle string, env anchor.Envelope) {
-	l.Nudge(ctx, sessionID, anchor.ProcessRefused, anchor.ProcessRefused, handle, env)
+	_ = l.Nudge(ctx, sessionID, anchor.ProcessRefused, anchor.ProcessRefused, handle, env)
 }
 func (l *Nudges) NudgeWorkerRoundNotice(ctx context.Context, sessionID, jobID string, env anchor.Envelope) {
-	l.Nudge(ctx, sessionID, anchor.WorkerRoundNotice, anchor.WorkerRoundNotice, jobID, env)
+	_ = l.Nudge(ctx, sessionID, anchor.WorkerRoundNotice, anchor.WorkerRoundNotice, jobID, env)
 }
 func (l *Nudges) NudgeWorkerPrerequisiteBlocked(ctx context.Context, sessionID, jobID string, env anchor.Envelope) {
-	l.Nudge(ctx, sessionID, anchor.WorkerPrerequisiteBlocked, anchor.WorkerPrerequisiteBlocked, jobID, env)
+	_ = l.Nudge(ctx, sessionID, anchor.WorkerPrerequisiteBlocked, anchor.WorkerPrerequisiteBlocked, jobID, env)
 }
 
 // NudgeWorkerMessage wakes a coordinator for a message from running job
 // jobID that needs a reply. It has no inform: the message itself reaches the
 // coordinator on its next request's message page.
 func (l *Nudges) NudgeWorkerMessage(ctx context.Context, sessionID, jobID string) {
-	l.Nudge(ctx, sessionID, anchor.WorkerMessageReceived, "", jobID, anchor.Envelope{})
+	_ = l.Nudge(ctx, sessionID, anchor.WorkerMessageReceived, "", jobID, anchor.Envelope{})
 }
 func (l *Nudges) NudgeLegFinished(ctx context.Context, parentID string, completedAt time.Time, legID string) {
 	env := anchor.Envelope{}
@@ -228,7 +228,7 @@ func (l *Nudges) NudgeLegFinished(ctx context.Context, parentID string, complete
 	if id := strings.TrimSpace(legID); id != "" {
 		env.Vars = map[string]any{"leg_id": id}
 	}
-	l.Nudge(ctx, parentID, anchor.LegFinished, anchor.LegFinished, legID, env)
+	_ = l.Nudge(ctx, parentID, anchor.LegFinished, anchor.LegFinished, legID, env)
 }
 func (l *Nudges) ClearPending(sessionID string, reason api.WakeReason) {
 	if l == nil {

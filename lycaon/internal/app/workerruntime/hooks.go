@@ -251,7 +251,7 @@ func (r *Runtime) OnWorkflowToolAskOpened(ctx context.Context, sessionID, _ stri
 func (r *Runtime) OnWorkflowFeedbackResolved(ctx context.Context, sessionID, _, _, _ string) {
 	r.deps.Sessions.Manager.Coordinator.Guidance.Drop(sessionID, anchor.FeedbackPending)
 	r.deps.Sessions.Manager.Coordinator.Guidance.Emit(ctx, sessionID, anchor.FeedbackReceived, anchor.Envelope{})
-	r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.FeedbackReceived, "", anchor.Envelope{})
+	_ = r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.FeedbackReceived, "", anchor.Envelope{})
 }
 
 // OnWorkflowReviewLoopHeld emits loop decision kicks and nudges coordinator.
@@ -261,7 +261,7 @@ func (r *Runtime) OnWorkflowReviewLoopHeld(ctx context.Context, sessionID string
 		id = anchor.ReviewLoopDecide
 	}
 	r.deps.Sessions.Manager.Coordinator.Guidance.Emit(ctx, sessionID, id, anchor.Envelope{})
-	r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, id, "", anchor.Envelope{})
+	_ = r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, id, "", anchor.Envelope{})
 }
 
 // OnPlanCloseout advances the workflow run once its planned workers settle.

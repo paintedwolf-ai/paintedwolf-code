@@ -108,6 +108,6 @@ func (l *Waits) armSleepTimerLocked(st *sessionSleep, wakeCtx context.Context, s
 			return
 		}
 		loopLogSleep(sessionID, "timer_fire", reason, until)
-		l.Nudges.Nudge(wakeCtx, sessionID, anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
+		_ = l.Nudges.Nudge(wakeCtx, sessionID, anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
 	})
 }

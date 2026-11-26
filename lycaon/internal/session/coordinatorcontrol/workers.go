@@ -98,7 +98,7 @@ func (m *Workers) AfterTerminal(
 	if m == nil || strings.TrimSpace(parentID) == "" || strings.TrimSpace(completingJobID) == "" {
 		return
 	}
-	m.Runtime.CoordinatorLoop().Nudges.NudgeAfterWorkerJobTerminal(
+	_ = m.Runtime.CoordinatorLoop().Nudges.NudgeAfterWorkerJobTerminal(
 		ctx,
 		parentID,
 		completingJobID,

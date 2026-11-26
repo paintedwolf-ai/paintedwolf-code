@@ -112,7 +112,7 @@ func (l *HostTurns) releasePromptActiveAndRedrain(ctx context.Context, sessionID
 }
 func (l *HostTurns) spawnAsyncTurn(ctx context.Context, sessionID string, fn func(ctx context.Context)) {
 	timeout := l.Facts.sessionLimits(ctx, sessionID).CoordinatorHostTurnTimeout()
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	ctx, cancel := context.WithTimeout(actionoutcome.IndependentWork(context.WithoutCancel(ctx)), timeout)
 	work := l.registerAsyncTurn(sessionID, cancel)
 	l.asyncTurns.Add(1)
 	go func() {

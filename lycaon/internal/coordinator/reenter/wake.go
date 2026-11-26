@@ -36,5 +36,5 @@ func NudgeOnManifestReenter(
 	if hasDef && anchor.SameInform(def.OnReenter.InjectKick, anchor.WorkerTaskFinished) {
 		return
 	}
-	n.Nudge(ctx, sessionID, anchor.LegFinished, anchor.LegFinished, legID, anchor.Envelope{})
+	_ = n.Nudge(ctx, sessionID, anchor.LegFinished, anchor.LegFinished, legID, anchor.Envelope{})
 }
