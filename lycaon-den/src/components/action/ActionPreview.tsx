@@ -15,8 +15,14 @@ const MAX_CACHED_PREVIEWS = 128;
 
 const settledPreviewPages = new WeakMap<LycaonClient, Map<string, CommandProgramReceiptPage>>();
 
-function previewCacheKey(sessionId: string, programId: string, activityId: string | undefined): string {
-  return `${sessionId}\0${programId}\0${activityId ?? ""}`;
+function previewCacheKey(sessionId: string, programId: string, activityId: string | undefined, revision: number): string {
+  return `${sessionId}\0${programId}\0${activityId ?? ""}\0${revision}`;
+}
+
+function expectedProgramRevision(part: ToolPartView, programId: string): number | undefined {
+  const program = part.commandProgram;
+  if (!program || program.id !== programId || commandProgramActive(program)) return undefined;
+  return program.activity_revision;
 }
 
 function cachedPreviewPage(client: LycaonClient, key: string): CommandProgramReceiptPage | undefined {
@@ -29,9 +35,8 @@ function cachedPreviewPage(client: LycaonClient, key: string): CommandProgramRec
   return hit;
 }
 
-function storePreviewPage(client: LycaonClient, key: string, page: CommandProgramReceiptPage): void {
-  if (page.program && commandProgramActive(page.program)) {
-    settledPreviewPages.get(client)?.delete(key);
+function storePreviewPage(client: LycaonClient, key: string, page: CommandProgramReceiptPage, revision: number): void {
+  if (page.program && (commandProgramActive(page.program) || (page.program.activity_revision ?? revision) < revision)) {
     return;
   }
   let map = settledPreviewPages.get(client);
@@ -85,21 +90,26 @@ function ReceiptOutput(props: Props) {
   const request = createMemo(() => {
     const client = props.client ?? getLycaonClient();
     if (!client || !props.sessionId) return undefined;
-    const scopes = (props.preview.receipts ?? []).slice(0, PREVIEW_SCOPES);
     const settled = props.action.status !== "running";
-    return { client, sessionId: props.sessionId, scopes, settled, key: JSON.stringify([scopes, props.action.status]) };
+    const scopes = (props.preview.receipts ?? []).slice(0, PREVIEW_SCOPES).map((scope) => ({
+      scope,
+      revision: settled ? expectedProgramRevision(props.part, scope.program_id) : undefined,
+    }));
+    const key = JSON.stringify([scopes, props.action.status, props.part.commandProgram?.activity_revision, props.part.commandProgram?.state]);
+    return { client, sessionId: props.sessionId, scopes, key };
   }, undefined, { equals: (a, b) => a?.client === b?.client && a?.sessionId === b?.sessionId && a?.key === b?.key });
-  const [pages] = createResource(request, ({ client, sessionId, scopes, settled }) =>
-    Promise.all(scopes.map(async (scope) => {
+  const [pages] = createResource(request, ({ client, sessionId, scopes }) =>
+    Promise.all(scopes.map(async ({ scope, revision }) => {
       const activityId = scope.activity_id || undefined;
-      const key = previewCacheKey(sessionId, scope.program_id, activityId);
-      if (settled) {
+      if (revision !== undefined) {
+        const key = previewCacheKey(sessionId, scope.program_id, activityId, revision);
         const hit = cachedPreviewPage(client, key);
         if (hit) return hit;
+        const page = await client.getCommandProgramReceipt(sessionId, scope.program_id, { limit: PREVIEW_EXECUTIONS, cursor: undefined, activity_id: activityId });
+        storePreviewPage(client, key, page, revision);
+        return page;
       }
-      const page = await client.getCommandProgramReceipt(sessionId, scope.program_id, { limit: PREVIEW_EXECUTIONS, cursor: undefined, activity_id: activityId });
-      if (settled) storePreviewPage(client, key, page);
-      return page;
+      return client.getCommandProgramReceipt(sessionId, scope.program_id, { limit: PREVIEW_EXECUTIONS, cursor: undefined, activity_id: activityId });
     })));
   const output = createMemo(() => {
     const loaded = pages.state === "ready" || pages.state === "refreshing" ? pages.latest ?? [] : [];

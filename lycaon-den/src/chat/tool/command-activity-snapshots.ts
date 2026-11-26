@@ -39,13 +39,24 @@ function cachedSnapshot(client: LycaonClient, session: string, program: CommandP
   return hit;
 }
 
-function storeSnapshot(client: LycaonClient, session: string, snapshot: CommandProgramReceipt): void {
+function storeSnapshot(client: LycaonClient, session: string, snapshot: CommandProgramReceipt): CommandProgramReceipt {
   const key = cacheKey(session, snapshot.id);
   let map = settledSnapshots.get(client);
+  const existing = map?.get(key);
+  const nextRev = snapshot.activity_revision ?? 0;
+  const existingRev = existing?.activity_revision ?? 0;
+
   if (commandProgramActive(snapshot)) {
-    map?.delete(key);
-    return;
+    if (existing && nextRev > existingRev) {
+      map?.delete(key);
+    }
+    return existing && existingRev >= nextRev ? existing : snapshot;
   }
+
+  if (existing && existingRev > nextRev) {
+    return existing;
+  }
+
   if (!map) {
     map = new Map();
     settledSnapshots.set(client, map);
@@ -57,6 +68,7 @@ function storeSnapshot(client: LycaonClient, session: string, snapshot: CommandP
     if (oldest === undefined) break;
     map.delete(oldest);
   }
+  return snapshot;
 }
 
 /**
@@ -69,15 +81,20 @@ export function useCommandActivitySnapshots(entries: () => readonly ActivitySpan
     const session = sessionId();
     const client = getLycaonClient();
     if (!session || !client) return undefined;
-    const programs = [...new Map(entries().flatMap(entry => {
-      if (entry.kind !== "tool") return [];
+    const byId = new Map<string, CommandProgramReceipt>();
+    for (const entry of entries()) {
+      if (entry.kind !== "tool") continue;
       const program = entry.part.commandProgram;
-      if (!program || liveCommandProgram(session, entry.part.toolCallId)) return [];
-      if (!commandProgramActive(program) && program.activities?.some(fact => fact.steps !== undefined)) return [];
-      if (cachedSnapshot(client, session, program)) return [];
-      return [[program.id, program] as const];
-    })).values()];
-    return programs.length ? { session, client, programs, key: programs.map(program => program.id).join(":") } : undefined;
+      if (!program || liveCommandProgram(session, entry.part.toolCallId)) continue;
+      if (!commandProgramActive(program) && program.activities?.some(fact => fact.steps !== undefined)) continue;
+      if (cachedSnapshot(client, session, program)) continue;
+      const previous = byId.get(program.id);
+      byId.set(program.id, previous ? preferredCommandProgram(previous, program) ?? program : program);
+    }
+    const programs = [...byId.values()];
+    if (!programs.length) return undefined;
+    const key = programs.map(program => `${program.id}@${program.activity_revision ?? 0}:${program.state}`).join("|");
+    return { session, client, programs, key };
   }, undefined, { equals: (a, b) => a?.session === b?.session && a?.client === b?.client && a?.key === b?.key });
   const [snapshots] = createResource(requests, async ({ session, client, programs }) => {
     const results = new Map<string, CommandProgramReceipt>();
@@ -90,8 +107,7 @@ export function useCommandActivitySnapshots(entries: () => readonly ActivitySpan
         }
         const page = await client.getCommandProgramReceipt(session, program.id, { limit: 1 });
         const snapshot: CommandProgramReceipt = { ...page.program, activities: page.activities };
-        storeSnapshot(client, session, snapshot);
-        results.set(program.id, snapshot);
+        results.set(program.id, storeSnapshot(client, session, snapshot));
       }));
     }
     return results;
@@ -107,7 +123,7 @@ export function useCommandActivitySnapshots(entries: () => readonly ActivitySpan
     if (cached) return cached;
     if (snapshots.state === "errored") return { ...program, activities: undefined };
     const retained = snapshots.latest?.get(program.id);
-    if (retained) return retained;
+    if (retained && (retained.activity_revision ?? 0) >= (program.activity_revision ?? 0)) return retained;
     if (!requests()?.programs.some(value => value.id === program.id)) return undefined;
     // An unsettled program keeps its recorded rows until the receipt arrives.
     return commandProgramActive(program) ? program : { ...program, activities: [] };
