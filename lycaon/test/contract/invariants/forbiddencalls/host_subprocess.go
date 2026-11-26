@@ -110,6 +110,7 @@ var approvedHostLaunches = []invariants.Exemption{
 	{Key: "test volume", Reason: "attaches disk images for placement tests on macOS; test support, never in the product"},
 	{Key: "test volume namespace", Reason: "re-runs a placement test in a private mount namespace on Linux; test support, never in the product"},
 	{Key: "source outage volume", Reason: "mounts and detaches the loopback NFS volume of source-outage tests on macOS; test support, never in the product"},
+	{Key: "mapped file fixture", Reason: "holds a test's shared mapping of a mount file in a child, so the test process serving the mount never faults on its pages; test support, never in the product"},
 	{Key: "git", Reason: "executes Git CLI for worktree isolation, staging, signing, and repository management"},
 	{Key: "git_config_query", Reason: "reads global and system git configuration cascade"},
 	{Key: "git_identity_query", Reason: "queries author identity configured in host git"},
