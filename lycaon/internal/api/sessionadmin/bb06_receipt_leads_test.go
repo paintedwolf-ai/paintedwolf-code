@@ -60,7 +60,7 @@ func activityIDsOf(activities []wire.CommandActivity) []string {
 // the same program/session identity.
 func TestBB06_L02_L06_PipelineReceiptLookupCorrelation(t *testing.T) {
 	f := newBB06Fixture(t)
-	sub, unsub, err := f.hub.Subscribe(t.Context(), events.Subscription{Project: f.project.ID})
+	sub, unsub, err := f.hub.Subscribe(t.Context(), events.Subscription{Project: f.project.ID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe event hub", err)
 	defer unsub()
 
