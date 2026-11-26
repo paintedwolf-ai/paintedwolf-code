@@ -79,3 +79,49 @@ func workerRoundNoticeCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCa
 		},
 	}}, nil
 }
+
+// workerTaskFinishedCases queue the worker-finished kick with the result
+// notice workerroster.Source.ResultNotice describes: the worker and its leg
+// status, the result handle when the round named one, the changed paths
+// (bounded, with an omitted count) and the instructions the round never
+// received. They render on stock coordinators through RenderPendingNudge.
+func workerTaskFinishedCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
+	reps := coordinatorRepsBy(e.cReps, func(coordRep) bool { return true },
+		func(cr coordRep) string {
+			return offers(cr.auth, "promote_overlay", "instruct_worker", "preview_overlay", "worker_history", "update_progress", "wait")
+		})
+	knobs := []casegen.Knob{
+		repKnob("rep", []string{"profile_has_promote_overlay", "profile_has_instruct_worker", "profile_has_preview_overlay", "profile_has_worker_history", "profile_has_update_progress", casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
+		indexKnob("handle", []string{"worker_result.result_handle"}, []string{"named", "none"}),
+		indexKnob("changed", []string{"worker_result.changed", "worker_result.changed_omitted"}, []string{"bounded", "shown", "none"}),
+		indexKnob("not_applied", []string{"worker_result.not_applied"}, []string{"none", "one"}),
+	}
+	return []guidanceCase{{
+		unit: "guidance/coordinator-worker-task-finished", recipient: interactions.RecipientCoordinator, knobs: knobs,
+		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
+			cr := reps[knobValue[int](knobs, set, "rep")]
+			notice := map[string]any{"worker": "impl-1", "leg_status": "complete", "changed": []string(nil), "changed_omitted": 0, "not_applied": []string(nil)}
+			if knobValue[int](knobs, set, "handle") == 0 {
+				notice["result_handle"] = "res-1"
+			}
+			switch knobValue[int](knobs, set, "changed") {
+			case 0:
+				notice["changed"], notice["changed_omitted"] = []string{"a.go", "b.go"}, 1
+			case 1:
+				notice["changed"] = []string{"a.go"}
+			}
+			if knobValue[int](knobs, set, "not_applied") == 1 {
+				notice["not_applied"] = []string{"Also update the docs."}
+			}
+			engine := &kick.KickEngine{}
+			engine.SetPromptEngine(e.s.Engine())
+			engine.QueueDeferred("sess-finished", "coordinator-worker-task-finished", kick.WithVars(map[string]any{"worker_result": notice}))
+			engine.TakePendingKickIDUnless("sess-finished", nil)
+			text, _, _, err := engine.RenderPendingNudge(ctx, "sess-finished", kick.CoordinatorKickRenderContext{Reader: cr.auth.Reader})
+			if err != nil {
+				return guidanceRender{}, err
+			}
+			return coordinatorRender(text, cr), nil
+		},
+	}}, nil
+}
