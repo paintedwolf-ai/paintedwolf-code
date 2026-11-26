@@ -56,8 +56,15 @@ class FakeApp:
         self.pending_req = None
         if mode == 'incomplete-log':
             (self.directory / 'sidecar.log').write_text('unrelated noise\n')
+        elif mode == 'truncated-startup':
+            (self.directory / 'sidecar.log').write_text('level=INFO msg="server listening" addr=127.0.0.1:1\n')
+        elif mode == 'truncated-session':
+            (self.directory / 'sidecar.log').write_text(
+                'level=INFO msg="server listening" addr=127.0.0.1:1\n'
+                'level=INFO msg="session active" session_id=sess1234\n'
+            )
         elif mode != 'missing-log':
-            log_line = 'level=INFO msg="startup"\n'
+            log_line = 'level=INFO msg="server listening" addr=127.0.0.1:1\n'
             if mode == 'external-launch':
                 log_line += 'level=INFO msg="process boundary selected" tool=command session_id=sess1234…\n'
             (self.directory / 'sidecar.log').write_text(log_line)
@@ -68,6 +75,9 @@ class FakeApp:
 
     def close(self, cleanup=True):
         self.closed = True
+        if self.mode not in {'missing-log', 'incomplete-log', 'truncated-startup', 'truncated-session'}:
+            with (self.directory / 'sidecar.log').open('a') as f:
+                f.write('level=INFO msg="shutdown signal received" signal=terminated\n')
 
     def wait_for(self, fn, phase, session=None, timeout=10):
         res = fn()
@@ -190,12 +200,16 @@ class PortableCommandHarnessTests(unittest.TestCase):
                 launched = harness.run_case(CASES['native-option-no-fallback'], root / 'launched', app_factory=lambda d: FakeApp(d, mode='external-launch'), sse_factory=FakeSSE)
                 missing = harness.run_case(CASES['native-option-no-fallback'], root / 'missing', app_factory=lambda d: FakeApp(d, mode='missing-log'), sse_factory=FakeSSE)
                 incomp = harness.run_case(CASES['native-option-no-fallback'], root / 'incomp', app_factory=lambda d: FakeApp(d, mode='incomplete-log'), sse_factory=FakeSSE)
+                trunc_start = harness.run_case(CASES['native-option-no-fallback'], root / 'ts', app_factory=lambda d: FakeApp(d, mode='truncated-startup'), sse_factory=FakeSSE)
+                trunc_sess = harness.run_case(CASES['native-option-no-fallback'], root / 'tss', app_factory=lambda d: FakeApp(d, mode='truncated-session'), sse_factory=FakeSSE)
             self.assertTrue(clean['observation']['facts']['no_external_launch'])
+            self.assertTrue((root / 'clean' / 'raw' / 'window.json').is_file())
             self.assertFalse(launched['observation']['facts']['no_external_launch'])
             self.assertFalse(missing['observation']['facts']['no_external_launch'])
             self.assertIn('missing_sidecar_log', missing['audit']['observation_gaps'])
-            self.assertFalse(incomp['observation']['facts']['no_external_launch'])
-            self.assertIn('incomplete_sidecar_log', incomp['audit']['observation_gaps'])
+            for bad in (incomp, trunc_start, trunc_sess):
+                self.assertFalse(bad['observation']['facts']['no_external_launch'])
+                self.assertIn('incomplete_sidecar_log', bad['audit']['observation_gaps'])
 
     def test_cli_modes_and_unknown_case(self):
         with tempfile.TemporaryDirectory() as tmp:

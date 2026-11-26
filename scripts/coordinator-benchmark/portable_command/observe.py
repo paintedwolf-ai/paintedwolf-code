@@ -69,8 +69,16 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
     }
 
 
-def scan_sidecar_launches(log_path, session_id):
-    """Verify sidecar log covers this isolated run window and count command process-boundary selections."""
+OPENING_MARKERS = ('server listening', 'listening', 'server started', 'startup')
+CLOSING_MARKERS = (
+    'shutdown signal received', 'shutdown after spawning process exited',
+    'shutdown context canceled', 'engine shutdown', 'server stopped',
+    'session aborted', 'session ended', 'shutdown',
+)
+
+
+def scan_sidecar_launches(log_path, session_id, window=None):
+    """Verify sidecar log spans the full run window (opening + terminal/flush) and count launches."""
     path = pathlib.Path(log_path)
     if not path.is_file():
         return {'available': False, 'complete': False, 'command_launches': None, 'lines': []}
@@ -78,10 +86,27 @@ def scan_sidecar_launches(log_path, session_id):
     if not lines:
         return {'available': True, 'complete': False, 'command_launches': None, 'lines': []}
     prefix = f'session_id={session_id[:8]}'
-    covered = any(prefix in line or session_id in line or 'listening' in line.lower() or 'server started' in line.lower() or 'startup' in line.lower() for line in lines)
+    opening_line = next(
+        (n for n, line in enumerate(lines, 1)
+         if prefix in line or session_id in line or any(m in line.lower() for m in OPENING_MARKERS)),
+        None,
+    )
+    closing_line = None
+    if opening_line is not None:
+        for n, line in enumerate(lines, 1):
+            if n > opening_line and any(m in line.lower() for m in CLOSING_MARKERS):
+                closing_line = n
+    window_ok = True
+    if isinstance(window, dict) and isinstance(window.get('post_tool_lines'), int):
+        window_ok = bool(closing_line is not None and closing_line > window['post_tool_lines'] and len(lines) > window['post_tool_lines'])
+    complete = bool(opening_line is not None and closing_line is not None and closing_line > opening_line and window_ok)
     matches = [{'line': n, 'excerpt': line[:240]} for n, line in enumerate(lines, 1)
                if 'process boundary selected' in line and 'tool=command' in line and (prefix in line or session_id in line)]
-    return {'available': True, 'complete': covered, 'scope': prefix, 'line_count': len(lines), 'command_launches': len(matches) if covered else None, 'lines': matches}
+    return {
+        'available': True, 'complete': complete, 'scope': prefix, 'line_count': len(lines),
+        'opening_line': opening_line, 'closing_line': closing_line, 'window_ok': window_ok,
+        'command_launches': len(matches) if complete else None, 'lines': matches,
+    }
 
 
 def parse_tool_result(message_row):
@@ -178,13 +203,13 @@ def _extract_recovery(case_id, payload, raw_result, audit, unexpected_cmd):
     }
 
 
-def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records):
+def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=()):
     """Construct a version-1 native-runtime observation from the whole isolated session."""
     prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
     expected_calls = {cid for rec in turn_records for cid in rec['call_ids']}
     audit = query_db_audit(db_path, session_id, prelude_calls)
-    sidecar = scan_sidecar_launches(sidecar_log, session_id)
-    gaps = []
+    sidecar = scan_sidecar_launches(sidecar_log, session_id, window=sidecar_window)
+    gaps = list(dict.fromkeys(extra_gaps or ()))
     if not sidecar['available']:
         gaps.append('missing_sidecar_log')
     elif not sidecar['complete']:

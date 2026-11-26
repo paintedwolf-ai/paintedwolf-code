@@ -85,9 +85,19 @@ def send_tool_calls(application, session, calls):
     return [(i, wait_tool_result(application, session, i)) for i in ids]
 
 
+def log_line_count(path):
+    p = pathlib.Path(path)
+    return len(p.read_text(errors='replace').splitlines()) if p.is_file() else 0
+
+
+def session_posture(profile):
+    return 'build' if profile in {None, '', 'implement'} else 'vet'
+
+
 def create_isolated_session(application, project_dir, case):
     attached = application.request('/v1/projects', {'roots': [{'path': str(project_dir)}]})
-    session = application.request('/v1/sessions', {'project_id': attached['id'], 'posture': 'build'})
+    posture = session_posture(case.get('profile'))
+    session = application.request('/v1/sessions', {'project_id': attached['id'], 'posture': posture})
     sid = session['id']
     application.request('/harness/model-limit', {'session_id': sid, 'limit': 20})
     def ready():
@@ -146,7 +156,7 @@ def export_bundle(export_dir, case, observation, grade, audit_bundle, baseline_h
     save(export_dir / 'audit.json', audit_bundle)
     raw_out = export_dir / 'raw'
     raw_out.mkdir(exist_ok=True)
-    for name in ('invocations.json', 'messages.json', 'program-receipts.json', 'receipt-documents.json', 'events.jsonl', 'prelude.json'):
+    for name in ('invocations.json', 'messages.json', 'program-receipts.json', 'receipt-documents.json', 'events.jsonl', 'prelude.json', 'window.json'):
         src = pathlib.Path(raw_dir) / name
         if src.is_file():
             (raw_out / name).write_bytes(src.read_bytes())
@@ -196,15 +206,18 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
     save(out_dir / 'attempt.json', {'status': 'running', 'case_id': case['id'], 'identity': identity, 'revision_aliases': revision_aliases})
 
     application = app_factory(app_dir)
+    sidecar_path = app_dir / 'sidecar.log'
     sse = None
     prelude_records = []
     turn_records = []
     session_id = None
+    pre_prompt_lines = post_tool_lines = None
     try:
         application.ready()
         sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl')
         sse.start()
         session_id, _ = create_isolated_session(application, project_dir, case)
+        pre_prompt_lines = log_line_count(sidecar_path)
         application.request(f'/v1/sessions/{session_id}/prompts', {
             'operation_id': str(uuid.uuid4()),
             'text': f"Execute portable-command fixture {case['id']}.",
@@ -217,15 +230,19 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
             save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases})
         for turn in case['turns']:
             batch = []
-            if 'progress_update' in turn:
-                batch.append({'name': 'update_progress', 'args': turn['progress_update']})
-            batch.append({'name': 'command', 'args': {'command': turn['program']}})
+            if 'structured_tool' in turn:
+                batch.append({'name': turn['structured_tool'], 'args': dict(turn.get('arguments') or {})})
+                envelope_mode = 'structured_tool'
+            else:
+                if 'progress_update' in turn:
+                    batch.append({'name': 'update_progress', 'args': turn['progress_update']})
+                batch.append({'name': 'command', 'args': {'command': turn['program']}})
+                envelope_mode = 'sibling_update_progress' if 'progress_update' in turn else 'command_only'
             results = send_tool_calls(application, session_id, batch)
             call_ids = [cid for cid, _ in results]
-            cmd_id = call_ids[-1]
             turn_records.append({
-                'program': turn['program'], 'command_call_id': cmd_id, 'call_ids': call_ids,
-                'batch_plan': [c['name'] for c in batch],
+                'program': turn['program'], 'command_call_id': call_ids[-1], 'call_ids': call_ids,
+                'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
                 'batch_outcomes': [{'call_id': cid, 'tool': c['name'], 'outcome': res.get('outcome')} for c, (cid, res) in zip(batch, results)],
             })
         application.request(f'/v1/sessions/{session_id}/abort', {})
@@ -235,6 +252,7 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
                 (session_id,),
             ).fetchall()]
         collect_raw_api(application, session_id, raw_dir, pids)
+        post_tool_lines = log_line_count(sidecar_path)
     except Exception as exc:
         save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'execution', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity})
         raise
@@ -242,6 +260,13 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
         if sse is not None:
             sse.close()
         application.close(cleanup=False)
+    window = {'pre_prompt_lines': pre_prompt_lines, 'post_tool_lines': post_tool_lines, 'post_close_lines': log_line_count(sidecar_path)}
+    save(raw_dir / 'window.json', window)
+    extra_gaps = [g for g, cond in (
+        ('profile_binding_approximate', case.get('profile', 'implement') != 'implement'),
+        ('uninjected_drafts', bool(case['setup'].get('drafts'))),
+        ('uninjected_host_facts', bool(case['setup'].get('host_facts'))),
+    ) if cond]
 
     try:
         checkpoint_closed_store(app_dir / 'store.db', application.process)
@@ -251,9 +276,11 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
             identity=identity,
             project_dir=project_dir,
             db_path=app_dir / 'store.db',
-            sidecar_log=app_dir / 'sidecar.log',
+            sidecar_log=sidecar_path,
             turn_records=turn_records,
             prelude_records=prelude_records,
+            sidecar_window=window,
+            extra_gaps=extra_gaps,
         )
         grade = grade_case(case, observation, project_dir, identity)
     except Exception as exc:

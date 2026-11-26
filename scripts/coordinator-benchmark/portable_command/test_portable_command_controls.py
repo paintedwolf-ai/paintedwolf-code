@@ -8,6 +8,7 @@ from unittest.mock import patch
 import focused_outcomes as oracle
 from portable_command.contracts import DIRECTORY, bytes_value, load_suite
 from portable_command.grading import grade_case
+from portable_command.observe import scan_sidecar_launches
 from test_focused_outcomes import local_execute
 
 CASES = {c['id']: c for c in load_suite()['cases']}
@@ -332,3 +333,34 @@ class PortableCommandControls(unittest.TestCase):
         failed = self.grade(case, non_benign)
         self.assertFalse(failed['dimensions']['execution'])
         self.assertFalse(failed['passed'])
+
+    def test_sidecar_log_truncated_after_startup_or_session_fails_completeness(self):
+        sid = 'sess1234-0000-0000-0000-000000000001'
+        case = CASES['native-option-no-fallback']
+        write_project(self.root, case)
+        for label, content in [
+            ('truncated_after_startup', 'level=INFO msg="server listening" addr=127.0.0.1:9999\n'),
+            ('truncated_after_session', 'level=INFO msg="server listening"\nlevel=INFO msg="session created" session_id=sess1234\n'),
+        ]:
+            log_path = self.root / f'{label}.log'
+            log_path.write_text(content)
+            scan = scan_sidecar_launches(log_path, sid)
+            with self.subTest(defect=label):
+                self.assertFalse(scan['complete'])
+                self.assertIsNone(scan['command_launches'])
+                obs = make_observation(case)
+                obs['facts']['no_external_launch'] = bool(scan['available'] and scan['complete'] and scan['command_launches'] == 0)
+                result = self.grade(case, obs)
+                self.assertFalse(obs['facts']['no_external_launch'])
+                self.assertFalse(result['dimensions']['evidence'])
+                self.assertFalse(result['passed'])
+        full_log = self.root / 'complete.log'
+        full_log.write_text(
+            'level=INFO msg="server listening"\n'
+            'level=INFO msg="session created" session_id=sess1234\n'
+            'level=INFO msg="shutdown signal received" signal=terminated\n'
+        )
+        ok = scan_sidecar_launches(full_log, sid, window={'post_tool_lines': 2})
+        self.assertTrue(ok['complete'])
+        self.assertEqual(ok['command_launches'], 0)
+        self.assertFalse(scan_sidecar_launches(full_log, sid, window={'post_tool_lines': 3})['complete'])
