@@ -1,5 +1,5 @@
 id: implement
-description: Implementer that edits and checks without command, loading read_review on request
+description: Implementer that edits and checks without command or complete_leg, loading read_review on request
 command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   code_rewrite: sticky
@@ -23,7 +23,6 @@ tools:
   handoff_release_all: true
   source_history: sticky
   verify: sticky
-  complete_leg: sticky
   secret_generate: true
   secret_list: true
   secret_revoke: true

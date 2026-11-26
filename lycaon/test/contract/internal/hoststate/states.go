@@ -297,6 +297,12 @@ func buildProjectBindingSeeds(bindings []PhaseBinding) []coordinatorSeed {
 						})
 					}
 				}
+				// Without web search a rootless turn cannot dispatch web research.
+				seeds = append(seeds, coordinatorSeed{
+					mode: mode, posture: p, wf: WorkflowActivePhase, surfaceID: b.Resolved.CoordinatorSurface,
+					roots: RootsNone, loading: LoadingFloorOnly, web: false, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+					binding: b,
+				})
 			}
 		}
 	}
@@ -337,6 +343,11 @@ func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, phaseBindings []
 				approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
 			})
 		}
+		seeds = append(seeds, coordinatorSeed{
+			overlayIdx: ovIdx, mode: api.SessionModeAgent, posture: api.SessionPostureBuild, wf: WorkflowActivePhase,
+			surfaceID: s.ID, roots: RootsSingleGit, loading: LoadingFloorOnly, web: false,
+			approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+		})
 	}
 	return seeds
 }
