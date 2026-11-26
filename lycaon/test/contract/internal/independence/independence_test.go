@@ -3,6 +3,8 @@ package independence
 import (
 	"strings"
 	"testing"
+
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func andOf(_ string, v []Truth) (bool, error) {
@@ -41,9 +43,7 @@ func TestJointConstraintExcludesAndDetectsContradiction(t *testing.T) {
 		Atoms: []string{`op == "a"`, `op == "b"`}, Allowed: [][]Truth{{False, False}, {True, False}, {False, True}}, Source: "expression",
 	}}}
 	res, err := Analyze([]Guard{g}, orOf, cons)
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "Analyze failed", err)
 	if len(res.Gaps) != 2 || len(res.Gaps[0].Needs) != 1 || res.Gaps[0].Needs[0][`op == "b"`] != False {
 		t.Fatalf("gaps = %+v", res.Gaps)
 	}
@@ -51,18 +51,14 @@ func TestJointConstraintExcludesAndDetectsContradiction(t *testing.T) {
 	g.Atoms = []string{`op == "a"`, `op == "b"`}
 	g.Source = `op == "a" && op == "b"`
 	res, err = Analyze([]Guard{g}, andOf, cons)
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "Analyze failed", err)
 	if len(res.Gaps) != 0 || len(res.Exclusions) != 2 || !strings.Contains(res.Exclusions[0].Reason, "joint") {
 		t.Fatalf("result = %+v", res)
 	}
 
 	g.Vectors = append(g.Vectors, Vector{Atoms: []Truth{True, True}, Decision: true})
 	res, err = Analyze([]Guard{g}, andOf, cons)
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "Analyze failed", err)
 	if len(res.Contradicted) != 1 || !strings.Contains(res.Contradicted[0], "joint") {
 		t.Fatalf("contradicted = %v", res.Contradicted)
 	}
@@ -76,25 +72,19 @@ func TestGapNeedsListTheWitnessingAssignments(t *testing.T) {
 		atoms = append(atoms, string(rune('a'+i)))
 	}
 	res, err := Analyze([]Guard{{Site: "or", Atoms: atoms}}, orOf, Constraints{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "Analyze failed", err)
 	for _, g := range res.Gaps {
 		if len(g.Needs) != 1 || len(g.Missing) != 1 {
 			t.Fatalf("gap = %+v", g)
 		}
 	}
 	res, err = Analyze([]Guard{{Site: "and", Atoms: atoms}}, andOf, Constraints{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "Analyze failed", err)
 	if len(res.Gaps) != 7 || len(res.Gaps[0].Needs) != 1 {
 		t.Fatalf("gaps = %+v", res.Gaps)
 	}
 	res, err = Analyze([]Guard{{Site: "parity", Atoms: atoms}}, parityOf, Constraints{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "Analyze failed", err)
 	if g := res.Gaps[0]; len(g.Needs) != maxNeeds || len(g.Missing) != maxListed+1 {
 		t.Fatalf("gap = %+v", g)
 	}

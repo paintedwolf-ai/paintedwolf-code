@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/independence"
 )
 
@@ -68,9 +69,7 @@ func TestGenerateFindsAPairPerInputAndExplainsMisses(t *testing.T) {
 	)
 	p := &toyProducer{}
 	outcomes, err := Generate(t.Context(), p, targets, Budget{PerTarget: 40, Total: 400})
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "Generate failed", err)
 	for _, o := range outcomes[:3] {
 		if !o.Found || o.With == nil || o.Then == nil {
 			t.Fatalf("%s: no pair: %s", o.Input, o.Reason)
@@ -100,9 +99,7 @@ func TestGenerateStopsAtTheBudget(t *testing.T) {
 		Site: "g2", Recipient: "coordinator", Input: "a",
 		Needs: Needs(inputs, "a", toyDecide, 4), References: toyRefs,
 	}}, Budget{PerTarget: 1, Total: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "Generate failed", err)
 	if p.runs != 1 || outcomes[0].Found || outcomes[1].Found {
 		t.Fatalf("runs=%d outcomes=%+v", p.runs, outcomes)
 	}
@@ -234,9 +231,7 @@ func TestGeneratePairsWithinOneGroup(t *testing.T) {
 		Needs:      []map[string]independence.Truth{{"b": independence.True}},
 		References: toyRefs,
 	}}, Budget{PerTarget: 20, Total: 20})
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "Generate failed", err)
 	if o := outcomes[0]; !o.Found || !strings.Contains(o.With.Vector, "b=T") || !strings.Contains(o.Then.Vector, "b=T") {
 		t.Fatalf("outcome = %+v", outcomes[0])
 	}
