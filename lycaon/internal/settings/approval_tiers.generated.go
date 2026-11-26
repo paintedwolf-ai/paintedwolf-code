@@ -79,6 +79,7 @@ var (
 		"page_close",
 		"page_open",
 		"page_snapshot",
+		"python",
 		"render_view",
 		"task",
 		"terminal_close",
@@ -138,6 +139,7 @@ var (
 	// Command grants match exact structured arguments.
 	commandScopedTools = []string{
 		"command",
+		"python",
 		"terminal_open",
 		"verify",
 	}
