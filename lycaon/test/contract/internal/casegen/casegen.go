@@ -263,7 +263,10 @@ func (s *search) target(t Target, perTarget int) (Outcome, error) {
 			nearest = near
 		}
 		if errors.Is(err, errBudget) {
-			break
+			if *s.total <= 0 {
+				break
+			}
+			continue
 		}
 		if err != nil {
 			return o, err

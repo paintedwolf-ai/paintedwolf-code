@@ -87,6 +87,9 @@ const (
 	srcUnscopedWorkerLeg = "session/policyfacts/service.go:FillSessionFacts names every non-worker session coordinator, so a policyfacts occurrence without a role is a worker leg"
 )
 
+// maxGenerationRounds bounds the OAR generation rounds.
+const maxGenerationRounds = 3
+
 // caseBudget and templateCaseBudget bound targeted generation: runs per gap
 // and in total.
 var (
@@ -125,28 +128,34 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 		return nil, err
 	}
 	// Generated observations can reach guards and recipients the matrix did
-	// not; their gaps get one more round.
-	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations())
-	second, err := interactions.BuildConditionLedger(in)
-	if err != nil {
-		return nil, err
-	}
+	// not; their gaps get further rounds.
 	searched := map[string]bool{}
 	for _, t := range targets {
 		searched[interactions.SearchKey(t.Site, t.Recipient, t.Input)] = true
 	}
-	more, moreRecipients := gen.targets(second)
-	var fresh []casegen.Target
-	for i, t := range more {
-		if !searched[interactions.SearchKey(t.Site, t.Recipient, t.Input)] {
-			fresh, gapRecipients = append(fresh, t), append(gapRecipients, moreRecipients[i])
+	for range maxGenerationRounds - 1 {
+		in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations())
+		next, err := interactions.BuildConditionLedger(in)
+		if err != nil {
+			return nil, err
 		}
+		more, moreRecipients := gen.targets(next)
+		var fresh []casegen.Target
+		for i, t := range more {
+			if key := interactions.SearchKey(t.Site, t.Recipient, t.Input); !searched[key] {
+				searched[key] = true
+				fresh, gapRecipients = append(fresh, t), append(gapRecipients, moreRecipients[i])
+			}
+		}
+		if len(fresh) == 0 {
+			break
+		}
+		freshOutcomes, err := casegen.Generate(ctx, gen.producer, fresh, caseBudget)
+		if err != nil {
+			return nil, err
+		}
+		targets, outcomes = append(targets, fresh...), append(outcomes, freshOutcomes...)
 	}
-	freshOutcomes, err := casegen.Generate(ctx, gen.producer, fresh, caseBudget)
-	if err != nil {
-		return nil, err
-	}
-	targets, outcomes = append(targets, fresh...), append(outcomes, freshOutcomes...)
 	kicks, err := newKickCaseProducer(s, sites)
 	if err != nil {
 		return nil, err
