@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -208,9 +209,10 @@ func awaitNoEngineProcesses(t *testing.T) time.Duration {
 }
 
 // runDirsFromRows returns the engine run directories named by the given
-// processes. The driver passes --output <runDir>/report.json, so argv names the
-// exact directory that scan owns. Attribution comes from the parent-link walk
-// that produced these rows; the flag only locates the path.
+// processes. The driver passes --output <runDir>/report.json where <runDir> is
+// a confine.ActionWorkspace under action-work/action-*, so argv names the exact
+// directory that scan owns. Attribution comes from the parent-link walk that
+// produced these rows; the flag only locates the path.
 func runDirsFromRows(rows []procRow) []string {
 	seen := map[string]bool{}
 	for _, row := range rows {
@@ -219,8 +221,12 @@ func runDirsFromRows(rows []procRow) []string {
 			if fields[i] != "--output" {
 				continue
 			}
-			dir := filepath.Dir(fields[i+1])
-			if strings.Contains(filepath.Base(dir), "paintedwolf-opengrep-") {
+			outPath := fields[i+1]
+			if filepath.Base(outPath) != "report.json" {
+				continue
+			}
+			dir := filepath.Dir(outPath)
+			if filepath.Base(filepath.Dir(dir)) == "action-work" && strings.HasPrefix(filepath.Base(dir), "action-") {
 				seen[dir] = true
 			}
 		}
@@ -231,6 +237,27 @@ func runDirsFromRows(rows []procRow) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func TestRunDirsFromRows(t *testing.T) {
+	rows := []procRow{
+		{PID: 10, Command: "/usr/bin/sandbox-exec -p (version 1) /path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-bbb/report.json --jobs 2"},
+		{PID: 11, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-bbb/report.json --jobs 2"},
+		{PID: 12, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-aaa/report.json --jobs 2"},
+		{PID: 13, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-ccc/other.json --jobs 2"},
+		{PID: 14, Command: "/path/to/opengrep scan --json --output /tmp/paintedwolf-opengrep-123/report.json --jobs 2"},
+		{PID: 15, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/other-dir/action-ddd/report.json --jobs 2"},
+		{PID: 16, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/notaction-eee/report.json --jobs 2"},
+		{PID: 17, Command: "/path/to/opengrep scan --output"},
+	}
+	got := runDirsFromRows(rows)
+	want := []string{
+		"/Users/m1/.config/paintedwolf/action-work/action-aaa",
+		"/Users/m1/.config/paintedwolf/action-work/action-bbb",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("runDirsFromRows() = %v, want %v", got, want)
+	}
 }
 
 // awaitEngineWorking waits until an engine below root has written to its log,
