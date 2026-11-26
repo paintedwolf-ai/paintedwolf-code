@@ -6,6 +6,7 @@ package pythoncatalog
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -18,91 +19,61 @@ const ImageManifestSchemaVersion = "portable-python.image-manifest/v1"
 // PY02 produces it from the actual built WASI CPython image; PY01 and host tools consume it
 // for discovery, read-only pip inventory, CLI dispatch, and diagnostics.
 type ImageManifest struct {
-	SchemaVersion      string                  `json:"schema_version"`
-	ImageID            string                  `json:"image_id"`
-	BuiltAt            string                  `json:"built_at"`
-	Target             TargetInfo              `json:"target"`
-	Interpreter        InterpreterInfo         `json:"interpreter"`
-	PackagesRoot       string                  `json:"packages_root"`
-	Distributions      []DistributionRecord    `json:"distributions"`
-	StdlibCapabilities []StdlibCapabilityGroup `json:"stdlib_capabilities"`
-	WasmImports        []WasmImportRecord      `json:"wasm_imports"`
-}
-
-// TargetInfo identifies the compiled guest platform and WASI target.
-type TargetInfo struct {
-	Triple      string `json:"triple"`
-	OS          string `json:"os"`
-	Arch        string `json:"arch"`
-	WASI        string `json:"wasi"`
-	PlatformTag string `json:"platform_tag"`
+	SchemaVersion      string               `json:"schema_version"`
+	ImageID            string               `json:"image_id"`
+	BuiltAt            string               `json:"built_at"`
+	Target             string               `json:"target"`
+	Interpreter        InterpreterInfo      `json:"interpreter"`
+	PackagesRoot       string               `json:"packages_root"`
+	Distributions      []DistributionRecord `json:"distributions"`
+	StdlibCapabilities []string             `json:"stdlib_capabilities"`
+	WasmImports        []WasmImportRecord   `json:"wasm_imports"`
 }
 
 // InterpreterInfo identifies the pinned CPython WASI interpreter and build inputs.
 type InterpreterInfo struct {
-	Implementation string       `json:"implementation"`
-	Version        string       `json:"version"`
-	Major          int          `json:"major"`
-	Minor          int          `json:"minor"`
-	Micro          int          `json:"micro"`
-	WasmPath       string       `json:"wasm_path"`
-	WasmSHA256     string       `json:"wasm_sha256"`
-	StdlibRoot     string       `json:"stdlib_root"`
-	StdlibSHA256   string       `json:"stdlib_sha256"`
-	BuildInputs    []BuildInput `json:"build_inputs,omitempty"`
-	Patches        []string     `json:"patches,omitempty"`
+	Name         string            `json:"name"`
+	Version      string            `json:"version"`
+	WasmPath     string            `json:"wasm_path"`
+	WasmSHA256   string            `json:"wasm_sha256"`
+	StdlibPath   string            `json:"stdlib_path"`
+	StdlibSHA256 string            `json:"stdlib_sha256"`
+	BuildInputs  map[string]string `json:"build_inputs,omitempty"`
+	Patches      []PatchSpec       `json:"patches,omitempty"`
 }
 
-// BuildInput records one pinned build input used to produce the image.
-type BuildInput struct {
-	Name   string `json:"name"`
-	URL    string `json:"url"`
-	SHA256 string `json:"sha256"`
+// PatchSpec records one applied patch in the built image.
+type PatchSpec struct {
+	Target string `json:"target"`
+	Reason string `json:"reason"`
 }
 
 // DistributionRecord describes one installed Python distribution in the immutable image.
 type DistributionRecord struct {
-	Name           string                `json:"name"`
-	NormalizedName string                `json:"normalized_name"`
-	Version        string                `json:"version"`
-	Public         bool                  `json:"public"`
-	Imports        []string              `json:"imports"`
-	Backend        string                `json:"backend,omitempty"`
-	Features       []string              `json:"features,omitempty"`
-	ConsoleScripts []ConsoleScriptRecord `json:"console_scripts,omitempty"`
-	HasPackageData bool                  `json:"has_package_data"`
-	DistInfoPath   string                `json:"dist_info_path"`
-	License        string                `json:"license"`
-	SourceURL      string                `json:"source_url"`
-	SourceSHA256   string                `json:"source_sha256"`
-	TreeSHA256     string                `json:"tree_sha256"`
-	Requires       []string              `json:"requires,omitempty"`
-	Workflow       string                `json:"workflow,omitempty"`
-}
-
-// ConsoleScriptRecord binds a distribution's console_scripts entry point.
-type ConsoleScriptRecord struct {
-	Name       string `json:"name"`
-	EntryPoint string `json:"entry_point"`
-	Module     string `json:"module"`
-	Callable   string `json:"callable"`
-	Exposed    bool   `json:"exposed"`
-}
-
-// StdlibCapabilityGroup documents one qualified standard-library workflow group.
-type StdlibCapabilityGroup struct {
-	ID       string   `json:"id"`
-	Title    string   `json:"title"`
-	Modules  []string `json:"modules"`
-	Workflow string   `json:"workflow"`
+	Name           string   `json:"name"`
+	NormalizedName string   `json:"normalized_name"`
+	Version        string   `json:"version"`
+	Public         bool     `json:"public"`
+	Imports        []string `json:"imports"`
+	Backend        string   `json:"backend,omitempty"`
+	Features       []string `json:"features,omitempty"`
+	ConsoleScripts []string `json:"console_scripts"`
+	HasPackageData bool     `json:"has_package_data"`
+	DistInfoPath   string   `json:"dist_info_path"`
+	License        string   `json:"license"`
+	SourceURL      string   `json:"source_url"`
+	SourceSHA256   string   `json:"source_sha256"`
+	TreeSHA256     string   `json:"tree_sha256"`
 }
 
 // WasmImportRecord inventories one host import required by the WASI Python binary.
 type WasmImportRecord struct {
-	Module             string `json:"module"`
-	Name               string `json:"name"`
-	Authority          string `json:"authority"`
-	FailureDisposition string `json:"failure_disposition"`
+	Module      string `json:"module"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Disposition string `json:"disposition"`
+	Authority   string `json:"authority"`
+	FailureMode string `json:"failure_mode,omitempty"`
 }
 
 var pep503Separator = regexp.MustCompile(`[-_.]+`)
@@ -114,6 +85,16 @@ func NormalizeDistributionName(name string) string {
 		return ""
 	}
 	return strings.ToLower(pep503Separator.ReplaceAllString(trimmed, "-"))
+}
+
+// LoadImageManifest reads, decodes, and validates an ImageManifest JSON file from disk.
+func LoadImageManifest(path string) (ImageManifest, error) {
+	// #nosec G304 -- path is an explicit caller-provided manifest file path.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ImageManifest{}, fmt.Errorf("read image manifest %q: %w", path, err)
+	}
+	return ParseImageManifest(data)
 }
 
 // ParseImageManifest decodes and validates an ImageManifest JSON document.
@@ -151,11 +132,11 @@ func (m ImageManifest) Validate() error {
 	if strings.TrimSpace(m.BuiltAt) == "" {
 		return fmt.Errorf("image manifest missing built_at")
 	}
-	if strings.TrimSpace(m.Target.Triple) == "" || strings.TrimSpace(m.Target.WASI) == "" {
-		return fmt.Errorf("image manifest missing target triple or wasi version")
+	if strings.TrimSpace(m.Target) == "" {
+		return fmt.Errorf("image manifest missing target")
 	}
-	if strings.TrimSpace(m.Interpreter.Implementation) == "" || strings.TrimSpace(m.Interpreter.Version) == "" {
-		return fmt.Errorf("image manifest missing interpreter implementation or version")
+	if strings.TrimSpace(m.Interpreter.Name) == "" || strings.TrimSpace(m.Interpreter.Version) == "" {
+		return fmt.Errorf("image manifest missing interpreter name or version")
 	}
 	if strings.TrimSpace(m.PackagesRoot) == "" {
 		return fmt.Errorf("image manifest missing packages_root")
@@ -199,30 +180,30 @@ func validateDistributions(dists []DistributionRecord) error {
 			return fmt.Errorf("distribution %q missing dist_info_path", d.Name)
 		}
 		for _, script := range d.ConsoleScripts {
-			if strings.TrimSpace(script.Name) == "" || strings.TrimSpace(script.EntryPoint) == "" {
-				return fmt.Errorf("distribution %q has incomplete console script", d.Name)
+			name := strings.TrimSpace(script)
+			if name == "" {
+				return fmt.Errorf("distribution %q has empty console script", d.Name)
 			}
-			if script.Exposed {
-				if seenCLI[script.Name] {
-					return fmt.Errorf("duplicate exposed console script %q", script.Name)
-				}
-				seenCLI[script.Name] = true
+			if seenCLI[name] {
+				return fmt.Errorf("duplicate console script %q", name)
 			}
+			seenCLI[name] = true
 		}
 	}
 	return nil
 }
 
-func validateStdlibCapabilities(groups []StdlibCapabilityGroup) error {
-	seen := make(map[string]bool, len(groups))
-	for _, g := range groups {
-		if strings.TrimSpace(g.ID) == "" || strings.TrimSpace(g.Title) == "" || len(g.Modules) == 0 {
-			return fmt.Errorf("invalid stdlib capability group %q", g.ID)
+func validateStdlibCapabilities(caps []string) error {
+	seen := make(map[string]bool, len(caps))
+	for _, c := range caps {
+		trimmed := strings.TrimSpace(c)
+		if trimmed == "" {
+			return fmt.Errorf("empty stdlib capability entry")
 		}
-		if seen[g.ID] {
-			return fmt.Errorf("duplicate stdlib capability group %q", g.ID)
+		if seen[trimmed] {
+			return fmt.Errorf("duplicate stdlib capability %q", trimmed)
 		}
-		seen[g.ID] = true
+		seen[trimmed] = true
 	}
 	return nil
 }
@@ -255,20 +236,18 @@ func (m ImageManifest) FindByImport(importName string) (DistributionRecord, bool
 	return DistributionRecord{}, false
 }
 
-// FindConsoleScript looks up an advertised (exposed) console script by command name.
-func (m ImageManifest) FindConsoleScript(cliName string) (DistributionRecord, ConsoleScriptRecord, bool) {
+// FindConsoleScript looks up an advertised console script by command name.
+func (m ImageManifest) FindConsoleScript(cliName string) (DistributionRecord, string, bool) {
 	trimmed := strings.TrimSpace(cliName)
 	if trimmed == "" {
-		return DistributionRecord{}, ConsoleScriptRecord{}, false
+		return DistributionRecord{}, "", false
 	}
 	for _, d := range m.Distributions {
-		for _, s := range d.ConsoleScripts {
-			if s.Exposed && s.Name == trimmed {
-				return d, s, true
-			}
+		if slices.Contains(d.ConsoleScripts, trimmed) {
+			return d, trimmed, true
 		}
 	}
-	return DistributionRecord{}, ConsoleScriptRecord{}, false
+	return DistributionRecord{}, "", false
 }
 
 // PublicDistributions returns the distributions marked public in manifest order.
@@ -283,14 +262,10 @@ func (m ImageManifest) PublicDistributions() []DistributionRecord {
 }
 
 // AdvertisedConsoleScripts returns every exposed console script in manifest order.
-func (m ImageManifest) AdvertisedConsoleScripts() []ConsoleScriptRecord {
-	var out []ConsoleScriptRecord
+func (m ImageManifest) AdvertisedConsoleScripts() []string {
+	var out []string
 	for _, d := range m.Distributions {
-		for _, s := range d.ConsoleScripts {
-			if s.Exposed {
-				out = append(out, s)
-			}
-		}
+		out = append(out, d.ConsoleScripts...)
 	}
 	return out
 }

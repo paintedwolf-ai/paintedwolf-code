@@ -114,13 +114,13 @@ func TestRenderPackageHelp(t *testing.T) {
 	m := DefaultLaunchManifest()
 	help := RenderPackageHelp(m)
 	for _, want := range []string{
-		"Portable Python 3.12.8",
+		"Portable Python 3.12.0 (cpython / wasm32-wasi)",
 		"PyYAML 6.0.2 (import yaml)",
 		"beautifulsoup4 4.12.3 (import bs4) [backend: html.parser]",
 		"markdown-it-py 3.0.0 (import markdown_it)",
-		"- pytest (pytest:console_main)",
-		"- markdown-it (markdown_it.cli.parse:interactive)",
-		"Read, join and emit structured records",
+		"- pytest\n",
+		"- markdown-it\n",
+		"Standard-library capabilities:",
 		ExternalPythonRoute,
 	} {
 		if !strings.Contains(help, want) {

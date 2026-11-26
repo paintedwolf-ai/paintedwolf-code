@@ -146,10 +146,8 @@ func executePipShow(manifest ImageManifest, args []string) PipResult {
 		foundCount++
 		fmt.Fprintf(&out, "Name: %s\n", d.Name)
 		fmt.Fprintf(&out, "Version: %s\n", d.Version)
-		fmt.Fprintf(&out, "Summary: %s\n", d.Workflow)
 		fmt.Fprintf(&out, "License: %s\n", d.License)
 		fmt.Fprintf(&out, "Location: %s\n", manifest.PackagesRoot)
-		fmt.Fprintf(&out, "Requires: %s\n", strings.Join(d.Requires, ", "))
 		fmt.Fprintf(&out, "Imports: %s\n", strings.Join(d.Imports, ", "))
 		if d.Backend != "" {
 			fmt.Fprintf(&out, "Backend: %s\n", d.Backend)
@@ -208,7 +206,7 @@ func sortedDistributions(dists []DistributionRecord) []DistributionRecord {
 // RenderPackageHelp renders compact on-demand package discovery and help from manifest.
 func RenderPackageHelp(manifest ImageManifest) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Portable Python %s (%s / %s)\n", manifest.Interpreter.Version, manifest.Interpreter.Implementation, manifest.Target.Triple)
+	fmt.Fprintf(&b, "Portable Python %s (%s / %s)\n", manifest.Interpreter.Version, manifest.Interpreter.Name, manifest.Target)
 	fmt.Fprintf(&b, "Image: %s\n\n", manifest.ImageID)
 
 	b.WriteString("Public packages (fixed immutable image):\n")
@@ -228,15 +226,13 @@ func RenderPackageHelp(manifest ImageManifest) string {
 	if len(scripts) > 0 {
 		b.WriteString("\nManaged console scripts:\n")
 		for _, s := range scripts {
-			fmt.Fprintf(&b, "- %s (%s)\n", s.Name, s.EntryPoint)
+			fmt.Fprintf(&b, "- %s\n", s)
 		}
 	}
 
 	if len(manifest.StdlibCapabilities) > 0 {
-		b.WriteString("\nStandard-library capability groups:\n")
-		for _, g := range manifest.StdlibCapabilities {
-			fmt.Fprintf(&b, "- %s: %s\n", g.Title, strings.Join(g.Modules, ", "))
-		}
+		b.WriteString("\nStandard-library capabilities:\n")
+		fmt.Fprintf(&b, "- %s\n", strings.Join(manifest.StdlibCapabilities, ", "))
 	}
 
 	b.WriteString("\nDiscovery and project-environment routes:\n")

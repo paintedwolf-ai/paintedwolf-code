@@ -148,11 +148,7 @@ func DiagnoseExtraOrBackend(manifest ImageManifest, distributionName, requestedE
 
 // DiagnoseCLI reports an unadvertised console script and lists the exposed launch CLIs.
 func DiagnoseCLI(manifest ImageManifest, cliName string) Diagnostic {
-	scripts := manifest.AdvertisedConsoleScripts()
-	names := make([]string, 0, len(scripts))
-	for _, s := range scripts {
-		names = append(names, s.Name)
-	}
+	names := manifest.AdvertisedConsoleScripts()
 	return Diagnostic{
 		Kind:          DiagnosticUnknownCLI,
 		Requested:     cliName,
