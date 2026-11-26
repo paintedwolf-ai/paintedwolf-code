@@ -562,11 +562,12 @@ func buildDocumentStore(req ToolRequest) (pythondocuments.DocumentStore, []pytho
 		}
 		return mem, specs
 	}
-	door := req.MutationDoor
-	if door == nil {
-		door = newFSEffectMutationDoor(req.Roots)
-	}
-	store := pythondocuments.NewHostDocumentStore(req.Roots, req.Editor, door)
+	// Fail closed: never construct a parallel disk/fseffect write path here.
+	// Callers must inject Painted Wolf's single apply-and-record MutationDoor
+	// (e.g. native.NewPythonMutationDoor). When MutationDoor is nil,
+	// HostDocumentStore allows reads and rejects any workspace write with
+	// pythondocuments.ErrMutationDoorUnavailable.
+	store := pythondocuments.NewHostDocumentStore(req.Roots, req.Editor, req.MutationDoor)
 	specs := req.RootSpecs
 	if len(specs) == 0 {
 		specs = make([]pythondocuments.RootSpec, 0, len(req.Roots))

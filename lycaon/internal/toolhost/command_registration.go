@@ -66,14 +66,20 @@ func (p *portablePythonRunner) Run(ctx context.Context, args map[string]any, tc 
 		})
 	}
 
+	var mutationDoor pythondocuments.MutationDoor
+	if len(roots) > 0 {
+		mutationDoor = native.NewPythonMutationDoor(tc, roots)
+	}
+
 	resp, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
-		RawArgs:  args,
-		CallID:   tc.Identity.ToolCallID,
-		Actor:    tc.Identity.Agent,
-		View:     string(tc.Source.SourceWorkspaceKind),
-		Surface:  tc.Turn.TurnSurfaceID,
-		ReadOnly: tc.Source.ReadOnly || tc.Source.AskMode,
-		Roots:    roots,
+		RawArgs:      args,
+		CallID:       tc.Identity.ToolCallID,
+		Actor:        tc.Identity.Agent,
+		View:         string(tc.Source.SourceWorkspaceKind),
+		Surface:      tc.Turn.TurnSurfaceID,
+		ReadOnly:     tc.Source.ReadOnly || tc.Source.AskMode,
+		Roots:        roots,
+		MutationDoor: mutationDoor,
 	})
 	if err != nil {
 		return "", err

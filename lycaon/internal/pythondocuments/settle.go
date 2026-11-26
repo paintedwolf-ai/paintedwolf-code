@@ -62,6 +62,40 @@ func (a *OverlayAdapter) Settle(ctx context.Context, cleanCompletion bool) (*pyt
 			parentOpID = m.parentOpID
 		}
 		if err != nil {
+			// If a two-step operation (such as a modified-bytes move) committed
+			// the destination before failing on source cleanup, record the
+			// committed destination change so reported effects match disk state.
+			if res.CommittedRevision.HasIdentity() {
+				committed := res.CommittedRevision
+				partialOp := m.op
+				if partialOp == "move" {
+					if baseRev.Absent {
+						partialOp = "create"
+					} else {
+						partialOp = "write"
+					}
+				}
+				report.Published = append(report.Published, pythonruntime.PublishedChange{
+					Target:            m.target,
+					Operation:         partialOp,
+					BaseRevision:      baseRev.Identity(),
+					CommittedRevision: committed.Identity(),
+					BytesWritten:      res.BytesWritten,
+				})
+				a.recordPublication(parentOpID, survivingMutation{
+					key:              m.key,
+					seq:              m.seq,
+					op:               partialOp,
+					target:           m.target,
+					data:             m.data,
+					hasModifiedBytes: m.hasModifiedBytes,
+					mode:             m.mode,
+					parentOpID:       m.parentOpID,
+					writeOriginFrame: m.writeOriginFrame,
+					flushCloseFrame:  m.flushCloseFrame,
+				}, baseRev, &committed, res.BytesWritten, nil, true)
+				_ = a.pins.AdvanceAfterCommit(m.target, committed)
+			}
 			var conflictErr *RevisionConflictError
 			conflict := res.Conflict
 			if conflict == nil && errors.As(err, &conflictErr) {

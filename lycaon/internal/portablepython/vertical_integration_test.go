@@ -28,6 +28,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	pporacle "github.com/lycaon/lycaon/test/contract/portablepython"
 )
 
@@ -292,6 +293,28 @@ raise RuntimeError("abort before settlement")
 		testutil.FailErr(t, "execute pip install refusal", err)
 		if installResp.ExitCode == 0 || installResp.Diagnostic == nil || installResp.Diagnostic.Kind != pythoncatalog.DiagnosticImageMutation {
 			t.Fatalf("expected DiagnosticImageMutation refusal for pip install, got %+v", installResp)
+		}
+	})
+
+	t.Run("fails closed on disk write when MutationDoor is nil (no parallel fseffect fallback)", func(t *testing.T) {
+		noDoorDir := t.TempDir()
+		resp, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
+			RawArgs: map[string]any{
+				"code": `open("should_not_land.txt", "w").write("blocked")`,
+			},
+			CallID:  "call-no-door",
+			Actor:   "coordinator",
+			View:    "primary",
+			Surface: "agent",
+			Roots:   []pythondocuments.HostRootConfig{{ID: "ws-nodoor", Dir: noDoorDir}},
+			Limits:  pythonruntime.ResourceLimits{Timeout: 60 * time.Second},
+		})
+		testutil.FailErr(t, "execute without MutationDoor", err)
+		if resp.CleanCompletion {
+			t.Fatal("expected CleanCompletion=false when MutationDoor is nil")
+		}
+		if _, statErr := os.Stat(filepath.Join(noDoorDir, "should_not_land.txt")); !os.IsNotExist(statErr) {
+			t.Fatalf("file must not land on disk without MutationDoor, statErr=%v", statErr)
 		}
 	})
 }
@@ -634,16 +657,18 @@ func TestEndToEndCPythonWASI_FrozenWorkloadReplay(t *testing.T) {
 
 	t.Run("actual end-to-end CPython/WASI frozen dependency-review (tomllib + csv)", func(t *testing.T) {
 		depDir := extractWorkflowDir(t, files, "dependency-review")
+		depRoots := []pythondocuments.HostRootConfig{{ID: "ws-dep", Dir: depDir}}
 		resp, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
 			RawArgs: map[string]any{
 				"script": "program.py",
 			},
-			CallID:  "call-frozen-dep-review",
-			Actor:   "coordinator",
-			View:    "primary",
-			Surface: "agent",
-			Roots:   []pythondocuments.HostRootConfig{{ID: "ws-dep", Dir: depDir}},
-			Limits:  pythonruntime.ResourceLimits{Timeout: 90 * time.Second},
+			CallID:       "call-frozen-dep-review",
+			Actor:        "coordinator",
+			View:         "primary",
+			Surface:      "agent",
+			Roots:        depRoots,
+			MutationDoor: native.NewPythonMutationDoor(tools.ToolContext{}, depRoots),
+			Limits:       pythonruntime.ResourceLimits{Timeout: 90 * time.Second},
 		})
 		testutil.FailErr(t, "execute frozen dependency-review in CPython/WASI", err)
 		if !resp.CleanCompletion || resp.ExitCode != 0 {
@@ -664,16 +689,18 @@ func TestEndToEndCPythonWASI_FrozenWorkloadReplay(t *testing.T) {
 
 	t.Run("actual end-to-end CPython/WASI frozen workbook (openpyxl + PyYAML)", func(t *testing.T) {
 		wbDir := extractWorkflowDir(t, files, "workbook")
+		wbRoots := []pythondocuments.HostRootConfig{{ID: "ws-wb", Dir: wbDir}}
 		resp, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
 			RawArgs: map[string]any{
 				"script": "program.py",
 			},
-			CallID:  "call-frozen-workbook",
-			Actor:   "coordinator",
-			View:    "primary",
-			Surface: "agent",
-			Roots:   []pythondocuments.HostRootConfig{{ID: "ws-wb", Dir: wbDir}},
-			Limits:  pythonruntime.ResourceLimits{Timeout: 120 * time.Second},
+			CallID:       "call-frozen-workbook",
+			Actor:        "coordinator",
+			View:         "primary",
+			Surface:      "agent",
+			Roots:        wbRoots,
+			MutationDoor: native.NewPythonMutationDoor(tools.ToolContext{}, wbRoots),
+			Limits:       pythonruntime.ResourceLimits{Timeout: 120 * time.Second},
 		})
 		testutil.FailErr(t, "execute frozen workbook in CPython/WASI", err)
 		if !resp.CleanCompletion || resp.ExitCode != 0 {
@@ -708,14 +735,16 @@ with open("report_out.txt", "w", encoding="utf-8") as f:
     f.write(out)
 print("EVIDENCE_RUN_OK")
 `
+	evRoots := []pythondocuments.HostRootConfig{{ID: "ws-ev", Dir: wsDir}}
 	resp, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
-		RawArgs: map[string]any{"code": code},
-		CallID:  "call-evidence-e2e",
-		Actor:   "coordinator",
-		View:    "primary",
-		Surface: "agent",
-		Roots:   []pythondocuments.HostRootConfig{{ID: "ws-ev", Dir: wsDir}},
-		Limits:  pythonruntime.ResourceLimits{Timeout: 60 * time.Second},
+		RawArgs:      map[string]any{"code": code},
+		CallID:       "call-evidence-e2e",
+		Actor:        "coordinator",
+		View:         "primary",
+		Surface:      "agent",
+		Roots:        evRoots,
+		MutationDoor: native.NewPythonMutationDoor(tools.ToolContext{}, evRoots),
+		Limits:       pythonruntime.ResourceLimits{Timeout: 60 * time.Second},
 	})
 	testutil.FailErr(t, "execute python for evidence ledger", err)
 	if !resp.CleanCompletion || resp.ExitCode != 0 {
