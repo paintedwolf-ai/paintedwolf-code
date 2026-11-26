@@ -198,11 +198,11 @@ func rejectCases(_ context.Context, _ *guidanceCaseEnv) ([]guidanceCase, error) 
 // renders it: the delivered references and summary levels, whose
 // through_ord covers every compacted source, and the session revision digest,
 // which renders the summary level with no ordinal. A record-capable recall
-// reach comes from a stock recipient offering recall.
+// reach comes from a stock recipient offering recall and minting read handles.
 func continuationRecordCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
 	var recall *coordRep
 	for i, cr := range e.cReps {
-		if cr.auth.Reach.Status("recall") == toolreach.Callable && cr.auth.Reach.AcceptsField("recall", "history.format") {
+		if cr.auth.Reach.Status("recall") == toolreach.Callable && cr.auth.Reach.AcceptsField("recall", "history.format") && cr.auth.Reader.Mints()["read"] {
 			recall = &e.cReps[i]
 			break
 		}
@@ -212,7 +212,7 @@ func continuationRecordCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceC
 	}
 	knobs := []casegen.Knob{
 		indexKnob("reach", []string{"can_recall_history", "can_recall_history_record", "can_recall_query"}, []string{"recall", "none"}),
-		indexKnob("record", nil, []string{"summary", "references", "revision"}),
+		indexKnob("record", []string{"through_ord"}, []string{"summary", "references", "revision"}),
 		indexKnob("source", []string{"s.handles", "s.tool"}, []string{"message", "handles", "message-without-tool"}),
 	}
 	return []guidanceCase{{
