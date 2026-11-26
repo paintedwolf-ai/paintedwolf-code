@@ -36,7 +36,8 @@ webE2e("Outside locations follow the chat while a dirty file stays open", async 
 
   const tree = page.getByTestId("files-tree");
   const outsideLocation = tree.locator(`[data-testid="files-tree-dir"][data-root="${picked.location.id}"]`);
-  await expect(outsideLocation).toContainText("Outside project");
+  await expect(tree.getByTestId("files-tree-outside-section")).toHaveText("Outside project");
+  await expect(outsideLocation).toBeVisible();
   await expect(outsideLocation.getByTestId("files-tree-dir-toggle")).toHaveAttribute("aria-expanded", "false");
   await outsideLocation.getByTestId("files-tree-dir-toggle").click();
   await tree.getByTestId("files-tree-file").filter({ hasText: filename }).dblclick();
@@ -137,4 +138,44 @@ webE2e("An outside text edit opens the recorded file from chat", async ({ page, 
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
+});
+
+webE2e("A location keeps its name readable in the narrowest tree", async ({ page, request }) => {
+  const folder = e2eTempDir(request, "outside-narrow-location-with-a-long-name");
+  const outside = path.join(folder, "narrow.txt");
+  const root = e2eTempDir(request, "outside-narrow-project");
+  writeFileSync(outside, "Narrow\n");
+  writeFileSync(path.join(root, "project.txt"), "Project notes\n");
+  const project = await bootstrapActiveProject(page, request, root, e2eUniqueLabel("Narrow outside location"));
+  await sendChatPrompt(page, "Keep this file handy.");
+  await expect(liveChatStage(page).getByText("Harness reply.", { exact: true })).toBeVisible();
+  const picked = await apiJson<OpenedOutsideFile>(request, "POST", `/v1/projects/${project.id}/source/outside-files`, {
+    session_id: await settledChatSessionId(page),
+    path: outside,
+  });
+  await page.getByTestId("project-files-entry").click();
+  const tree = page.getByTestId("files-tree");
+  const section = tree.getByTestId("files-tree-outside-section");
+  const location = tree.locator(`[data-testid="files-tree-dir"][data-root="${picked.location.id}"]`);
+  await expect(section).toBeVisible();
+  await expect(location).toBeVisible();
+
+  const grip = page.getByTestId("files-tree-resize");
+  await grip.focus();
+  const minimum = Number(await grip.getAttribute("aria-valuemin"));
+  for (let step = 0; step < 60 && Number(await grip.getAttribute("aria-valuenow")) > minimum; step++) {
+    await page.keyboard.press("ArrowLeft");
+  }
+  await expect(grip).toHaveAttribute("aria-valuenow", String(minimum));
+
+  const sectionBox = await section.boundingBox();
+  const locationBox = await location.boundingBox();
+  expect(sectionBox && locationBox && sectionBox.y < locationBox.y).toBe(true);
+  const name = location.locator(".den-files-tree__name");
+  const tag = location.locator(".den-files-tree__outside-tag");
+  await expect(name).toHaveText(picked.location.label);
+  const nameBox = await name.boundingBox();
+  const tagBox = await tag.boundingBox();
+  expect(nameBox?.width ?? 0).toBeGreaterThanOrEqual(36);
+  expect(tagBox && locationBox && tagBox.x + tagBox.width <= locationBox.x + locationBox.width + 0.5).toBe(true);
 });

@@ -1,10 +1,16 @@
 package tools
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func outsideRootsContext(granted ...string) ToolContext {
@@ -16,18 +22,28 @@ func outsideRootsContext(granted ...string) ToolContext {
 	return tc
 }
 
-// The window observes the profile's grants beyond the project, outermost
-// first, skipping the project inside one and never a scratch folder.
-func TestOutsideWriteRootsAreTheProfilesGrantsACFL19(t *testing.T) {
-	scratch := t.TempDir()
-	tc := outsideRootsContext("/fl03-work/shared", "/fl03-work/shared/nested", "/fl03-work/other", scratch, "/fl03-work/shared/project/build")
-	got := tc.OutsideWriteRoots()
-	paths := make([]string, 0, len(got))
-	for _, root := range got {
+func rootPaths(roots []OutsideWriteRoot) []string {
+	paths := make([]string, 0, len(roots))
+	for _, root := range roots {
 		paths = append(paths, root.Path)
 	}
-	if !slices.Equal(paths, []string{"/fl03-work/other", "/fl03-work/shared"}) {
-		t.Fatalf("outside write roots = %v", paths)
+	return paths
+}
+
+// The window observes the profile's grants beyond the project, outermost
+// first, skipping the project inside one, and the session's scratch without
+// its program temp.
+func TestOutsideWriteRootsAreTheProfilesGrantsACFL19(t *testing.T) {
+	scratch := fspath.CanonicalPath(t.TempDir())
+	temp := enginepaths.ProgramTempUnder(scratch)
+	if err := os.Mkdir(temp, 0o700); err != nil {
+		testutil.FailErr(t, "os.Mkdir failed", err)
+	}
+	tc := outsideRootsContext("/fl03-work/shared", "/fl03-work/shared/nested", "/fl03-work/other", "/fl03-work/shared/project/build")
+	tc.Host.SessionScratchDir = scratch
+	got, unobserved := tc.OutsideWriteRoots()
+	if paths := rootPaths(got); !slices.Equal(paths, []string{"/fl03-work/other", "/fl03-work/shared", scratch}) || len(unobserved) != 0 {
+		t.Fatalf("outside write roots = %v, unobserved %v", paths, unobserved)
 	}
 	if !slices.Contains(got[1].Omit, "/fl03-work/shared/project") {
 		t.Fatalf("shared root omits %v, want the attached root", got[1].Omit)
@@ -35,15 +51,39 @@ func TestOutsideWriteRootsAreTheProfilesGrantsACFL19(t *testing.T) {
 	if len(got[0].Omit) != 0 {
 		t.Fatalf("other root omits %v", got[0].Omit)
 	}
+	if !slices.Equal(got[2].Omit, []string{temp}) {
+		t.Fatalf("scratch omits %v, want its program temp", got[2].Omit)
+	}
+}
+
+// A whole shared temp location is reported instead of compared; a folder
+// granted inside one is compared like any other.
+func TestSharedTempLocationIsNeverComparedWhole(t *testing.T) {
+	whole := fspath.CanonicalPath(t.TempDir())
+	t.Setenv("TMPDIR", whole)
+	if confine.SharedTempLocation(filepath.Join(whole, "x")) != whole {
+		t.Fatalf("%s is not a shared temp location", whole)
+	}
+	narrow := filepath.Join(whole, "build")
+	if err := os.Mkdir(narrow, 0o700); err != nil {
+		testutil.FailErr(t, "os.Mkdir failed", err)
+	}
+	got, unobserved := outsideRootsContext(whole, narrow).OutsideWriteRoots()
+	if !slices.Equal(unobserved, []string{whole}) {
+		t.Fatalf("unobserved = %v, want %s", unobserved, whole)
+	}
+	if paths := rootPaths(got); !slices.Contains(paths, narrow) || slices.Contains(paths, whole) {
+		t.Fatalf("outside write roots = %v, want %s and not %s", paths, narrow, whole)
+	}
 }
 
 func TestNoGrantedWriteRootObservesNothingOutsideACFL19(t *testing.T) {
-	if got := outsideRootsContext().OutsideWriteRoots(); len(got) != 0 {
-		t.Fatalf("outside write roots = %+v, want none without a grant", got)
+	if got, unobserved := outsideRootsContext().OutsideWriteRoots(); len(got) != 0 || len(unobserved) != 0 {
+		t.Fatalf("outside write roots = %+v, %v, want none without a grant", got, unobserved)
 	}
 	tc := outsideRootsContext("/fl03-work/shared")
 	tc.Source.OutsideRoot = projectroot.RootRef{}
-	if got := tc.OutsideWriteRoots(); len(got) != 0 {
+	if got, _ := tc.OutsideWriteRoots(); len(got) != 0 {
 		t.Fatalf("outside write roots = %+v, want none without an outside namespace", got)
 	}
 }

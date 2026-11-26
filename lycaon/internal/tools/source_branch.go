@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -60,8 +61,13 @@ func (tc ToolContext) outsideLocation(path string) (projectroot.RootRef, string,
 	if abs == "" {
 		abs = filepath.Clean(path)
 	}
+	// Session scratch lies inside the host's state, which is otherwise unrecorded.
+	scratch := confine.WithinSessionDirectory(abs, tc.Host.SessionScratchDir)
 	for _, root := range tc.unrecordedRoots() {
-		if root != "" && confine.PathAtOrUnder(abs, fspath.CanonicalPath(root)) {
+		if root == "" || scratch && confine.PathAtOrUnder(fspath.CanonicalPath(tc.Host.SessionScratchDir), fspath.CanonicalPath(root)) {
+			continue
+		}
+		if confine.PathAtOrUnder(abs, fspath.CanonicalPath(root)) {
 			return projectroot.RootRef{}, "", false
 		}
 	}
@@ -73,9 +79,12 @@ func (tc ToolContext) outsideLocation(path string) (projectroot.RootRef, string,
 }
 
 // unrecordedRoots are the folders whose paths never enter the outside
-// namespace: the project's own trees and the host's scratch and state.
+// namespace: the project's own trees, program temp and the host's state.
 func (tc ToolContext) unrecordedRoots() []string {
-	roots := append(confine.UnrecordedRoots(), tc.Source.WorkerBranchRoot, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir, tc.Host.HostDataDir)
+	roots := append(confine.UnrecordedRoots(), tc.Source.WorkerBranchRoot, tc.Host.SessionOutputDir, tc.Host.HostDataDir)
+	if tc.Host.SessionScratchDir != "" {
+		roots = append(roots, enginepaths.ProgramTempUnder(tc.Host.SessionScratchDir))
+	}
 	for _, root := range tc.Source.Roots {
 		roots = append(roots, root.Path)
 	}

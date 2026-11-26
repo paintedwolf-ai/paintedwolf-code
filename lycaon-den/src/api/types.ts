@@ -11079,7 +11079,7 @@ export interface components {
         /** @enum {string} */
         SourceWindowCoverage: "complete" | "partial" | "not_observed";
         /** @enum {string} */
-        SourceWindowGapReason: "unconfined" | "baseline_incomplete" | "canceled" | "io_error" | "settlement_failed" | "time_budget";
+        SourceWindowGapReason: "unconfined" | "baseline_incomplete" | "canceled" | "io_error" | "settlement_failed" | "time_budget" | "shared_temp";
         /** @enum {string} */
         SourceWindowBoundaryReason: "scope" | "directory_cap" | "subtree_cap" | "walk_budget" | "unreadable";
         /** @description One folder a partial observation did not enter. */
@@ -17471,6 +17471,11 @@ export interface components {
             /** Format: uuid */
             intent_revision: string;
             projection_revision: string;
+            /**
+             * Format: int64
+             * @description Index of the first row outside the project, where the chat's locations begin. Omitted when the view has none, and on filtered frames.
+             */
+            outside_start?: number;
             extent: components["schemas"]["SourceViewExtent"];
             span: components["schemas"]["SourceViewSpan"];
             /**

@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 )
 
 // LaunchKind identifies process purpose.
@@ -127,6 +128,13 @@ func OCREngineLaunch(confinement *confine.Confinement) LaunchPlan {
 // ScratchDirEnv names the session scratch folder in an agent process's environment.
 const ScratchDirEnv = "SCRATCH_DIR"
 
+// ScratchEnv names a session's scratch folder and gives programs its private
+// temporary folder.
+func ScratchEnv(sessionScratch string) []string {
+	temp := enginepaths.ProgramTempUnder(sessionScratch)
+	return []string{ScratchDirEnv + "=" + sessionScratch, "TMPDIR=" + temp, "TMP=" + temp, "TEMP=" + temp}
+}
+
 // AgentLaunch starts a confined agent process.
 func AgentLaunch(kind LaunchKind, subject string, confinement *confine.Confinement) LaunchPlan {
 	plan := LaunchPlan{Kind: kind, Subject: strings.TrimSpace(subject), Confinement: confinement}
@@ -134,8 +142,7 @@ func AgentLaunch(kind LaunchKind, subject string, confinement *confine.Confineme
 		plan.Environment = EnvironmentReduced
 	}
 	if confinement != nil && strings.TrimSpace(confinement.Workspaces.SessionScratch) != "" {
-		scratch := confinement.Workspaces.SessionScratch
-		plan.ExtraEnv = []string{ScratchDirEnv + "=" + scratch, "TMPDIR=" + scratch, "TMP=" + scratch, "TEMP=" + scratch}
+		plan.ExtraEnv = ScratchEnv(confinement.Workspaces.SessionScratch)
 	}
 	return plan
 }

@@ -99,3 +99,20 @@ func TestOutsideGrantOpensItsObjectThroughALeafSymlink(t *testing.T) {
 		})
 	}
 }
+
+// A write root granted for one file also reads that file back, and only it.
+func TestExactFileWriteRootReadsItsFile(t *testing.T) {
+	target, _, other := outsideGrantFixture(t)
+	tc := outsideGrantContext(t)
+	tc.Files.GrantedWriteRoots = []string{target}
+	paths, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, ".")
+	testutil.FailErr(t, "bind cwd", err)
+	data, err := readBound(t, paths, target)
+	testutil.FailErr(t, "read the granted file", err)
+	if data != "approved" {
+		t.Fatalf("granted file read %q", data)
+	}
+	if data, err := readBound(t, paths, other); err == nil {
+		t.Fatalf("a sibling of the granted file opened %q", data)
+	}
+}

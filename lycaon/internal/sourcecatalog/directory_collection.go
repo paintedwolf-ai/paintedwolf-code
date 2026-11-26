@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -52,14 +53,18 @@ func collectDirectoryObservation(ctx context.Context, store *indexStore, dir str
 		}
 		batch, complete, readErr := reader.read(quantum)
 		var nodes []indexNode
+		hidden := 0
 		if readErr == nil {
 			nodes = readObservationNodes(root, directory, dir, batch)
+			read := len(nodes)
+			nodes = slices.DeleteFunc(nodes, func(node indexNode) bool { return store.root.hidden(node.path) })
+			hidden = read - len(nodes)
 		}
 		finish()
 		if readErr != nil {
 			return observation, false, readErr
 		}
-		observation.Entries += len(batch)
+		observation.Entries += len(batch) - hidden
 		observation.Complete = complete
 		if err := consume(directoryDiscovery{nodes: nodes, observation: observation}); err != nil {
 			return observation, false, err

@@ -7,8 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -248,7 +251,9 @@ func servePathCalls(fd int) error {
 		}
 		result.Caller, result.Notification = call.Caller, call.Notification
 		if call.Notification != 0 && listener >= 0 {
-			answerKernel(listener, call, result, opened)
+			if !answerKernel(listener, call, result, opened) {
+				undoInterruptedCreate(call, opened)
+			}
 			if opened >= 0 {
 				_ = unix.Close(opened)
 				opened = -1
@@ -292,8 +297,9 @@ func sendPathReply(fd int, reply []byte, opened int) bool {
 // answerKernel completes the pending call: an opened descriptor is installed
 // in the caller before sending its number as the call's result, so a signal
 // interrupting the descriptor wait can retry without completing the call early
-// with descriptor zero. A call that ended meanwhile is simply no longer pending.
-func answerKernel(listener int, call pathCall, result pathResult, opened int) {
+// with descriptor zero. It reports false when the call ended meanwhile, which
+// the caller restarts as a new call.
+func answerKernel(listener int, call pathCall, result pathResult, opened int) bool {
 	resp := seccompNotifResp{ID: call.Notification}
 	if opened >= 0 {
 		var newFlags uint32
@@ -301,7 +307,11 @@ func answerKernel(listener int, call pathCall, result pathResult, opened int) {
 			newFlags = unix.O_CLOEXEC
 		}
 		add := seccompNotifAddfd{ID: call.Notification, SrcFD: uint32(opened), NewFDFlags: newFlags}
-		if remoteFD, err := ioctlAddFD(listener, &add); err != nil {
+		remoteFD, err := ioctlAddFD(listener, &add)
+		if errors.Is(err, unix.ENOENT) {
+			return false
+		}
+		if err != nil {
 			resp.Error = -int32(errnoOf(err, unix.EACCES))
 		} else {
 			resp.Val = int64(remoteFD)
@@ -312,7 +322,25 @@ func answerKernel(listener int, call pathCall, result pathResult, opened int) {
 	} else if result.Errno != 0 {
 		resp.Error = -int32(result.Errno)
 	}
-	_ = ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_SEND, unsafe.Pointer(&resp))
+	return !errors.Is(ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_SEND, unsafe.Pointer(&resp)), unix.ENOENT)
+}
+
+// undoInterruptedCreate removes the file an exclusive open created for a call
+// that ended before its answer: the restarted call must find the name free.
+// The name is removed only while it still holds the created file.
+func undoInterruptedCreate(call pathCall, opened int) {
+	if call.Op != callOpen || opened < 0 || call.Flags&(unix.O_CREAT|unix.O_EXCL) != unix.O_CREAT|unix.O_EXCL {
+		return
+	}
+	path, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(opened))
+	if err != nil || !filepath.IsAbs(path) {
+		return
+	}
+	var held, named unix.Stat_t
+	if unix.Fstat(opened, &held) != nil || unix.Lstat(path, &named) != nil || held.Dev != named.Dev || held.Ino != named.Ino {
+		return
+	}
+	_ = unix.Unlink(path)
 }
 
 func receivedFDs(oob []byte) []int {

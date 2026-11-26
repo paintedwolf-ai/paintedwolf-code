@@ -28714,6 +28714,7 @@ components:
         - io_error
         - settlement_failed
         - time_budget
+        - shared_temp
     SourceWindowBoundaryReason:
       type: string
       enum:
@@ -43553,6 +43554,12 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+        outside_start:
+          type: integer
+          format: int64
+          minimum: 0
+          x-go-pointer: true
+          description: Index of the first row outside the project, where the chat's locations begin. Omitted when the view has none, and on filtered frames.
         extent:
           $ref: '#/components/schemas/SourceViewExtent'
         span:

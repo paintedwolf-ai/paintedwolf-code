@@ -168,7 +168,8 @@ func (view *sourceViewRead) treeFrame(r *http.Request, query sourceFrameQuery) (
 	}
 	out := &wire.SourceTreeFrame{Kind: "tree", ViewID: view.id, IntentRevision: view.intentRevision, ProjectionRevision: frame.Revision.Projection,
 		Target: frame.Target, Extent: wireViewExtent(frame.Extent), Span: wire.SourceViewSpan{Start: frame.Span.Start, End: frame.Span.End}, Anchor: wireTreeAddress(frame.Anchor),
-		Rows: make([]wire.SourceTreeRow, 0, len(frame.Rows)), Ancestors: make([]wire.SourceTreeAncestor, 0, len(frame.Ancestors))}
+		Rows: make([]wire.SourceTreeRow, 0, len(frame.Rows)), Ancestors: make([]wire.SourceTreeAncestor, 0, len(frame.Ancestors)),
+		OutsideStart: frame.OutsideStart}
 	if frame.Prefix != nil {
 		out.Prefix = &wire.SourceTreeFramePrefix{End: frame.Prefix.End, Fingerprint: frame.Prefix.Fingerprint}
 	}

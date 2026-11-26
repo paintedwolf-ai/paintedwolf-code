@@ -275,7 +275,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 		t.Fatalf("turn 2 posture = %q want strict", surface2.Posture)
 	}
 	prompt2 := renderPrompt(surface2)
-	if !strings.Contains(prompt2, "Declared writes outside these folders and scratch are reviewed.") {
+	if !strings.Contains(prompt2, "Declared writes and redirects outside these folders and scratch are reviewed.") {
 		t.Fatalf("turn 2 prompt kept non-strict copy:\n%s", prompt2)
 	}
 	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != "coordinator-posture-changed" {

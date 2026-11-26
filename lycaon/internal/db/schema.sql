@@ -3287,7 +3287,7 @@ CREATE TABLE IF NOT EXISTS source_command_window_coverage (
     root_id TEXT NOT NULL,
     path TEXT NOT NULL,
     coverage TEXT NOT NULL CHECK (coverage IN ('complete', 'partial', 'not_observed')),
-    reason TEXT NOT NULL DEFAULT '' CHECK (reason IN ('', 'unconfined', 'baseline_incomplete', 'canceled', 'io_error', 'settlement_failed', 'time_budget')),
+    reason TEXT NOT NULL DEFAULT '' CHECK (reason IN ('', 'unconfined', 'baseline_incomplete', 'canceled', 'io_error', 'settlement_failed', 'time_budget', 'shared_temp')),
     boundaries_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(boundaries_json)),
     omitted_boundaries INTEGER NOT NULL DEFAULT 0 CHECK (omitted_boundaries >= 0),
     CHECK ((coverage = 'not_observed') = (reason != '')),

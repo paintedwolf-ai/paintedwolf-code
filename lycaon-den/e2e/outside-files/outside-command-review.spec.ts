@@ -141,7 +141,7 @@ webE2e("outside command changes reach chat Files and Review with explicit covera
     await expect(page.getByTestId("review-command-coverage").filter({ hasText: unreadable })).toBeVisible();
 
     await page.getByTestId("files-pane-files").click();
-    await expect(page.getByTestId("files-tree-outside-tag")).toBeVisible();
+    await expect(page.getByTestId("files-tree-outside-section")).toBeVisible();
     const location = page.getByRole("button", { name: new RegExp(`^(Expand|Collapse) ${path.basename(observed)}$`) });
     const locationId = await location.getAttribute("data-root");
     expect(locationId).toBeTruthy();

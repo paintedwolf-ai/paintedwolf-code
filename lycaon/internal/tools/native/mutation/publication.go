@@ -31,6 +31,7 @@ type Publication struct {
 	Tools      tools.ToolContext
 	Admission  tools.CommandOutputAdmission
 	ReviewRoot RedirectRootReview
+	ReviewRead RedirectReadReview
 }
 
 var (
@@ -113,14 +114,14 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 // OpenInput serves a < operand from its pinned published-disk capture. The
 // pin is recorded first.
 func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.InputDestination) (io.ReadCloser, error) {
-	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, false)
+	bound, tc, err := p.bindInput(ctx, destination.Redirect.Operator, destination.Target.Value)
 	if err != nil {
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
 	if bound.Null {
 		return commandprogram.NullInput(), nil
 	}
-	source, err := p.Owners.Revisions.OpenStream(ctx, p.Tools, bound.Resolved.Abs, 0)
+	source, err := p.Owners.Revisions.OpenNamedStream(ctx, tc, bound.Resolved.Abs, 0)
 	if err != nil {
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
@@ -133,7 +134,7 @@ func (p *Publication) OpenInput(ctx context.Context, destination commandprogram.
 
 // Capture pins one source script from its accepted document or published disk.
 func (p *Publication) Capture(ctx context.Context, inv toolcontract.OperationInvocation, request commandprogram.SourceCaptureRequest) (commandprogram.CapturedSource, error) {
-	bound, err := p.Program.Paths.Bind(ctx, request.Path, false)
+	bound, tc, err := p.bindInput(ctx, "source", request.Path)
 	if err != nil {
 		return commandprogram.CapturedSource{}, wrapPathError("source", err)
 	}
@@ -148,7 +149,7 @@ func (p *Publication) Capture(ctx context.Context, inv toolcontract.OperationInv
 			},
 		}, nil
 	}
-	source, err := p.Owners.Revisions.CaptureSource(ctx, p.Tools, bound.Resolved.Abs)
+	source, err := p.Owners.Revisions.CaptureSource(ctx, tc, bound.Resolved.Abs)
 	if err != nil {
 		return commandprogram.CapturedSource{}, wrapPathError("source", err)
 	}

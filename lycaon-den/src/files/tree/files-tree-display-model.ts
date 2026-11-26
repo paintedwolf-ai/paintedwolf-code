@@ -15,6 +15,7 @@ export type DisplayRow =
     }
   | { kind: "create-error"; key: string; depth: number; message: string }
   | { kind: "empty"; key: string; depth: number }
+  | { kind: "outside-section"; key: string; depth: number }
   | { kind: "error"; key: string; depth: number; message: string };
 
 export type DisplayRowModel = StickyIndex & {
