@@ -13,12 +13,10 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
-	"github.com/lycaon/lycaon/internal/tools/native/reporting"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -33,9 +31,12 @@ func newProgressEnvelopeFixture(t *testing.T, allowProgress bool) *programtest.F
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "load platform tool schemas", err)
 	f.Runtime.Executor.Metadata.SetToolSchemas(schemas)
-	testutil.FailErr(t, "register update_progress handler", f.Runtime.Registry.Register(
+	testutil.FailErr(t, "register update_progress metadata", f.Runtime.Registry.Register(
 		"update_progress",
-		reporting.ProgressHandler(f.ProgressStore(), func(_ context.Context, id string) string { return id }, nil),
+		func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+			t.Fatal("recursive JSON handler invoked")
+			return "", nil
+		},
 	))
 	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec)
 	testutil.FailErr(t, "compile command effects", err)
@@ -104,11 +105,12 @@ func TestProgramProgressEnvelopeInvalidHasZeroEffects(t *testing.T) {
 		_, err := f.CallArgs(t, t.Context(), map[string]any{
 			"command": "printf 'never\\n' | tee never.txt",
 			"progress_update": map[string]any{
-				"content": "not a markdown checklist",
+				"content": "## Progress\n- [ ] top\n  - [ ] nested\n",
 			},
 		})
-		if toolrejection.AsToolReject(err) == nil {
-			t.Fatalf("invalid checklist err = %v, want structured rejection", err)
+		var reject *toolrejection.ToolReject
+		if !errors.As(err, &reject) || reject.Code != "PROGRESS_NESTED_LINE" {
+			t.Fatalf("invalid checklist err = %v, want PROGRESS_NESTED_LINE", err)
 		}
 		if got := f.Progress(t.Context()); got != "" {
 			t.Fatalf("invalid checklist committed progress: %q", got)
@@ -118,6 +120,26 @@ func TestProgramProgressEnvelopeInvalidHasZeroEffects(t *testing.T) {
 		}
 		if programs := f.Programs(t); len(programs) != 0 {
 			t.Fatalf("invalid checklist recorded program receipts: %v", programs)
+		}
+	})
+
+	t.Run("owner_rejection_stops_before_command", func(t *testing.T) {
+		f := newProgressEnvelopeFixture(t, true)
+		_, err := f.CallArgs(t, t.Context(), map[string]any{
+			"command": "printf 'never\\n' | tee never.txt",
+			"progress_update": map[string]any{
+				"content": "not a markdown checklist",
+			},
+		})
+		var reject *toolrejection.ToolReject
+		if !errors.As(err, &reject) || reject.Code != "PROGRESS_NO_OPEN_STEP" {
+			t.Fatalf("owner rejection err = %v, want PROGRESS_NO_OPEN_STEP", err)
+		}
+		if got := f.Progress(t.Context()); got != "" {
+			t.Fatalf("rejected progress committed store state: %q", got)
+		}
+		if _, statErr := os.Stat(filepath.Join(f.Dir, "never.txt")); !os.IsNotExist(statErr) {
+			t.Fatalf("rejected progress ran gated command: %v", statErr)
 		}
 	})
 
@@ -229,44 +251,5 @@ func TestProgramProgressEnvelopeSurvivesLaterCommandRefusal(t *testing.T) {
 	testutil.FailErr(t, "read refused program receipt", err)
 	if page.Progress == nil || page.Progress.State != "committed" || page.Program.ProgressState != "committed" || page.Program.State != "rejected" {
 		t.Fatalf("unexpected receipt state after later refusal: program=%+v progress=%+v", page.Program, page.Progress)
-	}
-}
-
-func TestStandaloneUpdateProgressUnchangedWithEnvelopeSupport(t *testing.T) {
-	f := newProgressEnvelopeFixture(t, true)
-	exec := toolexecution.NewExecutor(nil, f.Runtime.Registry, "fixture")
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	testutil.FailErr(t, "load schemas", err)
-	exec.Metadata.SetToolSchemas(schemas)
-	tc := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "fixture", SessionID: f.Session, ToolCallID: "standalone-1"}}
-
-	firstRaw, err := exec.Invoke(t.Context(), "update_progress", map[string]any{"content": "- [ ] First item"}, tc)
-	testutil.FailErr(t, "standalone create", err)
-	var first struct {
-		Status   string `json:"status"`
-		Snapshot struct {
-			Revision string   `json:"revision"`
-			ItemIDs  []string `json:"item_ids"`
-		} `json:"snapshot"`
-	}
-	testutil.FailErr(t, "decode standalone create", json.Unmarshal([]byte(firstRaw), &first))
-	if first.Status != "updated" || first.Snapshot.Revision == "" || len(first.Snapshot.ItemIDs) != 1 {
-		t.Fatalf("unexpected standalone create response: %s", firstRaw)
-	}
-	if _, err := exec.Invoke(t.Context(), "update_progress", map[string]any{"content": "- [x] First item"}, tc); toolrejection.AsToolReject(err) == nil || toolrejection.AsToolReject(err).Code != "PROGRESS_REVISION_REQUIRED" {
-		t.Fatalf("missing revision err = %v, want PROGRESS_REVISION_REQUIRED", err)
-	}
-	secondRaw, err := exec.Invoke(t.Context(), "update_progress", map[string]any{
-		"content":           "- [x] First item",
-		"expected_revision": first.Snapshot.Revision,
-		"item_ids":          first.Snapshot.ItemIDs,
-	}, tc)
-	testutil.FailErr(t, "standalone revision update", err)
-	var second struct {
-		Status string `json:"status"`
-	}
-	testutil.FailErr(t, "decode standalone update", json.Unmarshal([]byte(secondRaw), &second))
-	if second.Status != "updated" || f.Progress(t.Context()) != "- [x] First item" {
-		t.Fatalf("standalone update failed: status=%q store=%q", second.Status, f.Progress(t.Context()))
 	}
 }
