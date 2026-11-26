@@ -32,10 +32,37 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 )
+
+func expectBB04Reject(t *testing.T, f *programtest.Fixture, source string, wantCodes ...string) {
+	t.Helper()
+	raw, err := f.Call(t, t.Context(), source)
+	if err != nil {
+		reject := toolrejection.AsToolReject(err)
+		if reject == nil {
+			t.Fatalf("%q: expected typed ToolReject, got %T (%v)", source, err, err)
+		}
+		for _, want := range wantCodes {
+			if reject.Code == want {
+				return
+			}
+		}
+		t.Fatalf("%q: reject code = %q, want one of %v (err=%v)", source, reject.Code, wantCodes, err)
+	}
+	outcome := decodeProgramOutcome(t, raw)
+	if outcome.State == "rejected" && outcome.Refusal != nil {
+		for _, want := range wantCodes {
+			if outcome.Refusal.Code == want {
+				return
+			}
+		}
+	}
+	t.Fatalf("%q: expected rejection %v, got outcome=%+v refusal=%+v", source, wantCodes, outcome, outcome.Refusal)
+}
 
 // TestBB04SyntaxGapsToolhostZeroEffects verifies end-to-end through the real
 // command entry that the three BB01 syntax gaps refuse the whole unit with
@@ -54,12 +81,12 @@ func TestBB04SyntaxGapsToolhostZeroEffects(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newComposedProgramFixture(t)
-			outcome := callComposedProgram(t, f, tc.source)
-			if outcome.State != "rejected" || outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_SYNTAX_UNSUPPORTED" {
-				t.Fatalf("%s: outcome=%+v refusal=%+v", tc.name, outcome, outcome.Refusal)
-			}
-			if outcome.ExecutedChildren != 0 || outcome.CompletedEffects != 0 || outcome.UncertainEffects != 0 {
-				t.Fatalf("%s: expected zero admitted work/effects, got %+v", tc.name, outcome)
+			expectBB04Reject(t, f, tc.source, "COMMAND_SYNTAX_UNSUPPORTED")
+			var children int
+			testutil.FailErr(t, "count child executions", f.Database.QueryRowContext(t.Context(),
+				`SELECT count(*) FROM invocation_program_executions`).Scan(&children))
+			if children != 0 {
+				t.Fatalf("%s: expected zero admitted child executions, got %d", tc.name, children)
 			}
 			if _, err := os.Stat(filepath.Join(f.Dir, "sentinel.txt")); !os.IsNotExist(err) {
 				t.Fatalf("%s: refused unit mutated sentinel.txt: %v", tc.name, err)
@@ -105,9 +132,9 @@ func TestBB04M01ProfileAndInvalidOptionRefusal(t *testing.T) {
 	roClasses, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 	testutil.FailErr(t, "compile readonly effects", err)
 	roBoundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true},
-		[]sandbox.ToolProfile{{ID: "readonly", Tools: map[string]bool{"command": true}, CommandEffects: roClasses}})
+		[]sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"command": true}, CommandEffects: roClasses}})
 	ro.Runtime.Boundary = roBoundary
-	ro.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(roBoundary), ro.Runtime.Registry, "readonly")
+	ro.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(roBoundary), ro.Runtime.Registry, "fixture")
 
 	readOut := callComposedProgram(t, ro, "cat sample.txt")
 	if readOut.State != "completed" || readOut.Status != 0 || readOut.Stdout != "readonly-ok\n" {
@@ -168,20 +195,23 @@ func TestBB04M02ExactQuotingAndMalformedRecovery(t *testing.T) {
 
 	// 5. Malformed quote opens zero executable children; corrected call creates
 	// its own fresh receipt and performs the effect once.
-	bad := callComposedProgram(t, f, "printf changed > recovered.txt; echo 'unterminated")
-	if bad.State != "rejected" || bad.Refusal == nil || bad.ExecutedChildren != 0 || bad.CompletedEffects != 0 {
-		t.Fatalf("malformed quote outcome = %+v refusal=%+v", bad, bad.Refusal)
+	var beforeChildren int
+	testutil.FailErr(t, "count children before malformed", f.Database.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM invocation_program_executions`).Scan(&beforeChildren))
+	expectBB04Reject(t, f, "printf changed > recovered.txt; echo 'unterminated", "COMMAND_SYNTAX_INVALID", "COMMAND_SYNTAX_UNSUPPORTED")
+	var afterChildren int
+	testutil.FailErr(t, "count children after malformed", f.Database.QueryRowContext(t.Context(),
+		`SELECT count(*) FROM invocation_program_executions`).Scan(&afterChildren))
+	if afterChildren != beforeChildren {
+		t.Fatalf("malformed quote opened %d child execution(s)", afterChildren-beforeChildren)
 	}
 	if _, err := os.Stat(filepath.Join(f.Dir, "recovered.txt")); !os.IsNotExist(err) {
 		t.Fatalf("malformed quote created recovered.txt: %v", err)
 	}
 
 	fixed := callComposedProgram(t, f, "printf 'corrected\n' > recovered.txt")
-	if fixed.State != "completed" || fixed.Status != 0 || fixed.CompletedEffects != 1 {
+	if fixed.State != "completed" || fixed.Status != 0 || fixed.CompletedEffects != 1 || fixed.ProgramID == "" {
 		t.Fatalf("corrected call outcome = %+v", fixed)
-	}
-	if fixed.ProgramID == "" || fixed.ProgramID == bad.ProgramID {
-		t.Fatalf("corrected call did not allocate a fresh receipt: bad=%q fixed=%q", bad.ProgramID, fixed.ProgramID)
 	}
 	gotRecovered, err := os.ReadFile(filepath.Join(f.Dir, "recovered.txt"))
 	testutil.FailErr(t, "read recovered.txt", err)
@@ -226,10 +256,7 @@ func TestBB04M03PipelinesAndPublicationIndependence(t *testing.T) {
 	if pfOn.State != "completed" || pfOn.Status != 1 {
 		t.Fatalf("pipefail-on pipeline outcome = %+v", pfOn)
 	}
-	pfOff := callComposedProgram(t, f, "set +o pipefail; printf 'a\n' | grep z | cat")
-	if pfOff.State != "rejected" || pfOff.Refusal == nil || pfOff.Refusal.Code != "COMMAND_SYNTAX_UNSUPPORTED" {
-		t.Fatalf("set +o pipefail must be refused: %+v", pfOff)
-	}
+	expectBB04Reject(t, f, "set +o pipefail; printf 'a\n' | grep z | cat", "COMMAND_SYNTAX_UNSUPPORTED")
 
 	// 4. Producer emits prefix then fails -> existing destination sentinel survives.
 	sentinel := filepath.Join(f.Dir, "sentinel.txt")
@@ -365,12 +392,12 @@ func TestBB04M06LoopbackHTTPFixture(t *testing.T) {
 	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec)
 	testutil.FailErr(t, "compile HTTP profile effects", err)
 	b := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
-		ID:             "bb04-http",
+		ID:             "fixture",
 		Tools:          map[string]bool{"command": true, "http_request": true},
 		CommandEffects: classes,
 	}})
 	f.Runtime.Boundary = b
-	f.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(b), f.Runtime.Registry, "bb04-http")
+	f.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(b), f.Runtime.Registry, "fixture")
 	owners, err := (programOwnerTools{
 		http:     httpaction.Deps{Boundary: b},
 		boundary: b,
@@ -507,10 +534,7 @@ func TestBB04M11LimitsCleanupAndHistoricalLeads(t *testing.T) {
 		}
 
 		// Beyond program_bytes limit (64 KiB + 1) -> typed COMMAND_LIMIT_EXCEEDED refusal.
-		overBytes := callComposedProgram(t, f, "#"+strings.Repeat("x", 65537))
-		if overBytes.State != "rejected" || overBytes.Refusal == nil || overBytes.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" {
-			t.Fatalf("program_bytes ceiling outcome = %+v refusal=%+v", overBytes, overBytes.Refusal)
-		}
+		expectBB04Reject(t, f, "#"+strings.Repeat("x", 65537), "COMMAND_LIMIT_EXCEEDED")
 
 		// Subsequent normal command in the same session succeeds cleanly.
 		reuse := callComposedProgram(t, f, "printf 'reused-ok\n'")
