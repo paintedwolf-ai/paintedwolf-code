@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/hostos"
@@ -16,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/pythoncatalog"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
+	"github.com/lycaon/lycaon/internal/pythonruntime"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
@@ -40,6 +44,15 @@ func (p *portablePythonRunner) SetService(svc *portablepython.Service) {
 	p.mu.Lock()
 	p.service = svc
 	p.mu.Unlock()
+}
+
+func (p *portablePythonRunner) Service() *portablepython.Service {
+	if p == nil {
+		return nil
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.service
 }
 
 func (p *portablePythonRunner) Run(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
@@ -76,6 +89,7 @@ func (p *portablePythonRunner) Run(ctx context.Context, args map[string]any, tc 
 		Surface:        tc.Turn.TurnSurfaceID,
 		ReadOnly:       readOnly,
 		AllowedEffects: allowedEffects,
+		Policy:         buildPythonSessionPolicy(tc),
 		Roots:          roots,
 		RootSpecs:      rootSpecs,
 		Editor:         editorBridge,
@@ -89,6 +103,57 @@ func (p *portablePythonRunner) Run(ctx context.Context, args map[string]any, tc 
 		return "", err
 	}
 	return string(encoded), nil
+}
+
+// buildPythonSessionPolicy wires Painted Wolf's session egress destination
+// policy and approval broker (confine.DecideAttributedHTTPRequest) into
+// Portable Python's OperationObserver. Sensitive effects fail closed whenever
+// session identity or destination approval is missing.
+func buildPythonSessionPolicy(tc tools.ToolContext) pythonadmission.PolicyEvaluator {
+	return func(ctx context.Context, op pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
+		switch op.Family {
+		case pythonruntime.EffectHTTP:
+			host := strings.TrimSpace(op.Target.RootID)
+			if host == "" || strings.TrimSpace(tc.Identity.SessionID) == "" {
+				return pythonadmission.PolicyDecision{
+					Kind:      pythonruntime.DecisionStop,
+					Condition: pythonadmission.ConditionEffectDenied,
+					Reason:    "outbound HTTP blocked: missing session identity or destination host",
+				}
+			}
+			method := ""
+			if len(op.Args) > 0 {
+				method = op.Args[0]
+			}
+			cmd := confine.EgressCommand{
+				SessionID:     tc.Identity.SessionID,
+				RootSessionID: tc.Identity.RootSessionID,
+				ProjectID:     tc.Identity.ProjectID,
+				ProjectDir:    tc.ActiveRootPath(),
+				ToolCallID:    tc.Identity.ToolCallID,
+				ToolName:      "python",
+				DeclaredHosts: []string{host},
+			}
+			if !confine.DecideAttributedHTTPRequest(ctx, cmd, host, method, op.Target.RelPath) {
+				return pythonadmission.PolicyDecision{
+					Kind:      pythonruntime.DecisionStop,
+					Condition: pythonadmission.ConditionEffectDenied,
+					Reason:    fmt.Sprintf("outbound HTTP to %s denied by session egress policy", host),
+				}
+			}
+			return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
+
+		case pythonruntime.EffectSubprocess, pythonruntime.EffectPreviewListener:
+			return pythonadmission.PolicyDecision{
+				Kind:      pythonruntime.DecisionStop,
+				Condition: pythonadmission.ConditionEffectDenied,
+				Reason:    fmt.Sprintf("%s not permitted by default python session policy", op.Family),
+			}
+
+		default:
+			return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
+		}
+	}
 }
 
 func mustCommandEffects(classes ...toolcontract.CommandEffectClass) toolcontract.CommandEffects {

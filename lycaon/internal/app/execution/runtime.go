@@ -3,6 +3,11 @@ package execution
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/lycaon/lycaon/internal/blobstore"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide"
@@ -10,6 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/portablepython"
+	"github.com/lycaon/lycaon/internal/pythonevidence"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -64,7 +71,7 @@ func loadToolRuntime(settingsSvc *settings.Service, configRoot string, catalog *
 	if cfg.ConfigRoot == "" {
 		cfg.ConfigRoot = configlayout.FindModuleRoot()
 	}
-	if pySvc, pyErr := portablepython.NewService(context.Background(), portablepython.ServiceConfig{}); pyErr == nil {
+	if pySvc, pyErr := buildPortablePythonService(context.Background()); pyErr == nil {
 		cfg.PortablePython = pySvc
 	}
 	rt, err := toolhost.NewRuntime(cfg)
@@ -72,6 +79,40 @@ func loadToolRuntime(settingsSvc *settings.Service, configRoot string, catalog *
 		return nil, fmt.Errorf("native tool runtime: %w", err)
 	}
 	return rt, nil
+}
+
+// buildPortablePythonService constructs the production Portable Python service
+// with Painted Wolf's real secretmatch.Matcher screener and disk-backed
+// blobstore RetainedArtifactStore (never test defaults).
+func buildPortablePythonService(ctx context.Context) (*portablepython.Service, error) {
+	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
+	if err != nil {
+		return nil, fmt.Errorf("build secretmatch matcher: %w", err)
+	}
+	screener, err := pythonevidence.NewHostSecretScreener(matcher)
+	if err != nil {
+		return nil, fmt.Errorf("create host secret screener: %w", err)
+	}
+	retainedRoot, err := configdir.Root()
+	if err != nil || retainedRoot == "" {
+		retainedRoot = os.TempDir()
+	}
+	blobStore := blobstore.Store{
+		Root: retainedRoot,
+		Dir:  filepath.Join("portable-python", "retained"),
+	}
+	streamPort := portablepython.NewBlobRetainedStreamPort(blobStore)
+	retainedStore, err := pythonevidence.NewProductionRetainedArtifactStore(pythonevidence.RetainedArtifactConfig{
+		Screener:   screener,
+		StreamPort: streamPort,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create production retained artifact store: %w", err)
+	}
+	return portablepython.NewService(ctx, portablepython.ServiceConfig{
+		SecretScreener: screener,
+		RetainedStore:  retainedStore,
+	})
 }
 
 func loadToolSchemas() (*toolschema.Config, error) {

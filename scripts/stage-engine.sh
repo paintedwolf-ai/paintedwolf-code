@@ -85,6 +85,15 @@ mkdir -p "${ENGINE_ROOT}/schemas"
 cp -R "${ROOT}/schemas/." "${ENGINE_ROOT}/schemas/"
 
 bash "${ROOT}/scripts/stage-bundled-opengrep.sh" "${ENGINE_ROOT}" "${TARGET}" "${OPENGREP_ARTIFACT}"
+if [[ -n "${PW_PORTABLE_PYTHON_IMAGE_DIR:-}" && -f "${PW_PORTABLE_PYTHON_IMAGE_DIR}/image-manifest.json" ]]; then
+  rm -rf "${ENGINE_ROOT}/portable-python/image"
+  mkdir -p "${ENGINE_ROOT}/portable-python/image"
+  cp -R "${PW_PORTABLE_PYTHON_IMAGE_DIR}/." "${ENGINE_ROOT}/portable-python/image/"
+elif [[ -f "${ROOT}/scripts/portable-python/image/image-manifest.json" ]]; then
+  rm -rf "${ENGINE_ROOT}/portable-python/image"
+  mkdir -p "${ENGINE_ROOT}/portable-python/image"
+  cp -R "${ROOT}/scripts/portable-python/image/." "${ENGINE_ROOT}/portable-python/image/"
+fi
 if [[ "${MODE}" == "full" ]]; then
   bash "${ROOT}/scripts/gitengine-fetch.sh"
   if [[ "${HOST_KIND}" == "linux" ]]; then

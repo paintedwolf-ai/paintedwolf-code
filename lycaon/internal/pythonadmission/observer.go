@@ -162,7 +162,15 @@ func (o *AdmissionObserver) Admit(ctx context.Context, op pythonruntime.ReachedO
 	if o.cfg.Policy != nil {
 		pol = o.cfg.Policy(ctx, op)
 		if pol.Kind == "" {
-			pol.Kind = pythonruntime.DecisionAllow
+			if isSensitiveEffect(op.Family) {
+				pol = PolicyDecision{
+					Kind:      pythonruntime.DecisionStop,
+					Condition: ConditionEffectDenied,
+					Reason:    fmt.Sprintf("%s blocked: policy returned empty decision (fail-closed)", op.Family),
+				}
+			} else {
+				pol.Kind = pythonruntime.DecisionAllow
+			}
 		}
 	} else {
 		// Fail closed for outbound network, subprocess, and preview listener
@@ -270,6 +278,18 @@ func (o *AdmissionObserver) checkWorkspaceInvariants(op pythonruntime.ReachedOpe
 	}
 
 	return "", "", false
+}
+
+func isSensitiveEffect(fam pythonruntime.EffectFamily) bool {
+	switch fam {
+	case pythonruntime.EffectHTTP,
+		pythonruntime.EffectSubprocess,
+		pythonruntime.EffectPreviewListener,
+		pythonruntime.EffectFilesystemWrite:
+		return true
+	default:
+		return false
+	}
 }
 
 func (o *AdmissionObserver) checkAllowedEffects(op pythonruntime.ReachedOperation) (AdmissionCondition, string, bool) {

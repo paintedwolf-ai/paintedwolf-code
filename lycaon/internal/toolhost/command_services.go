@@ -39,6 +39,14 @@ func (r *CommandServices) SetPortablePython(svc *portablepython.Service) {
 	r.pythonRunner.SetService(svc)
 }
 
+// PortablePython returns the active Portable Python service, if configured.
+func (r *CommandServices) PortablePython() *portablepython.Service {
+	if r == nil || r.pythonRunner == nil {
+		return nil
+	}
+	return r.pythonRunner.Service()
+}
+
 func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {
 	if r == nil {
 		return

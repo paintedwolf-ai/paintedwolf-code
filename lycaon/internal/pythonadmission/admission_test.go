@@ -412,6 +412,39 @@ func TestObserverFailsClosedWithoutPolicyAndEnforcesAllowedEffects(t *testing.T)
 		}
 	})
 
+	t.Run("non-nil policy returning empty decision fails closed on sensitive effects", func(t *testing.T) {
+		emptyPolicy := func(_ context.Context, _ pythonruntime.ReachedOperation) PolicyDecision {
+			return PolicyDecision{}
+		}
+		for _, fam := range []pythonruntime.EffectFamily{
+			pythonruntime.EffectHTTP,
+			pythonruntime.EffectSubprocess,
+			pythonruntime.EffectPreviewListener,
+			pythonruntime.EffectFilesystemWrite,
+		} {
+			_, cancel := context.WithCancel(context.Background())
+			latch := pythonruntime.NewStopLatch(cancel)
+			obs := NewAdmissionObserver(ObserverConfig{
+				ExecutionID: "exec-empty-pol-" + string(fam),
+				Policy:      emptyPolicy,
+				StopLatch:   latch,
+			})
+			dec, err := obs.Admit(context.Background(), pythonruntime.ReachedOperation{
+				Family:    fam,
+				Operation: "test",
+				Target:    pythonruntime.CanonicalTarget{Namespace: pythonruntime.NamespaceWorkspace, RelPath: "out.txt"},
+			})
+			cancel()
+			testutil.FailErr(t, "admit empty policy "+string(fam), err)
+			if dec.Kind != pythonruntime.DecisionStop || dec.Stop == nil || dec.Stop.Code != pythonruntime.StopEffectNotAllowed {
+				t.Fatalf("family %s with empty policy decision = %+v, want COMMAND_EFFECT_NOT_ALLOWED", fam, dec)
+			}
+			if !latch.Stopped() {
+				t.Fatalf("family %s with empty policy decision did not latch StopLatch", fam)
+			}
+		}
+	})
+
 	t.Run("allowed effects enforces mutation network_egress and external_exec", func(t *testing.T) {
 		allowAll := func(_ context.Context, _ pythonruntime.ReachedOperation) PolicyDecision {
 			return PolicyDecision{Kind: pythonruntime.DecisionAllow}

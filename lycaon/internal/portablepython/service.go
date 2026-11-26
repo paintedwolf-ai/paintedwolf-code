@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/pythoncatalog"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
@@ -78,20 +79,29 @@ func DiscoverImageDir() (string, error) {
 
 func standardImageDirCandidates() []string {
 	var out []string
-	// 1. Beside the running binary (installed bundle / packaged release layouts).
+	// 1. Official Painted Wolf bundled engine root (macOS .app/Contents/Resources/engine-root,
+	// Linux packaged engine-root, Nix generation engine-root, or LYCAON_ENGINE_ROOT).
+	if engineRoot := strings.TrimSpace(configlayout.EngineRoot()); engineRoot != "" {
+		out = append(out,
+			filepath.Join(engineRoot, "portable-python", "image"),
+			filepath.Join(engineRoot, "portable-python"),
+		)
+	}
+	// 2. Beside the running binary (installed bundle / packaged release layouts).
 	if exe, err := os.Executable(); err == nil && exe != "" {
 		exeDir := filepath.Dir(exe)
 		out = append(out,
 			filepath.Join(exeDir, "portable-python", "image"),
 			filepath.Join(exeDir, "..", "share", "paintedwolf", "portable-python", "image"),
 			filepath.Join(exeDir, "..", "Resources", "portable-python", "image"),
+			filepath.Join(exeDir, "..", "Resources", "engine-root", "portable-python", "image"),
 		)
 	}
-	// 2. Active Painted Wolf configdir root.
+	// 3. Active Painted Wolf configdir root.
 	if cfgRoot, err := configdir.Root(); err == nil && cfgRoot != "" {
 		out = append(out, filepath.Join(cfgRoot, "portable-python", "image"))
 	}
-	// 3. Standard user data directories.
+	// 4. Standard user data directories.
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		channel := configdir.ChannelDirName()
 		out = append(out,
@@ -142,6 +152,9 @@ type ServiceConfig struct {
 	ReceiptSink pythonevidence.ReceiptSink
 	// InlineBudgetBytes caps inline stdout/stderr returned to the caller (default 65536).
 	InlineBudgetBytes int
+	// DefaultHTTPClient optionally supplies the base *http.Client for host-mediated
+	// requests.Session traffic when ToolRequest.HTTPClient is nil.
+	DefaultHTTPClient *http.Client
 }
 
 // Service owns a verified, compiled Portable Python WASI runtime and
@@ -160,6 +173,7 @@ type Service struct {
 	retainedStore   *pythonevidence.RetainedArtifactStore
 	receiptSink     pythonevidence.ReceiptSink
 	inlineBudget    int
+	httpClient      *http.Client
 	execSeq         atomic.Uint64
 }
 
@@ -280,6 +294,7 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 		retainedStore:   retained,
 		receiptSink:     cfg.ReceiptSink,
 		inlineBudget:    inlineBudget,
+		httpClient:      cfg.DefaultHTTPClient,
 	}, nil
 }
 
@@ -299,6 +314,13 @@ func (s *Service) Runtime() *pythonruntime.WazeroRuntime { return s.runtime }
 // RetainedStore returns the bounded, secret-screened RetainedArtifactStore
 // holding overflow stdout/stderr artifacts.
 func (s *Service) RetainedStore() *pythonevidence.RetainedArtifactStore { return s.retainedStore }
+
+// SecretScreener returns the active secret screener used by this Service.
+func (s *Service) SecretScreener() pythonevidence.SecretScreener { return s.screener }
+
+// SetDefaultHTTPClient overrides the default *http.Client used when
+// ToolRequest.HTTPClient is nil (e.g., to trust a test TLS server CA).
+func (s *Service) SetDefaultHTTPClient(c *http.Client) { s.httpClient = c }
 
 // PackageHelp renders on-demand package discovery help from the verified manifest.
 func (s *Service) PackageHelp() string {
@@ -543,11 +565,15 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 	if credScreener == nil {
 		credScreener = pythonadmission.StrictCredentialScreener()
 	}
+	httpClient := req.HTTPClient
+	if httpClient == nil {
+		httpClient = s.httpClient
+	}
 	httpTransport := pythonadmission.NewHTTPTransport(pythonadmission.HTTPTransportConfig{
 		ExecutionID:        execID,
 		CallID:             req.CallID,
 		Observer:           observer,
-		Client:             req.HTTPClient,
+		Client:             httpClient,
 		AllowPlainHTTP:     req.AllowPlainHTTP,
 		AllowLoopbackHTTP:  req.AllowLoopbackHTTP,
 		CredentialScreener: credScreener,
