@@ -31,6 +31,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // countingListener wraps a net.Listener and counts raw TCP accepts so denied
@@ -583,4 +584,103 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 		}
 		t.Logf("verified distinct interpreter identity: portable=%+v vs project_runner=%+v", wasiID, hostID)
 	})
+}
+
+// TestPortablePythonCombinedCommandAndOAR exercises the common trusted
+// invocation builder through the normal `command` tool entry:
+//  1. Managed `python3` and `pytest` when direct `python` is NOT offered, with
+//     a distinguishable decoy `python3` on PATH (proving Portable Python WASI
+//     runs, not the host decoy) and shared profile authority (`worker_readonly`
+//     on `implement_investigate` stops workspace writes).
+//  2. Bare `python3` after a preceding completed shell effect (`echo prior_ok >
+//     prior.txt && python3 -c ...`) when direct `python` IS offered -> refuses
+//     with PYTHON_TOOL_REQUIRED while preserving `prior.txt`.
+//  3. Explicit project runner (`./.venv/bin/python`) executes cleanly without
+//     triggering PYTHON_TOOL_REQUIRED.
+func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
+	ctx := context.Background()
+	cfgDir := t.TempDir()
+	rt, _ := buildQualificationRuntime(t, cfgDir)
+	defer func() { _ = rt.Host.Commands.PortablePython().Close(ctx) }()
+
+	wsDir := t.TempDir()
+	// Plant a distinguishable decoy python3 on PATH to prove managed command
+	// routing selects Portable Python WASI rather than the host PATH binary.
+	decoyBinDir := t.TempDir()
+	decoyPy := filepath.Join(decoyBinDir, "python3")
+	testutil.FailErr(t, "write decoy python3", os.WriteFile(decoyPy, []byte("#!/bin/sh\necho HOST_DECOY_PYTHON\n"), 0o755))
+	t.Setenv("PATH", decoyBinDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	// Plant an explicit project runner at ./.venv/bin/python.
+	venvBinDir := filepath.Join(wsDir, ".venv", "bin")
+	testutil.FailErr(t, "mkdir .venv/bin", os.MkdirAll(venvBinDir, 0o755))
+	venvPy := filepath.Join(venvBinDir, "python")
+	testutil.FailErr(t, "write .venv/bin/python", os.WriteFile(venvPy, []byte("#!/bin/sh\necho PROJECT_VENV_PYTHON_OK\n"), 0o755))
+
+	// 1a. Managed `python3` via `command` when direct `python` is NOT offered
+	// runs Portable Python WASI (sys.platform == "wasi"), NOT the host decoy.
+	tcNoDirect := workspaceTC("sess-cmd-managed", "implement", "", wsDir)
+	tcNoDirect.Turn.TurnOfferedToolNames = []string{"command"}
+	outManaged, err := rt.Host.Registry.Run(ctx, "command", map[string]any{
+		"command": `python3 -c "import sys; print('PLATFORM:' + sys.platform)"`,
+	}, tcNoDirect)
+	testutil.FailErr(t, "run managed python3 via command tool", err)
+	if !strings.Contains(outManaged, "PLATFORM:wasi") {
+		t.Fatalf("expected Portable Python WASI output via command tool, got: %q", outManaged)
+	}
+	if strings.Contains(outManaged, "HOST_DECOY_PYTHON") {
+		t.Fatalf("command tool unexpectedly executed host decoy python3 on PATH: %q", outManaged)
+	}
+
+	// 1b. Shared authority: restricted worker (`worker_readonly`) on broader
+	// surface (`implement_investigate`) via `command` stops workspace write.
+	tcRestricted := workspaceTC("sess-cmd-ro", "worker_readonly", "implement_investigate", wsDir)
+	tcRestricted.Turn.TurnOfferedToolNames = []string{"command"}
+	_, _ = rt.Host.Registry.Run(ctx, "command", map[string]any{
+		"command": `python3 -c "open('blocked_via_cmd.txt', 'w').write('nope')"`,
+	}, tcRestricted)
+	if _, statErr := os.Stat(filepath.Join(wsDir, "blocked_via_cmd.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("blocked_via_cmd.txt must not exist under worker_readonly via command tool, statErr=%v", statErr)
+	}
+
+	// 1c. Managed `pytest` via `command` runs in Portable Python WASI.
+	testutil.FailErr(t, "write test_cmd_smoke.py", os.WriteFile(
+		filepath.Join(wsDir, "test_cmd_smoke.py"),
+		[]byte("def test_cmd_ok():\n    assert 3 * 3 == 9\n"),
+		0o644,
+	))
+	outPytest, err := rt.Host.Registry.Run(ctx, "command", map[string]any{
+		"command": "pytest -q -p no:cacheprovider",
+	}, tcNoDirect)
+	testutil.FailErr(t, "run managed pytest via command tool", err)
+	if !strings.Contains(outPytest, "1 passed") {
+		t.Fatalf("expected managed pytest via command tool to pass, got: %q", outPytest)
+	}
+
+	// 2. Preceding completed shell effect + bare `python3` when direct `python`
+	// IS offered -> refuses with PYTHON_TOOL_REQUIRED while preserving prior.txt!
+	tcWithDirect := workspaceTC("sess-cmd-refuse", "implement", "", wsDir)
+	tcWithDirect.Turn.TurnOfferedToolNames = []string{"command", "python"}
+	_, refuseErr := rt.Host.Registry.Run(ctx, "command", map[string]any{
+		"command": `echo prior_ok > prior.txt && python3 -c "print('SHOULD_NOT_RUN')"`,
+	}, tcWithDirect)
+	reject := toolrejection.AsToolReject(refuseErr)
+	if reject == nil || reject.Code != "PYTHON_TOOL_REQUIRED" {
+		t.Fatalf("expected PYTHON_TOOL_REQUIRED refusal, got err=%v (reject=%+v)", refuseErr, reject)
+	}
+	priorBytes, err := os.ReadFile(filepath.Join(wsDir, "prior.txt"))
+	testutil.FailErr(t, "read prior.txt preserved after PYTHON_TOOL_REQUIRED", err)
+	if strings.TrimSpace(string(priorBytes)) != "prior_ok" {
+		t.Fatalf("prior.txt = %q, want %q", string(priorBytes), "prior_ok")
+	}
+
+	// 3. Explicit project runner (`./.venv/bin/python`) runs cleanly even when
+	// direct `python` IS offered (never triggers PYTHON_TOOL_REQUIRED).
+	outVenv, err := rt.Host.Registry.Run(ctx, "command", map[string]any{
+		"command": `./.venv/bin/python -c "print('ignored')"`,
+	}, tcWithDirect)
+	testutil.FailErr(t, "run explicit .venv/bin/python via command tool", err)
+	if !strings.Contains(outVenv, "PROJECT_VENV_PYTHON_OK") {
+		t.Fatalf("expected explicit project runner output, got: %q", outVenv)
+	}
 }

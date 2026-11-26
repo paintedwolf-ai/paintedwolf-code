@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -59,18 +60,100 @@ func (p *portablePythonRunner) Run(ctx context.Context, args map[string]any, tc 
 	if _, err := pythoncatalog.ValidateDirectToolArgs(args); err != nil {
 		return "", err
 	}
-	var svc *portablepython.Service
-	var boundary *sandbox.Boundary
-	if p != nil {
-		p.mu.RLock()
-		svc = p.service
-		boundary = p.boundary
-		p.mu.RUnlock()
-	}
+	svc, boundary := p.snapshot()
 	if svc == nil {
 		return "", errors.New("portable python runtime is not configured")
 	}
 
+	req := buildPortablePythonRequest(ctx, boundary, tc, "python")
+	req.RawArgs = args
+	resp, err := svc.ExecuteTool(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	encoded, err := json.Marshal(resp)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+// ExecuteCommand implements command.PythonRunner through the exact same
+// trusted invocation builder as direct `python`, preserving the actual surface,
+// session/call identity, profile command_effects, live editor bridge, host
+// mutation door, and egress/approval policy while recording "command" as the
+// initiating tool separately from Surface.
+func (p *portablePythonRunner) ExecuteCommand(ctx context.Context, cmdReq command.PythonExecutionRequest) (command.PythonExecutionResponse, error) {
+	svc, boundary := p.snapshot()
+	if svc == nil {
+		return command.PythonExecutionResponse{}, errors.New("portable python runtime is not configured")
+	}
+
+	req := buildPortablePythonRequest(ctx, boundary, cmdReq.ToolCtx, "command")
+	req.Mode = cmdReq.Mode
+	req.Code = cmdReq.Code
+	req.Script = cmdReq.Script
+	req.Module = cmdReq.Module
+	req.CLI = cmdReq.CLI
+	req.CWD = cmdReq.CWD
+	req.Args = cmdReq.Args
+	req.Env = cmdReq.Env
+	req.Stdin = cmdReq.Stdin
+	if cmdReq.ReadOnly {
+		req.ReadOnly = true
+		if req.AllowedEffects != nil {
+			narrowed := *req.AllowedEffects
+			narrowed.AllowMutation = false
+			req.AllowedEffects = &narrowed
+		}
+	}
+	if len(req.Roots) == 0 && cmdReq.RootPath != "" {
+		rootID := cmdReq.RootID
+		if rootID == "" {
+			rootID = "default"
+		}
+		req.Roots = []pythondocuments.HostRootConfig{{
+			ID:       rootID,
+			Dir:      cmdReq.RootPath,
+			ReadOnly: req.ReadOnly,
+		}}
+		req.RootSpecs = []pythondocuments.RootSpec{{
+			ID:       rootID,
+			Label:    rootID,
+			Default:  true,
+			ReadOnly: req.ReadOnly,
+		}}
+		req.MutationDoor = native.NewPythonMutationDoor(cmdReq.ToolCtx, req.Roots)
+	}
+
+	resp, err := svc.ExecuteTool(ctx, req)
+	if err != nil {
+		return command.PythonExecutionResponse{}, err
+	}
+	out := command.PythonExecutionResponse{
+		ExitCode: resp.ExitCode,
+		Stdout:   resp.Stdout,
+		Stderr:   resp.Stderr,
+	}
+	if resp.Stop != nil {
+		out.StopCode = string(resp.Stop.Code)
+		out.StopMsg = resp.Stop.Reason
+	}
+	return out, nil
+}
+
+func (p *portablePythonRunner) snapshot() (*portablepython.Service, *sandbox.Boundary) {
+	if p == nil {
+		return nil, nil
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.service, p.boundary
+}
+
+// buildPortablePythonRequest is the single common trusted invocation builder
+// shared by direct `python` and managed `command` Portable Python entries.
+func buildPortablePythonRequest(ctx context.Context, boundary *sandbox.Boundary, tc tools.ToolContext, initiatingTool string) portablepython.ToolRequest {
 	allowedEffects, readOnly := resolvePythonAllowedEffects(ctx, boundary, tc)
 	roots, rootSpecs := buildPythonRoots(tc, readOnly)
 
@@ -80,13 +163,13 @@ func (p *portablePythonRunner) Run(ctx context.Context, args map[string]any, tc 
 	}
 	editorBridge := newEditorDocumentsBridge(tc)
 
-	resp, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
-		RawArgs:        args,
+	return portablepython.ToolRequest{
 		CallID:         tc.Identity.ToolCallID,
 		SessionID:      tc.Identity.SessionID,
 		Actor:          tc.Identity.Agent,
 		View:           string(tc.Source.SourceWorkspaceKind),
 		Surface:        tc.Turn.TurnSurfaceID,
+		InitiatingTool: initiatingTool,
 		ReadOnly:       readOnly,
 		AllowedEffects: allowedEffects,
 		Policy:         buildPythonSessionPolicy(tc),
@@ -94,15 +177,7 @@ func (p *portablePythonRunner) Run(ctx context.Context, args map[string]any, tc 
 		RootSpecs:      rootSpecs,
 		Editor:         editorBridge,
 		MutationDoor:   mutationDoor,
-	})
-	if err != nil {
-		return "", err
 	}
-	encoded, err := json.Marshal(resp)
-	if err != nil {
-		return "", err
-	}
-	return string(encoded), nil
 }
 
 // buildPythonSessionPolicy wires Painted Wolf's session egress destination
@@ -356,18 +431,37 @@ func registerCommandToolsWithPython(
 	if err != nil {
 		return err
 	}
-	programs := &command.ProgramRuntime{Registry: reg, Boundary: boundary, Supervisor: &command.ProgramSupervisor{}, Evaluate: commandprogram.Evaluate, Ports: service, FailureTracker: ft,
-		Builtins: func(tc tools.ToolContext, nested commandprogram.NestedCommand, bound command.NativeBindings) map[string]commandprogram.OperationDispatcher {
-			return hostUtilities.Builtins(tc, nested, bound)
-		}}
-	*commandTool = &command.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft, Programs: programs}
-	*verifyTool = &native.VerifyTool{Programs: programs}
-	*commandOutputTool = &command.CommandOutputTool{}
-	*commandStopTool = &command.CommandStopTool{}
 	pyHandler := &portablePythonRunner{service: pythonSvc, boundary: boundary}
 	if pythonRunner != nil {
 		*pythonRunner = pyHandler
 	}
+	programs := &command.ProgramRuntime{
+		Registry:       reg,
+		Boundary:       boundary,
+		Supervisor:     &command.ProgramSupervisor{},
+		Evaluate:       commandprogram.Evaluate,
+		Ports:          service,
+		FailureTracker: ft,
+		PortablePython: pyHandler,
+		DirectPythonOffered: func(tc tools.ToolContext) bool {
+			if tc.Turn.TurnOfferedToolNames != nil {
+				return slices.Contains(tc.Turn.TurnOfferedToolNames, "python")
+			}
+			if boundary != nil {
+				if profileID := strings.TrimSpace(tc.ProfileID()); profileID != "" {
+					return boundary.ProfileAllowsTool(profileID, "python")
+				}
+			}
+			return false
+		},
+		Builtins: func(tc tools.ToolContext, nested commandprogram.NestedCommand, bound command.NativeBindings) map[string]commandprogram.OperationDispatcher {
+			return hostUtilities.Builtins(tc, nested, bound)
+		},
+	}
+	*commandTool = &command.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft, Programs: programs}
+	*verifyTool = &native.VerifyTool{Programs: programs}
+	*commandOutputTool = &command.CommandOutputTool{}
+	*commandStopTool = &command.CommandStopTool{}
 	if err := reg.Register("command", (*commandTool).Run); err != nil {
 		return err
 	}

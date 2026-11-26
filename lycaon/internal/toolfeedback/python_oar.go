@@ -1,7 +1,6 @@
 package toolfeedback
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oar"
@@ -43,13 +42,7 @@ func publishPythonOARFacts(gc *oar.GuardContext, tr *toolrejection.ToolReject) {
 		}
 	}
 	if facts.PendingHeldOperationID != "" {
-		reason := stringFromMap(gc.ObservationData, "rejection_reason")
-		if !strings.Contains(reason, facts.PendingHeldOperationID) {
-			if reason != "" {
-				reason += " "
-			}
-			gc.ObservationData["rejection_reason"] = fmt.Sprintf("%sPending approval operation: %s.", reason, facts.PendingHeldOperationID)
-		}
+		gc.ObservationData["pending_held_operation_id"] = facts.PendingHeldOperationID
 	}
 	if facts.PolicyCode == pythonruntime.StopEffectNotAllowed && surface.ReadOnly && stringFromMap(gc.ObservationData, "expected_form") == "" {
 		gc.ObservationData["expected_form"] = "read_only"

@@ -215,9 +215,20 @@ func TestOARTrigger5DeniedHTTPOrWriteForbidsLanguageSwitchAndSurfacesHeldOp(t *t
 			if len(calls) != 0 {
 				t.Fatalf("HTTP denial must not offer tool-switch next_calls: %+v", calls)
 			}
-			// Pack consumed held_operation_id published into rejection_reason before rendering!
-			if !strings.Contains(refusal.Copy["cause"], "hold-http-42") {
-				t.Fatalf("rendered cause missing pending held operation hold-http-42: %q", refusal.Copy["cause"])
+			// Typed pending_held_operation_id observation is published without
+			// formatting an English sentence into rejection_reason.
+			gcCheck := oar.NewGuardContext()
+			gcCheck.ObserveToolCall(toolName, nil)
+			gcCheck.ObservationData = map[string]any{"rejection_reason": "egress destination not approved."}
+			publishPythonOARFacts(gcCheck, &toolrejection.ToolReject{
+				Code: "HTTP_REQUEST_HOST_DENIED",
+				Data: map[string]any{"held_operation_id": "hold-http-42"},
+			})
+			if got := gcCheck.ObservationData["pending_held_operation_id"]; got != "hold-http-42" {
+				t.Fatalf("pending_held_operation_id = %v, want %q", got, "hold-http-42")
+			}
+			if got := gcCheck.ObservationData["rejection_reason"]; got != "egress destination not approved." {
+				t.Fatalf("rejection_reason was mutated with formatted prose: %q", got)
 			}
 			if strings.Contains(refusal.Copy["fix"], "`python(") || strings.Contains(refusal.Copy["fix"], "`command(") {
 				t.Fatalf("HTTP denial must not suggest switching languages: %q", refusal.Copy["fix"])

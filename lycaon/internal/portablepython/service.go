@@ -410,14 +410,15 @@ type ToolRequest struct {
 	// and populates Mode, Code, Script, Module, CWD, and Args.
 	RawArgs map[string]any
 
-	ExecutionID string
-	CallID      string
-	SessionID   string
-	CheckoutID  string
-	Actor       string
-	View        string
-	Surface     string
-	ReadOnly    bool
+	ExecutionID    string
+	CallID         string
+	SessionID      string
+	CheckoutID     string
+	Actor          string
+	View           string
+	Surface        string
+	InitiatingTool string
+	ReadOnly       bool
 
 	Mode   pythonruntime.ExecutionMode
 	Code   string
