@@ -107,6 +107,7 @@ type CustomizationSeed struct {
 	SurfaceID string
 	Roots     RootTopology
 	Loading   LoadingMode
+	Loaded    []string
 	Vision    bool
 	Binding   *PhaseBinding
 }

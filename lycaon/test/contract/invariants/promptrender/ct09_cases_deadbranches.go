@@ -19,20 +19,21 @@ func deadBranchCases() []hoststate.CustomizationCase {
 		// no verify and no dispatch: the worker-finished kick's inspect arm
 		// with worker_history, a surface card that may only edit, and a
 		// rootless orchestrate turn without task.
-		ownProfile("coordinator-without-landing", "coordinator", pendingOverlaySeed(), investigateAllLoadedSeed(), rootlessOrchestrateSeed()),
+		ownCoordinatorProfile("coordinator-without-landing", pendingOverlaySeed(), investigateAllLoadedSeed(), rootlessOrchestrateSeed()),
 		// Previews and runs checks without worker_history, restores or
 		// dispatch: the inspect arm without worker_history, and a card that
 		// may only run.
-		ownProfile("coordinator-preview-only", "coordinator", pendingOverlaySeed()),
+		ownCoordinatorProfile("coordinator-preview-only", pendingOverlaySeed()),
 		// Restores files and dispatches without verify or mutating command: a
 		// surface card that may edit and dispatch without running commands.
-		ownProfile("coordinator-edit-and-dispatch", "coordinator", investigateAllLoadedSeed()),
+		ownCoordinatorProfile("coordinator-edit-and-dispatch", investigateAllLoadedSeed()),
 		// Holds scan_pack without scan_summary on a vet surface: witnesses
 		// coordinator-surface-vet's else arm with scan_pack offered.
-		ownProfile("coordinator-scan-pack-only", "coordinator", vetAllLoadedSeed()),
-		// Defers only scan_pack and scan_summary on observe_investigate so
-		// partly-loaded loads scan_pack while scan_summary stays requestable.
-		ownProfile("coordinator-scan-pack-first", "coordinator", vetPartlyLoadedSeed()),
+		ownCoordinatorProfile("coordinator-scan-pack-only", vetAllLoadedSeed()),
+		// Loads scan_pack while scan_summary stays deferred on
+		// observe_investigate: witnesses coordinator-surface-vet's elif arm
+		// with scan_pack offered.
+		ownCoordinatorProfile("coordinator-scan-pack-first", vetPartlyLoadedSeed()),
 		{
 			ID: "project-without-read-workers", Project: deadBranchFixture("without-read-workers"),
 			Coordinator: func() ([]hoststate.CustomizationSeed, error) {
@@ -78,10 +79,10 @@ func deadBranchCases() []hoststate.CustomizationCase {
 	}
 }
 
-func ownProfile(pack, profile string, seeds ...hoststate.CustomizationSeed) hoststate.CustomizationCase {
+func ownCoordinatorProfile(pack string, seeds ...hoststate.CustomizationSeed) hoststate.CustomizationCase {
 	return hoststate.CustomizationCase{
 		ID: "own-" + pack, Packs: []string{deadBranchFixture("packs", pack)},
-		Own:         map[string]string{"tools/profiles/" + profile: "fixture/" + pack},
+		Own:         map[string]string{"tools/profiles/coordinator": "fixture/" + pack},
 		Coordinator: func() ([]hoststate.CustomizationSeed, error) { return seeds, nil },
 	}
 }
@@ -105,7 +106,9 @@ func vetAllLoadedSeed() hoststate.CustomizationSeed {
 }
 
 func vetPartlyLoadedSeed() hoststate.CustomizationSeed {
-	return ambientSeed(api.SessionPostureVet, hoststate.WorkflowAmbientIdle, hoststate.RootsSingleGit, hoststate.LoadingPartlyLoaded)
+	s := ambientSeed(api.SessionPostureVet, hoststate.WorkflowAmbientIdle, hoststate.RootsSingleGit, hoststate.LoadingPartlyLoaded)
+	s.Loaded = []string{"scan_pack"}
+	return s
 }
 
 func deadBranchFixture(parts ...string) string {
