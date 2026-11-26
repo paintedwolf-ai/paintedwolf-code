@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/diagnostics"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,21 +25,13 @@ func TestPrintOutcomesFromBundle(t *testing.T) {
 	a.Commit(s, "session", nil)
 	dir := t.TempDir()
 	bundle, err := diagnostics.Build(ctx, diagnostics.Input{ConfigDir: dir, LogDir: dir, GeneratedAt: time.Now(), Outcomes: sessions.Trails()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "build diagnostics", err)
 	path := filepath.Join(dir, "diagnostics.zip")
-	if err := os.WriteFile(path, bundle, 0600); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "write bundle", os.WriteFile(path, bundle, 0600))
 	var output bytes.Buffer
-	if err := printOutcomes(&output, path, "session"); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "print session outcomes", printOutcomes(&output, path, "session"))
 	var trail actionoutcome.Trail
-	if err := json.Unmarshal(output.Bytes(), &trail); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "decode outcome trail", json.Unmarshal(output.Bytes(), &trail))
 	if len(trail.Wakes) != 1 || len(trail.Turns) != 1 || len(trail.Continuations) != 1 {
 		t.Fatalf("trail: %+v", trail)
 	}
