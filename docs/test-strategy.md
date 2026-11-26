@@ -823,6 +823,23 @@ goroutine stack, and then ends the run. Digests and CI annotations name the
 pending waits. Nothing scales with host load: a test bounds its waits by the
 test, and a timeout handed to product code is the literal the test is about.
 
+Await a reported outcome, never the absence of an event. A test that causes work
+waits for that work's own terminal record, not for a later side effect that only
+appears if everything went right. Host wakes follow this rule by construction:
+every wake ends in exactly one recorded outcome (delivered to a turn, with the
+turn's identity; routed to the session's wait; parked; or dropped), each with a
+structured reason code. A delivered wake's turn records how it ended (completed,
+failed, cancelled or not started). `deliverNudge` and `runPromptSync` decide a wake
+through one decision per pass that must end in exactly one settle or requeue, and
+a guard drops an undecided wake and counts any second decision as a violation. A
+test opens `wiring.WatchWakes` before the action that causes a wake, then calls
+`AwaitDelivered`, `AwaitTurn` or `AwaitCompletedTurn`. A parked or dropped wake
+fails the test as soon as its outcome is recorded, naming the wake, the result and
+the reason, followed by the session's wake ledger. A prompt the test submits
+reports its own end through its result or receipt status, and the test waits on
+that. A wait with no reported outcome to await says so where it is written,
+together with what bounds it.
+
 Compilation artifacts use the persistent Go cache across snapshots, tests,
 fuzzing, and lint. Snapshot worktrees reuse leased directory slots, preserving
 the absolute source paths in Go's compilation cache keys; active descendants
