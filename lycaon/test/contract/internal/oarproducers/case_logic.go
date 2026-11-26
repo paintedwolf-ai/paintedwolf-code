@@ -212,26 +212,52 @@ func distinctOf(atoms []string) []string {
 const maxShadowInputs = 14
 
 // ShadowJoints rules out the vectors of a rule's condition under which a
-// block rule evaluated earlier on the same anchor fires: the first enforced
-// block stops evaluation ([OAR-EVAL-3]), so the rule never sees them.
+// mandatory block rule evaluated earlier on the same anchor fires: the first
+// enforced block stops evaluation ([OAR-EVAL-3]), so the rule never sees them.
+// A rule that is not mandatory can be disabled ([OAR-OPS-5] refuses only
+// mandatory disables), so it shadows nothing for good; Shadowers names those
+// rules, and the vectors they hide are generated with them disabled.
 func (p *CaseProducer) ShadowJoints(site string, atoms []string) []independence.Joint {
-	if j, ok := p.shadows[site]; ok {
-		return j
-	}
-	j := p.shadowJoints(site, atoms)
-	p.shadows[site] = j
-	return j
+	return p.shadowing(site, atoms).joints
 }
 
-func (p *CaseProducer) shadowJoints(site string, atoms []string) []independence.Joint {
+// Shadowers lists the disableable block rules that hide some vector of
+// site's condition on the stock catalog.
+func (p *CaseProducer) Shadowers(site string) []string {
+	rule, src := p.ruleOf(site)
+	if rule == nil {
+		return nil
+	}
+	compiled := (&ruleLogic{env: p.env, compiled: p.compiled}).compile(src)
+	if compiled == nil {
+		return nil
+	}
+	return p.shadowing(site, compiled.Atoms()).disableable
+}
+
+type shadowResult struct {
+	joints      []independence.Joint
+	disableable []string
+}
+
+func (p *CaseProducer) shadowing(site string, atoms []string) shadowResult {
+	if r, ok := p.shadows[site]; ok {
+		return r
+	}
+	r := p.computeShadowing(site, atoms)
+	p.shadows[site] = r
+	return r
+}
+
+func (p *CaseProducer) computeShadowing(site string, atoms []string) shadowResult {
 	rule, _ := p.ruleOf(site)
 	inputs := distinctOf(atoms)
 	if rule == nil || !strings.HasSuffix(site, "#when") || len(inputs) > maxShadowInputs {
-		return nil
+		return shadowResult{}
 	}
 	logic := &ruleLogic{env: p.env, selector: rule.Tools(), compiled: p.compiled}
 	var earlier []*oar.Rule
-	for _, r := range p.h.Rules.OnAnchor(rule.Anchor) {
+	for _, r := range p.stock.Rules.OnAnchor(rule.Anchor) {
 		if r == rule {
 			break
 		}
@@ -240,7 +266,7 @@ func (p *CaseProducer) shadowJoints(site string, atoms []string) []independence.
 		}
 	}
 	var allowed [][]independence.Truth
-	shadows := map[string]bool{}
+	mandatory, disableable := map[string]bool{}, map[string]bool{}
 	for mask := 0; mask < 1<<len(inputs); mask++ {
 		vec := make([]independence.Truth, len(inputs))
 		for i := range inputs {
@@ -251,20 +277,25 @@ func (p *CaseProducer) shadowJoints(site string, atoms []string) []independence.
 		}
 		shadowed := false
 		for _, r := range earlier {
-			if fires(logic, r, inputs, vec) {
-				shadowed, shadows[r.ID] = true, true
+			if !fires(logic, r, inputs, vec) {
+				continue
+			}
+			if r.Mandatory {
+				shadowed, mandatory[r.ID] = true, true
 				break
 			}
+			disableable[r.ID] = true
 		}
 		if !shadowed {
 			allowed = append(allowed, vec)
 		}
 	}
-	if len(shadows) == 0 {
-		return nil
+	out := shadowResult{disableable: slices.Sorted(maps.Keys(disableable))}
+	if len(mandatory) > 0 {
+		out.joints = []independence.Joint{{Atoms: inputs, Allowed: allowed,
+			Source: fmt.Sprintf("OAR-EVAL-3 with OAR-OPS-5: the mandatory rules %v on %s evaluate before %s, cannot be disabled, and block under the excluded vectors", slices.Sorted(maps.Keys(mandatory)), rule.Anchor, rule.ID)}}
 	}
-	return []independence.Joint{{Atoms: inputs, Allowed: allowed,
-		Source: fmt.Sprintf("OAR-EVAL-3: the first enforced block stops evaluation, and %v on %s evaluate before %s and block under the excluded vectors", slices.Sorted(maps.Keys(shadows)), rule.Anchor, rule.ID)}}
+	return out
 }
 
 // selects reports that a rule with selector outer is evaluated for every
