@@ -2,7 +2,7 @@
 
 ## Reading a refusal
 
-Application errors are clues, not host decisions. Read `command_output`’s structured network observations and `boundary_refusal` first. With no observation, keep the cause unresolved; a timeout alone proves neither permission nor peer failure.
+Application errors are clues, not host decisions. Read {% if profile_has_command_output %}`command_output`’s{% else %}the command result's{% endif %} structured network observations and `boundary_refusal` first. With no observation, keep the cause unresolved; a timeout alone proves neither permission nor peer failure.
 
 | Observed need or boundary | Next move |
 |---------------------------|-----------|

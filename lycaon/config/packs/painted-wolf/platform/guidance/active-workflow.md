@@ -38,7 +38,7 @@ You are at phase {{ phase_index }}/{{ phase_total }} — {{ current_phase }}{% i
 Gates:{% for g in current_phase_gates %} [{% if g.satisfied %}x{% else %} {% endif %}] `{{ g.id }}`{% endfor %}
 {% endif %}{% if fanout_plan %}
 ### Stamped fan-out
-The plan is stamped, not automatically started. If no planned worker from this plan has started, call `task` for every leg below with its `workflow_work_id` in one assistant turn, then call `wait(timeout_ms=1800000, conditions=[{"kind":"all_workers_idle"}])`. If workers or results already exist, do not duplicate them; wait, or recover incomplete legs within the attempt allowance{% if profile_has_instruct_worker %} with `instruct_worker`{% endif %}. Do not synthesize until every worker delivers.
+The plan is stamped, not automatically started. If no planned worker from this plan has started, {% if profile_has_task %}call `task` for every leg below{% else %}start every leg below{% endif %} with its `workflow_work_id` in one assistant turn{% if profile_has_wait %}, then call `wait(timeout_ms=1800000, conditions=[{"kind":"all_workers_idle"}])`{% endif %}. If workers or results already exist, do not duplicate them; wait, or recover incomplete legs within the attempt allowance{% if profile_has_instruct_worker %} with `instruct_worker`{% endif %}. Do not synthesize until every worker delivers.
 
 {{ fanout_plan }}
 {% endif %}{% if gate_obligations %}
@@ -55,7 +55,7 @@ When no phase work is required below, work the user's request directly.
 This is the last phase. There is no further advance to call.
 {% elif phase_exit.kind == "review_loop" %}{% if phase_exit.review_work_ids %}Use these exact `workflow_work_id` values: {% for agent, work_id in phase_exit.review_work_ids %}`{{ agent }}` → `{{ work_id }}`. {% endfor %}
 {% endif %}{% if phase_exit.review_agents %}
-1. Start every owed reviewer ({% for a in phase_exit.review_agents %}`{{ a }}`{% if not forloop.Last %}, {% endif %}{% endfor %}) with `task` through its workflow review assignment in **one assistant message**, within user limits. Ask before conflicting review. A terminal verdict needs each completed review.
+1. Start every owed reviewer ({% for a in phase_exit.review_agents %}`{{ a }}`{% if not forloop.Last %}, {% endif %}{% endfor %}){% if profile_has_task %} with `task`{% endif %} through its workflow review assignment in **one assistant message**, within user limits. Ask before conflicting review. A terminal verdict needs each completed review.
 {% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_outline %} with `verdict` shaped `{{ phase_exit.verdict_outline }}` (the first `verdict` value is terminal; the tool schema gives each member's type); arrays may be empty when no entry exists{% endif %}. Only that call records a verdict.{% if phase_exit.review_loop_key %}
 {% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. {% if phase_exit.followup_attempts %}A non-terminal verdict registers open questions; start their `workflow_work_id` for focused investigation ({{ phase_exit.followup_attempts }} completed attempts each).{% else %}A non-terminal verdict runs the loop again{% if phase_exit.review_loop_cap %}, up to {{ phase_exit.review_loop_cap }} time(s){% endif %}.{% endif %}{% endif %}
 {% elif phase_exit.kind == "human_approval" %}
