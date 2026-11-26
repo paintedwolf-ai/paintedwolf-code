@@ -140,7 +140,13 @@ func renderAndCheckCoordinatorStandingPrompt(
 	}
 	unitIDs := selectedUnitIDs(unitCat, auth.Reader.Selection())
 	templates := append([]string{st.TurnProfile.SurfaceTemplate}, st.TurnProfile.ModeRefs...)
-	rKey := renderCacheKeyForVars("standing:"+strings.Join(templates, ",")+":"+s.Site, engineRev(s, st.Overlay), unitIDs, vars)
+	keyVars := vars
+	if !hasSiteOverlayFiles(s.Site) {
+		refs := append([]string{surface.CoordinatorCoreTemplate, st.TurnProfile.SurfaceTemplate}, coordinatorModeRefs(st.TurnProfile)...)
+		refs = append(refs, selectedUnitRefs(unitCat, auth.Reader.Selection())...)
+		keyVars = overlayRenderInputs(s, st.Overlay).project(vars, refs...)
+	}
+	rKey := renderCacheKeyForVars("standing:"+strings.Join(templates, ",")+":"+s.Site, engineRev(s, st.Overlay), unitIDs, keyVars)
 	standingTiming.vars += time.Since(t0)
 	t1 := time.Now()
 	promptText, _, err := cache.RenderOrReuse(rKey, func() (string, error) {
@@ -265,6 +271,17 @@ func mergeAdmittedSkillsIntoVars(occ map[string]any, reader prompts.Reader, skil
 	})
 	admittedSkillVarsMemo.Store(mKey, surfaceVars)
 	maps.Copy(occ, surfaceVars)
+}
+
+func selectedUnitRefs(cat promptunit.Catalog, sel promptunit.Selection) []string {
+	rendered := cat.Rendered(sel)
+	var refs []string
+	for _, slot := range promptunit.Slots() {
+		for _, u := range rendered[slot] {
+			refs = append(refs, u.Ref)
+		}
+	}
+	return refs
 }
 
 func selectedUnitIDs(cat promptunit.Catalog, sel promptunit.Selection) []string {

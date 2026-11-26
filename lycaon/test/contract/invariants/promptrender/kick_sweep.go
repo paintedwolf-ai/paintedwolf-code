@@ -72,7 +72,7 @@ func (k *kickSweep) render(ctx context.Context, keyPrefix, kick string, reader p
 	}
 	keyVars := fullVars
 	if k.inputs != nil {
-		keyVars = k.inputs.project(prompts.KicksTemplatePrefix+kick+".md", fullVars)
+		keyVars = k.inputs.project(fullVars, prompts.KicksTemplatePrefix+kick+".md")
 	}
 	rKey := renderCacheKeyForVars(keyPrefix+kick+":"+k.s.Site, k.s.Catalog.Revision, nil, keyVars)
 	k.varsDur += time.Since(t0)

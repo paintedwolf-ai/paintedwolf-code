@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/pongoplain"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 	"github.com/lycaon/lycaon/test/contract/internal/interactions"
 )
 
@@ -40,6 +41,19 @@ func stockRenderInputs(s *Stock) *renderInputs {
 	return actual.(*renderInputs)
 }
 
+// overlayRenderInputs indexes the catalog that renders for overlay.
+func overlayRenderInputs(s *Stock, overlay hoststate.PackOverlay) *renderInputs {
+	if overlay.Catalog == nil {
+		return stockRenderInputs(s)
+	}
+	if cached, ok := stockRenderInputsMemo.Load(overlay.Catalog.Revision); ok {
+		return cached.(*renderInputs)
+	}
+	in := newRenderInputs(overlay.Catalog)
+	actual, _ := stockRenderInputsMemo.LoadOrStore(overlay.Catalog.Revision, in)
+	return actual.(*renderInputs)
+}
+
 func newRenderInputs(catalog *extpacks.EffectiveCatalog) *renderInputs {
 	templates, err := interactions.TemplateUnits(catalog)
 	if err != nil {
@@ -48,15 +62,24 @@ func newRenderInputs(catalog *extpacks.EffectiveCatalog) *renderInputs {
 	return &renderInputs{catalog: catalog, templates: templates, memo: map[string]inputRoots{}}
 }
 
-// project keeps the values of full that ref can read, or returns full when
-// ref's inputs cannot be resolved statically.
-func (r *renderInputs) project(ref string, full map[string]any) map[string]any {
-	in := r.of(ref)
-	if !in.ok {
-		return full
+// project keeps the values of full that refs can read, or returns full when
+// any ref's inputs cannot be resolved statically.
+func (r *renderInputs) project(full map[string]any, refs ...string) map[string]any {
+	roots := map[string]bool{}
+	for _, ref := range refs {
+		if ref == "" {
+			continue
+		}
+		in := r.of(ref)
+		if !in.ok {
+			return full
+		}
+		for name := range in.roots {
+			roots[name] = true
+		}
 	}
-	out := make(map[string]any, len(in.roots)+len(alwaysKeyedInputs))
-	for name := range in.roots {
+	out := make(map[string]any, len(roots)+len(alwaysKeyedInputs))
+	for name := range roots {
 		if v, ok := full[name]; ok {
 			out[name] = v
 		}
