@@ -433,9 +433,13 @@ export function SessionTranscript(props: Props) {
         if (geometryTransitionFrame !== undefined) {
           cancelAnimationFrame(geometryTransitionFrame);
         }
+        // Keep the transition active through the frame's ResizeObserver row
+        // measurements (which run after rAF callbacks, before paint).
         geometryTransitionFrame = requestAnimationFrame(() => {
-          geometryTransitionFrame = undefined;
-          geometryTransitionActive = false;
+          geometryTransitionFrame = requestAnimationFrame(() => {
+            geometryTransitionFrame = undefined;
+            geometryTransitionActive = false;
+          });
         });
       },
       { defer: true },
