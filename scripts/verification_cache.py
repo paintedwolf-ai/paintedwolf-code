@@ -1,4 +1,4 @@
-"""Maintain build cache budgets between verification operations."""
+"""Maintain Go build cache budgets and abandoned Go temp between verification operations."""
 
 import argparse
 from dataclasses import dataclass
@@ -11,6 +11,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 
 from verification_resources import EXCLUSIVE, Reservation
@@ -24,6 +25,11 @@ RECENT_SECONDS = 3600
 # entries the age cutoff would evict; eviction therefore waits for every other operation to drain.
 MAINTENANCE = EXCLUSIVE
 ENTRY_NAME = re.compile(r"[0-9a-f]{64}-[ad]\Z")
+# Work directories of the go command and its linker.
+GO_TEMP_PREFIXES = ("go-build", "go-link-")
+# Go removes its work directory when a command exits, and no build goes this long without adding to it.
+ABANDONED_TEMP_SECONDS = 24 * 3600
+TEMP_SCAN_INTERVAL = 3600
 
 
 @dataclass(frozen=True)
@@ -129,12 +135,95 @@ def measurement(root, size, budget):
             "removed_entries": 0, "reclaimed_bytes": 0, "over_budget": size > budget.maximum}
 
 
+def host_temp(environment):
+    return Path(environment.get("PW_HOST_TMPDIR") or environment.get("TMPDIR") or tempfile.gettempdir())
+
+
+def last_touched(path):
+    """Newest of a directory and its children: Go adds a child per build action, so a live build stays fresh."""
+    newest = path.lstat().st_mtime
+    for child in path.iterdir():
+        try:
+            newest = max(newest, child.lstat().st_mtime)
+        except FileNotFoundError:
+            continue
+    return newest
+
+
+def tree_size(path):
+    total = 0
+    for directory, _, files in os.walk(path):
+        for name in files:
+            try:
+                total += allocated(os.lstat(os.path.join(directory, name)))
+            except FileNotFoundError:
+                continue
+    return total
+
+
+def sweep_go_temp(root, *, now=None):
+    """Remove Go work directories that commands run outside verification left behind when they were killed.
+
+    Scheduled operations keep theirs in leased run directories, so this covers only the host temp directory.
+    """
+    now = time.time() if now is None else now
+    removed, reclaimed, failures = 0, 0, []
+    entries = sorted(root.iterdir()) if root.is_dir() else []
+    for path in entries:
+        if not path.name.startswith(GO_TEMP_PREFIXES):
+            continue
+        try:
+            info = path.lstat()
+            if not stat.S_ISDIR(info.st_mode) or (hasattr(os, "getuid") and info.st_uid != os.getuid()):
+                continue
+            if last_touched(path) >= now - ABANDONED_TEMP_SECONDS:
+                continue
+            size = tree_size(path)
+            shutil.rmtree(path)
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            failures.append(f"{path}: {error}")
+            continue
+        removed += 1
+        reclaimed += size
+    return {"temp": str(root), "removed_directories": removed, "reclaimed_bytes": reclaimed, "failures": failures}
+
+
+def report_temp(result):
+    if result["removed_directories"]:
+        print(f"go temp: removed {result['removed_directories']} abandoned work directories "
+              f"({result['reclaimed_bytes'] / GIB:.2f} GiB) from {result['temp']}", file=sys.stderr, flush=True)
+    for failure in result["failures"]:
+        print(f"go temp: keeping {failure}", file=sys.stderr, flush=True)
+
+
 class Maintenance:
     def __init__(self, queue, environment):
         self.queue = queue
         self.environment = environment
         self.root = None
         self.retry_at = 0.0
+
+    def sweep_temp(self):
+        """Sweep abandoned Go work directories at most once per TEMP_SCAN_INTERVAL across all runners."""
+        try:
+            temp = host_temp(self.environment).resolve()
+            key = hashlib.sha256(str(temp).encode()).hexdigest()[:24]
+            path = self.queue.root / f"go-temp-{key}.json"
+            with self.queue.locked():
+                try:
+                    checked = json.loads(path.read_text())["checked_at"]
+                    if 0 <= time.time() - checked < TEMP_SCAN_INTERVAL:
+                        return
+                except (OSError, ValueError, KeyError, TypeError):
+                    pass
+                temporary = path.with_suffix(".tmp")
+                temporary.write_text(json.dumps({"checked_at": time.time()}))
+                temporary.replace(path)
+            report_temp(sweep_go_temp(temp))
+        except OSError as error:
+            print(f"go temp: automatic maintenance failed: {error}", file=sys.stderr, flush=True)
 
     def configuration(self):
         budget = Budget.environment(self.environment)
@@ -159,6 +248,7 @@ class Maintenance:
 
     def admitted(self):
         """Trim under the caller's maintenance or exclusive admission; report failures separately."""
+        self.sweep_temp()
         try:
             budget = self.configuration()
             if not self.due(budget):
@@ -181,6 +271,7 @@ class Maintenance:
     def scheduled(self, batch):
         """Trim if admitted at once; otherwise skip and retry after SCAN_INTERVAL. Waiting could block on
         capacity held by work that only finishing can free."""
+        self.sweep_temp()
         if time.monotonic() < self.retry_at:
             return
         try:
@@ -204,14 +295,21 @@ class Maintenance:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("cache", type=Path)
+    parser.add_argument("cache", type=Path, nargs="?")
     parser.add_argument("--unused-hours", type=int)
+    parser.add_argument("--abandoned-temp", type=Path, help="host temp directory to sweep for abandoned Go work")
     args = parser.parse_args()
+    if args.cache is None and args.abandoned_temp is None:
+        parser.error("expected a cache, --abandoned-temp, or both")
     if args.unused_hours is not None and args.unused_hours < 0:
         parser.error("--unused-hours must be nonnegative")
-    budget = Budget.environment(os.environ)
-    result = trim(args.cache, budget, unused_seconds=None if args.unused_hours is None else args.unused_hours * 3600)
-    report(result, budget)
+    if args.abandoned_temp is not None:
+        report_temp(sweep_go_temp(args.abandoned_temp))
+    if args.cache is not None:
+        budget = Budget.environment(os.environ)
+        result = trim(args.cache, budget,
+                      unused_seconds=None if args.unused_hours is None else args.unused_hours * 3600)
+        report(result, budget)
 
 
 if __name__ == "__main__":
