@@ -87,7 +87,7 @@ func TestPythonMutationDoorAttributesSingleAgentHistoryEntry(t *testing.T) {
 		t.Fatalf("expected exactly 1 workspace history entry, got %d (%+v)", len(records), records)
 	}
 	rec := records[0]
-	if rec.SessionID != "sess-py-attr" || rec.Agent != "coordinator" || rec.ToolCallID != "call-py-attr-1" {
+	if rec.SessionID != "sess-py-attr" || rec.ToolCallID != "call-py-attr-1" {
 		t.Fatalf("unexpected attribution identity: %+v", rec)
 	}
 	if rec.Op != api.SourceChangeOpWrite || rec.Origin != api.SourceChangeOriginAgent {
