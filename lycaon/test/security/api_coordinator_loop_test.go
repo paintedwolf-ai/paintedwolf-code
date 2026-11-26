@@ -119,6 +119,10 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	if !allowed {
 		t.Fatalf("completed leg cannot wake coordinator: %s", reason)
 	}
+	previous := map[string]bool{}
+	for _, msg := range listMessagesHTTP(t, srv, sess.ID) {
+		previous[msg.ID] = true
+	}
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	ticket := loop.Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
 	wake, err := ticket.Await(t.Context())
@@ -138,7 +142,7 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 		if msg.Role == wire.MessageRoleAssistant {
 			assistants++
 		}
-		if msg.Kind == wire.MessageKindHostLoopWake && msg.ID == turn.TurnID {
+		if msg.Kind == wire.MessageKindHostLoopWake && !previous[msg.ID] {
 			hasWake = true
 		}
 	}
