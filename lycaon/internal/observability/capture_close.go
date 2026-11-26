@@ -100,7 +100,7 @@ func CloseDebugCaptures() {
 	CloseSummarizeDebug()
 	closePerformance()
 	debugClosersMu.Lock()
-	closers := append([]func()(nil), debugClosers...)
+	closers := append(([]func())(nil), debugClosers...)
 	debugClosersMu.Unlock()
 	for _, fn := range closers {
 		fn()
