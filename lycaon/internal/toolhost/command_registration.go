@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/hostprocess"
@@ -16,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/pythoncatalog"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -91,6 +91,27 @@ func (p *portablePythonRunner) Run(ctx context.Context, args map[string]any, tc 
 	return string(encoded), nil
 }
 
+func mustCommandEffects(classes ...toolcontract.CommandEffectClass) toolcontract.CommandEffects {
+	effects, err := toolcontract.NewCommandEffects(classes...)
+	if err != nil {
+		panic(err)
+	}
+	return effects
+}
+
+var (
+	pyEffectReadOnly     = mustCommandEffects(toolcontract.CommandReadOnly)
+	pyEffectMutation     = mustCommandEffects(toolcontract.CommandMutation)
+	pyEffectExternalExec = mustCommandEffects(toolcontract.CommandExternalExec)
+	pyEffectNetwork      = mustCommandEffects(toolcontract.CommandNetworkEgress)
+	pyEffectAll          = mustCommandEffects(
+		toolcontract.CommandReadOnly,
+		toolcontract.CommandMutation,
+		toolcontract.CommandExternalExec,
+		toolcontract.CommandNetworkEgress,
+	)
+)
+
 // resolvePythonAllowedEffects computes the effective command_effects posture
 // from the active profile (via sandbox.Boundary) and turn surface (via
 // surfacecatalog.RestrictCommandEffects), combined with tc.Source.ReadOnly and
@@ -105,27 +126,22 @@ func resolvePythonAllowedEffects(ctx context.Context, boundary *sandbox.Boundary
 	} else if tc.Turn.TurnSurfaceID != "" {
 		// No boundary configured, but a surface was explicitly named: start
 		// from full effects and let RestrictCommandEffects intersect.
-		allowed = toolcontract.NewCommandEffects(
-			toolcontract.CommandReadOnly,
-			toolcontract.CommandMutation,
-			toolcontract.CommandExternalExec,
-			toolcontract.CommandNetworkEgress,
-		)
+		allowed = pyEffectAll
 	}
 	if tc.Turn.TurnSurfaceID != "" {
 		if restricted, err := surfacecatalog.RestrictCommandEffects(allowed, tc.Turn.TurnSurfaceID); err == nil {
 			allowed = restricted
 		} else {
 			// Unknown or invalid surface fails closed to read-only.
-			allowed = toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+			allowed = pyEffectReadOnly
 		}
 	}
 
 	var ae pythonadmission.AllowedEffects
 	if hasProfileOrSurface {
-		ae.AllowMutation = allowed.Allows(toolcontract.NewCommandEffects(toolcontract.CommandMutation))
-		ae.AllowNetworkEgress = allowed.Allows(toolcontract.NewCommandEffects(toolcontract.CommandNetworkEgress))
-		ae.AllowExternalExec = allowed.Allows(toolcontract.NewCommandEffects(toolcontract.CommandExternalExec))
+		ae.AllowMutation = allowed.Allows(pyEffectMutation)
+		ae.AllowNetworkEgress = allowed.Allows(pyEffectNetwork)
+		ae.AllowExternalExec = allowed.Allows(pyEffectExternalExec)
 	} else {
 		ae.AllowMutation = true
 		ae.AllowNetworkEgress = false
