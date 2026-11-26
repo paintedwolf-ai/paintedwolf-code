@@ -7,11 +7,28 @@ import (
 
 	"github.com/lycaon/lycaon/internal/pythondocuments"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
-// StopPythonToolRequired is the recoverable routing code emitted when a bare
-// interpreter command is attempted while the direct Python tool is offered.
-const StopPythonToolRequired pythonruntime.StopCode = "PYTHON_TOOL_REQUIRED"
+// OAR policy and ordinary-failure codes handled by the PY05 recovery contract.
+const (
+	StopPythonToolRequired   pythonruntime.StopCode = "PYTHON_TOOL_REQUIRED"
+	StopHTTPHostDenied       pythonruntime.StopCode = "HTTP_REQUEST_HOST_DENIED"
+	StopWritePathDenied      pythonruntime.StopCode = "WRITE_PATH_DENIED"
+	StopPythonException      pythonruntime.StopCode = "PYTHON_RUNTIME_EXCEPTION"
+	StopProjectRunnerFailure pythonruntime.StopCode = "PROJECT_RUNNER_FAILURE"
+	StopShellStageFailure    pythonruntime.StopCode = "SHELL_STAGE_FAILURE"
+)
+
+// RuntimeKind classifies the child operation or stage independently of the
+// initiating model tool (`Invocation.Tool`).
+const (
+	RuntimeKindPortablePython = "portable_python"
+	RuntimeKindProjectRunner  = "project_runner"
+	RuntimeKindShellStage     = "shell_stage"
+	RuntimeKindHTTP           = "http"
+	RuntimeKindWorkspaceWrite = "workspace_write"
+)
 
 // ReachableSurface describes the caller's currently reachable tool and
 // environment surface. Pack OAR facts MUST be derived strictly from this
@@ -27,13 +44,39 @@ type ReachableSurface struct {
 	ReadOnly               bool     `json:"read_only"`
 }
 
-// RecoveryStopContext captures the stopped operation and prior effects needed
-// to populate pack-owned OAR recovery facts.
+// ReachableSurfaceFromRequest derives a ReachableSurface directly from Painted
+// Wolf's frozen toolreach.Request without any parallel reachability table.
+func ReachableSurfaceFromRequest(req toolreach.Request, readOnly bool, admittedProjectRunner string) ReachableSurface {
+	surface := ReachableSurface{
+		DirectPythonOffered:   req.Status("python") == toolreach.Callable,
+		CommandOffered:        req.Status(toolreach.ProgramTool) == toolreach.Callable,
+		RequestToolsAvailable: req.Status(toolreach.LoaderTool) == toolreach.Callable,
+		NativeReadOffered:     req.Status("read") == toolreach.Callable,
+		ReadOnly:              readOnly,
+	}
+	if req.Status("python") == toolreach.Loadable {
+		surface.RequestableTools = []string{"python"}
+	}
+	if cmd := strings.TrimSpace(admittedProjectRunner); cmd != "" && !readOnly && surface.CommandOffered {
+		surface.ProjectRunnerAvailable = true
+		surface.ProjectRunnerCommand = cmd
+	}
+	return surface
+}
+
+// RecoveryStopContext captures the initiating tool, stopped stage/child facts,
+// and prior effects needed to populate pack-owned OAR recovery facts.
 type RecoveryStopContext struct {
 	PolicyCode            pythonruntime.StopCode          `json:"policy_code"`
+	InitiatingTool        string                          `json:"initiating_tool,omitempty"`
+	StageName             string                          `json:"stage_name,omitempty"`
+	ChildOperation        string                          `json:"child_operation,omitempty"`
+	RuntimeKind           string                          `json:"runtime_kind,omitempty"`
 	StoppedOperationID    string                          `json:"stopped_operation_id"`
 	StoppedOperation      string                          `json:"stopped_operation,omitempty"`
 	PriorCompletedEffects int                             `json:"prior_completed_effects,omitempty"`
+	ExitCode              int                             `json:"exit_code,omitempty"`
+	HeldOperationID       string                          `json:"held_operation_id,omitempty"`
 	Target                string                          `json:"target,omitempty"`
 	Conflict              *pythonruntime.RevisionConflict `json:"conflict,omitempty"`
 }
@@ -72,12 +115,21 @@ type NativeReadCallForm struct {
 }
 
 // OARRecoveryFacts supplies structured, reachability-filtered facts consumed by
-// pack-owned OAR policy templates. No inline Go recovery prose is generated.
+// pack-owned OAR policy templates and model-visible recovery reporting.
+// InitiatingTool (`Invocation.Tool`) and stage/runtime facts are preserved
+// independently; no inline Go recovery prose is generated.
 type OARRecoveryFacts struct {
 	PolicyCode             pythonruntime.StopCode          `json:"policy_code"`
+	InitiatingTool         string                          `json:"initiating_tool,omitempty"`
+	StageName              string                          `json:"stage_name,omitempty"`
+	ChildOperation         string                          `json:"child_operation,omitempty"`
+	RuntimeKind            string                          `json:"runtime_kind,omitempty"`
 	StoppedOperationID     string                          `json:"stopped_operation_id"`
 	StoppedOperation       string                          `json:"stopped_operation,omitempty"`
 	PriorEffects           int                             `json:"prior_effects"`
+	ExitCode               int                             `json:"exit_code,omitempty"`
+	DiagnosticPreserved    bool                            `json:"diagnostic_preserved,omitempty"`
+	PendingHeldOperationID string                          `json:"pending_held_operation_id,omitempty"`
 	ReachableDirectPython  *DirectPythonCallForm           `json:"reachable_direct_python,omitempty"`
 	RequestableNeed        *RequestToolsCallForm           `json:"requestable_need,omitempty"`
 	AdmittedExternalRunner *AdmittedExternalRunnerForm     `json:"admitted_external_runner,omitempty"`
@@ -87,31 +139,46 @@ type OARRecoveryFacts struct {
 }
 
 // BuildOARRecoveryFacts populates structured pack OAR facts strictly from
-// surface. Unreachable tools, unadmitted project runners, and mutating or
-// external routes on read-only surfaces are omitted.
+// surface. Unreachable tools, unadmitted project runners, cross-language
+// permission bypasses, and mutating routes on read-only surfaces are omitted.
 func BuildOARRecoveryFacts(surface ReachableSurface, ctx RecoveryStopContext) OARRecoveryFacts {
 	facts := OARRecoveryFacts{
-		PolicyCode:         ctx.PolicyCode,
-		StoppedOperationID: ctx.StoppedOperationID,
-		StoppedOperation:   ctx.StoppedOperation,
-		PriorEffects:       ctx.PriorCompletedEffects,
-		Conflict:           ctx.Conflict,
+		PolicyCode:             ctx.PolicyCode,
+		InitiatingTool:         strings.TrimSpace(ctx.InitiatingTool),
+		StageName:              strings.TrimSpace(ctx.StageName),
+		ChildOperation:         strings.TrimSpace(ctx.ChildOperation),
+		RuntimeKind:            strings.TrimSpace(ctx.RuntimeKind),
+		StoppedOperationID:     ctx.StoppedOperationID,
+		StoppedOperation:       ctx.StoppedOperation,
+		PriorEffects:           ctx.PriorCompletedEffects,
+		ExitCode:               ctx.ExitCode,
+		PendingHeldOperationID: strings.TrimSpace(ctx.HeldOperationID),
+		Conflict:               ctx.Conflict,
 	}
 
-	switch ctx.PolicyCode {
-	case StopPythonToolRequired:
+	switch {
+	case ctx.PolicyCode == StopPythonToolRequired:
 		populatePythonToolRequired(surface, &facts)
-	case pythonruntime.StopRevisionConflict:
+	case ctx.PolicyCode == StopPythonException || (facts.InitiatingTool == "python" && facts.RuntimeKind == RuntimeKindPortablePython && ctx.PolicyCode == ""):
+		populateDirectPythonException(surface, &facts)
+	case ctx.PolicyCode == StopProjectRunnerFailure || facts.RuntimeKind == RuntimeKindProjectRunner:
+		populateProjectRunnerFailure(surface, &facts)
+	case ctx.PolicyCode == StopShellStageFailure || facts.RuntimeKind == RuntimeKindShellStage:
+		facts.DiagnosticPreserved = true
+	case ctx.PolicyCode == StopHTTPHostDenied || ctx.PolicyCode == StopWritePathDenied:
+		// Switching languages cannot grant permission; preserve denial and any held op.
+	case ctx.PolicyCode == pythonruntime.StopRevisionConflict:
 		populateRevisionConflict(surface, ctx, &facts)
-	case pythonruntime.StopEffectNotAllowed:
+	case ctx.PolicyCode == pythonruntime.StopEffectNotAllowed:
 		populateEffectNotAllowed(surface, ctx, &facts)
 	default:
-		if !surface.ReadOnly && surface.DirectPythonOffered {
+		if !surface.ReadOnly && surface.DirectPythonOffered && facts.PendingHeldOperationID == "" {
 			facts.ReachableDirectPython = directPythonForm()
 		}
 	}
 
-	facts.NoRecoveryRoute = facts.ReachableDirectPython == nil &&
+	facts.NoRecoveryRoute = facts.PendingHeldOperationID == "" &&
+		facts.ReachableDirectPython == nil &&
 		facts.RequestableNeed == nil &&
 		facts.AdmittedExternalRunner == nil &&
 		facts.ReachableNativeRead == nil
@@ -150,6 +217,20 @@ func admittedRunnerForm(surface ReachableSurface) *AdmittedExternalRunnerForm {
 	}
 }
 
+func populateDirectPythonException(surface ReachableSurface, facts *OARRecoveryFacts) {
+	facts.DiagnosticPreserved = true
+	if surface.DirectPythonOffered {
+		facts.ReachableDirectPython = directPythonForm()
+	} else if surface.RequestToolsAvailable && slices.Contains(surface.RequestableTools, "python") {
+		facts.RequestableNeed = requestPythonNeedForm()
+	}
+}
+
+func populateProjectRunnerFailure(surface ReachableSurface, facts *OARRecoveryFacts) {
+	facts.DiagnosticPreserved = true
+	facts.AdmittedExternalRunner = admittedRunnerForm(surface)
+}
+
 func populatePythonToolRequired(surface ReachableSurface, facts *OARRecoveryFacts) {
 	if surface.DirectPythonOffered {
 		facts.ReachableDirectPython = directPythonForm()
@@ -177,17 +258,16 @@ func populateRevisionConflict(surface ReachableSurface, ctx RecoveryStopContext,
 }
 
 func populateEffectNotAllowed(surface ReachableSurface, ctx RecoveryStopContext, facts *OARRecoveryFacts) {
-	if surface.ReadOnly {
-		if surface.NativeReadOffered {
-			facts.ReachableNativeRead = &NativeReadCallForm{
-				Tool:         "read",
-				Path:         ctx.Target,
-				CallableForm: fmt.Sprintf(`read(path=%q)`, ctx.Target),
-			}
-		}
+	if facts.PendingHeldOperationID != "" {
 		return
 	}
-	facts.AdmittedExternalRunner = admittedRunnerForm(surface)
+	if surface.ReadOnly && surface.NativeReadOffered {
+		facts.ReachableNativeRead = &NativeReadCallForm{
+			Tool:         "read",
+			Path:         ctx.Target,
+			CallableForm: fmt.Sprintf(`read(path=%q)`, ctx.Target),
+		}
+	}
 }
 
 // DiscoveryHint represents a Python-emitted AST or line coordinate. It is

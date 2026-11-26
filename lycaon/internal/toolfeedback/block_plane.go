@@ -165,7 +165,8 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 		return toolrejection.RenderRejectBlock(gc.ObservedRejectCode, tr.Data, tr, nil)
 	}
 	if rd, ok := oar.FirstBlock(rendered); ok && rd.Text != "" {
-		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(oar.NextCallsDetails(tr.Data, rd.Decision.Data), nil).WithCause(tr)
+		details := attachPythonOARRecovery(gc, tr, oar.NextCallsDetails(tr.Data, rd.Decision.Data))
+		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(details, nil).WithCause(tr)
 	}
 	if d := strings.TrimSpace(res.Decision.Code); d != "" {
 		return toolrejection.RenderRejectBlock(d, tr.Data, tr, nil)
