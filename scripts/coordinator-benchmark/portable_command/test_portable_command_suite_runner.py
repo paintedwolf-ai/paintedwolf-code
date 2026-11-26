@@ -35,10 +35,14 @@ class ProbeFakeApp(FakeApp):
         db = sqlite3.connect(self.directory / 'store.db')
         for idx, tc in enumerate(calls, start=1):
             cid = tc['id']
-            prog_text = ((tc.get('args') or {}).get('progress_update') or {}).get('content', '')
+            pu = (tc.get('args') or {}).get('progress_update') or {}
+            prog_text = pu.get('content', '')
             if self.reject:
                 db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','rejected',0)", (f'rcpt-{cid}', self.session_id, cid))
                 res = {'outcome': 'rejected', 'codes': ['COMMAND_ARGS_INVALID'], 'content': json.dumps({'refusal': {'code': 'COMMAND_ARGS_INVALID'}})}
+            elif self.native_progress and self.turn >= 1 and pu.get('expected_revision') != 1:
+                db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','rejected',0)", (f'rcpt-{cid}', self.session_id, cid))
+                res = {'outcome': 'rejected', 'codes': ['PROGRESS_REVISION_REQUIRED'], 'content': json.dumps({'refusal': {'code': 'PROGRESS_REVISION_REQUIRED'}})}
             elif self.native_progress and '- [ ]' not in prog_text:
                 db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','rejected',0)", (f'rcpt-{cid}', self.session_id, cid))
                 res = {'outcome': 'rejected', 'codes': ['PROGRESS_NO_OPEN_STEP'], 'content': json.dumps({'refusal': {'code': 'PROGRESS_NO_OPEN_STEP'}})}
@@ -46,7 +50,7 @@ class ProbeFakeApp(FakeApp):
                 db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','completed',1)", (f'rcpt-cmd-{cid}', self.session_id, cid))
                 db.execute("INSERT INTO invocation_programs VALUES (?,?,'completed',0,'')", (f'prog-{cid}', f'rcpt-cmd-{cid}'))
                 if self.native_progress:
-                    db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'update_progress','progress','completed',1)", (f'rcpt-prog-{cid}', self.session_id, cid))
+                    db.execute("INSERT INTO invocation_program_progress VALUES (?,?,?,'committed',1,'')", (f'prog-exec-{cid}', f'prog-{cid}', self.session_id))
                 res = {'outcome': 'completed', 'content': '[command#1]\n' + json.dumps({'status': 0, 'state': 'completed'})}
             db.execute("INSERT INTO messages VALUES (?,?,?,'tool',?,?)", (f'msg-{cid}', self.session_id, self.turn * 10 + idx, cid, json.dumps(res)))
         db.commit()
