@@ -57,6 +57,9 @@ var conditionConstraints = []interactions.AtomConstraint{
 	// A coordinator's requestable tools are its surface's loadable tools.
 	{Atom: "profile_can_request.command", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
 	{Atom: "can_request_command_verify", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_git_read", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_git_commit", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_git_bisect", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
 	{Atom: "profile_can_request.source_history", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "source_history")},
 	{Atom: "profile_can_request.terminal_open", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "terminal_open")},
 	{Atom: "visual_show_terminal_needs_request", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "terminal_open")},
