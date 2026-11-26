@@ -3,9 +3,11 @@ package mutation
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -49,5 +51,45 @@ func TestRedirectBindsOnlyWithAnEffectiveReviewGrant(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRedirectWriteRootAsksForTheSmallestUsefulGrant(t *testing.T) {
+	shared, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve shared temp", err)
+	t.Setenv("TMPDIR", shared)
+	home, err := os.UserHomeDir()
+	testutil.FailErr(t, "home directory", err)
+	if hostHome := os.Getenv("PW_TEST_HOST_HOME"); hostHome != "" {
+		home = hostHome
+	}
+	//nolint:usetesting // Must reside under the home directory, outside shared temp.
+	outside, err := os.MkdirTemp(home, "paintedwolf-redirect-root-*")
+	testutil.FailErr(t, "outside folder", err)
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+	outside, err = filepath.EvalSymlinks(outside)
+	testutil.FailErr(t, "resolve outside folder", err)
+	file := filepath.Join(outside, "out.txt")
+	for _, tc := range []struct{ name, path, requested, want string }{
+		{"ordinary folder", file, "", outside},
+		{"declared file", file, file, file},
+		{"declared root refused", file, string(filepath.Separator), outside},
+		{"declaration elsewhere", file, filepath.Join(shared, "x"), outside},
+		{"shared temp", filepath.Join(shared, "out.txt"), "", confine.SharedTempLocation(filepath.Join(shared, "out.txt"))},
+		{"declared temp file", filepath.Join(shared, "out.txt"), filepath.Join(shared, "out.txt"), filepath.Join(shared, "out.txt")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := redirectWriteRoot(tc.path, tc.requested)
+			if !ok || got != tc.want {
+				t.Fatalf("redirectWriteRoot(%q, %q) = %q, %v; want %q", tc.path, tc.requested, got, ok, tc.want)
+			}
+		})
+	}
+}
+
+func TestRedirectAtTheFilesystemRootIsNotReviewed(t *testing.T) {
+	root := string(filepath.Separator)
+	if got, ok := redirectWriteRoot(filepath.Join(root, "escape.txt"), ""); ok {
+		t.Fatalf("redirectWriteRoot proposed %q for a file in %s", got, root)
 	}
 }

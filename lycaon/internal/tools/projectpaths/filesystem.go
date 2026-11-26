@@ -27,8 +27,12 @@ func resolveFilesystemPath(ctx context.Context, b *sandbox.Boundary, tctx tools.
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return Resolved{}, false, nil
 	}
-	// An existing ancestor anchors creation within an approved missing root.
+	// An existing ancestor anchors creation within an approved missing root,
+	// and an exact-file root anchors at its folder.
 	anchor := existingEffectAnchor(root)
+	if info, err := os.Stat(anchor); err == nil && !info.IsDir() {
+		anchor = filepath.Dir(anchor)
+	}
 	rel, err = filepath.Rel(anchor, abs)
 	if err != nil {
 		return Resolved{}, false, err
