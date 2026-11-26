@@ -6,18 +6,23 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/observability/cmddiag"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func observeProgramActivities(ctx context.Context, recorder *invocation.SQLRecorder, tc tools.ToolContext) context.Context {
-	if tc.Effects.ReportProgress == nil {
+	diagEnabled := cmddiag.Enabled()
+	if tc.Effects.ReportProgress == nil && !diagEnabled {
 		return ctx
 	}
 	var mu sync.Mutex
 	var sampled time.Time
 	known := map[string]bool{}
 	report := func(ctx context.Context, program string) bool {
+		if tc.Effects.ReportProgress == nil {
+			return false
+		}
 		// Committed state is published even when the transition's own context ended.
 		receipt, err := recorder.LiveActivitySummary(context.WithoutCancel(ctx), tc.Identity.SessionID, program)
 		if err != nil || len(receipt.Activities) == 0 {
@@ -29,6 +34,9 @@ func observeProgramActivities(ctx context.Context, recorder *invocation.SQLRecor
 	}
 	return invocation.WithActivityObserver(ctx, invocation.ActivityObserver{
 		Execution: func(ctx context.Context, program, execution string) {
+			if tc.Effects.ReportProgress == nil {
+				return
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			// Repetitions coalesce; new structural states publish immediately.
@@ -46,8 +54,11 @@ func observeProgramActivities(ctx context.Context, recorder *invocation.SQLRecor
 		},
 		Settled: func(ctx context.Context, program string) {
 			mu.Lock()
-			defer mu.Unlock()
 			report(ctx, program)
+			mu.Unlock()
+			if diagEnabled {
+				observeSettledProgramDiagnostics(ctx, recorder, tc.Identity.SessionID, tc.Identity.ToolCallID, program)
+			}
 		},
 	})
 }
