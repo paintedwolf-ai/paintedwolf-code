@@ -700,18 +700,17 @@ func (r *WazeroRuntime) buildModuleConfig(
 		}
 	}
 	if len(inv.ExtraSysMounts) > 0 {
-		if sysCfg, ok := fsCfg.(experimentalsysfs.FSConfig); ok {
-			mounts := make([]string, 0, len(inv.ExtraSysMounts))
-			for m := range inv.ExtraSysMounts {
-				mounts = append(mounts, m)
-			}
-			sort.Strings(mounts)
-			for _, m := range mounts {
-				if fsys := inv.ExtraSysMounts[m]; fsys != nil {
-					sysCfg = sysCfg.WithSysFSMount(fsys, m).(experimentalsysfs.FSConfig)
+		mounts := make([]string, 0, len(inv.ExtraSysMounts))
+		for m := range inv.ExtraSysMounts {
+			mounts = append(mounts, m)
+		}
+		sort.Strings(mounts)
+		for _, m := range mounts {
+			if fsys := inv.ExtraSysMounts[m]; fsys != nil {
+				if sysCfg, ok := fsCfg.(experimentalsysfs.FSConfig); ok {
+					fsCfg = sysCfg.WithSysFSMount(fsys, m)
 				}
 			}
-			fsCfg = sysCfg
 		}
 	}
 	return cfg.WithFSConfig(fsCfg)
