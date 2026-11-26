@@ -431,7 +431,6 @@ export const COORDINATOR_INTERNAL_TOOLS: readonly string[] = [
 export const LONG_RUNNING_COORDINATOR_TOOLS: readonly string[] = [
   "command",
   "instruct_worker",
-  "python",
   "summarize",
   "survey_repo",
   "verify",

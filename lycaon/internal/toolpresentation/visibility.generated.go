@@ -8,7 +8,6 @@ import "strings"
 var longRunningSet = map[string]struct{}{
 	"command":         {},
 	"instruct_worker": {},
-	"python":          {},
 	"summarize":       {},
 	"survey_repo":     {},
 	"verify":          {},
