@@ -559,7 +559,7 @@ func confineKnobs(sources []string) []casegen.Knob {
 		denial = append(denial, l)
 	}
 	knobs := []casegen.Knob{
-		{Name: "confine.applied", Facts: confineFacts, Values: []any{true, false}},
+		{Name: "confine.applied", Facts: append([]string{"paintedwolf.confine_applied"}, confineFacts...), Values: []any{true, false}},
 		{Name: "confine.running", Facts: []string{"paintedwolf.process_running"}, Values: []any{false, true}},
 		{Name: "confine.failed", Facts: []string{"paintedwolf.failed_stages"}, Values: []any{[]string{}, []string{"run"}}},
 		{Name: "confine.signals", Facts: []string{"paintedwolf.confine_signals"}, Values: signals},
