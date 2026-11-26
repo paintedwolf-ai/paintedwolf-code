@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/pythoncatalog"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
+	"github.com/lycaon/lycaon/internal/pythonevidence"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
@@ -517,6 +518,37 @@ func TestDirectPythonToolSchemaAndValidation(t *testing.T) {
 		t.Fatalf("schema description %q != pythoncatalog.ToolDescription %q", entry.Description, pythoncatalog.ToolDescription)
 	}
 
+	// Verify matched offered vs unoffered `python` tool schema byte delta:
+	// when unoffered, python contributes 0 bytes; when offered, its projected
+	// tool declaration carries only the compact schema + exact two-sentence
+	// description (no standing package list or extra prompt prose).
+	type projectedToolDef struct {
+		Name        string         `json:"name"`
+		Description string         `json:"description"`
+		Schema      map[string]any `json:"schema"`
+	}
+	unofferedDefs := []projectedToolDef{
+		{Name: "command", Description: schemas.Tools["command"].Description, Schema: schemas.Tools["command"].Schema},
+	}
+	offeredDefs := []projectedToolDef{
+		unofferedDefs[0],
+		{Name: "python", Description: entry.Description, Schema: entry.Schema},
+	}
+	unofferedRaw, err := json.Marshal(unofferedDefs)
+	testutil.FailErr(t, "marshal unoffered tool definitions", err)
+	offeredRaw, err := json.Marshal(offeredDefs)
+	testutil.FailErr(t, "marshal offered tool definitions", err)
+	byteDelta := len(offeredRaw) - len(unofferedRaw)
+	if byteDelta <= 0 || byteDelta > 1024 {
+		t.Fatalf("unexpected offered-vs-unoffered python schema byte delta: %d bytes (want 1..1024)", byteDelta)
+	}
+	for _, forbiddenStanding := range []string{"openpyxl", "tomlkit", "PyYAML", "ruamel", "beautifulsoup4", "pypdf"} {
+		if strings.Contains(string(offeredRaw), forbiddenStanding) {
+			t.Fatalf("offered python tool schema leaked standing package name %q", forbiddenStanding)
+		}
+	}
+	t.Logf("matched offered vs unoffered python tool schema byte delta: +%d bytes (description=%d bytes)", byteDelta, len(entry.Description))
+
 	// Reject invalid code+script combination.
 	if _, err := pythoncatalog.ValidateDirectToolArgs(map[string]any{
 		"code":   "print(1)",
@@ -653,4 +685,159 @@ func TestEndToEndCPythonWASI_FrozenWorkloadReplay(t *testing.T) {
 		testutil.FailErr(t, "grade repositories.xlsx (frozen replay) with PY06 oracle", pporacle.GradeRepoWorkbookWithMode(files["workbook/config/repos.yaml"], wbBytes, pporacle.WorkbookFrozenReplay))
 		testutil.FailErr(t, "grade repositories.xlsx (live mode) with PY06 oracle", pporacle.GradeRepoWorkbookWithMode(files["workbook/config/repos.yaml"], wbBytes, pporacle.WorkbookLiveDeliverable))
 	})
+}
+
+// TestEndToEndCPythonWASI_EvidenceLedgerAndDenProjection verifies that an
+// actual CPython/WASI Service.ExecuteTool run populates pythonevidence.ExecutionLedger
+// and projects accurately through ProjectForDen with parent-child ancestry,
+// read-time BytesDeliveredToGuest, python_workspace_publication attribution,
+// and fail-closed cross-session and read-only visibility.
+func TestEndToEndCPythonWASI_EvidenceLedgerAndDenProjection(t *testing.T) {
+	svc := newRealPortablePythonService(t)
+	ctx := context.Background()
+
+	wsDir := t.TempDir()
+	inputBytes := []byte("alpha=1\nbeta=2\n")
+	testutil.FailErr(t, "write report.txt", os.WriteFile(filepath.Join(wsDir, "report.txt"), inputBytes, 0o644))
+
+	code := `
+with open("report.txt", "r", encoding="utf-8") as f:
+    text = f.read()
+out = text.upper() + "GAMMA=3\n"
+with open("report_out.txt", "w", encoding="utf-8") as f:
+    f.write(out)
+print("EVIDENCE_RUN_OK")
+`
+	resp, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
+		RawArgs: map[string]any{"code": code},
+		CallID:  "call-evidence-e2e",
+		Actor:   "coordinator",
+		View:    "primary",
+		Surface: "agent",
+		Roots:   []pythondocuments.HostRootConfig{{ID: "ws-ev", Dir: wsDir}},
+		Limits:  pythonruntime.ResourceLimits{Timeout: 60 * time.Second},
+	})
+	testutil.FailErr(t, "execute python for evidence ledger", err)
+	if !resp.CleanCompletion || resp.ExitCode != 0 {
+		t.Fatalf("expected clean exit 0, got exit=%d clean=%v stderr=%q stop=%+v", resp.ExitCode, resp.CleanCompletion, resp.Stderr, resp.Stop)
+	}
+
+	ledger := pythonevidence.NewExecutionLedger(pythonevidence.ExecutionRecord{
+		ExecutionID:     resp.ExecutionID,
+		CallID:          "call-evidence-e2e",
+		SessionID:       "sess-alpha",
+		CheckoutID:      "chk-1",
+		Actor:           "coordinator",
+		View:            "primary",
+		Surface:         "agent",
+		SubmittedSource: code,
+		RuntimeImageID:  svc.RuntimeManifest().ImageID,
+	}, nil, nil)
+
+	parentOpID := resp.ExecutionID + "-root"
+	for _, adm := range resp.AdmissionEvidence.Admissions() {
+		ledger.RecordAdmission(adm, parentOpID, nil)
+	}
+
+	readRecords := resp.DocumentEvidence.Reads()
+	var sawDeliveredReport bool
+	for _, r := range readRecords {
+		pID := r.ParentOperationID
+		if pID == "" {
+			pID = parentOpID
+		}
+		witnessCount := len(r.DeliveredRanges)
+		if r.BytesDeliveredToGuest > 0 && witnessCount == 0 {
+			witnessCount = 1
+		}
+		testutil.FailErr(t, "record document read in ledger", ledger.RecordDocumentRead(r, pID, witnessCount, nil, nil))
+		if r.Target.RelPath == "report.txt" && r.BytesDeliveredToGuest == int64(len(inputBytes)) {
+			sawDeliveredReport = true
+		}
+	}
+	if !sawDeliveredReport {
+		t.Fatalf("expected actual read-time BytesDeliveredToGuest=%d for report.txt, got %+v", len(inputBytes), readRecords)
+	}
+
+	// Negative control: shell_redirect attribution must be rejected.
+	if err := pythonevidence.ValidatePythonAttribution(pythonevidence.AttributionShellRedirect); err == nil {
+		t.Fatal("expected ValidatePythonAttribution to reject shell_redirect")
+	}
+
+	pubs := resp.DocumentEvidence.Publications()
+	if len(pubs) != 1 {
+		t.Fatalf("expected 1 publication record, got %d", len(pubs))
+	}
+	for i, p := range pubs {
+		pID := p.ParentOperationID
+		if pID == "" {
+			pID = parentOpID
+		}
+		testutil.FailErr(t, "record publication in ledger", ledger.RecordPublication(
+			p,
+			pID,
+			"host-pub-1",
+			pythonevidence.AttributionPythonWorkspacePublication,
+			nil,
+			nil,
+		))
+		if i > 0 {
+			break
+		}
+	}
+
+	ledger.RecordDerivedOutput("stdout", resp.Stdout, "")
+	modelFact := ledger.RecordScreenedModelOutput(resp.Stdout)
+	if modelFact.MintsSourceCitation || modelFact.MintsVerificationVerdict {
+		t.Fatalf("derived guest output must never mint citations or verification verdicts: %+v", modelFact)
+	}
+	ledger.RecordCompletion(resp.CleanCompletion, resp.ExitCode, resp.Stop)
+
+	// 1. Same-session coordinator sees full projection with ancestry, delivered bytes, and python_workspace_publication.
+	coordProj := pythonevidence.ProjectForDen(ledger, pythonevidence.ViewerScope{
+		Role:       pythonevidence.RoleCoordinator,
+		SessionID:  "sess-alpha",
+		CheckoutID: "chk-1",
+		Actor:      "coordinator",
+		View:       "primary",
+	})
+	if !coordProj.Visible || coordProj.RedactedForVisibility {
+		t.Fatalf("expected coordinator projection to be visible, got %+v", coordProj)
+	}
+	if coordProj.RuntimeImageID != svc.RuntimeManifest().ImageID {
+		t.Fatalf("RuntimeImageID = %q, want %q", coordProj.RuntimeImageID, svc.RuntimeManifest().ImageID)
+	}
+	if len(coordProj.ReadGroups) == 0 || coordProj.ReadGroups[0].TotalBytesDelivered < int64(len(inputBytes)) {
+		t.Fatalf("expected ReadGroups with TotalBytesDelivered >= %d, got %+v", len(inputBytes), coordProj.ReadGroups)
+	}
+	if len(coordProj.PublishedDiffs) != 1 || coordProj.PublishedDiffs[0].AttributionKind != pythonevidence.AttributionPythonWorkspacePublication {
+		t.Fatalf("expected 1 PublishedDiff with python_workspace_publication attribution, got %+v", coordProj.PublishedDiffs)
+	}
+	if coordProj.PublishedDiffs[0].ParentOperationID == "" {
+		t.Fatalf("expected non-empty ParentOperationID on PublishedDiff: %+v", coordProj.PublishedDiffs[0])
+	}
+
+	// 2. Same-session read-only viewer sees ReadOnlyView=true and omits PublishedDiffs.
+	roProj := pythonevidence.ProjectForDen(ledger, pythonevidence.ViewerScope{
+		Role:       pythonevidence.RoleReadOnly,
+		SessionID:  "sess-alpha",
+		CheckoutID: "chk-1",
+		Actor:      "reviewer",
+		View:       "primary",
+	})
+	if !roProj.Visible || !roProj.ReadOnlyView || len(roProj.PublishedDiffs) != 0 {
+		t.Fatalf("expected visible ReadOnlyView with 0 PublishedDiffs, got %+v", roProj)
+	}
+
+	// 3. Cross-session viewers (including RoleReadOnly and RoleCoordinator) fail closed.
+	for _, scope := range []pythonevidence.ViewerScope{
+		{Role: pythonevidence.RoleReadOnly, SessionID: "sess-other", CheckoutID: "chk-1", Actor: "reviewer", View: "primary"},
+		{Role: pythonevidence.RoleCoordinator, SessionID: "sess-other", CheckoutID: "chk-1", Actor: "coordinator", View: "primary"},
+		{Role: pythonevidence.RoleReadOnly, SessionID: "sess-alpha", CheckoutID: "", Actor: "reviewer", View: "primary"},
+	} {
+		denied := pythonevidence.ProjectForDen(ledger, scope)
+		if denied.Visible || !denied.RedactedForVisibility || len(denied.ReadGroups) != 0 || len(denied.PublishedDiffs) != 0 {
+			t.Fatalf("expected fail-closed visibility for scope %+v, got %+v", scope, denied)
+		}
+	}
 }
