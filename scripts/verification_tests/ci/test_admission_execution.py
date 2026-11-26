@@ -179,26 +179,19 @@ class AdmissionTests(unittest.TestCase):
             self.assertEqual(monitor.sample(), {'kind': 'package_rss', 'measured_bytes': 101, 'limit_bytes': 100})
         self.assertEqual(monitor.peak, 101)
         self.assertEqual(monitor.hwm, 105)
-        self.assertEqual(monitor.finalize(types.SimpleNamespace(ru_maxrss=1)), {
-            'peak_bytes': 1 if sys.platform == 'darwin' else 1024,
-            'limit_bytes': 100,
-            'ratio': round((1 if sys.platform == 'darwin' else 1024) / 100, 4),
-            'source': 'wait4_ru_maxrss',
-            'lower_bound': False,
-        })
-        self.assertEqual(monitor.finalize(None), {
+        self.assertEqual(monitor.finalize(), {
             'peak_bytes': 105, 'limit_bytes': 100, 'ratio': 1.05, 'source': 'proc_vmhwm', 'lower_bound': True,
         })
         rss_only = resources.Monitor(123, 200)
         with patch.object(resources, 'proc_status_memory', return_value=(80, None)):
             self.assertIsNone(rss_only.sample())
-        self.assertEqual(rss_only.finalize(types.SimpleNamespace(ru_maxrss=0)), {
+        self.assertEqual(rss_only.finalize(), {
             'peak_bytes': 80, 'limit_bytes': 200, 'ratio': 0.4, 'source': 'proc_vmrss', 'lower_bound': True,
         })
         missing = resources.Monitor(123, 200)
         with patch.object(resources, 'proc_status_memory', return_value=(None, None)):
             self.assertIsNone(missing.sample())
-        self.assertEqual(missing.finalize(None), {
+        self.assertEqual(missing.finalize(), {
             'peak_bytes': None, 'limit_bytes': 200, 'ratio': None, 'source': 'unavailable', 'lower_bound': False,
         })
 
@@ -215,7 +208,7 @@ class AdmissionTests(unittest.TestCase):
             with patch.object(resources, 'Path', return_value=status):
                 self.assertEqual(resources.proc_status_memory(123), (None, None))
 
-    @unittest.skipIf(os.name == 'nt', 'go-test-exec requires POSIX fork and wait4')
+    @unittest.skipIf(os.name == 'nt', 'go-test-exec requires POSIX fork and waitpid')
     def test_go_test_exec_records_peak_rss_for_passing_breaching_and_reaped_fixtures(self):
         wrapper_path = Path(__file__).resolve().parents[2] / 'go-test-exec.py'
         spec = importlib.util.spec_from_file_location('go_test_exec_mu01', wrapper_path)
@@ -232,18 +225,17 @@ class AdmissionTests(unittest.TestCase):
             env = {'PATH': os.environ['PATH']}
             limit = 64 * 1024 * 1024
             with patch.object(wrapper.Path, 'is_dir', return_value=True):
-                with tempfile.NamedTemporaryFile(dir=root) as owner:
+                with tempfile.NamedTemporaryFile(dir=root) as owner, \
+                        patch.object(resources, 'proc_status_memory', return_value=(12 * 1024 * 1024, 16 * 1024 * 1024)):
                     status, _, _, violation, leaked, memory = wrapper.execute(
                         str(passing), [], env, owner, False, lambda: {}, limit)
                 self.assertEqual(os.waitstatus_to_exitcode(status), 0)
                 self.assertIsNone(violation)
                 self.assertEqual(leaked, {})
-                self.assertEqual(memory['limit_bytes'], limit)
-                self.assertEqual(memory['source'], 'wait4_ru_maxrss')
-                self.assertFalse(memory['lower_bound'])
-                self.assertIsInstance(memory['peak_bytes'], int)
-                self.assertGreater(memory['peak_bytes'], 0)
-                self.assertEqual(memory['ratio'], round(memory['peak_bytes'] / limit, 4))
+                self.assertEqual(memory, {
+                    'peak_bytes': 16 * 1024 * 1024, 'limit_bytes': limit, 'ratio': 0.25,
+                    'source': 'proc_vmhwm', 'lower_bound': True,
+                })
 
                 with tempfile.NamedTemporaryFile(dir=root) as owner, \
                         patch.object(resources, 'proc_status_memory', return_value=(limit + 4096, limit + 4096)):
@@ -252,20 +244,13 @@ class AdmissionTests(unittest.TestCase):
                 self.assertEqual(os.waitstatus_to_exitcode(status), -signal.SIGKILL)
                 self.assertEqual(violation, {'kind': 'package_rss', 'measured_bytes': limit + 4096, 'limit_bytes': limit})
                 self.assertEqual(leaked, {})
-                self.assertEqual(memory['limit_bytes'], limit)
-                self.assertEqual(memory['source'], 'wait4_ru_maxrss')
-                self.assertIsInstance(memory['peak_bytes'], int)
-                self.assertGreater(memory['peak_bytes'], 0)
-
-                real_wait4 = wrapper.os.wait4
-
-                def wait4_without_rusage(pid, options):
-                    wpid, code, _usage = real_wait4(pid, options)
-                    return wpid, code, types.SimpleNamespace(ru_maxrss=0)
+                self.assertEqual(memory, {
+                    'peak_bytes': limit + 4096, 'limit_bytes': limit, 'ratio': round((limit + 4096) / limit, 4),
+                    'source': 'proc_vmhwm', 'lower_bound': True,
+                })
 
                 with tempfile.NamedTemporaryFile(dir=root) as owner, \
-                        patch.object(resources, 'proc_status_memory', return_value=(None, None)), \
-                        patch.object(wrapper.os, 'wait4', side_effect=wait4_without_rusage):
+                        patch.object(resources, 'proc_status_memory', return_value=(None, None)):
                     status, _, _, violation, leaked, memory = wrapper.execute(
                         str(passing), [], env, owner, False, lambda: {}, limit)
                 self.assertEqual(os.waitstatus_to_exitcode(status), 0)
@@ -274,6 +259,43 @@ class AdmissionTests(unittest.TestCase):
                     'peak_bytes': None, 'limit_bytes': limit, 'ratio': None,
                     'source': 'unavailable', 'lower_bound': False,
                 })
+
+    @unittest.skipUnless(sys.platform == 'linux', 'per-PID /proc/<pid>/status scope requires Linux')
+    def test_go_test_exec_excludes_reaped_descendant_rss_from_package_peak(self):
+        wrapper_path = Path(__file__).resolve().parents[2] / 'go-test-exec.py'
+        spec = importlib.util.spec_from_file_location('go_test_exec_descendant', wrapper_path)
+        wrapper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(wrapper)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = root / 'with_helper.py'
+            fixture.write_text(
+                f'#!{sys.executable}\n'
+                'import os, sys, time\n'
+                'pid = os.fork()\n'
+                'if pid == 0:\n'
+                '    buf = bytearray(48 * 1024 * 1024)\n'
+                '    for i in range(0, len(buf), 4096):\n'
+                '        buf[i] = 1\n'
+                '    os._exit(0)\n'
+                'os.waitpid(pid, 0)\n'
+                'print("ready", flush=True)\n'
+                'time.sleep(0.1)\n'
+            )
+            fixture.chmod(0o755)
+            limit = 256 * 1024 * 1024
+            with tempfile.NamedTemporaryFile(dir=root) as owner:
+                status, _, _, violation, leaked, memory = wrapper.execute(
+                    str(fixture), [], {'PATH': os.environ['PATH']}, owner, False, lambda: {}, limit)
+            self.assertEqual(os.waitstatus_to_exitcode(status), 0)
+            self.assertIsNone(violation)
+            self.assertEqual(leaked, {})
+            self.assertEqual(memory['source'], 'proc_vmhwm')
+            self.assertTrue(memory['lower_bound'])
+            self.assertIsInstance(memory['peak_bytes'], int)
+            self.assertGreater(memory['peak_bytes'], 0)
+            # The reaped 48 MiB helper must not inflate the test process's own per-PID peak.
+            self.assertLess(memory['peak_bytes'], 32 * 1024 * 1024)
 
     def test_stage_publish_carries_package_memory_for_passing_and_failing_packages(self):
         from contextlib import nullcontext
@@ -286,9 +308,9 @@ class AdmissionTests(unittest.TestCase):
             log = root / 'stage-001.log'
             log.write_text('')
             pass_mem = {'peak_bytes': 1024, 'limit_bytes': 4096, 'ratio': 0.25,
-                        'source': 'wait4_ru_maxrss', 'lower_bound': False}
+                        'source': 'proc_vmhwm', 'lower_bound': True}
             fail_mem = {'peak_bytes': 4097, 'limit_bytes': 4096, 'ratio': 1.0002,
-                        'source': 'wait4_ru_maxrss', 'lower_bound': False}
+                        'source': 'proc_vmhwm', 'lower_bound': True}
             events_path.write_text(
                 json.dumps({'package': 'example/pass', 'exit_code': 0, 'memory': pass_mem}) + '\n'
                 + json.dumps({'package': 'example/fail', 'exit_code': 1, 'memory': fail_mem,

@@ -77,7 +77,7 @@ def execute(binary, arguments, env, owner, observe_forks, settle, resource_limit
         signal.signal(signum, forward)
     os.write(ready_write, b"x")
     os.close(ready_write)
-    captured, forked, status, rusage, open_output = bytearray(), False, None, None, True
+    captured, forked, status, open_output = bytearray(), False, None, True
 
     def drain_forks():
         nonlocal forked
@@ -107,12 +107,14 @@ def execute(binary, arguments, env, owner, observe_forks, settle, resource_limit
             drain_forks()
         if open_output and output_read in readable:
             read_output()
+            if not open_output and monitor:
+                monitor.observe()
         if monitor and monitor.sample():
             # The PID was forked above and has not been reaped, so it cannot have been reused.
             os.kill(pid, signal.SIGKILL)
-        finished, code, usage = os.wait4(pid, os.WNOHANG)
+        finished, code = os.waitpid(pid, os.WNOHANG)
         if finished:
-            status, rusage, running = code, usage, False
+            status, running = code, False
     drain_forks()
     observed = forked if watch is not None else None
     leaked = settle() if observed is not False else {}
@@ -120,7 +122,7 @@ def execute(binary, arguments, env, owner, observe_forks, settle, resource_limit
     while open_output and select.select([output_read], [], [], 0)[0]:
         read_output()
     os.close(output_read)
-    memory = monitor.finalize(rusage) if monitor else None
+    memory = monitor.finalize() if monitor else None
     return status, bytes(captured), observed, monitor.violation if monitor else None, leaked, memory
 
 
