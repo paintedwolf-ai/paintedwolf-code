@@ -386,7 +386,11 @@ type RuntimeConfig struct {
 // fresh guest per Execute call.
 type WazeroRuntime struct {
 	rt                  wazero.Runtime
+	wasmBytes           []byte
 	compiled            wazero.CompiledModule
+	meteredOnce         sync.Once
+	compiledMetered     wazero.CompiledModule
+	compiledMeteredErr  error
 	manifest            *ImageManifest
 	imageDir            string
 	scratchRoot         string
@@ -416,8 +420,7 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 		return nil, fmt.Errorf("instantiate wasi_snapshot_preview1: %w", err)
 	}
 
-	compileCtx := experimental.WithFunctionListenerFactory(ctx, newWorkMeterListenerFactory())
-	compiled, err := rt.CompileModule(compileCtx, cfg.WasmBytes)
+	compiled, err := rt.CompileModule(ctx, cfg.WasmBytes)
 	if err != nil {
 		_ = rt.Close(ctx)
 		return nil, fmt.Errorf("compile wasm module: %w", err)
@@ -451,6 +454,7 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 
 	return &WazeroRuntime{
 		rt:                  rt,
+		wasmBytes:           append([]byte(nil), cfg.WasmBytes...),
 		compiled:            compiled,
 		manifest:            cfg.Manifest,
 		imageDir:            cfg.ImageDir,
@@ -463,6 +467,14 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 		parked:              NewParkedGuestTracker(cfg.ParkedBudget),
 		memLimitPgs:         cfg.DefaultMemoryLimitPages,
 	}, nil
+}
+
+func (r *WazeroRuntime) meteredModule(ctx context.Context) (wazero.CompiledModule, error) {
+	r.meteredOnce.Do(func() {
+		compileCtx := experimental.WithFunctionListenerFactory(context.Background(), newWorkMeterListenerFactory())
+		r.compiledMetered, r.compiledMeteredErr = r.rt.CompileModule(compileCtx, r.wasmBytes)
+	})
+	return r.compiledMetered, r.compiledMeteredErr
 }
 
 // Manifest returns the image manifest associated with this runtime.
@@ -541,7 +553,15 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 		defer r.parked.Release(inv.ExecutionID)
 	}
 
-	mod, runErr := r.rt.InstantiateModule(execCtx, r.compiled, modCfg)
+	targetMod := r.compiled
+	if inv.Limits.MaxGuestWork > 0 {
+		targetMod, err = r.meteredModule(execCtx)
+		if err != nil {
+			return nil, fmt.Errorf("compile metered wasm module: %w", err)
+		}
+	}
+
+	mod, runErr := r.rt.InstantiateModule(execCtx, targetMod, modCfg)
 	var peakPages uint32
 	if mod != nil {
 		if mem := mod.Memory(); mem != nil {

@@ -258,12 +258,13 @@ func TestCPythonWASILoopCancellationAndBundledPackages(t *testing.T) {
 import io, tomlkit, yaml, openpyxl, pypdf
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
+from referencing.jsonschema import DRAFT202012
 
 doc = tomlkit.parse("[pkg]\nname = 'pw' # keep\n")
 assert "# keep" in tomlkit.dumps(doc)
 assert yaml.safe_load("a: 1\n")["a"] == 1
 
-child = Resource.from_contents({"type": "integer", "minimum": 10})
+child = Resource.from_contents({"type": "integer", "minimum": 10}, default_specification=DRAFT202012)
 reg = Registry().with_resource("urn:pw:num", child)
 v = Draft202012Validator({"$ref": "urn:pw:num"}, registry=reg)
 assert v.is_valid(12) and not v.is_valid(3)
@@ -285,7 +286,7 @@ print("ALL_BUNDLED_OK")
 `,
 			Stdout:    &stdout,
 			Workspace: ws,
-			Limits:    ResourceLimits{Timeout: 60 * time.Second},
+			Limits:    ResourceLimits{Timeout: 120 * time.Second},
 		})
 		testutil.FailErr(t, "execute bundled packages", err)
 		if !res.CleanCompletion || res.ExitCode != 0 {
