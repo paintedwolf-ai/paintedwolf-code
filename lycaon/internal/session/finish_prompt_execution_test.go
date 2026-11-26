@@ -6,7 +6,6 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -238,12 +237,12 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
-	var mu sync.Mutex
-	var reported []error
+	reported := make(chan error, 1)
 	mgr.Runner.Turns.SetFailureSink(func(_ context.Context, _ string, err error) {
-		mu.Lock()
-		reported = append(reported, err)
-		mu.Unlock()
+		select {
+		case reported <- err:
+		default:
+		}
 	})
 
 	wfStore := workflowpersistence.New(sqlDB)
@@ -262,8 +261,11 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	_, err = wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
+	testutil.FailErr(t, "seed user request", st.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
+		ID: "opening", WorkflowRunID: run.ID, Role: wire.MessageRoleUser, Origin: wire.MessageOriginUser, Content: "Change the greeting.",
+	}))
 	testutil.FailErr(t, "set session busy", st.Sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy))
 
 	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
@@ -275,17 +277,15 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	finishExecution()
 	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 
-	testutil.WaitFor(t, "the failed turn is reported", func() bool {
-		mu.Lock()
-		defer mu.Unlock()
-		return len(reported) > 0
-	})
-
-	mu.Lock()
-	defer mu.Unlock()
-	silent, ok := failure.AsProviderSilent(reported[0])
+	mgr.Coordinator.WaitForTurns(ctx)
+	select {
+	case err = <-reported:
+	default:
+		t.Fatal("missing provider failure after turn settlement")
+	}
+	silent, ok := failure.AsProviderSilent(err)
 	if !ok {
-		t.Fatalf("want the provider fault to survive to the sink, got %T: %v", reported[0], reported[0])
+		t.Fatalf("want the provider fault to survive to the sink, got %T: %v", err, err)
 	}
 	if silent.ProviderID != "together-1" {
 		t.Fatalf("want the failing provider named, got %q", silent.ProviderID)
