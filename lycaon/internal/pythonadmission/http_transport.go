@@ -20,6 +20,12 @@ import (
 )
 
 var (
+	// ErrMissingObserver is returned when a host-mediated transport or listener
+	// is invoked without a configured OperationObserver (fail closed).
+	ErrMissingObserver = errors.New("operation observer is required (fail closed)")
+	// ErrMissingCredentialScreener is returned when HTTPTransport is invoked
+	// without a configured CredentialScreener (fail closed).
+	ErrMissingCredentialScreener = errors.New("credential screener is required (fail closed)")
 	// ErrTLSRequired is returned when a non-HTTPS URL is requested under TLS enforcement.
 	ErrTLSRequired = errors.New("TLS (https) is required for HTTP transport")
 	// ErrCredentialRecipientDenied is returned when credential-recipient screening blocks a request.
@@ -27,6 +33,30 @@ var (
 	// ErrTooManyRedirects is returned when the redirect hop cap is exceeded.
 	ErrTooManyRedirects = errors.New("maximum redirect count exceeded")
 )
+
+// StrictCredentialScreener returns a fail-closed CredentialScreener that
+// rejects Authorization or Cookie headers unless the recipient host is in
+// allowedHosts.
+func StrictCredentialScreener(allowedHosts ...string) CredentialScreener {
+	allowed := make(map[string]struct{}, len(allowedHosts))
+	for _, h := range allowedHosts {
+		if h != "" {
+			allowed[strings.ToLower(h)] = struct{}{}
+		}
+	}
+	return func(targetURL *url.URL, headers http.Header) error {
+		if headers.Get("Authorization") == "" && headers.Get("Cookie") == "" {
+			return nil
+		}
+		if _, ok := allowed[strings.ToLower(targetURL.Host)]; ok {
+			return nil
+		}
+		if _, ok := allowed[strings.ToLower(targetURL.Hostname())]; ok {
+			return nil
+		}
+		return fmt.Errorf("recipient host %q is not authorized for credential headers", targetURL.Host)
+	}
+}
 
 // HTTPAdmissionError wraps a refused initial or redirected HTTP admission.
 type HTTPAdmissionError struct {
@@ -136,9 +166,17 @@ func NewHTTPTransport(cfg HTTPTransportConfig) *HTTPTransport {
 	}
 }
 
-// Do executes one mediated HTTP request. Redirects re-enter
-// OperationObserver.Admit(EffectHTTP) at every destination URL.
+// Do executes one mediated HTTP request. Fails closed if Observer or
+// CredentialScreener is nil. Redirects re-enter OperationObserver.Admit(EffectHTTP)
+// at every destination URL.
 func (t *HTTPTransport) Do(ctx context.Context, req HTTPRequest) (*HTTPResponse, error) {
+	if t.cfg.Observer == nil {
+		return nil, ErrMissingObserver
+	}
+	if t.cfg.CredentialScreener == nil {
+		return nil, ErrMissingCredentialScreener
+	}
+
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
 	if method == "" {
 		method = http.MethodGet
@@ -484,6 +522,18 @@ func (b *trackedHTTPBody) Close() error {
 	err := b.rc.Close()
 	b.finalize()
 	return err
+}
+
+// MarkCancelled records a mid-stream cancellation as a truthful partial failure.
+func (b *trackedHTTPBody) MarkCancelled(err error) {
+	if err == nil {
+		err = context.Canceled
+	}
+	b.mu.Lock()
+	if b.readErr == nil {
+		b.readErr = err
+	}
+	b.mu.Unlock()
 }
 
 func (b *trackedHTTPBody) finalize() {

@@ -18,6 +18,10 @@ import (
 )
 
 var (
+	// ErrMissingWorkspace is returned when StartPreviewListener is called without a WorkspaceAdapter.
+	ErrMissingWorkspace = errors.New("preview listener requires a WorkspaceAdapter (fail closed)")
+	// ErrMissingJobRegistry is returned when StartPreviewListener is called without a SessionJobRegistry.
+	ErrMissingJobRegistry = errors.New("preview listener requires a SessionJobRegistry (fail closed)")
 	// ErrUnsupportedPreviewForm is returned when `python[3] -m http.server`
 	// uses flags or forms outside the cataloged static-preview subset.
 	ErrUnsupportedPreviewForm = errors.New("unsupported http.server preview form")
@@ -28,6 +32,68 @@ var (
 	// ErrPreviewDenied is returned when listener admission refuses the preview bind.
 	ErrPreviewDenied = errors.New("preview listener admission refused")
 )
+
+const defaultPreviewMaxResponseBytes int64 = 16 * 1024 * 1024
+
+// SessionJobRegistry tracks live preview listener jobs owned by a session.
+type SessionJobRegistry interface {
+	RegisterPreviewJob(ctx context.Context, rec PreviewListenerRecord) error
+	UnregisterPreviewJob(ctx context.Context, jobID string, rec PreviewListenerRecord) error
+}
+
+// MemorySessionJobRegistry is a thread-safe in-memory SessionJobRegistry.
+type MemorySessionJobRegistry struct {
+	mu   sync.Mutex
+	jobs map[string]PreviewListenerRecord
+}
+
+// NewMemorySessionJobRegistry constructs an empty MemorySessionJobRegistry.
+func NewMemorySessionJobRegistry() *MemorySessionJobRegistry {
+	return &MemorySessionJobRegistry{
+		jobs: make(map[string]PreviewListenerRecord),
+	}
+}
+
+// RegisterPreviewJob registers an active preview listener job.
+func (r *MemorySessionJobRegistry) RegisterPreviewJob(_ context.Context, rec PreviewListenerRecord) error {
+	if rec.JobID == "" {
+		return errors.New("preview job missing job_id")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.jobs[rec.JobID]; exists {
+		return fmt.Errorf("preview job %q already registered", rec.JobID)
+	}
+	r.jobs[rec.JobID] = rec
+	return nil
+}
+
+// UnregisterPreviewJob removes a stopped preview listener job.
+func (r *MemorySessionJobRegistry) UnregisterPreviewJob(_ context.Context, jobID string, _ PreviewListenerRecord) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.jobs, jobID)
+	return nil
+}
+
+// Get returns a registered active preview job by jobID.
+func (r *MemorySessionJobRegistry) Get(jobID string) (PreviewListenerRecord, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rec, ok := r.jobs[jobID]
+	return rec, ok
+}
+
+// ActiveJobs returns a snapshot of all currently registered active preview jobs.
+func (r *MemorySessionJobRegistry) ActiveJobs() []PreviewListenerRecord {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]PreviewListenerRecord, 0, len(r.jobs))
+	for _, rec := range r.jobs {
+		out = append(out, rec)
+	}
+	return out
+}
 
 // PreviewCommandSpec holds the parsed arguments of a cataloged
 // `python[3] -m http.server` invocation.
@@ -121,47 +187,58 @@ func CheckStdlibHTTPServerSelected(ctx context.Context, workspace pythonruntime.
 
 // PreviewConfig configures StartPreviewListener.
 type PreviewConfig struct {
-	ExecutionID   string
-	OperationID   string
-	CallID        string
-	JobID         string
-	CWD           string
-	Args          []string
-	Workspace     pythonruntime.WorkspaceAdapter
-	Observer      pythonruntime.OperationObserver
-	StopLatch     *pythonruntime.StopLatch
-	Clock         pythonruntime.Clock
-	Evidence      EvidenceSink
-	DeclaredFrame *pythonruntime.DeclaredFrame
+	ExecutionID      string
+	OperationID      string
+	CallID           string
+	JobID            string
+	CWD              string
+	Args             []string
+	Workspace        pythonruntime.WorkspaceAdapter
+	Observer         pythonruntime.OperationObserver
+	JobRegistry      SessionJobRegistry
+	StopLatch        *pythonruntime.StopLatch
+	MaxResponseBytes int64
+	Clock            pythonruntime.Clock
+	Evidence         EvidenceSink
+	DeclaredFrame    *pythonruntime.DeclaredFrame
 }
 
 // PreviewListener is a host-managed static file HTTP listener serving scoped
 // workspace reads only.
 type PreviewListener struct {
-	jobID     string
-	execID    string
-	callID    string
-	directory string
-	listener  net.Listener
-	server    *http.Server
-	clock     pythonruntime.Clock
-	evidence  EvidenceSink
-	startedAt time.Time
+	jobID       string
+	execID      string
+	callID      string
+	directory   string
+	listener    net.Listener
+	server      *http.Server
+	jobRegistry SessionJobRegistry
+	clock       pythonruntime.Clock
+	evidence    EvidenceSink
+	startedAt   time.Time
 
-	stopOnce sync.Once
-	mu       sync.Mutex
-	active   bool
+	stopOnce  sync.Once
+	mu        sync.Mutex
+	active    bool
 	stoppedAt time.Time
 }
 
 var previewJobSeq atomic.Uint64
 
-// StartPreviewListener validates arguments, honors workspace module shadowing,
-// authorizes the listener through OperationObserver.Admit(EffectPreviewListener),
-// binds a host-managed net.Listener, and serves scoped workspace reads.
+// StartPreviewListener fails closed if Workspace, Observer, or JobRegistry is
+// nil, validates arguments, honors workspace module shadowing, authorizes the
+// listener through OperationObserver.Admit(EffectPreviewListener), binds a
+// host-managed net.Listener, registers the live job with JobRegistry, and
+// serves bounded, admitted, StopLatch-aware workspace reads.
 func StartPreviewListener(ctx context.Context, cfg PreviewConfig) (*PreviewListener, error) {
 	if cfg.Workspace == nil {
-		return nil, errors.New("preview listener requires a WorkspaceAdapter")
+		return nil, ErrMissingWorkspace
+	}
+	if cfg.Observer == nil {
+		return nil, ErrMissingObserver
+	}
+	if cfg.JobRegistry == nil {
+		return nil, ErrMissingJobRegistry
 	}
 
 	spec, err := ParseHTTPServerArgs(cfg.Args)
@@ -197,46 +274,46 @@ func StartPreviewListener(ctx context.Context, cfg PreviewConfig) (*PreviewListe
 	if opID == "" {
 		opID = "preview-bind-" + jobID
 	}
+	maxBytes := cfg.MaxResponseBytes
+	if maxBytes <= 0 {
+		maxBytes = defaultPreviewMaxResponseBytes
+	}
 
-	if cfg.Observer != nil {
-		dec, admitErr := cfg.Observer.Admit(ctx, pythonruntime.ReachedOperation{
-			OperationID: opID,
-			ExecutionID: cfg.ExecutionID,
-			Family:      pythonruntime.EffectPreviewListener,
-			Operation:   "preview.bind",
-			Target: pythonruntime.CanonicalTarget{
-				Namespace: pythonruntime.NamespaceWorkspace,
-				RelPath:   dirPath,
-			},
-			Args: map[string]any{
-				"bind":      spec.BindAddress,
-				"port":      spec.Port,
-				"directory": dirPath,
-				"job_id":    jobID,
-			},
-			DeclaredFrame: cfg.DeclaredFrame,
-		})
-		if admitErr != nil {
-			return nil, admitErr
-		}
-		if dec.Kind != pythonruntime.DecisionAllow {
-			return nil, fmt.Errorf("%w: %s", ErrPreviewDenied, dec.Reason)
-		}
+	dec, admitErr := cfg.Observer.Admit(ctx, pythonruntime.ReachedOperation{
+		OperationID: opID,
+		ExecutionID: cfg.ExecutionID,
+		Family:      pythonruntime.EffectPreviewListener,
+		Operation:   "preview.bind",
+		Target: pythonruntime.CanonicalTarget{
+			Namespace: pythonruntime.NamespaceWorkspace,
+			RelPath:   dirPath,
+		},
+		Args: map[string]any{
+			"bind":      spec.BindAddress,
+			"port":      spec.Port,
+			"directory": dirPath,
+			"job_id":    jobID,
+		},
+		DeclaredFrame: cfg.DeclaredFrame,
+	})
+	if admitErr != nil {
+		return nil, admitErr
+	}
+	if dec.Kind != pythonruntime.DecisionAllow {
+		return nil, fmt.Errorf("%w: %s", ErrPreviewDenied, dec.Reason)
 	}
 
 	addr := net.JoinHostPort(spec.BindAddress, strconv.Itoa(spec.Port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		if cfg.Observer != nil {
-			cfg.Observer.RecordOutcome(ctx, opID, pythonruntime.OperationOutcome{
-				Succeeded: false,
-				Error:     err.Error(),
-			})
-		}
+		cfg.Observer.RecordOutcome(ctx, opID, pythonruntime.OperationOutcome{
+			Succeeded: false,
+			Error:     err.Error(),
+		})
 		return nil, fmt.Errorf("bind preview listener on %s: %w", addr, err)
 	}
 
-	handler := newScopedWorkspaceHandler(cfg.Workspace, dirPath)
+	handler := newScopedWorkspaceHandler(cfg.Workspace, cfg.Observer, cfg.StopLatch, cfg.ExecutionID, dirPath, maxBytes)
 	srv := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
@@ -244,24 +321,28 @@ func StartPreviewListener(ctx context.Context, cfg PreviewConfig) (*PreviewListe
 
 	now := clk.Now().UTC()
 	pl := &PreviewListener{
-		jobID:     jobID,
-		execID:    cfg.ExecutionID,
-		callID:    cfg.CallID,
-		directory: dirPath,
-		listener:  ln,
-		server:    srv,
-		clock:     clk,
-		evidence:  ev,
-		startedAt: now,
-		active:    true,
+		jobID:       jobID,
+		execID:      cfg.ExecutionID,
+		callID:      cfg.CallID,
+		directory:   dirPath,
+		listener:    ln,
+		server:      srv,
+		jobRegistry: cfg.JobRegistry,
+		clock:       clk,
+		evidence:    ev,
+		startedAt:   now,
+		active:      true,
+	}
+
+	if err := cfg.JobRegistry.RegisterPreviewJob(ctx, pl.Record()); err != nil {
+		_ = ln.Close()
+		return nil, fmt.Errorf("register preview job: %w", err)
 	}
 
 	ev.RecordPreviewListener(pl.Record())
-	if cfg.Observer != nil {
-		cfg.Observer.RecordOutcome(ctx, opID, pythonruntime.OperationOutcome{
-			Succeeded: true,
-		})
-	}
+	cfg.Observer.RecordOutcome(ctx, opID, pythonruntime.OperationOutcome{
+		Succeeded: true,
+	})
 
 	if cfg.StopLatch != nil {
 		cfg.StopLatch.RegisterSealer(func() {
@@ -314,8 +395,8 @@ func (p *PreviewListener) Record() PreviewListenerRecord {
 	}
 }
 
-// Stop cleanly shuts down the HTTP server, releases the TCP listener, and
-// records the inactive PreviewListenerRecord.
+// Stop cleanly shuts down the HTTP server, releases the TCP listener,
+// unregisters the session job, and records the inactive PreviewListenerRecord.
 func (p *PreviewListener) Stop(ctx context.Context) error {
 	var stopErr error
 	p.stopOnce.Do(func() {
@@ -325,13 +406,29 @@ func (p *PreviewListener) Stop(ctx context.Context) error {
 		p.active = false
 		p.stoppedAt = p.clock.Now().UTC()
 		p.mu.Unlock()
-		p.evidence.RecordPreviewListener(p.Record())
+		rec := p.Record()
+		if p.jobRegistry != nil {
+			_ = p.jobRegistry.UnregisterPreviewJob(ctx, p.jobID, rec)
+		}
+		p.evidence.RecordPreviewListener(rec)
 	})
 	return stopErr
 }
 
-func newScopedWorkspaceHandler(workspace pythonruntime.WorkspaceAdapter, baseDir string) http.Handler {
+func newScopedWorkspaceHandler(
+	workspace pythonruntime.WorkspaceAdapter,
+	observer pythonruntime.OperationObserver,
+	stopLatch *pythonruntime.StopLatch,
+	execID string,
+	baseDir string,
+	maxResponseBytes int64,
+) http.Handler {
+	var reqSeq atomic.Uint64
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if stopLatch != nil && stopLatch.Stopped() {
+			http.Error(w, "preview stopped", http.StatusServiceUnavailable)
+			return
+		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -347,13 +444,63 @@ func newScopedWorkspaceHandler(workspace pythonruntime.WorkspaceAdapter, baseDir
 			return
 		}
 
+		// Re-check read authority through OperationObserver on every served request.
+		readOpID := fmt.Sprintf("preview-read-%d", reqSeq.Add(1))
+		dec, admitErr := observer.Admit(r.Context(), pythonruntime.ReachedOperation{
+			OperationID: readOpID,
+			ExecutionID: execID,
+			Family:      pythonruntime.EffectFilesystemRead,
+			Operation:   "preview.read",
+			Target: pythonruntime.CanonicalTarget{
+				Namespace: pythonruntime.NamespaceWorkspace,
+				RelPath:   targetPath,
+			},
+			Args: map[string]any{
+				"method": r.Method,
+				"path":   r.URL.Path,
+			},
+		})
+		if admitErr != nil || dec.Kind != pythonruntime.DecisionAllow {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+
 		info, errno := workspace.Stat(r.Context(), targetPath)
 		if errno == pythonruntime.ErrnoSuccess && info.IsDir {
 			targetPath = joinWorkspacePath(targetPath, "index.html")
+			// Re-admit resolved index.html target as well.
+			idxOpID := fmt.Sprintf("preview-read-%d", reqSeq.Add(1))
+			idxDec, idxErr := observer.Admit(r.Context(), pythonruntime.ReachedOperation{
+				OperationID: idxOpID,
+				ExecutionID: execID,
+				Family:      pythonruntime.EffectFilesystemRead,
+				Operation:   "preview.read",
+				Target: pythonruntime.CanonicalTarget{
+					Namespace: pythonruntime.NamespaceWorkspace,
+					RelPath:   targetPath,
+				},
+			})
+			if idxErr != nil || idxDec.Kind != pythonruntime.DecisionAllow {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			readOpID = idxOpID
 			info, errno = workspace.Stat(r.Context(), targetPath)
 		}
 		if errno != pythonruntime.ErrnoSuccess {
+			observer.RecordOutcome(r.Context(), readOpID, pythonruntime.OperationOutcome{
+				Succeeded: false,
+				Errno:     errno,
+			})
 			http.NotFound(w, r)
+			return
+		}
+		if maxResponseBytes > 0 && info.Size > maxResponseBytes {
+			observer.RecordOutcome(r.Context(), readOpID, pythonruntime.OperationOutcome{
+				Succeeded: false,
+				Error:     "response exceeds max_response_bytes",
+			})
+			http.Error(w, "payload too large", http.StatusRequestEntityTooLarge)
 			return
 		}
 
@@ -362,43 +509,79 @@ func newScopedWorkspaceHandler(workspace pythonruntime.WorkspaceAdapter, baseDir
 			Flags: pythonruntime.OpenRead,
 		})
 		if errno != pythonruntime.ErrnoSuccess {
+			observer.RecordOutcome(r.Context(), readOpID, pythonruntime.OperationOutcome{
+				Succeeded: false,
+				Errno:     errno,
+			})
 			http.NotFound(w, r)
 			return
 		}
 		defer f.Close()
 
-		data, readErr := readAllGuestFile(f)
-		if readErr != nil {
-			http.Error(w, "read error", http.StatusInternalServerError)
-			return
-		}
-
 		if ct := mime.TypeByExtension(path.Ext(targetPath)); ct != "" {
 			w.Header().Set("Content-Type", ct)
 		} else {
-			w.Header().Set("Content-Type", http.DetectContentType(data))
+			w.Header().Set("Content-Type", "application/octet-stream")
 		}
-		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		if info.Size >= 0 {
+			w.Header().Set("Content-Length", strconv.FormatInt(info.Size, 10))
+		}
 		w.WriteHeader(http.StatusOK)
-		if r.Method == http.MethodGet {
-			_, _ = w.Write(data)
+		if r.Method == http.MethodHead {
+			observer.RecordOutcome(r.Context(), readOpID, pythonruntime.OperationOutcome{Succeeded: true})
+			return
 		}
+
+		written, streamErr := streamBoundedGuestFile(w, f, stopLatch, maxResponseBytes)
+		outcome := pythonruntime.OperationOutcome{
+			Succeeded:        streamErr == nil,
+			BytesTransferred: written,
+		}
+		if streamErr != nil {
+			outcome.Error = streamErr.Error()
+		}
+		observer.RecordOutcome(r.Context(), readOpID, outcome)
 	})
 }
 
-func readAllGuestFile(f pythonruntime.GuestFile) ([]byte, error) {
-	var out []byte
+func streamBoundedGuestFile(
+	w http.ResponseWriter,
+	f pythonruntime.GuestFile,
+	stopLatch *pythonruntime.StopLatch,
+	maxBytes int64,
+) (int64, error) {
 	buf := make([]byte, 32*1024)
+	var total int64
 	for {
-		n, errno := f.Read(buf)
+		if stopLatch != nil && stopLatch.Stopped() {
+			return total, pythonruntime.ErrStreamSealed
+		}
+		readCap := len(buf)
+		if maxBytes > 0 {
+			rem := maxBytes - total
+			if rem <= 0 {
+				return total, errors.New("preview response exceeded max_response_bytes")
+			}
+			if int64(readCap) > rem {
+				readCap = int(rem)
+			}
+		}
+		n, errno := f.Read(buf[:readCap])
 		if n > 0 {
-			out = append(out, buf[:n]...)
+			if stopLatch != nil && stopLatch.Stopped() {
+				return total, pythonruntime.ErrStreamSealed
+			}
+			wn, wErr := w.Write(buf[:n])
+			total += int64(wn)
+			if wErr != nil {
+				return total, wErr
+			}
 		}
 		if errno != pythonruntime.ErrnoSuccess {
-			return out, errno
+			return total, errno
 		}
 		if n == 0 {
-			return out, nil
+			return total, nil
 		}
 	}
 }

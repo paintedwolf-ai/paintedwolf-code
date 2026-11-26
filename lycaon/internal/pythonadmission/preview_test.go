@@ -158,6 +158,7 @@ func TestPreviewListenerBindServeStopAndModuleShadowing(t *testing.T) {
 		Evidence:    store,
 	})
 
+	jobs := NewMemorySessionJobRegistry()
 	pl, err := StartPreviewListener(context.Background(), PreviewConfig{
 		ExecutionID: "exec-preview-1",
 		CallID:      "call-preview-1",
@@ -165,6 +166,7 @@ func TestPreviewListenerBindServeStopAndModuleShadowing(t *testing.T) {
 		Args:        []string{"--bind", "127.0.0.1", "--directory", "site", "0"},
 		Workspace:   ws,
 		Observer:    obs,
+		JobRegistry: jobs,
 		Evidence:    store,
 	})
 	testutil.FailErr(t, "start preview listener", err)
@@ -172,6 +174,9 @@ func TestPreviewListenerBindServeStopAndModuleShadowing(t *testing.T) {
 
 	if !pl.Active() || pl.Port() <= 0 || pl.JobID() != "job-preview-1" {
 		t.Fatalf("unexpected preview listener identity: active=%v port=%d job=%q", pl.Active(), pl.Port(), pl.JobID())
+	}
+	if _, ok := jobs.Get("job-preview-1"); !ok {
+		t.Fatal("preview job was not registered in SessionJobRegistry")
 	}
 
 	// Serve index.html via scoped workspace reads.
@@ -199,6 +204,9 @@ func TestPreviewListenerBindServeStopAndModuleShadowing(t *testing.T) {
 	if pl.Active() {
 		t.Fatal("preview listener still active after Stop")
 	}
+	if _, ok := jobs.Get("job-preview-1"); ok {
+		t.Fatal("preview job was not unregistered from SessionJobRegistry on Stop")
+	}
 
 	recs := store.PreviewListeners()
 	if len(recs) != 2 || !recs[0].Active || recs[1].Active {
@@ -214,6 +222,7 @@ func TestPreviewListenerBindServeStopAndModuleShadowing(t *testing.T) {
 		Args:        []string{"0"},
 		Workspace:   shadowedWS,
 		Observer:    obs,
+		JobRegistry: jobs,
 	})
 	if !errors.Is(shadowErr, ErrPreviewModuleShadowed) {
 		t.Fatalf("shadowed http.server err = %v, want ErrPreviewModuleShadowed", shadowErr)
@@ -222,6 +231,7 @@ func TestPreviewListenerBindServeStopAndModuleShadowing(t *testing.T) {
 
 func TestPreviewListenerStoppedByStopLatchAndAdmissionRefusal(t *testing.T) {
 	ws := newMemWorkspace(map[string]string{"index.html": "ok"})
+	jobs := NewMemorySessionJobRegistry()
 
 	// 1. Denied by observer -> does not bind.
 	denyObs := NewAdmissionObserver(ObserverConfig{
@@ -238,6 +248,7 @@ func TestPreviewListenerStoppedByStopLatchAndAdmissionRefusal(t *testing.T) {
 		Args:        []string{"0"},
 		Workspace:   ws,
 		Observer:    denyObs,
+		JobRegistry: jobs,
 	})
 	if !errors.Is(err, ErrPreviewDenied) {
 		t.Fatalf("denied preview err = %v, want ErrPreviewDenied", err)
@@ -256,11 +267,77 @@ func TestPreviewListenerStoppedByStopLatchAndAdmissionRefusal(t *testing.T) {
 		Args:        []string{"0"},
 		Workspace:   ws,
 		Observer:    allowObs,
+		JobRegistry: jobs,
 		StopLatch:   latch,
 	})
 	testutil.FailErr(t, "start latched preview", err)
 	latch.Trigger(pythonruntime.TerminalStop{Code: pythonruntime.StopCancelled, Reason: "cancelled"})
 	if pl.Active() {
 		t.Fatal("preview listener remained active after StopLatch triggered")
+	}
+}
+
+func TestPreviewListenerFailsClosedAndEnforcesPerRequestAdmissionAndBounds(t *testing.T) {
+	ws := newMemWorkspace(map[string]string{
+		"ok.txt":     "small",
+		"secret.txt": "classified",
+		"large.txt":  strings.Repeat("A", 2048),
+	})
+	obs := NewAdmissionObserver(ObserverConfig{
+		ExecutionID: "exec-preview-fc",
+		Policy: func(_ context.Context, op pythonruntime.ReachedOperation) PolicyDecision {
+			if op.Family == pythonruntime.EffectFilesystemRead && op.Target.RelPath == "secret.txt" {
+				return PolicyDecision{Kind: pythonruntime.DecisionStop, Condition: ConditionProtectedSink, Reason: "secret blocked"}
+			}
+			return PolicyDecision{Kind: pythonruntime.DecisionAllow}
+		},
+	})
+	jobs := NewMemorySessionJobRegistry()
+
+	// Fail closed on missing Workspace, Observer, or JobRegistry.
+	if _, err := StartPreviewListener(context.Background(), PreviewConfig{Observer: obs, JobRegistry: jobs}); !errors.Is(err, ErrMissingWorkspace) {
+		t.Fatalf("missing workspace err = %v, want ErrMissingWorkspace", err)
+	}
+	if _, err := StartPreviewListener(context.Background(), PreviewConfig{Workspace: ws, JobRegistry: jobs}); !errors.Is(err, ErrMissingObserver) {
+		t.Fatalf("missing observer err = %v, want ErrMissingObserver", err)
+	}
+	if _, err := StartPreviewListener(context.Background(), PreviewConfig{Workspace: ws, Observer: obs}); !errors.Is(err, ErrMissingJobRegistry) {
+		t.Fatalf("missing job registry err = %v, want ErrMissingJobRegistry", err)
+	}
+
+	pl, err := StartPreviewListener(context.Background(), PreviewConfig{
+		ExecutionID:      "exec-preview-fc",
+		JobID:            "job-fc-1",
+		Args:             []string{"0"},
+		Workspace:        ws,
+		Observer:         obs,
+		JobRegistry:      jobs,
+		MaxResponseBytes: 128,
+	})
+	testutil.FailErr(t, "start bounded preview", err)
+	defer func() { _ = pl.Stop(context.Background()) }()
+
+	// Allowed small file succeeds.
+	respOK, err := http.Get("http://" + pl.Address() + "/ok.txt")
+	testutil.FailErr(t, "GET ok.txt", err)
+	_ = respOK.Body.Close()
+	if respOK.StatusCode != http.StatusOK {
+		t.Fatalf("GET ok.txt status = %d, want 200", respOK.StatusCode)
+	}
+
+	// Oversized file is rejected with 413 Request Entity Too Large.
+	respLarge, err := http.Get("http://" + pl.Address() + "/large.txt")
+	testutil.FailErr(t, "GET large.txt", err)
+	_ = respLarge.Body.Close()
+	if respLarge.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("GET large.txt status = %d, want 413", respLarge.StatusCode)
+	}
+
+	// Per-request Observer.Admit(EffectFilesystemRead) blocks secret.txt with 403.
+	respSecret, err := http.Get("http://" + pl.Address() + "/secret.txt")
+	testutil.FailErr(t, "GET secret.txt", err)
+	_ = respSecret.Body.Close()
+	if respSecret.StatusCode != http.StatusForbidden {
+		t.Fatalf("GET secret.txt status = %d, want 403", respSecret.StatusCode)
 	}
 }

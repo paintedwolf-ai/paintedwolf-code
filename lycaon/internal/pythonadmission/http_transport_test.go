@@ -2,6 +2,7 @@ package pythonadmission
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -51,11 +52,12 @@ func TestHTTPTransportMethodsParamsJSONAndAllowedRedirect(t *testing.T) {
 		Evidence:    store,
 	})
 	tr := NewHTTPTransport(HTTPTransportConfig{
-		ExecutionID:       "exec-http-1",
-		CallID:            "call-http-1",
-		Observer:          obs,
-		AllowLoopbackHTTP: true,
-		Evidence:          store,
+		ExecutionID:        "exec-http-1",
+		CallID:             "call-http-1",
+		Observer:           obs,
+		CredentialScreener: StrictCredentialScreener(),
+		AllowLoopbackHTTP:  true,
+		Evidence:           store,
 	})
 
 	// 1. POST with query params, JSON body, and custom header.
@@ -147,10 +149,11 @@ func TestHTTPTransportRefusedRedirectStopsBeforeConnecting(t *testing.T) {
 	})
 
 	tr := NewHTTPTransport(HTTPTransportConfig{
-		ExecutionID:       "exec-http-refuse",
-		Observer:          obs,
-		AllowLoopbackHTTP: true,
-		Evidence:          store,
+		ExecutionID:        "exec-http-refuse",
+		Observer:           obs,
+		CredentialScreener: StrictCredentialScreener(),
+		AllowLoopbackHTTP:  true,
+		Evidence:           store,
 	})
 
 	_, reqErr := tr.Do(context.Background(), HTTPRequest{
@@ -208,10 +211,11 @@ func TestHTTPTransportStreamingAndPartialFailure(t *testing.T) {
 		Evidence:    store,
 	})
 	tr := NewHTTPTransport(HTTPTransportConfig{
-		ExecutionID:       "exec-stream",
-		Observer:          obs,
-		AllowLoopbackHTTP: true,
-		Evidence:          store,
+		ExecutionID:        "exec-stream",
+		Observer:           obs,
+		CredentialScreener: StrictCredentialScreener(),
+		AllowLoopbackHTTP:  true,
+		Evidence:           store,
 	})
 
 	// 1. Clean streaming read.
@@ -256,8 +260,12 @@ func TestHTTPTransportTLSEnforcementAndCredentialScreening(t *testing.T) {
 	}))
 	defer tlsSrv.Close()
 
+	obs := NewAdmissionObserver(ObserverConfig{
+		ExecutionID: "exec-tls",
+	})
 	tr := NewHTTPTransport(HTTPTransportConfig{
 		ExecutionID: "exec-tls",
+		Observer:    obs,
 		Client:      tlsSrv.Client(),
 		CredentialScreener: func(u *url.URL, h http.Header) error {
 			if h.Get("Authorization") != "" && strings.Contains(u.Path, "untrusted") {
@@ -298,5 +306,206 @@ func TestHTTPTransportTLSEnforcementAndCredentialScreening(t *testing.T) {
 	_ = resp.Body.Close()
 	if string(body) != "tls-ok:Bearer ok" {
 		t.Fatalf("tls body = %q, want %q", string(body), "tls-ok:Bearer ok")
+	}
+}
+
+func TestHTTPTransportFailsClosedWithoutObserverOrScreener(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	// Missing Observer must fail closed without connecting.
+	trNoObs := NewHTTPTransport(HTTPTransportConfig{
+		ExecutionID:        "exec-no-obs",
+		CredentialScreener: StrictCredentialScreener(),
+		AllowLoopbackHTTP:  true,
+	})
+	if _, err := trNoObs.Do(context.Background(), HTTPRequest{Method: http.MethodGet, URL: srv.URL}); !errors.Is(err, ErrMissingObserver) {
+		t.Fatalf("nil observer err = %v, want ErrMissingObserver", err)
+	}
+
+	// Missing CredentialScreener must fail closed without connecting.
+	trNoScreener := NewHTTPTransport(HTTPTransportConfig{
+		ExecutionID:       "exec-no-screener",
+		Observer:          NewAdmissionObserver(ObserverConfig{ExecutionID: "exec-no-screener"}),
+		AllowLoopbackHTTP: true,
+	})
+	if _, err := trNoScreener.Do(context.Background(), HTTPRequest{Method: http.MethodGet, URL: srv.URL}); !errors.Is(err, ErrMissingCredentialScreener) {
+		t.Fatalf("nil screener err = %v, want ErrMissingCredentialScreener", err)
+	}
+
+	if hits.Load() != 0 {
+		t.Fatalf("server received %d hits on fail-closed transport, want 0", hits.Load())
+	}
+}
+
+func TestGuestHTTPAdapterFullChainLoopback(t *testing.T) {
+	var forbiddenHits atomic.Int32
+	forbiddenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forbiddenHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer forbiddenSrv.Close()
+	forbiddenURL, err := url.Parse(forbiddenSrv.URL)
+	testutil.FailErr(t, "parse forbidden url", err)
+
+	allowedDest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("redirect-ok"))
+	}))
+	defer allowedDest.Close()
+
+	streamBlock := make(chan struct{})
+	mainSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/ok":
+			_, _ = w.Write([]byte("hello-guest"))
+		case "/redir-ok":
+			http.Redirect(w, r, allowedDest.URL+"/final", http.StatusFound)
+		case "/redir-bad":
+			http.Redirect(w, r, forbiddenSrv.URL+"/blocked", http.StatusFound)
+		case "/stream":
+			flusher, _ := w.(http.Flusher)
+			_, _ = w.Write([]byte("first-chunk"))
+			if flusher != nil {
+				flusher.Flush()
+			}
+			<-streamBlock
+			_, _ = w.Write([]byte("second-chunk"))
+		}
+	}))
+	defer func() {
+		close(streamBlock)
+		mainSrv.Close()
+	}()
+
+	store := NewMemoryEvidenceStore()
+	obs := NewAdmissionObserver(ObserverConfig{
+		ExecutionID: "exec-guest-http",
+		CallID:      "call-guest-http",
+		Evidence:    store,
+		Policy: func(_ context.Context, op pythonruntime.ReachedOperation) PolicyDecision {
+			if op.Family == pythonruntime.EffectHTTP && op.Target.RootID == forbiddenURL.Host {
+				return PolicyDecision{
+					Kind:      pythonruntime.DecisionStop,
+					Condition: ConditionEffectDenied,
+					Reason:    "forbidden destination",
+				}
+			}
+			return PolicyDecision{Kind: pythonruntime.DecisionAllow}
+		},
+	})
+	tr := NewHTTPTransport(HTTPTransportConfig{
+		ExecutionID:        "exec-guest-http",
+		CallID:             "call-guest-http",
+		Observer:           obs,
+		CredentialScreener: StrictCredentialScreener(),
+		AllowLoopbackHTTP:  true,
+		Evidence:           store,
+	})
+	adapter := NewGuestHTTPAdapter(tr)
+
+	// 1. Accepted destination through JSON bridge.
+	rawReq, err := json.Marshal(GuestHTTPRequest{
+		OperationID: "guest-ok",
+		Method:      http.MethodGet,
+		URL:         mainSrv.URL + "/ok",
+	})
+	testutil.FailErr(t, "marshal ok request", err)
+	rawResp, err := adapter.HandleJSON(context.Background(), rawReq)
+	testutil.FailErr(t, "handle ok request", err)
+	var gresp GuestHTTPResponse
+	testutil.FailErr(t, "decode ok response", json.Unmarshal(rawResp, &gresp))
+	decoded, err := base64.StdEncoding.DecodeString(gresp.BodyBase64)
+	testutil.FailErr(t, "decode ok body", err)
+	if gresp.StatusCode != http.StatusOK || string(decoded) != "hello-guest" {
+		t.Fatalf("unexpected ok guest response: status=%d body=%q", gresp.StatusCode, string(decoded))
+	}
+
+	// 2. Allowed redirect through JSON bridge.
+	rawRedirOK, _ := json.Marshal(GuestHTTPRequest{
+		OperationID: "guest-redir-ok",
+		Method:      http.MethodGet,
+		URL:         mainSrv.URL + "/redir-ok",
+	})
+	rawRedirOKResp, err := adapter.HandleJSON(context.Background(), rawRedirOK)
+	testutil.FailErr(t, "handle redir-ok", err)
+	var redirOKResp GuestHTTPResponse
+	testutil.FailErr(t, "decode redir-ok", json.Unmarshal(rawRedirOKResp, &redirOKResp))
+	if len(redirOKResp.Redirects) != 1 || !redirOKResp.Redirects[0].Admitted {
+		t.Fatalf("expected 1 admitted redirect, got %+v", redirOKResp.Redirects)
+	}
+
+	// 3. Refused destination directly through JSON bridge.
+	rawRefused, _ := json.Marshal(GuestHTTPRequest{
+		OperationID: "guest-refused",
+		Method:      http.MethodGet,
+		URL:         forbiddenSrv.URL + "/secret",
+	})
+	rawRefusedResp, refusedErr := adapter.HandleJSON(context.Background(), rawRefused)
+	if refusedErr == nil {
+		t.Fatal("expected error for refused destination")
+	}
+	var refusedResp GuestHTTPResponse
+	testutil.FailErr(t, "decode refused response", json.Unmarshal(rawRefusedResp, &refusedResp))
+	if refusedResp.StopCode != pythonruntime.StopEffectNotAllowed {
+		t.Fatalf("refused stop code = %q, want COMMAND_EFFECT_NOT_ALLOWED", refusedResp.StopCode)
+	}
+
+	// 4. Refused redirect through JSON bridge stops before hitting forbiddenSrv.
+	rawRedirBad, _ := json.Marshal(GuestHTTPRequest{
+		OperationID: "guest-redir-bad",
+		Method:      http.MethodGet,
+		URL:         mainSrv.URL + "/redir-bad",
+	})
+	rawRedirBadResp, redirBadErr := adapter.HandleJSON(context.Background(), rawRedirBad)
+	if redirBadErr == nil {
+		t.Fatal("expected error for refused redirect")
+	}
+	var redirBadResp GuestHTTPResponse
+	testutil.FailErr(t, "decode redir-bad response", json.Unmarshal(rawRedirBadResp, &redirBadResp))
+	if !redirBadResp.PartialFailure || redirBadResp.StopCode != pythonruntime.StopEffectNotAllowed {
+		t.Fatalf("unexpected redir-bad response: %+v", redirBadResp)
+	}
+	if forbiddenHits.Load() != 0 {
+		t.Fatalf("forbidden server hit %d times, want 0", forbiddenHits.Load())
+	}
+
+	// 5. Mid-stream cancellation through GuestHTTPAdapter.ReadStreamChunk.
+	rawStream, _ := json.Marshal(GuestHTTPRequest{
+		OperationID: "guest-stream",
+		Method:      http.MethodGet,
+		URL:         mainSrv.URL + "/stream",
+		Stream:      true,
+	})
+	rawStreamResp, err := adapter.HandleJSON(context.Background(), rawStream)
+	testutil.FailErr(t, "open guest stream", err)
+	var streamResp GuestHTTPResponse
+	testutil.FailErr(t, "decode stream response", json.Unmarshal(rawStreamResp, &streamResp))
+	if streamResp.StreamHandleID == "" {
+		t.Fatal("expected non-empty stream_handle_id")
+	}
+
+	chunk1Raw, err := adapter.ReadStreamChunk(context.Background(), streamResp.StreamHandleID, 64)
+	testutil.FailErr(t, "read chunk 1", err)
+	var chunk1 GuestHTTPStreamChunk
+	testutil.FailErr(t, "decode chunk 1", json.Unmarshal(chunk1Raw, &chunk1))
+	c1Bytes, _ := base64.StdEncoding.DecodeString(chunk1.DataBase64)
+	if string(c1Bytes) != "first-chunk" {
+		t.Fatalf("chunk 1 = %q, want %q", string(c1Bytes), "first-chunk")
+	}
+
+	cancelCtx, cancelStream := context.WithCancel(context.Background())
+	cancelStream()
+	chunk2Raw, cancelErr := adapter.ReadStreamChunk(cancelCtx, streamResp.StreamHandleID, 64)
+	if !errors.Is(cancelErr, context.Canceled) {
+		t.Fatalf("cancelled chunk err = %v, want context.Canceled", cancelErr)
+	}
+	var chunk2 GuestHTTPStreamChunk
+	testutil.FailErr(t, "decode cancelled chunk", json.Unmarshal(chunk2Raw, &chunk2))
+	if !chunk2.PartialFailure {
+		t.Fatalf("expected PartialFailure=true on mid-stream cancel, got %+v", chunk2)
 	}
 }

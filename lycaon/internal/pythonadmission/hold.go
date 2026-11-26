@@ -271,6 +271,7 @@ type activeWaiter struct {
 // capacity tracking, cancellation, and host-restart settlement.
 type ApprovalBroker struct {
 	registry      *LeaseRegistry
+	store         DurableContinuationStore
 	parked        *pythonruntime.ParkedGuestTracker
 	clock         pythonruntime.Clock
 	onHoldCreated func(ApprovalLease)
@@ -284,6 +285,7 @@ type ApprovalBroker struct {
 // ApprovalBrokerConfig configures an ApprovalBroker.
 type ApprovalBrokerConfig struct {
 	Registry      *LeaseRegistry
+	Store         DurableContinuationStore
 	ParkedTracker *pythonruntime.ParkedGuestTracker
 	Clock         pythonruntime.Clock
 	OnHoldCreated func(ApprovalLease)
@@ -301,6 +303,7 @@ func NewApprovalBroker(cfg ApprovalBrokerConfig) *ApprovalBroker {
 	}
 	return &ApprovalBroker{
 		registry:      reg,
+		store:         cfg.Store,
 		parked:        cfg.ParkedTracker,
 		clock:         clk,
 		onHoldCreated: cfg.OnHoldCreated,
@@ -369,6 +372,11 @@ func (b *ApprovalBroker) WaitForApproval(ctx context.Context, req HoldRequest) (
 	if err := b.registry.Create(lease); err != nil {
 		return HoldResult{}, err
 	}
+	if b.store != nil {
+		if err := b.store.SaveLease(ctx, lease); err != nil {
+			return HoldResult{}, fmt.Errorf("persist pending lease: %w", err)
+		}
+	}
 
 	waiter := &activeWaiter{
 		leaseID: leaseID,
@@ -393,7 +401,9 @@ func (b *ApprovalBroker) WaitForApproval(ctx context.Context, req HoldRequest) (
 	select {
 	case resolution = <-waiter.ch:
 	case <-ctx.Done():
-		_, _ = b.registry.transition(leaseID, []LeaseState{LeasePending}, LeaseCancelled, ctx.Err().Error(), b.clock.Now())
+		if updated, err := b.registry.transition(leaseID, []LeaseState{LeasePending}, LeaseCancelled, ctx.Err().Error(), b.clock.Now()); err == nil && b.store != nil {
+			_ = b.store.SaveLease(context.Background(), updated)
+		}
 		return HoldResult{
 			LeaseID:             leaseID,
 			State:               LeaseCancelled,
@@ -415,7 +425,9 @@ func (b *ApprovalBroker) WaitForApproval(ctx context.Context, req HoldRequest) (
 	if req.Recheck != nil {
 		recheckedTarget, err := req.Recheck(ctx, lease)
 		if err != nil {
-			_, _ = b.registry.transition(leaseID, []LeaseState{LeaseApproved}, LeaseDeclined, err.Error(), b.clock.Now())
+			if updated, tErr := b.registry.transition(leaseID, []LeaseState{LeaseApproved}, LeaseDeclined, err.Error(), b.clock.Now()); tErr == nil && b.store != nil {
+				_ = b.store.SaveLease(context.Background(), updated)
+			}
 			return HoldResult{
 				LeaseID:             leaseID,
 				State:               LeaseDeclined,
@@ -436,6 +448,11 @@ func (b *ApprovalBroker) WaitForApproval(ctx context.Context, req HoldRequest) (
 			AuthoritativeTarget: authTarget,
 			Reason:              err.Error(),
 		}, err
+	}
+	if b.store != nil {
+		if consumed, ok := b.registry.Get(leaseID); ok {
+			_ = b.store.SaveLease(context.Background(), consumed)
+		}
 	}
 
 	return HoldResult{
@@ -464,8 +481,14 @@ func (b *ApprovalBroker) Cancel(leaseID, reason string) error {
 }
 
 func (b *ApprovalBroker) resolve(leaseID string, target LeaseState, reason string) error {
-	if _, err := b.registry.transition(leaseID, []LeaseState{LeasePending}, target, reason, b.clock.Now()); err != nil {
+	updated, err := b.registry.transition(leaseID, []LeaseState{LeasePending}, target, reason, b.clock.Now())
+	if err != nil {
 		return err
+	}
+	if b.store != nil {
+		if saveErr := b.store.SaveLease(context.Background(), updated); saveErr != nil {
+			return saveErr
+		}
 	}
 	b.mu.Lock()
 	w, ok := b.waiters[leaseID]
@@ -477,6 +500,53 @@ func (b *ApprovalBroker) resolve(leaseID string, target LeaseState, reason strin
 		}
 	}
 	return nil
+}
+
+// ReconcileOnStartup hydrates a fresh ApprovalBroker from its
+// DurableContinuationStore after a host restart, marks every orphaned
+// pending/unconsumed lease as LeaseLostOnRestart, persists the settlement
+// durably, and ensures any stale approval arriving afterward is rejected with
+// ErrStaleApprovalAfterRestart.
+func (b *ApprovalBroker) ReconcileOnStartup(ctx context.Context, reason string) (RestartSettlementReport, error) {
+	if b.store == nil {
+		return RestartSettlementReport{}, errors.New("approval broker requires DurableContinuationStore for startup reconciliation")
+	}
+	if reason == "" {
+		reason = "host restarted; orphaned pending approval settled as lost"
+	}
+	snap, err := b.store.Load(ctx)
+	if err != nil {
+		return RestartSettlementReport{}, err
+	}
+
+	now := b.clock.Now().UTC()
+	report := RestartSettlementReport{
+		SettledAt: now,
+	}
+	var updatedLeases []ApprovalLease
+
+	for _, lease := range snap.Leases {
+		if lease.State == LeasePending || lease.State == LeaseApproved {
+			lease.State = LeaseLostOnRestart
+			lease.Reason = reason
+			lease.SettledAt = now
+			report.SettledLeaseIDs = append(report.SettledLeaseIDs, lease.LeaseID)
+			updatedLeases = append(updatedLeases, lease)
+		}
+		if _, exists := b.registry.Get(lease.LeaseID); !exists {
+			if err := b.registry.Create(lease); err != nil {
+				return RestartSettlementReport{}, err
+			}
+		}
+	}
+
+	if b.parked != nil {
+		report.ReleasedParkedGuests = b.parked.ReleaseAll()
+	}
+	if err := b.store.SaveRestartSettlement(ctx, report, updatedLeases); err != nil {
+		return RestartSettlementReport{}, err
+	}
+	return report, nil
 }
 
 // SettleInterruptedOnRestart marks all in-flight leases lost on host restart,
@@ -500,10 +570,12 @@ func (b *ApprovalBroker) SettleInterruptedOnRestart(reason string) RestartSettle
 	}
 	b.mu.Unlock()
 
+	var updatedLeases []ApprovalLease
 	for _, lease := range b.registry.List() {
 		if lease.State == LeasePending || lease.State == LeaseApproved {
-			if _, err := b.registry.transition(lease.LeaseID, []LeaseState{LeasePending, LeaseApproved}, LeaseLostOnRestart, reason, now); err == nil {
+			if updated, err := b.registry.transition(lease.LeaseID, []LeaseState{LeasePending, LeaseApproved}, LeaseLostOnRestart, reason, now); err == nil {
 				report.SettledLeaseIDs = append(report.SettledLeaseIDs, lease.LeaseID)
+				updatedLeases = append(updatedLeases, updated)
 			}
 		}
 	}
@@ -526,6 +598,9 @@ func (b *ApprovalBroker) SettleInterruptedOnRestart(reason string) RestartSettle
 
 	if b.parked != nil {
 		report.ReleasedParkedGuests = b.parked.ReleaseAll()
+	}
+	if b.store != nil {
+		_ = b.store.SaveRestartSettlement(context.Background(), report, updatedLeases)
 	}
 
 	return report

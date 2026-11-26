@@ -379,3 +379,97 @@ func TestConcurrentParkedGuestsAndIndependentCancellation(t *testing.T) {
 		t.Fatalf("ParkedGuestTracker did not return to zero baseline: %+v", snap)
 	}
 }
+
+func TestDurableRestartReconciliation(t *testing.T) {
+	dir := t.TempDir()
+	store1, err := NewFileContinuationStore(dir, "continuation.json")
+	testutil.FailErr(t, "create file continuation store 1", err)
+
+	clk := pythonruntime.NewFixedClock(time.Date(2026, 11, 26, 14, 0, 0, 0, time.UTC))
+	leasePersisted := make(chan ApprovalLease, 1)
+	broker1 := NewApprovalBroker(ApprovalBrokerConfig{
+		Store: store1,
+		Clock: clk,
+		OnHoldCreated: func(l ApprovalLease) {
+			leasePersisted <- l
+		},
+	})
+
+	obs1 := NewAdmissionObserver(ObserverConfig{
+		ExecutionID: "exec-durable-1",
+		CallID:      "call-durable-1",
+		Broker:      broker1,
+		Clock:       clk,
+		Policy: func(_ context.Context, _ pythonruntime.ReachedOperation) PolicyDecision {
+			return PolicyDecision{Kind: pythonruntime.DecisionHold, Reason: "review before commit"}
+		},
+	})
+
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	t.Cleanup(cancel1)
+
+	go func() {
+		_, _ = obs1.Admit(ctx1, pythonruntime.ReachedOperation{
+			OperationID: "op-durable-write",
+			Family:      pythonruntime.EffectFilesystemWrite,
+			Operation:   "write",
+			Target: pythonruntime.CanonicalTarget{
+				Namespace: pythonruntime.NamespaceWorkspace,
+				RootID:    "root-1",
+				RelPath:   "important.txt",
+			},
+			Args: map[string]any{"bytes": 64},
+		})
+	}()
+
+	lease := <-leasePersisted
+
+	// Confirm the pending lease is durably persisted on disk before simulated crash.
+	preSnap, err := store1.Load(context.Background())
+	testutil.FailErr(t, "load pre-restart durable snapshot", err)
+	if len(preSnap.Leases) != 1 || preSnap.Leases[0].LeaseID != lease.LeaseID || preSnap.Leases[0].State != LeasePending {
+		t.Fatalf("pre-restart durable snapshot = %+v, want 1 pending lease", preSnap)
+	}
+
+	// Simulate host restart: discard broker1 completely and construct a brand-new
+	// broker2 pointing at the same durable store on disk.
+	store2, err := NewFileContinuationStore(dir, "continuation.json")
+	testutil.FailErr(t, "create file continuation store 2", err)
+	clk.Advance(30 * time.Second)
+	broker2 := NewApprovalBroker(ApprovalBrokerConfig{
+		Store: store2,
+		Clock: clk,
+	})
+
+	report, err := broker2.ReconcileOnStartup(context.Background(), "host process restarted")
+	testutil.FailErr(t, "reconcile broker2 on startup", err)
+	if len(report.SettledLeaseIDs) != 1 || report.SettledLeaseIDs[0] != lease.LeaseID {
+		t.Fatalf("reconcile report = %+v, want settled lease %s", report, lease.LeaseID)
+	}
+
+	// Verify durable history on disk records the settlement and lost_on_restart state.
+	postSnap, err := store2.Load(context.Background())
+	testutil.FailErr(t, "load post-restart durable snapshot", err)
+	if len(postSnap.Settlements) != 1 || len(postSnap.Leases) != 1 || postSnap.Leases[0].State != LeaseLostOnRestart {
+		t.Fatalf("post-restart durable snapshot = %+v, want 1 settlement and lost_on_restart lease", postSnap)
+	}
+
+	// Stale approval arriving on broker2 MUST be rejected with zero replay.
+	staleErr := broker2.Approve(lease.LeaseID, "late human approval after restart")
+	if !errors.Is(staleErr, ErrStaleApprovalAfterRestart) {
+		t.Fatalf("broker2 stale approve err = %v, want ErrStaleApprovalAfterRestart", staleErr)
+	}
+
+	// Consuming the lease on broker2's registry MUST also be rejected.
+	consumeErr := broker2.Registry().Consume(
+		lease.LeaseID,
+		lease.ExecutionID,
+		lease.OperationID,
+		lease.AuthoritativeTarget,
+		lease.ArgsDigest,
+		clk.Now(),
+	)
+	if !errors.Is(consumeErr, ErrLeaseLostOnRestart) {
+		t.Fatalf("broker2 consume err = %v, want ErrLeaseLostOnRestart", consumeErr)
+	}
+}
