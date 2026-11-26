@@ -365,6 +365,27 @@ func TestProcessEnvironmentSetsDarwinXcrunDB(t *testing.T) {
 		}
 	}
 
+	gotRelative := confine.ProcessEnvironment([]string{"PATH=/bin"}, confine.Confinement{
+		Network:    confine.NetworkDeny,
+		Workspaces: confine.WorkspaceRoots{SessionScratch: "relative/scratch"},
+	})
+	if got, ok := envValue(gotRelative, "xcrun_db"); !ok || got != gotDB {
+		t.Fatalf("relative SessionScratch: xcrun_db=%q (ok=%v), want fallback %q", got, ok, gotDB)
+	}
+
+	loopDir := t.TempDir()
+	loopA := filepath.Join(loopDir, "a")
+	loopB := filepath.Join(loopDir, "b")
+	testutil.FailErr(t, "create symlink loop a->b", os.Symlink(loopB, loopA))
+	testutil.FailErr(t, "create symlink loop b->a", os.Symlink(loopA, loopB))
+	gotLoop := confine.ProcessEnvironment([]string{"PATH=/bin"}, confine.Confinement{
+		Network:    confine.NetworkDeny,
+		Workspaces: confine.WorkspaceRoots{SessionScratch: loopA},
+	})
+	if got, ok := envValue(gotLoop, "xcrun_db"); !ok || got != gotDB {
+		t.Fatalf("canonicalization-failing SessionScratch: xcrun_db=%q (ok=%v), want fallback %q", got, ok, gotDB)
+	}
+
 	gotExplicit := confine.ProcessEnvironment([]string{"PATH=/bin", "xcrun_db=/custom/xcrun_db"}, confine.Confinement{Network: confine.NetworkDeny})
 	if got, ok := envValue(gotExplicit, "xcrun_db"); !ok || got != "/custom/xcrun_db" {
 		t.Fatalf("explicit xcrun_db=%q (ok=%v), want /custom/xcrun_db", got, ok)

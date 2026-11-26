@@ -842,16 +842,23 @@ func withDarwinXcrunCacheEnv(env []string, c Confinement) []string {
 	return OverlayEnv(env, []string{"xcrun_db=" + dbPath})
 }
 
-func darwinXcrunDBPath(c Confinement) string {
-	if scratch := strings.TrimSpace(c.Workspaces.SessionScratch); scratch != "" {
-		if cp := fspath.CanonicalPath(scratch); cp != "" {
-			return filepath.Join(cp, "xcrun_db")
-		}
-		if filepath.IsAbs(scratch) {
-			return filepath.Join(filepath.Clean(scratch), "xcrun_db")
-		}
+func canonicalAbsRoot(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || !filepath.IsAbs(trimmed) {
+		return ""
 	}
-	if cache := fspath.CanonicalPath(platformUserCache()); cache != "" {
+	resolved, ok := fspath.CanonicalPathOrMissing(trimmed)
+	if !ok || !filepath.IsAbs(resolved) {
+		return ""
+	}
+	return resolved
+}
+
+func darwinXcrunDBPath(c Confinement) string {
+	if scratch := canonicalAbsRoot(c.Workspaces.SessionScratch); scratch != "" {
+		return filepath.Join(scratch, "xcrun_db")
+	}
+	if cache := canonicalAbsRoot(platformUserCache()); cache != "" {
 		return filepath.Join(cache, "paintedwolf-xcrun_db")
 	}
 	return ""
