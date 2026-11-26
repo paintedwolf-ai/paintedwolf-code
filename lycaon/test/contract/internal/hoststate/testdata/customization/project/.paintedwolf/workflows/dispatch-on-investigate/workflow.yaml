@@ -1,0 +1,12 @@
+id: fixture-dispatch-on-investigate
+version: 1.0.0
+name: Fixture dispatch on investigate
+trigger: /fixture-dispatch-on-investigate
+request:
+  question: What should this phase work on?
+phases:
+  - id: bound
+    activity_label: Working
+    coordinator_surface: implement_investigate
+    surface_template: agents/coordinator-surface-investigate.md
+    mode_refs: [implement-dispatch]

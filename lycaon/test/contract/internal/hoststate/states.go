@@ -167,8 +167,24 @@ func CoordinatorStates(ctx context.Context) ([]CoordinatorState, error) {
 	if err != nil {
 		return nil, err
 	}
+	projectBindings, err := ProjectPhaseBindings()
+	if err != nil {
+		return nil, err
+	}
+	custom, err := CustomizationOverlays(ctx)
+	if err != nil {
+		return nil, err
+	}
 	seeds := buildCoordinatorSeeds(overlays, postures, surfaces)
 	seeds = append(seeds, buildPhaseBindingSeeds(postures, bindings)...)
+	seeds = append(seeds, buildProjectBindingSeeds(projectBindings)...)
+	overlays = slices.Clone(overlays)
+	for _, co := range custom {
+		if co.Coordinator {
+			seeds = append(seeds, buildCustomizationSeeds(len(overlays), surfaces)...)
+			overlays = append(overlays, co.Overlay)
+		}
+	}
 	planCache := make(map[string]toolsurface.Plan, 64)
 	seen := make(map[string]bool, len(seeds))
 	out := make([]CoordinatorState, 0, len(seeds))
@@ -258,6 +274,56 @@ func buildPhaseBindingSeeds(postures []sessionprofiles.PostureSpec, bindings []P
 					}
 				}
 			}
+		}
+	}
+	return seeds
+}
+
+// buildProjectBindingSeeds adds an active phase for each project workflow
+// binding under both command-effect families, so a rebound mode or surface
+// template meets the tools of its new surface.
+func buildProjectBindingSeeds(bindings []PhaseBinding) []coordinatorSeed {
+	var seeds []coordinatorSeed
+	for i := range bindings {
+		b := &bindings[i]
+		for _, mode := range api.AllSessionModeValues() {
+			for _, p := range []api.SessionPosture{api.SessionPostureBuild, api.SessionPostureSpec} {
+				for _, rt := range []RootTopology{RootsNone, RootsSingleGit, RootsDualNonGitFirst} {
+					for _, ld := range []LoadingMode{LoadingFloorOnly, LoadingAllLoaded} {
+						seeds = append(seeds, coordinatorSeed{
+							mode: mode, posture: p, wf: WorkflowActivePhase, surfaceID: b.Resolved.CoordinatorSurface,
+							roots: rt, loading: ld, web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+							binding: b,
+						})
+					}
+				}
+			}
+		}
+	}
+	return seeds
+}
+
+// buildCustomizationSeeds meets a customized catalog with the ambient worker
+// lifecycle and every active phase surface.
+func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo) []coordinatorSeed {
+	var seeds []coordinatorSeed
+	for _, mode := range api.AllSessionModeValues() {
+		for _, p := range []api.SessionPosture{api.SessionPostureBuild, api.SessionPostureOrchestrate} {
+			for _, wf := range []WorkflowState{WorkflowAmbientIdle, WorkflowWorkersInFlight, WorkflowPendingOverlays} {
+				seeds = append(seeds, coordinatorSeed{
+					overlayIdx: ovIdx, mode: mode, posture: p, wf: wf, roots: RootsSingleGit, loading: LoadingAllLoaded,
+					web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+				})
+			}
+		}
+	}
+	for _, s := range surfaces {
+		for _, ld := range []LoadingMode{LoadingFloorOnly, LoadingAllLoaded} {
+			seeds = append(seeds, coordinatorSeed{
+				overlayIdx: ovIdx, mode: api.SessionModeAgent, posture: api.SessionPostureBuild, wf: WorkflowActivePhase,
+				surfaceID: s.ID, roots: RootsSingleGit, loading: ld, web: true,
+				approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+			})
 		}
 	}
 	return seeds

@@ -385,7 +385,6 @@ func workerCloseoutReader(ws hoststate.WorkerState) (prompts.Reader, error) {
 func workerPersonasNameOnlyOffered(r *invariants.Run) {
 	ctx := context.Background()
 	s := stock(r)
-	engine := s.Engine()
 	cache := hoststate.NewRenderCache()
 	workerPairs, err := cachedWorkerPairs()
 	r.Must(err)
@@ -393,19 +392,17 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 	checked := 0
 	for _, wp := range workerPairs {
 		ws, auth := wp.ws, wp.auth
-		if ws.ParentSessionMode == api.SessionModeAsk {
-			if mutCapable, ok := prompts.AgentMutationCapable(ws.AgentID); ok && mutCapable {
-				continue
-			}
+		if ws.ParentSessionMode == api.SessionModeAsk && ws.MutationCapable {
+			continue
 		}
 		wSkills, sErr := overlaySkills(s, ws.Overlay)
 		r.Must(sErr)
 		occ := workerPersonaOccurrence(auth.Reader, wSkills)
 		fullVars, err := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
 		r.Must(err)
-		rKey := renderCacheKeyForVars("persona:"+ws.AgentID+":"+s.Site, s.Catalog.Revision, nil, fullVars)
+		rKey := renderCacheKeyForVars("persona:"+ws.AgentID+":"+s.Site, engineRev(s, ws.Overlay), nil, fullVars)
 		text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
-			return prompts.RenderPersona(ctx, engine, ws.AgentID, auth.Reader, occ)
+			return prompts.RenderPersona(ctx, engineForOverlay(s, ws.Overlay), ws.AgentID, auth.Reader, occ)
 		})
 		r.Must(rErr)
 		checked++

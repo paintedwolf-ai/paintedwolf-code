@@ -505,12 +505,7 @@ func runWorkerPersonaAndInjectMatrix(
 	for idx, wp := range pairs {
 		ws, auth := wp.ws, wp.auth
 		sum.markCase("worker:" + ws.ID)
-		mutInAsk := false
-		if ws.ParentSessionMode == api.SessionModeAsk {
-			if mutCapable, ok := prompts.AgentMutationCapable(ws.AgentID); ok && mutCapable {
-				mutInAsk = true
-			}
-		}
+		mutInAsk := ws.ParentSessionMode == api.SessionModeAsk && ws.MutationCapable
 		wEngine := engineForOverlay(s, ws.Overlay)
 		wRev := s.Catalog.Revision
 		if ws.Overlay.Catalog != nil {
