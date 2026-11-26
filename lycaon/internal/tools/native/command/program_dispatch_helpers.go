@@ -271,6 +271,9 @@ func (d *ProgramDispatcher) GapLaunchable(request commandprogram.OperationReques
 		return false
 	}
 	// A closed owner's unsupported forms refuse wherever they are bound.
+	if spec, native := d.run.commands[request.Argv[0].Value]; native && d.natives[spec.Name].ClosedForms {
+		return false
+	}
 	if d.natives[request.Argv[0].Value].ClosedForms {
 		return false
 	}

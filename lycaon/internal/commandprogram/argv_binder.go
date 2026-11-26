@@ -403,6 +403,8 @@ func (b *argvBinding) options(scope string) error {
 		return b.jobsOptions()
 	case "ps":
 		return b.psOptions()
+	case "python":
+		return b.pythonOptions(scope)
 	}
 	operandsOnly := false
 	for b.index < len(b.argv) {
@@ -420,6 +422,35 @@ func (b *argvBinding) options(scope string) error {
 		default:
 			if err := b.option(word, scope); err != nil {
 				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (b *argvBinding) pythonOptions(scope string) error {
+	operandsOnly := false
+	for b.index < len(b.argv) {
+		word := b.argv[b.index]
+		switch {
+		case operandsOnly || word.Value == "-" || !optionWord(word.Value):
+			b.index++
+			operand := word
+			b.bound.Items = append(b.bound.Items, BoundItem{Operand: &operand})
+			operandsOnly = true
+		case word.Value == "--":
+			b.index++
+			b.bound.EndOfOptions = true
+			operandsOnly = true
+		default:
+			isCodeOrModule := word.Value == "-c" || word.Value == "-m" ||
+				(strings.HasPrefix(word.Value, "-c") && len(word.Value) > 2) ||
+				(strings.HasPrefix(word.Value, "-m") && len(word.Value) > 2)
+			if err := b.option(word, scope); err != nil {
+				return err
+			}
+			if isCodeOrModule {
+				operandsOnly = true
 			}
 		}
 	}
