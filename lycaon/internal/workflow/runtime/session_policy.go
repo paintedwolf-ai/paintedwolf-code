@@ -251,9 +251,26 @@ func (m *SessionPolicy) ResolvedRequest(ctx context.Context, sessionID string) w
 		return workflowfacts.ResolvedWorkflowRequest{}
 	}
 	if state, ok := runstate.RequestStateFromVars(vars); ok && state.Status == runstate.RequestStatusResolved {
-		return workflowfacts.ResolvedWorkflowRequest{RunID: active.ID, OpeningMessageID: active.StartMessageID, Text: strings.TrimSpace(state.Text)}
+		return workflowfacts.ResolvedWorkflowRequest{RunID: active.ID, OpeningMessageID: m.requestOpeningMessageID(ctx, active), Text: strings.TrimSpace(state.Text)}
 	}
 	return workflowfacts.ResolvedWorkflowRequest{}
+}
+
+// requestOpeningMessageID names where a run's request opened. An invoked child
+// starts without its own start message: its request is the one an ancestor's
+// start opened.
+func (m *SessionPolicy) requestOpeningMessageID(ctx context.Context, run *api.WorkflowRun) string {
+	for run != nil && run.StartMessageID == "" && run.ParentRunID != nil {
+		parent, err := m.Runs.Get(ctx, *run.ParentRunID)
+		if err != nil {
+			return ""
+		}
+		run = parent
+	}
+	if run == nil {
+		return ""
+	}
+	return run.StartMessageID
 }
 
 func (m *SessionPolicy) AssertRunnable(ctx context.Context, runID string) error {
