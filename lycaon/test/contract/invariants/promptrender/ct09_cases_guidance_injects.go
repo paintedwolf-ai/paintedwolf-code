@@ -262,7 +262,7 @@ func sourceChangesCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, 
 		return nil, fmt.Errorf("no stock coordinator with folders")
 	}
 	knobs := []casegen.Knob{
-		repKnob("rep", []string{"profile_mutation_capable", "profile_has_source_history"}, len(reps), func(i int) string { return reps[i].state.ID }),
+		repKnob([]string{"profile_mutation_capable", "profile_has_source_history"}, len(reps), func(i int) string { return reps[i].state.ID }),
 		indexKnob("git", []string{"g.from_ref", "g.from_ref != g.to_ref"}, []string{"move", "detached", "none"}),
 		indexKnob("files", []string{"files"}, []string{"one", "none"}),
 		indexKnob("overflow", []string{"truncated", "own_truncated"}, []string{"none", "foreign", "own", "both"}),
@@ -329,7 +329,7 @@ func commandJobsCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, er
 	}
 	auths := map[authKey]hoststate.TurnAuthority{}
 	coordKnobs := []casegen.Knob{
-		repKnob("rep", repFacts, len(coords), func(i int) string { return coords[i].state.ID }),
+		repKnob(repFacts, len(coords), func(i int) string { return coords[i].state.ID }),
 		indexKnob("jobs", jobFacts, shapes),
 	}
 	var workers []workerRep
@@ -342,7 +342,7 @@ func commandJobsCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, er
 		}
 	}
 	workerKnobs := []casegen.Knob{
-		repKnob("rep", repFacts, len(workers), func(i int) string { return workers[i].ws.ID }),
+		repKnob(repFacts, len(workers), func(i int) string { return workers[i].ws.ID }),
 		indexKnob("jobs", jobFacts, shapes),
 	}
 	return []guidanceCase{

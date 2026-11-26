@@ -34,7 +34,7 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 	}
 	gateStates := []string{"open", "failed", "satisfied", "dormant", "none", "open-two", "dormant-two", "failed-two", "failed-coordinator"}
 	knobs := []casegen.Knob{
-		repKnob("rep", []string{"profile_has_promote_overlay", "profile_has_ask_user", "profile_has_workflow_advance", casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
+		repKnob([]string{"profile_has_promote_overlay", "profile_has_ask_user", "profile_has_workflow_advance", casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
 		indexKnob("gates", []string{"unsatisfied_gate_leaves", "failed_leaves", "current_phase_gates", "phase_exit.open_gates", "phase_exit.dormant_gates"}, gateStates),
 		indexKnob("complete_when", []string{"complete_when", "phase_exit.complete_when"}, []string{"none", "set"}),
 		indexKnob("blueprint", []string{"blueprint_approval", "blueprint_approval.status == \"approved\""}, []string{"none", "approved", "invalid"}),
@@ -200,7 +200,7 @@ func securityPhaseKickCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCa
 			continue
 		}
 		knobs := []casegen.Knob{
-			repKnob("rep", []string{casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
+			repKnob([]string{casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
 			indexKnob("verdicts", []string{"review_verdict", "review_verdict.survey_claims", "review_verdict.survey_challenged"}, verdicts),
 		}
 		out = append(out, guidanceCase{
@@ -241,7 +241,7 @@ func workerRoundNoticeCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCa
 		})
 	inFlight := []string{kick.RoundInFlightModelCall, kick.RoundInFlightQueued, kick.RoundInFlightTools}
 	knobs := []casegen.Knob{
-		repKnob("rep", []string{"profile_has_pack_board", "profile_has_worker_history", "profile_has_read_findings", "profile_has_wait", "profile_has_worker_cancel"}, len(reps), func(i int) string { return reps[i].state.ID }),
+		repKnob([]string{"profile_has_pack_board", "profile_has_worker_history", "profile_has_read_findings", "profile_has_wait", "profile_has_worker_cancel"}, len(reps), func(i int) string { return reps[i].state.ID }),
 		indexKnob("worker", []string{"worker"}, []string{"named", "unnamed"}),
 		indexKnob("round", []string{"round_ordinal"}, []string{"second", "none"}),
 		indexKnob("work", []string{"workflow_work_id"}, []string{"bound", "none"}),
@@ -316,7 +316,7 @@ func workerTaskFinishedCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceC
 			return offers(cr.auth, "promote_overlay", "instruct_worker", "preview_overlay", "worker_history", "update_progress", "wait")
 		})
 	knobs := []casegen.Knob{
-		repKnob("rep", []string{"profile_has_promote_overlay", "profile_has_instruct_worker", "profile_has_preview_overlay", "profile_has_worker_history", "profile_has_update_progress", casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
+		repKnob([]string{"profile_has_promote_overlay", "profile_has_instruct_worker", "profile_has_preview_overlay", "profile_has_worker_history", "profile_has_update_progress", casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
 		indexKnob("handle", []string{"worker_result.result_handle"}, []string{"named", "none"}),
 		indexKnob("changed", []string{"worker_result.changed", "worker_result.changed_omitted"}, []string{"bounded", "shown", "none"}),
 		indexKnob("not_applied", []string{"worker_result.not_applied"}, []string{"none", "one"}),

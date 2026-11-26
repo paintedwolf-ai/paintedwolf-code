@@ -362,12 +362,14 @@ func readerFact(r prompts.Reader, name string) bool {
 	return v
 }
 
-func repKnob(name string, facts []string, n int, label func(int) string) casegen.Knob {
+// repKnob picks one of n recipients; sweepSettings crosses every setting
+// with it.
+func repKnob(facts []string, n int, label func(int) string) casegen.Knob {
 	labels := make([]string, n)
 	for i := range labels {
 		labels[i] = label(i)
 	}
-	return indexKnob(name, facts, labels)
+	return indexKnob("rep", facts, labels)
 }
 
 func coordinatorRender(text string, cr coordRep) guidanceRender {
