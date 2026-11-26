@@ -71,7 +71,7 @@ def inject_drafts(application, project_id, root_id, drafts):
     return all_ok, bindings
 
 
-def inspect_engine_provenance(root=ROOT, engine_bin=None, evaluator_git_head='', engine_manifest=None):
+def inspect_engine_provenance(root=ROOT, engine_bin=None, evaluator_git_head='', evaluator_git_tree='', engine_manifest=None):
     """Bind the engine executable and build/source identity independently from the evaluator checkout."""
     binary, build_source = resolve_engine_binary(root, engine_bin)
     exists = binary.is_file()
@@ -100,9 +100,8 @@ def inspect_engine_provenance(root=ROOT, engine_bin=None, evaluator_git_head='',
             pass
 
     mpath = resolve_engine_manifest(engine_manifest)
-    m_data = {}
-    m_sha = ''
-    m_match = None
+    m_data, m_sha = {}, ''
+    m_match = m_path_match = m_head_match = m_tree_match = None
     if mpath is not None and mpath.is_file():
         m_sha = file_sha256(mpath)
         try:
@@ -112,12 +111,18 @@ def inspect_engine_provenance(root=ROOT, engine_bin=None, evaluator_git_head='',
         except (OSError, ValueError):
             m_data = {}
         m_match = bool(exists and sha and m_data.get('executable_sha256') == sha)
+        m_exec = str(m_data.get('executable_path') or '')
+        m_path_match = bool(m_exec and pathlib.Path(m_exec).resolve() == binary)
+        m_head = str(m_data.get('git_head') or '')
+        m_tree = str(m_data.get('git_tree') or '')
+        m_head_match = bool(m_head and (not evaluator_git_head or m_head == evaluator_git_head))
+        m_tree_match = bool(m_tree and (not evaluator_git_tree or m_tree == evaluator_git_tree))
+    else:
+        m_head = m_tree = ''
 
     vcs_rev = vcs.get('vcs.revision', '')
-    m_head = str(m_data.get('git_head') or '')
-    m_tree = str(m_data.get('git_tree') or '')
     if mpath is not None:
-        provenance_verified = bool(m_match and m_head and m_tree)
+        provenance_verified = bool(m_match and m_path_match and m_head_match and m_tree_match)
         effective_rev = m_head
     else:
         provenance_verified = bool(exists and sha and vcs_rev and vcs.get('vcs.modified') in {'', 'false'})
@@ -141,6 +146,9 @@ def inspect_engine_provenance(root=ROOT, engine_bin=None, evaluator_git_head='',
         'manifest_build_command': str(m_data.get('build_command') or ''),
         'manifest_built_at': str(m_data.get('built_at') or ''),
         'manifest_sha256_match': m_match,
+        'manifest_path_match': m_path_match,
+        'manifest_head_match': m_head_match,
+        'manifest_tree_match': m_tree_match,
         'provenance_verified': provenance_verified,
         'matches_evaluator_head': matches_head,
     }
@@ -152,7 +160,10 @@ def source_identity(root=ROOT, profile=None, engine_bin=None, engine_manifest=No
     git_tree = _git(root, 'rev-parse', 'HEAD^{tree}')
     version_file = root / 'VERSION'
     lang_file = root / 'lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/language.json'
-    prov = inspect_engine_provenance(root, engine_bin=engine_bin, evaluator_git_head=git_head, engine_manifest=engine_manifest)
+    prov = inspect_engine_provenance(
+        root, engine_bin=engine_bin, evaluator_git_head=git_head,
+        evaluator_git_tree=git_tree, engine_manifest=engine_manifest,
+    )
     return {
         'git_head': git_head,
         'git_tree': git_tree,

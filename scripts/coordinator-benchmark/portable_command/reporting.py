@@ -1,6 +1,7 @@
 """Durable per-case evidence archiving, Q-ID qualification, and discrepancy breakdown."""
 import hashlib
 import pathlib
+from portable_command.contracts import bytes_value, digest
 from portable_command.provenance import (
     file_sha256,
     inject_drafts,
@@ -12,7 +13,7 @@ from portable_command.provenance import (
 )
 from progress import save
 
-SETUP_GAPS = {'profile_binding_approximate', 'uninjected_drafts', 'uninjected_host_facts'}
+SETUP_GAPS = {'profile_binding_approximate', 'profile_binding_mismatch', 'uninjected_drafts', 'uninjected_host_facts'}
 OBSERVATION_GAPS = {'missing_sidecar_log', 'incomplete_sidecar_log', 'missing_program_status_code'}
 OPENING_MARKERS = ('server listening', 'listening', 'server started', 'startup')
 CLOSING_MARKERS = (
@@ -72,7 +73,36 @@ FACT_OWNERS = {
     'same_physical_identity': 'temp_owner', 'session_authored_paths': 'git_owner',
     'temp_path_owned': 'temp_owner', 'typed_null_sink': 'program_runtime',
     'validated_resubmission_reference': 'progress_owner', 'verification_source_match': 'verification_owner',
+    'screened_retained_failure_output': 'security_screen_owner',
+    'retained_full_output': 'output_retention_owner',
+    'full_stream_digest': 'output_retention_owner',
+    'preview_independent': 'output_retention_owner',
+    'every_producer_eligible': 'program_runtime',
 }
+
+
+def verified_source_binding(case, pins, execs, baseline_hashes):
+    """Verify source pins match actual fixture paths/digests and belong to owner executions."""
+    expected = {k.lstrip('./'): v for k, v in (baseline_hashes or {}).items()}
+    if not expected:
+        expected = {k.lstrip('./'): digest(bytes_value(v)) for k, v in case.get('setup', {}).get('files', {}).items()}
+    draft_digests = {k.lstrip('./'): digest(bytes_value(v['bytes'])) for k, v in case.get('setup', {}).get('drafts', {}).items()}
+    exec_ids = {e['id'] for e in execs}
+    source_pins = [p for p in pins if p.get('role') == 'source' and p.get('mode') in {'published_disk', 'accepted_document'}]
+    if not source_pins:
+        return False, []
+    matched_paths = set()
+    for p in source_pins:
+        rel = str(p.get('path') or '').lstrip('./')
+        pin_sha = p.get('content_sha256') or p.get('disk_sha256') or ''
+        allowed = {s for s in (expected.get(rel), draft_digests.get(rel)) if s}
+        if p.get('execution_id') not in exec_ids or rel not in expected or not pin_sha or pin_sha not in allowed:
+            return False, source_pins
+        matched_paths.add(rel)
+    required_paths = {k.lstrip('./') for k in case.get('setup', {}).get('revisions', {})}
+    if required_paths and not (required_paths <= matched_paths):
+        return False, source_pins
+    return True, source_pins
 
 
 def slice_sidecar_log(log_path, session_id=None, max_edge=40):
