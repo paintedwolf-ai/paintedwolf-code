@@ -202,10 +202,10 @@ class RepositoryToolsInputsTest(unittest.TestCase):
                                                                   "libarchive-tools", "lintian", "makepkg", "minisign",
                                                                   "pacman-package-manager", "rpm", "rpmlint"})
 
-    def test_macos_prepares_the_signer_without_an_unrelated_homebrew_update(self):
+    def test_macos_prepares_openpgp_and_the_signer_without_an_unrelated_homebrew_update(self):
         result, calls = self.run_profile("Darwin")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(calls, [{"argv": ["brew", "install", "minisign"], "auto": "1"}])
+        self.assertEqual(calls, [{"argv": ["brew", "install", "gnupg", "minisign"], "auto": "1"}])
 
     def test_unknown_platform_and_extra_arguments_cannot_install_tools(self):
         for system, arguments in [("unknown", []), ("Linux", ["unexpected"])]:
