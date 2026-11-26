@@ -14,9 +14,9 @@ import (
 // workflowfacts.ResolvedWorkflowRequest binds request text to its workflow start.
 
 // ResolvedRequest supplies a coordinator's resolved workflow request.
-func (m *Service) ResolvedRequest(ctx context.Context, sess *api.Session) workflowfacts.ResolvedWorkflowRequest {
+func (m *Service) ResolvedRequest(ctx context.Context, sess *api.Session) (workflowfacts.ResolvedWorkflowRequest, error) {
 	if m == nil || m.workflows == nil || sess == nil || sess.IsWorkerChild() {
-		return workflowfacts.ResolvedWorkflowRequest{}
+		return workflowfacts.ResolvedWorkflowRequest{}, nil
 	}
 	return m.workflows.ResolvedRequest(ctx, sess.ID)
 }
@@ -43,12 +43,18 @@ func (m *Service) Request(ctx context.Context, in promptinput.Input, history []a
 
 // HasRequest reports whether the chat holds a request a host turn could
 // continue: a user instruction or a workflow's resolved request. A worker
-// leg's request is its job brief, which every leg carries.
+// leg's request is its job brief, which every leg carries. A request that
+// cannot be read counts as present, so a store failure never drops a wake.
 func (m *Service) HasRequest(ctx context.Context, sess *api.Session, history []api.Message) bool {
 	if sess == nil || sess.IsWorkerChild() {
 		return true
 	}
-	opening, text := RequestOpening(history, m.ResolvedRequest(ctx, sess))
+	request, err := m.ResolvedRequest(ctx, sess)
+	if err != nil {
+		turnLoadLog.Warn("workflow request unreadable", "session_id", sess.ID, "error", err)
+		return true
+	}
+	opening, text := RequestOpening(history, request)
 	return opening != "" && text != ""
 }
 

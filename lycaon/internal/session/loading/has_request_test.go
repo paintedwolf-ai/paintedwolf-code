@@ -2,6 +2,7 @@ package loading
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/promptinput"
@@ -11,8 +12,14 @@ import (
 
 type resolvedWorkflow workflowfacts.ResolvedWorkflowRequest
 
-func (w resolvedWorkflow) ResolvedRequest(context.Context, string) workflowfacts.ResolvedWorkflowRequest {
-	return workflowfacts.ResolvedWorkflowRequest(w)
+func (w resolvedWorkflow) ResolvedRequest(context.Context, string) (workflowfacts.ResolvedWorkflowRequest, error) {
+	return workflowfacts.ResolvedWorkflowRequest(w), nil
+}
+
+type unreadableWorkflow struct{}
+
+func (unreadableWorkflow) ResolvedRequest(context.Context, string) (workflowfacts.ResolvedWorkflowRequest, error) {
+	return workflowfacts.ResolvedWorkflowRequest{}, errors.New("database is locked")
 }
 
 // A host turn continues a request only when Request could name one, so the
@@ -48,10 +55,27 @@ func TestHasRequestMatchesTheRequestATurnWouldDecideFor(t *testing.T) {
 			if tc.sess.IsWorkerChild() {
 				return
 			}
-			_, _, decides := s.Request(t.Context(), wake, tc.history, "", s.ResolvedRequest(t.Context(), tc.sess))
+			resolved, err := s.ResolvedRequest(t.Context(), tc.sess)
+			if err != nil {
+				t.Fatalf("resolve request: %v", err)
+			}
+			_, _, decides := s.Request(t.Context(), wake, tc.history, "", resolved)
 			if decides != tc.want {
 				t.Fatalf("Request decides = %v, HasRequest = %v", decides, tc.want)
 			}
 		})
+	}
+}
+
+// A request the store cannot read is not a missing request: the wake stays
+// actionable instead of being dropped.
+func TestAnUnreadableRequestKeepsAHostTurnActionable(t *testing.T) {
+	s := &Service{workflows: unreadableWorkflow{}, turnStore: requestReceipts{}}
+	hostNote := api.Message{ID: "note", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Phase entered"}
+	if !s.HasRequest(t.Context(), &api.Session{ID: "chat"}, []api.Message{hostNote}) {
+		t.Fatal("an unreadable request dropped the wake")
+	}
+	if _, err := s.ResolvedRequest(t.Context(), &api.Session{ID: "chat"}); err == nil {
+		t.Fatal("the store failure did not reach the caller")
 	}
 }
