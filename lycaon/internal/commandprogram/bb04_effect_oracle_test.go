@@ -15,7 +15,11 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Family B: Generated effect sequences vs independent file-state oracle
+// Family B (evaluator-level): Generated effect sequences exercising evaluator
+// decisions against a fake staged publisher (bb04OraclePublication) that
+// independently models file bytes, revision aliases, and outcome counters.
+// Real-owner filesystem/HTTP uncertain outcomes are exercised separately in
+// lycaon/internal/toolhost/bb04_uncertainty_and_checkpoint_test.go.
 // ---------------------------------------------------------------------------
 
 type bb04OracleFileState struct {
@@ -37,6 +41,8 @@ type bb04OraclePublication struct {
 	committed int
 	withheld  int
 	refused   int
+	canceled  int
+	onCancel  func()
 }
 
 func newBB04OraclePublication() *bb04OraclePublication {
@@ -53,12 +59,25 @@ type bb04OracleStaged struct {
 	buf    bytes.Buffer
 }
 
-func (p *bb04OraclePublication) Open(_ context.Context, dest OutputDestination) (StagedOutput, error) {
+func (p *bb04OraclePublication) Open(ctx context.Context, dest OutputDestination) (StagedOutput, error) {
 	if dest.Target.Value == "refused" {
 		p.mu.Lock()
 		p.refused++
 		p.mu.Unlock()
 		return nil, &codedError{code: "COMMAND_PATH_REFUSED"}
+	}
+	if dest.Target.Value == "cancel-target" {
+		p.mu.Lock()
+		p.canceled++
+		cancelFn := p.onCancel
+		p.mu.Unlock()
+		if cancelFn != nil {
+			cancelFn()
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return nil, context.Canceled
 	}
 	return &bb04OracleStaged{
 		pub:    p,
@@ -97,6 +116,7 @@ const (
 	bb04StepReplace
 	bb04StepProducerFail
 	bb04StepDeny
+	bb04StepCancel
 	bb04StepRetryFromKnown
 )
 
@@ -113,11 +133,14 @@ func bb04GenerateFamilyB(seed uint64) []bb04EffectStep {
 	payloads := []string{"v1\n", "line two\n", "it's ok\n", "payload-4\n", "final\n"}
 	steps := make([]bb04EffectStep, 0, count)
 	for i := 0; i < count; i++ {
-		kind := bb04EffectStepKind(rng.IntN(6))
+		kind := bb04EffectStepKind(rng.IntN(7))
 		target := targets[rng.IntN(len(targets))]
 		payload := payloads[rng.IntN(len(payloads))]
-		if kind == bb04StepDeny {
+		switch kind {
+		case bb04StepDeny:
 			target = "refused"
+		case bb04StepCancel:
+			target = "cancel-target"
 		}
 		steps = append(steps, bb04EffectStep{kind: kind, target: target, payload: payload})
 	}
@@ -128,9 +151,9 @@ func bb04ExecuteEffectSequence(t testing.TB, steps []bb04EffectStep) error {
 	t.Helper()
 	pub := newBB04OraclePublication()
 	oracle := newBB04OracleFileState()
-	wantCommitted, wantWithheld, wantRefused := 0, 0, 0
+	wantCommitted, wantWithheld, wantRefused, wantCanceled := 0, 0, 0, 0
 
-	runProgram := func(src string) (ProgramOutcome, error) {
+	runProgramCtx := func(ctx context.Context, src string) (ProgramOutcome, error) {
 		var stdout, stderr bytes.Buffer
 		root := fixtureInvocation()
 		root.SourceUnitID = "program"
@@ -147,17 +170,20 @@ func bb04ExecuteEffectSequence(t testing.TB, steps []bb04EffectStep) error {
 			Memory:      mem,
 			Streams:     Streams{Input: NullInput(), Output: &stdout, Error: &stderr},
 		}
-		parsed, err := commandsurface.ParseAdmitted(t.Context(), mem, []byte(src), commandsurface.ParseOptions{SourceName: "program"})
+		parsed, err := commandsurface.ParseAdmitted(ctx, mem, []byte(src), commandsurface.ParseOptions{SourceName: "program"})
 		if err != nil {
 			return ProgramOutcome{}, err
 		}
 		defer parsed.Close()
-		lease, err := parsed.SnapshotWithMemory(t.Context(), mem)
+		lease, err := parsed.SnapshotWithMemory(ctx, mem)
 		if err != nil {
 			return ProgramOutcome{}, err
 		}
 		defer lease.Close()
-		return Evaluate(t.Context(), lease.Plan, ports)
+		return Evaluate(ctx, lease.Plan, ports)
+	}
+	runProgram := func(src string) (ProgramOutcome, error) {
+		return runProgramCtx(t.Context(), src)
 	}
 
 	for idx, step := range steps {
@@ -202,15 +228,34 @@ func bb04ExecuteEffectSequence(t testing.TB, steps []bb04EffectStep) error {
 				return fmt.Errorf("step %d (%s): want COMMAND_PATH_REFUSED authority stop, got err=%v stop=%+v", idx, src, err, out.Stop)
 			}
 			wantRefused++
+
+		case bb04StepCancel:
+			// Deterministic cancellation at the staged-publisher seam stops the
+			// program with StopInterrupted; earlier committed bytes survive and
+			// trailing statements do not execute.
+			stepCtx, cancel := context.WithCancel(t.Context())
+			pub.mu.Lock()
+			pub.onCancel = cancel
+			pub.mu.Unlock()
+			src := fmt.Sprintf("echo %s > cancel-target; echo never > alpha.txt", quoted)
+			out, err := runProgramCtx(stepCtx, src)
+			cancel()
+			pub.mu.Lock()
+			pub.onCancel = nil
+			pub.mu.Unlock()
+			if !errors.Is(err, context.Canceled) || out.Stop == nil || out.Stop.Kind != StopInterrupted {
+				return fmt.Errorf("step %d (%s): want context.Canceled interrupted stop, got err=%v stop=%+v", idx, src, err, out.Stop)
+			}
+			wantCanceled++
 		}
 
 		// Verify independent file-state oracle after every single step.
 		pub.mu.Lock()
-		gotCommitted, gotWithheld, gotRefused := pub.committed, pub.withheld, pub.refused
-		if gotCommitted != wantCommitted || gotWithheld != wantWithheld || gotRefused != wantRefused {
+		gotCommitted, gotWithheld, gotRefused, gotCanceled := pub.committed, pub.withheld, pub.refused, pub.canceled
+		if gotCommitted != wantCommitted || gotWithheld != wantWithheld || gotRefused != wantRefused || gotCanceled != wantCanceled {
 			pub.mu.Unlock()
-			return fmt.Errorf("step %d counters: got committed=%d withheld=%d refused=%d; want %d/%d/%d",
-				idx, gotCommitted, gotWithheld, gotRefused, wantCommitted, wantWithheld, wantRefused)
+			return fmt.Errorf("step %d counters: got committed=%d withheld=%d refused=%d canceled=%d; want %d/%d/%d/%d",
+				idx, gotCommitted, gotWithheld, gotRefused, gotCanceled, wantCommitted, wantWithheld, wantRefused, wantCanceled)
 		}
 		if len(pub.files) != len(oracle.bytes) {
 			pub.mu.Unlock()
@@ -235,11 +280,11 @@ func bb04ExecuteEffectSequence(t testing.TB, steps []bb04EffectStep) error {
 
 func TestBB04GeneratedEffectSequencesOracle(t *testing.T) {
 	digest := bb04GeneratorDigest(bb04FamilyBGenVersion)
-	t.Logf("Family B file-state oracle: seeds=0..%d generator_digest=%s", bb04SeedCount-1, digest)
+	t.Logf("Family B evaluator/fake-publisher oracle: seeds=0..%d generator_digest=%s", bb04SeedCount-1, digest)
 	for seed := uint64(0); seed < bb04SeedCount; seed++ {
 		steps := bb04GenerateFamilyB(seed)
 		if err := bb04ExecuteEffectSequence(t, steps); err != nil {
-			t.Fatalf("Family B oracle divergence (seed=%d generator_digest=%s steps=%+v): %v", seed, digest, steps, err)
+			t.Fatalf("Family B evaluator/fake-publisher oracle divergence (seed=%d generator_digest=%s steps=%+v): %v", seed, digest, steps, err)
 		}
 	}
 }
@@ -250,6 +295,7 @@ func TestBB04EffectOracleExplicitTransitions(t *testing.T) {
 		{kind: bb04StepAppend, target: "alpha.txt", payload: "appended"},
 		{kind: bb04StepProducerFail, target: "alpha.txt", payload: "must-not-publish"},
 		{kind: bb04StepDeny, target: "refused", payload: "denied"},
+		{kind: bb04StepCancel, target: "cancel-target", payload: "canceled"},
 		{kind: bb04StepReplace, target: "alpha.txt", payload: "replaced"},
 		{kind: bb04StepRetryFromKnown, target: "beta.txt", payload: "retried"},
 	}

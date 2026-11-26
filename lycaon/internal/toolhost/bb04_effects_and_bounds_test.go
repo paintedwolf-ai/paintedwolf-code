@@ -233,10 +233,21 @@ func TestBB04M06LoopbackHTTPFixture(t *testing.T) {
 		t.Fatalf("GET /interrupted count = %d, want 1 (no automatic retry)", n)
 	}
 
-	// 3. Server records receipt before connection drops -> zero implicit resend.
+	// 3. Server records receipt before connection drops -> typed uncertainty,
+	// no replay availability, and zero implicit resend.
 	commitOut := callComposedProgram(t, f, fmt.Sprintf("curl -sS -X POST -d 'op=1' '%s/commit'", srv.URL))
-	if commitOut.Status == 0 && commitOut.Refusal == nil {
-		t.Fatalf("dropped commit response unexpectedly succeeded: %+v", commitOut)
+	if commitOut.State != "completed" || commitOut.Status != 52 || commitOut.Refusal != nil {
+		t.Fatalf("dropped commit response outcome = %+v refusal=%+v, want completed status=52", commitOut, commitOut.Refusal)
+	}
+	if commitOut.UncertainEffects != 1 || commitOut.ReplayAvailable || !strings.Contains(commitOut.Stderr, "curl: (52)") {
+		t.Fatalf("dropped commit uncertainty/recovery facts = %+v (want UncertainEffects=1 ReplayAvailable=false curl:(52))", commitOut)
+	}
+	var certainty string
+	testutil.FailErr(t, "read http_request certainty", f.Database.QueryRowContext(t.Context(),
+		`SELECT effect_certainty FROM invocation_program_executions WHERE program_id=? AND operation_id='http_request'`,
+		commitOut.ProgramID).Scan(&certainty))
+	if certainty != "unknown" {
+		t.Fatalf("dropped commit child effect_certainty = %q, want %q", certainty, "unknown")
 	}
 	if hits := commitHits.Load(); hits != 1 {
 		t.Fatalf("POST /commit server hits = %d, want exactly 1 (no implicit resend)", hits)
@@ -332,7 +343,9 @@ func TestBB04M11LimitsCleanupAndHistoricalLeads(t *testing.T) {
 		}
 	})
 
-	t.Run("L05/program-state-memory-cap-typed-refusal", func(t *testing.T) {
+	// Allocator-bound evidence only; checkpoint-resume boundary behavior is
+	// exercised separately in TestBB04M11L05CheckpointResumeBoundary.
+	t.Run("L05-allocator-bound/program-state-memory-cap-typed-refusal", func(t *testing.T) {
 		mem, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 64 << 20, State: 64 << 20})
 		testutil.FailErr(t, "allocate 64 MiB program memory", err)
 		release, err := mem.ReserveProgramState(t.Context(), 64<<20)
