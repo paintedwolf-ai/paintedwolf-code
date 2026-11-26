@@ -125,7 +125,11 @@ func (h *Harness) runDoomLoopRejectedProducers(ctx context.Context, cells []Auth
 		refNoH, _ := h.Policy.FormatDoomLoopReject(cctx, sessID, tool, map[string]any{"query": "x"}, 9, "")
 		h.EvalCount++
 		h.recordRefusal(&out, oar.AnchorToolRejected, "doom.repeat[plain]", cell, refNoH, len(cell.Auth.Offered) > 0)
-		// Deferred-unactivated branch on repeat.
+		// Deferred-unactivated branch on repeat; only a coordinator turn has
+		// deferred tools to count (policyfacts.DeferredUnactivatedCount).
+		if cell.Role == "worker" {
+			continue
+		}
 		_, blkDef, _ := h.Policy.Block(cctx, oar.AnchorToolRejected, cell.Session(sessID), tool, nil, func(gc *oar.GuardContext) error {
 			gc.Counters.RepeatCount = 9
 			gc.Counters.DeferredUnactivated = 2
