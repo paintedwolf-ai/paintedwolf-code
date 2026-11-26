@@ -47,9 +47,11 @@ test_run_export_isolation() {
   # Toolchains and dependency stores are provisioned host inputs, not test state.
   export RUSTUP_HOME="${RUSTUP_HOME:-${HOME}/.rustup}"
   export CARGO_HOME="${CARGO_HOME:-${HOME}/.cargo}"
-  local go_env goroot gocache gomodcache gopath
-  go_env="$(go env GOROOT GOCACHE GOMODCACHE GOPATH)" || return 1
-  { read -r goroot; read -r gocache; read -r gomodcache; read -r gopath; } <<<"${go_env}"
+  local goroot gocache gomodcache gopath
+  goroot="$(go env GOROOT)" || return 1
+  gocache="$(go env GOCACHE)" || return 1
+  gomodcache="$(go env GOMODCACHE)" || return 1
+  gopath="$(go env GOPATH)" || return 1
   export GOCACHE="${GOCACHE:-${gocache}}"
   export GOMODCACHE="${GOMODCACHE:-${gomodcache}}"
   export GOPATH="${GOPATH:-${gopath}}"

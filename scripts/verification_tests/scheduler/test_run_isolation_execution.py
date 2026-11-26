@@ -10,14 +10,22 @@ ISOLATION = Path(__file__).resolve().parents[2] / "test-run-isolation.sh"
 
 # Resolves its toolchain and caches from HOME, as a version wrapper does.
 WRAPPER = """#!/bin/sh
-[ "$1" = env ] || exit 2
-printf '%s\\n' "$HOME/sdk/go-fixture" "$HOME/go-cache" "$HOME/go-mod" "$HOME/go-path"
+case "$1 $2" in
+  "env GOROOT") echo "$HOME/sdk/go-fixture" ;;
+  "env GOCACHE") echo "$HOME/go-cache" ;;
+  "env GOMODCACHE") echo "$HOME/go-mod" ;;
+  "env GOPATH") echo "$HOME/go-path" ;;
+  *) exit 2 ;;
+esac
 """
 
 # Names a toolchain root that holds no go.
 MISSING_ROOT = """#!/bin/sh
-[ "$1" = env ] || exit 2
-printf '%s\\n' "$HOME/nowhere" "$HOME/go-cache" "$HOME/go-mod" "$HOME/go-path"
+case "$1 $2" in
+  "env GOROOT") echo "$HOME/nowhere" ;;
+  "env "*) echo "$HOME/go-$2" ;;
+  *) exit 2 ;;
+esac
 """
 
 # Cannot report its environment.
