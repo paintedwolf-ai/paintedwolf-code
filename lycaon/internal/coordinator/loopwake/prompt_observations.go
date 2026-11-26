@@ -14,7 +14,7 @@ func (l *PromptObservations) ObservePrompt(ctx context.Context, sessionID string
 	seq := l.Nudges.nextSequence()
 	return func(frame inject.CoordinatorTurnFrame) {
 		l.promptWorkflow.Store(sessionID, observedWorkflow{sequence: seq, runID: frame.RunContext.RunID, revision: frame.WorkflowRevision, turn: actionoutcome.CurrentTurn(ctx)})
-		slog.Debug("prompt wake observation", "component", loopLogComponent, "session_id", sessionID, "sequence", seq, "run_id", frame.RunContext.RunID, "workflow_revision", frame.WorkflowRevision)
+		slog.DebugContext(ctx, "prompt wake observation", "component", loopLogComponent, "session_id", sessionID, "sequence", seq, "run_id", frame.RunContext.RunID, "workflow_revision", frame.WorkflowRevision)
 	}
 }
 func (l *PromptObservations) wakeConsumed(ctx context.Context, sessionID string, pending pendingLoopWake) bool {

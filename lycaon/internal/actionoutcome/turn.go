@@ -117,6 +117,8 @@ func (t *Turn) Finish(result *promptresult.Result, err error, canceledBy api.Tur
 			}
 			if r.Outcome == api.TurnOutcomeKindCanceled {
 				switch canceledBy {
+				case api.TurnCancellationSourceHost:
+					result = WakeResult(api.WakeReasonTurnSettled)
 				case api.TurnCancellationSourceUser:
 					result = WakeResult(api.WakeReasonUserStopped)
 				case api.TurnCancellationSourceShutdown:

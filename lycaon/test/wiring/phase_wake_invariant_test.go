@@ -163,12 +163,12 @@ func (d *phaseWakeDriver) checkHostWake(t *testing.T, session *actionoutcome.Ses
 		}
 		result, err := session.Wakes.Await(t.Context(), strconv.FormatUint(wake.Sequence, 10))
 		testutil.FailErr(t, "await host phase wake", err)
-		switch result.State {
-		case wire.WakeStateHeld:
+		if result.State == wire.WakeStateHeld {
 			if holds[string(result.Reason)] {
 				return
 			}
-		case wire.WakeStateConsumed, wire.WakeStateDelivered:
+		}
+		if result.State == wire.WakeStateConsumed || result.State == wire.WakeStateDelivered {
 			turn, err := session.Turns.Await(t.Context(), result.TurnID)
 			testutil.FailErr(t, "await host phase turn", err)
 			if !turn.DispatchedAt.IsZero() {

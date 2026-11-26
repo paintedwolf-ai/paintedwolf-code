@@ -59,6 +59,8 @@ func TestWorkflowActionsReturnTheirOwnContinuation(t *testing.T) {
 			if action.Reason != wire.ContinuationReasonWorkflowCompleted {
 				t.Fatalf("unexpected end: %+v", action)
 			}
+		case wire.ContinuationStateFailed, wire.ContinuationStateNotContinued, wire.ContinuationStatePending:
+			t.Fatalf("unexpected continuation: %+v", action)
 		}
 		seen[action.ContinuationID] = true
 	}

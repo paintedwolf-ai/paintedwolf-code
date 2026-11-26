@@ -99,19 +99,7 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 	ctx = workercontext.WithJob(ctx, in.WorkerJobID)
 	finalOutputID, closeoutID := "", ""
 	defer func() {
-		outcomeErr := runErr
-		if err := m.Turns.Finish(context.WithoutCancel(ctx), turnExecution, finalOutputID, resp, runErr); err != nil {
-			outcomeErr = err
-			resp = nil
-			runErr = errors.Join(runErr, err)
-		}
-		cancelledBy := api.TurnCancellationSourceHost
-		if errors.Is(context.Cause(ctx), sessionexecution.ErrUserCancelled) {
-			cancelledBy = api.TurnCancellationSourceUser
-		} else if m.Settlement.Disposition(true) == api.SessionIdleDispositionInterrupted {
-			cancelledBy = api.TurnCancellationSourceShutdown
-		}
-		outcome.Finish(resp, outcomeErr, cancelledBy)
+		resp, runErr = m.finishTurn(ctx, turnExecution, finalOutputID, resp, runErr, outcome)
 	}()
 
 	if err := m.Chats.UnarchiveOnPrompt(ctx, sess); err != nil {
@@ -201,6 +189,23 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 	}
 	promptFailed = false
 	return execution.Response, nil
+}
+
+func (m *Service) finishTurn(ctx context.Context, execution store.TurnExecution, outputID string, resp *promptresult.Result, runErr error, outcome *actionoutcome.Turn) (*promptresult.Result, error) {
+	outcomeErr := runErr
+	if err := m.Turns.Finish(context.WithoutCancel(ctx), execution, outputID, resp, runErr); err != nil {
+		outcomeErr = err
+		resp = nil
+		runErr = errors.Join(runErr, err)
+	}
+	canceledBy := api.TurnCancellationSourceHost
+	if errors.Is(context.Cause(ctx), sessionexecution.ErrUserCancelled) {
+		canceledBy = api.TurnCancellationSourceUser
+	} else if m.Settlement.Disposition(true) == api.SessionIdleDispositionInterrupted {
+		canceledBy = api.TurnCancellationSourceShutdown
+	}
+	outcome.Finish(resp, outcomeErr, canceledBy)
+	return resp, runErr
 }
 
 type promptRunExecution struct {

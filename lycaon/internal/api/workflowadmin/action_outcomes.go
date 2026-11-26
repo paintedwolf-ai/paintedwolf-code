@@ -16,11 +16,13 @@ func (s *RunControl) commitAction(ctx context.Context, a *actionoutcome.Action, 
 		actionoutcome.Register(ctx, run.SessionID).Resolve(actionoutcome.Result{State: wire.ContinuationStateFinished, Reason: wire.ContinuationReasonWorkflowCanceled})
 	case wire.WorkflowRunStatusComplete:
 		actionoutcome.Register(ctx, run.SessionID).Resolve(actionoutcome.Result{State: wire.ContinuationStateFinished, Reason: wire.ContinuationReasonWorkflowCompleted})
+	case wire.WorkflowRunStatusRunning, wire.WorkflowRunStatusPausedOnChild, wire.WorkflowRunStatusFailed, wire.WorkflowRunStatusInterrupted:
+		// Registered callbacks determine the continuation.
 	}
 	results := s.Sessions.Coordinator.Runtime.CoordinatorLoop().Outcomes.For(run.SessionID)
 	projectID := run.ProjectID
 	publisher := s.eventPublisher
-	eventCtx := context.Background()
+	eventCtx := context.WithoutCancel(ctx)
 	catalog := s.responses.Notices
 	order := a.Order
 	render := func(reason string, kind wire.ContinuationAction) *wire.SessionHostError {

@@ -78,7 +78,7 @@ func (t *Ticket) Record(state api.WakeState, reason api.WakeReason, turnID, leas
 		t.ack.Store(true)
 	}
 	step := WakeStep{state, reason}
-	valid := false
+	var valid bool
 	switch state {
 	case api.WakeStateDelivered, api.WakeStateConsumed:
 		valid = reason == "" && turnID != ""

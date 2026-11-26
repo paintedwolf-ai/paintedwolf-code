@@ -59,7 +59,8 @@ func (q *sessionNudgeQueue) push(n pendingLoopWake) {
 func (q *sessionNudgeQueue) close(reason api.WakeReason) {
 	q.mu.Lock()
 	q.closed = reason
-	items := append(q.nudges, q.deferred...)
+	q.nudges = append(q.nudges, q.deferred...)
+	items := q.nudges
 	q.nudges = nil
 	q.deferred = nil
 	q.mu.Unlock()

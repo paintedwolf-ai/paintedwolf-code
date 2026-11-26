@@ -15,12 +15,12 @@ func printOutcomes(out io.Writer, path, sessionID string) error {
 	if err != nil {
 		return err
 	}
-	defer bundle.Close()
+	defer func() { _ = bundle.Close() }()
 	entry, err := bundle.Open("action-outcomes.json")
 	if err != nil {
 		return err
 	}
-	defer entry.Close()
+	defer func() { _ = entry.Close() }()
 	decoder := json.NewDecoder(entry)
 	if _, err := decoder.Token(); err != nil {
 		return err
