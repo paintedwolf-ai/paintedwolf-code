@@ -46,8 +46,13 @@ func (h *Handoff) Resolve(result Result) {
 
 type leaseKey struct{}
 
-func WithLease(ctx context.Context, delivery *Handoff) context.Context {
-	return context.WithValue(ctx, leaseKey{}, delivery)
+type leaseWitness struct {
+	id       string
+	delivery *Handoff
+}
+
+func WithLease(ctx context.Context, id string, delivery *Handoff) context.Context {
+	return context.WithValue(ctx, leaseKey{}, leaseWitness{id, delivery})
 }
 func CurrentTurn(ctx context.Context) *Turn { t, _ := ctx.Value(turnContextKey{}).(*Turn); return t }
 
@@ -56,8 +61,7 @@ func (t *Ticket) Consumed(turn *Turn) {
 		return
 	}
 	if turn == nil {
-		t.Record(api.WakeStateConsumed, "", "", "")
-		t.path.Resolve(WakeResult(api.WakeReasonDefect))
+		t.Record(api.WakeStateDropped, api.WakeReasonDefect, "", "")
 		return
 	}
 	t.Record(api.WakeStateConsumed, "", turn.id, "")

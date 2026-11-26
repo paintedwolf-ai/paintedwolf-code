@@ -15,6 +15,7 @@ var ErrNoRequest = errors.New("turn has no open request")
 
 type TurnRecord struct {
 	Refusal      api.WakeReason             `json:"refusal,omitempty"`
+	LeaseID      string                     `json:"lease_id,omitempty"`
 	TurnID       string                     `json:"turn_id"`
 	SessionID    string                     `json:"session_id"`
 	AdmittedAt   time.Time                  `json:"admitted_at"`
@@ -35,19 +36,20 @@ type Turn struct {
 }
 
 func BeginTurn(ctx context.Context, history *History[TurnRecord], sessionID, turnID string) (context.Context, *Turn) {
-	history.Open(turnID, TurnRecord{TurnID: turnID, SessionID: sessionID, AdmittedAt: time.Now().UTC()})
+	lease, _ := ctx.Value(leaseKey{}).(leaseWitness)
+	history.Open(turnID, TurnRecord{LeaseID: lease.id, TurnID: turnID, SessionID: sessionID, AdmittedAt: time.Now().UTC()})
 	var path *Path
 	if ticket, _ := ctx.Value(ticketKey{}).(*Ticket); ticket != nil {
 		ticket.Record(api.WakeStateDelivered, "", turnID, "")
 		path = ticket.path
 		ctx = WithTicket(ctx, nil)
 	}
-	handoff, _ := ctx.Value(leaseKey{}).(*Handoff)
+	handoff := lease.delivery
 	if handoff == nil {
 		handoff = &Handoff{}
 	}
 	handoff.Follow(path)
-	ctx = context.WithValue(ctx, leaseKey{}, (*Handoff)(nil))
+	ctx = context.WithValue(ctx, leaseKey{}, leaseWitness{})
 	t := &Turn{handoff: handoff, id: turnID, history: history}
 	return context.WithValue(ctx, turnContextKey{}, t), t
 }
