@@ -77,6 +77,7 @@ export function createShellChatActions({ appStore, recents, projects, readyChat,
         {
           onPendingSend: payload.onPendingSend,
           recovery: payload.recovery,
+          recoveryContinuationId: payload.recoveryContinuationId,
           attachmentLabels: payload.attachmentLabels,
           shouldSend,
         },

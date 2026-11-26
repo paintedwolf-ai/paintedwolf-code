@@ -15,3 +15,15 @@ components:
         failure_code: {type: string}
         opened_at: {type: string, format: date-time}
         resolved_at: {type: string, format: date-time, x-go-pointer: true}
+    ContinuationNotice:
+      x-go-generate: true
+      type: object
+      required: [session_id, revision]
+      additionalProperties: false
+      properties:
+        session_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64}
+        continuation_id: {type: string, format: uuid}
+        host_error:
+          x-go-pointer: true
+          $ref: events.yaml#/components/schemas/SessionHostError

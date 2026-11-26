@@ -3,6 +3,7 @@ package actionoutcome
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,7 +17,10 @@ type Result struct {
 	FailureCode string
 }
 
+var actionSequence atomic.Uint64
+
 type Action struct {
+	Order   uint64
 	mu      sync.Mutex
 	record  api.ActionContinuation
 	paths   []*Path
@@ -29,7 +33,7 @@ type Action struct {
 type actionKey struct{}
 
 func Capture(ctx context.Context, kind api.ContinuationAction) (context.Context, *Action) {
-	a := &Action{record: api.ActionContinuation{ContinuationID: uuid.NewString(), Action: kind, State: api.ContinuationStatePending, OpenedAt: time.Now().UTC()}}
+	a := &Action{Order: actionSequence.Add(1), record: api.ActionContinuation{ContinuationID: uuid.NewString(), Action: kind, State: api.ContinuationStatePending, OpenedAt: time.Now().UTC()}}
 	return context.WithValue(ctx, actionKey{}, a), a
 }
 

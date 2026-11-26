@@ -2157,6 +2157,14 @@ type ContentReviewRule struct {
 	DisabledUntilAt *time.Time `json:"disabled_until_at,omitempty"`
 }
 
+// ContinuationNotice
+type ContinuationNotice struct {
+	SessionID      string            `json:"session_id"`
+	Revision       int64             `json:"revision"`
+	ContinuationID string            `json:"continuation_id,omitempty"`
+	HostError      *SessionHostError `json:"host_error,omitempty"`
+}
+
 // ContributionAgentColors Theme-authored color family for agent chats. Den gives each chat a lightness step around one muted hue and enforces display contrast.
 type ContributionAgentColors struct {
 	Main          string  `json:"main"`
@@ -5611,6 +5619,7 @@ type PromptRecovery struct {
 
 // PromptRequest
 type PromptRequest struct {
+	RecoveryContinuationID string `json:"recovery_continuation_id,omitempty"`
 	// Bind or upgrade the session mode at admission.
 	Mode *SessionMode `json:"mode,omitempty"`
 	// Stable client mutation identity. An exact retry replays the original submission; reusing this id with different input is rejected with 409 idempotency_conflict.
@@ -6900,9 +6909,10 @@ type SessionBackgroundExecutionJob struct {
 // SessionBootstrap
 type SessionBootstrap struct {
 	// Replay boundary captured before the snapshot was read
-	EventCursor   string               `json:"event_cursor"`
-	Session       Session              `json:"session"`
-	Continuations []ActionContinuation `json:"continuations,omitempty"`
+	EventCursor        string               `json:"event_cursor"`
+	Session            Session              `json:"session"`
+	ContinuationNotice *ContinuationNotice  `json:"continuation_notice,omitempty"`
+	Continuations      []ActionContinuation `json:"continuations,omitempty"`
 	// Current host work leases for this session. Omitted when no leases remain.
 	Activities        []ActivityEvent           `json:"activities,omitempty"`
 	Transcript        SessionTranscriptPage     `json:"transcript"`

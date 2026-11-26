@@ -90,7 +90,9 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 	if err != nil {
 		return nil, err
 	}
-	ctx, outcome := actionoutcome.BeginTurn(ctx, m.Coordinator.CoordinatorLoop().Outcomes.For(id).Turns, id, turnExecution.Turn.ID)
+	records := m.Coordinator.CoordinatorLoop().Outcomes.For(id)
+	ctx, outcome := actionoutcome.BeginTurn(ctx, records.Turns, id, turnExecution.Turn.ID)
+	outcome.RecoverNotice(&records.Notices, in.RecoveryContinuationID)
 	defer m.Execution.ClaimTurn(sess.ProjectID, turnExecution.Turn.ID)()
 	finishPromptExecution := m.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(ctx, id)
 	defer finishPromptExecution()

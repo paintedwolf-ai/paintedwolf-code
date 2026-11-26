@@ -340,6 +340,7 @@ export async function resumeChatSession(
 
 type SendChatPromptOpts = {
   mode?: SessionMode;
+  recoveryContinuationId?: string;
   recovery?: import("../../api/types.ts").PromptRecovery;
   /** Fires after the pending submission is visible, before any network wait. */
   onPendingSend?: (destination: "transcript" | "queue") => void;
@@ -448,6 +449,7 @@ export async function sendChatPrompt(
       operation_id: operationId,
       ...(admission.mode && { mode: admission.mode }),
       recovery: opts?.recovery,
+      recovery_continuation_id: opts?.recoveryContinuationId,
       text: trimmed,
       attachments: attachmentParts.length > 0 ? attachmentParts : undefined,
       references: referenceParts.length > 0 ? referenceParts : undefined,

@@ -138,7 +138,10 @@ export function createChatViewRecovery(props: ChatViewProps, options: RecoveryOp
         onCleanup(
           registerSessionPromptActions(sessionId, {
             retry: () => void retryLastAsk()?.(),
-            keepGoing: () => void keepGoingLastAsk()?.(),
+            keepGoing: (id) => {
+              if (id) void sendWithStreamFollow({ text: "Keep going", recoveryContinuationId: id });
+              else void keepGoingLastAsk()?.();
+            },
             rewindAndRetry: () => void rewindAndRetryLastAsk()?.(),
           }),
         );

@@ -1,3 +1,4 @@
+import { applyContinuationNotice } from "../notices/continuation-notices.ts";
 import { mergeSessionMode, replaceSessionWithMode, sessionReceivesMode } from "../chat/session/session-mode-projection.ts";
 import { settleSessionModeIntent } from "../chat/session/session-mode-state.ts";
 import { batch } from "solid-js";
@@ -108,6 +109,7 @@ export function createAppStore(
     installSessionBootstrap(bootstrap, sessionOverride) {
       const session = sessionOverride ?? bootstrap.session;
       const sid = session.id.trim();
+      if (bootstrap.continuation_notice) applyContinuationNotice(session.project_id, bootstrap.continuation_notice);
       settleSessionModeIntent(actions, session);
       const queue = rememberQueueDraft(sid, bootstrap.queue);
       setState(

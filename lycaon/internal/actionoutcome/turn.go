@@ -25,9 +25,10 @@ type TurnRecord struct {
 
 type turnContextKey struct{}
 type Turn struct {
-	handoff *Handoff
-	id      string
-	history *History[TurnRecord]
+	recoverNotice func()
+	handoff       *Handoff
+	id            string
+	history       *History[TurnRecord]
 }
 
 func BeginTurn(ctx context.Context, history *History[TurnRecord], sessionID, turnID string) (context.Context, *Turn) {
@@ -48,6 +49,12 @@ func BeginTurn(ctx context.Context, history *History[TurnRecord], sessionID, tur
 	return context.WithValue(ctx, turnContextKey{}, t), t
 }
 
+func (t *Turn) RecoverNotice(notices *Notices, id string) {
+	if id != "" {
+		t.recoverNotice = func() { notices.Recover(id) }
+	}
+}
+
 func Dispatch(ctx context.Context) {
 	t, _ := ctx.Value(turnContextKey{}).(*Turn)
 	if t == nil {
@@ -59,6 +66,9 @@ func Dispatch(ctx context.Context) {
 		}
 		return r, false
 	})
+	if t.recoverNotice != nil {
+		t.recoverNotice()
+	}
 	t.handoff.Resolve(Result{State: api.ContinuationStateContinued, TurnID: t.id})
 }
 

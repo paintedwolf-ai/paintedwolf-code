@@ -13,6 +13,7 @@ type Sessions struct {
 }
 
 type Session struct {
+	Notices Notices
 	Wakes   *History[WakeRecord]
 	Actions *History[api.ActionContinuation]
 	Turns   *History[TurnRecord]

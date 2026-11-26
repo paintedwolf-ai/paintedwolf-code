@@ -6011,6 +6011,15 @@ export interface components {
         ContinuationReason: "human_approval_awaiting" | "host_obligation_held" | "pending_user_input" | "active_hold" | "workflow_paused" | "workflow_cancelled" | "workflow_completed" | "no_open_request" | "turn_budget_reached" | "run_inactive" | "session_closed" | "admission_denied" | "user_interrupted" | "action_interrupted";
         /** @enum {string} */
         HostContinuationFailure: "host_lookup_failed" | "host_invariant_failed";
+        ContinuationNotice: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: int64 */
+            revision: number;
+            /** Format: uuid */
+            continuation_id?: string;
+            host_error?: components["schemas"]["SessionHostError"];
+        };
         ActionContinuation: {
             /** Format: uuid */
             continuation_id: string;
@@ -6028,9 +6037,9 @@ export interface components {
             resolved_at?: string;
         };
         /** @enum {string} */
-        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "cost" | "llm" | "continuation" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
+        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "cost" | "llm" | "continuation_notice" | "continuation" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
         /** @description Topic-discriminated EventHub SSE envelope. */
-        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeContinuation"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
+        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeContinuationNotice"] | components["schemas"]["EventEnvelopeContinuation"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
         /** @description One transcript row change. message is always the full post-write row: apply it as a whole-row snapshot ordered by seq, never a field merge onto a cached row — an absent field means the row no longer has it. */
         MessageEvent: {
             /** Format: uuid */
@@ -8031,6 +8040,8 @@ export interface components {
             versions: components["schemas"]["DraftVersion"][];
         };
         PromptRequest: {
+            /** Format: uuid */
+            recovery_continuation_id?: string;
             /** @description Bind or upgrade the session mode at admission. */
             mode?: components["schemas"]["SessionMode"];
             /**
@@ -8238,6 +8249,7 @@ export interface components {
             /** @description Replay boundary captured before the snapshot was read */
             event_cursor: string;
             session: components["schemas"]["Session"];
+            continuation_notice?: components["schemas"]["ContinuationNotice"];
             continuations?: components["schemas"]["ActionContinuation"][];
             /** @description Current host work leases for this session. Omitted when no leases remain. */
             activities?: components["schemas"]["ActivityEvent"][];
@@ -11062,6 +11074,8 @@ export interface components {
             /** @description Moves a pinned session to this 1-based position in its project's pinned order; a position past the end moves it last. The project's pinned chats are renumbered 1…n. */
             pin_position?: number;
         };
+        /** @enum {string} */
+        NoticeCode: "attachment_scanned_no_text" | "coordinator_not_continued" | "grounding_escalated" | "host_fault" | "model_refused" | "project_mutation_in_progress" | "prompt_failed" | "provider_context_too_small" | "provider_empty_completion" | "provider_not_configured" | "provider_overloaded" | "provider_rate_limited" | "provider_request_rejected" | "provider_response_interrupted" | "provider_server_error" | "provider_silent" | "provider_tool_calls_in_prose" | "provider_tool_calls_unsupported" | "provider_unreachable" | "session_preparation_failed" | "session_spend_ceiling_reached" | "thinking_override_unavailable" | "turn_closeout_tool_call" | "user_image_not_visible" | "workflow_active" | "workflow_not_runnable" | "workflow_version_unavailable" | "worktree_stale";
         /**
          * @description Closed host work phase; presentation copy is client-supplied.
          * @enum {string}
@@ -17712,8 +17726,6 @@ export interface components {
          * @enum {string}
          */
         SessionEventAction: "created" | "updated" | "deleted";
-        /** @enum {string} */
-        NoticeCode: "attachment_scanned_no_text" | "grounding_escalated" | "host_fault" | "model_refused" | "project_mutation_in_progress" | "prompt_failed" | "provider_context_too_small" | "provider_empty_completion" | "provider_not_configured" | "provider_overloaded" | "provider_rate_limited" | "provider_request_rejected" | "provider_response_interrupted" | "provider_server_error" | "provider_silent" | "provider_tool_calls_in_prose" | "provider_tool_calls_unsupported" | "provider_unreachable" | "session_preparation_failed" | "session_spend_ceiling_reached" | "thinking_override_unavailable" | "turn_closeout_tool_call" | "user_image_not_visible" | "workflow_active" | "workflow_not_runnable" | "workflow_version_unavailable" | "worktree_stale";
         /**
          * @description Why a session went idle, stated so clients tell a stop from an error without reading message text or error strings. `interrupted` is the engine stopping under a live turn — a shutdown signal, or a session still busy at boot after process death — and does not render as an error. It is the session-level peer of the TOOL_OWNER_INTERRUPTED tool result.
          * @enum {string}
@@ -17795,6 +17807,17 @@ export interface components {
              * @enum {string}
              */
             topic: "llm";
+        };
+        EventEnvelopeContinuationNotice: components["schemas"]["EventEnvelopeBase"] & {
+            /** @constant */
+            topic: "continuation_notice";
+            data: components["schemas"]["ContinuationNotice"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            topic: "continuation_notice";
         };
         EventEnvelopeContinuation: components["schemas"]["EventEnvelopeBase"] & {
             /** @constant */
@@ -31504,6 +31527,7 @@ export type ContinuationAction = components["schemas"]["ContinuationAction"];
 export type ContinuationState = components["schemas"]["ContinuationState"];
 export type ContinuationReason = components["schemas"]["ContinuationReason"];
 export type HostContinuationFailure = components["schemas"]["HostContinuationFailure"];
+export type ContinuationNotice = components["schemas"]["ContinuationNotice"];
 export type ActionContinuation = components["schemas"]["ActionContinuation"];
 export type EventTopic = components["schemas"]["EventTopic"];
 export type EventEnvelope = components["schemas"]["EventEnvelope"];
@@ -31971,6 +31995,7 @@ export type SessionBackgroundExecutionJob = components["schemas"]["SessionBackgr
 export type SessionProtectionState = components["schemas"]["SessionProtectionState"];
 export type SessionUiState = components["schemas"]["SessionUiState"];
 export type UpdateSessionRequest = components["schemas"]["UpdateSessionRequest"];
+export type NoticeCode = components["schemas"]["NoticeCode"];
 export type ActivityKind = components["schemas"]["ActivityKind"];
 export type ActivityStatus = components["schemas"]["ActivityStatus"];
 export type CommandActivityStep = components["schemas"]["CommandActivityStep"];
@@ -32592,7 +32617,6 @@ export type EventScopeKind = components["schemas"]["EventScopeKind"];
 export type EventScope = components["schemas"]["EventScope"];
 export type EventEnvelopeBase = components["schemas"]["EventEnvelopeBase"];
 export type SessionEventAction = components["schemas"]["SessionEventAction"];
-export type NoticeCode = components["schemas"]["NoticeCode"];
 export type SessionIdleDisposition = components["schemas"]["SessionIdleDisposition"];
 export type EventEnvelopeSession = components["schemas"]["EventEnvelopeSession"];
 export type EventEnvelopeMessage = components["schemas"]["EventEnvelopeMessage"];
@@ -32601,6 +32625,7 @@ export type EventEnvelopeCheckpoint = components["schemas"]["EventEnvelopeCheckp
 export type EventEnvelopeBoard = components["schemas"]["EventEnvelopeBoard"];
 export type EventEnvelopeCost = components["schemas"]["EventEnvelopeCost"];
 export type EventEnvelopeLlm = components["schemas"]["EventEnvelopeLlm"];
+export type EventEnvelopeContinuationNotice = components["schemas"]["EventEnvelopeContinuationNotice"];
 export type EventEnvelopeContinuation = components["schemas"]["EventEnvelopeContinuation"];
 export type EventEnvelopeActivity = components["schemas"]["EventEnvelopeActivity"];
 export type OAROnFireEvent = components["schemas"]["OAROnFireEvent"];

@@ -523,3 +523,11 @@ func (p *Publisher) PublishContinuation(ctx context.Context, projectID string, e
 	key := PublishKeyFor(ctx, p.Lookup, projectID, ev.SessionID)
 	logPublishFailure(ctx, "PublishContinuation", api.EventTopicContinuation, p.Hub.Publish(ctx, api.EventTopicContinuation, key, ev))
 }
+
+func (p *Publisher) PublishContinuationNotice(ctx context.Context, projectID string, ev api.ContinuationNotice) {
+	if p == nil || p.Hub == nil {
+		return
+	}
+	key := PublishKeyFor(ctx, p.Lookup, projectID, ev.SessionID)
+	logPublishFailure(ctx, "PublishContinuationNotice", api.EventTopicContinuationNotice, p.Hub.Publish(ctx, api.EventTopicContinuationNotice, key, ev))
+}

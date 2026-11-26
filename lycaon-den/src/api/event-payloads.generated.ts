@@ -14,6 +14,7 @@ import type {
   ChatVault,
   CheckpointEvent,
   CodeScanEvent,
+  ContinuationNotice,
   CostEvent,
   EditorDocumentEvent,
   FileBriefingEvent,
@@ -50,6 +51,7 @@ export type EventPayloadMap = {
   board: BoardEvent;
   cost: CostEvent;
   llm: LLMCallEvent;
+  continuation_notice: ContinuationNotice;
   continuation: ActionContinuation;
   activity: ActivityEvent;
   oar: OAROnFireEvent;

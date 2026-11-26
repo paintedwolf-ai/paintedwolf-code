@@ -48,7 +48,7 @@ func DebounceForTopic(topic api.EventTopic) time.Duration {
 	// Transition events must preserve every state change.
 	// Agent presence is too: a trailing window would drop a short call's start
 	// and hold delivery while calls keep arriving.
-	case api.EventTopicMessage, api.EventTopicContinuation, api.EventTopicActivity, api.EventTopicWorkflow, api.EventTopicGrounding,
+	case api.EventTopicMessage, api.EventTopicContinuation, api.EventTopicContinuationNotice, api.EventTopicActivity, api.EventTopicWorkflow, api.EventTopicGrounding,
 		api.EventTopicFindings, api.EventTopicProgress, api.EventTopicTurnClock, api.EventTopicAgentPresence:
 		return DebounceImmediate
 	case api.EventTopicSourceChanged:

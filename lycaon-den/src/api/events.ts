@@ -1,3 +1,4 @@
+import { applyContinuationNotice, resetContinuationNotices } from "../notices/continuation-notices.ts";
 import { applyCachedSessionMode } from "../chat/session/session-chat-cache.ts";
 import { rebaseSessionModeIntents } from "../chat/session/session-mode-state.ts";
 import { deliverSourceOperationCompletion } from "./source-operation-completion.ts";
@@ -42,6 +43,7 @@ import {
 
 /** Starts a new backend connection generation for this store. */
 export function resetSessionEventRevisions(storeActions: AppStoreActions): void {
+  resetContinuationNotices();
   forgetSessionRevisions(storeActions);
   rebaseSessionModeIntents(storeActions);
   resetSessionSnapshotReads(storeActions);
@@ -87,7 +89,8 @@ export const TOPIC_STORE_INVALIDATION: Readonly<
   // The topic handler replaces one chat's presence.
   agent_presence: [],
   activity: [],
-  continuation: ["session"],
+  continuation: [],
+  continuation_notice: [],
   oar: [],
   scan: ["scan"],
   providers: ["providers"],
@@ -263,6 +266,9 @@ function dispatchTopic(
       break;
     case "llm":
       storeActions.setLLMCallStatus(envelope.data);
+      break;
+    case "continuation_notice":
+      if (envelope.scope.kind === "session") applyContinuationNotice(envelope.scope.project_id, envelope.data);
       break;
     case "activity":
       storeActions.setActivity(envelope.data);

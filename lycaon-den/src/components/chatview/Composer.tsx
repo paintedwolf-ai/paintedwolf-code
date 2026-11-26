@@ -79,6 +79,7 @@ import { fitDraftHeight, useComposerDraftSizing } from "./useComposerDraftSizing
 let nextSlashListboxId = 0;
 
 export type ComposerSendPayload = {
+  recoveryContinuationId?: string;
   recovery?: import("../../api/types.ts").PromptRecovery;
   text: string;
   attachments?: PromptAttachmentPart[];

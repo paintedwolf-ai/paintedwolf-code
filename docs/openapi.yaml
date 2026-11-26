@@ -16108,6 +16108,26 @@ components:
       enum:
         - host_lookup_failed
         - host_invariant_failed
+    ContinuationNotice:
+      x-go-generate: true
+      type: object
+      required:
+        - session_id
+        - revision
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          format: int64
+        continuation_id:
+          type: string
+          format: uuid
+        host_error:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionHostError'
     ActionContinuation:
       x-go-generate: true
       type: object
@@ -16153,6 +16173,7 @@ components:
         - board
         - cost
         - llm
+        - continuation_notice
         - continuation
         - activity
         - oar
@@ -16193,6 +16214,7 @@ components:
         - $ref: '#/components/schemas/EventEnvelopeBoard'
         - $ref: '#/components/schemas/EventEnvelopeCost'
         - $ref: '#/components/schemas/EventEnvelopeLlm'
+        - $ref: '#/components/schemas/EventEnvelopeContinuationNotice'
         - $ref: '#/components/schemas/EventEnvelopeContinuation'
         - $ref: '#/components/schemas/EventEnvelopeActivity'
         - $ref: '#/components/schemas/EventEnvelopeOar'
@@ -16233,6 +16255,7 @@ components:
           board: '#/components/schemas/EventEnvelopeBoard'
           cost: '#/components/schemas/EventEnvelopeCost'
           llm: '#/components/schemas/EventEnvelopeLlm'
+          continuation_notice: '#/components/schemas/EventEnvelopeContinuationNotice'
           continuation: '#/components/schemas/EventEnvelopeContinuation'
           activity: '#/components/schemas/EventEnvelopeActivity'
           oar: '#/components/schemas/EventEnvelopeOar'
@@ -21264,6 +21287,9 @@ components:
         - text
       additionalProperties: false
       properties:
+        recovery_continuation_id:
+          type: string
+          format: uuid
         mode:
           x-go-pointer: true
           $ref: '#/components/schemas/SessionMode'
@@ -21723,6 +21749,9 @@ components:
           description: Replay boundary captured before the snapshot was read
         session:
           $ref: '#/components/schemas/Session'
+        continuation_notice:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ContinuationNotice'
         continuations:
           type: array
           items:
@@ -28715,6 +28744,37 @@ components:
           minimum: 1
           description: |
             Moves a pinned session to this 1-based position in its project's pinned order; a position past the end moves it last. The project's pinned chats are renumbered 1…n.
+    NoticeCode:
+      type: string
+      enum:
+        - attachment_scanned_no_text
+        - coordinator_not_continued
+        - grounding_escalated
+        - host_fault
+        - model_refused
+        - project_mutation_in_progress
+        - prompt_failed
+        - provider_context_too_small
+        - provider_empty_completion
+        - provider_not_configured
+        - provider_overloaded
+        - provider_rate_limited
+        - provider_request_rejected
+        - provider_response_interrupted
+        - provider_server_error
+        - provider_silent
+        - provider_tool_calls_in_prose
+        - provider_tool_calls_unsupported
+        - provider_unreachable
+        - session_preparation_failed
+        - session_spend_ceiling_reached
+        - thinking_override_unavailable
+        - turn_closeout_tool_call
+        - user_image_not_visible
+        - workflow_active
+        - workflow_not_runnable
+        - workflow_version_unavailable
+        - worktree_stale
     ActivityKind:
       type: string
       description: Closed host work phase; presentation copy is client-supplied.
@@ -44204,36 +44264,6 @@ components:
         - updated
         - deleted
       description: Durable session lifecycle transition represented by an event.
-    NoticeCode:
-      type: string
-      enum:
-        - attachment_scanned_no_text
-        - grounding_escalated
-        - host_fault
-        - model_refused
-        - project_mutation_in_progress
-        - prompt_failed
-        - provider_context_too_small
-        - provider_empty_completion
-        - provider_not_configured
-        - provider_overloaded
-        - provider_rate_limited
-        - provider_request_rejected
-        - provider_response_interrupted
-        - provider_server_error
-        - provider_silent
-        - provider_tool_calls_in_prose
-        - provider_tool_calls_unsupported
-        - provider_unreachable
-        - session_preparation_failed
-        - session_spend_ceiling_reached
-        - thinking_override_unavailable
-        - turn_closeout_tool_call
-        - user_image_not_visible
-        - workflow_active
-        - workflow_not_runnable
-        - workflow_version_unavailable
-        - worktree_stale
     SessionIdleDisposition:
       type: string
       description: |
@@ -44327,6 +44357,18 @@ components:
               const: llm
             data:
               $ref: '#/components/schemas/LLMCallEvent'
+    EventEnvelopeContinuationNotice:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelopeBase'
+        - type: object
+          required:
+            - topic
+            - data
+          properties:
+            topic:
+              const: continuation_notice
+            data:
+              $ref: '#/components/schemas/ContinuationNotice'
     EventEnvelopeContinuation:
       allOf:
         - $ref: '#/components/schemas/EventEnvelopeBase'
