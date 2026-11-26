@@ -95,7 +95,7 @@ func TestAppExecutionBuildAutoDiscoversPortablePythonImage(t *testing.T) {
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{
 			SessionID:  "sess-installed-1",
-			Agent:      "coder",
+			Agent:      "implement",
 			ToolCallID: "call-installed-1",
 		},
 	})
@@ -116,7 +116,7 @@ func TestAppExecutionBuildAutoDiscoversPortablePythonImage(t *testing.T) {
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{
 			SessionID:  "sess-installed-1",
-			Agent:      "coder",
+			Agent:      "implement",
 			ToolCallID: "call-installed-big",
 		},
 	})
@@ -129,7 +129,7 @@ func TestAppExecutionBuildAutoDiscoversPortablePythonImage(t *testing.T) {
 	art, err := svc.RetainedStore().Get(context.Background(), pythonevidence.ViewerScope{
 		Role:      pythonevidence.RoleCoordinator,
 		SessionID: "sess-installed-1",
-		Actor:     "coder",
+		Actor:     "implement",
 		View:      "workspace",
 	}, bigResp.RetainedStdoutArtifactID)
 	testutil.FailErr(t, "load disk-backed retained stdout artifact", err)
@@ -187,7 +187,7 @@ func TestAppExecutionBuildAutoDiscoversPortablePythonImage(t *testing.T) {
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{
 			SessionID:  "sess-installed-http",
-			Agent:      "coder",
+			Agent:      "implement",
 			ToolCallID: "call-installed-post-ok",
 		},
 	})
@@ -211,7 +211,7 @@ func TestAppExecutionBuildAutoDiscoversPortablePythonImage(t *testing.T) {
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{
 			SessionID:  "sess-installed-http",
-			Agent:      "coder",
+			Agent:      "implement",
 			ToolCallID: "call-installed-post-deny",
 		},
 	})
