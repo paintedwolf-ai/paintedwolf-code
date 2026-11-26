@@ -299,6 +299,10 @@ func (p *standingCaseProducer) renderCoordinator(ctx context.Context, fork *host
 // renderWorker renders a resolved worker seed's persona and tool procedures
 // as the matrix does; a seed the production rules exclude renders nothing.
 func (p *standingCaseProducer) renderWorker(ctx context.Context, fork *hoststate.CoverageTracker, v func(string) any) error {
+	// Only an Ask parent upgrades to Agent; any other pairing is no state.
+	if v("upgraded").(bool) && v("parent_mode").(api.SessionMode) != api.SessionModeAsk {
+		return nil
+	}
 	ws, err := hoststate.ResolveWorkerSeed(ctx, p.domains, hoststate.WorkerSeed{
 		OverlayIndex: v("overlay").(int), AgentID: v("agent").(string), Posture: v("posture").(api.SessionPosture),
 		BranchView: v("branch").(hoststate.WorkerBranchView), RootCount: v("roots").(int), SecondaryRootGit: v("secondary_git").(bool),
