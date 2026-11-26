@@ -422,7 +422,7 @@ tasks:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:digest -- {{.CLI_ARGS}}
 
   gocache:trim:
-    desc: 'Apply the Go cache size budget and trim compiled and diagnostic caches unused for more than a week'
+    desc: 'Apply the Go cache size budget, trim compiled and diagnostic caches unused for more than a week, and remove abandoned Go temp'
     cmds:
       - bash {{.SCRIPTS_DIR}}/gocache-trim.sh
 
