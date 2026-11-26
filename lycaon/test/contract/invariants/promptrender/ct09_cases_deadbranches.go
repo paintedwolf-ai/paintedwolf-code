@@ -1,7 +1,9 @@
 package promptrender
 
 import (
+	"fmt"
 	"path/filepath"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -53,6 +55,27 @@ func deadBranchCases() []hoststate.CustomizationCase {
 			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
 		},
 		{
+			ID: "own-implement-deferred-command-with-verify", Packs: []string{deadBranchFixture("packs", "implement-deferred-command-with-verify")},
+			Own:          map[string]string{"tools/profiles/implement": "fixture/implement-deferred-command-with-verify"},
+			WorkerAgents: []string{"implementer"},
+			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
+		},
+		{
+			ID: "own-implement-deferred-command", Packs: []string{deadBranchFixture("packs", "implement-deferred-command")},
+			Own:          map[string]string{"tools/profiles/implement": "fixture/implement-deferred-command"},
+			WorkerAgents: []string{"implementer"},
+			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
+		},
+		ownCoordinatorProfileWith("coordinator-secplan-a", func() ([]hoststate.CustomizationSeed, error) {
+			return securitySurveyPhaseSeeds("plan")
+		}),
+		ownCoordinatorProfileWith("coordinator-secplan-b", func() ([]hoststate.CustomizationSeed, error) {
+			return securitySurveyPhaseSeeds("plan")
+		}),
+		ownCoordinatorProfileWith("coordinator-secplan-c", func() ([]hoststate.CustomizationSeed, error) {
+			return securitySurveyPhaseSeeds("plan", "execute")
+		}),
+		{
 			ID: "own-implement-terminal-on-request", Packs: []string{deadBranchFixture("packs", "implement-terminal-on-request")},
 			Own:          map[string]string{"tools/profiles/implement": "fixture/implement-terminal-on-request"},
 			WorkerAgents: []string{"implementer"},
@@ -80,11 +103,38 @@ func deadBranchCases() []hoststate.CustomizationCase {
 }
 
 func ownCoordinatorProfile(pack string, seeds ...hoststate.CustomizationSeed) hoststate.CustomizationCase {
+	return ownCoordinatorProfileWith(pack, func() ([]hoststate.CustomizationSeed, error) { return seeds, nil })
+}
+
+func ownCoordinatorProfileWith(pack string, seeds func() ([]hoststate.CustomizationSeed, error)) hoststate.CustomizationCase {
 	return hoststate.CustomizationCase{
 		ID: "own-" + pack, Packs: []string{deadBranchFixture("packs", pack)},
 		Own:         map[string]string{"tools/profiles/coordinator": "fixture/" + pack},
-		Coordinator: func() ([]hoststate.CustomizationSeed, error) { return seeds, nil },
+		Coordinator: seeds,
 	}
+}
+
+func securitySurveyPhaseSeeds(phaseIDs ...string) ([]hoststate.CustomizationSeed, error) {
+	bindings, err := hoststate.ShippedPhaseBindings()
+	if err != nil {
+		return nil, err
+	}
+	var out []hoststate.CustomizationSeed
+	for i := range bindings {
+		b := &bindings[i]
+		if b.WorkflowID != "security-survey" || !slices.Contains(phaseIDs, b.PhaseID) {
+			continue
+		}
+		out = append(out, hoststate.CustomizationSeed{
+			Mode: api.SessionModeAgent, Posture: api.SessionPostureBuild, Workflow: hoststate.WorkflowActivePhase,
+			SurfaceID: b.Resolved.CoordinatorSurface, Roots: hoststate.RootsSingleGit, Loading: hoststate.LoadingFloorOnly,
+			Binding: b,
+		})
+	}
+	if len(out) != len(phaseIDs) {
+		return nil, fmt.Errorf("security-survey phases %v: matched %d bindings", phaseIDs, len(out))
+	}
+	return out, nil
 }
 
 // pendingOverlaySeed resolves to the promotion surface, the only floor that

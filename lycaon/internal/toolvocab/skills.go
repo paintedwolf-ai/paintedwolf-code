@@ -627,6 +627,17 @@ func evalSkillRenderedReach(
 			return false
 		}
 	}
+	// Command-language programs cannot run until command is loaded; a deferred
+	// command tool alone does not satisfy a skill body that invokes them.
+	if !offered["command"] && reachable["command"] {
+		noCmd := maps.Clone(reachable)
+		delete(noCmd, "command")
+		for _, name := range UnreachableNames(c, checkText, noCmd) {
+			if name != "command" && !slices.Contains(anyOf, name) {
+				return false
+			}
+		}
+	}
 	if len(anyOf) == 0 {
 		return true
 	}

@@ -30,7 +30,11 @@ import (
 // a compose summary requiring isolation, choice transitions, a stamped fan-out
 // plan and the gate catalog's obligations for open leaves.
 func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
-	reps := coordinatorRepsBy(e.cReps,
+	pairs, err := cachedCoordinatorPairs()
+	if err != nil {
+		return nil, err
+	}
+	reps := coordinatorRepsBy(pairs,
 		func(cr coordRep) bool { return cr.state.TurnProfile.WorkflowActive },
 		func(cr coordRep) string { return offers(cr.auth, "promote_overlay", "ask_user", "workflow_advance") })
 	if len(reps) == 0 {

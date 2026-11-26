@@ -41,10 +41,6 @@ var readerFactConstraints = map[string]map[string]string{
 	},
 	RecipientWorker: {
 		"can_ask_user_secret":        srcAskUser,
-		"can_request_command_verify": srcCommandSticky,
-		"can_request_git_bisect":     srcCommandSticky,
-		"can_request_git_commit":     srcCommandSticky,
-		"can_request_git_read":       srcCommandSticky,
 		"can_spawn_implementer":      srcSpawnRoster,
 		"can_spawn_web_research":     srcSpawnRoster,
 		"can_spawn_workers":          srcSpawnRoster,

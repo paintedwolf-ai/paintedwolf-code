@@ -521,3 +521,38 @@ func skillOffered(t *testing.T, sk skills.Skill, held map[string]bool) bool {
 	testutil.FailErr(t, "reader holding tools", err)
 	return toolvocab.SkillToolsOfferedForReader(sk, reader)
 }
+
+func TestSkillToolsOfferedForReaderRefusesCommandProgramsWhenCommandDeferred(t *testing.T) {
+	profiles := []sandbox.ToolProfile{{
+		ID:             "worker",
+		Tools:          map[string]bool{"request_tools": true, "command": true},
+		StickyTools:    map[string]bool{"request_tools": true},
+		CommandEffects: []string{"read_only", "mutation", "external_exec"},
+	}}
+	deferredReader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+	}, prompts.TurnProjection{
+		ProfileID:   "worker",
+		Offered:     readerDeclaredOffer(profiles, "worker", []string{"request_tools"}, map[string]bool{"request_tools": true}),
+		Requestable: []string{"command"},
+		Declared:    true,
+	})
+	testutil.FailErr(t, "deferred command reader", err)
+
+	programSkill := skills.Skill{
+		Name: "uses-rg",
+		Body: "Search with `rg -n foo`.",
+	}
+	if toolvocab.SkillToolsOfferedForReader(programSkill, deferredReader) {
+		t.Fatal("skill invoking a command-language program must not be offered while command is deferred")
+	}
+	loaderSkill := skills.Skill{
+		Name: "loads-command",
+		Body: "Load `command` via `request_tools(need=\"command\")`.",
+	}
+	if !toolvocab.SkillToolsOfferedForReader(loaderSkill, deferredReader) {
+		t.Fatal("skill naming command via request_tools should be offered while command is deferred")
+	}
+}
