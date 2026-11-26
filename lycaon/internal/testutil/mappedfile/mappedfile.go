@@ -14,19 +14,22 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 )
 
 const (
 	pathEnv = "PW_MAPPED_FILE_PATH"
 	sizeEnv = "PW_MAPPED_FILE_SIZE"
 	syncCmd = "sync"
+	// channelFD is the socket the child inherits from StartDescriptorHelper.
+	channelFD = 3
 )
 
 // ServeIfChild runs the mapping child and exits when this process was started as one. Call it
@@ -36,46 +39,55 @@ func ServeIfChild() {
 	if path == "" {
 		return
 	}
+	channel := os.NewFile(channelFD, "mapped-file-channel")
 	size, err := strconv.Atoi(os.Getenv(sizeEnv))
 	if err != nil {
-		reply(os.Stdout, err)
+		reply(channel, err)
 		os.Exit(2)
 	}
-	os.Exit(serve(path, size, os.Stdin, os.Stdout))
+	os.Exit(serve(path, size, channel, channel))
 }
 
 // File is a mapping held by a child process.
 type File struct {
 	mu      sync.Mutex
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
+	channel io.WriteCloser
 	replies *bufio.Scanner
+	wait    func() error
 }
 
 // Map starts a child of the test binary that maps the first size bytes of path. The child exits
 // when the test ends.
 func Map(t testing.TB, path string, size int) *File {
 	t.Helper()
-	cmd := exec.Command(os.Args[0]) // #nosec G204 G702 -- re-executes the running test binary with fixed arguments.
-	cmd.Env = append(os.Environ(), pathEnv+"="+path, sizeEnv+"="+strconv.Itoa(size))
-	cmd.Stderr = os.Stderr
-	stdin, err := cmd.StdinPipe()
+	f, err := start(t, path, size)
 	if err != nil {
-		t.Fatalf("mapping child stdin: %v", err)
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatalf("mapping child stdout: %v", err)
-	}
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start mapping child: %v", err)
-	}
-	f := &File{cmd: cmd, stdin: stdin, replies: bufio.NewScanner(stdout)}
-	t.Cleanup(f.close)
-	if err := f.await(); err != nil {
 		t.Fatalf("map %s: %v", path, err)
 	}
 	return f
+}
+
+func start(t testing.TB, path string, size int) (*File, error) {
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
+	if err != nil {
+		return nil, err
+	}
+	parent, child := os.NewFile(uintptr(fds[0]), "mapped-file-parent"), os.NewFile(uintptr(fds[1]), "mapped-file-child")
+	defer func() { _ = child.Close() }()
+	executable, err := os.Executable()
+	if err != nil {
+		_ = parent.Close()
+		return nil, err
+	}
+	wait, err := execpkg.StartDescriptorHelper(t.Context(), execpkg.HostLaunch("mapped file fixture"), executable, nil,
+		[]string{pathEnv + "=" + path, sizeEnv + "=" + strconv.Itoa(size)}, child, os.Stderr)
+	if err != nil {
+		_ = parent.Close()
+		return nil, err
+	}
+	f := &File{channel: parent, replies: bufio.NewScanner(parent), wait: wait}
+	t.Cleanup(f.close)
+	return f, f.await()
 }
 
 // Write copies data to the start of the mapping and leaves the pages dirty.
@@ -87,7 +99,7 @@ func (f *File) Sync() error { return f.request(syncCmd) }
 func (f *File) request(line string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if _, err := io.WriteString(f.stdin, line+"\n"); err != nil {
+	if _, err := io.WriteString(f.channel, line+"\n"); err != nil {
 		return err
 	}
 	return f.await()
@@ -104,8 +116,8 @@ func (f *File) await() error {
 }
 
 func (f *File) close() {
-	_ = f.stdin.Close()
-	_ = f.cmd.Wait()
+	_ = f.channel.Close()
+	_ = f.wait()
 }
 
 func serve(path string, size int, in io.Reader, out io.Writer) int {
