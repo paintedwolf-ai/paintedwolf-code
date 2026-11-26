@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
@@ -105,5 +106,30 @@ func TestMarkedWorkHoldsTheSessionBusy(t *testing.T) {
 	end()
 	if busy := loop.Activity(t.Context(), "sess").Busy; len(busy) != 0 {
 		t.Fatalf("busy = %v after the prompt returned", busy)
+	}
+}
+
+// A parked wait still holds a wake: the session reads busy until the sleep breaks.
+func TestParkedSleepHoldsTheSessionBusy(t *testing.T) {
+	loop := activityLoop(true, nil)
+	loop.Waits.EnterSleep(t.Context(), "sess", time.Now().Add(time.Hour), "awaiting the user", AwaitUserWaitTriggers(false), nil, SleepMoverUser)
+	if busy := loop.Activity(t.Context(), "sess").Busy; !slices.Contains(busy, ActivitySleep) {
+		t.Fatalf("busy = %v while parked, want %s", busy, ActivitySleep)
+	}
+	loop.Waits.breakSleep(t.Context(), "sess", "user replied", false)
+	if busy := loop.Activity(t.Context(), "sess").Busy; slices.Contains(busy, ActivitySleep) {
+		t.Fatalf("busy = %v after the sleep broke", busy)
+	}
+}
+
+func TestRoundDrainMarkHoldsTheSessionBusy(t *testing.T) {
+	loop := activityLoop(true, nil)
+	end := loop.Nudges.BeginRoundDrain("sess")
+	if busy := loop.Activity(t.Context(), "sess").Busy; !slices.Equal(busy, []ActivityKind{ActivityRoundDrain}) {
+		t.Fatalf("busy = %v during a round drain", busy)
+	}
+	end()
+	if busy := loop.Activity(t.Context(), "sess").Busy; len(busy) != 0 {
+		t.Fatalf("busy = %v after the round drain", busy)
 	}
 }
