@@ -323,7 +323,7 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 		req.Code = validated.Code
 		req.Script = validated.Script
 		req.Module = validated.Module
-		req.CWD = validated.CWD
+		req.CWD = validated.Cwd
 		req.Args = validated.Args
 	}
 
