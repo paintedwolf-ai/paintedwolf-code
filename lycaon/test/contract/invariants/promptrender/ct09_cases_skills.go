@@ -322,9 +322,15 @@ func (p *skillCaseProducer) reader(recipient string, extra []string, c skillCase
 		r, err := prompts.NewReader(host, prompts.TurnProjection{ProfileID: prompts.CoordinatorProfileID, SurfaceID: skillCaseSurface, Plan: plan, Offered: plan.ImmediateNames()})
 		return r, err == nil, err
 	}
+	// A worker with roots starts from the implementer's tools; one without
+	// starts from web_research, the stock profile spawned without roots.
+	baseID := "implement"
+	if c.roots == 0 {
+		baseID = "web_research"
+	}
 	var base sandbox.ToolProfile
 	for _, prof := range profiles {
-		if prof.ID == "implement" {
+		if prof.ID == baseID {
 			base = prof
 		}
 	}
