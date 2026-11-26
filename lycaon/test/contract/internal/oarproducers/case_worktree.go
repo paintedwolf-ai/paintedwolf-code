@@ -97,6 +97,12 @@ func (w *worktreeFixture) snapshot(ctx context.Context, kind string) (indexwatch
 		cleanup()
 		return indexwatch.Snapshot{}, func() {}, err
 	}
+	// A copied worktree has new file stats; refresh them so the captured
+	// index sees the files clean, as a command start would.
+	if err := gitRun(ctx, dir, "update-index", "-q", "--refresh"); err != nil {
+		cleanup()
+		return indexwatch.Snapshot{}, func() {}, err
+	}
 	snap := indexwatch.Take(dir)
 	if !snap.Active() {
 		cleanup()

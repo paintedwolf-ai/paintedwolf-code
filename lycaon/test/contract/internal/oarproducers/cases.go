@@ -239,6 +239,10 @@ func recipientCells(cells []AuthCell, role string) []AuthCell {
 				continue
 			}
 			seen[key] = true
+			if role == RecipientWorker {
+				// A worker session has no coordinator turn surface.
+				c.SurfaceID = ""
+			}
 			out = append(out, c)
 		}
 	}
