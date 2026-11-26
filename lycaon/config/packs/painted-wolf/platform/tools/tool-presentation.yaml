@@ -370,7 +370,6 @@ tools:
     kind: command
     title_keys: [script, module, code]
     running_label: "Running Python…"
-    visibility: long_running
     activity: {headline: "running Python", salience: primary, role: command}
   read:
     label: "Read file"

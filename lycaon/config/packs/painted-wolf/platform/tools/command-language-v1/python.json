@@ -110,10 +110,16 @@
       },
       "effects": [
         {
+          "mode": "read-only",
+          "requires": [
+            "read"
+          ]
+        },
+        {
           "mode": "default",
           "requires": [
-            "workspace-read",
-            "workspace-write"
+            "read",
+            "write"
           ]
         }
       ],
@@ -251,10 +257,16 @@
       },
       "effects": [
         {
+          "mode": "read-only",
+          "requires": [
+            "read"
+          ]
+        },
+        {
           "mode": "default",
           "requires": [
-            "workspace-read",
-            "workspace-write"
+            "read",
+            "write"
           ]
         }
       ],
@@ -346,7 +358,7 @@
         {
           "mode": "default",
           "requires": [
-            "workspace-read"
+            "read"
           ]
         }
       ],

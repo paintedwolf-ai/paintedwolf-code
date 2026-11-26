@@ -134,6 +134,7 @@ func ProfileMutationCapable(data AgentToolSurfaceData) bool {
 	enabled := toolNameSet(append(toolViewNames(data.Tools), requestableToolNames(data.Requestable)...))
 	if !commandEffectFlags(true, data.CommandEffects).mutation {
 		delete(enabled, "command")
+		delete(enabled, "python")
 	}
 	return toolSetMutationCapable(enabled)
 }
