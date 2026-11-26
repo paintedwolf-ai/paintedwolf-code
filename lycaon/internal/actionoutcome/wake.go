@@ -2,11 +2,11 @@ package actionoutcome
 
 import (
 	"context"
+	"flag"
 	"log/slog"
 	"slices"
 	"strconv"
 	"sync/atomic"
-	"testing"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -161,7 +161,7 @@ func (t *Ticket) reportDefect(step WakeStep, problem string) {
 	s.defects = append(s.defects, WakeDefect{Sequence: t.seq, Attempt: step, Problem: problem})
 	s.defectsMu.Unlock()
 	slog.Error("wake transition defect", "ticket", t.key, "problem", problem)
-	if testing.Testing() {
+	if flag.Lookup("test.v") != nil {
 		panic(problem)
 	}
 }
