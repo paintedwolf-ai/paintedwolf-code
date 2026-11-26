@@ -12,11 +12,11 @@ Send one directive per citation and nothing else, such as `[cite: c1 => path/to/
 {% for target in document_citation_targets %}- {{ target }}
 {% endfor %}
 Return the report fence with those `where` entries corrected.
-{% if retained_document %}
+
 ```json
 {{ retained_document }}
 ```
-{% endif %}{% endif %}
+{% endif %}
 {% if observed_handles_sample %}Observed handles: {{ observed_handles_sample }}{% if observed_handles_omitted %} (+{{ observed_handles_omitted }} more){% endif %}
 {% endif %}{% if observed_paths_sample %}Observed paths: {{ observed_paths_sample }}{% if observed_paths_omitted %} (+{{ observed_paths_omitted }} more){% endif %}
 {% endif %}{% if observed_urls_sample %}Observed URLs: {{ observed_urls_sample }}{% if observed_urls_omitted %} (+{{ observed_urls_omitted }} more){% endif %}

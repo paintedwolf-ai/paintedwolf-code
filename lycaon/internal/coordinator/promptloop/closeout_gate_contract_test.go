@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -29,6 +30,7 @@ var retiredCloseoutWords = []string{"citations fence", "cited_evidence", "cited_
 type closeoutContract struct {
 	loop     *PromptLoop
 	selected *oar.Decision
+	rules    *oar.RuleSet
 	fired    []string
 	friction int
 	accepted int
@@ -62,7 +64,7 @@ func newCloseoutContract(t *testing.T) *closeoutContract {
 			LineRanges: []evidence.LineRange{{Start: 1, End: 5}}},
 		{Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "fetch_url", URL: "https://example.test/seen"},
 	})
-	c := &closeoutContract{}
+	c := &closeoutContract{rules: rules}
 	c.loop = NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			HintConfig:     hints,
@@ -258,7 +260,7 @@ func kickVariables(t *testing.T, ref string) map[string]bool {
 // AC-COMPAT-08: a repair kick reads exactly what the real path sends it. A name the
 // builder never sends renders as a silent fallback, which is how a retired form or an
 // empty document reaches the model. A key the kick does not read must belong to the
-// facts the refusal's policy copy reads, or to the builder both kicks share.
+// facts the closeout refusals' policy declares or reads, or to the builder both kicks share.
 func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 	const documentContent = "Done [read#1:2].\n\n```json\n{\"headline\":\"H\",\"cited_evidence\":[{\"evidence\":\"read#1\"}]}\n```"
 	for _, tc := range []struct {
@@ -294,7 +296,10 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 					t.Errorf("%s reads %q, which the real path does not send (sent %v)", tc.kick, name, slices.Sorted(maps.Keys(sent)))
 				}
 			}
-			policyFacts := guidance.GroundingHintData([]string{"offender"}, evidence.Ledger{})
+			if c.selected == nil {
+				t.Fatalf("%s rendered without a selected refusal", tc.kick)
+			}
+			policyFacts := refusalCopyFacts(t, c.rules, c.selected.Rule)
 			for name := range sent {
 				if _, isPolicyFact := policyFacts[name]; !reads[name] && !isPolicyFact && !slices.Contains(tc.sharedOnly, name) && !prompts.IsDeclaredOrReservedReaderFact(name) {
 					t.Errorf("%s is sent %q and does not read it", tc.kick, name)
@@ -302,6 +307,33 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 			}
 		})
 	}
+}
+
+// refusalCopyFacts are the occurrence facts the rules on the selected
+// refusal's anchor declare in requires_facts or bind in their copy, by kick data
+// name. One builder feeds that anchor, and the observation picks which rule fires.
+func refusalCopyFacts(t *testing.T, rules *oar.RuleSet, ruleID string) map[string]bool {
+	t.Helper()
+	selected, ok := rules.Get(ruleID)
+	if !ok {
+		t.Fatalf("refusal rule %q is not loaded", ruleID)
+	}
+	out := map[string]bool{}
+	add := func(name string) { out[strings.TrimPrefix(name, "paintedwolf.")] = true }
+	for _, rule := range rules.OnAnchor(selected.Anchor) {
+		for _, name := range rule.RequiresFacts {
+			add(name)
+		}
+		c := rule.Copy
+		for _, member := range []string{c.Title, c.What, c.Cause, c.Why, c.Fix, c.Instead, c.Message} {
+			bindings, err := oarcore.ParseCopy(member)
+			testutil.FailErr(t, "parse "+rule.ID+" copy", err)
+			for _, b := range bindings {
+				add(b.Name)
+			}
+		}
+	}
+	return out
 }
 
 // AC-CLO-13: a retired fence member is refused by name on the document budget, and

@@ -2,9 +2,11 @@ package promptrender
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/test/contract/internal/casegen"
@@ -274,7 +276,32 @@ func newOARCaseGenerator(ctx context.Context, s *Stock) (*oarCaseGenerator, erro
 	if err != nil {
 		return nil, err
 	}
+	p.SetDisabledCatalog(func(units []string) (*oarproducers.Harness, error) {
+		return harnessWithoutUnits(ctx, s, units)
+	})
 	return &oarCaseGenerator{producer: p}, nil
+}
+
+// harnessWithoutUnits resolves the stock catalog with units disabled in the
+// device desired state, as a person disabling a policy does, and wires the
+// production hook producers to it.
+func harnessWithoutUnits(ctx context.Context, s *Stock, units []string) (*oarproducers.Harness, error) {
+	content, err := extpacks.DiscoverStockContent()
+	if err != nil {
+		return nil, err
+	}
+	desired := extpacks.EmptyDesired()
+	desired.Disabled = slices.Clone(units)
+	eff := extpacks.Resolve(ctx, extpacks.ResolveInput{Packs: content, Desired: desired})
+	for _, u := range units {
+		if _, loaded := eff.Loaded[u]; loaded {
+			return nil, fmt.Errorf("resolve kept %s loaded", u)
+		}
+		if _, known := eff.Units[u]; !known {
+			return nil, fmt.Errorf("no unit %s to disable", u)
+		}
+	}
+	return oarproducers.NewHarness(eff, s.Schemas, s.Engine())
 }
 
 // derived returns what an OAR guard's own expression and its producer fix:

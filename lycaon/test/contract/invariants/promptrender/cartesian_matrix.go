@@ -273,6 +273,7 @@ func registerStockTemplatesInTracker(s *Stock, tracker *hoststate.CoverageTracke
 }
 
 func registerExpectedZeroBranches(tracker *hoststate.CoverageTracker) {
+	registerGuidanceExpectedZeroBranches(tracker)
 	// Every shipped gate-feedback leaf declares unconditional missing_signals,
 	// so the template's fallback branch is never taken by stock leaves.
 	gateReason := "every shipped guidance/gate-feedback/*.yaml leaf declares unconditional missing_signals (when: \"true\"), keeping matched_signals non-empty in production"

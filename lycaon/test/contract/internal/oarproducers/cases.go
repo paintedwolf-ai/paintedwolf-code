@@ -171,8 +171,19 @@ type CaseProducer struct {
 	observed  map[string]*hoststate.ObservedCondition
 	runs      int
 	compiled  map[string]*oarcore.Rule
-	shadows   map[string][]independence.Joint
+	shadows   map[string]shadowResult
 	worktree  worktreeFixture
+	// stock is the harness over the catalog the ledger judges; h is the one
+	// the current case runs on.
+	stock    *Harness
+	disabled func(units []string) (*Harness, error)
+	without  map[string]*Harness
+}
+
+// SetDisabledCatalog supplies harnesses over the catalog with policy units
+// disabled, for cases a disableable earlier rule hides on the stock catalog.
+func (p *CaseProducer) SetDisabledCatalog(build func(units []string) (*Harness, error)) {
+	p.disabled = build
 }
 
 // Close removes the worktree fixture repository.
@@ -192,7 +203,8 @@ func NewCaseProducer(h *Harness, cells []AuthCell, partition func(*oar.GuardCont
 	p := &CaseProducer{
 		h: h, env: env, partition: partition, cells: map[string][]AuthCell{},
 		rules: map[string]*oar.Rule{}, fields: map[string]*factField{}, observed: map[string]*hoststate.ObservedCondition{},
-		compiled: map[string]*oarcore.Rule{}, shadows: map[string][]independence.Joint{},
+		compiled: map[string]*oarcore.Rule{}, shadows: map[string]shadowResult{},
+		stock: h, without: map[string]*Harness{},
 	}
 	for _, role := range []string{RecipientCoordinator, RecipientWorker} {
 		p.cells[role] = recipientCells(cells, role)
@@ -323,6 +335,13 @@ func (p *CaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	}
 	sources := []string{src, rule.When}
 	knobs := []casegen.Knob{p.toolKnob(rule, entry.tool, sources), p.cellKnob(recipient)}
+	if shadowers := p.Shadowers(site); len(shadowers) > 0 && p.disabled != nil {
+		// Cases start on the catalog without the rules that would hide them.
+		knobs = append([]casegen.Knob{{
+			Name: "catalog", Facts: []string{casegen.AnyFact}, Values: []any{shadowers, []string(nil)},
+			Labels: []string{"without " + strings.Join(shadowers, " "), "stock"},
+		}}, knobs...)
+	}
 	// Only a coordinator turn records a turn surface.
 	if recipient == RecipientCoordinator {
 		knobs = append(knobs, p.surfaceKnob(sources))
@@ -428,7 +447,7 @@ func (p *CaseProducer) codeKnob(rule *oar.Rule, sources []string) casegen.Knob {
 // that rule cannot fire before it.
 func (p *CaseProducer) otherOperationCode(rule *oar.Rule) []string {
 	own := slices.Concat(rule.Operations(), rule.Tools())
-	for _, r := range p.h.Rules.OnAnchor(oar.AnchorToolRejected) {
+	for _, r := range p.stock.Rules.OnAnchor(oar.AnchorToolRejected) {
 		ops, codes := r.Operations(), oarcore.ConjunctValues(r.When, "paintedwolf.rejection_code")
 		if r != rule && len(ops) > 0 && len(codes) > 0 && len(own) > 0 && !slices.ContainsFunc(ops, func(o string) bool { return slices.Contains(own, o) }) {
 			return codes[:1]
@@ -723,6 +742,12 @@ func (p *CaseProducer) Run(ctx context.Context, site, recipient, id string, knob
 	}
 	entry := caseEntries[rule.Anchor]
 	o := p.occurrence(rule, recipient, knobs, s)
+	h, err := p.harnessFor(knobs, s)
+	if err != nil {
+		return nil, err
+	}
+	p.h = h
+	defer func() { p.h = p.stock }()
 	p.runs++
 	o.sessID = fmt.Sprintf("gen-%d", p.runs)
 
@@ -730,7 +755,7 @@ func (p *CaseProducer) Run(ctx context.Context, site, recipient, id string, knob
 	tracker.ObserveConditions(func(map[string]any) string { return "" }, p.partition)
 	tracker.SetCase(id)
 	restore := tracker.Install()
-	err := p.deliver(ctx, entry, o)
+	err = p.deliver(ctx, entry, o)
 	restore()
 	if err != nil {
 		return nil, err
@@ -754,6 +779,35 @@ func (p *CaseProducer) Run(ctx context.Context, site, recipient, id string, knob
 		}
 	}
 	return out, nil
+}
+
+// harnessFor is the harness of the case's catalog: stock, or stock with the
+// named policy units disabled.
+func (p *CaseProducer) harnessFor(knobs []casegen.Knob, s casegen.Setting) (*Harness, error) {
+	for _, k := range knobs {
+		if k.Name != "catalog" {
+			continue
+		}
+		ids, _ := s.Value(k).([]string)
+		if len(ids) == 0 {
+			return p.stock, nil
+		}
+		key := strings.Join(ids, ",")
+		if h, ok := p.without[key]; ok {
+			return h, nil
+		}
+		units := make([]string, len(ids))
+		for i, id := range ids {
+			units[i] = "policy/" + id
+		}
+		h, err := p.disabled(units)
+		if err != nil {
+			return nil, fmt.Errorf("catalog without %v: %w", ids, err)
+		}
+		p.without[key] = h
+		return h, nil
+	}
+	return p.stock, nil
 }
 
 func (p *CaseProducer) deliver(ctx context.Context, entry caseEntry, o *occurrence) error {
