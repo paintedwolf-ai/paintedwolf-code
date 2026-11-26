@@ -106,7 +106,7 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 									if parentMode != api.SessionModeAsk && upgraded {
 										continue
 									}
-									ws, buildErr := buildWorkerState(ctx, stock, agent, WorkerSeed{
+									ws, buildErr := BuildWorkerState(ctx, stock, agent, WorkerSeed{
 										Posture: posture.ID, BranchView: bv, RootCount: rc, SecondaryRootGit: secGit,
 										Loading: ld, ParentSessionMode: parentMode, ParentUpgradedAskToAgent: upgraded,
 										WebSearch: true, ApprovalPosture: gate.PostureBalanced, TempState: TempNone,
@@ -142,7 +142,7 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 		}
 		for _, agent := range co.Workers {
 			for _, seed := range customizationWorkerSeeds() {
-				ws, buildErr := buildWorkerState(ctx, co.Overlay, agent, seed)
+				ws, buildErr := BuildWorkerState(ctx, co.Overlay, agent, seed)
 				if buildErr != nil {
 					return nil, buildErr
 				}
@@ -299,8 +299,8 @@ func buildNarrowWorkerSeeds(ctx context.Context, domains *SeedDomains) []WorkerS
 	return seeds
 }
 
-// buildWorkerState resolves seed's coordinates for agent in overlay.
-func buildWorkerState(ctx context.Context, overlay PackOverlay, agent WorkerAgent, seed WorkerSeed) (WorkerState, error) {
+// BuildWorkerState resolves seed's coordinates for agent in overlay.
+func BuildWorkerState(ctx context.Context, overlay PackOverlay, agent WorkerAgent, seed WorkerSeed) (WorkerState, error) {
 	bv, rootCount := seed.BranchView, seed.RootCount
 	parentAsk := seed.ParentSessionMode == api.SessionModeAsk
 	hasGit := rootCount > 0 && bv != BranchMainNonGit
