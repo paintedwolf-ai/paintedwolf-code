@@ -327,18 +327,18 @@ func TestToolsInDistinguishesHostResourceSectionFromProse(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(schemas, []sandbox.ToolProfile{{ID: "stock"}}, toolvocab.Provenance{})
 	testutil.FailErr(t, "build tool catalog", err)
 
-	// Structured host-resource roster bullets inside "## Host resources" are not tool calls.
-	roster := "## Host resources\n\nObserved on this device.\n\n- Runtimes: `go` allow, `python` allow\n\n## Invariants\n\nStay grounded.\n"
+	// Positive control: plain host-resource IDs emitted by host-resources.md are not tool calls.
+	roster := "## Host resources\n\nObserved on this device.\n\n- Runtimes: go allow, python allow\n\n## Invariants\n\nStay grounded.\n"
 	if got := toolvocab.UnreachableNames(catalog, roster, nil); len(got) != 0 {
-		t.Fatalf("host-resource roster line falsely flagged as unreachable tool: %v", got)
+		t.Fatalf("plain host-resource roster line falsely flagged as unreachable tool: %v", got)
 	}
 
-	// Negative control: genuine unavailable tool mentions outside the structured host-resource
-	// section — even if followed by "allow" — must still be detected.
+	// Negative control: an actual backticked tool mention — even inside a roster bullet —
+	// must still be detected as unreachable.
 	for _, prose := range []string{
 		"Use `python` to run helper scripts.",
-		"Runtimes: `python` allow is mentioned in ordinary prose.",
-		"## Host resources\n\n- Runtimes: `python` allow\n\n## Invariants\n\nCall `python` directly.\n",
+		"## Host resources\n\n- Runtimes: call `python` here\n\n## Invariants\n",
+		"## Host resources\n\n- Runtimes: python allow\n\n## Invariants\n\nCall `python` directly.\n",
 	} {
 		got := toolvocab.UnreachableNames(catalog, prose, nil)
 		if strings.Join(got, ",") != "python" {
