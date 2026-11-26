@@ -26,17 +26,28 @@ from portable_command.reporting import (
 from progress import save
 
 
+def _refusal_code(tool_result, parsed_payload):
+    if isinstance(parsed_payload, dict) and isinstance(parsed_payload.get('refusal'), dict) and parsed_payload['refusal'].get('code'):
+        return parsed_payload['refusal']['code']
+    fb = (tool_result or {}).get('feedback') or []
+    if isinstance(fb, list) and fb and isinstance(fb[0], dict) and fb[0].get('code'):
+        return fb[0]['code']
+    codes = (tool_result or {}).get('codes') or []
+    return codes[0] if codes else None
+
+
 def probe_command_envelope(
     out_dir,
     *,
     program='printf ok > ./probe.txt',
-    progress_content='- [x] Probe native envelope',
+    progress_content='- [ ] Probe native envelope\n- [x] Setup',
+    all_checked_content='- [x] Probe native envelope',
     engine_bin=None,
     engine_manifest=None,
     app_factory=smoke.Application,
     sse_factory=SSECollector,
 ):
-    """Probe the offered command tool schema and single-call progress_update envelope."""
+    """Probe the offered command tool schema, valid open-step envelope, and all-checked benign refusal control."""
     out_dir = pathlib.Path(out_dir).resolve()
     app_dir, project_dir, raw_dir = out_dir / 'app', out_dir / 'project', out_dir / 'raw'
     project_dir.mkdir(parents=True, exist_ok=True)
@@ -44,8 +55,10 @@ def probe_command_envelope(
     identity = source_identity(ROOT, profile='implement', engine_bin=engine_bin, engine_manifest=engine_manifest)
 
     application = make_app_factory(engine_bin, app_factory)(app_dir)
-    sse, session_id, offered_tools, command_schema, call_id, tool_result = None, None, [], None, None, None
+    sse, session_id, offered_tools, command_schema = None, None, [], None
+    call_id = tool_result = control_call_id = control_result = None
     invocation_args = {'command': program, 'progress_update': {'content': progress_content}}
+    control_args = {'command': program, 'progress_update': {'content': all_checked_content}}
     try:
         application.ready()
         sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl')
@@ -75,6 +88,13 @@ def probe_command_envelope(
                 'tool_calls': [{'id': call_id, 'name': 'command', 'args': invocation_args}],
             })
             tool_result = wait_tool_result(application, session_id, call_id)
+            req2 = application.wait_for(lambda: smoke_workers.pending(application, session_id), 'envelope all-checked control turn', session_id)
+            control_call_id = str(uuid.uuid4())
+            application.request('/harness/llm/respond', {
+                'id': req2['id'],
+                'tool_calls': [{'id': control_call_id, 'name': 'command', 'args': control_args}],
+            })
+            control_result = wait_tool_result(application, session_id, control_call_id)
         application.request(f'/v1/sessions/{session_id}/abort', {})
     finally:
         if sse is not None:
@@ -82,7 +102,7 @@ def probe_command_envelope(
         application.close(cleanup=False)
 
     checkpoint_closed_store(app_dir / 'store.db', application.process)
-    receipts = []
+    receipts, programs = [], []
     if session_id:
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             db.row_factory = sqlite3.Row
@@ -90,14 +110,28 @@ def probe_command_envelope(
                 'SELECT id, tool_call_id, tool_name, owner, status FROM invocation_receipts WHERE session_id=? ORDER BY rowid',
                 (session_id,),
             ).fetchall()]
+            r_ids = [r['id'] for r in receipts]
+            if r_ids:
+                ph = ','.join('?' for _ in r_ids)
+                programs = [dict(p) for p in db.execute(
+                    f'SELECT id, parent_receipt_id, state FROM invocation_programs WHERE parent_receipt_id IN ({ph})', r_ids,
+                ).fetchall()]
     props = ((command_schema or {}).get('schema') or {}).get('properties') or {}
     schema_has_progress = 'progress_update' in props
-    native_progress = [r for r in receipts if r.get('tool_name') == 'update_progress' or r.get('owner') == 'progress']
+    native_progress = [r for r in receipts if (r.get('tool_name') == 'update_progress' or r.get('owner') == 'progress') and r.get('status') == 'completed']
+    cmd_receipts = [r for r in receipts if r.get('tool_name') == 'command' and r.get('tool_call_id') == call_id]
+    independent_receipts = bool(
+        native_progress and cmd_receipts
+        and all(pr['id'] != cr['id'] for pr in native_progress for cr in cmd_receipts)
+        and all(pr['id'] != p['parent_receipt_id'] for pr in native_progress for p in programs)
+    )
     _, parsed_payload = parse_tool_result({'tool_result_json': json.dumps(tool_result)}) if tool_result else ({}, {})
+    _, ctrl_payload = parse_tool_result({'tool_result_json': json.dumps(control_result)}) if control_result else ({}, {})
+    ctrl_code = _refusal_code(control_result, ctrl_payload)
     outcome = (tool_result or {}).get('outcome')
     if 'command' not in offered_tools:
         status = 'unavailable'
-    elif schema_has_progress and outcome == 'completed' and native_progress:
+    elif schema_has_progress and outcome == 'completed' and independent_receipts:
         status = 'supported'
     elif outcome == 'rejected':
         status = 'rejected'
@@ -110,9 +144,15 @@ def probe_command_envelope(
         'session_id': session_id, 'offered_tools': offered_tools, 'command_schema': command_schema,
         'command_schema_properties': sorted(props.keys()), 'schema_has_progress_update': schema_has_progress,
         'invocation_call_id': call_id, 'invocation_args': invocation_args, 'tool_result': tool_result,
-        'parsed_payload': parsed_payload, 'receipts': receipts,
-        'native_progress_receipt_count': len(native_progress), 'envelope_status': status,
-        'native_envelope_qualified': status == 'supported', 'sibling_fallback_used': False,
+        'parsed_payload': parsed_payload, 'receipts': receipts, 'programs': programs,
+        'native_progress_receipt_count': len(native_progress), 'independent_receipts': independent_receipts,
+        'all_checked_refusal_code': ctrl_code,
+        'all_checked_control': {
+            'invocation_call_id': control_call_id, 'args': control_args,
+            'outcome': (control_result or {}).get('outcome'), 'refusal_code': ctrl_code,
+            'benign_refusal_verified': bool((control_result or {}).get('outcome') == 'rejected' and ctrl_code == 'PROGRESS_NO_OPEN_STEP'),
+        },
+        'envelope_status': status, 'native_envelope_qualified': status == 'supported', 'sibling_fallback_used': False,
     }
     save(out_dir / 'envelope-probe.json', report)
     return report
@@ -134,8 +174,8 @@ def _case_metadata(case):
             'turns': len(case['turns']),
         },
         'has_progress_update': has_progress,
-        'envelope_mode': 'sibling_update_progress' if has_progress else 'command_only',
-        'native_envelope_qualified': False if has_progress else None,
+        'envelope_mode': 'native_command_envelope' if has_progress else 'command_only',
+        'native_envelope_qualified': True if has_progress else None,
     }
 
 
@@ -185,8 +225,10 @@ def run_suite(
             gaps = list(audit.get('observation_gaps', []))
             surface = audit.get('session_surface') or {}
             pb = dict(meta['profile_binding'], effective_posture=surface.get('effective_posture', ''), offered_tools=surface.get('offered_tools', []))
+            used_sibling = any(tb.get('envelope_mode') == 'sibling_update_progress' for tb in audit.get('turn_batches') or ())
+            env_fields = {'envelope_mode': 'sibling_update_progress', 'native_envelope_qualified': False} if used_sibling else {}
             rec = {
-                **meta, 'profile_binding': pb, 'attempt': 'measured', 'session_id': res.get('session_id'),
+                **meta, **env_fields, 'profile_binding': pb, 'attempt': 'measured', 'session_id': res.get('session_id'),
                 'qualification': grade['qualification'], 'passed': grade['passed'],
                 'dimensions': grade['dimensions'], 'observation_gaps': gaps, 'error': None,
             }

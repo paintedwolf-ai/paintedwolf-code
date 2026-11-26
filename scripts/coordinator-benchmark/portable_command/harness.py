@@ -232,9 +232,11 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         for turn in case['turns']:
             if 'structured_tool' in turn:
                 batch, envelope_mode = [{'name': turn['structured_tool'], 'args': dict(turn.get('arguments') or {})}], 'structured_tool'
+            elif 'progress_update' in turn:
+                batch = [{'name': 'command', 'args': {'command': turn['program'], 'progress_update': turn['progress_update']}}]
+                envelope_mode = 'native_command_envelope'
             else:
-                batch = ([{'name': 'update_progress', 'args': turn['progress_update']}] if 'progress_update' in turn else []) + [{'name': 'command', 'args': {'command': turn['program']}}]
-                envelope_mode = 'sibling_update_progress' if 'progress_update' in turn else 'command_only'
+                batch, envelope_mode = [{'name': 'command', 'args': {'command': turn['program']}}], 'command_only'
             results = send_tool_calls(application, session_id, batch, surface=session_surface)
             call_ids = [cid for cid, _ in results]
             turn_records.append({
