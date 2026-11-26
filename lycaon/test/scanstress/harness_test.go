@@ -208,30 +208,15 @@ func awaitNoEngineProcesses(t *testing.T) time.Duration {
 	return time.Since(start)
 }
 
-// scannerArgsFromRow returns the opengrep subcommand arguments when row is an
-// opengrep scan invocation (direct or wrapped by sandbox-exec), rejecting
-// unrelated commands that merely carry "opengrep" as data (config paths, URLs,
-// or shell arguments).
+// scannerArgsFromRow returns the opengrep subcommand arguments when row is the
+// actual opengrep scan process, rejecting unrelated commands and wrapped
+// non-scanners that merely carry "opengrep" or "scan" as arguments.
 func scannerArgsFromRow(row procRow) ([]string, bool) {
 	fields := strings.Fields(row.Command)
-	if len(fields) < 2 {
+	if len(fields) < 2 || filepath.Base(fields[0]) != "opengrep" || fields[1] != "scan" {
 		return nil, false
 	}
-	exe := filepath.Base(fields[0])
-	if exe == "opengrep" {
-		if fields[1] == "scan" {
-			return fields[1:], true
-		}
-		return nil, false
-	}
-	if exe == "sandbox-exec" {
-		for i := 1; i+1 < len(fields); i++ {
-			if !strings.Contains(fields[i], "://") && filepath.Base(fields[i]) == "opengrep" && fields[i+1] == "scan" {
-				return fields[i+1:], true
-			}
-		}
-	}
-	return nil, false
+	return fields[1:], true
 }
 
 // runDirsFromRows returns the engine run directories named by the given
@@ -272,7 +257,7 @@ func runDirsFromRows(rows []procRow) []string {
 
 func TestRunDirsFromRows(t *testing.T) {
 	rows := []procRow{
-		{PID: 10, Command: "/usr/bin/sandbox-exec -p (version 1) /path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-bbb/report.json --jobs 2"},
+		{PID: 10, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-bbb/report.json --jobs 2"},
 		{PID: 11, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-bbb/report.json --jobs 2"},
 		{PID: 12, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-aaa/report.json --jobs 2"},
 		{PID: 13, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/action-ccc/other.json --jobs 2"},
@@ -285,6 +270,7 @@ func TestRunDirsFromRows(t *testing.T) {
 		{PID: 20, Command: "/usr/bin/curl https://example.invalid/opengrep --output /Users/m1/.config/paintedwolf/action-work/action-hhh/report.json"},
 		{PID: 21, Command: "/usr/bin/sandbox-exec -p (version 1) /usr/bin/curl https://example.invalid/opengrep --config /tmp/opengrep --output /Users/m1/.config/paintedwolf/action-work/action-iii/report.json"},
 		{PID: 22, Command: "/path/to/opengrep --version --output /Users/m1/.config/paintedwolf/action-work/action-jjj/report.json"},
+		{PID: 23, Command: "/usr/bin/sandbox-exec -f /tmp/p.sb /bin/echo opengrep scan --output /Users/m1/.config/paintedwolf/action-work/action-kkk/report.json"},
 	}
 	got := runDirsFromRows(rows)
 	want := []string{
