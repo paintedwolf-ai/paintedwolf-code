@@ -2,6 +2,7 @@ package workerruntime
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"log/slog"
 	"strings"
 
@@ -150,6 +151,7 @@ func (r *Runtime) OnWorkflowPhaseReenter(ctx context.Context, rc *workflowphases
 func (r *Runtime) OnWorkflowPhaseAutoAdvanced(ctx context.Context, sessionID, runID, previousPhase, newPhase string) {
 	run, runErr := r.deps.Workflows.Manager.Store.Runs.Get(context.WithoutCancel(ctx), runID)
 	if runErr != nil || run == nil || run.Status != wire.WorkflowRunStatusRunning {
+		recordInactiveRun(ctx, sessionID, runErr)
 		return
 	}
 
@@ -173,6 +175,7 @@ func (r *Runtime) OnWorkflowPhaseAutoAdvanced(ctx context.Context, sessionID, ru
 			if r.deps.Coordinator != nil && r.deps.Coordinator() != nil {
 				r.deps.Coordinator().CoordinatorLoop().Waits.ParkForHostObligation(postStartCtx, sessionID)
 			}
+			actionoutcome.Register(postStartCtx, sessionID).Resolve(actionoutcome.WakeResult(wire.WakeReasonHostObligationHeld))
 			return
 		}
 		r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
@@ -185,6 +188,7 @@ func (r *Runtime) OnWorkflowPhaseAutoAdvanced(ctx context.Context, sessionID, ru
 			if r.deps.Coordinator != nil && r.deps.Coordinator() != nil {
 				r.deps.Coordinator().CoordinatorLoop().Waits.ParkForHostObligation(postAdvanceCtx, sessionID)
 			}
+			actionoutcome.Register(postAdvanceCtx, sessionID).Resolve(actionoutcome.WakeResult(wire.WakeReasonHostObligationHeld))
 			return
 		}
 		r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(postAdvanceCtx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
@@ -207,12 +211,14 @@ func (r *Runtime) OnWorkflowRunCompleted(ctx context.Context, run *wire.Workflow
 func (r *Runtime) OnWorkflowRunResumed(ctx context.Context, run *wire.WorkflowRun) {
 	active, err := r.deps.Workflows.Manager.Store.Runs.ActiveBySession(ctx, run.SessionID)
 	if err != nil || active == nil || active.ID != run.ID || active.Status != wire.WorkflowRunStatusRunning {
+		recordInactiveRun(ctx, run.SessionID, err)
 		return
 	}
 	if held, heldErr := r.deps.Workflows.Manager.Obligations.HostObligationHeld(ctx, run.SessionID); heldErr == nil && held {
 		if r.deps.Coordinator != nil && r.deps.Coordinator() != nil {
 			r.deps.Coordinator().CoordinatorLoop().Waits.ParkForHostObligation(ctx, run.SessionID)
 		}
+		actionoutcome.Register(ctx, run.SessionID).Resolve(actionoutcome.WakeResult(wire.WakeReasonHostObligationHeld))
 		return
 	}
 	r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, run.SessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
@@ -226,6 +232,7 @@ func (r *Runtime) OnWorkflowHumanApprovalAdvanced(ctx context.Context, run *wire
 	sessionID := run.SessionID
 	active, err := r.deps.Workflows.Manager.Store.Runs.ActiveBySession(context.WithoutCancel(ctx), sessionID)
 	if err != nil || active == nil || active.Status != wire.WorkflowRunStatusRunning {
+		recordInactiveRun(ctx, sessionID, err)
 		return
 	}
 	r.deps.Sessions.Manager.Runner.Execution.Cancel(sessionID)
@@ -233,6 +240,7 @@ func (r *Runtime) OnWorkflowHumanApprovalAdvanced(ctx context.Context, run *wire
 		if r.deps.Coordinator != nil && r.deps.Coordinator() != nil {
 			r.deps.Coordinator().CoordinatorLoop().Waits.ParkForHostObligation(ctx, sessionID)
 		}
+		actionoutcome.Register(ctx, sessionID).Resolve(actionoutcome.WakeResult(wire.WakeReasonHostObligationHeld))
 		return
 	}
 	r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
@@ -342,4 +350,12 @@ func (r *Runtime) roundCriteriaOutcomes(ctx context.Context, task *wire.WorkerTa
 		return ""
 	}
 	return workerrecords.EncodeCriteriaOutcomes(outcomes)
+}
+
+func recordInactiveRun(ctx context.Context, sessionID string, err error) {
+	reason := wire.WakeReasonNoActiveRun
+	if err != nil {
+		reason = wire.WakeReasonLookupFailed
+	}
+	actionoutcome.Register(ctx, sessionID).Resolve(actionoutcome.WakeResult(reason))
 }

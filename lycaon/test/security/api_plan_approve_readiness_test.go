@@ -144,11 +144,19 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("approve status = %d body = %s", w.Code, w.Body.String())
 	}
-	testutil.WaitFor(t, "the approval advance is seen", sawApprovalAdvance.Load)
-
-	testutil.WaitFor(t, "the coordinator sends another request", func() bool {
-		return len(h.Recording.AllRequests()) > requestCountBeforeApproval
-	})
+	var approved wire.Blueprint
+	testutil.FailErr(t, "read approved blueprint", json.Unmarshal(w.Body.Bytes(), &approved))
+	actions := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Outcomes.For(sess.ID).Actions
+	outcome, err := actions.Await(t.Context(), approved.ContinuationID)
+	testutil.FailErr(t, "await approval", err)
+	if outcome.State != wire.ContinuationStateContinued || outcome.TurnID == "" || !sawApprovalAdvance.Load() {
+		t.Fatalf("approval outcome = %+v", outcome)
+	}
+	reqSeen, err := h.Recording.AwaitRequest(t.Context(), requestCountBeforeApproval)
+	testutil.FailErr(t, "await implementation request", err)
+	if reqSeen.Debug.SessionID != sess.ID {
+		t.Fatalf("implementation request session = %q", reqSeen.Debug.SessionID)
+	}
 	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)
 	history, err := h.Workflows.Manager.Store.Runs.ListBySession(ctx, sess.ID, 100, nil)
 	testutil.FailErr(t, "list workflows after approval", err)

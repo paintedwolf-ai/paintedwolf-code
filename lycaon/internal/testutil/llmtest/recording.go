@@ -10,10 +10,11 @@ import (
 
 // RecordingClient wraps an LLMClient and captures completion requests for tests.
 type RecordingClient struct {
-	Inner modelcall.LLMClient
-	mu    sync.Mutex
-	last  modelcall.CompletionRequest
-	all   []modelcall.CompletionRequest
+	Inner   modelcall.LLMClient
+	changed chan struct{}
+	mu      sync.Mutex
+	last    modelcall.CompletionRequest
+	all     []modelcall.CompletionRequest
 }
 
 // NewRecordingClient wraps inner for test observability.
@@ -62,4 +63,29 @@ func (c *RecordingClient) record(req modelcall.CompletionRequest) {
 	defer c.mu.Unlock()
 	c.last = req
 	c.all = append(c.all, req)
+	if c.changed != nil {
+		close(c.changed)
+		c.changed = nil
+	}
+}
+
+func (c *RecordingClient) AwaitRequest(ctx context.Context, index int) (modelcall.CompletionRequest, error) {
+	for {
+		c.mu.Lock()
+		if index < len(c.all) {
+			request := c.all[index]
+			c.mu.Unlock()
+			return request, nil
+		}
+		if c.changed == nil {
+			c.changed = make(chan struct{})
+		}
+		changed := c.changed
+		c.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return modelcall.CompletionRequest{}, ctx.Err()
+		case <-changed:
+		}
+	}
 }
