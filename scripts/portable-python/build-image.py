@@ -1,0 +1,610 @@
+#!/usr/bin/env python3
+"""Reproducible builder for the Portable Python CPython/WASI curated image.
+
+Reads scripts/portable-python/lock.json, verifies SHA-256 digests of every
+pinned upstream input, extracts CPython 3.12 WASI + stdlib, installs all
+29 locked distributions (13 public + 16 runtime deps, zero host binaries),
+generates image-manifest.json (portable-python.image-manifest/v1), and packs
+a deterministic tarball + SHA256SUMS.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import datetime as dt
+import hashlib
+import json
+import os
+import shutil
+import struct
+import tarfile
+import urllib.request
+import zipfile
+from pathlib import Path
+from typing import Any
+
+FORBIDDEN_SUFFIXES = (".so", ".dylib", ".pyd", ".dll", ".a", ".o", ".c", ".h", ".pyx")
+
+STDLIB_CAPABILITIES = [
+    "ast",
+    "base64",
+    "bz2",
+    "collections",
+    "csv",
+    "datetime",
+    "decimal",
+    "difflib",
+    "fractions",
+    "glob",
+    "hashlib",
+    "io",
+    "itertools",
+    "json",
+    "math",
+    "os",
+    "pathlib",
+    "pyexpat",
+    "re",
+    "sqlite3",
+    "tokenize",
+    "tomllib",
+    "unittest",
+    "urllib.parse",
+    "xml.etree.ElementTree",
+    "zipfile",
+    "zlib",
+]
+
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def sha256_tree(root: Path, rel_paths: list[str] | None = None) -> str:
+    """Compute a deterministic SHA-256 over relative paths + file contents."""
+    h = hashlib.sha256()
+    if rel_paths is None:
+        files = sorted(
+            p.relative_to(root).as_posix()
+            for p in root.rglob("*")
+            if p.is_file()
+        )
+    else:
+        files = sorted(set(rel_paths))
+    for rel in files:
+        full = root / rel
+        if not full.is_file():
+            continue
+        h.update(rel.encode("utf-8"))
+        h.update(b"\x00")
+        h.update(sha256_file(full).encode("ascii"))
+        h.update(b"\n")
+    return h.hexdigest()
+
+
+def parse_wasm_imports(wasm_path: Path) -> list[dict[str, str]]:
+    """Parse the WebAssembly Import section (section id 2) without external deps."""
+    data = wasm_path.read_bytes()
+    if data[:4] != b"\x00asm":
+        raise ValueError(f"{wasm_path} is not a valid WebAssembly binary")
+    pos = 8  # skip magic + version
+    n = len(data)
+
+    def read_leb128() -> int:
+        nonlocal pos
+        result = 0
+        shift = 0
+        while True:
+            b = data[pos]
+            pos += 1
+            result |= (b & 0x7F) << shift
+            if (b & 0x80) == 0:
+                return result
+            shift += 7
+
+    def read_name() -> str:
+        nonlocal pos
+        length = read_leb128()
+        s = data[pos : pos + length].decode("utf-8")
+        pos += length
+        return s
+
+    imports: list[dict[str, str]] = []
+    kind_names = {0: "func", 1: "table", 2: "memory", 3: "global"}
+
+    while pos < n:
+        sec_id = data[pos]
+        pos += 1
+        sec_size = read_leb128()
+        sec_end = pos + sec_size
+        if sec_id == 2:  # Import section
+            count = read_leb128()
+            for _ in range(count):
+                mod = read_name()
+                name = read_name()
+                kind = data[pos]
+                pos += 1
+                if kind == 0:  # func typeidx
+                    read_leb128()
+                elif kind == 1:  # table: reftype + limits
+                    pos += 1
+                    flags = read_leb128()
+                    read_leb128()
+                    if flags & 1:
+                        read_leb128()
+                elif kind == 2:  # memory: limits
+                    flags = read_leb128()
+                    read_leb128()
+                    if flags & 1:
+                        read_leb128()
+                elif kind == 3:  # global: valtype + mut
+                    pos += 2
+                else:
+                    raise ValueError(f"Unsupported WASM import kind {kind}")
+                imports.append(
+                    {
+                        "module": mod,
+                        "name": name,
+                        "kind": kind_names.get(kind, str(kind)),
+                    }
+                )
+            break
+        pos = sec_end
+    return imports
+
+
+def download_verified(url: str, dest: Path, expected_sha256: str) -> Path:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        actual = sha256_file(dest)
+        if actual == expected_sha256:
+            return dest
+        dest.unlink()
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    urllib.request.urlretrieve(url, tmp)
+    actual = sha256_file(tmp)
+    if actual != expected_sha256:
+        tmp.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"SHA-256 mismatch for {url}: expected {expected_sha256}, got {actual}"
+        )
+    tmp.replace(dest)
+    return dest
+
+
+def record_hash(path: Path) -> tuple[str, int]:
+    data = path.read_bytes()
+    digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode("ascii")
+    return f"sha256={digest}", len(data)
+
+
+def write_record(packages_root: Path, dist_info_dir: Path, rel_files: list[str]) -> str:
+    record_rel = (dist_info_dir.relative_to(packages_root) / "RECORD").as_posix()
+    lines = []
+    for rel in sorted(set(rel_files)):
+        if rel == record_rel:
+            continue
+        h, size = record_hash(packages_root / rel)
+        lines.append(f"{rel},{h},{size}")
+    lines.append(f"{record_rel},,")
+    (packages_root / record_rel).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return record_rel
+
+
+def install_wheel(whl_path: Path, packages_root: Path) -> tuple[str, list[str]]:
+    installed: list[str] = []
+    dist_info_dir: str | None = None
+    with zipfile.ZipFile(whl_path, "r") as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            rel = info.filename
+            # Skip .data directories if any (console scripts are bound via entry_points.txt)
+            parts = Path(rel).parts
+            if any(p.endswith(".data") for p in parts):
+                continue
+            if parts[0].endswith(".dist-info"):
+                dist_info_dir = parts[0]
+            out_path = packages_root / rel
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(zf.read(info.filename))
+            installed.append(rel)
+    if dist_info_dir is None:
+        raise RuntimeError(f"Wheel {whl_path.name} missing .dist-info directory")
+    return dist_info_dir, installed
+
+
+def install_sdist_pure_python(
+    sdist_path: Path,
+    dist: dict[str, Any],
+    packages_root: Path,
+) -> tuple[str, list[str]]:
+    name = dist["name"]
+    version = dist["version"]
+    dist_info_name = f"{name.replace('-', '_')}-{version}.dist-info"
+    dist_info_dir = packages_root / dist_info_name
+    dist_info_dir.mkdir(parents=True, exist_ok=True)
+
+    # Known pure-python source subdirs inside upstream sdists
+    sdist_cfg = {
+        "PyYAML": ("lib/yaml/", "yaml", "LICENSE"),
+        "MarkupSafe": ("src/markupsafe/", "markupsafe", "LICENSE.txt"),
+    }
+    if name not in sdist_cfg:
+        raise RuntimeError(f"No sdist_pure_python mapping for {name}")
+    src_prefix, pkg_name, license_name = sdist_cfg[name]
+
+    installed: list[str] = []
+    pkg_info_bytes: bytes | None = None
+    license_bytes: bytes | None = None
+
+    with tarfile.open(sdist_path, "r:gz") as tf:
+        for member in tf.getmembers():
+            if not member.isfile():
+                continue
+            parts = Path(member.name).parts
+            if len(parts) < 2:
+                continue
+            inner = Path(*parts[1:]).as_posix()
+            if inner == "PKG-INFO":
+                f = tf.extractfile(member)
+                assert f is not None
+                pkg_info_bytes = f.read()
+            elif inner == license_name:
+                f = tf.extractfile(member)
+                assert f is not None
+                license_bytes = f.read()
+            elif inner.startswith(src_prefix):
+                sub = inner[len(src_prefix) :]
+                if sub.endswith(FORBIDDEN_SUFFIXES):
+                    continue
+                rel = f"{pkg_name}/{sub}"
+                out = packages_root / rel
+                out.parent.mkdir(parents=True, exist_ok=True)
+                f = tf.extractfile(member)
+                assert f is not None
+                out.write_bytes(f.read())
+                installed.append(rel)
+
+    if pkg_info_bytes is None:
+        raise RuntimeError(f"sdist {sdist_path.name} missing PKG-INFO")
+
+    meta_path = dist_info_dir / "METADATA"
+    meta_path.write_bytes(pkg_info_bytes)
+    installed.append(meta_path.relative_to(packages_root).as_posix())
+
+    wheel_path = dist_info_dir / "WHEEL"
+    wheel_path.write_text(
+        "Wheel-Version: 1.0\n"
+        "Generator: paintedwolf-portable-python\n"
+        "Root-Is-Purelib: true\n"
+        "Tag: py3-none-any\n",
+        encoding="utf-8",
+    )
+    installed.append(wheel_path.relative_to(packages_root).as_posix())
+
+    top_path = dist_info_dir / "top_level.txt"
+    top_path.write_text(f"{pkg_name}\n", encoding="utf-8")
+    installed.append(top_path.relative_to(packages_root).as_posix())
+
+    if license_bytes is not None:
+        lic_path = dist_info_dir / license_name
+        lic_path.write_bytes(license_bytes)
+        installed.append(lic_path.relative_to(packages_root).as_posix())
+
+    rec_rel = write_record(packages_root, dist_info_dir, installed)
+    installed.append(rec_rel)
+    return dist_info_name, installed
+
+
+def install_wasi_pure_python_rpds(
+    script_dir: Path,
+    dist: dict[str, Any],
+    packages_root: Path,
+) -> tuple[str, list[str], str]:
+    src_root = script_dir / "rpds_wasi"
+    version = dist["version"]
+    dist_info_name = f"rpds_py-{version}.dist-info"
+    dist_info_dir = packages_root / dist_info_name
+    dist_info_dir.mkdir(parents=True, exist_ok=True)
+
+    installed: list[str] = []
+    for p in sorted((src_root / "rpds").rglob("*")):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(src_root).as_posix()
+        out = packages_root / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(p.read_bytes())
+        installed.append(rel)
+
+    meta_path = dist_info_dir / "METADATA"
+    meta_path.write_text(
+        "Metadata-Version: 2.1\n"
+        "Name: rpds-py\n"
+        f"Version: {version}\n"
+        "Summary: WASI-compatible pure-Python implementation of rpds persistent data structures\n"
+        "License: MIT\n"
+        "Requires-Python: >=3.9\n",
+        encoding="utf-8",
+    )
+    installed.append(meta_path.relative_to(packages_root).as_posix())
+
+    wheel_path = dist_info_dir / "WHEEL"
+    wheel_path.write_text(
+        "Wheel-Version: 1.0\n"
+        "Generator: paintedwolf-portable-python\n"
+        "Root-Is-Purelib: true\n"
+        "Tag: py3-none-any\n",
+        encoding="utf-8",
+    )
+    installed.append(wheel_path.relative_to(packages_root).as_posix())
+
+    top_path = dist_info_dir / "top_level.txt"
+    top_path.write_text("rpds\n", encoding="utf-8")
+    installed.append(top_path.relative_to(packages_root).as_posix())
+
+    lic_src = src_root / "LICENSE"
+    lic_path = dist_info_dir / "LICENSE"
+    lic_path.write_bytes(lic_src.read_bytes())
+    installed.append(lic_path.relative_to(packages_root).as_posix())
+
+    rec_rel = write_record(packages_root, dist_info_dir, installed)
+    installed.append(rec_rel)
+
+    source_sha = sha256_tree(src_root)
+    return dist_info_name, installed, source_sha
+
+
+def apply_wasi_package_patches(packages_root: Path) -> list[dict[str, str]]:
+    """Apply minimal, auditable WASI compatibility patches and refresh RECORD."""
+    patches: list[dict[str, str]] = []
+
+    # Patch 1: pytest 8.4.1 _pytest/compat.py checks win32/emscripten for os.getuid()
+    # but omits wasi, breaking the tmp_path fixture on wasm32-wasi.
+    compat_py = packages_root / "_pytest" / "compat.py"
+    if compat_py.is_file():
+        old = 'if sys.platform == "win32" or sys.platform == "emscripten":'
+        new = 'if sys.platform in ("win32", "emscripten", "wasi"):'
+        text = compat_py.read_text(encoding="utf-8")
+        if old in text:
+            compat_py.write_text(text.replace(old, new, 1), encoding="utf-8")
+            # Refresh pytest RECORD entry for _pytest/compat.py
+            for dist_info in packages_root.glob("pytest-*.dist-info"):
+                rec = dist_info / "RECORD"
+                if rec.is_file():
+                    h, sz = record_hash(compat_py)
+                    lines = rec.read_text(encoding="utf-8").splitlines()
+                    updated = [
+                        f"_pytest/compat.py,{h},{sz}" if l.startswith("_pytest/compat.py,") else l
+                        for l in lines
+                    ]
+                    rec.write_text("\n".join(updated) + "\n", encoding="utf-8")
+            patches.append(
+                {
+                    "target": "packages/_pytest/compat.py",
+                    "reason": "Treat sys.platform == 'wasi' like emscripten/win32 in get_user_id() so tmp_path fixture works without os.getuid()",
+                }
+            )
+    return patches
+
+
+def assert_no_host_binaries(root: Path) -> None:
+    bad: list[str] = []
+    for p in root.rglob("*"):
+        if p.is_file() and p.name.endswith(FORBIDDEN_SUFFIXES):
+            bad.append(p.relative_to(root).as_posix())
+    if bad:
+        raise RuntimeError(
+            f"Forbidden native/source files found in guest packages tree: {bad}"
+        )
+
+
+def pack_deterministic_tar_gz(src_dir: Path, out_tar_gz: Path) -> None:
+    out_tar_gz.parent.mkdir(parents=True, exist_ok=True)
+    files = sorted(src_dir.rglob("*"))
+    with tarfile.open(out_tar_gz, "w:gz", compresslevel=6, format=tarfile.PAX_FORMAT) as tf:
+        for p in files:
+            rel = p.relative_to(src_dir).as_posix()
+            ti = tf.gettarinfo(p, arcname=rel)
+            ti.uid = 0
+            ti.gid = 0
+            ti.uname = ""
+            ti.gname = ""
+            ti.mtime = 0
+            if ti.isfile():
+                with p.open("rb") as f:
+                    tf.addfile(ti, f)
+            else:
+                tf.addfile(ti)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Build Portable Python CPython/WASI curated image")
+    ap.add_argument("--lock", type=Path, default=Path(__file__).resolve().parent / "lock.json")
+    ap.add_argument("--cache-dir", type=Path, required=True)
+    ap.add_argument("--out-dir", type=Path, required=True)
+    args = ap.parse_args()
+
+    script_dir = Path(__file__).resolve().parent
+    lock = json.loads(args.lock.read_text(encoding="utf-8"))
+
+    image_dir = args.out_dir / "image"
+    if image_dir.exists():
+        shutil.rmtree(image_dir)
+    bin_dir = image_dir / "bin"
+    lib_dir = image_dir / "lib"
+    packages_dir = image_dir / "packages"
+    bin_dir.mkdir(parents=True)
+    lib_dir.mkdir(parents=True)
+    packages_dir.mkdir(parents=True)
+
+    # 1. Fetch & extract CPython WASI interpreter + stdlib
+    interp = lock["interpreter"]
+    interp_tar = download_verified(
+        interp["source_url"],
+        args.cache_dir / interp["filename"],
+        interp["source_sha256"],
+    )
+    print(f"[interpreter] verified {interp_tar.name} ({interp['source_sha256'][:16]}...)")
+
+    wasm_out = bin_dir / "python.wasm"
+    with tarfile.open(interp_tar, "r:gz") as tf:
+        for member in tf.getmembers():
+            if not member.isfile():
+                continue
+            name = member.name.lstrip("./")
+            if name == "bin/python-3.12.0.wasm":
+                f = tf.extractfile(member)
+                assert f is not None
+                wasm_out.write_bytes(f.read())
+                os.chmod(wasm_out, 0o755)
+            elif name.startswith("usr/local/lib/"):
+                sub = name[len("usr/local/lib/") :]
+                if not sub or "/__pycache__/" in sub or sub.endswith(".pyc"):
+                    continue
+                out = lib_dir / sub
+                out.parent.mkdir(parents=True, exist_ok=True)
+                f = tf.extractfile(member)
+                assert f is not None
+                out.write_bytes(f.read())
+
+    if not wasm_out.is_file():
+        raise RuntimeError("Failed to extract python.wasm from interpreter archive")
+
+    wasm_sha256 = sha256_file(wasm_out)
+    stdlib_sha256 = sha256_tree(lib_dir)
+    wasm_imports = parse_wasm_imports(wasm_out)
+    print(f"[interpreter] python.wasm sha256={wasm_sha256[:16]}... imports={len(wasm_imports)}")
+    print(f"[interpreter] stdlib sha256={stdlib_sha256[:16]}...")
+
+    # 2. Install all locked distributions
+    manifest_dists: list[dict[str, Any]] = []
+    for dist in lock["distributions"]:
+        kind = dist["source_kind"]
+        if kind == "wheel":
+            whl = download_verified(
+                dist["source_url"],
+                args.cache_dir / "packages" / dist["filename"],
+                dist["source_sha256"],
+            )
+            dist_info_rel, installed = install_wheel(whl, packages_dir)
+            src_url = dist["source_url"]
+            src_sha = dist["source_sha256"]
+        elif kind == "sdist_pure_python":
+            sdist = download_verified(
+                dist["source_url"],
+                args.cache_dir / "packages" / dist["filename"],
+                dist["source_sha256"],
+            )
+            dist_info_rel, installed = install_sdist_pure_python(sdist, dist, packages_dir)
+            src_url = dist["source_url"]
+            src_sha = dist["source_sha256"]
+        elif kind == "wasi_pure_python":
+            dist_info_rel, installed, src_sha = install_wasi_pure_python_rpds(
+                script_dir, dist, packages_dir
+            )
+            src_url = dist["source_url"]
+        else:
+            raise RuntimeError(f"Unknown source_kind: {kind}")
+
+        tree_sha = sha256_tree(packages_dir, installed)
+        manifest_dists.append(
+            {
+                "name": dist["name"],
+                "normalized_name": dist["normalized_name"],
+                "version": dist["version"],
+                "public": dist["public"],
+                "imports": dist["imports"],
+                "backend": dist["backend"],
+                "features": dist["features"],
+                "console_scripts": dist["console_scripts"],
+                "has_package_data": dist["has_package_data"],
+                "dist_info_path": f"packages/{dist_info_rel}",
+                "license": dist["license"],
+                "source_url": src_url,
+                "source_sha256": src_sha,
+                "tree_sha256": tree_sha,
+            }
+        )
+        print(f"[package] {dist['name']}=={dist['version']} ({kind}) files={len(installed)}")
+
+    # 2b. Apply minimal WASI compatibility patches (e.g. pytest get_user_id on wasi)
+    applied_patches = apply_wasi_package_patches(packages_dir)
+    for p in applied_patches:
+        print(f"[patch] {p['target']}: {p['reason']}")
+        # Recompute tree_sha256 for pytest if patched
+        for md in manifest_dists:
+            if md["normalized_name"] == "pytest" and p["target"].startswith("packages/_pytest/"):
+                # Re-hash using its RECORD file
+                rec_path = packages_dir / md["dist_info_path"].removeprefix("packages/") / "RECORD"
+                rel_files = [
+                    line.split(",", 1)[0]
+                    for line in rec_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+                md["tree_sha256"] = sha256_tree(packages_dir, rel_files)
+
+    # 3. Verify ZERO host extension binaries in packages/
+    assert_no_host_binaries(packages_dir)
+    packages_tree_sha256 = sha256_tree(packages_dir)
+    print(f"[verify] zero forbidden native/source files in packages/ (tree={packages_tree_sha256[:16]}...)")
+
+    # 4. Compute deterministic image_id & write image-manifest.json
+    id_hash = hashlib.sha256(
+        f"{wasm_sha256}\n{stdlib_sha256}\n{packages_tree_sha256}\n".encode("ascii")
+    ).hexdigest()[:16]
+    image_id = f"pp-cpython-{interp['version']}-wasi-{id_hash}"
+    built_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    manifest = {
+        "schema_version": "portable-python.image-manifest/v1",
+        "image_id": image_id,
+        "built_at": built_at,
+        "target": interp["target"],
+        "interpreter": {
+            "name": interp["name"],
+            "version": interp["version"],
+            "wasm_path": "bin/python.wasm",
+            "wasm_sha256": wasm_sha256,
+            "stdlib_path": "lib",
+            "stdlib_sha256": stdlib_sha256,
+            "build_inputs": {
+                "release_tag": interp["release_tag"],
+                "wasi_sdk": interp["wasi_sdk"],
+                "source_url": interp["source_url"],
+                "source_sha256": interp["source_sha256"],
+            },
+            "patches": applied_patches,
+        },
+        "packages_root": "packages",
+        "distributions": manifest_dists,
+        "stdlib_capabilities": STDLIB_CAPABILITIES,
+        "wasm_imports": wasm_imports,
+    }
+
+    manifest_text = json.dumps(manifest, indent=2) + "\n"
+    (image_dir / "image-manifest.json").write_text(manifest_text, encoding="utf-8")
+    (args.out_dir / "image-manifest.json").write_text(manifest_text, encoding="utf-8")
+
+    # 5. Pack deterministic tarball & write SHA256SUMS
+    tarball_path = args.out_dir / "portable-python-image.tar.gz"
+    pack_deterministic_tar_gz(image_dir, tarball_path)
+
+    sums = [
+        f"{sha256_file(tarball_path)}  {tarball_path.name}",
+        f"{sha256_file(args.out_dir / 'image-manifest.json')}  image-manifest.json",
+    ]
+    (args.out_dir / "SHA256SUMS").write_text("\n".join(sums) + "\n", encoding="utf-8")
+
+    print(f"[done] image_id={image_id}")
+    print(f"[done] tarball={tarball_path} ({tarball_path.stat().st_size} bytes)")
+
+
+if __name__ == "__main__":
+    main()

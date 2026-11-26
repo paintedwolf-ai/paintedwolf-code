@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/experimental"
+	experimentalsysfs "github.com/tetratelabs/wazero/experimental/sysfs"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
 )
@@ -371,6 +373,9 @@ type RuntimeConfig struct {
 	Manifest                *ImageManifest
 	ImportPolicy            []WasmImportSpec
 	EnforceImportAudit      bool
+	UseTrustedBootstrap     bool
+	ScratchRoot             string
+	WorkspaceMount          string
 	DefaultMemoryLimitPages uint32
 	Clock                   Clock
 	Entropy                 Entropy
@@ -380,15 +385,18 @@ type RuntimeConfig struct {
 // WazeroRuntime hosts an immutable compiled WASI module and instantiates a
 // fresh guest per Execute call.
 type WazeroRuntime struct {
-	rt          wazero.Runtime
-	compiled    wazero.CompiledModule
-	manifest    *ImageManifest
-	imageDir    string
-	audit       *ImportAuditReport
-	clock       Clock
-	entropy     Entropy
-	parked      *ParkedGuestTracker
-	memLimitPgs uint32
+	rt                  wazero.Runtime
+	compiled            wazero.CompiledModule
+	manifest            *ImageManifest
+	imageDir            string
+	scratchRoot         string
+	workspaceMount      string
+	useTrustedBootstrap bool
+	audit               *ImportAuditReport
+	clock               Clock
+	entropy             Entropy
+	parked              *ParkedGuestTracker
+	memLimitPgs         uint32
 }
 
 // NewWazeroRuntime compiles cfg.WasmBytes once, audits its actual Wasm imports,
@@ -408,7 +416,8 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 		return nil, fmt.Errorf("instantiate wasi_snapshot_preview1: %w", err)
 	}
 
-	compiled, err := rt.CompileModule(ctx, cfg.WasmBytes)
+	compileCtx := experimental.WithFunctionListenerFactory(ctx, newWorkMeterListenerFactory())
+	compiled, err := rt.CompileModule(compileCtx, cfg.WasmBytes)
 	if err != nil {
 		_ = rt.Close(ctx)
 		return nil, fmt.Errorf("compile wasm module: %w", err)
@@ -435,17 +444,24 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 	if ent == nil {
 		ent = CryptoEntropy{}
 	}
+	wsMount := cfg.WorkspaceMount
+	if strings.TrimSpace(wsMount) == "" {
+		wsMount = DefaultGuestWorkspaceMount
+	}
 
 	return &WazeroRuntime{
-		rt:          rt,
-		compiled:    compiled,
-		manifest:    cfg.Manifest,
-		imageDir:    cfg.ImageDir,
-		audit:       audit,
-		clock:       clk,
-		entropy:     ent,
-		parked:      NewParkedGuestTracker(cfg.ParkedBudget),
-		memLimitPgs: cfg.DefaultMemoryLimitPages,
+		rt:                  rt,
+		compiled:            compiled,
+		manifest:            cfg.Manifest,
+		imageDir:            cfg.ImageDir,
+		scratchRoot:         cfg.ScratchRoot,
+		workspaceMount:      wsMount,
+		useTrustedBootstrap: cfg.UseTrustedBootstrap,
+		audit:               audit,
+		clock:               clk,
+		entropy:             ent,
+		parked:              NewParkedGuestTracker(cfg.ParkedBudget),
+		memLimitPgs:         cfg.DefaultMemoryLimitPages,
 	}, nil
 }
 
@@ -465,14 +481,9 @@ func (r *WazeroRuntime) Close(ctx context.Context) error {
 }
 
 // Execute instantiates a fresh guest module for inv, enforces configured
-// output/time/memory boundaries, settles the workspace adapter, and releases
-// all guest resources before returning.
+// output/time/memory/work boundaries, settles the workspace adapter, and
+// releases all guest resources before returning.
 func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*ExecutionResult, error) {
-	argv, err := BuildArgv(inv)
-	if err != nil {
-		return nil, err
-	}
-
 	start := r.clock.Now()
 	execCtx, cancel := context.WithCancel(ctx)
 	if inv.Limits.Timeout > 0 {
@@ -482,6 +493,39 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 
 	latch := NewStopLatch(cancel)
 	latch.now = r.clock.Now
+	meter := NewWorkMeter(inv.Limits.MaxGuestWork, inv.Limits.MaxHostWork, latch)
+	execCtx = WithWorkMeter(execCtx, meter)
+
+	var (
+		argv     []string
+		err      error
+		markerFS *CompletionMarkerFS
+	)
+	if r.useTrustedBootstrap {
+		nonce := GenerateCompletionNonce()
+		markerFS = NewCompletionMarkerFS(nonce, latch)
+		cwd := inv.CWD
+		if strings.TrimSpace(cwd) == "" {
+			cwd = r.workspaceMount
+		}
+		argv, err = BuildBootstrapArgv(BootstrapConfig{
+			Mode:            inv.Mode,
+			Code:            inv.Code,
+			Script:          inv.Script,
+			Module:          inv.Module,
+			CLI:             inv.CLI,
+			CWD:             cwd,
+			Args:            inv.Args,
+			PackagesMount:   DefaultGuestPackagesMount,
+			ScratchMount:    DefaultGuestScratchMount,
+			CompletionNonce: nonce,
+		})
+	} else {
+		argv, err = BuildArgv(inv)
+	}
+	if err != nil {
+		return nil, err
+	}
 
 	var stderrCapture bytes.Buffer
 	stderrTarget := io.Writer(&stderrCapture)
@@ -491,7 +535,7 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 	sealedStdout := NewSealedWriter(inv.Stdout, latch, inv.Limits.MaxOutputBytes)
 	sealedStderr := NewSealedWriter(stderrTarget, latch, inv.Limits.MaxOutputBytes)
 
-	modCfg := r.buildModuleConfig(inv, argv, sealedStdout, sealedStderr)
+	modCfg := r.buildModuleConfig(execCtx, inv, argv, sealedStdout, sealedStderr, latch, meter, markerFS)
 
 	if inv.ExecutionID != "" {
 		defer r.parked.Release(inv.ExecutionID)
@@ -510,6 +554,8 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 		ExecutionID: inv.ExecutionID,
 		GuestStderr: stderrCapture.String(),
 		Usage: ResourceUsage{
+			GuestWork:       meter.GuestWork(),
+			HostWork:        meter.HostWork(),
 			PeakMemoryPages: peakPages,
 			StdoutBytes:     sealedStdout.WrittenBytes(),
 			StderrBytes:     sealedStderr.WrittenBytes(),
@@ -518,6 +564,9 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 	}
 
 	r.classifyOutcome(execCtx, latch, runErr, res)
+	if r.useTrustedBootstrap && (markerFS == nil || !markerFS.Completed()) {
+		res.CleanCompletion = false
+	}
 
 	if inv.Workspace != nil {
 		report, settleErr := inv.Workspace.Settle(context.Background(), res.CleanCompletion)
@@ -526,12 +575,35 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 			res.CleanCompletion = false
 			res.Diagnostics = append(res.Diagnostics, fmt.Sprintf("workspace settlement failed: %v", settleErr))
 		}
+		if report != nil {
+			if len(report.Conflicts) > 0 {
+				res.CleanCompletion = false
+				latch.Trigger(TerminalStop{
+					Code:   StopRevisionConflict,
+					Reason: fmt.Sprintf("workspace settlement detected %d revision conflict(s)", len(report.Conflicts)),
+				})
+				res.Stop = latch.Stop()
+				res.Diagnostics = append(res.Diagnostics, fmt.Sprintf("workspace settlement revision conflicts: %d", len(report.Conflicts)))
+			}
+			if report.PartialFailure != nil {
+				res.CleanCompletion = false
+				res.Diagnostics = append(res.Diagnostics, fmt.Sprintf("workspace settlement partial failure: %v", report.PartialFailure))
+			}
+		}
 	}
 
 	return res, nil
 }
 
-func (r *WazeroRuntime) buildModuleConfig(inv Invocation, argv []string, stdout, stderr io.Writer) wazero.ModuleConfig {
+func (r *WazeroRuntime) buildModuleConfig(
+	execCtx context.Context,
+	inv Invocation,
+	argv []string,
+	stdout, stderr io.Writer,
+	latch *StopLatch,
+	meter *WorkMeter,
+	markerFS *CompletionMarkerFS,
+) wazero.ModuleConfig {
 	cfg := wazero.NewModuleConfig().
 		WithName("").
 		WithArgs(argv...).
@@ -552,19 +624,44 @@ func (r *WazeroRuntime) buildModuleConfig(inv Invocation, argv []string, stdout,
 	for k, v := range inv.Env {
 		cfg = cfg.WithEnv(k, v)
 	}
+
+	fsCfg := wazero.NewFSConfig()
+	if sysCfg, ok := fsCfg.(experimentalsysfs.FSConfig); ok {
+		fsCfg = sysCfg.WithSysFSMount(NullDeviceFS{}, "/dev")
+	}
 	if r.imageDir != "" && r.manifest != nil {
-		fsCfg := wazero.NewFSConfig()
 		if stdlibAbs, err := resolveInsideDir(r.imageDir, r.manifest.Interpreter.StdlibPath); err == nil {
 			fsCfg = fsCfg.WithReadOnlyDirMount(stdlibAbs, "/usr/local/lib")
 		}
 		if r.manifest.PackagesRoot != "" {
 			if pkgAbs, err := resolveInsideDir(r.imageDir, r.manifest.PackagesRoot); err == nil {
-				fsCfg = fsCfg.WithReadOnlyDirMount(pkgAbs, "/packages")
+				fsCfg = fsCfg.WithReadOnlyDirMount(pkgAbs, DefaultGuestPackagesMount)
 			}
 		}
-		cfg = cfg.WithFSConfig(fsCfg)
 	}
-	return cfg
+	if r.scratchRoot != "" {
+		fsCfg = fsCfg.WithDirMount(r.scratchRoot, DefaultGuestScratchMount)
+	}
+	if inv.Workspace != nil {
+		wsFS := NewWorkspaceSysFS(WorkspaceSysFSConfig{
+			Context:     execCtx,
+			ExecutionID: inv.ExecutionID,
+			Namespace:   NamespaceWorkspace,
+			Adapter:     inv.Workspace,
+			Observer:    inv.Observer,
+			Latch:       latch,
+			Meter:       meter,
+		})
+		if sysCfg, ok := fsCfg.(experimentalsysfs.FSConfig); ok {
+			fsCfg = sysCfg.WithSysFSMount(wsFS, r.workspaceMount)
+		}
+	}
+	if markerFS != nil {
+		if sysCfg, ok := fsCfg.(experimentalsysfs.FSConfig); ok {
+			fsCfg = sysCfg.WithSysFSMount(markerFS, InternalCompletionMount)
+		}
+	}
+	return cfg.WithFSConfig(fsCfg)
 }
 
 func (r *WazeroRuntime) classifyOutcome(execCtx context.Context, latch *StopLatch, runErr error, res *ExecutionResult) {
