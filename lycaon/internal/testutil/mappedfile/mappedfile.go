@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -68,26 +69,42 @@ func Map(t testing.TB, path string, size int) *File {
 }
 
 func start(t testing.TB, path string, size int) (*File, error) {
-	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
+	executable, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
-	parent, child := os.NewFile(uintptr(fds[0]), "mapped-file-parent"), os.NewFile(uintptr(fds[1]), "mapped-file-child")
-	defer func() { _ = child.Close() }()
-	executable, err := os.Executable()
+	parent, child, err := socketPair()
 	if err != nil {
-		_ = parent.Close()
 		return nil, err
 	}
 	wait, err := execpkg.StartDescriptorHelper(t.Context(), execpkg.HostLaunch("mapped file fixture"), executable, nil,
 		[]string{pathEnv + "=" + path, sizeEnv + "=" + strconv.Itoa(size)}, child, os.Stderr)
+	// Only the child holds its end now, so its exit ends the parent's reads.
+	_ = child.Close()
 	if err != nil {
 		_ = parent.Close()
 		return nil, err
 	}
 	f := &File{channel: parent, replies: bufio.NewScanner(parent), wait: wait}
 	t.Cleanup(f.close)
-	return f, f.await()
+	if err := f.await(); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+// socketPair returns a connected pair that later children do not inherit; ExtraFiles still hands
+// the child its end. Holding ForkLock keeps a concurrent fork from copying the ends before then.
+func socketPair() (parent, child *os.File, err error) {
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	unix.CloseOnExec(fds[0])
+	unix.CloseOnExec(fds[1])
+	return os.NewFile(uintptr(fds[0]), "mapped-file-parent"), os.NewFile(uintptr(fds[1]), "mapped-file-child"), nil
 }
 
 // Write copies data to the start of the mapping and leaves the pages dirty.
