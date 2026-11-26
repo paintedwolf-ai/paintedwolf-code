@@ -21,7 +21,7 @@ Application errors are clues, not host decisions. Read {% if profile_has_command
 
 - **Do not declare the environment broken from one client error.** Recover through the matching route when supported by observations; report a proven broker failure or unresolved limitation honestly.
 - **Do not narrate host policy.** Report what the command proved and the fallback you took. Do not explain why a command paused unless they ask.
-- **Do not let a later omitted field retract an earlier working result.** A later `command` that omitted `direct_ip` and failed at lookup is that invocation's boundary, not evidence the earlier run was wrong or that the host cannot reach the network.
+- **Do not let a later omitted field retract an earlier working result.** A later {% if profile_has_command %}`command`{% else %}call{% endif %} that omitted `direct_ip` and failed at lookup is that invocation's boundary, not evidence the earlier run was wrong or that the host cannot reach the network.
 - **Do not reshape the project for this host box.** Mediation is host policy. Prefer `socks_proxy`, one-shot env, or client flags on the invocation over durable product changes whose only purpose is to ignore injected proxy vars. Close out when a result was mediation-conditioned; green here is not ambient CI parity.
 - **Do not partially strip proxy environment variables** to "fix" mediation. Clearing only some of `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` (and their lowercase forms) leaves the others and reproduces the same failure. Prefer `socks_proxy` for SOCKS clients, or disable env trust in the HTTP client when the process must ignore mediation.
 - **Do not retry the same call unchanged.** A boundary refusal is deterministic; the second attempt fails identically.
