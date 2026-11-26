@@ -207,7 +207,7 @@ func executorBundleForOverlay(
 	}
 	executorCacheMu.Unlock()
 
-	reg, err := buildCatalogRegistry(overlay.Catalog, mcpState)
+	reg, err := catalogRegistry(overlay.Catalog, mcpState)
 	if err != nil {
 		return executorBundle{}, nil, err
 	}
@@ -273,6 +273,34 @@ func (b executorBundle) programTable(ctx context.Context, filter platform.ToolFi
 	b.tables[key] = table
 	b.tablesMu.Unlock()
 	return table, nil
+}
+
+type registryCacheKey struct {
+	revision string
+	mcpState MCPState
+}
+
+var (
+	registryCacheMu sync.Mutex
+	registryCache   = map[registryCacheKey]*tools.DefaultRegistry{}
+)
+
+// catalogRegistry shares one registry per catalog and MCP fixture: posture,
+// web search and external hiding narrow the executor's policy, not the
+// registry, and executors only read it.
+func catalogRegistry(eff *extpacks.EffectiveCatalog, mcpState MCPState) (*tools.DefaultRegistry, error) {
+	key := registryCacheKey{revision: eff.Revision, mcpState: mcpState}
+	registryCacheMu.Lock()
+	defer registryCacheMu.Unlock()
+	if reg, ok := registryCache[key]; ok {
+		return reg, nil
+	}
+	reg, err := buildCatalogRegistry(eff, mcpState)
+	if err != nil {
+		return nil, err
+	}
+	registryCache[key] = reg
+	return reg, nil
 }
 
 func buildCatalogRegistry(eff *extpacks.EffectiveCatalog, mcpState MCPState) (*tools.DefaultRegistry, error) {
