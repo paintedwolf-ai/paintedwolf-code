@@ -13,16 +13,13 @@ import (
 // TestCommandLiteralReadersRefuseUnsupportedOptionsWithoutExternalFallback
 // verifies Q21/F02: exact-mapped literal document readers refuse unsupported
 // options with COMMAND_OPTION_UNSUPPORTED and zero external launch even when
-// external execution is enabled in the implement profile, while preserving
-// deliberate `external --` execution.
+// external execution is enabled, while preserving deliberate `external --`
+// execution.
 func TestCommandLiteralReadersRefuseUnsupportedOptionsWithoutExternalFallback(t *testing.T) {
 	f := newComposedProgramFixture(t)
 	testutil.FailErr(t, "write input.txt", os.WriteFile(filepath.Join(f.Dir, "input.txt"), []byte("alpha\n"), 0o644))
 
 	// Positive control: deliberate external execution remains enabled and finds cat.
-	f.Configure = func(call *tools.ToolContext) {
-		call.Identity.Agent = "implement"
-	}
 	raw, err := f.Call(t, t.Context(), "external -- cat ./input.txt")
 	testutil.FailErr(t, "run deliberate external cat", err)
 	if ext := decodeProgramOutcome(t, raw); ext.Refusal != nil || ext.Status != 0 || ext.Stdout != "alpha\n" {
@@ -42,7 +39,6 @@ func TestCommandLiteralReadersRefuseUnsupportedOptionsWithoutExternalFallback(t 
 		t.Run(tc.name, func(t *testing.T) {
 			out := &tools.ToolInvocationOut{}
 			f.Configure = func(call *tools.ToolContext) {
-				call.Identity.Agent = "implement"
 				call.Effects.Out = out
 			}
 			raw, err := f.Call(t, t.Context(), tc.source)
@@ -77,9 +73,7 @@ func TestCommandLiteralReadersRefuseUnsupportedOptionsWithoutExternalFallback(t 
 	}
 
 	t.Run("nested env cat unsupported option", func(t *testing.T) {
-		f.Configure = func(call *tools.ToolContext) {
-			call.Identity.Agent = "implement"
-		}
+		f.Configure = nil
 		raw, err := f.Call(t, t.Context(), "env cat --not-a-version-1-option ./input.txt")
 		testutil.FailErr(t, "env cat", err)
 		result := decodeProgramOutcome(t, raw)
