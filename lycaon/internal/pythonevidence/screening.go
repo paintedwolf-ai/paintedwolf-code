@@ -1,14 +1,22 @@
 package pythonevidence
 
 import (
+	"context"
+	"errors"
 	"net/url"
 	"regexp"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/pythonadmission"
+	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 )
 
-const redactedMarker = "[REDACTED]"
+// ErrMissingSecretScreener is returned by fail-closed production constructors
+// when no active host secret screener (secretmatch.Matcher) is provided.
+var ErrMissingSecretScreener = errors.New("production pythonevidence requires an active host secretmatch.Matcher")
+
+const redactedMarker = secretmatch.RedactedMarker
 
 // SecretScreener redacts credentials, tokens, and secrets from text before
 // persistence to the execution ledger, retained artifacts, Den projections, or
@@ -17,10 +25,53 @@ type SecretScreener interface {
 	ScreenText(text string) (screened string, redactedCount int)
 }
 
-// DefaultSecretScreener applies baseline redaction for embedded URL userinfo,
-// secret query parameters, bearer/basic authorization tokens, common provider
-// token prefixes, PEM private keys, and key=value secret assignments.
-type DefaultSecretScreener struct{}
+// HostSecretScreener adapts Painted Wolf's secretmatch.Matcher as the
+// production secret screening engine, layered with URL credential scrubbing.
+type HostSecretScreener struct {
+	matcher *secretmatch.Matcher
+}
+
+// NewHostSecretScreener constructs a fail-closed production screener backed by
+// an active secretmatch.Matcher. Returns ErrMissingSecretScreener if matcher is
+// nil or inert.
+func NewHostSecretScreener(matcher *secretmatch.Matcher) (*HostSecretScreener, error) {
+	if matcher == nil || matcher.Inert() {
+		return nil, ErrMissingSecretScreener
+	}
+	return &HostSecretScreener{matcher: matcher}, nil
+}
+
+// ScreenText screens text through secretmatch.Matcher and URL credential rules.
+func (h *HostSecretScreener) ScreenText(text string) (string, int) {
+	if text == "" || h == nil || h.matcher == nil {
+		return text, 0
+	}
+	total := 0
+	out := reURLWithCreds.ReplaceAllStringFunc(text, func(raw string) string {
+		screened, n := screenRawURL(raw)
+		total += n
+		return screened
+	})
+	ctx := context.Background()
+	matches := h.matcher.ScreenContext(ctx, out)
+	if len(matches) > 0 {
+		out = secretmatch.RedactMatches(out, matches)
+		total += len(matches)
+	}
+	return out, total
+}
+
+// ScreenToOutput screens text and wraps it in Painted Wolf's typed
+// tooloutput.ScreenedOutput seam.
+func ScreenToOutput(s SecretScreener, text string) (tooloutput.ScreenedOutput, int) {
+	screened, n := effectiveScreener(s).ScreenText(text)
+	return tooloutput.Screened(screened), n
+}
+
+// TestSecretScreener is a standalone regex-based screener for unit tests and
+// offline fixtures where no host secretmatch catalog is loaded. Production
+// callers MUST use NewHostSecretScreener.
+type TestSecretScreener struct{}
 
 var (
 	rePrivateKeyBlock = regexp.MustCompile(`(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----`)
@@ -48,7 +99,7 @@ var secretQueryKeys = map[string]struct{}{
 
 // ScreenText redacts secrets in text and returns the screened text alongside
 // the number of redactions applied.
-func (DefaultSecretScreener) ScreenText(text string) (string, int) {
+func (TestSecretScreener) ScreenText(text string) (string, int) {
 	if text == "" {
 		return "", 0
 	}
@@ -138,12 +189,12 @@ func screenRawURL(raw string) (string, int) {
 
 func effectiveScreener(s SecretScreener) SecretScreener {
 	if s == nil {
-		return DefaultSecretScreener{}
+		return TestSecretScreener{}
 	}
 	return s
 }
 
-// ScreenText screens text using s (or DefaultSecretScreener if s is nil).
+// ScreenText screens text using s (or TestSecretScreener if s is nil).
 func ScreenText(s SecretScreener, text string) (string, int) {
 	return effectiveScreener(s).ScreenText(text)
 }

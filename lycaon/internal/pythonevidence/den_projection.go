@@ -1,15 +1,27 @@
 package pythonevidence
 
 import (
+	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 )
 
+var (
+	// ErrIncompleteScope is returned when a ViewerScope or record lacks
+	// required SessionID, Actor, or View authorization identity.
+	ErrIncompleteScope = errors.New("authorization scope requires non-empty session_id, actor, and view")
+	// ErrAccessDenied is returned when a ViewerScope is not authorized to read
+	// the requested execution or retained artifact.
+	ErrAccessDenied = errors.New("viewer scope not authorized to access resource")
+)
+
 // VisibilityRole controls session visibility scoping for Den activity projections.
+// Read-only is a mutation posture, NEVER a cross-session read grant.
 type VisibilityRole string
 
 const (
@@ -18,12 +30,61 @@ const (
 	RoleReadOnly    VisibilityRole = "read_only"
 )
 
-// ProjectionScope identifies the viewer requesting a Den activity projection.
-type ProjectionScope struct {
-	Role             VisibilityRole `json:"role"`
-	Actor            string         `json:"actor,omitempty"`
-	View             string         `json:"view,omitempty"`
-	AllowCrossWorker bool           `json:"allow_cross_worker,omitempty"`
+// ViewerScope identifies the caller requesting a Den activity projection or
+// retained artifact. SessionID, Actor, and View are all mandatory; incomplete
+// scopes fail closed.
+type ViewerScope struct {
+	Role       VisibilityRole `json:"role"`
+	SessionID  string         `json:"session_id"`
+	CheckoutID string         `json:"checkout_id,omitempty"`
+	Actor      string         `json:"actor"`
+	View       string         `json:"view"`
+}
+
+// ValidateViewerScope checks that scope carries complete authorization identity.
+func ValidateViewerScope(scope ViewerScope) error {
+	switch scope.Role {
+	case RoleCoordinator, RoleWorker, RoleReadOnly:
+	default:
+		return fmt.Errorf("%w: unknown role %q", ErrIncompleteScope, scope.Role)
+	}
+	if strings.TrimSpace(scope.SessionID) == "" ||
+		strings.TrimSpace(scope.Actor) == "" ||
+		strings.TrimSpace(scope.View) == "" {
+		return ErrIncompleteScope
+	}
+	return nil
+}
+
+// AuthorizeExecutionAccess enforces fail-closed session, checkout, actor, and
+// view isolation. No role—including RoleReadOnly—may cross session boundaries.
+func AuthorizeExecutionAccess(exec ExecutionRecord, scope ViewerScope) bool {
+	if err := ValidateViewerScope(scope); err != nil {
+		return false
+	}
+	if strings.TrimSpace(exec.SessionID) == "" || exec.SessionID != scope.SessionID {
+		return false
+	}
+	if exec.CheckoutID != "" && scope.CheckoutID != "" && exec.CheckoutID != scope.CheckoutID {
+		return false
+	}
+	switch scope.Role {
+	case RoleCoordinator:
+		return true
+	case RoleWorker:
+		return strings.TrimSpace(exec.Actor) != "" &&
+			strings.TrimSpace(exec.View) != "" &&
+			exec.Actor == scope.Actor &&
+			exec.View == scope.View
+	case RoleReadOnly:
+		// Read-only is a mutation posture, never a cross-session or cross-view grant.
+		if exec.CheckoutID != "" && strings.TrimSpace(scope.CheckoutID) == "" {
+			return false
+		}
+		return strings.TrimSpace(exec.View) != "" && exec.View == scope.View
+	default:
+		return false
+	}
 }
 
 // ReadMemberProjection preserves an individual inspectable read operation
@@ -41,14 +102,14 @@ type ReadMemberProjection struct {
 // ReadGroup aggregates repeated reads (such as a loop reading N files) into a
 // compact Den group while retaining every inspectable member operation.
 type ReadGroup struct {
-	GroupID             string                 `json:"group_id"`
-	ParentOperationID   string                 `json:"parent_operation_id"`
+	GroupID             string                  `json:"group_id"`
+	ParentOperationID   string                  `json:"parent_operation_id"`
 	Namespace           pythonruntime.Namespace `json:"namespace"`
-	RootID              string                 `json:"root_id,omitempty"`
-	FileCount           int                    `json:"file_count"`
-	ReadCount           int                    `json:"read_count"`
-	TotalBytesDelivered int64                  `json:"total_bytes_delivered"`
-	Members             []ReadMemberProjection `json:"members"`
+	RootID              string                  `json:"root_id,omitempty"`
+	FileCount           int                     `json:"file_count"`
+	ReadCount           int                     `json:"read_count"`
+	TotalBytesDelivered int64                   `json:"total_bytes_delivered"`
+	Members             []ReadMemberProjection  `json:"members"`
 }
 
 // PublishedDiffProjection represents a committed workspace change attributed
@@ -113,6 +174,8 @@ type UncertainExternalProjection struct {
 type PythonActivityProjection struct {
 	ExecutionID           string                                  `json:"execution_id"`
 	CallID                string                                  `json:"call_id"`
+	SessionID             string                                  `json:"session_id"`
+	CheckoutID            string                                  `json:"checkout_id,omitempty"`
 	Actor                 string                                  `json:"actor"`
 	View                  string                                  `json:"view"`
 	Surface               string                                  `json:"surface"`
@@ -135,40 +198,44 @@ type PythonActivityProjection struct {
 }
 
 // ProjectForDen builds a visibility-scoped Den activity projection from ledger.
-func ProjectForDen(ledger *ExecutionLedger, scope ProjectionScope) PythonActivityProjection {
+// Fails closed when scope is incomplete or unauthorized.
+func ProjectForDen(ledger *ExecutionLedger, scope ViewerScope) PythonActivityProjection {
 	exec := ledger.Execution()
+	if !AuthorizeExecutionAccess(exec, scope) {
+		return PythonActivityProjection{
+			ExecutionID:           exec.ExecutionID,
+			VisibilityRole:        scope.Role,
+			Visible:               false,
+			RedactedForVisibility: true,
+		}
+	}
+
 	proj := PythonActivityProjection{
-		ExecutionID:     exec.ExecutionID,
-		CallID:          exec.CallID,
-		Actor:           exec.Actor,
-		View:            exec.View,
-		Surface:         exec.Surface,
-		RuntimeImageID:  exec.RuntimeImageID,
-		VisibilityRole:  scope.Role,
-		Visible:         true,
-		CleanCompletion: exec.CleanCompletion,
-		ExitCode:        exec.ExitCode,
-		Stop:            exec.Stop,
+		ExecutionID:        exec.ExecutionID,
+		CallID:             exec.CallID,
+		SessionID:          exec.SessionID,
+		CheckoutID:         exec.CheckoutID,
+		Actor:              exec.Actor,
+		View:               exec.View,
+		Surface:            exec.Surface,
+		RuntimeImageID:     exec.RuntimeImageID,
+		VisibilityRole:     scope.Role,
+		Visible:            true,
+		CleanCompletion:    exec.CleanCompletion,
+		ExitCode:           exec.ExitCode,
+		Stop:               exec.Stop,
+		ReadGroups:         groupReads(ledger.DocumentReads()),
+		RefusedChildren:    projectRefusals(ledger.Admissions()),
+		UncertainExternals: projectUncertainExternals(ledger.Subprocesses(), ledger.HTTPRecords()),
+		ScreenedOutputs:    ledger.ScreenedModelOutputs(),
+		NativeSourceRanges: ledger.ModelSourceCitations(),
 	}
-
-	if !canViewExecution(exec, scope) {
-		proj.Visible = false
-		proj.RedactedForVisibility = true
-		return proj
-	}
-
-	proj.ReadGroups = groupReads(ledger.DocumentReads())
-	proj.RefusedChildren = projectRefusals(ledger.Admissions())
-	proj.UncertainExternals = projectUncertainExternals(ledger.Subprocesses(), ledger.HTTPRecords())
-	proj.ScreenedOutputs = ledger.ScreenedModelOutputs()
-	proj.NativeSourceRanges = ledger.ModelSourceCitations()
 
 	diffs, conflicts := projectPublications(ledger.Publications())
 	proj.Conflicts = conflicts
 
 	if scope.Role == RoleReadOnly {
 		proj.ReadOnlyView = true
-		// Read-only sessions do not expose mutating diff internals or preview listeners.
 		return proj
 	}
 
@@ -177,26 +244,6 @@ func ProjectForDen(ledger *ExecutionLedger, scope ProjectionScope) PythonActivit
 		proj.PreviewListeners = append(proj.PreviewListeners, pl.Record)
 	}
 	return proj
-}
-
-func canViewExecution(exec ExecutionRecord, scope ProjectionScope) bool {
-	switch scope.Role {
-	case RoleCoordinator, RoleReadOnly:
-		return true
-	case RoleWorker:
-		if scope.AllowCrossWorker {
-			return true
-		}
-		if scope.View != "" && exec.View != "" && scope.View != exec.View {
-			return false
-		}
-		if scope.Actor != "" && exec.Actor != "" && scope.Actor != exec.Actor {
-			return false
-		}
-		return true
-	default:
-		return false
-	}
 }
 
 type readGroupKey struct {
@@ -310,9 +357,6 @@ func projectRefusals(admissions []LedgerAdmission) []RefusedChildProjection {
 func projectUncertainExternals(subprocs []LedgerSubprocess, https []LedgerHTTP) []UncertainExternalProjection {
 	var out []UncertainExternalProjection
 	for _, sp := range subprocs {
-		if !sp.UncertainOutcome && sp.Record.Decision != pythonruntime.DecisionAllow {
-			continue
-		}
 		if sp.UncertainOutcome {
 			out = append(out, UncertainExternalProjection{
 				OperationID:       sp.Record.OperationID,

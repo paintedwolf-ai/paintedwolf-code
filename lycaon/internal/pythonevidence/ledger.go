@@ -1,6 +1,7 @@
 package pythonevidence
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -24,7 +25,18 @@ var (
 	// ErrInvalidAttributionKind is returned when a Python workspace change is
 	// attributed to a non-Python mechanism (such as shell_redirect).
 	ErrInvalidAttributionKind = errors.New("workspace publication attribution must be python_workspace_publication")
+	// ErrMissingReceiptSink is returned by production ledger constructors when
+	// no durable host receipt sink is supplied.
+	ErrMissingReceiptSink = errors.New("production execution ledger requires a durable ReceiptSink")
 )
+
+// ReceiptSink persists execution, admission, and publication receipts to
+// Painted Wolf's durable receipt store.
+type ReceiptSink interface {
+	PersistExecution(ctx context.Context, exec ExecutionRecord) error
+	PersistAdmission(ctx context.Context, adm LedgerAdmission) error
+	PersistPublication(ctx context.Context, pub LedgerPublication) error
+}
 
 // AttributionKind identifies the host mechanism that produced a workspace change.
 type AttributionKind string
@@ -122,11 +134,14 @@ type WriteAttribution struct {
 	AttributionKind   AttributionKind `json:"attribution_kind,omitempty"`
 }
 
-// ExecutionRecord pins the identity, actor, view, surface, submitted source,
-// imported units, and runtime image for one Portable Python execution.
+// ExecutionRecord pins the identity, session/checkout scope, actor, view,
+// surface, submitted source, imported units, and runtime image for one
+// Portable Python execution.
 type ExecutionRecord struct {
 	ExecutionID           string                      `json:"execution_id"`
 	CallID                string                      `json:"call_id"`
+	SessionID             string                      `json:"session_id"`
+	CheckoutID            string                      `json:"checkout_id,omitempty"`
 	Actor                 string                      `json:"actor"`
 	View                  string                      `json:"view"`
 	Surface               string                      `json:"surface"`
@@ -141,36 +156,29 @@ type ExecutionRecord struct {
 	Stop                  *pythonruntime.TerminalStop `json:"stop,omitempty"`
 }
 
-// Five strictly separate evidence facts:
-// 1. DocumentOpenedFact
-// 2. BytesDeliveredFact
-// 3. DerivedOutputFact
-// 4. ScreenedModelOutputFact
-// 5. NativeSourceRangeFact
-
 // DocumentOpenedFact records that the guest opened a document handle. Opening a
 // document NEVER establishes bytes delivered to the guest or model grounding.
 type DocumentOpenedFact struct {
-	ExecutionID       string                         `json:"execution_id"`
-	OperationID       string                         `json:"operation_id"`
-	ParentOperationID string                         `json:"parent_operation_id"`
-	Target            pythonruntime.CanonicalTarget  `json:"target"`
+	ExecutionID       string                           `json:"execution_id"`
+	OperationID       string                           `json:"operation_id"`
+	ParentOperationID string                           `json:"parent_operation_id"`
+	Target            pythonruntime.CanonicalTarget    `json:"target"`
 	Revision          pythondocuments.DocumentRevision `json:"revision"`
-	UnsavedDraft      bool                           `json:"unsaved_draft,omitempty"`
-	RecordedAt        time.Time                      `json:"recorded_at"`
+	UnsavedDraft      bool                             `json:"unsaved_draft,omitempty"`
+	RecordedAt        time.Time                        `json:"recorded_at"`
 }
 
 // BytesDeliveredFact records actual bytes delivered to the guest, witnessed by
 // successful guest read operations (never snapshot length on open).
 type BytesDeliveredFact struct {
-	ExecutionID           string                         `json:"execution_id"`
-	OperationID           string                         `json:"operation_id"`
-	ParentOperationID     string                         `json:"parent_operation_id"`
-	Target                pythonruntime.CanonicalTarget  `json:"target"`
+	ExecutionID           string                           `json:"execution_id"`
+	OperationID           string                           `json:"operation_id"`
+	ParentOperationID     string                           `json:"parent_operation_id"`
+	Target                pythonruntime.CanonicalTarget    `json:"target"`
 	Revision              pythondocuments.DocumentRevision `json:"revision"`
-	BytesDeliveredToGuest int64                          `json:"bytes_delivered_to_guest"`
-	ReadWitnessCount      int                            `json:"read_witness_count"`
-	RecordedAt            time.Time                      `json:"recorded_at"`
+	BytesDeliveredToGuest int64                            `json:"bytes_delivered_to_guest"`
+	ReadWitnessCount      int                              `json:"read_witness_count"`
+	RecordedAt            time.Time                        `json:"recorded_at"`
 }
 
 // DerivedOutputFact records secret-screened stdout/stderr emitted by the guest.
@@ -268,6 +276,7 @@ type ExecutionLedger struct {
 	mu       sync.Mutex
 	exec     ExecutionRecord
 	screener SecretScreener
+	sink     ReceiptSink
 	now      func() time.Time
 
 	admissions       []LedgerAdmission
@@ -285,13 +294,42 @@ type ExecutionLedger struct {
 	nativeSourceRanges   []NativeSourceRangeFact
 }
 
-// NewExecutionLedger constructs an ExecutionLedger, screening SubmittedSource
-// and computing its SHA-256 digest from the raw source before persistence.
+// NewProductionExecutionLedger constructs a fail-closed production
+// ExecutionLedger requiring an active host SecretScreener, a durable
+// ReceiptSink, and non-empty SessionID/Actor/View scope.
+func NewProductionExecutionLedger(
+	ctx context.Context,
+	exec ExecutionRecord,
+	screener SecretScreener,
+	sink ReceiptSink,
+	now func() time.Time,
+) (*ExecutionLedger, error) {
+	if screener == nil {
+		return nil, ErrMissingSecretScreener
+	}
+	if sink == nil {
+		return nil, ErrMissingReceiptSink
+	}
+	if strings.TrimSpace(exec.SessionID) == "" || strings.TrimSpace(exec.Actor) == "" || strings.TrimSpace(exec.View) == "" {
+		return nil, ErrIncompleteScope
+	}
+	ledger := newExecutionLedger(exec, screener, sink, now)
+	if err := sink.PersistExecution(ctx, ledger.Execution()); err != nil {
+		return nil, fmt.Errorf("persist execution record: %w", err)
+	}
+	return ledger, nil
+}
+
+// NewExecutionLedger constructs an in-memory ExecutionLedger for tests and
+// offline fixtures. Production callers MUST use NewProductionExecutionLedger.
 func NewExecutionLedger(exec ExecutionRecord, screener SecretScreener, now func() time.Time) *ExecutionLedger {
+	return newExecutionLedger(exec, effectiveScreener(screener), nil, now)
+}
+
+func newExecutionLedger(exec ExecutionRecord, scr SecretScreener, sink ReceiptSink, now func() time.Time) *ExecutionLedger {
 	if now == nil {
 		now = time.Now
 	}
-	scr := effectiveScreener(screener)
 	if exec.SubmittedSource != "" && exec.SubmittedSourceSHA256 == "" {
 		sum := sha256.Sum256([]byte(exec.SubmittedSource))
 		exec.SubmittedSourceSHA256 = hex.EncodeToString(sum[:])
@@ -303,6 +341,7 @@ func NewExecutionLedger(exec ExecutionRecord, screener SecretScreener, now func(
 	return &ExecutionLedger{
 		exec:     exec,
 		screener: scr,
+		sink:     sink,
 		now:      now,
 	}
 }
@@ -310,7 +349,6 @@ func NewExecutionLedger(exec ExecutionRecord, screener SecretScreener, now func(
 // RecordCompletion finalizes the execution outcome on the ledger.
 func (l *ExecutionLedger) RecordCompletion(clean bool, exitCode int, stop *pythonruntime.TerminalStop) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.exec.CleanCompletion = clean
 	l.exec.ExitCode = exitCode
 	if stop != nil {
@@ -319,6 +357,12 @@ func (l *ExecutionLedger) RecordCompletion(clean bool, exitCode int, stop *pytho
 		l.exec.Stop = &copied
 	}
 	l.exec.CompletedAt = l.now().UTC()
+	execCopy := l.exec
+	sink := l.sink
+	l.mu.Unlock()
+	if sink != nil {
+		_ = sink.PersistExecution(context.Background(), execCopy)
+	}
 }
 
 // AddImportedUnit records an imported or dynamic source unit on the execution.
@@ -332,15 +376,19 @@ func (l *ExecutionLedger) AddImportedUnit(unit SourceUnit) {
 // attribution and secret screening.
 func (l *ExecutionLedger) RecordAdmission(rec pythonadmission.AdmissionRecord, parentOpID string, proof *SourceBindingProof) {
 	screened, n := ScreenAdmissionRecord(l.screener, rec)
-	frame := AttributeFrame(screened.DeclaredFrame, proof)
-	l.mu.Lock()
-	l.admissions = append(l.admissions, LedgerAdmission{
+	entry := LedgerAdmission{
 		ParentOperationID: parentOpID,
 		Record:            screened,
-		Frame:             frame,
+		Frame:             AttributeFrame(screened.DeclaredFrame, proof),
 		RedactedCount:     n,
-	})
+	}
+	l.mu.Lock()
+	l.admissions = append(l.admissions, entry)
+	sink := l.sink
 	l.mu.Unlock()
+	if sink != nil {
+		_ = sink.PersistAdmission(context.Background(), entry)
+	}
 }
 
 // RecordDocumentRead records a document read event, enforcing parent ancestry
@@ -431,8 +479,7 @@ func (l *ExecutionLedger) RecordPublication(
 	if err := ValidatePythonAttribution(kind); err != nil {
 		return err
 	}
-	l.mu.Lock()
-	l.publications = append(l.publications, LedgerPublication{
+	entry := LedgerPublication{
 		ParentOperationID: parentOpID,
 		Record:            rec,
 		Attribution: WriteAttribution{
@@ -441,8 +488,16 @@ func (l *ExecutionLedger) RecordPublication(
 			HostPublicationID: hostPublicationID,
 			AttributionKind:   kind,
 		},
-	})
+	}
+	l.mu.Lock()
+	l.publications = append(l.publications, entry)
+	sink := l.sink
 	l.mu.Unlock()
+	if sink != nil {
+		if err := sink.PersistPublication(context.Background(), entry); err != nil {
+			return fmt.Errorf("persist publication receipt: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -494,9 +549,11 @@ func (l *ExecutionLedger) RecordSubprocess(rec pythonadmission.SubprocessRecord,
 	return nil
 }
 
-// RecordDerivedOutput screens guest stdout/stderr before persisting fact #3.
+// RecordDerivedOutput screens guest stdout/stderr via tooloutput.ScreenedOutput
+// before persisting fact #3.
 func (l *ExecutionLedger) RecordDerivedOutput(stream, rawText, artifactID string) DerivedOutputFact {
-	screened, n := l.screener.ScreenText(rawText)
+	screenedOut, n := ScreenToOutput(l.screener, rawText)
+	screened := screenedOut.String()
 	fact := DerivedOutputFact{
 		ExecutionID:   l.exec.ExecutionID,
 		Stream:        stream,
@@ -515,10 +572,10 @@ func (l *ExecutionLedger) RecordDerivedOutput(stream, rawText, artifactID string
 // RecordScreenedModelOutput screens output delivered to the model (fact #4).
 // Program output NEVER mints a model source citation or verification verdict.
 func (l *ExecutionLedger) RecordScreenedModelOutput(rawText string) ScreenedModelOutputFact {
-	screened, n := l.screener.ScreenText(rawText)
+	screenedOut, n := ScreenToOutput(l.screener, rawText)
 	fact := ScreenedModelOutputFact{
 		ExecutionID:              l.exec.ExecutionID,
-		ScreenedText:             screened,
+		ScreenedText:             screenedOut.String(),
 		RedactedCount:            n,
 		MintsSourceCitation:      false,
 		MintsVerificationVerdict: false,

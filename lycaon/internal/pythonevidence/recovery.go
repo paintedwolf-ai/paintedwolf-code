@@ -14,8 +14,8 @@ import (
 const StopPythonToolRequired pythonruntime.StopCode = "PYTHON_TOOL_REQUIRED"
 
 // ReachableSurface describes the caller's currently reachable tool and
-// environment surface. Recovery advice MUST be derived strictly from this
-// surface and NEVER suggest an unreachable tool or unavailable route.
+// environment surface. Pack OAR facts MUST be derived strictly from this
+// surface and NEVER reference an unreachable tool or unadmitted runner.
 type ReachableSurface struct {
 	DirectPythonOffered    bool     `json:"direct_python_offered"`
 	CommandOffered         bool     `json:"command_offered"`
@@ -28,9 +28,9 @@ type ReachableSurface struct {
 }
 
 // RecoveryStopContext captures the stopped operation and prior effects needed
-// to build truthful OAR recovery advice.
+// to populate pack-owned OAR recovery facts.
 type RecoveryStopContext struct {
-	StopCode              pythonruntime.StopCode          `json:"stop_code"`
+	PolicyCode            pythonruntime.StopCode          `json:"policy_code"`
 	StoppedOperationID    string                          `json:"stopped_operation_id"`
 	StoppedOperation      string                          `json:"stopped_operation,omitempty"`
 	PriorCompletedEffects int                             `json:"prior_completed_effects,omitempty"`
@@ -38,162 +38,156 @@ type RecoveryStopContext struct {
 	Conflict              *pythonruntime.RevisionConflict `json:"conflict,omitempty"`
 }
 
-// RecoveryRoute describes one concrete, currently reachable recovery action.
-type RecoveryRoute struct {
-	Kind           string `json:"kind"`
-	ToolName       string `json:"tool_name,omitempty"`
-	CallableForm   string `json:"callable_form"`
-	RequiresLoader string `json:"requires_loader,omitempty"`
-	LoadArgument   string `json:"load_argument,omitempty"`
-	Reason         string `json:"reason"`
+// DirectPythonCallForm declares the exact projected schema arguments for the
+// direct `python` tool (`code` | `script` | `module`, with optional `cwd`, `args`).
+type DirectPythonCallForm struct {
+	Tool         string   `json:"tool"`
+	ModeArgs     []string `json:"mode_args"`
+	OptionalArgs []string `json:"optional_args"`
+	CallableForm string   `json:"callable_form"`
 }
 
-// RecoveryAdvice holds the reachability-filtered recovery options for a stop.
-type RecoveryAdvice struct {
-	StopCode              pythonruntime.StopCode `json:"stop_code"`
-	StoppedOperationID    string                 `json:"stopped_operation_id"`
-	PriorEffectsPreserved int                    `json:"prior_effects_preserved"`
-	Routes                []RecoveryRoute        `json:"routes,omitempty"`
-	NoRecoveryRoute       bool                   `json:"no_recovery_route,omitempty"`
-	Summary               string                 `json:"summary"`
+// RequestToolsCallForm declares the exact projected schema call for loading a
+// requestable tool via `request_tools(need=...)`.
+type RequestToolsCallForm struct {
+	Tool         string `json:"tool"`
+	Need         string `json:"need"`
+	CallableForm string `json:"callable_form"`
 }
 
-// BuildRecoveryAdvice constructs OAR recovery advice strictly from surface.
-// Unreachable tools, unavailable project runners, and mutating/external routes
-// on read-only surfaces are never suggested.
-func BuildRecoveryAdvice(surface ReachableSurface, ctx RecoveryStopContext) RecoveryAdvice {
-	advice := RecoveryAdvice{
-		StopCode:              ctx.StopCode,
-		StoppedOperationID:    ctx.StoppedOperationID,
-		PriorEffectsPreserved: ctx.PriorCompletedEffects,
+// AdmittedExternalRunnerForm declares an explicitly admitted project runner
+// callable through the `command` tool.
+type AdmittedExternalRunnerForm struct {
+	Tool         string `json:"tool"`
+	Command      string `json:"command"`
+	CallableForm string `json:"callable_form"`
+}
+
+// NativeReadCallForm declares a bounded native `read` tool call for refreshing
+// a conflicted or ungrounded document revision.
+type NativeReadCallForm struct {
+	Tool         string `json:"tool"`
+	Path         string `json:"path"`
+	CallableForm string `json:"callable_form"`
+}
+
+// OARRecoveryFacts supplies structured, reachability-filtered facts consumed by
+// pack-owned OAR policy templates. No inline Go recovery prose is generated.
+type OARRecoveryFacts struct {
+	PolicyCode             pythonruntime.StopCode          `json:"policy_code"`
+	StoppedOperationID     string                          `json:"stopped_operation_id"`
+	StoppedOperation       string                          `json:"stopped_operation,omitempty"`
+	PriorEffects           int                             `json:"prior_effects"`
+	ReachableDirectPython  *DirectPythonCallForm           `json:"reachable_direct_python,omitempty"`
+	RequestableNeed        *RequestToolsCallForm           `json:"requestable_need,omitempty"`
+	AdmittedExternalRunner *AdmittedExternalRunnerForm     `json:"admitted_external_runner,omitempty"`
+	ReachableNativeRead    *NativeReadCallForm             `json:"reachable_native_read,omitempty"`
+	Conflict               *pythonruntime.RevisionConflict `json:"conflict,omitempty"`
+	NoRecoveryRoute        bool                            `json:"no_recovery_route"`
+}
+
+// BuildOARRecoveryFacts populates structured pack OAR facts strictly from
+// surface. Unreachable tools, unadmitted project runners, and mutating or
+// external routes on read-only surfaces are omitted.
+func BuildOARRecoveryFacts(surface ReachableSurface, ctx RecoveryStopContext) OARRecoveryFacts {
+	facts := OARRecoveryFacts{
+		PolicyCode:         ctx.PolicyCode,
+		StoppedOperationID: ctx.StoppedOperationID,
+		StoppedOperation:   ctx.StoppedOperation,
+		PriorEffects:       ctx.PriorCompletedEffects,
+		Conflict:           ctx.Conflict,
 	}
 
-	switch ctx.StopCode {
+	switch ctx.PolicyCode {
 	case StopPythonToolRequired:
-		advice.Routes = routesForPythonToolRequired(surface)
+		populatePythonToolRequired(surface, &facts)
 	case pythonruntime.StopRevisionConflict:
-		advice.Routes = routesForRevisionConflict(surface, ctx)
+		populateRevisionConflict(surface, ctx, &facts)
 	case pythonruntime.StopEffectNotAllowed:
-		advice.Routes = routesForEffectNotAllowed(surface)
+		populateEffectNotAllowed(surface, ctx, &facts)
 	default:
-		advice.Routes = routesForGenericStop(surface)
-	}
-
-	if len(advice.Routes) == 0 {
-		advice.NoRecoveryRoute = true
-		advice.Summary = fmt.Sprintf(
-			"operation %s stopped with %s (%d prior completed effect(s) preserved); no reachable recovery route is available on the current surface",
-			ctx.StoppedOperationID, ctx.StopCode, ctx.PriorCompletedEffects,
-		)
-	} else {
-		advice.Summary = fmt.Sprintf(
-			"operation %s stopped with %s (%d prior completed effect(s) preserved); %d reachable recovery route(s) available",
-			ctx.StoppedOperationID, ctx.StopCode, ctx.PriorCompletedEffects, len(advice.Routes),
-		)
-	}
-	return advice
-}
-
-func routesForPythonToolRequired(surface ReachableSurface) []RecoveryRoute {
-	var routes []RecoveryRoute
-	if surface.DirectPythonOffered {
-		routes = append(routes, RecoveryRoute{
-			Kind:         "direct_python",
-			ToolName:     "python",
-			CallableForm: `python(mode="code"|"script"|"module", ...)`,
-			Reason:       "run agent working script through the offered Portable Python tool",
-		})
-	} else if surface.RequestToolsAvailable && slices.Contains(surface.RequestableTools, "python") {
-		routes = append(routes, RecoveryRoute{
-			Kind:           "request_tool",
-			ToolName:       "request_tools",
-			RequiresLoader: "request_tools",
-			LoadArgument:   "python",
-			CallableForm:   `request_tools(tools=["python"])`,
-			Reason:         "load the requestable Portable Python tool before invoking it",
-		})
-	}
-	if !surface.ReadOnly && surface.CommandOffered && surface.ProjectRunnerAvailable {
-		cmd := strings.TrimSpace(surface.ProjectRunnerCommand)
-		if cmd == "" {
-			cmd = "external -- python3"
+		if !surface.ReadOnly && surface.DirectPythonOffered {
+			facts.ReachableDirectPython = directPythonForm()
 		}
-		routes = append(routes, RecoveryRoute{
-			Kind:         "project_runner",
-			ToolName:     "command",
-			CallableForm: fmt.Sprintf(`command(command=%q)`, cmd),
-			Reason:       "execute the user's project CLI or tests with the declared project environment",
-		})
 	}
-	return routes
+
+	facts.NoRecoveryRoute = facts.ReachableDirectPython == nil &&
+		facts.RequestableNeed == nil &&
+		facts.AdmittedExternalRunner == nil &&
+		facts.ReachableNativeRead == nil
+	return facts
 }
 
-func routesForRevisionConflict(surface ReachableSurface, ctx RecoveryStopContext) []RecoveryRoute {
-	var routes []RecoveryRoute
+func directPythonForm() *DirectPythonCallForm {
+	return &DirectPythonCallForm{
+		Tool:         "python",
+		ModeArgs:     []string{"code", "script", "module"},
+		OptionalArgs: []string{"cwd", "args"},
+		CallableForm: `python(code=...|script=...|module=..., cwd=..., args=[...])`,
+	}
+}
+
+func requestPythonNeedForm() *RequestToolsCallForm {
+	return &RequestToolsCallForm{
+		Tool:         "request_tools",
+		Need:         "python",
+		CallableForm: `request_tools(need="python")`,
+	}
+}
+
+func admittedRunnerForm(surface ReachableSurface) *AdmittedExternalRunnerForm {
+	if surface.ReadOnly || !surface.CommandOffered || !surface.ProjectRunnerAvailable {
+		return nil
+	}
+	cmd := strings.TrimSpace(surface.ProjectRunnerCommand)
+	if cmd == "" {
+		return nil
+	}
+	return &AdmittedExternalRunnerForm{
+		Tool:         "command",
+		Command:      cmd,
+		CallableForm: fmt.Sprintf(`command(command=%q)`, cmd),
+	}
+}
+
+func populatePythonToolRequired(surface ReachableSurface, facts *OARRecoveryFacts) {
+	if surface.DirectPythonOffered {
+		facts.ReachableDirectPython = directPythonForm()
+	} else if surface.RequestToolsAvailable && slices.Contains(surface.RequestableTools, "python") {
+		facts.RequestableNeed = requestPythonNeedForm()
+	}
+	facts.AdmittedExternalRunner = admittedRunnerForm(surface)
+}
+
+func populateRevisionConflict(surface ReachableSurface, ctx RecoveryStopContext, facts *OARRecoveryFacts) {
 	target := ctx.Target
 	if target == "" && ctx.Conflict != nil {
 		target = ctx.Conflict.Target.RelPath
 	}
 	if surface.NativeReadOffered {
-		routes = append(routes, RecoveryRoute{
-			Kind:         "native_read",
-			ToolName:     "read",
+		facts.ReachableNativeRead = &NativeReadCallForm{
+			Tool:         "read",
+			Path:         target,
 			CallableForm: fmt.Sprintf(`read(path=%q)`, target),
-			Reason:       "read the current document revision before retrying against fresh state",
-		})
+		}
 	}
 	if !surface.ReadOnly && surface.DirectPythonOffered {
-		routes = append(routes, RecoveryRoute{
-			Kind:         "direct_python",
-			ToolName:     "python",
-			CallableForm: `python(mode="code"|"script"|"module", ...)`,
-			Reason:       "start a new calculation against the current document revision",
-		})
+		facts.ReachableDirectPython = directPythonForm()
 	}
-	return routes
 }
 
-func routesForEffectNotAllowed(surface ReachableSurface) []RecoveryRoute {
-	var routes []RecoveryRoute
+func populateEffectNotAllowed(surface ReachableSurface, ctx RecoveryStopContext, facts *OARRecoveryFacts) {
 	if surface.ReadOnly {
 		if surface.NativeReadOffered {
-			routes = append(routes, RecoveryRoute{
-				Kind:         "native_read",
-				ToolName:     "read",
-				CallableForm: `read(path=...)`,
-				Reason:       "inspect workspace files within read-only surface limits",
-			})
+			facts.ReachableNativeRead = &NativeReadCallForm{
+				Tool:         "read",
+				Path:         ctx.Target,
+				CallableForm: fmt.Sprintf(`read(path=%q)`, ctx.Target),
+			}
 		}
-		return routes
+		return
 	}
-	if surface.CommandOffered && surface.ProjectRunnerAvailable {
-		cmd := strings.TrimSpace(surface.ProjectRunnerCommand)
-		if cmd == "" {
-			cmd = "external -- python3"
-		}
-		routes = append(routes, RecoveryRoute{
-			Kind:         "project_runner",
-			ToolName:     "command",
-			CallableForm: fmt.Sprintf(`command(command=%q)`, cmd),
-			Reason:       "run the admitted project runner when external execution is required",
-		})
-	}
-	return routes
-}
-
-func routesForGenericStop(surface ReachableSurface) []RecoveryRoute {
-	if surface.ReadOnly {
-		return nil
-	}
-	if surface.DirectPythonOffered {
-		return []RecoveryRoute{{
-			Kind:         "direct_python",
-			ToolName:     "python",
-			CallableForm: `python(mode="code"|"script"|"module", ...)`,
-			Reason:       "retry with bounded input or reduced scope via Portable Python",
-		}}
-	}
-	return nil
+	facts.AdmittedExternalRunner = admittedRunnerForm(surface)
 }
 
 // DiscoveryHint represents a Python-emitted AST or line coordinate. It is
@@ -214,7 +208,6 @@ type GroundedFindingCheckResult struct {
 	Delivery          *NativeSourceRangeFact `json:"delivery,omitempty"`
 	Grounded          bool                   `json:"grounded"`
 	NeedsRevalidation bool                   `json:"needs_revalidation"`
-	Reason            string                 `json:"reason"`
 }
 
 // CheckGroundedFinding verifies that a Python-emitted discovery hint is backed
@@ -227,12 +220,7 @@ func CheckGroundedFinding(
 	currentRevision pythondocuments.DocumentRevision,
 ) GroundedFindingCheckResult {
 	res := GroundedFindingCheckResult{Hint: hint}
-	if hint.StartLine <= 0 || hint.EndLine < hint.StartLine {
-		res.Reason = "discovery hint has invalid line range"
-		return res
-	}
-	if ledger == nil {
-		res.Reason = "no execution ledger provided"
+	if hint.StartLine <= 0 || hint.EndLine < hint.StartLine || ledger == nil {
 		return res
 	}
 
@@ -254,7 +242,6 @@ func CheckGroundedFinding(
 			res.Delivery = &copied
 			res.Grounded = true
 			res.NeedsRevalidation = false
-			res.Reason = "grounded by revision-bound native source range delivery"
 			return res
 		}
 		staleMatch = &copied
@@ -264,10 +251,6 @@ func CheckGroundedFinding(
 		res.Delivery = staleMatch
 		res.Grounded = false
 		res.NeedsRevalidation = true
-		res.Reason = "document revision changed since native source range delivery; revalidation required"
-		return res
 	}
-
-	res.Reason = "python discovery hint requires bounded native source range delivery before grounding"
 	return res
 }

@@ -1,6 +1,8 @@
 package pythonevidence
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/pythondocuments"
@@ -12,6 +14,7 @@ func TestGroundedFindingRequiresNativeRangeAndRevalidatesOnRevisionBump(t *testi
 	ledger := NewExecutionLedger(ExecutionRecord{
 		ExecutionID:    "exec-gf-1",
 		CallID:         "call-gf-1",
+		SessionID:      "sess-1",
 		Actor:          "coordinator",
 		View:           "main",
 		Surface:        "python",
@@ -23,49 +26,24 @@ func TestGroundedFindingRequiresNativeRangeAndRevalidatesOnRevisionBump(t *testi
 		RootID:    "root-1",
 		RelPath:   "internal/auth/check.go",
 	}
-	rev1 := pythondocuments.DocumentRevision{
-		DocumentID:       "doc-auth",
-		DocumentRevision: "rev-1",
-		DiskSHA256:       "sha256:aaa",
-	}
-	rev2 := pythondocuments.DocumentRevision{
-		DocumentID:       "doc-auth",
-		DocumentRevision: "rev-2",
-		DiskSHA256:       "sha256:bbb",
-	}
+	rev1 := pythondocuments.DocumentRevision{DocumentID: "doc-auth", DocumentRevision: "rev-1", DiskSHA256: "sha256:aaa"}
+	rev2 := pythondocuments.DocumentRevision{DocumentID: "doc-auth", DocumentRevision: "rev-2", DiskSHA256: "sha256:bbb"}
 
-	// Guest reads the file and prints a discovery hint.
 	err := ledger.RecordDocumentRead(pythondocuments.DocumentReadRecord{
-		ExecutionID:           "exec-gf-1",
-		OperationID:           "op-read-auth",
-		Target:                target,
-		Revision:              rev1,
-		BytesDeliveredToGuest: 512,
+		ExecutionID: "exec-gf-1", OperationID: "op-read-auth", Target: target, Revision: rev1, BytesDeliveredToGuest: 512,
 	}, "op-sys-read", 1, nil, nil)
 	testutil.FailErr(t, "RecordDocumentRead", err)
 	ledger.RecordScreenedModelOutput("internal/auth/check.go:40-48: missing nil check")
 
-	hint := DiscoveryHint{
-		ExecutionID: "exec-gf-1",
-		Target:      target,
-		StartLine:   40,
-		EndLine:     48,
-		Symbol:      "VerifyToken",
-	}
+	hint := DiscoveryHint{ExecutionID: "exec-gf-1", Target: target, StartLine: 40, EndLine: 48, Symbol: "VerifyToken"}
 
-	// 1. Before native range delivery, hint is NOT grounded.
 	res1 := CheckGroundedFinding(hint, ledger, rev1)
 	if res1.Grounded || res1.NeedsRevalidation {
 		t.Fatalf("expected ungrounded before native range delivery, got %+v", res1)
 	}
 
-	// 2. Deliver bounded native source range covering lines 35..55 at rev1.
 	err = ledger.RecordNativeSourceRange(NativeSourceRangeFact{
-		Target:     target,
-		Revision:   rev1,
-		StartLine:  35,
-		EndLine:    55,
-		HostHandle: "handle-read-001",
+		Target: target, Revision: rev1, StartLine: 35, EndLine: 55, HostHandle: "handle-read-001",
 	})
 	testutil.FailErr(t, "RecordNativeSourceRange", err)
 
@@ -74,93 +52,82 @@ func TestGroundedFindingRequiresNativeRangeAndRevalidatesOnRevisionBump(t *testi
 		t.Fatalf("expected grounded finding at matching revision, got %+v", res2)
 	}
 
-	// 3. Revision changes to rev2 -> forces revalidation.
 	res3 := CheckGroundedFinding(hint, ledger, rev2)
 	if res3.Grounded || !res3.NeedsRevalidation {
 		t.Fatalf("expected Grounded=false and NeedsRevalidation=true after revision bump, got %+v", res3)
 	}
 }
 
-func TestReachabilityOnlyRecoveryAcrossSurfaces(t *testing.T) {
+func TestOARRecoveryFactsSchemaAndReachability(t *testing.T) {
 	stopCtx := RecoveryStopContext{
-		StopCode:              StopPythonToolRequired,
+		PolicyCode:            StopPythonToolRequired,
 		StoppedOperationID:    "op-cmd-1",
 		StoppedOperation:      "python3 script.py",
 		PriorCompletedEffects: 2,
 	}
 
-	// 1. Direct Python offered + project runner available.
-	adv1 := BuildRecoveryAdvice(ReachableSurface{
+	// 1. Direct Python offered + admitted project runner.
+	f1 := BuildOARRecoveryFacts(ReachableSurface{
 		DirectPythonOffered:    true,
 		CommandOffered:         true,
 		ProjectRunnerAvailable: true,
 		ProjectRunnerCommand:   "external -- python3 -m pytest",
 	}, stopCtx)
-	if adv1.NoRecoveryRoute || len(adv1.Routes) != 2 {
-		t.Fatalf("expected 2 reachable routes (direct_python + project_runner), got %+v", adv1)
+	if f1.NoRecoveryRoute || f1.ReachableDirectPython == nil || f1.AdmittedExternalRunner == nil {
+		t.Fatalf("expected direct python + admitted external runner, got %+v", f1)
 	}
-	if adv1.Routes[0].Kind != "direct_python" || adv1.Routes[1].Kind != "project_runner" {
-		t.Fatalf("unexpected route kinds: %+v", adv1.Routes)
+	// Verify exact real tool schema arg names (code/script/module + cwd/args), NEVER mode=.
+	if !slices.Equal(f1.ReachableDirectPython.ModeArgs, []string{"code", "script", "module"}) ||
+		!slices.Equal(f1.ReachableDirectPython.OptionalArgs, []string{"cwd", "args"}) ||
+		strings.Contains(f1.ReachableDirectPython.CallableForm, "mode=") {
+		t.Fatalf("python call form must match real schema (code/script/module, cwd, args), got %+v", f1.ReachableDirectPython)
 	}
-
-	// 2. Direct Python NOT offered, but requestable via request_tools; command not offered.
-	adv2 := BuildRecoveryAdvice(ReachableSurface{
-		DirectPythonOffered:   false,
-		CommandOffered:        false,
-		RequestToolsAvailable: true,
-		RequestableTools:      []string{"python"},
-	}, stopCtx)
-	if adv2.NoRecoveryRoute || len(adv2.Routes) != 1 {
-		t.Fatalf("expected 1 request_tool route, got %+v", adv2)
-	}
-	r := adv2.Routes[0]
-	if r.Kind != "request_tool" || r.RequiresLoader != "request_tools" || r.LoadArgument != "python" {
-		t.Fatalf("expected request_tools loader with exact load arg 'python', got %+v", r)
+	if f1.AdmittedExternalRunner.Command != "external -- python3 -m pytest" {
+		t.Fatalf("unexpected admitted runner command: %+v", f1.AdmittedExternalRunner)
 	}
 
-	// 3. Completely unavailable surface -> NoRecoveryRoute=true, reports stopped op and prior effects.
-	adv3 := BuildRecoveryAdvice(ReachableSurface{
-		DirectPythonOffered:    false,
-		CommandOffered:         false,
-		ProjectRunnerAvailable: false,
-		RequestToolsAvailable:  false,
-	}, stopCtx)
-	if !adv3.NoRecoveryRoute || len(adv3.Routes) != 0 || adv3.PriorEffectsPreserved != 2 {
-		t.Fatalf("expected NoRecoveryRoute with prior effects preserved, got %+v", adv3)
-	}
-
-	// 4. Read-only surface must NEVER suggest project_runner or mutating python execution.
-	adv4 := BuildRecoveryAdvice(ReachableSurface{
+	// 2. Direct Python NOT offered, requestable via request_tools(need="python").
+	// ProjectRunnerAvailable=true but empty ProjectRunnerCommand (not admitted) -> MUST NOT emit runner!
+	f2 := BuildOARRecoveryFacts(ReachableSurface{
 		DirectPythonOffered:    false,
 		CommandOffered:         true,
 		ProjectRunnerAvailable: true,
+		ProjectRunnerCommand:   "",
+		RequestToolsAvailable:  true,
+		RequestableTools:       []string{"python"},
+	}, stopCtx)
+	if f2.NoRecoveryRoute || f2.ReachableDirectPython != nil || f2.RequestableNeed == nil {
+		t.Fatalf("expected requestable_need only, got %+v", f2)
+	}
+	if f2.RequestableNeed.Tool != "request_tools" || f2.RequestableNeed.Need != "python" ||
+		f2.RequestableNeed.CallableForm != `request_tools(need="python")` {
+		t.Fatalf("request_tools must use exact `need` schema arg, got %+v", f2.RequestableNeed)
+	}
+	if f2.AdmittedExternalRunner != nil {
+		t.Fatalf("must never emit an external runner when no command is admitted, got %+v", f2.AdmittedExternalRunner)
+	}
+
+	// 3. Completely unavailable surface -> NoRecoveryRoute=true, preserves prior effects.
+	f3 := BuildOARRecoveryFacts(ReachableSurface{}, stopCtx)
+	if !f3.NoRecoveryRoute || f3.PriorEffects != 2 || f3.ReachableDirectPython != nil || f3.RequestableNeed != nil || f3.AdmittedExternalRunner != nil {
+		t.Fatalf("expected NoRecoveryRoute with prior effects preserved, got %+v", f3)
+	}
+
+	// 4. Read-only surface must NEVER emit external runner or mutating python retry.
+	f4 := BuildOARRecoveryFacts(ReachableSurface{
+		DirectPythonOffered:    true,
+		CommandOffered:         true,
+		ProjectRunnerAvailable: true,
+		ProjectRunnerCommand:   "external -- python3 -m pytest",
 		NativeReadOffered:      true,
 		ReadOnly:               true,
 	}, RecoveryStopContext{
-		StopCode:              pythonruntime.StopEffectNotAllowed,
+		PolicyCode:            pythonruntime.StopEffectNotAllowed,
 		StoppedOperationID:    "op-write-1",
 		PriorCompletedEffects: 1,
+		Target:                "src/app.py",
 	})
-	for _, route := range adv4.Routes {
-		if route.Kind == "project_runner" || route.Kind == "direct_python" {
-			t.Fatalf("read-only surface must never suggest %q route: %+v", route.Kind, route)
-		}
-	}
-	if len(adv4.Routes) != 1 || adv4.Routes[0].Kind != "native_read" {
-		t.Fatalf("expected only native_read on read-only surface, got %+v", adv4.Routes)
-	}
-
-	// 5. Revision conflict on read-only surface suggests native_read only (no mutating retry).
-	adv5 := BuildRecoveryAdvice(ReachableSurface{
-		DirectPythonOffered: true,
-		NativeReadOffered:   true,
-		ReadOnly:            true,
-	}, RecoveryStopContext{
-		StopCode:           pythonruntime.StopRevisionConflict,
-		StoppedOperationID: "op-pub-1",
-		Target:             "src/app.py",
-	})
-	if len(adv5.Routes) != 1 || adv5.Routes[0].Kind != "native_read" {
-		t.Fatalf("read-only conflict recovery must only offer native_read, got %+v", adv5.Routes)
+	if f4.AdmittedExternalRunner != nil || f4.ReachableDirectPython != nil || f4.ReachableNativeRead == nil {
+		t.Fatalf("read-only surface must only expose native read, got %+v", f4)
 	}
 }
