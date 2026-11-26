@@ -472,6 +472,10 @@ func (f *guardianCFixture) namespace(owner, gid uint32, mapping string) (_ *os.F
 	}
 	ready := make([]byte, 1)
 	n, _, _, _, err := unix.Recvmsg(int(parent.Fd()), ready, nil, 0)
+	// The receive timeout makes a signal, such as the runtime's preemption, interrupt the wait.
+	for errors.Is(err, unix.EINTR) {
+		n, _, _, _, err = unix.Recvmsg(int(parent.Fd()), ready, nil, 0)
+	}
 	if err != nil || n != 1 || ready[0] != 1 {
 		return nil, errors.New("owned namespace factory did not become ready")
 	}
