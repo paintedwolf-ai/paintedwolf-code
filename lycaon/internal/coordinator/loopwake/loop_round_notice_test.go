@@ -113,14 +113,14 @@ func TestRoundNoticeKickCarriesMeasurementsWhileBusy(t *testing.T) {
 
 func TestRoundNoticeDeferralIsJobScoped(t *testing.T) {
 	engine := NewLoopEngine()
-	q := engine.Nudges.sessionDeferredQueue("s1")
-	q.push(pendingLoopWake{wake: anchor.WorkerRoundNotice, inform: anchor.WorkerRoundNotice, legID: "job-1"})
-	q.push(pendingLoopWake{wake: anchor.WorkerRoundNotice, inform: anchor.WorkerRoundNotice, legID: "job-2"})
-	q.push(pendingLoopWake{wake: anchor.LegFinished, inform: anchor.LegFinished, legID: "leg-1"})
+	q := engine.Nudges.sessionPendingQueue("s1")
+	q.deferWorker(pendingLoopWake{wake: anchor.WorkerRoundNotice, inform: anchor.WorkerRoundNotice, legID: "job-1"})
+	q.deferWorker(pendingLoopWake{wake: anchor.WorkerRoundNotice, inform: anchor.WorkerRoundNotice, legID: "job-2"})
+	q.deferWorker(pendingLoopWake{wake: anchor.LegFinished, inform: anchor.LegFinished, legID: "leg-1"})
 
 	engine.Nudges.dropDeferredRunningWorkerWakes("s1", "job-1")
 
-	remaining := q.drain()
+	remaining := q.drainDeferred()
 	if len(remaining) != 2 {
 		t.Fatalf("remaining = %d want 2 (job-2 notice + leg-finished kept)", len(remaining))
 	}

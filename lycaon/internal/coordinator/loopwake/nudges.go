@@ -22,23 +22,23 @@ type NudgesDeps struct {
 	QueueInform          func(ctx context.Context, sessionID string, inform anchor.ID, env anchor.Envelope)
 }
 type Nudges struct {
-	outcomes            *actionoutcome.Sessions
-	depsMu              sync.RWMutex
-	deps                NudgesDeps
-	pendingDrain        sync.Map
-	pendingQueues       sync.Map
-	pendingWorkerQueues sync.Map
-	kickDedup           sync.Map
-	nudgeSeq            atomic.Uint64
-	Admission           *Admission
-	Turns               *HostTurns
-	Policy              *HostWakePolicy
-	Observations        *PromptObservations
-	Facts               *SessionFacts
-	Deliveries          *WaitDeliveries
-	Subscriptions       *WaitSubscriptions
-	Waits               *Waits
-	Cycles              *WorkerCycles
+	outcomes      *actionoutcome.Sessions
+	depsMu        sync.RWMutex
+	deps          NudgesDeps
+	pendingDrain  sync.Map
+	pendingQueues sync.Map
+
+	kickDedup     sync.Map
+	nudgeSeq      atomic.Uint64
+	Admission     *Admission
+	Turns         *HostTurns
+	Policy        *HostWakePolicy
+	Observations  *PromptObservations
+	Facts         *SessionFacts
+	Deliveries    *WaitDeliveries
+	Subscriptions *WaitSubscriptions
+	Waits         *Waits
+	Cycles        *WorkerCycles
 }
 
 func (l *Nudges) setDeps(deps NudgesDeps) { l.depsMu.Lock(); l.deps = deps; l.depsMu.Unlock() }
@@ -72,9 +72,10 @@ func (l *Nudges) nudgeNow(
 	if l == nil || strings.TrimSpace(sessionID) == "" || wake == "" {
 		return nil
 	}
+	q := l.sessionPendingQueue(sessionID)
 	seq := l.nextSequence()
 	ticket := l.outcomes.For(sessionID).Receive(ctx, sessionID, seq, string(wake))
-	pending := pendingLoopWake{ticket: ticket, wake: wake, inform: inform, legID: legID, completingJobID: completingJobID, env: env, seq: seq}
+	pending := pendingLoopWake{queue: q, ticket: ticket, wake: wake, inform: inform, legID: legID, completingJobID: completingJobID, env: env, seq: seq}
 	if wake == anchor.PhaseAdvanced {
 		if run, _, ok := l.Facts.activeRunAndVars(ctx, sessionID); ok && run != nil {
 			pending.runID, pending.revision = run.ID, run.Revision
@@ -285,14 +286,6 @@ func (l *Nudges) sessionPendingQueue(sessionID string) *sessionNudgeQueue {
 	actual, _ := l.pendingQueues.LoadOrStore(sessionID, q)
 	return actual.(*sessionNudgeQueue)
 }
-func (l *Nudges) sessionDeferredQueue(sessionID string) *deferredNudgeQueue {
-	if v, ok := l.pendingWorkerQueues.Load(sessionID); ok {
-		return v.(*deferredNudgeQueue)
-	}
-	q := &deferredNudgeQueue{}
-	actual, _ := l.pendingWorkerQueues.LoadOrStore(sessionID, q)
-	return actual.(*deferredNudgeQueue)
-}
 func (l *Nudges) enqueuePending(sessionID string, pending pendingLoopWake) {
 	q := pending.queue
 	if q == nil {
@@ -346,7 +339,7 @@ func (l *Nudges) HasPendingLoopWakes(sessionID string) bool {
 	if _, ok := l.Pending(sessionID); ok {
 		return true
 	}
-	return l.sessionDeferredQueue(sessionID).nonEmpty()
+	return l.sessionPendingQueue(sessionID).hasDeferred()
 }
 func (l *Nudges) drainPending(ctx context.Context, sessionID string, postTurnDrain bool) {
 	if _, draining := l.pendingDrain.LoadOrStore(sessionID, struct{}{}); draining {
@@ -390,7 +383,7 @@ func (l *Nudges) dropDeferredRunningWorkerWakes(sessionID, jobID string) {
 	if l == nil || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(jobID) == "" {
 		return
 	}
-	l.sessionDeferredQueue(sessionID).removeRunningWorkerWakesForJob(jobID)
+	l.sessionPendingQueue(sessionID).removeRunningWorkerWakesForJob(jobID)
 }
 func (l *Nudges) deferNudge(ctx context.Context, sessionID string, d pendingLoopWake) {
 	if l == nil || strings.TrimSpace(sessionID) == "" {
@@ -406,14 +399,17 @@ func (l *Nudges) deferNudge(ctx context.Context, sessionID string, d pendingLoop
 			d.env.BatchSeqSet = true
 		}
 	}
-	d.ticket.Record(api.WakeStateDeferred, api.WakeReasonWorkerCycle, "", "")
-	l.sessionDeferredQueue(sessionID).push(d)
+	q := d.queue
+	if q == nil {
+		q = l.sessionPendingQueue(sessionID)
+	}
+	q.deferWorker(d)
 }
 func (l *Nudges) flushDeferredNudges(ctx context.Context, sessionID string) {
 	if l == nil {
 		return
 	}
-	items := l.sessionDeferredQueue(sessionID).drain()
+	items := l.sessionPendingQueue(sessionID).drainDeferred()
 	for _, d := range items {
 		l.deliverNudge(ctx, sessionID, d)
 	}
