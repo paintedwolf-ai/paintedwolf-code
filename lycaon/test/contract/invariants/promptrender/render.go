@@ -190,7 +190,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 	}
 
 	processState := func(label, profileID string, sessionMode api.SessionMode, posture api.SessionPosture, auth hoststate.TurnAuthority, effectiveSkills []skills.Skill) error {
-		fp := auth.Digest + "|" + auth.Reader.Fingerprint() + "|" + string(sessionMode) + "|" + string(posture) + "|" + profileID
+		fp := auth.Digest + "|" + auth.Reader.Fingerprint() + "|" + string(sessionMode) + "|" + string(posture) + "|" + profileID + "|" + skillsKey(effectiveSkills)
 		if seenReaderFP[fp] {
 			return nil
 		}
@@ -267,20 +267,25 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		return audit, err
 	}
 	overlaySkillsCache := map[string][]skills.Skill{}
+	effectiveSkillsOf := func(overlay hoststate.PackOverlay) ([]skills.Skill, error) {
+		if overlay.Catalog == nil || overlay.ID == "stock" {
+			return nil, nil
+		}
+		if cached, found := overlaySkillsCache[overlay.ID]; found {
+			return cached, nil
+		}
+		cached, diags := extpacks.LoadEffectiveSkills(overlay.Catalog)
+		if extpacks.HasErrorDiagnostic(diags) {
+			return nil, fmt.Errorf("load skills for overlay %s: %+v", overlay.ID, diags)
+		}
+		overlaySkillsCache[overlay.ID] = cached
+		return cached, nil
+	}
 	for _, cp := range coordPairs {
 		st := cp.state
-		var overlaySkills []skills.Skill
-		if st.Overlay.Catalog != nil && st.PackOverlayID != "stock" {
-			cached, found := overlaySkillsCache[st.PackOverlayID]
-			if !found {
-				var diags []extpacks.Diagnostic
-				cached, diags = extpacks.LoadEffectiveSkills(st.Overlay.Catalog)
-				if extpacks.HasErrorDiagnostic(diags) {
-					return audit, fmt.Errorf("load skills for overlay %s: %+v", st.PackOverlayID, diags)
-				}
-				overlaySkillsCache[st.PackOverlayID] = cached
-			}
-			overlaySkills = cached
+		overlaySkills, err := effectiveSkillsOf(st.Overlay)
+		if err != nil {
+			return audit, err
 		}
 		if err := processState(st.ID, prompts.CoordinatorProfileID, st.SessionMode, st.Posture, cp.auth, overlaySkills); err != nil {
 			return audit, err
@@ -292,7 +297,11 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		return audit, err
 	}
 	for _, wp := range workerPairs {
-		if err := processState(wp.ws.ID, wp.ws.ToolProfile, wp.ws.ParentSessionMode, wp.ws.Posture, wp.auth, nil); err != nil {
+		overlaySkills, err := effectiveSkillsOf(wp.ws.Overlay)
+		if err != nil {
+			return audit, err
+		}
+		if err := processState(wp.ws.ID, wp.ws.ToolProfile, wp.ws.ParentSessionMode, wp.ws.Posture, wp.auth, overlaySkills); err != nil {
 			return audit, err
 		}
 	}
