@@ -14,7 +14,9 @@ import (
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/pythoncatalog"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
@@ -53,6 +55,15 @@ func newPythonCommandFixture(t *testing.T, runner command.PythonRunner, directOf
 		Publication: func(dir string) commandprogram.OutputPublication {
 			return fileOutputPublication{dir: dir}
 		},
+	})
+	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec)
+	testutil.FailErr(t, "compile profile effects", err)
+	fx.Runtime.Boundary.SetProfileSource(func(context.Context, string) []sandbox.ToolProfile {
+		return []sandbox.ToolProfile{{
+			ID:             "fixture",
+			Tools:          map[string]bool{"command": true, "python": true, "verify": true, "summarize": true, "survey_repo": true, "code_rewrite": true},
+			CommandEffects: classes,
+		}}
 	})
 	fx.Runtime.PortablePython = runner
 	fx.Runtime.DirectPythonOffered = func(tools.ToolContext) bool { return directOffered }
