@@ -208,6 +208,10 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	}
 	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations(), skillGen.Observations(), standing, profiles.Observations())
 	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes, pOutcomes), slices.Concat(gapRecipients, tRecipients, skillGapRecipients, sRecipients, pRecipients))
+	guided, err := generateGuidanceCases(ctx, s, first, &in)
+	if err != nil {
+		return nil, err
+	}
 	l, err := interactions.BuildConditionLedger(in)
 	if err != nil {
 		return nil, err
@@ -220,6 +224,7 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 			l.Generation.Found++
 		}
 	}
+	addGuidanceGeneration(&l.Generation, guided)
 	return l, nil
 }
 
@@ -304,7 +309,7 @@ func newOARCaseGenerator(ctx context.Context, s *Stock) (*oarCaseGenerator, erro
 func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient string) independence.Constraints {
 	var c independence.Constraints
 	if site.Family != "oar" {
-		return c
+		return guidanceDerived(site, recipient)
 	}
 	logic := g.producer.Logic(site.ID)
 	if logic == nil {
