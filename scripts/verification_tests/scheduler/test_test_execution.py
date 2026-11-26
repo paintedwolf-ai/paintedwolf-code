@@ -1,6 +1,7 @@
 """Behavioral coverage for shared verification admission."""
 
 import importlib.util
+import json
 import os
 from pathlib import Path
 import signal
@@ -19,6 +20,8 @@ execution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(execution)
 import verification_history as history  # importable once test-execution.py extends the path
 import verification_resources as resources
+if os.name != "nt":
+    from verification_lifecycle import run_lease
 
 
 class HostSettingIsolationTests(unittest.TestCase):
@@ -301,8 +304,11 @@ class ExecutionLifecycleTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.queue = execution.Queue(self.root / "queue", self.root / "user-cache/paintedwolf/verification")
+        self.host_temp = self.root / "host-temp"
+        self.host_temp.mkdir()
         self.env = {**os.environ, "PW_TEST_EXECUTION_ROOT": str(self.queue.root), "PW_TEST_WORKERS": "1",
-                    "GOCACHE": str(self.root / "go-cache"), "XDG_CACHE_HOME": str(self.root / "user-cache")}
+                    "GOCACHE": str(self.root / "go-cache"), "XDG_CACHE_HOME": str(self.root / "user-cache"),
+                    "TMPDIR": str(self.host_temp), "PW_HOST_TMPDIR": str(self.host_temp)}
         self.env.pop("PW_TEST_EXECUTION_TICKET", None)
 
     def start(self, name, body):
@@ -574,6 +580,22 @@ while True: time.sleep(.1)
     def test_unlocked_abandoned_lease_is_collected(self):
         (self.queue.root / "abandoned.lease").write_text("interrupted write")
         self.assertEqual(self.queue.status()["runs"], [])
+
+    @unittest.skipIf(os.name == "nt", "run temp uses POSIX leases")
+    def test_a_run_builds_in_leased_temp_that_leaves_with_it(self):
+        body = ("import json, os, tempfile\nfrom pathlib import Path\n"
+                "Path(tempfile.gettempdir(), 'go-build1', 'b001').mkdir(parents=True)\n"
+                "print(json.dumps({key: os.environ[key] for key in ('TMPDIR', 'GOTMPDIR', 'PW_HOST_TMPDIR')}))")
+        process = self.start("temp", body)
+        out, err = process.communicate()
+        self.assertEqual(process.returncode, 0, err)
+        seen = json.loads(out)
+        run = Path(seen["TMPDIR"]).parent
+        self.assertEqual(run.parent.resolve(), run_lease.RUN_ROOT.resolve())
+        self.assertEqual(seen["GOTMPDIR"], seen["TMPDIR"])
+        self.assertEqual(seen["PW_HOST_TMPDIR"], str(self.host_temp))
+        self.assertFalse(run.exists())
+        self.assertEqual(list(self.host_temp.iterdir()), [])
 
     def test_child_failure_releases_admission_and_preserves_exit_code(self):
         process = self.start("failure", "raise SystemExit(7)")

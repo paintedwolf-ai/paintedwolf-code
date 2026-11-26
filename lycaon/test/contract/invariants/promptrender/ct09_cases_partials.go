@@ -24,7 +24,8 @@ import (
 var standingCaseBudget = casegen.Budget{PerTarget: 40, Total: 12000}
 
 // standingConstraints are the production invariants that couple standing
-// reader facts to the root count.
+// reader facts to the root count; runner_write_root_tools needs command with
+// mutation and external exec (reader_facts.go).
 var standingConstraints = []interactions.AtomConstraint{
 	{Atom: "runner_write_root_tools", Implies: "has_workspace_roots", Recipient: interactions.RecipientCoordinator, Source: srcCoordinatorNoFolder},
 	{Atom: "runner_write_root_tools", Implies: "has_workspace_roots", Recipient: interactions.RecipientWorker, Source: srcWorkerWorkspace},
@@ -32,8 +33,6 @@ var standingConstraints = []interactions.AtomConstraint{
 }
 
 const (
-	srcCoordinatorNoFolder = "internal/prompts/reader.go:CompileSurfacePlan keeps only coordinator-surfaces.yaml no_folder_allowlist at zero roots, " +
-		"which omits command; runner_write_root_tools needs command with mutation and external exec (reader_facts.go)"
 	srcWorkerWorkspace = "internal/worker/task_tool.go refuses a zero-root spawn (WORKER_WORKSPACE_REQUIRED) unless prompts.AgentRunsWithoutWorkspace, " +
 		"which is false for a mutation-capable profile (AgentMutationCapable) and for one reaching command (ProfileSurveysProjectTree)"
 )
@@ -162,22 +161,6 @@ func inStandingFamily(site string) bool {
 	return slices.ContainsFunc(standingFamilies, func(prefix string) bool { return strings.HasPrefix(site, prefix) })
 }
 
-// standingReferences names the top-level variables a template atom reads.
-func standingReferences(atom string) []string {
-	expr, err := pongoplain.ParseExpression(atom)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, id := range expr.Identifiers() {
-		top, _, _ := strings.Cut(id, ".")
-		if !slices.Contains(out, top) {
-			out = append(out, top)
-		}
-	}
-	return out
-}
-
 // Knobs lists the seed coordinates of the recipient's standing render.
 func (p *standingCaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	if !inStandingFamily(site) {
@@ -213,7 +196,7 @@ func (p *standingCaseProducer) Run(ctx context.Context, site, recipient, id stri
 			if v.Partition != recipient || !v.Recomposes {
 				continue
 			}
-			vec := casegen.Vector{Truths: map[string]independence.Truth{}, Decision: v.Decision, Evaluated: true}
+			vec := casegen.Vector{Truths: map[string]independence.Truth{}, Decision: v.Decision, Evaluated: true, Group: strings.Join(v.Path, ">")}
 			for i, a := range c.Atoms {
 				if prev, seen := vec.Truths[a]; seen && prev != v.Atoms[i] {
 					vec.Truths[a] = independence.Unknown
@@ -383,7 +366,7 @@ func (p *standingCaseProducer) targets(l *interactions.ConditionLedger) ([]caseg
 			recipients = []string{interactions.RecipientCoordinator, interactions.RecipientWorker}
 		}
 		for _, r := range recipients {
-			out = append(out, casegen.Target{Site: gap.Site, Recipient: r, Input: gap.Atom, Needs: needs, References: standingReferences})
+			out = append(out, casegen.Target{Site: gap.Site, Recipient: r, Input: gap.Atom, Needs: needs, References: templateReferences})
 			gapRecipients = append(gapRecipients, gap.Recipient)
 		}
 	}
