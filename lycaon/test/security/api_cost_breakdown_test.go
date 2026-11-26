@@ -88,7 +88,7 @@ func TestCostSummaryWorkerSplitAfterDelegation(t *testing.T) {
 	dir := t.TempDir()
 	parent := createSessionHTTP(t, srv, dir)
 
-	postPromptAndWaitIdle(t, h.ServeApp, parent.ID, "plan the work")
+	postPromptAndWaitIdle(t, srv, parent.ID, "plan the work")
 	h.SeedProgress(t, ctx, parent.ID)
 
 	_, err := h.ToolRegistry.Run(
@@ -99,7 +99,7 @@ func TestCostSummaryWorkerSplitAfterDelegation(t *testing.T) {
 	)
 	testutil.FailErr(t, "task tool failed", err)
 
-	wiring.WaitForSessionProgress(t, h.ServeApp, parent.ID, "the worker job completes and its outcome is delivered", func() bool {
+	testutil.WaitFor(t, "the worker job completes and its outcome is delivered", func() bool {
 		jobs, err := h.Workers.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, wire.WorkerStatusComplete)
 		if err != nil || len(jobs) != 1 {
 			return false

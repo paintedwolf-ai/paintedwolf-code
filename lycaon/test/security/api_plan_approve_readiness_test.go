@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -140,15 +141,19 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	req = AuthedRequest(t, http.MethodPost, approveURL, strings.NewReader(blueprintApprovalJSON(t, *current, plan.Content)))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
+	wakes := wiring.WatchWakes(t, h.ServeApp, sess.ID)
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("approve status = %d body = %s", w.Code, w.Body.String())
 	}
-	wiring.WaitForSessionProgress(t, h.ServeApp, sess.ID, "the approval advance is seen", sawApprovalAdvance.Load)
+	if !sawApprovalAdvance.Load() {
+		t.Fatal("the approval returned without advancing the run to execute")
+	}
 
-	wiring.WaitForSessionProgress(t, h.ServeApp, sess.ID, "the coordinator sends another request", func() bool {
-		return len(h.Recording.AllRequests()) > requestCountBeforeApproval
-	})
+	wakes.AwaitCompletedTurn(t, "the approval wake opens a coordinator turn", anchor.PhaseAdvanced)
+	if got := len(h.Recording.AllRequests()); got <= requestCountBeforeApproval {
+		t.Fatalf("the approval wake's turn made no model request\n%s", wakes.Report())
+	}
 	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)
 	history, err := h.Workflows.Manager.Store.Runs.ListBySession(ctx, sess.ID, 100, nil)
 	testutil.FailErr(t, "list workflows after approval", err)

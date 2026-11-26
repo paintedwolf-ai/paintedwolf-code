@@ -159,7 +159,7 @@ func TestCoordinatorPromptSuccessWorkflowGateBanner(t *testing.T) {
 	}
 
 	acceptPromptHTTP(t, srv, sess.ID, "review notes")
-	waitToolFeedbackHTTP(t, h.ServeApp, sess.ID, "WORKFLOW_GATE_BLOCKED")
+	waitToolFeedbackHTTP(t, srv, sess.ID, "WORKFLOW_GATE_BLOCKED")
 
 	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)

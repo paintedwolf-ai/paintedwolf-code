@@ -71,7 +71,6 @@ func (l *Waits) armSleepTimerLocked(st *sessionSleep, wakeCtx context.Context, s
 	st.timerDone = timerDone
 	st.timer = time.AfterFunc(remaining, func() {
 		defer close(timerDone)
-		defer l.Nudges.Activity.Begin(sessionID, ActivityWaitTimer)()
 		callbackCtx, finish, err := l.timerWork.Begin(wakeCtx)
 		if err != nil {
 			return

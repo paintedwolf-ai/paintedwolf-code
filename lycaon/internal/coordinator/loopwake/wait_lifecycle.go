@@ -206,21 +206,6 @@ func (l *Waits) IsSleeping(sessionID string) bool {
 	defer st.mu.Unlock()
 	return sleepArmedLocked(st, time.Now())
 }
-
-// sleepPending reports a parked wait or a timer that has not yet fired.
-func (l *Waits) sleepPending(sessionID string) bool {
-	if l == nil {
-		return false
-	}
-	value, ok := l.sleep.Load(sessionID)
-	st, valid := value.(*sessionSleep)
-	if !ok || !valid || st == nil {
-		return false
-	}
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	return st.armed || st.timer != nil
-}
 func (l *Waits) clearCompletedWorkflowWait(ctx context.Context, sessionID string) {
 	l.breakSleep(ctx, sessionID, "workflow_complete", false)
 	st := l.sleep.state(sessionID)

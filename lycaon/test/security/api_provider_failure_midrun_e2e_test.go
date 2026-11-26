@@ -137,7 +137,7 @@ func TestProviderFailureMidRunIsRecoverable(t *testing.T) {
 				"[[scn:"+tc.marker+"_after]] try again"); err != nil {
 				t.Fatalf("session unusable after a recoverable provider failure: %v", err)
 			}
-			waitTranscriptContainsHTTP(t, h.ServeApp, sess.ID, "Recovered and finished.")
+			waitTranscriptContainsHTTP(t, h.Server, sess.ID, "Recovered and finished.")
 		})
 	}
 }
