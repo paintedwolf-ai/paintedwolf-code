@@ -187,7 +187,7 @@ func (f *bb06Fixture) beginProgram(t *testing.T, callID, cmdText string, nodeIDs
 		SyntaxValidated: true,
 		Sources: []toolcontract.ProgramSource{{
 			UnitID:          "submitted",
-			Pin:             toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: len(cmdText)},
+			Pin:             toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: int64(len(cmdText))},
 			DetailReference: "output:exact-program",
 		}},
 		Nodes: nodes,
@@ -492,7 +492,7 @@ func TestBB06_L06_BriefingsMissingOrFoldedProgramReceipt(t *testing.T) {
 			"target_ref": wire.ToolActivityBriefingTarget{
 				SessionID:   f.session.ID,
 				ToolCallIds: []string{p.callID},
-				Members:     []wire.ActionReceiptScope{{ProgramID: programID, ActivityID: activityID}},
+				Members:     []wire.ToolActivityBriefingMember{{ProgramID: programID, ActivityID: activityID}},
 			},
 		}
 	}
