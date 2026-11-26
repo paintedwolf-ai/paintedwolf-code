@@ -302,14 +302,16 @@ func (p *CaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	knobs = append(knobs, modeKnob(p.cells[recipient][0].Mode))
 	switch entry.kind {
 	case entryRejected:
+		if recipient == RecipientUnscoped {
+			// An unscoped block-plane occurrence has no session; a worker leg's
+			// doom-loop check through policyfacts is unscoped too.
+			knobs = append([]casegen.Knob{{Name: "session", Facts: []string{casegen.AnyFact}, Values: []any{false, true}, Labels: []string{"", "worker"}}}, knobs...)
+		}
 		knobs = append(knobs, p.codeKnob(rule, sources))
 		knobs = append(knobs,
 			casegen.Knob{Name: "doom.count", Facts: []string{"paintedwolf.repeat_count", "paintedwolf.count", "paintedwolf.deferred_unactivated"}, Values: []any{0, 1, 9}},
 			casegen.Knob{Name: "doom.code", Facts: []string{"paintedwolf.repeated_rejection_code"}, Values: []any{"", "TOOL_ARGS_INVALID"}},
 		)
-		if recipient == RecipientUnscoped {
-			knobs = append(knobs, casegen.Knob{Name: "session", Facts: []string{casegen.AnyFact}, Values: []any{true, false}, Labels: []string{"", "none"}})
-		}
 		sample := defaultOccurrenceSample(rule)
 		for _, f := range p.references(sources...) {
 			if k, ok := p.factKnob("data.", f, sources, sample[strings.TrimPrefix(f, "paintedwolf.")]); ok {

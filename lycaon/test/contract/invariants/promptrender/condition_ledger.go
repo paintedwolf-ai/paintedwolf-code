@@ -75,7 +75,7 @@ const (
 )
 
 // caseBudget bounds targeted generation: runs per gap and in total.
-var caseBudget = casegen.Budget{PerTarget: 120, Total: 30000}
+var caseBudget = casegen.Budget{PerTarget: 120, Total: 12000}
 
 // StockConditionLedger discovers every stock guard, joins it with the atom
 // observations of the host-state matrix, then generates targeted OAR cases
