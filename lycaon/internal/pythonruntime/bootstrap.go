@@ -303,6 +303,19 @@ def _pw_install_pytest_defaults():
 
     builtins.__import__ = _pw_import
 
+def _pw_install_interruptible_sleep():
+    import select, time
+
+    def _pw_sleep(secs):
+        secs = float(secs)
+        if secs < 0:
+            raise ValueError("sleep length must be non-negative")
+        if secs == 0:
+            return
+        select.select([], [], [], secs)
+
+    time.sleep = _pw_sleep
+
 def _pw_bootstrap():
     cfg = json.loads(%q)
     for _k in ("PYTHONPATH", "PYTHONUSERBASE", "PYTHONSTARTUP"):
@@ -346,6 +359,7 @@ def _pw_bootstrap():
     if cfg.get("http_bridge_path"):
         _pw_install_http_bridge(cfg["http_bridge_path"])
     _pw_install_pytest_defaults()
+    _pw_install_interruptible_sleep()
 
     try:
         if mode == "code":
