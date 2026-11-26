@@ -412,8 +412,12 @@ export function SessionTranscript(props: Props) {
     },
   );
 
-  // Window swaps preserve extent; reconcile extent changes before paint when visible.
+  // Window swaps preserve extent; resize observations report content growth.
   const virtualExtent = createMemo(() => virtualizer.getTotalSize());
+  let pinnedReconcilePending = false;
+  onCleanup(() => {
+    pinnedReconcilePending = false;
+  });
   createEffect(() => {
     if (layout() !== "chat") return;
     virtualExtent();
@@ -421,12 +425,19 @@ export function SessionTranscript(props: Props) {
     if (!scroller) return;
     const motion = scrollportMotionForViewport(scroller);
     if (!motion) return;
-    motion.scheduleLayoutReconcile();
-    // notifyLayoutMutated cancels the scheduled frame via cancelLayoutReconcile
-    // so layout measurement runs once before paint, and is a no-op off-tail.
-    if (scroller.isConnected && scroller.clientHeight > 0) {
-      motion.notifyLayoutMutated();
+    if (motion.tail.pinControlsOffset() && scroller.isConnected) {
+      if (pinnedReconcilePending) return;
+      pinnedReconcilePending = true;
+      queueMicrotask(() => {
+        if (!pinnedReconcilePending) return;
+        pinnedReconcilePending = false;
+        if (scroller.isConnected && motion.tail.pinControlsOffset()) {
+          motion.notifyLayoutMutated();
+        }
+      });
+      return;
     }
+    motion.scheduleLayoutReconcile();
   });
 
   createEffect(() => {
