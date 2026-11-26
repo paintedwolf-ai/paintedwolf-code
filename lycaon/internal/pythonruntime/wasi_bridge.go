@@ -651,13 +651,13 @@ func (NullDeviceFS) Rmdir(string) experimentalsys.Errno              { return ex
 func (NullDeviceFS) Rename(string, string) experimentalsys.Errno     { return experimentalsys.EROFS }
 
 type nullDirFile struct {
-	experimentalsys.DirFile
 	experimentalsys.UnimplementedFile
 	read bool
 }
 
 func (d *nullDirFile) Dev() (uint64, experimentalsys.Errno)    { return 2, 0 }
 func (d *nullDirFile) Ino() (sys.Inode, experimentalsys.Errno) { return 1, 0 }
+func (d *nullDirFile) IsDir() (bool, experimentalsys.Errno)    { return true, 0 }
 func (d *nullDirFile) Stat() (sys.Stat_t, experimentalsys.Errno) {
 	return sys.Stat_t{Dev: 2, Ino: 1, Mode: fs.ModeDir | 0o555, Nlink: 1}, 0
 }

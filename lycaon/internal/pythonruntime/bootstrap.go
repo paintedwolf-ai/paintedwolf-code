@@ -262,12 +262,12 @@ func (c *CompletionMarkerFS) Lstat(p string) (sys.Stat_t, experimentalsys.Errno)
 }
 
 type completionDirFile struct {
-	experimentalsys.DirFile
 	experimentalsys.UnimplementedFile
 }
 
 func (completionDirFile) Dev() (uint64, experimentalsys.Errno)    { return 3, 0 }
 func (completionDirFile) Ino() (sys.Inode, experimentalsys.Errno) { return 1, 0 }
+func (completionDirFile) IsDir() (bool, experimentalsys.Errno)    { return true, 0 }
 func (completionDirFile) Stat() (sys.Stat_t, experimentalsys.Errno) {
 	return sys.Stat_t{Dev: 3, Ino: 1, Mode: fs.ModeDir | 0o700, Nlink: 1}, 0
 }
