@@ -432,10 +432,10 @@ func TestEngineKilledOutrightReapsOwnedActionWorkspaceOnly(t *testing.T) {
 				return errors.Is(statErr, os.ErrNotExist)
 			})
 			for name, path := range map[string]string{
-				"untracked sibling action dir": sibling,
-				"non-action dir in action-work": nonAction,
+				"untracked sibling action dir":      sibling,
+				"non-action dir in action-work":     nonAction,
 				"unrelated dir outside action-work": outside,
-				"action-work root": filepath.Dir(owned),
+				"action-work root":                  filepath.Dir(owned),
 			} {
 				if _, err := os.Stat(path); err != nil {
 					t.Fatalf("%s (%s) did not survive SIGKILL: %v", name, path, err)
