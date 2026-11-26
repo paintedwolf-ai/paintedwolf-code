@@ -2,6 +2,8 @@ package execution_test
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"io"
@@ -19,7 +21,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/app/execution"
-	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/decide"
@@ -62,6 +63,23 @@ func newCountingTLSServer(t *testing.T, handler http.Handler) (*httptest.Server,
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	return srv, cl
+}
+
+func combinedTLSClient(srvs ...*httptest.Server) *http.Client {
+	pool := x509.NewCertPool()
+	for _, s := range srvs {
+		if s != nil && s.Certificate() != nil {
+			pool.AddCert(s.Certificate())
+		}
+	}
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+				RootCAs:    pool,
+			},
+		},
+	}
 }
 
 // buildQualificationRuntime constructs the real app execution.Build runtime.
@@ -182,14 +200,22 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			t.Fatalf("denied redirect target observed %d raw TCP accepts, want 0", got)
 		}
 
-		// 1c. Cross-recipient credential isolation: Bearer token allowed ONLY for Recipient A, never Recipient B.
+		// 1c. Allowed cross-origin redirect to second authorized recipient (A -> B)
+		// strips credential scoped solely to A while B actually receives the request.
 		var recAGotAuth, recBGotAuth string
+		var recBHits atomic.Int64
 		recBSrv, recBLn := newCountingTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			recBHits.Add(1)
 			recBGotAuth = r.Header.Get("Authorization")
-			_, _ = w.Write([]byte("recipient-b"))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("redirected-b-ok"))
 		}))
 		recASrv, _ := newCountingTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			recAGotAuth = r.Header.Get("Authorization")
+			if r.URL.Path == "/redirect-to-b" {
+				http.Redirect(w, r, recBSrv.URL+"/redirected", http.StatusFound)
+				return
+			}
 			_, _ = w.Write([]byte("recipient-a-ok"))
 		}))
 		recAURL, _ := url.Parse(recASrv.URL)
@@ -203,27 +229,10 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
 		}
 
-		respA, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
-			ExecutionID:        "qual-cred-a",
-			CallID:             "call-qual-cred-a",
-			SessionID:          "sess-qual-cred",
-			Actor:              "implement",
-			View:               "workspace",
-			Mode:               pythonruntime.ModeCode,
-			Code:               `import requests, sys; r = requests.get(sys.argv[1], headers={"Authorization": "Bearer secret-for-a"}); print(r.text)`,
-			Args:               []string{recASrv.URL + "/api"},
-			HTTPClient:         recASrv.Client(),
-			CredentialScreener: scopedScreener,
-			Policy:             allowAll,
-		})
-		testutil.FailErr(t, "execute credentialed request to recipient A", err)
-		if !respA.CleanCompletion || strings.TrimSpace(respA.Stdout) != "recipient-a-ok" || recAGotAuth != "Bearer secret-for-a" {
-			t.Fatalf("recipient A mismatch: resp=%+v auth=%q", respA, recAGotAuth)
-		}
-
-		respB, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
-			ExecutionID:        "qual-cred-b",
-			CallID:             "call-qual-cred-b",
+		// Direct cross-recipient credential send to B is refused before any TCP accept.
+		respDirectB, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
+			ExecutionID:        "qual-cred-direct-b",
+			CallID:             "call-qual-cred-direct-b",
 			SessionID:          "sess-qual-cred",
 			Actor:              "implement",
 			View:               "workspace",
@@ -234,22 +243,67 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			CredentialScreener: scopedScreener,
 			Policy:             allowAll,
 		})
-		testutil.FailErr(t, "execute cross-recipient credential request to B", err)
-		if respB.CleanCompletion || recBGotAuth != "" || recBLn.accepts.Load() != 0 {
-			t.Fatalf("recipient B leaked credential or connected: clean=%v auth=%q tcpAccepts=%d", respB.CleanCompletion, recBGotAuth, recBLn.accepts.Load())
+		testutil.FailErr(t, "execute direct cross-recipient credential request to B", err)
+		if respDirectB.CleanCompletion || recBGotAuth != "" || recBLn.accepts.Load() != 0 || recBHits.Load() != 0 {
+			t.Fatalf("direct B leaked credential or connected: clean=%v auth=%q tcpAccepts=%d hits=%d", respDirectB.CleanCompletion, recBGotAuth, recBLn.accepts.Load(), recBHits.Load())
 		}
 
-		// 1d. Partial streamed delivery interrupted mid-stream survives reopen in persisted receipts.
-		chunkSent := make(chan struct{})
+		// Allowed redirect A -> B (both authorized): A receives Bearer token,
+		// B ACTUALLY receives the redirected request (hits==1, tcpAccepts==1)
+		// with ZERO Authorization header (stripped on cross-origin redirect).
+		respRedirStrip, err := svc.ExecuteTool(ctx, portablepython.ToolRequest{
+			ExecutionID:        "qual-cred-redir-strip",
+			CallID:             "call-qual-cred-redir-strip",
+			SessionID:          "sess-qual-cred",
+			Actor:              "implement",
+			View:               "workspace",
+			Mode:               pythonruntime.ModeCode,
+			Code:               `import requests, sys; r = requests.get(sys.argv[1], headers={"Authorization": "Bearer secret-for-a"}); print(r.status_code, r.text)`,
+			Args:               []string{recASrv.URL + "/redirect-to-b"},
+			HTTPClient:         combinedTLSClient(recASrv, recBSrv),
+			CredentialScreener: scopedScreener,
+			Policy:             allowAll,
+		})
+		testutil.FailErr(t, "execute allowed cross-origin redirect A -> B", err)
+		if !respRedirStrip.CleanCompletion || strings.TrimSpace(respRedirStrip.Stdout) != "200 redirected-b-ok" {
+			t.Fatalf("allowed redirect A -> B failed: resp=%+v stop=%+v", respRedirStrip, respRedirStrip.Stop)
+		}
+		if recAGotAuth != "Bearer secret-for-a" {
+			t.Fatalf("recipient A auth = %q, want %q", recAGotAuth, "Bearer secret-for-a")
+		}
+		if recBHits.Load() != 1 || recBLn.accepts.Load() != 1 {
+			t.Fatalf("recipient B did not actually receive redirected request: hits=%d tcpAccepts=%d", recBHits.Load(), recBLn.accepts.Load())
+		}
+		if recBGotAuth != "" {
+			t.Fatalf("recipient B unexpectedly received stripped Authorization header: %q", recBGotAuth)
+		}
+
+		// 1d. Partial streamed delivery interrupted mid-stream: assert guest
+		// actually received the exact first chunk BEFORE cancellation and
+		// compare byte counts with the reopened durable disposition.
+		const firstChunk = "FIRST_CHUNK_64B_0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"
+		if len(firstChunk) != 64 {
+			t.Fatalf("expected 64-byte test chunk, got %d", len(firstChunk))
+		}
+		guestAcked := make(chan struct{})
 		releaseStream := make(chan struct{})
 		streamSrv, _ := newCountingTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/ack" {
+				select {
+				case <-guestAcked:
+				default:
+					close(guestAcked)
+				}
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("acked"))
+				return
+			}
 			w.Header().Set("Content-Type", "text/plain")
 			flusher, _ := w.(http.Flusher)
-			_, _ = w.Write([]byte("partial-chunk-1\n"))
+			_, _ = w.Write([]byte(firstChunk))
 			if flusher != nil {
 				flusher.Flush()
 			}
-			close(chunkSent)
 			select {
 			case <-releaseStream:
 			case <-r.Context().Done():
@@ -259,9 +313,13 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 
 		streamCtx, cancelStream := context.WithCancel(ctx)
 		go func() {
-			<-chunkSent
-			time.Sleep(150 * time.Millisecond)
-			cancelStream()
+			select {
+			case <-guestAcked:
+				time.Sleep(100 * time.Millisecond)
+				cancelStream()
+			case <-time.After(15 * time.Second):
+				cancelStream()
+			}
 		}()
 		respStream, err := svc.ExecuteTool(streamCtx, portablepython.ToolRequest{
 			ExecutionID: "qual-partial-stream",
@@ -270,32 +328,69 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			Actor:       "implement",
 			View:        "workspace",
 			Mode:        pythonruntime.ModeCode,
-			Code:        `import requests, sys; r = requests.get(sys.argv[1], stream=True); print(next(r.iter_lines(decode_unicode=True)), flush=True); r.raw.read()`,
-			Args:        []string{streamSrv.URL + "/stream"},
-			HTTPClient:  streamSrv.Client(),
-			Policy:      allowAll,
+			Code: `import requests, sys
+r = requests.get(sys.argv[1], stream=True)
+chunk = next(r.iter_content(chunk_size=64))
+print("CHUNK_RECEIVED:" + str(len(chunk)), flush=True)
+requests.get(sys.argv[2])
+next(r.iter_content(chunk_size=64))`,
+			Args:       []string{streamSrv.URL + "/stream", streamSrv.URL + "/ack"},
+			HTTPClient: streamSrv.Client(),
+			Policy:     allowAll,
 		})
 		testutil.FailErr(t, "execute partial stream", err)
 		if respStream.CleanCompletion {
 			t.Fatalf("expected interrupted stream to not cleanly complete: %+v", respStream)
 		}
-		// Reopen persisted receipt store from disk and verify the interrupted stream execution was recorded.
-		reopenedReceipts, err := portablepython.NewFileReceiptStore(filepath.Join(cfgDir, "portable-python", "receipts"))
-		testutil.FailErr(t, "reopen FileReceiptStore after partial stream", err)
-		adms, err := reopenedReceipts.LoadAdmissions("qual-partial-stream")
-		testutil.FailErr(t, "load persisted admissions for partial stream", err)
-		sawHTTP := false
-		for _, a := range adms {
-			if a.Record.Family == pythonruntime.EffectHTTP {
-				sawHTTP = true
+		if !strings.Contains(respStream.Stdout, "CHUNK_RECEIVED:64") {
+			t.Fatalf("guest stdout did not confirm first 64-byte chunk before cancellation: stdout=%q stderr=%q", respStream.Stdout, respStream.Stderr)
+		}
+
+		// Reopen through a fresh execution.Build runtime and verify durable
+		// admission byte count parity and non-clean disposition.
+		_ = svc.Close(ctx)
+		rtStreamReopen, _ := buildQualificationRuntime(t, cfgDir)
+		defer func() { _ = rtStreamReopen.Host.Commands.PortablePython().Close(ctx) }()
+
+		adms, err := rtStreamReopen.Host.Commands.PythonPersistedAdmissions("qual-partial-stream")
+		testutil.FailErr(t, "load persisted admissions through composed runtime", err)
+		var streamAdm *pythonevidence.LedgerAdmission
+		for i := range adms {
+			if adms[i].Record.Family == pythonruntime.EffectHTTP && adms[i].Record.Target.RelPath == "/stream" {
+				streamAdm = &adms[i]
+				break
 			}
 		}
-		if !sawHTTP {
-			t.Fatalf("reopened receipt store missing HTTP admission for partial stream: %+v", adms)
+		if streamAdm == nil {
+			t.Fatalf("reopened receipt store missing /stream HTTP admission: %+v", adms)
+		}
+		if streamAdm.Record.Outcome == nil {
+			t.Fatalf("persisted /stream HTTP admission missing Outcome: %+v", streamAdm.Record)
+		}
+		if streamAdm.Record.Outcome.Succeeded {
+			t.Fatalf("persisted /stream HTTP admission unexpectedly succeeded: %+v", streamAdm.Record.Outcome)
+		}
+		if streamAdm.Record.Outcome.BytesTransferred < int64(len(firstChunk)) {
+			t.Fatalf("persisted /stream BytesTransferred = %d, want >= %d (guest received 64B chunk)", streamAdm.Record.Outcome.BytesTransferred, len(firstChunk))
+		}
+		if streamAdm.Record.Outcome.Error == "" {
+			t.Fatalf("persisted /stream HTTP admission missing cancellation error: %+v", streamAdm.Record.Outcome)
+		}
+		streamProj, err := rtStreamReopen.Host.Commands.PythonDenProjection("qual-partial-stream", pythonevidence.ViewerScope{
+			Role:      pythonevidence.RoleCoordinator,
+			SessionID: "sess-qual-stream",
+			Actor:     "implement",
+			View:      "workspace",
+		})
+		testutil.FailErr(t, "project partial stream after reopen", err)
+		if streamProj.CleanCompletion {
+			t.Fatalf("expected reopened partial-stream Den projection CleanCompletion=false, got %+v", streamProj)
 		}
 	})
 
-	// 2. Durable persisted approvals across Approval (dedup), Decline, Cancel, and Restart (reopen).
+	// 2. Durable persisted approvals across Approval (dedup), Decline, Cancel, and
+	// Restart (reopen) exercised through the composed registered `python` tool
+	// (`rt.Host.Registry.Run`), NOT direct `svc.ExecuteTool` with supplied policy.
 	t.Run("durable persisted approvals across approve, decline, cancel, and host restart", func(t *testing.T) {
 		cfgDir := t.TempDir()
 		rt1, _ := buildQualificationRuntime(t, cfgDir)
@@ -311,50 +406,42 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			b, _ := io.ReadAll(r.Body)
 			_, _ = w.Write([]byte("OK:" + string(b)))
 		}))
-		holdPolicy := func(_ context.Context, op pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
-			if op.Family == pythonruntime.EffectHTTP {
-				return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionHold, Reason: "human approval required"}
-			}
-			return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
-		}
+		svc1.SetDefaultHTTPClient(srv.Client())
+		wsDir := t.TempDir()
 
-		waitForPendingLease := func(b *pythonadmission.ApprovalBroker, execID string) pythonadmission.ApprovalLease {
+		waitForPendingLeaseByCall := func(b *pythonadmission.ApprovalBroker, callID string) pythonadmission.ApprovalLease {
 			deadline := time.Now().Add(8 * time.Second)
 			for time.Now().Before(deadline) {
 				for _, l := range b.Registry().List() {
-					if l.ExecutionID == execID && l.State == pythonadmission.LeasePending {
+					if l.CallID == callID && l.State == pythonadmission.LeasePending {
 						return l
 					}
 				}
 				time.Sleep(15 * time.Millisecond)
 			}
-			t.Fatalf("timed out waiting for pending lease for %s", execID)
+			t.Fatalf("timed out waiting for pending lease for call %s", callID)
 			return pythonadmission.ApprovalLease{}
 		}
+		holdTC := func(callID string) tools.ToolContext {
+			tc := workspaceTC("sess-qual-hold", "implement", "", wsDir)
+			tc.Identity.ToolCallID = callID
+			return tc
+		}
 
-		// 2a. Approve once (and repeat same approval -> error, still 1 body).
+		// 2a. Approve once through rt1.Host.Registry.Run("python") (and repeat same approval -> error, still 1 body).
 		var approvedLeaseID string
 		approveDone := make(chan struct{})
 		go func() {
 			defer close(approveDone)
-			l := waitForPendingLease(broker1, "qual-hold-approve")
+			l := waitForPendingLeaseByCall(broker1, "call-qual-hold-approve")
 			approvedLeaseID = l.LeaseID
 			_ = broker1.Approve(l.LeaseID, "approved once")
 		}()
-		respApp, err := svc1.ExecuteTool(ctx, portablepython.ToolRequest{
-			ExecutionID: "qual-hold-approve",
-			CallID:      "call-qual-hold-approve",
-			SessionID:   "sess-qual-hold",
-			Actor:       "implement",
-			View:        "workspace",
-			Mode:        pythonruntime.ModeCode,
-			Code:        `import requests, sys; r = requests.post(sys.argv[1], data="once"); print(r.text)`,
-			Args:        []string{srv.URL + "/approve"},
-			HTTPClient:  srv.Client(),
-			Policy:      holdPolicy,
-		})
+		respApp := runInstalledPython(t, ctx, rt1, map[string]any{
+			"code": `import requests, sys; r = requests.post(sys.argv[1], data="once"); print(r.text)`,
+			"args": []any{srv.URL + "/approve"},
+		}, holdTC("call-qual-hold-approve"))
 		<-approveDone
-		testutil.FailErr(t, "held approve execution", err)
 		if !respApp.CleanCompletion || strings.TrimSpace(respApp.Stdout) != "OK:once" || bodyCount.Load() != 1 {
 			t.Fatalf("approve once mismatch: resp=%+v stop=%+v bodies=%d", respApp, respApp.Stop, bodyCount.Load())
 		}
@@ -365,28 +452,19 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			t.Fatalf("duplicate approval caused extra body delivery: %d", bodyCount.Load())
 		}
 
-		// 2b. Decline -> 0 additional bodies, 0 additional TCP accepts.
+		// 2b. Decline through rt1.Host.Registry.Run("python") -> 0 additional bodies, 0 additional TCP accepts.
 		acceptsBeforeDecline := srvLn.accepts.Load()
 		declineDone := make(chan struct{})
 		go func() {
 			defer close(declineDone)
-			l := waitForPendingLease(broker1, "qual-hold-decline")
+			l := waitForPendingLeaseByCall(broker1, "call-qual-hold-decline")
 			_ = broker1.Decline(l.LeaseID, "declined")
 		}()
-		respDec, err := svc1.ExecuteTool(ctx, portablepython.ToolRequest{
-			ExecutionID: "qual-hold-decline",
-			CallID:      "call-qual-hold-decline",
-			SessionID:   "sess-qual-hold",
-			Actor:       "implement",
-			View:        "workspace",
-			Mode:        pythonruntime.ModeCode,
-			Code:        `import requests, sys; requests.post(sys.argv[1], data="declined")`,
-			Args:        []string{srv.URL + "/decline"},
-			HTTPClient:  srv.Client(),
-			Policy:      holdPolicy,
-		})
+		respDec := runInstalledPython(t, ctx, rt1, map[string]any{
+			"code": `import requests, sys; requests.post(sys.argv[1], data="declined")`,
+			"args": []any{srv.URL + "/decline"},
+		}, holdTC("call-qual-hold-decline"))
 		<-declineDone
-		testutil.FailErr(t, "held decline execution", err)
 		if respDec.CleanCompletion || respDec.Stop == nil || respDec.Stop.Code != pythonruntime.StopEffectNotAllowed {
 			t.Fatalf("decline = %+v, want COMMAND_EFFECT_NOT_ALLOWED", respDec)
 		}
@@ -394,29 +472,20 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			t.Fatalf("declined POST connected: bodies=%d accepts=%d (before=%d)", bodyCount.Load(), srvLn.accepts.Load(), acceptsBeforeDecline)
 		}
 
-		// 2c. Cancel / Stop while held -> 0 additional bodies, 0 additional TCP accepts.
+		// 2c. Cancel / Stop while held through rt1.Host.Registry.Run("python") -> 0 additional bodies, 0 additional TCP accepts.
 		acceptsBeforeCancel := srvLn.accepts.Load()
 		cancelCtx, cancelHold := context.WithCancel(ctx)
 		cancelDone := make(chan struct{})
 		go func() {
 			defer close(cancelDone)
-			_ = waitForPendingLease(broker1, "qual-hold-cancel")
+			_ = waitForPendingLeaseByCall(broker1, "call-qual-hold-cancel")
 			cancelHold()
 		}()
-		respCan, err := svc1.ExecuteTool(cancelCtx, portablepython.ToolRequest{
-			ExecutionID: "qual-hold-cancel",
-			CallID:      "call-qual-hold-cancel",
-			SessionID:   "sess-qual-hold",
-			Actor:       "implement",
-			View:        "workspace",
-			Mode:        pythonruntime.ModeCode,
-			Code:        `import requests, sys; requests.post(sys.argv[1], data="cancelled")`,
-			Args:        []string{srv.URL + "/cancel"},
-			HTTPClient:  srv.Client(),
-			Policy:      holdPolicy,
-		})
+		respCan := runInstalledPython(t, cancelCtx, rt1, map[string]any{
+			"code": `import requests, sys; requests.post(sys.argv[1], data="cancelled")`,
+			"args": []any{srv.URL + "/cancel"},
+		}, holdTC("call-qual-hold-cancel"))
 		<-cancelDone
-		testutil.FailErr(t, "held cancel execution", err)
 		if respCan.CleanCompletion || bodyCount.Load() != 1 || srvLn.accepts.Load() != acceptsBeforeCancel {
 			t.Fatalf("cancelled hold unexpected state: clean=%v bodies=%d accepts=%d", respCan.CleanCompletion, bodyCount.Load(), srvLn.accepts.Load())
 		}
@@ -428,20 +497,12 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 		restartExecDone := make(chan struct{})
 		go func() {
 			defer close(restartExecDone)
-			_, _ = svc1.ExecuteTool(restartCtx, portablepython.ToolRequest{
-				ExecutionID: "qual-hold-restart",
-				CallID:      "call-qual-hold-restart",
-				SessionID:   "sess-qual-hold",
-				Actor:       "implement",
-				View:        "workspace",
-				Mode:        pythonruntime.ModeCode,
-				Code:        `import requests, sys; requests.post(sys.argv[1], data="lost-on-restart")`,
-				Args:        []string{srv.URL + "/restart"},
-				HTTPClient:  srv.Client(),
-				Policy:      holdPolicy,
-			})
+			_, _ = rt1.Host.Registry.Run(restartCtx, "python", map[string]any{
+				"code": `import requests, sys; requests.post(sys.argv[1], data="lost-on-restart")`,
+				"args": []any{srv.URL + "/restart"},
+			}, holdTC("call-qual-hold-restart"))
 		}()
-		lostLease := waitForPendingLease(broker1, "qual-hold-restart")
+		lostLease := waitForPendingLeaseByCall(broker1, "call-qual-hold-restart")
 		// Simulate host process restart by constructing a fresh execution.Build against the same cfgDir BEFORE cancelling old goroutine.
 		rt2, _ := buildQualificationRuntime(t, cfgDir)
 		svc2 := rt2.Host.Commands.PortablePython()
@@ -463,7 +524,9 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 		}
 	})
 
-	// 3. PY05 Files/Den/Session Reopen Binding & Cross-Session/Worker Isolation.
+	// 3. PY05 Files/Den/Session Reopen Binding & Cross-Session/Worker Isolation
+	// exercised through a fresh composed execution.Build runtime (never opening
+	// FileReceiptStore or BlobRetainedStreamPort manually in the test).
 	t.Run("Files/Den/session reopen and cross-session/worker isolation", func(t *testing.T) {
 		cfgDir := t.TempDir()
 		rt1, _ := buildQualificationRuntime(t, cfgDir)
@@ -486,15 +549,11 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			t.Fatalf("expected protected write refusal, got %+v", denyResp)
 		}
 
-		// Close the first runtime completely and reopen fresh receipt + blob stores from disk.
+		// Close the first runtime completely and reopen via a fresh execution.Build
+		// instance on the same cfgDir.
 		_ = rt1.Host.Commands.PortablePython().Close(ctx)
-
-		reopenedReceipts, err := portablepython.NewFileReceiptStore(filepath.Join(cfgDir, "portable-python", "receipts"))
-		testutil.FailErr(t, "reopen FileReceiptStore", err)
-		reopenedPort := portablepython.NewBlobRetainedStreamPort(blobstore.Store{
-			Root: cfgDir,
-			Dir:  filepath.Join("portable-python", "retained"),
-		})
+		rt2, _ := buildQualificationRuntime(t, cfgDir)
+		defer func() { _ = rt2.Host.Commands.PortablePython().Close(ctx) }()
 
 		// Authorized coordinator scope sees persisted publications and reads disk-backed retained output.
 		authScope := pythonevidence.ViewerScope{
@@ -503,8 +562,8 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			Actor:     "implement",
 			View:      string(workspaceTC("sess-reopen-a", "implement", "", wsDir).Source.SourceWorkspaceKind),
 		}
-		projWrite, err := reopenedReceipts.ProjectPersistedForDen(writeResp.ExecutionID, authScope)
-		testutil.FailErr(t, "project persisted write execution for Den", err)
+		projWrite, err := rt2.Host.Commands.PythonDenProjection(writeResp.ExecutionID, authScope)
+		testutil.FailErr(t, "project persisted write execution for Den via composed runtime", err)
 		if !projWrite.Visible || len(projWrite.PublishedDiffs) == 0 {
 			t.Fatalf("expected visible projection with published diffs after reopen, got %+v", projWrite)
 		}
@@ -512,14 +571,14 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			t.Fatalf("unexpected attribution kind after reopen: %+v", projWrite.PublishedDiffs[0])
 		}
 
-		projDeny, err := reopenedReceipts.ProjectPersistedForDen(denyResp.ExecutionID, authScope)
-		testutil.FailErr(t, "project persisted deny execution for Den", err)
+		projDeny, err := rt2.Host.Commands.PythonDenProjection(denyResp.ExecutionID, authScope)
+		testutil.FailErr(t, "project persisted deny execution for Den via composed runtime", err)
 		if !projDeny.Visible || len(projDeny.RefusedChildren) == 0 {
 			t.Fatalf("expected visible projection with refused children after reopen, got %+v", projDeny)
 		}
 
-		retainedBytes, err := reopenedReceipts.ReadRetainedBytes(ctx, authScope, writeResp.RetainedStdoutArtifactID, reopenedPort)
-		testutil.FailErr(t, "read persisted retained stdout bytes after reopen", err)
+		retainedBytes, err := rt2.Host.Commands.ReadPythonRetainedOutput(ctx, authScope, writeResp.RetainedStdoutArtifactID)
+		testutil.FailErr(t, "read persisted retained stdout bytes after reopen via composed runtime", err)
 		if len(retainedBytes) < 80000 {
 			t.Fatalf("reopened retained bytes = %d, want >= 80000", len(retainedBytes))
 		}
@@ -538,12 +597,12 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			View:      authScope.View,
 		}
 		for _, deniedScope := range []pythonevidence.ViewerScope{otherSessionScope, otherWorkerScope} {
-			projDenied, err := reopenedReceipts.ProjectPersistedForDen(writeResp.ExecutionID, deniedScope)
-			testutil.FailErr(t, "project for denied scope", err)
+			projDenied, err := rt2.Host.Commands.PythonDenProjection(writeResp.ExecutionID, deniedScope)
+			testutil.FailErr(t, "project for denied scope via composed runtime", err)
 			if projDenied.Visible || !projDenied.RedactedForVisibility {
 				t.Fatalf("denied scope %+v unexpectedly saw projection: %+v", deniedScope, projDenied)
 			}
-			if _, rErr := reopenedReceipts.ReadRetainedBytes(ctx, deniedScope, writeResp.RetainedStdoutArtifactID, reopenedPort); !errors.Is(rErr, pythonevidence.ErrAccessDenied) {
+			if _, rErr := rt2.Host.Commands.ReadPythonRetainedOutput(ctx, deniedScope, writeResp.RetainedStdoutArtifactID); !errors.Is(rErr, pythonevidence.ErrAccessDenied) {
 				t.Fatalf("denied scope %+v retained read err = %v, want ErrAccessDenied", deniedScope, rErr)
 			}
 		}
@@ -657,6 +716,18 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 	}
 	if strings.Contains(outManaged, "HOST_DECOY_PYTHON") {
 		t.Fatalf("command tool unexpectedly executed host decoy python3 on PATH: %q", outManaged)
+	}
+
+	// 1a-ii. Permitted-by-profile (`implement`) but unoffered/unknown turn offer
+	// (TurnOfferedToolNames == nil) preserves the established portable `command`
+	// route and MUST NOT issue PYTHON_TOOL_REQUIRED from profile permission alone.
+	outUnknownOffer, err := runCmd("implement", "", nil, `python3 -c "import sys; print('UNKNOWN_OFFER:' + sys.platform)"`)
+	testutil.FailErr(t, "run managed python3 via command tool with unknown turn offer", err)
+	if !strings.Contains(outUnknownOffer, "UNKNOWN_OFFER:wasi") {
+		t.Fatalf("expected Portable Python WASI output when turn offer is unknown, got: %q", outUnknownOffer)
+	}
+	if strings.Contains(outUnknownOffer, "HOST_DECOY_PYTHON") || strings.Contains(outUnknownOffer, "PYTHON_TOOL_REQUIRED") {
+		t.Fatalf("unknown turn offer must not fall back to host decoy or refuse with PYTHON_TOOL_REQUIRED: %q", outUnknownOffer)
 	}
 
 	// 1b. Shared authority: restricted worker (`worker_readonly`) on broader

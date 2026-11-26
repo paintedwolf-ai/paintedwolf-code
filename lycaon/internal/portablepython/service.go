@@ -335,6 +335,53 @@ func (s *Service) ReceiptSink() pythonevidence.ReceiptSink { return s.receiptSin
 // SecretScreener returns the active secret screener used by this Service.
 func (s *Service) SecretScreener() pythonevidence.SecretScreener { return s.screener }
 
+// DenProjectionForSession projects a persisted execution for Den/Files
+// inspection under the caller's ViewerScope through this Service's durable
+// ReceiptSink.
+func (s *Service) DenProjectionForSession(executionID string, scope pythonevidence.ViewerScope) (pythonevidence.PythonActivityProjection, error) {
+	if s == nil {
+		return pythonevidence.PythonActivityProjection{}, errors.New("portable python service is not initialized")
+	}
+	projector, ok := s.receiptSink.(interface {
+		ProjectPersistedForDen(string, pythonevidence.ViewerScope) (pythonevidence.PythonActivityProjection, error)
+	})
+	if !ok || projector == nil {
+		return pythonevidence.PythonActivityProjection{}, errors.New("durable receipt store does not support Den projection")
+	}
+	return projector.ProjectPersistedForDen(executionID, scope)
+}
+
+// ReadRetainedOutputForSession enforces fail-closed ViewerScope authorization
+// and reads disk-backed retained output bytes through this Service's durable
+// ReceiptSink and RetainedStreamPort.
+func (s *Service) ReadRetainedOutputForSession(ctx context.Context, scope pythonevidence.ViewerScope, artifactID string) ([]byte, error) {
+	if s == nil {
+		return nil, errors.New("portable python service is not initialized")
+	}
+	reader, ok := s.receiptSink.(interface {
+		ReadRetainedBytes(context.Context, pythonevidence.ViewerScope, string, pythonevidence.RetainedStreamPort) ([]byte, error)
+	})
+	if !ok || reader == nil {
+		return nil, errors.New("durable receipt store does not support retained output reads")
+	}
+	return reader.ReadRetainedBytes(ctx, scope, artifactID, s.streamPort)
+}
+
+// PersistedAdmissionsForExecution loads durable LedgerAdmission records for
+// executionID through this Service's configured ReceiptSink.
+func (s *Service) PersistedAdmissionsForExecution(executionID string) ([]pythonevidence.LedgerAdmission, error) {
+	if s == nil {
+		return nil, errors.New("portable python service is not initialized")
+	}
+	loader, ok := s.receiptSink.(interface {
+		LoadAdmissions(string) ([]pythonevidence.LedgerAdmission, error)
+	})
+	if !ok || loader == nil {
+		return nil, errors.New("durable receipt store does not support admission queries")
+	}
+	return loader.LoadAdmissions(executionID)
+}
+
 // SetDefaultHTTPClient overrides the default *http.Client used when
 // ToolRequest.HTTPClient is nil (e.g., to trust a test TLS server CA).
 func (s *Service) SetDefaultHTTPClient(c *http.Client) { s.httpClient = c }
@@ -689,8 +736,10 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 		HTTPBridgePath: GuestHTTPBridgePath,
 	})
 	if err != nil {
+		guestHTTPAdapter.CloseAll(execCtx.Err())
 		return nil, err
 	}
+	guestHTTPAdapter.CloseAll(execCtx.Err())
 
 	stderrOut := stderrBuf.String()
 	if stderrOut == "" && res.GuestStderr != "" {

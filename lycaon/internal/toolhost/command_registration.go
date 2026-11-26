@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pythondocuments"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -33,9 +34,10 @@ import (
 // portablePythonRunner holds an optional live portablepython.Service for the
 // direct `python` tool handler.
 type portablePythonRunner struct {
-	mu       sync.RWMutex
-	service  *portablepython.Service
-	boundary *sandbox.Boundary
+	mu        sync.RWMutex
+	service   *portablepython.Service
+	boundary  *sandbox.Boundary
+	approvals *settings.ApprovalStore
 }
 
 func (p *portablePythonRunner) SetService(svc *portablepython.Service) {
@@ -44,6 +46,15 @@ func (p *portablePythonRunner) SetService(svc *portablepython.Service) {
 	}
 	p.mu.Lock()
 	p.service = svc
+	p.mu.Unlock()
+}
+
+func (p *portablePythonRunner) SetApprovals(store *settings.ApprovalStore) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.approvals = store
 	p.mu.Unlock()
 }
 
@@ -60,12 +71,12 @@ func (p *portablePythonRunner) Run(ctx context.Context, args map[string]any, tc 
 	if _, err := pythoncatalog.ValidateDirectToolArgs(args); err != nil {
 		return "", err
 	}
-	svc, boundary := p.snapshot()
+	svc, boundary, approvals := p.snapshot()
 	if svc == nil {
 		return "", errors.New("portable python runtime is not configured")
 	}
 
-	req := buildPortablePythonRequest(ctx, boundary, tc, "python")
+	req := buildPortablePythonRequest(ctx, boundary, approvals, svc.Broker(), tc, "python")
 	req.RawArgs = args
 	resp, err := svc.ExecuteTool(ctx, req)
 	if err != nil {
@@ -84,12 +95,12 @@ func (p *portablePythonRunner) Run(ctx context.Context, args map[string]any, tc 
 // mutation door, and egress/approval policy while recording "command" as the
 // initiating tool separately from Surface.
 func (p *portablePythonRunner) ExecuteCommand(ctx context.Context, cmdReq command.PythonExecutionRequest) (command.PythonExecutionResponse, error) {
-	svc, boundary := p.snapshot()
+	svc, boundary, approvals := p.snapshot()
 	if svc == nil {
 		return command.PythonExecutionResponse{}, errors.New("portable python runtime is not configured")
 	}
 
-	req := buildPortablePythonRequest(ctx, boundary, cmdReq.ToolCtx, "command")
+	req := buildPortablePythonRequest(ctx, boundary, approvals, svc.Broker(), cmdReq.ToolCtx, "command")
 	req.Mode = cmdReq.Mode
 	req.Code = cmdReq.Code
 	req.Script = cmdReq.Script
@@ -142,18 +153,25 @@ func (p *portablePythonRunner) ExecuteCommand(ctx context.Context, cmdReq comman
 	return out, nil
 }
 
-func (p *portablePythonRunner) snapshot() (*portablepython.Service, *sandbox.Boundary) {
+func (p *portablePythonRunner) snapshot() (*portablepython.Service, *sandbox.Boundary, *settings.ApprovalStore) {
 	if p == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.service, p.boundary
+	return p.service, p.boundary, p.approvals
 }
 
 // buildPortablePythonRequest is the single common trusted invocation builder
 // shared by direct `python` and managed `command` Portable Python entries.
-func buildPortablePythonRequest(ctx context.Context, boundary *sandbox.Boundary, tc tools.ToolContext, initiatingTool string) portablepython.ToolRequest {
+func buildPortablePythonRequest(
+	ctx context.Context,
+	boundary *sandbox.Boundary,
+	approvals *settings.ApprovalStore,
+	broker *pythonadmission.ApprovalBroker,
+	tc tools.ToolContext,
+	initiatingTool string,
+) portablepython.ToolRequest {
 	allowedEffects, readOnly := resolvePythonAllowedEffects(ctx, boundary, tc)
 	roots, rootSpecs := buildPythonRoots(tc, readOnly)
 
@@ -172,7 +190,7 @@ func buildPortablePythonRequest(ctx context.Context, boundary *sandbox.Boundary,
 		InitiatingTool: initiatingTool,
 		ReadOnly:       readOnly,
 		AllowedEffects: allowedEffects,
-		Policy:         buildPythonSessionPolicy(tc),
+		Policy:         buildPythonSessionPolicy(tc, approvals, broker),
 		Roots:          roots,
 		RootSpecs:      rootSpecs,
 		Editor:         editorBridge,
@@ -181,10 +199,15 @@ func buildPortablePythonRequest(ctx context.Context, boundary *sandbox.Boundary,
 }
 
 // buildPythonSessionPolicy wires Painted Wolf's session egress destination
-// policy and approval broker (confine.DecideAttributedHTTPRequest) into
-// Portable Python's OperationObserver. Sensitive effects fail closed whenever
-// session identity or destination approval is missing.
-func buildPythonSessionPolicy(tc tools.ToolContext) pythonadmission.PolicyEvaluator {
+// policy and approval broker into Portable Python's OperationObserver.
+// Sensitive effects fail closed whenever session identity or destination
+// approval is missing; under PostureAsk/PostureStrict without a synchronous
+// egress resolver, outbound HTTP holds in the composed durable ApprovalBroker.
+func buildPythonSessionPolicy(
+	tc tools.ToolContext,
+	approvals *settings.ApprovalStore,
+	broker *pythonadmission.ApprovalBroker,
+) pythonadmission.PolicyEvaluator {
 	return func(ctx context.Context, op pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
 		switch op.Family {
 		case pythonruntime.EffectHTTP:
@@ -208,6 +231,32 @@ func buildPythonSessionPolicy(tc tools.ToolContext) pythonadmission.PolicyEvalua
 				ToolCallID:    tc.Identity.ToolCallID,
 				ToolName:      "python",
 				DeclaredHosts: []string{host},
+			}
+			if approvals != nil {
+				ref := settings.ProjectRef{ID: cmd.ProjectID, Dir: cmd.ProjectDir}
+				if rule, ok := settings.EvaluateHostRule(approvals.EffectiveConfig(ref).Rules, host); ok {
+					switch rule.Effect {
+					case settings.ApprovalEffectDeny:
+						return pythonadmission.PolicyDecision{
+							Kind:      pythonruntime.DecisionStop,
+							Condition: pythonadmission.ConditionEffectDenied,
+							Reason:    fmt.Sprintf("outbound HTTP to %s denied by host approval rule", host),
+						}
+					case settings.ApprovalEffectAsk:
+						if broker != nil && !confine.HasEgressResolver() {
+							return pythonadmission.PolicyDecision{
+								Kind:   pythonruntime.DecisionHold,
+								Reason: fmt.Sprintf("outbound HTTP %s to %s requires session approval", method, host),
+							}
+						}
+					}
+				}
+			}
+			if !confine.HasEgressResolver() && confine.EffectivePosture(cmd) == confine.PostureAsk && broker != nil {
+				return pythonadmission.PolicyDecision{
+					Kind:   pythonruntime.DecisionHold,
+					Reason: fmt.Sprintf("outbound HTTP %s to %s requires session approval", method, host),
+				}
 			}
 			if !confine.DecideAttributedHTTPRequest(ctx, cmd, host, method, op.Target.RelPath) {
 				return pythonadmission.PolicyDecision{
@@ -444,15 +493,10 @@ func registerCommandToolsWithPython(
 		FailureTracker: ft,
 		PortablePython: pyHandler,
 		DirectPythonOffered: func(tc tools.ToolContext) bool {
-			if tc.Turn.TurnOfferedToolNames != nil {
-				return slices.Contains(tc.Turn.TurnOfferedToolNames, "python")
-			}
-			if boundary != nil {
-				if profileID := strings.TrimSpace(tc.ProfileID()); profileID != "" {
-					return boundary.ProfileAllowsTool(profileID, "python")
-				}
-			}
-			return false
+			// Only report direct `python` as offered when the actual projected
+			// turn offer explicitly includes it. Never infer an offer from
+			// profile eligibility alone when the turn offer is unknown.
+			return slices.Contains(tc.Turn.TurnOfferedToolNames, "python")
 		},
 		Builtins: func(tc tools.ToolContext, nested commandprogram.NestedCommand, bound command.NativeBindings) map[string]commandprogram.OperationDispatcher {
 			return hostUtilities.Builtins(tc, nested, bound)

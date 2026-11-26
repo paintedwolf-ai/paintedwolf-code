@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/pythonadmission"
+	"github.com/lycaon/lycaon/internal/pythonevidence"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
@@ -64,6 +65,36 @@ func (r *CommandServices) StopPythonPreviewJob(ctx context.Context, jobID string
 		return fmt.Errorf("portable python service is not configured")
 	}
 	return svc.StopPreviewJob(ctx, jobID)
+}
+
+// PythonDenProjection projects a persisted Portable Python execution for
+// Den/Files inspection under scope through the composed service.
+func (r *CommandServices) PythonDenProjection(executionID string, scope pythonevidence.ViewerScope) (pythonevidence.PythonActivityProjection, error) {
+	svc := r.PortablePython()
+	if svc == nil {
+		return pythonevidence.PythonActivityProjection{}, fmt.Errorf("portable python service is not configured")
+	}
+	return svc.DenProjectionForSession(executionID, scope)
+}
+
+// ReadPythonRetainedOutput reads disk-backed retained stdout/stderr bytes for
+// artifactID after enforcing fail-closed ViewerScope authorization.
+func (r *CommandServices) ReadPythonRetainedOutput(ctx context.Context, scope pythonevidence.ViewerScope, artifactID string) ([]byte, error) {
+	svc := r.PortablePython()
+	if svc == nil {
+		return nil, fmt.Errorf("portable python service is not configured")
+	}
+	return svc.ReadRetainedOutputForSession(ctx, scope, artifactID)
+}
+
+// PythonPersistedAdmissions returns durable LedgerAdmission records for
+// executionID through the composed Portable Python service.
+func (r *CommandServices) PythonPersistedAdmissions(executionID string) ([]pythonevidence.LedgerAdmission, error) {
+	svc := r.PortablePython()
+	if svc == nil {
+		return nil, fmt.Errorf("portable python service is not configured")
+	}
+	return svc.PersistedAdmissionsForExecution(executionID)
 }
 
 func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {

@@ -37,18 +37,22 @@ import (
 
 func buildInstalledExecutionRuntime(t *testing.T) (execution.Runtime, string) {
 	t.Helper()
-	sourceImageDir := strings.TrimSpace(os.Getenv(portablepython.EnvImageDir))
-	if sourceImageDir == "" {
-		t.Skip("PW_PORTABLE_PYTHON_IMAGE_DIR not set; skipping installed-session Portable Python acceptance suite")
-	}
 	cfgDir := t.TempDir()
-	engineRoot := t.TempDir()
-	stagedParent := filepath.Join(engineRoot, "portable-python")
-	testutil.FailErr(t, "mkdir staged engine-root parent", os.MkdirAll(stagedParent, 0o755))
-	testutil.FailErr(t, "symlink verified image into engine-root", os.Symlink(sourceImageDir, filepath.Join(stagedParent, "image")))
+	existingEngineRoot := strings.TrimSpace(os.Getenv(configlayout.EnvEngineRoot))
+	hasStagedDist := existingEngineRoot != "" && fileExists(filepath.Join(existingEngineRoot, "portable-python", "image", "image-manifest.json"))
+	if !hasStagedDist {
+		sourceImageDir := strings.TrimSpace(os.Getenv(portablepython.EnvImageDir))
+		if sourceImageDir == "" {
+			t.Skip("neither staged LYCAON_ENGINE_ROOT nor PW_PORTABLE_PYTHON_IMAGE_DIR is set; skipping installed-session Portable Python acceptance suite")
+		}
+		engineRoot := t.TempDir()
+		stagedParent := filepath.Join(engineRoot, "portable-python")
+		testutil.FailErr(t, "mkdir staged engine-root parent", os.MkdirAll(stagedParent, 0o755))
+		testutil.FailErr(t, "symlink verified image into engine-root", os.Symlink(sourceImageDir, filepath.Join(stagedParent, "image")))
+		t.Setenv(configlayout.EnvEngineRoot, engineRoot)
+	}
 
 	t.Setenv(configdir.EnvConfigDir, cfgDir)
-	t.Setenv(configlayout.EnvEngineRoot, engineRoot)
 	t.Setenv(portablepython.EnvImageDir, "")
 
 	catalog := extpackstest.StockCatalog(t)

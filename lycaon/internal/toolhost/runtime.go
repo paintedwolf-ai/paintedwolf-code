@@ -171,6 +171,9 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 	runtime.Executor.Approvals.SetApprovalOutcomeRenderer(newCatalogOutcomeRenderer(approvaloutcome.NewCatalog(outcomeCfg)))
 	if cfg.Approvals != nil {
 		wireEgressPolicy(runtime.Authority, cfg.Approvals)
+		if runtime.Commands != nil && runtime.Commands.pythonRunner != nil {
+			runtime.Commands.pythonRunner.SetApprovals(cfg.Approvals)
+		}
 	}
 	return runtime, nil
 }

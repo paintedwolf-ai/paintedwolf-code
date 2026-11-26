@@ -246,3 +246,27 @@ func (a *GuestHTTPAdapter) CloseStream(handleID string) error {
 	}
 	return handle.body.Close()
 }
+
+// CloseAll closes every remaining open streaming response handle, marking each
+// cancelled with err when non-nil so partial byte counts and PartialFailure are
+// finalized truthfully before execution evidence is persisted.
+func (a *GuestHTTPAdapter) CloseAll(err error) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	handles := make([]*guestStreamHandle, 0, len(a.streams))
+	for id, handle := range a.streams {
+		handles = append(handles, handle)
+		delete(a.streams, id)
+	}
+	a.mu.Unlock()
+	for _, handle := range handles {
+		if err != nil {
+			if tb, ok := handle.body.(*trackedHTTPBody); ok {
+				tb.MarkCancelled(err)
+			}
+		}
+		_ = handle.body.Close()
+	}
+}
