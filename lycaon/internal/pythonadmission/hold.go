@@ -369,15 +369,6 @@ func (b *ApprovalBroker) WaitForApproval(ctx context.Context, req HoldRequest) (
 		Reason:              req.Reason,
 		CreatedAt:           b.clock.Now().UTC(),
 	}
-	if err := b.registry.Create(lease); err != nil {
-		return HoldResult{}, err
-	}
-	if b.store != nil {
-		if err := b.store.SaveLease(ctx, lease); err != nil {
-			return HoldResult{}, fmt.Errorf("persist pending lease: %w", err)
-		}
-	}
-
 	waiter := &activeWaiter{
 		leaseID: leaseID,
 		execID:  req.ExecutionID,
@@ -392,6 +383,15 @@ func (b *ApprovalBroker) WaitForApproval(ctx context.Context, req HoldRequest) (
 		delete(b.waiters, leaseID)
 		b.mu.Unlock()
 	}()
+
+	if err := b.registry.Create(lease); err != nil {
+		return HoldResult{}, err
+	}
+	if b.store != nil {
+		if err := b.store.SaveLease(ctx, lease); err != nil {
+			return HoldResult{}, fmt.Errorf("persist pending lease: %w", err)
+		}
+	}
 
 	if b.onHoldCreated != nil {
 		b.onHoldCreated(lease)

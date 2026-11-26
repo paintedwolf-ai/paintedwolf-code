@@ -352,7 +352,7 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 		<-approveDone
 		testutil.FailErr(t, "held approve execution", err)
 		if !respApp.CleanCompletion || strings.TrimSpace(respApp.Stdout) != "OK:once" || bodyCount.Load() != 1 {
-			t.Fatalf("approve once mismatch: resp=%+v bodies=%d", respApp, bodyCount.Load())
+			t.Fatalf("approve once mismatch: resp=%+v stop=%+v bodies=%d", respApp, respApp.Stop, bodyCount.Load())
 		}
 		if dupErr := broker1.Approve(approvedLeaseID, "duplicate approve"); dupErr == nil {
 			t.Fatal("expected duplicate Approve on consumed lease to fail")

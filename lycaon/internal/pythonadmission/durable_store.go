@@ -46,6 +46,9 @@ func NewFileContinuationStore(rootDir, relFile string) (*FileContinuationStore, 
 	if err != nil {
 		return nil, fmt.Errorf("resolve continuation store root: %w", err)
 	}
+	if err := os.MkdirAll(absRoot, 0o700); err != nil {
+		return nil, fmt.Errorf("create continuation store root: %w", err)
+	}
 	return &FileContinuationStore{
 		rootDir: absRoot,
 		relFile: relFile,
