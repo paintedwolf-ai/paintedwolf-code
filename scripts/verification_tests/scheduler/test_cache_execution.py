@@ -4,6 +4,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -25,6 +27,58 @@ class CacheTests(unittest.TestCase):
         self.root.mkdir()
         self.now = time.time()
         self.sequence = 0
+        self.host = Path(self.temporary.name) / "host-temp"
+        self.host.mkdir()
+        patcher = patch.object(cache, "host_temp", return_value=self.host)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def go_temp(self, name, age, child_age=None):
+        path = self.host / name
+        (path / "b001").mkdir(parents=True)
+        (path / "b001" / "pkg.test").write_bytes(b"x" * 4096)
+        child = self.now - (age if child_age is None else child_age)
+        os.utime(path / "b001", (child, child))
+        os.utime(path, (self.now - age, self.now - age))
+        return path
+
+    def test_abandoned_go_work_is_swept_while_live_and_unrelated_temp_stays(self):
+        day = cache.ABANDONED_TEMP_SECONDS
+        abandoned = self.go_temp("go-build123", 2 * day)
+        linker = self.go_temp("go-link-456", 2 * day)
+        building = self.go_temp("go-build789", 2 * day, child_age=60)
+        recent = self.go_temp("go-build000", 60)
+        unrelated = self.go_temp("lycaon-harness.abc", 2 * day)
+        alias = self.host / "go-build-alias"
+        alias.symlink_to(unrelated)
+        result = cache.sweep_go_temp(self.host, now=self.now)
+        self.assertFalse(abandoned.exists())
+        self.assertFalse(linker.exists())
+        for kept in (building, recent, unrelated, alias):
+            self.assertTrue(kept.exists(), kept.name)
+        self.assertEqual(result["removed_directories"], 2)
+        self.assertGreaterEqual(result["reclaimed_bytes"], 2 * 4096)
+        self.assertEqual(result["failures"], [])
+
+    def test_temp_sweep_runs_once_per_interval_across_runners(self):
+        queue = execution.Queue(Path(self.temporary.name) / "queue", Path(self.temporary.name) / "history")
+        environment = {"GOCACHE": str(self.root)}
+        with patch.object(cache, "sweep_go_temp", wraps=cache.sweep_go_temp) as sweep:
+            cache.Maintenance(queue, environment).scheduled("batch")
+            cache.Maintenance(queue, environment).admitted()
+            self.assertEqual(sweep.call_count, 1)
+            state = next(queue.root.glob("go-temp-*.json"))
+            state.write_text(json.dumps({"checked_at": time.time() - cache.TEMP_SCAN_INTERVAL - 1}))
+            cache.Maintenance(queue, environment).admitted()
+            self.assertEqual(sweep.call_count, 2)
+
+    def test_explicit_maintenance_sweeps_a_named_temp_directory(self):
+        abandoned = self.go_temp("go-build123", 2 * cache.ABANDONED_TEMP_SECONDS)
+        script = Path(cache.__file__)
+        result = subprocess.run([sys.executable, str(script), "--abandoned-temp", str(self.host)],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(abandoned.exists())
 
     def entry(self, age, executable=False):
         self.sequence += 1

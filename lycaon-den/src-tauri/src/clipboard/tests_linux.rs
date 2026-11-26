@@ -165,7 +165,7 @@ fn private_x11_preserves_text_rich_text_and_image_paste() {
 
 #[test]
 fn private_wayland_preserves_text_rich_text_and_image_paste() {
-    let runtime = TempDir::new("wayland-clipboard");
+    let runtime = TempDir::for_sockets("wayland-clipboard");
     let (_server, socket) = start_sway(&runtime);
     run_fixture(
         owner_child("wayland")

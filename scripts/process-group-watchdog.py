@@ -94,16 +94,20 @@ def main() -> int:
     flag.touch()
     print(f"watchdog: exceeded {timeout:g}s; terminating: {description}", file=sys.stderr)
     report_waits(pgid)
-    try:
-        os.killpg(pgid, signal.SIGTERM)
-    except ProcessLookupError:
+    if not signal_group(pgid, signal.SIGTERM):
         return 0
     time.sleep(5)
-    try:
-        os.killpg(pgid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    signal_group(pgid, signal.SIGKILL)
     return 0
+
+
+def signal_group(pgid, number):
+    """Whether any member was left to signal. macOS refuses a group of unreaped exits with EPERM."""
+    try:
+        os.killpg(pgid, number)
+    except (ProcessLookupError, PermissionError):
+        return False
+    return True
 
 
 if __name__ == "__main__":
