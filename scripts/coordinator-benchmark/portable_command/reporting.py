@@ -78,7 +78,66 @@ FACT_OWNERS = {
     'full_stream_digest': 'output_retention_owner',
     'preview_independent': 'output_retention_owner',
     'every_producer_eligible': 'program_runtime',
+    'progress_committed_separately': 'progress_owner',
+    'no_gated_effect': 'program_runtime',
+    'fresh_resubmission_only': 'program_runtime',
 }
+
+
+def structured_rejection(raw_result, payload):
+    fb_list = raw_result.get('feedback') or []
+    fb0 = fb_list[0] if isinstance(fb_list, list) and fb_list and isinstance(fb_list[0], dict) else {}
+    refusal = payload.get('refusal') if isinstance(payload, dict) and isinstance(payload.get('refusal'), dict) else {}
+    inv_failure = (raw_result.get('invocation') or {}).get('failure') or {}
+    rejection = raw_result.get('rejection') or {}
+    codes = raw_result.get('codes') or []
+    code = refusal.get('code') or fb0.get('code') or inv_failure.get('code') or rejection.get('code') or (codes[0] if codes else None)
+    details = refusal.get('details') or fb0.get('details') or rejection.get('details') or {}
+    return code, details if isinstance(details, dict) else {}
+
+
+def has_structured_span(details):
+    if isinstance(details.get('span'), dict) and isinstance(details['span'].get('start'), int) and isinstance(details['span'].get('end'), int):
+        return True
+    return isinstance(details.get('source_start_byte'), int) and isinstance(details.get('source_end_byte'), int)
+
+
+def extract_recovery(case_id, payload, raw_result, audit, unexpected_cmd):
+    code, details = structured_rejection(raw_result, payload)
+    if not code:
+        return None
+    has_span = has_structured_span(details)
+    has_help = bool(details.get('expected_form') or details.get('usage') or details.get('help'))
+    if code == 'COMMAND_OPTION_UNSUPPORTED':
+        cause, remedy = 'option', ('focused_command_help' if has_help else '')
+    elif code == 'COMMAND_SYNTAX_INVALID':
+        cause, remedy = 'syntax', ('focused_syntax_help' if has_help else '')
+    elif code == 'WRITE_SCOPE_DENIED':
+        cause = 'scope_denial'
+        remedy = 'named_capability_limitation' if (has_help or details.get('profile') or details.get('patterns_list') or details.get('path')) else ''
+    else:
+        cause, remedy = code.lower(), ('focused_command_help' if has_help else '')
+    zero_effects = (
+        payload.get('completed_effects', 0) == 0 and payload.get('uncertain_effects', 0) == 0
+        and not audit['invocation_program_executions'] and details.get('command_execution') in {None, 'not_started'}
+    )
+    inv_failure = (raw_result.get('invocation') or {}).get('failure') or {}
+    replay_fact = details.get('program_replay_available')
+    retry_fact = details.get('retryable') if isinstance(details.get('retryable'), bool) else inv_failure.get('retryable')
+    if isinstance(replay_fact, bool):
+        replay_allowed = replay_fact and zero_effects
+    elif isinstance(payload.get('replay_available'), bool):
+        replay_allowed = payload['replay_available'] and zero_effects
+    elif isinstance(retry_fact, bool):
+        replay_allowed = retry_fact and zero_effects
+    else:
+        replay_allowed = None
+    return {
+        'case_id': case_id, 'cause': cause, 'zero_program_effects': zero_effects,
+        'whole_program_resubmit_allowed': replay_allowed, 'automatic_execution': bool(unexpected_cmd),
+        'remedy': remedy, 'effect_certainty_required': zero_effects,
+        'source_span_required': has_span, 'owner_code': code,
+    }
 
 
 def verified_source_binding(case, pins, execs, baseline_hashes):
