@@ -173,7 +173,12 @@ class PortableCommandHarnessTests(unittest.TestCase):
                     app_factory=lambda d: FakeApp(d, mode='refuse'),
                     sse_factory=FakeSSE,
                 )
-            self.assertTrue(res['grade']['passed'])
+            self.assertEqual(res['grade']['qualification'], 'native-runtime')
+            # Every non-recovery dimension passes; recovery flags the suite.json vs grading.py expected_rejection contract.
+            for dim in ('artifacts', 'execution', 'receipts', 'authority', 'evidence', 'delivery', 'closeout', 'delivered_tests'):
+                self.assertTrue(res['grade']['dimensions'][dim], dim)
+            self.assertFalse(res['grade']['dimensions']['recovery'])
+            self.assertEqual(res['observation']['invocations'][0]['rejection_code'], 'COMMAND_OPTION_UNSUPPORTED')
             self.assertTrue(res['observation']['facts']['no_external_launch'])
             self.assertEqual(len(res['audit']['prelude']), 1)
 

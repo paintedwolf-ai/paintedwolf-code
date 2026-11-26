@@ -103,9 +103,18 @@ def scan_sidecar_launches(log_path, session_id):
 
 def parse_tool_result(message_row):
     raw = json.loads(message_row['tool_result_json'])
-    body = raw.get('result')
-    parsed = json.loads(body) if isinstance(body, str) and body.startswith('{') else (body if isinstance(body, dict) else {})
-    return raw, parsed
+    body = raw.get('content') if raw.get('content') is not None else raw.get('result')
+    if isinstance(body, str):
+        text = body.strip()
+        if text.startswith('[') and '\n' in text:
+            text = text.split('\n', 1)[1].strip()
+        if text.startswith('{'):
+            try:
+                return raw, json.loads(text)
+            except json.JSONDecodeError:
+                return raw, {}
+        return raw, {}
+    return raw, body if isinstance(body, dict) else {}
 
 
 def normalize_outcome(raw_result, program_row, payload):
@@ -129,7 +138,7 @@ def _receipt_rows(audit, progress_receipts):
         receipts.append(row)
         effects.append({'operation': 'update_progress', 'outcome': pr['status']})
     for ex in audit['invocation_program_executions']:
-        op = ex.get('native_command') or ex.get('operation_id')
+        op = 'write' if ex.get('operation_id') == 'write' else (ex.get('native_command') or ex.get('operation_id'))
         outcome = ex['state']
         row = {'execution_id': ex['id'], 'operation': op, 'outcome': outcome}
         effect = {'operation': op, 'outcome': outcome}

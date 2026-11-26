@@ -34,7 +34,7 @@ class SSECollector:
     def _run(self):
         req = urllib.request.Request(self.url, headers={'Authorization': 'Bearer ' + self.token, 'Accept': 'text/event-stream'})
         try:
-            with open_request(req, timeout=5) as resp:
+            with open_request(req) as resp:
                 self._response = resp
                 with self.out_path.open('w') as sink:
                     for raw in resp:
@@ -197,7 +197,7 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
             cmd_id = c_calls[0][0]
             call_ids.append(cmd_id)
             turn_records.append({'program': turn['program'], 'command_call_id': cmd_id, 'call_ids': call_ids})
-        smoke_workers.finish(application, session_id, f"Completed fixture {case['id']}.")
+        application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             pids = [r[0] for r in db.execute(
                 'SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?',
