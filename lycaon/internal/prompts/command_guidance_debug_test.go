@@ -41,11 +41,11 @@ func TestCommandGuidanceSnapshotFollowsOfferedCommand(t *testing.T) {
 			t.Errorf("facts missing %q", key)
 		}
 	}
-	if facts["command_output_files"] != true {
-		t.Fatalf("command_output_files = %#v with command offered", facts["command_output_files"])
+	if facts["profile_has_command"] != true {
+		t.Fatalf("profile_has_command = %#v with command offered", facts["profile_has_command"])
 	}
 	_, without := snapshot([]string{"wait", "request_tools"})
-	if without["command_output_files"] != false {
-		t.Fatalf("command_output_files = %#v without command", without["command_output_files"])
+	if without["profile_has_command"] != false {
+		t.Fatalf("profile_has_command = %#v without command", without["profile_has_command"])
 	}
 }

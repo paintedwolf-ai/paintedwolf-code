@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -48,17 +49,9 @@ func effectsAllowMutation(eff toolcontract.CommandEffects) bool {
 	return err == nil && eff.Allows(mut)
 }
 
-func firstCommandWord(s string) string {
-	words := splitCommandWords(strings.TrimSpace(s))
-	if len(words) == 0 {
-		return ""
-	}
-	return words[0]
-}
-
 func checkAllCommandSegments(vocab *BacktickVocab, reach toolreach.Request, allowMut bool, cmd string) (bool, string) {
-	for _, seg := range chainSplitRe.Split(cmd, -1) {
-		first := firstCommandWord(seg)
+	for _, seg := range toolvocab.SplitCommandChain(cmd) {
+		first := toolvocab.FirstCommandWord(seg)
 		if first == "" || (vocab != nil && !vocab.commands[first]) {
 			continue
 		}
@@ -79,7 +72,7 @@ func checkSingleCommandSegment(reach toolreach.Request, allowMut bool, seg strin
 	if hasUnquotedOutputRedirect(cleaned) && !allowMut {
 		return false, fmt.Sprintf("output redirect in %q requires command mutation", seg)
 	}
-	words := normalizeProseCommandWords(splitCommandWords(strings.TrimSpace(cleaned)))
+	words := normalizeProseCommandWords(toolvocab.SplitCommandWords(strings.TrimSpace(cleaned)))
 	if len(words) == 0 {
 		return true, ""
 	}
@@ -327,48 +320,6 @@ func buildTurnExecutor(
 	exec.Metadata.SetToolSchemas(schemas)
 	exec.Metadata.SetCommandExternalHidden(externalHidden)
 	return narrowed, schemas, reg, exec, nil
-}
-
-func splitCommandWords(seg string) []string {
-	var words []string
-	var cur strings.Builder
-	inWord := false
-	var quote byte
-	for i := 0; i < len(seg); i++ {
-		ch := seg[i]
-		if quote != 0 {
-			if ch == '\\' && quote == '"' && i+1 < len(seg) {
-				i++
-				cur.WriteByte(seg[i])
-				continue
-			}
-			if ch == quote {
-				quote = 0
-				continue
-			}
-			cur.WriteByte(ch)
-			continue
-		}
-		if ch == '\'' || ch == '"' {
-			quote = ch
-			inWord = true
-			continue
-		}
-		if ch == ' ' || ch == '\t' {
-			if inWord {
-				words = append(words, cur.String())
-				cur.Reset()
-				inWord = false
-			}
-			continue
-		}
-		cur.WriteByte(ch)
-		inWord = true
-	}
-	if inWord {
-		words = append(words, cur.String())
-	}
-	return words
 }
 
 func normalizeProseCommandWords(words []string) []string {

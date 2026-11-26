@@ -79,6 +79,13 @@ var cartesianInvariants = []invariants.Invariant{
 		},
 		Check: checkNoDeadOrVacuousBranches,
 	},
+	{
+		Name: "stock-skills-delivered-under-stock-profiles",
+		Anchors: []invariants.Anchor{
+			invariants.Func("internal/toolvocab", "SkillToolsOfferedForReader"),
+		},
+		Check: checkStockSkillsDelivered,
+	},
 }
 
 var (
@@ -151,6 +158,24 @@ func checkNoDeadOrVacuousBranches(r *invariants.Run) {
 	r.Expect(selected, "templates selected by surface, mode and run-state selectors")
 	for _, ref := range missing {
 		r.Report("selected template %s is not shipped", ref)
+	}
+}
+
+func checkStockSkillsDelivered(r *invariants.Run) {
+	audit := cartesianSummary(r).SkillAudit
+	r.Expect(len(audit.AllStockSkillNames), "stock skills")
+	r.Expect(len(audit.StockDeliveredSkills), "stock skills delivered under stock profiles")
+	r.Expect(len(audit.StockImplementSkills), "stock skills delivered under stock implement profile")
+	r.Expect(len(audit.DeferredCommandImplementSkills), "stock skills delivered under deferred-command implement profile")
+	for _, name := range audit.AllStockSkillNames {
+		if !audit.StockDeliveredSkills[name] {
+			r.Report("stock skill %q was not delivered under any stock profile", name)
+		}
+	}
+	for _, name := range sortedKeys(audit.StockImplementSkills) {
+		if !audit.DeferredCommandImplementSkills[name] {
+			r.Report("stock skill %q delivered under stock implement profile was hidden when command is deferred", name)
+		}
 	}
 }
 

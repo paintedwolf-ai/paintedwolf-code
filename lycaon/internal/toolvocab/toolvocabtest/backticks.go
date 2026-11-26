@@ -334,27 +334,15 @@ func (v *BacktickVocab) populateCatalogAndEnvelopeIDs(eff *extpacks.EffectiveCat
 
 // ExtractInlineBackticks extracts inline backtick spans outside fenced code blocks.
 func ExtractInlineBackticks(prose string) []BacktickSpan {
-	var out []BacktickSpan
-	inFence := ""
-	lineOffset := 0
-	for idx, lineText := range strings.Split(prose, "\n") {
-		lineNum := idx + 1
-		trimmed := strings.TrimSpace(lineText)
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			marker := trimmed[:3]
-			switch inFence {
-			case "":
-				inFence = marker
-			case marker:
-				inFence = ""
-			}
-			lineOffset += len(lineText) + 1
-			continue
+	raw := toolvocab.ExtractInlineBackticks(prose)
+	out := make([]BacktickSpan, len(raw))
+	for i, s := range raw {
+		out[i] = BacktickSpan{
+			Span:  s.Span,
+			Line:  s.Line,
+			Start: s.Start,
+			End:   s.End,
 		}
-		if inFence == "" {
-			out = append(out, scanLineBackticks(lineText, lineNum, lineOffset)...)
-		}
-		lineOffset += len(lineText) + 1
 	}
 	return out
 }
@@ -656,39 +644,6 @@ func collectStructTagNames(dst map[string]bool, rootTypes ...reflect.Type) {
 	for _, rt := range rootTypes {
 		walk(rt)
 	}
-}
-
-func scanLineBackticks(line string, lineNum int, baseOffset int) []BacktickSpan {
-	var out []BacktickSpan
-	i := 0
-	for i < len(line) {
-		if line[i] != '`' {
-			i++
-			continue
-		}
-		ticks := 1
-		for i+ticks < len(line) && line[i+ticks] == '`' {
-			ticks++
-		}
-		start := i + ticks
-		closing := strings.Repeat("`", ticks)
-		relEnd := strings.Index(line[start:], closing)
-		if relEnd < 0 {
-			break
-		}
-		rawEnd := start + relEnd + ticks
-		span := strings.TrimSpace(line[start : start+relEnd])
-		if span != "" {
-			out = append(out, BacktickSpan{
-				Span:  span,
-				Line:  lineNum,
-				Start: baseOffset + i,
-				End:   baseOffset + rawEnd,
-			})
-		}
-		i = rawEnd
-	}
-	return out
 }
 
 func walkTopLevel(s string, visit func(idx int, ch byte) bool) {

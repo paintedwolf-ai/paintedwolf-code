@@ -145,7 +145,6 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 			for key, want := range map[string]bool{
 				"shared_temp_writable":     len(shared) > 0,
 				"profile_command_mutation": !tc.readOnly,
-				"command_output_files":     true,
 				"command_external_hidden":  tc.externalHidden,
 				"command_external_shown":   !tc.externalHidden,
 				"reviews_confined_writes":  tc.posture == gate.PostureStrict,

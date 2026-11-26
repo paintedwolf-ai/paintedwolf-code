@@ -297,8 +297,8 @@ func TestReaderFactsFromSurfaceTools(t *testing.T) {
 
 func TestPreferNativeAndHostRunnerDerivedFromSurface(t *testing.T) {
 	vars := factsFromOffered(t, []string{"write", "command", "terminal_open"}, true)
-	if vars["command_output_files"] != true {
-		t.Fatalf("command_output_files = %v, want true", vars["command_output_files"])
+	if vars["profile_has_command"] != true {
+		t.Fatalf("profile_has_command = %v, want true", vars["profile_has_command"])
 	}
 }
 

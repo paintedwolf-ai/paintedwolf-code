@@ -133,14 +133,18 @@ func skillTexts(renders []SkillRender) []SkillText {
 
 // SkillSurfaceAudit summarizes skill discovery, preload, exclusion, and schema-narrowing checks.
 type SkillSurfaceAudit struct {
-	Renders                 []SkillRender
-	AdmittedChecks          int
-	ExcludedChecks          int
-	DiscoveryChecks         int
-	PreloadProcedureChecks  int
-	PreloadPointerChecks    int
-	WarmColdNarrowingChecks int
-	Violations              []string
+	Renders                        []SkillRender
+	AllStockSkillNames             []string
+	StockDeliveredSkills           map[string]bool
+	StockImplementSkills           map[string]bool
+	DeferredCommandImplementSkills map[string]bool
+	AdmittedChecks                 int
+	ExcludedChecks                 int
+	DiscoveryChecks                int
+	PreloadProcedureChecks         int
+	PreloadPointerChecks           int
+	WarmColdNarrowingChecks        int
+	Violations                     []string
 }
 
 // RenderStockSkills renders every stock skill across hoststate coordinator and
@@ -206,7 +210,17 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		}
 	}
 
-	processState := func(label, profileID string, profiles []sandbox.ToolProfile, sessionMode api.SessionMode, posture api.SessionPosture, auth hoststate.TurnAuthority, effectiveSkills []skills.Skill) error {
+	audit.StockDeliveredSkills = map[string]bool{}
+	audit.StockImplementSkills = map[string]bool{}
+	audit.DeferredCommandImplementSkills = map[string]bool{}
+	for _, sk := range loaded {
+		if !sk.Project {
+			audit.AllStockSkillNames = append(audit.AllStockSkillNames, sk.Name)
+		}
+	}
+	slices.Sort(audit.AllStockSkillNames)
+
+	processState := func(label, overlayID, profileID string, profiles []sandbox.ToolProfile, sessionMode api.SessionMode, posture api.SessionPosture, auth hoststate.TurnAuthority, effectiveSkills []skills.Skill, recordImplement bool) error {
 		fp := auth.Digest + "|" + auth.Reader.Fingerprint() + "|" + string(sessionMode) + "|" + string(posture) + "|" + profileID + "|" + skillsKey(effectiveSkills)
 		if seenReaderFP[fp] {
 			return nil
@@ -248,6 +262,15 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 			}
 			audit.AdmittedChecks++
 			admitted = append(admitted, sk)
+			if overlayID == "stock" {
+				audit.StockDeliveredSkills[sk.Name] = true
+				if recordImplement && !slices.Equal(sk.AnyOfTools(), []string{"command"}) {
+					audit.StockImplementSkills[sk.Name] = true
+				}
+			}
+			if overlayID == "own-implement-deferred-command-with-verify" && profileID == "implement" {
+				audit.DeferredCommandImplementSkills[sk.Name] = true
+			}
 
 			parts, rErr := renderSkillCachedWithDigest(ctx, cache, varsDigest, sk, varsWithCfg)
 			if rErr != nil {
@@ -304,7 +327,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		if err != nil {
 			return audit, err
 		}
-		if err := processState(st.ID, prompts.CoordinatorProfileID, overlayProfiles(stock, st.Overlay), st.SessionMode, st.Posture, cp.auth, overlaySkills); err != nil {
+		if err := processState(st.ID, st.PackOverlayID, prompts.CoordinatorProfileID, overlayProfiles(stock, st.Overlay), st.SessionMode, st.Posture, cp.auth, overlaySkills, false); err != nil {
 			return audit, err
 		}
 	}
@@ -318,7 +341,12 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		if err != nil {
 			return audit, err
 		}
-		if err := processState(wp.ws.ID, wp.ws.ToolProfile, overlayProfiles(stock, wp.ws.Overlay), wp.ws.ParentSessionMode, wp.ws.Posture, wp.auth, overlaySkills); err != nil {
+		overlayID := wp.ws.Overlay.ID
+		recImpl := overlayID == "stock" && wp.ws.ToolProfile == "implement" &&
+			wp.ws.Loading == hoststate.WorkerLoadingStickyOnly &&
+			wp.ws.Posture == api.SessionPostureBuild && wp.ws.ParentSessionMode == api.SessionModeAgent &&
+			wp.ws.RootCount == 1 && wp.ws.HasGit && !wp.ws.CommandExternalHidden
+		if err := processState(wp.ws.ID, overlayID, wp.ws.ToolProfile, overlayProfiles(stock, wp.ws.Overlay), wp.ws.ParentSessionMode, wp.ws.Posture, wp.auth, overlaySkills, recImpl); err != nil {
 			return audit, err
 		}
 	}
@@ -328,7 +356,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		return audit, err
 	}
 	for _, sb := range boundaryAuths {
-		if err := processState(sb.label, sb.profileID, stock.Profiles, sb.mode, sb.posture, sb.auth, sb.onlySkills); err != nil {
+		if err := processState(sb.label, "", sb.profileID, stock.Profiles, sb.mode, sb.posture, sb.auth, sb.onlySkills, false); err != nil {
 			return audit, err
 		}
 	}
