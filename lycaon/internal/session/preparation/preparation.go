@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -63,6 +64,9 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, id string, in pr
 	history, err := m.History.Load(ctx, sess)
 	if err != nil {
 		return zero, err
+	}
+	if in.HostSignal != nil && !m.Loading.HasRequest(ctx, sess, history) {
+		return zero, actionoutcome.ErrNoRequest
 	}
 	recorded, _ := m.Loading.RecordedStanding(ctx, id)
 	m.Loading.Ledger.Restore(id, recorded, history)

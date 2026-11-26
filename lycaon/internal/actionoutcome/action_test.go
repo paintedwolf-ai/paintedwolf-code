@@ -73,3 +73,21 @@ func TestNoticeOrderingAndRecovery(t *testing.T) {
 		t.Fatalf("notice revisions: %+v", events)
 	}
 }
+
+func TestLoadingRefusalPreservesAdmittedTurn(t *testing.T) {
+	var sessions Sessions
+	s := sessions.For("s")
+	ctx, action := Capture(t.Context(), api.ContinuationActionFeedback)
+	ticket := s.Receive(ctx, "s", 1, "phase_advanced")
+	_, turn := BeginTurn(WithTicket(ctx, ticket), s.Turns, "s", "turn")
+	turn.Finish(nil, ErrNoRequest, "")
+	action.Commit(s, "s", nil)
+	outcome, err := s.Actions.Await(ctx, action.ID())
+	if err != nil || outcome.State != api.ContinuationStateNotContinued || outcome.Reason != api.ContinuationReasonNoOpenRequest || outcome.TurnID != "turn" {
+		t.Fatalf("continuation: %+v, %v", outcome, err)
+	}
+	record, err := s.Turns.Await(ctx, "turn")
+	if err != nil || record.Outcome != api.TurnOutcomeKindRefused || !record.DispatchedAt.IsZero() {
+		t.Fatalf("turn: %+v, %v", record, err)
+	}
+}

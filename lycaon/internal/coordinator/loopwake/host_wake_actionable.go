@@ -104,7 +104,7 @@ func BuildHostWakeActionable(deps HostWakeActionableDeps) func(ctx context.Conte
 		if deps.GetMessages != nil {
 			var err error
 			if msgs, err = deps.GetMessages(ctx, in.SessionID); err != nil {
-				return ""
+				return api.WakeReasonLookupFailed
 			}
 		}
 		// A turn without a request takes no load decision and has nothing to answer.
@@ -132,7 +132,7 @@ func BuildHostWakeActionable(deps HostWakeActionableDeps) func(ctx context.Conte
 		}
 		run, err := deps.ActiveRun(ctx, in.SessionID)
 		if err != nil {
-			return ""
+			return api.WakeReasonLookupFailed
 		}
 		if run != nil && run.Status == api.WorkflowRunStatusRunning {
 			return ""

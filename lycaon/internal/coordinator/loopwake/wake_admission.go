@@ -11,7 +11,7 @@ func (pending pendingLoopWake) actionableInput(sessionID string) HostWakeActiona
 
 func (p pendingLoopWake) recordPolicySkip(reason api.WakeReason) {
 	state := api.WakeStateSkipped
-	if reason == api.WakeReasonStaleBatch {
+	if reason == api.WakeReasonStaleBatch || reason == api.WakeReasonLookupFailed {
 		state = api.WakeStateDropped
 	}
 	p.ticket.Record(state, reason, "", "")

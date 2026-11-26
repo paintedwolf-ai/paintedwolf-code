@@ -11,7 +11,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+var ErrNoRequest = errors.New("turn has no open request")
+
 type TurnRecord struct {
+	Refusal      api.WakeReason             `json:"refusal,omitempty"`
 	TurnID       string                     `json:"turn_id"`
 	SessionID    string                     `json:"session_id"`
 	AdmittedAt   time.Time                  `json:"admitted_at"`
@@ -84,12 +87,18 @@ func (t *Turn) Finish(result *promptresult.Result, err error, cancelledBy api.Tu
 		case errors.Is(err, context.Canceled):
 			r.Outcome = api.TurnOutcomeKindCancelled
 			r.CancelledBy = cancelledBy
+		case r.DispatchedAt.IsZero() && errors.Is(err, ErrNoRequest):
+			r.Outcome = api.TurnOutcomeKindRefused
+			r.Refusal = api.WakeReasonNoRequest
 		case err != nil:
 			r.Outcome = api.TurnOutcomeKindFailed
 			r.FailureCode = PromptFailureCode(err)
 		}
 		if r.DispatchedAt.IsZero() {
 			result := WakeResult(api.WakeReasonTurnSettled)
+			if r.Outcome == api.TurnOutcomeKindRefused {
+				result = WakeResult(r.Refusal)
+			}
 			if r.Outcome == api.TurnOutcomeKindFailed {
 				result = Result{State: api.ContinuationStateFailed, FailureCode: string(r.FailureCode)}
 			}
