@@ -7,10 +7,9 @@ export function applyContinuationNotice(project: string, notice: ContinuationNot
   const session = notice.session_id;
   if ((current.get(session)?.revision ?? 0) >= notice.revision) return;
   current.set(session, { revision: notice.revision, id: notice.continuation_id, project });
+  withdrawNotice("coordinator_not_continued", { kind: "session", projectId: project, sessionId: session });
   if (notice.host_error) {
     publishSessionHostError(notice.host_error, project, session);
-  } else {
-    withdrawNotice("coordinator_not_continued", { kind: "session", projectId: project, sessionId: session });
   }
 }
 
