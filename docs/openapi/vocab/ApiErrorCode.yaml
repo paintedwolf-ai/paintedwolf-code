@@ -1027,6 +1027,9 @@ values:
     status: 409
     comment: >-
       opt-in per-session USD spend ceiling reached (SSE host_error)
+  - id: coordinator_not_continued
+    status: 409
+    comment: the host could not continue an accepted workflow action (SSE host_error)
   - id: prompt_failed
     status: 500
     comment: >-

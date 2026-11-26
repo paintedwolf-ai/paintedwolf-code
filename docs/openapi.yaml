@@ -117,6 +117,148 @@ paths:
           description: Zip archive
           content:
             application/zip:
+              x-archive-entries:
+                action-outcomes.json:
+                  description: Retained host outcomes keyed by session ID.
+                  type: object
+                  additionalProperties:
+                    type: object
+                    required:
+                      - host_instance
+                      - wakes
+                      - turns
+                      - continuations
+                    properties:
+                      host_instance:
+                        type: string
+                        format: uuid
+                      wakes:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - sequence
+                            - session_id
+                            - anchor
+                            - state
+                            - steps
+                          properties:
+                            sequence:
+                              type: integer
+                              minimum: 1
+                            session_id:
+                              type: string
+                              format: uuid
+                            anchor:
+                              type: string
+                            state:
+                              $ref: '#/components/schemas/WakeState'
+                            reason:
+                              $ref: '#/components/schemas/WakeReason'
+                            continuation_id:
+                              type: string
+                              format: uuid
+                            turn_id:
+                              type: string
+                              format: uuid
+                            lease_id:
+                              type: string
+                            steps:
+                              type: array
+                              items:
+                                $ref: '#/components/schemas/DiagnosticWakeStep'
+                      defects:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - sequence
+                            - problem
+                            - attempt
+                          properties:
+                            sequence:
+                              type: integer
+                              minimum: 1
+                            problem:
+                              type: string
+                            attempt:
+                              $ref: '#/components/schemas/DiagnosticWakeStep'
+                      turns:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - turn_id
+                            - session_id
+                            - admitted_at
+                          properties:
+                            turn_id:
+                              type: string
+                              format: uuid
+                            session_id:
+                              type: string
+                              format: uuid
+                            admitted_at:
+                              type: string
+                              format: date-time
+                            dispatched_at:
+                              type: string
+                              format: date-time
+                            settled_at:
+                              type: string
+                              format: date-time
+                            outcome:
+                              $ref: '#/components/schemas/TurnOutcomeKind'
+                            lease_id:
+                              type: string
+                            refusal:
+                              $ref: '#/components/schemas/WakeReason'
+                            failure_code:
+                              $ref: '#/components/schemas/NoticeCode'
+                            detail:
+                              type: string
+                            closeout_blocked:
+                              type: object
+                              properties:
+                                code:
+                                  type: string
+                                phase:
+                                  type: string
+                                open_gate_leaves:
+                                  type: array
+                                  items:
+                                    type: string
+                                notice:
+                                  type: string
+                            output_truncated:
+                              type: object
+                              properties:
+                                model:
+                                  type: string
+                                finish_reason:
+                                  type: string
+                                max_tokens:
+                                  type: integer
+                                configured_max_tokens:
+                                  type: integer
+                                provider_max_tokens:
+                                  type: integer
+                                low_output_ceiling:
+                                  type: boolean
+                                tool_call_truncated:
+                                  type: boolean
+                                tool_name:
+                                  type: string
+                                tool_args_bytes:
+                                  type: integer
+                                notice:
+                                  type: string
+                            canceled_by:
+                              $ref: '#/components/schemas/TurnCancellationSource'
+                      continuations:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ActionContinuation'
               schema:
                 type: string
                 format: binary
@@ -16061,7 +16203,7 @@ components:
       enum:
         - completed
         - failed
-        - cancelled
+        - canceled
         - refused
     TurnCancellationSource:
       type: string
@@ -16094,7 +16236,7 @@ components:
         - pending_user_input
         - active_hold
         - workflow_paused
-        - workflow_cancelled
+        - workflow_canceled
         - workflow_completed
         - no_open_request
         - turn_budget_reached
@@ -16128,6 +16270,147 @@ components:
         host_error:
           x-go-pointer: true
           $ref: '#/components/schemas/SessionHostError'
+    ActionOutcomeArchive:
+      description: Retained host outcomes keyed by session ID.
+      type: object
+      additionalProperties:
+        type: object
+        required:
+          - host_instance
+          - wakes
+          - turns
+          - continuations
+        properties:
+          host_instance:
+            type: string
+            format: uuid
+          wakes:
+            type: array
+            items:
+              type: object
+              required:
+                - sequence
+                - session_id
+                - anchor
+                - state
+                - steps
+              properties:
+                sequence:
+                  type: integer
+                  minimum: 1
+                session_id:
+                  type: string
+                  format: uuid
+                anchor:
+                  type: string
+                state:
+                  $ref: '#/components/schemas/WakeState'
+                reason:
+                  $ref: '#/components/schemas/WakeReason'
+                continuation_id:
+                  type: string
+                  format: uuid
+                turn_id:
+                  type: string
+                  format: uuid
+                lease_id:
+                  type: string
+                steps:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DiagnosticWakeStep'
+          defects:
+            type: array
+            items:
+              type: object
+              required:
+                - sequence
+                - problem
+                - attempt
+              properties:
+                sequence:
+                  type: integer
+                  minimum: 1
+                problem:
+                  type: string
+                attempt:
+                  $ref: '#/components/schemas/DiagnosticWakeStep'
+          turns:
+            type: array
+            items:
+              type: object
+              required:
+                - turn_id
+                - session_id
+                - admitted_at
+              properties:
+                turn_id:
+                  type: string
+                  format: uuid
+                session_id:
+                  type: string
+                  format: uuid
+                admitted_at:
+                  type: string
+                  format: date-time
+                dispatched_at:
+                  type: string
+                  format: date-time
+                settled_at:
+                  type: string
+                  format: date-time
+                outcome:
+                  $ref: '#/components/schemas/TurnOutcomeKind'
+                lease_id:
+                  type: string
+                refusal:
+                  $ref: '#/components/schemas/WakeReason'
+                failure_code:
+                  $ref: '#/components/schemas/NoticeCode'
+                detail:
+                  type: string
+                closeout_blocked:
+                  type: object
+                  properties:
+                    code:
+                      type: string
+                    phase:
+                      type: string
+                    open_gate_leaves:
+                      type: array
+                      items:
+                        type: string
+                    notice:
+                      type: string
+                output_truncated:
+                  type: object
+                  properties:
+                    model:
+                      type: string
+                    finish_reason:
+                      type: string
+                    max_tokens:
+                      type: integer
+                    configured_max_tokens:
+                      type: integer
+                    provider_max_tokens:
+                      type: integer
+                    low_output_ceiling:
+                      type: boolean
+                    tool_call_truncated:
+                      type: boolean
+                    tool_name:
+                      type: string
+                    tool_args_bytes:
+                      type: integer
+                    notice:
+                      type: string
+                canceled_by:
+                  $ref: '#/components/schemas/TurnCancellationSource'
+          continuations:
+            type: array
+            items:
+              $ref: '#/components/schemas/ActionContinuation'
     ActionContinuation:
       x-go-generate: true
       type: object
@@ -16156,6 +16439,10 @@ components:
           format: uuid
         failure_code:
           type: string
+          x-go-type: string
+          anyOf:
+            - $ref: '#/components/schemas/HostContinuationFailure'
+            - $ref: '#/components/schemas/NoticeCode'
         opened_at:
           type: string
           format: date-time
@@ -28216,6 +28503,7 @@ components:
         - security_disabled
         - grounding_escalated
         - session_spend_ceiling_reached
+        - coordinator_not_continued
         - prompt_failed
         - turn_closeout_tool_call
         - host_fault
@@ -44169,6 +44457,15 @@ components:
           format: uuid
         view:
           $ref: '#/components/schemas/SourceView'
+    DiagnosticWakeStep:
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          $ref: '#/components/schemas/WakeState'
+        reason:
+          $ref: '#/components/schemas/WakeReason'
     EventScopeKind:
       type: string
       enum:

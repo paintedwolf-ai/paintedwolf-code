@@ -81,7 +81,7 @@ func errorCodeInventory(r *invariants.Run) *errorCodes {
 					if i, ok := at[name]; ok && i < len(node.Args) {
 						add(inv.handlers, code(node.Args[i], apiCodes))
 					}
-					if name == "NewSessionHostError" && len(node.Args) == 1 {
+					if (name == "NewSessionHostError" && len(node.Args) == 1) || (name == "HostError" && len(node.Args) == 2) {
 						add(inv.hostErrors, code(node.Args[0], noticeCodes))
 					}
 				case *ast.SelectorExpr:
@@ -124,7 +124,7 @@ func errorCodeInventory(r *invariants.Run) *errorCodes {
 						return false
 					}
 					switch {
-					case node.Name.Name == "NoticeCode":
+					case node.Name.Name == "NoticeCode" || (node.Name.Name == "PromptFailureCode" && f.Dir == "internal/actionoutcome"):
 						returns(node, func(v ast.Expr) { add(inv.hostErrors, code(v, noticeCodes)) })
 					case node.Name.Name == "ExecuteFailureCode" && node.Recv == nil && f.Dir == "internal/worker":
 						mappers++

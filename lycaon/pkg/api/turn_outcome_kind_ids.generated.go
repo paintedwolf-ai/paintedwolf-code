@@ -9,14 +9,14 @@ type TurnOutcomeKind string
 const (
 	TurnOutcomeKindCompleted TurnOutcomeKind = "completed"
 	TurnOutcomeKindFailed    TurnOutcomeKind = "failed"
-	TurnOutcomeKindCancelled TurnOutcomeKind = "cancelled"
+	TurnOutcomeKindCanceled  TurnOutcomeKind = "canceled"
 	TurnOutcomeKindRefused   TurnOutcomeKind = "refused"
 )
 
 var allTurnOutcomeKindValues = []TurnOutcomeKind{
 	TurnOutcomeKindCompleted,
 	TurnOutcomeKindFailed,
-	TurnOutcomeKindCancelled,
+	TurnOutcomeKindCanceled,
 	TurnOutcomeKindRefused,
 }
 

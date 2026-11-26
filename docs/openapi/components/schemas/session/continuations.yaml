@@ -12,7 +12,12 @@ components:
         state: {$ref: ../continuation-state.generated.yaml#/components/schemas/ContinuationState}
         reason: {$ref: ../continuation-reason.generated.yaml#/components/schemas/ContinuationReason}
         turn_id: {type: string, format: uuid}
-        failure_code: {type: string}
+        failure_code:
+          type: string
+          x-go-type: string
+          anyOf:
+            - {$ref: ../host-continuation-failure.generated.yaml#/components/schemas/HostContinuationFailure}
+            - {$ref: ../notice-code.generated.yaml#/components/schemas/NoticeCode}
         opened_at: {type: string, format: date-time}
         resolved_at: {type: string, format: date-time, x-go-pointer: true}
     ContinuationNotice:

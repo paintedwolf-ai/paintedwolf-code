@@ -10,7 +10,7 @@ components:
         - pending_user_input
         - active_hold
         - workflow_paused
-        - workflow_cancelled
+        - workflow_canceled
         - workflow_completed
         - no_open_request
         - turn_budget_reached

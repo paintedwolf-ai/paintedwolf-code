@@ -56,8 +56,8 @@ func (s *Sessions) Forget(sessionID string) {
 		return r
 	})
 	session.Turns.Retire(func(r TurnRecord) TurnRecord {
-		r.Outcome = api.TurnOutcomeKindCancelled
-		r.CancelledBy = api.TurnCancellationSourceShutdown
+		r.Outcome = api.TurnOutcomeKindCanceled
+		r.CanceledBy = api.TurnCancellationSourceShutdown
 		r.SettledAt = now
 		return r
 	})

@@ -12,7 +12,7 @@ const (
 	ContinuationReasonPendingUserInput      ContinuationReason = "pending_user_input"
 	ContinuationReasonActiveHold            ContinuationReason = "active_hold"
 	ContinuationReasonWorkflowPaused        ContinuationReason = "workflow_paused"
-	ContinuationReasonWorkflowCancelled     ContinuationReason = "workflow_cancelled"
+	ContinuationReasonWorkflowCanceled      ContinuationReason = "workflow_canceled"
 	ContinuationReasonWorkflowCompleted     ContinuationReason = "workflow_completed"
 	ContinuationReasonNoOpenRequest         ContinuationReason = "no_open_request"
 	ContinuationReasonTurnBudgetReached     ContinuationReason = "turn_budget_reached"
@@ -29,7 +29,7 @@ var allContinuationReasonValues = []ContinuationReason{
 	ContinuationReasonPendingUserInput,
 	ContinuationReasonActiveHold,
 	ContinuationReasonWorkflowPaused,
-	ContinuationReasonWorkflowCancelled,
+	ContinuationReasonWorkflowCanceled,
 	ContinuationReasonWorkflowCompleted,
 	ContinuationReasonNoOpenRequest,
 	ContinuationReasonTurnBudgetReached,

@@ -6,7 +6,7 @@ values:
   - id: pending_user_input
   - id: active_hold
   - id: workflow_paused
-  - id: workflow_cancelled
+  - id: workflow_canceled
   - id: workflow_completed
   - id: no_open_request
   - id: turn_budget_reached

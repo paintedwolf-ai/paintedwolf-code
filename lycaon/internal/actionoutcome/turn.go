@@ -26,7 +26,7 @@ type TurnRecord struct {
 	CloseoutBlocked *promptresult.CloseoutBlocked        `json:"closeout_blocked,omitempty"`
 	Detail          promptresult.Outcome                 `json:"detail,omitempty"`
 	FailureCode     api.NoticeCode                       `json:"failure_code,omitempty"`
-	CancelledBy     api.TurnCancellationSource           `json:"cancelled_by,omitempty"`
+	CanceledBy      api.TurnCancellationSource           `json:"canceled_by,omitempty"`
 }
 
 type turnContextKey struct{}
@@ -86,7 +86,7 @@ func Dispatch(ctx context.Context) {
 	t.handoff.Resolve(Result{State: api.ContinuationStateContinued, TurnID: t.id})
 }
 
-func (t *Turn) Finish(result *promptresult.Result, err error, cancelledBy api.TurnCancellationSource) {
+func (t *Turn) Finish(result *promptresult.Result, err error, canceledBy api.TurnCancellationSource) {
 	var handoff Result
 	t.history.Change(t.id, func(r TurnRecord) (TurnRecord, bool) {
 		r.SettledAt = time.Now().UTC()
@@ -98,8 +98,8 @@ func (t *Turn) Finish(result *promptresult.Result, err error, cancelledBy api.Tu
 		}
 		switch {
 		case errors.Is(err, context.Canceled):
-			r.Outcome = api.TurnOutcomeKindCancelled
-			r.CancelledBy = cancelledBy
+			r.Outcome = api.TurnOutcomeKindCanceled
+			r.CanceledBy = canceledBy
 		case r.DispatchedAt.IsZero() && errors.Is(err, ErrNoRequest):
 			r.Outcome = api.TurnOutcomeKindRefused
 			r.Refusal = api.WakeReasonNoRequest
@@ -115,8 +115,8 @@ func (t *Turn) Finish(result *promptresult.Result, err error, cancelledBy api.Tu
 			if r.Outcome == api.TurnOutcomeKindFailed {
 				result = Result{State: api.ContinuationStateFailed, FailureCode: string(r.FailureCode)}
 			}
-			if r.Outcome == api.TurnOutcomeKindCancelled {
-				switch cancelledBy {
+			if r.Outcome == api.TurnOutcomeKindCanceled {
+				switch canceledBy {
 				case api.TurnCancellationSourceUser:
 					result = WakeResult(api.WakeReasonUserStopped)
 				case api.TurnCancellationSourceShutdown:
