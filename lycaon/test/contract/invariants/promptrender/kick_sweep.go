@@ -30,13 +30,19 @@ type kickSweep struct {
 	cache     *hoststate.RenderCache
 	report    func(string)
 	rendered  int
+	// inputs keys stock renders by the variables each kick reads.
+	inputs *renderInputs
 	// Temporary measurement.
 	varsDur, renderDur, claimDur time.Duration
 	renderMisses, claimRuns      int
 }
 
 func newKickSweep(s *Stock, cache *hoststate.RenderCache, report func(string)) *kickSweep {
-	return &kickSweep{s: s, envelopes: richKickEnvelopes, engine: s.Engine(), cache: cache, report: report}
+	k := &kickSweep{s: s, envelopes: richKickEnvelopes, engine: s.Engine(), cache: cache, report: report}
+	if !hasSiteOverlayFiles(s.Site) {
+		k.inputs = stockRenderInputs(s)
+	}
+	return k
 }
 
 // checkClaimsCached runs check once per render key and authority key and
@@ -64,7 +70,11 @@ func (k *kickSweep) render(ctx context.Context, keyPrefix, kick string, reader p
 	if err != nil {
 		return "", "", err
 	}
-	rKey := renderCacheKeyForVars(keyPrefix+kick+":"+k.s.Site, k.s.Catalog.Revision, nil, fullVars)
+	keyVars := fullVars
+	if k.inputs != nil {
+		keyVars = k.inputs.project(prompts.KicksTemplatePrefix+kick+".md", fullVars)
+	}
+	rKey := renderCacheKeyForVars(keyPrefix+kick+":"+k.s.Site, k.s.Catalog.Revision, nil, keyVars)
 	k.varsDur += time.Since(t0)
 	t1 := time.Now()
 	text, _, err := k.cache.RenderOrReuse(rKey, func() (string, error) {
