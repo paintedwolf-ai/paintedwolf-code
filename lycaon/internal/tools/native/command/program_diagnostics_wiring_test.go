@@ -86,7 +86,7 @@ func TestDiagnosticsBlockedReaderDoesNotBlockCaller(t *testing.T) {
 	entered := make(chan struct{})
 	reader := &stubDiagReader{blockCh: blockCh, entered: entered}
 
-	obs := cmddiag.NewObserver(cmddiag.Config{Enabled: true, QueueCapacity: 2, TaskTimeout: 5 * time.Second})
+	obs := cmddiag.NewObserver(cmddiag.Config{Enabled: true, QueueCapacity: 2, TaskTimeout: 5 * time.Second, CloseGrace: 50 * time.Millisecond})
 	restore := cmddiag.SetObserver(obs)
 	t.Cleanup(func() {
 		restore()

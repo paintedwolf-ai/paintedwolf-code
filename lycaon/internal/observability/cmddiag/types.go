@@ -42,6 +42,7 @@ const (
 	DefaultMaxIDsPerFinding     = 16
 	DefaultMaxFieldBytes        = 256
 	DefaultTaskTimeout          = 5 * time.Second
+	DefaultCloseGrace           = 250 * time.Millisecond
 	DefaultMaxDedupEntries      = 4096
 )
 
