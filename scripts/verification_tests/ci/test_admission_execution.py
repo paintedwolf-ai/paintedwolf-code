@@ -259,6 +259,24 @@ class AdmissionTests(unittest.TestCase):
                     'peak_bytes': None, 'limit_bytes': limit, 'ratio': None,
                     'source': 'unavailable', 'lower_bound': False,
                 })
+                events = root / 'stage-001-events.jsonl'
+                module = root / 'mod'
+                pkg = module / 'p'
+                pkg.mkdir(parents=True)
+                (module / 'go.mod').write_text('module example.com/m\n')
+                main_env = {'PATH': os.environ['PATH'], 'PW_TEST_STAGE_EVENTS': str(events),
+                            'PW_TEST_SCRATCH_ROOT': str(root), 'PW_TEST_MODULE_ROOT': str(module)}
+                with patch.object(wrapper.sys, 'argv', ['go-test-exec.py', str(passing)]), \
+                        patch.dict(wrapper.os.environ, main_env, clear=True), \
+                        patch.object(wrapper.os, 'getcwd', return_value=str(pkg)), \
+                        patch.object(wrapper, 'write_all'), \
+                        patch.object(wrapper, 'fork_observable', return_value=False), \
+                        patch.object(wrapper, 'settle_package_children', return_value={}), \
+                        patch.object(resources, 'proc_status_memory', return_value=(12 * 1024 * 1024, 16 * 1024 * 1024)):
+                    self.assertEqual(wrapper.main(), 0)
+                emitted = json.loads(events.read_text().splitlines()[-1])
+                self.assertEqual(emitted['memory']['source'], 'proc_vmhwm')
+                self.assertEqual(emitted['memory']['peak_bytes'], 16 * 1024 * 1024)
 
     @unittest.skipUnless(sys.platform == 'linux', 'per-PID /proc/<pid>/status scope requires Linux')
     def test_go_test_exec_excludes_reaped_descendant_rss_from_package_peak(self):
