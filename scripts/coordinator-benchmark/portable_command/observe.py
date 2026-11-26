@@ -148,15 +148,11 @@ def _extract_recovery(case_id, payload, raw_result, audit, unexpected_cmd):
     )
     replay_fact = details.get('program_replay_available')
     if isinstance(replay_fact, bool):
-        replay_allowed = replay_fact
-    elif payload.get('replay_available') is True:
-        replay_allowed = True
-    elif cause == 'syntax':
-        replay_allowed = False
-    elif cause == 'option' and zero_effects:
-        replay_allowed = True
+        replay_allowed = replay_fact and zero_effects
+    elif isinstance(payload.get('replay_available'), bool):
+        replay_allowed = payload['replay_available'] and zero_effects
     else:
-        replay_allowed = payload['replay_available'] if isinstance(payload.get('replay_available'), bool) else None
+        replay_allowed = None
     return {
         'case_id': case_id, 'cause': cause, 'zero_program_effects': zero_effects,
         'whole_program_resubmit_allowed': replay_allowed, 'automatic_execution': bool(unexpected_cmd),
