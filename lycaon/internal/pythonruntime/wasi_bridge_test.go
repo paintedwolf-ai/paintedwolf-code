@@ -82,7 +82,7 @@ func TestWorkspaceSysFSMediationAndStopLatch(t *testing.T) {
 		},
 	}
 
-	meter := NewWorkMeter(0, 100, latch)
+	meter := NewWorkMeter(0, 100, 0, latch)
 	wfs := NewWorkspaceSysFS(WorkspaceSysFSConfig{
 		Context:     ctx,
 		ExecutionID: "exec-bridge",
@@ -171,7 +171,7 @@ func TestHostWorkLimitTriggersStop(t *testing.T) {
 	defer cancel()
 
 	latch := NewStopLatch(cancel)
-	meter := NewWorkMeter(0, 2, latch)
+	meter := NewWorkMeter(0, 2, 0, latch)
 	memWS := newMemWorkspaceAdapter(map[string][]byte{"a.txt": []byte("x")})
 	wfs := NewWorkspaceSysFS(WorkspaceSysFSConfig{
 		Context:     ctx,
@@ -244,6 +244,121 @@ func TestGuestWorkLimitInterruptsWasmCalls(t *testing.T) {
 	if res.Usage.GuestWork <= 5 {
 		t.Fatalf("expected GuestWork > 5, got %d", res.Usage.GuestWork)
 	}
+}
+
+func TestStagedBytesLimitEnforcedBeforeWrite(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	latch := NewStopLatch(cancel)
+	meter := NewWorkMeter(0, 0, 10, latch)
+	memWS := newMemWorkspaceAdapter(nil)
+	wfs := NewWorkspaceSysFS(WorkspaceSysFSConfig{
+		Context:     ctx,
+		ExecutionID: "exec-staged-limit",
+		Adapter:     memWS,
+		Latch:       latch,
+		Meter:       meter,
+	})
+
+	f, errno := wfs.OpenFile("out.bin", experimentalsys.O_WRONLY|experimentalsys.O_CREAT, 0o644)
+	if errno != 0 {
+		t.Fatalf("OpenFile errno = %v", errno)
+	}
+	if wfs.OpenWriteDescriptors() != 1 {
+		t.Fatalf("OpenWriteDescriptors = %d, want 1", wfs.OpenWriteDescriptors())
+	}
+
+	if n, errno := f.Write([]byte("12345")); errno != 0 || n != 5 {
+		t.Fatalf("first write = (%d, %v), want (5, 0)", n, errno)
+	}
+	// Second write of 6 bytes would exceed 10 -> must fail BEFORE writing.
+	if n, errno := f.Write([]byte("678901")); errno != experimentalsys.EACCES || n != 0 {
+		t.Fatalf("over-limit write = (%d, %v), want (0, EACCES)", n, errno)
+	}
+	if !latch.Stopped() || latch.Stop().Code != StopWorkLimitExceeded {
+		t.Fatalf("expected StopWorkLimitExceeded, got %+v", latch.Stop())
+	}
+	if meter.StagedBytes() != 5 {
+		t.Fatalf("StagedBytes = %d, want 5 (over-limit write must not be charged)", meter.StagedBytes())
+	}
+	_ = f.Close()
+	if wfs.OpenWriteDescriptors() != 0 {
+		t.Fatalf("OpenWriteDescriptors after Close = %d, want 0", wfs.OpenWriteDescriptors())
+	}
+}
+
+func TestWasmLoopFuelMeteringAtLimitAndOverLimit(t *testing.T) {
+	ctx := context.Background()
+	// wasmCountedLoopModule(5): 1 function entry + 5 loop iterations = 6 fuel units.
+	rt, err := NewWazeroRuntime(ctx, RuntimeConfig{
+		WasmBytes: wasmCountedLoopModule(5),
+	})
+	testutil.FailErr(t, "new wazero runtime for counted loop", err)
+	defer rt.Close(ctx)
+
+	// Exact at-limit (6): passes cleanly with GuestWork == 6.
+	resOK, err := rt.Execute(ctx, Invocation{
+		ExecutionID: "loop-at-limit",
+		Mode:        ModeCode,
+		Code:        "pass",
+		Limits:      ResourceLimits{MaxGuestWork: 6},
+	})
+	testutil.FailErr(t, "execute at-limit loop", err)
+	if !resOK.CleanCompletion || resOK.ExitCode != 0 {
+		t.Fatalf("at-limit loop failed: exit=%d clean=%v stop=%+v diag=%v", resOK.ExitCode, resOK.CleanCompletion, resOK.Stop, resOK.Diagnostics)
+	}
+	if resOK.Usage.GuestWork != 6 {
+		t.Fatalf("at-limit GuestWork = %d, want 6", resOK.Usage.GuestWork)
+	}
+
+	// Over-limit (5 < 6): traps deterministically with StopWorkLimitExceeded.
+	resOver, err := rt.Execute(ctx, Invocation{
+		ExecutionID: "loop-over-limit",
+		Mode:        ModeCode,
+		Code:        "pass",
+		Limits:      ResourceLimits{MaxGuestWork: 5},
+	})
+	testutil.FailErr(t, "execute over-limit loop", err)
+	if resOver.CleanCompletion {
+		t.Fatal("over-limit loop must not report CleanCompletion=true")
+	}
+	if resOver.Stop == nil || resOver.Stop.Code != StopWorkLimitExceeded {
+		t.Fatalf("expected StopWorkLimitExceeded, got %+v", resOver.Stop)
+	}
+}
+
+// wasmCountedLoopModule builds a Wasm module whose _start loops `iters` times
+// using a single in-function loop (no function calls inside the loop).
+func wasmCountedLoopModule(iters byte) []byte {
+	mod := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+	mod = append(mod, wasmSection(1, []byte{0x01, 0x60, 0x00, 0x00})...)
+	mod = append(mod, wasmSection(3, []byte{0x01, 0x00})...)
+	mod = append(mod, wasmSection(5, []byte{0x01, 0x00, 0x01})...)
+	exp := []byte{0x02}
+	exp = append(exp, wasmString("memory")...)
+	exp = append(exp, 0x02, 0x00)
+	exp = append(exp, wasmString("_start")...)
+	exp = append(exp, 0x00, 0x00)
+	mod = append(mod, wasmSection(7, exp)...)
+	body := []byte{
+		0x01, 0x01, 0x7f, // 1 local of type i32 (local 0 = counter)
+		0x41, iters,      // i32.const iters
+		0x21, 0x00,       // local.set 0
+		0x03, 0x40,       // loop (void)
+		0x20, 0x00,       // local.get 0
+		0x41, 0x01,       // i32.const 1
+		0x6b,             // i32.sub
+		0x22, 0x00,       // local.tee 0
+		0x0d, 0x00,       // br_if 0 (branch back if counter != 0)
+		0x0b,             // end loop
+		0x0b,             // end func
+	}
+	code := []byte{0x01}
+	code = append(code, encodeULEB128(uint32(len(body)))...)
+	code = append(code, body...)
+	mod = append(mod, wasmSection(10, code)...)
+	return mod
 }
 
 // --- In-memory WorkspaceAdapter and Observer test helpers ---

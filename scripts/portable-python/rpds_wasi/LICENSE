@@ -2,6 +2,13 @@ MIT License
 
 Copyright (c) 2026 Painted Wolf Code
 
+Provenance Notice:
+This package (scripts/portable-python/rpds_wasi) is an independent pure-Python
+implementation of the persistent data structure API (HashTrieMap, HashTrieSet,
+List, Queue) authored by Painted Wolf Code for CPython/WASI (wasm32-wasi),
+where the upstream Rust-compiled rpds-py wheel cannot be dynamically loaded.
+It provides API compatibility with rpds-py for referencing and jsonschema.
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights

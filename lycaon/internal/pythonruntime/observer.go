@@ -200,6 +200,7 @@ type SealedWriter struct {
 	maxBytes  int64
 	mu        sync.Mutex
 	sealed    atomic.Bool
+	hadError  atomic.Bool
 	written   int64
 	dropped   int64
 	truncated bool
@@ -245,11 +246,18 @@ func (w *SealedWriter) DroppedBytes() int64 {
 	return w.dropped
 }
 
+// HadError reports whether any write failed, was truncated, or was rejected
+// after sealing.
+func (w *SealedWriter) HadError() bool {
+	return w.hadError.Load()
+}
+
 // Write delivers bytes to dst unless sealed or over budget.
 func (w *SealedWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	if w.sealed.Load() || (w.latch != nil && w.latch.Stopped()) {
 		w.sealed.Store(true)
+		w.hadError.Store(true)
 		w.dropped += int64(len(p))
 		w.mu.Unlock()
 		return 0, ErrStreamSealed
@@ -263,6 +271,7 @@ func (w *SealedWriter) Write(p []byte) (int, error) {
 			w.written += int64(n)
 			if err != nil {
 				w.sealed.Store(true)
+				w.hadError.Store(true)
 				w.mu.Unlock()
 				return writtenNow, err
 			}
@@ -270,6 +279,7 @@ func (w *SealedWriter) Write(p []byte) (int, error) {
 		w.dropped += int64(len(p) - writtenNow)
 		w.truncated = true
 		w.sealed.Store(true)
+		w.hadError.Store(true)
 		latch := w.latch
 		w.mu.Unlock()
 		if latch != nil {
@@ -286,6 +296,9 @@ func (w *SealedWriter) Write(p []byte) (int, error) {
 		n, err = w.dst.Write(p)
 	} else {
 		n = len(p)
+	}
+	if err != nil {
+		w.hadError.Store(true)
 	}
 	w.written += int64(n)
 	w.mu.Unlock()

@@ -197,16 +197,26 @@ type WorkspaceSysFSConfig struct {
 type WorkspaceSysFS struct {
 	experimentalsys.UnimplementedFS
 
-	ctx         context.Context
-	executionID string
-	namespace   Namespace
-	rootID      string
-	branch      string
-	adapter     WorkspaceAdapter
-	observer    OperationObserver
-	latch       *StopLatch
-	meter       *WorkMeter
-	opSeq       atomic.Uint64
+	ctx            context.Context
+	executionID    string
+	namespace      Namespace
+	rootID         string
+	branch         string
+	adapter        WorkspaceAdapter
+	observer       OperationObserver
+	latch          *StopLatch
+	meter          *WorkMeter
+	opSeq          atomic.Uint64
+	openWriteDescs atomic.Int64
+}
+
+// OpenWriteDescriptors returns the count of host-tracked workspace write
+// descriptors that remain unclosed.
+func (w *WorkspaceSysFS) OpenWriteDescriptors() int64 {
+	if w == nil {
+		return 0
+	}
+	return w.openWriteDescs.Load()
 }
 
 // NewWorkspaceSysFS constructs a wazero sys.FS backed by WorkspaceAdapter and
@@ -239,6 +249,10 @@ func (w *WorkspaceSysFS) admit(family EffectFamily, operation, relPath string, a
 	}
 	seq := w.opSeq.Add(1)
 	opID := fmt.Sprintf("%s-fs-%d", w.executionID, seq)
+	// Enforce MaxHostWork BEFORE performing the host operation.
+	if w.meter != nil && !w.meter.ReserveHostWork(1, opID) {
+		return opID, experimentalsys.EACCES
+	}
 	if w.observer == nil {
 		return opID, 0
 	}
@@ -300,9 +314,6 @@ func (w *WorkspaceSysFS) admit(family EffectFamily, operation, relPath string, a
 }
 
 func (w *WorkspaceSysFS) recordOutcome(opID string, errno Errno, bytes int64, hostWork uint64) {
-	if hostWork > 0 && w.meter != nil {
-		w.meter.ChargeHostWork(hostWork, opID)
-	}
 	if w.observer != nil && opID != "" {
 		w.observer.RecordOutcome(w.ctx, opID, OperationOutcome{
 			Succeeded:        errno == ErrnoSuccess,
@@ -320,8 +331,9 @@ func (w *WorkspaceSysFS) OpenFile(p string, flag experimentalsys.Oflag, perm fs.
 	}
 	rel := cleanGuestRelPath(p)
 	openFlags := OflagToOpenFlags(flag)
+	isWrite := openFlags&(OpenWrite|OpenCreate|OpenTruncate|OpenAppend) != 0
 	family := EffectFilesystemRead
-	if openFlags&(OpenWrite|OpenCreate|OpenTruncate|OpenAppend) != 0 {
+	if isWrite {
 		family = EffectFilesystemWrite
 	}
 
@@ -339,11 +351,15 @@ func (w *WorkspaceSysFS) OpenFile(p string, flag experimentalsys.Oflag, perm fs.
 	if errno != ErrnoSuccess {
 		return nil, ErrnoToSys(errno)
 	}
+	if isWrite {
+		w.openWriteDescs.Add(1)
+	}
 	return &workspaceSysFile{
 		fs:         w,
 		file:       gf,
 		relPath:    rel,
 		flags:      openFlags,
+		isWrite:    isWrite,
 		appendMode: openFlags&OpenAppend != 0,
 	}, 0
 }
@@ -467,6 +483,8 @@ type workspaceSysFile struct {
 	file       GuestFile
 	relPath    string
 	flags      OpenFlags
+	isWrite    bool
+	closed     atomic.Bool
 	mu         sync.Mutex
 	appendMode bool
 	dirLoaded  bool
@@ -519,10 +537,10 @@ func (f *workspaceSysFile) Read(buf []byte) (int, experimentalsys.Errno) {
 	if f.fs.latch != nil && f.fs.latch.Stopped() {
 		return 0, experimentalsys.EACCES
 	}
-	n, errno := f.file.Read(buf)
-	if f.fs.meter != nil && n > 0 {
-		f.fs.meter.ChargeHostWork(1, "")
+	if f.fs.meter != nil && len(buf) > 0 && !f.fs.meter.ReserveHostWork(1, "") {
+		return 0, experimentalsys.EACCES
 	}
+	n, errno := f.file.Read(buf)
 	return n, ErrnoToSys(errno)
 }
 
@@ -530,10 +548,15 @@ func (f *workspaceSysFile) Write(buf []byte) (int, experimentalsys.Errno) {
 	if f.fs.latch != nil && f.fs.latch.Stopped() {
 		return 0, experimentalsys.EACCES
 	}
-	n, errno := f.file.Write(buf)
-	if f.fs.meter != nil && n > 0 {
-		f.fs.meter.ChargeHostWork(1, "")
+	if f.fs.meter != nil && len(buf) > 0 {
+		if !f.fs.meter.ReserveStagedBytes(int64(len(buf)), "") {
+			return 0, experimentalsys.EACCES
+		}
+		if !f.fs.meter.ReserveHostWork(1, "") {
+			return 0, experimentalsys.EACCES
+		}
 	}
+	n, errno := f.file.Write(buf)
 	return n, ErrnoToSys(errno)
 }
 
@@ -608,6 +631,9 @@ func (f *workspaceSysFile) Readdir(n int) ([]experimentalsys.Dirent, experimenta
 }
 
 func (f *workspaceSysFile) Close() experimentalsys.Errno {
+	if f.closed.CompareAndSwap(false, true) && f.isWrite && f.fs != nil {
+		f.fs.openWriteDescs.Add(-1)
+	}
 	return ErrnoToSys(f.file.Close())
 }
 

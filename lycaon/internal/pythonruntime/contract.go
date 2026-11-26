@@ -11,14 +11,39 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/experimental"
 	experimentalsysfs "github.com/tetratelabs/wazero/experimental/sysfs"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
 )
+
+type procExitContextKey struct{}
+
+type procExitTracker struct {
+	called atomic.Bool
+	code   atomic.Uint32
+}
+
+func newProcExitListenerFactory() experimental.FunctionListenerFactory {
+	return experimental.FunctionListenerFactoryFunc(func(def api.FunctionDefinition) experimental.FunctionListener {
+		if def.Name() != "proc_exit" {
+			return nil
+		}
+		return experimental.FunctionListenerFunc(func(ctx context.Context, _ api.Module, _ api.FunctionDefinition, params []uint64, _ experimental.StackIterator) {
+			if tr, ok := ctx.Value(procExitContextKey{}).(*procExitTracker); ok && tr != nil {
+				tr.called.Store(true)
+				if len(params) > 0 {
+					tr.code.Store(uint32(params[0]))
+				}
+			}
+		})
+	})
+}
 
 var (
 	// ErrParkedBudgetExceeded is returned when parking a guest awaiting
@@ -415,7 +440,8 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 		rtCfg = rtCfg.WithMemoryLimitPages(cfg.DefaultMemoryLimitPages)
 	}
 	rt := wazero.NewRuntimeWithConfig(ctx, rtCfg)
-	if _, err := wasi_snapshot_preview1.Instantiate(ctx, rt); err != nil {
+	wasiCtx := experimental.WithFunctionListenerFactory(ctx, newProcExitListenerFactory())
+	if _, err := wasi_snapshot_preview1.Instantiate(wasiCtx, rt); err != nil {
 		_ = rt.Close(ctx)
 		return nil, fmt.Errorf("instantiate wasi_snapshot_preview1: %w", err)
 	}
@@ -469,10 +495,14 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 	}, nil
 }
 
-func (r *WazeroRuntime) meteredModule(ctx context.Context) (wazero.CompiledModule, error) {
+func (r *WazeroRuntime) meteredModule(_ context.Context) (wazero.CompiledModule, error) {
 	r.meteredOnce.Do(func() {
-		compileCtx := experimental.WithFunctionListenerFactory(context.Background(), newWorkMeterListenerFactory())
-		r.compiledMetered, r.compiledMeteredErr = r.rt.CompileModule(compileCtx, r.wasmBytes)
+		instrumented, err := InstrumentWasmFuel(r.wasmBytes)
+		if err != nil {
+			r.compiledMeteredErr = err
+			return
+		}
+		r.compiledMetered, r.compiledMeteredErr = r.rt.CompileModule(context.Background(), instrumented)
 	})
 	return r.compiledMetered, r.compiledMeteredErr
 }
@@ -505,32 +535,29 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 
 	latch := NewStopLatch(cancel)
 	latch.now = r.clock.Now
-	meter := NewWorkMeter(inv.Limits.MaxGuestWork, inv.Limits.MaxHostWork, latch)
-	execCtx = WithWorkMeter(execCtx, meter)
+	meter := NewWorkMeter(inv.Limits.MaxGuestWork, inv.Limits.MaxHostWork, inv.Limits.MaxStagedBytes, latch)
+	procExit := &procExitTracker{}
+	execCtx = context.WithValue(execCtx, procExitContextKey{}, procExit)
 
 	var (
-		argv     []string
-		err      error
-		markerFS *CompletionMarkerFS
+		argv []string
+		err  error
 	)
 	if r.useTrustedBootstrap {
-		nonce := GenerateCompletionNonce()
-		markerFS = NewCompletionMarkerFS(nonce, latch)
 		cwd := inv.CWD
 		if strings.TrimSpace(cwd) == "" {
 			cwd = r.workspaceMount
 		}
 		argv, err = BuildBootstrapArgv(BootstrapConfig{
-			Mode:            inv.Mode,
-			Code:            inv.Code,
-			Script:          inv.Script,
-			Module:          inv.Module,
-			CLI:             inv.CLI,
-			CWD:             cwd,
-			Args:            inv.Args,
-			PackagesMount:   DefaultGuestPackagesMount,
-			ScratchMount:    DefaultGuestScratchMount,
-			CompletionNonce: nonce,
+			Mode:          inv.Mode,
+			Code:          inv.Code,
+			Script:        inv.Script,
+			Module:        inv.Module,
+			CLI:           inv.CLI,
+			CWD:           cwd,
+			Args:          inv.Args,
+			PackagesMount: DefaultGuestPackagesMount,
+			ScratchMount:  DefaultGuestScratchMount,
 		})
 	} else {
 		argv, err = BuildArgv(inv)
@@ -547,22 +574,55 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 	sealedStdout := NewSealedWriter(inv.Stdout, latch, inv.Limits.MaxOutputBytes)
 	sealedStderr := NewSealedWriter(stderrTarget, latch, inv.Limits.MaxOutputBytes)
 
-	modCfg := r.buildModuleConfig(execCtx, inv, argv, sealedStdout, sealedStderr, latch, meter, markerFS)
+	modCfg, wsFS := r.buildModuleConfig(execCtx, inv, argv, sealedStdout, sealedStderr, latch, meter)
 
 	if inv.ExecutionID != "" {
 		defer r.parked.Release(inv.ExecutionID)
 	}
 
-	targetMod := r.compiled
+	var (
+		mod       api.Module
+		runErr    error
+		peakPages uint32
+	)
 	if inv.Limits.MaxGuestWork > 0 {
-		targetMod, err = r.meteredModule(execCtx)
-		if err != nil {
-			return nil, fmt.Errorf("compile metered wasm module: %w", err)
+		targetMod, mErr := r.meteredModule(execCtx)
+		if mErr != nil {
+			return nil, fmt.Errorf("compile metered wasm module: %w", mErr)
 		}
+		// Instantiate without auto-running _start so we can seed __pw_fuel first.
+		mod, runErr = r.rt.InstantiateModule(execCtx, targetMod, modCfg.WithStartFunctions())
+		if runErr == nil && mod != nil {
+			if g := mod.ExportedGlobal(FuelGlobalExportName); g != nil {
+				if mg, ok := g.(api.MutableGlobal); ok {
+					mg.Set(inv.Limits.MaxGuestWork)
+				}
+			}
+			if startFn := mod.ExportedFunction("_start"); startFn != nil {
+				_, runErr = startFn.Call(execCtx)
+			}
+			if g := mod.ExportedGlobal(FuelGlobalExportName); g != nil {
+				rem := int64(g.Get())
+				if rem < 0 {
+					meter.SetGuestWork(inv.Limits.MaxGuestWork + 1)
+					latch.Trigger(TerminalStop{
+						Code:   StopWorkLimitExceeded,
+						Reason: fmt.Sprintf("guest work fuel exhausted (limit %d)", inv.Limits.MaxGuestWork),
+					})
+				} else {
+					meter.SetGuestWork(inv.Limits.MaxGuestWork - uint64(rem))
+				}
+			}
+		}
+	} else {
+		mod, runErr = r.rt.InstantiateModule(execCtx, r.compiled, modCfg)
 	}
 
-	mod, runErr := r.rt.InstantiateModule(execCtx, targetMod, modCfg)
-	var peakPages uint32
+	var unclosedWriteDescs int64
+	if wsFS != nil {
+		unclosedWriteDescs = wsFS.OpenWriteDescriptors()
+	}
+
 	if mod != nil {
 		if mem := mod.Memory(); mem != nil {
 			peakPages = mem.Size() / 65536
@@ -579,13 +639,28 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 			PeakMemoryPages: peakPages,
 			StdoutBytes:     sealedStdout.WrittenBytes(),
 			StderrBytes:     sealedStderr.WrittenBytes(),
+			StagedBytes:     meter.StagedBytes(),
 			Duration:        r.clock.Now().Sub(start),
 		},
 	}
 
 	r.classifyOutcome(execCtx, latch, runErr, res)
-	if r.useTrustedBootstrap && (markerFS == nil || !markerFS.Completed()) {
+
+	// Host-confirmed clean finalization requirements:
+	// 1. In trusted bootstrap mode, _start must return cleanly without proc_exit (rejecting os._exit(0)).
+	// 2. Zero stdout/stderr write or flush errors.
+	// 3. Zero unclosed host-tracked workspace write descriptors.
+	if r.useTrustedBootstrap && procExit.called.Load() {
 		res.CleanCompletion = false
+		res.Diagnostics = append(res.Diagnostics, fmt.Sprintf("abrupt guest exit via proc_exit(%d) bypassed clean finalization", procExit.code.Load()))
+	}
+	if sealedStdout.HadError() || sealedStderr.HadError() {
+		res.CleanCompletion = false
+		res.Diagnostics = append(res.Diagnostics, "guest output stream reported write or seal error")
+	}
+	if unclosedWriteDescs > 0 {
+		res.CleanCompletion = false
+		res.Diagnostics = append(res.Diagnostics, fmt.Sprintf("guest exited with %d unclosed workspace write descriptor(s)", unclosedWriteDescs))
 	}
 
 	if inv.Workspace != nil {
@@ -622,8 +697,7 @@ func (r *WazeroRuntime) buildModuleConfig(
 	stdout, stderr io.Writer,
 	latch *StopLatch,
 	meter *WorkMeter,
-	markerFS *CompletionMarkerFS,
-) wazero.ModuleConfig {
+) (wazero.ModuleConfig, *WorkspaceSysFS) {
 	cfg := wazero.NewModuleConfig().
 		WithName("").
 		WithArgs(argv...).
@@ -662,8 +736,9 @@ func (r *WazeroRuntime) buildModuleConfig(
 	if r.scratchRoot != "" {
 		fsCfg = fsCfg.WithDirMount(r.scratchRoot, DefaultGuestScratchMount)
 	}
+	var wsFS *WorkspaceSysFS
 	if inv.Workspace != nil {
-		wsFS := NewWorkspaceSysFS(WorkspaceSysFSConfig{
+		wsFS = NewWorkspaceSysFS(WorkspaceSysFSConfig{
 			Context:     execCtx,
 			ExecutionID: inv.ExecutionID,
 			Namespace:   NamespaceWorkspace,
@@ -676,12 +751,7 @@ func (r *WazeroRuntime) buildModuleConfig(
 			fsCfg = sysCfg.WithSysFSMount(wsFS, r.workspaceMount)
 		}
 	}
-	if markerFS != nil {
-		if sysCfg, ok := fsCfg.(experimentalsysfs.FSConfig); ok {
-			fsCfg = sysCfg.WithSysFSMount(markerFS, InternalCompletionMount)
-		}
-	}
-	return cfg.WithFSConfig(fsCfg)
+	return cfg.WithFSConfig(fsCfg), wsFS
 }
 
 func (r *WazeroRuntime) classifyOutcome(execCtx context.Context, latch *StopLatch, runErr error, res *ExecutionResult) {

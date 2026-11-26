@@ -406,9 +406,14 @@ def install_wasi_pure_python_rpds(
         "Metadata-Version: 2.1\n"
         "Name: rpds-py\n"
         f"Version: {version}\n"
-        "Summary: WASI-compatible pure-Python implementation of rpds persistent data structures\n"
+        "Summary: Painted Wolf WASI-compatible pure-Python rpds implementation (API-compatible with rpds-py for referencing/jsonschema)\n"
+        "Author: Painted Wolf Code\n"
         "License: MIT\n"
-        "Requires-Python: >=3.9\n",
+        "Requires-Python: >=3.9\n"
+        "\n"
+        "Independent pure-Python implementation of HashTrieMap, HashTrieSet, List, and Queue\n"
+        "authored by Painted Wolf Code for wasm32-wasi where native Rust wheels cannot load.\n"
+        "API-compatible with upstream rpds-py for referencing and jsonschema.\n",
         encoding="utf-8",
     )
     installed.append(meta_path.relative_to(packages_root).as_posix())
@@ -661,6 +666,7 @@ def main() -> None:
             "patches": applied_patches,
         },
         "packages_root": "packages",
+        "packages_tree_sha256": packages_tree_sha256,
         "distributions": manifest_dists,
         "stdlib_capabilities": STDLIB_CAPABILITIES,
         "wasm_imports": wasm_imports,

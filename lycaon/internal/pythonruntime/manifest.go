@@ -28,6 +28,7 @@ type ImageManifest struct {
 	Target             string             `json:"target"`
 	Interpreter        InterpreterSpec    `json:"interpreter"`
 	PackagesRoot       string             `json:"packages_root"`
+	PackagesTreeSHA256 string             `json:"packages_tree_sha256,omitempty"`
 	Distributions      []DistributionSpec `json:"distributions"`
 	StdlibCapabilities []string           `json:"stdlib_capabilities,omitempty"`
 	WasmImports        []WasmImportSpec   `json:"wasm_imports,omitempty"`
@@ -161,12 +162,102 @@ func VerifyImage(dir string, manifest *ImageManifest) error {
 		if !info.IsDir() {
 			return fmt.Errorf("packages_root %q is not a directory", manifest.PackagesRoot)
 		}
+		if !isHexSHA256(manifest.PackagesTreeSHA256) {
+			return fmt.Errorf("image manifest missing or invalid packages_tree_sha256 %q", manifest.PackagesTreeSHA256)
+		}
+		pkgTreeDigest, err := HashTree(pkgRoot)
+		if err != nil {
+			return fmt.Errorf("hash packages_root tree: %w", err)
+		}
+		if !strings.EqualFold(pkgTreeDigest, manifest.PackagesTreeSHA256) {
+			return fmt.Errorf("packages_root tree sha256 mismatch: got %s, want %s", pkgTreeDigest, manifest.PackagesTreeSHA256)
+		}
+		for _, dist := range manifest.Distributions {
+			if err := verifyDistributionTree(absDir, pkgRoot, dist); err != nil {
+				return err
+			}
+		}
 	}
 
 	if err := rejectHostNativeBinaries(absDir); err != nil {
 		return err
 	}
 	return nil
+}
+
+func verifyDistributionTree(absDir, pkgRoot string, dist DistributionSpec) error {
+	if strings.TrimSpace(dist.DistInfoPath) == "" {
+		return nil
+	}
+	distInfoAbs, err := resolveInsideDir(absDir, dist.DistInfoPath)
+	if err != nil {
+		return fmt.Errorf("distribution %s dist_info_path: %w", dist.Name, err)
+	}
+	info, err := os.Stat(distInfoAbs)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("distribution %s dist_info_path %q missing or not a directory", dist.Name, dist.DistInfoPath)
+	}
+	if !isHexSHA256(dist.TreeSHA256) {
+		return nil
+	}
+	recPath := filepath.Join(distInfoAbs, "RECORD")
+	recBytes, err := os.ReadFile(recPath)
+	if err != nil {
+		return fmt.Errorf("distribution %s missing RECORD: %w", dist.Name, err)
+	}
+	var rels []string
+	for _, line := range strings.Split(string(recBytes), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		rel := strings.SplitN(line, ",", 2)[0]
+		if rel != "" {
+			rels = append(rels, rel)
+		}
+	}
+	digest, err := hashRelativeFiles(pkgRoot, rels)
+	if err != nil {
+		return fmt.Errorf("hash distribution %s tree: %w", dist.Name, err)
+	}
+	if !strings.EqualFold(digest, dist.TreeSHA256) {
+		return fmt.Errorf("distribution %s tree sha256 mismatch: got %s, want %s", dist.Name, digest, dist.TreeSHA256)
+	}
+	return nil
+}
+
+func hashRelativeFiles(root string, rels []string) (string, error) {
+	seen := make(map[string]struct{}, len(rels))
+	unique := make([]string, 0, len(rels))
+	for _, r := range rels {
+		r = filepath.ToSlash(r)
+		if _, ok := seen[r]; ok {
+			continue
+		}
+		seen[r] = struct{}{}
+		unique = append(unique, r)
+	}
+	sort.Strings(unique)
+	outer := sha256.New()
+	for _, rel := range unique {
+		full, err := resolveInsideDir(root, filepath.FromSlash(rel))
+		if err != nil {
+			return "", err
+		}
+		info, err := os.Stat(full)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		digest, err := HashFile(full)
+		if err != nil {
+			return "", fmt.Errorf("hash %s: %w", rel, err)
+		}
+		_, _ = io.WriteString(outer, rel)
+		_, _ = outer.Write([]byte{0})
+		_, _ = io.WriteString(outer, digest)
+		_, _ = outer.Write([]byte{'\n'})
+	}
+	return hex.EncodeToString(outer.Sum(nil)), nil
 }
 
 // HashFile returns the lowercase hex SHA-256 digest of a regular file.

@@ -2,10 +2,9 @@ package pythonruntime
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
-
-	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -19,11 +18,10 @@ func TestTrustedBootstrapSourceModes(t *testing.T) {
 		{
 			name: "code mode",
 			cfg: BootstrapConfig{
-				Mode:            ModeCode,
-				Code:            "print('ok')",
-				CWD:             "/workspace/sub",
-				Args:            []string{"--flag"},
-				CompletionNonce: "abc123",
+				Mode: ModeCode,
+				Code: "print('ok')",
+				CWD:  "/workspace/sub",
+				Args: []string{"--flag"},
 			},
 			want: []string{
 				`os.chdir(cwd)`,
@@ -32,36 +30,30 @@ func TestTrustedBootstrapSourceModes(t *testing.T) {
 				`atexit._run_exitfuncs()`,
 				`sys.stdout.flush()`,
 				`sys.stderr.flush()`,
-				`/.pw_internal/complete`,
-				`abc123`,
 			},
 		},
 		{
 			name: "script mode",
 			cfg: BootstrapConfig{
-				Mode:            ModeScript,
-				Script:          "tools/run.py",
-				CWD:             "/workspace",
-				CompletionNonce: "deadbeef",
+				Mode:   ModeScript,
+				Script: "tools/run.py",
+				CWD:    "/workspace",
 			},
 			want: []string{
 				`os.path.dirname(os.path.abspath(script_path))`,
 				`tools/run.py`,
-				`deadbeef`,
 			},
 		},
 		{
 			name: "module mode",
 			cfg: BootstrapConfig{
-				Mode:            ModeModule,
-				Module:          "unittest",
-				Args:            []string{"-v"},
-				CompletionNonce: "cafebabe",
+				Mode:   ModeModule,
+				Module: "unittest",
+				Args:   []string{"-v"},
 			},
 			want: []string{
 				`runpy.run_module`,
 				`unittest`,
-				`cafebabe`,
 			},
 		},
 	}
@@ -79,65 +71,17 @@ func TestTrustedBootstrapSourceModes(t *testing.T) {
 					t.Fatalf("bootstrap source missing %q", sub)
 				}
 			}
+			// Must contain zero guest-visible completion marker or nonce.
+			if strings.Contains(src, ".pw_internal") || strings.Contains(src, "nonce") {
+				t.Fatalf("bootstrap source must not expose guest-visible completion nonce/path")
+			}
 		})
 	}
 }
 
-func TestCompletionMarkerFSContract(t *testing.T) {
-	_, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	latch := NewStopLatch(cancel)
-	nonce := GenerateCompletionNonce()
-	mfs := NewCompletionMarkerFS(nonce, latch)
-
-	if mfs.Completed() {
-		t.Fatal("marker should not be completed initially")
-	}
-
-	// Wrong nonce must not mark completion.
-	f, errno := mfs.OpenFile(InternalCompletionFile, experimentalsys.O_WRONLY|experimentalsys.O_CREAT, 0o200)
-	if errno != 0 {
-		t.Fatalf("OpenFile(complete) errno = %v", errno)
-	}
-	_, errno = f.Write([]byte("wrong-nonce"))
-	if errno != 0 {
-		t.Fatalf("Write(wrong) errno = %v", errno)
-	}
-	_ = f.Close()
-	if mfs.Completed() {
-		t.Fatal("wrong nonce must not mark completion")
-	}
-
-	// Exact nonce marks completion.
-	f, errno = mfs.OpenFile(InternalCompletionFile, experimentalsys.O_WRONLY|experimentalsys.O_CREAT, 0o200)
-	if errno != 0 {
-		t.Fatalf("OpenFile(complete) errno = %v", errno)
-	}
-	_, errno = f.Write([]byte(nonce))
-	if errno != 0 {
-		t.Fatalf("Write(nonce) errno = %v", errno)
-	}
-	_ = f.Close()
-	if !mfs.Completed() {
-		t.Fatal("exact nonce did not mark completion")
-	}
-
-	// Once StopLatch trips, CompletionMarkerFS rejects opens and writes.
-	mfsStopped := NewCompletionMarkerFS(nonce, latch)
-	latch.Trigger(TerminalStop{Code: StopCancelled, Reason: "test stop"})
-	if _, errno := mfsStopped.OpenFile(InternalCompletionFile, experimentalsys.O_WRONLY, 0o200); errno != experimentalsys.EACCES {
-		t.Fatalf("OpenFile after stop errno = %v, want EACCES", errno)
-	}
-	if mfsStopped.Completed() {
-		t.Fatal("stopped marker must never mark completion")
-	}
-}
-
-func TestRequireCompletionMarkerRejectsAbruptZeroExit(t *testing.T) {
+func TestHostLifecycleRejectsAbruptZeroExit(t *testing.T) {
 	ctx := context.Background()
-	// wasmFreshCounterModule calls proc_exit(0) directly (simulating os._exit(0)
-	// without writing the trusted bootstrap completion marker).
+	// wasmFreshCounterModule calls proc_exit(0) directly (simulating os._exit(0)).
 	rt, err := NewWazeroRuntime(ctx, RuntimeConfig{
 		WasmBytes:           wasmFreshCounterModule(),
 		UseTrustedBootstrap: true,
@@ -157,7 +101,7 @@ func TestRequireCompletionMarkerRejectsAbruptZeroExit(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0", res.ExitCode)
 	}
 	if res.CleanCompletion {
-		t.Fatal("os._exit(0) without completion marker must NOT set CleanCompletion=true")
+		t.Fatal("proc_exit(0) must NOT set CleanCompletion=true under trusted bootstrap")
 	}
 	if !ws.settled || ws.settledClean {
 		t.Fatalf("expected WorkspaceAdapter.Settle(false), got settled=%v clean=%v", ws.settled, ws.settledClean)
@@ -204,7 +148,7 @@ func TestExecuteHandlesSettlementConflictsAndPartialFailure(t *testing.T) {
 		ws := &customSettleWorkspace{
 			report: &SettlementReport{
 				CleanCompletion: true,
-				PartialFailure:  context.DeadlineExceeded,
+				PartialFailure:  errors.New("disk full"),
 			},
 		}
 		res, err := rt.Execute(ctx, Invocation{
