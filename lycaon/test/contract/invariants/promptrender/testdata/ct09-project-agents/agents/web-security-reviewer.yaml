@@ -1,0 +1,15 @@
+id: web-security-reviewer
+name: Web security reviewer
+description: Security reviewer persona on the web research profile
+tool_profile: web_research
+exec_mode: none
+capabilities:
+  - security
+topology_roles:
+  - worker
+dispatch_lanes:
+  - read
+  - review
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/security-reviewer.md

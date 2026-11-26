@@ -124,24 +124,62 @@ func CustomizationOverlays(_ context.Context) ([]CustomizationOverlay, error) {
 }
 
 func buildCustomizationOverlay(ctx context.Context, spec customizationSpec, stockContent []extpacks.PackContent) (PackOverlay, error) {
-	packs := slices.Clone(stockContent)
-	desired := extpacks.DesiredState{Format: extpacks.DesiredFormat, Own: spec.own, Disabled: spec.disable}
+	roots := make([]string, 0, len(spec.packs))
 	for _, dir := range spec.packs {
-		root := filepath.Join(customizationRoot(), "packs", dir)
+		roots = append(roots, filepath.Join(customizationRoot(), "packs", dir))
+	}
+	desired := extpacks.DesiredState{Format: extpacks.DesiredFormat, Own: spec.own, Disabled: spec.disable}
+	return overlayWithPacks(ctx, spec.id, roots, "", stockContent, desired)
+}
+
+// overlayWithPacks links each pack folder into the device desired state, as
+// installing a folder does; installedFrom names the project that suggested
+// them.
+func overlayWithPacks(ctx context.Context, id string, roots []string, installedFrom string, stockContent []extpacks.PackContent, desired extpacks.DesiredState) (PackOverlay, error) {
+	packs := slices.Clone(stockContent)
+	for _, root := range roots {
 		man, err := extpacks.LoadManifest(root)
 		if err != nil {
-			return PackOverlay{}, fmt.Errorf("customization %s: %w", spec.id, err)
+			return PackOverlay{}, fmt.Errorf("customization %s: %w", id, err)
 		}
 		pc, err := extpacks.InventoryPack(extpacks.Pack{ID: man.ID, Root: extpacks.OnDisk(root)}, man)
 		if err != nil {
-			return PackOverlay{}, fmt.Errorf("customization %s: %w", spec.id, err)
+			return PackOverlay{}, fmt.Errorf("customization %s: %w", id, err)
 		}
 		pc.Kind = extpacks.PackKindPath
 		packs = append(packs, pc)
 		enabled := true
-		desired.Packs = append(desired.Packs, extpacks.DesiredPack{ID: man.ID, Source: root, Development: true, Enabled: &enabled})
+		desired.Packs = append(desired.Packs, extpacks.DesiredPack{ID: man.ID, Source: root, Development: true, Enabled: &enabled, InstalledFrom: installedFrom})
 	}
-	return buildPackOverlay(ctx, spec.id, "", packs, desired)
+	return buildPackOverlay(ctx, id, "", packs, desired)
+}
+
+// ProjectAgentOverlay is the stock device catalog with the pack at root
+// installed as a project's suggestion. Agents are a kind a project shares
+// (extpacks ScopeShared); their tool profiles resolve on the device catalog.
+// Workers are the agents the pack adds.
+func ProjectAgentOverlay(ctx context.Context, id, root, projectID string) (CustomizationOverlay, error) {
+	stockContent, err := extpacks.DiscoverStockContent()
+	if err != nil {
+		return CustomizationOverlay{}, fmt.Errorf("discover stock content: %w", err)
+	}
+	base, err := DiscoverPackOverlays(ctx)
+	if err != nil {
+		return CustomizationOverlay{}, err
+	}
+	desired := extpacks.DesiredState{Format: extpacks.DesiredFormat, Own: map[string]string{}}
+	ov, err := overlayWithPacks(ctx, id, []string{root}, projectID, stockContent, desired)
+	if err != nil {
+		return CustomizationOverlay{}, err
+	}
+	if err := refuseNewErrorDiagnostics(base[0].Catalog, ov.Catalog, id); err != nil {
+		return CustomizationOverlay{}, err
+	}
+	workers := customizedWorkerAgents(base[0], ov, nil)
+	if len(workers) == 0 {
+		return CustomizationOverlay{}, fmt.Errorf("project pack %s adds no worker agent", root)
+	}
+	return CustomizationOverlay{Overlay: ov, Worker: true, Workers: workers}, nil
 }
 
 // refuseNewErrorDiagnostics fails when Resolve reports something the
