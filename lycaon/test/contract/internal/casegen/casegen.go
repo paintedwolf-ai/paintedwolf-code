@@ -244,12 +244,13 @@ func (s *search) target(t Target, perTarget int) (Outcome, error) {
 		o.Reason = fmt.Sprintf("the producer did not evaluate the guard in %d generated cases", s.spent)
 		return o, nil
 	}
-	s.runs, s.budget = 0, perTarget
+	s.runs = 0
+	tried := t.Needs[:min(len(t.Needs), maxNeedsTried)]
 	nearest := ""
-	for i, need := range t.Needs {
-		if i == maxNeedsTried {
-			break
-		}
+	for i, need := range tried {
+		// Each needed assignment gets an equal share of the target's budget,
+		// so an infeasible first assignment cannot starve the others.
+		s.budget = perTarget * (i + 1) / len(tried)
 		with, then, near, err := s.pair(t, need)
 		if nearest == "" {
 			nearest = near

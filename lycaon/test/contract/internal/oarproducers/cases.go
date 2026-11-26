@@ -135,6 +135,8 @@ var credentialValues = []string{
 	"ab_cd_ef_gh",
 	"k1-k2-k3-k4-k5",
 	"Xq7Lm2Pz9Kd4Rt8Vw3Nb_alpha_bravo_charlie",
+	"1234qwerasdfzxcv",
+	"q1w2e3r4t5y6u7i8o9p0",
 }
 
 // CaseProducer runs generated occurrences through the production hook
@@ -368,12 +370,26 @@ func (p *CaseProducer) toolKnob(rule *oar.Rule, fallback string, sources []strin
 
 func (p *CaseProducer) codeKnob(rule *oar.Rule, sources []string) casegen.Knob {
 	var values []any
-	for _, c := range slices.Concat(oarcore.ConjunctValues(rule.When, "paintedwolf.rejection_code"), literals("paintedwolf.rejection_code", sources...), p.altCodes) {
+	for _, c := range slices.Concat(oarcore.ConjunctValues(rule.When, "paintedwolf.rejection_code"), literals("paintedwolf.rejection_code", sources...), p.altCodes, p.otherOperationCode(rule)) {
 		if !slices.Contains(values, any(c)) {
 			values = append(values, c)
 		}
 	}
 	return casegen.Knob{Name: "code", Facts: []string{"paintedwolf.rejection_code", casegen.AnyFact}, Values: values}
+}
+
+// otherOperationCode is the code of the first tool.rejected rule that
+// requires operations rule never selects: delivered for rule's operation,
+// that rule cannot fire before it.
+func (p *CaseProducer) otherOperationCode(rule *oar.Rule) []string {
+	own := slices.Concat(rule.Operations(), rule.Tools())
+	for _, r := range p.h.Rules.OnAnchor(oar.AnchorToolRejected) {
+		ops, codes := r.Operations(), oarcore.ConjunctValues(r.When, "paintedwolf.rejection_code")
+		if r != rule && len(ops) > 0 && len(codes) > 0 && len(own) > 0 && !slices.ContainsFunc(ops, func(o string) bool { return slices.Contains(own, o) }) {
+			return codes[:1]
+		}
+	}
+	return nil
 }
 
 func (p *CaseProducer) cellKnob(recipient string) casegen.Knob {

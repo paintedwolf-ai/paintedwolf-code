@@ -46,7 +46,14 @@ var conditionConstraints = []interactions.AtomConstraint{
 		Source: "test/contract/invariants/promptrender/condition_ledger.go:renderRecipient partitions renders by is_coordinator"},
 	{Atom: "has_git", Implies: "has_any_git_root", Recipient: interactions.RecipientCoordinator, Source: srcGitFacts},
 	{Atom: "has_git", Implies: "has_any_git_root", Recipient: interactions.RecipientWorker, Source: srcGitFacts},
+	{Atom: "paintedwolf.command_loadable_without_schema", Implies: admittedProcessFieldsEmpty, Recipient: interactions.RecipientCoordinator, Source: srcLoaderOnly},
+	{Atom: "paintedwolf.command_loadable_without_schema", Implies: admittedProcessFieldsEmpty, Recipient: interactions.RecipientWorker, Source: srcLoaderOnly},
 }
+
+const (
+	admittedProcessFieldsEmpty = "size(paintedwolf.admitted_process_capability_fields) == 0"
+	srcLoaderOnly              = "internal/tools/recovery_form_facts.go:registerCommandFormRecoveryFacts admits capability fields only when command accepts its command field, which a loader-only command without a schema does not"
+)
 
 const srcGitFacts = "internal/session/readerfacts/resolver.go:gitFacts starts hasAnyGit at hasGit, so the any-root fact includes the primary root"
 
