@@ -123,6 +123,7 @@ type coordinatorSeed struct {
 	approval   gate.Posture
 	temp       TempState
 	mcp        MCPState
+	loaded     []string
 	binding    *PhaseBinding
 }
 
@@ -362,7 +363,7 @@ func caseCoordinatorSeeds(ovIdx int, in []CustomizationSeed) []coordinatorSeed {
 	for i, c := range in {
 		out[i] = coordinatorSeed{
 			overlayIdx: ovIdx, mode: c.Mode, posture: c.Posture, wf: c.Workflow, surfaceID: c.SurfaceID,
-			roots: c.Roots, loading: c.Loading, web: true, vision: c.Vision,
+			roots: c.Roots, loading: c.Loading, loaded: c.Loaded, web: true, vision: c.Vision,
 			approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone, binding: c.Binding,
 		}
 	}
@@ -469,7 +470,20 @@ func resolveCoordinatorSeed(
 		}
 		planCache[planKey] = plan
 	}
-	loaded, loadExclude := selectLoadedTools(plan, seed.loading)
+	var loaded map[string]bool
+	var loadExclude string
+	if len(seed.loaded) > 0 {
+		loaded = make(map[string]bool, len(seed.loaded))
+		deferred := plan.DeferredNames()
+		for _, name := range seed.loaded {
+			if !slices.Contains(deferred, name) {
+				return CoordinatorState{}, fmt.Errorf("seed loaded tool %q is not deferred on surface %s", name, tp.SurfaceID)
+			}
+			loaded[name] = true
+		}
+	} else {
+		loaded, loadExclude = selectLoadedTools(plan, seed.loading)
+	}
 	if excludedReason == "" && loadExclude != "" {
 		excludedReason = loadExclude
 	}
@@ -479,6 +493,9 @@ func resolveCoordinatorSeed(
 		overlay.ID, seed.mode, seed.posture, seed.wf, seed.surfaceID, tp.SurfaceID,
 		seed.roots, seed.loading, seed.web, seed.vision, seed.extHidden, seed.approval, seed.temp, seed.mcp,
 	)
+	if len(seed.loaded) > 0 {
+		id += "/loaded=" + strings.Join(seed.loaded, "+")
+	}
 	if seed.binding != nil {
 		id += "/bind=" + seed.binding.WorkflowID + ":" + seed.binding.PhaseID
 	}

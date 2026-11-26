@@ -352,6 +352,23 @@ func coordinatorRepsBy(reps []coordRep, keep func(coordRep) bool, key func(coord
 	return out
 }
 
+// catalogRepsBy is coordinatorRepsBy over every catalog that keeps all stock
+// packs, customized ones included.
+func catalogRepsBy(reps []coordRep, key func(coordRep) string) []coordRep {
+	var out []coordRep
+	seen := map[string]bool{}
+	for _, cr := range reps {
+		if cr.state.Overlay.RemovedPackID != "" {
+			continue
+		}
+		if k := key(cr); !seen[k] {
+			seen[k] = true
+			out = append(out, cr)
+		}
+	}
+	return out
+}
+
 func offers(auth hoststate.TurnAuthority, tools ...string) string {
 	var b strings.Builder
 	for _, t := range tools {

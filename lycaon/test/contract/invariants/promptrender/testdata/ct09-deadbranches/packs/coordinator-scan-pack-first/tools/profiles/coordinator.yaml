@@ -1,0 +1,17 @@
+id: coordinator
+description: Coordinator that defers only scan_pack and scan_summary on observe_investigate
+command_effects: [read_only]
+tools:
+  survey_repo: sticky
+  summarize: sticky
+  inspect_source: sticky
+  recall: sticky
+  update_progress: sticky
+  ask_user: sticky
+  skills_read: sticky
+  scan_pack: true
+  scan_summary: true
+deny_tools:
+read_scope: coordinator_product_read
+write_scope: coordinator_orchestration
+wait_conditions: []

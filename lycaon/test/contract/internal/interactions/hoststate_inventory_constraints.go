@@ -16,7 +16,6 @@ const (
 	srcCoordinatorScopes    = "internal/prompts:CoordinatorPathScopesFromProfiles over the coordinator profile globs"
 	srcCadence              = "internal/prompts/reader_facts.go:fillCoordinatorReaderFacts sets visual_review_cadence on_request"
 	srcAskUser              = "config/packs/painted-wolf/*/tools/profiles: no worker profile admits ask_user"
-	srcOrientation          = "config/packs/painted-wolf/*/tools/profiles: every worker profile holds pack_board sticky"
 	srcRejectCodes          = "internal/prompts/reader_facts.go:fillWorkerReaderFacts recoverableRejectCodes over the shipped hint catalog"
 )
 
@@ -41,9 +40,7 @@ var readerFactConstraints = map[string]map[string]string{
 		"write_globs":                        srcCoordinatorScopes,
 	},
 	RecipientWorker: {
-		"agent_tools":                srcWorkerOnlyFacts,
 		"can_ask_user_secret":        srcAskUser,
-		"can_orient":                 srcOrientation,
 		"can_request_command_verify": srcCommandSticky,
 		"can_request_git_bisect":     srcCommandSticky,
 		"can_request_git_commit":     srcCommandSticky,
