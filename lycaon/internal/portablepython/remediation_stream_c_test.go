@@ -133,7 +133,8 @@ func TestStreamCRemediationCommandEffectsFailClosedProtectedPathsEditorAndEviden
 			t.Fatalf("nil policy http = %+v, want COMMAND_EFFECT_NOT_ALLOWED", respNilPol)
 		}
 
-		// (b) Registered toolhost python handler under AskMode stops HTTP with 0 hits.
+		// (b) Registered toolhost python handler on a surface without
+		// network_egress (orchestrate_plan) stops HTTP with COMMAND_EFFECT_NOT_ALLOWED and 0 hits.
 		rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{
 			Catalog:        stockCatalog,
 			PortablePython: svc,
@@ -141,22 +142,22 @@ func TestStreamCRemediationCommandEffectsFailClosedProtectedPathsEditorAndEviden
 		testutil.FailErr(t, "construct toolhost runtime", err)
 		raw, err := rt.Registry.Run(context.Background(), "python", map[string]any{
 			"code": `import requests, sys; requests.get(sys.argv[1])`,
-			"args": []any{srv.URL + "/ask-mode"},
+			"args": []any{srv.URL + "/no-egress-surface"},
 		}, tools.ToolContext{
 			Identity: tools.InvocationIdentity{
-				SessionID:  "sess-ask",
-				Agent:      "agent:coder",
-				ToolCallID: "call-ask",
+				SessionID:  "sess-no-egress",
+				Agent:      "agent:planner",
+				ToolCallID: "call-no-egress",
 			},
-			Source: tools.InvocationSource{
-				AskMode: true,
+			Turn: tools.InvocationTurn{
+				TurnSurfaceID: "orchestrate_plan",
 			},
 		})
-		testutil.FailErr(t, "run python http in ask mode", err)
-		var respAsk portablepython.ToolResponse
-		testutil.FailErr(t, "decode ask mode response", json.Unmarshal([]byte(raw), &respAsk))
-		if respAsk.CleanCompletion || respAsk.Stop == nil || respAsk.Stop.Code != pythonruntime.StopEffectNotAllowed {
-			t.Fatalf("ask mode http = %+v, want COMMAND_EFFECT_NOT_ALLOWED", respAsk)
+		testutil.FailErr(t, "run python http on surface without network_egress", err)
+		var respNoEgress portablepython.ToolResponse
+		testutil.FailErr(t, "decode no-egress response", json.Unmarshal([]byte(raw), &respNoEgress))
+		if respNoEgress.CleanCompletion || respNoEgress.Stop == nil || respNoEgress.Stop.Code != pythonruntime.StopEffectNotAllowed {
+			t.Fatalf("no-egress surface http = %+v, want COMMAND_EFFECT_NOT_ALLOWED", respNoEgress)
 		}
 		if hits.Load() != 0 {
 			t.Fatalf("server received %d hits under fail-closed HTTP policy, want 0", hits.Load())
