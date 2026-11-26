@@ -365,7 +365,7 @@ func (p *skillCaseProducer) reader(recipient string, extra []string, c skillCase
 		return prompts.Reader{}, false, nil
 	}
 	plan := toolsurface.Compile(immediate, deferred)
-	host.Profiles = append(profiles, profile)
+	host.Profiles = append(slices.Clone(profiles), profile)
 	r, err := prompts.NewReader(host, prompts.TurnProjection{ProfileID: skillCaseProfileID, Plan: plan, Offered: plan.ImmediateNames()})
 	return r, err == nil, err
 }
