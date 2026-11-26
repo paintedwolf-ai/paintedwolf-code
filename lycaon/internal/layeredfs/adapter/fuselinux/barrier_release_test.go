@@ -9,14 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
-	"golang.org/x/sys/unix"
+	"github.com/lycaon/lycaon/internal/testutil/mappedfile"
 )
 
 func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
@@ -70,17 +69,14 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 	}
 	defer func() { _ = mf.Close() }()
 
-	mappedSlice, err := syscall.Mmap(int(mf.Fd()), 0, len(initialBytes), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
-	if err != nil {
-		t.Fatalf("syscall.Mmap: %v", err)
-	}
-	defer func() { _ = syscall.Munmap(mappedSlice) }()
-
+	mapping := mappedfile.Map(t, mappedPath, len(initialBytes))
 	wantMapped := []byte("mutated-by-mmap!\n")
-	copyToMapping(mappedSlice, wantMapped)
+	if err := mapping.Write(wantMapped); err != nil {
+		t.Fatalf("write mapping: %v", err)
+	}
 
 	if err := adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := unix.Msync(mappedSlice, unix.MS_SYNC); err != nil {
+		if err := mapping.Sync(); err != nil {
 			return err
 		}
 		return mf.Sync()
