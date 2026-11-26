@@ -35,7 +35,7 @@ const (
 	// Production default resource limits applied whenever ToolRequest.Limits
 	// leaves a field unset (zero).
 	DefaultMaxMemoryPages    uint32 = 4096             // 256 MiB Wasm linear memory
-	DefaultMaxGuestWork      uint64 = 50_000_000       // deterministic Wasm loop-fuel cap
+	DefaultMaxGuestWork      uint64 = 2_000_000_000    // deterministic Wasm loop-fuel cap (allows stdlib + bundled package imports)
 	DefaultMaxHostWork       uint64 = 100_000          // host work unit cap
 	DefaultMaxOutputBytes    int64  = 1024 * 1024      // 1 MiB WASI stream capture bound
 	DefaultMaxStagedBytes    int64  = 16 * 1024 * 1024 // 16 MiB staged overlay bound
