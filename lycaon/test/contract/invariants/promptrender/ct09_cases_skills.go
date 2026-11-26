@@ -117,6 +117,12 @@ func factTools(fact string) []string {
 	switch {
 	case slices.Contains(commandFacts, fact):
 		return []string{"command"}
+	case fact == "card_may_edit":
+		return []string{"restore_version", "command"}
+	case fact == "card_may_run":
+		return []string{"verify", "command"}
+	case fact == "card_may_dispatch":
+		return []string{"task", "instruct_worker"}
 	case strings.HasPrefix(fact, "profile_has_"):
 		if name := strings.TrimPrefix(fact, "profile_has_"); isTool(name) {
 			return []string{name}

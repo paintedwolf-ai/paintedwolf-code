@@ -29,6 +29,7 @@ tools:
   page_act: true
   page_snapshot: true
   terminal_open: true
+  terminal_snapshot: true
   terminal_send: true
   terminal_read: true
   terminal_close: sticky

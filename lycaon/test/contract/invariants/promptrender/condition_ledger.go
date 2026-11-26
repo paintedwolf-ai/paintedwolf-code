@@ -2,6 +2,7 @@ package promptrender
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
@@ -52,7 +53,25 @@ var conditionConstraints = []interactions.AtomConstraint{
 	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: interactions.RecipientCoordinator, Source: srcMCPCode},
 	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: interactions.RecipientWorker, Source: srcMCPCode},
 	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: unscopedRecipient, Source: srcMCPCode},
+	// A coordinator's requestable tools are its surface's loadable tools.
+	{Atom: "profile_can_request.command", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_command_verify", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "profile_can_request.source_history", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "source_history")},
+	{Atom: "profile_can_request.terminal_open", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "terminal_open")},
+	{Atom: "visual_show_terminal_needs_request", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "terminal_open")},
+	// Every runner tool's schema accepts capability_request.
+	{Atom: "profile_has_command", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientCoordinator, Source: srcRunnerCapability},
+	{Atom: "profile_has_command", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientWorker, Source: srcRunnerCapability},
+	{Atom: "can_command_verify", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientCoordinator, Source: srcRunnerCapability},
+	{Atom: "can_command_verify", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientWorker, Source: srcRunnerCapability},
+	{Atom: "runner_socks_proxy_tools", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientCoordinator, Source: srcRunnerCapability},
+	{Atom: "runner_socks_proxy_tools", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientWorker, Source: srcRunnerCapability},
 }
+
+const (
+	srcCoordinatorFloors = "config/packs/painted-wolf/platform/host/coordinator-surfaces.yaml lists %s only on surface floors, and prompts.NewReader makes only a surface's loadable tools requestable"
+	srcRunnerCapability  = "native-tools.yaml: command and verify, the runner tools, each declare capability_request, so runner_capability_request_tools lists every offered runner"
+)
 
 const (
 	mcpServerCodeAtom = `starts_with(mcp_error_code, "MCP_SERVER_")`
