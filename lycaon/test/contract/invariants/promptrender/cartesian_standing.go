@@ -549,7 +549,7 @@ func runWorkerPersonaAndInjectMatrix(
 				withResources["finish_note"] = "Return evidence handles in complete_leg."
 				variants = append(variants, withResources)
 			}
-			if readerFact(auth.Reader, "can_request_command_verify") {
+			if readerFact(auth.Reader, "can_request_command_verify") || (readerFact(auth.Reader, "profile_has_verify") && !readerFact(auth.Reader, "can_command_verify")) {
 				withVerify := maps.Clone(plain)
 				withVerify["verify_command"] = "go test ./..."
 				variants = append(variants, withVerify)
