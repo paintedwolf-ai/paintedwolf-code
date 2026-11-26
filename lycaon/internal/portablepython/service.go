@@ -549,7 +549,17 @@ func buildDocumentStore(req ToolRequest) (pythondocuments.DocumentStore, []pytho
 		return req.Store, req.RootSpecs
 	}
 	if len(req.Roots) == 0 {
-		return nil, req.RootSpecs
+		mem := pythondocuments.NewMemoryDocumentStore()
+		specs := req.RootSpecs
+		if len(specs) == 0 {
+			specs = []pythondocuments.RootSpec{{
+				ID:       "default",
+				Label:    "workspace",
+				Default:  true,
+				ReadOnly: req.ReadOnly,
+			}}
+		}
+		return mem, specs
 	}
 	store := pythondocuments.NewHostDocumentStore(req.Roots, req.Editor)
 	specs := req.RootSpecs
