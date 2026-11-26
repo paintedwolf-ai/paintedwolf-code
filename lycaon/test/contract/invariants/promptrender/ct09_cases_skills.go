@@ -499,6 +499,9 @@ const (
 		"keep only coordinator-surfaces.yaml no_folder_allowlist at zero roots, which omits command, command_output, render_view and skills_read"
 	srcWorkerRoots = "internal/worker/task_tool.go refuses a zero-root spawn (WORKER_WORKSPACE_REQUIRED) unless prompts.AgentRunsWithoutWorkspace, " +
 		"false for a profile reaching command (ProfileSurveysProjectTree over surveyToolDisplayOrder [command]); a command effect needs command offered"
+	srcWorkerHostResources = "toolvocab.SkillToolsOfferedForReader admits a host_resources skill only with runner_host_resources_tools, the tools whose schema accepts " +
+		"capability_request.host_resources (command, terminal_open, verify), all requires_worker_branch tools (native-tools.yaml), so the agent is mutation-capable " +
+		"and internal/worker/task_tool.go refuses its zero-root spawn"
 	srcWorkerChildTools = "internal/toolpolicy/engine.go:ListForPrompt drops tools whose contract admits only worker children " +
 		"(native-tools.yaml session_scope request_decision: worker_child) from a coordinator"
 	srcCoordinatorBranch = "internal/session/workerworkspace/worker_tool_coord.go:OnWorkerBranch is false for a session without a parent"
@@ -510,12 +513,12 @@ var effectAtoms = []string{"profile_command_mutation", "profile_command_external
 
 var rootAtoms = []string{"root_count", "has_workspace_roots"}
 
-// withSkillDerived answers skill guards with skillDerived and others with
-// next.
-func withSkillDerived(next func(interactions.ConditionSite, string) independence.Constraints) func(interactions.ConditionSite, string) independence.Constraints {
+// withSkillDerived answers skill guards with p's skillDerived and others
+// with next.
+func withSkillDerived(p *skillCaseProducer, next func(interactions.ConditionSite, string) independence.Constraints) func(interactions.ConditionSite, string) independence.Constraints {
 	return func(site interactions.ConditionSite, recipient string) independence.Constraints {
 		if site.Family == "skill" {
-			return skillDerived(site, recipient)
+			return p.skillDerived(site, recipient)
 		}
 		return next(site, recipient)
 	}
@@ -523,7 +526,7 @@ func withSkillDerived(next func(interactions.ConditionSite, string) independence
 
 // skillDerived returns the production invariants over a skill guard's atoms
 // on recipient, keeping only those whose atoms the guard reads.
-func skillDerived(site interactions.ConditionSite, recipient string) independence.Constraints {
+func (p *skillCaseProducer) skillDerived(site interactions.ConditionSite, recipient string) independence.Constraints {
 	var c independence.Constraints
 	has := func(a string) bool { return slices.Contains(site.Atoms, a) }
 	imply := func(ifs, thens []string, source string) {
@@ -547,7 +550,14 @@ func skillDerived(site interactions.ConditionSite, recipient string) independenc
 			}
 		}
 	case interactions.RecipientWorker:
-		imply(effectAtoms, rootAtoms, srcWorkerRoots)
+		imply(append([]string{"profile_has_command"}, effectAtoms...), rootAtoms, srcWorkerRoots)
+		if sk, ok := p.skills[skillNameOf(site.ID)]; ok && strings.TrimSpace(sk.Metadata["host_resources"]) != "" {
+			for _, a := range rootAtoms {
+				if has(a) {
+					c.Fixed = append(c.Fixed, independence.Fixed{Atom: a, Value: independence.True, Source: srcWorkerHostResources})
+				}
+			}
+		}
 	}
 	return c
 }

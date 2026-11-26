@@ -7,7 +7,7 @@ metadata:
 
 # Run a local model
 
-Use this workflow to get useful, reproducible output from models already on this device. Ollama serves a loopback API on this machine:{% if profile_command_network_egress %} call it with `curl` in `command`, declaring the port in `capability_request.loopback_connect`. Only a process that must talk to the daemon itself (the `ollama` CLI) declares `ollama` in `capability_request.host_resources` on its `command`, together with `loopback_connect` `ports: [11434]`.{% else %} declare `ollama` in `capability_request.host_resources` together with `loopback_connect` `ports: [11434]` on the runner tool that invokes the `ollama` CLI.{% endif %}
+Use this workflow to get useful, reproducible output from models already on this device. Ollama serves a loopback API on this machine:{% if profile_command_network_egress %} call it with `curl` in `command`{% if "command" in runner_loopback_connect_tools %}, declaring the port in `capability_request.loopback_connect`{% endif %}. Only a process that must talk to the daemon itself (the `ollama` CLI) declares `ollama` in `capability_request.host_resources` on its `command`{% if "command" in runner_loopback_connect_tools %}, together with `loopback_connect` `ports: [11434]`{% endif %}.{% else %} declare `ollama` in `capability_request.host_resources`{% if runner_loopback_connect_tools %} together with `loopback_connect` `ports: [11434]`{% endif %} on the runner tool that invokes the `ollama` CLI.{% endif %}
 
 ## Workflow
 

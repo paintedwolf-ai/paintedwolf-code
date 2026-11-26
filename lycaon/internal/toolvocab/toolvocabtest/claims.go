@@ -12,6 +12,9 @@ import (
 
 var chainSplitRe = regexp.MustCompile(`\s*(?:&&|\|\||[|;])\s*`)
 
+// schemaPathSpanRe matches a dotted argument path, `a.b` or `a[].b`.
+var schemaPathSpanRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(?:\[\])?(?:\.[a-z][a-z0-9_]*(?:\[\])?)+$`)
+
 // claimGrammar reads one actor's claims from rendered text by protocol
 // grammar alone: tool mentions, call expressions with their arguments,
 // tool.path spans, and command code spans, each within its block.
@@ -76,6 +79,7 @@ func (g claimGrammar) block(block ClaimBlock, b toolvocab.Block) []SubjectViolat
 	}
 	for _, bs := range ExtractInlineBackticks(b.Text) {
 		g.checkToolPath(bs, report)
+		g.checkSchemaPath(bs, report)
 		g.checkCommandSpan(bs, calls, report)
 	}
 	return out
@@ -159,6 +163,36 @@ func (g claimGrammar) checkToolPath(bs BacktickSpan, report func(string, int, st
 	for _, iss := range validateToolPath(head, schema, rest, bs.Span, bs.Line) {
 		report(claimOf(iss), bs.Start, iss.Reason)
 	}
+}
+
+// checkSchemaPath reads a dotted argument path with no tool head, such as
+// `capability_request.local_listen`: a declared schema path names an argument
+// some tool accepts, so a tool the reader holds, or can request with a
+// certified post-load schema, must accept the whole path. A single field name
+// outside a call makes no claim (decision 005 rule 3).
+func (g claimGrammar) checkSchemaPath(bs BacktickSpan, report func(string, int, string)) {
+	raw := strings.TrimSpace(bs.Span)
+	if g.vocab == nil || !schemaPathSpanRe.MatchString(raw) {
+		return
+	}
+	if _, _, ok := toolPathSpan(g.cat, raw); ok {
+		return
+	}
+	p := normalizeSchemaPath(raw)
+	if !g.vocab.schemaItems[p] {
+		return
+	}
+	for tool := range g.held {
+		if s, ok := g.offeredSchema(tool); ok && schemaAcceptsPath(s, p) {
+			return
+		}
+	}
+	for tool := range g.requestable {
+		if s, ok := g.postLoadSchema(tool); ok && schemaAcceptsPath(s, p) {
+			return
+		}
+	}
+	report(raw, bs.Start, fmt.Sprintf("no reachable tool's projected schema accepts %q", raw))
 }
 
 // checkCommandSpan reads a command code span with the production command
