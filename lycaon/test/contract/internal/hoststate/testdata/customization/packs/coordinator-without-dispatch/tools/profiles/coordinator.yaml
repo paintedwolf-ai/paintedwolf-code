@@ -1,6 +1,6 @@
 id: coordinator
-description: Coordinator tools without worker dispatch, waiting or progress rows
-command_effects: [read_only, mutation, external_exec, network_egress]
+description: Coordinator tools without worker dispatch, waiting, progress rows or mutating commands
+command_effects: [read_only, external_exec, network_egress]
 tools:
   code_rewrite: true
   survey_repo: sticky
