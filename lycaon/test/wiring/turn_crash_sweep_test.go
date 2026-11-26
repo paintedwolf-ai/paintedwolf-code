@@ -483,6 +483,7 @@ func crashTurnScript() *stackScriptLLM {
 // with finishedExit once the turn and its event delivery have settled.
 func runTurnChild(t *testing.T, dir, killAt string) {
 	tracer := newCommitTracer(t, killAt, filepath.Join(dir, crashLog))
+	disableScanCadence(t, dir)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
 	h := BuildForTestAt(t, dir, WithLLMClient(crashTurnScript()), WithStoreCommitObserver(tracer.observe))
 	project := h.ProjectDir(t, "project")
@@ -502,6 +503,17 @@ func runTurnChild(t *testing.T, dir, killAt string) {
 	waitForOutboxDrained(t, h)
 	tracer.armed.Store(false)
 	os.Exit(finishedExit)
+}
+
+// disableScanCadence turns security scanners off in the device configuration
+// both children boot from. The turn writes no scan state, but the cadence
+// schedules a scan for each watched write, and the time that scan comes due
+// would decide which of the two boots re-arms it.
+func disableScanCadence(t *testing.T, dir string) {
+	t.Helper()
+	configDir := filepath.Join(dir, "config")
+	testutil.FailErr(t, "create device configuration", os.MkdirAll(configDir, 0o700))
+	testutil.FailErr(t, "turn security scanners off", os.WriteFile(filepath.Join(configDir, "security-scanners.yaml"), []byte("enabled: false\n"), 0o600))
 }
 
 // watchBarrier is the directory the turn child creates once its project is
