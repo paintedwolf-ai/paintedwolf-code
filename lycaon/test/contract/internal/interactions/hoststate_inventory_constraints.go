@@ -17,7 +17,6 @@ const (
 	srcCadence              = "internal/prompts/reader_facts.go:fillCoordinatorReaderFacts sets visual_review_cadence on_request"
 	srcAskUser              = "config/packs/painted-wolf/*/tools/profiles: no worker profile admits ask_user"
 	srcOrientation          = "config/packs/painted-wolf/*/tools/profiles: every worker profile holds pack_board sticky"
-	srcProgressLifecycle    = "internal/progress/progress_gated_tools.go:UngatedLifecycleTools over tools every worker profile holds sticky"
 	srcRejectCodes          = "internal/prompts/reader_facts.go:fillWorkerReaderFacts recoverableRejectCodes over the shipped hint catalog"
 )
 
@@ -61,7 +60,6 @@ var readerFactConstraints = map[string]map[string]string{
 		"is_coordinator":                     srcWorkerRole,
 		"lane_s_sync_tools":                  srcCoordinatorOnlyFacts,
 		"native_edit_limit_mib":              srcEditLimit,
-		"progress_ungated_lifecycle_tools":   srcProgressLifecycle,
 		"read_globs":                         srcCoordinatorOnlyFacts,
 		"recall_may_widen":                   srcWorkerRole,
 		"reject_codes":                       srcRejectCodes,

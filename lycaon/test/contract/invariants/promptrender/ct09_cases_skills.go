@@ -547,7 +547,7 @@ func skillDerived(site interactions.ConditionSite, recipient string) independenc
 			}
 		}
 	case interactions.RecipientWorker:
-		imply(effectAtoms, rootAtoms, srcWorkerRoots)
+		imply(append([]string{"profile_has_command"}, effectAtoms...), rootAtoms, srcWorkerRoots)
 	}
 	return c
 }
