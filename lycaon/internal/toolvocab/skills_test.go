@@ -180,6 +180,21 @@ func TestSkillResourceMentionsMustBeReachable(t *testing.T) {
 	}
 }
 
+func TestSkillDescriptionsNameNoTools(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+	body := "Use `source_history` to locate the definition."
+	// The reader holds the tool, yet the roster line reaches surfaces that do not.
+	named := skills.Skill{Name: "search", Description: "Locate a definition with `source_history`.", Body: body}
+	if err := validateWith(t, catalog, "explore_readonly", named); err == nil {
+		t.Fatal("a skill description naming a tool was accepted")
+	}
+	plain := skills.Skill{Name: "search", Description: "Locate a definition through its history.", Body: body}
+	if err := validateWith(t, catalog, "explore_readonly", plain); err != nil {
+		t.Fatalf("a description naming no tool was rejected: %v", err)
+	}
+}
+
 func TestSkillGuardedMentionsResolvePerReader(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
 	testutil.FailErr(t, "build tool catalog", err)

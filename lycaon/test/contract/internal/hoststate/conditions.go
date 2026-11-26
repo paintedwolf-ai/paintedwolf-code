@@ -54,6 +54,24 @@ func (t *CoverageTracker) ObserveConditions(templatePartition func(map[string]an
 	t.templateRec.Label, t.ruleRec.Label = label, label
 }
 
+// Fork returns a tracker sharing t's registered templates, rules and
+// attribution with fresh recorders, so one render's observations can be read
+// alone without registering the templates again.
+func (t *CoverageTracker) Fork() *CoverageTracker {
+	f := NewCoverageTracker()
+	t.mu.Lock()
+	f.templateSpecs, f.inlineOwners, f.ruleSpecs, f.resolveRef = t.templateSpecs, t.inlineOwners, t.ruleSpecs, t.resolveRef
+	t.mu.Unlock()
+	t.templateRec.Mu.Lock()
+	f.templateRec.Aliases = t.templateRec.Aliases
+	templatePartition, observe := t.templateRec.Partition, t.templateRec.ObserveConditions
+	t.templateRec.Mu.Unlock()
+	if observe {
+		f.ObserveConditions(templatePartition, t.ruleRec.Partition)
+	}
+	return f
+}
+
 // SetCase names the case whose renders and occurrences follow, so observed
 // vectors carry the state that produced them.
 func (t *CoverageTracker) SetCase(id string) { t.currentCase.Store(&id) }
