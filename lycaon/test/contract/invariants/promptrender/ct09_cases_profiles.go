@@ -139,19 +139,6 @@ func (p *profileCaseProducer) render(ctx context.Context, site, recipient, id st
 		extra = append(extra, factTools(f)...)
 	}
 	c := caseOf(knobs, s)
-	if recipient == interactions.RecipientCoordinator {
-		// A coordinator profile cannot defer a tool its surface lists on the
-		// floor; only the surface's loadable tools load on request.
-		floor, err := prompts.CompileSurfacePlan(skillCaseSurface, c.roots)
-		if err != nil {
-			return nil, err
-		}
-		for tool, v := range c.tools {
-			if v == toolDeferred && floor.Immediate(tool) {
-				return nil, nil
-			}
-		}
-	}
 	reader, ok, err := p.readers.reader(recipient, extra, c)
 	if err != nil || !ok {
 		return nil, err

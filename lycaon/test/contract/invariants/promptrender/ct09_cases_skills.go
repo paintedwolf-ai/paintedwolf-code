@@ -327,6 +327,13 @@ func (p *skillCaseProducer) reader(recipient string, extra []string, c skillCase
 		if err != nil {
 			return prompts.Reader{}, false, err
 		}
+		// A coordinator profile cannot defer a tool its surface lists on the
+		// floor; only the surface's loadable tools load on request.
+		for tool, v := range c.tools {
+			if v == toolDeferred && plan.Immediate(tool) {
+				return prompts.Reader{}, false, nil
+			}
+		}
 		plan = plan.Promote(plan.DeferredNames()...)
 		for _, name := range plan.AddressableNames() {
 			// toolpolicy's listing drops worker-child tools from a coordinator.
