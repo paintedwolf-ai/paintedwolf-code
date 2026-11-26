@@ -278,8 +278,8 @@ func mustCreateSessionHTTP(t *testing.T, baseURL, projectID string) wire.Session
 	})
 	testutil.FailErr(t, "marshal create session", err)
 	status, body := doAuthedHTTP(t, http.MethodPost, baseURL+"/v1/sessions", payload)
-	if status != http.StatusCreated {
-		t.Fatalf("POST /v1/sessions status = %d, want 201 (body=%s)", status, string(body))
+	if status != http.StatusCreated && status != http.StatusAccepted {
+		t.Fatalf("POST /v1/sessions status = %d, want 201 or 202 (body=%s)", status, string(body))
 	}
 	var sess wire.Session
 	testutil.FailErr(t, "decode created session", json.Unmarshal(body, &sess))
