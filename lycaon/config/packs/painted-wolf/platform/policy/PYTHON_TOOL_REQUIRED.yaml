@@ -2,18 +2,20 @@ spec_version: "1.0"
 id: PYTHON_TOOL_REQUIRED
 kind: policy
 on: tool.rejected
-selector: {}
-requires_facts: [paintedwolf.command, paintedwolf.rejection_code, paintedwolf.source_column, paintedwolf.source_line]
+selector:
+  tools:
+    - command
+requires_facts: [paintedwolf.command, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.source_column, paintedwolf.source_line]
 when: paintedwolf.rejection_code == "PYTHON_TOOL_REQUIRED"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:python_tool_routing
 message: use the direct Python tool for bare interpreter launches
-what: '{% if paintedwolf.command %}Bare {{ paintedwolf.command }} launch{% else %}Bare Python interpreter launch{% endif %}{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} was stopped before interpreter startup because the direct Python tool is available on this surface.'
-cause: Bare python or python3 launches bypass the direct Python tool structured code, script, or module form.
-why: The direct Python tool runs the same curated Portable Python runtime without shell quoting overhead while preserving workspace authority, receipts, and earlier completed operations.
-fix: Invoke the direct Python tool with code, script, or module (plus optional cwd and args). For a project virtual environment or system Python, invoke external -- python3 or the explicit project interpreter path.
-instead: Preserve earlier completed operations and switch this Python step to the direct Python tool, or use external -- python3 when project or system Python is required.
+what: '{% if paintedwolf.command %}Bare {{ paintedwolf.command }} launch{% else %}Bare Python interpreter launch{% endif %}{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} stopped before startup.'
+cause: The direct Python tool is offered on this surface.
+why: Earlier completed operations remain authoritative.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Preserve earlier completed operations instead of replaying prior steps.
 x-paintedwolf-scenarios:
   - id: bare-python3-command
     vars:

@@ -318,6 +318,35 @@ func TestUnreachableNamesFlagInvocations(t *testing.T) {
 	}
 }
 
+func TestToolsInDistinguishesHostResourceSectionFromProse(t *testing.T) {
+	schemas := &toolschema.Config{
+		Tools: map[string]toolschema.Entry{
+			"python": {Description: "Run helper scripts."},
+		},
+	}
+	catalog, err := toolvocab.NewCatalog(schemas, []sandbox.ToolProfile{{ID: "stock"}}, toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+
+	// Structured host-resource roster bullets inside "## Host resources" are not tool calls.
+	roster := "## Host resources\n\nObserved on this device.\n\n- Runtimes: `go` allow, `python` allow\n\n## Invariants\n\nStay grounded.\n"
+	if got := toolvocab.UnreachableNames(catalog, roster, nil); len(got) != 0 {
+		t.Fatalf("host-resource roster line falsely flagged as unreachable tool: %v", got)
+	}
+
+	// Negative control: genuine unavailable tool mentions outside the structured host-resource
+	// section — even if followed by "allow" — must still be detected.
+	for _, prose := range []string{
+		"Use `python` to run helper scripts.",
+		"Runtimes: `python` allow is mentioned in ordinary prose.",
+		"## Host resources\n\n- Runtimes: `python` allow\n\n## Invariants\n\nCall `python` directly.\n",
+	} {
+		got := toolvocab.UnreachableNames(catalog, prose, nil)
+		if strings.Join(got, ",") != "python" {
+			t.Fatalf("negative control %q: UnreachableNames = %v, want [python]", prose, got)
+		}
+	}
+}
+
 func TestValidateSkillsSkipsUnofferedSkills(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
 	testutil.FailErr(t, "build tool catalog", err)

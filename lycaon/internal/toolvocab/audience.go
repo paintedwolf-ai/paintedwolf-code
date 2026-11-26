@@ -210,13 +210,36 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 	return notes, joinProblems(problems)
 }
 
-// hostResourcePosture matches a host-resources inventory entry such as
-// "`python` allow" so host resource IDs are not mistaken for tool calls.
-var hostResourcePosture = regexp.MustCompile("`[a-z][a-z0-9_-]*`\\s+(?:allow|ask|deny)\\b")
+// stripHostResourceRoster removes bullet lines inside the structured
+// "## Host resources" section emitted by partials/host-resources.md so host
+// resource IDs (such as `python` under Runtimes) are not mistaken for tool
+// calls. Prose outside that section is left untouched.
+func stripHostResourceRoster(text string) string {
+	if !strings.Contains(text, "## Host resources") {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	inHostResources := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "## Host resources" {
+			inHostResources = true
+			continue
+		}
+		if inHostResources && strings.HasPrefix(trimmed, "## ") {
+			inHostResources = false
+			continue
+		}
+		if inHostResources && strings.HasPrefix(trimmed, "- ") {
+			lines[i] = ""
+		}
+	}
+	return strings.Join(lines, "\n")
+}
 
 // ToolsIn lists the current and retired tools rendered text names as calls, sorted.
 func ToolsIn(c *Catalog, text string) []string {
-	cleaned := hostResourcePosture.ReplaceAllString(text, " ")
+	cleaned := stripHostResourceRoster(text)
 	seen := map[string]bool{}
 	for _, m := range namedTool.FindAllStringSubmatch(cleaned, -1) {
 		if c.registered[m[1]] || c.operations[m[1]] {

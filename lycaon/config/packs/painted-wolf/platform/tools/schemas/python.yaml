@@ -5,26 +5,11 @@ description: >-
 schema:
   type: object
   properties:
-    code:
-      type: string
-      minLength: 1
-      description: Inline Python source executed as __main__.
-    script:
-      type: string
-      minLength: 1
-      description: Workspace Python script path executed as __main__.
-    module:
-      type: string
-      minLength: 1
-      description: Python module name executed as __main__.
-    cwd:
-      type: string
-      description: "Folder for the execution. Empty = the session folder; `@label` or `@label/sub` = any attached folder; `@scratch`/`@output` = session scratch/output; absolute paths are accepted."
-    args:
-      type: array
-      description: Positional string arguments forwarded to sys.argv[1:] without shell interpolation.
-      items:
-        type: string
+    code: {type: string, minLength: 1, description: Inline Python source.}
+    script: {type: string, minLength: 1, description: Workspace script path.}
+    module: {type: string, minLength: 1, description: Module name.}
+    cwd: {type: string, description: "Folder. Empty = session folder; `@label` or `@label/sub` = attached folder; `@scratch`/`@output` = session scratch/output; absolute paths accepted."}
+    args: {type: array, description: "Positional arguments for sys.argv[1:].", items: {type: string}}
   oneOf:
     - required: [code]
     - required: [script]
