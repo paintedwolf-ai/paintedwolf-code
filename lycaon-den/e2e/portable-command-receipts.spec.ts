@@ -164,7 +164,15 @@ async function expandDisclosure(container: Locator) {
   await expect(container).toHaveAttribute("data-expanded", "true");
 }
 
+async function ensureChatView(page: Page) {
+  const backToChat = page.getByRole("button", { name: "Back to chat" });
+  if (await backToChat.isVisible().catch(() => false)) {
+    await backToChat.click();
+  }
+}
+
 async function openFoldedCommand(page: Page) {
+  await ensureChatView(page);
   const span = liveChatStage(page).getByTestId("activity-span-card").last();
   await expandDisclosure(span);
   const card = span.getByTestId("action-card").first();
@@ -218,6 +226,7 @@ webE2e("captures live and settled portable command receipts, document pages, rel
       content: "Portable command completed: alpha.",
     });
     await waitForSessionReady(request, sessionId);
+    await ensureChatView(page);
     await expect(liveChatStage(page).getByTestId("transcript-article-assistant").last()).toContainText("Portable command completed: alpha.");
 
     const { card: settledCard } = await openFoldedCommand(page);
@@ -262,6 +271,7 @@ webE2e("captures live and settled portable command receipts, document pages, rel
     }, { timeout: 20_000 }).toBe(true);
 
     // Close and reopen the settled card to verify L01 cache prevents redundant receipt refetches.
+    await ensureChatView(page);
     await reloadedCard.locator(":scope > .den-transcript-disclosure-header").click();
     await expect(reloadedCard).toHaveAttribute("data-expanded", "false");
     await expandDisclosure(reloadedCard);
