@@ -2,7 +2,9 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/invocation"
@@ -10,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ProgramProgressOwner supplies the existing progress store and reconciler
@@ -84,31 +87,13 @@ func applyProgramProgress(
 	observer := invocation.ProgramAdmissionRecorder{Recorder: r.Recorder, Inputs: run.capture}
 	res, err := r.Executor.ApplyProgramProgress(ctx, prepared, store, r.Progress, reconciler, observer, run.tc)
 	settleCtx := context.WithoutCancel(ctx)
+	detailRef := "output:program-source:" + run.root.Identity.ProgramID
 	if err != nil {
-		stopCode := toolrejection.ToolOwnerFailedCode
-		state := "unknown"
-		if tr := toolrejection.AsToolReject(err); tr != nil {
-			if tr.Code != "" {
-				stopCode = tr.Code
-			}
-			state = "rejected"
-		}
-		if res.Identity.ExecutionID != "" {
-			_ = r.Recorder.SettleProgramProgress(settleCtx, invocation.ProgressSettlement{
-				Identity:        res.Identity,
-				OwnerInvoked:    res.OwnerInvoked,
-				State:           state,
-				DetailReference: "output:progress:" + res.Identity.ExecutionID,
-			})
-		} else {
-			_ = r.Recorder.RecordProgressRefusal(settleCtx, run.root.Identity.ProgramID, "progress")
-		}
-		_ = r.Recorder.SettleProgram(settleCtx, run.root.Identity.ProgramID, toolcontract.ProgramSettlement{
-			State:           "rejected",
-			StopCode:        stopCode,
-			DetailReference: "output:program-source:" + run.root.Identity.ProgramID,
-		})
-		return nil, err
+		return nil, settleFailedProgramProgress(settleCtx, r, run, res, detailRef, err)
+	}
+	if run.tc.Effects.Out != nil {
+		advanced := res.Outcome.AdvancesWorkflow()
+		run.tc.Effects.Out.Facts.WorkflowAdvanced = &advanced
 	}
 	receiptState := "unchanged"
 	status := "unchanged"
@@ -116,17 +101,13 @@ func applyProgramProgress(
 		receiptState = "committed"
 		status = "updated"
 	}
-	if err := r.Recorder.SettleProgramProgress(settleCtx, invocation.ProgressSettlement{
+	if settleErr := r.Recorder.SettleProgramProgress(settleCtx, invocation.ProgressSettlement{
 		Identity:        res.Identity,
 		OwnerInvoked:    true,
 		State:           receiptState,
 		DetailReference: "output:progress:" + res.Identity.ExecutionID,
-	}); err != nil {
-		return nil, err
-	}
-	if run.tc.Effects.Out != nil {
-		advanced := res.Outcome.AdvancesWorkflow()
-		run.tc.Effects.Out.Facts.WorkflowAdvanced = &advanced
+	}); settleErr != nil {
+		return nil, recoverCommittedProgressSettlementFault(settleCtx, r, run, res, detailRef, settleErr)
 	}
 	return &ProgramProgressOutcome{
 		Status:               status,
@@ -136,4 +117,99 @@ func applyProgramProgress(
 		ReconciliationStatus: res.Outcome.ReconciliationStatus,
 		Snapshot:             progress.ForRequest(res.Identity.RootSessionID, res.Outcome.Snapshot),
 	}, nil
+}
+
+func settleFailedProgramProgress(
+	ctx context.Context,
+	r *ProgramRuntime,
+	run *programRun,
+	res toolexecution.ProgramProgressResult,
+	detailRef string,
+	applyErr error,
+) error {
+	stopCode := toolrejection.ToolOwnerFailedCode
+	state := "unknown"
+	tr := toolrejection.AsToolReject(applyErr)
+	if tr != nil {
+		if tr.Code != "" {
+			stopCode = tr.Code
+		}
+		state = "rejected"
+	}
+	var settleErrs []error
+	if res.Identity.ExecutionID != "" {
+		if sErr := r.Recorder.SettleProgramProgress(ctx, invocation.ProgressSettlement{
+			Identity:        res.Identity,
+			OwnerInvoked:    res.OwnerInvoked,
+			State:           state,
+			DetailReference: "output:progress:" + res.Identity.ExecutionID,
+		}); sErr != nil {
+			settleErrs = append(settleErrs, fmt.Errorf("settle progress receipt: %w", sErr))
+		}
+	} else if rErr := r.Recorder.RecordProgressRefusal(ctx, run.root.Identity.ProgramID, "progress"); rErr != nil {
+		settleErrs = append(settleErrs, fmt.Errorf("record progress refusal: %w", rErr))
+	}
+	if pErr := r.Recorder.SettleProgram(ctx, run.root.Identity.ProgramID, toolcontract.ProgramSettlement{
+		State:           "rejected",
+		StopCode:        stopCode,
+		DetailReference: detailRef,
+	}); pErr != nil {
+		settleErrs = append(settleErrs, fmt.Errorf("settle program receipt: %w", pErr))
+		if iErr := r.Recorder.InterruptProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, detailRef); iErr != nil {
+			settleErrs = append(settleErrs, fmt.Errorf("recover program receipt: %w", iErr))
+		}
+	}
+	if len(settleErrs) == 0 {
+		return applyErr
+	}
+	joined := errors.Join(settleErrs...)
+	if tr == nil {
+		return errors.Join(applyErr, joined)
+	}
+	clone := *tr
+	data := map[string]any{}
+	if tr.Data != nil {
+		maps.Copy(data, tr.Data)
+	}
+	data["program_id"] = run.root.Identity.ProgramID
+	data["progress_committed"] = false
+	data["command_executed"] = false
+	data["program_replay_available"] = false
+	data["settlement_error"] = joined.Error()
+	clone.Data = data
+	return &clone
+}
+
+func recoverCommittedProgressSettlementFault(
+	ctx context.Context,
+	r *ProgramRuntime,
+	run *programRun,
+	res toolexecution.ProgramProgressResult,
+	detailRef string,
+	settleErr error,
+) error {
+	recoverErr := r.Recorder.InterruptProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, detailRef)
+	data := map[string]any{
+		"tool":                     run.tool,
+		"program_id":               run.root.Identity.ProgramID,
+		"progress_execution_id":    res.Identity.ExecutionID,
+		"progress_committed":       res.Outcome.Updated,
+		"progress_owner_invoked":   true,
+		"command_executed":         false,
+		"program_replay_available": false,
+		"reason":                   settleErr.Error(),
+	}
+	if res.Outcome.Updated {
+		data["snapshot"] = progress.ForRequest(res.Identity.RootSessionID, res.Outcome.Snapshot)
+	}
+	if recoverErr != nil {
+		data["settlement_error"] = recoverErr.Error()
+	}
+	return &toolrejection.ToolReject{
+		Code:         toolrejection.ToolOwnerFailedCode,
+		OwnerRef:     "progress",
+		FailureClass: api.FailureClassOwnerError,
+		BeforeEffect: !res.Outcome.Updated,
+		Data:         data,
+	}
 }

@@ -101,6 +101,12 @@ func (e *Metadata) enrichToolMeta(ctx context.Context, meta tools.ToolMeta, filt
 }
 
 func (e *Metadata) toolVisibleForFilter(ctx context.Context, filter platform.ToolFilter, tool string) bool {
+	if filter.SurfaceID != "" {
+		surfaceTools, err := surfaceCommandFormTools(filter.SurfaceID)
+		if err != nil || (surfaceTools != nil && !surfaceTools[tool]) {
+			return false
+		}
+	}
 	if e == nil || e.policy == nil {
 		return true
 	}

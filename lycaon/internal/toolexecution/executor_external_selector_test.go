@@ -68,9 +68,9 @@ func TestCommandSchemaOffersExternalOnlyWhenNotHidden(t *testing.T) {
 	if !slices.Contains(parts(), "external_exec_selector") {
 		t.Fatalf("offered selector missing from DescriptionParts: %v", parts())
 	}
-	hasProgressUpdate := func(profileID string) bool {
-		metas, err := rt.Executor.Metadata.List(t.Context(), platform.ToolFilter{ProfileID: profileID, ProjectRootCount: 1})
-		testutil.FailErr(t, "list tools for "+profileID, err)
+	hasProgressUpdate := func(profileID, surfaceID string) bool {
+		metas, err := rt.Executor.Metadata.List(t.Context(), platform.ToolFilter{ProfileID: profileID, SurfaceID: surfaceID, ProjectRootCount: 1})
+		testutil.FailErr(t, "list tools for "+profileID+"/"+surfaceID, err)
 		for _, meta := range metas {
 			if meta.Name == "command" {
 				props, _ := meta.ArgsSchema["properties"].(map[string]any)
@@ -78,16 +78,21 @@ func TestCommandSchemaOffersExternalOnlyWhenNotHidden(t *testing.T) {
 				return ok
 			}
 		}
-		t.Fatalf("command not listed for %s", profileID)
+		t.Fatalf("command not listed for %s/%s", profileID, surfaceID)
 		return false
 	}
-	if !hasProgressUpdate("coordinator") {
-		t.Fatal("coordinator command schema must offer progress_update")
+	if !hasProgressUpdate("coordinator", "implement_investigate") {
+		t.Fatal("coordinator implement_investigate command schema must offer progress_update")
 	}
-	if hasProgressUpdate("implement") {
+	for _, restrictedSurface := range []string{"await_user", "observe_plan", "unknown_surface"} {
+		if hasProgressUpdate("coordinator", restrictedSurface) {
+			t.Fatalf("coordinator %s command schema must prune progress_update", restrictedSurface)
+		}
+	}
+	if hasProgressUpdate("implement", "") {
 		t.Fatal("implement command schema must prune progress_update when update_progress is unoffered")
 	}
-	if hasProgressUpdate("explore_readonly") {
+	if hasProgressUpdate("explore_readonly", "") {
 		t.Fatal("explore_readonly command schema must prune progress_update when update_progress is unoffered")
 	}
 	readOnlyMetas, err := rt.Executor.Metadata.List(t.Context(), platform.ToolFilter{ProfileID: "explore_readonly", ProjectRootCount: 1})
