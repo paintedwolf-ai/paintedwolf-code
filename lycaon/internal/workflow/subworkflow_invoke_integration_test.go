@@ -87,7 +87,8 @@ func TestPlanImplementPhaseInvokesImplementChild(t *testing.T) {
 	if parentStart == "" || active.StartMessageID != "" {
 		t.Fatalf("fixture start messages: parent %q child %q", parentStart, active.StartMessageID)
 	}
-	resolved := mgr.Policy.ResolvedRequest(ctx, sess.ID)
+	resolved, err := mgr.Policy.ResolvedRequest(ctx, sess.ID)
+	testutil.FailErr(t, "resolve child request", err)
 	if resolved.RunID != active.ID || resolved.OpeningMessageID != parentStart || resolved.Text != "test request" {
 		t.Fatalf("child resolved request = %+v, want run %q opened at %q", resolved, active.ID, parentStart)
 	}

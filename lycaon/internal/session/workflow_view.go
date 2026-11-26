@@ -57,7 +57,7 @@ type WorkflowPolicy interface {
 	AssertSessionCompletion(context.Context, string) error
 	AllowedAgents(ctx context.Context, sessionID string) []string
 	ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool)
-	ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest
+	ResolvedRequest(ctx context.Context, sessionID string) (workflowfacts.ResolvedWorkflowRequest, error)
 	ScaffoldVarsForSession(ctx context.Context, sessionID string) (map[string]any, error)
 	ActivePhaseRequiresEvidence(ctx context.Context, sessionID, evidenceType string) bool
 }

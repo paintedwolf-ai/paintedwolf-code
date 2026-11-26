@@ -285,8 +285,8 @@ func (s stubWorkflowManifest) ActivePhaseGuardState(context.Context, string) wor
 	return workflowfacts.WorkflowPhaseGuardState{}
 }
 func (s stubWorkflowManifest) AllowedAgents(context.Context, string) []string { return nil }
-func (s stubWorkflowManifest) ResolvedRequest(context.Context, string) workflowfacts.ResolvedWorkflowRequest {
-	return workflowfacts.ResolvedWorkflowRequest{}
+func (s stubWorkflowManifest) ResolvedRequest(context.Context, string) (workflowfacts.ResolvedWorkflowRequest, error) {
+	return workflowfacts.ResolvedWorkflowRequest{}, nil
 }
 
 func (s stubWorkflowManifest) ActiveManifest(context.Context, string) (workflowfacts.ActiveWorkflowManifest, bool) {
