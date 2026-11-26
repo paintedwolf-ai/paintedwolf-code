@@ -75,6 +75,12 @@ type ProgramRuntime struct {
 	SharedTemp     SharedTempReviewer
 	SourceRuns     SourceRunRecorder
 	FailureTracker *CommandFailureTracker
+	// PortablePython executes managed python, python3, pytest, and markdown-it
+	// command forms inside the curated Portable Python WASI image.
+	PortablePython PythonRunner
+	// DirectPythonOffered optionally overrides whether the active surface offers
+	// the direct python tool for bare-interpreter PYTHON_TOOL_REQUIRED routing.
+	DirectPythonOffered func(tools.ToolContext) bool
 
 	mu        sync.Mutex
 	outputs   map[string]*invocation.ProgramOutputRetention
@@ -113,7 +119,9 @@ type programRun struct {
 	publicationErr  error
 	publishDocument func(context.Context, tools.ToolContext, *toolcontract.ProgramMemory, tools.EditorDocumentPublication) (tools.EditorDocumentApplied, error)
 
-	externalHidden bool
+	externalHidden      bool
+	directPythonOffered bool
+	pythonRunner        PythonRunner
 	// retainOutput keeps one child stream in the program output store.
 	retainOutput  func(ctx context.Context, executionID, stream string, data []byte, complete bool) error
 	executor      *toolexecution.Executor
@@ -223,6 +231,8 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
 	run.custody = r.Provenance
 	run.externalHidden = r.ExternalHidden
+	run.directPythonOffered = r.resolveDirectPythonOffered(tool, tc)
+	run.pythonRunner = r.PortablePython
 	run.publishDocument = owners.PublishDocument
 	if err := r.bindProgramCapture(ctx, run); err != nil {
 		return "", err
@@ -390,11 +400,14 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	builtins := jobBuiltins(jobs, run.commands)
 	listeners := listenerInspection{sessionID: tc.Identity.SessionID, jobs: jobs, ports: r.Ports, review: tc.Execution.ProcessReview}
 	natives := map[string]NativeOperation{
-		"kill":  killOperation(jobs, run.commands["kill"]),
-		"lsof":  listeners.operation(run.commands["lsof"]),
-		"pgrep": pgrepOperation(jobs, run.commands["pgrep"]),
-		"pkill": pkillOperation(jobs, run.commands["pkill"]),
-		"sleep": sleepOperation(run.commands["sleep"]),
+		"kill":        killOperation(jobs, run.commands["kill"]),
+		"lsof":        listeners.operation(run.commands["lsof"]),
+		"pgrep":       pgrepOperation(jobs, run.commands["pgrep"]),
+		"pkill":       pkillOperation(jobs, run.commands["pkill"]),
+		"sleep":       sleepOperation(run.commands["sleep"]),
+		"python":      pythonNativeOperation(run.commands["python"], run.pythonRunner, run),
+		"pytest":      pytestNativeOperation(run.commands["pytest"], run.pythonRunner, run),
+		"markdown-it": markdownItNativeOperation(run.commands["markdown-it"], run.pythonRunner, run),
 	}
 	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, redirections: owners.Redirections}
 	builtins["timeout"] = timeoutBuiltin(run.commands["timeout"], dispatcher, r.clock())
