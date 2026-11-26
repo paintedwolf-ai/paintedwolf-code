@@ -333,12 +333,12 @@ func TestBB04M11LimitsCleanupAndHistoricalLeads(t *testing.T) {
 			t.Fatal("expected detector work budget overflow, got nil")
 		}
 		limit := captureprojection.ScreeningLimit(screenErr)
-		if limit == nil || limit.Resource != "work" || limit.Maximum != 1 || limit.Observed <= 1 {
+		if limit == nil || limit.Resource != "screen_work_units" || limit.Maximum != 1 || limit.Observed <= 1 {
 			t.Fatalf("L04b work budget error was not classified as structured ScreeningLimit: err=%v limit=%+v", screenErr, limit)
 		}
 		// Verify no duplicated raw text in the classified error string.
 		msg := limit.Error()
-		if strings.Count(msg, "work: requested ") != 1 {
+		if strings.Count(msg, "screen_work_units: requested ") != 1 {
 			t.Fatalf("L04b finding: duplicated work-budget error text: %q", msg)
 		}
 	})
