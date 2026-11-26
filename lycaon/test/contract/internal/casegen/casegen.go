@@ -80,11 +80,13 @@ func Label(knobs []Knob, s Setting) string {
 }
 
 // Vector is one evaluation of a guard: each atom's truth by its text and the
-// decision. Evaluated is false when the case never reached the guard.
+// decision. Evaluated is false when the case never reached the guard. Group
+// names the enclosing path; only vectors of one group pair.
 type Vector struct {
 	Truths    map[string]independence.Truth
 	Decision  bool
 	Evaluated bool
+	Group     string
 }
 
 func (v Vector) String() string {
@@ -188,6 +190,8 @@ type search struct {
 	runs, budget    int
 	spent           int
 	evaluated       bool
+	// group, when set, is the only group run returns evaluations of.
+	group string
 }
 
 func (s *search) key(set Setting) string {
@@ -219,6 +223,9 @@ func (s *search) run(set Setting, goal map[string]independence.Truth) (Vector, e
 	best := Vector{}
 	for _, v := range vs {
 		s.evaluated = s.evaluated || v.Evaluated
+		if s.group != "" && v.Group != s.group {
+			continue
+		}
 		if score(v, goal) > score(best, goal) {
 			best = v
 		}
@@ -296,7 +303,9 @@ func (s *search) pair(t Target, need map[string]independence.Truth) (*Case, *Cas
 			nearest = cmp.Or(nearest, describe(va, goal(order[0])))
 			continue
 		}
+		s.group = va.Group
 		b, vb, ok, err := s.climb(t, a, goal(order[1]))
+		s.group = ""
 		if err != nil {
 			return nil, nil, cmp.Or(nearest, describe(vb, goal(order[1]))), err
 		}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/test/contract/internal/casegen"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 	"github.com/lycaon/lycaon/test/contract/internal/independence"
@@ -74,8 +75,12 @@ const (
 	srcConfine = "internal/session/policyfacts/oar_observe.go:ObserveConfine publishes execution facts only for an applied confinement"
 )
 
-// caseBudget bounds targeted generation: runs per gap and in total.
-var caseBudget = casegen.Budget{PerTarget: 120, Total: 12000}
+// caseBudget and templateCaseBudget bound targeted generation: runs per gap
+// and in total.
+var (
+	caseBudget         = casegen.Budget{PerTarget: 120, Total: 12000}
+	templateCaseBudget = casegen.Budget{PerTarget: 60, Total: 6000}
+)
 
 // StockConditionLedger discovers every stock guard, joins it with the atom
 // observations of the host-state matrix, then generates targeted OAR cases
@@ -107,19 +112,63 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	if err != nil {
 		return nil, err
 	}
-	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations())
-	in.Searches = searchesOf(outcomes, gapRecipients)
+	kicks, err := newKickCaseProducer(s, sites)
+	if err != nil {
+		return nil, err
+	}
+	tTargets, tRecipients := templateTargets(first)
+	tOutcomes, err := casegen.Generate(ctx, kicks, tTargets, templateCaseBudget)
+	if err != nil {
+		return nil, err
+	}
+	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations())
+	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes), slices.Concat(gapRecipients, tRecipients))
 	l, err := interactions.BuildConditionLedger(in)
 	if err != nil {
 		return nil, err
 	}
-	l.Generation = interactions.GenerationSummary{Targets: len(targets), Runs: gen.producer.Runs(), Seconds: time.Since(started).Seconds()}
-	for _, o := range outcomes {
+	l.Generation = interactions.GenerationSummary{
+		Targets: len(targets) + len(tTargets), Runs: gen.producer.Runs() + kicks.runs, Seconds: time.Since(started).Seconds(),
+	}
+	for _, o := range slices.Concat(outcomes, tOutcomes) {
 		if o.Found {
 			l.Generation.Found++
 		}
 	}
 	return l, nil
+}
+
+// templateTargets turns each gap of a composed template guard into
+// generation targets; a guard nobody evaluated is searched on both
+// recipients.
+func templateTargets(l *interactions.ConditionLedger) ([]casegen.Target, []string) {
+	byID := map[string]interactions.ConditionSite{}
+	for _, s := range l.Sites {
+		byID[s.ID] = s
+	}
+	var out []casegen.Target
+	var gapRecipients []string
+	for _, gap := range l.Gaps {
+		site := byID[gap.Site]
+		if site.Family != "template" {
+			continue
+		}
+		needs := gap.Needs
+		if len(needs) == 0 {
+			if expr, err := pongoplain.ParseExpression(site.Source); err == nil {
+				needs = casegen.Needs(distinctAtoms(site.Atoms), gap.Atom, expr.Decide, 16)
+			}
+		}
+		recipients := []string{gap.Recipient}
+		if gap.Recipient == interactions.RecipientAny {
+			recipients = []string{interactions.RecipientCoordinator, interactions.RecipientWorker}
+		}
+		for _, r := range recipients {
+			out = append(out, casegen.Target{Site: gap.Site, Recipient: r, Input: gap.Atom, Needs: needs, References: templateReferences})
+			gapRecipients = append(gapRecipients, gap.Recipient)
+		}
+	}
+	return out, gapRecipients
 }
 
 // NewConditionTracker returns a tracker that attributes stock template and
