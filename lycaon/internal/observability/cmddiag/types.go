@@ -37,13 +37,15 @@ const (
 
 // Default bounds for async capture and emitted metadata.
 const (
-	DefaultQueueCapacity        = 64
-	DefaultMaxExecutionsPerRead = 256
-	DefaultMaxIDsPerFinding     = 16
-	DefaultMaxFieldBytes        = 256
-	DefaultTaskTimeout          = 5 * time.Second
-	DefaultCloseGrace           = 250 * time.Millisecond
-	DefaultMaxDedupEntries      = 4096
+	DefaultQueueCapacity         = 64
+	DefaultMaxExecutionsPerRead  = 256
+	DefaultMaxIDsPerFinding      = 16
+	DefaultMaxFieldBytes         = 256
+	DefaultTaskTimeout           = 5 * time.Second
+	DefaultCloseGrace            = 250 * time.Millisecond
+	DefaultMaxDedupEntries       = 4096
+	DefaultMaxSnapshotActivities = 16
+	DefaultMaxSnapshotExecIDs    = 4
 )
 
 // Task is a lightweight bounded work item enqueued onto the async worker
@@ -113,13 +115,17 @@ type TerminalFact struct {
 	Source          string `json:"source,omitempty"`
 }
 
-// PresentationSnapshot captures the consumer's independently delivered
-// terminal presentation metadata.
+// PresentationSnapshot captures bounded terminal presentation metadata,
+// either from an explicit consumer catch-up witness or a host-boundary
+// publication snapshot (HostBoundaryOnly=true).
 type PresentationSnapshot struct {
 	ProgramState      string         `json:"program_state"`
 	ProgramStatusCode *int           `json:"program_status_code,omitempty"`
 	ProgramStopCode   string         `json:"program_stop_code,omitempty"`
 	ActivityRevision  int64          `json:"activity_revision,omitempty"`
+	ActivityCount     int            `json:"activity_count,omitempty"`
+	HostBoundaryOnly  bool           `json:"host_boundary_only,omitempty"`
+	Truncated         bool           `json:"truncated,omitempty"`
 	Activities        []ActivityFact `json:"activities,omitempty"`
 }
 

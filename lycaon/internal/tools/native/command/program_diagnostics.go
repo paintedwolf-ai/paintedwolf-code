@@ -29,7 +29,7 @@ func observeSettledProgramDiagnostics(reader programDiagnosticReader, sessionID,
 	}
 	var pres *cmddiag.PresentationSnapshot
 	if delivered != nil {
-		pres = presentationFromReceipt(*delivered)
+		pres, _ = boundedPresentationFromReceipt(*delivered)
 	}
 	return cmddiag.ObserveTask(cmddiag.Task{
 		SessionID:  sessionID,
@@ -110,7 +110,7 @@ func fetchProgramObservation(ctx context.Context, reader programDiagnosticReader
 		PageInconsistent:        pageInconsistent,
 		LookupFailedExecutions:  lookupFailed,
 		ActivityRevision:        program.ActivityRevision,
-		ConsumerCaughtUp:        delivered != nil,
+		ConsumerCaughtUp:        false,
 		PresentationUnsupported: delivered == nil,
 		Presentation:            delivered,
 		Executions:              execs,
@@ -181,14 +181,30 @@ func linkedOperationFact(ctx context.Context, reader programDiagnosticReader, se
 	return link, false
 }
 
-func presentationFromReceipt(summary api.CommandProgramReceipt) *cmddiag.PresentationSnapshot {
-	acts := make([]cmddiag.ActivityFact, 0, len(summary.Activities))
-	for _, a := range summary.Activities {
+// boundedPresentationFromReceipt extracts an O(1)-bounded host publication
+// snapshot before queue admission, returning the snapshot and the bounded
+// number of activities copied. Any excess marks Truncated=true so omitted
+// comparisons never appear complete.
+func boundedPresentationFromReceipt(summary api.CommandProgramReceipt) (*cmddiag.PresentationSnapshot, int) {
+	total := len(summary.Activities)
+	limit := min(total, cmddiag.DefaultMaxSnapshotActivities)
+	truncated := total > limit
+	acts := make([]cmddiag.ActivityFact, 0, limit)
+	for i := 0; i < limit; i++ {
+		a := summary.Activities[i]
+		idLimit := min(len(a.ExecutionIDs), cmddiag.DefaultMaxSnapshotExecIDs)
+		if len(a.ExecutionIDs) > idLimit {
+			truncated = true
+		}
+		var execIDs []string
+		if idLimit > 0 {
+			execIDs = append([]string(nil), a.ExecutionIDs[:idLimit]...)
+		}
 		acts = append(acts, cmddiag.ActivityFact{
 			ActivityID:   a.ID,
 			State:        a.State,
 			StatusCode:   a.StatusCode,
-			ExecutionIDs: append([]string(nil), a.ExecutionIDs...),
+			ExecutionIDs: execIDs,
 		})
 	}
 	return &cmddiag.PresentationSnapshot{
@@ -196,6 +212,9 @@ func presentationFromReceipt(summary api.CommandProgramReceipt) *cmddiag.Present
 		ProgramStatusCode: summary.StatusCode,
 		ProgramStopCode:   summary.StopCode,
 		ActivityRevision:  summary.ActivityRevision,
+		ActivityCount:     total,
+		HostBoundaryOnly:  true,
+		Truncated:         truncated,
 		Activities:        acts,
-	}
+	}, limit
 }
