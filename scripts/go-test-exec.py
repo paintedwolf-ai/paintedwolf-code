@@ -38,8 +38,9 @@ def write_all(data):
 def execute(binary, arguments, env, owner, observe_forks, settle, resource_limit=None):
     """Run the binary with combined output streamed through.
 
-    Returns (wait status, output, forked, resource violation, leaked processes). Once the binary exits, settle
-    removes what it left behind, so a leaked holder of the output cannot delay the outcome.
+    Returns (wait status, output, forked, resource violation, leaked processes, memory observation).
+    Once the binary exits, settle removes what it left behind, so a leaked holder of the output
+    cannot delay the outcome.
     """
     output_read, output_write = os.pipe()
     ready_read, ready_write = os.pipe()
@@ -76,7 +77,7 @@ def execute(binary, arguments, env, owner, observe_forks, settle, resource_limit
         signal.signal(signum, forward)
     os.write(ready_write, b"x")
     os.close(ready_write)
-    captured, forked, status, open_output = bytearray(), False, None, True
+    captured, forked, status, rusage, open_output = bytearray(), False, None, None, True
 
     def drain_forks():
         nonlocal forked
@@ -109,9 +110,9 @@ def execute(binary, arguments, env, owner, observe_forks, settle, resource_limit
         if monitor and monitor.sample():
             # The PID was forked above and has not been reaped, so it cannot have been reused.
             os.kill(pid, signal.SIGKILL)
-        finished, code = os.waitpid(pid, os.WNOHANG)
+        finished, code, usage = os.wait4(pid, os.WNOHANG)
         if finished:
-            status, running = code, False
+            status, rusage, running = code, usage, False
     drain_forks()
     observed = forked if watch is not None else None
     leaked = settle() if observed is not False else {}
@@ -119,7 +120,8 @@ def execute(binary, arguments, env, owner, observe_forks, settle, resource_limit
     while open_output and select.select([output_read], [], [], 0)[0]:
         read_output()
     os.close(output_read)
-    return status, bytes(captured), observed, monitor.violation if monitor else None, leaked
+    memory = monitor.finalize(rusage) if monitor else None
+    return status, bytes(captured), observed, monitor.violation if monitor else None, leaked, memory
 
 
 # A supervised child settles itself once the engine exits: its lifetime pipe closes, it kills its
@@ -219,7 +221,7 @@ def main():
             scan["seconds"] = round(time.monotonic() - scan_started, 3)
 
     with tempfile.NamedTemporaryFile(prefix="package-child-", dir=environment["PW_TEST_SCRATCH_ROOT"]) as owner:
-        status, output, forked, resource_limit, leaked = execute(
+        status, output, forked, resource_limit, leaked, memory = execute(
             binary, arguments, {**runtime_environment(child_environment, heap_limit), OWNER_ENV: entry.partition("=")[2]},
             owner, fork_observable(), settle, limit)
     elapsed = time.monotonic() - started
@@ -239,6 +241,8 @@ def main():
     event = {"package": package, "exit_code": code, "elapsed": round(elapsed, 3), "forked": forked}
     if scan:
         event["child_scan_seconds"] = scan["seconds"]
+    if memory:
+        event["memory"] = memory
     if resource_limit:
         event["resource_limit"] = resource_limit
     if code != 0:
