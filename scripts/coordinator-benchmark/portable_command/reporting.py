@@ -81,6 +81,9 @@ FACT_OWNERS = {
     'progress_committed_separately': 'progress_owner',
     'no_gated_effect': 'program_runtime',
     'fresh_resubmission_only': 'program_runtime',
+    'destination_unchanged': 'filesystem_owner',
+    'accepted_then_published': 'publication_owner',
+    'no_source_statement_started': 'source_owner',
 }
 
 
