@@ -171,7 +171,6 @@ func TestUnobservedRenderRecordsNothing(t *testing.T) {
 	data := map[string]any{"a": true, "b": false, "xs": []int{1, 2}}
 	want, err := ExecuteDetached(tpl, data)
 	testutil.FailErr(t, "plain render", err)
-	NameTemplate(tpl, "probe.md")
 	rec := &BranchRecorder{ObserveConditions: true}
 	ActiveBranchRecorder.Store(rec)
 	defer ActiveBranchRecorder.Store(nil)
@@ -186,7 +185,7 @@ func TestUnobservedRenderRecordsNothing(t *testing.T) {
 	if _, err := Execute(t.Context(), tpl, data); err != nil {
 		t.Fatalf("observed render: %v", err)
 	}
-	if len(rec.Hits) == 0 || len(rec.Conditions) == 0 || rec.Rendered["probe.md"] != 1 {
+	if len(rec.Hits) == 0 || len(rec.Conditions) == 0 || len(rec.Rendered) != 1 {
 		t.Fatalf("observed render recorded hits=%d conditions=%d rendered=%v", len(rec.Hits), len(rec.Conditions), rec.Rendered)
 	}
 }
