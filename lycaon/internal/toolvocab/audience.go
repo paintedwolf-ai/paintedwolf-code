@@ -210,15 +210,10 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 	return notes, joinProblems(problems)
 }
 
-// hostResourcePosture matches a host-resources inventory entry such as
-// "`python` allow" so host resource IDs are not mistaken for tool calls.
-var hostResourcePosture = regexp.MustCompile("`[a-z][a-z0-9_-]*`\\s+(?:allow|ask|deny)\\b")
-
 // ToolsIn lists the current and retired tools rendered text names as calls, sorted.
 func ToolsIn(c *Catalog, text string) []string {
-	cleaned := hostResourcePosture.ReplaceAllString(text, " ")
 	seen := map[string]bool{}
-	for _, m := range namedTool.FindAllStringSubmatch(cleaned, -1) {
+	for _, m := range namedTool.FindAllStringSubmatch(text, -1) {
 		if c.registered[m[1]] || c.operations[m[1]] {
 			seen[m[1]] = true
 		}

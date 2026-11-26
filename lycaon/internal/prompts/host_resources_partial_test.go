@@ -41,7 +41,7 @@ func TestHostResourcesPartialGroupsPresenceAndCap(t *testing.T) {
 	if cloud < 0 || containers < 0 || cloud > containers {
 		t.Fatalf("categories not grouped: %q", excerpt(got, "Host resources"))
 	}
-	if !strings.Contains(got, "`docker` allow") {
+	if !strings.Contains(got, "docker allow") {
 		t.Fatal("missing docker presence line")
 	}
 	if !strings.Contains(got, "(ask)") || !strings.Contains(got, "(avoid unless the user opts in)") {
