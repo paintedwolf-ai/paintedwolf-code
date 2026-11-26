@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/prompts"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -21,19 +20,16 @@ import (
 // current phase's gate states and the leave recipe derived from them, its
 // completion condition, an inherited Blueprint approval
 // (workflow.Approvals.InheritedApprovalSnapshot yields approved or invalid)
-// and a compose summary requiring isolation.
+// and a compose summary requiring isolation. Gate obligations are left out:
+// their feedback is rendered and checked per leaf elsewhere.
 func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
-	gateCfg, err := feedback.LoadGateFeedbackCatalogWithCatalog(e.s.Catalog)
-	if err != nil {
-		return nil, err
-	}
 	reps := coordinatorRepsBy(e.cReps,
 		func(cr coordRep) bool { return cr.state.TurnProfile.WorkflowActive },
 		func(cr coordRep) string { return offers(cr.auth, "promote_overlay", "ask_user", "workflow_advance") })
 	if len(reps) == 0 {
 		return nil, fmt.Errorf("no stock coordinator on an active run")
 	}
-	gateStates := []string{"open", "failed", "satisfied", "dormant", "none"}
+	gateStates := []string{"open", "failed", "satisfied", "dormant", "none", "open-two", "dormant-two"}
 	knobs := []casegen.Knob{
 		repKnob("rep", []string{"profile_has_promote_overlay", "profile_has_ask_user", "profile_has_workflow_advance", casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
 		indexKnob("gates", []string{"unsatisfied_gate_leaves", "failed_leaves", "current_phase_gates", "phase_exit.open_gates", "phase_exit.dormant_gates"}, gateStates),
@@ -64,6 +60,12 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 			case "dormant":
 				row.Gates = []inject.WorkflowGateState{{ID: "evidence_passed:plan_review", Dormant: true}}
 				exit.DormantGates = []string{"evidence_passed:plan_review"}
+			case "open-two":
+				row.Gates = []inject.WorkflowGateState{{ID: "plan_stub_valid"}, {ID: "hitl_consulted:intake"}}
+				exit.OpenGates = []string{"plan_stub_valid", "hitl_consulted:intake"}
+			case "dormant-two":
+				row.Gates = []inject.WorkflowGateState{{ID: "evidence_passed:plan_review", Dormant: true}, {ID: "evidence_passed:survey_claims", Dormant: true}}
+				exit.DormantGates = []string{"evidence_passed:plan_review", "evidence_passed:survey_claims"}
 			}
 			if knobValue[int](knobs, set, "complete_when") == 1 {
 				row.CompleteWhen, exit.CompleteWhen = "draft ready", "draft ready"
@@ -78,7 +80,7 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 			case 2:
 				snap.BlueprintApproval = &inject.BlueprintApprovalView{Status: "invalid", Origin: "inherited", ParentRunID: "run-parent"}
 			}
-			block, err := inject.RenderActiveWorkflowInject(ctx, e.inj, cr.auth.Reader, "sess-wf-ct09", inject.CoordinatorTurnFrame{RunContext: runCtx, Runtime: snap}, nil, nil, gateCfg)
+			block, err := inject.RenderActiveWorkflowInject(ctx, e.inj, cr.auth.Reader, "sess-wf-ct09", inject.CoordinatorTurnFrame{RunContext: runCtx, Runtime: snap}, nil, nil, nil)
 			if err != nil {
 				return guidanceRender{}, err
 			}
