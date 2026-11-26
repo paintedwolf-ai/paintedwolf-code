@@ -672,7 +672,7 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 		[]byte("def test_cmd_ok():\n    assert 3 * 3 == 9\n"),
 		0o644,
 	))
-	outPytest, err := runCmd("implement", "", []string{"command"}, "pytest -q -p no:cacheprovider")
+	outPytest, err := runCmd("implement", "", []string{"command"}, "pytest -q")
 	testutil.FailErr(t, "run managed pytest via command tool", err)
 	if !strings.Contains(outPytest, "1 passed") {
 		t.Fatalf("expected managed pytest via command tool to pass, got: %q", outPytest)
