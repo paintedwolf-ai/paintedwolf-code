@@ -1,0 +1,14 @@
+id: web-path-explorer
+name: Web path explorer
+description: Path explorer persona on the web research profile
+tool_profile: web_research
+exec_mode: none
+capabilities:
+  - explore
+topology_roles:
+  - worker
+dispatch_lanes:
+  - read
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/path-explorer.md

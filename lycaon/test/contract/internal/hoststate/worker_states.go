@@ -106,7 +106,7 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 									if parentMode != api.SessionModeAsk && upgraded {
 										continue
 									}
-									ws, buildErr := buildWorkerState(ctx, stock, agent, WorkerSeed{
+									ws, buildErr := BuildWorkerState(ctx, stock, agent, WorkerSeed{
 										Posture: posture.ID, BranchView: bv, RootCount: rc, SecondaryRootGit: secGit,
 										Loading: ld, ParentSessionMode: parentMode, ParentUpgradedAskToAgent: upgraded,
 										WebSearch: true, ApprovalPosture: gate.PostureBalanced, TempState: TempNone,
@@ -146,7 +146,7 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 		}
 		for _, agent := range co.Workers {
 			for _, seed := range seeds {
-				ws, buildErr := buildWorkerState(ctx, co.Overlay, agent, seed)
+				ws, buildErr := BuildWorkerState(ctx, co.Overlay, agent, seed)
 				if buildErr != nil {
 					return nil, buildErr
 				}
@@ -303,8 +303,8 @@ func buildNarrowWorkerSeeds(ctx context.Context, domains *SeedDomains) []WorkerS
 	return seeds
 }
 
-// buildWorkerState resolves seed's coordinates for agent in overlay.
-func buildWorkerState(ctx context.Context, overlay PackOverlay, agent WorkerAgent, seed WorkerSeed) (WorkerState, error) {
+// BuildWorkerState resolves seed's coordinates for agent in overlay.
+func BuildWorkerState(ctx context.Context, overlay PackOverlay, agent WorkerAgent, seed WorkerSeed) (WorkerState, error) {
 	bv, rootCount := seed.BranchView, seed.RootCount
 	parentAsk := seed.ParentSessionMode == api.SessionModeAsk
 	hasGit := rootCount > 0 && bv != BranchMainNonGit
@@ -320,6 +320,10 @@ func buildWorkerState(ctx context.Context, overlay PackOverlay, agent WorkerAgen
 		excluded = "worker_without_roots_has_no_repository_view"
 	case rootCount == 0 && mutCapable:
 		excluded = "write_scope_requires_project_roots"
+	// internal/worker/task_tool.go refuses a rootless spawn with
+	// WORKER_WORKSPACE_REQUIRED unless prompts.AgentRunsWithoutWorkspace.
+	case rootCount == 0 && profileSurveysProjectTree(overlay, agent.ToolProfile):
+		excluded = "survey_tree_requires_project_roots"
 	case onBranch && !mutCapable:
 		excluded = "read_only_agent_has_no_isolated_worker_branch"
 	case parentAsk && mutCapable:

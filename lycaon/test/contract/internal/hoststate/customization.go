@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -33,6 +34,8 @@ type customizationSpec struct {
 	worker      bool
 	// workers names stock agents whose facts move without a profile change.
 	workers []string
+	// packRoots are pack folders installed beside packs, by absolute path.
+	packRoots []string
 	// project is a fixture project whose overlay extensions file disables
 	// units at project scope.
 	project string
@@ -79,7 +82,11 @@ var customizationSpecs = []customizationSpec{
 // the states it meets: unit disables from device desired state and from a
 // fixture project's extensions file, resolved through extpacks.Resolve.
 type CustomizationCase struct {
-	ID             string
+	ID string
+	// Packs are pack folders installed from disk; Own selects collision
+	// winners among them and the stock packs.
+	Packs          []string
+	Own            map[string]string
 	DeviceDisabled []string
 	// Project is a fixture project directory; its overlay extensions.yaml
 	// disables units at project scope.
@@ -114,7 +121,7 @@ func AddCustomizationCases(cases ...CustomizationCase) bool {
 	}
 	for _, c := range cases {
 		customizationSpecs = append(customizationSpecs, customizationSpec{
-			id: c.ID, disable: c.DeviceDisabled, project: c.Project,
+			id: c.ID, packRoots: c.Packs, own: c.Own, disable: c.DeviceDisabled, project: c.Project,
 			coordinator: c.Coordinator != nil, worker: len(c.WorkerAgents) > 0, workers: c.WorkerAgents,
 			coordinatorSeeds: c.Coordinator, workerSeeds: c.Workers,
 		})
@@ -196,23 +203,12 @@ func CustomizationOverlays(_ context.Context) ([]CustomizationOverlay, error) {
 }
 
 func buildCustomizationOverlay(ctx context.Context, spec customizationSpec, stockContent []extpacks.PackContent) (PackOverlay, error) {
-	packs := slices.Clone(stockContent)
-	desired := extpacks.DesiredState{Format: extpacks.DesiredFormat, Own: spec.own, Disabled: spec.disable}
+	roots := make([]string, 0, len(spec.packs))
 	for _, dir := range spec.packs {
-		root := filepath.Join(customizationRoot(), "packs", dir)
-		man, err := extpacks.LoadManifest(root)
-		if err != nil {
-			return PackOverlay{}, fmt.Errorf("customization %s: %w", spec.id, err)
-		}
-		pc, err := extpacks.InventoryPack(extpacks.Pack{ID: man.ID, Root: extpacks.OnDisk(root)}, man)
-		if err != nil {
-			return PackOverlay{}, fmt.Errorf("customization %s: %w", spec.id, err)
-		}
-		pc.Kind = extpacks.PackKindPath
-		packs = append(packs, pc)
-		enabled := true
-		desired.Packs = append(desired.Packs, extpacks.DesiredPack{ID: man.ID, Source: root, Development: true, Enabled: &enabled})
+		roots = append(roots, filepath.Join(customizationRoot(), "packs", dir))
 	}
+	roots = append(roots, spec.packRoots...)
+	desired := extpacks.DesiredState{Format: extpacks.DesiredFormat, Own: spec.own, Disabled: spec.disable}
 	var projectDisabled []string
 	if spec.project != "" {
 		m, err := extpacks.LoadSuggestionFile(extpacks.ProjectDesiredPath(spec.project))
@@ -224,10 +220,7 @@ func buildCustomizationOverlay(ctx context.Context, spec customizationSpec, stoc
 		}
 		projectDisabled = m.Disabled
 	}
-	merged, provenance := extpacks.MergeDesired(desired, projectDisabled)
-	ov, err := buildPackOverlay(ctx, spec.id, "", extpacks.ResolveInput{
-		Packs: packs, Desired: merged, ProjectID: spec.project, Provenance: provenance,
-	})
+	ov, err := overlayWithPacks(ctx, spec.id, roots, "", stockContent, desired, projectDisabled, spec.project)
 	if err != nil {
 		return PackOverlay{}, err
 	}
@@ -239,6 +232,66 @@ func buildCustomizationOverlay(ctx context.Context, spec customizationSpec, stoc
 		}
 	}
 	return ov, nil
+}
+
+// overlayWithPacks links each pack folder into the device desired state, as
+// installing a folder does; installedFrom names the project that suggested
+// them. projectDisabled are the units projectID's extensions file disables.
+func overlayWithPacks(
+	ctx context.Context,
+	id string,
+	roots []string,
+	installedFrom string,
+	stockContent []extpacks.PackContent,
+	desired extpacks.DesiredState,
+	projectDisabled []string,
+	projectID string,
+) (PackOverlay, error) {
+	packs := slices.Clone(stockContent)
+	for _, root := range roots {
+		man, err := extpacks.LoadManifest(root)
+		if err != nil {
+			return PackOverlay{}, fmt.Errorf("customization %s: %w", id, err)
+		}
+		pc, err := extpacks.InventoryPack(extpacks.Pack{ID: man.ID, Root: extpacks.OnDisk(root)}, man)
+		if err != nil {
+			return PackOverlay{}, fmt.Errorf("customization %s: %w", id, err)
+		}
+		pc.Kind = extpacks.PackKindPath
+		packs = append(packs, pc)
+		enabled := true
+		desired.Packs = append(desired.Packs, extpacks.DesiredPack{ID: man.ID, Source: root, Development: true, Enabled: &enabled, InstalledFrom: installedFrom})
+	}
+	merged, provenance := extpacks.MergeDesired(desired, projectDisabled)
+	return buildPackOverlay(ctx, id, "", extpacks.ResolveInput{Packs: packs, Desired: merged, ProjectID: projectID, Provenance: provenance})
+}
+
+// ProjectAgentOverlay is the stock device catalog with the pack at root
+// installed as a project's suggestion. Agents are a kind a project shares
+// (extpacks ScopeShared); their tool profiles resolve on the device catalog.
+// Workers are the agents the pack adds.
+func ProjectAgentOverlay(ctx context.Context, id, root, projectID string) (CustomizationOverlay, error) {
+	stockContent, err := extpacks.DiscoverStockContent()
+	if err != nil {
+		return CustomizationOverlay{}, fmt.Errorf("discover stock content: %w", err)
+	}
+	base, err := DiscoverPackOverlays(ctx)
+	if err != nil {
+		return CustomizationOverlay{}, err
+	}
+	desired := extpacks.DesiredState{Format: extpacks.DesiredFormat, Own: map[string]string{}}
+	ov, err := overlayWithPacks(ctx, id, []string{root}, projectID, stockContent, desired, nil, "")
+	if err != nil {
+		return CustomizationOverlay{}, err
+	}
+	if err := refuseNewErrorDiagnostics(base[0].Catalog, ov.Catalog, id); err != nil {
+		return CustomizationOverlay{}, err
+	}
+	workers := customizedWorkerAgents(base[0], ov, nil)
+	if len(workers) == 0 {
+		return CustomizationOverlay{}, fmt.Errorf("project pack %s adds no worker agent", root)
+	}
+	return CustomizationOverlay{Overlay: ov, Worker: true, Workers: workers}, nil
 }
 
 // refuseNewErrorDiagnostics fails when Resolve reports something the
@@ -287,6 +340,18 @@ func profileByID(overlay PackOverlay, id string) any {
 		}
 	}
 	return nil
+}
+
+// profileSurveysProjectTree reports whether profileID in overlay can survey the
+// project tree, which production refuses to spawn without project roots.
+func profileSurveysProjectTree(overlay PackOverlay, profileID string) bool {
+	for _, p := range overlay.Profiles {
+		if p.ID == profileID {
+			surface, err := prompts.LoadAgentToolSurface(p.ID, nil, nil, nil, nil, []sandbox.ToolProfile{p})
+			return err == nil && prompts.ProfileSurveysProjectTree(surface)
+		}
+	}
+	return false
 }
 
 // profileMutationCapable reports whether profileID in overlay can mutate.
