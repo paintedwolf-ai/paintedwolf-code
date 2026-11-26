@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolvocab"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 	"github.com/lycaon/lycaon/test/contract/internal/interactions"
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
@@ -89,7 +90,7 @@ func TestHostStateInventoryHasNoUnexplainedGaps(t *testing.T) {
 	t.Logf("host-state inventory JSON:\n%s", raw)
 	t.Logf("host-state inventory:\n%s", rep.FormatMarkdown())
 	if err := rep.ValidateZeroUnexplainedGaps(); err != nil {
-		t.Fatal(err)
+		contractcheck.FailErr(t, "rep.ValidateZeroUnexplainedGaps failed", err)
 	}
 }
 

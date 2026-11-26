@@ -3,6 +3,8 @@ package pongoplain
 import (
 	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestParseExpressionPrintsEveryKindAsEquivalentSource(t *testing.T) {
@@ -93,9 +95,7 @@ func TestParseExpressionFailsClosed(t *testing.T) {
 
 func TestExprBooleanSkeletonDecidesFromAtoms(t *testing.T) {
 	expr, err := ParseExpression(`a or not b and c|length > 1 or d`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "ParseExpression failed", err)
 	var atoms []string
 	for _, atom := range expr.Atoms() {
 		atoms = append(atoms, atom.Source())

@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
 
@@ -68,9 +69,7 @@ func TestFuzzCorpusSemanticWitnesses(t *testing.T) {
 	for _, overlay := range []string{"without-implement", "without-hitl"} {
 		t.Run("coordinator_"+overlay, func(t *testing.T) {
 			states, err := hoststate.CoordinatorStates(t.Context())
-			if err != nil {
-				t.Fatal(err)
-			}
+			contractcheck.FailErr(t, "hoststate.CoordinatorStates failed", err)
 			ran := map[string]bool{}
 			for _, st := range states {
 				if st.Excluded || st.PackOverlayID != overlay || ran[st.TurnProfile.SurfaceID] {
@@ -108,9 +107,7 @@ func TestFuzzCorpusSemanticWitnesses(t *testing.T) {
 		)
 		rep := run(t, raw)
 		decoded, err := d.Decode(raw)
-		if err != nil {
-			t.Fatal(err)
-		}
+		contractcheck.FailErr(t, "d.Decode failed", err)
 		b := decoded.Coordinator
 		for _, ch := range decoded.Tail.Changes[:2] {
 			b = mutateCoordinatorSeed(d, b, ch.Axis, ch.Value)

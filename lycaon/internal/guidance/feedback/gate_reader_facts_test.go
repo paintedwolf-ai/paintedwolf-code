@@ -1,6 +1,10 @@
 package feedback
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+)
 
 // A gate leaf reads the turn reader's facts as top-level variables beside
 // `context`; without them a reader fact is absent and its guard is false.
@@ -18,9 +22,7 @@ func TestGateSignalTextReadsReaderFacts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			extras := WithReaderFacts(map[string]any{"review_agents": "r"}, tc.facts)
 			got, err := renderGateSignalText(t.Context(), tmpl, GateFeedbackContext(WorkflowEvaluationContext{}, extras))
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "renderGateSignalText failed", err)
 			if got != tc.want {
 				t.Fatalf("rendered %q, want %q", got, tc.want)
 			}

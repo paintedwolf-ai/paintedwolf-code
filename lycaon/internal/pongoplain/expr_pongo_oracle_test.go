@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // oracleAssignments are the variable sets every oracle expression is decided
@@ -125,15 +127,13 @@ func TestParsedTreeMatchesPongoEvaluation(t *testing.T) {
 func TestObservedConditionsRecomposeUnderPongoGrammar(t *testing.T) {
 	src := `{% if a and b or not n == m and c %}1{% elif -n + m > 0 or a and not c %}2{% endif %}`
 	tpl, err := Compile(src)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "Compile failed", err)
 	rec := &BranchRecorder{ObserveConditions: true}
 	ActiveBranchRecorder.Store(rec)
 	defer ActiveBranchRecorder.Store(nil)
 	for _, vars := range oracleAssignments {
 		if _, err := ExecuteDetached(tpl, vars); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "ExecuteDetached failed", err)
 		}
 	}
 	if len(rec.Conditions) != 2 {

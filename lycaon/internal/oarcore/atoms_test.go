@@ -3,6 +3,8 @@ package oarcore
 import (
 	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestConditionAtomsSplitConnectivesAndEvaluateIndependently(t *testing.T) {
@@ -71,9 +73,7 @@ func TestRuleAtomsMatchEvaluatedAtoms(t *testing.T) {
 		t.Fatalf("Atoms() = %v, want %v", rule.Atoms(), want)
 	}
 	values, err := rule.EvaluateAtoms(map[string]any{"tool": "x"}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "rule.EvaluateAtoms failed", err)
 	if want := []Truth{False, False, False}; !slices.Equal([]Truth{values[0].Value, values[1].Value, values[2].Value}, want) {
 		t.Fatalf("values = %+v", values)
 	}
@@ -93,12 +93,8 @@ func TestRuleAtomsMatchEvaluatedAtoms(t *testing.T) {
 func compiledRule(t *testing.T, source string, env *Environment) *Rule {
 	t.Helper()
 	root, err := parseCondition(source)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "parseCondition failed", err)
 	_, refs, err := checkCondition(root, env)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkCondition failed", err)
 	return &Rule{When: root, Refs: refs, environment: env}
 }

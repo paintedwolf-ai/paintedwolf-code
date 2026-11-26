@@ -3,13 +3,13 @@ package pongoplain
 import (
 	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestExprAtomsPrintAsEvaluableSource(t *testing.T) {
 	expr, err := ParseExpression(`a and not (b.c or d == "x") and e|length > 2 and f in g`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "ParseExpression failed", err)
 	var got []string
 	for _, atom := range expr.Atoms() {
 		got = append(got, atom.Source())
@@ -30,9 +30,7 @@ func TestExprAtomsPrintAsEvaluableSource(t *testing.T) {
 
 func TestObservedConditionsRecordEveryAtomPerArm(t *testing.T) {
 	tpl, err := Compile(`{% if a and not (b or n == 2) %}x{% elif a %}y{% endif %}`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "Compile failed", err)
 	rec := &BranchRecorder{ObserveConditions: true}
 	ActiveBranchRecorder.Store(rec)
 	defer ActiveBranchRecorder.Store(nil)
@@ -42,7 +40,7 @@ func TestObservedConditionsRecordEveryAtomPerArm(t *testing.T) {
 		{"a": true, "b": false, "n": 2},
 	} {
 		if _, err := ExecuteDetached(tpl, vars); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "ExecuteDetached failed", err)
 		}
 	}
 	var ifHit, elifHit *ConditionHit

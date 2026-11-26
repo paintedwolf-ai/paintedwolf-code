@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 	"github.com/lycaon/lycaon/test/contract/internal/interactions"
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
@@ -49,7 +50,7 @@ func TestGuardAtomsHaveIndependentWitnesses(t *testing.T) {
 		t.Error(err)
 	}
 	if err := ledger.ValidateZeroUnexplainedGaps(); err != nil {
-		t.Fatal(err)
+		contractcheck.FailErr(t, "ledger.ValidateZeroUnexplainedGaps failed", err)
 	}
 }
 
@@ -68,9 +69,7 @@ func fuzzCorpusConditions(t *testing.T, stock *promptrender.Stock) []hoststate.O
 		names[i] = "fuzz seed " + strconv.Itoa(i)
 	}
 	files, err := filepath.Glob(filepath.Join("testdata", "fuzz", "FuzzRecipientGuidanceAcrossHostStates", "*"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "filepath.Glob failed", err)
 	for _, f := range files {
 		seeds = append(seeds, readCorpusEntry(t, f))
 		names = append(names, "fuzz corpus "+filepath.Base(f))
@@ -94,9 +93,7 @@ func fuzzCorpusConditions(t *testing.T, stock *promptrender.Stock) []hoststate.O
 func readCorpusEntry(t *testing.T, path string) []byte {
 	t.Helper()
 	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "read file", err)
 	header, value, ok := strings.Cut(strings.TrimSpace(string(raw)), "\n")
 	inner, found := strings.CutPrefix(strings.TrimSpace(value), "[]byte(")
 	if !ok || header != "go test fuzz v1" || !found || !strings.HasSuffix(inner, ")") {
