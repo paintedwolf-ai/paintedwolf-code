@@ -122,8 +122,8 @@ func buildPythonSessionPolicy(tc tools.ToolContext) pythonadmission.PolicyEvalua
 				}
 			}
 			method := ""
-			if len(op.Args) > 0 {
-				method = op.Args[0]
+			if m, ok := op.Args["method"].(string); ok {
+				method = m
 			}
 			cmd := confine.EgressCommand{
 				SessionID:     tc.Identity.SessionID,
