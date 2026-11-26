@@ -1,16 +1,17 @@
 import { expect, type Locator, type Page, type Response } from "@playwright/test";
-import type { CommandProgramReceiptPage, CommandReceiptDocumentPage } from "../src/api/types.ts";
+import type { CommandProgramReceiptPage, CommandReceiptDocumentPage, Message } from "../src/api/types.ts";
 import {
   apiJson,
+  apiPostPrompt,
   bootstrapChatSession,
   liveChatStage,
   openSessionRow,
   settledChatSessionId,
-  waitForChatComposerReady,
   waitForSessionReady,
   waitHarnessConnected,
   webE2e,
 } from "./helpers.ts";
+import { manualHarnessTools } from "./manual-harness-tools.ts";
 
 type Phase = "live" | "settled" | "reload";
 
@@ -66,9 +67,8 @@ function attachEvidenceRecorder(page: Page) {
   const inFlight = new Set<Promise<void>>();
 
   const record = async (response: Response) => {
-    const url = response.url();
+    const parsed = new URL(response.url());
     const status = response.status();
-    const parsed = new URL(url);
     const currentPhase = phase;
 
     if (parsed.pathname.includes("/program-receipts/")) {
@@ -164,16 +164,15 @@ async function expandDisclosure(container: Locator) {
   await expect(container).toHaveAttribute("data-expanded", "true");
 }
 
-async function openFoldedCommand(page: Page, sessionId: string) {
-  const stream = liveChatStage(page).locator(`[data-testid="chat-stream"][data-session-id="${sessionId}"]`);
-  const span = stream.getByTestId("activity-span-card").last();
+async function openFoldedCommand(page: Page) {
+  const span = liveChatStage(page).getByTestId("activity-span-card").last();
   await expandDisclosure(span);
   const card = span.getByTestId("action-card").first();
   await expandDisclosure(card);
   return { span, card };
 }
 
-webE2e("captures live and settled portable command receipts, document pages, reload persistence, and bounded L01/L07 counts", async ({ page, request }) => {
+webE2e("captures live and settled portable command receipts, document pages, reload persistence, and bounded L01/L07 counts", async ({ page, request }, testInfo) => {
   webE2e.setTimeout(180_000);
   const recorder = attachEvidenceRecorder(page);
 
@@ -182,39 +181,36 @@ webE2e("captures live and settled portable command receipts, document pages, rel
   await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
 
   try {
-    const composer = await waitForChatComposerReady(page);
-    await composer.fill("Run a multi-step portable command and report the filtered line.");
-    await composer.press("Enter");
-
-    const pendingPath = `/harness/llm/pending?wait=30000&session_id=${sessionId}`;
-    let pending = await apiJson<PendingTurn>(request, "GET", pendingPath);
-    expect(pending.pending).toBe(true);
-    expect(pending.session_id).toBe(sessionId);
-
-    if (!pending.tools?.includes("command")) {
-      await apiJson(request, "POST", "/harness/llm/respond", {
-        id: pending.id,
-        tool_calls: [{ id: "m10-load-command", name: "request_tools", args: { need: "command" } }],
-      });
-      pending = await apiJson<PendingTurn>(request, "GET", pendingPath);
-      expect(pending.pending).toBe(true);
-    }
-
-    const commandText = "printf 'alpha\\nbeta\\n' > ./m10-a.txt && sleep 4 && grep alpha ./m10-a.txt > ./m10-b.txt && cat ./m10-b.txt";
-    await apiJson(request, "POST", "/harness/llm/respond", {
-      id: pending.id,
-      tool_calls: [{ id: "m10-portable-cmd", name: "command", args: { command: commandText, timeout_ms: 60000 } }],
+    const prompt = await apiPostPrompt(request, sessionId, {
+      text: "Run a multi-step portable command and report the filtered line.",
     });
+    expect(prompt.ok(), await prompt.text()).toBe(true);
 
-    // Open the folded command activity while it is running to exercise live receipt and document requests.
-    const { card: liveCard } = await openFoldedCommand(page, sessionId);
-    const liveReceiptLink = liveCard.getByTestId("action-link-receipt");
-    if (await liveReceiptLink.isVisible().catch(() => false)) {
-      await liveReceiptLink.click();
+    const driver = manualHarnessTools(request, sessionId);
+    const commandText = "printf 'alpha\\nbeta\\n' | grep alpha && sleep 2 && ls && printf 'm10-settled\\n'";
+    const callId = await driver.invoke("command", { command: commandText });
+
+    // If Den surfaces the live activity span while sleep is running, open it early to capture live requests.
+    const liveSpan = liveChatStage(page).getByTestId("activity-span-card").last();
+    if (await liveSpan.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      const { card: liveCard } = await openFoldedCommand(page);
+      const liveReceipt = liveCard.getByTestId("action-link-receipt");
+      if (await liveReceipt.isVisible().catch(() => false)) {
+        await liveReceipt.click();
+      }
     }
 
-    // Wait for the multi-step command to complete and finish the assistant turn.
-    pending = await apiJson<PendingTurn>(request, "GET", pendingPath);
+    // Confirm the real portable command completed cleanly.
+    const toolOutput = await driver.completed(callId);
+    expect(toolOutput).toContain("alpha");
+
+    // Open the folded command activity while the turn is still open, then settle the assistant turn.
+    const { card: midCard } = await openFoldedCommand(page);
+    const midReceiptLink = midCard.getByTestId("action-link-receipt");
+    await expect(midReceiptLink).toBeVisible({ timeout: 15_000 });
+    await midReceiptLink.click();
+
+    const pending = await apiJson<PendingTurn>(request, "GET", `/harness/llm/pending?wait=30000&session_id=${sessionId}`);
     expect(pending.pending).toBe(true);
     recorder.setPhase("settled");
     await apiJson(request, "POST", "/harness/llm/respond", {
@@ -224,8 +220,7 @@ webE2e("captures live and settled portable command receipts, document pages, rel
     await waitForSessionReady(request, sessionId);
     await expect(liveChatStage(page).getByTestId("transcript-article-assistant").last()).toContainText("Portable command completed: alpha.");
 
-    // Ensure settled card preview and receipt document are both loaded.
-    const { card: settledCard } = await openFoldedCommand(page, sessionId);
+    const { card: settledCard } = await openFoldedCommand(page);
     await expect(settledCard.getByTestId("action-preview")).toContainText("alpha", { timeout: 15_000 });
     const settledReceiptLink = settledCard.getByTestId("action-link-receipt");
     await expect(settledReceiptLink).toBeVisible({ timeout: 15_000 });
@@ -255,7 +250,7 @@ webE2e("captures live and settled portable command receipts, document pages, rel
     }
     await expect.poll(() => settledChatSessionId(page)).toBe(sessionId);
 
-    const { card: reloadedCard } = await openFoldedCommand(page, sessionId);
+    const { card: reloadedCard } = await openFoldedCommand(page);
     await expect(reloadedCard.getByTestId("action-preview")).toContainText("alpha", { timeout: 15_000 });
     const reloadedReceiptLink = reloadedCard.getByTestId("action-link-receipt");
     await expect(reloadedReceiptLink).toBeVisible({ timeout: 15_000 });
@@ -332,6 +327,13 @@ webE2e("captures live and settled portable command receipts, document pages, rel
         .map((e) => ({ phase: e.phase, limit: e.limit, executionsLength: e.executionsLength, activitiesLength: e.activitiesLength, activityRevision: e.activityRevision })),
     };
     console.log("M10_DEN_EVIDENCE:" + JSON.stringify(evidence));
+  } catch (error) {
+    const transcript = await apiJson<{ messages: Message[] }>(request, "GET", `/v1/sessions/${sessionId}/messages`).catch(() => undefined);
+    await testInfo.attach("m10-failure-state", {
+      body: JSON.stringify({ transcript, receipts: recorder.receipts, documents: recorder.documents, windows: recorder.windows }, null, 2),
+      contentType: "application/json",
+    });
+    throw error;
   } finally {
     await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "Done." }).catch(() => undefined);
     const pending = await apiJson<PendingTurn>(request, "GET", "/harness/llm/pending").catch(() => undefined);
