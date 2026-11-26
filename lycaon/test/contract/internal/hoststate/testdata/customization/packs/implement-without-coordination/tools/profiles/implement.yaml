@@ -1,5 +1,5 @@
 id: implement
-description: Implementer without peer findings, decisions, waiting or verify, loading command on request
+description: Implementer without peer findings, decisions, waiting or verify
 command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   code_rewrite: sticky
@@ -17,7 +17,7 @@ tools:
   handoff_reserve: true
   handoff_release: true
   handoff_release_all: true
-  command: true
+  command: sticky
   complete_leg: sticky
   secret_generate: true
   secret_list: true
