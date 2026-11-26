@@ -28,60 +28,6 @@ func WaitFor(t testing.TB, step string, cond func() bool) {
 	}
 }
 
-// Progress is a system's work at one instant. Epoch changes whenever work
-// begins, ends or decides anything; Idle means nothing in flight can still
-// change the system; Report explains the state for a failure.
-type Progress struct {
-	Epoch  uint64
-	Idle   bool
-	Report string
-}
-
-// ProgressIdleWindow is how long a system must stay idle, with no work beginning,
-// ending or deciding anything, before WaitForProgress gives up. It is long so
-// that work the progress report does not track cannot fail a healthy test; the
-// run backstop still bounds every wait.
-const ProgressIdleWindow = 2 * time.Minute
-
-// WaitForProgress polls cond like WaitFor and fails once the system has stayed
-// idle at one epoch for ProgressIdleWindow with the condition still false. Each
-// idle reading brackets a condition check at an unchanged epoch, so no work ran
-// in between; any busy reading or epoch change restarts the window.
-func WaitForProgress(t testing.TB, step string, cond func() bool, progress func() Progress) {
-	t.Helper()
-	waitForProgress(t, step, cond, progress, time.Now)
-}
-
-func waitForProgress(t testing.TB, step string, cond func() bool, progress func() Progress, now func() time.Time) {
-	t.Helper()
-	defer trackWait(t, step)()
-	ticker := time.NewTicker(waitForPollInterval)
-	defer ticker.Stop()
-	var idleSince time.Time
-	var idleEpoch uint64
-	for {
-		before := progress()
-		if cond() {
-			return
-		}
-		after := progress()
-		switch {
-		case !before.Idle || !after.Idle || after.Epoch != before.Epoch:
-			idleSince = time.Time{}
-		case idleSince.IsZero() || after.Epoch != idleEpoch:
-			idleSince, idleEpoch = now(), after.Epoch
-		case now().Sub(idleSince) >= ProgressIdleWindow:
-			t.Fatalf("%s: the system stayed idle for %s with nothing left that could make the condition hold\n%s",
-				step, ProgressIdleWindow, after.Report)
-		}
-		select {
-		case <-ticker.C:
-		case <-t.Context().Done():
-			t.Fatalf("%s: the test ended before the condition held\n%s", step, progress().Report)
-		}
-	}
-}
-
 // Receive returns the next channel value.
 func Receive[T any](t testing.TB, step string, ch <-chan T) T {
 	t.Helper()

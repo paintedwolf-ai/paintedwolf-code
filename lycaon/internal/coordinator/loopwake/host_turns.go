@@ -40,63 +40,73 @@ func (l *HostTurns) loopDeps() HostTurnsDeps {
 	defer l.depsMu.RUnlock()
 	return l.deps
 }
+
+// runPromptSync makes one decision about a queued wake: it opens a turn for it,
+// ends it without one, or queues it again. It reports whether draining continues.
 func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending pendingLoopWake) bool {
+	d := l.Nudges.Outcomes.decide(sessionID, pending)
+	defer d.close()
 	if l.hostTurnBlocked(ctx, sessionID) {
+		d.requeue("host_turn_blocked")
 		l.Nudges.enqueuePending(sessionID, pending)
 		return false
 	}
 	if _, loaded := l.promptActive.LoadOrStore(sessionID, struct{}{}); loaded {
-		l.Nudges.Activity.decide(sessionID, pending.wake, pending.inform, pending.legID, pending.completingJobID, "prompt_active_requeue")
+		d.requeue("prompt_active_requeue")
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
 	defer l.releasePromptActiveAndRedrain(ctx, sessionID)
 	wake := pending.wake
 	if l.Observations.wakeConsumed(ctx, sessionID, pending) {
+		d.settle(WakeDropped, "consumed_by_prompt")
 		return true
 	}
 	if l.Admission.PromptExecutionActive(sessionID) {
-		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "sync_defer_busy")
+		d.requeue("sync_defer_busy")
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
 	// Explicit wait delivery precedes optional workflow gates.
 	if l.Subscriptions.routeWaitWake(ctx, sessionID, pending) {
-		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_route_wait")
+		d.settle(WakeRouted, "wait")
 		return true
 	}
 	allow, busy := l.Admission.evaluate(ctx, sessionID)
 	if busy {
-		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_defer_busy")
+		d.requeue("drain_busy")
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
 	if !allow {
-		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_denied")
+		d.settle(WakeParked, "denied")
 		return true
 	}
 	if pending.completingJobID == "" && !anchor.AboutRunningWorker(wake) && !pending.env.HasWorkerDecision() && !l.Cycles.workerCycleIdle(ctx, sessionID, "") {
-		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_defer_worker_cycle")
+		d.requeue("defer_worker_cycle")
 		l.Nudges.deferNudge(ctx, sessionID, pending)
 		return true
 	}
 	if reason, skip := l.Policy.hostWakeSkipReason(ctx, pending.actionableInput(sessionID)); skip {
-		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_"+reason)
+		d.settle(skipOutcome(reason))
 		l.Waits.parkForActiveHold(ctx, sessionID)
 		return true
 	}
 
 	runID := l.Facts.activeRunID(ctx, sessionID)
 	if !l.Admission.ConsumeBudget(ctx, sessionID, runID, wake) {
-		l.Nudges.Activity.decide(sessionID, wake, "", "", "", "budget_exhausted")
+		d.settle(WakeDropped, "budget_exhausted")
 		return false
 	}
 	loopLogRunPrompt(sessionID, wake)
-	l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "run_prompt")
+	turnID := d.deliver()
 	deps := l.loopDeps()
+	var res *promptresult.Result
+	var err error
 	if deps.RunPrompt != nil {
-		_, _ = deps.RunPrompt(ctx, sessionID)
+		res, err = deps.RunPrompt(WithLoopWakeTurn(ctx, turnID), sessionID)
 	}
+	l.Nudges.Outcomes.turnEnded(sessionID, pending, turnID, res, err)
 	return true
 }
 func (l *HostTurns) releasePromptActiveAndRedrain(ctx context.Context, sessionID string) {
@@ -107,11 +117,9 @@ func (l *HostTurns) spawnAsyncTurn(ctx context.Context, sessionID string, fn fun
 	timeout := l.Facts.sessionLimits(ctx, sessionID).CoordinatorHostTurnTimeout()
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	work := l.registerAsyncTurn(sessionID, cancel)
-	endActivity := l.Nudges.Activity.Begin(sessionID, ActivityHostTurn)
 	l.asyncTurns.Add(1)
 	go func() {
 		defer l.asyncTurns.Done()
-		defer endActivity()
 		defer l.finishAsyncTurn(sessionID, work)
 		defer observability.GuardPanic("coordinator.loopwake.async_turn")
 		fn(ctx)

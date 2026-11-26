@@ -119,26 +119,24 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	if !allowed {
 		t.Fatalf("completed leg cannot wake coordinator: %s", reason)
 	}
+	wakes := wiring.WatchWakes(t, h.ServeApp, sess.ID)
 	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
+	turn := wakes.AwaitCompletedTurn(t, "the leg wake opens a coordinator turn", anchor.LegFinished)
 
-	wiring.WaitForSessionProgress(t, h.ServeApp, sess.ID, "the coordinator answers the loop wake", func() bool {
-		mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
-		msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
-		if err != nil {
-			return false
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
+	testutil.FailErr(t, "read transcript after the wake turn", err)
+	assistants, wakeMessage := 0, false
+	for _, msg := range msgs {
+		if msg.Role == wire.MessageRoleAssistant {
+			assistants++
 		}
-		assistants := 0
-		hasAuto := false
-		for _, msg := range msgs {
-			if msg.Role == wire.MessageRoleAssistant {
-				assistants++
-			}
-			if msg.Kind == wire.MessageKindHostLoopWake {
-				hasAuto = true
-			}
+		if msg.Kind == wire.MessageKindHostLoopWake && msg.ID == turn.TurnID {
+			wakeMessage = true
 		}
-		return assistants >= 2 && hasAuto
-	})
+	}
+	if assistants < 2 || !wakeMessage {
+		t.Fatalf("after wake turn %s: assistants=%d wake message=%v\n%s", turn.TurnID, assistants, wakeMessage, wakes.Report())
+	}
 
 	req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
 	w = httptest.NewRecorder()

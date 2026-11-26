@@ -20,7 +20,6 @@ import (
 )
 
 func (m *Service) Prompt(ctx context.Context, id string, text string) (*promptresult.Result, error) {
-	defer m.HoldActivity(id)()
 	ctx, unlockDispatch := m.LockDispatch(ctx, id)
 	defer unlockDispatch()
 	runCtx := context.WithValue(ctx, userPromptReceiptContextKey{}, true)
@@ -32,7 +31,6 @@ func (m *Service) Prompt(ctx context.Context, id string, text string) (*promptre
 }
 
 func (m *Service) PromptWorker(ctx context.Context, id, jobID, text string) (*promptresult.Result, error) {
-	defer m.HoldActivity(id)()
 	ctx, unlockDispatch := m.LockDispatch(ctx, id)
 	defer unlockDispatch()
 	resp, err := m.Input(ctx, id, promptinput.Input{Text: text, WorkerJobID: strings.TrimSpace(jobID)})
@@ -77,9 +75,12 @@ func (m *Service) waitObservation(sessionID string, winner awaitstore.Condition,
 	}
 }
 
+// LoopWake runs the turn a loop wake opened, admitted under the identity the
+// wake recorded for it.
 func (m *Service) LoopWake(ctx context.Context, id string) (*promptresult.Result, error) {
 	return m.HostTurnWithAdmission(ctx, id, store.PromptSubmissionOriginLoopWake, promptinput.Input{
-		Text: surface.HostLoopWakeSentinel,
+		SubmissionID: loopwake.LoopWakeTurn(ctx),
+		Text:         surface.HostLoopWakeSentinel,
 		HostSignal: &promptinput.HostSignal{
 			Kind: api.MessageKindHostLoopWake,
 			ID:   string(anchor.LoopWake),

@@ -46,10 +46,14 @@ func (l *Admission) ForgetSession(sessionID string) {
 	})
 }
 func (l *Nudges) ForgetSession(sessionID string) {
-	l.Activity.forget(sessionID)
-	l.pendingQueues.Delete(sessionID)
+	l.ClearPending(sessionID)
+	if v, ok := l.pendingWorkerQueues.LoadAndDelete(sessionID); ok {
+		for _, p := range v.(*deferredNudgeQueue).drain() {
+			l.Outcomes.settle(sessionID, p, WakeDropped, "session_forgotten", "")
+		}
+	}
+	l.Outcomes.forget(sessionID)
 	l.pendingDrain.Delete(sessionID)
-	l.pendingWorkerQueues.Delete(sessionID)
 	l.kickDedup.Range(func(key, _ any) bool {
 		if k, ok := key.(loopKickKey); ok && k.sessionID == sessionID {
 			l.kickDedup.Delete(key)

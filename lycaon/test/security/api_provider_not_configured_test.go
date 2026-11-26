@@ -60,10 +60,9 @@ func buildNoMockServeApp(t *testing.T) *app.ServeApp {
 	return serveApp
 }
 
-func postPromptExpectNotConfigured(t *testing.T, host *app.ServeApp, sessionID string) {
+func postPromptExpectNotConfigured(t *testing.T, srv *api.Server, sessionID string) {
 	t.Helper()
-	srv := host.Server
-	postPromptAndWaitIdle(t, host, sessionID, "hello")
+	postPromptAndWaitIdle(t, srv, sessionID, "hello")
 
 	msgs := listMessagesHTTP(t, srv, sessionID)
 	for _, m := range msgs {
@@ -81,7 +80,7 @@ func TestPromptWithoutProviderLeavesNoAssistantMessage(t *testing.T) {
 	_, projectDir := noMockServeEnv(t)
 	serveApp := buildNoMockServeApp(t)
 	sess := createSessionHTTP(t, serveApp.Server, projectDir)
-	postPromptExpectNotConfigured(t, serveApp, sess.ID)
+	postPromptExpectNotConfigured(t, serveApp.Server, sess.ID)
 
 	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
 	w := httptest.NewRecorder()
@@ -142,5 +141,5 @@ func TestPromptAfterCredentialDeleteReturnsNotConfigured(t *testing.T) {
 		t.Fatalf("provider should be unconfigured after credential DELETE: %+v", after)
 	}
 
-	postPromptExpectNotConfigured(t, serveApp, sess.ID)
+	postPromptExpectNotConfigured(t, serveApp.Server, sess.ID)
 }

@@ -107,10 +107,14 @@ func TestCommandApprovalWildcardAskSSEMetadataE2E(t *testing.T) {
 	testutil.FailErr(t, "Subscribe", err)
 	defer unsub()
 
-	done := wiring.GoPrompt(ctx, h.ServeApp, sess.ID, "sort output file")
+	done := make(chan error, 1)
+	go func() {
+		_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "sort output file")
+		done <- err
+	}()
 
 	var checkpointID string
-	wiring.WaitForSessionProgress(t, h.ServeApp, sess.ID, "the command approval is pending", func() bool {
+	testutil.WaitFor(t, "the command approval is pending", func() bool {
 		kind := wire.CheckpointKindToolApproval
 		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, &kind)
 		if err == nil && len(pending) == 1 {

@@ -54,6 +54,15 @@ func (q *sessionNudgeQueue) pop() (pendingLoopWake, bool) {
 	return n, true
 }
 
+// take empties the queue and returns what it held.
+func (q *sessionNudgeQueue) take() []pendingLoopWake {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	out := q.nudges
+	q.nudges = nil
+	return out
+}
+
 func (q *sessionNudgeQueue) peek() (pendingLoopWake, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -78,24 +87,24 @@ func (q *deferredNudgeQueue) push(d pendingLoopWake) {
 }
 
 // removeRunningWorkerWakesForJob drops a terminal job's deferred wakes about it running.
-func (q *deferredNudgeQueue) removeRunningWorkerWakesForJob(jobID string) bool {
+func (q *deferredNudgeQueue) removeRunningWorkerWakesForJob(jobID string) []pendingLoopWake {
 	jobID = strings.TrimSpace(jobID)
 	if jobID == "" {
-		return false
+		return nil
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	kept := q.items[:0:0]
-	found := false
+	var removed []pendingLoopWake
 	for _, it := range q.items {
 		if anchor.AboutRunningWorker(it.wake) && strings.TrimSpace(it.legID) == jobID {
-			found = true
+			removed = append(removed, it)
 			continue
 		}
 		kept = append(kept, it)
 	}
 	q.items = kept
-	return found
+	return removed
 }
 
 func (q *deferredNudgeQueue) drain() []pendingLoopWake {

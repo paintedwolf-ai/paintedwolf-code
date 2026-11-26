@@ -26,6 +26,7 @@ func TestHumanPlanStartLoopWakesCoordinator(t *testing.T) {
 	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(planStartBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
+	wakes := wiring.WatchWakes(t, h.ServeApp, sess.ID)
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("start run status = %d body = %s", w.Code, w.Body.String())
@@ -33,14 +34,13 @@ func TestHumanPlanStartLoopWakesCoordinator(t *testing.T) {
 	var run wire.WorkflowRun
 	testutil.FailErr(t, "decode started run", json.Unmarshal(w.Body.Bytes(), &run))
 
-	wiring.WaitForSessionProgress(t, h.ServeApp, sess.ID, "the coordinator loop wakes for the started run", func() bool {
-		msgs, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
-		testutil.FailErr(t, "GetMessages", err)
-		for _, msg := range msgs {
-			if !seen[msg.ID] && msg.Kind == wire.MessageKindHostLoopWake && msg.WorkflowRunID == run.ID {
-				return true
-			}
+	turn := wakes.AwaitCompletedTurn(t, "the started run's wake opens a coordinator turn", "")
+	msgs, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "GetMessages", err)
+	for _, msg := range msgs {
+		if !seen[msg.ID] && msg.Kind == wire.MessageKindHostLoopWake && msg.ID == turn.TurnID && msg.WorkflowRunID == run.ID {
+			return
 		}
-		return false
-	})
+	}
+	t.Fatalf("wake turn %s left no loop wake message for run %s\n%s", turn.TurnID, run.ID, wakes.Report())
 }
