@@ -1,7 +1,12 @@
 import copy
+import importlib.util
 import json
+import os
 from pathlib import Path
+import signal
+import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -170,9 +175,231 @@ class AdmissionTests(unittest.TestCase):
 
     def test_package_memory_guard_attributes_own_process(self):
         monitor = resources.Monitor(123, 100)
-        with patch.object(resources, 'resident_bytes', return_value=101):
+        with patch.object(resources, 'proc_status_memory', return_value=(101, 105)):
             self.assertEqual(monitor.sample(), {'kind': 'package_rss', 'measured_bytes': 101, 'limit_bytes': 100})
         self.assertEqual(monitor.peak, 101)
+        self.assertEqual(monitor.hwm, 105)
+        self.assertEqual(monitor.finalize(), {
+            'peak_bytes': 105, 'limit_bytes': 100, 'ratio': 1.05, 'source': 'proc_vmhwm', 'lower_bound': True,
+        })
+        rss_only = resources.Monitor(123, 200)
+        with patch.object(resources, 'proc_status_memory', return_value=(80, None)):
+            self.assertIsNone(rss_only.sample())
+        self.assertEqual(rss_only.finalize(), {
+            'peak_bytes': 80, 'limit_bytes': 200, 'ratio': 0.4, 'source': 'proc_vmrss', 'lower_bound': True,
+        })
+        missing = resources.Monitor(123, 200)
+        with patch.object(resources, 'proc_status_memory', return_value=(None, None)):
+            self.assertIsNone(missing.sample())
+        self.assertEqual(missing.finalize(), {
+            'peak_bytes': None, 'limit_bytes': 200, 'ratio': None, 'source': 'unavailable', 'lower_bound': False,
+        })
+
+    def test_proc_status_memory_reads_rss_and_hwm_without_substituting_zero(self):
+        with tempfile.TemporaryDirectory() as directory:
+            status = Path(directory) / 'status'
+            status.write_text('Name:\tpkg.test\nVmHWM:\t   2048 kB\nVmRSS:\t   1024 kB\n')
+            with patch.object(resources, 'Path', return_value=status):
+                self.assertEqual(resources.proc_status_memory(123), (1024 * 1024, 2048 * 1024))
+            status.write_text('Name:\tpkg.test\nState:\tZ (zombie)\n')
+            with patch.object(resources, 'Path', return_value=status):
+                self.assertEqual(resources.proc_status_memory(123), (None, None))
+            status.unlink()
+            with patch.object(resources, 'Path', return_value=status):
+                self.assertEqual(resources.proc_status_memory(123), (None, None))
+
+    @unittest.skipIf(os.name == 'nt', 'go-test-exec requires POSIX fork and waitpid')
+    def test_go_test_exec_records_peak_rss_for_passing_breaching_and_reaped_fixtures(self):
+        wrapper_path = Path(__file__).resolve().parents[2] / 'go-test-exec.py'
+        spec = importlib.util.spec_from_file_location('go_test_exec_mu01', wrapper_path)
+        wrapper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(wrapper)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            passing = root / 'pass.sh'
+            passing.write_text('#!/bin/sh\necho ok\n')
+            passing.chmod(0o755)
+            breaching = root / 'breach.sh'
+            breaching.write_text('#!/bin/sh\nsleep 30\n')
+            breaching.chmod(0o755)
+            env = {'PATH': os.environ['PATH']}
+            limit = 64 * 1024 * 1024
+            with patch.object(wrapper.Path, 'is_dir', return_value=True):
+                with tempfile.NamedTemporaryFile(dir=root) as owner, \
+                        patch.object(resources, 'proc_status_memory', return_value=(12 * 1024 * 1024, 16 * 1024 * 1024)):
+                    status, _, _, violation, leaked, memory = wrapper.execute(
+                        str(passing), [], env, owner, False, lambda: {}, limit)
+                self.assertEqual(os.waitstatus_to_exitcode(status), 0)
+                self.assertIsNone(violation)
+                self.assertEqual(leaked, {})
+                self.assertEqual(memory, {
+                    'peak_bytes': 16 * 1024 * 1024, 'limit_bytes': limit, 'ratio': 0.25,
+                    'source': 'proc_vmhwm', 'lower_bound': True,
+                })
+
+                with tempfile.NamedTemporaryFile(dir=root) as owner, \
+                        patch.object(resources, 'proc_status_memory', return_value=(limit + 4096, limit + 4096)):
+                    status, _, _, violation, leaked, memory = wrapper.execute(
+                        str(breaching), [], env, owner, False, lambda: {}, limit)
+                self.assertEqual(os.waitstatus_to_exitcode(status), -signal.SIGKILL)
+                self.assertEqual(violation, {'kind': 'package_rss', 'measured_bytes': limit + 4096, 'limit_bytes': limit})
+                self.assertEqual(leaked, {})
+                self.assertEqual(memory, {
+                    'peak_bytes': limit + 4096, 'limit_bytes': limit, 'ratio': round((limit + 4096) / limit, 4),
+                    'source': 'proc_vmhwm', 'lower_bound': True,
+                })
+
+                with tempfile.NamedTemporaryFile(dir=root) as owner, \
+                        patch.object(resources, 'proc_status_memory', return_value=(None, None)):
+                    status, _, _, violation, leaked, memory = wrapper.execute(
+                        str(passing), [], env, owner, False, lambda: {}, limit)
+                self.assertEqual(os.waitstatus_to_exitcode(status), 0)
+                self.assertIsNone(violation)
+                self.assertEqual(memory, {
+                    'peak_bytes': None, 'limit_bytes': limit, 'ratio': None,
+                    'source': 'unavailable', 'lower_bound': False,
+                })
+                events = root / 'stage-001-events.jsonl'
+                module = root / 'mod'
+                pkg = module / 'p'
+                pkg.mkdir(parents=True)
+                (module / 'go.mod').write_text('module example.com/m\n')
+                main_env = {'PATH': os.environ['PATH'], 'PW_TEST_STAGE_EVENTS': str(events),
+                            'PW_TEST_SCRATCH_ROOT': str(root), 'PW_TEST_MODULE_ROOT': str(module)}
+                with patch.object(wrapper.sys, 'argv', ['go-test-exec.py', str(passing)]), \
+                        patch.dict(wrapper.os.environ, main_env, clear=True), \
+                        patch.object(wrapper.os, 'getcwd', return_value=str(pkg)), \
+                        patch.object(wrapper, 'write_all'), \
+                        patch.object(wrapper, 'fork_observable', return_value=False), \
+                        patch.object(wrapper, 'settle_package_children', return_value={}), \
+                        patch.object(resources, 'proc_status_memory', return_value=(12 * 1024 * 1024, 16 * 1024 * 1024)):
+                    self.assertEqual(wrapper.main(), 0)
+                emitted = json.loads(events.read_text().splitlines()[-1])
+                self.assertEqual(emitted['memory']['source'], 'proc_vmhwm')
+                self.assertEqual(emitted['memory']['peak_bytes'], 16 * 1024 * 1024)
+
+    @unittest.skipUnless(sys.platform == 'linux', 'per-PID /proc/<pid>/status scope requires Linux')
+    def test_go_test_exec_excludes_reaped_descendant_rss_from_package_peak(self):
+        wrapper_path = Path(__file__).resolve().parents[2] / 'go-test-exec.py'
+        spec = importlib.util.spec_from_file_location('go_test_exec_descendant', wrapper_path)
+        wrapper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(wrapper)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / 'report.json'
+            release_fifo = root / 'release.fifo'
+            os.mkfifo(release_fifo)
+            alloc_bytes = 48 * 1024 * 1024
+            fixture = root / 'with_helper.py'
+            fixture.write_text(
+                f'#!{sys.executable}\n'
+                'import json, os, resource\n'
+                'from pathlib import Path\n'
+                'def self_vmhwm():\n'
+                '    for line in Path("/proc/self/status").read_text().splitlines():\n'
+                '        if line.startswith("VmHWM:"):\n'
+                '            return int(line.split()[1]) * 1024\n'
+                '    raise RuntimeError("VmHWM missing")\n'
+                'read_fd, write_fd = os.pipe()\n'
+                'pid = os.fork()\n'
+                'if pid == 0:\n'
+                '    os.close(read_fd)\n'
+                f'    buf = bytearray({alloc_bytes})\n'
+                '    for i in range(0, len(buf), 4096):\n'
+                '        buf[i] = 1\n'
+                '    os.write(write_fd, str(self_vmhwm()).encode())\n'
+                '    os.close(write_fd)\n'
+                '    os._exit(0)\n'
+                'os.close(write_fd)\n'
+                'helper_hwm = int(os.read(read_fd, 64).decode())\n'
+                'os.close(read_fd)\n'
+                '_, wait_status = os.waitpid(pid, 0)\n'
+                'children_ru_maxrss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss * 1024\n'
+                'report = {"helper_exit": os.waitstatus_to_exitcode(wait_status),\n'
+                '          "helper_hwm": helper_hwm, "self_hwm": self_vmhwm(),\n'
+                '          "children_ru_maxrss": children_ru_maxrss}\n'
+                f'tmp = Path({str(report_path)!r} + ".tmp")\n'
+                'tmp.write_text(json.dumps(report))\n'
+                f'tmp.replace({str(report_path)!r})\n'
+                'print("ready", flush=True)\n'
+                f'Path({str(release_fifo)!r}).read_text()\n'
+            )
+            fixture.chmod(0o755)
+            orig_proc_status_memory = resources.proc_status_memory
+            released = False
+
+            def synchronized_proc_status_memory(pid):
+                nonlocal released
+                rss, hwm = orig_proc_status_memory(pid)
+                if not released and report_path.exists() and hwm is not None:
+                    released = True
+                    with open(release_fifo, 'w') as stream:
+                        stream.write('go')
+                return rss, hwm
+
+            limit = 256 * 1024 * 1024
+            with tempfile.NamedTemporaryFile(dir=root) as owner, \
+                    patch.object(resources, 'proc_status_memory', side_effect=synchronized_proc_status_memory):
+                status, _, _, violation, leaked, memory = wrapper.execute(
+                    str(fixture), [], {'PATH': os.environ['PATH']}, owner, False, lambda: {}, limit)
+            self.assertEqual(os.waitstatus_to_exitcode(status), 0)
+            self.assertIsNone(violation)
+            self.assertEqual(leaked, {})
+            self.assertTrue(released)
+            report = json.loads(report_path.read_text())
+            self.assertEqual(report['helper_exit'], 0)
+            self.assertGreaterEqual(report['helper_hwm'], alloc_bytes)
+            self.assertGreaterEqual(report['children_ru_maxrss'], alloc_bytes)
+            self.assertEqual(memory['source'], 'proc_vmhwm')
+            self.assertTrue(memory['lower_bound'])
+            self.assertIsInstance(memory['peak_bytes'], int)
+            self.assertGreaterEqual(memory['peak_bytes'], report['self_hwm'])
+            self.assertLess(memory['peak_bytes'], report['helper_hwm'])
+            self.assertLess(memory['peak_bytes'], report['children_ru_maxrss'])
+
+    def test_stage_publish_carries_package_memory_for_passing_and_failing_packages(self):
+        from contextlib import nullcontext
+        import verification_execute as execution
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            events_path = root / 'stage-001-events.jsonl'
+            raw_path = root / 'stage-001-go.json'
+            result_path = root / 'stage-001.json'
+            log = root / 'stage-001.log'
+            log.write_text('')
+            pass_mem = {'peak_bytes': 1024, 'limit_bytes': 4096, 'ratio': 0.25,
+                        'source': 'proc_vmhwm', 'lower_bound': True}
+            fail_mem = {'peak_bytes': 4097, 'limit_bytes': 4096, 'ratio': 1.0002,
+                        'source': 'proc_vmhwm', 'lower_bound': True}
+            events_path.write_text(
+                json.dumps({'package': 'example/pass', 'exit_code': 0, 'memory': pass_mem}) + '\n'
+                + json.dumps({'package': 'example/fail', 'exit_code': 1, 'memory': fail_mem,
+                              'resource_limit': {'kind': 'package_rss', 'measured_bytes': 4097, 'limit_bytes': 4096}}) + '\n'
+            )
+            result_path.write_text(json.dumps({
+                'completed': True, 'process_exit_code': 1, 'digest_exit_code': 1,
+                'packages': {'example/pass': 'pass', 'example/fail': 'fail'},
+            }))
+            queue = types.SimpleNamespace(root=root, history=root, locked=nullcontext)
+            executor = types.SimpleNamespace(queue=queue, directory=root, running={'req': {0}},
+                                             cache={}, finished=set(), stages=[])
+            job = {
+                'first': {'kind': 'go', 'name': 'test:short', 'options': [], 'flags': [], 'exclude': ''},
+                'key': 'go:test:short',
+                'packages': ['example/pass', 'example/fail'],
+                'result': {'stage_id': 'stage-001', 'names': ['test:short'], 'started_at': 100,
+                           'consumers': ['req'], 'log': str(log)},
+                'result_path': result_path,
+                'events_path': events_path,
+                'events': execution.StageEvents(events_path, raw_path),
+                'failures': {},
+                'future': types.SimpleNamespace(result=lambda: 1),
+                'reservation': types.SimpleNamespace(entry={'started_at': 100}),
+                'needs': [({'ticket': 'req'}, 0, {}, ['example/pass', 'example/fail'])],
+            }
+            execution.Executor.publish_stage(executor, job)
+            self.assertEqual(executor.cache['go:test:short']['example/pass']['memory'], pass_mem)
+            self.assertEqual(executor.cache['go:test:short']['example/fail']['memory'], fail_mem)
 
     def test_package_memory_ceiling_scales_for_race_builds_only(self):
         with tempfile.TemporaryDirectory() as directory:
