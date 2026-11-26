@@ -158,9 +158,18 @@ func (p *PreparedProgramEnvelope) validate(ctx context.Context) error {
 }
 
 func progressOwnerError(err error) error {
+	return progressOwnerErrorForRoot("", err)
+}
+
+func progressOwnerErrorForRoot(root string, err error) error {
 	var rejected *progress.AuthorUpdateRejection
 	if errors.As(err, &rejected) {
-		return &toolrejection.ToolReject{Code: rejected.Code, OwnerRef: "progress", Data: rejected.Data}
+		if root != "" {
+			if snapshot, ok := rejected.Data["snapshot"].(progress.Snapshot); ok {
+				rejected.Data["snapshot"] = progress.ForRequest(root, snapshot)
+			}
+		}
+		return &toolrejection.ToolReject{Code: rejected.Code, OwnerRef: "progress", Data: rejected.Data, BeforeEffect: true}
 	}
 	return err
 }

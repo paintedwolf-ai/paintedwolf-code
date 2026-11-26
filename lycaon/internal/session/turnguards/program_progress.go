@@ -40,3 +40,22 @@ func (m *Service) progressPrerequisites(ctx context.Context, sess *api.Session) 
 	state.ReviewLoopActive = m.workflows != nil && m.workflows.Policy != nil && m.workflows.Policy.ActivePhaseHasReviewLoop(ctx, sess.ID)
 	return state
 }
+
+// ProgramProgressStore exposes the session progress store for command-envelope
+// progress_update application.
+func (m *Service) ProgramProgressStore() progress.Store {
+	if m == nil {
+		return nil
+	}
+	store, _ := m.progress.(progress.Store)
+	return store
+}
+
+// ProgramProgressReconciler exposes the coordinator progress reconciler for
+// command-envelope progress_update application.
+func (m *Service) ProgramProgressReconciler() progress.Reconciler {
+	if m == nil || m.ProgressClosure == nil {
+		return nil
+	}
+	return m.ProgressClosure
+}
