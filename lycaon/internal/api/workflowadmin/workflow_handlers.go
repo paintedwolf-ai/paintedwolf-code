@@ -50,7 +50,7 @@ func (s *RunControl) HandleStartWorkflowRun(w http.ResponseWriter, r *http.Reque
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
-	ctx, action := actionoutcome.Capture(r.Context(), wire.ContinuationActionWorkflowStart)
+	ctx, action := actionoutcome.CaptureOperation(r.Context(), wire.ContinuationActionWorkflowStart, sessionID, req.OperationID)
 	run, err := s.Workflows.Starts.Start(hostctx.WithHumanWorkflowStart(ctx), sessionID, req)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)

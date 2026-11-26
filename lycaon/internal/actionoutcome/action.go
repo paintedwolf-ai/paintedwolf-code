@@ -2,6 +2,7 @@ package actionoutcome
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,6 +26,7 @@ type Action struct {
 	record  api.ActionContinuation
 	paths   []*Path
 	pending int
+	replay  bool
 	sealed  bool
 	history *History[api.ActionContinuation]
 	publish func(api.ActionContinuation)
@@ -35,6 +37,22 @@ type actionKey struct{}
 func Capture(ctx context.Context, kind api.ContinuationAction) (context.Context, *Action) {
 	a := &Action{Order: actionSequence.Add(1), record: api.ActionContinuation{ContinuationID: uuid.NewString(), Action: kind, State: api.ContinuationStatePending, OpenedAt: time.Now().UTC()}}
 	return context.WithValue(ctx, actionKey{}, a), a
+}
+
+// CaptureOperation gives retries the original continuation handle.
+func CaptureOperation(ctx context.Context, kind api.ContinuationAction, key ...string) (context.Context, *Action) {
+	ctx, a := Capture(ctx, kind)
+	parts := append([]string{string(kind)}, key...)
+	a.record.ContinuationID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join(parts, "\x00"))).String()
+	return ctx, a
+}
+
+func MarkReplay(ctx context.Context) {
+	if a, _ := ctx.Value(actionKey{}).(*Action); a != nil {
+		a.mu.Lock()
+		a.replay = true
+		a.mu.Unlock()
+	}
 }
 
 func MarkAskAnswer(ctx context.Context) {
@@ -99,6 +117,9 @@ func (a *Action) Commit(s *Session, sessionID string, publish func(api.ActionCon
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.sealed = true
+	if a.replay {
+		return
+	}
 	a.publish = publish
 	a.history = s.Actions
 	a.record.SessionID = sessionID

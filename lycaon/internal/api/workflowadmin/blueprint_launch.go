@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -31,7 +32,7 @@ func (s *BlueprintRoutes) HandleApproveBlueprint(w http.ResponseWriter, r *http.
 	if p, err := s.Projects.Get(r.Context(), projectID); err == nil {
 		projectPath = project.PrimaryRootPath(p)
 	}
-	ctx, action := actionoutcome.Capture(r.Context(), wire.ContinuationActionPlanApproval)
+	ctx, action := actionoutcome.CaptureOperation(r.Context(), wire.ContinuationActionPlanApproval, projectID, path, strings.TrimSpace(req.WorkflowRunID), strconv.FormatInt(req.ExpectedRevision, 10), strings.TrimSpace(req.ContentDigest))
 	run, err := rm.Approvals.ApprovePlan(ctx, projectID, path, projectPath, req.WorkflowRunID, req.ExpectedRevision, req.ContentDigest)
 	if err != nil {
 		if errors.Is(err, blueprint.ErrNotFound) {

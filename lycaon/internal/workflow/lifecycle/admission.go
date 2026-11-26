@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"strings"
 	"sync"
 	"time"
@@ -144,6 +145,7 @@ func (m *Admission) startAdmitted(ctx context.Context, sessionID string, req api
 		return nil, err
 	}
 	if replayed, found, replayErr := m.Starts.ReplayStart(ctx, req.OperationID, sessionID, startDigest); replayErr != nil || found {
+		actionoutcome.MarkReplay(ctx)
 		return &workflowStartResult{Run: replayed}, replayErr
 	}
 	var committed *committedWorkflowStart

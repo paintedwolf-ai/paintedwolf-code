@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -89,6 +90,7 @@ func (m *Approvals) ApprovePlan(ctx context.Context, projectID, blueprintPath, p
 		return nil, err
 	}
 	if matched {
+		actionoutcome.MarkReplay(ctx)
 		return target, nil
 	}
 	active, err := m.Runs.ActiveByProjectForBlueprint(ctx, projectID, blueprintPath)
