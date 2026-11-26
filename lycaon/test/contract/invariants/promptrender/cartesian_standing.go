@@ -415,6 +415,7 @@ func checkSkillRenderClaims(
 	cache *hoststate.RenderCache,
 	sum *CartesianSummary,
 ) {
+	sum.SkillClaims.Rendered = len(renders)
 	for _, sr := range renders {
 		parts := make([]string, len(sr.Parts))
 		for i, p := range sr.Parts {
@@ -423,7 +424,10 @@ func checkSkillRenderClaims(
 		joined := strings.Join(parts, "\n")
 		label := fmt.Sprintf("skill %s as read by %s", sr.Skill.Name, sr.Reader)
 		rKey := hoststate.RenderCacheKey("cskill:"+sr.Skill.Name, s.Catalog.Revision, nil, map[string]any{"body": joined})
-		checkClaimsCached(cache, rKey, sr.Authority.Digest, func(v string) { sum.Violations = append(sum.Violations, v) }, func() []string {
+		checkClaimsCached(cache, rKey, sr.Authority.Digest, func(v string) {
+			sum.Violations = append(sum.Violations, v)
+			sum.SkillClaims.Violations = append(sum.SkillClaims.Violations, v)
+		}, func() []string {
 			return checkClaimsOnce(s, label, joined, sr.Authority, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
 		})
 	}

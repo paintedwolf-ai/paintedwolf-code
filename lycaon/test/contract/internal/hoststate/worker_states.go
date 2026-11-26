@@ -140,8 +140,12 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 		if !co.Worker {
 			continue
 		}
+		seeds := co.WorkerSeeds
+		if len(seeds) == 0 {
+			seeds = customizationWorkerSeeds()
+		}
 		for _, agent := range co.Workers {
-			for _, seed := range customizationWorkerSeeds() {
+			for _, seed := range seeds {
 				ws, buildErr := BuildWorkerState(ctx, co.Overlay, agent, seed)
 				if buildErr != nil {
 					return nil, buildErr

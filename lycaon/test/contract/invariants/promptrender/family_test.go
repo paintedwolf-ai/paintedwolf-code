@@ -6,12 +6,16 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
+	guidancetestsetup "github.com/lycaon/lycaon/internal/testsetup/guidance"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 )
 
 func TestMain(m *testing.M) {
+	// Generated worktree cases run the pinned Git.
+	gittestsetup.Enable()
 	// Production readers consult the process's active catalog; the family
 	// judges the stock catalog.
 	stock, err := promptrender.LoadStock(context.Background())
@@ -20,6 +24,9 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	extpacks.SetActive(stock.Catalog)
+	// Guidance cases render through the process renderer a session build
+	// installs; no rule may depend on another installing it first.
+	guidancetestsetup.Install()
 	code := m.Run()
 	if corpus, err := invariants.Shared(); err == nil {
 		if err := corpus.Close(); err != nil {

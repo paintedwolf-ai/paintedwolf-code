@@ -180,10 +180,15 @@ func CoordinatorStates(ctx context.Context) ([]CoordinatorState, error) {
 	seeds = append(seeds, buildProjectBindingSeeds(projectBindings)...)
 	overlays = slices.Clone(overlays)
 	for _, co := range custom {
-		if co.Coordinator {
-			seeds = append(seeds, buildCustomizationSeeds(len(overlays), surfaces, append(slices.Clone(bindings), projectBindings...))...)
-			overlays = append(overlays, co.Overlay)
+		if !co.Coordinator {
+			continue
 		}
+		if len(co.CoordinatorSeeds) > 0 {
+			seeds = append(seeds, caseCoordinatorSeeds(len(overlays), co.CoordinatorSeeds)...)
+		} else {
+			seeds = append(seeds, buildCustomizationSeeds(len(overlays), surfaces, append(slices.Clone(bindings), projectBindings...))...)
+		}
+		overlays = append(overlays, co.Overlay)
 	}
 	planCache := make(map[string]toolsurface.Plan, 64)
 	seen := make(map[string]bool, len(seeds))
@@ -350,6 +355,18 @@ func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, phaseBindings []
 		})
 	}
 	return seeds
+}
+
+func caseCoordinatorSeeds(ovIdx int, in []CustomizationSeed) []coordinatorSeed {
+	out := make([]coordinatorSeed, len(in))
+	for i, c := range in {
+		out[i] = coordinatorSeed{
+			overlayIdx: ovIdx, mode: c.Mode, posture: c.Posture, wf: c.Workflow, surfaceID: c.SurfaceID,
+			roots: c.Roots, loading: c.Loading, web: true, vision: c.Vision,
+			approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone, binding: c.Binding,
+		}
+	}
+	return out
 }
 
 func buildOverlayAndEnvSeeds(

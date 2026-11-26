@@ -46,9 +46,20 @@ func stock(r *invariants.Run) *Stock {
 	})
 }
 
-// skillRenders is every stock skill rendered for every reader, once per
-// corpus.
-func skillRenders(r *invariants.Run) []SkillRender {
+// skillRenders is every stock skill's text for every reader, once per
+// corpus. The host-state matrix's skill audit is that render set for the
+// stock templates and reports the audit's violations; a checkout's prompt
+// overlay changes the renders, so it renders afresh.
+func skillRenders(r *invariants.Run) []SkillText {
+	if !hasSiteOverlayFiles(stock(r).Site) {
+		return cartesianSummary(r).SkillTexts
+	}
+	return skillTexts(overlaySkillRenders(r))
+}
+
+// overlaySkillRenders renders every skill of a checkout's prompt overlay for
+// every reader, with the reader's authority.
+func overlaySkillRenders(r *invariants.Run) []SkillRender {
 	return invariants.Part(r.Corpus, "stock skill renders", func() ([]SkillRender, error) { return RenderStockSkills(stock(r)) })
 }
 

@@ -135,7 +135,7 @@ func TestGroundingHintData_observedPaths(t *testing.T) {
 	if data["observed_paths_sample"] == "" {
 		t.Fatal("expected observed_paths_sample")
 	}
-	if data["observed_handles_count"] != 3 || data["observed_handles_sample"] == "" {
+	if handles, _ := data["observed_handles_sample"].(string); len(strings.Split(handles, ", ")) != 3 || data["observed_handles_omitted"] != 0 {
 		t.Fatalf("expected exact observed handles, data = %+v", data)
 	}
 }

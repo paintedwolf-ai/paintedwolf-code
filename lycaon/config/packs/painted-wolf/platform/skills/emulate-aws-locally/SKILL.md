@@ -7,7 +7,7 @@ metadata:
 
 # Emulate AWS locally
 
-Use this workflow to exercise cloud-dependent code with zero blast radius. On a process start that talks to the emulator, declare `localstack` in `capability_request.host_resources` and `loopback_connect` with `ports: [4566]`.
+Use this workflow to exercise cloud-dependent code with zero blast radius. On a process start that talks to the emulator, declare `localstack` in `capability_request.host_resources`{% if runner_loopback_connect_tools %} and `loopback_connect` with `ports: [4566]`{% endif %}.
 
 ## Workflow
 

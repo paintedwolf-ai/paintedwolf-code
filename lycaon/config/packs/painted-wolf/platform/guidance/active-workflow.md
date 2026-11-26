@@ -45,7 +45,7 @@ The plan is stamped, not automatically started. If no planned worker from this p
 ### Phase obligations
 {% for o in gate_obligations %}- `{{ o.id }}`: {{ o.purpose }}
 {% if o.required %}  Required (exact ## headings — write these titles literally):
-{% for r in o.required %}  - `{{ r }}`
+{% for r in o.required %}  - {{ r }}
 {% endfor %}{% endif %}{% if o.missing %}{% for m in o.missing %}  - missing: {{ m }}
 {% endfor %}{% endif %}{% for s in o.satisfy %}  {{ forloop.Counter }}. {{ s }}
 {% endfor %}{% endfor %}{% endif %}{% if phase_exit %}
@@ -56,12 +56,12 @@ This is the last phase. There is no further advance to call.
 {% elif phase_exit.kind == "review_loop" %}{% if phase_exit.review_work_ids %}Use these exact `workflow_work_id` values: {% for agent, work_id in phase_exit.review_work_ids %}`{{ agent }}` → `{{ work_id }}`. {% endfor %}
 {% endif %}{% if phase_exit.review_agents %}
 1. Start every owed reviewer ({% for a in phase_exit.review_agents %}`{{ a }}`{% if not forloop.Last %}, {% endif %}{% endfor %}){% if profile_has_task %} with `task`{% endif %} through its workflow review assignment in **one assistant message**, within user limits. Ask before conflicting review. A terminal verdict needs each completed review.
-{% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_outline %} with `verdict` shaped `{{ phase_exit.verdict_outline }}` (the first `verdict` value is terminal; the tool schema gives each member's type); arrays may be empty when no entry exists{% endif %}. Only that call records a verdict.{% if phase_exit.review_loop_key %}
-{% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. {% if phase_exit.followup_attempts %}A non-terminal verdict registers open questions; start their `workflow_work_id` for focused investigation ({{ phase_exit.followup_attempts }} completed attempts each).{% else %}A non-terminal verdict runs the loop again{% if phase_exit.review_loop_cap %}, up to {{ phase_exit.review_loop_cap }} time(s){% endif %}.{% endif %}{% endif %}
+{% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_outline %} with `verdict` shaped `{{ phase_exit.verdict_outline }}` (the first `verdict` value is terminal; the tool schema gives each member's type); arrays may be empty when no entry exists{% endif %}. Only that call records a verdict.
+{% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. {% if phase_exit.followup_attempts %}A non-terminal verdict registers open questions; start their `workflow_work_id` for focused investigation ({{ phase_exit.followup_attempts }} completed attempts each).{% else %}A non-terminal verdict runs the loop again, up to {{ phase_exit.review_loop_cap }} time(s).{% endif %}
 {% elif phase_exit.kind == "human_approval" %}
 End the turn. The user approves the bound document themselves — chat prose is not approval{% if profile_has_workflow_advance %}, and `workflow_advance` will not stand in for it{% endif %}. Treat any message they send meanwhile as revision feedback on that document.
 {% elif phase_exit.kind == "invoke" %}
-Wait for the child workflow {% if phase_exit.invoke_workflow_id %}`{{ phase_exit.invoke_workflow_id }}` {% endif %}to finish (`child_run_complete`).
+Wait for the child workflow `{{ phase_exit.invoke_workflow_id }}` to finish (`child_run_complete`).
 {% elif phase_exit.open_gates or phase_exit.dormant_gates %}{% if phase_exit.open_gates %}
 Satisfy {% if phase_exit.open_gates|length > 1 %}these gate leaves — none has passed yet{% else %}this gate leaf — it has not passed yet{% endif %}: {% for g in phase_exit.open_gates %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}.
 {% endif %}{% if phase_exit.dormant_gates %}
@@ -75,8 +75,8 @@ Advancing is your call: when the gates pass, call `workflow_advance`.
 {% else %}
 The host advances on its own once the gates pass.
 {% endif %}{% endif %}{% if phase_exit.choice_transitions %}
-**Choice transitions out of this phase** — call `workflow_transition` with the arm's `transition_id`; do not invent phase ids.
-{% for arm in phase_exit.choice_transitions %}- `{{ arm.id }}` — {{ arm.label }}{% if arm.coordinator_may_fire %}: `workflow_transition(transition_id="{{ arm.id }}")`{% else %}: {% if arm.actors %}{% for a in arm.actors %}{{ a }}{% if not forloop.Last %}, {% endif %}{% endfor %}{% else %}the user{% endif %} takes this one — you cannot fire it{% endif %}
+**Choice transitions out of this phase**{% if profile_has_workflow_transition %} — call `workflow_transition` with the arm's `transition_id`; do not invent phase ids{% endif %}.
+{% for arm in phase_exit.choice_transitions %}- `{{ arm.id }}` — {{ arm.label }}{% if arm.coordinator_may_fire %}: `workflow_transition(transition_id="{{ arm.id }}")`{% else %}: {% for a in arm.actors %}{{ a }}{% endfor %} takes this one — you cannot fire it{% endif %}
 {% endfor %}{% endif %}{% if phase_exit.depth_param %}
 Depth parameter: {{ phase_exit.depth_param }}.
 {% endif %}{% endif %}{% if next_phase %}Next: {{ next_phase }}.

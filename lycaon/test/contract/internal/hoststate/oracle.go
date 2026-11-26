@@ -100,7 +100,36 @@ var (
 	cachedSandboxConf = sync.OnceValues(sandbox.LoadConfig)
 	projTurnMu        sync.Mutex
 	projTurnCache     = map[string]projectedTurnToolsEntry{}
+
+	authorityMemoMu    sync.Mutex
+	authorityMemoHolds int
 )
+
+// HoldAuthorityMemos keeps the executor, registry and turn-projection memos
+// that freezes share until the returned release runs; the last open hold's
+// release drops them. Freezes outside any hold still fill the memos.
+func HoldAuthorityMemos() (release func()) {
+	authorityMemoMu.Lock()
+	authorityMemoHolds++
+	authorityMemoMu.Unlock()
+	return sync.OnceFunc(func() {
+		authorityMemoMu.Lock()
+		defer authorityMemoMu.Unlock()
+		authorityMemoHolds--
+		if authorityMemoHolds > 0 {
+			return
+		}
+		executorCacheMu.Lock()
+		executorCache = map[executorCacheKey]executorBundle{}
+		executorCacheMu.Unlock()
+		registryCacheMu.Lock()
+		registryCache = map[registryCacheKey]*tools.DefaultRegistry{}
+		registryCacheMu.Unlock()
+		projTurnMu.Lock()
+		projTurnCache = map[string]projectedTurnToolsEntry{}
+		projTurnMu.Unlock()
+	})
+}
 
 func sortedBoolKeys(m map[string]bool) string {
 	if len(m) == 0 {
@@ -207,7 +236,7 @@ func executorBundleForOverlay(
 	}
 	executorCacheMu.Unlock()
 
-	reg, err := buildCatalogRegistry(overlay.Catalog, mcpState)
+	reg, err := catalogRegistry(overlay.Catalog, mcpState)
 	if err != nil {
 		return executorBundle{}, nil, err
 	}
@@ -273,6 +302,34 @@ func (b executorBundle) programTable(ctx context.Context, filter platform.ToolFi
 	b.tables[key] = table
 	b.tablesMu.Unlock()
 	return table, nil
+}
+
+type registryCacheKey struct {
+	revision string
+	mcpState MCPState
+}
+
+var (
+	registryCacheMu sync.Mutex
+	registryCache   = map[registryCacheKey]*tools.DefaultRegistry{}
+)
+
+// catalogRegistry shares one registry per catalog and MCP fixture: posture,
+// web search and external hiding narrow the executor's policy, not the
+// registry, and executors only read it.
+func catalogRegistry(eff *extpacks.EffectiveCatalog, mcpState MCPState) (*tools.DefaultRegistry, error) {
+	key := registryCacheKey{revision: eff.Revision, mcpState: mcpState}
+	registryCacheMu.Lock()
+	defer registryCacheMu.Unlock()
+	if reg, ok := registryCache[key]; ok {
+		return reg, nil
+	}
+	reg, err := buildCatalogRegistry(eff, mcpState)
+	if err != nil {
+		return nil, err
+	}
+	registryCache[key] = reg
+	return reg, nil
 }
 
 func buildCatalogRegistry(eff *extpacks.EffectiveCatalog, mcpState MCPState) (*tools.DefaultRegistry, error) {
