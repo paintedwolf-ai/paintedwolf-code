@@ -95,7 +95,7 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	}
 	in := interactions.LedgerInput{
 		Sites: sites, Observed: interactions.MergeObservations(append([][]hoststate.ObservedCondition{sum.Conditions}, extra...)...),
-		Constraints: conditionConstraints, Derived: gen.derived,
+		Constraints: slices.Concat(conditionConstraints, standingConstraints), Derived: gen.derived,
 	}
 	first, err := interactions.BuildConditionLedger(in)
 	if err != nil {

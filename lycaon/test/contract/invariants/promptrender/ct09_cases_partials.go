@@ -23,6 +23,21 @@ import (
 // every site.
 var standingCaseBudget = casegen.Budget{PerTarget: 30, Total: 4000}
 
+// standingConstraints are the production invariants that couple standing
+// reader facts to the root count.
+var standingConstraints = []interactions.AtomConstraint{
+	{Atom: "runner_write_root_tools", Implies: "has_workspace_roots", Recipient: interactions.RecipientCoordinator, Source: srcCoordinatorNoFolder},
+	{Atom: "runner_write_root_tools", Implies: "has_workspace_roots", Recipient: interactions.RecipientWorker, Source: srcWorkerWorkspace},
+	{Atom: "profile_has_write_tools", Implies: "has_workspace_roots", Recipient: interactions.RecipientWorker, Source: srcWorkerWorkspace},
+}
+
+const (
+	srcCoordinatorNoFolder = "internal/prompts/reader.go:CompileSurfacePlan keeps only coordinator-surfaces.yaml no_folder_allowlist at zero roots, " +
+		"which omits command; runner_write_root_tools needs command with mutation and external exec (reader_facts.go)"
+	srcWorkerWorkspace = "internal/worker/task_tool.go refuses a zero-root spawn (WORKER_WORKSPACE_REQUIRED) unless prompts.AgentRunsWithoutWorkspace, " +
+		"which is false for a mutation-capable profile (AgentMutationCapable) and for one reaching command (ProfileSurveysProjectTree)"
+)
+
 // standingFamilies are the template units whose gaps the standing producer
 // searches: shared partials, units and archetypes, and agent prompts.
 var standingFamilies = []string{"shared/", "agents/"}
