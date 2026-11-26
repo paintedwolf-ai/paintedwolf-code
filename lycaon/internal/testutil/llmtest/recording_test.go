@@ -71,3 +71,34 @@ func TestRecordingClientWithoutDelegateCapturesRequests(t *testing.T) {
 		t.Fatal("delegate-free requests were not recorded")
 	}
 }
+
+func TestRecordingBarrierObservesEntryBeforeResponse(t *testing.T) {
+	r := NewRecordingClient(nil)
+	release := r.HoldResponses()
+	defer release()
+	done := make(chan error, 1)
+	go func() {
+		_, err := r.Complete(t.Context(), modelcall.CompletionRequest{Model: "held"})
+		done <- err
+	}()
+	req, err := r.AwaitRequest(t.Context(), 0)
+	testutil.FailErr(t, "await held request", err)
+	if req.Model != "held" {
+		t.Fatalf("recorded model = %q", req.Model)
+	}
+	select {
+	case <-done:
+		t.Fatal("completion returned before release")
+	default:
+	}
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := r.AwaitRequest(cancelled, 1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled request waiter = %v", err)
+	}
+	if _, err := r.Stream(cancelled, modelcall.CompletionRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled held stream = %v", err)
+	}
+	release()
+	testutil.FailErr(t, "released response", <-done)
+}

@@ -43,3 +43,13 @@ func TestPrintOutcomesFromBundle(t *testing.T) {
 		t.Fatal("read absent session")
 	}
 }
+
+func TestOutcomesCommandRequiresAnExistingBundleAndSession(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.zip")
+	if err := Run("pw-logs", []string{"outcomes", "--file", path}); err == nil {
+		t.Fatal("accepted outcome lookup without a session")
+	}
+	if err := Run("pw-logs", []string{"outcomes", "--file", path, "--session", "chat"}); !os.IsNotExist(err) {
+		t.Fatalf("missing bundle error = %v", err)
+	}
+}
