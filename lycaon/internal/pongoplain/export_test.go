@@ -35,5 +35,5 @@ func ExecuteWithStepHook(
 	values map[string]any,
 	onStep func(step int),
 ) (string, error) {
-	return executeWithHook(ctx, tpl, values, onStep)
+	return executeWithHook(ctx, tpl, values, onStep, false)
 }

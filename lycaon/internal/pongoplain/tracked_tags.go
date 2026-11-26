@@ -48,7 +48,7 @@ func (node *trackedIfNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 	if stateErr != nil {
 		return stateErr
 	}
-	rec := ActiveBranchRecorder.Load()
+	rec := state.recorder()
 	if rec != nil && isAtomReplay(ctx) {
 		rec = nil
 	}
@@ -177,7 +177,7 @@ func (node *trackedForNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	}
 	state.step()
 
-	rec := ActiveBranchRecorder.Load()
+	rec := state.recorder()
 	forCtx := pongo2.NewChildExecutionContext(ctx)
 	loopInfo := &trackedForLoopInfo{First: true}
 	if parent, ok := forCtx.Private["forloop"].(*trackedForLoopInfo); ok {
