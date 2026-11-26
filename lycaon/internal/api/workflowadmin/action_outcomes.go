@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/actionoutcome"
+	"github.com/lycaon/lycaon/internal/usernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,7 +25,7 @@ func (s *RunControl) commitAction(ctx context.Context, a *actionoutcome.Action, 
 	order := a.Order
 	render := func(reason string, kind wire.ContinuationAction) *wire.SessionHostError {
 		code := wire.NoticeCodeCoordinatorNotContinued
-		h := catalog.HostError(code, map[string]any{"reason": reason, "action": string(kind)})
+		h := catalog.HostError(code, usernotice.ContinuationContext(reason, kind))
 		return &h
 	}
 	a.Commit(results, run.SessionID, func(ev wire.ActionContinuation) {

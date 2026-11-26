@@ -1,6 +1,7 @@
 package workerruntime
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/actionoutcome"
@@ -32,5 +33,26 @@ func TestStaleResumeAndApprovalReportInactiveRun(t *testing.T) {
 		if out.State != api.ContinuationStateNotContinued || out.Reason != api.ContinuationReasonRunInactive {
 			t.Fatalf("%s: %+v", kind, out)
 		}
+	}
+}
+
+func TestUnreadableObligationStopsTheWakeAndReportsLookupFailure(t *testing.T) {
+	db := testdbfixture.Open(t, "obligation.db")
+	store := persistence.New(db)
+	r := &Runtime{}
+	r.SetDependencies(Dependencies{Workflows: &workflows.Runtime{Manager: &workflow.RunManager{Obligations: &workflow.Obligations{Runs: store.Runs}}}})
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	ctx, a := actionoutcome.Capture(cancelled, api.ContinuationActionWorkflowResume)
+	if !r.parkWorkflowObligation(ctx, "chat", false) {
+		t.Fatal("unreadable obligation allowed a wake")
+	}
+	var sessions actionoutcome.Sessions
+	s := sessions.For("chat")
+	a.Commit(s, "chat", nil)
+	out, err := s.Actions.Await(t.Context(), a.ID())
+	testutil.FailErr(t, "await obligation lookup", err)
+	if out.State != api.ContinuationStateFailed || out.FailureCode != string(api.HostContinuationFailureHostLookupFailed) || out.TurnID != "" {
+		t.Fatalf("obligation lookup outcome = %+v", out)
 	}
 }

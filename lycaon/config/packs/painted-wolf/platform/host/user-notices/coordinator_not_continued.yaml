@@ -12,6 +12,11 @@ message: >-
   {% elif reason == "host_lookup_failed" %}The host could not read the workflow state needed to continue.
   {% elif reason == "host_invariant_failed" %}The host could not account for the coordinator wake.
   {% else %}The action was interrupted before the coordinator could continue.{% endif %}
+suggested_action: >-
+  {% if reason == "no_open_request" or reason == "turn_budget_reached" %}Send a prompt describing what to do next.
+  {% elif reason == "session_closed" %}Open a chat to continue the work.
+  {% elif reason == "run_inactive" %}Start a workflow when you are ready to continue.
+  {% else %}Check the current workflow state before trying again.{% endif %}
 actions:
   - '{% if reason == "no_open_request" or reason == "turn_budget_reached" %}prompt_keep_going{% endif %}'
 scenarios:

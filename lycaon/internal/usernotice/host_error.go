@@ -20,3 +20,7 @@ func (catalog *Catalog) HostError(code wire.NoticeCode, ctx map[string]any) wire
 	}
 	return host
 }
+
+func ContinuationContext(reason string, action wire.ContinuationAction) map[string]any {
+	return map[string]any{"reason": reason, "action": string(action)}
+}
