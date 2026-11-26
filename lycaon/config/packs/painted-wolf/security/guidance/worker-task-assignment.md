@@ -60,7 +60,7 @@ Focus paths:
 {% endfor %}{% endif %}{% if file_orientations %}
 
 File orientation (structural hints for suggested paths — not a substitute for survey first pass on layout or large files{% if profile_has_command %}; for edits, inspect exact source windows through `command`{% endif %}):
-{% for file in file_orientations %}- **{{ file.path }}** — {{ file.total_lines }} lines, {{ file.size_bytes }} bytes{% if file.symbols %} ({% for sym in file.symbols %}{{ sym.kind }} `{{ sym.name }}` L{{ sym.line }}{% if not forloop.Last %}; {% endif %}{% endfor %}{% if file.symbols_elided %}; +{{ file.symbols_elided }} more not listed{% endif %}){% endif %}
+{% for file in file_orientations %}- **{{ file.path }}** — {{ file.total_lines }} lines, {{ file.size_bytes }} bytes{% if file.symbols %} ({% for sym in file.symbols %}{{ sym.kind }} {{ sym.name }} L{{ sym.line }}{% if not forloop.Last %}; {% endif %}{% endfor %}{% if file.symbols_elided %}; +{{ file.symbols_elided }} more not listed{% endif %}){% endif %}
 {% endfor %}{% endif %}{% if attachments %}
 
 Parent attachments (metadata only — page with the named tool; `prompt-attachments/` paths are host data, not project paths):

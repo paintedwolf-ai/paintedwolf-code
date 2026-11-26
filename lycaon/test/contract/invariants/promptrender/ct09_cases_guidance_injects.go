@@ -504,7 +504,7 @@ func workerRepsBy(reps []workerRep, keep func(workerRep) bool, key func(workerRe
 func workerTaskAssignmentCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
 	reps := workerRepsBy(e.wReps, func(workerRep) bool { return true },
 		func(wr workerRep) string {
-			return offers(wr.auth, "command_mutation", "read_review", "scan_query", "record_finding", "read_findings", "request_decision")
+			return fmt.Sprintf("%t|%s", wr.auth.Reader.Held()["command_mutation"], offers(wr.auth, "read_review", "scan_query", "record_finding", "read_findings", "request_decision"))
 		})
 	knobs := []casegen.Knob{
 		repKnob([]string{casegen.AnyFact}, len(reps), func(i int) string { return reps[i].ws.ID }),
