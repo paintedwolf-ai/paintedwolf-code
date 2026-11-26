@@ -77,19 +77,25 @@ def inspect_engine_provenance(root=ROOT, engine_bin=None, evaluator_git_head='')
     go_version = ''
     vcs = {}
     if exists:
-        ver = subprocess.run([str(binary), '--version'], capture_output=True, text=True, check=False)
-        if ver.returncode == 0:
-            product_version = ver.stdout.strip()
-        meta = subprocess.run(['go', 'version', '-m', str(binary)], capture_output=True, text=True, check=False)
-        if meta.returncode == 0:
-            for line in meta.stdout.splitlines():
-                parts = line.strip().split('\t')
-                if line.startswith(str(binary)) and ': ' in line:
-                    go_version = line.split(': ', 1)[1].strip()
-                elif len(parts) >= 2 and parts[0] == 'build' and '=' in parts[1]:
-                    k, v = parts[1].split('=', 1)
-                    if k.startswith('vcs.'):
-                        vcs[k] = v
+        try:
+            ver = subprocess.run([str(binary), '--version'], capture_output=True, text=True, check=False)
+            if ver.returncode == 0:
+                product_version = ver.stdout.strip()
+        except OSError:
+            pass
+        try:
+            meta = subprocess.run(['go', 'version', '-m', str(binary)], capture_output=True, text=True, check=False)
+            if meta.returncode == 0:
+                for line in meta.stdout.splitlines():
+                    parts = line.strip().split('\t')
+                    if line.startswith(str(binary)) and ': ' in line:
+                        go_version = line.split(': ', 1)[1].strip()
+                    elif len(parts) >= 2 and parts[0] == 'build' and '=' in parts[1]:
+                        k, v = parts[1].split('=', 1)
+                        if k.startswith('vcs.'):
+                            vcs[k] = v
+        except OSError:
+            pass
     vcs_rev = vcs.get('vcs.revision', '')
     matches_head = bool(vcs_rev and evaluator_git_head and evaluator_git_head.startswith(vcs_rev)) if vcs_rev else None
     return {
