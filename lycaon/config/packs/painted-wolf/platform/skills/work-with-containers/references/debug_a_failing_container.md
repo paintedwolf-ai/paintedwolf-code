@@ -36,7 +36,7 @@ The single idea that explains most of these: **a container lives exactly as long
 
 ## Do not
 
-- **Do not add an endless sleep or a tail of `/dev/null` to keep it alive** unless you are deliberately holding it open to inspect it, and say so. As a fix it hides the failure rather than resolving it.
+- **Do not add `CMD sleep infinity` or `CMD tail -f /dev/null` (or the same as a Compose `command:`) to keep it alive** unless you are deliberately holding it open to inspect it, and say so. As a fix it hides the failure rather than resolving it.
 - **Do not rebuild the image to "try again"** before reading the exit code. A rebuild changes nothing about a bad mount, a missing env var, or an OOM.
 - Do not `docker kill`/`rm` containers you did not start. They may be the user's running services.
 - Do not raise a memory limit without first showing the observed usage that justifies it.
