@@ -232,6 +232,11 @@ var (
 		if err != nil {
 			return nil, err
 		}
+		projectAgents, err := projectAgentWorkerStates()
+		if err != nil {
+			return nil, err
+		}
+		workerStates = slices.Concat(workerStates, projectAgents)
 		out := make([]workerRep, 0, len(workerStates))
 		for _, ws := range workerStates {
 			if ws.Excluded {
