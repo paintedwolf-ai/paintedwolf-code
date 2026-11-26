@@ -37,6 +37,11 @@ type CartesianSummary struct {
 	Kicks map[string]*KickFamily
 	// PlainPersonas holds the worker persona renders without host resources.
 	PlainPersonas KickFamily
+	// SkillTexts and SkillClaims are the skill audit's renders as texts and
+	// their claim results. The renders carry the recipient authorities,
+	// which the summary outlives, so SkillAudit keeps none.
+	SkillTexts  []SkillText
+	SkillClaims KickFamily
 	// setCase names the case the following renders belong to.
 	setCase                func(string)
 	CacheHits              int
@@ -159,6 +164,7 @@ func RunCartesianMatrix(ctx context.Context, s *Stock) (*CartesianSummary, error
 }
 
 func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummary, error) {
+	defer holdRecipients()()
 	tracker := hoststate.NewCoverageTracker()
 	if err := registerStockTemplatesInTracker(s, tracker); err != nil {
 		return nil, err
@@ -216,9 +222,11 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 	if err != nil {
 		return nil, err
 	}
-	sum.SkillAudit = skillAudit
 	sum.Violations = append(sum.Violations, skillAudit.Violations...)
 	checkSkillRenderClaims(s, skillAudit.Renders, cache, sum)
+	sum.SkillTexts = skillTexts(skillAudit.Renders)
+	skillAudit.Renders = nil
+	sum.SkillAudit = skillAudit
 
 	hits, misses, _ := cache.Stats()
 	sum.CacheHits = hits

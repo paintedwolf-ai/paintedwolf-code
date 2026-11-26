@@ -189,90 +189,13 @@ func informKickIDs(reg *anchor.Registry, prefix string, extra ...string) []strin
 	return ids
 }
 
-var (
-	cachedCoordinatorPairs = sync.OnceValues(func() ([]coordRep, error) {
-		ctx := context.Background()
-		states, err := hoststate.CoordinatorStates(ctx)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]coordRep, 0, len(states))
-		for _, st := range states {
-			if st.Excluded {
-				continue
-			}
-			auth, fErr := hoststate.FreezeTurnAuthority(ctx, st)
-			if fErr != nil {
-				return nil, fErr
-			}
-			out = append(out, coordRep{state: st, auth: auth})
-		}
-		return out, nil
-	})
-	cachedCoordinatorReps = sync.OnceValues(func() ([]coordRep, error) {
-		pairs, err := cachedCoordinatorPairs()
-		if err != nil {
-			return nil, err
-		}
-		// The digest omits reader facts such as root count, so a recipient
-		// is distinct by authority and reader.
-		seen := map[string]bool{}
-		var out []coordRep
-		for _, p := range pairs {
-			if key := p.auth.Digest + "|" + p.auth.Reader.Fingerprint(); !seen[key] {
-				seen[key] = true
-				out = append(out, p)
-			}
-		}
-		return out, nil
-	})
-	cachedWorkerPairs = sync.OnceValues(func() ([]workerRep, error) {
-		ctx := context.Background()
-		workerStates, err := hoststate.WorkerStates(ctx)
-		if err != nil {
-			return nil, err
-		}
-		projectAgents, err := projectAgentWorkerStates()
-		if err != nil {
-			return nil, err
-		}
-		workerStates = slices.Concat(workerStates, projectAgents)
-		out := make([]workerRep, 0, len(workerStates))
-		for _, ws := range workerStates {
-			if ws.Excluded {
-				continue
-			}
-			auth, fErr := hoststate.FreezeWorkerAuthority(ctx, ws)
-			if fErr != nil {
-				return nil, fErr
-			}
-			out = append(out, workerRep{ws: ws, auth: auth})
-		}
-		return out, nil
-	})
-	cachedWorkerReps = sync.OnceValues(func() ([]workerRep, error) {
-		pairs, err := cachedWorkerPairs()
-		if err != nil {
-			return nil, err
-		}
-		seen := map[string]bool{}
-		var out []workerRep
-		for _, p := range pairs {
-			if key := p.auth.Digest + "|" + p.auth.Reader.Fingerprint(); !seen[key] {
-				seen[key] = true
-				out = append(out, p)
-			}
-		}
-		return out, nil
-	})
-)
-
 // coordinatorKicksNameOnlyOffered verifies every non-phase coordinator kick
 // across the coordinator host states and anchor envelopes.
 func coordinatorKicksNameOnlyOffered(r *invariants.Run) {
 	if reportMatrixKicks(r, kickFamilyCoordinator, "coordinator kick renders") {
 		return
 	}
+	defer holdRecipients()()
 	reps, err := cachedCoordinatorReps()
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
@@ -373,6 +296,7 @@ func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
 	if reportMatrixKicks(r, kickFamilyPhase, "phase kick renders") {
 		return
 	}
+	defer holdRecipients()()
 	reg, err := workflowdef.RegistryFromDirs("")
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
@@ -390,6 +314,7 @@ func workerKicksNameOnlyOffered(r *invariants.Run) {
 	if reportMatrixKicks(r, kickFamilyWorker, "worker kick renders") {
 		return
 	}
+	defer holdRecipients()()
 	reps, err := cachedWorkerReps()
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
@@ -436,6 +361,7 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 		}
 		return
 	}
+	defer holdRecipients()()
 	cache := hoststate.NewRenderCache()
 	workerPairs, err := cachedWorkerPairs()
 	r.Must(err)
@@ -497,7 +423,16 @@ func workerPersonaOccurrence(reader prompts.Reader, skillsList []skills.Skill) m
 // and WorkerStates through EvaluateClaimBlock and closed backtick vocabulary.
 func skillsNameOnlyOffered(r *invariants.Run) {
 	s := stock(r)
-	renders := skillRenders(r)
+	if !hasSiteOverlayFiles(s.Site) {
+		// The host-state matrix checks the claims of every stock skill render.
+		claims := cartesianSummary(r).SkillClaims
+		r.Expect(claims.Rendered, "stock skill renders")
+		for _, v := range claims.Violations {
+			r.Report("%s", v)
+		}
+		return
+	}
+	renders := overlaySkillRenders(r)
 	r.Expect(len(renders), "stock skill renders")
 	cache := hoststate.NewRenderCache()
 	for _, sr := range renders {
