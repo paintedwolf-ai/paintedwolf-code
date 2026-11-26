@@ -65,7 +65,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, id string, in pr
 	if err != nil {
 		return zero, err
 	}
-	if in.HostSignal != nil && !m.Loading.HasRequest(ctx, sess, history) {
+	if actionoutcome.RequiresWakeRequest(ctx) && !m.Loading.HasRequest(ctx, sess, history) {
 		return zero, actionoutcome.ErrNoRequest
 	}
 	recorded, _ := m.Loading.RecordedStanding(ctx, id)

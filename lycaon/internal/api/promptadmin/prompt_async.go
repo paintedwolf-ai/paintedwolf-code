@@ -36,7 +36,7 @@ func shouldPublishPromptHostError(err error) bool {
 		return false
 	}
 	// Stopped and active submissions are not host errors.
-	return !errors.Is(err, lifecycle.ErrStopping) &&
+	return !errors.Is(err, actionoutcome.ErrNoRequest) && !errors.Is(err, lifecycle.ErrStopping) &&
 		!errors.Is(err, submissions.ErrInFlight)
 }
 

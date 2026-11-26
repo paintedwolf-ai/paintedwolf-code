@@ -31,6 +31,7 @@ type TurnRecord struct {
 
 type turnContextKey struct{}
 type Turn struct {
+	fromWake      bool
 	recoverNotice func()
 	handoff       *Handoff
 	id            string
@@ -41,7 +42,8 @@ func BeginTurn(ctx context.Context, history *History[TurnRecord], sessionID, tur
 	lease, _ := ctx.Value(leaseKey{}).(leaseWitness)
 	history.Open(turnID, TurnRecord{LeaseID: lease.id, TurnID: turnID, SessionID: sessionID, AdmittedAt: time.Now().UTC()})
 	var path *Path
-	if ticket, _ := ctx.Value(ticketKey{}).(*Ticket); ticket != nil {
+	ticket, _ := ctx.Value(ticketKey{}).(*Ticket)
+	if ticket != nil {
 		ticket.Record(api.WakeStateDelivered, "", turnID, "")
 		path = ticket.path
 		ctx = WithTicket(ctx, nil)
@@ -52,8 +54,13 @@ func BeginTurn(ctx context.Context, history *History[TurnRecord], sessionID, tur
 	}
 	handoff.Follow(path)
 	ctx = context.WithValue(ctx, leaseKey{}, leaseWitness{})
-	t := &Turn{handoff: handoff, id: turnID, history: history}
+	t := &Turn{fromWake: ticket != nil, handoff: handoff, id: turnID, history: history}
 	return context.WithValue(ctx, turnContextKey{}, t), t
+}
+
+func RequiresWakeRequest(ctx context.Context) bool {
+	t := CurrentTurn(ctx)
+	return t != nil && t.fromWake
 }
 
 func (t *Turn) RecoverNotice(notices *Notices, id string) {
