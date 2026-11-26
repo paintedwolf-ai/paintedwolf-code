@@ -19,6 +19,7 @@ type survivingMutation struct {
 	hasModifiedBytes bool
 	mode             fs.FileMode
 	isDir            bool
+	parentOpID       string
 	writeOriginFrame *pythonruntime.DeclaredFrame
 	flushCloseFrame  *pythonruntime.DeclaredFrame
 }
@@ -53,8 +54,13 @@ func (a *OverlayAdapter) Settle(ctx context.Context, cleanCompletion bool) (*pyt
 		return report, nil
 	}
 
+	settleParentOpID := ParentOperationID(ctx)
 	for _, m := range mutations {
 		res, baseRev, err := a.publishOne(ctx, m)
+		parentOpID := settleParentOpID
+		if parentOpID == "" {
+			parentOpID = m.parentOpID
+		}
 		if err != nil {
 			var conflictErr *RevisionConflictError
 			conflict := res.Conflict
@@ -66,7 +72,7 @@ func (a *OverlayAdapter) Settle(ctx context.Context, cleanCompletion bool) (*pyt
 				report.Conflicts = append(report.Conflicts, *conflict)
 			}
 			report.PartialFailure = err
-			a.recordPublication(m, baseRev, nil, 0, conflict, len(report.Published) > 0)
+			a.recordPublication(parentOpID, m, baseRev, nil, 0, conflict, len(report.Published) > 0)
 			return report, err
 		}
 
@@ -80,7 +86,7 @@ func (a *OverlayAdapter) Settle(ctx context.Context, cleanCompletion bool) (*pyt
 			BytesWritten:      res.BytesWritten,
 		}
 		report.Published = append(report.Published, change)
-		a.recordPublication(m, baseRev, &committed, res.BytesWritten, nil, false)
+		a.recordPublication(parentOpID, m, baseRev, &committed, res.BytesWritten, nil, false)
 
 		if err := a.pins.AdvanceAfterCommit(m.target, committed); err != nil {
 			report.PartialFailure = err
@@ -130,6 +136,7 @@ func (a *OverlayAdapter) collectSurvivingMutationsLocked() []survivingMutation {
 		origin := n.originTarget
 		modified := n.contentModified
 		seq := n.mutationSeq
+		parentOpID := n.parentOpID
 		wFrame := n.writeOriginFrame
 		fcFrame := n.flushCloseFrame
 		n.mu.Unlock()
@@ -145,6 +152,7 @@ func (a *OverlayAdapter) collectSurvivingMutationsLocked() []survivingMutation {
 				op:               "delete",
 				target:           target,
 				isDir:            mode&fs.ModeDir != 0,
+				parentOpID:       parentOpID,
 				writeOriginFrame: wFrame,
 				flushCloseFrame:  fcFrame,
 			})
@@ -159,6 +167,7 @@ func (a *OverlayAdapter) collectSurvivingMutationsLocked() []survivingMutation {
 					source:           &src,
 					mode:             mode,
 					isDir:            true,
+					parentOpID:       parentOpID,
 					writeOriginFrame: wFrame,
 					flushCloseFrame:  fcFrame,
 				})
@@ -172,6 +181,7 @@ func (a *OverlayAdapter) collectSurvivingMutationsLocked() []survivingMutation {
 					target:           target,
 					mode:             mode,
 					isDir:            true,
+					parentOpID:       parentOpID,
 					writeOriginFrame: wFrame,
 					flushCloseFrame:  fcFrame,
 				})
@@ -188,6 +198,7 @@ func (a *OverlayAdapter) collectSurvivingMutationsLocked() []survivingMutation {
 					data:             data,
 					hasModifiedBytes: modified,
 					mode:             mode,
+					parentOpID:       parentOpID,
 					writeOriginFrame: wFrame,
 					flushCloseFrame:  fcFrame,
 				})
@@ -208,6 +219,7 @@ func (a *OverlayAdapter) collectSurvivingMutationsLocked() []survivingMutation {
 				data:             data,
 				hasModifiedBytes: true,
 				mode:             mode,
+				parentOpID:       parentOpID,
 				writeOriginFrame: wFrame,
 				flushCloseFrame:  fcFrame,
 			})
@@ -277,7 +289,7 @@ func (a *OverlayAdapter) publishOne(ctx context.Context, m survivingMutation) (P
 	}
 }
 
-func (a *OverlayAdapter) recordPublication(m survivingMutation, baseRev DocumentRevision, committed *DocumentRevision, bytesWritten int64, conflict *pythonruntime.RevisionConflict, partialFailure bool) {
+func (a *OverlayAdapter) recordPublication(parentOpID string, m survivingMutation, baseRev DocumentRevision, committed *DocumentRevision, bytesWritten int64, conflict *pythonruntime.RevisionConflict, partialFailure bool) {
 	if a.evidence == nil {
 		return
 	}
@@ -292,6 +304,7 @@ func (a *OverlayAdapter) recordPublication(m survivingMutation, baseRev Document
 	a.evidence.RecordPublication(PublicationRecord{
 		ExecutionID:       a.executionID,
 		OperationID:       opID,
+		ParentOperationID: parentOpID,
 		Target:            m.target,
 		Operation:         m.op,
 		PreviousTarget:    prevCopy,

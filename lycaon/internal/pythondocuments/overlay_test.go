@@ -371,3 +371,96 @@ func TestOpenAppendTruncateSeekAndClosedHandleErrors(t *testing.T) {
 		t.Fatalf("Write after Close = %s, want EBADF", errno)
 	}
 }
+
+func TestBytesDeliveredToGuestSemanticsAndParentOperationID(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryDocumentStore()
+	store.SetSaved("root-main", "", "secret.txt", []byte("0123456789abcdef"), 0o644)
+
+	evidence := NewEvidenceLog()
+	adapter := NewOverlayAdapter(OverlayConfig{
+		ExecutionID: "exec-bytes",
+		Store:       store,
+		Roots:       []RootSpec{{ID: "root-main", Label: "main", Default: true}},
+		Evidence:    evidence,
+	})
+
+	// (a) Defective-control regression: Open + Close with zero Read calls MUST deliver 0 bytes.
+	f0, errno := adapter.Open(WithParentOperationID(ctx, "sysfs-op-open-close"), pythonruntime.OpenRequest{
+		Path:  "secret.txt",
+		Flags: pythonruntime.OpenRead,
+	})
+	if errno != pythonruntime.ErrnoSuccess {
+		t.Fatalf("Open(a): %s", errno)
+	}
+	if errno := f0.Close(); errno != pythonruntime.ErrnoSuccess {
+		t.Fatalf("Close(a): %s", errno)
+	}
+
+	// (b) Defective-control regression: Open + 1-byte Read MUST deliver 1 byte (never len(snap.Bytes)=16).
+	f1, errno := adapter.Open(WithParentOperationID(ctx, "sysfs-op-one-byte"), pythonruntime.OpenRequest{
+		Path:  "secret.txt",
+		Flags: pythonruntime.OpenRead,
+	})
+	if errno != pythonruntime.ErrnoSuccess {
+		t.Fatalf("Open(b): %s", errno)
+	}
+	one := make([]byte, 1)
+	n, errno := f1.Read(one)
+	if errno != pythonruntime.ErrnoSuccess || n != 1 || string(one) != "0" {
+		t.Fatalf("1-byte Read = (%d, %q, %s), want (1, \"0\", SUCCESS)", n, string(one), errno)
+	}
+	_ = f1.Close()
+
+	// (c) Non-contiguous seek + read records exact delivered bytes and distinct ranges.
+	f2, errno := adapter.Open(WithParentOperationID(ctx, "sysfs-op-ranges"), pythonruntime.OpenRequest{
+		Path:  "secret.txt",
+		Flags: pythonruntime.OpenRead,
+	})
+	if errno != pythonruntime.ErrnoSuccess {
+		t.Fatalf("Open(c): %s", errno)
+	}
+	two := make([]byte, 2)
+	_, _ = f2.Read(two) // [0,2)
+	_, _ = f2.Seek(10, io.SeekStart)
+	three := make([]byte, 3)
+	_, _ = f2.Read(three) // [10,13)
+	_ = f2.Close()
+
+	reads := evidence.Reads()
+	if len(reads) != 3 {
+		t.Fatalf("recorded %d DocumentReadRecords, want 3", len(reads))
+	}
+	if reads[0].BytesDeliveredToGuest != 0 || len(reads[0].DeliveredRanges) != 0 || reads[0].ParentOperationID != "sysfs-op-open-close" {
+		t.Fatalf("open+close read record = %+v, want 0 bytes and parent sysfs-op-open-close", reads[0])
+	}
+	if reads[1].BytesDeliveredToGuest != 1 || len(reads[1].DeliveredRanges) != 1 || reads[1].DeliveredRanges[0] != (ByteRange{Start: 0, End: 1}) || reads[1].ParentOperationID != "sysfs-op-one-byte" {
+		t.Fatalf("1-byte read record = %+v, want 1 byte [0,1) and parent sysfs-op-one-byte", reads[1])
+	}
+	if reads[2].BytesDeliveredToGuest != 5 || len(reads[2].DeliveredRanges) != 2 || reads[2].DeliveredRanges[0] != (ByteRange{Start: 0, End: 2}) || reads[2].DeliveredRanges[1] != (ByteRange{Start: 10, End: 13}) {
+		t.Fatalf("ranged read record = %+v, want 5 bytes [[0,2),[10,13)]", reads[2])
+	}
+
+	// Verify ParentOperationID propagation onto OverlayEventRecord and PublicationRecord.
+	w, errno := adapter.Open(WithParentOperationID(ctx, "sysfs-op-write"), pythonruntime.OpenRequest{
+		Path:  "secret.txt",
+		Flags: pythonruntime.OpenWrite | pythonruntime.OpenTruncate,
+	})
+	if errno != pythonruntime.ErrnoSuccess {
+		t.Fatalf("Open write: %s", errno)
+	}
+	_, _ = w.Write([]byte("updated"))
+	_ = w.Close()
+
+	_, err := adapter.Settle(WithParentOperationID(ctx, "sysfs-op-settle"), true)
+	testutil.FailErr(t, "Settle with parent op", err)
+
+	events := evidence.OverlayEvents()
+	if len(events) == 0 || events[0].ParentOperationID != "sysfs-op-write" {
+		t.Fatalf("overlay events missing ParentOperationID: %+v", events)
+	}
+	pubs := evidence.Publications()
+	if len(pubs) != 1 || pubs[0].ParentOperationID != "sysfs-op-settle" {
+		t.Fatalf("publication record missing ParentOperationID: %+v", pubs)
+	}
+}

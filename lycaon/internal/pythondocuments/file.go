@@ -16,6 +16,8 @@ type overlayFile struct {
 	adapter          *OverlayAdapter
 	node             *overlayNode
 	flags            pythonruntime.OpenFlags
+	readOpID         string
+	parentOpID       string
 	writeOriginFrame *pythonruntime.DeclaredFrame
 
 	mu     sync.Mutex
@@ -44,15 +46,25 @@ func (f *overlayFile) Read(p []byte) (int, pythonruntime.Errno) {
 		return 0, pythonruntime.ErrnoEBADF
 	}
 	f.node.mu.Lock()
-	defer f.node.mu.Unlock()
 	if f.node.kind == nodeDir {
+		f.node.mu.Unlock()
 		return 0, pythonruntime.ErrnoEISDIR
 	}
 	if f.offset >= int64(len(f.node.data)) {
+		f.node.mu.Unlock()
 		return 0, pythonruntime.ErrnoSuccess
 	}
+	start := f.offset
 	n := copy(p, f.node.data[f.offset:])
 	f.offset += int64(n)
+	f.node.mu.Unlock()
+
+	if n > 0 && f.readOpID != "" && f.adapter != nil && f.adapter.evidence != nil {
+		f.adapter.evidence.RecordDocumentReadBytes(f.readOpID, ByteRange{
+			Start: start,
+			End:   start + int64(n),
+		})
+	}
 	return n, pythonruntime.ErrnoSuccess
 }
 
@@ -83,13 +95,16 @@ func (f *overlayFile) Write(p []byte) (int, pythonruntime.Errno) {
 	if f.node.writeOriginFrame == nil && f.writeOriginFrame != nil {
 		f.node.writeOriginFrame = f.writeOriginFrame
 	}
+	if f.node.parentOpID == "" && f.parentOpID != "" {
+		f.node.parentOpID = f.parentOpID
+	}
 	target := f.node.target
 	f.node.mu.Unlock()
 
 	if target.Namespace == pythonruntime.NamespaceWorkspace {
 		f.adapter.mu.Lock()
 		f.node.mutationSeq = f.adapter.allocSeqLocked()
-		f.adapter.recordOverlayEventLocked("write", target, nil, int64(n), f.writeOriginFrame, nil)
+		f.adapter.recordOverlayEventLocked(f.parentOpID, "write", target, nil, int64(n), f.writeOriginFrame, nil)
 		f.adapter.mu.Unlock()
 	}
 	return n, pythonruntime.ErrnoSuccess
@@ -146,13 +161,16 @@ func (f *overlayFile) Truncate(size int64) pythonruntime.Errno {
 	}
 	f.node.contentModified = true
 	f.node.modTime = f.adapter.now().UTC()
+	if f.node.parentOpID == "" && f.parentOpID != "" {
+		f.node.parentOpID = f.parentOpID
+	}
 	target := f.node.target
 	f.node.mu.Unlock()
 
 	if target.Namespace == pythonruntime.NamespaceWorkspace {
 		f.adapter.mu.Lock()
 		f.node.mutationSeq = f.adapter.allocSeqLocked()
-		f.adapter.recordOverlayEventLocked("truncate", target, nil, size, f.writeOriginFrame, nil)
+		f.adapter.recordOverlayEventLocked(f.parentOpID, "truncate", target, nil, size, f.writeOriginFrame, nil)
 		f.adapter.mu.Unlock()
 	}
 	return pythonruntime.ErrnoSuccess
@@ -173,7 +191,7 @@ func (f *overlayFile) Sync() pythonruntime.Errno {
 
 	if target.Namespace == pythonruntime.NamespaceWorkspace {
 		f.adapter.mu.Lock()
-		f.adapter.recordOverlayEventLocked("flush", target, nil, size, f.writeOriginFrame, nil)
+		f.adapter.recordOverlayEventLocked(f.parentOpID, "flush", target, nil, size, f.writeOriginFrame, nil)
 		f.adapter.mu.Unlock()
 	}
 	return pythonruntime.ErrnoSuccess
@@ -204,7 +222,7 @@ func (f *overlayFile) Close() pythonruntime.Errno {
 
 	if target.Namespace == pythonruntime.NamespaceWorkspace && f.canWrite() {
 		f.adapter.mu.Lock()
-		f.adapter.recordOverlayEventLocked("close", target, nil, size, f.writeOriginFrame, nil)
+		f.adapter.recordOverlayEventLocked(f.parentOpID, "close", target, nil, size, f.writeOriginFrame, nil)
 		f.adapter.mu.Unlock()
 	}
 	return pythonruntime.ErrnoSuccess
