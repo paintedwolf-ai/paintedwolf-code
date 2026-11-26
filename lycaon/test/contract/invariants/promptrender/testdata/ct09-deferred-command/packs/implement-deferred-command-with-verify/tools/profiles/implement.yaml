@@ -1,0 +1,26 @@
+id: implement
+description: Implementer with write tools, sticky verify, and deferred command
+command_effects: [read_only, mutation, external_exec, network_egress]
+tools:
+  survey_repo: sticky
+  summarize: sticky
+  inspect_source: sticky
+  recall: sticky
+  record_finding: sticky
+  pack_board: sticky
+  read_findings: sticky
+  read_review: sticky
+  request_decision: sticky
+  message_coordinator: sticky
+  code_rewrite: sticky
+  restore_version: sticky
+  source_history: sticky
+  command: true
+  command_output: true
+  command_stop: true
+  verify: sticky
+  complete_leg: sticky
+  skills_read: sticky
+  wait: sticky
+deny_tools:
+wait_conditions: [process_done, http_ready, port_ready]
