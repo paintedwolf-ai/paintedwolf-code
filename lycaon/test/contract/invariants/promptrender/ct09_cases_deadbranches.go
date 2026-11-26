@@ -17,12 +17,40 @@ func deadBranchCases() []hoststate.CustomizationCase {
 	return []hoststate.CustomizationCase{
 		// Previews worker results and restores files, with read-only command,
 		// no verify and no dispatch: the worker-finished kick's inspect arm
-		// with worker_history, and a surface card that may only edit.
-		ownProfile("coordinator-without-landing", "coordinator", pendingOverlaySeed(), investigateAllLoadedSeed()),
+		// with worker_history, a surface card that may only edit, and a
+		// rootless orchestrate turn without task.
+		ownProfile("coordinator-without-landing", "coordinator", pendingOverlaySeed(), investigateAllLoadedSeed(), rootlessOrchestrateSeed()),
 		// Previews and runs checks without worker_history, restores or
 		// dispatch: the inspect arm without worker_history, and a card that
 		// may only run.
 		ownProfile("coordinator-preview-only", "coordinator", pendingOverlaySeed()),
+		// Restores files and dispatches without verify or mutating command: a
+		// surface card that may edit and dispatch without running commands.
+		ownProfile("coordinator-edit-and-dispatch", "coordinator", investigateAllLoadedSeed()),
+		// Holds scan_pack without scan_summary on a vet surface: witnesses
+		// coordinator-surface-vet's else arm with scan_pack offered.
+		ownProfile("coordinator-scan-pack-only", "coordinator", vetAllLoadedSeed()),
+		// Defers only scan_pack and scan_summary on observe_investigate so
+		// partly-loaded loads scan_pack while scan_summary stays requestable.
+		ownProfile("coordinator-scan-pack-first", "coordinator", vetPartlyLoadedSeed()),
+		{
+			ID: "project-without-read-workers", Project: deadBranchFixture("without-read-workers"),
+			Coordinator: func() ([]hoststate.CustomizationSeed, error) {
+				return []hoststate.CustomizationSeed{investigateAllLoadedSeed()}, nil
+			},
+		},
+		{
+			ID: "own-explore-readonly-no-read-tools", Packs: []string{deadBranchFixture("packs", "explore-readonly-no-read-tools")},
+			Own:          map[string]string{"tools/profiles/explore_readonly": "fixture/explore-readonly-no-read-tools"},
+			WorkerAgents: []string{"code-reviewer"},
+			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
+		},
+		{
+			ID: "own-explore-readonly-no-tools", Packs: []string{deadBranchFixture("packs", "explore-readonly-no-tools")},
+			Own:          map[string]string{"tools/profiles/explore_readonly": "fixture/explore-readonly-no-tools"},
+			WorkerAgents: []string{"code-reviewer"},
+			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
+		},
 		{
 			ID: "own-implement-terminal-on-request", Packs: []string{deadBranchFixture("packs", "implement-terminal-on-request")},
 			Own:          map[string]string{"tools/profiles/implement": "fixture/implement-terminal-on-request"},
@@ -66,6 +94,18 @@ func pendingOverlaySeed() hoststate.CustomizationSeed {
 
 func investigateAllLoadedSeed() hoststate.CustomizationSeed {
 	return ambientSeed(api.SessionPostureBuild, hoststate.WorkflowAmbientIdle, hoststate.RootsSingleGit, hoststate.LoadingAllLoaded)
+}
+
+func rootlessOrchestrateSeed() hoststate.CustomizationSeed {
+	return ambientSeed(api.SessionPostureOrchestrate, hoststate.WorkflowAmbientIdle, hoststate.RootsNone, hoststate.LoadingFloorOnly)
+}
+
+func vetAllLoadedSeed() hoststate.CustomizationSeed {
+	return ambientSeed(api.SessionPostureVet, hoststate.WorkflowAmbientIdle, hoststate.RootsSingleGit, hoststate.LoadingAllLoaded)
+}
+
+func vetPartlyLoadedSeed() hoststate.CustomizationSeed {
+	return ambientSeed(api.SessionPostureVet, hoststate.WorkflowAmbientIdle, hoststate.RootsSingleGit, hoststate.LoadingPartlyLoaded)
 }
 
 func deadBranchFixture(parts ...string) string {

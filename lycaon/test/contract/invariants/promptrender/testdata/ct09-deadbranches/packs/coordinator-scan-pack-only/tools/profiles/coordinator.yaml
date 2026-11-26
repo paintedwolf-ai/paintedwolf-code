@@ -1,0 +1,18 @@
+id: coordinator
+description: Coordinator that runs scan_pack without scan_summary
+command_effects: [read_only]
+tools:
+  survey_repo: sticky
+  summarize: sticky
+  inspect_source: sticky
+  recall: sticky
+  read_findings: sticky
+  read_review: sticky
+  update_progress: sticky
+  ask_user: sticky
+  skills_read: sticky
+  scan_pack: sticky
+deny_tools:
+read_scope: coordinator_product_read
+write_scope: coordinator_orchestration
+wait_conditions: [scan_done]

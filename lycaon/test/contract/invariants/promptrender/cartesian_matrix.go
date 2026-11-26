@@ -303,11 +303,9 @@ func registerExpectedZeroBranches(tracker *hoststate.CoverageTracker) {
 	}
 	tracker.ExpectZeroTemplateBranch("shared/partials/agent-tool-surface@L33:C4:if", hoststate.ExpectedZeroFalse,
 		"prompts.fillWorkerReaderFacts sets reject_codes from recoverableRejectCodes over the host's shipped hint catalog, which is never empty")
-	runnerReach := "native-tools.yaml: command and verify each accept capability_request.local_listen, loopback_connect and socket_paths, " +
+	runnerReach := "native-tools.yaml: command and verify each accept capability_request.socket_paths, " +
 		"and no runner tool reaches a turn without workspace roots (no_folder_allowlist omits them; internal/worker/task_tool.go WORKER_WORKSPACE_REQUIRED)"
-	for _, id := range []string{"shared/partials/capability-request-grammar@L1:C492:if", "shared/partials/capability-request-grammar@L1:C732:if"} {
-		tracker.ExpectZeroTemplateBranch(id, hoststate.ExpectedZeroFalse, runnerReach)
-	}
+	tracker.ExpectZeroTemplateBranch("shared/partials/capability-request-grammar@L1:C732:if", hoststate.ExpectedZeroFalse, runnerReach)
 	effectFlags := "prompts/reader_facts.go sets the profile_command_* effect flags only when command is offered, and native-edit-tool renders these lines " +
 		"and includes large-file-write-discipline only under profile_command_mutation"
 	for _, id := range []string{"shared/units/native-edit-tool@L5:C261:if", "shared/partials/large-file-write-discipline@L1:C64:if",

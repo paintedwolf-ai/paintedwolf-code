@@ -7,7 +7,7 @@ Only attached folders have indexing, history and undo.{% if profile_command_muta
 {% endif %}{% include "partials/temporary-storage.md" %}
 {% if profile_command_mutation != false %}{% if profile_command_external_exec != false %}External programs run in a sandbox unless the person approves host access.{% if not command_external_hidden %} For a native-name collision, use `external -- NAME` or `external -- /path/to/NAME`.{% endif %}{% else %}Only native programs run on this surface; external programs are refused.{% endif %}
 
-{% if command_output_files %}For long output, read the saved copy named in the result.{% endif %}
+For long output, read the saved copy named in the result.
 
 One `command` call can chain orientation ({% if profile_has_survey_repo %}`repo-map`, {% endif %}`outline --path`,{% if profile_has_summarize %} `summarize`,{% endif %} `rg -n`, `find`, `git status`, `git diff`), bounded slices (`sed -n 'A,Bp'`, `cat -n`), and multi-edit sequences (`edit`, `replace-lines`,{% if profile_has_code_rewrite %} `code-rewrite`,{% endif %} `jq-edit`, heredocs).
 
