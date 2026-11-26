@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -37,12 +38,27 @@ func TestWorkflowActionsReturnTheirOwnContinuation(t *testing.T) {
 	}
 	outcomes := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Outcomes.For(sess.ID)
 	seen := map[string]bool{}
-	check := func(run wire.WorkflowRun, kind wire.ContinuationAction, state wire.ContinuationState) {
+	check := func(run wire.WorkflowRun, kind wire.ContinuationAction, states ...wire.ContinuationState) {
 		t.Helper()
 		action, err := outcomes.Actions.Await(ctx, run.ContinuationID)
 		testutil.FailErr(t, "await "+string(kind), err)
-		if seen[action.ContinuationID] || action.Action != kind || action.State != state || action.SessionID != sess.ID {
+		if seen[action.ContinuationID] || action.Action != kind || !slices.Contains(states, action.State) || action.SessionID != sess.ID {
 			t.Fatalf("%s: %+v", kind, action)
+		}
+		switch action.State {
+		case wire.ContinuationStateHeld:
+			if action.Reason != wire.ContinuationReasonPendingUserInput && action.Reason != wire.ContinuationReasonHostObligationHeld {
+				t.Fatalf("unexpected hold: %+v", action)
+			}
+		case wire.ContinuationStateContinued:
+			if action.TurnID == "" {
+				t.Fatal("continued without an admitted turn")
+			}
+			h.Sessions.Manager.Coordinator.WaitForTurns(ctx)
+		case wire.ContinuationStateFinished:
+			if action.Reason != wire.ContinuationReasonWorkflowCompleted {
+				t.Fatalf("unexpected end: %+v", action)
+			}
 		}
 		seen[action.ContinuationID] = true
 	}
@@ -53,7 +69,7 @@ func TestWorkflowActionsReturnTheirOwnContinuation(t *testing.T) {
 	run = post(path+"/resume", fmt.Sprintf(`{"expected_revision":%d}`, run.Revision), http.StatusOK)
 	check(run, wire.ContinuationActionWorkflowResume, wire.ContinuationStateHeld)
 	run = post(path+"/feedback/clarify", fmt.Sprintf(`{"response":"SQLite","expected_revision":%d}`, run.Revision), http.StatusOK)
-	check(run, wire.ContinuationActionFeedback, wire.ContinuationStateHeld)
+	check(run, wire.ContinuationActionFeedback, wire.ContinuationStateHeld, wire.ContinuationStateContinued)
 	run = post(path+"/decisions/confirm", fmt.Sprintf(`{"choice":"yes","expected_revision":%d}`, run.Revision), http.StatusOK)
 	check(run, wire.ContinuationActionFeedback, wire.ContinuationStateFinished)
 }
