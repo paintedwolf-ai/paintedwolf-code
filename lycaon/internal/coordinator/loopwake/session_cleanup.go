@@ -16,16 +16,21 @@ func (l *LoopEngine) ForgetSession(ctx context.Context, sessionID string) {
 	if sessionID == "" {
 		return
 	}
+	finish, owner := l.Nudges.lifetimes.retire(sessionID)
+	if !owner {
+		return
+	}
+	defer finish()
 	l.Subscriptions.interruptParkedProgram(ctx, sessionID, false)
 	l.Subscriptions.InterruptSession(ctx, sessionID)
-	l.Deliveries.ForgetSession(sessionID)
+	l.Deliveries.closeWinner(sessionID, api.WakeReasonSessionClosed)
 	l.Turns.cancelAndDrainAsyncTurns(sessionID)
 	l.Waits.ForgetSession(ctx, sessionID)
 	l.Nudges.ForgetSession(sessionID)
 	l.Turns.ForgetSession(sessionID)
 	l.Admission.ForgetSession(sessionID)
 	l.Observations.ForgetSession(sessionID)
-	l.Deliveries.ForgetSession(sessionID)
+	l.Deliveries.closeWinner(sessionID, api.WakeReasonSessionClosed)
 	l.Deliveries.TakeEndedWaits(sessionID)
 	l.Outcomes.Forget(sessionID)
 }
@@ -34,9 +39,9 @@ func (l *WaitSubscriptions) InterruptSession(ctx context.Context, sessionID stri
 		_ = store.InterruptSession(ctx, sessionID, "canceled")
 	}
 }
-func (l *WaitDeliveries) ForgetSession(sessionID string) {
+func (l *WaitDeliveries) closeWinner(sessionID string, reason api.WakeReason) {
 	if value, ok := l.waitWinners.LoadAndDelete(sessionID); ok {
-		value.(*waitWinner).handoff.Resolve(actionoutcome.WakeResult(api.WakeReasonSessionClosed))
+		value.(*waitWinner).handoff.Resolve(actionoutcome.WakeResult(reason))
 	}
 }
 func (l *HostTurns) ForgetSession(sessionID string) { l.promptActive.Delete(sessionID) }

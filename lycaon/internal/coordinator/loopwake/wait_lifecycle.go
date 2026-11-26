@@ -45,7 +45,7 @@ func (l *Waits) InterruptSleep(ctx context.Context, sessionID string) {
 	if store := l.Subscriptions.durableWaitStore(); store != nil {
 		_ = store.InterruptSession(ctx, sessionID, "interrupted")
 	}
-	l.Deliveries.ForgetSession(strings.TrimSpace(sessionID))
+	l.Deliveries.closeWinner(strings.TrimSpace(sessionID), api.WakeReasonPromptInterrupted)
 	l.breakSleep(ctx, sessionID, "user_prompt", false)
 	l.Nudges.ClearPending(sessionID, api.WakeReasonPromptInterrupted)
 }

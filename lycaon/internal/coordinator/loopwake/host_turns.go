@@ -126,6 +126,11 @@ func (l *HostTurns) releasePromptActiveAndRedrain(ctx context.Context, sessionID
 	l.Nudges.schedulePendingDrain(ctx, sessionID, true)
 }
 func (l *HostTurns) spawnAsyncTurn(ctx context.Context, sessionID string, fn func(ctx context.Context)) {
+	finish, open := l.Nudges.lifetimes.enter(sessionID)
+	if !open {
+		return
+	}
+	defer finish()
 	timeout := l.Facts.sessionLimits(ctx, sessionID).CoordinatorHostTurnTimeout()
 	ctx, cancel := context.WithTimeout(actionoutcome.IndependentWork(context.WithoutCancel(ctx)), timeout)
 	work := l.registerAsyncTurn(sessionID, cancel)

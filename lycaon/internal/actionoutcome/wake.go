@@ -55,6 +55,14 @@ func (s *Session) Receive(ctx context.Context, sessionID string, seq uint64, anc
 	return ticket
 }
 
+// ClosedTicket answers a caller that arrives during session retirement.
+func ClosedTicket(ctx context.Context, sessionID string, seq uint64, anchor string) *Ticket {
+	s := &Session{Wakes: NewHistory[WakeRecord](1)}
+	t := s.Receive(ctx, sessionID, seq, anchor)
+	t.Record(api.WakeStateDropped, api.WakeReasonSessionClosed, "", "")
+	return t
+}
+
 func (t *Ticket) Await(ctx context.Context) (WakeRecord, error) {
 	if t == nil {
 		return WakeRecord{}, ErrUnavailable

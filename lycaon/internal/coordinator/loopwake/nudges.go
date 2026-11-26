@@ -22,6 +22,7 @@ type NudgesDeps struct {
 	QueueInform          func(ctx context.Context, sessionID string, inform anchor.ID, env anchor.Envelope)
 }
 type Nudges struct {
+	lifetimes     wakeLifetimes
 	outcomes      *actionoutcome.Sessions
 	depsMu        sync.RWMutex
 	deps          NudgesDeps
@@ -72,8 +73,13 @@ func (l *Nudges) nudgeNow(
 	if l == nil || strings.TrimSpace(sessionID) == "" || wake == "" {
 		return nil
 	}
-	q := l.sessionPendingQueue(sessionID)
+	finish, open := l.lifetimes.enter(sessionID)
 	seq := l.nextSequence()
+	if !open {
+		return actionoutcome.ClosedTicket(ctx, sessionID, seq, string(wake))
+	}
+	defer finish()
+	q := l.sessionPendingQueue(sessionID)
 	ticket := l.outcomes.For(sessionID).Receive(ctx, sessionID, seq, string(wake))
 	pending := pendingLoopWake{queue: q, ticket: ticket, wake: wake, inform: inform, legID: legID, completingJobID: completingJobID, env: env, seq: seq}
 	if wake == anchor.PhaseAdvanced {
