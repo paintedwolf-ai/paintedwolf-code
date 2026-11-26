@@ -166,7 +166,7 @@ func TestExtendedWorkloadsReferenceReplay(t *testing.T) {
 	contractcheck.FailErr(t, "read test_sampling.py", err)
 	brokenTest := strings.Replace(string(origTest), "Fraction(3, 10)", "Fraction(9, 10)", 1)
 	contractcheck.FailErr(t, "inject failing assertion", os.WriteFile(testPath, []byte(brokenTest), 0o644))
-	failCmd := exec.Command(pyBin, "-m", "unittest", "discover")
+	failCmd := exec.Command(pyBin, "-B", "-m", "unittest", "discover")
 	failCmd.Dir = benchDir
 	failOut, failErr := failCmd.CombinedOutput()
 	failCode := 0
@@ -178,7 +178,7 @@ func TestExtendedWorkloadsReferenceReplay(t *testing.T) {
 		}
 	}
 	contractcheck.FailErr(t, "repair test_sampling.py", os.WriteFile(testPath, origTest, 0o644))
-	runRefPython(t, pyBin, benchDir, "-m", "unittest", "discover")
+	runRefPython(t, pyBin, benchDir, "-B", "-m", "unittest", "discover")
 	contractcheck.FailErr(t, "grade project math and tests", GradeProjectMathAndTests(ProjectMathObs{
 		Ratios:               ratios,
 		InvalidInputRejected: evalRes.InvalidInputRejected,
