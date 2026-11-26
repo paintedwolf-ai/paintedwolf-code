@@ -823,6 +823,21 @@ goroutine stack, and then ends the run. Digests and CI annotations name the
 pending waits. Nothing scales with host load: a test bounds its waits by the
 test, and a timeout handed to product code is the literal the test is about.
 
+A wait for something only host work on one session can bring about, such as a
+coordinator request, a pending approval or a worker outcome, uses
+`wiring.WaitForSessionProgress` instead of `testutil.WaitFor`. The loop engine
+counts the session's in-flight work (submitted prompts, prompt executions, host
+turns, wake deliveries and drains, round drains, wait timers) and the loop state
+that still holds a wake (queued and deferred wakes, a ready wait resume, a parked
+sleep, a busy worker cycle), and records each wake decision with its outcome. The
+wait fails as soon as the session reads idle on both sides of a false condition
+with no work in between, and the failure lists the session's recent wake
+decisions, so a parked or lost wake reports its reason within one poll rather
+than at the backstop. A test that hands a prompt to its own goroutine starts it
+with `wiring.GoPrompt`, which holds the session busy across the handoff. Waits on
+work the test drives itself, on event streams, or on scans keep
+`testutil.WaitFor`.
+
 Compilation artifacts use the persistent Go cache across snapshots, tests,
 fuzzing, and lint. Snapshot worktrees reuse leased directory slots, preserving
 the absolute source paths in Go's compilation cache keys; active descendants
