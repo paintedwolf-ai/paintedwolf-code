@@ -353,6 +353,10 @@ func workerTaskFinishedCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceC
 		indexKnob("handle", []string{"worker_result.result_handle"}, []string{"named", "none"}),
 		indexKnob("changed", []string{"worker_result.changed", "worker_result.changed_omitted"}, []string{"bounded", "shown", "none"}),
 		indexKnob("not_applied", []string{"worker_result.not_applied"}, []string{"none", "one"}),
+		// The roster counts results awaiting landing and partial reports
+		// independently (guidancedelivery.kickRenderContext).
+		{Name: "pending", Facts: []string{"pending_overlays"}, Values: []any{0, 1}},
+		{Name: "partial", Facts: []string{"partial_workers"}, Values: []any{0, 1}},
 	}
 	return []guidanceCase{{
 		unit: "guidance/coordinator-worker-task-finished", recipient: interactions.RecipientCoordinator, knobs: knobs,
@@ -375,7 +379,9 @@ func workerTaskFinishedCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceC
 			engine.SetPromptEngine(e.s.Engine())
 			engine.QueueDeferred("sess-finished", "coordinator-worker-task-finished", kick.WithVars(map[string]any{"worker_result": notice}))
 			engine.TakePendingKickIDUnless("sess-finished", nil)
-			text, _, _, err := engine.RenderPendingNudge(ctx, "sess-finished", kick.CoordinatorKickRenderContext{Reader: cr.auth.Reader})
+			text, _, _, err := engine.RenderPendingNudge(ctx, "sess-finished", kick.CoordinatorKickRenderContext{
+				Reader: cr.auth.Reader, PendingOverlays: knobValue[int](knobs, set, "pending"), PartialWorkers: knobValue[int](knobs, set, "partial"),
+			})
 			if err != nil {
 				return guidanceRender{}, err
 			}

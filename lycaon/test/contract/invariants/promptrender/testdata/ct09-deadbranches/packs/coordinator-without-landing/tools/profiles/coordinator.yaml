@@ -1,0 +1,69 @@
+id: coordinator
+description: Coordinator that restores files and previews worker results; it never lands, instructs, dispatches or runs checks
+command_effects: [read_only]
+tools:
+  code_rewrite: true
+  survey_repo: sticky
+  summarize: sticky
+  inspect_source: sticky
+  recall: sticky
+  pack_board: sticky
+  read_findings: sticky
+  read_review: sticky
+  plan_from_blueprint: sticky
+  update_progress: sticky
+  worker_cancel: sticky
+  answer_decision: sticky
+  worker_history: sticky
+  reject_overlay: sticky
+  preview_overlay: sticky
+  shelve_overlay: sticky
+  workflow_compose: sticky
+  workflow_compose_from_template: sticky
+  workflow_catalog_summaries: sticky
+  workflow_persist: sticky
+  workflow_user_feedback: sticky
+  ask_user: sticky
+  workflow_advance: sticky
+  workflow_transition: sticky
+  fanout_plan: sticky
+  submit_verdict: sticky
+  state_start: sticky
+  source_history: sticky
+  restore_version: true
+  scan_pack: sticky
+  scan_list: true
+  scan_summary: true
+  scan_query: true
+  scan_compare: true
+  wait: sticky
+  web_search: sticky
+  fetch_url: sticky
+  command: sticky
+  command_output: true
+  command_stop: true
+  held_result: true
+  held_stop: true
+  skills_read: sticky
+  secret_generate: sticky
+  secret_list: sticky
+  secret_revoke: sticky
+  mcp_*: true
+  render_view: sticky
+  view_image: sticky
+  view_video: sticky
+  capture_page: sticky
+  measure_page: sticky
+  page_open: sticky
+  page_act: sticky
+  page_snapshot: sticky
+  page_close: sticky
+  terminal_open: sticky
+  terminal_send: sticky
+  terminal_read: sticky
+  terminal_snapshot: sticky
+  terminal_close: sticky
+deny_tools:
+read_scope: coordinator_product_read
+write_scope: coordinator_orchestration
+wait_conditions: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready]
