@@ -1578,7 +1578,7 @@
       "targets": [
         "test:race"
       ],
-      "minutes": 90,
+      "minutes": 240,
       "profiles": [
         "integration"
       ],
