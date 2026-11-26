@@ -228,30 +228,3 @@ func securityPhaseKickCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCa
 	}
 	return out, nil
 }
-
-// securityPlanKickCases render the security plan kick on stock coordinators
-// that hold scan_pack, can load it, or reach neither: a workflow manifest
-// binds a phase-entry render to whichever surface its phase names.
-func securityPlanKickCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
-	reps := coordinatorRepsBy(e.cReps, func(coordRep) bool { return true },
-		func(cr coordRep) string {
-			return fmt.Sprintf("%t|%t", slices.Contains(cr.auth.Offered, "scan_pack"), slices.Contains(cr.auth.Reader.Requestable(), "scan_pack"))
-		})
-	knobs := []casegen.Knob{repKnob("rep", []string{"profile_has_scan_pack", "profile_can_request.scan_pack"}, len(reps), func(i int) string { return reps[i].state.ID })}
-	return []guidanceCase{{
-		unit: "guidance/coordinator-security-plan", recipient: interactions.RecipientCoordinator, knobs: knobs,
-		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
-			cr := reps[knobValue[int](knobs, set, "rep")]
-			data := maps.Clone(phaseKickVariants()[0])
-			data["max_fanout_legs"] = 4
-			if err := prompts.MergeCoordinatorKickVarsForTools(data, cr.auth.Reader); err != nil {
-				return guidanceRender{}, err
-			}
-			text, err := e.s.Engine().RenderKick(ctx, cr.auth.Reader, "coordinator-security-plan", data)
-			if err != nil {
-				return guidanceRender{}, err
-			}
-			return coordinatorRender(text, cr), nil
-		},
-	}}, nil
-}
