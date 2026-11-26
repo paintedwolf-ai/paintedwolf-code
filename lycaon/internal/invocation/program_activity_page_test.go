@@ -2,6 +2,7 @@ package invocation_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/invocation"
@@ -119,5 +120,13 @@ func TestActivityPageCoversFoldedRoots(t *testing.T) {
 	testutil.FailErr(t, "read folded activity page", err)
 	if len(page.Executions) != 2 || page.Executions[0].ID != id || page.Executions[1].ID != "folded-root" {
 		t.Fatalf("folded paging: %+v", page.Executions)
+	}
+	foldedPage, err := f.recorder.ReadProgramActivityPage(t.Context(), f.session, f.program, "folded-root", "", 10)
+	testutil.FailErr(t, "read folded member activity page", err)
+	if len(foldedPage.Executions) != 2 || foldedPage.Executions[0].ID != id || foldedPage.Executions[1].ID != "folded-root" {
+		t.Fatalf("folded member paging: %+v", foldedPage.Executions)
+	}
+	if _, err := f.recorder.ReadProgramActivityPage(t.Context(), f.session, f.program, "unknown-activity", "", 10); !errors.Is(err, invocation.ErrProgramNotFound) {
+		t.Fatalf("unknown activity err = %v, want ErrProgramNotFound", err)
 	}
 }
