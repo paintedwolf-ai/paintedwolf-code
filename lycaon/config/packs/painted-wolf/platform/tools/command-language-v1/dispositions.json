@@ -1486,6 +1486,27 @@
       "command_forms": []
     },
     {
+      "tool": "python",
+      "owner": "processes",
+      "disposition": "tool-and-command-form",
+      "command": "python",
+      "lifecycle": "effect_attempt",
+      "reuse": "Portable Python direct tool and native python/python3 command form sharing the immutable WASI CPython launch image.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/python.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a direct structured tool alongside command; python and python3 share the same native catalog definition.",
+      "selected_disposition": "Direct Python tool and native command form",
+      "behavior_change_or_retention": "Direct code/script/module tool with cwd and args; bare python/python3 in command routes to python via PYTHON_TOOL_REQUIRED while external -- python3 selects project Python",
+      "existing_semantic_difference": "Curated immutable WASI CPython launch image with 13 public distributions and mediated workspace authority",
+      "implementing_issues": [
+        "PY01"
+      ],
+      "existing_rejection_code": "PYTHON_TOOL_REQUIRED",
+      "command_forms": [
+        "python"
+      ]
+    },
+    {
       "tool": "read",
       "owner": "filesystem",
       "disposition": "replace-routine-schema",

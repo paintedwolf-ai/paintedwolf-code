@@ -365,6 +365,12 @@ tools:
     title_keys: []
     activity: {headline: "landing worker changes", salience: defining, role: mutation}
     title_fallback: "Worker changes"
+  python:
+    label: "Run Python"
+    kind: command
+    title_keys: [script, module, code]
+    running_label: "Running Python…"
+    activity: {headline: "running Python", salience: primary, role: command}
   read:
     label: "Read file"
     kind: read

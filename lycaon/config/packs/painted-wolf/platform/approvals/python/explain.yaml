@@ -1,0 +1,16 @@
+# python — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    python:
+        tool: python
+        tier_hint: recoverable
+        what_changes: Runs a Python script, inline code, or module in the curated Portable Python runtime.
+        who_affected: Project files and host-mediated resources reachable under the active session profile.
+        if_wrong: Surviving workspace file changes or mediated host effects may persist; review the Python target before allowing.
+        allow_line: running Python `{{ command }}`
+        scenarios:
+            - id: default
+              vars:
+                command: scripts/build.py
+                project: my-app

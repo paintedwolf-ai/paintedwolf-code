@@ -1,0 +1,25 @@
+spec_version: "1.0"
+id: PYTHON_TOOL_REQUIRED
+kind: policy
+on: tool.rejected
+selector:
+  tools:
+    - command
+requires_facts: [paintedwolf.command, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.source_column, paintedwolf.source_line]
+when: paintedwolf.rejection_code == "PYTHON_TOOL_REQUIRED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:python_tool_routing
+message: use the direct Python tool for bare interpreter launches
+what: '{% if paintedwolf.command %}Bare {{ paintedwolf.command }} launch{% else %}Bare Python interpreter launch{% endif %}{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} stopped before startup.'
+cause: The direct Python tool is offered on this surface.
+why: Earlier completed operations remain authoritative.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Preserve earlier completed operations instead of replaying prior steps.
+x-paintedwolf-scenarios:
+  - id: bare-python3-command
+    vars:
+      tool: command
+      command: python3
+      source_line: 1
+      source_column: 1
