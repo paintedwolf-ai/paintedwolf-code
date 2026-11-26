@@ -132,7 +132,13 @@ func renderAndCheckCoordinatorStandingPrompt(
 	}
 	unitIDs := selectedUnitIDs(unitCat, auth.Reader.Selection())
 	templates := append([]string{st.TurnProfile.SurfaceTemplate}, st.TurnProfile.ModeRefs...)
-	rKey := renderCacheKeyForVars("standing:"+strings.Join(templates, ",")+":"+s.Site, engineRev(s, st.Overlay), unitIDs, vars)
+	keyVars := vars
+	if !hasSiteOverlayFiles(s.Site) {
+		refs := append([]string{surface.CoordinatorCoreTemplate, st.TurnProfile.SurfaceTemplate}, coordinatorModeRefs(st.TurnProfile)...)
+		refs = append(refs, selectedUnitRefs(unitCat, auth.Reader.Selection())...)
+		keyVars = overlayRenderInputs(s, st.Overlay).project(vars, refs...)
+	}
+	rKey := renderCacheKeyForVars("standing:"+strings.Join(templates, ",")+":"+s.Site, engineRev(s, st.Overlay), unitIDs, keyVars)
 	promptText, _, err := cache.RenderOrReuse(rKey, func() (string, error) {
 		return renderStandingFromVars(ctx, engine, unitCat, st.TurnProfile, auth.Reader.Selection(), vars)
 	})
@@ -250,6 +256,17 @@ func mergeAdmittedSkillsIntoVars(occ map[string]any, reader prompts.Reader, skil
 	})
 	admittedSkillVarsMemo.Store(mKey, surfaceVars)
 	maps.Copy(occ, surfaceVars)
+}
+
+func selectedUnitRefs(cat promptunit.Catalog, sel promptunit.Selection) []string {
+	rendered := cat.Rendered(sel)
+	var refs []string
+	for _, slot := range promptunit.Slots() {
+		for _, u := range rendered[slot] {
+			refs = append(refs, u.Ref)
+		}
+	}
+	return refs
 }
 
 func selectedUnitIDs(cat promptunit.Catalog, sel promptunit.Selection) []string {
@@ -505,12 +522,7 @@ func runWorkerPersonaAndInjectMatrix(
 	for idx, wp := range pairs {
 		ws, auth := wp.ws, wp.auth
 		sum.markCase("worker:" + ws.ID)
-		mutInAsk := false
-		if ws.ParentSessionMode == api.SessionModeAsk {
-			if mutCapable, ok := prompts.AgentMutationCapable(ws.AgentID); ok && mutCapable {
-				mutInAsk = true
-			}
-		}
+		mutInAsk := ws.ParentSessionMode == api.SessionModeAsk && ws.MutationCapable
 		wEngine := engineForOverlay(s, ws.Overlay)
 		wRev := s.Catalog.Revision
 		if ws.Overlay.Catalog != nil {
@@ -521,29 +533,44 @@ func runWorkerPersonaAndInjectMatrix(
 			if sErr != nil {
 				return sErr
 			}
-			occ := workerPersonaOccurrence(auth.Reader, wSkills)
+			// Every worker renders the plain persona; alternate workers also
+			// render it with host resources and a finish note.
+			plain := workerPersonaOccurrence(auth.Reader, wSkills)
+			variants := []map[string]any{plain}
 			if idx%2 == 0 {
-				occ["agent_host_resources"] = []map[string]any{
+				withResources := maps.Clone(plain)
+				withResources["agent_host_resources"] = []map[string]any{
 					{"category": "Runtime", "resources": []map[string]any{{"id": "python3", "access": "allow"}}},
 				}
-				occ["finish_note"] = "Return evidence handles in complete_leg."
+				withResources["finish_note"] = "Return evidence handles in complete_leg."
+				variants = append(variants, withResources)
 			}
-			fullVars, vErr := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
-			if vErr != nil {
-				return vErr
+			for vIdx, occ := range variants {
+				fullVars, vErr := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
+				if vErr != nil {
+					return vErr
+				}
+				rKey := renderCacheKeyForVars("wpersona:"+ws.AgentID+":"+s.Site, wRev, nil, fullVars)
+				text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
+					return prompts.RenderPersona(ctx, wEngine, ws.AgentID, auth.Reader, occ)
+				})
+				if rErr != nil {
+					return rErr
+				}
+				sum.WorkerArtifactCount++
+				if vIdx == 0 {
+					sum.PlainPersonas.Rendered++
+				}
+				label := fmt.Sprintf("worker persona %s (%s)", ws.AgentID, ws.ID)
+				checkClaimsCached(cache, rKey, auth.Digest, func(v string) {
+					sum.Violations = append(sum.Violations, v)
+					if vIdx == 0 {
+						sum.PlainPersonas.Violations = append(sum.PlainPersonas.Violations, v)
+					}
+				}, func() []string {
+					return checkClaimsOnce(s, label, text, auth, ws.ParentSessionMode, ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
+				})
 			}
-			rKey := renderCacheKeyForVars("wpersona:"+ws.AgentID+":"+s.Site, wRev, nil, fullVars)
-			text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
-				return prompts.RenderPersona(ctx, wEngine, ws.AgentID, auth.Reader, occ)
-			})
-			if rErr != nil {
-				return rErr
-			}
-			sum.WorkerArtifactCount++
-			label := fmt.Sprintf("worker persona %s (%s)", ws.AgentID, ws.ID)
-			checkClaimsCached(cache, rKey, auth.Digest, func(v string) { sum.Violations = append(sum.Violations, v) }, func() []string {
-				return checkClaimsOnce(s, label, text, auth, ws.ParentSessionMode, ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
-			})
 		}
 
 		wInjRenderer := injRenderer

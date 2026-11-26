@@ -74,7 +74,8 @@ func TestInstalledPacksReachEngines(t *testing.T) {
 	})
 
 	// Spawnable is not enough. Without the pack's persona row the agent renders
-	// its template body alone, which never names how a leg finishes.
+	// its template body alone, which never says how a leg finishes. The
+	// example's profile holds no complete_leg, so the finish section says so.
 	t.Run("agents/prompts/_persona-contract → rendered persona", func(t *testing.T) {
 		engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()}).
 			WithEffectiveCatalog(cat)
@@ -82,7 +83,7 @@ func TestInstalledPacksReachEngines(t *testing.T) {
 		testutil.FailErr(t, "declared reader for pack agent", err)
 		body, err := prompts.RenderPersona(ctx, engine, "example-docs-writer", reader, map[string]any{})
 		testutil.FailErr(t, "render pack agent persona", err)
-		for _, want := range []string{"complete_leg", "Example Docs Writer"} {
+		for _, want := range []string{"## Finish", "Example Docs Writer"} {
 			if !strings.Contains(body, want) {
 				t.Fatalf("rendered persona omits %q; pack agents get the worker protocol through their persona row", want)
 			}

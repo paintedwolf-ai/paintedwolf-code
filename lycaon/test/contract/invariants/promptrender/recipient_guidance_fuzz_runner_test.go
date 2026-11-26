@@ -707,10 +707,8 @@ func compareMessagesAndProvenance(warm, fresh []api.Message) error {
 }
 
 func renderWorkerPromptWithCache(bundle fuzzOverlayBundle, cache *hoststate.RenderCache, st hoststate.WorkerState, auth hoststate.TurnAuthority) (string, error) {
-	if st.ParentSessionMode == api.SessionModeAsk {
-		if mutCapable, ok := prompts.AgentMutationCapable(st.AgentID); ok && mutCapable {
-			return "", nil
-		}
+	if st.ParentSessionMode == api.SessionModeAsk && st.MutationCapable {
+		return "", nil
 	}
 	occ := spawn.PolicyTemplateVars()
 	merged, err := prompts.Vars(auth.Reader, occ)

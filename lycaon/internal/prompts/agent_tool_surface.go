@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -301,17 +302,24 @@ func filterToolName(names []string, drop string) []string {
 	return out
 }
 
-// TemplateRefForAgent resolves the persona template file agentID renders.
-func TemplateRefForAgent(agentID string) (string, error) {
+// TemplateRefForAgent resolves the persona template file agentID renders from
+// the catalog that renders it.
+func TemplateRefForAgent(eff *extpacks.EffectiveCatalog, agentID string) (string, error) {
 	agentID = strings.TrimSpace(agentID)
-	ref, ok := agentdef.SystemPromptTemplateFor(agentID)
-	if !ok {
-		return "", fmt.Errorf("%w: agent %q is not registered", ErrUnknownAgent, agentID)
+	defs, err := agentdef.LoadEffectiveWithCatalog(eff)
+	if err != nil {
+		return "", err
 	}
-	if ref = strings.TrimSpace(ref); ref == "" {
+	for _, p := range defs {
+		if p.ID != agentID {
+			continue
+		}
+		if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
+			return ref, nil
+		}
 		return "", fmt.Errorf("agent %q: missing system_prompt_template", agentID)
 	}
-	return ref, nil
+	return "", fmt.Errorf("%w: agent %q is not registered", ErrUnknownAgent, agentID)
 }
 
 // ToolProfileForAgent resolves the tool profile agentID runs under.

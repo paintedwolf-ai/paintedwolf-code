@@ -64,7 +64,7 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 	if err := requireArchetypePartials(engine.Layers(), def.Archetype, cfg.Archetypes[def.Archetype]); err != nil {
 		return nil, "", "", nil, err
 	}
-	ref, err := TemplateRefForAgent(id)
+	ref, err := TemplateRefForAgent(eff, id)
 	if err != nil {
 		return nil, "", "", nil, err
 	}

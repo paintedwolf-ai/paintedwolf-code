@@ -33,12 +33,28 @@ type CartesianSummary struct {
 	InjectAndGuidanceCount int
 	ToolDescriptionCount   int
 	OARRuleEvalCount       int
+	// Kicks holds each kick family's renders and violations.
+	Kicks map[string]*KickFamily
+	// PlainPersonas holds the worker persona renders without host resources.
+	PlainPersonas KickFamily
 	// setCase names the case the following renders belong to.
 	setCase                func(string)
 	CacheHits              int
 	CacheMisses            int
 	FolderlessParkVerified bool
 }
+
+// KickFamily is one render family's sweep result in the host-state matrix.
+type KickFamily struct {
+	Rendered   int
+	Violations []string
+}
+
+const (
+	kickFamilyCoordinator = "coordinator"
+	kickFamilyWorker      = "worker"
+	kickFamilyPhase       = "phase"
+)
 
 var cartesianInvariants = []invariants.Invariant{
 	{

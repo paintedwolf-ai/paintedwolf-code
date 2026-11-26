@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -52,6 +51,8 @@ type WorkerState struct {
 	CommandExternalHidden    bool
 	ApprovalPosture          gate.Posture
 	TempState                TempState
+	// MutationCapable is whether the agent's tool profile in Overlay can mutate.
+	MutationCapable bool
 
 	HasGit         bool
 	HasAnyGitRoot  bool
@@ -131,7 +132,44 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 		}
 		appendUnique(ws)
 	}
+	custom, err := CustomizationOverlays(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, co := range custom {
+		if !co.Worker {
+			continue
+		}
+		for _, agent := range co.Workers {
+			for _, seed := range customizationWorkerSeeds() {
+				ws, buildErr := buildWorkerState(ctx, co.Overlay, agent, seed)
+				if buildErr != nil {
+					return nil, buildErr
+				}
+				appendUnique(ws)
+			}
+		}
+	}
 	return out, nil
+}
+
+// customizationWorkerSeeds meets a customized worker with both command-effect
+// families, both parent modes, both loadings and an isolated branch.
+func customizationWorkerSeeds() []WorkerSeed {
+	var seeds []WorkerSeed
+	for _, posture := range []api.SessionPosture{api.SessionPostureBuild, api.SessionPostureSpec} {
+		for _, bv := range []WorkerBranchView{BranchMainGit, BranchIsolatedWorker} {
+			for _, ld := range []WorkerLoadingMode{WorkerLoadingStickyOnly, WorkerLoadingAllLoaded} {
+				for _, parentMode := range api.AllSessionModeValues() {
+					seeds = append(seeds, WorkerSeed{
+						Posture: posture, BranchView: bv, RootCount: 1, Loading: ld, ParentSessionMode: parentMode,
+						WebSearch: true, ApprovalPosture: gate.PostureBalanced, TempState: TempNone,
+					})
+				}
+			}
+		}
+	}
+	return seeds
 }
 
 func buildNarrowWorkerSeeds(ctx context.Context, domains *SeedDomains) []WorkerSeed {
@@ -270,7 +308,7 @@ func buildWorkerState(ctx context.Context, overlay PackOverlay, agent WorkerAgen
 	onBranch := bv == BranchIsolatedWorker
 
 	excluded := ""
-	mutCapable, _ := prompts.AgentMutationCapable(agent.ID)
+	mutCapable := profileMutationCapable(overlay, agent.ToolProfile)
 	switch {
 	case rootCount < 2 && seed.SecondaryRootGit:
 		excluded = "secondary_git_requires_multiple_roots"
@@ -278,13 +316,17 @@ func buildWorkerState(ctx context.Context, overlay PackOverlay, agent WorkerAgen
 		excluded = "worker_without_roots_has_no_repository_view"
 	case rootCount == 0 && mutCapable:
 		excluded = "write_scope_requires_project_roots"
+	// internal/worker/task_tool.go refuses a rootless spawn with
+	// WORKER_WORKSPACE_REQUIRED unless prompts.AgentRunsWithoutWorkspace.
+	case rootCount == 0 && profileSurveysProjectTree(overlay, agent.ToolProfile):
+		excluded = "survey_tree_requires_project_roots"
 	case onBranch && !mutCapable:
 		excluded = "read_only_agent_has_no_isolated_worker_branch"
 	case parentAsk && mutCapable:
 		excluded = "ask_mode_forbids_mutating_worker"
 	case parentAsk && onBranch:
 		excluded = "ask_mode_never_spawns_isolated_branch_worker"
-	case !seed.WebSearch && agentdef.DeclaresAny(agent.ID, agentdef.CapabilityExternal):
+	case !seed.WebSearch && slices.Contains(agent.Profile.Capabilities, agentdef.CapabilityExternal):
 		excluded = "web_search_disabled_for_external_agent"
 	}
 
@@ -326,7 +368,7 @@ func buildWorkerState(ctx context.Context, overlay PackOverlay, agent WorkerAgen
 		Posture: seed.Posture, BranchView: bv, RootCount: rootCount, SecondaryRootGit: seed.SecondaryRootGit,
 		Loading: seed.Loading, ParentSessionMode: seed.ParentSessionMode, ParentUpgradedAskToAgent: seed.ParentUpgradedAskToAgent,
 		WebSearch: seed.WebSearch, Vision: seed.Vision, CommandExternalHidden: seed.CommandExternalHidden,
-		ApprovalPosture: seed.ApprovalPosture, TempState: seed.TempState,
+		ApprovalPosture: seed.ApprovalPosture, TempState: seed.TempState, MutationCapable: mutCapable,
 		HasGit: hasGit, HasAnyGitRoot: anyGit, OnWorkerBranch: onBranch,
 		SessionScratchDir: scratch, SharedTempLocations: shared,
 		Loaded: loaded, Overlay: overlay,
