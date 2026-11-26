@@ -498,8 +498,7 @@ func workerRepsBy(reps []workerRep, keep func(workerRep) bool, key func(workerRe
 }
 
 // workerTaskAssignmentCases render inject.RenderWorkerTaskAssignment for read
-// and write scopes (a write leg goes to a mutation-capable worker), each
-// overlay view kind, a review-coverage binding that does or does not require
+// and write scopes over each overlay view kind, a review-coverage binding that does or does not require
 // coverage, and a scope path the outline reads from this package's sources.
 func workerTaskAssignmentCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
 	reps := workerRepsBy(e.wReps, func(workerRep) bool { return true },
@@ -508,8 +507,7 @@ func workerTaskAssignmentCases(_ context.Context, e *guidanceCaseEnv) ([]guidanc
 		})
 	knobs := []casegen.Knob{
 		repKnob([]string{casegen.AnyFact}, len(reps), func(i int) string { return reps[i].ws.ID }),
-		indexKnob("mode", []string{"scope_mode", "scope_has_git", "linked_checkout"}, []string{"read", "write"}),
-		{Name: "view", Facts: []string{"view_kind"}, Values: []any{"", "mounted"}, Labels: []string{"default", "mounted"}},
+		indexKnob("mode", []string{"scope_mode", "scope_has_git", "linked_checkout", "view_kind"}, []string{"read", "write", "write-mounted"}),
 		indexKnob("coverage", []string{"coverage_assignment", "coverage_required"}, []string{"none", "required", "optional"}),
 		indexKnob("paths", []string{"file_orientations", "file.symbols_elided"}, []string{"none", "file"}),
 	}
@@ -519,15 +517,20 @@ func workerTaskAssignmentCases(_ context.Context, e *guidanceCaseEnv) ([]guidanc
 			wr := reps[knobValue[int](knobs, set, "rep")]
 			in := inject.WorkerTaskAssignmentInput{
 				Reader: wr.auth.Reader, SessionID: "wsess-assign", ProjectDir: ".", AgentType: wr.ws.AgentID,
-				WorkerName: "w-alpha", WorkerJobID: "job-1", ViewKind: knobValue[string](knobs, set, "view"),
+				WorkerName: "w-alpha", WorkerJobID: "job-1",
 				Charter: api.WorkerTaskCharter{Goal: "Complete the assigned slice.", DoneWhen: []string{"Verified"}},
 				Scope:   api.TaskScope{Mode: api.TaskScopeModeRead},
 			}
-			if knobValue[int](knobs, set, "mode") == 1 {
+			// A write leg goes to a mutation-capable worker; its overlay view is
+			// materialized by default or mounted.
+			if mode := knobValue[int](knobs, set, "mode"); mode > 0 {
 				if !wr.auth.Reader.Held()["command_mutation"] {
 					return guidanceRender{}, nil
 				}
 				in.Scope.Mode = api.TaskScopeModeWrite
+				if mode == 2 {
+					in.ViewKind = "mounted"
+				}
 			}
 			if knobValue[int](knobs, set, "paths") == 1 {
 				in.Scope.Paths = []string{"overlay_skills.go"}
