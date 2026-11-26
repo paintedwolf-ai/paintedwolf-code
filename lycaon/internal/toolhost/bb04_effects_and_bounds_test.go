@@ -389,7 +389,7 @@ func TestBB04M05MultiRootAndGitIsolation(t *testing.T) {
 //  3. Server-recorded receipt before connection drop produces no implicit resend.
 func TestBB04M06LoopbackHTTPFixture(t *testing.T) {
 	f := programtest.New(t, programtest.Options{Tools: []string{"http_request"}})
-	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec)
+	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec, toolcontract.CommandNetworkEgress)
 	testutil.FailErr(t, "compile HTTP profile effects", err)
 	b := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
 		ID:             "fixture",
