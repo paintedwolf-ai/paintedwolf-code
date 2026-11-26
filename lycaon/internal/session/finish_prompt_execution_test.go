@@ -70,7 +70,9 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 	testutil.FailErr(t, "LoadRegistryConfig", err)
 	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
-	_ = run
+	testutil.FailErr(t, "seed user request", store.Transcript.AppendMessages(ctx, sess.ID, wire.Message{
+		ID: "opening", WorkflowRunID: run.ID, Role: wire.MessageRoleUser, Origin: wire.MessageOriginUser, Content: "Change the greeting.",
+	}))
 	if err := store.Sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "store.SetSessionStatus failed", err)
 	}
@@ -89,18 +91,20 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 		_ = mgr.Runner.Settlement.Drain(canceled, sess.ID)
 	}()
 
-	testutil.WaitFor(t, "the loop wake message is stored", func() bool {
-		msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
-		if err != nil {
-			return false
+	wake, err := ticket.Await(t.Context())
+	testutil.FailErr(t, "await deferred wake", err)
+	if wake.State != wire.WakeStateDelivered {
+		t.Fatalf("deferred wake = %+v", wake)
+	}
+	mgr.Coordinator.WaitForTurns(ctx)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
+	testutil.FailErr(t, "read wake transcript", err)
+	for _, msg := range msgs {
+		if msg.Kind == wire.MessageKindHostLoopWake {
+			return
 		}
-		for _, msg := range msgs {
-			if msg.Kind == wire.MessageKindHostLoopWake {
-				return true
-			}
-		}
-		return false
-	})
+	}
+	t.Fatal("missing loop wake in transcript")
 }
 
 func setupPlanTripartiteFixture(t *testing.T) coordinatorPromptFixture {
