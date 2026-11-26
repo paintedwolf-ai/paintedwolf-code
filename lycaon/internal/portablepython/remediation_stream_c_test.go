@@ -134,7 +134,14 @@ func TestStreamCRemediationCommandEffectsFailClosedProtectedPathsEditorAndEviden
 		}
 
 		// (b) Registered toolhost python handler on a surface without
-		// network_egress (orchestrate_plan) stops HTTP with COMMAND_EFFECT_NOT_ALLOWED and 0 hits.
+		// network_egress (orchestrate_plan) stops HTTPS with COMMAND_EFFECT_NOT_ALLOWED and 0 hits.
+		var tlsHits atomic.Int32
+		tlsSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			tlsHits.Add(1)
+			_, _ = w.Write([]byte("should-never-connect"))
+		}))
+		defer tlsSrv.Close()
+
 		rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{
 			Catalog:        stockCatalog,
 			PortablePython: svc,
@@ -142,7 +149,7 @@ func TestStreamCRemediationCommandEffectsFailClosedProtectedPathsEditorAndEviden
 		testutil.FailErr(t, "construct toolhost runtime", err)
 		raw, err := rt.Registry.Run(context.Background(), "python", map[string]any{
 			"code": `import requests, sys; requests.get(sys.argv[1])`,
-			"args": []any{srv.URL + "/no-egress-surface"},
+			"args": []any{tlsSrv.URL + "/no-egress-surface"},
 		}, tools.ToolContext{
 			Identity: tools.InvocationIdentity{
 				SessionID:  "sess-no-egress",
@@ -159,8 +166,8 @@ func TestStreamCRemediationCommandEffectsFailClosedProtectedPathsEditorAndEviden
 		if respNoEgress.CleanCompletion || respNoEgress.Stop == nil || respNoEgress.Stop.Code != pythonruntime.StopEffectNotAllowed {
 			t.Fatalf("no-egress surface http = %+v, want COMMAND_EFFECT_NOT_ALLOWED", respNoEgress)
 		}
-		if hits.Load() != 0 {
-			t.Fatalf("server received %d hits under fail-closed HTTP policy, want 0", hits.Load())
+		if hits.Load() != 0 || tlsHits.Load() != 0 {
+			t.Fatalf("server received %d http / %d https hits under fail-closed HTTP policy, want 0", hits.Load(), tlsHits.Load())
 		}
 	})
 
