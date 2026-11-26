@@ -1,6 +1,6 @@
 id: coordinator
-description: Coordinator that restores files and previews worker results; it never lands, instructs, dispatches or runs checks
-command_effects: [read_only]
+description: Coordinator that restores files, reaches the network read-only and previews worker results; it never lands, instructs, dispatches, runs checks or opens terminals
+command_effects: [read_only, network_egress]
 tools:
   code_rewrite: true
   survey_repo: sticky
@@ -58,11 +58,6 @@ tools:
   page_act: sticky
   page_snapshot: sticky
   page_close: sticky
-  terminal_open: sticky
-  terminal_send: sticky
-  terminal_read: sticky
-  terminal_snapshot: sticky
-  terminal_close: sticky
 deny_tools:
 read_scope: coordinator_product_read
 write_scope: coordinator_orchestration

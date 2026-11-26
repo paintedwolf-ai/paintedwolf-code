@@ -344,10 +344,11 @@ func workerRoundNoticeCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCa
 // (bounded, with an omitted count) and the instructions the round never
 // received. They render on stock coordinators through RenderPendingNudge.
 func workerTaskFinishedCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
-	reps := coordinatorRepsBy(e.cReps, func(coordRep) bool { return true },
-		func(cr coordRep) string {
-			return offers(cr.auth, "promote_overlay", "instruct_worker", "preview_overlay", "worker_history", "update_progress", "wait")
-		})
+	// A device-owned coordinator profile keeps every stock pack, so its
+	// readers receive this kick too.
+	reps := catalogRepsBy(e.cReps, func(cr coordRep) string {
+		return offers(cr.auth, "promote_overlay", "instruct_worker", "preview_overlay", "worker_history", "update_progress", "wait")
+	})
 	knobs := []casegen.Knob{
 		repKnob([]string{"profile_has_promote_overlay", "profile_has_instruct_worker", "profile_has_preview_overlay", "profile_has_worker_history", "profile_has_update_progress", casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
 		indexKnob("handle", []string{"worker_result.result_handle"}, []string{"named", "none"}),
@@ -355,8 +356,8 @@ func workerTaskFinishedCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceC
 		indexKnob("not_applied", []string{"worker_result.not_applied"}, []string{"none", "one"}),
 		// The roster counts results awaiting landing and partial reports
 		// independently (guidancedelivery.kickRenderContext).
-		{Name: "pending", Facts: []string{"pending_overlays"}, Values: []any{0, 1}},
-		{Name: "partial", Facts: []string{"partial_workers"}, Values: []any{0, 1}},
+		{Name: "pending", Facts: []string{"pending_overlays"}, Values: []any{0, 1}, Labels: []string{"none", "one"}},
+		{Name: "partial", Facts: []string{"partial_workers"}, Values: []any{0, 1}, Labels: []string{"none", "one"}},
 	}
 	return []guidanceCase{{
 		unit: "guidance/coordinator-worker-task-finished", recipient: interactions.RecipientCoordinator, knobs: knobs,
