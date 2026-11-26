@@ -322,9 +322,8 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','call-1',?)", (json.dumps(raw_res),))
             db.commit()
             db.close()
-            log_path = root / 'sidecar.log'
+            log_path, proj = root / 'sidecar.log', root / 'proj'
             log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
-            proj = root / 'proj'
             proj.mkdir()
             obs, audit = observe.build_observation(
                 syn_case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj,
@@ -335,9 +334,7 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             self.assertEqual(audit['observation_gaps'], [])
             self.assertEqual(obs['program']['status'], 2)
             self.assertFalse(obs['recovery']['whole_program_resubmit_allowed'])
-            self.assertTrue(obs['facts']['zero_progress_effects'])
-            self.assertTrue(obs['facts']['zero_program_effects'])
-            self.assertTrue(obs['facts']['syntax_span'])
+            self.assertTrue(obs['facts']['zero_progress_effects'] and obs['facts']['zero_program_effects'] and obs['facts']['syntax_span'])
             # Independent session_progress mutation witness breaks zero_progress_effects.
             db = sqlite3.connect(db_path)
             db.execute("INSERT INTO session_progress VALUES ('sess1234', 1)")
@@ -350,3 +347,27 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
                 prelude_records=[],
             )
             self.assertFalse(obs2['facts']['zero_progress_effects'])
+
+    def test_pipeline_wrapper_filter_base64_op_and_destination_unchanged(self):
+        audit = {
+            'invocation_program_executions': [
+                {'id': 'e0', 'program_id': 'p1', 'operation_id': 'program |', 'native_command': '', 'state': 'completed', 'effect_certainty': 'none'},
+                {'id': 'e1', 'program_id': 'p1', 'operation_id': 'printf', 'native_command': 'printf', 'state': 'completed', 'effect_certainty': 'none'},
+                {'id': 'e2', 'program_id': 'p1', 'operation_id': 'read', 'native_command': 'base64', 'state': 'completed', 'effect_certainty': 'none'},
+            ],
+            'invocation_program_publications': [], 'invocation_program_revision_pins': [],
+        }
+        receipts, _ = observe._receipt_rows(audit, [])
+        self.assertEqual([r['operation'] for r in receipts], ['printf', 'base64'])
+        cases = {c['id']: c for c in load_suite()['cases']}
+        fp = cases['failed-producer']
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            db_path, log_path, proj = root / 'store.db', root / 'sidecar.log', root / 'proj'
+            create_audit_db(db_path)
+            log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+            proj.mkdir()
+            (proj / 'result.txt').write_text('old\n')
+            base = {'result.txt': hashlib.sha256(b'old\n').hexdigest()}
+            obs, _ = observe.build_observation(fp, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes=base, turn_records=[], prelude_records=[])
+            self.assertTrue(obs['facts']['destination_unchanged'])

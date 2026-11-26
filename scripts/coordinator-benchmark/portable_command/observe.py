@@ -40,6 +40,7 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         outputs = _rows(db, f'SELECT id,program_id,execution_id,stream,reference,complete,redacted,preview,preview_truncated,line_count,inline_digest,blob_id FROM invocation_program_outputs WHERE program_id IN ({p_ph}) ORDER BY rowid', p_ids) if p_ids else []
         publications = _rows(db, f'SELECT * FROM invocation_program_publications WHERE program_id IN ({p_ph})', p_ids) if p_ids else []
         program_progress = _rows(db, f'SELECT execution_id,program_id,session_id,state,owner_invoked,detail_ref FROM invocation_program_progress WHERE program_id IN ({p_ph})', p_ids) if p_ids and _table_exists(db, 'invocation_program_progress') else []
+        program_sources = _rows(db, f'SELECT program_id,source_unit_id,source_id,revision,sha256 FROM invocation_program_sources WHERE program_id IN ({p_ph})', p_ids) if p_ids and _table_exists(db, 'invocation_program_sources') else []
         session_progress = _rows(db, 'SELECT * FROM session_progress WHERE session_id=?', (session_id,)) if _table_exists(db, 'session_progress') else []
         o_ids = [o['id'] for o in outputs]
         o_ph = ','.join('?' for _ in o_ids) or "''"
@@ -52,8 +53,8 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         'prelude_receipts': prelude_receipts, 'invocation_receipts': receipts, 'invocation_programs': programs,
         'invocation_program_executions': executions, 'invocation_program_revision_pins': pins,
         'invocation_program_outputs': outputs, 'invocation_program_publications': publications,
-        'invocation_program_progress': program_progress, 'session_progress': session_progress,
-        'invocation_program_deliveries': deliveries,
+        'invocation_program_progress': program_progress, 'invocation_program_sources': program_sources,
+        'session_progress': session_progress, 'invocation_program_deliveries': deliveries,
         'source_command_windows': windows, 'tool_result_messages': messages,
     }
 
@@ -95,7 +96,10 @@ def _receipt_rows(audit, progress_receipts):
     receipts = [{'execution_id': pr['id'], 'operation': 'update_progress', 'outcome': pr['status']} for pr in progress_receipts]
     effects = [{'operation': 'update_progress', 'outcome': pr['status']} for pr in progress_receipts]
     for ex in audit['invocation_program_executions']:
-        op = ex['operation_id'] if ex.get('operation_id') in {'read', 'write'} else (ex.get('native_command') or ex.get('operation_id'))
+        op_id, native_cmd = ex.get('operation_id') or '', ex.get('native_command') or ''
+        if op_id.startswith('program ') and not native_cmd:
+            continue
+        op = 'write' if op_id == 'write' else ('read' if op_id == 'read' and native_cmd in {'', 'cat', 'head', 'read'} else (native_cmd or op_id))
         row = {'execution_id': ex['id'], 'operation': op, 'outcome': ex['state']}
         effect = {'operation': op, 'outcome': ex['state']}
         if isinstance(ex.get('status_code'), int):
@@ -148,7 +152,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     unexpected_receipts = [r for r in audit['invocation_receipts'] if r['tool_call_id'] not in expected_calls and not (has_progress_turn and r['tool_name'] == 'update_progress' and r['owner'] == 'progress')]
     unexpected_cmd = [r for r in cmd_receipts if r['tool_call_id'] not in expected_calls]
 
-    cmd_invocations, last_payload, last_raw, last_prog = [], {}, {}, None
+    cmd_invocations, last_payload, last_raw, last_prog, first_rejected = [], {}, {}, None, None
     for rec in turn_records:
         cmd_call = rec['command_call_id']
         raw_res, payload = msgs_by_call.get(cmd_call, ({}, {}))
@@ -157,6 +161,8 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         outcome, _, code = normalize_outcome(raw_res, prog_row, payload)
         cmd_invocations.append({'id': (prog_row or {}).get('id') or inv_row.get('id') or cmd_call,
                                 'program': rec['program'], 'outcome': outcome, 'rejection_code': code})
+        if outcome == 'rejected' and first_rejected is None:
+            first_rejected = (payload, raw_res, (prog_row or {}).get('id'))
         last_payload, last_raw, last_prog = payload, raw_res, prog_row
     for extra in unexpected_cmd:
         cmd_invocations.append({'id': extra['id'], 'program': '<unexpected>', 'outcome': extra['status'], 'rejection_code': None})
@@ -180,6 +186,10 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     for extra in unexpected_receipts:
         effects.append({'operation': extra['tool_name'], 'outcome': extra['status'], 'unexpected_call_id': extra['tool_call_id']})
     recovery = _extract_recovery(case['id'], last_payload, last_raw, audit, unexpected_cmd)
+    if recovery is None and first_rejected is not None:
+        rej_payload, rej_raw, rej_pid = first_rejected
+        rej_audit = {**audit, 'invocation_program_executions': [e for e in audit['invocation_program_executions'] if rej_pid and e.get('program_id') == rej_pid]}
+        recovery = _extract_recovery(case['id'], rej_payload, rej_raw, rej_audit, unexpected_cmd)
 
     external_execs = [e for e in audit['invocation_program_executions']
                       if e.get('owner') == 'external' or e.get('native_command') == 'external' or e.get('native_gap_json')]
@@ -198,9 +208,10 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     node_ids = [e['node_id'] for e in execs if e.get('node_id')]
     final_hashes = project_hashes(project_dir)
     last_pid = (last_prog or {}).get('id')
-    scoped_producers = [e for e in execs if e.get('operation_id') != 'write' and (not last_pid or e.get('program_id') == last_pid)]
-    digested_outputs = [o for o in outputs if o.get('complete') == 1 and len(o.get('inline_digest') or '') == 64]
+    scoped_producers = [e for e in execs if e.get('operation_id') != 'write' and not (e.get('operation_id') or '').startswith('program ') and (not last_pid or e.get('program_id') == last_pid)]
+    digested_outputs = [o for o in outputs if o.get('stream') in {'stdout', 'stderr'} and o.get('complete') == 1 and (len(o.get('blob_id') or '') == 64 or len(o.get('inline_digest') or '') == 64)]
     write_rev_ok = all(bool(e.get('published_revision') or e.get('accepted_revision')) for e in write_execs)
+    committed_session_progress = [r for r in (audit.get('session_progress') or ()) if (r.get('document_version') or r.get('revision') or 0) > 0]
     facts = {
         'progress_and_program_separate': bool(progress_receipts and audit['invocation_programs'] and all(pr['id'] not in {p['parent_receipt_id'], p['id']} for pr in progress_receipts for p in audit['invocation_programs'])),
         'absence_pin': any(p['mode'] == 'absent' and p['role'] == 'destination' and p['execution_id'] in write_exec_ids for p in pins),
@@ -211,7 +222,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'syntax_span': bool(recovery and recovery['cause'] == 'syntax' and recovery['source_span_required']),
         'focused_help': bool(recovery and recovery['remedy'] in {'focused_command_help', 'focused_syntax_help'}),
         'zero_program_effects': bool(recovery and recovery['zero_program_effects'] and (baseline_hashes is None or final_hashes == baseline_hashes)),
-        'zero_progress_effects': not progress_receipts and not audit.get('session_progress'),
+        'zero_progress_effects': not progress_receipts and not committed_session_progress,
         'progress_committed_separately': bool(
             env_progress and any(pr['status'] == 'completed' for pr in env_progress)
             and audit['invocation_programs']
@@ -221,9 +232,10 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'fresh_resubmission_only': bool(recovery and recovery['whole_program_resubmit_allowed'] is False and not unexpected_cmd and len(cmd_receipts) == len(turn_records)),
         'exact_source_binding': source_bound,
         'execution_revision': bool(source_bound and write_rev_ok and all(len(p.get('content_sha256') or '') == 64 or (p.get('document_revision') or 0) > 0 for p in source_pins)),
+        'accepted_then_published': bool(write_execs and all(e.get('accepted_revision') and e.get('published_revision') for e in write_execs) and any(p.get('state') == 'committed' and p.get('materialized') == 1 for p in audit['invocation_program_publications'])),
         'no_conversational_read_base': source_bound and not audit.get('invocation_program_deliveries'),
-        'preview_only_first_line': any(o.get('preview_truncated') == 1 and '\n' not in (o.get('preview') or '').rstrip('\n') for o in outputs),
-        'unseen_ranges_not_read_bases': any(o.get('preview_truncated') == 1 for o in outputs) and not audit.get('invocation_program_deliveries'),
+        'preview_only_first_line': any(o.get('stream') == 'stdout' and o.get('preview_truncated') == 1 and '\n' not in (o.get('preview') or '').rstrip('\n') for o in outputs),
+        'unseen_ranges_not_read_bases': any(o.get('stream') == 'stdout' and o.get('preview_truncated') == 1 for o in outputs) and not audit.get('invocation_program_deliveries'),
         'shared_static_node': bool(node_ids) and len(set(node_ids)) < len(node_ids),
         'session_job_handle': any(e.get('job_handle') for e in execs),
         'no_device_file_mutation': not write_exec_ids,
@@ -241,6 +253,21 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         facts['preview_independent'] = any(o.get('preview_truncated') == 1 or bool(o.get('blob_id')) for o in digested_outputs)
     if scoped_producers:
         facts['every_producer_eligible'] = all(e.get('publication_eligible') == 1 for e in scoped_producers)
+    if baseline_hashes:
+        dest_paths = {k.lstrip('./') for k in case.get('expected', {}).get('files', {})} & set(baseline_hashes)
+        pub_paths = {r.get('path', '').lstrip('./') for r in receipts if r.get('operation') == 'write' and r.get('published') is True}
+        if dest_paths:
+            facts['destination_unchanged'] = all(final_hashes.get(p) == baseline_hashes.get(p) for p in dest_paths) and not (dest_paths & pub_paths)
+    if any(s.get('source_unit_id') and len(s.get('sha256') or '') == 64 for s in audit.get('invocation_program_sources') or ()):
+        facts['captured_source_identity'] = True
+    src_execs = [e for e in execs if e.get('operation_id') == 'source' and e.get('state') in {'refused', 'rejected'}]
+    if src_execs:
+        src_ids = {e['id'] for e in src_execs}
+        facts['no_source_statement_started'] = not any(e.get('parent_execution_id') in src_ids for e in execs)
+    if not write_exec_ids and any('/dev/null' in (e.get('canonical') or '') for e in execs):
+        facts['typed_null_sink'] = True
+    if bool(node_ids) and len(set(node_ids)) < len(node_ids) and outcome == 'completed':
+        facts['bounded_control_flow'] = True
     for req_fact in case.get('required_evidence') or ():
         if req_fact not in facts:
             gaps.append(f"missing_observation:{req_fact}:{FACT_OWNERS.get(req_fact, 'runtime_owner')}")
