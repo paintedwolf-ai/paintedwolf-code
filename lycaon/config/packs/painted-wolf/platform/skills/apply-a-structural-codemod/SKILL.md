@@ -1,6 +1,6 @@
 ---
 name: apply-a-structural-codemod
-description: Rewrite one repeated code shape across many files with a structural pattern and `code_rewrite`, previewed before it is applied.
+description: Rewrite one repeated code shape across many files with a structural pattern, previewed before it is applied.
 ---
 
 # Apply a structural codemod

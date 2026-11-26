@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -82,10 +81,10 @@ func New(sqlDB db.Handle, contentDir string, timing Timing) *Store {
 	if sqlDB == nil {
 		return nil
 	}
-	contentDir = filepath.Clean(contentDir)
-	if contentDir == "." || contentDir == "" {
-		contentDir, _ = os.MkdirTemp("", "painted-wolf-source-content-")
+	if contentDir == "" {
+		panic("sourceledger: New requires a content directory")
 	}
+	contentDir = filepath.Clean(contentDir)
 	if timing.After == nil {
 		timing.After = time.After
 	}
