@@ -132,6 +132,9 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 	awaitEngineWorking(t, victim)
 	engine = engineProcesses(descendants(processTable(t), victim))
 	runDirs := runDirsFromRows(descendants(processTable(t), victim))
+	if len(runDirs) == 0 {
+		t.Fatalf("observer never attributed a run directory to victim %d before %s", victim, sig)
+	}
 	enginePIDs := make([]int, 0, len(engine))
 	for _, row := range engine {
 		enginePIDs = append(enginePIDs, row.PID)

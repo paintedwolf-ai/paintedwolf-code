@@ -209,13 +209,18 @@ func awaitNoEngineProcesses(t *testing.T) time.Duration {
 }
 
 // runDirsFromRows returns the engine run directories named by the given
-// processes. The driver passes --output <runDir>/report.json where <runDir> is
-// a confine.ActionWorkspace under action-work/action-*, so argv names the exact
-// directory that scan owns. Attribution comes from the parent-link walk that
-// produced these rows; the flag only locates the path.
+// processes. The driver launches opengrep with --output <runDir>/report.json
+// where <runDir> is a confine.ActionWorkspace under action-work/action-*, so
+// argv names the exact directory that scan owns while discriminating opengrep
+// from unrelated processes that may also use action workspaces. Attribution
+// comes from the parent-link walk that produced these rows; the command and
+// flag only locate the path.
 func runDirsFromRows(rows []procRow) []string {
 	seen := map[string]bool{}
 	for _, row := range rows {
+		if !strings.Contains(row.Command, "opengrep") {
+			continue
+		}
 		fields := strings.Fields(row.Command)
 		for i := 0; i+1 < len(fields); i++ {
 			if fields[i] != "--output" {
@@ -249,6 +254,8 @@ func TestRunDirsFromRows(t *testing.T) {
 		{PID: 15, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/other-dir/action-ddd/report.json --jobs 2"},
 		{PID: 16, Command: "/path/to/opengrep scan --json --output /Users/m1/.config/paintedwolf/action-work/notaction-eee/report.json --jobs 2"},
 		{PID: 17, Command: "/path/to/opengrep scan --output"},
+		{PID: 18, Command: "/usr/bin/curl --output /Users/m1/.config/paintedwolf/action-work/action-fff/report.json https://example.invalid"},
+		{PID: 19, Command: "/usr/bin/sandbox-exec -p (version 1) /bin/sh -c tool --output /Users/m1/.config/paintedwolf/action-work/action-ggg/report.json"},
 	}
 	got := runDirsFromRows(rows)
 	want := []string{
