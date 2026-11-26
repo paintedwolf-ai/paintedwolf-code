@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 )
 
@@ -524,20 +525,19 @@ func skillOffered(t *testing.T, sk skills.Skill, held map[string]bool) bool {
 
 func TestSkillToolsOfferedForReaderRefusesCommandProgramsWhenCommandDeferred(t *testing.T) {
 	profiles := []sandbox.ToolProfile{{
-		ID:             "worker",
-		Tools:          map[string]bool{"request_tools": true, "command": true},
-		StickyTools:    map[string]bool{"request_tools": true},
-		CommandEffects: []string{"read_only", "mutation", "external_exec"},
+		ID:          "worker",
+		Tools:       map[string]bool{"request_tools": true, "command": true},
+		StickyTools: map[string]bool{"request_tools": true},
 	}}
+	plan := toolsurface.Compile([]string{"request_tools"}, []string{"command"})
 	deferredReader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
 		HasGit:    true,
 	}, prompts.TurnProjection{
-		ProfileID:   "worker",
-		Offered:     readerDeclaredOffer(profiles, "worker", []string{"request_tools"}, map[string]bool{"request_tools": true}),
-		Requestable: []string{"command"},
-		Declared:    true,
+		ProfileID: "worker",
+		Plan:      plan,
+		Offered:   readerDeclaredOffer(profiles, "worker", []string{"request_tools"}, map[string]bool{"request_tools": true}),
 	})
 	testutil.FailErr(t, "deferred command reader", err)
 
