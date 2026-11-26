@@ -191,6 +191,11 @@ func dedupeEnvelopeMaps(in []map[string]any) []map[string]any {
 	return out
 }
 
+// AnchorVarDomain returns the typed values an envelope variable takes in the
+// envelope sweep: both truths, zero, one and a plural count, empty and sample
+// strings, and empty, one- and two-item collections.
+func AnchorVarDomain(v AnchorVarSpec) ([]any, error) { return boundaryValuesForVar(v) }
+
 func boundaryValuesForVar(v AnchorVarSpec) ([]any, error) {
 	switch v.Type {
 	case "bool":

@@ -1,6 +1,8 @@
 ---
 name: diagnose-a-tls-failure
 description: Diagnose TLS certificate, expiry, chain, hostname, trust, or clock errors without disabling verification.
+metadata:
+  paintedwolf.any_of_tools: command
 ---
 
 # Diagnose a TLS failure

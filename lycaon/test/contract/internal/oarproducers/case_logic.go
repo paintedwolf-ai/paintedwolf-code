@@ -39,6 +39,15 @@ func (p *CaseProducer) Anchor(site string) string {
 	return ""
 }
 
+// WhenReferences lists the declared facts the condition of site's rule reads.
+func (p *CaseProducer) WhenReferences(site string) []string {
+	rule, _ := p.ruleOf(site)
+	if rule == nil {
+		return nil
+	}
+	return p.references(rule.When)
+}
+
 // Decide gives site's decision for atom truths keyed by atom text.
 func (p *CaseProducer) Decide(site string) func(map[string]bool) bool {
 	_, src := p.ruleOf(site)
@@ -126,8 +135,9 @@ func (l *ruleLogic) Domain(fact string, atoms []string) ([]any, bool) {
 			out = append(out, set)
 		}
 		return out, true
+	default:
+		return nil, false
 	}
-	return nil, false
 }
 
 func (l *ruleLogic) Zero(fact string) any {
@@ -138,8 +148,9 @@ func (l *ruleLogic) Zero(fact string) any {
 		return int64(0)
 	case oarcore.TypeListString:
 		return []string{}
+	default:
+		return ""
 	}
-	return ""
 }
 
 // toolFacts are the facts the producer derives from the invoked tool alone.
@@ -198,7 +209,7 @@ func distinctOf(atoms []string) []string {
 }
 
 // maxShadowInputs caps the guards whose vectors ShadowJoints enumerates.
-const maxShadowInputs = 10
+const maxShadowInputs = 14
 
 // ShadowJoints rules out the vectors of a rule's condition under which a
 // block rule evaluated earlier on the same anchor fires: the first enforced

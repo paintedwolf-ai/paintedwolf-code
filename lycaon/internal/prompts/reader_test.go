@@ -3,6 +3,7 @@ package prompts_test
 import (
 	"maps"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -122,6 +123,54 @@ func TestReaderHeldComposesOfferedToolsAndReachMarks(t *testing.T) {
 
 			if got := reader.Held(); !reflect.DeepEqual(got, want) {
 				t.Fatalf("Held() = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+// A surface may list a tool an owned coordinator profile no longer allows: it
+// is neither requestable nor on the floor for the reader.
+func TestReaderReachFollowsTheProfileOverTheSurface(t *testing.T) {
+	stock, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
+	profiles := slices.Clone(stock)
+	for i := range profiles {
+		if profiles[i].ID != prompts.CoordinatorProfileID {
+			continue
+		}
+		profiles[i].Tools = maps.Clone(profiles[i].Tools)
+		profiles[i].StickyTools = maps.Clone(profiles[i].StickyTools)
+		for _, name := range []string{"task", "command"} {
+			delete(profiles[i].Tools, name)
+			delete(profiles[i].StickyTools, name)
+		}
+	}
+	plan := toolsurface.Compile([]string{"recall", "command"}, []string{"task", "fetch_url"})
+	for _, tc := range []struct {
+		name            string
+		profiles        []sandbox.ToolProfile
+		offered         []string
+		wantRequestable []string
+		wantFloor       bool
+	}{
+		{name: "stock profile", profiles: stock, offered: []string{"command", "recall"}, wantRequestable: []string{"fetch_url", "task"}, wantFloor: true},
+		{name: "profile without task or command", profiles: profiles, offered: []string{"recall"}, wantRequestable: []string{"fetch_url"}, wantFloor: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reader, err := prompts.NewReader(prompts.HostFacts{Profiles: tc.profiles, RootCount: 1, WebSearch: true}, prompts.TurnProjection{
+				ProfileID: prompts.CoordinatorProfileID,
+				SurfaceID: "implement_investigate",
+				Plan:      plan,
+				Offered:   tc.offered,
+			})
+			testutil.FailErr(t, "NewReader", err)
+			if got := reader.Requestable(); !reflect.DeepEqual(got, tc.wantRequestable) {
+				t.Fatalf("Requestable() = %v, want %v", got, tc.wantRequestable)
+			}
+			vars, err := prompts.Vars(reader, nil)
+			testutil.FailErr(t, "Vars", err)
+			if got := vars["command_on_floor"]; got != tc.wantFloor {
+				t.Fatalf("command_on_floor = %v, want %v", got, tc.wantFloor)
 			}
 		})
 	}

@@ -218,9 +218,16 @@ func guardSuggestion(c *Catalog, name string) string {
 // skillVocabularyProblems checks the template vocabulary a skill authors
 // against the catalog (INV-SK-07): every profile_has_<name> fact must name a
 // registered tool or the write_tools alias, and every any_of_tools member must
-// be a registered tool.
+// be a registered tool. The description names no tool, because the roster that
+// carries it is shared by surfaces that do not offer the skill's tools.
 func skillVocabularyProblems(c *Catalog, skill skills.Skill) []string {
 	var problems []string
+	for _, tool := range ToolsIn(c, skill.Description) {
+		problems = append(problems, fmt.Sprintf(
+			"skill %q names %s in its description, which every surface's skill roster shows — "+
+				"describe the procedure there and name tools in the body",
+			skill.Name, tool))
+	}
 	texts := []string{skill.Body}
 	for _, rel := range skill.MarkdownResources() {
 		body, err := skill.ReadResource(rel)

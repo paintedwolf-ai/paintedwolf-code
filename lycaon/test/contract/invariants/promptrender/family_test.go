@@ -6,12 +6,15 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 )
 
 func TestMain(m *testing.M) {
+	// Generated worktree cases run the pinned Git.
+	gittestsetup.Enable()
 	// Production readers consult the process's active catalog; the family
 	// judges the stock catalog.
 	stock, err := promptrender.LoadStock(context.Background())

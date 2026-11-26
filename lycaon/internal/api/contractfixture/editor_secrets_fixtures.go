@@ -89,7 +89,7 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	testutil.FailErr(t, "read fixture person", err)
 	srv := NewTestServer(t, WithSessionStore(repositories), func(d *hostapi.Dependencies) {
 		d.Host.Events = hub
-		sourceHistory16 := sourceledger.New(database, "", sourceledger.Timing{})
+		sourceHistory16 := sourceledger.New(database, t.TempDir(), sourceledger.Timing{})
 		d.Source.EditorDocuments = editordoc.New(editordoc.NewStore(database), sourceHistory16, sourceHistory16.History, d.Core.Projects)
 		d.Approvals.SecretSpans = secretspan.New(matcher)
 		d.Approvals.ManagedSecrets = secretcap.NewWithStore(database, values, matcher.Remember)

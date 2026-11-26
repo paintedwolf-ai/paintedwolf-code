@@ -28,7 +28,7 @@ if [[ "${1:-}" == repository-tools ]]; then
       python3 "$ROOT/scripts/ci_policy/apt_origins.py" install --no-recommends -- \
         apt-utils aspell-en createrepo-c gnupg libarchive-tools lintian makepkg minisign pacman-package-manager rpm rpmlint
       ;;
-    Darwin) HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign ;;
+    Darwin) HOMEBREW_NO_AUTO_UPDATE=1 brew install gnupg minisign ;;
     *) echo "error: repository tools require macOS or apt-based Linux" >&2; exit 2 ;;
   esac
   exit 0
