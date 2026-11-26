@@ -190,7 +190,7 @@ describe("BB06 Den command activity snapshots & leads L01/L07/M10", () => {
     const client = stubClient({ getProjectSourceCommandObservation: getObservation });
     const action: CardAction = {
       label: "Run command",
-      status: "completed",
+      status: "done",
       ran: { text: "ls", noun: "command" },
       row: [],
       links: [],
