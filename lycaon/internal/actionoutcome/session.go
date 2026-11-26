@@ -1,7 +1,9 @@
 package actionoutcome
 
 import (
+	"cmp"
 	"github.com/lycaon/lycaon/pkg/api"
+	"slices"
 	"sync"
 )
 
@@ -34,4 +36,24 @@ func (s *Sessions) Forget(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.byID, sessionID)
+}
+
+type Trail struct {
+	Wakes         []WakeRecord             `json:"wakes"`
+	Turns         []TurnRecord             `json:"turns"`
+	Continuations []api.ActionContinuation `json:"continuations"`
+}
+
+func (s *Sessions) Trails() map[string]Trail {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	trails := make(map[string]Trail, len(s.byID))
+	for id, session := range s.byID {
+		trace := Trail{Wakes: session.Wakes.Snapshot(), Turns: session.Turns.Snapshot(), Continuations: session.Actions.Snapshot()}
+		slices.SortFunc(trace.Wakes, func(a, b WakeRecord) int { return cmp.Compare(a.Sequence, b.Sequence) })
+		slices.SortFunc(trace.Turns, func(a, b TurnRecord) int { return a.AdmittedAt.Compare(b.AdmittedAt) })
+		slices.SortFunc(trace.Continuations, func(a, b api.ActionContinuation) int { return a.OpenedAt.Compare(b.OpenedAt) })
+		trails[id] = trace
+	}
+	return trails
 }

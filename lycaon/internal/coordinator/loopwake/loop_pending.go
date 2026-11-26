@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"github.com/lycaon/lycaon/internal/actionoutcome"
+	"github.com/lycaon/lycaon/pkg/api"
 	"sort"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 
 // pendingLoopWake preserves wake ordering across prompt execution.
 type pendingLoopWake struct {
+	queue           *sessionNudgeQueue
 	ticket          *actionoutcome.Ticket
 	wake            anchor.ID
 	seq             uint64
@@ -27,6 +29,7 @@ type pendingLoopWake struct {
 type sessionNudgeQueue struct {
 	mu     sync.Mutex
 	nudges []pendingLoopWake
+	closed api.WakeReason
 }
 
 func (q *sessionNudgeQueue) push(n pendingLoopWake) {
@@ -35,14 +38,31 @@ func (q *sessionNudgeQueue) push(n pendingLoopWake) {
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.closed != "" {
+		n.ticket.Record(api.WakeStateDropped, q.closed, "", "")
+		return
+	}
 	// Sequence identity deduplicates retries and preserves their position.
 	index := sort.Search(len(q.nudges), func(i int) bool { return q.nudges[i].seq >= n.seq })
 	if n.seq > 0 && index < len(q.nudges) && q.nudges[index].seq == n.seq {
 		return
 	}
+	n.queue = q
+	n.ticket.Record(api.WakeStateQueued, "", "", "")
 	q.nudges = append(q.nudges, pendingLoopWake{})
 	copy(q.nudges[index+1:], q.nudges[index:])
 	q.nudges[index] = n
+}
+
+func (q *sessionNudgeQueue) close(reason api.WakeReason) {
+	q.mu.Lock()
+	q.closed = reason
+	items := q.nudges
+	q.nudges = nil
+	q.mu.Unlock()
+	for _, n := range items {
+		n.ticket.Record(api.WakeStateDropped, reason, "", "")
+	}
 }
 
 func (q *sessionNudgeQueue) pop() (pendingLoopWake, bool) {
@@ -91,6 +111,7 @@ func (q *deferredNudgeQueue) removeRunningWorkerWakesForJob(jobID string) bool {
 	found := false
 	for _, it := range q.items {
 		if anchor.AboutRunningWorker(it.wake) && strings.TrimSpace(it.legID) == jobID {
+			it.ticket.Record(api.WakeStateDropped, api.WakeReasonJobTerminal, "", "")
 			found = true
 			continue
 		}

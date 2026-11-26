@@ -100,7 +100,7 @@ func (m *Service) Finish(ctx context.Context, sessionID string, promptFailed, ho
 	closeoutBlocked := m.deferredTurnSettlement.takeCloseoutBlocked(sessionID)
 	if m.gate.InProgress(hostCtx, sessionID) {
 		m.deferredTurnSettlement.remove(sessionID)
-		rt.CoordinatorLoop().Nudges.ClearPending(sessionID)
+		rt.CoordinatorLoop().Nudges.ClearPending(sessionID, api.WakeReasonTurnSettled)
 		rt.Kicks().ClearPending(sessionID)
 		return nil
 	}

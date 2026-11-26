@@ -53,9 +53,13 @@ func (l *Admission) ForgetSession(sessionID string) {
 	})
 }
 func (l *Nudges) ForgetSession(sessionID string) {
-	l.pendingQueues.Delete(sessionID)
+	l.ClearPending(sessionID, api.WakeReasonSessionClosed)
 	l.pendingDrain.Delete(sessionID)
-	l.pendingWorkerQueues.Delete(sessionID)
+	if value, ok := l.pendingWorkerQueues.LoadAndDelete(sessionID); ok {
+		for _, n := range value.(*deferredNudgeQueue).drain() {
+			n.ticket.Record(api.WakeStateDropped, api.WakeReasonSessionClosed, "", "")
+		}
+	}
 	l.kickDedup.Range(func(key, _ any) bool {
 		if k, ok := key.(loopKickKey); ok && k.sessionID == sessionID {
 			l.kickDedup.Delete(key)

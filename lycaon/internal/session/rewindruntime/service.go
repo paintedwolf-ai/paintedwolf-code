@@ -62,7 +62,7 @@ func (s *Service) ResetCoordinator(ctx context.Context, id string) {
 	s.Batch.Apply(ctx, id, batch.EventVisibleUserMessage, 0)
 	s.Batch.BeginTurn(id)
 	s.Coordinator.Kicks().ClearPending(id)
-	s.Coordinator.CoordinatorLoop().Nudges.ClearPending(id)
+	s.Coordinator.CoordinatorLoop().Nudges.ClearPending(id, api.WakeReasonRewound)
 	s.Coordinator.CoordinatorLoop().Waits.InterruptSleep(ctx, id)
 }
 

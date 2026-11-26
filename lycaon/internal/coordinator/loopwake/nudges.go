@@ -226,11 +226,13 @@ func (l *Nudges) NudgeLegFinished(ctx context.Context, parentID string, complete
 	}
 	l.Nudge(ctx, parentID, anchor.LegFinished, anchor.LegFinished, legID, env)
 }
-func (l *Nudges) ClearPending(sessionID string) {
+func (l *Nudges) ClearPending(sessionID string, reason api.WakeReason) {
 	if l == nil {
 		return
 	}
-	l.pendingQueues.Delete(sessionID)
+	if value, ok := l.pendingQueues.LoadAndDelete(sessionID); ok {
+		value.(*sessionNudgeQueue).close(reason)
+	}
 }
 func (l *Nudges) DrainPending(ctx context.Context, sessionID string) {
 	if l == nil {
@@ -289,8 +291,11 @@ func (l *Nudges) sessionDeferredQueue(sessionID string) *deferredNudgeQueue {
 	return actual.(*deferredNudgeQueue)
 }
 func (l *Nudges) enqueuePending(sessionID string, pending pendingLoopWake) {
-	pending.ticket.Record(api.WakeStateQueued, "", "", "")
-	l.sessionPendingQueue(sessionID).push(pending)
+	q := pending.queue
+	if q == nil {
+		q = l.sessionPendingQueue(sessionID)
+	}
+	q.push(pending)
 }
 func (l *Nudges) deferPromptWake(ctx context.Context, sessionID string, pending pendingLoopWake) {
 	pending.postTurnDrain = true

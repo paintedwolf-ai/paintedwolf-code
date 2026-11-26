@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"io"
 	"os"
 	"path/filepath"
@@ -24,6 +25,7 @@ const maxLogTailBytes = 256 * 1024
 
 // Input is the facts the caller already gathered.
 type Input struct {
+	Outcomes map[string]actionoutcome.Trail
 	// Health is the GET /health payload.
 	Health any
 	// Preflight is the GET /v1/preflight payload.
@@ -71,6 +73,12 @@ func Build(ctx context.Context, in Input) ([]byte, error) {
 		"contents":     []string{"health.json", "preflight.json", "boundary-overrides.json", "config/", "logs/"},
 		"redaction":    "secrets removed by layered diagnostics scrubber; secret stores excluded entirely",
 		"upload":       "none — this file is saved locally and shared only if you choose to",
+	}
+	if in.Outcomes != nil {
+		manifest["contents"] = append(manifest["contents"].([]string), "action-outcomes.json")
+		if err := writeJSONEntry(ctx, zw, "action-outcomes.json", in.Outcomes, in.Redactor); err != nil {
+			return nil, err
+		}
 	}
 	if err := writeJSONEntry(ctx, zw, "manifest.json", manifest, in.Redactor); err != nil {
 		return nil, err

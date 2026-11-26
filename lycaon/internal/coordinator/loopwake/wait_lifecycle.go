@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"sync"
 	"time"
@@ -46,7 +47,7 @@ func (l *Waits) InterruptSleep(ctx context.Context, sessionID string) {
 	}
 	l.Deliveries.ForgetSession(strings.TrimSpace(sessionID))
 	l.breakSleep(ctx, sessionID, "user_prompt", false)
-	l.Nudges.ClearPending(sessionID)
+	l.Nudges.ClearPending(sessionID, api.WakeReasonPromptInterrupted)
 }
 func (l *Waits) EnterSleep(ctx context.Context, sessionID string, until time.Time, reason string, triggers []WaitTrigger, processHandles []string, mover SleepMover) {
 	l.enterSleep(ctx, sessionID, sleepArm{until: until, reason: reason, triggers: triggers, processHandles: processHandles, mover: mover})
