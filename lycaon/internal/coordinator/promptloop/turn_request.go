@@ -209,18 +209,19 @@ func (l *modelTurn) buildCommandGuidanceDebug(
 		projectDir = l.Context.primaryProjectRoot(ctx, sess)
 	}
 	templates, facts := prompts.BuildCommandGuidanceSnapshot(prompts.CommandGuidanceSnapshotInput{
-		ProfileID:             profileID,
-		SurfaceID:             surfaceID,
-		AgentType:             sess.AgentType,
-		IsCoordinator:         profileID == prompts.CoordinatorProfileID || strings.TrimSpace(surfaceID) != "",
-		OfferedTools:          offered,
-		DeferredTools:         deferred,
-		RootCount:             rootCount,
-		ProjectDir:            projectDir,
-		SessionScratchDir:     frame.Machine.Surface.SessionScratchDir,
-		Posture:               frame.Machine.Surface.Posture,
-		SharedTempLocations:   frame.Machine.Surface.SharedTempLocations,
-		CommandExternalHidden: frame.Machine.Surface.CommandExternalHidden,
+		ProfileID:               profileID,
+		SurfaceID:               surfaceID,
+		AgentType:               sess.AgentType,
+		IsCoordinator:           profileID == prompts.CoordinatorProfileID || strings.TrimSpace(surfaceID) != "",
+		OfferedTools:            offered,
+		DeferredTools:           deferred,
+		RootCount:               rootCount,
+		ProjectDir:              projectDir,
+		SessionScratchDir:       frame.Machine.Surface.SessionScratchDir,
+		Posture:                 frame.Machine.Surface.Posture,
+		SharedTempLocations:     frame.Machine.Surface.SharedTempLocations,
+		SharedTempReadLocations: frame.Machine.Surface.SharedTempReadLocations,
+		CommandExternalHidden:   frame.Machine.Surface.CommandExternalHidden,
 	})
 	if len(templates) == 0 && len(facts) == 0 {
 		return nil

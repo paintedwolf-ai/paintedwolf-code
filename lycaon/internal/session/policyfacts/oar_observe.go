@@ -104,10 +104,14 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 			continue
 		}
 		gc.Refusals.RefusedReadPaths = append(gc.Refusals.RefusedReadPaths, path.Path)
+		if path.Layer != confine.FloorSharedTemp {
+			gc.Refusals.OrdinaryReadPaths = append(gc.Refusals.OrdinaryReadPaths, path.Path)
+		}
 	}
 	gc.Refusals.RefusedWriteGrants = refusals.Grants(confine.AccessWrite)
 	gc.Refusals.OrdinaryWriteGrants = ordinary.Grants(confine.AccessWrite)
 	gc.Refusals.RefusedReadGrants = refusals.Grants(confine.AccessRead)
+	gc.Refusals.OrdinaryReadGrants = ordinary.Grants(confine.AccessRead)
 }
 
 func appendUnique(list []string, value string) []string {

@@ -98,6 +98,8 @@ type ActionConfineInputs struct {
 	PolicyWriteGrants []confine.ProtectedPathGrant
 	// OverlayReadPaths contains chat-scoped protected read grants.
 	OverlayReadPaths []string
+	// GrantedReadGrants carries shape-aware read grants from grantedpath.
+	GrantedReadGrants []confine.ProtectedPathGrant
 	// ReadDenyPaths are host-selected read exclusions.
 	ReadDenyPaths []string
 	// View is what the action's mounted worker view keeps out of its reach.
@@ -118,10 +120,11 @@ type ActionConfineInputs struct {
 // ActionConfineRequest builds the request shared by approval and execution.
 func ActionConfineRequest(in ActionConfineInputs) confine.Request {
 	overlayRoots, protected := confine.SplitChatOverlay(in.OverlayWriteRoots)
-	reads := make([]confine.ProtectedPathGrant, 0, len(in.OverlayReadPaths))
+	reads := make([]confine.ProtectedPathGrant, 0, len(in.OverlayReadPaths)+len(in.GrantedReadGrants))
 	for _, p := range in.OverlayReadPaths {
 		reads = append(reads, confine.NewProtectedPathGrant(p))
 	}
+	reads = append(reads, in.GrantedReadGrants...)
 	req := confine.Request{
 		ProcessControl: in.ProcessControl, CredentialStore: in.CredentialStore, HostExecution: in.HostExecution,
 		ProjectID:            in.ProjectID,

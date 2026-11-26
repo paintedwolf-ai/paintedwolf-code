@@ -128,7 +128,7 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	if args == nil {
 		return nil
 	}
-	if targets := nativePathTargetsFromArgs(args); targets != nil {
+	if targets := nativePathTargetsFromArgs(tool, args); targets != nil {
 		files := make([]string, 0, len(targets))
 		for _, target := range targets {
 			files = append(files, target.Path)
@@ -184,24 +184,54 @@ func filesFromArgs(tool string, args map[string]any) []string {
 	return files
 }
 
-// nativePathTargetsFromArgs consumes the owner-bound projection. It never
-// guesses file operands from an argv word or a command's help prose.
-func nativePathTargetsFromArgs(args map[string]any) []hitl.NativePathTarget {
-	raw, present := args["path_targets"]
-	if !present {
-		return nil
-	}
-	targets := []hitl.NativePathTarget{}
-	groups, _ := raw.(map[string]any)
-	for _, direction := range []string{"read", "write"} {
-		paths, _ := groups[direction].([]any)
-		for _, item := range paths {
-			if path, _ := item.(string); path != "" {
-				targets = append(targets, hitl.NativePathTarget{Path: path, Write: direction == "write"})
+// nativePathTargetsFromArgs consumes the owner-bound projection or structured
+// read/write pair fields. It never guesses file operands from an argv word.
+func nativePathTargetsFromArgs(tool string, args map[string]any) []hitl.NativePathTarget {
+	if raw, present := args["path_targets"]; present {
+		targets := []hitl.NativePathTarget{}
+		groups, _ := raw.(map[string]any)
+		for _, direction := range []string{"read", "write"} {
+			paths, _ := groups[direction].([]any)
+			for _, item := range paths {
+				if path, _ := item.(string); path != "" {
+					targets = append(targets, hitl.NativePathTarget{Path: path, Write: direction == "write"})
+				}
 			}
 		}
+		return targets
 	}
-	return targets
+	switch tool {
+	case "copy":
+		items, ok := args["copies"].([]any)
+		if !ok {
+			return nil
+		}
+		var out []hitl.NativePathTarget
+		for _, item := range items {
+			pair, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if from, ok := pair["from"].(string); ok && from != "" {
+				out = append(out, hitl.NativePathTarget{Path: from, Write: false})
+			}
+			if to, ok := pair["to"].(string); ok && to != "" {
+				out = append(out, hitl.NativePathTarget{Path: to, Write: true})
+			}
+		}
+		return out
+	case "extract_archive":
+		var out []hitl.NativePathTarget
+		if p, ok := args["path"].(string); ok && p != "" {
+			out = append(out, hitl.NativePathTarget{Path: p, Write: false})
+		}
+		if dest, ok := args["dest"].(string); ok && dest != "" {
+			out = append(out, hitl.NativePathTarget{Path: dest, Write: true})
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 // commandStreamFiles reads redirection and stream-field paths from the plan.
@@ -285,6 +315,7 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			SessionScratchRoot: confReq.SessionScratchRoot,
 			SessionOutputRoot:  confReq.SessionOutputRoot,
 			GrantedWriteRoots:  append([]string(nil), confReq.GrantedWriteRoots...),
+			SessionReadPaths:   protectedReadGrantPaths(confReq.ProtectedReadGrants),
 		},
 		Execution: hitl.ActionExecution{
 			Contained:                       hitl.ContainedForRequest(confReq),
@@ -305,6 +336,19 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			DeclaredDestinations: append([]string(nil), eval.DeclaredDestinations...),
 		},
 	}
+}
+
+func protectedReadGrantPaths(grants []confine.ProtectedPathGrant) []string {
+	if len(grants) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(grants))
+	for _, g := range grants {
+		if strings.TrimSpace(g.ApprovedPath) != "" {
+			out = append(out, g.ApprovedPath)
+		}
+	}
+	return out
 }
 
 // denyRejectData is the denied path and first matched rule plus tool and profile.

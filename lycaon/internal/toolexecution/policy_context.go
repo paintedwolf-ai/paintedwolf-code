@@ -20,7 +20,7 @@ func (e *Boundary) preInvokePolicyContext(
 		ToolName:                        tool,
 		ToolArgs:                        args,
 		ResolvedFiles:                   ResolvedApprovalFiles(tool, args, tc),
-		NativePathTargets:               nativePathTargetsFromArgs(args),
+		NativePathTargets:               nativePathTargetsFromArgs(tool, args),
 		ApprovedFileAccess:              append([]hitl.GrantedPathDelta(nil), tc.Files.ApprovedFileAccess...),
 		HostResources:                   append([]string(nil), tc.Host.HostResources...),
 		HostResourceFamilies:            append([]string(nil), tc.Host.HostResourceFamilies...),

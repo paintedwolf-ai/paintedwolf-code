@@ -108,9 +108,10 @@ type cursorRange struct{ start, end int64 }
 // completionResources stay owned by the process until transfer or discard.
 // Process-held resources move under the process table lock.
 type completionResources struct {
-	programStop    ProgramStop
-	indexWatch     indexwatch.Snapshot
-	releaseNotices func()
+	programStop        ProgramStop
+	programObservation confine.Observation
+	indexWatch         indexwatch.Snapshot
+	releaseNotices     func()
 }
 
 func (r *completionResources) take() completionResources {

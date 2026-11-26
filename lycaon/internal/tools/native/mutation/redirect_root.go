@@ -12,6 +12,31 @@ import (
 )
 
 type RedirectRootReview func(context.Context, tools.ToolContext, string, string, string) (tools.ToolContext, error)
+type RedirectReadReview func(context.Context, tools.ToolContext, string, string) (tools.ToolContext, error)
+
+// bindInput carries reviewed shared-temp read access into both binding and stream open.
+func (p *Publication) bindInput(ctx context.Context, operator, path string) (projectpaths.BoundPath, tools.ToolContext, error) {
+	tc := p.Tools
+	bound, err := p.Program.Paths.Bind(ctx, path, false)
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" || p.ReviewRead == nil ||
+		!filepath.IsAbs(path) || tc.Source.WorkerBranchRoot != "" {
+		return bound, tc, err
+	}
+	if confine.SharedTempLocation(path) == "" {
+		return bound, tc, err
+	}
+	tc, err = p.ReviewRead(ctx, tc, operator, path)
+	if err != nil {
+		return bound, tc, err
+	}
+	frame, err := p.Program.Paths.Rebind(ctx, tc)
+	if err != nil {
+		return bound, tc, err
+	}
+	bound, err = frame.Bind(ctx, path, false)
+	return bound, tc, err
+}
 
 // bindOutput carries the reviewed location into both the binding and the revision capture.
 func (p *Publication) bindOutput(ctx context.Context, destination commandprogram.OutputDestination) (projectpaths.BoundPath, tools.ToolContext, error) {

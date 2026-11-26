@@ -54,7 +54,7 @@ func ValidateCapabilityContract(tool string, contract toolcontract.Contract, arg
 		if request.LoopbackConnect != nil && !contract.Supports(toolcontract.CapabilityLoopbackConnect) {
 			return unsupported("loopback_connect")
 		}
-		if request.WriteRoot != "" && !contract.Supports(toolcontract.CapabilityWriteRoot) {
+		if len(request.WriteRoots) > 0 && !contract.Supports(toolcontract.CapabilityWriteRoot) {
 			return unsupported("write_root")
 		}
 		if len(request.ReadPaths) > 0 && !contract.Supports(toolcontract.CapabilityReadPath) {

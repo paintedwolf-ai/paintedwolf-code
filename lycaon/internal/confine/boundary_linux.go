@@ -256,6 +256,11 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 		exitHelper(code)
 	}
 	linuxsandbox.HoldSignals()
+	if !plan.Probe && helperPinnedCwdFDArg >= 0 {
+		if err := unix.Fchdir(helperPinnedCwdFDArg); err != nil {
+			return err
+		}
+	}
 	if err := linuxsandbox.Enter(plan); err != nil {
 		return err
 	}
@@ -313,6 +318,8 @@ type planCompiler struct {
 	readOnly    map[string]bool
 	hidden      map[string]bool
 	restored    map[string]bool
+	readRoots   map[string]bool
+	readFiles   map[string]bool
 	view        ViewBoundary
 	loaderFiles map[string][]string
 	readDirs    int64
@@ -325,6 +332,8 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 		readOnly:    map[string]bool{},
 		hidden:      map[string]bool{},
 		restored:    map[string]bool{},
+		readRoots:   map[string]bool{},
+		readFiles:   map[string]bool{},
 		view:        rules.view,
 		loaderFiles: map[string][]string{},
 	}
@@ -342,11 +351,10 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 		}
 	}
 	for p := range pc.readOnly {
-		// A read restoration beneath a placeholder has nothing to cover until it
-		// is mounted, and the helper seals it unless a write grant reaches it.
+		// Restorations beneath a placeholder keep readOnly recorded while dropping direct write grants.
 		if pc.restored[p] && coveredBy(pc.hidden, p) {
 			pc.fs.WriteRoots = slices.DeleteFunc(pc.fs.WriteRoots, func(root string) bool { return root == p })
-			continue
+			pc.fs.WriteFiles = slices.DeleteFunc(pc.fs.WriteFiles, func(file string) bool { return file == p })
 		}
 		pc.fs.ReadOnly = append(pc.fs.ReadOnly, p)
 	}
@@ -359,6 +367,26 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 	for p := range pc.restored {
 		if coveredBy(pc.hidden, p) || coveredBy(pc.readOnly, p) {
 			pc.fs.Restored = append(pc.fs.Restored, p)
+		}
+	}
+	for p := range pc.readRoots {
+		if rules.Verdict(AccessRead, p).Allowed {
+			pc.fs.ReadRoots = append(pc.fs.ReadRoots, p)
+		}
+	}
+	for p := range pc.readFiles {
+		if rules.Verdict(AccessRead, p).Allowed {
+			pc.fs.ReadFiles = append(pc.fs.ReadFiles, p)
+		}
+	}
+	for _, p := range pc.fs.WriteRoots {
+		if !rules.Verdict(AccessRead, p).Allowed {
+			pc.fs.WriteOnlyRoots = append(pc.fs.WriteOnlyRoots, p)
+		}
+	}
+	for _, p := range pc.fs.WriteFiles {
+		if !rules.Verdict(AccessRead, p).Allowed {
+			pc.fs.WriteOnlyFiles = append(pc.fs.WriteOnlyFiles, p)
 		}
 	}
 	lastPlanReadDirs.Store(pc.readDirs)
@@ -382,9 +410,31 @@ func (pc *planCompiler) readRule(rule fsRule) {
 		if !rule.allow {
 			pc.hidden[path] = true
 			delete(pc.restored, path)
+			delete(pc.readRoots, path)
+			delete(pc.readFiles, path)
+			if m.subpath != "" {
+				for r := range pc.readRoots {
+					if PathAtOrUnder(r, path) {
+						delete(pc.readRoots, r)
+					}
+				}
+				for f := range pc.readFiles {
+					if PathAtOrUnder(f, path) {
+						delete(pc.readFiles, f)
+					}
+				}
+			}
 			continue
 		}
+		wasHidden := coveredBy(pc.hidden, path)
 		lift(pc.hidden, path, m.subpath != "")
+		if wasHidden || coveredBy(pc.hidden, path) {
+			if m.subpath != "" {
+				pc.readRoots[path] = true
+			} else {
+				pc.readFiles[path] = true
+			}
+		}
 		if coveredBy(pc.hidden, path) {
 			pc.restored[path] = true
 		}

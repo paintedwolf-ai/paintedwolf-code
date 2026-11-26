@@ -47,7 +47,11 @@ func TestFailureDigestSurvivesTheCommandResultWindow(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := programtest.New(t, programtest.Options{})
-			f.Configure = func(tc2 *tools.ToolContext) { tc2.Host.ModelContextWindow = tc.contextTokens }
+			scriptsRoot := filepath.Join(contractcheck.RepoRoot(t), "scripts")
+			f.Configure = func(tc2 *tools.ToolContext) {
+				tc2.Host.ModelContextWindow = tc.contextTokens
+				tc2.Files.ReadRoots = []string{scriptsRoot}
+			}
 			source := "external -- " + python + " -B " + script + " " + f.Dir
 			out, err := f.Call(t, t.Context(), source)
 			contractcheck.FailErr(t, "run failing verification", err)

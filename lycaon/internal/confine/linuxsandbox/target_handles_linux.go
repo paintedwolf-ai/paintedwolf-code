@@ -16,8 +16,8 @@ import (
 const maxCachedTargets = 256
 
 // processHandles retains one process's pidfd and address space across notified
-// calls. The pidfd binds process identity; exec empties the retained address space,
-// so an empty memory read reopens it.
+// calls. The pidfd binds process identity; non-dumpable processes leave mem nil
+// until a readable address space opens.
 type processHandles struct {
 	pidfd int
 	mu    sync.Mutex
@@ -58,7 +58,7 @@ func (c *targetHandles) acquire(tgid int) (*processHandles, error) {
 		return nil, err
 	}
 	mem, err := os.Open("/proc/" + strconv.Itoa(tgid) + "/mem")
-	if err != nil {
+	if err != nil && !isNonDumpableOpen(err) {
 		_ = unix.Close(pidfd)
 		return nil, err
 	}
@@ -110,23 +110,40 @@ func (h *processHandles) closeLocked() {
 }
 
 // readAt reads the process's memory, reopening it once if the cached handle
-// names an address space the process left by exec.
+// names an address space the process left by exec or was not yet readable.
 func (h *processHandles) readAt(tgid int, buf []byte, addr int64) (int, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	n, err := h.mem.ReadAt(buf, addr)
-	if n > 0 || (err != nil && !isStaleAddressSpaceRead(err)) {
-		return n, err
+	var n int
+	var err error
+	if h.mem != nil {
+		n, err = h.mem.ReadAt(buf, addr)
+		if n > 0 || (err != nil && !isStaleAddressSpaceRead(err)) {
+			return n, err
+		}
 	}
 	fresh, openErr := os.Open("/proc/" + strconv.Itoa(tgid) + "/mem")
 	if openErr != nil {
+		if h.mem != nil {
+			_ = h.mem.Close()
+			h.mem = nil
+		}
+		if isNonDumpableOpen(openErr) || err == nil {
+			return 0, openErr
+		}
 		return n, err
 	}
-	_ = h.mem.Close()
+	if h.mem != nil {
+		_ = h.mem.Close()
+	}
 	h.mem = fresh
 	return h.mem.ReadAt(buf, addr)
 }
 
 func isStaleAddressSpaceRead(err error) bool {
 	return errors.Is(err, io.EOF) || errors.Is(err, unix.EIO)
+}
+
+func isNonDumpableOpen(err error) bool {
+	return errors.Is(err, unix.EACCES) || errors.Is(err, unix.EPERM)
 }

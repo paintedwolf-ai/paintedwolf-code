@@ -18,6 +18,29 @@ func (g *RuleApprovalGate) declaredFileTarget(cfg ApprovalConfig, action hitl.Pr
 	if len(targets) == 0 {
 		return nil
 	}
+	pool := g.uncoveredDeclaredTargetsFrom(cfg, action, targets)
+	if len(pool) == 0 {
+		pool = targets
+	}
+	worst := worstFileTarget(pool)
+	if len(targets) == 1 {
+		return worst
+	}
+	// Copy the target before adding batch display metadata.
+	withCount := *worst
+	withCount.OtherTargetCount = len(targets) - 1
+	return &withCount
+}
+
+func (g *RuleApprovalGate) uncoveredDeclaredFileTargets(cfg ApprovalConfig, action hitl.ProposedAction) []*gate.FileTarget {
+	targets := g.declaredFileTargets(action)
+	if len(targets) == 0 {
+		return nil
+	}
+	return g.uncoveredDeclaredTargetsFrom(cfg, action, targets)
+}
+
+func (g *RuleApprovalGate) uncoveredDeclaredTargetsFrom(cfg ApprovalConfig, action hitl.ProposedAction, targets []*gate.FileTarget) []*gate.FileTarget {
 	// Strict reviews the write itself, so scratch authority stands for reads only.
 	if cfg.Posture.ReviewsConfinedWrites() {
 		for _, target := range targets {
@@ -32,17 +55,7 @@ func (g *RuleApprovalGate) declaredFileTarget(cfg ApprovalConfig, action hitl.Pr
 			pool = append(pool, target)
 		}
 	}
-	if len(pool) == 0 {
-		pool = targets
-	}
-	worst := worstFileTarget(pool)
-	if len(targets) == 1 {
-		return worst
-	}
-	// Copy the target before adding batch display metadata.
-	withCount := *worst
-	withCount.OtherTargetCount = len(targets) - 1
-	return &withCount
+	return pool
 }
 
 // worstFileTarget picks the highest-risk crossing among candidates.
@@ -83,10 +96,54 @@ func declaredFileWrites(action hitl.ProposedAction) (write, declared bool) {
 	return IsPathMutatingTool(action.Invocation.Tool), true
 }
 
+// effectivePathTargets preserves per-operand read/write direction for tools
+// that read a source and write a destination in one call.
+func effectivePathTargets(action hitl.ProposedAction) []hitl.NativePathTarget {
+	if action.Invocation.NativePathTargets != nil {
+		return action.Invocation.NativePathTargets
+	}
+	if action.Invocation.Args == nil {
+		return nil
+	}
+	switch action.Invocation.Tool {
+	case "copy":
+		items, ok := action.Invocation.Args["copies"].([]any)
+		if !ok {
+			return nil
+		}
+		var out []hitl.NativePathTarget
+		for _, item := range items {
+			pair, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if from, ok := pair["from"].(string); ok && from != "" {
+				out = append(out, hitl.NativePathTarget{Path: from, Write: false})
+			}
+			if to, ok := pair["to"].(string); ok && to != "" {
+				out = append(out, hitl.NativePathTarget{Path: to, Write: true})
+			}
+		}
+		return out
+	case "extract_archive":
+		var out []hitl.NativePathTarget
+		if p, ok := action.Invocation.Args["path"].(string); ok && p != "" {
+			out = append(out, hitl.NativePathTarget{Path: p, Write: false})
+		}
+		if dest, ok := action.Invocation.Args["dest"].(string); ok && dest != "" {
+			out = append(out, hitl.NativePathTarget{Path: dest, Write: true})
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
 // declaredFileTargets returns every declared path crossing.
 func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*gate.FileTarget {
 	write, declared := declaredFileWrites(action)
-	if action.Invocation.NativePathTargets != nil {
+	explicitTargets := effectivePathTargets(action)
+	if explicitTargets != nil {
 		declared = true
 	}
 	if !declared {
@@ -95,9 +152,9 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 	var targets []*gate.FileTarget
 	roots := workspaceRoots(action)
 	paths := action.Invocation.Files
-	if action.Invocation.NativePathTargets != nil {
-		paths = make([]string, len(action.Invocation.NativePathTargets))
-		for i, target := range action.Invocation.NativePathTargets {
+	if explicitTargets != nil {
+		paths = make([]string, len(explicitTargets))
+		for i, target := range explicitTargets {
 			paths[i] = target.Path
 		}
 	}
@@ -110,8 +167,8 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 		mode := gate.ModeRead
 		catalogMode := sensitivepath.ModeRead
 		pathWrite := write
-		if action.Invocation.NativePathTargets != nil {
-			pathWrite = action.Invocation.NativePathTargets[i].Write
+		if explicitTargets != nil {
+			pathWrite = explicitTargets[i].Write
 		}
 		if pathWrite {
 			mode, catalogMode = gate.ModeWrite, sensitivepath.ModeWrite
@@ -163,22 +220,27 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 }
 
 func pathWithinFileAuthority(action hitl.ProposedAction, roots []string, path string, write bool) bool {
-	c := action.Execution.Contained
-	if !write && confine.PathWithinRoots(path, c.ReadRoots) {
-		return true
+	if !write {
+		c := action.Execution.Contained
+		root, err := confine.NativeReadRootForPath(
+			action.Scope.ProjectID, roots, c.ReadRoots,
+			action.Scope.SessionReadPaths, action.Scope.GrantedWriteRoots,
+			action.Scope.SessionScratchRoot, action.Scope.SessionOutputRoot, path,
+		)
+		return err == nil && root != ""
 	}
-	root, err := confine.NativeFilesystemRootForPath(action.Scope.ProjectID, roots, action.Scope.GrantedWriteRoots, action.Scope.SessionScratchRoot, path, write)
+	root, err := confine.NativeFilesystemRootForPath(action.Scope.ProjectID, roots, action.Scope.GrantedWriteRoots, action.Scope.SessionScratchRoot, path, true)
 	return err == nil && root != ""
 }
 
 // Shared machine temp keeps its approval floor when discretionary prompts are disabled.
-func (g *RuleApprovalGate) sharedTempWriteNeedsReview(action hitl.ProposedAction, grants []ApprovalGrant) bool {
+func (g *RuleApprovalGate) sharedTempNeedsReview(action hitl.ProposedAction, grants []ApprovalGrant) bool {
 	for _, target := range g.declaredFileTargets(action) {
 		path := target.ResolvedPath
 		if path == "" {
 			path = target.Path
 		}
-		if target.Mode == gate.ModeWrite && target.OutsideRoots && !target.WithinConfinement &&
+		if target.OutsideRoots && !target.WithinConfinement &&
 			confine.SharedTempLocation(path) != "" && !currentActionCoversTarget(action, target) &&
 			!grantedPathCoversTarget(g, grants, action, target) {
 			return true

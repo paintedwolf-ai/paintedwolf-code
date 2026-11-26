@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/sandboxmark"
@@ -70,11 +71,13 @@ func startReaperLocked(name string, args ...string) error {
 	}
 	cmd := exec.CommandContext(context.Background(), name, args...) //nolint:gosec // G204 — the engine's own executable; the reaper outlives every request
 	cmd.Stdin = read
-	// The companion outlives the engine, so it takes along only the temp root its
-	// directory entries must lie in.
+	// The companion outlives the engine, so it carries only the root-selection
+	// variables its directory entries must lie under.
 	cmd.Env = []string{}
-	if tmp, ok := os.LookupEnv("TMPDIR"); ok {
-		cmd.Env = append(cmd.Env, "TMPDIR="+tmp)
+	for _, key := range []string{"TMPDIR", "HOME", configdir.EnvConfigDir, configdir.EnvDev} {
+		if val, ok := os.LookupEnv(key); ok {
+			cmd.Env = append(cmd.Env, key+"="+val)
+		}
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {

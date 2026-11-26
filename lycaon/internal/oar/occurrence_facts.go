@@ -19,6 +19,9 @@ func buildOccurrenceFactDecls() []factDecl {
 
 var staticOccurrenceFactDecls = []factDecl{
 	{"refused_shared_temp", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_reads", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_writes", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_job_handle", oarcore.TypeString, FactTierHost, ""},
 	{"shared_temp_allowed", oarcore.TypeListString, FactTierHost, ""},
 	{"shared_temp_declined", oarcore.TypeListString, FactTierHost, ""},
 	{"shared_temp_unanswered", oarcore.TypeListString, FactTierHost, ""},

@@ -18,6 +18,9 @@ import (
 
 // GrantedPathOffers builds the reuse ladder for a filesystem crossing.
 func GrantedPathOffers(action hitl.ProposedAction, target gate.FileTarget, decision *gate.Decision, locations *sensitivepath.Catalog) []hitl.ApprovalGrantOffer {
+	if isSharedTempCrossing(target) {
+		return sharedTempGrantedPathOffers(action, target, decision)
+	}
 	var offers []hitl.ApprovalGrantOffer
 	for _, access := range grantedPathCandidates(target, locations) {
 		offers = append(offers, grantedPathOffersForAccess(action, target, decision, access)...)
@@ -182,6 +185,12 @@ func probeTargetFolder(path string) (folder string, exists, isDir bool) {
 }
 
 func grantedPathCoverage(access hitl.GrantedPathDelta) string {
+	if access.Write && access.WriteOnly {
+		if access.Tree {
+			return "writing files in `" + access.Path + "` (without reading or listing)"
+		}
+		return "writing `" + access.Path + "` (without reading or listing)"
+	}
 	if access.Write {
 		return hitl.CoverageWritesTo(access.Path)
 	}
@@ -196,7 +205,9 @@ func grantedPathGrantID(
 	scope hitl.ApprovalGrantScope, rung hitl.ApprovalOptionRung,
 ) string {
 	mode := "read"
-	if access.Write {
+	if access.Write && access.WriteOnly {
+		mode = "write_only"
+	} else if access.Write {
 		mode = "write"
 	}
 	shape := "exact"

@@ -92,7 +92,7 @@ func (d *ProgramDispatcher) InvokeEvaluator(ctx context.Context, request command
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
-	return d.invokeHost(ctx, request, streams, false, func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	return d.invokeHost(ctx, request, streams, false, nil, func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		return body(ctx, streams)
 	})
 }
@@ -108,8 +108,13 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 	if prepared.Mode != "" {
 		request.EffectMode = prepared.Mode
 	}
-	return d.invokeHost(ctx, request, streams, prepared.LaunchesConfined, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
+	prepared.Review.PathTargets = absolutePathTargets(d.paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, prepared.Review.PathTargets)
+	return d.invokeHost(ctx, request, streams, prepared.LaunchesConfined, &prepared.Review, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		frame, err := d.paths.Rebind(ctx, tc)
+		if err != nil {
+			return ownerFailure(err), err
+		}
+		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, frame.Cwd(), prepared.Review); err != nil {
 			return ownerFailure(err), err
 		}
 		return d.run.invokeWithFileCustody(ctx, spec.Name, prepared.Review.PathTargets, func() (toolcontract.ProducerResult, error) {
@@ -121,7 +126,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 	})
 }
 
-func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, launches bool, body func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, launches bool, review *commandprogram.ArgvReview, body func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
 	spec, ok := d.run.commands[request.OperationID]
 	if !ok {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("evaluator operation is not catalogued")
@@ -137,7 +142,14 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 		return ownerFailure(err), err
 	}
 	arguments := map[string]any{"argv": request.Argv.Values(), "source_unit_id": request.Invocation.SourceUnitID, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte}
-	if launches {
+	if review != nil {
+		normalized := *review
+		normalized.OperationID = definition.ReadOnlyFacts().Identity
+		normalized.PathTargets = absolutePathTargets(d.paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, normalized.PathTargets)
+		review = &normalized
+		maps.Copy(arguments, review.Arguments())
+	}
+	if launches || review != nil {
 		arguments = d.run.nativeArguments(arguments, definition.ReadOnlyFacts().Contract, nil)
 	}
 	child, err := d.prepareInvocation(ctx, definition, request.Invocation, spec.Name, arguments, nil)
@@ -148,7 +160,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker
-	effect := toolexecution.NativeEffect{Operation: bound, Arguments: arguments, Streams: runStreams, Inspection: d.run.capture, CheckOutputs: request.CheckOutputAdmission, Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: request.Argv.Values()}, PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+	effect := toolexecution.NativeEffect{Operation: bound, Arguments: arguments, Argv: review, Streams: runStreams, Inspection: d.run.capture, CheckOutputs: request.CheckOutputAdmission, Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: request.Argv.Values()}, PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 		return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				streams.Error = markingWriter{w: nonNilWriter(streams.Error), tracker: tracker}

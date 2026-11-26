@@ -330,6 +330,30 @@ func assertCopyWritePath(
 	})
 }
 
+func assertCopyReadPath(
+	ctx context.Context,
+	boundary *sandbox.Boundary,
+	tctx tools.ToolContext,
+	relPath, profileID string,
+) (projectpaths.Resolved, error) {
+	deny := func(path string) error {
+		return &toolrejection.ToolReject{Code: "COPY_PATH_DENIED", Data: map[string]any{"path": path}}
+	}
+	if sandbox.HasParentTraversal(relPath) {
+		return projectpaths.Resolved{}, deny(filepath.ToSlash(relPath))
+	}
+	relSlash := filepath.ToSlash(relPath)
+	resolved, err := projectpaths.ResolveCopySource(ctx, boundary, tctx, relPath)
+	if err != nil {
+		var reject *toolrejection.ToolReject
+		if errors.As(err, &reject) && reject.Code == "SURVEY_PATH_ESCAPE" {
+			return projectpaths.Resolved{}, deny(relSlash)
+		}
+		return projectpaths.Resolved{}, writePathReject(ctx, boundary, relSlash, profileID, "copy", err, deny)
+	}
+	return resolved, nil
+}
+
 func assertMoveWritePath(
 	ctx context.Context,
 	boundary *sandbox.Boundary,
@@ -392,18 +416,33 @@ func assertMutationFileSource(
 				Data: map[string]any{"path": filepath.ToSlash(relPath)},
 			}
 		}
-		if err := boundary.AssertWriteScope(ctx, resolved.Root.Path, resolvedRel, profileID); err != nil {
-			if reject := writeScopeReject(ctx, boundary, resolvedRel, profileID, tool, err); !errors.Is(reject, err) {
-				return projectpaths.Resolved{}, reject
+		if boundary != nil {
+			var scopeErr error
+			if tool == "copy" {
+				scopeErr = boundary.AssertReadScope(ctx, resolved.Root.Path, resolvedRel, profileID)
+			} else {
+				scopeErr = boundary.AssertWriteScope(ctx, resolved.Root.Path, resolvedRel, profileID)
 			}
-			return projectpaths.Resolved{}, &toolrejection.ToolReject{
-				Code: symlinkEscapeCode,
-				Data: map[string]any{"path": filepath.ToSlash(relPath), "symlink_target": resolvedRel},
+			if scopeErr != nil {
+				if tool != "copy" {
+					if reject := writeScopeReject(ctx, boundary, resolvedRel, profileID, tool, scopeErr); !errors.Is(reject, scopeErr) {
+						return projectpaths.Resolved{}, reject
+					}
+				}
+				return projectpaths.Resolved{}, &toolrejection.ToolReject{
+					Code: symlinkEscapeCode,
+					Data: map[string]any{"path": filepath.ToSlash(relPath), "symlink_target": resolvedRel},
+				}
 			}
 		}
-		fullPath, err := boundary.ResolveAbs(resolved.Root.Path, resolvedRel)
-		if err != nil {
-			return projectpaths.Resolved{}, err
+		var fullPath string
+		if boundary != nil {
+			fullPath, err = boundary.ResolveAbs(resolved.Root.Path, resolvedRel)
+			if err != nil {
+				return projectpaths.Resolved{}, err
+			}
+		} else {
+			fullPath = filepath.Join(resolved.Root.Path, filepath.FromSlash(resolvedRel))
 		}
 		resolved.Abs = fullPath
 		resolved.ScopeRel = resolvedRel

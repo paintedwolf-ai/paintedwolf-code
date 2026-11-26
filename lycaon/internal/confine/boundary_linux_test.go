@@ -44,6 +44,7 @@ func TestCompileFilesystemPlanMasksDenialsInsideGrants(t *testing.T) {
 	fs, err := compileFilesystemPlan(rules)
 	testutil.FailErr(t, "compile", err)
 	want := linuxsandbox.Filesystem{
+		ReadRoots:  []string{ws},
 		WriteRoots: []string{proj, ws},
 		ReadOnly:   []string{ro},
 		Hidden:     []string{cfg},
@@ -448,7 +449,7 @@ func UseDelegatedEndpointsForTest(t *testing.T, endpoints []linuxsandbox.Delegat
 }
 
 func TestLinuxCredentialStorePlanAdmitsDBusSocketAndKeyringsReadOnly(t *testing.T) {
-	home := fspath.CanonicalPath(t.TempDir())
+	home := fspath.CanonicalPath(privateCacheFixture(t))
 	t.Setenv("HOME", home)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
 
@@ -522,7 +523,7 @@ func TestLinuxPlanRefusesADeniedLoopbackPort(t *testing.T) {
 }
 
 func TestLinuxPlanHidesViewStorage(t *testing.T) {
-	root, storage := t.TempDir(), t.TempDir()
+	root, storage := t.TempDir(), privateCacheFixture(t)
 	rules, err := filesystemRules(Confinement{Roots: []string{root}, View: ViewBoundary{DeniedPaths: []string{storage}}})
 	testutil.FailErr(t, "filesystemRules failed", err)
 	plan, err := compileFilesystemPlan(rules)

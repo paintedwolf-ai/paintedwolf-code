@@ -162,7 +162,7 @@ func (op *CopyOperation) CopyPair(ctx context.Context, pair FilePair, tctx tools
 	}
 	in, t := op.input, op.tool
 	if in.Recursive {
-		source, err := assertCopyWritePath(ctx, t.Boundary, tctx, pair.From, tctx.ProfileID())
+		source, err := assertCopyReadPath(ctx, t.Boundary, tctx, pair.From, tctx.ProfileID())
 		if err != nil {
 			return result, err
 		}
@@ -191,7 +191,7 @@ func (op *CopyOperation) copyFile(ctx context.Context, tctx tools.ToolContext, p
 	prof := tctx.ProfileID()
 	fromSlash, toSlash := filepath.ToSlash(pair.From), filepath.ToSlash(pair.To)
 	srcResolved, err := assertMutationFileSource(ctx, t.Boundary, tctx, pair.From, prof, "copy",
-		"COPY_NOT_FOUND", "COPY_IS_DIRECTORY", "COPY_SYMLINK_ESCAPE", assertCopyWritePath)
+		"COPY_NOT_FOUND", "COPY_IS_DIRECTORY", "COPY_SYMLINK_ESCAPE", assertCopyReadPath)
 	if err != nil {
 		return err
 	}

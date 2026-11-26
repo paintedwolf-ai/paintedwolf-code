@@ -4,6 +4,7 @@ package linuxsandbox
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -154,5 +155,66 @@ func verifySharedTempRefusals(t *testing.T, fs Filesystem) {
 	data, err := os.ReadFile(existing)
 	if err != nil || string(data) != "original" {
 		t.Fatalf("shared file after refusal: %q, %v", data, err)
+	}
+}
+
+func TestConcealedWorkingDirectoryDetachesFromHostObject(t *testing.T) {
+	if raw := os.Getenv("PW_CONCEALED_CWD_PLAN"); raw != "" {
+		runtime.LockOSThread()
+		var fs Filesystem
+		if err := json.Unmarshal([]byte(raw), &fs); err != nil {
+			t.Fatal("decode mount fixture:", err)
+		}
+		if err := makeRootPrivate(); err != nil {
+			t.Fatal("isolate mount fixture:", err)
+		}
+		if err := applyFilesystem(fs); err != nil {
+			t.Fatal("apply mount fixture:", err)
+		}
+		entries, err := os.ReadDir(".")
+		if err != nil || len(entries) != 0 {
+			t.Fatalf("concealed working directory entries = %v, err = %v; want empty placeholder", entries, err)
+		}
+		if err := os.WriteFile("probe", []byte("x"), 0o600); !errors.Is(err, unix.EROFS) {
+			t.Fatalf("write in concealed working directory = %v, want EROFS", err)
+		}
+		return
+	}
+	base := t.TempDir()
+	hiddenRoot := filepath.Join(base, "hidden")
+	subDir := filepath.Join(hiddenRoot, "nested", "work")
+	testutil.FailErr(t, "create concealed working directory", os.MkdirAll(subDir, 0o700))
+	testutil.FailErr(t, "seed host secret in cwd", os.WriteFile(filepath.Join(subDir, "secret.txt"), []byte("host-secret"), 0o600))
+	fs := Filesystem{Hidden: []string{hiddenRoot}}
+	args := []string{"-test.run=^TestConcealedWorkingDirectoryDetachesFromHostObject$"}
+	coverDir := os.Getenv("PW_GO_CHILD_COVERDIR")
+	if coverDir == "" {
+		coverDir = os.Getenv("GOCOVERDIR")
+	}
+	if coverDir != "" {
+		fs.WriteRoots = append(fs.WriteRoots, coverDir)
+		args = append(args, "-test.gocoverdir="+coverDir)
+	}
+	raw, err := json.Marshal(fs)
+	testutil.FailErr(t, "encode mount fixture", err)
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate mount fixture binary", err)
+	for _, dir := range []string{hiddenRoot, subDir} {
+		cmd := exec.Command(self, args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "PW_CONCEALED_CWD_PLAN="+string(raw))
+		if coverDir != "" {
+			cmd.Env = append(cmd.Env, "GOCOVERDIR="+coverDir)
+		}
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
+			UidMappings:                []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}},
+			GidMappings:                []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}},
+			GidMappingsEnableSetgroups: false,
+			AmbientCaps:                []uintptr{unix.CAP_SYS_ADMIN},
+		}
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("concealed cwd %s failed: %v\n%s", dir, err, out)
+		}
 	}
 }

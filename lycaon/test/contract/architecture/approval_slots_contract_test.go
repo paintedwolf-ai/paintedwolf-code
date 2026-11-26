@@ -31,7 +31,7 @@ func TestEveryGateOffersTheFixedSlots(t *testing.T) {
 			Scope: hitl.ActionScope{
 				SessionID:  "sess-slots",
 				ProjectID:  "proj-slots",
-				ProjectDir: "/tmp/proj",
+				ProjectDir: "/opt/proj",
 			},
 		}
 		decision := &gate.Decision{Primary: g, Posture: gate.PostureBalanced}
@@ -40,22 +40,22 @@ func TestEveryGateOffersTheFixedSlots(t *testing.T) {
 		case g == api.GateAgentPolicyChange:
 			policyAction := action
 			policyAction.Invocation.Tool = "write"
-			policyAction.Mutations.AgentPolicy = []hitl.AgentPolicyTarget{{Path: "/tmp/proj/AGENTS.md", Surface: "agents_md"}}
+			policyAction.Mutations.AgentPolicy = []hitl.AgentPolicyTarget{{Path: "/opt/proj/AGENTS.md", Surface: "agents_md"}}
 			offers = approvals.GrantOffers(policyAction, &hitl.ApprovalResult{Decision: decision})
 		case gate.IsFilesystem(g):
 			pathAction := hitl.ProposedAction{
 				Invocation: hitl.ActionInvocation{
 					Tool:  "write",
-					Files: []string{"/tmp/other/a.txt"},
+					Files: []string{"/opt/other/a.txt"},
 				},
 				Scope: hitl.ActionScope{
 					SessionID:  "sess-slots",
 					ProjectID:  "proj-slots",
-					ProjectDir: "/tmp/proj",
+					ProjectDir: "/opt/proj",
 				},
 			}
 			offers = settings.GrantedPathOffers(pathAction, gate.FileTarget{
-				Path: "/tmp/other/a.txt", Mode: gate.ModeWrite, OutsideRoots: true,
+				Path: "/opt/other/a.txt", Mode: gate.ModeWrite, OutsideRoots: true,
 			}, decision, nil)
 		default:
 			offers = approvals.GrantOffers(action, &hitl.ApprovalResult{Decision: decision})
@@ -92,6 +92,26 @@ func TestEveryGateOffersTheFixedSlots(t *testing.T) {
 		}
 		if !durable.Disabled && reuse.Scope == gate.ScopeChat {
 			t.Errorf("%s: chat-ceiling gate offered a selectable durable rung", g)
+		}
+	}
+}
+
+func TestSharedTempCrossingsOfferChatScopeOnly(t *testing.T) {
+	t.Parallel()
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "write", Files: []string{"/tmp/other/a.txt"}},
+		Scope:      hitl.ActionScope{SessionID: "sess-temp-slots", ProjectID: "proj-slots", ProjectDir: "/opt/proj"},
+	}
+	decision := &gate.Decision{Primary: api.GateOutsideRootsWrite, Posture: gate.PostureBalanced}
+	offers := settings.GrantedPathOffers(action, gate.FileTarget{
+		Path: "/tmp/other/a.txt", Mode: gate.ModeWrite, OutsideRoots: true,
+	}, decision, nil)
+	if len(offers) == 0 {
+		t.Fatal("shared-temp crossing offered no chat reuse option")
+	}
+	for _, offer := range offers {
+		if offer.Scope != hitl.ApprovalGrantScopeChat || offer.Rung != hitl.ApprovalRungChat || offer.TTLSeconds != 0 || offer.Grant.ExpiresAt != nil {
+			t.Fatalf("shared-temp offer exceeded chat scope: %+v", offer)
 		}
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -33,7 +34,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	if reject != nil {
 		return ctx, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
-	if request == nil || (len(request.ReadPaths) < 2 && !multipleCapabilityFamilies(request)) {
+	if request == nil || (len(request.ReadPaths) < 2 && len(request.WriteRoots) < 2 && !multipleCapabilityFamilies(request)) {
 		return ctx, nil
 	}
 	permission, err := e.Secrets.prepareSecretPermission(ctx, tool, args, tc)
@@ -61,6 +62,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 			SessionID:         tc.Identity.SessionID,
 			RootSessionID:     tc.ChatSessionID(),
 			GrantedWriteRoots: append([]string(nil), confReq.GrantedWriteRoots...),
+			SessionReadPaths:  protectedReadGrantPaths(confReq.ProtectedReadGrants),
 		},
 		Execution: hitl.ActionExecution{
 			Contained: hitl.ContainedForRequest(confReq),
@@ -119,12 +121,18 @@ func capabilityReviewDenialCodeAndPath(plan *hitl.ApprovalPlan) (string, string)
 	if plan == nil {
 		return isolation.CodeApprovalUnavailable, ""
 	}
+	targetPath := func(target hitl.ApprovalTarget) string {
+		if blocked, ok := target.Details["blocked_path"].(string); ok && strings.TrimSpace(blocked) != "" {
+			return strings.TrimSpace(blocked)
+		}
+		return strings.TrimSpace(target.Label)
+	}
 	for _, target := range plan.Subject.Targets {
 		switch target.Kind {
 		case "write_root", "credential_file", "key_material", "shared_temp":
-			return isolation.CodeWriteRootDenied, strings.TrimSpace(target.Label)
+			return isolation.CodeWriteRootDenied, targetPath(target)
 		case "read_path":
-			return isolation.CodeReadPathDenied, strings.TrimSpace(target.Label)
+			return isolation.CodeReadPathDenied, targetPath(target)
 		case "socket":
 			return isolation.CodeSocketPathDenied, strings.TrimSpace(target.Label)
 		case "process_control", "credential_store", "host_execution":
@@ -144,7 +152,7 @@ func multipleCapabilityFamilies(request *capabilityrequest.CapabilityRequest) bo
 	}
 	count := 0
 	for _, present := range []bool{
-		request.WriteRoot != "", len(request.ReadPaths) > 0, len(request.SocketPaths) > 0,
+		len(request.WriteRoots) > 0, len(request.ReadPaths) > 0, len(request.SocketPaths) > 0,
 		request.ProcessControl || request.HostExecution, request.CredentialStore, request.DirectIP != nil, request.LocalListen != nil || request.LoopbackConnect != nil,
 	} {
 		if present {
@@ -164,15 +172,29 @@ func (e *Executor) prepareInvocationCapabilities(ctx context.Context, tool strin
 		}
 		return err
 	}
-	if err := collect(e.Boundary.preflightWriteRoot(ctx, tool, args, &tc)); err != nil {
-		return nil, err
-	}
-	// Predicted roots belong only to review preparation.
-	if request.WriteRoot != "" && len(reviews) > 0 {
-		ctx = context.WithValue(ctx, capabilityReviewRootsKey{}, []string{request.WriteRoot})
+	if tc.Invocation.Contract.Supports(toolcontract.CapabilityWriteRoot) && len(request.WriteRoots) > 0 {
+		roots := coalesceRequestedPaths(request.WriteRoots, true)
+		for _, root := range roots {
+			if _, policy := confine.AgentPolicyPath(root, tools.ConfineRootsForAction(tc)...); policy {
+				if tc.Invocation.Contract.Owner == "terminals" {
+					return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{Code: "POLICY_WRITE_REQUIRES_COMMAND", Data: map[string]any{"path": root}})
+				}
+				if err := collect(e.Boundary.preparePolicyWrite(&tc, root)); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			if err := collect(e.Boundary.reviewWriteRoot(ctx, tool, args, tc, root)); err != nil {
+				return nil, err
+			}
+		}
+		if len(reviews) > 0 {
+			ctx = context.WithValue(ctx, capabilityReviewRootsKey{}, roots)
+		}
 	}
 	if tc.Invocation.Contract.Supports(toolcontract.CapabilityReadPath) {
-		for _, path := range request.ReadPaths {
+		readPaths := coalesceRequestedPaths(request.ReadPaths, false)
+		for _, path := range readPaths {
 			if err := collect(e.Boundary.authorizeReadPath(ctx, tool, args, &tc, path)); err != nil {
 				return nil, err
 			}

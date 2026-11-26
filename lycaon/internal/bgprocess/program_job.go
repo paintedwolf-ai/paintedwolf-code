@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 )
 
@@ -41,6 +42,7 @@ type ProgramStop struct {
 type ProgramJobResult struct {
 	ExitCode    int
 	ProgramStop ProgramStop
+	Observation confine.Observation
 	FinishedAt  time.Time
 	// PersonWait includes any waits before the registry took over the job.
 	PersonWait     *time.Duration
@@ -113,6 +115,7 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		proc.running, proc.hasExit, proc.exitCode = false, true, exitCode
 		proc.programStopCode = settled.ProgramStop.Code
 		proc.resources.programStop = settled.ProgramStop
+		proc.resources.programObservation = settled.Observation
 		proc.resources.releaseNotices = settled.ReleaseNotices
 		proc.Stages[0].ExitCode, proc.Stages[0].Failed = &exitCode, exitCode != 0
 		proc.failure = hostcmd.ExecFailureOf(err)

@@ -81,7 +81,7 @@ func TestOpenGrepEmbeddedSourceRecovery(t *testing.T) {
 	for _, warning := range result.Warnings {
 		name := filepath.Base(warning.File)
 		warnings[name]++
-		if _, exists := sources[name]; !exists || strings.Contains(warning.Message, "paintedwolf-opengrep-") || strings.Contains(warning.Message, ".script-") {
+		if _, exists := sources[name]; !exists || strings.Contains(warning.Message, "action-work") || strings.Contains(warning.Message, ".script-") {
 			t.Errorf("unmapped warning=%+v", warning)
 		}
 		if name == "syntax.html" && (warning.StartLine != 3 || warning.StartColumn != 1) {

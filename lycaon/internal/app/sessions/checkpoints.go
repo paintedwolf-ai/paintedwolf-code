@@ -12,11 +12,13 @@ import (
 	"github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/approvals"
 	"github.com/lycaon/lycaon/internal/authzledger"
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/grantedpath"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -28,6 +30,8 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolhost"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -125,6 +129,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		Store:             deps.Sessions.Sessions,
 		Runtime:           writeRootRT,
 		ReadRuntime:       readPathRT,
+		GrantedPaths:      r.GrantedPath,
 		Consequence:       deriver,
 		Authority:         deps.Execution.Host.Authority.ApprovalGate(),
 		ApprovalsDisabled: deps.Execution.Host.Authority.ApprovalsDisabled,
@@ -134,7 +139,27 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		Authz:             authzRec,
 	}
 	deps.Execution.Host.Commands.SetSandboxWriteRootGate(writeBroker)
+	if r.Manager.Processes != nil {
+		r.Manager.Processes.SharedTemp = func(ctx context.Context, sess *api.Session, completion bgprocess.Completion, observed confine.SharedTempObservation, failed bool) guidance.SharedTempSettlement {
+			var cmdLine string
+			if len(completion.Stages) > 0 {
+				cmdLine = completion.Stages[0].Command
+			}
+			settled := writeBroker.ReviewSharedTemp(ctx, command.SandboxWriteRootAsk{
+				SessionID:       sess.ID,
+				ParentSessionID: sess.ParentSessionID,
+				ProjectID:       sess.ProjectID,
+				ToolCallID:      completion.ToolCallID,
+				ProjectDir:      completion.Cwd,
+				ToolName:        completion.OriginTool,
+				Command:         cmdLine,
+			}, observed, failed)
+			settled.ScratchAvailable = true
+			return settled
+		}
+	}
 	r.Manager.Profiles.SessionWriteRoots = writeBroker.SessionWriteRoots
+	r.Manager.Profiles.SessionReadPaths = writeBroker.SessionReadPaths
 	deps.Execution.Host.Authority.SetSandboxListenGate(&session.ListenCheckpointBroker{
 		Checkpoints:       r.Checkpoints,
 		Store:             deps.Sessions.Sessions,
@@ -259,7 +284,12 @@ func wireGrantedAccess(r *Runtime, deps CheckpointDependencies) error {
 		}
 		return projectpaths.Access{Path: g.Path, Tree: g.Tree}, true
 	})
-	deps.Resources.Track("granted-access-source", 22, func(context.Context) error { releaseGrantedAccess(); return nil })
+	releaseGrantedConfinement := tools.SetGrantedPathSource(grantedRT.ListEffective)
+	deps.Resources.Track("granted-access-source", 22, func(context.Context) error {
+		releaseGrantedConfinement()
+		releaseGrantedAccess()
+		return nil
+	})
 	if err := r.Manager.Resources.RegisterCleanup("approval-run", 50, func(_ context.Context, sessionID string) error {
 		deps.Execution.Host.Authority.ReleaseSessionRun(sessionID)
 		r.SandboxReadPath.ReleaseRun(sessionID)
@@ -299,7 +329,9 @@ func durableGrantedPaths(leases []hitl.ApprovalGrant, projectID string) []grante
 			continue
 		}
 		mode := grantedpath.ModeRead
-		if lease.GrantedPath.Write {
+		if lease.GrantedPath.Write && lease.GrantedPath.WriteOnly {
+			mode = grantedpath.ModeWriteOnly
+		} else if lease.GrantedPath.Write {
 			mode = grantedpath.ModeWrite
 		}
 		out = append(out, grantedpath.Grant{

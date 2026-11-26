@@ -12,35 +12,37 @@ import (
 
 func TestSeccompProgramAssembles(t *testing.T) {
 	t.Parallel()
-	raw, err := seccompProgram()
-	if err != nil {
-		t.Fatalf("seccompProgram: %v", err)
-	}
-	// Arch check, syscall load, one compare and one return per escape, the
-	// clone3 and clone blocks, and the final allow.
-	if min := 4 + 2*len(escapeSyscalls) + 7; len(raw) < min {
-		t.Fatalf("program has %d instructions, want at least %d", len(raw), min)
-	}
-	insts, allErr := bpf.Disassemble(raw)
-	if !allErr {
-		t.Fatal("program did not disassemble completely")
-	}
-	first, ok := insts[0].(bpf.LoadAbsolute)
-	if !ok || first.Off != seccompDataArch {
-		t.Fatalf("program must start by loading the architecture, got %v", insts[0])
-	}
-	last, ok := insts[len(insts)-1].(bpf.RetConstant)
-	if !ok || last.Val != unix.SECCOMP_RET_ALLOW {
-		t.Fatalf("program must end by allowing, got %v", insts[len(insts)-1])
-	}
-	kills := 0
-	for _, inst := range insts {
-		if ret, ok := inst.(bpf.RetConstant); ok && ret.Val == uint32(unix.SECCOMP_RET_KILL_PROCESS) {
-			kills++
+	for _, observeReads := range []bool{false, true} {
+		raw, err := seccompProgram(observeReads)
+		if err != nil {
+			t.Fatalf("seccompProgram(%t): %v", observeReads, err)
 		}
-	}
-	if kills < len(escapeSyscalls)+2 {
-		t.Fatalf("program kills on %d paths, want at least %d", kills, len(escapeSyscalls)+2)
+		// Arch check, syscall load, one compare and one return per escape, the
+		// clone3 and clone blocks, and the final allow.
+		if min := 4 + 2*len(escapeSyscalls) + 7; len(raw) < min {
+			t.Fatalf("program has %d instructions, want at least %d", len(raw), min)
+		}
+		insts, allErr := bpf.Disassemble(raw)
+		if !allErr {
+			t.Fatal("program did not disassemble completely")
+		}
+		first, ok := insts[0].(bpf.LoadAbsolute)
+		if !ok || first.Off != seccompDataArch {
+			t.Fatalf("program must start by loading the architecture, got %v", insts[0])
+		}
+		last, ok := insts[len(insts)-1].(bpf.RetConstant)
+		if !ok || last.Val != unix.SECCOMP_RET_ALLOW {
+			t.Fatalf("program must end by allowing, got %v", insts[len(insts)-1])
+		}
+		kills := 0
+		for _, inst := range insts {
+			if ret, ok := inst.(bpf.RetConstant); ok && ret.Val == uint32(unix.SECCOMP_RET_KILL_PROCESS) {
+				kills++
+			}
+		}
+		if kills < len(escapeSyscalls)+2 {
+			t.Fatalf("program kills on %d paths, want at least %d", kills, len(escapeSyscalls)+2)
+		}
 	}
 }
 
@@ -82,7 +84,7 @@ func TestHandledAccessesGrowWithTheABI(t *testing.T) {
 // offsets are the kernel's.
 func TestSeccompProgramDecides(t *testing.T) {
 	t.Parallel()
-	raw, err := seccompProgram()
+	raw, err := seccompProgram(false)
 	if err != nil {
 		t.Fatalf("seccompProgram: %v", err)
 	}
@@ -206,5 +208,34 @@ func TestSeccompProgramDecides(t *testing.T) {
 	binary.BigEndian.PutUint32(foreign[seccompDataArch:], nativeAuditArch^1)
 	if got, _ := vm.Run(foreign); got != kill {
 		t.Fatalf("foreign architecture: filter returned %#x, want kill", got)
+	}
+
+	rawObserved, err := seccompProgram(true)
+	if err != nil {
+		t.Fatalf("seccompProgram(true): %v", err)
+	}
+	instsObserved, ok := bpf.Disassemble(rawObserved)
+	if !ok {
+		t.Fatal("observed program did not disassemble completely")
+	}
+	vmObserved, err := bpf.NewVM(instsObserved)
+	if err != nil {
+		t.Fatalf("NewVM(observed): %v", err)
+	}
+	for _, tc := range []struct {
+		name string
+		data []byte
+		want int
+	}{
+		{"observed openat O_RDONLY notifies", argsRecord(unix.SYS_OPENAT, 3, 0, unix.O_RDONLY), notify},
+		{"observed openat O_DIRECTORY notifies", argsRecord(unix.SYS_OPENAT, 3, 0, unix.O_RDONLY|unix.O_DIRECTORY), notify},
+		{"observed openat O_PATH allows", argsRecord(unix.SYS_OPENAT, 3, 0, unix.O_PATH|unix.O_CLOEXEC), allow},
+		{"observed openat O_TMPFILE allows", argsRecord(unix.SYS_OPENAT, 3, 0, unix.O_TMPFILE|unix.O_RDWR), allow},
+		{"observed read fd allows with zero notifications", record(unix.SYS_READ, 3, 0, 0), allow},
+	} {
+		got, err := vmObserved.Run(tc.data)
+		if err != nil || got != tc.want {
+			t.Fatalf("%s: got %#x (%v), want %#x", tc.name, got, err, tc.want)
+		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -64,7 +65,11 @@ func resolveGranted(tctx tools.ToolContext, modelPath string, op sandbox.PathOp)
 		return Resolved{}, false
 	}
 	anchor := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(access.Path)))
-	if !access.Tree {
+	if access.Tree {
+		if op != sandbox.PathOpRead {
+			anchor = existingDirectoryAnchor(anchor)
+		}
+	} else {
 		// Missing parents need an existing effect anchor; authority stays on the leaf.
 		anchor = existingEffectAnchor(filepath.Dir(anchor))
 	}
@@ -87,12 +92,16 @@ func resolveGranted(tctx tools.ToolContext, modelPath string, op sandbox.PathOp)
 func approvedAccess(tctx tools.ToolContext, rootSession, abs string, write bool) (Access, bool) {
 	accesses := append([]hitl.GrantedPathDelta(nil), tctx.Files.ApprovedFileAccess...)
 	if tctx.Files.FileChangeReview != nil {
-		accesses = append(accesses, tctx.Files.PreparedFileAccess...)
+		for _, prepared := range tctx.Files.PreparedFileAccess {
+			if prepared.Write {
+				accesses = append(accesses, prepared)
+			}
+		}
 	}
 	for _, access := range accesses {
 		// The frozen canonical path prevents symlink retargeting from redirecting approval.
-		if access.Path == abs && (!write || access.Write) {
-			return Access{Path: abs}, true
+		if (access.Path == abs || (access.Tree && confine.PathAtOrUnder(abs, access.Path))) && access.Permits(write) {
+			return Access{Path: access.Path, Tree: access.Tree}, true
 		}
 	}
 	grantedAccessMu.RLock()

@@ -2421,12 +2421,12 @@
     "SANDBOX_SHARED_TEMP_REFUSED": {
       "category": "informational",
       "emit": "guard:sandbox",
-      "summary": "The sandbox refused writes under {{ paintedwolf.refused_shared_temp }}.{% if paintedwolf.process_running %} The job is still running. A new grant would apply only to a later launch.{% endif %}"
+      "summary": "The sandbox refused shared system temp access under {{ paintedwolf.refused_shared_temp }}{% if paintedwolf.shared_temp_reads %} (reads: {{ paintedwolf.shared_temp_reads }}){% endif %}{% if paintedwolf.shared_temp_writes %} (writes: {{ paintedwolf.shared_temp_writes }}){% endif %}.{% if paintedwolf.shared_temp_job_handle %} Background job `{{ paintedwolf.shared_temp_job_handle }}` has exited.{% endif %}{% if paintedwolf.process_running %} The job is still running; a new grant applies only to a later launch.{% endif %}"
     },
     "SANDBOX_SHARED_TEMP_TOLERATED": {
       "category": "informational",
       "emit": "guard:sandbox",
-      "summary": "The program exited successfully after the sandbox refused a write under {{ paintedwolf.refused_shared_temp }}."
+      "summary": "The program exited successfully after the sandbox refused access under {{ paintedwolf.refused_shared_temp }}."
     },
     "SANDBOX_SOCKET_PATH_CHANGED": {
       "branch_instruction": "Branch on Code; re-request after the socket path is stable",
@@ -2521,7 +2521,7 @@
     "SANDBOX_TRY_READ_PATH": {
       "category": "recoverable",
       "emit": "guard:sandbox",
-      "summary": "In `{{ tool }}`, the sandbox refused reads of protected paths {{ paintedwolf.refused_read_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}."
+      "summary": "In `{{ tool }}`, the sandbox refused reads of protected paths {{ paintedwolf.ordinary_read_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}."
     },
     "SANDBOX_TRY_SOCKET_PATH": {
       "category": "recoverable",

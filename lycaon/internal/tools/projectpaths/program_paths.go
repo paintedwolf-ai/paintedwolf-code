@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -152,7 +153,7 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 		return nil, err
 	}
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
-	p := &ProgramPaths{boundary: boundary, context: tc, specs: facts.specs, argumentLimit: facts.argumentLimit, outputLimit: facts.outputLimit, rootParents: rootParentChains(actionRootPaths(tc))}
+	p := &ProgramPaths{boundary: boundary, context: tc, specs: facts.specs, argumentLimit: facts.argumentLimit, outputLimit: facts.outputLimit, rootParents: rootParentChains(globReadableRoots(tc))}
 	if cwd == "" {
 		cwd = "."
 	}
@@ -303,6 +304,9 @@ func (p *ProgramPaths) bindAuthority(ctx context.Context, bound BoundPath, write
 			return &os.PathError{Op: "stat", Path: actual, Err: os.ErrNotExist}
 		}
 		if scope == "." || scope == "" {
+			return bound.admitRead(actual)
+		}
+		if resolved.External && (confine.SharedTempLocation(actual) != "" || confine.ControlPlaneReadDenied(actual) || confine.KeyMaterialPath(actual)) {
 			return bound.admitRead(actual)
 		}
 		if p.boundary == nil {

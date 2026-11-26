@@ -241,9 +241,24 @@ host_facts:
  - name: paintedwolf.ordinary_write_grants
    type: list<string>
    observation: Requestable write-root grants for filesystem refusals outside shared temporary directories.
+ - name: paintedwolf.ordinary_read_paths
+   type: list<string>
+   observation: Refused paths eligible for read-path recovery outside shared temporary directories.
+ - name: paintedwolf.ordinary_read_grants
+   type: list<string>
+   observation: Requestable read-path grants for filesystem refusals outside shared temporary directories.
  - name: paintedwolf.refused_shared_temp
    type: list<string>
    observation: Shared temporary directories refused for writing in this occurrence.
+ - name: paintedwolf.shared_temp_reads
+   type: list<string>
+   observation: Observed shared temporary paths refused for reading in this occurrence.
+ - name: paintedwolf.shared_temp_writes
+   type: list<string>
+   observation: Observed shared temporary directories refused for writing in this occurrence.
+ - name: paintedwolf.shared_temp_job_handle
+   type: string
+   observation: Background job handle when shared-temp settlement occurred at terminal completion; empty otherwise.
  - name: paintedwolf.shared_temp_allowed
    type: list<string>
    observation: Refused shared temporary directories now authorized for this chat.

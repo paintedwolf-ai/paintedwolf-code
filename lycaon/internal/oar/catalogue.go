@@ -109,6 +109,8 @@ var factDecls = []factDecl{
 	{"process_running", oarcore.TypeBool, FactTierHost, ""},
 	{"ordinary_write_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"ordinary_write_grants", oarcore.TypeListString, FactTierHost, ""},
+	{"ordinary_read_paths", oarcore.TypeListString, FactTierHost, ""},
+	{"ordinary_read_grants", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_write_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_write_grants", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_read_paths", oarcore.TypeListString, FactTierHost, ""},

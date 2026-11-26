@@ -142,6 +142,8 @@ type ExecutionFacts struct {
 type RefusalsFacts struct {
 	OrdinaryWritePaths          []string
 	OrdinaryWriteGrants         []string
+	OrdinaryReadPaths           []string
+	OrdinaryReadGrants          []string
 	RefusedWritePaths           []string
 	RefusedWriteGrants          []string
 	RefusedReadPaths            []string

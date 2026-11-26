@@ -50,7 +50,7 @@ func newCopyPage(ctx context.Context, tc tools.ToolContext, operation *CopyOpera
 }
 
 func (p *copyPage) Add(pair FilePair, maximum int64) error {
-	from, err := assertMutationFileSource(p.ctx, p.operation.tool.Boundary, p.tc, pair.From, p.tc.ProfileID(), "copy", "COPY_NOT_FOUND", "COPY_IS_DIRECTORY", "COPY_SYMLINK_ESCAPE", assertCopyWritePath)
+	from, err := assertMutationFileSource(p.ctx, p.operation.tool.Boundary, p.tc, pair.From, p.tc.ProfileID(), "copy", "COPY_NOT_FOUND", "COPY_IS_DIRECTORY", "COPY_SYMLINK_ESCAPE", assertCopyReadPath)
 	if err != nil {
 		return err
 	}

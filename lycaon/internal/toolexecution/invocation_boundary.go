@@ -182,7 +182,7 @@ func (e *Executor) applyPreInvokeBoundary(
 	}
 	boundaryApproved := (socketPreflight != nil && socketPreflight.ApprovalSatisfied) ||
 		(directPreflight != nil && directPreflight.ApprovalSatisfied) || tc.HasExecutionApproval()
-	// Socket/direct outer actions reach profile policy.Evaluate with BoundaryApprovalSatisfied via applyPreInvokePolicy.
+	// Socket and direct-IP actions pass BoundaryApprovalSatisfied to applyPreInvokePolicy.
 	args, err = e.applyPreInvokePolicy(ctx, tool, profileID, args, &tc, confReq, boundaryApproved)
 	if err != nil {
 		return nil, tc, boundaryApproved, err
@@ -218,10 +218,11 @@ func (e *Executor) applyPreInvokePolicy(
 	if len(tc.Files.PolicyWriteGrants) != 0 && (e.Approvals.approvalGate == nil || e.Approvals.checkpointMgr == nil) {
 		return nil, fmt.Errorf("agent policy write requires the approval gate")
 	}
-	if tc.Invocation.Contract.Supports(toolcontract.CapabilityFileChange) {
-		if decision.RequiresApproval && (e.Approvals.approvalGate == nil || e.Approvals.checkpointMgr == nil) {
-			return nil, fmt.Errorf("file change approval checkpoints not configured")
-		}
+	supportsFileChange := tc.Invocation.Contract.Supports(toolcontract.CapabilityFileChange)
+	if supportsFileChange && decision.RequiresApproval && (e.Approvals.approvalGate == nil || e.Approvals.checkpointMgr == nil) {
+		return nil, fmt.Errorf("file change approval checkpoints not configured")
+	}
+	if supportsFileChange && !hasUnapprovedReadAccess(decision.Approval) {
 		if decision.Approval != nil {
 			tc.Files.PreparedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
 		} else if !boundaryApprovalSatisfied {
@@ -233,7 +234,7 @@ func (e *Executor) applyPreInvokePolicy(
 	if tool == "process_list" || tool == "process_signal" {
 		return args, nil
 	}
-	for decision.RequiresApproval {
+	for decision.RequiresApproval && (!supportsFileChange || hasUnapprovedReadAccess(decision.Approval)) {
 		if e.Approvals.checkpointMgr == nil {
 			return nil, fmt.Errorf("tool approval checkpoints not configured")
 		}
@@ -246,7 +247,7 @@ func (e *Executor) applyPreInvokePolicy(
 		if reviewedApproval == nil {
 			break
 		}
-		tc.Files.ApprovedFileAccess = append([]hitl.GrantedPathDelta(nil), reviewedApproval.FileAccess...)
+		tc.Files.ApprovedFileAccess = append(tc.Files.ApprovedFileAccess, reviewedApproval.FileAccess...)
 		policyEval = e.Boundary.preInvokePolicyContext(tool, profileID, args, *tc, confReq)
 		tc.RecordCurrentActionReview(args, confReq, proposedActionFromPolicy(policyEval), reviewedApproval)
 		policyEval.CurrentActionReview = tc.CurrentActionReview(args, confReq)
@@ -263,5 +264,24 @@ func (e *Executor) applyPreInvokePolicy(
 			return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, toolprofiles.PolicyBlockReject(decision, tool, profileID))
 		}
 	}
+	if supportsFileChange {
+		if decision.Approval != nil {
+			tc.Files.PreparedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
+		} else if !boundaryApprovalSatisfied {
+			tc.Files.PreparedFileAccess = nil
+		}
+	}
 	return args, nil
+}
+
+func hasUnapprovedReadAccess(approval *hitl.ApprovalResult) bool {
+	if approval == nil {
+		return false
+	}
+	for _, access := range approval.FileAccess {
+		if !access.Write {
+			return true
+		}
+	}
+	return false
 }

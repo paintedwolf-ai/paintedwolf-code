@@ -47,15 +47,16 @@ type AgentHostResourceView struct {
 // AgentPromptSurface holds skill availability and host resources for prompts.
 type AgentPromptSurface struct {
 	// Skills are the applicable catalog; bodies remain on demand.
-	Skills                []AgentSkillView
-	FullCatalog           bool
-	HostResources         []AgentHostResourceView
-	HostResourcesOmitted  int // rows the ambient budget dropped
-	Fingerprint           string
-	SessionScratchDir     string
-	SharedTempLocations   []string
-	Posture               gate.Posture
-	CommandExternalHidden bool
+	Skills                  []AgentSkillView
+	FullCatalog             bool
+	HostResources           []AgentHostResourceView
+	HostResourcesOmitted    int // rows the ambient budget dropped
+	Fingerprint             string
+	SessionScratchDir       string
+	SharedTempLocations     []string
+	SharedTempReadLocations []string
+	Posture                 gate.Posture
+	CommandExternalHidden   bool
 }
 
 // AgentRejectCodeView describes a recoverable tool rejection.
@@ -94,6 +95,8 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"prompt_surface_fingerprint":   surface.Fingerprint,
 		"shared_temp_writable":         len(surface.SharedTempLocations) > 0,
 		"shared_temp_locations":        surface.SharedTempLocations,
+		"shared_temp_readable":         len(surface.SharedTempReadLocations) > 0,
+		"shared_temp_read_locations":   surface.SharedTempReadLocations,
 		"session_scratch_dir":          surface.SessionScratchDir,
 		"reviews_confined_writes":      surface.Posture.ReviewsConfinedWrites(),
 		"command_external_hidden":      surface.CommandExternalHidden,

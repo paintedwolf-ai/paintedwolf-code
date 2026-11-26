@@ -4,16 +4,16 @@ kind: policy
 on: sandbox.shared_temp
 selector:
   tools: [command, verify, command_output]
-requires_facts: [paintedwolf.process_running, paintedwolf.refused_shared_temp, paintedwolf.session_scratch_available, paintedwolf.shared_temp_allowed, paintedwolf.shared_temp_declined, paintedwolf.shared_temp_tolerated, paintedwolf.shared_temp_unanswered]
+requires_facts: [paintedwolf.process_running, paintedwolf.refused_shared_temp, paintedwolf.session_scratch_available, paintedwolf.shared_temp_allowed, paintedwolf.shared_temp_declined, paintedwolf.shared_temp_job_handle, paintedwolf.shared_temp_reads, paintedwolf.shared_temp_tolerated, paintedwolf.shared_temp_unanswered, paintedwolf.shared_temp_writes]
 when: size(paintedwolf.refused_shared_temp) > 0 && !paintedwolf.shared_temp_tolerated
 effect: warn
 x-paintedwolf-category: informational
 x-paintedwolf-emit: guard:sandbox
-message: a program encountered a shared temporary directory write restriction
-what: 'The sandbox refused writes under {{ paintedwolf.refused_shared_temp }}.{% if paintedwolf.process_running %} The job is still running. A new grant would apply only to a later launch.{% endif %}'
+message: a program encountered a shared system temp restriction
+what: 'The sandbox refused shared system temp access under {{ paintedwolf.refused_shared_temp }}{% if paintedwolf.shared_temp_reads %} (reads: {{ paintedwolf.shared_temp_reads }}){% endif %}{% if paintedwolf.shared_temp_writes %} (writes: {{ paintedwolf.shared_temp_writes }}){% endif %}.{% if paintedwolf.shared_temp_job_handle %} Background job `{{ paintedwolf.shared_temp_job_handle }}` has exited.{% endif %}{% if paintedwolf.process_running %} The job is still running; a new grant applies only to a later launch.{% endif %}'
 cause: ''
 why: ''
-fix: '{% if paintedwolf.shared_temp_allowed %}This chat can now write under {{ paintedwolf.shared_temp_allowed }}. Check which effects completed and submit only the remaining work. {% endif %}{% if paintedwolf.shared_temp_declined %}Write access to {{ paintedwolf.shared_temp_declined }} is denied. Avoid those locations.{% if paintedwolf.session_scratch_available %} Point temporary files or sockets at the session scratch folder, `@scratch`.{% endif %} {% endif %}{% if paintedwolf.shared_temp_unanswered %}Write access to {{ paintedwolf.shared_temp_unanswered }} remains unapproved. If the work still needs it, check earlier effects and run the remaining work to request access again.{% endif %}'
+fix: '{% if paintedwolf.shared_temp_allowed %}This chat can now access {{ paintedwolf.shared_temp_allowed }} for the approved direction. Inspect any uncertain prior effect before re-running and submit only the remaining work. {% endif %}{% if paintedwolf.shared_temp_declined %}System temp access to {{ paintedwolf.shared_temp_declined }} was declined for this chat. Avoid those locations.{% if paintedwolf.session_scratch_available %} Use `@scratch` (`TMPDIR`) for temporary files or sockets.{% endif %} {% endif %}{% if paintedwolf.shared_temp_unanswered %}System temp access to {{ paintedwolf.shared_temp_unanswered }} remains unapproved. If the remaining work still needs it, inspect earlier effects and declare the exact exchange (`capability_request.read_path` and/or `capability_request.write_root`) on one `command` call.{% endif %}'
 instead: ''
 x-paintedwolf-scenarios:
   - id: mixed_decisions

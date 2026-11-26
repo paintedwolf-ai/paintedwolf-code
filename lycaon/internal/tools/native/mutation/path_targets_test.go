@@ -21,6 +21,8 @@ func TestArchiveAndPatchOperandsAreDeclaredTargets(t *testing.T) {
 		"patch -d sub -i fix.diff main.go": {{Path: "sub/fix.diff"}, {Path: "sub/main.go", Write: true}},
 		"patch --dry-run main.go fix.diff": {{Path: "main.go"}, {Path: "fix.diff"}},
 		"patch -p1 -i /tmp/abs.diff":       {{Path: "/tmp/abs.diff"}},
+		"ln -s target link":                {{Path: "link", Write: true}},
+		"ln -s -r target link":             {{Path: "target"}, {Path: "link", Write: true}},
 	} {
 		inv := h.invocation()
 		words := strings.Fields(source)

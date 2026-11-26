@@ -18,7 +18,12 @@ type NamedFloor struct {
 // not exist yet is held here by name. Names and paths fold case, as the
 // loaders do, so a case-insensitive directory cannot alias one.
 type creationFloors struct {
-	sharedTemp []string
+	sharedTemp     []string
+	readRoots      []string
+	readFiles      []string
+	writeOnlyRoots []string
+	writeOnlyFiles []string
+	hidden         []string
 	// protected are write- and read-floor locations, existing or not.
 	protected []string
 	// names are basenames protected at any depth below a directory.
@@ -31,9 +36,18 @@ type creationFloors struct {
 }
 
 func newCreationFloors(fs Filesystem) creationFloors {
-	f := creationFloors{sharedTemp: fs.SharedTemp, names: fs.ReadOnlyNames, sensitive: map[string]bool{}}
+	f := creationFloors{
+		sharedTemp:     fs.SharedTemp,
+		readRoots:      fs.ReadRoots,
+		readFiles:      fs.ReadFiles,
+		writeOnlyRoots: fs.WriteOnlyRoots,
+		writeOnlyFiles: fs.WriteOnlyFiles,
+		hidden:         fs.Hidden,
+		names:          fs.ReadOnlyNames,
+		sensitive:      map[string]bool{},
+	}
 	f.protected = append(append(f.protected, fs.ReadOnly...), fs.Hidden...)
-	f.grants = append(append(append(f.grants, fs.Restored...), fs.WriteFiles...), fs.WriteRoots...)
+	f.grants = append(append(f.grants, fs.WriteFiles...), fs.WriteRoots...)
 	for _, p := range f.protected {
 		for _, component := range strings.Split(filepath.Clean(p), "/") {
 			if component != "" {
@@ -153,6 +167,75 @@ func (f creationFloors) exactGrant(path string) bool {
 		}
 	}
 	return false
+}
+
+// refusesTempRead reports whether shared-temp policy denies reading or listing path.
+func (f creationFloors) refusesTempRead(path string, asDir bool) bool {
+	path = filepath.Clean(strings.TrimSuffix(path, " (deleted)"))
+	tempRoot := f.enclosingSharedTemp(path)
+	if tempRoot == "" {
+		return false
+	}
+	if f.hiddenBelowTemp(path, tempRoot) {
+		return true
+	}
+	if !asDir {
+		for _, file := range f.writeOnlyFiles {
+			if strings.EqualFold(filepath.Clean(file), path) {
+				return true
+			}
+		}
+		for _, file := range f.readFiles {
+			if strings.EqualFold(filepath.Clean(file), path) {
+				return false
+			}
+		}
+	}
+	bestRead, bestWriteOnly := -1, -1
+	for _, r := range f.readRoots {
+		if atOrUnderFold(path, r) && len(r) > bestRead {
+			bestRead = len(r)
+		}
+	}
+	for _, w := range f.writeOnlyRoots {
+		if atOrUnderFold(path, w) && len(w) > bestWriteOnly {
+			bestWriteOnly = len(w)
+		}
+	}
+	return bestRead <= bestWriteOnly
+}
+
+func (f creationFloors) enclosingSharedTemp(path string) string {
+	var best string
+	for _, loc := range f.sharedTemp {
+		if atOrUnderFold(path, loc) && len(loc) > len(best) {
+			best = loc
+		}
+	}
+	return best
+}
+
+func (f creationFloors) hiddenBelowTemp(path, tempRoot string) bool {
+	bestHidden := -1
+	for _, p := range f.hidden {
+		if len(p) > len(tempRoot) && atOrUnderFold(p, tempRoot) && atOrUnderFold(path, p) && len(p) > bestHidden {
+			bestHidden = len(p)
+		}
+	}
+	if bestHidden < 0 {
+		return false
+	}
+	for _, r := range f.readRoots {
+		if atOrUnderFold(path, r) && len(r) >= bestHidden {
+			return false
+		}
+	}
+	for _, file := range f.readFiles {
+		if strings.EqualFold(filepath.Clean(file), path) && len(file) >= bestHidden {
+			return false
+		}
+	}
+	return true
 }
 
 // atOrUnderFold reports whether path is root or below it, comparing each

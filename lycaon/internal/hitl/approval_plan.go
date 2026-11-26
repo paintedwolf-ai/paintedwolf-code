@@ -226,8 +226,18 @@ type GrantedPathDelta struct {
 	Path string `json:"path" yaml:"path"`
 	// Write distinguishes mutation authority from read authority.
 	Write bool `json:"write,omitempty" yaml:"write,omitempty"`
+	// WriteOnly keeps a write grant from permitting reads or directory listing.
+	WriteOnly bool `json:"write_only,omitzero" yaml:"write_only,omitempty"`
 	// Tree covers Path and every descendant. Exact grants cover Path only.
 	Tree bool `json:"tree,omitempty" yaml:"tree,omitempty"`
+}
+
+// Permits reports whether this delta covers a read or write operation.
+func (d GrantedPathDelta) Permits(write bool) bool {
+	if write {
+		return d.Write
+	}
+	return !d.WriteOnly
 }
 
 // ApprovalOption is one exact affirmative choice on a plan.

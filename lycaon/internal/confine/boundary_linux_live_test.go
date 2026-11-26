@@ -269,6 +269,9 @@ func linuxConfinedRun(t *testing.T, self string, c confine.Confinement, env []st
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	if name == self && confine.SharedTempLocation(self) != "" && len(c.ProtectedReadGrants) < confine.MaxProtectedPathGrants {
+		c.ProtectedReadGrants = append(append([]confine.ProtectedPathGrant(nil), c.ProtectedReadGrants...), confine.NewProtectedPathGrant(self))
+	}
 	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), name, args, c)
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
@@ -429,7 +432,11 @@ func TestLinuxTerminalInjectionKillsTheProcess(t *testing.T) {
 	for _, mode := range []string{"tiocsti", "tioclinux"} {
 		master, slave := openPty(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, denyConfinement(t.TempDir()))
+		c := denyConfinement(t.TempDir())
+		if confine.SharedTempLocation(self) != "" {
+			c.ProtectedReadGrants = []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(self)}
+		}
+		cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, c)
 		testutil.FailErr(t, "confine.Command", err)
 		cmd.Env = probeEnv(mode)
 		var out bytes.Buffer
@@ -483,7 +490,7 @@ func TestLinuxTerminalInterruptReachesOnlyTheTarget(t *testing.T) {
 		testutil.FailErr(t, "write terminal input", err)
 	}
 	send("print('ready' + '-for-input')\n")
-	terminal.await(t, "ready-for-input")
+	terminal.await(t, "ready-for-input\r\n>>> ")
 	send("\x03")
 	terminal.await(t, "KeyboardInterrupt")
 	created := filepath.Join(root, "after-interrupt")
@@ -1157,5 +1164,69 @@ func TestLinuxHelperReportsTypedUnavailability(t *testing.T) {
 	status, stderr := rawHelper(t, self, unsupported, "/bin/true")
 	if status.ExitStatus() != confine.HelperFailureExit || !strings.Contains(stderr, linuxsandbox.UnsupportedNetworkMode) {
 		t.Fatalf("unsupported plan: exit %d: %s", status.ExitStatus(), stderr)
+	}
+}
+
+func TestLinuxExecuteOnlyBinaryEnforcesSharedTempBoundaries(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	project := fspath.CanonicalPath(outsideTemporaryWriteRoots(t))
+	custom := fspath.CanonicalPath(outsideTemporaryWriteRoots(t))
+	t.Setenv("TMPDIR", custom)
+
+	catBytes, err := os.ReadFile("/bin/cat")
+	testutil.FailErr(t, "read /bin/cat", err)
+	xonlyCat := filepath.Join(project, "xonly-cat")
+	testutil.FailErr(t, "write execute-only cat", os.WriteFile(xonlyCat, catBytes, 0o100))
+
+	mkdirBytes, err := os.ReadFile("/bin/mkdir")
+	testutil.FailErr(t, "read /bin/mkdir", err)
+	xonlyMkdir := filepath.Join(project, "xonly-mkdir")
+	testutil.FailErr(t, "write execute-only mkdir", os.WriteFile(xonlyMkdir, mkdirBytes, 0o100))
+
+	incoming := filepath.Join(custom, "incoming.csv")
+	sibling := filepath.Join(custom, "sibling.csv")
+	exportDir := filepath.Join(custom, "export")
+	exportExisting := filepath.Join(exportDir, "existing.csv")
+	testutil.FailErr(t, "mkdir export", os.MkdirAll(exportDir, 0o700))
+	for path, body := range map[string]string{incoming: "alpha", sibling: "beta", exportExisting: "secret-export"} {
+		testutil.FailErr(t, "write "+path, os.WriteFile(path, []byte(body), 0o600))
+	}
+
+	c := confine.Confinement{
+		Roots:               liveBoundaryRoots(project),
+		Network:             confine.NetworkDeny,
+		ProtectedReadGrants: []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(incoming)},
+		GrantedWriteRoots:   []string{exportDir},
+	}
+	runXOnly := func(bin string, arg string) (int, string, confine.SandboxRefusals) {
+		t.Helper()
+		cfg := c
+		lease, err := confine.BindAction(&cfg, confine.EgressCommand{SessionID: "xonly-live", ToolName: "command", CommandLine: bin})
+		testutil.FailErr(t, "bind action", err)
+		cmd, cleanup, err := confine.Command(context.Background(), self, bin, []string{arg}, cfg)
+		testutil.FailErr(t, "build confined command", err)
+		setConfinedWorkingDir(cmd, cfg)
+		out, _ := cmd.CombinedOutput()
+		cleanup()
+		refusals := lease.SettledRefusals(t.Context())
+		lease.Close(t.Context())
+		return cmd.ProcessState.ExitCode(), string(out), refusals
+	}
+
+	if code, out, refusals := runXOnly(xonlyCat, incoming); code != 0 || out != "alpha" || len(refusals.Refusals) != 0 {
+		t.Fatalf("execute-only allowed input read: exit=%d out=%q refusals=%+v", code, out, refusals)
+	}
+	if code, out, _ := runXOnly(xonlyCat, sibling); code == 0 || strings.Contains(out, "beta") {
+		t.Fatalf("execute-only leaked ungranted sibling: exit=%d out=%q", code, out)
+	}
+	if code, out, _ := runXOnly(xonlyCat, exportExisting); code == 0 || strings.Contains(out, "secret-export") {
+		t.Fatalf("execute-only leaked write-only file: exit=%d out=%q", code, out)
+	}
+	deniedDir := filepath.Join(project, "denied-mutation")
+	if code, _, _ := runXOnly(xonlyMkdir, deniedDir); code == 0 {
+		t.Fatalf("execute-only mutation succeeded: exit=%d", code)
+	}
+	if _, err := os.Stat(deniedDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("execute-only mutation created %s: err=%v", deniedDir, err)
 	}
 }

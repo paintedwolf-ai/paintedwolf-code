@@ -11,7 +11,7 @@ import (
 // The path-only spellings reach the supervisor like their *at forms.
 func TestSeccompProgramNotifiesLegacyPathCreators(t *testing.T) {
 	t.Parallel()
-	raw, err := seccompProgram()
+	raw, err := seccompProgram(false)
 	if err != nil {
 		t.Fatalf("seccompProgram: %v", err)
 	}
@@ -55,5 +55,28 @@ func TestSeccompProgramNotifiesLegacyPathCreators(t *testing.T) {
 	}
 	if a, _ := pathArgsOf(unix.SYS_CREAT); a.fixedFlags != unix.O_CREAT|unix.O_WRONLY|unix.O_TRUNC {
 		t.Errorf("creat flags %#x", a.fixedFlags)
+	}
+	rawRead, err := seccompProgram(true)
+	if err != nil {
+		t.Fatalf("seccompProgram(true): %v", err)
+	}
+	instsRead, _ := bpf.Disassemble(rawRead)
+	vmRead, err := bpf.NewVM(instsRead)
+	if err != nil {
+		t.Fatalf("NewVM(true): %v", err)
+	}
+	openRdonly := make([]byte, 64)
+	binary.BigEndian.PutUint32(openRdonly[seccompDataNr:], unix.SYS_OPEN)
+	binary.BigEndian.PutUint32(openRdonly[seccompDataArch:], nativeAuditArch)
+	binary.BigEndian.PutUint32(openRdonly[seccompArgLow(1):], unix.O_RDONLY)
+	if got, err := vmRead.Run(openRdonly); err != nil || got != notify {
+		t.Errorf("observed open O_RDONLY: %#x (%v), want notify", got, err)
+	}
+	openPath := make([]byte, 64)
+	binary.BigEndian.PutUint32(openPath[seccompDataNr:], unix.SYS_OPEN)
+	binary.BigEndian.PutUint32(openPath[seccompDataArch:], nativeAuditArch)
+	binary.BigEndian.PutUint32(openPath[seccompArgLow(1):], unix.O_PATH)
+	if got, err := vmRead.Run(openPath); err != nil || got != int(unix.SECCOMP_RET_ALLOW) {
+		t.Errorf("observed open O_PATH: %#x (%v), want allow", got, err)
 	}
 }

@@ -68,7 +68,7 @@ func pinnedFinalTarget(self string, target []string) (string, []string, []uintpt
 		files = append(files, uintptr(lineage.ChildFD))
 		args = append(args, lineageFDFlag, "7")
 	}
-	return self, append(append(args, "--"), target...), files, nil
+	return "/proc/self/exe", append(append(args, "--"), target...), files, nil
 }
 
 func closePinnedHelperInputs() {

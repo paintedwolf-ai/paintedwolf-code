@@ -183,7 +183,7 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 	t.Setenv("SSH_AUTH_SOCK", agent)
 	self, err := os.Executable()
 	testutil.FailErr(t, "resolve test binary", err)
-	shims := t.TempDir()
+	shims := outsideCommandFolder(t)
 	testutil.FailErr(t, "write ssh shim", os.WriteFile(filepath.Join(shims, "ssh"), []byte("#!/bin/sh\nexec '"+self+"' "+wiring.SSHAgentProbeVerb+" \"$@\"\n"), 0o755))
 	remote := "ssh://git@ssh.example.test/org/repo.git"
 	// Launches take the engine's resolved PATH; the stand-in goes first.

@@ -5,6 +5,7 @@ package linuxsandbox
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -97,5 +98,44 @@ func TestLandlockProbeRefusedSeparatesCreationFromCleanup(t *testing.T) {
 	}
 	if !probe.refused() {
 		t.Fatal("probe.refused() = false when Openat failed with EACCES")
+	}
+}
+
+func TestWriteOnlyRootsExcludeReadAccessWithoutScanningPopulatedTemp(t *testing.T) {
+	base := t.TempDir()
+	temp := filepath.Join(base, "populated-temp")
+	scratch := filepath.Join(temp, "scratch")
+	testutil.FailErr(t, "mkdir scratch", os.MkdirAll(scratch, 0o700))
+	for i := range 200 {
+		testutil.FailErr(t, "seed temp entry", os.WriteFile(filepath.Join(temp, "f-"+strconv.Itoa(i)), []byte("x"), 0o600))
+	}
+	exact := filepath.Join(temp, "f-0")
+	fs := Filesystem{
+		SharedTemp:     []string{temp},
+		WriteRoots:     []string{temp, scratch},
+		WriteOnlyRoots: []string{temp},
+		ReadRoots:      []string{scratch},
+		ReadFiles:      []string{exact},
+	}
+	rules, err := landlockRules(fs, 3)
+	testutil.FailErr(t, "landlockRules", err)
+	byPath := map[string]uint64{}
+	for _, r := range rules {
+		byPath[r.path] = r.access
+		if filepath.Dir(r.path) == temp && r.path != scratch && r.path != exact {
+			t.Fatalf("populated write-only temp leaked per-entry rule for %s", r.path)
+		}
+	}
+	if byPath[temp]&(unix.LANDLOCK_ACCESS_FS_READ_FILE|unix.LANDLOCK_ACCESS_FS_READ_DIR) != 0 {
+		t.Fatalf("write-only root %s kept read access %#x", temp, byPath[temp])
+	}
+	if byPath[temp]&unix.LANDLOCK_ACCESS_FS_MAKE_REG == 0 {
+		t.Fatalf("write-only root %s lost write access %#x", temp, byPath[temp])
+	}
+	if byPath[scratch] != (landlockReadExecute&handledAccesses(3)) && byPath[scratch] != handledAccesses(3) {
+		t.Fatalf("nested scratch access = %#x", byPath[scratch])
+	}
+	if byPath[exact]&unix.LANDLOCK_ACCESS_FS_READ_FILE == 0 {
+		t.Fatalf("exact read file %s lost read access %#x", exact, byPath[exact])
 	}
 }

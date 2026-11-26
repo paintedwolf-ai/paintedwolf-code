@@ -193,12 +193,23 @@ type Confinement struct {
 	// Process sets resource limits and signal dispositions the target
 	// starts with; they narrow the process, never the boundary.
 	Process ProcessAttributes
+	// PinnedExecutable is the resolved entry binary verified across handoff.
+	PinnedExecutable string
 }
 
 // DefaultConfinement builds the boundary for a valid rooted request.
 func DefaultConfinement(req Request) (*Confinement, bool) {
 	if req.HostExecution {
-		return &Confinement{HostExecution: true, Network: NetworkDirectIP, Roots: append([]string(nil), req.Roots...)}, true
+		scratch := strings.TrimSpace(req.SessionScratchRoot)
+		if scratch != "" {
+			scratch = fspath.CanonicalPath(scratch)
+		}
+		return &Confinement{
+			HostExecution: true,
+			Network:       NetworkDirectIP,
+			Roots:         append([]string(nil), req.Roots...),
+			Workspaces:    WorkspaceRoots{SessionScratch: scratch, Action: req.ActionWorkspace, ScannerCache: req.ScannerCache},
+		}, true
 	}
 	prepared, err := prepareRequest(req)
 	if err != nil {
@@ -214,7 +225,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		ProjectID:                   req.ProjectID,
 		Roots:                       prepared.Roots,
 		GrantedWriteRoots:           append([]string(nil), prepared.GrantedWriteRoots...),
-		Workspaces:                  WorkspaceRoots{SessionScratch: prepared.SessionScratchRoot, Action: req.ActionWorkspace},
+		Workspaces:                  WorkspaceRoots{SessionScratch: prepared.SessionScratchRoot, Action: req.ActionWorkspace, ScannerCache: req.ScannerCache},
 		ReadRoots:                   prepared.ReadRoots,
 		ReadDenyPaths:               prepared.ReadDenyPaths,
 		View:                        prepared.View,
@@ -406,19 +417,27 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		return rules, err
 	}
 	rules.add(fsRule{op: opRead, allow: true, everywhere: true})
+	tempReachable := rules.addSharedTempReadFloor(c)
 	deny := readDenyMatches(c)
-	if len(deny) > 0 {
+	if len(deny) > 0 || len(tempReachable) > 0 {
 		// Denying file-read* blocks metadata probes too; frameworks such as
 		// macOS Security stat a store before opening it and exit without a
 		// kernel refusal report when stat succeeds on an unreadable file.
 		rules.add(fsRule{op: opRead, matches: deny})
+		excluded := resolveEach(c.ReadDenyPaths)
 		allow := workspaceReadAllowBacks(c)
-		allow = append(allow, resolveEach(c.ReadRoots)...)
+		allow = append(allow, nonExcludedPaths(resolveEach(c.ReadRoots), excluded)...)
 		allow = append(allow, c.privateWorkRoots()...)
 		addManagedReadRoots(&rules, deny, allow)
-		// An approved read grant also lifts the denials beneath it.
+		// Shared-temp grants lift only the shared-temp floor unless they also name
+		// an attached project root or a path inside an editable floor.
+		editableDeny := editableReadDenyPaths(c)
+		attachedTemp := attachedTempProjectRoots(c, rules.sharedTemp)
 		var subtrees, literals []string
 		for _, g := range c.ProtectedReadGrants {
+			if underAny(g.ResolvedPath, rules.sharedTemp) && !underAny(g.ResolvedPath, editableDeny) && !underAny(g.ResolvedPath, attachedTemp) {
+				continue
+			}
 			if g.Subtree {
 				subtrees = append(subtrees, g.ResolvedPath)
 			} else {
@@ -434,12 +453,14 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 			literals = mergeSortedStrings(literals, keychains)
 		}
 		// Ancestor metadata permits traversal into allowed descendants.
-		if len(allow) > 0 || len(literals) > 0 {
-			ancestors := traversalAncestors(matchPaths(deny), append(append([]string(nil), allow...), literals...))
+		reachable := slices.Concat(allow, literals, tempReachable)
+		if len(reachable) > 0 {
+			deniedPaths := append(slices.Clone(rules.sharedTemp), matchPaths(deny)...)
+			ancestors := traversalAncestors(deniedPaths, reachable)
 			if c.CredentialStore {
 				ancestors = mergeSortedStrings(ancestors, darwinLoginKeychainMetadataDirs())
 			}
-			rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(ancestors, "")})
+			rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(withDarwinAliases(ancestors), "")})
 		}
 	}
 	addControlPlaneReadFloor(&rules, c)
@@ -506,6 +527,18 @@ func readDenyMatches(c Confinement) []fsMatch {
 		out = append(out, subpathMatches([]string{p}, layer)...)
 	}
 	return append(out, subpathMatches(resolveEach(c.ReadDenyPaths), FloorReadConfigured)...)
+}
+
+func editableReadDenyPaths(c Confinement) []string {
+	var out []string
+	for _, m := range readDenyMatches(c) {
+		if m.layer == FloorReadKeyMaterial || m.layer == FloorReadConfigured {
+			if p := matchPath(m); p != "" {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
 }
 
 func matchPaths(matches []fsMatch) []string {

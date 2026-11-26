@@ -352,9 +352,14 @@ func (l *promptContext) refreshCoordinatorSurface(
 	st *promptLoopTurnState,
 	current string,
 ) (string, error) {
-	if l.Deps.WritableSharedTemp != nil && st.machine.Compiled() {
+	if (l.Deps.WritableSharedTemp != nil || l.Deps.ReadableSharedTemp != nil) && st.machine.Compiled() {
 		surface := &st.machine.Surface
-		surface.SharedTempLocations = l.Deps.WritableSharedTemp(ctx, sess)
+		if l.Deps.WritableSharedTemp != nil {
+			surface.SharedTempLocations = l.Deps.WritableSharedTemp(ctx, sess)
+		}
+		if l.Deps.ReadableSharedTemp != nil {
+			surface.SharedTempReadLocations = l.Deps.ReadableSharedTemp(ctx, sess)
+		}
 		surface.Fingerprint = surface.CacheFingerprint()
 	}
 	if !guard.IsCoordinatorProfile(profileID) {

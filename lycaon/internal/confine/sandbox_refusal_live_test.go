@@ -17,11 +17,19 @@ import (
 // refusalsOf collects kernel reports for one confined action.
 func refusalsOf(t *testing.T, self string, roots []string, name string, args ...string) (confine.SandboxRefusals, string) {
 	t.Helper()
-	c := &confine.Confinement{Roots: roots, Network: confine.NetworkDeny}
-	lease, err := confine.BindAction(c, confine.EgressCommand{SessionID: "refusal-live", ToolName: "command", CommandLine: name})
+	return refusalsOfConfinement(t, self, confine.Confinement{Roots: roots, Network: confine.NetworkDeny}, name, args...)
+}
+
+func refusalsOfConfinement(t *testing.T, self string, c confine.Confinement, name string, args ...string) (confine.SandboxRefusals, string) {
+	t.Helper()
+	if c.Network == 0 {
+		c.Network = confine.NetworkDeny
+	}
+	lease, err := confine.BindAction(&c, confine.EgressCommand{SessionID: "refusal-live", ToolName: "command", CommandLine: name})
 	testutil.FailErr(t, "bind action", err)
-	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, *c)
+	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "build confined command", err)
+	setConfinedWorkingDir(cmd, c)
 	out, _ := cmd.CombinedOutput()
 	cleanup()
 	refusals := lease.SettledRefusals(t.Context())
@@ -172,5 +180,103 @@ func TestSharedTempWriteRefusalNamesItsLocation(t *testing.T) {
 			}
 			t.Fatalf("shared temp write: refusals=%+v, output=%q", refusals, out)
 		})
+	}
+}
+
+func TestSharedTempReadAndWriteOnlyRefusalsReachAction(t *testing.T) {
+	self := requireLiveBoundary(t)
+	confinefixture.RequireRefusalReports(t)
+	project := fspath.CanonicalPath(outsideTemporaryWriteRoots(t))
+	custom := fspath.CanonicalPath(outsideTemporaryWriteRoots(t))
+	t.Setenv("TMPDIR", custom)
+
+	runConfined := func(c confine.Confinement, name string, args ...string) (int, string, confine.SandboxRefusals) {
+		t.Helper()
+		c.Roots = liveBoundaryRoots(c.Roots...)
+		c.Network = confine.NetworkDeny
+		lease, err := confine.BindAction(&c, confine.EgressCommand{SessionID: "shared-temp-live", ToolName: "command", CommandLine: name})
+		testutil.FailErr(t, "bind action", err)
+		cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
+		testutil.FailErr(t, "build confined command", err)
+		setConfinedWorkingDir(cmd, c)
+		out, _ := cmd.CombinedOutput()
+		cleanup()
+		refusals := lease.SettledRefusals(t.Context())
+		lease.Close(t.Context())
+		return cmd.ProcessState.ExitCode(), string(out), refusals
+	}
+
+	incoming := filepath.Join(custom, "incoming.csv")
+	sibling := filepath.Join(custom, "sibling.csv")
+	exportDir := filepath.Join(custom, "export")
+	exportExisting := filepath.Join(exportDir, "existing.csv")
+	testutil.FailErr(t, "mkdir export", os.MkdirAll(exportDir, 0o700))
+	for path, body := range map[string]string{incoming: "alpha", sibling: "beta", exportExisting: "secret-export"} {
+		testutil.FailErr(t, "write "+path, os.WriteFile(path, []byte(body), 0o600))
+	}
+
+	// Ungranted read and directory listing are denied and observed with RecoverReadPath.
+	code, out, refusals := runConfined(confine.Confinement{Roots: []string{project}}, "/bin/cat", incoming)
+	if code == 0 || strings.Contains(out, "alpha") {
+		t.Fatalf("ungranted shared temp read succeeded: exit=%d out=%q", code, out)
+	}
+	readRefusal, ok := findRefusal(refusals, "file-read-data", incoming)
+	if !ok || readRefusal.Layer != confine.FloorSharedTemp || readRefusal.Recovery != confine.RecoverReadPath || readRefusal.Grant != incoming {
+		t.Fatalf("ungranted read refusal = %+v (all=%+v)", readRefusal, refusals.Refusals)
+	}
+
+	code, out, refusals = runConfined(confine.Confinement{Roots: []string{project}}, "/bin/ls", custom)
+	if code == 0 || strings.Contains(out, "incoming.csv") {
+		t.Fatalf("ungranted shared temp listing succeeded: exit=%d out=%q", code, out)
+	}
+	listRefusal, ok := findRefusal(refusals, "file-read-data", custom)
+	if !ok || listRefusal.Layer != confine.FloorSharedTemp || listRefusal.Recovery != confine.RecoverReadPath || listRefusal.Grant != custom {
+		t.Fatalf("ungranted list refusal = %+v (all=%+v)", listRefusal, refusals.Refusals)
+	}
+
+	// Exact file read grant admits only incoming.csv; sibling and directory listing stay denied.
+	withExactRead := confine.Confinement{
+		Roots:               []string{project},
+		ProtectedReadGrants: []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(incoming)},
+	}
+	code, out, refusals = runConfined(withExactRead, "/bin/cat", incoming)
+	if code != 0 || out != "alpha" || len(refusals.Refusals) != 0 {
+		t.Fatalf("exact input read failed: exit=%d out=%q refusals=%+v", code, out, refusals.Refusals)
+	}
+	if code, out, _ = runConfined(withExactRead, "/bin/cat", sibling); code == 0 || strings.Contains(out, "beta") {
+		t.Fatalf("exact input grant leaked sibling: exit=%d out=%q", code, out)
+	}
+	if code, out, _ = runConfined(withExactRead, "/bin/ls", custom); code == 0 || strings.Contains(out, "sibling.csv") {
+		t.Fatalf("exact input grant leaked parent listing: exit=%d out=%q", code, out)
+	}
+
+	// Write-only directory grant permits creating/replacing files while keeping reads and listing denied.
+	withWriteOnly := confine.Confinement{
+		Roots:             []string{project},
+		GrantedWriteRoots: []string{exportDir},
+	}
+	created := filepath.Join(exportDir, "new.csv")
+	code, out, refusals = runConfined(withWriteOnly, "/bin/sh", "-c", `printf created > "$1"`, "sh", created)
+	if code != 0 || len(refusals.Refusals) != 0 {
+		t.Fatalf("write-only create failed: exit=%d out=%q refusals=%+v", code, out, refusals.Refusals)
+	}
+	gotBytes, err := os.ReadFile(created)
+	testutil.FailErr(t, "read host created output", err)
+	if string(gotBytes) != "created" {
+		t.Fatalf("created bytes = %q, want %q", gotBytes, "created")
+	}
+	code, out, refusals = runConfined(withWriteOnly, "/bin/cat", exportExisting)
+	if code == 0 || strings.Contains(out, "secret-export") {
+		t.Fatalf("write-only grant leaked file read: exit=%d out=%q", code, out)
+	}
+	if r, ok := findRefusal(refusals, "file-read-data", exportExisting); !ok || r.Recovery != confine.RecoverReadPath {
+		t.Fatalf("write-only read refusal missing: %+v", refusals.Refusals)
+	}
+	code, out, refusals = runConfined(withWriteOnly, "/bin/ls", exportDir)
+	if code == 0 || strings.Contains(out, "existing.csv") {
+		t.Fatalf("write-only grant leaked directory listing: exit=%d out=%q", code, out)
+	}
+	if r, ok := findRefusal(refusals, "file-read-data", exportDir); !ok || r.Recovery != confine.RecoverReadPath {
+		t.Fatalf("write-only list refusal missing: %+v", refusals.Refusals)
 	}
 }

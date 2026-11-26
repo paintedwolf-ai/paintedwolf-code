@@ -42,6 +42,7 @@ type ContextDeps struct {
 	BuildMessages         func(ctx context.Context, sess *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error)
 	ImplementSessionState func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
 	WritableSharedTemp    func(context.Context, *api.Session) []string
+	ReadableSharedTemp    func(context.Context, *api.Session) []string
 	RefreshToolContext    func(ctx context.Context, sess *api.Session, machine inject.Machine) (tools.ToolContext, error)
 	LoadedTools           func(sessionID string) map[string]bool
 	LiveResources         func(sessionID string) toolcontract.ResourcePresence

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/exec"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/scan/opengrep"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
@@ -55,7 +56,7 @@ func TestOpenGrepProductionInvocationOverridesAmbientRuleTimeout(t *testing.T) {
 	t.Setenv("SEMGREP_TIMEOUT", "1")
 	t.Setenv("SCANNER_HOLD_AFTER_REPORT", "")
 	scanner, root, files := newBudgetScanner(t)
-	result, err := scanner.scanTargets(t.Context(), root, filepath.Join(root, "scanner"), []string{"fixture-rule"}, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intraprocedural}, files)
+	result, err := scanner.scanTargets(t.Context(), root, filepath.Join(root, "scanner"), []string{"fixture-rule"}, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intraprocedural}, files, nil)
 	testutil.FailErr(t, "scan with host-owned budget", err)
 	if result == nil || result.FindingsCount != 0 || len(result.Warnings) != 0 {
 		t.Fatalf("incomplete scan admitted: %#v", result)
@@ -71,7 +72,7 @@ func TestOpenGrepCancellationRejectsUnfinishedReport(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		result, err = scanner.scanTargets(ctx, root, filepath.Join(root, "scanner"), []string{"fixture-rule"}, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intraprocedural}, files)
+		result, err = scanner.scanTargets(ctx, root, filepath.Join(root, "scanner"), []string{"fixture-rule"}, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intraprocedural}, files, nil)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -104,7 +105,7 @@ func TestOpenGrepHostDeadlineRemainsAuthoritative(t *testing.T) {
 	scanner, root, files := newBudgetScanner(t)
 	ctx, cancel := context.WithDeadline(t.Context(), time.Unix(0, 0))
 	defer cancel()
-	result, err := scanner.scanTargets(ctx, root, filepath.Join(root, "scanner"), []string{"fixture-rule"}, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intraprocedural}, files)
+	result, err := scanner.scanTargets(ctx, root, filepath.Join(root, "scanner"), []string{"fixture-rule"}, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intraprocedural}, files, nil)
 	if result != nil || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expired host deadline: result=%#v error=%v", result, err)
 	}
@@ -115,7 +116,7 @@ func TestOpenGrepBatchCannotReuseAnEarlierReport(t *testing.T) {
 	t.Setenv("SCANNER_SKIP_REPORT", "")
 	scanner, root, files := newBudgetScanner(t)
 	run := func() (*scanoutput.Result, error) {
-		return scanner.scanTargets(t.Context(), root, filepath.Join(root, "scanner"), []string{"fixture-rule"}, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intraprocedural}, files)
+		return scanner.scanTargets(t.Context(), root, filepath.Join(root, "scanner"), []string{"fixture-rule"}, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intraprocedural}, files, nil)
 	}
 	_, err := run()
 	testutil.FailErr(t, "publish first batch report", err)
@@ -126,5 +127,24 @@ func TestOpenGrepBatchCannotReuseAnEarlierReport(t *testing.T) {
 	}
 	if !errors.Is(err, os.ErrNotExist) || !strings.Contains(err.Error(), "exit=5") || !strings.Contains(err.Error(), "fixture scanner failed before report") {
 		t.Fatalf("missing batch output lost its cause or bounded console: %v", err)
+	}
+}
+
+func TestOpenGrepHardLimitReturnsCommandDeadline(t *testing.T) {
+	t.Setenv("SCANNER_HOLD_AFTER_REPORT", "1")
+	_, root, files := newBudgetScanner(t)
+	scanner := NewOpenGrepScanner(OpenGrepOptions{
+		Jobs:          1,
+		RuntimePolicy: scancatalog.RuntimePolicy{SoftLimitSec: 1, HardLimitSec: 1, CPUUnits: 1, Parallelism: 1},
+	})
+	result, err := scanner.scanTargets(t.Context(), root, filepath.Join(root, "scanner"), []string{"fixture-rule"}, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intraprocedural}, files, nil)
+	var timeout *exec.TimeoutError
+	if result != nil || !errors.As(err, &timeout) || !timeout.CommandDeadline {
+		t.Fatalf("hard limit result=%#v error=%v; want CommandDeadline TimeoutError", result, err)
+	}
+	expired := time.Now().Add(-time.Second)
+	result, err = scanner.scanTargets(t.Context(), root, filepath.Join(root, "scanner"), []string{"fixture-rule"}, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intraprocedural}, files, &expired)
+	if result != nil || !errors.As(err, &timeout) || !timeout.CommandDeadline {
+		t.Fatalf("exhausted batch deadline result=%#v error=%v; want CommandDeadline TimeoutError", result, err)
 	}
 }

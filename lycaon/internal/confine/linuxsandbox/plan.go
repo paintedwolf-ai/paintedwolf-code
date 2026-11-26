@@ -65,12 +65,20 @@ const (
 // Filesystem is the mount and Landlock expression of the filesystem rules.
 // Landlock grants are positive; mounts express the denials inside them.
 type Filesystem struct {
-	// SharedTemp names machine directories whose denied writes reach the action.
+	// SharedTemp names machine directories whose denied accesses reach the action.
 	SharedTemp []string `json:"shared_temp,omitempty"`
-	// WriteRoots are directories the process may read and change.
+	// ReadRoots are directories beneath a hidden or write-only floor the process may read and list.
+	ReadRoots []string `json:"read_roots,omitempty"`
+	// ReadFiles are exact files beneath a hidden or write-only floor the process may read.
+	ReadFiles []string `json:"read_files,omitempty"`
+	// WriteRoots are directories the process may change; read rights follow unless listed in WriteOnlyRoots.
 	WriteRoots []string `json:"write_roots"`
-	// WriteFiles are exact files the process may read and change.
+	// WriteFiles are exact files the process may change; read rights follow unless listed in WriteOnlyFiles.
 	WriteFiles []string `json:"write_files"`
+	// WriteOnlyRoots are directories in WriteRoots where reading and listing stay denied.
+	WriteOnlyRoots []string `json:"write_only_roots,omitempty"`
+	// WriteOnlyFiles are exact files in WriteFiles where reading stays denied.
+	WriteOnlyFiles []string `json:"write_only_files,omitempty"`
 	// ReadOnly are paths below a write grant the process may read but not change.
 	ReadOnly []string `json:"read_only"`
 	// Hidden are paths replaced by an empty read-only placeholder.
@@ -272,7 +280,11 @@ func (p Plan) Validate() error {
 
 // sorted orders every list so plans compare and apply deterministically.
 func (f Filesystem) sorted() Filesystem {
-	for _, list := range []*[]string{&f.WriteRoots, &f.WriteFiles, &f.ReadOnly, &f.Hidden, &f.Restored} {
+	for _, list := range []*[]string{
+		&f.SharedTemp, &f.ReadRoots, &f.ReadFiles,
+		&f.WriteRoots, &f.WriteFiles, &f.WriteOnlyRoots, &f.WriteOnlyFiles,
+		&f.ReadOnly, &f.Hidden, &f.Restored,
+	} {
 		*list = dedupeSorted(*list)
 	}
 	sort.Slice(f.ReadOnlyNames, func(i, j int) bool {

@@ -20,7 +20,7 @@ import (
 // path the applied profile refused.
 var refusedGrantFact = map[string]string{
 	"write_root":       "paintedwolf.ordinary_write_grants",
-	"read_path":        "paintedwolf.refused_read_grants",
+	"read_path":        "paintedwolf.ordinary_read_grants",
 	"credential_store": "paintedwolf.refused_credential_store_paths",
 }
 

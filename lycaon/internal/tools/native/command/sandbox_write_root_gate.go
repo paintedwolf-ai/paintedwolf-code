@@ -8,6 +8,7 @@ type SandboxWriteRootAsk struct {
 	ParentSessionID string
 	ProjectID       string
 	ToolCallID      string
+	ActionID        string
 	ProjectDir      string
 	// ToolName is the argv-running tool.
 	ToolName          string
@@ -17,6 +18,7 @@ type SandboxWriteRootAsk struct {
 	// fact its confinement and control-plane verdict carry.
 	SessionScratchRoot string
 	SessionOutputRoot  string
+	ReadDenyPaths      []string
 }
 
 // SandboxWriteRootResult is the gate outcome after optional HITL.
@@ -39,6 +41,7 @@ type SandboxReadPathAsk struct {
 	ParentSessionID string
 	ProjectID       string
 	ToolCallID      string
+	ActionID        string
 	ProjectDir      string
 	// ToolName is the argv-running tool.
 	ToolName           string

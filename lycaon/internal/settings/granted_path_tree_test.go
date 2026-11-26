@@ -3,6 +3,7 @@ package settings_test
 import (
 	"context"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -405,9 +406,9 @@ func canonDir(t *testing.T, dir string) string {
 // still crosses into outside-root review.
 func outsideScratchDir(t *testing.T) string {
 	t.Helper()
-	home, err := os.UserHomeDir()
-	testutil.FailErr(t, "resolve user home", err)
-	base, err := os.MkdirTemp(home, "paintedwolf-fixture-") //nolint:usetesting // Fixture must be outside the temp scratch roots.
+	account, err := user.Current()
+	testutil.FailErr(t, "resolve current user", err)
+	base, err := os.MkdirTemp(account.HomeDir, "paintedwolf-fixture-") //nolint:usetesting // Outside shared temp.
 	testutil.FailErr(t, "create outside fixture folder", err)
 	t.Cleanup(func() { os.RemoveAll(base) })
 	resolved, err := filepath.EvalSymlinks(base)

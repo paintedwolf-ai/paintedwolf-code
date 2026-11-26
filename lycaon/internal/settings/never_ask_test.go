@@ -134,17 +134,20 @@ func TestDisabledPromptsKeepSharedTempWriteReview(t *testing.T) {
 			shared := t.TempDir()
 			t.Setenv("TMPDIR", shared)
 			path := filepath.Join(shared, "notes.txt")
-			action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "write", Files: []string{path}}, Scope: hitl.ActionScope{ProjectDir: project}}
-			result, err := g.Evaluate(t.Context(), action)
-			testutil.FailErr(t, "evaluate shared temp write", err)
-			if !result.Required() || len(result.FileAccess) != 1 || !result.FileAccess[0].Write {
-				t.Fatalf("shared temp review = %+v", result)
-			}
-			action.Invocation.ApprovedFileAccess = result.FileAccess
-			result, err = g.Evaluate(t.Context(), action)
-			testutil.FailErr(t, "evaluate approved shared temp write", err)
-			if result.Required() {
-				t.Fatalf("approved write asked again: %+v", result)
+			for _, tool := range []string{"read", "write"} {
+				action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: tool, Files: []string{path}}, Scope: hitl.ActionScope{ProjectDir: project}}
+				result, err := g.Evaluate(t.Context(), action)
+				testutil.FailErr(t, "evaluate shared temp "+tool, err)
+				wantWrite := tool == "write"
+				if !result.Required() || len(result.FileAccess) != 1 || result.FileAccess[0].Write != wantWrite {
+					t.Fatalf("shared temp %s review = %+v", tool, result)
+				}
+				action.Invocation.ApprovedFileAccess = result.FileAccess
+				result, err = g.Evaluate(t.Context(), action)
+				testutil.FailErr(t, "evaluate approved shared temp "+tool, err)
+				if result.Required() {
+					t.Fatalf("approved %s asked again: %+v", tool, result)
+				}
 			}
 		})
 	}

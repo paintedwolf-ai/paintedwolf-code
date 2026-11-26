@@ -68,6 +68,11 @@ func runApply(ctx context.Context, p Prepared, tc tools.ToolContext, streams com
 	if p.filesystem == nil {
 		return settleMutationError(toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": p.command.spec.Name, "capability": "the program's staged publication owner"}), toolcontract.NoEffect)
 	}
+	if p.paths != nil {
+		if rebound, err := p.paths.Rebind(ctx, tc); err == nil {
+			p.paths = rebound
+		}
+	}
 	run := &applyRun{ctx: ctx, p: p, tc: tc, stderr: stderr, cached: has(p.Argv, "--cached"), threeWay: has(p.Argv, "-3")}
 	run.index = has(p.Argv, "--index") || (run.threeWay && !run.cached)
 	err := run.apply(streams.Input, out)

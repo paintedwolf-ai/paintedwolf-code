@@ -511,7 +511,7 @@ func TestDarwinTempAndCacheWithOverriddenTMPDIR(t *testing.T) {
 	}
 }
 
-func TestSharedTempGrantNamesTheLocationAtEveryDepth(t *testing.T) {
+func TestSharedTempGrantsFollowDirectionAndParentScope(t *testing.T) {
 	location := t.TempDir()
 	t.Setenv("TMPDIR", location)
 	root := fspath.CanonicalPath(location)
@@ -520,14 +520,25 @@ func TestSharedTempGrantNamesTheLocationAtEveryDepth(t *testing.T) {
 	path := root
 	for depth := 1; depth <= 6; depth++ {
 		path = filepath.Join(path, "build")
-		verdict := rules.Verdict(AccessWrite, path)
-		if verdict.Layer != FloorSharedTemp || verdict.Layer.Recovery().GrantPath(path) != root {
-			t.Fatalf("depth %d: %+v", depth, verdict)
+		writeVerdict := rules.Verdict(AccessWrite, path)
+		wantWriteGrant := filepath.Dir(path)
+		if writeVerdict.Layer != FloorSharedTemp || writeVerdict.Layer.RecoveryFor(AccessWrite).GrantPath(path) != wantWriteGrant {
+			t.Fatalf("write depth %d: %+v grant=%q want=%q", depth, writeVerdict, writeVerdict.Layer.RecoveryFor(AccessWrite).GrantPath(path), wantWriteGrant)
 		}
+		readVerdict := rules.Verdict(AccessRead, path)
+		if readVerdict.Layer != FloorSharedTemp || readVerdict.Layer.RecoveryFor(AccessRead).GrantPath(path) != path {
+			t.Fatalf("read depth %d: %+v grant=%q want=%q", depth, readVerdict, readVerdict.Layer.RecoveryFor(AccessRead).GrantPath(path), path)
+		}
+	}
+	if got := FloorSharedTemp.RecoveryFor(AccessWrite).GrantPath(root); got != root {
+		t.Fatalf("root write grant = %q, want %q", got, root)
 	}
 	rules, err = filesystemRules(Confinement{GrantedWriteRoots: []string{root}})
 	testutil.FailErr(t, "compile filesystem rules with grant", err)
 	if !rules.Verdict(AccessWrite, path).Allowed {
 		t.Fatal("reviewed temp root did not admit nested write")
+	}
+	if rules.Verdict(AccessRead, path).Allowed {
+		t.Fatal("write-only temp root admitted nested read")
 	}
 }

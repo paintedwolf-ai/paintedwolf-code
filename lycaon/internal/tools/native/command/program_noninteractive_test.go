@@ -37,9 +37,14 @@ func externalProgram(binary string, args ...string) string {
 }
 
 func TestProgramGitPreservesOwnEditorAndHookFailures(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	f := newProgramFixture(t)
+	homeDir := filepath.Join(f.ScratchDir, "home")
+	xdgDir := filepath.Join(f.ScratchDir, "xdg")
+	testutil.FailErr(t, "create home fixture", os.MkdirAll(homeDir, 0o700))
+	testutil.FailErr(t, "create xdg fixture", os.MkdirAll(xdgDir, 0o700))
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
 	git := requiredExternal(t, "git")
 	opts, err := lycexec.AgentLaunchOptions(lycexec.HostLaunch("noninteractive fixture"), f.Dir, nil, nil)
 	testutil.FailErr(t, "build process environment", err)

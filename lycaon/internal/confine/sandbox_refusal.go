@@ -1,6 +1,7 @@
 package confine
 
 import (
+	"os"
 	"slices"
 	"strings"
 )
@@ -272,7 +273,7 @@ func routeFilesystemRefusal(rules FilesystemRules, r SandboxRefusal, access File
 		return r
 	}
 	r.Layer = verdict.Layer
-	recovery := verdict.Layer.Recovery()
+	recovery := verdict.Layer.RecoveryFor(access)
 	if recovery.Terminal() {
 		return r
 	}
@@ -323,12 +324,106 @@ func operationAccess(operation string) FilesystemAccess {
 	}
 }
 
-// SharedTempRoots lists the shared directories identified by observed write refusals.
+// SharedTempPaths returns refused shared-temp paths for access.
+func (s SandboxRefusals) SharedTempPaths(access FilesystemAccess) []BoundaryPath {
+	var out []BoundaryPath
+	for _, path := range s.Paths(access) {
+		if path.Layer == FloorSharedTemp && path.Grant != "" {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+// SharedTempObservation groups reviewable shared-temp read and write grants
+// observed in one confinement run, skipping speculative missing read probes.
+type SharedTempObservation struct {
+	Reads  []string
+	Writes []string
+}
+
+func (o SharedTempObservation) Empty() bool {
+	return len(o.Reads) == 0 && len(o.Writes) == 0
+}
+
+func (o SharedTempObservation) All() []string {
+	var all []string
+	for _, p := range append(slices.Clone(o.Reads), o.Writes...) {
+		if !slices.Contains(all, p) {
+			all = append(all, p)
+		}
+	}
+	slices.Sort(all)
+	return all
+}
+
+// SharedTempObservation extracts deduplicated read and write grant candidates.
+func (s SandboxRefusals) SharedTempObservation() SharedTempObservation {
+	readPaths := s.SharedTempPaths(AccessRead)
+	var rawReads, readDirs []string
+	for i, p := range readPaths {
+		if metadataOnly(p.Operations) && hasGrantableDescendant(readPaths, i) {
+			continue
+		}
+		info, err := os.Lstat(p.Grant)
+		if err != nil {
+			// Speculative probes for absent temp files generate no automatic card.
+			continue
+		}
+		if !slices.Contains(rawReads, p.Grant) {
+			rawReads = append(rawReads, p.Grant)
+			if info.IsDir() {
+				readDirs = append(readDirs, p.Grant)
+			}
+		}
+	}
+	slices.Sort(rawReads)
+	slices.Sort(readDirs)
+	var reads []string
+	for _, p := range rawReads {
+		covered := false
+		for _, dir := range readDirs {
+			if dir != p && PathAtOrUnder(p, dir) {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			reads = append(reads, p)
+		}
+	}
+
+	var rawWrites []string
+	for _, p := range s.SharedTempPaths(AccessWrite) {
+		if !slices.Contains(rawWrites, p.Grant) {
+			rawWrites = append(rawWrites, p.Grant)
+		}
+	}
+	slices.Sort(rawWrites)
+	var writes []string
+	for _, w := range rawWrites {
+		covered := false
+		for _, other := range rawWrites {
+			if other != w && PathAtOrUnder(w, other) {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			writes = append(writes, w)
+		}
+	}
+	return SharedTempObservation{Reads: reads, Writes: writes}
+}
+
+// SharedTempRoots lists the shared-temp targets identified by observed refusals.
 func (s SandboxRefusals) SharedTempRoots() []string {
 	var roots []string
-	for _, path := range s.Paths(AccessWrite) {
-		if path.Layer == FloorSharedTemp && path.Grant != "" && !slices.Contains(roots, path.Grant) {
-			roots = append(roots, path.Grant)
+	for _, access := range []FilesystemAccess{AccessRead, AccessWrite} {
+		for _, path := range s.SharedTempPaths(access) {
+			if !slices.Contains(roots, path.Grant) {
+				roots = append(roots, path.Grant)
+			}
 		}
 	}
 	slices.Sort(roots)

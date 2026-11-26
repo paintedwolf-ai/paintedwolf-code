@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/admissiontest"
+	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -119,5 +120,46 @@ func TestGateContainedMatchesSpawnRequest(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGrantedPathSourceProjectsDirectionalAuthorityToConfinement(t *testing.T) {
+	admissiontest.Enable(t)
+	project := t.TempDir()
+	tempDir := t.TempDir()
+	readFile := filepath.Join(tempDir, "in.csv")
+	writeOnlyDir := filepath.Join(tempDir, "out")
+	rwDir := filepath.Join(tempDir, "exchange")
+	testutil.FailErr(t, "seed read file", os.WriteFile(readFile, []byte("a"), 0o600))
+	testutil.FailErr(t, "mkdir write-only", os.MkdirAll(writeOnlyDir, 0o700))
+	testutil.FailErr(t, "mkdir rw", os.MkdirAll(rwDir, 0o700))
+
+	rt := grantedpath.NewRuntime()
+	_, err := rt.Grant("sess-1", grantedpath.Grant{ID: "g-read", Path: readFile, Mode: grantedpath.ModeRead})
+	testutil.FailErr(t, "grant read file", err)
+	_, err = rt.Grant("sess-1", grantedpath.Grant{ID: "g-wo", Path: writeOnlyDir, Mode: grantedpath.ModeWriteOnly, Tree: true})
+	testutil.FailErr(t, "grant write-only dir", err)
+	_, err = rt.Grant("sess-1", grantedpath.Grant{ID: "g-rw", Path: rwDir, Mode: grantedpath.ModeWrite, Tree: true})
+	testutil.FailErr(t, "grant rw dir", err)
+	t.Cleanup(tools.SetGrantedPathSource(rt.ListEffective))
+
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: "proj-1", SessionID: "sess-1"},
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: project, IsPrimary: true}}, ActiveRootID: "r1"},
+	}
+	req := hitl.ActionConfineRequest(tools.ActionConfineInputsForContext(tctx, nil))
+	c, ok := confine.DefaultConfinement(req)
+	if !ok || c == nil {
+		t.Fatal("default confinement unavailable")
+	}
+	fs := confine.BoundaryOf(c).Filesystem
+	if !fs.Verdict(confine.AccessRead, readFile).Allowed || fs.Verdict(confine.AccessWrite, readFile).Allowed {
+		t.Fatalf("exact read file projection broke direction: read=%+v write=%+v", fs.Verdict(confine.AccessRead, readFile), fs.Verdict(confine.AccessWrite, readFile))
+	}
+	if !fs.Verdict(confine.AccessWrite, filepath.Join(writeOnlyDir, "res.csv")).Allowed || fs.Verdict(confine.AccessRead, filepath.Join(writeOnlyDir, "res.csv")).Allowed {
+		t.Fatalf("write-only dir projection broke direction")
+	}
+	if !fs.Verdict(confine.AccessWrite, filepath.Join(rwDir, "swap.csv")).Allowed || !fs.Verdict(confine.AccessRead, filepath.Join(rwDir, "swap.csv")).Allowed {
+		t.Fatalf("read-write dir projection broke direction")
 	}
 }

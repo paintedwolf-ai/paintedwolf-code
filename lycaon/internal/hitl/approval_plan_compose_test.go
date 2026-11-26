@@ -109,6 +109,26 @@ func TestCapabilityCompositionRefusesForeignInvocation(t *testing.T) {
 	}
 }
 
+func TestCapabilityCompositionBindsChildExecutionActionIDUnderModelToolCall(t *testing.T) {
+	write, read := capabilityPathReview(t, false), capabilityPathReview(t, true)
+	writeAct := *write.Request.ProposedAction
+	writeAct.Invocation.ActionID = "exec-child-1"
+	write.Request.ProposedAction = &writeAct
+	readAct := *read.Request.ProposedAction
+	readAct.Invocation.ActionID = "exec-child-1"
+	read.Request.ProposedAction = &readAct
+
+	action := writeAct
+	if _, _, err := ComposeCapabilityApprovals(action, []*PreparedApproval{write, read}); err != nil {
+		t.Fatalf("compose child execution capabilities: %v", err)
+	}
+	readAct.Invocation.ActionID = "exec-child-2"
+	read.Request.ProposedAction = &readAct
+	if _, _, err := ComposeCapabilityApprovals(action, []*PreparedApproval{write, read}); err == nil {
+		t.Fatal("composition accepted mismatched child execution ActionID")
+	}
+}
+
 func TestCapabilityCompositionKeepsStrictestContributingPosture(t *testing.T) {
 	write, read := capabilityPathReview(t, false), capabilityPathReview(t, true)
 	write.Request.Decision.Posture, read.Request.Decision.Posture = gate.PostureLight, gate.PostureLight

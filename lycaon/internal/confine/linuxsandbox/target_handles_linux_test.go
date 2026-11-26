@@ -4,6 +4,7 @@ package linuxsandbox
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -164,5 +165,93 @@ func TestCallerFactsParseEachField(t *testing.T) {
 	}
 	if facts, err := parseCallerFacts([]byte("Name:\tx\n")); err == nil || facts.umask != 0o777 {
 		t.Fatalf("record without a thread group: %+v %v", facts, err)
+	}
+}
+
+const nonDumpableChildEnv = "PW_TARGET_HANDLES_NONDUMPABLE_CHILD"
+
+func TestTargetHandlesNonDumpableChild(t *testing.T) {
+	if os.Getenv(nonDumpableChildEnv) == "" {
+		return
+	}
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		os.Exit(2)
+	}
+	_, _ = os.Stdout.WriteString("nondumpable\n")
+	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 1, 0, 0, 0); err != nil {
+		os.Exit(3)
+	}
+	_, _ = os.Stdout.WriteString("dumpable\n")
+	_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+}
+
+func TestNonDumpableTargetContinuesReadOpensAndFailsMutations(t *testing.T) {
+	cache := newTargetHandles()
+	child := exec.Command(os.Args[0], "-test.run=^TestTargetHandlesNonDumpableChild$")
+	child.Env = append(os.Environ(), nonDumpableChildEnv+"=1")
+	stdin, err := child.StdinPipe()
+	testutil.FailErr(t, "child input", err)
+	stdout, err := child.StdoutPipe()
+	testutil.FailErr(t, "child output", err)
+	testutil.FailErr(t, "start child", child.Start())
+	done := make(chan struct{})
+	t.Cleanup(func() { _ = child.Process.Kill(); <-done })
+	go func() { _ = child.Wait(); close(done) }()
+	reader := bufio.NewReader(stdout)
+	line, err := reader.ReadString('\n')
+	if err != nil || line != "nondumpable\n" {
+		t.Fatalf("child nondumpable state %q: %v", line, err)
+	}
+
+	pid := child.Process.Pid
+	handles, err := cache.acquire(pid)
+	testutil.FailErr(t, "acquire nondumpable", err)
+	defer cache.release(handles)
+	if handles.mem != nil {
+		t.Fatal("nondumpable process opened /proc/pid/mem")
+	}
+
+	target := &targetProcess{pid: pid, pidfd: handles.pidfd, handles: handles, cache: cache}
+	s := &supervisor{performer: &performerClient{}}
+
+	for _, flags := range []uint64{unix.O_RDONLY, unix.O_RDONLY | unix.O_CLOEXEC, unix.O_RDONLY | unix.O_DIRECTORY} {
+		notif := seccompNotif{Nr: unix.SYS_OPENAT, Args: [6]uint64{0, 0x1000, flags}}
+		if _, errno, examined := s.performPath(target, notif); errno != errMetadataContinue || !examined {
+			t.Fatalf("read-only openat flags=%#x: got errno=%v examined=%v", flags, errno, examined)
+		}
+	}
+	nullNotif := seccompNotif{Nr: unix.SYS_OPENAT, Args: [6]uint64{0, 0, unix.O_RDONLY}}
+	if _, errno, examined := s.performPath(target, nullNotif); errno != unix.EFAULT || !examined {
+		t.Fatalf("null-pointer openat: got errno=%v examined=%v", errno, examined)
+	}
+	for _, notif := range []seccompNotif{
+		{Nr: unix.SYS_OPENAT, Args: [6]uint64{0, 0x1000, unix.O_WRONLY}},
+		{Nr: unix.SYS_OPENAT, Args: [6]uint64{0, 0x1000, unix.O_RDWR}},
+		{Nr: unix.SYS_OPENAT, Args: [6]uint64{0, 0x1000, unix.O_RDONLY | unix.O_CREAT}},
+		{Nr: unix.SYS_OPENAT, Args: [6]uint64{0, 0x1000, unix.O_RDONLY | unix.O_TRUNC}},
+		{Nr: unix.SYS_OPENAT, Args: [6]uint64{0, 0x1000, unix.O_TMPFILE}},
+		{Nr: unix.SYS_OPENAT2, Args: [6]uint64{0, 0x1000, 0x2000, 24}},
+		{Nr: unix.SYS_MKDIRAT, Args: [6]uint64{0, 0x1000, 0o700}},
+		{Nr: unix.SYS_UNLINKAT, Args: [6]uint64{0, 0x1000, 0}},
+	} {
+		if _, errno, examined := s.performPath(target, notif); errno != unix.EACCES || examined {
+			t.Fatalf("mutating call nr=%d flags=%#x: got errno=%v examined=%v", notif.Nr, notif.Args[2], errno, examined)
+		}
+	}
+
+	_, err = stdin.Write([]byte("dumpable\n"))
+	testutil.FailErr(t, "restore dumpable", err)
+	line, err = reader.ReadString('\n')
+	if err != nil || line != "dumpable\n" {
+		t.Fatalf("child dumpable state %q: %v", line, err)
+	}
+	start := firstMapping(t, pid)
+	buf := make([]byte, 16)
+	if n, err := handles.readAt(pid, buf, int64(start)); err != nil || n != len(buf) {
+		t.Fatalf("readAt after dumpable restored: n=%d err=%v", n, err)
+	}
+	if _, err := target.readPath(0x1); !errors.Is(err, unix.EFAULT) {
+		t.Fatalf("unmapped readPath after dumpable restored: got %v, want EFAULT", err)
 	}
 }

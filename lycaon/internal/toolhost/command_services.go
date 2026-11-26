@@ -63,7 +63,7 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 		r.paths.SetWriteRootPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, root string) (bool, bool, string, error) {
 			result, err := writeRoot.Authorize(ctx, command.SandboxWriteRootAsk{
 				SessionID: tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
-				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(),
+				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ActionID: tc.EffectActionID(), ProjectDir: tc.ActiveRootPath(),
 				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedWriteRoot: root,
 				SessionScratchRoot: tc.Host.SessionScratchDir,
 				SessionOutputRoot:  tc.Host.SessionOutputDir,
@@ -74,7 +74,7 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 		r.paths.SetReadPathPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
 			result, err := writeRoot.AuthorizeRead(ctx, command.SandboxReadPathAsk{
 				SessionID: tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
-				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(),
+				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ActionID: tc.EffectActionID(), ProjectDir: tc.ActiveRootPath(),
 				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedReadPath: path,
 				ReadDenyPaths:      tools.ActionConfineInputsForContext(tc, nil).ReadDenyPaths,
 				SessionScratchRoot: tc.Host.SessionScratchDir,
@@ -152,6 +152,7 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	if programs.Executor != nil {
 		programs.Executor.Metadata.SetCommandExternalHidden(services.ExternalHidden)
 		r.owners.reviewRoot = programs.Executor.Boundary.ReviewRedirectRoot
+		r.owners.reviewRead = programs.Executor.Boundary.ReviewRedirectRead
 	}
 	owners, err := r.owners.compose(services.Recorder)
 	if err != nil {

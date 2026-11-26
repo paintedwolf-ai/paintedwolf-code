@@ -501,3 +501,58 @@ func TestSharedTempOccurrencePreservesOtherRecovery(t *testing.T) {
 		}
 	}
 }
+
+func TestSharedTempXcodeMixedRefusalReconcilesToSingleGuidance(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
+	mgr := newPostToolGuidanceManager(t)
+	userTemp := "/private/var/folders/s5/dbnkbygx0w9d7cxh99cs0vmh0000gn/T"
+	obs := confine.Observation{
+		Applied:      true,
+		FailedStages: []string{"external -- ./qa/xcode.sh"},
+		Signals:      []string{"boundary_refused"},
+		Refusals: confine.SandboxRefusals{Refusals: []confine.SandboxRefusal{
+			{
+				Operation: "file-write-create", Target: userTemp + "/xcrun_db-95047",
+				Layer: confine.FloorSharedTemp, Grant: userTemp, Recovery: confine.RecoverWriteRoot,
+			},
+			{
+				Operation: "file-write-create", Target: filepath.Join(home, ".swiftpm"),
+				Layer:    confine.FloorOutsideWriteRoots,
+				Grant:    confine.FloorOutsideWriteRoots.RecoveryFor(confine.AccessWrite).GrantPath(filepath.Join(home, ".swiftpm")),
+				Recovery: confine.RecoverWriteRoot,
+			},
+			{
+				Operation: "file-read-data", Target: filepath.Join(home, "Library", "Keychains", "login.keychain-db"),
+				Layer: confine.FloorReadCredentialStore, Grant: filepath.Join(home, "Library", "Keychains"), Recovery: confine.RecoverCredentialStore,
+			},
+			{Operation: "user-preference-write", Target: "com.apple.dt.xcodebuild", Recovery: confine.RecoverHostExecution},
+			{Operation: "sysctl-write", Target: "kern.grade_cputype", Recovery: confine.RecoverHostExecution},
+			{Operation: "mach-lookup", Target: "com.apple.PowerManagement.control", Recovery: confine.RecoverHostExecution},
+		}},
+	}
+	settled := guidance.SharedTempSettlement{
+		Refused:          []string{userTemp},
+		Writes:           []string{userTemp},
+		Allowed:          []string{userTemp},
+		ScratchAvailable: true,
+	}
+	delivered, facts := mgr.ToolPolicy.AfterTool(
+		t.Context(), &api.Session{ID: "chat-xcode"}, "command",
+		map[string]any{"command": "external -- ./qa/xcode.sh"},
+		`{"status":65,"uncertain_effects":1,"replay_available":false}`,
+		1, guidance.ToolResultFacts{Confine: obs, SharedTemp: &settled},
+	)
+	if !facts.HasCode("SANDBOX_SHARED_TEMP_REFUSED") {
+		t.Fatalf("missing SANDBOX_SHARED_TEMP_REFUSED: %+v\n%s", facts, delivered)
+	}
+	for _, competing := range []string{"SANDBOX_TRY_CAPABILITIES", "SANDBOX_TRY_WRITE_ROOT", "SANDBOX_TRY_CREDENTIAL_STORE", "SANDBOX_TRY_HOST_EXECUTION"} {
+		if facts.HasCode(competing) {
+			t.Fatalf("competing escalation %s remained after shared-temp approval: %+v\n%s", competing, facts, delivered)
+		}
+	}
+	if strings.Contains(delivered, home) || strings.Contains(delivered, "host_execution") || strings.Contains(delivered, "credential_store") {
+		t.Fatalf("delivered guidance suggested home or host escalation:\n%s", delivered)
+	}
+}

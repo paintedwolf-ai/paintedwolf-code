@@ -79,7 +79,7 @@ func Enter(plan Plan) error {
 		if err := startPerformer(plan.Filesystem); err != nil {
 			return err
 		}
-		listener, err := applySeccomp()
+		listener, err := applySeccomp(len(plan.Filesystem.SharedTemp) > 0)
 		if err != nil {
 			return err
 		}

@@ -285,9 +285,8 @@ func refusalProjectAt(base string) refusalProject {
 	return refusalProject{project: filepath.Join(base, "proj"), outside: filepath.Join(base, "outsid\u00e9")}
 }
 
-// copyRefusalProject gives one cell its own copy of the template. Fixtures
-// live under the home directory: the system temp directory is a default write
-// root, so a sibling there is not outside the roots.
+// copyRefusalProject gives one cell its own copy of the template under a
+// non-shared-temp directory so outside-root cases exercise ordinary host paths.
 func copyRefusalProject(t *testing.T, template refusalProject) refusalProject {
 	t.Helper()
 	base := filepath.Join(outsideCommandFolder(t), "w")

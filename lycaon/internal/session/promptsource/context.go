@@ -107,6 +107,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 			return count
 		},
 		WritableSharedTemp: m.Profiles.WritableSharedTemp,
+		ReadableSharedTemp: m.Profiles.ReadableSharedTemp,
 		LoadedTools:        m.Loading.LoadedTools,
 		LiveResources: func(sessionID string) toolcontract.ResourcePresence {
 			presence := toolcontract.ResourcePresence{}

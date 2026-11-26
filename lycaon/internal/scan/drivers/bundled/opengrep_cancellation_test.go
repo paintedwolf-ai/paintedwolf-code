@@ -47,7 +47,7 @@ exit 2
 			var got outcome
 			go func() {
 				defer close(done)
-				got.result, got.err = scanner.scanTargets(ctx, projectDir, bin, []string{"fixture-rule"}, []string{projectDir}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, files)
+				got.result, got.err = scanner.scanTargets(ctx, projectDir, bin, []string{"fixture-rule"}, []string{projectDir}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, files, nil)
 			}()
 			t.Cleanup(func() {
 				cancel()

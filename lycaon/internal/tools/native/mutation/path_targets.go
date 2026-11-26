@@ -39,6 +39,13 @@ func mutationPathTargets(argv commandprogram.BoundArgv) []commandprogram.PathTar
 		for i, path := range operands {
 			add(path, i == len(operands)-1)
 		}
+	case "ln":
+		if len(operands) == 2 && (flag("-s") || flag("-r")) {
+			if flag("-r") {
+				add(operands[0], false)
+			}
+			add(operands[1], true)
+		}
 	case "chmod", "chown":
 		for _, path := range operands[min(1, len(operands)):] {
 			add(path, true)

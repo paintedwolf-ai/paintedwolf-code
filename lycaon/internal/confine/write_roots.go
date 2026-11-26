@@ -24,10 +24,11 @@ func osDefaultWriteRoots() []string {
 	return append(standardCacheDataRoots(), platformUserCache())
 }
 
-// WorkspaceRoots separates session storage from a single invocation’s private stage.
+// WorkspaceRoots separates session storage from invocation staging and scanner cache.
 type WorkspaceRoots struct {
 	SessionScratch string
 	Action         ActionWorkspace `json:"-"`
+	ScannerCache   ScannerCache    `json:"-"`
 }
 
 // ActionWorkspace holds a private working directory for one tool invocation.
@@ -48,9 +49,26 @@ func NewActionWorkspace() (ActionWorkspace, error) {
 
 func (w ActionWorkspace) Path() string { return w.path }
 
+// ScannerCache holds the host-managed runtime cache for bundled scanners.
+type ScannerCache struct{ path string }
+
+func NewScannerCache() (ScannerCache, error) {
+	root, err := configdir.UserConfigDir()
+	if err != nil {
+		return ScannerCache{}, err
+	}
+	path := enginepaths.ScannerCacheRootUnder(root)
+	if err := os.MkdirAll(path, 0700); err != nil {
+		return ScannerCache{}, err
+	}
+	return ScannerCache{path: path}, nil
+}
+
+func (c ScannerCache) Path() string { return c.path }
+
 func (c Confinement) privateWorkRoots() []string {
 	var paths []string
-	for _, dir := range []string{c.Workspaces.SessionScratch, c.Workspaces.Action.Path()} {
+	for _, dir := range []string{c.Workspaces.SessionScratch, c.Workspaces.Action.Path(), c.Workspaces.ScannerCache.Path()} {
 		if dir != "" {
 			paths = append(paths, fspath.CanonicalPath(dir))
 		}
@@ -59,9 +77,11 @@ func (c Confinement) privateWorkRoots() []string {
 }
 
 func (c Confinement) writeRoots() ([]string, error) {
-	granted := c.GrantedWriteRoots
-	if c.Workspaces.Action.Path() != "" {
-		granted = append(slices.Clone(granted), c.Workspaces.Action.Path())
+	granted := slices.Clone(c.GrantedWriteRoots)
+	for _, dir := range []string{c.Workspaces.Action.Path(), c.Workspaces.ScannerCache.Path()} {
+		if dir != "" {
+			granted = append(granted, dir)
+		}
 	}
 	return WriteRootsForBoundary(c.ProjectID, c.Roots, granted, c.Workspaces.SessionScratch)
 }
@@ -147,25 +167,136 @@ func PathWithinRoots(path string, roots []string) bool {
 	return false
 }
 
-// NativeFilesystemRootForPath preserves default read scope while limiting writes to reviewed and session roots.
+// NativeFilesystemRootForPath resolves external filesystem authority for native operations.
 func NativeFilesystemRootForPath(projectID string, roots, granted []string, sessionScratch, path string, write bool) (string, error) {
 	if !filepath.IsAbs(path) {
 		return "", nil
 	}
-	var defaults []string
-	if !write {
-		defaults = osDefaultWriteRoots()
+	abs := fspath.CanonicalPath(path)
+	if abs == "" {
+		return "", nil
 	}
-	allowed, err := filesystemRoots(projectID, roots, granted, sessionScratch, defaults)
+	var allowed []string
+	var err error
+	switch {
+	case write:
+		allowed, err = filesystemRoots(projectID, sharedTempScopedRoots(roots, abs), granted, sessionScratch, nil)
+	case SharedTempLocation(abs) != "":
+		allowed, err = explicitSharedTempReadRoots(roots, nil, nil, sessionScratch, abs)
+	default:
+		allowed, err = filesystemRoots(projectID, roots, granted, sessionScratch, osDefaultWriteRoots())
+	}
 	if err != nil {
 		return "", err
 	}
-	if !write {
-		if temp := SharedTempLocation(path); temp != "" && !defaultRootContainsStateFolder(temp) {
-			allowed = append(allowed, temp)
-		}
+	return deepestCoveringRoot(allowed, abs), nil
+}
+
+// NativeReadRootForPath resolves external read authority, honoring exact and directory read grants.
+func NativeReadRootForPath(projectID string, roots, readRoots, sessionReadPaths, grantedWriteRoots []string, sessionScratch, sessionOutput, path string) (string, error) {
+	if !filepath.IsAbs(path) {
+		return "", nil
 	}
 	abs := fspath.CanonicalPath(path)
+	if abs == "" {
+		return "", nil
+	}
+	if ControlPlanePathDenied(abs, false, sessionScratch, sessionOutput) {
+		return "", nil
+	}
+	effectiveReadRoots := slices.Clone(readRoots)
+	if strings.TrimSpace(sessionOutput) != "" {
+		effectiveReadRoots = append(effectiveReadRoots, sessionOutput)
+	}
+	if SharedTempLocation(abs) == "" {
+		allowed, err := filesystemRoots(projectID, roots, grantedWriteRoots, sessionScratch, osDefaultWriteRoots())
+		if err != nil {
+			return "", err
+		}
+		for _, r := range effectiveReadRoots {
+			if cp := fspath.CanonicalPath(r); cp != "" {
+				allowed = append(allowed, cp)
+			}
+		}
+		return deepestCoveringRoot(allowed, abs), nil
+	}
+	allowed, err := explicitSharedTempReadRoots(roots, effectiveReadRoots, sessionReadPaths, sessionScratch, abs)
+	if err != nil {
+		return "", err
+	}
+	return deepestCoveringRoot(allowed, abs), nil
+}
+
+// DefaultReadRoots lists ambient non-temp roots admitted for native reads.
+func DefaultReadRoots(projectID string) []string {
+	var out []string
+	for _, raw := range append(osDefaultWriteRoots(), grantedWriteRoots(projectID)...) {
+		if strings.TrimSpace(raw) == "" {
+			continue
+		}
+		cp := fspath.CanonicalPath(raw)
+		if cp == "" || SharedTempLocation(cp) != "" || defaultRootContainsStateFolder(cp) {
+			continue
+		}
+		if !slices.Contains(out, cp) {
+			out = append(out, cp)
+		}
+	}
+	return out
+}
+
+func sharedTempScopedRoots(roots []string, abs string) []string {
+	loc := SharedTempLocation(abs)
+	if loc == "" {
+		return roots
+	}
+	var out []string
+	for _, r := range roots {
+		if cp := fspath.CanonicalPath(r); cp != "" && PathAtOrUnder(cp, loc) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func explicitSharedTempReadRoots(roots, readRoots, sessionReadPaths []string, sessionScratch, abs string) ([]string, error) {
+	loc := SharedTempLocation(abs)
+	var allowed []string
+	for _, r := range append(slices.Clone(roots), readRoots...) {
+		if cp := fspath.CanonicalPath(r); cp != "" && PathAtOrUnder(cp, loc) {
+			allowed = append(allowed, cp)
+		}
+	}
+	if sessionScratch != "" {
+		if cp := fspath.CanonicalPath(sessionScratch); cp != "" {
+			allowed = append(allowed, cp)
+		}
+	}
+	rawGrants := make([]ProtectedPathGrant, 0, len(sessionReadPaths))
+	for _, p := range sessionReadPaths {
+		if strings.TrimSpace(p) != "" {
+			rawGrants = append(rawGrants, NewProtectedPathGrant(p))
+		}
+	}
+	applied, _, err := validateProtectedPathGrants(normalizeProtectedPathGrants(rawGrants))
+	if err != nil {
+		return nil, err
+	}
+	for _, g := range applied {
+		if g.Subtree {
+			if PathAtOrUnder(g.ResolvedPath, loc) || PathAtOrUnder(loc, g.ResolvedPath) {
+				allowed = append(allowed, g.ResolvedPath)
+			}
+			continue
+		}
+		if PathEqual(abs, g.ResolvedPath) {
+			allowed = append(allowed, g.ResolvedPath)
+		}
+	}
+	return allowed, nil
+}
+
+func deepestCoveringRoot(allowed []string, abs string) string {
 	var best string
 	for _, root := range allowed {
 		rel, err := filepath.Rel(root, abs)
@@ -173,7 +304,7 @@ func NativeFilesystemRootForPath(projectID string, roots, granted []string, sess
 			best = root
 		}
 	}
-	return best, nil
+	return best
 }
 
 // UnrecordedRoots are the host folders whose changes source history never

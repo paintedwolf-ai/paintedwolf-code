@@ -68,14 +68,27 @@ func confinedRun(t *testing.T, self string, c confine.Confinement, name string, 
 	}
 	defer release()
 	c.Roots = liveBoundaryRoots(c.Roots...)
+	if name == self && confine.SharedTempLocation(self) != "" && len(c.ProtectedReadGrants) < confine.MaxProtectedPathGrants {
+		c.ProtectedReadGrants = append(append([]confine.ProtectedPathGrant(nil), c.ProtectedReadGrants...), confine.NewProtectedPathGrant(self))
+	}
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
+	setConfinedWorkingDir(cmd, c)
 	if scratch := c.Workspaces.SessionScratch; scratch != "" {
 		cmd.Env = append(cmd.Environ(), "TMPDIR="+scratch, "TMP="+scratch, "TEMP="+scratch)
 	}
 	out, _ := cmd.CombinedOutput()
 	return cmd.ProcessState.ExitCode(), string(out)
+}
+
+func setConfinedWorkingDir(cmd *exec.Cmd, c confine.Confinement) {
+	for _, root := range c.Roots {
+		if info, err := os.Stat(root); err == nil && info.IsDir() {
+			cmd.Dir = root
+			return
+		}
+	}
 }
 
 // confinedStdout is confinedRun with stdout kept apart from stderr, for probes
@@ -88,9 +101,13 @@ func confinedStdout(t *testing.T, self string, c confine.Confinement, name strin
 	}
 	defer release()
 	c.Roots = liveBoundaryRoots(c.Roots...)
+	if name == self && confine.SharedTempLocation(self) != "" && len(c.ProtectedReadGrants) < confine.MaxProtectedPathGrants {
+		c.ProtectedReadGrants = append(append([]confine.ProtectedPathGrant(nil), c.ProtectedReadGrants...), confine.NewProtectedPathGrant(self))
+	}
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
+	setConfinedWorkingDir(cmd, c)
 	var errBuf strings.Builder
 	cmd.Stderr = &errBuf
 	out, _ := cmd.Output()
@@ -406,6 +423,7 @@ func TestBoundaryDraftWorkspaceVenvInterpreterExecutes(t *testing.T) {
 	draft, err := project.DraftWorkspaceDir("venv-probe")
 	testutil.FailErr(t, "project.DraftWorkspaceDir failed", err)
 	testutil.FailErr(t, "mkdir draft", os.MkdirAll(draft, 0o700))
+	t.Chdir(draft)
 	venv := filepath.Join(draft, ".venv")
 	scratch := outsideTemporaryWriteRoots(t)
 	confinement := confine.Confinement{Roots: []string{draft}, Workspaces: confine.WorkspaceRoots{SessionScratch: scratch}}
@@ -527,6 +545,7 @@ func TestBoundarySignalSameSandboxOnly(t *testing.T) {
 	}, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup2()
+	setConfinedWorkingDir(same, c)
 	same.WaitDelay = 10 * time.Second
 	out2, err := same.CombinedOutput()
 	if err != nil {

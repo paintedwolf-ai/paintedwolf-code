@@ -1,10 +1,14 @@
 package policyfacts
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -121,7 +125,10 @@ func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
 		{Operation: "network-bind", Target: "local:127.0.0.1:5301", Recovery: confine.RecoverLocalListen},
 		{Operation: "network-outbound", Target: "remote:127.0.0.1:5302", Recovery: confine.RecoverOutboundPort},
 		{Operation: "file-read-data", Target: "/state/store", Layer: confine.FloorReadControlPlane, Recovery: confine.RecoverNone},
+		{Operation: "file-read-data", Target: tempReadTarget(t), Layer: confine.FloorSharedTemp, Recovery: confine.RecoverReadPath, Grant: tempReadTarget(t)},
 	}
+	tempRead := items[11].Target
+	items[11].Grant = tempRead
 	for mask := 1; mask < 1<<len(items); mask++ {
 		var subset confine.SandboxRefusals
 		for i, item := range items {
@@ -131,18 +138,63 @@ func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
 		}
 		gc := oar.NewGuardContext()
 		ObserveConfine(gc, confine.Observation{Applied: true, Refusals: subset})
-		groups := [][]string{gc.Refusals.RefusedReadGrants, gc.Refusals.OrdinaryWriteGrants, subset.SharedTempRoots(), gc.Refusals.RefusedTerminalWritePaths, gc.Refusals.RefusedCredentialStorePaths, gc.Refusals.RefusedSocketPaths, gc.Refusals.RefusedSignals, gc.Refusals.UnsandboxedRefusals, gc.Refusals.RefusedListenPorts, gc.Refusals.RefusedConnectPorts, gc.Refusals.RefusedTerminalReadPaths}
+		groups := [][]string{
+			gc.Refusals.OrdinaryReadGrants,
+			gc.Refusals.OrdinaryWriteGrants,
+			subset.SharedTempObservation().Writes,
+			gc.Refusals.RefusedTerminalWritePaths,
+			gc.Refusals.RefusedCredentialStorePaths,
+			gc.Refusals.RefusedSocketPaths,
+			gc.Refusals.RefusedSignals,
+			gc.Refusals.UnsandboxedRefusals,
+			gc.Refusals.RefusedListenPorts,
+			gc.Refusals.RefusedConnectPorts,
+			gc.Refusals.RefusedTerminalReadPaths,
+			subset.SharedTempObservation().Reads,
+		}
 		for i, group := range groups {
 			if (len(group) > 0) != (mask&(1<<i) != 0) {
 				t.Fatalf("subset %b group %d=%v", mask, i, group)
 			}
 		}
-		hasTemp := mask&(1<<2) != 0
-		if slices.Contains(gc.Refusals.RefusedWritePaths, "/tmp/slot") != hasTemp || slices.Contains(gc.Refusals.RefusedWriteGrants, "/tmp") != hasTemp {
+		hasTempWrite := mask&(1<<2) != 0
+		if slices.Contains(gc.Refusals.RefusedWritePaths, "/tmp/slot") != hasTempWrite || slices.Contains(gc.Refusals.RefusedWriteGrants, "/tmp") != hasTempWrite {
 			t.Fatalf("published write observation missing from subset %b", mask)
 		}
 		if slices.Contains(gc.Refusals.OrdinaryWritePaths, "/tmp/slot") || slices.Contains(gc.Refusals.OrdinaryWriteGrants, "/tmp") {
 			t.Fatalf("temp leaked into ordinary writes in subset %b", mask)
 		}
+		hasTempRead := mask&(1<<11) != 0
+		if slices.Contains(gc.Refusals.RefusedReadPaths, tempRead) != hasTempRead || slices.Contains(gc.Refusals.RefusedReadGrants, tempRead) != hasTempRead {
+			t.Fatalf("published read observation missing from subset %b", mask)
+		}
+		if slices.Contains(gc.Refusals.OrdinaryReadPaths, tempRead) || slices.Contains(gc.Refusals.OrdinaryReadGrants, tempRead) {
+			t.Fatalf("temp leaked into ordinary reads in subset %b", mask)
+		}
+	}
+}
+
+func tempReadTarget(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "in.csv")
+	testutil.FailErr(t, "write temp read target", os.WriteFile(path, []byte("a,b\n"), 0o600))
+	return fspath.CanonicalPath(path)
+}
+
+func TestReconcileSettledSharedTempSuppressesCompetingEscalations(t *testing.T) {
+	gc := oar.NewGuardContext()
+	ObserveConfine(gc, confine.Observation{
+		Applied: true,
+		Signals: []string{"boundary_refused"},
+		Refusals: confine.SandboxRefusals{
+			Refusals: []confine.SandboxRefusal{
+				{Operation: "file-write-create", Target: "/var/folders/xx/T/xcrun_db-1234", Layer: confine.FloorSharedTemp, Recovery: confine.RecoverWriteRoot, Grant: "/var/folders/xx/T"},
+				{Operation: "mach-lookup", Target: "com.apple.diagnosticd", Recovery: confine.RecoverHostExecution},
+			},
+		},
+	})
+	reconcileSettledSharedTemp(gc, &guidance.SharedTempSettlement{Refused: []string{"/var/folders/xx/T"}, Allowed: []string{"/var/folders/xx/T"}})
+	if len(gc.Refusals.UnsandboxedRefusals) != 0 || len(gc.Refusals.RefusedWriteGrants) != 0 || slices.Contains(gc.Execution.ConfineSignals, "boundary_refused") {
+		t.Fatalf("settled shared-temp kept competing escalation facts: refusals=%+v signals=%v", gc.Refusals, gc.Execution.ConfineSignals)
 	}
 }

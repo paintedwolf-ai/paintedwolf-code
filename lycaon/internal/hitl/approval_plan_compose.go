@@ -1,11 +1,16 @@
 package hitl
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -25,10 +30,18 @@ func ComposeCapabilityApprovals(action ProposedAction, reviews []*PreparedApprov
 	var reasonKeys []string
 	var held *HeldRelease
 	plans := make([]*ApprovalPlan, 0, len(reviews))
+	firstCallID := reviews[0].Request.ToolCallID
 	for _, review := range reviews {
 		req := review.Request
 		if req.ApprovalPlan == nil || req.Decision == nil || req.ProposedAction == nil || req.ProjectID != action.Scope.ProjectID ||
-			req.SessionID != action.Scope.SessionID || req.ToolCallID != action.Invocation.ActionID {
+			req.SessionID != action.Scope.SessionID || req.ToolCallID != firstCallID {
+			return nil, nil, fmt.Errorf("capability review has incomplete or foreign contributions")
+		}
+		reqActionID := req.ProposedAction.Invocation.ActionID
+		if reqActionID == "" {
+			reqActionID = req.ToolCallID
+		}
+		if reqActionID != action.Invocation.ActionID {
 			return nil, nil, fmt.Errorf("capability review has incomplete or foreign contributions")
 		}
 		plan := req.ApprovalPlan
@@ -57,10 +70,15 @@ func ComposeCapabilityApprovals(action ProposedAction, reviews []*PreparedApprov
 	decision.Primary, decision.Also = reasons[0], reasons[1:]
 	decision.ReasonKey = strings.Join(uniqueCopy(reasonKeys), "|")
 	presentation.Gate = decision.Primary
+	if allSharedTempTargets(subject.Targets) {
+		subject.Title = "Allow this chat to exchange files in system temp?"
+		presentation.Action = "System temp access"
+	}
 	options := combinedCapabilityOptions(plans)
 	if !slices.ContainsFunc(options, func(option ApprovalOption) bool { return !option.Disabled }) {
 		return nil, nil, ErrNoCommonApprovalDuration
 	}
+	options = append(options, combinedSharedTempAlsoAllow(action, plans, subject.Targets)...)
 	options = append(options, combinedCapabilityQuiet(plans, options)...)
 	plan, err := NewApprovalPlan(action, ApprovalStagePreSpawn, subject, presentation, reasons, options, FaceContext{})
 	if err != nil {
@@ -206,7 +224,7 @@ func (p ApprovalPlan) OptionContinues(option ApprovalOption) bool {
 				return true
 			}
 		case ApprovalSubjectReadPathSet:
-			if delta.Kind == AuthorityReadPathChat {
+			if delta.Kind == AuthorityReadPathChat || delta.Kind == AuthorityGrantedPath {
 				return true
 			}
 		case ApprovalSubjectActionSet:
@@ -260,8 +278,15 @@ func actionSetOptionContinues(targets []ApprovalTarget, authority []ApprovalAuth
 			covered["local_listen"] = true
 		case AuthorityLoopbackConnectChat:
 			covered["loopback_connect"] = true
-		case AuthorityWriteRootChat, AuthorityGrantedPath:
+		case AuthorityWriteRootChat:
 			covered["write_path"] = true
+		case AuthorityGrantedPath:
+			if delta.GrantedPath != nil && delta.GrantedPath.Permits(true) {
+				covered["write_path"] = true
+			}
+			if delta.GrantedPath != nil && delta.GrantedPath.Permits(false) {
+				covered["read_path"] = true
+			}
 		case AuthorityReadPathChat:
 			covered["read_path"] = true
 		case AuthorityAskQuiet, AuthorityTrustDestination:
@@ -276,4 +301,118 @@ func actionSetOptionContinues(targets []ApprovalTarget, authority []ApprovalAuth
 		}
 	}
 	return true
+}
+
+func allSharedTempTargets(targets []ApprovalTarget) bool {
+	if len(targets) == 0 {
+		return false
+	}
+	for _, target := range targets {
+		if target.Kind == "shared_temp" {
+			continue
+		}
+		if shared, _ := target.Details["shared_temp"].(bool); shared {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func combinedSharedTempAlsoAllow(action ProposedAction, plans []*ApprovalPlan, targets []ApprovalTarget) []ApprovalOption {
+	if !allSharedTempTargets(targets) {
+		return nil
+	}
+	var tempRoots, paths []string
+	for _, target := range targets {
+		p, _ := target.Details["blocked_path"].(string)
+		if p == "" {
+			continue
+		}
+		paths = append(paths, p)
+		if root := confine.SharedTempLocation(p); root != "" && !slices.Contains(tempRoots, root) {
+			tempRoots = append(tempRoots, root)
+		}
+	}
+	if len(tempRoots) != 1 || len(paths) == 0 {
+		return nil
+	}
+	tempRoot := tempRoots[0]
+	common := commonSharedTempDirectory(paths, tempRoot)
+	_ = plans
+	if common != "" && !confine.PathEqual(common, tempRoot) {
+		return []ApprovalOption{SharedTempExchangeFolderOption(action, common, false)}
+	}
+	// Offer the single enclosing system temp root only when all targets live under it.
+	return []ApprovalOption{SharedTempExchangeFolderOption(action, tempRoot, true)}
+}
+
+func commonSharedTempDirectory(paths []string, tempRoot string) string {
+	dir := paths[0]
+	for _, p := range paths[1:] {
+		for dir != "" && !confine.PathAtOrUnder(p, dir) {
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				return ""
+			}
+			dir = parent
+		}
+	}
+	if !confine.PathAtOrUnder(dir, tempRoot) {
+		return ""
+	}
+	return dir
+}
+
+// SharedTempExchangeFolderOffer builds an explicit chat-scoped read+write folder offer.
+func SharedTempExchangeFolderOffer(action ProposedAction, dir string, isTopRoot bool) ApprovalGrantOffer {
+	chat := action.Scope.ChatSession()
+	coverage := "reading, listing, and writing files in `" + dir + "`"
+	if isTopRoot {
+		coverage += " — other applications' temporary files in " + dir + " are included"
+	}
+	access := GrantedPathDelta{Path: dir, Write: true, WriteOnly: false, Tree: true}
+	sum := sha256.Sum256([]byte(strings.Join([]string{"shared_temp_rw", dir, chat}, "\x00")))
+	id := "grant_" + hex.EncodeToString(sum[:8])
+	now := time.Now().UTC()
+	writeGrant := ApprovalGrant{
+		ID: id + "_w", Scope: ApprovalGrantScopeChat,
+		Predicate:     ApprovalGrantPredicate{Category: ApprovalGrantCategoryWriteRoot, Pattern: dir},
+		ChatSessionID: chat, ProjectID: action.Scope.ProjectID, ProjectDir: action.Scope.ProjectDir,
+		Title: "Read and write " + dir + " for this chat", Coverage: coverage,
+		GrantedAt: now, ExpiresWhen: ExpiresWhenChatDeleted,
+		ReaskWhen: ReaskWhenOutsideFolder, Source: "checkpoint",
+	}
+	readGrant := ApprovalGrant{
+		ID: id + "_r", Scope: ApprovalGrantScopeChat,
+		Predicate:     ApprovalGrantPredicate{Category: ApprovalGrantCategoryReadPath, Pattern: dir},
+		ChatSessionID: chat, ProjectID: action.Scope.ProjectID, ProjectDir: action.Scope.ProjectDir,
+		Title: writeGrant.Title, Coverage: coverage,
+		GrantedAt: now, ExpiresWhen: ExpiresWhenChatDeleted,
+		ReaskWhen: ReaskWhenOutsideFolder, Source: "checkpoint",
+	}
+	pathGrant := ApprovalGrant{
+		ID: id + "_p", Scope: ApprovalGrantScopeChat,
+		Predicate:     ApprovalGrantPredicate{Category: "path", Pattern: dir},
+		ChatSessionID: chat, ProjectID: action.Scope.ProjectID, ProjectDir: action.Scope.ProjectDir,
+		Title: writeGrant.Title, Coverage: coverage,
+		GrantedAt: now, ExpiresWhen: ExpiresWhenChatDeleted,
+		ReaskWhen: ReaskWhenOutsideFolder, Source: "checkpoint", GrantedPath: &access,
+	}
+	return ApprovalGrantOffer{
+		ID: id, Group: GroupAlsoAllow, Rung: ApprovalRungChat, Scope: ApprovalGrantScopeChat,
+		Title: writeGrant.Title, Coverage: coverage, ExpiresWhen: ExpiresWhenChatDeleted,
+		ReaskWhen: ReaskWhenOutsideFolder, Subject: gate.ReusePredicate, Grant: pathGrant,
+		Authority: []ApprovalAuthorityDelta{
+			{Kind: AuthorityWriteRootChat, Grant: &writeGrant, ChatSessionID: chat, WriteRoots: []string{dir}},
+			{Kind: AuthorityReadPathChat, Grant: &readGrant, ChatSessionID: chat, ReadPaths: []string{dir}},
+			{Kind: AuthorityGrantedPath, Grant: &pathGrant, ChatSessionID: chat, GrantedPath: &access},
+			{Kind: AuthorityGenericGrant, Grant: &pathGrant},
+		},
+	}
+}
+
+// SharedTempExchangeFolderOption builds an explicit chat-scoped read+write folder option.
+func SharedTempExchangeFolderOption(action ProposedAction, dir string, isTopRoot bool) ApprovalOption {
+	return GrantOption(SharedTempExchangeFolderOffer(action, dir, isTopRoot))
 }

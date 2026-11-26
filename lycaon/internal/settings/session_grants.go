@@ -321,7 +321,7 @@ func grantedPathGrantApplies(grant hitl.ApprovalGrant, action hitl.ProposedActio
 	if !GrantScopeApplies(grant, action) {
 		return false
 	}
-	if target.Mode == gate.ModeWrite && !grant.GrantedPath.Write {
+	if !grant.GrantedPath.Permits(target.Mode == gate.ModeWrite) {
 		return false
 	}
 	// Sensitive targets require an exact path grant.

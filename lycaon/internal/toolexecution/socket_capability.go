@@ -273,6 +273,7 @@ func socketCapabilityProposedAction(
 			SessionScratchRoot: tc.Host.SessionScratchDir,
 			SessionOutputRoot:  tc.Host.SessionOutputDir,
 			GrantedWriteRoots:  append([]string(nil), confReq.GrantedWriteRoots...),
+			SessionReadPaths:   protectedReadGrantPaths(confReq.ProtectedReadGrants),
 		},
 		Sockets: hitl.ActionSockets{
 			SocketGrants: append([]confine.SocketGrant(nil), merged...),

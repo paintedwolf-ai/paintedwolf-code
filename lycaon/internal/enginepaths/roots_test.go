@@ -70,3 +70,14 @@ func TestAgentWorkspaceRootsUnder_excludesScratch(t *testing.T) {
 		t.Fatalf("scratch root must stay outside the global agent-workspace carve-outs; got %v", roots)
 	}
 }
+
+func TestAgentWorkspaceRootsUnder_excludesScannerCache(t *testing.T) {
+	dir := "/state/lycaon"
+	cache := ScannerCacheRootUnder(dir)
+	if cache != filepath.FromSlash("/state/lycaon/cache/opengrep") {
+		t.Fatalf("scanner cache root = %q", cache)
+	}
+	if roots := AgentWorkspaceRootsUnder(dir); slices.Contains(roots, cache) {
+		t.Fatalf("scanner cache must stay outside agent-workspace carve-outs; got %v", roots)
+	}
+}

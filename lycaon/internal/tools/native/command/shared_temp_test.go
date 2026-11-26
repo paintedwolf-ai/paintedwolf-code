@@ -11,16 +11,17 @@ import (
 )
 
 type recordedTempReview struct {
-	calls  int
-	failed bool
-	roots  []string
-	ask    SandboxWriteRootAsk
+	calls    int
+	failed   bool
+	observed confine.SharedTempObservation
+	ask      SandboxWriteRootAsk
 }
 
-func (r *recordedTempReview) ReviewSharedTemp(_ context.Context, ask SandboxWriteRootAsk, roots []string, failed bool) guidance.SharedTempSettlement {
+func (r *recordedTempReview) ReviewSharedTemp(_ context.Context, ask SandboxWriteRootAsk, observed confine.SharedTempObservation, failed bool) guidance.SharedTempSettlement {
 	r.calls++
-	r.roots, r.failed, r.ask = roots, failed, ask
-	return guidance.SharedTempSettlement{Refused: roots, Allowed: roots}
+	r.observed, r.failed, r.ask = observed, failed, ask
+	all := observed.All()
+	return guidance.SharedTempSettlement{Refused: all, Allowed: all, Reads: observed.Reads, Writes: observed.Writes}
 }
 
 func TestSharedTempReviewUsesSettledForegroundFacts(t *testing.T) {
@@ -52,7 +53,7 @@ func TestSharedTempReviewUsesSettledForegroundFacts(t *testing.T) {
 			if broker.calls != tc.wantCalls {
 				t.Fatalf("submissions=%d want %d", broker.calls, tc.wantCalls)
 			}
-			if broker.calls > 0 && (broker.failed != tc.failed || !slices.Equal(broker.roots, []string{"/tmp", "/var/tmp"}) || broker.ask.SessionID != "worker" || broker.ask.ToolCallID != "call" || !tool.Effects.Out.Facts.SharedTemp.ScratchAvailable) {
+			if broker.calls > 0 && (broker.failed != tc.failed || !slices.Equal(broker.observed.Writes, []string{"/tmp", "/var/tmp"}) || broker.ask.SessionID != "worker" || broker.ask.ToolCallID != "call" || !tool.Effects.Out.Facts.SharedTemp.ScratchAvailable) {
 				t.Fatalf("broker=%+v settlement=%+v", broker, tool.Effects.Out.Facts.SharedTemp)
 			}
 			if tc.running && (tool.Effects.Out.Facts.SharedTemp == nil || !tool.Effects.Out.Facts.SharedTemp.Running) {
