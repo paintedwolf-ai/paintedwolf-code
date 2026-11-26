@@ -1,0 +1,50 @@
+id: implement
+description: Implementer that edits and checks without command
+command_effects: [read_only, mutation, external_exec, network_egress]
+tools:
+  code_rewrite: sticky
+  survey_repo: sticky
+  summarize: sticky
+  restore_version: sticky
+  scan_pack: true
+  scan_list: true
+  scan_summary: true
+  scan_query: true
+  scan_compare: true
+  record_finding: sticky
+  pack_board: sticky
+  read_review: sticky
+  request_decision: sticky
+  message_coordinator: sticky
+  web_search: true
+  fetch_url: true
+  handoff_reserve: true
+  handoff_release: true
+  handoff_release_all: true
+  source_history: sticky
+  verify: sticky
+  complete_leg: sticky
+  secret_generate: true
+  secret_list: true
+  secret_revoke: true
+  render_view: true
+  view_image: true
+  view_video: true
+  capture_page: true
+  measure_page: true
+  page_open: true
+  page_act: true
+  page_snapshot: true
+  page_close: true
+  terminal_open: sticky
+  terminal_send: true
+  terminal_read: true
+  terminal_snapshot: true
+  terminal_close: sticky
+  held_result: true
+  held_stop: true
+  wait: sticky
+deny_tools:
+  - plan_from_blueprint
+  - state_*
+wait_conditions: [process_done, http_ready, port_ready]

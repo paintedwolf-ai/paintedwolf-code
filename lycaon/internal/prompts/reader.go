@@ -117,8 +117,8 @@ func NewReader(host HostFacts, turn TurnProjection) (Reader, error) {
 	if err != nil {
 		return Reader{}, err
 	}
-	offered, requestable := projectReach(plan, offeredNames, host)
-	commandOnFloor := plan.Immediate("command")
+	offered, requestable := projectReach(plan, offeredNames, host, profile)
+	commandOnFloor := plan.Immediate("command") && slices.Contains(offered, "command")
 	if hostKind == promptunit.HostWorker {
 		commandOnFloor = slices.Contains(offered, "command") && !profile.ToolDeferred("command")
 	}
@@ -214,9 +214,10 @@ func resolveTurnPlan(profile sandbox.ToolProfile, surfaceID string, rootCount in
 }
 
 // projectReach offers the request's plan-immediate names and makes the plan's
-// remaining deferred names requestable, without research tools when web search
-// is off and without catalog tools Ask mode refuses.
-func projectReach(plan toolsurface.Plan, names []string, host HostFacts) (offered, requestable []string) {
+// remaining deferred names requestable, without tools the profile does not
+// allow (a surface may list one), research tools when web search is off, or
+// catalog tools Ask mode refuses.
+func projectReach(plan toolsurface.Plan, names []string, host HostFacts, profile sandbox.ToolProfile) (offered, requestable []string) {
 	seen := make(map[string]bool, len(names))
 	for _, name := range names {
 		name = strings.TrimSpace(name)
@@ -227,7 +228,7 @@ func projectReach(plan toolsurface.Plan, names []string, host HostFacts) (offere
 		offered = append(offered, name)
 	}
 	for _, name := range plan.DeferredNames() {
-		if seen[name] {
+		if seen[name] || !profile.ToolAllowed(name) {
 			continue
 		}
 		if host.SessionMode == "ask" {

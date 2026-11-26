@@ -2,7 +2,7 @@
 
 ## Follow the assigned review method
 
-**Threat-model survey:** name assets, entry points, trust boundaries, and authorization. Start with `summarize` for named scope, or `survey_repo` for unknown layout. Trace intended controls through defaults, alternate callers, failures, and effectful sinks. A helper name or comment is not proof of enforcement. Scanner absence or zero findings does not end this review. Do not open with unbounded {% if profile_has_command %}`ls` / `grep` programs{% else %}directory listings or text searches{% endif %}.
+**Threat-model survey:** name assets, entry points, trust boundaries, and authorization. {% if profile_has_summarize %}Start with `summarize` for named scope. {% endif %}{% if profile_has_survey_repo %}Use `survey_repo` for unknown layout. {% endif %}Trace intended controls through defaults, alternate callers, failures, and effectful sinks. A helper name or comment is not proof of enforcement. Scanner absence or zero findings does not end this review. Do not open with unbounded {% if profile_has_command %}`ls` / `grep` programs{% else %}directory listings or text searches{% endif %}.
 
 **Scanner triage:** follow this procedure before native discovery:
 {% if profile_has_scan_summary and profile_has_scan_query and profile_has_scan_list %}

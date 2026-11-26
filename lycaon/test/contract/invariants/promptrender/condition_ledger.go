@@ -81,8 +81,12 @@ const (
 	srcOccurrenceRole = "occurrenceRecipient partitions occurrences by session_role; toolfeedback/block_plane.go:fillOccurrenceIdentity, " +
 		"session/policyfacts/service.go:FillSessionFacts (coordinator only), session/workercompletion/worker_summary.go and " +
 		"session/workeroutcomes/delivery_policy.go set the worker role exactly with worker_leg"
-	srcConfine     = "internal/session/policyfacts/oar_observe.go:ObserveConfine publishes execution facts only for an applied confinement"
-	srcMCPRejected = "toolfeedback/block_plane.go:ApplyToolRejectObservations and oar/mcp_catalog.go:ObserveMCPStructuralPre set mcp_call_ok false on every rejection; only ObserveMCPStructuralPost (tool.post_invoke) publishes a successful call"
+	srcConfine               = "internal/session/policyfacts/oar_observe.go:ObserveConfine publishes execution facts only for an applied confinement"
+	srcMCPRejected           = "toolfeedback/block_plane.go:ApplyToolRejectObservations and oar/mcp_catalog.go:ObserveMCPStructuralPre set mcp_call_ok false on every rejection; only ObserveMCPStructuralPost (tool.post_invoke) publishes a successful call"
+	srcWorkerDeferredSchemas = "coordinator/promptloop/worker_tool_plan.go:deferredToolSchemas gives every deferred worker tool its provider schema, and turn_request.go:stampTurnToolSchemas stamps them on the request, so a worker never loads command without its schema"
+	srcDoomBlockPlane        = "the doom-loop counts come only from policyfacts (loopguard.ObserveDoomLoopRepeat in FormatDoomLoopReject, ObserveDeferredUnactivated); the block plane publishes none, and a policyfacts worker leg is unscoped"
+	srcDeferredSurface       = "session/policyfacts/oar_observe.go:DeferredUnactivatedCount is 0 without a turn surface, which only a coordinator turn records (coordinator/runtime.go:PromptTurnSurfaceID)"
+	srcDoomUnscoped          = "a rule reading only doom-loop counts fires on an unscoped occurrence only through policyfacts.FormatDoomLoopReject for a worker leg; the block plane without a session publishes no counts"
 	// Only the block plane evaluates occurrences without a session.
 	srcUnscopedWorkerLeg = "session/policyfacts/service.go:FillSessionFacts names every non-worker session coordinator, so a policyfacts occurrence without a role is a worker leg"
 )
@@ -128,6 +132,7 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	targets, gapRecipients := gen.targets(first)
 	skillTargets, skillGapRecipients := skillGen.targets(first)
 	started := time.Now()
+	defer gen.producer.Close()
 	outcomes, err := casegen.Generate(ctx, gen.producer, targets, caseBudget)
 	if err != nil {
 		return nil, err
@@ -180,6 +185,10 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	}
 	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations(), skillGen.Observations(), standing)
 	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes), slices.Concat(gapRecipients, tRecipients, skillGapRecipients, sRecipients))
+	guided, err := generateGuidanceCases(ctx, s, first, &in)
+	if err != nil {
+		return nil, err
+	}
 	l, err := interactions.BuildConditionLedger(in)
 	if err != nil {
 		return nil, err
@@ -192,6 +201,7 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 			l.Generation.Found++
 		}
 	}
+	addGuidanceGeneration(&l.Generation, guided)
 	return l, nil
 }
 
@@ -276,7 +286,7 @@ func newOARCaseGenerator(ctx context.Context, s *Stock) (*oarCaseGenerator, erro
 func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient string) independence.Constraints {
 	var c independence.Constraints
 	if site.Family != "oar" {
-		return c
+		return guidanceDerived(site, recipient)
 	}
 	logic := g.producer.Logic(site.ID)
 	if logic == nil {
@@ -288,6 +298,19 @@ func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient st
 	}
 	if g.producer.Anchor(site.ID) == oar.AnchorToolRejected && slices.Contains(site.Atoms, "mcp_call_ok") {
 		c.Fixed = append(c.Fixed, independence.Fixed{Atom: "mcp_call_ok", Value: independence.False, Source: srcMCPRejected})
+	}
+	anchor := g.producer.Anchor(site.ID)
+	if recipient == interactions.RecipientWorker {
+		c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, map[string]any{"paintedwolf.command_loadable_without_schema": false}, srcWorkerDeferredSchemas)...)
+		if anchor == oar.AnchorToolRejected {
+			c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, doomZeros, srcDoomBlockPlane)...)
+		}
+	}
+	if recipient == unscopedRecipient {
+		c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, map[string]any{"paintedwolf.deferred_unactivated": int64(0)}, srcDeferredSurface)...)
+		if anchor == oar.AnchorToolRejected && readsOnly(g.producer.WhenReferences(site.ID), oarproducers.DoomFacts) {
+			c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, map[string]any{"paintedwolf.worker_leg": true}, srcDoomUnscoped)...)
+		}
 	}
 	if recipient == unscopedRecipient && g.producer.Anchor(site.ID) != oar.AnchorToolRejected {
 		c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, map[string]any{"paintedwolf.worker_leg": true}, srcUnscopedWorkerLeg)...)
@@ -361,6 +384,15 @@ func searchesOf(outcomes []casegen.Outcome, gapRecipients []string) map[string]s
 		out[key] = reason
 	}
 	return out
+}
+
+// doomZeros are the doom-loop facts at their declared zero values.
+var doomZeros = map[string]any{
+	"paintedwolf.repeat_count": int64(0), "paintedwolf.repeated_rejection_code": "", "paintedwolf.deferred_unactivated": int64(0),
+}
+
+func readsOnly(refs, facts []string) bool {
+	return len(refs) > 0 && !slices.ContainsFunc(refs, func(f string) bool { return !slices.Contains(facts, f) })
 }
 
 func distinctAtoms(atoms []string) []string {

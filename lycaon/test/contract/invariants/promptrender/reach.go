@@ -144,12 +144,20 @@ func formatClaimViolations(
 ) []string {
 	var msgs []string
 	for _, v := range viols {
-		msgs = append(msgs, fmt.Sprintf("%s names `%s` (%s): %s", label, v.Claim, v.Reason, lineNaming(text, v.Claim)))
+		msgs = append(msgs, fmt.Sprintf("%s names `%s` (%s): %s", label, v.Claim, v.Reason, claimLine(text, v)))
 	}
 	for _, diag := range diags {
 		msgs = append(msgs, fmt.Sprintf("%s unclassified protocol backtick `%s` at line %d", label, diag.Span, diag.Line))
 	}
 	return msgs
+}
+
+// claimLine quotes the rendered line the checker attributed the claim to.
+func claimLine(text string, v toolvocabtest.SubjectViolation) string {
+	if lines := strings.Split(text, "\n"); v.Line > 0 && v.Line <= len(lines) {
+		return fmt.Sprintf("%q", strings.TrimSpace(lines[v.Line-1]))
+	}
+	return lineNaming(text, v.Claim)
 }
 
 func lineNaming(text, name string) string {
@@ -224,6 +232,11 @@ var (
 		if err != nil {
 			return nil, err
 		}
+		projectAgents, err := projectAgentWorkerStates()
+		if err != nil {
+			return nil, err
+		}
+		workerStates = slices.Concat(workerStates, projectAgents)
 		out := make([]workerRep, 0, len(workerStates))
 		for _, ws := range workerStates {
 			if ws.Excluded {
@@ -257,6 +270,9 @@ var (
 // coordinatorKicksNameOnlyOffered verifies every non-phase coordinator kick
 // across the coordinator host states and anchor envelopes.
 func coordinatorKicksNameOnlyOffered(r *invariants.Run) {
+	if reportMatrixKicks(r, kickFamilyCoordinator, "coordinator kick renders") {
+		return
+	}
 	reps, err := cachedCoordinatorReps()
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
@@ -265,6 +281,26 @@ func coordinatorKicksNameOnlyOffered(r *invariants.Run) {
 	sweep.envelopes = canonicalKickEnvelope
 	r.Must(sweep.coordinatorKicks(context.Background(), anchorReg, informKickIDs(anchorReg, "coordinator-", "session-agent-enabled"), reps))
 	r.Expect(sweep.rendered, "coordinator kick renders")
+}
+
+// reportMatrixKicks reports a kick family from the host-state matrix, which
+// sweeps the same recipients with the canonical fixture among its envelopes.
+// It applies to the stock templates; a checkout's prompt overlay changes the
+// renders, so it sweeps afresh.
+func reportMatrixKicks(r *invariants.Run, family, label string) bool {
+	if hasSiteOverlayFiles(stock(r).Site) {
+		return false
+	}
+	fam := cartesianSummary(r).Kicks[family]
+	if fam == nil {
+		r.Report("host-state matrix swept no %s kicks", family)
+		return true
+	}
+	r.Expect(fam.Rendered, label)
+	for _, v := range fam.Violations {
+		r.Report("%s", v)
+	}
+	return true
 }
 
 // canonicalKickEnvelope is the one fixture the reach invariants render for
@@ -334,6 +370,9 @@ func closeoutTurnReader(st hoststate.CoordinatorState, worker bool) (prompts.Rea
 // phaseKicksNameOnlyTheirSurface verifies workflow-event kicks across the
 // coordinator host states bound to each phase.
 func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
+	if reportMatrixKicks(r, kickFamilyPhase, "phase kick renders") {
+		return
+	}
 	reg, err := workflowdef.RegistryFromDirs("")
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
@@ -348,6 +387,9 @@ func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
 // workerKicksNameOnlyOffered verifies worker kicks across the worker host
 // states and anchor envelopes, including the follow-up leg on worker-closeout.
 func workerKicksNameOnlyOffered(r *invariants.Run) {
+	if reportMatrixKicks(r, kickFamilyWorker, "worker kick renders") {
+		return
+	}
 	reps, err := cachedWorkerReps()
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
@@ -385,7 +427,15 @@ func workerCloseoutReader(ws hoststate.WorkerState) (prompts.Reader, error) {
 func workerPersonasNameOnlyOffered(r *invariants.Run) {
 	ctx := context.Background()
 	s := stock(r)
-	engine := s.Engine()
+	if !hasSiteOverlayFiles(s.Site) {
+		// The host-state matrix renders every worker's plain persona.
+		plain := cartesianSummary(r).PlainPersonas
+		r.Expect(plain.Rendered, "worker persona renders")
+		for _, v := range plain.Violations {
+			r.Report("%s", v)
+		}
+		return
+	}
 	cache := hoststate.NewRenderCache()
 	workerPairs, err := cachedWorkerPairs()
 	r.Must(err)
@@ -393,19 +443,17 @@ func workerPersonasNameOnlyOffered(r *invariants.Run) {
 	checked := 0
 	for _, wp := range workerPairs {
 		ws, auth := wp.ws, wp.auth
-		if ws.ParentSessionMode == api.SessionModeAsk {
-			if mutCapable, ok := prompts.AgentMutationCapable(ws.AgentID); ok && mutCapable {
-				continue
-			}
+		if ws.ParentSessionMode == api.SessionModeAsk && ws.MutationCapable {
+			continue
 		}
 		wSkills, sErr := overlaySkills(s, ws.Overlay)
 		r.Must(sErr)
 		occ := workerPersonaOccurrence(auth.Reader, wSkills)
 		fullVars, err := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
 		r.Must(err)
-		rKey := renderCacheKeyForVars("persona:"+ws.AgentID+":"+s.Site, s.Catalog.Revision, nil, fullVars)
+		rKey := renderCacheKeyForVars("persona:"+ws.AgentID+":"+s.Site, engineRev(s, ws.Overlay), nil, fullVars)
 		text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
-			return prompts.RenderPersona(ctx, engine, ws.AgentID, auth.Reader, occ)
+			return prompts.RenderPersona(ctx, engineForOverlay(s, ws.Overlay), ws.AgentID, auth.Reader, occ)
 		})
 		r.Must(rErr)
 		checked++

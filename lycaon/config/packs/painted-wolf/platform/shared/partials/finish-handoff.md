@@ -4,4 +4,4 @@ Take another tool round only for a concrete assignment item, required mutation, 
 
 {% if finish_note %}{{ finish_note }}
 
-{% endif %}{% include "partials/worker-complete-leg.md" %}
+{% endif %}{% if profile_has_complete_leg %}{% include "partials/worker-complete-leg.md" %}{% else %}This profile holds no leg report tool, so this round cannot deliver a report: state what you found, with its evidence handles, in your final response.{% endif %}

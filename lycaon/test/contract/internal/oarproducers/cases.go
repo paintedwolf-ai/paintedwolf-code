@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -70,8 +71,9 @@ var caseEntries = map[string]caseEntry{
 }
 
 // producerFacts are facts the producer itself establishes from the session,
-// the invocation or the rejection (GuardContext.DeriveToolClassFacts derives
-// the tool classes); they move only through the cell, tool and code inputs.
+// the invocation, the rejection (GuardContext.DeriveToolClassFacts derives
+// the tool classes) or the doom-loop counts; they move only through the cell,
+// tool, code and doom inputs.
 var producerFacts = map[string]bool{
 	"paintedwolf.operation": true, "paintedwolf.rejection_code": true, "paintedwolf.session_role": true,
 	"paintedwolf.session_mode": true, "paintedwolf.session_posture": true, "paintedwolf.surface": true,
@@ -80,7 +82,13 @@ var producerFacts = map[string]bool{
 	"paintedwolf.command_form": true, "paintedwolf.native_operation": true,
 	"paintedwolf.tool_is_task": true, "paintedwolf.tool_is_state": true, "paintedwolf.tool_is_delegation": true,
 	"paintedwolf.tool_is_handoff": true, "paintedwolf.tool_payload_chunkable": true, "paintedwolf.receiving_tool_summarize": true,
+	"paintedwolf.repeat_count": true, "paintedwolf.repeated_rejection_code": true, "paintedwolf.deferred_unactivated": true,
 }
+
+// DoomFacts are published only by policyfacts: the repeat counts by
+// loopguard.ObserveDoomLoopRepeat inside FormatDoomLoopReject, and the
+// unloaded deferred tools by ObserveDeferredUnactivated.
+var DoomFacts = []string{"paintedwolf.repeat_count", "paintedwolf.repeated_rejection_code", "paintedwolf.deferred_unactivated"}
 
 // confineFacts are the execution facts ObserveConfine publishes from a
 // confined invocation's observation.
@@ -137,6 +145,12 @@ var credentialValues = []string{
 	"zebra_quartz_violet_mango",
 	"0123456789abcdefABCDEF",
 	"ab_cd_ef_gh",
+	"ab_cd_ef_ghijklmn",
+	"ab_cd_ef_ghijklmnopqr",
+	"alpha.bravo.charlie.delta",
+	"ab.cd.ef.gh",
+	"Alpha.Bravo.Charlie.Delta",
+	"Ab.Cd.Ef.Gh",
 	"k1-k2-k3-k4-k5",
 	"Xq7Lm2Pz9Kd4Rt8Vw3Nb_alpha_bravo_charlie",
 	"1234qwerasdfzxcv",
@@ -158,6 +172,14 @@ type CaseProducer struct {
 	runs      int
 	compiled  map[string]*oarcore.Rule
 	shadows   map[string][]independence.Joint
+	worktree  worktreeFixture
+}
+
+// Close removes the worktree fixture repository.
+func (p *CaseProducer) Close() {
+	if p.worktree.dir != "" {
+		_ = os.RemoveAll(p.worktree.dir)
+	}
 }
 
 // NewCaseProducer draws each recipient's states from cells: the first
@@ -217,6 +239,10 @@ func recipientCells(cells []AuthCell, role string) []AuthCell {
 				continue
 			}
 			seen[key] = true
+			if role == RecipientWorker {
+				// A worker session has no coordinator turn surface.
+				c.SurfaceID = ""
+			}
 			out = append(out, c)
 		}
 	}
@@ -297,7 +323,8 @@ func (p *CaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	}
 	sources := []string{src, rule.When}
 	knobs := []casegen.Knob{p.toolKnob(rule, entry.tool, sources), p.cellKnob(recipient)}
-	if recipient != RecipientWorker {
+	// Only a coordinator turn records a turn surface.
+	if recipient == RecipientCoordinator {
 		knobs = append(knobs, p.surfaceKnob(sources))
 	}
 	knobs = append(knobs, modeKnob(p.cells[recipient][0].Mode))
@@ -333,6 +360,10 @@ func (p *CaseProducer) Knobs(site, recipient string) []casegen.Knob {
 		knobs = append(knobs, confineKnobs(sources)...)
 		knobs = append(knobs, sharedTempKnob(),
 			casegen.Knob{Name: "count", Facts: []string{"paintedwolf.repeat_count", casegen.AnyFact}, Values: []any{1, 4, 9}},
+			casegen.Knob{
+				Name: "worktree", Facts: []string{"paintedwolf.worktree_stale_paths", "paintedwolf.worktree_leftover_paths", "paintedwolf.worktree_conflict_paths"},
+				Values: []any{"", worktreeStale, worktreeLeftover, worktreeConflict}, Labels: []string{"none"},
+			},
 			casegen.Knob{
 				Name: "args", Facts: []string{"tool_args", "paintedwolf.handle", "paintedwolf.query"},
 				Values: []any{map[string]any{"command": "run"}, map[string]any{"handle": "cmd-1"}, map[string]any{"query": "x"}},
@@ -528,7 +559,7 @@ func confineKnobs(sources []string) []casegen.Knob {
 		denial = append(denial, l)
 	}
 	knobs := []casegen.Knob{
-		{Name: "confine.applied", Facts: confineFacts, Values: []any{true, false}},
+		{Name: "confine.applied", Facts: append([]string{"paintedwolf.confine_applied"}, confineFacts...), Values: []any{true, false}},
 		{Name: "confine.running", Facts: []string{"paintedwolf.process_running"}, Values: []any{false, true}},
 		{Name: "confine.failed", Facts: []string{"paintedwolf.failed_stages"}, Values: []any{[]string{}, []string{"run"}}},
 		{Name: "confine.signals", Facts: []string{"paintedwolf.confine_signals"}, Values: signals},
@@ -598,6 +629,7 @@ type occurrence struct {
 	noSession bool
 	shared    *guidance.SharedTempSettlement
 	args      map[string]any
+	worktree  string
 	count     int
 	content   string
 	harvested bool
@@ -659,6 +691,8 @@ func (p *CaseProducer) occurrence(rule *oar.Rule, recipient string, knobs []case
 			o.count = v.(int)
 		case name == "args":
 			o.args = v.(map[string]any)
+		case name == "worktree":
+			o.worktree = v.(string)
 		case name == "content":
 			o.content = v.(string)
 		case name == "harvested":
@@ -696,8 +730,11 @@ func (p *CaseProducer) Run(ctx context.Context, site, recipient, id string, knob
 	tracker.ObserveConditions(func(map[string]any) string { return "" }, p.partition)
 	tracker.SetCase(id)
 	restore := tracker.Install()
-	p.deliver(ctx, entry, o)
+	err := p.deliver(ctx, entry, o)
 	restore()
+	if err != nil {
+		return nil, err
+	}
 	_ = p.h.takeAdvisories()
 	p.h.resetExercisedEdges()
 
@@ -719,7 +756,7 @@ func (p *CaseProducer) Run(ctx context.Context, site, recipient, id string, knob
 	return out, nil
 }
 
-func (p *CaseProducer) deliver(ctx context.Context, entry caseEntry, o *occurrence) {
+func (p *CaseProducer) deliver(ctx context.Context, entry caseEntry, o *occurrence) error {
 	h := p.h
 	var cctx context.Context
 	var sess *api.Session
@@ -756,7 +793,16 @@ func (p *CaseProducer) deliver(ctx context.Context, entry caseEntry, o *occurren
 			return nil
 		})
 	case entryAfterTool:
-		_, _ = h.Policy.AfterTool(cctx, sess, o.tool, maps.Clone(o.args), "ok", o.count, guidance.ToolResultFacts{Confine: o.confine, SharedTemp: o.shared})
+		facts := guidance.ToolResultFacts{Confine: o.confine, SharedTemp: o.shared}
+		if o.worktree != "" {
+			snap, cleanup, err := p.worktree.snapshot(ctx, o.worktree)
+			defer cleanup()
+			if err != nil {
+				return err
+			}
+			facts.IndexWatch = snap
+		}
+		_, _ = h.Policy.AfterTool(cctx, sess, o.tool, maps.Clone(o.args), "ok", o.count, facts)
 	case entryCredential:
 		if o.harvested {
 			for _, root := range []string{o.sessID, "coord-parent-" + o.sessID} {
@@ -769,6 +815,7 @@ func (p *CaseProducer) deliver(ctx context.Context, entry caseEntry, o *occurren
 		}
 		h.ignoreCredentials = false
 	}
+	return nil
 }
 
 func vectorOf(atoms []string, v hoststate.ObservedVector) casegen.Vector {

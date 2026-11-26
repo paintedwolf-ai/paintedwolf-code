@@ -2,6 +2,7 @@
 name: convert-documents
 description: Convert Markdown, HTML, DOCX, rst, LaTeX, or PDF outputs with pandoc.
 metadata:
+  paintedwolf.any_of_tools: command
   host_resources: pandoc
 ---
 
