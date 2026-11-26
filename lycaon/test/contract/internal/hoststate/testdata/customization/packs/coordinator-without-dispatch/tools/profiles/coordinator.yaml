@@ -10,6 +10,7 @@ tools:
   promote_overlay: sticky
   reject_overlay: sticky
   shelve_overlay: sticky
+  preview_overlay: sticky
   workflow_compose: sticky
   workflow_compose_from_template: sticky
   workflow_catalog_summaries: sticky

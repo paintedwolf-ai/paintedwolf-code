@@ -452,7 +452,9 @@ func verifySkillDiscoveryAndPreloads(
 	if len(admitted) == 0 || injRenderer == nil {
 		return
 	}
-	// Exercise both resource-bearing and resource-free skill preloads + skill pointers when skills_read is offered.
+	// Exercise both resource-bearing and resource-free skill preloads and
+	// pointers; assembly names a fitted skill whether or not skills_read is
+	// offered (skillPointerInject).
 	for _, sk := range admitted {
 		if len(sk.Resources) > 0 || sk.Name == admitted[0].Name {
 			bodyText := renderedBody[sk.Name]
@@ -474,13 +476,11 @@ func verifySkillDiscoveryAndPreloads(
 			} else if strings.TrimSpace(procBlock) != "" {
 				audit.PreloadProcedureChecks++
 			}
-			if hasSkillsRead {
-				ptrBlock, ptrErr := inject.RenderSkillPointerBlock(ctx, injRenderer, auth.Reader, "sess-skill", profileID, turnload.SkillRank{Name: sk.Name})
-				if ptrErr != nil {
-					audit.Violations = append(audit.Violations, fmt.Sprintf("%s RenderSkillPointerBlock(%s): %v", label, sk.Name, ptrErr))
-				} else if strings.TrimSpace(ptrBlock) != "" {
-					audit.PreloadPointerChecks++
-				}
+			ptrBlock, ptrErr := inject.RenderSkillPointerBlock(ctx, injRenderer, auth.Reader, "sess-skill", profileID, turnload.SkillRank{Name: sk.Name})
+			if ptrErr != nil {
+				audit.Violations = append(audit.Violations, fmt.Sprintf("%s RenderSkillPointerBlock(%s): %v", label, sk.Name, ptrErr))
+			} else if strings.TrimSpace(ptrBlock) != "" {
+				audit.PreloadPointerChecks++
 			}
 			if len(sk.Resources) > 0 {
 				break

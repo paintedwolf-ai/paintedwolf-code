@@ -181,7 +181,7 @@ func CoordinatorStates(ctx context.Context) ([]CoordinatorState, error) {
 	overlays = slices.Clone(overlays)
 	for _, co := range custom {
 		if co.Coordinator {
-			seeds = append(seeds, buildCustomizationSeeds(len(overlays), surfaces, projectBindings)...)
+			seeds = append(seeds, buildCustomizationSeeds(len(overlays), surfaces, append(slices.Clone(bindings), projectBindings...))...)
 			overlays = append(overlays, co.Overlay)
 		}
 	}
@@ -304,8 +304,8 @@ func buildProjectBindingSeeds(bindings []PhaseBinding) []coordinatorSeed {
 }
 
 // buildCustomizationSeeds meets a customized catalog with the ambient worker
-// lifecycle, every active phase surface and every project binding.
-func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, projectBindings []PhaseBinding) []coordinatorSeed {
+// lifecycle, every active phase surface and every shipped and project binding.
+func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, phaseBindings []PhaseBinding) []coordinatorSeed {
 	var seeds []coordinatorSeed
 	for _, mode := range api.AllSessionModeValues() {
 		for _, p := range []api.SessionPosture{api.SessionPostureBuild, api.SessionPostureOrchestrate} {
@@ -320,12 +320,12 @@ func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, projectBindings 
 		}
 	}
 	// A closed-floor surface admits only floor loading.
-	for i := range projectBindings {
+	for i := range phaseBindings {
 		for _, ld := range []LoadingMode{LoadingFloorOnly, LoadingAllLoaded} {
 			seeds = append(seeds, coordinatorSeed{
 				overlayIdx: ovIdx, mode: api.SessionModeAgent, posture: api.SessionPostureBuild, wf: WorkflowActivePhase,
-				surfaceID: projectBindings[i].Resolved.CoordinatorSurface, roots: RootsSingleGit, loading: ld,
-				web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone, binding: &projectBindings[i],
+				surfaceID: phaseBindings[i].Resolved.CoordinatorSurface, roots: RootsSingleGit, loading: ld,
+				web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone, binding: &phaseBindings[i],
 			})
 		}
 	}

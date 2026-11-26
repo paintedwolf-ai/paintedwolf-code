@@ -296,6 +296,12 @@ func registerExpectedZeroBranches(tracker *hoststate.CoverageTracker) {
 	for _, id := range []string{"shared/partials/capability-request-grammar@L1:C320:if", "shared/partials/capability-request-grammar@L1:C492:if", "shared/partials/capability-request-grammar@L1:C732:if"} {
 		tracker.ExpectZeroTemplateBranch(id, hoststate.ExpectedZeroFalse, runnerReach)
 	}
+	effectFlags := "prompts/reader_facts.go sets the profile_command_* effect flags only when command is offered, and native-edit-tool renders these lines " +
+		"and includes large-file-write-discipline only under profile_command_mutation"
+	for _, id := range []string{"shared/units/native-edit-tool@L5:C261:if", "shared/partials/large-file-write-discipline@L1:C64:if",
+		"shared/partials/large-file-write-discipline@L2:C4:if", "shared/partials/large-file-write-discipline@L2:C207:if"} {
+		tracker.ExpectZeroTemplateBranch(id, hoststate.ExpectedZeroFalse, effectFlags)
+	}
 	commandRoots := "command reaches no turn without workspace roots: coordinator-surfaces.yaml no_folder_allowlist omits it, and internal/worker/task_tool.go refuses a rootless worker whose profile surveys with command (WORKER_WORKSPACE_REQUIRED)"
 	tracker.ExpectZeroTemplateBranch("shared/partials/command-surface@L5:C4:if", hoststate.ExpectedZeroFalse, commandRoots)
 	tracker.ExpectZeroTemplateBranch("skills/diagnose-performance/references/diagnose_resource_exhaustion.md@L17:C440:if", hoststate.ExpectedZeroFalse, commandRoots)
