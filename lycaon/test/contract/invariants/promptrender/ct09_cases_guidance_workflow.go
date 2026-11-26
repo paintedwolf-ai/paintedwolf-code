@@ -10,8 +10,10 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -435,6 +437,58 @@ func skillProcedureCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 				preload.Tool = cr.auth.Offered[0]
 			}
 			text, err := inject.RenderSkillProcedureBlock(ctx, e.inj, cr.auth.Reader, "sess-skill-ct09", prompts.CoordinatorProfileID, preload)
+			if err != nil {
+				return guidanceRender{}, err
+			}
+			return coordinatorRender(text, cr), nil
+		},
+	}}, nil
+}
+
+// citationGroundingCases render the coordinator citation-repair kick with the
+// observed-evidence report guidance.GroundingHintData builds through
+// guidance.FormatOffenderReport: each list absent, within the display cap, or
+// beyond it. Handles are ones the recipient mints.
+func citationGroundingCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
+	reps := coordinatorRepsBy(e.cReps, func(cr coordRep) bool { return cr.auth.Reader.Mints()["read"] },
+		func(cr coordRep) string { return offers(cr.auth, "recall") })
+	sizes := []int{1, 0, guidance.MaxOffenderDisplay + 2}
+	sizeLabels := []string{"one", "none", "over-cap"}
+	knobs := []casegen.Knob{
+		repKnob([]string{"can_recall", casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
+		indexKnob("handles", []string{"observed_handles_sample", "observed_handles_omitted"}, sizeLabels),
+		indexKnob("paths", []string{"observed_paths_sample", "observed_paths_omitted"}, sizeLabels),
+		indexKnob("urls", []string{"observed_urls_sample", "observed_urls_omitted"}, sizeLabels),
+	}
+	list := func(n int, item func(int) string) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = item(i + 1)
+		}
+		return out
+	}
+	return []guidanceCase{{
+		unit: "guidance/coordinator-citation-grounding", recipient: interactions.RecipientCoordinator, knobs: knobs,
+		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
+			cr := reps[knobValue[int](knobs, set, "rep")]
+			data := guidance.OffenderHintData([]string{"ungrounded-claim"})
+			for _, part := range []struct {
+				knob, key string
+				item      func(int) string
+			}{
+				{"handles", "observed_handles", func(i int) string { return fmt.Sprintf("read#%d", i) }},
+				{"paths", "observed_paths", func(i int) string { return fmt.Sprintf("src/file%d.go", i) }},
+				{"urls", "observed_urls", func(i int) string { return fmt.Sprintf("https://example.test/page%d", i) }},
+			} {
+				report := guidance.FormatOffenderReport(list(sizes[knobValue[int](knobs, set, part.knob)], part.item))
+				data[part.key+"_count"], data[part.key+"_sample"], data[part.key+"_omitted"] = report.Count, report.Sample, report.Omitted
+			}
+			// The closeout retry sets it from the request's recall reach.
+			data["can_recall"] = cr.auth.Reach.Status("recall") == toolreach.Callable
+			if err := prompts.MergeCoordinatorKickVarsForTools(data, cr.auth.Reader); err != nil {
+				return guidanceRender{}, err
+			}
+			text, err := e.s.Engine().RenderKick(ctx, cr.auth.Reader, "coordinator-citation-grounding", data)
 			if err != nil {
 				return guidanceRender{}, err
 			}
