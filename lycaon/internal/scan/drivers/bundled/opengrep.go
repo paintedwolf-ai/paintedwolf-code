@@ -117,15 +117,6 @@ func (o *OpenGrepScanner) Run(ctx context.Context, req scan.ScanRequest) (*scano
 	})
 }
 
-type runStartKey struct{}
-
-func runStartedAt(ctx context.Context, fallback time.Time) time.Time {
-	if started, ok := ctx.Value(runStartKey{}).(time.Time); ok && !started.IsZero() {
-		return started
-	}
-	return fallback
-}
-
 func hardLimitTimeoutError(ctx context.Context, started time.Time) *exec.TimeoutError {
 	deadline, _ := ctx.Deadline()
 	return &exec.TimeoutError{
@@ -137,23 +128,24 @@ func hardLimitTimeoutError(ctx context.Context, started time.Time) *exec.Timeout
 }
 
 func classifyRunError(ctx context.Context, started time.Time, err error) error {
-	if err == nil {
-		if errors.Is(context.Cause(ctx), scancatalog.ErrHardLimitExceeded) {
-			return fmt.Errorf("opengrep scan: %w", hardLimitTimeoutError(ctx, started))
+	if errors.Is(context.Cause(ctx), scancatalog.ErrHardLimitExceeded) {
+		var timeout *exec.TimeoutError
+		if errors.As(err, &timeout) && timeout.CommandDeadline {
+			return err
 		}
-		if ctx.Err() != nil {
-			return fmt.Errorf("opengrep scan interrupted: %w", ctx.Err())
+		timeoutErr := hardLimitTimeoutError(ctx, started)
+		if err != nil && errors.Is(err, scancatalog.ErrHardLimitExceeded) {
+			return fmt.Errorf("%w: %w", err, timeoutErr)
 		}
-		return nil
+		return fmt.Errorf("opengrep scan: %w", timeoutErr)
 	}
-	var timeout *exec.TimeoutError
-	if errors.As(err, &timeout) && timeout.CommandDeadline {
+	if err != nil {
 		return err
 	}
-	if errors.Is(context.Cause(ctx), scancatalog.ErrHardLimitExceeded) {
-		return fmt.Errorf("opengrep scan: %w", hardLimitTimeoutError(ctx, started))
+	if ctx.Err() != nil {
+		return fmt.Errorf("opengrep scan interrupted: %w", ctx.Err())
 	}
-	return err
+	return nil
 }
 
 func (o *OpenGrepScanner) runWithPolicy(
@@ -162,27 +154,31 @@ func (o *OpenGrepScanner) runWithPolicy(
 	targets, excludes []string,
 	analysis opengrep.Analysis,
 	prepare func() (opengrepRunFiles, func(), []string, error),
-) (*scanoutput.Result, error) {
+) (result *scanoutput.Result, err error) {
 	started := time.Now()
-	ctx = context.WithValue(ctx, runStartKey{}, started)
 	ctx, cancel := o.runtimePolicy.Context(ctx)
 	defer cancel()
+	defer func() {
+		if err = classifyRunError(ctx, started, err); err != nil {
+			result = nil
+		}
+	}()
 	if err := ctx.Err(); err != nil {
-		return nil, classifyRunError(ctx, started, fmt.Errorf("opengrep scan interrupted: %w", err))
+		return nil, fmt.Errorf("opengrep scan interrupted: %w", err)
 	}
 	runFiles, cleanup, rulePaths, err := prepare()
 	if err != nil {
-		return nil, classifyRunError(ctx, started, err)
+		return nil, err
 	}
 	defer cleanup()
 	parsed, err := o.scanTargets(ctx, projectDir, bin, rulePaths, targets, excludes, analysis, runFiles)
 	if err != nil {
-		return nil, classifyRunError(ctx, started, err)
+		return nil, err
 	}
 	projectionDir := filepath.Join(runFiles.dir(), "embedded")
 	origins, limitations, err := scansourceview.Materialize(ctx, projectDir, projectionDir, parsed.ScannedPaths)
 	if err != nil {
-		return nil, classifyRunError(ctx, started, fmt.Errorf("embedded scripts: %w", err))
+		return nil, fmt.Errorf("embedded scripts: %w", err)
 	}
 	for _, limitation := range limitations {
 		parsed.Warnings = append(parsed.Warnings, api.ScanWarning{Kind: api.ScanWarningFilePartialParse, File: limitation.File, Construct: limitation.Construct, Message: limitation.Detail, StartLine: limitation.Start.Line, StartColumn: limitation.Start.Column})
@@ -192,26 +188,23 @@ func (o *OpenGrepScanner) runWithPolicy(
 		embeddedFiles.jsonPath = filepath.Join(runFiles.dir(), "embedded.json")
 		extra, err := o.scanTargets(ctx, projectDir, bin, rulePaths, []string{projectionDir}, nil, analysis, embeddedFiles)
 		if err != nil {
-			return nil, classifyRunError(ctx, started, err)
+			return nil, err
 		}
 		if err := scanoutput.RemapOpengrepSources(extra, origins, projectDir); err != nil {
-			return nil, classifyRunError(ctx, started, err)
+			return nil, err
 		}
 		parsed.Findings = append(parsed.Findings, extra.Findings...)
 		parsed.FindingsCount += extra.FindingsCount
 		parsed.Warnings = append(parsed.Warnings, extra.Warnings...)
 	}
 	if err := scanoutput.ValidateOpengrepLocations(parsed, projectDir); err != nil {
-		return nil, classifyRunError(ctx, started, err)
+		return nil, err
 	}
 	bundle, err := os.ReadFile(rulePaths[0])
 	if err != nil {
-		return nil, classifyRunError(ctx, started, err)
+		return nil, err
 	}
 	if err := filterNonCode(ctx, parsed, projectDir, bundle); err != nil {
-		return nil, classifyRunError(ctx, started, err)
-	}
-	if err := classifyRunError(ctx, started, nil); err != nil {
 		return nil, err
 	}
 	return parsed, nil
@@ -240,7 +233,6 @@ func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin s
 	if err := os.Remove(runFiles.jsonPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("opengrep clear prior batch output: %w", err)
 	}
-	batchStarted := time.Now()
 	output, console, exitCode, err := exec.RunSeparate(ctx, bin, args, exec.ExecOpts{
 		Launch:          launch,
 		Dir:             projectDir,
@@ -253,7 +245,7 @@ func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin s
 	console = append(output, console...)
 	if ctx.Err() != nil {
 		if errors.Is(context.Cause(ctx), scancatalog.ErrHardLimitExceeded) {
-			return nil, fmt.Errorf("opengrep scan (exit %d): %w%s", exitCode, hardLimitTimeoutError(ctx, runStartedAt(ctx, batchStarted)), o.consoleTail(console))
+			return nil, fmt.Errorf("opengrep scan (exit %d): %w%s", exitCode, context.Cause(ctx), o.consoleTail(console))
 		}
 		return nil, fmt.Errorf("opengrep scan interrupted: %w", ctx.Err())
 	}

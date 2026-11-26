@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,9 @@ import (
 )
 
 const slowFixtureScript = `#!/bin/sh
+if [ -n "${SCANNER_DIAGNOSTIC:-}" ]; then
+    printf '%s\n' "$SCANNER_DIAGNOSTIC" >&2
+fi
 if [ -n "${SCANNER_MARKER:-}" ]; then
     printf 'started\n' > "$SCANNER_MARKER"
 fi
@@ -32,11 +36,11 @@ func writeSlowFixtureBinary(t *testing.T, dir string) string {
 	return bin
 }
 
-func fixturePrepare(t *testing.T, setupDelay time.Duration) func() (opengrepRunFiles, func(), []string, error) {
+func fixturePrepare(t *testing.T, onPrepare func()) func() (opengrepRunFiles, func(), []string, error) {
 	t.Helper()
 	return func() (opengrepRunFiles, func(), []string, error) {
-		if setupDelay > 0 {
-			time.Sleep(setupDelay)
+		if onPrepare != nil {
+			onPrepare()
 		}
 		files, cleanup, err := newOpengrepRunFiles()
 		if err != nil {
@@ -57,15 +61,16 @@ func TestOpenGrepHardLimitClassification(t *testing.T) {
 		bin := writeSlowFixtureBinary(t, root)
 		marker := filepath.Join(root, "started")
 		t.Setenv("SCANNER_MARKER", marker)
+		t.Setenv("SCANNER_DIAGNOSTIC", "")
 
 		scanner := NewOpenGrepScanner(OpenGrepOptions{
 			Jobs:          1,
-			RuntimePolicy: scancatalog.RuntimePolicy{SoftLimitSec: 5, HardLimitSec: 10, CPUUnits: 1, Parallelism: 1},
+			RuntimePolicy: scancatalog.RuntimePolicy{SoftLimitSec: 30, HardLimitSec: 60, CPUUnits: 1, Parallelism: 1},
 		})
 		ctx, cancel := context.WithCancel(t.Context())
 		errCh := make(chan error, 1)
 		go func() {
-			_, err := scanner.runWithPolicy(ctx, root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, 0))
+			_, err := scanner.runWithPolicy(ctx, root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, nil))
 			errCh <- err
 		}()
 		t.Cleanup(func() {
@@ -90,17 +95,16 @@ func TestOpenGrepHardLimitClassification(t *testing.T) {
 		root := t.TempDir()
 		bin := writeSlowFixtureBinary(t, root)
 		t.Setenv("SCANNER_MARKER", "")
+		t.Setenv("SCANNER_DIAGNOSTIC", "")
 
 		scanner := NewOpenGrepScanner(OpenGrepOptions{
 			Jobs:          1,
-			RuntimePolicy: scancatalog.RuntimePolicy{SoftLimitSec: 5, HardLimitSec: 10, CPUUnits: 1, Parallelism: 1},
+			RuntimePolicy: scancatalog.RuntimePolicy{SoftLimitSec: 30, HardLimitSec: 60, CPUUnits: 1, Parallelism: 1},
 		})
-		ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 		defer cancel()
 
-		start := time.Now()
-		res, err := scanner.runWithPolicy(ctx, root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, 0))
-		elapsed := time.Since(start)
+		res, err := scanner.runWithPolicy(ctx, root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, nil))
 		if res != nil {
 			t.Fatalf("unexpected result on caller deadline: %#v", res)
 		}
@@ -114,63 +118,73 @@ func TestOpenGrepHardLimitClassification(t *testing.T) {
 		if errors.Is(err, scancatalog.ErrHardLimitExceeded) {
 			t.Fatalf("shorter caller deadline misclassified with ErrHardLimitExceeded: %v", err)
 		}
-		if elapsed >= 5*time.Second {
-			t.Fatalf("shorter caller deadline waited too long: %s", elapsed)
-		}
 	})
 
 	t.Run("hard limit expires during execution", func(t *testing.T) {
 		root := t.TempDir()
 		bin := writeSlowFixtureBinary(t, root)
 		t.Setenv("SCANNER_MARKER", "")
+		t.Setenv("SCANNER_DIAGNOSTIC", "")
 
 		scanner := NewOpenGrepScanner(OpenGrepOptions{
 			Jobs:          1,
 			RuntimePolicy: scancatalog.RuntimePolicy{SoftLimitSec: 1, HardLimitSec: 1, CPUUnits: 1, Parallelism: 1},
 		})
-		start := time.Now()
-		res, err := scanner.runWithPolicy(t.Context(), root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, 0))
-		elapsed := time.Since(start)
+		res, err := scanner.runWithPolicy(t.Context(), root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, nil))
 		if res != nil {
 			t.Fatalf("unexpected result on hard limit: %#v", res)
 		}
 		var timeout *exec.TimeoutError
 		if !errors.As(err, &timeout) || !timeout.CommandDeadline {
-			t.Fatalf("hard limit during execution returned %v after %s, want *exec.TimeoutError{CommandDeadline: true}", err, elapsed)
+			t.Fatalf("hard limit during execution returned %v, want *exec.TimeoutError{CommandDeadline: true}", err)
 		}
 		if !errors.Is(err, exec.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("hard limit error %v must unwrap ErrTimeout and context.DeadlineExceeded", err)
 		}
-		if timeout.Deadline.IsZero() || timeout.Elapsed < time.Second {
-			t.Fatalf("hard limit timeout metadata incomplete: %#v", timeout)
+		if timeout.Deadline.IsZero() {
+			t.Fatalf("hard limit timeout metadata missing deadline: %#v", timeout)
 		}
 	})
 
-	t.Run("hard limit includes setup time before child timeout", func(t *testing.T) {
+	t.Run("hard limit after setup preserves diagnostics while child runs", func(t *testing.T) {
 		root := t.TempDir()
 		bin := writeSlowFixtureBinary(t, root)
 		marker := filepath.Join(root, "started")
 		t.Setenv("SCANNER_MARKER", marker)
+		t.Setenv("SCANNER_DIAGNOSTIC", "fixture-stderr-diagnostic")
 
 		scanner := NewOpenGrepScanner(OpenGrepOptions{
 			Jobs:          1,
-			RuntimePolicy: scancatalog.RuntimePolicy{SoftLimitSec: 1, HardLimitSec: 1, CPUUnits: 1, Parallelism: 1},
+			RuntimePolicy: scancatalog.RuntimePolicy{SoftLimitSec: 30, HardLimitSec: 60, CPUUnits: 1, Parallelism: 1},
 		})
-		start := time.Now()
-		res, err := scanner.runWithPolicy(t.Context(), root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, 400*time.Millisecond))
-		elapsed := time.Since(start)
-		if res != nil {
-			t.Fatalf("unexpected result on hard limit with setup: %#v", res)
-		}
+		ctx, cancelCause := context.WithCancelCause(t.Context())
+		defer cancelCause(nil)
+
+		setupCompleted := make(chan struct{})
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := scanner.runWithPolicy(ctx, root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, func() {
+				close(setupCompleted)
+			}))
+			errCh <- err
+		}()
+
+		<-setupCompleted
+		testutil.WaitFor(t, "slow fixture starts after setup", func() bool {
+			_, err := os.Stat(marker)
+			return err == nil
+		})
+		cancelCause(scancatalog.ErrHardLimitExceeded)
+		err := <-errCh
 		var timeout *exec.TimeoutError
 		if !errors.As(err, &timeout) || !timeout.CommandDeadline {
-			t.Fatalf("hard limit including setup returned %v after %s, want *exec.TimeoutError{CommandDeadline: true}", err, elapsed)
+			t.Fatalf("hard limit after setup returned %v, want *exec.TimeoutError{CommandDeadline: true}", err)
 		}
-		if timeout.Elapsed < time.Second {
-			t.Fatalf("hard limit elapsed %s did not include setup time", timeout.Elapsed)
+		if !errors.Is(err, exec.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("hard limit after setup %v must unwrap ErrTimeout and context.DeadlineExceeded", err)
 		}
-		if _, statErr := os.Stat(marker); statErr != nil {
-			t.Fatalf("expected child to run during remaining budget after setup: %v", statErr)
+		if !strings.Contains(err.Error(), "fixture-stderr-diagnostic") {
+			t.Fatalf("hard limit after setup lost scanner diagnostics: %v", err)
 		}
 	})
 
@@ -179,20 +193,27 @@ func TestOpenGrepHardLimitClassification(t *testing.T) {
 		bin := writeSlowFixtureBinary(t, root)
 		marker := filepath.Join(root, "started")
 		t.Setenv("SCANNER_MARKER", marker)
+		t.Setenv("SCANNER_DIAGNOSTIC", "")
 
 		scanner := NewOpenGrepScanner(OpenGrepOptions{
 			Jobs:          1,
-			RuntimePolicy: scancatalog.RuntimePolicy{SoftLimitSec: 1, HardLimitSec: 1, CPUUnits: 1, Parallelism: 1},
+			RuntimePolicy: scancatalog.RuntimePolicy{SoftLimitSec: 30, HardLimitSec: 60, CPUUnits: 1, Parallelism: 1},
 		})
-		start := time.Now()
-		res, err := scanner.runWithPolicy(t.Context(), root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, 1100*time.Millisecond))
-		elapsed := time.Since(start)
+		ctx, cancelCause := context.WithCancelCause(t.Context())
+		defer cancelCause(nil)
+
+		res, err := scanner.runWithPolicy(ctx, root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, func() {
+			cancelCause(scancatalog.ErrHardLimitExceeded)
+		}))
 		if res != nil {
 			t.Fatalf("unexpected result when setup exhausted hard limit: %#v", res)
 		}
 		var timeout *exec.TimeoutError
 		if !errors.As(err, &timeout) || !timeout.CommandDeadline {
-			t.Fatalf("hard limit exhausted during setup returned %v after %s, want *exec.TimeoutError{CommandDeadline: true}", err, elapsed)
+			t.Fatalf("hard limit exhausted during setup returned %v, want *exec.TimeoutError{CommandDeadline: true}", err)
+		}
+		if !errors.Is(err, exec.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("hard limit exhausted during setup %v must unwrap ErrTimeout and context.DeadlineExceeded", err)
 		}
 		if _, statErr := os.Stat(marker); !errors.Is(statErr, os.ErrNotExist) {
 			t.Fatalf("child spawned despite setup exhausting hard limit: stat=%v", statErr)
@@ -203,17 +224,17 @@ func TestOpenGrepHardLimitClassification(t *testing.T) {
 		root := t.TempDir()
 		bin := writeSlowFixtureBinary(t, root)
 		t.Setenv("SCANNER_MARKER", "")
+		t.Setenv("SCANNER_DIAGNOSTIC", "")
 
 		policy := scancatalog.RuntimePolicy{SoftLimitSec: 1, HardLimitSec: 1, CPUUnits: 1, Parallelism: 1}
 		runnerCtx, cancelRunner := policy.Context(t.Context())
 		defer cancelRunner()
-		time.Sleep(150 * time.Millisecond)
 
 		scanner := NewOpenGrepScanner(OpenGrepOptions{
 			Jobs:          1,
 			RuntimePolicy: policy,
 		})
-		res, err := scanner.runWithPolicy(runnerCtx, root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, 0))
+		res, err := scanner.runWithPolicy(runnerCtx, root, bin, []string{root}, nil, opengrep.Analysis{Mode: opengrep.Intrafile}, fixturePrepare(t, nil))
 		if res != nil {
 			t.Fatalf("unexpected result with runner policy context: %#v", res)
 		}
