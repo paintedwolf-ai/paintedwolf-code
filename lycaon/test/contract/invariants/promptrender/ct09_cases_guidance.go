@@ -89,6 +89,9 @@ var guidanceCaseBuilders = []func(context.Context, *guidanceCaseEnv) ([]guidance
 	securityPhaseKickCases,
 	workerRoundNoticeCases,
 	workerTaskFinishedCases,
+	executionStateCases,
+	scheduledWakeCases,
+	skillProcedureCases,
 }
 
 // knobValue returns the value set picks for the knob named name.
@@ -435,4 +438,17 @@ func guidanceDerived(site interactions.ConditionSite, recipient string) independ
 		c.Fixed = append(c.Fixed, guidanceSiteFixed[site.ID]...)
 	}
 	return c
+}
+
+// registerGuidanceExpectedZeroBranches records the guidance arms the host's
+// producers keep constant. The active-workflow inject renders only for an
+// active run (assembly/turn_orientation.go requires a workflow id);
+// runtime.Snapshots.Project lists one row per manifest phase, and a manifest
+// declares at least one (definition/manifest.go), and projects the exit of
+// the run's current phase, which its manifest declares.
+func registerGuidanceExpectedZeroBranches(tracker *hoststate.CoverageTracker) {
+	const reason = "an active run's snapshot (runtime.Snapshots.Project) carries every manifest phase, at least one (definition/manifest.go), and the current phase's exit"
+	for _, branch := range []string{"guidance/active-workflow@L31:C4:if", "guidance/active-workflow@L33:C4:if", "guidance/active-workflow@L51:C39:if"} {
+		tracker.ExpectZeroTemplateBranch(branch, hoststate.ExpectedZeroFalse, reason)
+	}
 }

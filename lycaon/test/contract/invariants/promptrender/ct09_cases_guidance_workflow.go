@@ -9,6 +9,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -23,8 +25,8 @@ import (
 // current phase's gate states and the leave recipe derived from them, its
 // completion condition, an inherited Blueprint approval
 // (workflow.Approvals.InheritedApprovalSnapshot yields approved or invalid)
-// and a compose summary requiring isolation. Gate obligations are left out:
-// their feedback is rendered and checked per leaf elsewhere.
+// a compose summary requiring isolation, choice transitions, a stamped fan-out
+// plan and the gate catalog's obligations for open leaves.
 func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
 	reps := coordinatorRepsBy(e.cReps,
 		func(cr coordRep) bool { return cr.state.TurnProfile.WorkflowActive },
@@ -44,6 +46,13 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 		indexKnob("feedback", []string{"pending_feedback", "pending_feedback.prompt"}, []string{"none", "open", "prompt"}),
 		indexKnob("report", []string{"report_document_enabled", "report_rating"}, []string{"none", "unrated", "rated"}),
 		indexKnob("advance", []string{"phase_exit.coordinator_advances"}, []string{"host", "coordinator"}),
+		indexKnob("choice", []string{"phase_exit.choice_transitions", "arm.coordinator_may_fire"}, []string{"none", "human", "coordinator"}),
+		indexKnob("fanout", []string{"fanout_plan"}, []string{"none", "stamped"}),
+		indexKnob("obligations", []string{"gate_obligations", "o.required", "o.missing"}, []string{"none", "attached"}),
+	}
+	gateCfg, err := feedback.LoadGateFeedbackCatalogWithCatalog(e.s.Catalog)
+	if err != nil {
+		return nil, err
 	}
 	resolvers := map[int]func(string) (toolvocabtest.ActorAuthority, error){}
 	return []guidanceCase{{
@@ -136,6 +145,28 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 				snap.ReportDocumentEnabled = true
 				snap.ReportRating = &inject.ReportRatingView{Question: "Overall risk?", Levels: "high, low", Dimensions: []string{"auth", "crypto"}, Questions: "auth: high|low"}
 			}
+			// Manifest transitions declare their actors (human, coordinator);
+			// the coordinator may fire an arm that names it.
+			switch knobValue[int](knobs, set, "choice") {
+			case 1:
+				exit.ChoiceTransitions = []inject.PhaseExitChoiceArm{{ID: "revise", Label: "Send back for revision", Actors: []string{"human"}}}
+			case 2:
+				if !slices.Contains(cr.auth.Offered, "workflow_transition") {
+					return guidanceRender{}, nil
+				}
+				exit.ChoiceTransitions = []inject.PhaseExitChoiceArm{{ID: "revise", Label: "Send back for revision", Actors: []string{"coordinator", "human"}, CoordinatorMayFire: true}}
+			}
+			if knobValue[int](knobs, set, "fanout") == 1 {
+				// A stamped plan renders where the phase dispatches workers.
+				if !slices.Contains(cr.auth.Offered, "task") || !slices.Contains(cr.auth.Offered, "wait") {
+					return guidanceRender{}, nil
+				}
+				snap.FanoutPlan = "- leg-1: security-reviewer on the HTTP entry points"
+			}
+			var gates *feedback.GateFeedbackCatalog
+			if knobValue[int](knobs, set, "obligations") == 1 {
+				gates = gateCfg
+			}
 			idx := knobValue[int](knobs, set, "rep")
 			resolve, ok := resolvers[idx]
 			if !ok {
@@ -145,7 +176,7 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 				}
 				resolvers[idx] = resolve
 			}
-			block, err := inject.RenderActiveWorkflowInject(ctx, e.inj, cr.auth.Reader, "sess-wf-ct09", inject.CoordinatorTurnFrame{RunContext: runCtx, Roster: roster, Runtime: snap}, nil, nil, nil)
+			block, err := inject.RenderActiveWorkflowInject(ctx, e.inj, cr.auth.Reader, "sess-wf-ct09", inject.CoordinatorTurnFrame{RunContext: runCtx, Roster: roster, Runtime: snap}, nil, nil, gates)
 			if err != nil {
 				return guidanceRender{}, err
 			}
@@ -343,6 +374,67 @@ func workerTaskFinishedCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceC
 			engine.QueueDeferred("sess-finished", "coordinator-worker-task-finished", kick.WithVars(map[string]any{"worker_result": notice}))
 			engine.TakePendingKickIDUnless("sess-finished", nil)
 			text, _, _, err := engine.RenderPendingNudge(ctx, "sess-finished", kick.CoordinatorKickRenderContext{Reader: cr.auth.Reader})
+			if err != nil {
+				return guidanceRender{}, err
+			}
+			return coordinatorRender(text, cr), nil
+		},
+	}}, nil
+}
+
+// scheduledWakeCases queue the timer-wake kick on kick.KickEngine and render
+// it with the live roster facts the turn passes: results awaiting landing and
+// the batch phase.
+func scheduledWakeCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
+	reps := coordinatorRepsBy(e.cReps, func(coordRep) bool { return true },
+		func(cr coordRep) string { return offers(cr.auth, "preview_overlay") })
+	knobs := []casegen.Knob{
+		repKnob([]string{"profile_has_preview_overlay"}, len(reps), func(i int) string { return reps[i].state.ID }),
+		{Name: "pending", Facts: []string{"pending_overlays"}, Values: []any{0, 1, 2}},
+		{Name: "batch", Facts: []string{"batch_phase"}, Values: []any{"", "closed"}, Labels: []string{"open", "closed"}},
+	}
+	return []guidanceCase{{
+		unit: "guidance/coordinator-scheduled", recipient: interactions.RecipientCoordinator, knobs: knobs,
+		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
+			cr := reps[knobValue[int](knobs, set, "rep")]
+			engine := &kick.KickEngine{}
+			engine.SetPromptEngine(e.s.Engine())
+			engine.QueueDeferred("sess-wake", "coordinator-scheduled")
+			engine.TakePendingKickIDUnless("sess-wake", nil)
+			text, _, _, err := engine.RenderPendingNudge(ctx, "sess-wake", kick.CoordinatorKickRenderContext{
+				Reader: cr.auth.Reader, PendingOverlays: knobValue[int](knobs, set, "pending"), BatchPhase: knobValue[string](knobs, set, "batch"),
+			})
+			if err != nil {
+				return guidanceRender{}, err
+			}
+			return coordinatorRender(text, cr), nil
+		},
+	}}, nil
+}
+
+// skillProcedureCases render inject.RenderSkillProcedureBlock for a preload
+// the turn's opening decision selected (no trigger tool) and one a loadable
+// tool's first call selected.
+func skillProcedureCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
+	reps := coordinatorRepsBy(e.cReps, func(coordRep) bool { return true },
+		func(cr coordRep) string { return offers(cr.auth, "skills_read", "command") })
+	knobs := []casegen.Knob{
+		repKnob([]string{"profile_has_skills_read", casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
+		indexKnob("trigger", []string{"trigger_tool"}, []string{"tool", "decision"}),
+	}
+	return []guidanceCase{{
+		unit: "guidance/skill-procedure", recipient: interactions.RecipientCoordinator, knobs: knobs,
+		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
+			cr := reps[knobValue[int](knobs, set, "rep")]
+			preload := turnload.SkillPreload{Name: "verify-a-change", Body: "Run the declared project check after each change."}
+			if knobValue[int](knobs, set, "trigger") == 0 {
+				// The trigger is one of the recipient's own tools.
+				if len(cr.auth.Offered) == 0 {
+					return guidanceRender{}, nil
+				}
+				preload.Tool = cr.auth.Offered[0]
+			}
+			text, err := inject.RenderSkillProcedureBlock(ctx, e.inj, cr.auth.Reader, "sess-skill-ct09", prompts.CoordinatorProfileID, preload)
 			if err != nil {
 				return guidanceRender{}, err
 			}

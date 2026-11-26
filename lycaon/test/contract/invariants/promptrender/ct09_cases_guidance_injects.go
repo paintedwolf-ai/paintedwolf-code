@@ -211,7 +211,7 @@ func continuationRecordCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceC
 		return nil, fmt.Errorf("no stock coordinator offers recall with history records")
 	}
 	knobs := []casegen.Knob{
-		indexKnob("reach", []string{"can_recall_history", "can_recall_history_record", "can_recall_query"}, []string{"recall", "none"}),
+		repKnob([]string{"can_recall_history", "can_recall_history_record", "can_recall_query"}, 2, func(i int) string { return []string{"recall", "none"}[i] }),
 		indexKnob("record", []string{"through_ord"}, []string{"summary", "references", "revision"}),
 		indexKnob("source", []string{"s.handles", "s.tool"}, []string{"message", "handles", "message-without-tool"}),
 	}
@@ -219,7 +219,7 @@ func continuationRecordCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceC
 		unit: "guidance/compaction/continuation-record", recipient: unscopedRecipient, knobs: knobs,
 		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
 			reach, auth := recall.auth.Reach, recall.auth
-			if knobValue[int](knobs, set, "reach") == 1 {
+			if knobValue[int](knobs, set, "rep") == 1 {
 				reach, auth = toolreach.Offered(nil), e.zeroAuth()
 			}
 			source := map[string]any{"tool": "command", "handles": []string(nil), "message_id": "m-3"}
@@ -373,4 +373,43 @@ func commandJobsCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, er
 			},
 		},
 	}, nil
+}
+
+// executionStateCases render inject.RenderExecutionStateMessage over
+// transcript windows after one user intent, in one tool batch: rejected
+// writes to distinct paths and failed commands, each none, one, or more than
+// the row cap, with and without a declared project check.
+func executionStateCases(_ context.Context, _ *guidanceCaseEnv) ([]guidanceCase, error) {
+	knobs := []casegen.Knob{
+		{Name: "operations", Facts: []string{"operations", "operations_omitted"}, Values: []any{1, 0, 4}, Labels: []string{"one", "none", "over-cap"}},
+		{Name: "executions", Facts: []string{"executions", "executions_omitted"}, Values: []any{0, 1, 4}, Labels: []string{"none", "one", "over-cap"}},
+		indexKnob("declared", []string{"declared_command"}, []string{"none", "declared"}),
+	}
+	return []guidanceCase{{
+		unit: "guidance/execution-state", recipient: unscopedRecipient, knobs: knobs,
+		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
+			window := []api.Message{{ID: "u-1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Fix the build."}}
+			result := func(tool string, i int, args map[string]any, receipt api.InvocationReceipt) api.Message {
+				call := fmt.Sprintf("%s-%d", tool, i)
+				receipt.ID, receipt.Tool, receipt.ToolCallID, receipt.ArgsDigest = "inv-"+call, tool, call, "digest-"+call
+				return api.Message{ID: "m-" + call, Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
+					Tool: tool, ToolCallID: call, AssistantMessageID: "a-1", ToolArgs: args, Invocation: &receipt,
+				}}
+			}
+			for i := range knobValue[int](knobs, set, "operations") {
+				window = append(window, result("write", i, map[string]any{"path": fmt.Sprintf("src/f%d.go", i)},
+					api.InvocationReceipt{Status: api.InvocationStatusRejected, Failure: &api.InvocationFailure{Code: "PATH_DENIED"}}))
+			}
+			for i := range knobValue[int](knobs, set, "executions") {
+				window = append(window, result("command", i, map[string]any{"command": fmt.Sprintf("go test ./pkg%d", i), "cwd": "@primary"},
+					api.InvocationReceipt{Status: api.InvocationStatusCompleted, Invoked: true, SourceVerdict: api.SourceVerdictFailed}))
+			}
+			declared := ""
+			if knobValue[int](knobs, set, "declared") == 1 {
+				declared = "./task check"
+			}
+			msg := inject.RenderExecutionStateMessage(ctx, e.inj, "sess-exec", window, declared)
+			return e.unscopedRender(msg.Content), nil
+		},
+	}}, nil
 }
