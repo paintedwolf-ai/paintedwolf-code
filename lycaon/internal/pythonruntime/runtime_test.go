@@ -275,8 +275,18 @@ func TestWazeroRuntimeFreshInstantiationAndSettle(t *testing.T) {
 
 func TestWazeroRuntimeMemoryLimit(t *testing.T) {
 	ctx := context.Background()
-	rt, err := NewWazeroRuntime(ctx, RuntimeConfig{
+
+	// Static memory section exceeding DefaultMemoryLimitPages is rejected at compile time.
+	if _, err := NewWazeroRuntime(ctx, RuntimeConfig{
 		WasmBytes:               wasmExceedMemoryModule(8),
+		DefaultMemoryLimitPages: 4,
+	}); err == nil || !strings.Contains(err.Error(), "over limit") {
+		t.Fatalf("expected compile-time memory limit rejection, got %v", err)
+	}
+
+	// Runtime memory.grow beyond DefaultMemoryLimitPages fails and out-of-bounds access latches StopMemoryLimitExceeded.
+	rt, err := NewWazeroRuntime(ctx, RuntimeConfig{
+		WasmBytes:               wasmMemoryGrowAndOOBModule(),
 		DefaultMemoryLimitPages: 4,
 	})
 	testutil.FailErr(t, "new wazero runtime with memory limit", err)
@@ -516,6 +526,34 @@ func wasmExceedMemoryModule(minPages byte) []byte {
 	exp = append(exp, 0x00, 0x00)
 	mod = append(mod, wasmSection(7, exp)...)
 	body := []byte{0x00, 0x0b}
+	code := []byte{0x01}
+	code = append(code, encodeULEB128(uint32(len(body)))...)
+	code = append(code, body...)
+	mod = append(mod, wasmSection(10, code)...)
+	return mod
+}
+
+func wasmMemoryGrowAndOOBModule() []byte {
+	mod := []byte{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00}
+	mod = append(mod, wasmSection(1, []byte{0x01, 0x60, 0x00, 0x00})...)
+	mod = append(mod, wasmSection(3, []byte{0x01, 0x00})...)
+	mod = append(mod, wasmSection(5, []byte{0x01, 0x00, 0x01})...)
+	exp := []byte{0x02}
+	exp = append(exp, wasmString("memory")...)
+	exp = append(exp, 0x02, 0x00)
+	exp = append(exp, wasmString("_start")...)
+	exp = append(exp, 0x00, 0x00)
+	mod = append(mod, wasmSection(7, exp)...)
+	body := []byte{
+		0x00,             // 0 locals
+		0x41, 0x08,       // i32.const 8
+		0x40, 0x00,       // memory.grow 0 (fails against 4-page limit -> returns -1)
+		0x1a,             // drop
+		0x41, 0x80, 0x80, 0x14, // i32.const 327680 (5 * 64 KiB)
+		0x28, 0x02, 0x00, // i32.load -> traps out of bounds
+		0x1a,             // drop
+		0x0b,             // end
+	}
 	code := []byte{0x01}
 	code = append(code, encodeULEB128(uint32(len(body)))...)
 	code = append(code, body...)
