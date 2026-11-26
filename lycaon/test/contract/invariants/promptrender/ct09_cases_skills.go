@@ -112,11 +112,34 @@ var commandFacts = []string{
 	"profile_has_terminal_capture", "can_git_read", "can_request_git_read", "can_git_commit",
 }
 
+// isCommandFact reports whether the offered command and its admitted effects
+// move fact; can_run.<program> is command program reach.
+func isCommandFact(fact string) bool {
+	return slices.Contains(commandFacts, fact) || strings.HasPrefix(fact, "can_run.")
+}
+
+// commandFactsOf returns commandFacts plus the program reach facts in facts.
+func commandFactsOf(facts []string) []string {
+	out := slices.Clone(commandFacts)
+	for _, f := range facts {
+		if strings.HasPrefix(f, "can_run.") {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // factTools names the tools whose presence moves fact.
 func factTools(fact string) []string {
 	switch {
-	case slices.Contains(commandFacts, fact):
+	case isCommandFact(fact):
 		return []string{"command"}
+	case fact == "card_may_edit":
+		return []string{"restore_version", "command"}
+	case fact == "card_may_run":
+		return []string{"verify", "command"}
+	case fact == "card_may_dispatch":
+		return []string{"task", "instruct_worker"}
 	case strings.HasPrefix(fact, "profile_has_"):
 		if name := strings.TrimPrefix(fact, "profile_has_"); isTool(name) {
 			return []string{name}
@@ -190,7 +213,13 @@ func (p *skillCaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	if recipient != interactions.RecipientCoordinator && recipient != interactions.RecipientWorker {
 		return nil
 	}
-	facts := p.siteFacts(site)
+	return readerKnobs(p.siteFacts(site))
+}
+
+// readerKnobs lists the reader inputs that move facts: one per tool a fact
+// names, one per evidence kind a mints fact names, the command effects, the
+// root count, Git and the scratch folder.
+func readerKnobs(facts []string) []casegen.Knob {
 	var knobs []casegen.Knob
 	var tools []string
 	for _, f := range facts {
@@ -204,7 +233,7 @@ func (p *skillCaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	for _, t := range tools {
 		drives := []string{"profile_has_" + t, "profile_can_request." + t}
 		if t == "command" {
-			drives = append(drives, commandFacts...)
+			drives = append(drives, commandFactsOf(facts)...)
 		}
 		for _, f := range facts {
 			if kind, ok := strings.CutPrefix(f, "mints."); ok && slices.Contains(mintTools(kind), t) {
@@ -218,14 +247,14 @@ func (p *skillCaseProducer) Knobs(site, recipient string) []casegen.Knob {
 			knobs = append(knobs, casegen.Knob{Name: "mint:" + kind, Facts: []string{f}, Values: []any{toolHeld, toolAbsent}, Labels: []string{"held", "absent"}})
 		}
 	}
-	if slices.ContainsFunc(facts, func(f string) bool { return slices.Contains(commandFacts, f) }) {
+	if slices.ContainsFunc(facts, isCommandFact) {
 		values := make([]any, len(effectSets))
 		labels := make([]string, len(effectSets))
 		for i, e := range effectSets {
 			values[i] = e
 			labels[i] = fmt.Sprint(e.Classes())
 		}
-		knobs = append(knobs, casegen.Knob{Name: "effects", Facts: commandFacts, Values: values, Labels: labels})
+		knobs = append(knobs, casegen.Knob{Name: "effects", Facts: commandFactsOf(facts), Values: values, Labels: labels})
 	}
 	if slices.ContainsFunc(facts, func(f string) bool { return f == "root_count" || f == "has_workspace_roots" }) {
 		knobs = append(knobs, casegen.Knob{Name: "roots", Facts: []string{"root_count", "has_workspace_roots", casegen.AnyFact}, Values: []any{1, 0, 2}})
@@ -297,6 +326,13 @@ func (p *skillCaseProducer) reader(recipient string, extra []string, c skillCase
 		plan, err := prompts.CompileSurfacePlan(skillCaseSurface, c.roots)
 		if err != nil {
 			return prompts.Reader{}, false, err
+		}
+		// A coordinator profile cannot defer a tool its surface lists on the
+		// floor; only the surface's loadable tools load on request.
+		for tool, v := range c.tools {
+			if v == toolDeferred && plan.Immediate(tool) {
+				return prompts.Reader{}, false, nil
+			}
 		}
 		plan = plan.Promote(plan.DeferredNames()...)
 		for _, name := range plan.AddressableNames() {

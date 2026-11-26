@@ -54,7 +54,28 @@ var conditionConstraints = []interactions.AtomConstraint{
 	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: interactions.RecipientCoordinator, Source: srcMCPCode},
 	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: interactions.RecipientWorker, Source: srcMCPCode},
 	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: unscopedRecipient, Source: srcMCPCode},
+	// A coordinator's requestable tools are its surface's loadable tools.
+	{Atom: "profile_can_request.command", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_command_verify", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_git_read", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_git_commit", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "can_request_git_bisect", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "command")},
+	{Atom: "profile_can_request.source_history", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "source_history")},
+	{Atom: "profile_can_request.terminal_open", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "terminal_open")},
+	{Atom: "visual_show_terminal_needs_request", Recipient: interactions.RecipientCoordinator, Fixed: true, Value: independence.False, Source: fmt.Sprintf(srcCoordinatorFloors, "terminal_open")},
+	// Every runner tool's schema accepts capability_request.
+	{Atom: "profile_has_command", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientCoordinator, Source: srcRunnerCapability},
+	{Atom: "profile_has_command", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientWorker, Source: srcRunnerCapability},
+	{Atom: "can_command_verify", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientCoordinator, Source: srcRunnerCapability},
+	{Atom: "can_command_verify", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientWorker, Source: srcRunnerCapability},
+	{Atom: "runner_socks_proxy_tools", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientCoordinator, Source: srcRunnerCapability},
+	{Atom: "runner_socks_proxy_tools", Implies: "runner_capability_request_tools", Recipient: interactions.RecipientWorker, Source: srcRunnerCapability},
 }
+
+const (
+	srcCoordinatorFloors = "config/packs/painted-wolf/platform/host/coordinator-surfaces.yaml lists %s only on surface floors, and prompts.NewReader makes only a surface's loadable tools requestable"
+	srcRunnerCapability  = "native-tools.yaml: command and verify, the runner tools, each declare capability_request, so runner_capability_request_tools lists every offered runner"
+)
 
 const (
 	mcpServerCodeAtom = `starts_with(mcp_error_code, "MCP_SERVER_")`
@@ -186,8 +207,17 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	if err != nil {
 		return nil, err
 	}
-	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations(), skillGen.Observations(), standing)
-	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes), slices.Concat(gapRecipients, tRecipients, skillGapRecipients, sRecipients))
+	profiles, err := newProfileCaseProducer(s, sites)
+	if err != nil {
+		return nil, err
+	}
+	pTargets, pRecipients := profiles.targets(first)
+	pOutcomes, err := casegen.Generate(ctx, profiles, pTargets, profileCaseBudget)
+	if err != nil {
+		return nil, err
+	}
+	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations(), skillGen.Observations(), standing, profiles.Observations())
+	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes, pOutcomes), slices.Concat(gapRecipients, tRecipients, skillGapRecipients, sRecipients, pRecipients))
 	guided, err := generateGuidanceCases(ctx, s, first, &in)
 	if err != nil {
 		return nil, err
@@ -197,9 +227,9 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 		return nil, err
 	}
 	l.Generation = interactions.GenerationSummary{
-		Targets: len(targets) + len(tTargets) + len(skillTargets) + len(sOutcomes), Runs: gen.producer.Runs() + kicks.runs + skillGen.Runs() + sRuns, Seconds: time.Since(started).Seconds(),
+		Targets: len(targets) + len(tTargets) + len(skillTargets) + len(sOutcomes) + len(pTargets), Runs: gen.producer.Runs() + kicks.runs + skillGen.Runs() + sRuns + profiles.runs, Seconds: time.Since(started).Seconds(),
 	}
-	for _, o := range slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes) {
+	for _, o := range slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes, pOutcomes) {
 		if o.Found {
 			l.Generation.Found++
 		}

@@ -186,7 +186,7 @@ func CoordinatorStates(ctx context.Context) ([]CoordinatorState, error) {
 		if len(co.CoordinatorSeeds) > 0 {
 			seeds = append(seeds, caseCoordinatorSeeds(len(overlays), co.CoordinatorSeeds)...)
 		} else {
-			seeds = append(seeds, buildCustomizationSeeds(len(overlays), surfaces, projectBindings)...)
+			seeds = append(seeds, buildCustomizationSeeds(len(overlays), surfaces, append(slices.Clone(bindings), projectBindings...))...)
 		}
 		overlays = append(overlays, co.Overlay)
 	}
@@ -302,6 +302,12 @@ func buildProjectBindingSeeds(bindings []PhaseBinding) []coordinatorSeed {
 						})
 					}
 				}
+				// Without web search a rootless turn cannot dispatch web research.
+				seeds = append(seeds, coordinatorSeed{
+					mode: mode, posture: p, wf: WorkflowActivePhase, surfaceID: b.Resolved.CoordinatorSurface,
+					roots: RootsNone, loading: LoadingFloorOnly, web: false, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+					binding: b,
+				})
 			}
 		}
 	}
@@ -309,8 +315,8 @@ func buildProjectBindingSeeds(bindings []PhaseBinding) []coordinatorSeed {
 }
 
 // buildCustomizationSeeds meets a customized catalog with the ambient worker
-// lifecycle, every active phase surface and every project binding.
-func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, projectBindings []PhaseBinding) []coordinatorSeed {
+// lifecycle, every active phase surface and every shipped and project binding.
+func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, phaseBindings []PhaseBinding) []coordinatorSeed {
 	var seeds []coordinatorSeed
 	for _, mode := range api.AllSessionModeValues() {
 		for _, p := range []api.SessionPosture{api.SessionPostureBuild, api.SessionPostureOrchestrate} {
@@ -324,12 +330,15 @@ func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, projectBindings 
 			}
 		}
 	}
-	for i := range projectBindings {
-		seeds = append(seeds, coordinatorSeed{
-			overlayIdx: ovIdx, mode: api.SessionModeAgent, posture: api.SessionPostureBuild, wf: WorkflowActivePhase,
-			surfaceID: projectBindings[i].Resolved.CoordinatorSurface, roots: RootsSingleGit, loading: LoadingAllLoaded,
-			web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone, binding: &projectBindings[i],
-		})
+	// A closed-floor surface admits only floor loading.
+	for i := range phaseBindings {
+		for _, ld := range []LoadingMode{LoadingFloorOnly, LoadingAllLoaded} {
+			seeds = append(seeds, coordinatorSeed{
+				overlayIdx: ovIdx, mode: api.SessionModeAgent, posture: api.SessionPostureBuild, wf: WorkflowActivePhase,
+				surfaceID: phaseBindings[i].Resolved.CoordinatorSurface, roots: RootsSingleGit, loading: ld,
+				web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone, binding: &phaseBindings[i],
+			})
+		}
 	}
 	for _, s := range surfaces {
 		for _, ld := range []LoadingMode{LoadingFloorOnly, LoadingAllLoaded} {
@@ -339,6 +348,11 @@ func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, projectBindings 
 				approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
 			})
 		}
+		seeds = append(seeds, coordinatorSeed{
+			overlayIdx: ovIdx, mode: api.SessionModeAgent, posture: api.SessionPostureBuild, wf: WorkflowActivePhase,
+			surfaceID: s.ID, roots: RootsSingleGit, loading: LoadingFloorOnly, web: false,
+			approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+		})
 	}
 	return seeds
 }

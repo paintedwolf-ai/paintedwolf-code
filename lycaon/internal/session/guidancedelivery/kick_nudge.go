@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
@@ -222,7 +223,7 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 		}
 		rc.Reader = reader
 	}
-	rc.GateObligations = m.GateObligations(ctx, sessionID, frame)
+	rc.GateObligations = m.GateObligations(ctx, sessionID, frame, rc.Reader)
 	rc.ProgressOpenItems, rc.ProgressClosureArmed = m.closureState(ctx, sessionID)
 	return rc
 }
@@ -279,7 +280,7 @@ func unsatisfiedFrameGateLeaves(frame inject.CoordinatorTurnFrame) []string {
 }
 
 // GateObligations projects unmet gate obligations for the coordinator turn frame.
-func (m *Service) GateObligations(ctx context.Context, sessionID string, frame inject.CoordinatorTurnFrame) []kick.GateObligation {
+func (m *Service) GateObligations(ctx context.Context, sessionID string, frame inject.CoordinatorTurnFrame, reader prompts.Reader) []kick.GateObligation {
 	if m == nil || m.gateFeedback == nil {
 		return nil
 	}
@@ -295,6 +296,7 @@ func (m *Service) GateObligations(ctx context.Context, sessionID string, frame i
 	if frame.Runtime.PhaseExit != nil {
 		extras = feedback.WithReviewAgents(extras, frame.Runtime.PhaseExit.ReviewAgents)
 	}
+	extras = feedback.WithReaderFacts(extras, reader.Facts())
 	rows := fb.ProjectObligations(ctx, leaves, runCtx.AdvanceWhenGateMet, extras)
 	if len(rows) == 0 {
 		return nil

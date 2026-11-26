@@ -291,6 +291,10 @@ families:
     over: skills
     type: bool
     states: Active skill roster includes the named stock skill.
+  - pattern: can_run.{program}
+    over: command_programs
+    type: bool
+    states: Reader can run the named program under command on this turn.
 
 reserved_prefixes:
   - profile_
@@ -303,3 +307,4 @@ reserved_prefixes:
   - caps
   - can_git_
   - can_spawn_
+  - can_run

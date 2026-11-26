@@ -1,11 +1,10 @@
 id: implement
-description: Implementer without peer findings, decisions, waiting or verify
+description: Implementer without peer findings, decisions, waiting, verify or restore_version, loading terminal_open on request
 command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   code_rewrite: sticky
   survey_repo: sticky
   recall: sticky
-  restore_version: sticky
   scan_pack: true
   scan_summary: true
   scan_query: true
@@ -29,7 +28,8 @@ tools:
   page_open: true
   page_act: true
   page_snapshot: true
-  terminal_open: sticky
+  terminal_open: true
+  terminal_snapshot: true
   terminal_send: true
   terminal_read: true
   terminal_close: sticky

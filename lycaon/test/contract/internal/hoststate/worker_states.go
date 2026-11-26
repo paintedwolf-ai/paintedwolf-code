@@ -157,10 +157,14 @@ func WorkerStates(ctx context.Context) ([]WorkerState, error) {
 	return out, nil
 }
 
-// customizationWorkerSeeds meets a customized worker with both command-effect
-// families, both parent modes, both loadings and an isolated branch.
+// customizationWorkerSeeds meets a customized worker with vision, both
+// command-effect families, both parent modes, both loadings and an isolated
+// branch.
 func customizationWorkerSeeds() []WorkerSeed {
-	var seeds []WorkerSeed
+	seeds := []WorkerSeed{{
+		Posture: api.SessionPostureBuild, BranchView: BranchMainGit, RootCount: 1, Loading: WorkerLoadingAllLoaded,
+		ParentSessionMode: api.SessionModeAgent, WebSearch: true, Vision: true, ApprovalPosture: gate.PostureBalanced, TempState: TempNone,
+	}}
 	for _, posture := range []api.SessionPosture{api.SessionPostureBuild, api.SessionPostureSpec} {
 		for _, bv := range []WorkerBranchView{BranchMainGit, BranchIsolatedWorker} {
 			for _, ld := range []WorkerLoadingMode{WorkerLoadingStickyOnly, WorkerLoadingAllLoaded} {
