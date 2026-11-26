@@ -117,18 +117,24 @@ var (
 // surfacecatalog.RestrictCommandEffects), combined with tc.Source.ReadOnly and
 // tc.Source.AskMode. Always fails closed when an effect is absent.
 func resolvePythonAllowedEffects(ctx context.Context, boundary *sandbox.Boundary, tc tools.ToolContext) (*pythonadmission.AllowedEffects, bool) {
-	hasProfileOrSurface := boundary != nil || tc.Turn.TurnSurfaceID != ""
+	hasProfile := boundary != nil && tc.Identity.Agent != ""
+	hasSurface := tc.Turn.TurnSurfaceID != ""
+	hasProfileOrSurface := hasProfile || hasSurface
 	var allowed toolcontract.CommandEffects
-	if boundary != nil {
-		if profileEffects, err := boundary.CommandEffects(ctx, tc.Turn.ProfileID); err == nil {
+	if hasProfile {
+		if profileEffects, err := boundary.CommandEffects(ctx, tc.Identity.Agent); err == nil {
 			allowed = profileEffects
+		} else if hasSurface {
+			// Profile lookup failed (e.g. non-profile agent name), fall back to
+			// full effects intersected by the explicit surface restriction.
+			allowed = pyEffectAll
 		}
-	} else if tc.Turn.TurnSurfaceID != "" {
-		// No boundary configured, but a surface was explicitly named: start
+	} else if hasSurface {
+		// No profile configured, but a surface was explicitly named: start
 		// from full effects and let RestrictCommandEffects intersect.
 		allowed = pyEffectAll
 	}
-	if tc.Turn.TurnSurfaceID != "" {
+	if hasSurface {
 		if restricted, err := surfacecatalog.RestrictCommandEffects(allowed, tc.Turn.TurnSurfaceID); err == nil {
 			allowed = restricted
 		} else {

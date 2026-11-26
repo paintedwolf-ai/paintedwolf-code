@@ -34,7 +34,7 @@ func newEditorDocumentsBridge(tc tools.ToolContext) pythondocuments.EditorBridge
 		docs:      docs,
 		projectID: tc.Identity.ProjectID,
 		sessionID: tc.Identity.SessionID,
-		turn:      tc.Turn.Turn,
+		turn:      tc.Identity.UserTurn,
 		callID:    tc.Identity.ToolCallID,
 	}
 }
@@ -121,9 +121,9 @@ func (b *editorDocumentsBridge) PublishDraft(
 	return pythondocuments.DocumentRevision{
 		RootID:           rootID,
 		Branch:           branch,
-		DocumentID:       res.DocumentID,
-		DocumentRevision: strconv.FormatInt(res.Revision, 10),
+		DocumentID:       res.Document.ID,
+		DocumentRevision: strconv.FormatInt(res.Document.Revision, 10),
 		DiskSHA256:       pythondocuments.SHA256Hex(data),
-		UnsavedDraft:     true,
+		UnsavedDraft:     !res.Saved,
 	}, true, nil
 }
