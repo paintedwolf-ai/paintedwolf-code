@@ -498,8 +498,9 @@ func workerRepsBy(reps []workerRep, keep func(workerRep) bool, key func(workerRe
 }
 
 // workerTaskAssignmentCases render inject.RenderWorkerTaskAssignment for read
-// and write scopes over each overlay view kind, a review-coverage binding that does or does not require
-// coverage, and a scope path the outline reads from this package's sources.
+// and write scopes over each overlay view kind, a review-coverage binding
+// that does or does not require coverage, and a scope path the outline reads
+// from this package's sources.
 func workerTaskAssignmentCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
 	reps := workerRepsBy(e.wReps, func(workerRep) bool { return true },
 		func(wr workerRep) string {
