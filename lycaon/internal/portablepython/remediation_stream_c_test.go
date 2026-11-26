@@ -54,7 +54,7 @@ func (s *stubLiveEditorDocuments) FreezeAgentReads(_, _ string) map[string]docum
 
 func TestStreamCRemediationCommandEffectsFailClosedProtectedPathsEditorAndEvidence(t *testing.T) {
 	svc := newRealPortablePythonService(t)
-	stockCatalog := extpackstest.MustLoadStockCatalog(t)
+	stockCatalog := extpackstest.StockCatalog(t)
 
 	// Finding 2: Profile/surface command_effects enforced through toolhost.
 	t.Run("read_only surface stops python write with COMMAND_EFFECT_NOT_ALLOWED", func(t *testing.T) {
@@ -319,12 +319,12 @@ func TestStreamCRemediationCommandEffectsFailClosedProtectedPathsEditorAndEviden
 		if bigResp.RetainedStdoutArtifactID == "" {
 			t.Fatal("expected non-empty RetainedStdoutArtifactID for overflow stdout")
 		}
-		art, err := svc.RetainedStore().Get(bigResp.RetainedStdoutArtifactID, pythonevidence.ViewerScope{
+		art, err := svc.RetainedStore().Get(context.Background(), pythonevidence.ViewerScope{
 			Role:      pythonevidence.RoleCoordinator,
 			SessionID: "sess-evidence",
 			Actor:     "agent:coder",
 			View:      "workspace",
-		})
+		}, bigResp.RetainedStdoutArtifactID)
 		testutil.FailErr(t, "fetch retained stdout artifact", err)
 		if len(art.Data) < 100000 {
 			t.Fatalf("retained stdout artifact length = %d, want >= 100000", len(art.Data))

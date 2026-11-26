@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/app/execution"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
@@ -45,8 +46,8 @@ func TestAppExecutionBuildAutoDiscoversPortablePythonImage(t *testing.T) {
 		t.Fatal("DiscoverImageDir returned empty path")
 	}
 
-	catalog := extpackstest.MustLoadStockCatalog(t)
-	rt, err := execution.Build(nil, "", catalog, nil, nil)
+	catalog := extpackstest.StockCatalog(t)
+	rt, err := execution.Build(nil, "", catalog, decide.Reranker{}, nil)
 	testutil.FailErr(t, "execution.Build with auto-discovered Portable Python", err)
 
 	raw, err := rt.Host.Registry.Run(context.Background(), "python", map[string]any{
