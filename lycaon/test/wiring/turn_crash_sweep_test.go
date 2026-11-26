@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -490,8 +491,9 @@ func runTurnChild(t *testing.T, dir, killAt string) {
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
 	testutil.FailErr(t, "record session", os.WriteFile(filepath.Join(dir, crashSession), []byte(sess.ID), 0o600))
-	testutil.FailErr(t, "admit project roots before arming", h.Sessions.Manager.ToolContext.CredentialFiles.EnsureProject(t.Context(), sess.ProjectID))
-	repochange.WaitQuiet(t.Context(), project, repochange.DefaultDebounce, 5*time.Second)
+	settleProjectWatch(t, project, func() {
+		testutil.FailErr(t, "admit project roots before arming", h.Sessions.Manager.ToolContext.CredentialFiles.EnsureProject(t.Context(), sess.ProjectID))
+	})
 	tracer.armed.Store(true)
 	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "Read the notes.")
 	testutil.FailErr(t, "prompt", err)
@@ -500,6 +502,38 @@ func runTurnChild(t *testing.T, dir, killAt string) {
 	waitForOutboxDrained(t, h)
 	tracer.armed.Store(false)
 	os.Exit(finishedExit)
+}
+
+// watchBarrier is the directory the turn child creates once its project is
+// watched. A platform stream delivers in order and may report writes made just
+// before it started, as FSEvents does, so the barrier's delivery follows every
+// delivery for the seeded files.
+const watchBarrier = "watched"
+
+// settleProjectWatch starts the project's watch with ensureWatch and returns
+// once every delivery for earlier writes has run its observers, so none of
+// them commits after the tracer is armed.
+func settleProjectWatch(t *testing.T, project string, ensureWatch func()) {
+	t.Helper()
+	delivered := make(chan struct{})
+	var once sync.Once
+	unregister := repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+		if ev.Kind == repochange.WorktreeChanged && slices.Contains(ev.Paths, watchBarrier) {
+			once.Do(func() { close(delivered) })
+		}
+	})
+	defer unregister()
+	ensureWatch()
+	// Creating a directory is a single event on every platform stream.
+	testutil.FailErr(t, "create watch barrier", os.Mkdir(filepath.Join(project, watchBarrier), 0o755))
+	select {
+	case <-delivered:
+	case <-t.Context().Done():
+		t.Fatal("the project watch never delivered its barrier")
+	}
+	// An earlier batch may still be running observers beside the barrier's;
+	// with no grace this waits for the debouncer to hold no batch for the root.
+	repochange.WaitQuiet(t.Context(), project, 0, time.Hour)
 }
 
 // runBootChild boots the host left on dir twice, as the engine's next two
