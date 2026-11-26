@@ -3,6 +3,9 @@ package pythonruntime
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,6 +103,51 @@ func TestCPythonWASITrustedBootstrapCompletionAndAbruptExit(t *testing.T) {
 			t.Fatal("os._exit(0) must NOT produce CleanCompletion=true")
 		}
 	})
+
+	t.Run("failed stdout write prevents CleanCompletion", func(t *testing.T) {
+		ws := newMemWorkspaceAdapter(nil)
+		res, err := rt.Execute(ctx, Invocation{
+			ExecutionID: "cpython-failed-stdout",
+			Mode:        ModeCode,
+			Code:        "print('boom', flush=True)",
+			Stdout:      failingWriter{},
+			Workspace:   ws,
+			Limits:      ResourceLimits{Timeout: 30 * time.Second},
+		})
+		testutil.FailErr(t, "execute with failing stdout", err)
+		if res.CleanCompletion {
+			t.Fatal("failed stdout write must NOT produce CleanCompletion=true")
+		}
+	})
+
+	t.Run("guest cannot forge completion via /.pw_internal/complete", func(t *testing.T) {
+		ws := newMemWorkspaceAdapter(nil)
+		res, err := rt.Execute(ctx, Invocation{
+			ExecutionID: "cpython-forge-attempt",
+			Mode:        ModeCode,
+			Code: `
+import os
+try:
+    with open("/.pw_internal/complete", "wb") as f:
+        f.write(b"forged")
+except OSError:
+    pass
+os._exit(0)
+`,
+			Workspace: ws,
+			Limits:    ResourceLimits{Timeout: 30 * time.Second},
+		})
+		testutil.FailErr(t, "execute forge attempt", err)
+		if res.CleanCompletion {
+			t.Fatal("guest writing /.pw_internal/complete + os._exit(0) must NOT produce CleanCompletion=true")
+		}
+	})
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("simulated downstream pipe error")
 }
 
 func TestCPythonWASIMediatedWorkspaceImportsAndStopSealing(t *testing.T) {
@@ -294,6 +342,116 @@ print("ALL_BUNDLED_OK")
 		}
 		if strings.TrimSpace(stdout.String()) != "ALL_BUNDLED_OK" {
 			t.Fatalf("stdout = %q, want ALL_BUNDLED_OK", stdout.String())
+		}
+	})
+
+	t.Run("deterministic Wasm fuel stops pure-Python loop without timeout", func(t *testing.T) {
+		ws := newMemWorkspaceAdapter(nil)
+		res, err := rt.Execute(ctx, Invocation{
+			ExecutionID: "cpython-fuel-py-loop",
+			Mode:        ModeCode,
+			Code:        "while True:\n    pass\n",
+			Workspace:   ws,
+			Limits: ResourceLimits{
+				MaxGuestWork: 2_000_000,
+				Timeout:      120 * time.Second,
+			},
+		})
+		testutil.FailErr(t, "execute fuel-bounded python loop", err)
+		if res.CleanCompletion {
+			t.Fatal("expected CleanCompletion=false on fuel exhaustion")
+		}
+		if res.Stop == nil || res.Stop.Code != StopWorkLimitExceeded {
+			t.Fatalf("expected StopWorkLimitExceeded, got %+v (guestWork=%d)", res.Stop, res.Usage.GuestWork)
+		}
+	})
+
+	t.Run("deterministic Wasm fuel stops compiled C regex backtracking without timeout", func(t *testing.T) {
+		ws := newMemWorkspaceAdapter(nil)
+		res, err := rt.Execute(ctx, Invocation{
+			ExecutionID: "cpython-fuel-c-regex",
+			Mode:        ModeCode,
+			Code:        "import re\nre.match(r'(a+)+b', 'a' * 28 + 'c')\n",
+			Workspace:   ws,
+			Limits: ResourceLimits{
+				MaxGuestWork: 3_000_000,
+				Timeout:      120 * time.Second,
+			},
+		})
+		testutil.FailErr(t, "execute fuel-bounded C regex", err)
+		if res.CleanCompletion {
+			t.Fatal("expected CleanCompletion=false on C regex fuel exhaustion")
+		}
+		if res.Stop == nil || res.Stop.Code != StopWorkLimitExceeded {
+			t.Fatalf("expected StopWorkLimitExceeded, got %+v (guestWork=%d)", res.Stop, res.Usage.GuestWork)
+		}
+	})
+}
+
+func TestCPythonWASIImageTamperNegativeControls(t *testing.T) {
+	imageDir := strings.TrimSpace(os.Getenv("PW_PORTABLE_PYTHON_IMAGE_DIR"))
+	if imageDir == "" {
+		t.Skip("PW_PORTABLE_PYTHON_IMAGE_DIR not set; skipping image tamper negative controls")
+	}
+
+	copyDir := func(t *testing.T, src, dst string) {
+		t.Helper()
+		err := filepath.WalkDir(src, func(p string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			rel, err := filepath.Rel(src, p)
+			if err != nil {
+				return err
+			}
+			target := filepath.Join(dst, rel)
+			if d.IsDir() {
+				return os.MkdirAll(target, 0o755)
+			}
+			in, err := os.Open(p)
+			if err != nil {
+				return err
+			}
+			defer in.Close()
+			out, err := os.Create(target)
+			if err != nil {
+				return err
+			}
+			defer out.Close()
+			_, err = io.Copy(out, in)
+			return err
+		})
+		testutil.FailErr(t, "copy image dir", err)
+	}
+
+	t.Run("modifying package resource certifi/cacert.pem fails VerifyImage", func(t *testing.T) {
+		tmp := t.TempDir()
+		copyDir(t, imageDir, tmp)
+		manifest, err := LoadImageManifest(filepath.Join(tmp, "image-manifest.json"))
+		testutil.FailErr(t, "load manifest", err)
+		testutil.FailErr(t, "verify untouched copy", VerifyImage(tmp, manifest))
+
+		cacert := filepath.Join(tmp, "packages", "certifi", "cacert.pem")
+		orig, err := os.ReadFile(cacert)
+		testutil.FailErr(t, "read cacert.pem", err)
+		testutil.FailErr(t, "tamper cacert.pem", os.WriteFile(cacert, append(orig, []byte("\n# tampered\n")...), 0o644))
+
+		if err := VerifyImage(tmp, manifest); err == nil {
+			t.Fatal("VerifyImage must reject modified packages/certifi/cacert.pem")
+		}
+	})
+
+	t.Run("adding unlisted .py file under packages/ fails VerifyImage", func(t *testing.T) {
+		tmp := t.TempDir()
+		copyDir(t, imageDir, tmp)
+		manifest, err := LoadImageManifest(filepath.Join(tmp, "image-manifest.json"))
+		testutil.FailErr(t, "load manifest", err)
+
+		unlisted := filepath.Join(tmp, "packages", "unlisted_injected.py")
+		testutil.FailErr(t, "write unlisted file", os.WriteFile(unlisted, []byte("INJECTED = True\n"), 0o644))
+
+		if err := VerifyImage(tmp, manifest); err == nil {
+			t.Fatal("VerifyImage must reject unlisted .py file under packages/")
 		}
 	})
 }

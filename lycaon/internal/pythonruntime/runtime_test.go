@@ -170,6 +170,8 @@ func TestImageManifestLoadAndVerify(t *testing.T) {
 	testutil.FailErr(t, "hash wasm", err)
 	stdlibHash, err := HashTree(stdlibDir)
 	testutil.FailErr(t, "hash stdlib", err)
+	pkgTreeHash, err := HashTree(packagesDir)
+	testutil.FailErr(t, "hash packages tree", err)
 
 	manifest := &ImageManifest{
 		SchemaVersion: ImageManifestSchemaVersion,
@@ -184,7 +186,8 @@ func TestImageManifestLoadAndVerify(t *testing.T) {
 			StdlibPath:   "stdlib",
 			StdlibSHA256: stdlibHash,
 		},
-		PackagesRoot: "packages",
+		PackagesRoot:       "packages",
+		PackagesTreeSHA256: pkgTreeHash,
 		Distributions: []DistributionSpec{
 			{
 				Name:           "demo",
@@ -205,8 +208,16 @@ func TestImageManifestLoadAndVerify(t *testing.T) {
 	testutil.FailErr(t, "load manifest", err)
 	testutil.FailErr(t, "verify clean image", VerifyImage(dir, loaded))
 
+	// Unlisted file under packages/ must fail packages_tree_sha256 verification.
+	extraPath := filepath.Join(packagesDir, "unlisted.py")
+	testutil.FailErr(t, "write unlisted pkg file", os.WriteFile(extraPath, []byte("EVIL = 1\n"), 0o644))
+	if err := VerifyImage(dir, loaded); err == nil || !strings.Contains(err.Error(), "packages_root tree sha256 mismatch") {
+		t.Fatalf("expected packages_root tree sha256 mismatch, got %v", err)
+	}
+	testutil.FailErr(t, "remove unlisted pkg file", os.Remove(extraPath))
+
 	// Native binary injection must fail verification.
-	soPath := filepath.Join(packagesDir, "bad.so")
+	soPath := filepath.Join(dir, "bad.so")
 	testutil.FailErr(t, "write native binary", os.WriteFile(soPath, []byte("ELF"), 0o644))
 	if err := VerifyImage(dir, loaded); err == nil || !strings.Contains(err.Error(), "native binaries forbidden") {
 		t.Fatalf("expected native binary rejection, got %v", err)

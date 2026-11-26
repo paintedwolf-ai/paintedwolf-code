@@ -1,74 +1,93 @@
 package pythonruntime
 
 import (
-	"context"
 	"fmt"
 	"sync/atomic"
-
-	"github.com/tetratelabs/wazero/api"
-	"github.com/tetratelabs/wazero/experimental"
 )
 
-type workMeterContextKey struct{}
-
-// WorkMeter accounts for deterministic guest work (Wasm function calls) and
-// host work (charged via OperationObserver / WorkspaceSysFS) against per-
-// invocation limits, latching StopWorkLimitExceeded on overflow.
+// WorkMeter accounts for deterministic guest work (via Wasm loop+function fuel
+// instrumentation), host work, and staged bytes against per-invocation limits,
+// latching StopWorkLimitExceeded before overflowing host budgets.
 type WorkMeter struct {
-	maxGuestWork uint64
-	maxHostWork  uint64
-	guestWork    atomic.Uint64
-	hostWork     atomic.Uint64
-	latch        *StopLatch
+	maxGuestWork   uint64
+	maxHostWork    uint64
+	maxStagedBytes int64
+	guestWork      atomic.Uint64
+	hostWork       atomic.Uint64
+	stagedBytes    atomic.Int64
+	latch          *StopLatch
 }
 
-// NewWorkMeter creates a WorkMeter enforcing maxGuestWork and maxHostWork
-// (0 means unbounded for that dimension).
-func NewWorkMeter(maxGuestWork, maxHostWork uint64, latch *StopLatch) *WorkMeter {
+// NewWorkMeter creates a WorkMeter enforcing maxGuestWork, maxHostWork, and
+// maxStagedBytes (0 means unbounded for that dimension).
+func NewWorkMeter(maxGuestWork, maxHostWork uint64, maxStagedBytes int64, latch *StopLatch) *WorkMeter {
 	return &WorkMeter{
-		maxGuestWork: maxGuestWork,
-		maxHostWork:  maxHostWork,
-		latch:        latch,
+		maxGuestWork:   maxGuestWork,
+		maxHostWork:    maxHostWork,
+		maxStagedBytes: maxStagedBytes,
+		latch:          latch,
 	}
 }
 
-// ChargeGuestWork adds units to guest work and trips StopWorkLimitExceeded if
-// maxGuestWork is exceeded. Returns false once the limit is exceeded.
-func (m *WorkMeter) ChargeGuestWork(units uint64) bool {
+// ReserveHostWork checks and reserves host work units BEFORE performing a host
+// operation. Returns false and latches StopWorkLimitExceeded if maxHostWork
+// would be exceeded.
+func (m *WorkMeter) ReserveHostWork(units uint64, operationID string) bool {
 	if m == nil || units == 0 {
 		return true
 	}
-	total := m.guestWork.Add(units)
-	if m.maxGuestWork > 0 && total > m.maxGuestWork {
-		if m.latch != nil {
-			m.latch.Trigger(TerminalStop{
-				Code:   StopWorkLimitExceeded,
-				Reason: fmt.Sprintf("guest work %d exceeded limit %d", total, m.maxGuestWork),
-			})
+	for {
+		cur := m.hostWork.Load()
+		next := cur + units
+		if m.maxHostWork > 0 && next > m.maxHostWork {
+			if m.latch != nil {
+				m.latch.Trigger(TerminalStop{
+					Code:        StopWorkLimitExceeded,
+					OperationID: operationID,
+					Reason:      fmt.Sprintf("host work %d would exceed limit %d", next, m.maxHostWork),
+				})
+			}
+			return false
 		}
-		return false
+		if m.hostWork.CompareAndSwap(cur, next) {
+			return true
+		}
 	}
-	return true
 }
 
-// ChargeHostWork adds units to host work and trips StopWorkLimitExceeded if
-// maxHostWork is exceeded. Returns false once the limit is exceeded.
-func (m *WorkMeter) ChargeHostWork(units uint64, operationID string) bool {
-	if m == nil || units == 0 {
+// ReserveStagedBytes checks and reserves staged byte capacity BEFORE writing
+// to a workspace overlay descriptor. Returns false and latches
+// StopWorkLimitExceeded if maxStagedBytes would be exceeded.
+func (m *WorkMeter) ReserveStagedBytes(delta int64, operationID string) bool {
+	if m == nil || delta <= 0 {
 		return true
 	}
-	total := m.hostWork.Add(units)
-	if m.maxHostWork > 0 && total > m.maxHostWork {
-		if m.latch != nil {
-			m.latch.Trigger(TerminalStop{
-				Code:        StopWorkLimitExceeded,
-				OperationID: operationID,
-				Reason:      fmt.Sprintf("host work %d exceeded limit %d", total, m.maxHostWork),
-			})
+	for {
+		cur := m.stagedBytes.Load()
+		next := cur + delta
+		if m.maxStagedBytes > 0 && next > m.maxStagedBytes {
+			if m.latch != nil {
+				m.latch.Trigger(TerminalStop{
+					Code:        StopWorkLimitExceeded,
+					OperationID: operationID,
+					Reason:      fmt.Sprintf("staged bytes %d would exceed limit %d", next, m.maxStagedBytes),
+				})
+			}
+			return false
 		}
-		return false
+		if m.stagedBytes.CompareAndSwap(cur, next) {
+			return true
+		}
 	}
-	return true
+}
+
+// SetGuestWork records final guest fuel consumed from the instrumented Wasm
+// module.
+func (m *WorkMeter) SetGuestWork(units uint64) {
+	if m == nil {
+		return
+	}
+	m.guestWork.Store(units)
 }
 
 // GuestWork returns total charged guest work units.
@@ -87,38 +106,10 @@ func (m *WorkMeter) HostWork() uint64 {
 	return m.hostWork.Load()
 }
 
-// WithWorkMeter attaches meter to ctx for per-invocation guest work metering.
-func WithWorkMeter(ctx context.Context, meter *WorkMeter) context.Context {
-	if meter == nil {
-		return ctx
+// StagedBytes returns total reserved staged bytes.
+func (m *WorkMeter) StagedBytes() int64 {
+	if m == nil {
+		return 0
 	}
-	return context.WithValue(ctx, workMeterContextKey{}, meter)
+	return m.stagedBytes.Load()
 }
-
-// WorkMeterFromContext retrieves the per-invocation WorkMeter from ctx, if any.
-func WorkMeterFromContext(ctx context.Context) *WorkMeter {
-	if ctx == nil {
-		return nil
-	}
-	m, _ := ctx.Value(workMeterContextKey{}).(*WorkMeter)
-	return m
-}
-
-type workMeterListener struct{}
-
-func newWorkMeterListenerFactory() experimental.FunctionListenerFactory {
-	l := &workMeterListener{}
-	return experimental.FunctionListenerFactoryFunc(func(_ api.FunctionDefinition) experimental.FunctionListener {
-		return l
-	})
-}
-
-func (l *workMeterListener) Before(ctx context.Context, _ api.Module, _ api.FunctionDefinition, _ []uint64, _ experimental.StackIterator) {
-	if meter := WorkMeterFromContext(ctx); meter != nil {
-		meter.ChargeGuestWork(1)
-	}
-}
-
-func (l *workMeterListener) After(context.Context, api.Module, api.FunctionDefinition, []uint64) {}
-
-func (l *workMeterListener) Abort(context.Context, api.Module, api.FunctionDefinition, error) {}

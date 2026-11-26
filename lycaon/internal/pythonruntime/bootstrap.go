@@ -1,18 +1,9 @@
 package pythonruntime
 
 import (
-	"bytes"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"strings"
-	"sync"
-	"sync/atomic"
-
-	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
-	"github.com/tetratelabs/wazero/sys"
 )
 
 const (
@@ -23,40 +14,30 @@ const (
 	DefaultGuestPackagesMount = "/packages"
 	// DefaultGuestScratchMount is the program-private writable temporary mount.
 	DefaultGuestScratchMount = "/tmp"
-	// InternalCompletionMount is the host-only mount point that receives the
-	// trusted clean-completion nonce after normal Python finalization.
-	InternalCompletionMount = "/.pw_internal"
-	// InternalCompletionFile is the filename inside InternalCompletionMount.
-	InternalCompletionFile = "complete"
 )
 
 // BootstrapConfig configures the isolated CPython bootstrap preamble.
+// Clean completion is established strictly by host/embedding lifecycle
+// authority (clean _start return without proc_exit, zero stream errors, and
+// zero unclosed workspace write descriptors) — no guest-visible completion
+// nonce or marker is used.
 type BootstrapConfig struct {
-	Mode            ExecutionMode
-	Code            string
-	Script          string
-	Module          string
-	CLI             string
-	CWD             string
-	Args            []string
-	PackagesMount   string
-	ScratchMount    string
-	CompletionNonce string
-	HTTPBridgePath  string
-}
-
-// GenerateCompletionNonce returns a fresh 16-byte hex nonce for trusted
-// clean-completion verification.
-func GenerateCompletionNonce() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	return hex.EncodeToString(b[:])
+	Mode           ExecutionMode
+	Code           string
+	Script         string
+	Module         string
+	CLI            string
+	CWD            string
+	Args           []string
+	PackagesMount  string
+	ScratchMount   string
+	HTTPBridgePath string
 }
 
 // BuildBootstrapArgv returns the isolated CPython argv (`python3 -I -B -c <bootstrap>`)
 // that initializes cwd, sys.path, scratch TMPDIR, executes the requested mode,
-// flushes streams, runs atexit finalizers, and writes the completion nonce to
-// the host-only completion channel.
+// runs atexit finalizers, flushes stdout/stderr, and returns normally through
+// Py_FinalizeEx() -> _start without calling proc_exit.
 func BuildBootstrapArgv(cfg BootstrapConfig) ([]string, error) {
 	src, err := TrustedBootstrapSource(cfg)
 	if err != nil {
@@ -102,8 +83,6 @@ func TrustedBootstrapSource(cfg BootstrapConfig) (string, error) {
 		Args           []string `json:"args"`
 		PackagesMount  string   `json:"packages_mount"`
 		ScratchMount   string   `json:"scratch_mount"`
-		CompletionPath string   `json:"completion_path"`
-		Nonce          string   `json:"nonce"`
 		HTTPBridgePath string   `json:"http_bridge_path,omitempty"`
 	}{
 		Mode:           string(cfg.Mode),
@@ -115,8 +94,6 @@ func TrustedBootstrapSource(cfg BootstrapConfig) (string, error) {
 		Args:           cfg.Args,
 		PackagesMount:  pkgMount,
 		ScratchMount:   scratch,
-		CompletionPath: InternalCompletionMount + "/" + InternalCompletionFile,
-		Nonce:          cfg.CompletionNonce,
 		HTTPBridgePath: cfg.HTTPBridgePath,
 	}
 	if payload.Args == nil {
@@ -321,7 +298,6 @@ def _pw_bootstrap():
     if cfg.get("http_bridge_path"):
         _pw_install_http_bridge(cfg["http_bridge_path"])
 
-    exit_code = 0
     try:
         if mode == "code":
             ns = {"__name__": "__main__", "__file__": "<string>"}
@@ -340,124 +316,12 @@ def _pw_bootstrap():
             mod_name = cfg["module"] if mode == "module" else cfg["cli"]
             runpy.run_module(mod_name, run_name="__main__", alter_sys=True)
     except SystemExit as exc:
-        if exc.code is None or exc.code == 0:
-            exit_code = 0
-        else:
+        if exc.code is not None and exc.code != 0:
             raise
 
     atexit._run_exitfuncs()
     sys.stdout.flush()
     sys.stderr.flush()
 
-    nonce = cfg.get("nonce", "")
-    if exit_code == 0 and nonce:
-        with open(cfg["completion_path"], "wb") as _cf:
-            _cf.write(nonce.encode("ascii"))
-
 _pw_bootstrap()
 `
-
-// CompletionMarkerFS is a host-only experimental/sys.FS mounted at
-// InternalCompletionMount. Normal bootstrap finalization writes the per-
-// invocation nonce to "complete"; os._exit(0), uncaught exceptions, traps, or
-// terminal stops never record completion.
-type CompletionMarkerFS struct {
-	experimentalsys.UnimplementedFS
-
-	nonce     []byte
-	latch     *StopLatch
-	completed atomic.Bool
-}
-
-// NewCompletionMarkerFS creates a host-only completion marker FS bound to
-// nonce and latch.
-func NewCompletionMarkerFS(nonce string, latch *StopLatch) *CompletionMarkerFS {
-	return &CompletionMarkerFS{
-		nonce: []byte(nonce),
-		latch: latch,
-	}
-}
-
-// Completed reports whether the exact per-invocation completion nonce was
-// delivered before any terminal stop.
-func (c *CompletionMarkerFS) Completed() bool {
-	return c.completed.Load()
-}
-
-func (c *CompletionMarkerFS) OpenFile(p string, _ experimentalsys.Oflag, _ fs.FileMode) (experimentalsys.File, experimentalsys.Errno) {
-	if c.latch != nil && c.latch.Stopped() {
-		return nil, experimentalsys.EACCES
-	}
-	rel := cleanGuestRelPath(p)
-	switch rel {
-	case ".":
-		return &completionDirFile{}, 0
-	case InternalCompletionFile:
-		return &completionMarkerFile{parent: c}, 0
-	default:
-		return nil, experimentalsys.ENOENT
-	}
-}
-
-func (c *CompletionMarkerFS) Stat(p string) (sys.Stat_t, experimentalsys.Errno) {
-	rel := cleanGuestRelPath(p)
-	switch rel {
-	case ".":
-		return sys.Stat_t{Dev: 3, Ino: 1, Mode: fs.ModeDir | 0o700, Nlink: 1}, 0
-	case InternalCompletionFile:
-		return sys.Stat_t{Dev: 3, Ino: 2, Mode: 0o200, Nlink: 1}, 0
-	default:
-		return sys.Stat_t{}, experimentalsys.ENOENT
-	}
-}
-
-func (c *CompletionMarkerFS) Lstat(p string) (sys.Stat_t, experimentalsys.Errno) {
-	return c.Stat(p)
-}
-
-type completionDirFile struct {
-	experimentalsys.UnimplementedFile
-}
-
-func (completionDirFile) Dev() (uint64, experimentalsys.Errno)    { return 3, 0 }
-func (completionDirFile) Ino() (sys.Inode, experimentalsys.Errno) { return 1, 0 }
-func (completionDirFile) IsDir() (bool, experimentalsys.Errno)    { return true, 0 }
-func (completionDirFile) Stat() (sys.Stat_t, experimentalsys.Errno) {
-	return sys.Stat_t{Dev: 3, Ino: 1, Mode: fs.ModeDir | 0o700, Nlink: 1}, 0
-}
-func (completionDirFile) Close() experimentalsys.Errno { return 0 }
-
-type completionMarkerFile struct {
-	experimentalsys.UnimplementedFile
-	parent *CompletionMarkerFS
-	mu     sync.Mutex
-	buf    bytes.Buffer
-}
-
-func (f *completionMarkerFile) Dev() (uint64, experimentalsys.Errno)    { return 3, 0 }
-func (f *completionMarkerFile) Ino() (sys.Inode, experimentalsys.Errno) { return 2, 0 }
-func (f *completionMarkerFile) IsDir() (bool, experimentalsys.Errno)    { return false, 0 }
-func (f *completionMarkerFile) IsAppend() bool                          { return false }
-func (f *completionMarkerFile) SetAppend(bool) experimentalsys.Errno    { return 0 }
-func (f *completionMarkerFile) Stat() (sys.Stat_t, experimentalsys.Errno) {
-	return sys.Stat_t{Dev: 3, Ino: 2, Mode: 0o200, Nlink: 1}, 0
-}
-func (f *completionMarkerFile) Write(p []byte) (int, experimentalsys.Errno) {
-	if f.parent.latch != nil && f.parent.latch.Stopped() {
-		return 0, experimentalsys.EACCES
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.buf.Len()+len(p) > len(f.parent.nonce)+64 {
-		return 0, experimentalsys.EINVAL
-	}
-	f.buf.Write(p)
-	if len(f.parent.nonce) > 0 && bytes.Equal(f.buf.Bytes(), f.parent.nonce) {
-		f.parent.completed.Store(true)
-	}
-	return len(p), 0
-}
-func (f *completionMarkerFile) Truncate(int64) experimentalsys.Errno { return 0 }
-func (f *completionMarkerFile) Sync() experimentalsys.Errno          { return 0 }
-func (f *completionMarkerFile) Datasync() experimentalsys.Errno      { return 0 }
-func (f *completionMarkerFile) Close() experimentalsys.Errno         { return 0 }
