@@ -14,17 +14,19 @@ import (
 var ErrNoRequest = errors.New("turn has no open request")
 
 type TurnRecord struct {
-	Refusal      api.WakeReason             `json:"refusal,omitempty"`
-	LeaseID      string                     `json:"lease_id,omitempty"`
-	TurnID       string                     `json:"turn_id"`
-	SessionID    string                     `json:"session_id"`
-	AdmittedAt   time.Time                  `json:"admitted_at"`
-	DispatchedAt time.Time                  `json:"dispatched_at,omitzero"`
-	SettledAt    time.Time                  `json:"settled_at,omitzero"`
-	Outcome      api.TurnOutcomeKind        `json:"outcome,omitempty"`
-	Detail       promptresult.Outcome       `json:"detail,omitempty"`
-	FailureCode  api.NoticeCode             `json:"failure_code,omitempty"`
-	CancelledBy  api.TurnCancellationSource `json:"cancelled_by,omitempty"`
+	Refusal         api.WakeReason                       `json:"refusal,omitempty"`
+	LeaseID         string                               `json:"lease_id,omitempty"`
+	TurnID          string                               `json:"turn_id"`
+	SessionID       string                               `json:"session_id"`
+	AdmittedAt      time.Time                            `json:"admitted_at"`
+	DispatchedAt    time.Time                            `json:"dispatched_at,omitzero"`
+	SettledAt       time.Time                            `json:"settled_at,omitzero"`
+	Outcome         api.TurnOutcomeKind                  `json:"outcome,omitempty"`
+	OutputTruncated *promptresult.OutputTruncatedOutcome `json:"output_truncated,omitempty"`
+	CloseoutBlocked *promptresult.CloseoutBlocked        `json:"closeout_blocked,omitempty"`
+	Detail          promptresult.Outcome                 `json:"detail,omitempty"`
+	FailureCode     api.NoticeCode                       `json:"failure_code,omitempty"`
+	CancelledBy     api.TurnCancellationSource           `json:"cancelled_by,omitempty"`
 }
 
 type turnContextKey struct{}
@@ -84,6 +86,8 @@ func (t *Turn) Finish(result *promptresult.Result, err error, cancelledBy api.Tu
 		r.Outcome = api.TurnOutcomeKindCompleted
 		if result != nil {
 			r.Detail = result.Outcome
+			r.OutputTruncated = result.OutputTruncated
+			r.CloseoutBlocked = result.CloseoutBlocked
 		}
 		switch {
 		case errors.Is(err, context.Canceled):

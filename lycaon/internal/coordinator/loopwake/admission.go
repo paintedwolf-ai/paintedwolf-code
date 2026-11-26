@@ -2,11 +2,13 @@ package loopwake
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -80,6 +82,9 @@ func (l *Admission) decision(ctx context.Context, sessionID string) (api.WakeSta
 	}
 	deps := l.loopDeps()
 	sess, err := deps.GetSession(ctx, sessionID)
+	if errors.Is(err, store.ErrSessionNotFound) {
+		return api.WakeStateDropped, api.WakeReasonSessionMissing, nil
+	}
 	if err != nil {
 		return api.WakeStateDropped, api.WakeReasonLookupFailed, err
 	}
@@ -109,10 +114,18 @@ func (l *Admission) decision(ctx context.Context, sessionID string) (api.WakeSta
 	if run == nil || run.Status != api.WorkflowRunStatusRunning {
 		return api.WakeStateDropped, api.WakeReasonNoActiveRun, nil
 	}
-	if l.Facts.sessionHumanApprovalAwaiting(ctx, sessionID) {
+	awaiting, err := source.Approvals.HumanApprovalAwaiting(ctx, sessionID)
+	if err != nil {
+		return api.WakeStateDropped, api.WakeReasonLookupFailed, err
+	}
+	if awaiting {
 		return api.WakeStateHeld, api.WakeReasonHumanApprovalAwaiting, nil
 	}
-	if l.Facts.sessionHostObligationHeld(ctx, sessionID) {
+	held, err := source.Obligations.HostObligationHeld(ctx, sessionID)
+	if err != nil {
+		return api.WakeStateDropped, api.WakeReasonLookupFailed, err
+	}
+	if held {
 		return api.WakeStateHeld, api.WakeReasonHostObligationHeld, nil
 	}
 	vars, err := source.Runs.GetScaffoldVars(ctx, run.ID)
@@ -141,6 +154,9 @@ func (l *Admission) ConsumeBudget(ctx context.Context, sessionID, runID string) 
 	}
 	deps := l.loopDeps()
 	sess, err := deps.GetSession(ctx, sessionID)
+	if errors.Is(err, store.ErrSessionNotFound) {
+		return api.WakeReasonSessionMissing
+	}
 	if err != nil {
 		return api.WakeReasonLookupFailed
 	}
