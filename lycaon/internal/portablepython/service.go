@@ -451,6 +451,25 @@ func (s *Service) StopPreviewJob(ctx context.Context, jobID string) error {
 	return pl.Stop(ctx)
 }
 
+// HTTPRequestOptions configures host-mediated HTTP overrides for one ToolRequest.
+type HTTPRequestOptions struct {
+	Client             *http.Client
+	AllowPlainHTTP     bool
+	AllowLoopbackHTTP  bool
+	CredentialScreener pythonadmission.CredentialScreener
+}
+
+// AdmissionOptions configures optional per-invocation admission and evidence
+// overrides for one ToolRequest.
+type AdmissionOptions struct {
+	AllowedRoots      []string
+	ProtectedPaths    []string
+	Recheck           pythonadmission.RecheckFunc
+	JobRegistry       pythonadmission.SessionJobRegistry
+	AdmissionEvidence pythonadmission.EvidenceSink
+	DocumentEvidence  pythondocuments.EvidenceSink
+}
+
 // ToolRequest configures one invocation of Service.ExecuteTool.
 type ToolRequest struct {
 	// RawArgs, when non-nil, is validated via pythoncatalog.ValidateDirectToolArgs
@@ -486,23 +505,15 @@ type ToolRequest struct {
 
 	// Admission & authority configuration.
 	AllowedEffects *pythonadmission.AllowedEffects
-	AllowedRoots   []string
-	ProtectedPaths []string
 	Policy         pythonadmission.PolicyEvaluator
-	Recheck        pythonadmission.RecheckFunc
 	Broker         *pythonadmission.ApprovalBroker
-	JobRegistry    pythonadmission.SessionJobRegistry
+	Admission      AdmissionOptions
 
 	// Host-mediated HTTP configuration for requests.Session.
-	HTTPClient         *http.Client
-	AllowPlainHTTP     bool
-	AllowLoopbackHTTP  bool
-	CredentialScreener pythonadmission.CredentialScreener
+	HTTP HTTPRequestOptions
 
 	Limits            pythonruntime.ResourceLimits
 	InlineBudgetBytes int
-	AdmissionEvidence pythonadmission.EvidenceSink
-	DocumentEvidence  pythondocuments.EvidenceSink
 }
 
 // ToolResponse carries the complete trusted host outcome of ExecuteTool.
@@ -573,13 +584,13 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 
 	// Build per-invocation evidence sinks.
 	var memAdm *pythonadmission.MemoryEvidenceStore
-	admEvidence := req.AdmissionEvidence
+	admEvidence := req.Admission.AdmissionEvidence
 	if admEvidence == nil {
 		memAdm = pythonadmission.NewMemoryEvidenceStore()
 		admEvidence = memAdm
 	}
 	var memDoc *pythondocuments.EvidenceLog
-	docEvidence := req.DocumentEvidence
+	docEvidence := req.Admission.DocumentEvidence
 	if docEvidence == nil {
 		memDoc = pythondocuments.NewEvidenceLog()
 		docEvidence = memDoc
@@ -607,7 +618,7 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 	if broker == nil {
 		broker = s.broker
 	}
-	protectedPaths := mergeProtectedPaths(DefaultProtectedPaths, req.ProtectedPaths)
+	protectedPaths := mergeProtectedPaths(DefaultProtectedPaths, req.Admission.ProtectedPaths)
 	observer := pythonadmission.NewAdmissionObserver(pythonadmission.ObserverConfig{
 		ExecutionID:    execID,
 		CallID:         req.CallID,
@@ -616,14 +627,14 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 		Surface:        req.Surface,
 		ReadOnly:       req.ReadOnly,
 		AllowedEffects: req.AllowedEffects,
-		AllowedRoots:   req.AllowedRoots,
+		AllowedRoots:   req.Admission.AllowedRoots,
 		ProtectedPaths: protectedPaths,
 		MaxHostWork:    limits.MaxHostWork,
 		StopLatch:      stopLatch,
 		Broker:         broker,
 		Clock:          s.clock,
 		Policy:         req.Policy,
-		Recheck:        req.Recheck,
+		Recheck:        req.Admission.Recheck,
 		Evidence:       admEvidence,
 	})
 
@@ -632,7 +643,7 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 	if req.Mode == pythonruntime.ModeModule && strings.TrimSpace(req.Module) == "http.server" {
 		selected, _ := pythonadmission.CheckStdlibHTTPServerSelected(execCtx, overlay, req.CWD)
 		if selected {
-			jobReg := req.JobRegistry
+			jobReg := req.Admission.JobRegistry
 			if jobReg == nil {
 				jobReg = s.jobRegistry
 			}
@@ -682,11 +693,11 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 	}
 
 	// 3. Build per-invocation fail-closed HTTPTransport + GuestHTTPAdapter + WASI bridge.
-	credScreener := req.CredentialScreener
+	credScreener := req.HTTP.CredentialScreener
 	if credScreener == nil {
 		credScreener = pythonadmission.StrictCredentialScreener()
 	}
-	httpClient := req.HTTPClient
+	httpClient := req.HTTP.Client
 	if httpClient == nil {
 		httpClient = s.httpClient
 	}
@@ -695,8 +706,8 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 		CallID:             req.CallID,
 		Observer:           observer,
 		Client:             httpClient,
-		AllowPlainHTTP:     req.AllowPlainHTTP,
-		AllowLoopbackHTTP:  req.AllowLoopbackHTTP,
+		AllowPlainHTTP:     req.HTTP.AllowPlainHTTP,
+		AllowLoopbackHTTP:  req.HTTP.AllowLoopbackHTTP,
 		CredentialScreener: credScreener,
 		Clock:              s.clock,
 		Evidence:           admEvidence,

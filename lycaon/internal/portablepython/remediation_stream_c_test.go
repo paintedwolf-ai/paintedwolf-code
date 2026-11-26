@@ -125,7 +125,7 @@ func TestStreamCRemediationCommandEffectsFailClosedProtectedPathsEditorAndEviden
 			Mode:              pythonruntime.ModeCode,
 			Code:              `import requests, sys; requests.get(sys.argv[1])`,
 			Args:              []string{srv.URL + "/probe"},
-			AllowLoopbackHTTP: true,
+			HTTP: portablepython.HTTPRequestOptions{AllowLoopbackHTTP: true},
 			Policy:            nil,
 		})
 		testutil.FailErr(t, "execute http with nil policy", err)

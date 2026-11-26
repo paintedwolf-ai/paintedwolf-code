@@ -632,7 +632,7 @@ func TestInstalledSessionAcceptanceSuite(t *testing.T) {
 			Mode:        pythonruntime.ModeCode,
 			Code:        `import requests, sys; r = requests.post(sys.argv[1], data="payload-1"); print(r.text)`,
 			Args:        []string{srv.URL + "/hold-ok"},
-			HTTPClient:  srv.Client(),
+			HTTP:        portablepython.HTTPRequestOptions{Client: srv.Client()},
 			Broker:      broker,
 			Policy:      holdPolicy,
 		})
@@ -662,7 +662,7 @@ func TestInstalledSessionAcceptanceSuite(t *testing.T) {
 			Mode:        pythonruntime.ModeCode,
 			Code:        `import requests, sys; requests.post(sys.argv[1], data="payload-2")`,
 			Args:        []string{srv.URL + "/hold-deny"},
-			HTTPClient:  srv.Client(),
+			HTTP:        portablepython.HTTPRequestOptions{Client: srv.Client()},
 			Broker:      broker,
 			Policy:      holdPolicy,
 		})

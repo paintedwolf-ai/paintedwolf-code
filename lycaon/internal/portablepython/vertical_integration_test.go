@@ -401,7 +401,7 @@ print(json.dumps({"status": r.status_code, "body": data}))
 			Surface:           "agent",
 			Roots:             roots,
 			Policy:            policy,
-			AllowLoopbackHTTP: true,
+			HTTP: portablepython.HTTPRequestOptions{AllowLoopbackHTTP: true},
 			Limits:            pythonruntime.ResourceLimits{Timeout: 60 * time.Second},
 		})
 		testutil.FailErr(t, "execute guest requests accepted destination", err)
@@ -438,7 +438,7 @@ print("REDIR_OK", r.url, r.text)
 			Surface:           "agent",
 			Roots:             roots,
 			Policy:            policy,
-			AllowLoopbackHTTP: true,
+			HTTP: portablepython.HTTPRequestOptions{AllowLoopbackHTTP: true},
 			Limits:            pythonruntime.ResourceLimits{Timeout: 60 * time.Second},
 		})
 		testutil.FailErr(t, "execute guest requests allowed redirect", err)
@@ -471,7 +471,7 @@ print("SHOULD_NOT_PRINT")
 			Surface:           "agent",
 			Roots:             roots,
 			Policy:            policy,
-			AllowLoopbackHTTP: true,
+			HTTP: portablepython.HTTPRequestOptions{AllowLoopbackHTTP: true},
 			Limits:            pythonruntime.ResourceLimits{Timeout: 60 * time.Second},
 		})
 		testutil.FailErr(t, "execute guest requests refused redirect", err)
@@ -505,7 +505,7 @@ requests.get(sys.argv[1])
 			Surface:           "agent",
 			Roots:             roots,
 			Policy:            policy,
-			AllowLoopbackHTTP: true,
+			HTTP: portablepython.HTTPRequestOptions{AllowLoopbackHTTP: true},
 			Limits:            pythonruntime.ResourceLimits{Timeout: 60 * time.Second},
 		})
 		testutil.FailErr(t, "execute guest requests refused direct destination", err)

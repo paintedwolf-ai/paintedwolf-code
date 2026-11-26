@@ -150,7 +150,7 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			Mode:        pythonruntime.ModeCode,
 			Code:        `import requests, sys; requests.get(sys.argv[1])`,
 			Args:        []string{deniedSrv.URL + "/forbidden"},
-			HTTPClient:  deniedSrv.Client(),
+			HTTP:        portablepython.HTTPRequestOptions{Client: deniedSrv.Client()},
 			Policy: func(_ context.Context, op pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
 				if op.Family == pythonruntime.EffectHTTP {
 					return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionStop, Condition: pythonadmission.ConditionEffectDenied, Reason: "denied destination"}
@@ -184,7 +184,7 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			Mode:        pythonruntime.ModeCode,
 			Code:        `import requests, sys; requests.get(sys.argv[1])`,
 			Args:        []string{redirEntrySrv.URL + "/start"},
-			HTTPClient:  redirEntrySrv.Client(),
+			HTTP:        portablepython.HTTPRequestOptions{Client: redirEntrySrv.Client()},
 			Policy: func(_ context.Context, op pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
 				if op.Family == pythonruntime.EffectHTTP && op.Target.RootID == redirTargetURL.Host {
 					return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionStop, Condition: pythonadmission.ConditionEffectDenied, Reason: "redirect target denied"}
@@ -239,8 +239,10 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			Mode:               pythonruntime.ModeCode,
 			Code:               `import requests, sys; requests.get(sys.argv[1], headers={"Authorization": "Bearer secret-for-a"})`,
 			Args:               []string{recBSrv.URL + "/steal"},
-			HTTPClient:         recBSrv.Client(),
-			CredentialScreener: scopedScreener,
+			HTTP: portablepython.HTTPRequestOptions{
+				Client:             recBSrv.Client(),
+				CredentialScreener: scopedScreener,
+			},
 			Policy:             allowAll,
 		})
 		testutil.FailErr(t, "execute direct cross-recipient credential request to B", err)
@@ -260,8 +262,10 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 			Mode:               pythonruntime.ModeCode,
 			Code:               `import requests, sys; r = requests.get(sys.argv[1], headers={"Authorization": "Bearer secret-for-a"}); print(r.status_code, r.text)`,
 			Args:               []string{recASrv.URL + "/redirect-to-b"},
-			HTTPClient:         combinedTLSClient(recASrv, recBSrv),
-			CredentialScreener: scopedScreener,
+			HTTP: portablepython.HTTPRequestOptions{
+				Client:             combinedTLSClient(recASrv, recBSrv),
+				CredentialScreener: scopedScreener,
+			},
 			Policy:             allowAll,
 		})
 		testutil.FailErr(t, "execute allowed cross-origin redirect A -> B", err)
@@ -335,7 +339,7 @@ print("CHUNK_RECEIVED:" + str(len(chunk)), flush=True)
 requests.get(sys.argv[2])
 next(r.iter_content(chunk_size=64))`,
 			Args:       []string{streamSrv.URL + "/stream", streamSrv.URL + "/ack"},
-			HTTPClient: streamSrv.Client(),
+			HTTP:       portablepython.HTTPRequestOptions{Client: streamSrv.Client()},
 			Policy:     allowAll,
 		})
 		testutil.FailErr(t, "execute partial stream", err)
