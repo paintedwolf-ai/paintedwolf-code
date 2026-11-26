@@ -22,9 +22,11 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/testutil/mappedfile"
 )
 
 func TestMain(m *testing.M) {
+	mappedfile.ServeIfChild()
 	gittestsetup.Enable()
 	os.Exit(m.Run())
 }
