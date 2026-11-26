@@ -21,7 +21,7 @@ import (
 // standingCaseBudget bounds the generated standing cases: runs per gap and in
 // total. Runs of one recipient's setting are rendered once and shared by
 // every site.
-var standingCaseBudget = casegen.Budget{PerTarget: 30, Total: 4000}
+var standingCaseBudget = casegen.Budget{PerTarget: 40, Total: 12000}
 
 // standingConstraints are the production invariants that couple standing
 // reader facts to the root count.
@@ -111,10 +111,10 @@ func coordinatorSeedKnobs(d *hoststate.SeedDomains) []casegen.Knob {
 	}
 	return []casegen.Knob{
 		{Name: "surface", Facts: any1, Values: surfaces},
+		{Name: "workflow", Facts: any1, Values: leading(d.WorkflowStates, hoststate.WorkflowAmbientIdle)},
 		{Name: "posture", Facts: any1, Values: leading(postures, api.SessionPostureBuild)},
 		{Name: "mode", Facts: any1, Values: leading(d.SessionModes, api.SessionModeAgent)},
 		{Name: "loading", Facts: any1, Values: leading(d.LoadingModes, hoststate.LoadingAllLoaded)},
-		{Name: "workflow", Facts: any1, Values: leading(d.WorkflowStates, hoststate.WorkflowAmbientIdle)},
 		{Name: "overlay", Facts: any1, Values: overlays},
 		{Name: "roots", Facts: rootFacts, Values: leading(d.RootTopologies, hoststate.RootsSingleGit)},
 		{Name: "vision", Facts: []string{"caps"}, Values: bools},
