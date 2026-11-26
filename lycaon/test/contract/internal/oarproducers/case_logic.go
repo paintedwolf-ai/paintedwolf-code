@@ -39,6 +39,15 @@ func (p *CaseProducer) Anchor(site string) string {
 	return ""
 }
 
+// WhenReferences lists the declared facts the condition of site's rule reads.
+func (p *CaseProducer) WhenReferences(site string) []string {
+	rule, _ := p.ruleOf(site)
+	if rule == nil {
+		return nil
+	}
+	return p.references(rule.When)
+}
+
 // Decide gives site's decision for atom truths keyed by atom text.
 func (p *CaseProducer) Decide(site string) func(map[string]bool) bool {
 	_, src := p.ruleOf(site)
