@@ -1,28 +1,32 @@
-package workerruntime_test
+package workerruntime
 
 import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/actionoutcome"
+	"github.com/lycaon/lycaon/internal/app/workflows"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestStaleResumeAndApprovalReportInactiveRun(t *testing.T) {
-	h := wiring.BuildForTest(t)
-	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, h.ProjectDir(t, "inactive"))
-	testutil.FailErr(t, "create idle session", err)
-	run := &api.WorkflowRun{ID: "retired", SessionID: sess.ID}
-	s := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Outcomes.For(sess.ID)
+	db := testdbfixture.Open(t, "inactive.db")
+	r := &Runtime{}
+	r.SetDependencies(Dependencies{Workflows: &workflows.Runtime{Manager: &workflow.RunManager{Store: persistence.New(db)}}})
+	run := &api.WorkflowRun{ID: "retired", SessionID: "idle"}
+	var sessions actionoutcome.Sessions
+	s := sessions.For(run.SessionID)
 	for _, kind := range []api.ContinuationAction{api.ContinuationActionWorkflowResume, api.ContinuationActionPlanApproval} {
 		ctx, a := actionoutcome.Capture(t.Context(), kind)
 		if kind == api.ContinuationActionWorkflowResume {
-			h.Workers.OnWorkflowRunResumed(ctx, run)
+			r.OnWorkflowRunResumed(ctx, run)
 		} else {
-			h.Workers.OnWorkflowHumanApprovalAdvanced(ctx, run)
+			r.OnWorkflowHumanApprovalAdvanced(ctx, run)
 		}
-		a.Commit(s, sess.ID, nil)
+		a.Commit(s, run.SessionID, nil)
 		out, err := s.Actions.Await(ctx, a.ID())
 		testutil.FailErr(t, "await inactive hook", err)
 		if out.State != api.ContinuationStateNotContinued || out.Reason != api.ContinuationReasonRunInactive {

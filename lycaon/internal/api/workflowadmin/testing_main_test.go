@@ -1,8 +1,10 @@
-package workflowadmin
+package workflowadmin_test
 
 import (
 	"os"
 	"testing"
+
+	"github.com/lycaon/lycaon/test/wiring"
 
 	anchortestsetup "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
@@ -14,5 +16,5 @@ func TestMain(m *testing.M) {
 	gittestsetup.Enable()
 	guidancetestsetup.Install()
 	anchortestsetup.Install()
-	os.Exit(m.Run())
+	os.Exit(wiring.Main(m))
 }
