@@ -1,11 +1,15 @@
 package definition
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/scopedstore"
 	"gopkg.in/yaml.v3"
 )
+
+var runManifestCache = scopedstore.New[Manifest](64)
 
 // runManifestV1 stores the resolved fields used at admission.
 type runManifestV1 struct {
@@ -19,6 +23,11 @@ func EncodeRunManifest(manifest Manifest) (string, error) {
 }
 
 func DecodeRunManifest(raw string) (Manifest, error) {
+	sum := sha256.Sum256([]byte(raw))
+	key := string(sum[:])
+	if cached, ok := runManifestCache.Load(key); ok {
+		return cloneManifest(cached), nil
+	}
 	var snapshot runManifestV1
 	decoder := yaml.NewDecoder(strings.NewReader(raw))
 	decoder.KnownFields(true)
@@ -31,5 +40,6 @@ func DecodeRunManifest(raw string) (Manifest, error) {
 	if snapshot.Manifest.ID == "" || snapshot.Manifest.Version == "" {
 		return Manifest{}, fmt.Errorf("missing workflow snapshot identity")
 	}
-	return snapshot.Manifest, nil
+	runManifestCache.Store(key, snapshot.Manifest)
+	return cloneManifest(snapshot.Manifest), nil
 }

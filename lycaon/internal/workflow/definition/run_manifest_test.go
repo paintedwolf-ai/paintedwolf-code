@@ -31,3 +31,27 @@ func TestRunSnapshotRejectsUnknownShapes(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeRunManifestCacheReturnsDetachedClone(t *testing.T) {
+	reg, err := RegistryFromDirs("")
+	testutil.FailErr(t, "load catalog", err)
+	for _, m := range reg.All() {
+		if len(m.Phases) == 0 {
+			continue
+		}
+		raw, err := EncodeRunManifest(m)
+		testutil.FailErr(t, "encode run manifest", err)
+		first, err := DecodeRunManifest(raw)
+		testutil.FailErr(t, "first decode", err)
+		originalPhase := first.Phases[0]
+		first.Phases[0] = "mutated-phase"
+
+		second, err := DecodeRunManifest(raw)
+		testutil.FailErr(t, "second decode", err)
+		if second.Phases[0] != originalPhase {
+			t.Fatalf("cache leaked caller mutation: got %q, want %q", second.Phases[0], originalPhase)
+		}
+		return
+	}
+	t.Fatal("no bundled workflow with phases found")
+}
