@@ -63,8 +63,13 @@ func BenchmarkPagedCodeSearch(b *testing.B) {
 				if runErr != nil {
 					b.Fatalf("search: %v", runErr)
 				}
-				if mode.warm && (report.Code.IndexWarmingRoots != 0 || report.Code.WarmingRoots != 0) {
-					b.Fatalf("warm search still warming: index_warming=%d warming=%d", report.Code.IndexWarmingRoots, report.Code.WarmingRoots)
+				if mode.warm {
+					if report.Code.IndexWarmingRoots != 0 || report.Code.WarmingRoots != 0 {
+						b.Fatalf("warm search still warming: index_warming=%d warming=%d", report.Code.IndexWarmingRoots, report.Code.WarmingRoots)
+					}
+					if report.TimedOut {
+						b.Fatalf("warm search timed out: hits=%d opened=%d", len(report.Hits), report.Code.FilesOpened)
+					}
 				}
 				b.ReportMetric(float64(len(report.Hits)), "hits/op")
 				b.ReportMetric(float64(report.Code.FilesOpened), "opened/op")

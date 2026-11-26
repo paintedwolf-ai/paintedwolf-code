@@ -298,6 +298,9 @@ func TestContentPreparationDefersWhileInitialDiscoveryIsIncomplete(t *testing.T)
 	root := Root{ID: "root", Path: t.TempDir()}
 	writeLiteralFixture(t, root.Path, "a.txt", "ordinary text")
 	writeLiteralFixture(t, root.Path, "b.txt", "more ordinary text")
+	// Zero-size candidates remain uncached without opening the file; FilesRead
+	// must count only actual opener calls.
+	writeLiteralFixture(t, root.Path, "empty.txt", "")
 	reader := readyIndex(t, c, root)
 	entries, err := reader.FilePage(t.Context(), FileScope{Audience: HumanAudience}, "", TreeFilePageLimit)
 	testutil.FailErr(t, "metadata page", err)
@@ -343,15 +346,16 @@ func TestContentPreparationDefersWhileInitialDiscoveryIsIncomplete(t *testing.T)
 	reader.store.mu.Unlock()
 
 	warmPartial := preparedLiteralPage(t, c, &partialReader, query, entries)
-	if warmPartial.Warming || len(warmPartial.Candidates) != 0 {
+	// empty.txt stays a live candidate because zero-size files are not proved by blooms.
+	if warmPartial.Warming || len(warmPartial.Candidates) != 1 || warmPartial.Candidates[0].Path != "empty.txt" {
 		t.Fatalf("stale partial reader did not warm against completed revision: %+v", warmPartial)
 	}
 	warm := c.Literals.IndexLiteralCandidates(t.Context(), reader, query, entries)
-	if warm.Warming || len(warm.Candidates) != 0 {
+	if warm.Warming || len(warm.Candidates) != 1 || warm.Candidates[0].Path != "empty.txt" {
 		t.Fatalf("completed generation restarted preparation: %+v", warm)
 	}
 	stats := c.Literals.PreparationStats()
-	if stats.Builds != 1 || stats.FilesRead != int64(len(entries)) || opens.Load() != int32(len(entries)) {
-		t.Fatalf("unexpected preparation work counts: stats=%+v opens=%d want builds=1 files=%d", stats, opens.Load(), len(entries))
+	if stats.Builds != 1 || stats.FilesRead != 2 || opens.Load() != 2 {
+		t.Fatalf("unexpected preparation work counts: stats=%+v opens=%d want builds=1 files=2", stats, opens.Load())
 	}
 }

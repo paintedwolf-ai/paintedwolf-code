@@ -2,6 +2,7 @@ package sourcecatalog
 
 import (
 	"context"
+	"io"
 	"sync/atomic"
 	"time"
 
@@ -155,6 +156,10 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 // buildIndexLiterals releases metadata transactions before content I/O and
 // yields between pages.
 func (c *LiteralSearch) buildIndexLiterals(ctx context.Context, s *indexStore, query LiteralQuery) bool {
+	open := func(entry Entry) (io.ReadCloser, error) {
+		c.filesRead.Add(1)
+		return query.Open(entry)
+	}
 	after := ""
 	for ctx.Err() == nil {
 		db, tx, status, err := s.readTx(ctx, TreeStatus{})
@@ -192,8 +197,7 @@ func (c *LiteralSearch) buildIndexLiterals(ctx context.Context, s *indexStore, q
 		if err != nil {
 			return false
 		}
-		c.filesRead.Add(int64(len(misses)))
-		err = c.cache.readBlooms(ctx, s.root.Path, misses, query.Open)
+		err = c.cache.readBlooms(ctx, s.root.Path, misses, open)
 		release()
 		if err != nil {
 			return false
