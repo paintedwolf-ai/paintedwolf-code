@@ -454,7 +454,7 @@ func (p *CaseProducer) factKnob(prefix, fact string, sources []string, base any)
 		}
 		values = append(values, "fixture-1")
 	case oarcore.TypeInt:
-		values = []any{int64(0), int64(1), int64(2), int64(3), int64(4), int64(9), int64(16), int64(20), int64(32)}
+		values = []any{int64(0), int64(1), int64(2), int64(3), int64(4), int64(9), int64(16), int64(20), int64(32), int64(64), int64(128)}
 	case oarcore.TypeListString:
 		values = []any{[]string{}, []string{"item-1"}}
 		for _, l := range lits {

@@ -73,12 +73,14 @@ const (
 		"session/policyfacts/service.go:FillSessionFacts (coordinator only), session/workercompletion/worker_summary.go and " +
 		"session/workeroutcomes/delivery_policy.go set the worker role exactly with worker_leg"
 	srcConfine = "internal/session/policyfacts/oar_observe.go:ObserveConfine publishes execution facts only for an applied confinement"
+	// Only the block plane evaluates occurrences without a session.
+	srcUnscopedWorkerLeg = "session/policyfacts/service.go:FillSessionFacts names every non-worker session coordinator, so a policyfacts occurrence without a role is a worker leg"
 )
 
 // caseBudget and templateCaseBudget bound targeted generation: runs per gap
 // and in total.
 var (
-	caseBudget         = casegen.Budget{PerTarget: 120, Total: 12000}
+	caseBudget         = casegen.Budget{PerTarget: 160, Total: 12000}
 	templateCaseBudget = casegen.Budget{PerTarget: 60, Total: 6000}
 )
 
@@ -112,6 +114,29 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	if err != nil {
 		return nil, err
 	}
+	// Generated observations can reach guards and recipients the matrix did
+	// not; their gaps get one more round.
+	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations())
+	second, err := interactions.BuildConditionLedger(in)
+	if err != nil {
+		return nil, err
+	}
+	searched := map[string]bool{}
+	for _, t := range targets {
+		searched[interactions.SearchKey(t.Site, t.Recipient, t.Input)] = true
+	}
+	more, moreRecipients := gen.targets(second)
+	var fresh []casegen.Target
+	for i, t := range more {
+		if !searched[interactions.SearchKey(t.Site, t.Recipient, t.Input)] {
+			fresh, gapRecipients = append(fresh, t), append(gapRecipients, moreRecipients[i])
+		}
+	}
+	freshOutcomes, err := casegen.Generate(ctx, gen.producer, fresh, caseBudget)
+	if err != nil {
+		return nil, err
+	}
+	targets, outcomes = append(targets, fresh...), append(outcomes, freshOutcomes...)
 	kicks, err := newKickCaseProducer(s, sites)
 	if err != nil {
 		return nil, err
@@ -228,6 +253,9 @@ func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient st
 	c.Joints = append(casegen.SharedFactJoints(site.Atoms, logic), g.producer.ShadowJoints(site.ID, site.Atoms)...)
 	if fixed, ok := occurrenceRoleFacts[recipient]; ok {
 		c.Fixed = casegen.FixedFacts(site.Atoms, logic, fixed, srcOccurrenceRole)
+	}
+	if recipient == unscopedRecipient && g.producer.Anchor(site.ID) != oar.AnchorToolRejected {
+		c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, map[string]any{"paintedwolf.worker_leg": true}, srcUnscopedWorkerLeg)...)
 	}
 	switch g.producer.Anchor(site.ID) {
 	case oar.AnchorToolPost:
