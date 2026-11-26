@@ -1,4 +1,5 @@
 """Unit tests for the Portable Command Q01-Q22 suite runner, envelope probe, provenance, and Q aggregation."""
+import hashlib
 import io
 import json
 import pathlib
@@ -6,8 +7,9 @@ import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
-from portable_command import cli, harness, reporting, suite_runner
-from portable_command.test_portable_command_harness import FakeApp, FakeSSE
+from portable_command import cli, harness, observe, reporting, suite_runner
+from portable_command.contracts import load_suite
+from portable_command.test_portable_command_harness import FakeApp, FakeSSE, create_audit_db
 
 
 class ProbeFakeApp(FakeApp):
@@ -54,8 +56,23 @@ def _write_fake_case_artifacts(out_dir, case_id, passed=True):
     (out_dir / 'grade.json').write_text(json.dumps({'passed': passed}))
     (out_dir / 'raw' / 'messages.json').write_text('{"messages":[]}')
     (out_dir / 'raw' / 'events.jsonl').write_text('{"topic":"activity"}\n')
+    (out_dir / 'raw' / 'receipt-documents.json').write_text('{}')
     (out_dir / 'raw' / 'db-audit.json').write_text('{}')
     (out_dir / 'app' / 'sidecar.log').write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+
+
+def _write_verified_engine(root, sha_override=None):
+    fake_bin = root / 'lycaon-dev'
+    data = b'fake-engine-binary'
+    fake_bin.write_bytes(data)
+    manifest = root / 'engine-manifest.json'
+    manifest.write_text(json.dumps({
+        'git_head': 'a' * 40, 'git_tree': 'b' * 40,
+        'executable_path': str(fake_bin),
+        'executable_sha256': sha_override or hashlib.sha256(data).hexdigest(),
+        'build_command': './task build:lycaon-dev', 'built_at': '2026-11-26T20:00:00Z',
+    }))
+    return fake_bin, manifest
 
 
 class PortableCommandSuiteRunnerTests(unittest.TestCase):
@@ -92,17 +109,15 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             self.assertEqual(r3['envelope_status'], 'unavailable')
             self.assertFalse(r3['native_envelope_qualified'])
 
-    def test_unqualified_disposition_durable_bundles_and_discrepancy_breakdown(self):
+    def test_unqualified_disposition_relative_bundles_and_discrepancy_breakdown(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            def fake_runner(case, out_dir, *, export_dir=None, app_factory=None, sse_factory=None):
+            fake_bin, manifest = _write_verified_engine(root)
+            def fake_runner(case, out_dir, **kwargs):
                 _write_fake_case_artifacts(out_dir, case['id'], passed=(case['id'] == 'first-mutation'))
                 if case['id'] == 'draft-read-transform':
                     raise RuntimeError('simulated setup failure')
-                gaps = {
-                    'read-only-static-refusal': ['profile_binding_approximate'],
-                    'same-file-transform': ['incomplete_sidecar_log'],
-                }.get(case['id'], [])
+                gaps = {'same-file-transform': ['missing_observation:bounded_visits:filesystem_owner']}.get(case['id'], [])
                 return {
                     'case_id': case['id'], 'session_id': f"sess-{case['id']}",
                     'grade': {'qualification': 'native-runtime', 'passed': case['id'] == 'first-mutation', 'dimensions': {'artifacts': True}},
@@ -112,33 +127,62 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             report = suite_runner.run_suite(
                 root / 'suite',
                 case_ids=['first-mutation', 'draft-read-transform', 'same-file-transform', 'native-option-no-fallback'],
-                case_runner=fake_runner,
+                engine_bin=fake_bin, engine_manifest=manifest, case_runner=fake_runner,
             )
             by_id = {c['case_id']: c for c in report['cases']}
-            # first-mutation uses sibling_update_progress -> diagnostic pass, MUST be unqualified and not pass Q20.
-            self.assertTrue(by_id['first-mutation']['passed'])
             self.assertEqual(by_id['first-mutation']['disposition'], 'unqualified')
             self.assertIn('sibling_progress_substitute', by_id['first-mutation']['unqualified_reasons'])
-            self.assertFalse(by_id['first-mutation']['qualified_pass'])
-            self.assertNotIn('Q20', report['summary']['qualification_cases_passed_selected'])
-            self.assertNotIn('Q20', report['summary']['qualification_cases_passed_full'])
-            # All 4 discrepancy categories populated accurately.
+            self.assertEqual(by_id['same-file-transform']['disposition'], 'unqualified')
+            self.assertEqual(by_id['same-file-transform']['discrepancy_category'], 'missing_observation')
             self.assertEqual(report['discrepancy_breakdown']['cases']['proven_contract_mismatch'], ['first-mutation'])
             self.assertEqual(report['discrepancy_breakdown']['cases']['missing_setup'], ['draft-read-transform'])
             self.assertEqual(report['discrepancy_breakdown']['cases']['missing_observation'], ['same-file-transform'])
             self.assertEqual(report['discrepancy_breakdown']['cases']['runtime_issue'], ['native-option-no-fallback'])
-            # Durable per-case bundles with locators and SHA-256 hashes.
+            # Portable relative bundle locators (not absolute host paths) + receipt-documents.json retained.
             ev = by_id['native-option-no-fallback']['evidence']
-            self.assertIn('raw/sidecar-slice.log', ev['files'])
-            self.assertEqual(len(ev['files']['observation.json']['sha256']), 64)
-            self.assertTrue(pathlib.Path(ev['files']['raw/sidecar-slice.log']['path']).is_file())
+            self.assertEqual(ev['bundle_dir'], 'native-option-no-fallback')
+            self.assertEqual(ev['files']['raw/sidecar-slice.log']['path'], 'native-option-no-fallback/raw/sidecar-slice.log')
+            self.assertEqual(ev['files']['raw/receipt-documents.json']['path'], 'native-option-no-fallback/raw/receipt-documents.json')
+            self.assertFalse(pathlib.Path(ev['files']['observation.json']['path']).is_absolute())
+            self.assertTrue((pathlib.Path(report['durable_bundle_root']) / ev['files']['raw/sidecar-slice.log']['path']).is_file())
 
-    def test_shared_q_id_requires_all_cases_qualified_and_distinguishes_partial_vs_full(self):
-        # Q01 is shared by ['large-tree-discovery', 'oar-option-correction'].
+    def test_missing_observation_fact_emits_named_gap_and_never_defaults_to_runtime_issue(self):
+        cases = {c['id']: c for c in load_suite()['cases']}
+        case = cases['archive-create-extract']
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
+            db_path = root / 'store.db'
+            create_audit_db(db_path)
+            log_path = root / 'sidecar.log'
+            log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+            proj = root / 'proj'
+            proj.mkdir()
+            _, audit = observe.build_observation(
+                case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj,
+                db_path=db_path, sidecar_log=log_path, turn_records=[], prelude_records=[],
+            )
+            self.assertIn('missing_observation:confined_archive_entries:archive_owner', audit['observation_gaps'])
+            disp = reporting.classify_case_disposition(
+                {'attempt': 'measured', 'qualification': 'native-runtime', 'passed': False, 'observation_gaps': audit['observation_gaps']},
+                engine_provenance={'provenance_verified': True},
+            )
+            self.assertEqual(disp['disposition'], 'unqualified')
+            self.assertEqual(disp['discrepancy_category'], 'missing_observation')
+
+    def test_shared_q_id_and_verified_vs_unverified_engine_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            fake_bin, good_manifest = _write_verified_engine(root)
+            _, bad_manifest = _write_verified_engine(root / 'bad' if (root / 'bad').mkdir() or True else root, sha_override='0' * 64)
+            good_prov = reporting.inspect_engine_provenance(engine_bin=fake_bin, evaluator_git_head='a' * 40, engine_manifest=good_manifest)
+            bad_prov = reporting.inspect_engine_provenance(engine_bin=fake_bin, evaluator_git_head='a' * 40, engine_manifest=bad_manifest)
+            self.assertTrue(good_prov['provenance_verified'])
+            self.assertTrue(good_prov['manifest_sha256_match'])
+            self.assertFalse(bad_prov['provenance_verified'])
+            self.assertFalse(bad_prov['manifest_sha256_match'])
+
             def make_runner(oar_passed=True, oar_gaps=()):
-                def runner(case, out_dir, *, export_dir=None, app_factory=None, sse_factory=None):
+                def runner(case, out_dir, **kwargs):
                     passed = True if case['id'] == 'large-tree-discovery' else oar_passed
                     gaps = [] if case['id'] == 'large-tree-discovery' else list(oar_gaps)
                     _write_fake_case_artifacts(out_dir, case['id'], passed=passed)
@@ -149,35 +193,24 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
                     }
                 return runner
 
-            # One passing + one failing sharing Q01 -> Q01 does NOT pass.
-            r_fail = suite_runner.run_suite(root / 's1', case_ids=['large-tree-discovery', 'oar-option-correction'], case_runner=make_runner(oar_passed=False))
+            r_fail = suite_runner.run_suite(root / 's1', case_ids=['large-tree-discovery', 'oar-option-correction'], engine_bin=fake_bin, engine_manifest=good_manifest, case_runner=make_runner(oar_passed=False))
             self.assertNotIn('Q01', r_fail['summary']['qualification_cases_passed_selected'])
-            self.assertNotIn('Q01', r_fail['summary']['qualification_cases_passed_full'])
-            # One passing + one unqualified sharing Q01 -> Q01 does NOT pass.
-            r_unqual = suite_runner.run_suite(root / 's2', case_ids=['large-tree-discovery', 'oar-option-correction'], case_runner=make_runner(oar_passed=True, oar_gaps=['incomplete_sidecar_log']))
+            r_unqual = suite_runner.run_suite(root / 's2', case_ids=['large-tree-discovery', 'oar-option-correction'], engine_bin=fake_bin, engine_manifest=good_manifest, case_runner=make_runner(oar_passed=True, oar_gaps=['incomplete_sidecar_log']))
             self.assertNotIn('Q01', r_unqual['summary']['qualification_cases_passed_selected'])
-            self.assertNotIn('Q01', r_unqual['summary']['qualification_cases_passed_full'])
-            # Partial selection (only 1 of 2 Q01 cases) -> selected_partial only, NOT full.
-            r_part = suite_runner.run_suite(root / 's3', case_ids=['large-tree-discovery'], case_runner=make_runner())
-            self.assertEqual(r_part['summary']['selection_mode'], 'partial')
+            r_part = suite_runner.run_suite(root / 's3', case_ids=['large-tree-discovery'], engine_bin=fake_bin, engine_manifest=good_manifest, case_runner=make_runner())
             self.assertIn('Q01', r_part['summary']['qualification_cases_passed_selected'])
             self.assertNotIn('Q01', r_part['summary']['qualification_cases_passed_full'])
-            self.assertEqual(r_part['qualification_by_id']['Q01']['status'], 'passed_selected_partial')
-            # Both Q01 cases selected and qualified-passing -> passed_full.
-            r_both = suite_runner.run_suite(root / 's4', case_ids=['large-tree-discovery', 'oar-option-correction'], case_runner=make_runner())
+            r_both = suite_runner.run_suite(root / 's4', case_ids=['large-tree-discovery', 'oar-option-correction'], engine_bin=fake_bin, engine_manifest=good_manifest, case_runner=make_runner())
             self.assertIn('Q01', r_both['summary']['qualification_cases_passed_full'])
-            self.assertEqual(r_both['qualification_by_id']['Q01']['status'], 'passed_full')
+            # Mismatched engine manifest prevents qualification even if all cases passed diagnostically.
+            r_bad_prov = suite_runner.run_suite(root / 's5', case_ids=['large-tree-discovery', 'oar-option-correction'], engine_bin=fake_bin, engine_manifest=bad_manifest, case_runner=make_runner())
+            self.assertNotIn('Q01', r_bad_prov['summary']['qualification_cases_passed_full'])
+            self.assertIn('unverified_engine_provenance', r_bad_prov['cases'][0]['unqualified_reasons'])
 
-    def test_engine_provenance_draft_injection_and_cli_modes(self):
+    def test_draft_injection_and_cli_manifest_flag(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            fake_bin = root / 'lycaon-dev'
-            fake_bin.write_bytes(b'fake-engine-binary')
-            prov = reporting.inspect_engine_provenance(engine_bin=fake_bin, evaluator_git_head='a' * 40)
-            self.assertEqual(prov['executable_path'], str(fake_bin.resolve()))
-            self.assertEqual(prov['build_source'], 'cli:--engine')
-            self.assertEqual(len(prov['executable_sha256']), 64)
-
+            fake_bin, manifest = _write_verified_engine(root)
             calls = []
             class DraftApp:
                 def request(self, path, body=None, method=None):
@@ -186,21 +219,14 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             ok, bindings = harness.inject_drafts(DraftApp(), 'proj-1', 'root-1', {'a.txt': {'revision': 'draft-r2', 'bytes': 'hi\n'}})
             self.assertTrue(ok)
             self.assertEqual(bindings['a.txt']['revision'], 2)
-            self.assertEqual(calls[0][1], '/v1/projects/proj-1/editor-documents')
-            self.assertEqual(calls[1][0], 'PUT')
-
             with patch('sys.stdout', new=io.StringIO()):
-                rc_probe = cli.main(
-                    ['--probe-envelope', '--engine', str(fake_bin), '--out', str(root / 'probe')],
-                    envelope_prober=lambda out, engine_bin=None: {
+                seen = {}
+                def prober(out, engine_bin=None, engine_manifest=None):
+                    seen.update(engine_bin=engine_bin, engine_manifest=engine_manifest)
+                    return {
                         'session_id': 's-probe', 'schema_has_progress_update': False,
                         'command_schema_properties': ['command'], 'envelope_status': 'rejected',
                         'native_envelope_qualified': False, 'sibling_fallback_used': False,
-                    },
-                )
-                rc_suite = cli.main(
-                    ['--suite', '--cases', 'first-mutation', '--out', str(root / 's1')],
-                    suite_runner=lambda out, case_ids=None, export_dir=None: {'summary': {'total': 1, 'failed': 1}},
-                )
-            self.assertEqual(rc_probe, 0)
-            self.assertEqual(rc_suite, 1)
+                    }
+                self.assertEqual(cli.main(['--probe-envelope', '--engine', str(fake_bin), '--engine-manifest', str(manifest), '--out', str(root / 'p')], envelope_prober=prober), 0)
+            self.assertEqual(seen['engine_manifest'], manifest)

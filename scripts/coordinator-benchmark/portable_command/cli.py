@@ -21,6 +21,7 @@ def build_parser():
     group.add_argument('--probe-envelope', action='store_true', help='Probe offered command tool schema and single-call progress_update envelope')
     parser.add_argument('--cases', help='Comma-separated case IDs to run with --suite')
     parser.add_argument('--engine', type=pathlib.Path, help='Explicit engine executable path (overrides PW_ENGINE_BIN and checkout default)')
+    parser.add_argument('--engine-manifest', type=pathlib.Path, help='Build-time provenance manifest JSON (overrides PW_ENGINE_MANIFEST)')
     parser.add_argument('--out', type=pathlib.Path, required=True, help='Fresh output directory for the isolated run')
     parser.add_argument('--export', type=pathlib.Path, help='Optional directory for a sanitized replay & evidence bundle')
     return parser
@@ -28,7 +29,11 @@ def build_parser():
 
 def main(argv=None, *, runner=run_case, suite_runner=run_suite, envelope_prober=probe_command_envelope):
     args = build_parser().parse_args(argv)
-    extra = {'engine_bin': args.engine} if args.engine is not None else {}
+    extra = {}
+    if args.engine is not None:
+        extra['engine_bin'] = args.engine
+    if args.engine_manifest is not None:
+        extra['engine_manifest'] = args.engine_manifest
     if args.probe_envelope:
         report = envelope_prober(args.out, **extra)
         summary = {

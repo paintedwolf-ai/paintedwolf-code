@@ -192,7 +192,7 @@ def resolve_case(case_or_path):
     return cases[case_or_path]
 
 
-def run_case(case, out_dir, *, export_dir=None, engine_bin=None, app_factory=smoke.Application, sse_factory=SSECollector):
+def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest=None, app_factory=smoke.Application, sse_factory=SSECollector):
     """Execute one Portable Command case through an isolated zero-model application."""
     out_dir = pathlib.Path(out_dir).resolve()
     app_dir, project_dir, raw_dir = out_dir / 'app', out_dir / 'project', out_dir / 'raw'
@@ -202,7 +202,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, app_factory=smo
     if expected_baseline is not None and expected_baseline != baseline_hashes:
         raise ValueError('replay bundle baseline_hashes do not match materialized fixture')
     revision_aliases = {alias: baseline_hashes.get(path) for path, alias in case['setup'].get('revisions', {}).items()}
-    identity = source_identity(ROOT, profile=case['profile'], engine_bin=engine_bin)
+    identity = source_identity(ROOT, profile=case['profile'], engine_bin=engine_bin, engine_manifest=engine_manifest)
     save(out_dir / 'attempt.json', {'status': 'running', 'case_id': case['id'], 'identity': identity, 'revision_aliases': revision_aliases})
 
     application = make_app_factory(engine_bin, app_factory)(app_dir)

@@ -32,6 +32,7 @@ def probe_command_envelope(
     program='printf ok > ./probe.txt',
     progress_content='- [x] Probe native envelope',
     engine_bin=None,
+    engine_manifest=None,
     app_factory=smoke.Application,
     sse_factory=SSECollector,
 ):
@@ -40,7 +41,7 @@ def probe_command_envelope(
     app_dir, project_dir, raw_dir = out_dir / 'app', out_dir / 'project', out_dir / 'raw'
     project_dir.mkdir(parents=True, exist_ok=True)
     raw_dir.mkdir(parents=True, exist_ok=True)
-    identity = source_identity(ROOT, profile='implement', engine_bin=engine_bin)
+    identity = source_identity(ROOT, profile='implement', engine_bin=engine_bin, engine_manifest=engine_manifest)
 
     application = make_app_factory(engine_bin, app_factory)(app_dir)
     sse, session_id, offered_tools, command_schema, call_id, tool_result = None, None, [], None, None, None
@@ -144,6 +145,7 @@ def run_suite(
     case_ids=None,
     export_dir=None,
     engine_bin=None,
+    engine_manifest=None,
     app_factory=smoke.Application,
     sse_factory=SSECollector,
     case_runner=run_case,
@@ -163,7 +165,8 @@ def run_suite(
     else:
         selected = list(suite['cases'])
 
-    identity = source_identity(ROOT, engine_bin=engine_bin)
+    identity = source_identity(ROOT, engine_bin=engine_bin, engine_manifest=engine_manifest)
+    engine_prov = identity.get('engine_provenance')
     records = []
     for case in selected:
         cid = case['id']
@@ -173,6 +176,8 @@ def run_suite(
         run_kwargs = {'export_dir': case_export, 'app_factory': app_factory, 'sse_factory': sse_factory}
         if engine_bin is not None:
             run_kwargs['engine_bin'] = engine_bin
+        if engine_manifest is not None:
+            run_kwargs['engine_manifest'] = engine_manifest
         try:
             res = case_runner(case, case_out, **run_kwargs)
             grade = res['grade']
@@ -187,7 +192,7 @@ def run_suite(
                 **meta, 'attempt': 'unmeasured', 'session_id': None, 'qualification': 'unqualified',
                 'passed': False, 'dimensions': {}, 'observation_gaps': ['execution_error'], 'error': str(exc),
             }
-        rec.update(classify_case_disposition(rec))
+        rec.update(classify_case_disposition(rec, engine_provenance=engine_prov))
         rec['evidence'] = archive_case_evidence(case_out, durable_root, case_id=cid, session_id=rec['session_id'])
         records.append(rec)
 
