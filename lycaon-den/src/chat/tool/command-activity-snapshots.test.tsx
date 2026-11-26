@@ -176,10 +176,11 @@ it("re-fetches when an already-requested program advances its activity_revision 
  const [entries, setEntries] = createSignal<readonly ActivitySpanEntry[]>([row(v10, "call-adv")]);
  const view = render(() => {
   const snapshot = useCommandActivitySnapshots(entries, () => "session");
-  return <span>{() => {
+  const label = () => {
    const current = entries()[0];
-   return current.kind === "tool" ? snapshot(current.part)?.activities?.[0]?.id ?? "loading" : "none";
-  }}</span>;
+   return current?.kind === "tool" ? snapshot(current.part)?.activities?.[0]?.id ?? "loading" : "none";
+  };
+  return <span>{label()}</span>;
  });
  await waitFor(() => expect(view.container.textContent).toBe("act-10"));
  expect(get).toHaveBeenCalledTimes(1);
@@ -203,10 +204,11 @@ it("prevents out-of-order downgrade when older settled or active responses resol
  const [entries, setEntries] = createSignal<readonly ActivitySpanEntry[]>([row(v10, "call-ooo")]);
  const view = render(() => {
   const snapshot = useCommandActivitySnapshots(entries, () => "session");
-  return <span>{() => {
+  const label = () => {
    const current = entries()[0];
-   return current.kind === "tool" ? snapshot(current.part)?.activities?.[0]?.id ?? "loading" : "none";
-  }}</span>;
+   return current?.kind === "tool" ? snapshot(current.part)?.activities?.[0]?.id ?? "loading" : "none";
+  };
+  return <span>{label()}</span>;
  });
  await waitFor(() => expect(deferred).toHaveLength(1));
 
@@ -215,12 +217,12 @@ it("prevents out-of-order downgrade when older settled or active responses resol
  await waitFor(() => expect(deferred).toHaveLength(2));
  setEntries([row(v12, "call-ooo")]);
  await waitFor(() => expect(deferred).toHaveLength(3));
- deferred[2]({ program: v12, activities: [fact("rev-12", "completed")], executions: [], nodes: [] });
+ deferred[2]?.({ program: v12, activities: [fact("rev-12", "completed")], executions: [], nodes: [] });
  await waitFor(() => expect(view.container.textContent).toBe("rev-12"));
 
  // Late older settled and active responses resolve afterward and must neither downgrade nor evict rev 12.
- deferred[1]({ program: v11, activities: [fact("rev-11-settled", "completed")], executions: [], nodes: [] });
- deferred[0]({ program: v10, activities: [fact("rev-10-active", "running")], executions: [], nodes: [] });
+ deferred[1]?.({ program: v11, activities: [fact("rev-11-settled", "completed")], executions: [], nodes: [] });
+ deferred[0]?.({ program: v10, activities: [fact("rev-10-active", "running")], executions: [], nodes: [] });
  await Promise.resolve();
  expect(view.container.textContent).toBe("rev-12");
  view.unmount();
