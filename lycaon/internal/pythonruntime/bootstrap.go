@@ -257,6 +257,52 @@ def _pw_install_http_bridge(bridge_path):
 
     builtins.__import__ = _pw_import
 
+def _pw_pytest_args(args):
+    items = list(args)
+    has_capture = any(
+        a == "-s" or a == "--capture" or a.startswith("--capture=")
+        for a in items
+    )
+    has_no_fault = any(a == "no:faulthandler" or a == "-pno:faulthandler" for a in items)
+    has_no_cache = any(a == "no:cacheprovider" or a == "-pno:cacheprovider" for a in items)
+    prefix = []
+    if not has_capture:
+        prefix.append("--capture=sys")
+    if not has_no_fault:
+        prefix.extend(["-p", "no:faulthandler"])
+    if not has_no_cache:
+        prefix.extend(["-p", "no:cacheprovider"])
+    return prefix + items
+
+def _pw_install_pytest_defaults():
+    _orig_import = builtins.__import__
+    _patched = [False]
+
+    def _patch_pytest(pytest_mod):
+        _orig_main = pytest_mod.main
+
+        def _pw_main(args=None, plugins=None):
+            if args is None:
+                norm = _pw_pytest_args([])
+            elif isinstance(args, (str, bytes, os.PathLike)):
+                norm = _pw_pytest_args([os.fspath(args)])
+            else:
+                norm = _pw_pytest_args(list(args))
+            return _orig_main(norm, plugins=plugins)
+
+        pytest_mod.main = _pw_main
+
+    def _pw_import(name, globals=None, locals=None, fromlist=(), level=0):
+        mod = _orig_import(name, globals, locals, fromlist, level)
+        if not _patched[0] and (name == "pytest" or name.startswith("pytest.")):
+            pytest_mod = sys.modules.get("pytest")
+            if pytest_mod is not None and hasattr(pytest_mod, "main"):
+                _patched[0] = True
+                _patch_pytest(pytest_mod)
+        return mod
+
+    builtins.__import__ = _pw_import
+
 def _pw_bootstrap():
     cfg = json.loads(%q)
     for _k in ("PYTHONPATH", "PYTHONUSERBASE", "PYTHONSTARTUP"):
@@ -287,6 +333,8 @@ def _pw_bootstrap():
     elif mode in ("module", "cli"):
         sys.path[:] = [cwd] + base_path
         mod_name = cfg["module"] if mode == "module" else cfg["cli"]
+        if mod_name == "pytest":
+            args = _pw_pytest_args(args)
         sys.argv = [mod_name] + args
     elif mode == "stdin":
         sys.path[:] = [cwd] + base_path
@@ -297,6 +345,7 @@ def _pw_bootstrap():
 
     if cfg.get("http_bridge_path"):
         _pw_install_http_bridge(cfg["http_bridge_path"])
+    _pw_install_pytest_defaults()
 
     try:
         if mode == "code":
