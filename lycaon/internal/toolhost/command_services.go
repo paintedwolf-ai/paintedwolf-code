@@ -88,13 +88,13 @@ func (r *CommandServices) ReadPythonRetainedOutput(ctx context.Context, scope py
 }
 
 // PythonPersistedAdmissions returns durable LedgerAdmission records for
-// executionID through the composed Portable Python service.
-func (r *CommandServices) PythonPersistedAdmissions(executionID string) ([]pythonevidence.LedgerAdmission, error) {
+// executionID after enforcing fail-closed ViewerScope authorization.
+func (r *CommandServices) PythonPersistedAdmissions(executionID string, scope pythonevidence.ViewerScope) ([]pythonevidence.LedgerAdmission, error) {
 	svc := r.PortablePython()
 	if svc == nil {
 		return nil, fmt.Errorf("portable python service is not configured")
 	}
-	return svc.PersistedAdmissionsForExecution(executionID)
+	return svc.PersistedAdmissionsForExecution(executionID, scope)
 }
 
 func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {

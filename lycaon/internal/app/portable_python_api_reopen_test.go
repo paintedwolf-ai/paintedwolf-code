@@ -89,31 +89,37 @@ func TestPortablePythonDenFilesAndRetainedOutputAPIReopen(t *testing.T) {
 	ts1 := httptest.NewServer(app1.Server)
 
 	// 1. Create project, owning coordinator session, unrelated coordinator session,
-	// and an unrelated child worker session under the owning coordinator.
+	// and two sibling child worker sessions under the same root with the SAME AgentType.
 	proj := mustCreateProjectHTTP(t, ts1.URL, wsDir)
 	ownerSess := mustCreateSessionHTTP(t, ts1.URL, proj.ID)
 	otherSess := mustCreateSessionHTTP(t, ts1.URL, proj.ID)
-	otherWorkerSess, err := app1.Server.Admin.SessionAdmin.Transcript.SessionStore.CreateChild(ctx, &ownerSess, wire.SpawnChildRequest{
-		AgentType: "other-worker",
-		Prompt:    "unrelated worker",
+	workerA, err := app1.Server.Admin.SessionAdmin.Transcript.SessionStore.CreateChild(ctx, &ownerSess, wire.SpawnChildRequest{
+		AgentType: "implement",
+		Prompt:    "worker A",
 	})
-	testutil.FailErr(t, "create unrelated worker child session", err)
+	testutil.FailErr(t, "create worker A child session", err)
+	workerB, err := app1.Server.Admin.SessionAdmin.Transcript.SessionStore.CreateChild(ctx, &ownerSess, wire.SpawnChildRequest{
+		AgentType: "implement",
+		Prompt:    "worker B sibling",
+	})
+	testutil.FailErr(t, "create worker B sibling child session", err)
 
 	// 2. Execute Python read + workspace write + >65536B overflow stdout, and a
 	// denied protected write through the real registered `python` tool.
 	rootID := proj.Roots[0].ID
-	mkTC := func(callID string) tools.ToolContext {
+	mkTCFor := func(appInst *ServeApp, sessionID, rootSessionID, agent, callID string) tools.ToolContext {
 		return tools.ToolContext{
 			Identity: tools.InvocationIdentity{
-				ProjectID:  proj.ID,
-				SessionID:  ownerSess.ID,
-				Agent:      "implement",
-				ToolCallID: callID,
+				ProjectID:     proj.ID,
+				SessionID:     sessionID,
+				RootSessionID: rootSessionID,
+				Agent:         agent,
+				ToolCallID:    callID,
 			},
 			Source: tools.InvocationSource{
 				SourceWorkspaceKind: wire.SourceWorkspaceKindProject,
 				ActiveRootID:        rootID,
-				SourceLedger:        app1.Server.Sources.Workspace.SourceLedger,
+				SourceLedger:        appInst.Server.Sources.Workspace.SourceLedger,
 				Roots: []projectroot.RootRef{{
 					ID:    rootID,
 					Label: "main",
@@ -125,22 +131,34 @@ func TestPortablePythonDenFilesAndRetainedOutputAPIReopen(t *testing.T) {
 
 	writeResp := runPythonToolHTTPTest(t, app1, map[string]any{
 		"code": `txt = open("input.txt").read().strip(); open("out.txt", "w").write(txt + "-published\n"); print("R" * 80000)`,
-	}, mkTC("call-api-write"))
+	}, mkTCFor(app1, ownerSess.ID, ownerSess.ID, "implement", "call-api-write"))
 	if !writeResp.CleanCompletion || !writeResp.StdoutTruncated || writeResp.RetainedStdoutArtifactID == "" {
 		t.Fatalf("write+overflow run failed: %+v", writeResp)
 	}
 
 	denyResp := runPythonToolHTTPTest(t, app1, map[string]any{
 		"code": `open(".git/config", "w").write("bad")`,
-	}, mkTC("call-api-deny"))
+	}, mkTCFor(app1, ownerSess.ID, ownerSess.ID, "implement", "call-api-deny"))
 	if denyResp.CleanCompletion || denyResp.Stop == nil || denyResp.Stop.Code != pythonruntime.StopEffectNotAllowed {
 		t.Fatalf("expected protected write refusal, got %+v", denyResp)
 	}
 
-	// 3. Verify live HTTP/API access before reopen.
-	verifyAuthorizedPythonAPI(t, ts1.URL, proj.ID, ownerSess.ID, writeResp, denyResp)
+	// Execute a Python call as Worker A (same AgentType "implement" as sibling Worker B).
+	workerAResp := runPythonToolHTTPTest(t, app1, map[string]any{
+		"code": `open("worker_a.txt", "w").write("from-worker-a\n"); print("W" * 80000)`,
+	}, mkTCFor(app1, workerA.ID, ownerSess.ID, "implement", "call-worker-a"))
+	if !workerAResp.CleanCompletion || !workerAResp.StdoutTruncated || workerAResp.RetainedStdoutArtifactID == "" {
+		t.Fatalf("worker A run failed: %+v", workerAResp)
+	}
+
+	// 3. Verify live HTTP/API access before reopen:
+	// - Owner coordinator sees its activity/retained/file; unrelated session & workers are denied.
+	// - Worker A sees its OWN activity/retained; sibling Worker B (same AgentType, same root) is denied!
+	verifyAuthorizedPythonAPI(t, ts1.URL, proj.ID, ownerSess.ID, writeResp, denyResp, "out.txt", "hello-api-published", "R")
 	verifyForbiddenPythonAPI(t, ts1.URL, otherSess.ID, writeResp.ExecutionID, writeResp.RetainedStdoutArtifactID)
-	verifyForbiddenPythonAPI(t, ts1.URL, otherWorkerSess.ID, writeResp.ExecutionID, writeResp.RetainedStdoutArtifactID)
+	verifyForbiddenPythonAPI(t, ts1.URL, workerB.ID, writeResp.ExecutionID, writeResp.RetainedStdoutArtifactID)
+	verifySingleAuthorizedActivity(t, ts1.URL, workerA.ID, workerAResp, "worker_a.txt", "W")
+	verifyForbiddenPythonAPI(t, ts1.URL, workerB.ID, workerAResp.ExecutionID, workerAResp.RetainedStdoutArtifactID)
 
 	// 4. Close the server/app completely and reopen a fresh app.Build instance
 	// against the exact same on-disk cfgDir and dbPath.
@@ -152,46 +170,91 @@ func TestPortablePythonDenFilesAndRetainedOutputAPIReopen(t *testing.T) {
 	ts2 := httptest.NewServer(app2.Server)
 	defer ts2.Close()
 
-	// 5. After reopen: owning session STILL opens Python activity, reads retained
-	// output, and sees the published file via the real Files API; unrelated
-	// session and unrelated worker are STILL denied (403 Forbidden).
-	verifyAuthorizedPythonAPI(t, ts2.URL, proj.ID, ownerSess.ID, writeResp, denyResp)
+	// 5. Execute a BRAND NEW Python call #2 AFTER reopen before reading both
+	// activities: assert durable unique ExecutionIDs (no py-exec-1 collision!)
+	// and verify BOTH call #1 and call #2 read back with their distinct diffs
+	// and retained outputs.
+	writeResp2 := runPythonToolHTTPTest(t, app2, map[string]any{
+		"code": `open("out2.txt", "w").write("reopened-call-2\n"); print("S" * 80000)`,
+	}, mkTCFor(app2, ownerSess.ID, ownerSess.ID, "implement", "call-api-write-2"))
+	if !writeResp2.CleanCompletion || !writeResp2.StdoutTruncated || writeResp2.RetainedStdoutArtifactID == "" {
+		t.Fatalf("post-reopen write+overflow run #2 failed: %+v", writeResp2)
+	}
+	if writeResp2.ExecutionID == writeResp.ExecutionID {
+		t.Fatalf("post-reopen ExecutionID collided with pre-reopen ExecutionID %q", writeResp.ExecutionID)
+	}
+
+	verifyAuthorizedPythonAPI(t, ts2.URL, proj.ID, ownerSess.ID, writeResp, denyResp, "out.txt", "hello-api-published", "R")
+	verifySingleAuthorizedActivity(t, ts2.URL, ownerSess.ID, writeResp2, "out2.txt", "S")
+	verifySingleAuthorizedActivity(t, ts2.URL, workerA.ID, workerAResp, "worker_a.txt", "W")
 	verifyForbiddenPythonAPI(t, ts2.URL, otherSess.ID, writeResp.ExecutionID, writeResp.RetainedStdoutArtifactID)
-	verifyForbiddenPythonAPI(t, ts2.URL, otherWorkerSess.ID, writeResp.ExecutionID, writeResp.RetainedStdoutArtifactID)
+	verifyForbiddenPythonAPI(t, ts2.URL, otherSess.ID, writeResp2.ExecutionID, writeResp2.RetainedStdoutArtifactID)
+	verifyForbiddenPythonAPI(t, ts2.URL, workerB.ID, workerAResp.ExecutionID, workerAResp.RetainedStdoutArtifactID)
+
+	// 6. Admission-store corruption must propagate as 500 Internal Server Error
+	// (NEVER silently returning an incomplete 200 OK receipt).
+	admPath := filepath.Join(cfgDir, "portable-python", "receipts", "admissions.jsonl")
+	f, err := os.OpenFile(admPath, os.O_WRONLY|os.O_APPEND, 0o600)
+	testutil.FailErr(t, "open admissions.jsonl for corruption test", err)
+	_, wErr := f.WriteString("{corrupt-admission-json\n")
+	testutil.FailErr(t, "append corrupt admission line", wErr)
+	testutil.FailErr(t, "close corrupted admissions.jsonl", f.Close())
+
+	corruptStatus, corruptBody := doAuthedHTTP(t, http.MethodGet, ts2.URL+"/v1/sessions/"+ownerSess.ID+"/program-receipts/"+writeResp.ExecutionID, nil)
+	if corruptStatus != http.StatusInternalServerError {
+		t.Fatalf("corrupted admissions.jsonl status = %d, want 500 (body=%s)", corruptStatus, string(corruptBody))
+	}
+}
+
+func verifySingleAuthorizedActivity(
+	t *testing.T,
+	baseURL, sessionID string,
+	resp portablepython.ToolResponse,
+	expectedFile, expectedChar string,
+) {
+	t.Helper()
+	status, body := doAuthedHTTP(t, http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/program-receipts/"+resp.ExecutionID, nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET python activity %s for session %s status = %d, want 200 (body=%s)", resp.ExecutionID, sessionID, status, string(body))
+	}
+	var page wire.CommandProgramReceiptPage
+	testutil.FailErr(t, "decode program receipt page", json.Unmarshal(body, &page))
+	if page.Program.ID != resp.ExecutionID || page.Program.State != "completed" {
+		t.Fatalf("unexpected program header: %+v", page.Program)
+	}
+	sawPub := false
+	for _, act := range page.Activities {
+		if act.Group == "workspace_write" && act.Label == string(pythonevidence.AttributionPythonWorkspacePublication) && act.Subject == expectedFile {
+			sawPub = true
+		}
+	}
+	if !sawPub {
+		t.Fatalf("expected workspace_write publication activity for %s, got %+v", expectedFile, page.Activities)
+	}
+	if len(page.Executions) == 0 {
+		t.Fatalf("expected persisted admission executions on activity page %s", resp.ExecutionID)
+	}
+
+	status, retained := doAuthedHTTP(t, http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/artifacts/"+resp.RetainedStdoutArtifactID, nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET retained artifact %s for session %s status = %d, want 200 (body=%s)", resp.RetainedStdoutArtifactID, sessionID, status, string(retained))
+	}
+	if len(retained) < 80000 || !strings.Contains(string(retained), strings.Repeat(expectedChar, 1024)) {
+		t.Fatalf("retained artifact bytes = %d, want >= 80000 %s's", len(retained), expectedChar)
+	}
 }
 
 func verifyAuthorizedPythonAPI(
 	t *testing.T,
 	baseURL, projectID, sessionID string,
 	writeResp, denyResp portablepython.ToolResponse,
+	expectedFile, expectedContent, expectedChar string,
 ) {
 	t.Helper()
+	verifySingleAuthorizedActivity(t, baseURL, sessionID, writeResp, expectedFile, expectedChar)
 
-	// 1. Den activity receipt for write execution: PublishedDiffs + persisted admissions.
-	status, body := doAuthedHTTP(t, http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/program-receipts/"+writeResp.ExecutionID, nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET write python activity status = %d, want 200 (body=%s)", status, string(body))
-	}
-	var writePage wire.CommandProgramReceiptPage
-	testutil.FailErr(t, "decode write program receipt page", json.Unmarshal(body, &writePage))
-	if writePage.Program.ID != writeResp.ExecutionID || writePage.Program.State != "completed" {
-		t.Fatalf("unexpected write program header: %+v", writePage.Program)
-	}
-	sawPub := false
-	for _, act := range writePage.Activities {
-		if act.Group == "workspace_write" && act.Label == string(pythonevidence.AttributionPythonWorkspacePublication) && act.Subject == "out.txt" {
-			sawPub = true
-		}
-	}
-	if !sawPub {
-		t.Fatalf("expected workspace_write publication activity for out.txt, got %+v", writePage.Activities)
-	}
-	if len(writePage.Executions) == 0 {
-		t.Fatalf("expected persisted admission executions on write activity page")
-	}
-
-	// 2. Den activity receipt for denied execution: RefusedChildren.
-	status, body = doAuthedHTTP(t, http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/program-receipts/"+denyResp.ExecutionID, nil)
+	// Den activity receipt for denied execution: RefusedChildren.
+	status, body := doAuthedHTTP(t, http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/program-receipts/"+denyResp.ExecutionID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET deny python activity status = %d, want 200 (body=%s)", status, string(body))
 	}
@@ -207,22 +270,13 @@ func verifyAuthorizedPythonAPI(
 		t.Fatalf("expected refusal activity on deny page, got %+v", denyPage.Activities)
 	}
 
-	// 3. Retained overflow stdout via GET /v1/sessions/{id}/artifacts/{artifact_id}.
-	status, retained := doAuthedHTTP(t, http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/artifacts/"+writeResp.RetainedStdoutArtifactID, nil)
+	// Published workspace file via real Files API (GET /v1/projects/{id}/source).
+	status, srcBody := doAuthedHTTP(t, http.MethodGet, baseURL+"/v1/projects/"+projectID+"/source?path="+url.QueryEscape(expectedFile), nil)
 	if status != http.StatusOK {
-		t.Fatalf("GET retained python artifact status = %d, want 200 (body=%s)", status, string(retained))
+		t.Fatalf("GET project source %s status = %d, want 200 (body=%s)", expectedFile, status, string(srcBody))
 	}
-	if len(retained) < 80000 || !strings.Contains(string(retained), strings.Repeat("R", 1024)) {
-		t.Fatalf("retained artifact bytes = %d, want >= 80000 R's", len(retained))
-	}
-
-	// 4. Published workspace file via real Files API (GET /v1/projects/{id}/source).
-	status, srcBody := doAuthedHTTP(t, http.MethodGet, baseURL+"/v1/projects/"+projectID+"/source?path="+url.QueryEscape("out.txt"), nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET project source out.txt status = %d, want 200 (body=%s)", status, string(srcBody))
-	}
-	if !strings.Contains(string(srcBody), "hello-api-published") {
-		t.Fatalf("Files API response for out.txt missing published content: %s", string(srcBody))
+	if !strings.Contains(string(srcBody), expectedContent) {
+		t.Fatalf("Files API response for %s missing published content %q: %s", expectedFile, expectedContent, string(srcBody))
 	}
 }
 

@@ -8,6 +8,8 @@ package portablepython
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -518,7 +520,7 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 
 	execID := strings.TrimSpace(req.ExecutionID)
 	if execID == "" {
-		execID = fmt.Sprintf("py-exec-%d", s.execSeq.Add(1))
+		execID = s.newDurableExecutionID()
 	}
 
 	// 1. Read-only pip inventory and on-demand package help directly from the
@@ -724,6 +726,14 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 	}
 	s.finalizeResponse(ctx, req, resp, memAdm, memDoc)
 	return resp, nil
+}
+
+func (s *Service) newDurableExecutionID() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err == nil {
+		return "py-exec-" + hex.EncodeToString(raw[:])
+	}
+	return fmt.Sprintf("py-exec-%d-%d", s.clock.Now().UnixNano(), s.execSeq.Add(1))
 }
 
 func applyDefaultLimits(in pythonruntime.ResourceLimits) pythonruntime.ResourceLimits {

@@ -44,18 +44,18 @@ func (s *Service) ReadRetainedOutputForSession(ctx context.Context, scope python
 }
 
 // PersistedAdmissionsForExecution loads durable LedgerAdmission records for
-// executionID through this Service's configured ReceiptSink.
-func (s *Service) PersistedAdmissionsForExecution(executionID string) ([]pythonevidence.LedgerAdmission, error) {
+// executionID after enforcing fail-closed ViewerScope authorization.
+func (s *Service) PersistedAdmissionsForExecution(executionID string, scope pythonevidence.ViewerScope) ([]pythonevidence.LedgerAdmission, error) {
 	if s == nil {
 		return nil, errors.New("portable python service is not initialized")
 	}
 	loader, ok := s.receiptSink.(interface {
-		LoadAdmissions(string) ([]pythonevidence.LedgerAdmission, error)
+		LoadAdmissionsForScope(string, pythonevidence.ViewerScope) ([]pythonevidence.LedgerAdmission, error)
 	})
 	if !ok || loader == nil {
-		return nil, errors.New("durable receipt store does not support admission queries")
+		return nil, errors.New("durable receipt store does not support scoped admission queries")
 	}
-	return loader.LoadAdmissions(executionID)
+	return loader.LoadAdmissionsForScope(executionID, scope)
 }
 
 // finalizeResponse screens stdout/stderr/stop text for secrets, enforces the

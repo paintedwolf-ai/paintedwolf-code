@@ -2,10 +2,12 @@ package sessionadmin
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/pythonevidence"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -15,28 +17,26 @@ import (
 type PythonEvidenceReader interface {
 	PythonDenProjection(executionID string, scope pythonevidence.ViewerScope) (pythonevidence.PythonActivityProjection, error)
 	ReadPythonRetainedOutput(ctx context.Context, scope pythonevidence.ViewerScope, artifactID string) ([]byte, error)
-	PythonPersistedAdmissions(executionID string) ([]pythonevidence.LedgerAdmission, error)
+	PythonPersistedAdmissions(executionID string, scope pythonevidence.ViewerScope) ([]pythonevidence.LedgerAdmission, error)
 }
 
 // ViewerScopeForSession derives the fail-closed pythonevidence.ViewerScope
-// strictly from the authenticated session record.
+// strictly from the authenticated session record, using the session's actual
+// unique ID so sibling workers sharing an AgentType and root session remain
+// strictly isolated and match the writer's session/actor/view identity.
 func ViewerScopeForSession(sess *wire.Session) pythonevidence.ViewerScope {
 	if sess == nil {
 		return pythonevidence.ViewerScope{}
 	}
 	view := string(wire.SourceWorkspaceKindProject)
-	if parentID := strings.TrimSpace(sess.ParentSessionID); parentID != "" {
-		rootID := strings.TrimSpace(sess.RootSessionID)
-		if rootID == "" {
-			rootID = parentID
-		}
+	if strings.TrimSpace(sess.ParentSessionID) != "" {
 		actor := strings.TrimSpace(sess.AgentType)
 		if actor == "" {
 			actor = "worker"
 		}
 		return pythonevidence.ViewerScope{
 			Role:      pythonevidence.RoleWorker,
-			SessionID: rootID,
+			SessionID: strings.TrimSpace(sess.ID),
 			Actor:     actor,
 			View:      view,
 		}
@@ -53,20 +53,37 @@ func ViewerScopeForSession(sess *wire.Session) pythonevidence.ViewerScope {
 	}
 }
 
-func (s *Transcript) servePythonProgramReceipt(w http.ResponseWriter, _ *http.Request, sess *wire.Session, executionID string) bool {
+func (s *Transcript) servePythonProgramReceipt(w http.ResponseWriter, r *http.Request, sess *wire.Session, executionID string) bool {
 	if s.PythonEvidence == nil {
 		return false
 	}
 	scope := ViewerScopeForSession(sess)
 	proj, err := s.PythonEvidence.PythonDenProjection(executionID, scope)
 	if err != nil {
-		return false
+		switch {
+		case errors.Is(err, portablepython.ErrExecutionNotFound):
+			return false
+		case errors.Is(err, portablepython.ErrAmbiguousExecutionID):
+			s.responses.Fail(w, wire.ApiErrorCodeForbidden, "python activity scope is ambiguous")
+			return true
+		default:
+			s.responses.InternalError(w, r, err)
+			return true
+		}
 	}
 	if !proj.Visible || proj.RedactedForVisibility {
 		s.responses.Fail(w, wire.ApiErrorCodeForbidden, "python activity belongs to another session or worker")
 		return true
 	}
-	adms, _ := s.PythonEvidence.PythonPersistedAdmissions(executionID)
+	adms, err := s.PythonEvidence.PythonPersistedAdmissions(executionID, scope)
+	if err != nil {
+		if errors.Is(err, pythonevidence.ErrAccessDenied) || errors.Is(err, portablepython.ErrAmbiguousExecutionID) {
+			s.responses.Fail(w, wire.ApiErrorCodeForbidden, "python activity belongs to another session or worker")
+			return true
+		}
+		s.responses.InternalError(w, r, err)
+		return true
+	}
 	page := buildPythonProgramReceiptPage(proj, adms)
 	httpio.WriteJSON(w, http.StatusOK, page)
 	return true

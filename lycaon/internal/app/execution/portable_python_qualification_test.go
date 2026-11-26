@@ -356,7 +356,13 @@ next(r.iter_content(chunk_size=64))`,
 		rtStreamReopen, _ := buildQualificationRuntime(t, cfgDir)
 		defer func() { _ = rtStreamReopen.Host.Commands.PortablePython().Close(ctx) }()
 
-		adms, err := rtStreamReopen.Host.Commands.PythonPersistedAdmissions("qual-partial-stream")
+		streamScope := pythonevidence.ViewerScope{
+			Role:      pythonevidence.RoleCoordinator,
+			SessionID: "sess-qual-stream",
+			Actor:     "implement",
+			View:      "workspace",
+		}
+		adms, err := rtStreamReopen.Host.Commands.PythonPersistedAdmissions("qual-partial-stream", streamScope)
 		testutil.FailErr(t, "load persisted admissions through composed runtime", err)
 		var streamAdm *pythonevidence.LedgerAdmission
 		for i := range adms {

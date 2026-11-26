@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,16 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/pythonevidence"
+)
+
+var (
+	// ErrExecutionNotFound is returned when no persisted execution receipt exists
+	// for the requested execution_id.
+	ErrExecutionNotFound = errors.New("execution receipt not found")
+	// ErrAmbiguousExecutionID is returned (fail-closed) when legacy or duplicate
+	// persisted execution receipts share the same execution_id across distinct
+	// session/actor/view scopes.
+	ErrAmbiguousExecutionID = errors.New("ambiguous execution_id spans multiple scopes")
 )
 
 // FileReceiptStore is a durable, disk-backed implementation of
@@ -201,30 +212,117 @@ func (s *FileReceiptStore) ReadRetainedBytes(
 	return port.LoadScreened(ctx, *summary.StreamRef)
 }
 
+type executionScopeKey struct {
+	sessionID  string
+	checkoutID string
+	actor      string
+	view       string
+}
+
+func scopeKeyForExecution(rec pythonevidence.ExecutionRecord) executionScopeKey {
+	return executionScopeKey{
+		sessionID:  strings.TrimSpace(rec.SessionID),
+		checkoutID: strings.TrimSpace(rec.CheckoutID),
+		actor:      strings.TrimSpace(rec.Actor),
+		view:       strings.TrimSpace(rec.View),
+	}
+}
+
+func (s *FileReceiptStore) loadExecutionByID(executionID string) (pythonevidence.ExecutionRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var (
+		target   pythonevidence.ExecutionRecord
+		found    bool
+		firstKey executionScopeKey
+	)
+	err := scanJSONL(filepath.Join(s.dir, "executions.jsonl"), func(line []byte) error {
+		var rec pythonevidence.ExecutionRecord
+		if err := json.Unmarshal(line, &rec); err != nil {
+			return err
+		}
+		if rec.ExecutionID != executionID {
+			return nil
+		}
+		key := scopeKeyForExecution(rec)
+		if !found {
+			firstKey = key
+			found = true
+		} else if key != firstKey {
+			return fmt.Errorf("%w: %s", ErrAmbiguousExecutionID, executionID)
+		}
+		target = rec
+		return nil
+	})
+	if err != nil {
+		return pythonevidence.ExecutionRecord{}, err
+	}
+	if !found {
+		return pythonevidence.ExecutionRecord{}, fmt.Errorf("%w: %s", ErrExecutionNotFound, executionID)
+	}
+	return target, nil
+}
+
+// LoadAdmissionsForScope authorizes viewer access to executionID, rejects
+// ambiguous cross-scope duplicate IDs, and returns only admissions matching the
+// execution's authorized scope.
+func (s *FileReceiptStore) LoadAdmissionsForScope(
+	executionID string,
+	scope pythonevidence.ViewerScope,
+) ([]pythonevidence.LedgerAdmission, error) {
+	if err := pythonevidence.ValidateViewerScope(scope); err != nil {
+		return nil, err
+	}
+	target, err := s.loadExecutionByID(executionID)
+	if err != nil {
+		return nil, err
+	}
+	if !pythonevidence.AuthorizeExecutionAccess(target, scope) {
+		return nil, pythonevidence.ErrAccessDenied
+	}
+	return s.loadAdmissionsForTarget(target)
+}
+
+func (s *FileReceiptStore) loadAdmissionsForTarget(target pythonevidence.ExecutionRecord) ([]pythonevidence.LedgerAdmission, error) {
+	all, err := s.LoadAdmissions(target.ExecutionID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]pythonevidence.LedgerAdmission, 0, len(all))
+	for _, adm := range all {
+		if adm.Record.Actor != "" && target.Actor != "" && adm.Record.Actor != target.Actor {
+			continue
+		}
+		if adm.Record.View != "" && target.View != "" && adm.Record.View != target.View {
+			continue
+		}
+		out = append(out, adm)
+	}
+	return out, nil
+}
+
 // ProjectPersistedForDen reconstructs a visibility-scoped Den activity
 // projection directly from the persisted on-disk JSONL receipts after reopen.
+// Ambiguous cross-scope execution IDs fail closed, and store read/parse errors
+// are propagated rather than returning an incomplete projection.
 func (s *FileReceiptStore) ProjectPersistedForDen(
 	executionID string,
 	scope pythonevidence.ViewerScope,
 ) (pythonevidence.PythonActivityProjection, error) {
-	execs, err := s.LoadExecutions()
+	target, err := s.loadExecutionByID(executionID)
 	if err != nil {
 		return pythonevidence.PythonActivityProjection{}, err
 	}
-	var target pythonevidence.ExecutionRecord
-	found := false
-	for _, e := range execs {
-		if e.ExecutionID == executionID {
-			target = e
-			found = true
-			break
-		}
-	}
-	if !found {
-		return pythonevidence.PythonActivityProjection{}, fmt.Errorf("execution receipt %q not found", executionID)
+	if !pythonevidence.AuthorizeExecutionAccess(target, scope) {
+		return pythonevidence.PythonActivityProjection{
+			ExecutionID:           target.ExecutionID,
+			CallID:                target.CallID,
+			Visible:               false,
+			RedactedForVisibility: true,
+		}, nil
 	}
 	ledger := pythonevidence.NewExecutionLedger(target, nil, nil)
-	admissions, err := s.LoadAdmissions(executionID)
+	admissions, err := s.loadAdmissionsForTarget(target)
 	if err != nil {
 		return pythonevidence.PythonActivityProjection{}, err
 	}
