@@ -6,8 +6,6 @@ tools:
   summarize: sticky
   inspect_source: sticky
   recall: sticky
-  read_findings: sticky
-  read_review: sticky
   update_progress: sticky
   ask_user: sticky
   skills_read: sticky

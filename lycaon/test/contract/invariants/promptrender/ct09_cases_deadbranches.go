@@ -97,7 +97,7 @@ func investigateAllLoadedSeed() hoststate.CustomizationSeed {
 }
 
 func rootlessOrchestrateSeed() hoststate.CustomizationSeed {
-	return ambientSeed(api.SessionPostureOrchestrate, hoststate.WorkflowAmbientIdle, hoststate.RootsNone, hoststate.LoadingFloorOnly)
+	return ambientSeed(api.SessionPostureOrchestrate, hoststate.WorkflowWorkersInFlight, hoststate.RootsNone, hoststate.LoadingFloorOnly)
 }
 
 func vetAllLoadedSeed() hoststate.CustomizationSeed {
