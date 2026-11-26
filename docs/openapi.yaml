@@ -152,9 +152,9 @@ paths:
                             anchor:
                               type: string
                             state:
-                              $ref: ../components/schemas/wake-state.generated.yaml#/components/schemas/WakeState
+                              $ref: '#/components/schemas/WakeState'
                             reason:
-                              $ref: ../components/schemas/wake-reason.generated.yaml#/components/schemas/WakeReason
+                              $ref: '#/components/schemas/WakeReason'
                             continuation_id:
                               type: string
                               format: uuid
@@ -172,9 +172,9 @@ paths:
                                   - state
                                 properties:
                                   state:
-                                    $ref: ../components/schemas/wake-state.generated.yaml#/components/schemas/WakeState
+                                    $ref: '#/components/schemas/WakeState'
                                   reason:
-                                    $ref: ../components/schemas/wake-reason.generated.yaml#/components/schemas/WakeReason
+                                    $ref: '#/components/schemas/WakeReason'
                       defects:
                         type: array
                         items:
@@ -195,9 +195,9 @@ paths:
                                 - state
                               properties:
                                 state:
-                                  $ref: ../components/schemas/wake-state.generated.yaml#/components/schemas/WakeState
+                                  $ref: '#/components/schemas/WakeState'
                                 reason:
-                                  $ref: ../components/schemas/wake-reason.generated.yaml#/components/schemas/WakeReason
+                                  $ref: '#/components/schemas/WakeReason'
                       turns:
                         type: array
                         items:
@@ -223,14 +223,14 @@ paths:
                               type: string
                               format: date-time
                             outcome:
-                              $ref: ../components/schemas/turn-outcome-kind.generated.yaml#/components/schemas/TurnOutcomeKind
+                              $ref: '#/components/schemas/TurnOutcomeKind'
                             lease_id:
                               type: string
                               format: uuid
                             refusal:
-                              $ref: ../components/schemas/wake-reason.generated.yaml#/components/schemas/WakeReason
+                              $ref: '#/components/schemas/WakeReason'
                             failure_code:
-                              $ref: ../components/schemas/notice-code.generated.yaml#/components/schemas/NoticeCode
+                              $ref: '#/components/schemas/NoticeCode'
                             detail:
                               type: string
                             closeout_blocked:
@@ -272,11 +272,11 @@ paths:
                                 notice:
                                   type: string
                             canceled_by:
-                              $ref: ../components/schemas/turn-cancellation-source.generated.yaml#/components/schemas/TurnCancellationSource
+                              $ref: '#/components/schemas/TurnCancellationSource'
                       continuations:
                         type: array
                         items:
-                          $ref: ../components/schemas/session/continuations.yaml#/components/schemas/ActionContinuation
+                          $ref: '#/components/schemas/ActionContinuation'
               schema:
                 type: string
                 format: binary

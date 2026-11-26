@@ -48,8 +48,8 @@ components:
                 sequence: {type: integer, minimum: 1}
                 session_id: {type: string, format: uuid}
                 anchor: {type: string}
-                state: {$ref: ../components/schemas/wake-state.generated.yaml#/components/schemas/WakeState}
-                reason: {$ref: ../components/schemas/wake-reason.generated.yaml#/components/schemas/WakeReason}
+                state: {$ref: '#/components/schemas/WakeState'}
+                reason: {$ref: '#/components/schemas/WakeReason'}
                 continuation_id: {type: string, format: uuid}
                 turn_id: {type: string, format: uuid}
                 lease_id: {type: string, format: uuid}
@@ -59,8 +59,8 @@ components:
                     type: object
                     required: [state]
                     properties:
-                      state: {$ref: ../components/schemas/wake-state.generated.yaml#/components/schemas/WakeState}
-                      reason: {$ref: ../components/schemas/wake-reason.generated.yaml#/components/schemas/WakeReason}
+                      state: {$ref: '#/components/schemas/WakeState'}
+                      reason: {$ref: '#/components/schemas/WakeReason'}
           defects:
             type: array
             items:
@@ -81,10 +81,10 @@ components:
                 admitted_at: {type: string, format: date-time}
                 dispatched_at: {type: string, format: date-time}
                 settled_at: {type: string, format: date-time}
-                outcome: {$ref: ../components/schemas/turn-outcome-kind.generated.yaml#/components/schemas/TurnOutcomeKind}
+                outcome: {$ref: '#/components/schemas/TurnOutcomeKind'}
                 lease_id: {type: string, format: uuid}
-                refusal: {$ref: ../components/schemas/wake-reason.generated.yaml#/components/schemas/WakeReason}
-                failure_code: {$ref: ../components/schemas/notice-code.generated.yaml#/components/schemas/NoticeCode}
+                refusal: {$ref: '#/components/schemas/WakeReason'}
+                failure_code: {$ref: '#/components/schemas/NoticeCode'}
                 detail: {type: string}
                 closeout_blocked:
                   type: object
@@ -107,7 +107,19 @@ components:
                     tool_name: {type: string}
                     tool_args_bytes: {type: integer}
                     notice: {type: string}
-                canceled_by: {$ref: ../components/schemas/turn-cancellation-source.generated.yaml#/components/schemas/TurnCancellationSource}
+                canceled_by: {$ref: '#/components/schemas/TurnCancellationSource'}
           continuations:
             type: array
-            items: {$ref: ../components/schemas/session/continuations.yaml#/components/schemas/ActionContinuation}
+            items: {$ref: '#/components/schemas/ActionContinuation'}
+    ActionContinuation:
+      $ref: ../components/schemas/session/continuations.yaml#/components/schemas/ActionContinuation
+    NoticeCode:
+      $ref: ../components/schemas/notice-code.generated.yaml#/components/schemas/NoticeCode
+    TurnCancellationSource:
+      $ref: ../components/schemas/turn-cancellation-source.generated.yaml#/components/schemas/TurnCancellationSource
+    TurnOutcomeKind:
+      $ref: ../components/schemas/turn-outcome-kind.generated.yaml#/components/schemas/TurnOutcomeKind
+    WakeReason:
+      $ref: ../components/schemas/wake-reason.generated.yaml#/components/schemas/WakeReason
+    WakeState:
+      $ref: ../components/schemas/wake-state.generated.yaml#/components/schemas/WakeState
