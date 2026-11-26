@@ -138,5 +138,3 @@ func (q *deferredNudgeQueue) nonEmpty() bool {
 	defer q.mu.Unlock()
 	return len(q.items) > 0
 }
-
-// A failed execution waits for explicit input; queued facts remain available.

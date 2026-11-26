@@ -3,6 +3,7 @@ package actionoutcome
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -10,17 +11,30 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type WakeStep struct {
+	State  api.WakeState  `json:"state"`
+	Reason api.WakeReason `json:"reason,omitempty"`
+}
+type WakeDefect struct {
+	Sequence uint64   `json:"sequence"`
+	Attempt  WakeStep `json:"attempt"`
+	Problem  string   `json:"problem"`
+}
 type WakeRecord struct {
-	Sequence  uint64         `json:"sequence"`
-	SessionID string         `json:"session_id"`
-	Anchor    string         `json:"anchor"`
-	State     api.WakeState  `json:"state"`
-	Reason    api.WakeReason `json:"reason,omitempty"`
-	TurnID    string         `json:"turn_id,omitempty"`
-	LeaseID   string         `json:"lease_id,omitempty"`
+	ContinuationID string         `json:"continuation_id,omitempty"`
+	Steps          []WakeStep     `json:"steps"`
+	Sequence       uint64         `json:"sequence"`
+	SessionID      string         `json:"session_id"`
+	Anchor         string         `json:"anchor"`
+	State          api.WakeState  `json:"state"`
+	Reason         api.WakeReason `json:"reason,omitempty"`
+	TurnID         string         `json:"turn_id,omitempty"`
+	LeaseID        string         `json:"lease_id,omitempty"`
 }
 
 type Ticket struct {
+	session *Session
+	seq     uint64
 	ack     *atomic.Bool
 	history *History[WakeRecord]
 	key     string
@@ -29,8 +43,16 @@ type Ticket struct {
 
 func (s *Session) Receive(ctx context.Context, sessionID string, seq uint64, anchor string) *Ticket {
 	key := strconv.FormatUint(seq, 10)
-	s.Wakes.Open(key, WakeRecord{Sequence: seq, SessionID: sessionID, Anchor: anchor, State: api.WakeStateReceived})
-	return &Ticket{history: s.Wakes, key: key, path: Register(ctx, sessionID)}
+	path := Register(ctx, sessionID)
+	record := WakeRecord{Sequence: seq, SessionID: sessionID, Anchor: anchor, State: api.WakeStateReceived, Steps: []WakeStep{{State: api.WakeStateReceived}}}
+	if path != nil {
+		record.ContinuationID = path.action.ID()
+	}
+	ticket := &Ticket{session: s, seq: seq, history: s.Wakes, key: key, path: path}
+	if !s.Wakes.Open(key, record) {
+		ticket.reportDefect(WakeStep{State: api.WakeStateReceived}, "duplicate ticket")
+	}
+	return ticket
 }
 
 func (t *Ticket) Await(ctx context.Context) (WakeRecord, error) {
@@ -49,6 +71,7 @@ func (t *Ticket) Record(state api.WakeState, reason api.WakeReason, turnID, leas
 	}
 	terminal := state != api.WakeStateQueued && state != api.WakeStateDeferred
 	ok := t.history.Change(t.key, func(r WakeRecord) (WakeRecord, bool) {
+		r.Steps = append(slices.Clip(r.Steps), WakeStep{state, reason})
 		r.State = state
 		r.Reason = reason
 		r.TurnID = turnID
@@ -57,7 +80,7 @@ func (t *Ticket) Record(state api.WakeState, reason api.WakeReason, turnID, leas
 		return r, terminal
 	})
 	if !ok {
-		reportWakeDefect(t.key, "duplicate terminal disposition")
+		t.reportDefect(WakeStep{state, reason}, "duplicate terminal disposition")
 		return
 	}
 	if terminal && state != api.WakeStateDelivered && state != api.WakeStateConsumed && state != api.WakeStateRoutedToWait {
@@ -79,7 +102,8 @@ func (t *Ticket) RefuseBeforeAdmission(reason api.WakeReason) {
 		t.ack.Store(true)
 	}
 	if t.history.Change(t.key, func(r WakeRecord) (WakeRecord, bool) {
-		r.State = api.WakeStateDenied
+		r.Steps = append(slices.Clip(r.Steps), WakeStep{api.WakeStateDropped, reason})
+		r.State = api.WakeStateDropped
 		r.Reason = reason
 		return r, true
 	}) {
@@ -100,12 +124,19 @@ func (t *Ticket) Attempt() (*Ticket, func()) {
 			return
 		}
 		t.Record(api.WakeStateDropped, api.WakeReasonDefect, "", "")
-		reportWakeDefect(t.key, "missing disposition")
+		t.reportDefect(WakeStep{api.WakeStateDropped, api.WakeReasonDefect}, "missing disposition")
 	}
 }
 
-func reportWakeDefect(ticket, problem string) {
-	slog.Error("wake transition defect", "ticket", ticket, "problem", problem)
+func (t *Ticket) reportDefect(step WakeStep, problem string) {
+	s := t.session
+	s.defectsMu.Lock()
+	if len(s.defects) == 32 {
+		s.defects = slices.Delete(s.defects, 0, 1)
+	}
+	s.defects = append(s.defects, WakeDefect{Sequence: t.seq, Attempt: step, Problem: problem})
+	s.defectsMu.Unlock()
+	slog.Error("wake transition defect", "ticket", t.key, "problem", problem)
 	if testing.Testing() {
 		panic(problem)
 	}

@@ -390,9 +390,7 @@ func (l *Nudges) dropDeferredRunningWorkerWakes(sessionID, jobID string) {
 	if l == nil || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(jobID) == "" {
 		return
 	}
-	if l.sessionDeferredQueue(sessionID).removeRunningWorkerWakesForJob(jobID) {
-		loopLogNudge(sessionID, "", "", jobID, "", "drop:job_terminal")
-	}
+	l.sessionDeferredQueue(sessionID).removeRunningWorkerWakesForJob(jobID)
 }
 func (l *Nudges) deferNudge(ctx context.Context, sessionID string, d pendingLoopWake) {
 	if l == nil || strings.TrimSpace(sessionID) == "" {
