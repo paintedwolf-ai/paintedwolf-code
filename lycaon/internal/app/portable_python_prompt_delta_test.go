@@ -249,12 +249,14 @@ func rewriteCoordinatorSurfacesPython(t *testing.T, raw []byte, mode string) str
 		floor, hasFloor := surf["floor"].([]any)
 		loadable, _ := surf["loadable"].([]any)
 		var removedFromFloor bool
+		hasRequestTools := false
 		if hasFloor {
+			hasRequestTools = slices.ContainsFunc(floor, func(v any) bool { s, _ := v.(string); return s == "request_tools" })
 			floor, removedFromFloor = removeString(floor, "python")
 			surf["floor"] = floor
 		}
 		loadable, _ = removeString(loadable, "python")
-		if mode == "loadable" && removedFromFloor {
+		if mode == "loadable" && removedFromFloor && hasRequestTools {
 			if !slices.ContainsFunc(loadable, func(v any) bool { s, _ := v.(string); return s == "python" }) {
 				loadable = append(loadable, "python")
 			}
