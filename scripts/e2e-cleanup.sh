@@ -13,6 +13,9 @@ if [[ -n "${LYCAON_E2E_STATE_DIR:-}" ]]; then
     rm -rf "${LYCAON_E2E_STATE_DIR}"
   fi
 fi
+if [[ -n "${LYCAON_E2E_SOCKET_DIR:-}" && "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" ]]; then
+  rm -rf "${LYCAON_E2E_SOCKET_DIR}"
+fi
 
 e2e_docker_purge_orphan_projects "${ROOT}"
 

@@ -26,6 +26,7 @@ pull_e2e_images() {
   images="$(
     LYCAON_REPO_ROOT="${ROOT}" \
     LYCAON_E2E_STATE_DIR="${TMPDIR:-/tmp}" \
+    LYCAON_E2E_SOCKET_DIR="${TMPDIR:-/tmp}/e2e-s" \
     LYCAON_E2E_PROJECT_DIR="${ROOT}" \
     LYCAON_E2E_CONFIG_DIR="${TMPDIR:-/tmp}" \
       docker compose -f "${compose_file}" config --images
@@ -158,6 +159,10 @@ fi
 source "${ROOT}/scripts/artifact-paths.sh"
 mkdir -p "${PW_ARTIFACT_ROOT}/e2e-state"
 export LYCAON_E2E_STATE_DIR="$(mktemp -d "${PW_ARTIFACT_ROOT}/e2e-state/run.XXXXXX")"
+# Unix socket addresses are capped at 103 bytes; keep sockets in a short per-run
+# directory that the sidecar container bind-mounts at the identical resolved path.
+LYCAON_E2E_SOCKET_DIR="$(mktemp -d /tmp/pw-s.XXXXXX)"
+export LYCAON_E2E_SOCKET_DIR="$(cd "${LYCAON_E2E_SOCKET_DIR}" && pwd -P)"
 export PLAYWRIGHT_E2E=web
 # Match den:harness:test: browser tests can supply manual model completions.
 export LYCAON_LLM_MANUAL="${LYCAON_LLM_MANUAL:-1}"
@@ -188,6 +193,9 @@ cleanup() {
   fi
   if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${LYCAON_E2E_STATE_DIR:-}" ]]; then
     rm -rf "${LYCAON_E2E_STATE_DIR}"
+  fi
+  if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${LYCAON_E2E_SOCKET_DIR:-}" ]]; then
+    rm -rf "${LYCAON_E2E_SOCKET_DIR}"
   fi
   if [[ "${LYCAON_E2E_KEEP_ARTIFACTS:-0}" != "1" ]]; then
     rm -rf "${LYCAON_E2E_OUTPUT_DIR:-${ROOT}/lycaon-den/test-results}"
@@ -234,7 +242,7 @@ curl --fail --show-error --silent -X POST "${LYCAON_E2E_API_URL}/v1/projects" \
   --data-binary "${project_payload}" >/dev/null
 export PLAYWRIGHT_REUSE_SERVER=1
 export LYCAON_E2E_DOCKER_STACK=1
-echo "e2e-den (web/docker): project=${LYCAON_E2E_DOCKER_PROJECT} base=${LYCAON_E2E_BASE_URL} state=${LYCAON_E2E_STATE_DIR}" >&2
+echo "e2e-den (web/docker): project=${LYCAON_E2E_DOCKER_PROJECT} base=${LYCAON_E2E_BASE_URL} state=${LYCAON_E2E_STATE_DIR} sockets=${LYCAON_E2E_SOCKET_DIR}" >&2
 
 export PLAYWRIGHT_E2E=web
 # The JSON report measures each spec for the nightly durations that deal later runs.

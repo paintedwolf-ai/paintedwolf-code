@@ -8,6 +8,8 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${DIR}/e2e/env.sh"
 
 export LYCAON_E2E_STATE_DIR="$(mktemp -d -t lycaon-e2e-state.XXXXXX)"
+LYCAON_E2E_SOCKET_DIR="$(mktemp -d /tmp/pw-s.XXXXXX)"
+export LYCAON_E2E_SOCKET_DIR="$(cd "${LYCAON_E2E_SOCKET_DIR}" && pwd -P)"
 export PLAYWRIGHT_E2E=desktop
 
 FIXTURE_SRC="${ROOT}/lycaon/test/fixtures/e2e/minimal-go-project"
@@ -20,6 +22,9 @@ cleanup() {
   bash "${DIR}/e2e-sidecar-stop.sh" || true
   if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${LYCAON_E2E_STATE_DIR:-}" ]]; then
     rm -rf "${LYCAON_E2E_STATE_DIR}"
+  fi
+  if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${LYCAON_E2E_SOCKET_DIR:-}" ]]; then
+    rm -rf "${LYCAON_E2E_SOCKET_DIR}"
   fi
   # CI retains failure traces for the upload-artifact step.
   if [[ "${LYCAON_E2E_KEEP_ARTIFACTS:-0}" != "1" ]]; then
