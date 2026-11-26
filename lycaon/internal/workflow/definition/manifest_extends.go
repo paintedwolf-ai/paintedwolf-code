@@ -242,6 +242,9 @@ func cloneManifestControls(in ManifestControls) ManifestControls {
 }
 
 func clonePhaseDefs(in []PhaseDef) []PhaseDef {
+	if in == nil {
+		return nil
+	}
 	out := make([]PhaseDef, len(in))
 	for i := range in {
 		out[i] = in[i]
@@ -293,7 +296,7 @@ func clonePhaseDefs(in []PhaseDef) []PhaseDef {
 }
 
 func cloneWorkflowParameters(in map[string]WorkflowParameter) map[string]WorkflowParameter {
-	if len(in) == 0 {
+	if in == nil {
 		return nil
 	}
 	out := make(map[string]WorkflowParameter, len(in))
@@ -304,7 +307,7 @@ func cloneWorkflowParameters(in map[string]WorkflowParameter) map[string]Workflo
 }
 
 func cloneManifestPresets(in []ManifestPreset) []ManifestPreset {
-	if len(in) == 0 {
+	if in == nil {
 		return nil
 	}
 	out := make([]ManifestPreset, len(in))
@@ -316,7 +319,7 @@ func cloneManifestPresets(in []ManifestPreset) []ManifestPreset {
 }
 
 func cloneAgentToolAccess(in map[string]sandbox.ToolAccess) map[string]sandbox.ToolAccess {
-	if len(in) == 0 {
+	if in == nil {
 		return nil
 	}
 	out := make(map[string]sandbox.ToolAccess, len(in))

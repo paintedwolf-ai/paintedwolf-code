@@ -62,7 +62,7 @@ func claimStatusesYAML(in map[string]ClaimClass) map[string]string {
 }
 
 func cloneClaimStatuses(in map[string]ClaimClass) map[string]ClaimClass {
-	if len(in) == 0 {
+	if in == nil {
 		return nil
 	}
 	out := make(map[string]ClaimClass, len(in))

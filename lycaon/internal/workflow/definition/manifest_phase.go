@@ -2,6 +2,7 @@ package definition
 
 import (
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -458,7 +459,7 @@ func (p PhaseDef) TransitionByID(id string) (PhaseTransitionDef, bool) {
 }
 
 func copyStringMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
+	if in == nil {
 		return nil
 	}
 	out := make(map[string]string, len(in))
@@ -489,16 +490,17 @@ func mergeOnEnter(parent, child PhaseOnEnter) PhaseOnEnter {
 }
 
 func copyObligationDefs(in []ObligationDef) []ObligationDef {
-	if len(in) == 0 {
+	if in == nil {
 		return nil
 	}
 	out := make([]ObligationDef, len(in))
 	for i, ob := range in {
 		out[i] = ObligationDef{Kind: ob.Kind}
-		if len(ob.Params) > 0 {
+		if ob.Params != nil {
 			params := make(map[string]any, len(ob.Params))
 			for k, v := range ob.Params {
-				params[k] = cloneObligationParamValue(v)
+				cloned, _ := cloneObligationParamValue(v)
+				params[k] = cloned
 			}
 			out[i].Params = params
 		}
@@ -506,30 +508,84 @@ func copyObligationDefs(in []ObligationDef) []ObligationDef {
 	return out
 }
 
-func cloneObligationParamValue(v any) any {
+func canCacheManifest(m Manifest) bool {
+	for _, phase := range m.PhaseDefs {
+		for _, ob := range phase.OnEnter.Obligations {
+			for _, v := range ob.Params {
+				if _, ok := cloneObligationParamValue(v); !ok {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+func cloneObligationParamValue(v any) (any, bool) {
 	switch typed := v.(type) {
+	case nil, bool, string, int, int64, uint64, float64, time.Time:
+		return v, true
 	case map[string]any:
+		if typed == nil {
+			return typed, true
+		}
 		out := make(map[string]any, len(typed))
 		for k, val := range typed {
-			out[k] = cloneObligationParamValue(val)
+			cloned, ok := cloneObligationParamValue(val)
+			if !ok {
+				return v, false
+			}
+			out[k] = cloned
 		}
-		return out
+		return out, true
+	case map[any]any:
+		if typed == nil {
+			return typed, true
+		}
+		out := make(map[any]any, len(typed))
+		for k, val := range typed {
+			clonedKey, ok := cloneObligationParamValue(k)
+			if !ok {
+				return v, false
+			}
+			clonedVal, ok := cloneObligationParamValue(val)
+			if !ok {
+				return v, false
+			}
+			out[clonedKey] = clonedVal
+		}
+		return out, true
 	case map[string]string:
+		if typed == nil {
+			return typed, true
+		}
 		out := make(map[string]string, len(typed))
 		for k, val := range typed {
 			out[k] = val
 		}
-		return out
+		return out, true
 	case []any:
+		if typed == nil {
+			return typed, true
+		}
 		out := make([]any, len(typed))
 		for i, val := range typed {
-			out[i] = cloneObligationParamValue(val)
+			cloned, ok := cloneObligationParamValue(val)
+			if !ok {
+				return v, false
+			}
+			out[i] = cloned
 		}
-		return out
+		return out, true
 	case []string:
-		return append([]string(nil), typed...)
+		if typed == nil {
+			return typed, true
+		}
+		out := make([]string, len(typed))
+		copy(out, typed)
+		return out, true
 	default:
-		return v
+		return v, false
 	}
 }
 

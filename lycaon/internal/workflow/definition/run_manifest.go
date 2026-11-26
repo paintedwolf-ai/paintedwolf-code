@@ -40,6 +40,9 @@ func DecodeRunManifest(raw string) (Manifest, error) {
 	if snapshot.Manifest.ID == "" || snapshot.Manifest.Version == "" {
 		return Manifest{}, fmt.Errorf("missing workflow snapshot identity")
 	}
+	if !canCacheManifest(snapshot.Manifest) {
+		return snapshot.Manifest, nil
+	}
 	runManifestCache.Store(key, snapshot.Manifest)
 	return cloneManifest(snapshot.Manifest), nil
 }
