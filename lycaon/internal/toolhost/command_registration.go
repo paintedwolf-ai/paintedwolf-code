@@ -1,12 +1,15 @@
 package toolhost
 
 import (
+	"context"
+	"errors"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/pythoncatalog"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -53,6 +56,14 @@ func registerCommandTools(
 	*commandOutputTool = &command.CommandOutputTool{}
 	*commandStopTool = &command.CommandStopTool{}
 	if err := reg.Register("command", (*commandTool).Run); err != nil {
+		return err
+	}
+	if err := reg.Register("python", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+		if _, err := pythoncatalog.ValidateDirectToolArgs(args); err != nil {
+			return "", err
+		}
+		return "", errors.New("portable python runtime is not configured")
+	}); err != nil {
 		return err
 	}
 	if err := reg.Register("verify", (*verifyTool).Run); err != nil {

@@ -21,6 +21,7 @@ var workerBranchTools = []string{
 	"jq_edit",
 	"mkdir",
 	"move",
+	"python",
 	"replace_lines",
 	"restore_version",
 	"terminal_open",

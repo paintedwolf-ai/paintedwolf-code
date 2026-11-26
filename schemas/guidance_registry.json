@@ -2005,6 +2005,12 @@
       "emit": "rule:no_folder",
       "summary": "File and shell tools need a folder on this project — none is attached yet."
     },
+    "PYTHON_TOOL_REQUIRED": {
+      "branch_instruction": "Preserve earlier completed operations and switch this Python step to the direct Python tool, or use external -- python3 when project or system Python is required.",
+      "category": "recoverable",
+      "emit": "guard:python_tool_routing",
+      "summary": "{% if paintedwolf.command %}Bare {{ paintedwolf.command }} launch{% else %}Bare Python interpreter launch{% endif %}{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} was stopped before interpreter startup because the direct Python tool is available on this surface."
+    },
     "READ_ARGS_CONFLICT": {
       "branch_instruction": "Branch on Code; fix args and retry once",
       "category": "recoverable",
