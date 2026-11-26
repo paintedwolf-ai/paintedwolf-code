@@ -827,7 +827,14 @@ func ProcessEnvironment(base []string, c Confinement) []string {
 // DARWIN_USER_TEMP_DIR into a confined writable root so cold developer shims
 // do not attempt shared-temp cache writes under Seatbelt.
 func withDarwinXcrunCacheEnv(env []string, c Confinement) []string {
-	if runtime.GOOS != "darwin" || c.HostExecution {
+	if runtime.GOOS != "darwin" {
+		return env
+	}
+	return applyDarwinXcrunCacheEnv(env, c, platformUserCache())
+}
+
+func applyDarwinXcrunCacheEnv(env []string, c Confinement, userCache string) []string {
+	if c.HostExecution {
 		return env
 	}
 	for _, entry := range env {
@@ -835,7 +842,7 @@ func withDarwinXcrunCacheEnv(env []string, c Confinement) []string {
 			return env
 		}
 	}
-	dbPath := darwinXcrunDBPath(c)
+	dbPath := darwinXcrunDBPath(c, userCache)
 	if dbPath == "" {
 		return env
 	}
@@ -854,11 +861,11 @@ func canonicalAbsRoot(raw string) string {
 	return resolved
 }
 
-func darwinXcrunDBPath(c Confinement) string {
+func darwinXcrunDBPath(c Confinement, userCache string) string {
 	if scratch := canonicalAbsRoot(c.Workspaces.SessionScratch); scratch != "" {
 		return filepath.Join(scratch, "xcrun_db")
 	}
-	if cache := canonicalAbsRoot(platformUserCache()); cache != "" {
+	if cache := canonicalAbsRoot(userCache); cache != "" {
 		return filepath.Join(cache, "paintedwolf-xcrun_db")
 	}
 	return ""
