@@ -621,6 +621,11 @@ func evalSkillRenderedReach(
 				return false
 			}
 		}
+		if !offered[toolreach.ProgramTool] && slices.Contains(requestable, toolreach.ProgramTool) && !slices.Contains(anyOf, toolreach.ProgramTool) {
+			if len(UnloadedCommandSpans(c, checkText)) > 0 {
+				return false
+			}
+		}
 	}
 	for _, name := range UnreachableNames(c, checkText, reachable) {
 		if !slices.Contains(anyOf, name) {

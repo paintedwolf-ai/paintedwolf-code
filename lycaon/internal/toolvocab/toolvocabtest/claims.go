@@ -10,8 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolvocab"
 )
 
-var chainSplitRe = regexp.MustCompile(`\s*(?:&&|\|\||[|;])\s*`)
-
 // schemaPathSpanRe matches a dotted argument path, `a.b` or `a[].b`.
 var schemaPathSpanRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(?:\[\])?(?:\.[a-z][a-z0-9_]*(?:\[\])?)+$`)
 
@@ -199,18 +197,19 @@ func (g claimGrammar) checkSchemaPath(bs BacktickSpan, report func(string, int, 
 // grammar: each chained segment led by a declared command must be admitted on
 // the reach the reader holds at that point in the block.
 func (g claimGrammar) checkCommandSpan(bs BacktickSpan, calls []toolvocab.Call, report func(string, int, string)) {
-	raw := strings.TrimSpace(bs.Span)
-	if g.vocab == nil || strings.Contains(raw, "(") || !strings.Contains(raw, " ") {
+	if g.vocab == nil {
 		return
 	}
+	segs := toolvocab.CommandSegmentsInSpan(bs.Span)
+	if len(segs) == 0 {
+		return
+	}
+	raw := strings.TrimSpace(bs.Span)
 	reach, mut := g.curReach, g.curMut
 	if !g.held[toolreach.ProgramTool] && g.requestable[toolreach.ProgramTool] && toolvocab.LoadedBefore(g.cat, calls, toolreach.ProgramTool, bs.Start) {
 		reach, mut = g.postReach, g.postMut
 	}
-	for _, seg := range chainSplitRe.Split(raw, -1) {
-		if first := firstCommandWord(seg); first == "" || !g.vocab.commands[first] {
-			continue
-		}
+	for _, seg := range segs {
 		if ok, reason := checkSingleCommandSegment(reach, mut, seg); !ok {
 			report(raw, bs.Start, reason)
 		}

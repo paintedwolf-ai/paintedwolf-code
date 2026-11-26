@@ -13,12 +13,14 @@ import (
 var _ = hoststate.AddCustomizationCases(deferredCommandWorkerCases()...)
 
 func deferredCommandWorkerCases() []hoststate.CustomizationCase {
+	withScratch := overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)
+	withScratch.TempState = hoststate.TempScratchOnly
 	return []hoststate.CustomizationCase{
 		{
 			ID: "own-implement-deferred-command-with-verify", Packs: []string{deferredCommandFixture("packs", "implement-deferred-command-with-verify")},
 			Own:          map[string]string{"tools/profiles/implement": "fixture/implement-deferred-command-with-verify"},
 			WorkerAgents: []string{"implementer"},
-			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
+			Workers:      []hoststate.WorkerSeed{withScratch},
 		},
 		{
 			ID: "own-implement-deferred-command", Packs: []string{deferredCommandFixture("packs", "implement-deferred-command")},

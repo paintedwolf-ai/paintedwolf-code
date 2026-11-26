@@ -521,3 +521,64 @@ func skillOffered(t *testing.T, sk skills.Skill, held map[string]bool) bool {
 	testutil.FailErr(t, "reader holding tools", err)
 	return toolvocab.SkillToolsOfferedForReader(sk, reader)
 }
+
+func TestSkillToolsOfferedCommandSpansWhenCommandDeferred(t *testing.T) {
+	allEffects := toolcontract.AllCommandEffects()
+	profiles := []sandbox.ToolProfile{
+		{
+			ID:             "worker",
+			Tools:          map[string]bool{"request_tools": true, "command": true},
+			StickyTools:    map[string]bool{"request_tools": true},
+			CommandEffects: allEffects,
+		},
+	}
+	deferredReader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Offered:   []string{"request_tools"},
+		Declared:  true,
+	})
+	testutil.FailErr(t, "deferred command reader", err)
+	heldReader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	}, prompts.TurnProjection{
+		ProfileID: "worker",
+		Offered:   []string{"request_tools", "command"},
+		Declared:  true,
+	})
+	testutil.FailErr(t, "held command reader", err)
+
+	unsequenced := skills.Skill{
+		Name: "third-party-unsequenced-cmd",
+		Body: "Check the repository state with `git status` before editing.",
+	}
+	if toolvocab.SkillToolsOfferedForReader(unsequenced, deferredReader) {
+		t.Fatal("skill with unloaded inline command span was admitted when command is deferred")
+	}
+	if !toolvocab.SkillToolsOfferedForReader(unsequenced, heldReader) {
+		t.Fatal("skill with inline command span was rejected when command is held")
+	}
+
+	sequenced := skills.Skill{
+		Name: "third-party-sequenced-cmd",
+		Body: "Call `request_tools(need=\"command\")` first, then run `git status` before editing.",
+	}
+	if !toolvocab.SkillToolsOfferedForReader(sequenced, deferredReader) {
+		t.Fatal("skill loading command before inline command span was rejected when command is deferred")
+	}
+
+	crossBlock := skills.Skill{
+		Name: "third-party-cross-block-cmd",
+		Body: "Load `request_tools(need=\"command\")` upfront.\n\nThen run `git status` to inspect the tree.",
+	}
+	if toolvocab.SkillToolsOfferedForReader(crossBlock, deferredReader) {
+		t.Fatal("skill with request_tools in a different block than its command span was admitted when command is deferred")
+	}
+}
