@@ -1,6 +1,9 @@
 package actionoutcome
 
-import "sync"
+import (
+	"github.com/lycaon/lycaon/pkg/api"
+	"sync"
+)
 
 type Sessions struct {
 	mu   sync.Mutex
@@ -8,7 +11,8 @@ type Sessions struct {
 }
 
 type Session struct {
-	Turns *History[TurnRecord]
+	Actions *History[api.ActionContinuation]
+	Turns   *History[TurnRecord]
 }
 
 func (s *Sessions) For(sessionID string) *Session {
@@ -20,7 +24,7 @@ func (s *Sessions) For(sessionID string) *Session {
 	if session := s.byID[sessionID]; session != nil {
 		return session
 	}
-	session := &Session{Turns: NewHistory[TurnRecord](32)}
+	session := &Session{Actions: NewHistory[api.ActionContinuation](8), Turns: NewHistory[TurnRecord](32)}
 	s.byID[sessionID] = session
 	return session
 }
