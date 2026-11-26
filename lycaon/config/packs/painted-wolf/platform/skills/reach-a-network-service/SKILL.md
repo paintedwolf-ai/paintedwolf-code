@@ -18,8 +18,8 @@ Choose the route for the protocol and declare it on the call that uses it.
 | Git over SSH | Host SOCKS connector (`LYCAON_SOCKS_PROXY` via Git) | Nothing — already wired under mediation |
 | UDP — NTP, QUIC, custom DNS query | Direct IP only | Request `capability_request.direct_ip` |
 | Local daemon by socket path | Exact socket route | Request `capability_request.socket_paths` |
-| **Run a local server** — dev server, HMR, test harness | Local listener (egress mediated) | `capability_request.local_listen` with `ports` on `terminal_open`{% if profile_command_external_exec and profile_command_mutation %} or `command`{% endif %}; `render_view` / `capture_page` preview static pages without a server |
-| Connect to a local service | Loopback connect | Request `capability_request.loopback_connect`, with exact `ports` when known |
+| **Run a local server** — dev server, HMR, test harness | Local listener (egress mediated) | {% if runner_local_listen_tools %}`capability_request.local_listen` with `ports` on `{{ runner_local_listen_tools|join:"` or `" }}`; {% endif %}`render_view` / `capture_page` preview static pages without a server |
+| Connect to a local service | Loopback connect | {% if runner_loopback_connect_tools %}Request `capability_request.loopback_connect` on `{{ runner_loopback_connect_tools|join:"` or `" }}`, with exact `ports` when known{% else %}No offered tool accepts a loopback connect request{% endif %} |
 | Bind and call a local service | Both local fields | Request both, narrowed to its ports |
 
 ## Requesting access

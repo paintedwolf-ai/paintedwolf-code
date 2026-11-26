@@ -8,9 +8,9 @@ Application errors are clues, not host decisions. Read {% if profile_has_command
 |---------------------------|-----------|
 | Client resolves locally under mediation | Check proxy support and configuration; the broker resolves proxied hostnames. Use direct IP only when the required client cannot use the mediated route. |
 | UDP or a confirmed raw-network requirement | {% if profile_command_external_exec and profile_command_mutation %}`command`{% else %}`verify`{% endif %} with `capability_request.direct_ip` and declared destinations. SOCKS carries TCP only. |
-| TCP listener | Declare `capability_request.local_listen` with its ports. An `EPERM` string alone does not prove this boundary. |
+| TCP listener | {% if runner_local_listen_tools %}Declare `capability_request.local_listen` with its ports.{% else %}No offered tool accepts a local listener request.{% endif %} An `EPERM` string alone does not prove this boundary. |
 | Unix socket path | Request that exact `capability_request.socket_paths` route or the matching host resource. |
-| Loopback connection | Declare `capability_request.loopback_connect` for its ports; listening is separate. |
+| Loopback connection | {% if runner_loopback_connect_tools %}Declare `capability_request.loopback_connect` for its ports{% else %}No offered tool accepts a loopback connect request{% endif %}; listening is separate. |
 | Proxy-ignoring TCP client | Try its supported SOCKS route with `socks_proxy: true`; direct IP is the fallback when it cannot use mediation. |
 | Client reports missing SOCKS support | Inspect injected proxy fields and client support. HTTP clients should use the HTTP proxy; adding SOCKS env cannot install client support. |
 | Host reports mediation unavailable | Report the broker failure and the bounded alternative; do not infer this from client text. |
@@ -27,6 +27,6 @@ Application errors are clues, not host decisions. Read {% if profile_has_command
 - **Do not retry the same call unchanged.** A boundary refusal is deterministic; the second attempt fails identically.
 - **Do not request direct IP for TCP that mediation already carries** (HTTP via default env, other TCP via `socks_proxy: true`).
 - {% if can_command_external_selector and profile_command_network_egress %}**Do not run an installed shell HTTP client through `external` for an exchange native `curl` in `command` represents.** {% endif %}Readiness is `wait` with `http_ready` / `port_ready`, not a request loop.
-- **Do not request direct IP just to run a server.** `local_listen` covers the bind while egress stays mediated — a strictly smaller request than unobserved direct networking.
-- **Do not use direct IP for loopback.** `loopback_connect` leaves external egress unchanged.
+- **Do not request direct IP just to run a server.**{% if runner_local_listen_tools %} `local_listen` covers the bind while egress stays mediated — a strictly smaller request than unobserved direct networking.{% endif %}
+- **Do not use direct IP for loopback.**{% if runner_loopback_connect_tools %} `loopback_connect` leaves external egress unchanged.{% endif %}
 - **Do not describe a declared destination as restricting *where* you connected.** It bounds protocol and port. The host cannot restrict the peer and does not claim to.
