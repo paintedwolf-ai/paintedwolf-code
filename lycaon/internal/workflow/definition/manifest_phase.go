@@ -527,7 +527,7 @@ func cloneObligationParamValue(v any) (any, bool) {
 		return v, true
 	case map[string]any:
 		if typed == nil {
-			return typed, true
+			return v, true
 		}
 		out := make(map[string]any, len(typed))
 		for k, val := range typed {
@@ -540,7 +540,7 @@ func cloneObligationParamValue(v any) (any, bool) {
 		return out, true
 	case map[any]any:
 		if typed == nil {
-			return typed, true
+			return v, true
 		}
 		out := make(map[any]any, len(typed))
 		for k, val := range typed {
@@ -557,7 +557,7 @@ func cloneObligationParamValue(v any) (any, bool) {
 		return out, true
 	case map[string]string:
 		if typed == nil {
-			return typed, true
+			return v, true
 		}
 		out := make(map[string]string, len(typed))
 		for k, val := range typed {
@@ -566,7 +566,7 @@ func cloneObligationParamValue(v any) (any, bool) {
 		return out, true
 	case []any:
 		if typed == nil {
-			return typed, true
+			return v, true
 		}
 		out := make([]any, len(typed))
 		for i, val := range typed {
@@ -579,7 +579,7 @@ func cloneObligationParamValue(v any) (any, bool) {
 		return out, true
 	case []string:
 		if typed == nil {
-			return typed, true
+			return v, true
 		}
 		out := make([]string, len(typed))
 		copy(out, typed)
