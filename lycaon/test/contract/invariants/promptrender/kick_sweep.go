@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -29,6 +30,9 @@ type kickSweep struct {
 	cache     *hoststate.RenderCache
 	report    func(string)
 	rendered  int
+	// Temporary measurement.
+	varsDur, renderDur, claimDur time.Duration
+	renderMisses, claimRuns      int
 }
 
 func newKickSweep(s *Stock, cache *hoststate.RenderCache, report func(string)) *kickSweep {
@@ -55,14 +59,19 @@ func checkClaimsCached(cache *hoststate.RenderCache, renderKey, authKey string, 
 }
 
 func (k *kickSweep) render(ctx context.Context, keyPrefix, kick string, reader prompts.Reader, data map[string]any) (string, string, error) {
+	t0 := time.Now()
 	fullVars, err := prompts.Vars(reader, stripReaderFactKeys(data))
 	if err != nil {
 		return "", "", err
 	}
 	rKey := renderCacheKeyForVars(keyPrefix+kick+":"+k.s.Site, k.s.Catalog.Revision, nil, fullVars)
+	k.varsDur += time.Since(t0)
+	t1 := time.Now()
 	text, _, err := k.cache.RenderOrReuse(rKey, func() (string, error) {
+		k.renderMisses++
 		return k.engine.RenderKick(ctx, reader, kick, data)
 	})
+	k.renderDur += time.Since(t1)
 	if err == nil {
 		k.rendered++
 	}
@@ -197,7 +206,10 @@ func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase ma
 		return err
 	}
 	label := fmt.Sprintf("kick %s on %s (%s)", kick, cr.state.TurnProfile.SurfaceID, cr.state.ID)
+	tc := time.Now()
+	defer func() { k.claimDur += time.Since(tc) }()
 	checkClaimsCached(k.cache, rKey, cr.auth.Digest+"|"+string(subj.Kind), k.report, func() []string {
+		k.claimRuns++
 		target := cr.auth
 		target.Reader = reader
 		if subj.Kind == toolvocabtest.SubjectKindSessionNextTurn {
@@ -265,7 +277,10 @@ func (k *kickSweep) workerKick(ctx context.Context, kick string, envBase map[str
 		return err
 	}
 	label := fmt.Sprintf("kick %s for %s (%s)", kick, wr.ws.ToolProfile, wr.ws.ID)
+	tc := time.Now()
+	defer func() { k.claimDur += time.Since(tc) }()
 	checkClaimsCached(k.cache, rKey, wr.auth.Digest+"|"+string(subj.Kind), k.report, func() []string {
+		k.claimRuns++
 		target := wr.auth
 		target.Reader = reader
 		if closeout {

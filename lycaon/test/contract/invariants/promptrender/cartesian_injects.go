@@ -128,6 +128,8 @@ func runAllKicksAndNudges(
 		return err
 	}
 	sum.KickAndNudgeCount += sweep.rendered
+	sum.PhaseSeconds = append(sum.PhaseSeconds, fmt.Sprintf("kick_vars=%.1f kick_render=%.1f kick_claims=%.1f kick_calls=%d kick_render_misses=%d kick_claim_runs=%d",
+		sweep.varsDur.Seconds(), sweep.renderDur.Seconds(), sweep.claimDur.Seconds(), sweep.rendered, sweep.renderMisses, sweep.claimRuns))
 	return nil
 }
 

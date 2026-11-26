@@ -226,6 +226,8 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 		return nil, err
 	}
 	lap("coordinator_standing")
+	sum.PhaseSeconds = append(sum.PhaseSeconds, fmt.Sprintf("standing_vars=%.1f standing_render=%.1f standing_claims=%.1f standing_misses=%d standing_claim_runs=%d prompts=%d",
+		standingTiming.vars.Seconds(), standingTiming.render.Seconds(), standingTiming.claims.Seconds(), standingTiming.misses, standingTiming.claimRuns, sum.CoordinatorPromptCount))
 	if err := runWorkerPersonaAndInjectMatrix(ctx, s, cache, sum); err != nil {
 		return nil, err
 	}

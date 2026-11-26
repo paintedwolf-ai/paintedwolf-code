@@ -189,14 +189,14 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		}
 	}
 
-	processState := func(label, profileID string, sessionMode api.SessionMode, posture api.SessionPosture, auth hoststate.TurnAuthority, effectiveSkills []skills.Skill) error {
+	processState := func(label, profileID string, profiles []sandbox.ToolProfile, sessionMode api.SessionMode, posture api.SessionPosture, auth hoststate.TurnAuthority, effectiveSkills []skills.Skill) error {
 		fp := auth.Digest + "|" + auth.Reader.Fingerprint() + "|" + string(sessionMode) + "|" + string(posture) + "|" + profileID + "|" + skillsKey(effectiveSkills)
 		if seenReaderFP[fp] {
 			return nil
 		}
 		seenReaderFP[fp] = true
 
-		hasProcExec := profileHasProcessExecSurface(stock.Profiles, profileID, sessionMode, posture)
+		hasProcExec := profileHasProcessExecSurface(profiles, profileID, sessionMode, posture)
 		vars, vErr := prompts.SkillVars(auth.Reader)
 		if vErr != nil {
 			return vErr
@@ -287,7 +287,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		if err != nil {
 			return audit, err
 		}
-		if err := processState(st.ID, prompts.CoordinatorProfileID, st.SessionMode, st.Posture, cp.auth, overlaySkills); err != nil {
+		if err := processState(st.ID, prompts.CoordinatorProfileID, overlayProfiles(stock, st.Overlay), st.SessionMode, st.Posture, cp.auth, overlaySkills); err != nil {
 			return audit, err
 		}
 	}
@@ -301,7 +301,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		if err != nil {
 			return audit, err
 		}
-		if err := processState(wp.ws.ID, wp.ws.ToolProfile, wp.ws.ParentSessionMode, wp.ws.Posture, wp.auth, overlaySkills); err != nil {
+		if err := processState(wp.ws.ID, wp.ws.ToolProfile, overlayProfiles(stock, wp.ws.Overlay), wp.ws.ParentSessionMode, wp.ws.Posture, wp.auth, overlaySkills); err != nil {
 			return audit, err
 		}
 	}
@@ -311,7 +311,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		return audit, err
 	}
 	for _, sb := range boundaryAuths {
-		if err := processState(sb.label, sb.profileID, sb.mode, sb.posture, sb.auth, sb.onlySkills); err != nil {
+		if err := processState(sb.label, sb.profileID, stock.Profiles, sb.mode, sb.posture, sb.auth, sb.onlySkills); err != nil {
 			return audit, err
 		}
 	}
@@ -320,6 +320,14 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		return audit, err
 	}
 	return audit, nil
+}
+
+// overlayProfiles is the tool profiles the recipient's catalog loads.
+func overlayProfiles(stock *Stock, overlay hoststate.PackOverlay) []sandbox.ToolProfile {
+	if overlay.Catalog == nil {
+		return stock.Profiles
+	}
+	return overlay.Profiles
 }
 
 var compiledSkillTplCache sync.Map
