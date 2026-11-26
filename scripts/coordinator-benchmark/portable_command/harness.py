@@ -1,9 +1,11 @@
 """Zero-model real-application runner and second-process replay for Portable Command cases."""
 import contextlib
+import hashlib
 import json
 import pathlib
 import sqlite3
 import threading
+import urllib.parse
 import urllib.request
 import uuid
 import smoke
@@ -11,9 +13,9 @@ import smoke_workers
 from bootstrap_policy import open_request
 from capture_storage import checkpoint_closed_store
 from portable_command.artifacts import project_hashes
-from portable_command.contracts import ROOT, load_suite, materialize
+from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
-from portable_command.observe import build_observation, source_identity
+from portable_command.observe import build_observation, file_sha256, source_identity
 from progress import save
 
 
@@ -45,13 +47,13 @@ class SSECollector:
                             sink.write(line[5:].strip() + '\n')
                             sink.flush()
                             self.count += 1
-        except OSError:
+        except (OSError, AttributeError, ValueError):
             pass
 
     def close(self):
         self._stop.set()
         if self._response is not None:
-            with contextlib.suppress(OSError):
+            with contextlib.suppress(OSError, AttributeError):
                 self._response.close()
         self._thread.join(timeout=3)
 
@@ -103,16 +105,27 @@ def collect_raw_api(application, session_id, raw_dir, program_ids):
     save(raw_dir / 'invocations.json', application.request(f'/v1/sessions/{session_id}/invocations'))
     save(raw_dir / 'messages.json', application.request(f'/v1/sessions/{session_id}/messages'))
     prog_receipts = {}
+    receipt_docs = {}
     for pid in program_ids:
         prog_receipts[pid] = application.request(f'/v1/sessions/{session_id}/program-receipts/{pid}?limit=50', missing=True)
+        q = urllib.parse.urlencode({'scopes': pid, 'offset': 0, 'limit': 64})
+        receipt_docs[pid] = application.request(f'/v1/sessions/{session_id}/program-receipt-document?{q}', missing=True)
     save(raw_dir / 'program-receipts.json', prog_receipts)
+    save(raw_dir / 'receipt-documents.json', receipt_docs)
+
+
+def case_digest(case):
+    return hashlib.sha256(json.dumps(case, sort_keys=True).encode('utf-8')).hexdigest()
 
 
 def sanitized_fixture(case, baseline_hashes):
-    """Build a sanitized replay fixture free of session IDs, tokens, and host paths."""
+    """Build a pinned, sanitized replay fixture free of session IDs, tokens, and host paths."""
     return {
+        'schema': 'portable-command-replay-v1',
         'version': 1,
         'case_id': case['id'],
+        'suite_sha256': file_sha256(DIRECTORY / 'suite.json'),
+        'case_sha256': case_digest(case),
         'profile': case['profile'],
         'qualification_cases': list(case['qualification_cases']),
         'setup': case['setup'],
@@ -133,19 +146,31 @@ def export_bundle(export_dir, case, observation, grade, audit_bundle, baseline_h
     save(export_dir / 'audit.json', audit_bundle)
     raw_out = export_dir / 'raw'
     raw_out.mkdir(exist_ok=True)
-    for name in ('invocations.json', 'messages.json', 'program-receipts.json', 'events.jsonl'):
+    for name in ('invocations.json', 'messages.json', 'program-receipts.json', 'receipt-documents.json', 'events.jsonl', 'prelude.json'):
         src = pathlib.Path(raw_dir) / name
         if src.is_file():
             (raw_out / name).write_bytes(src.read_bytes())
 
 
 def resolve_case(case_or_path):
-    candidate = pathlib.Path(case_or_path)
-    if candidate.is_file():
-        data = json.loads(candidate.read_text())
-        return {**data, 'id': data['case_id']}
+    """Resolve a frozen case ID or validate a sanitized replay bundle against the pinned catalog."""
     suite = load_suite()
     cases = {c['id']: c for c in suite['cases']}
+    candidate = pathlib.Path(case_or_path)
+    if candidate.is_file():
+        bundle = json.loads(candidate.read_text())
+        if bundle.get('schema') != 'portable-command-replay-v1' or bundle.get('version') != 1:
+            raise ValueError('unsupported replay bundle schema/version')
+        cid = bundle.get('case_id')
+        if cid not in cases:
+            raise ValueError('replay bundle references unknown case: ' + str(cid))
+        pinned = cases[cid]
+        if bundle.get('suite_sha256') != file_sha256(DIRECTORY / 'suite.json') or bundle.get('case_sha256') != case_digest(pinned):
+            raise ValueError('replay bundle identity does not match pinned catalog')
+        for field in ('profile', 'setup', 'turns', 'expected', 'allowed_partial', 'required_evidence'):
+            if bundle.get(field) != pinned.get(field):
+                raise ValueError('replay bundle modified pinned field: ' + field)
+        return {**pinned, '_expected_baseline_hashes': bundle.get('baseline_hashes')}
     if case_or_path not in cases:
         raise ValueError('unknown portable-command case: ' + str(case_or_path))
     return cases[case_or_path]
@@ -160,6 +185,9 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
     raw_dir.mkdir(parents=True, exist_ok=True)
 
     baseline_hashes = materialize(case, project_dir)
+    expected_baseline = case.get('_expected_baseline_hashes')
+    if expected_baseline is not None and expected_baseline != baseline_hashes:
+        raise ValueError('replay bundle baseline_hashes do not match materialized fixture')
     revision_aliases = {alias: baseline_hashes.get(path) for path, alias in case['setup'].get('revisions', {}).items()}
     identity = source_identity(ROOT, profile=case['profile'])
     save(out_dir / 'attempt.json', {'status': 'running', 'case_id': case['id'], 'identity': identity, 'revision_aliases': revision_aliases})
@@ -173,7 +201,7 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
         application.ready()
         sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl')
         sse.start()
-        session_id, project_id = create_isolated_session(application, project_dir, case)
+        session_id, _ = create_isolated_session(application, project_dir, case)
         application.request(f'/v1/sessions/{session_id}/prompts', {
             'operation_id': str(uuid.uuid4()),
             'text': f"Execute portable-command fixture {case['id']}.",
@@ -205,25 +233,29 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
             ).fetchall()]
         collect_raw_api(application, session_id, raw_dir, pids)
     except Exception as exc:
-        save(out_dir / 'attempt.json', {'status': 'unmeasured', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity})
+        save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'execution', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity})
         raise
     finally:
         if sse is not None:
             sse.close()
         application.close(cleanup=False)
 
-    checkpoint_closed_store(app_dir / 'store.db', application.process)
-    observation, audit_bundle = build_observation(
-        case,
-        session_id=session_id,
-        identity=identity,
-        project_dir=project_dir,
-        db_path=app_dir / 'store.db',
-        sidecar_log=app_dir / 'sidecar.log',
-        turn_records=turn_records,
-        prelude_records=prelude_records,
-    )
-    grade = grade_case(case, observation, project_dir, identity)
+    try:
+        checkpoint_closed_store(app_dir / 'store.db', application.process)
+        observation, audit_bundle = build_observation(
+            case,
+            session_id=session_id,
+            identity=identity,
+            project_dir=project_dir,
+            db_path=app_dir / 'store.db',
+            sidecar_log=app_dir / 'sidecar.log',
+            turn_records=turn_records,
+            prelude_records=prelude_records,
+        )
+        grade = grade_case(case, observation, project_dir, identity)
+    except Exception as exc:
+        save(out_dir / 'attempt.json', {'status': 'unmeasured', 'phase': 'observation', 'case_id': case['id'], 'session_id': session_id, 'error': str(exc), 'identity': identity})
+        raise
     save(out_dir / 'observation.json', observation)
     save(out_dir / 'grade.json', grade)
     save(raw_dir / 'db-audit.json', audit_bundle)
