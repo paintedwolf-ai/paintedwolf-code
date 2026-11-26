@@ -130,6 +130,7 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 		oar.ObserveMCPStructuralPre(gc, tool, bp.MCPCatalog)
 	}
 	ApplyToolRejectObservations(gc, tr)
+	publishPythonOARFacts(gc, tr)
 	if observe != nil {
 		if err := observe(gc); err != nil {
 			return err
@@ -165,8 +166,7 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 		return toolrejection.RenderRejectBlock(gc.ObservedRejectCode, tr.Data, tr, nil)
 	}
 	if rd, ok := oar.FirstBlock(rendered); ok && rd.Text != "" {
-		details := attachPythonOARRecovery(gc, tr, oar.NextCallsDetails(tr.Data, rd.Decision.Data))
-		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(details, nil).WithCause(tr)
+		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(oar.NextCallsDetails(tr.Data, rd.Decision.Data), nil).WithCause(tr)
 	}
 	if d := strings.TrimSpace(res.Decision.Code); d != "" {
 		return toolrejection.RenderRejectBlock(d, tr.Data, tr, nil)

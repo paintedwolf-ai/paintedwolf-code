@@ -1,8 +1,7 @@
 package toolfeedback
 
 import (
-	"context"
-	"maps"
+	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oar"
@@ -11,108 +10,104 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
-// PythonOARRecoveryDetailKey stores structured PY05 OAR recovery facts on a
-// rendered refusal's details map without mutating policy copy or Invocation.Tool.
-const PythonOARRecoveryDetailKey = "python_oar_recovery"
-
-// OrdinaryResultObservation captures the outcome of an ordinary (non-rejection)
-// execution of `python` or `command` for model-visible OAR recovery evaluation.
-type OrdinaryResultObservation struct {
-	Succeeded             bool
-	RuntimeKind           string
-	StageName             string
-	ChildOperation        string
-	StoppedOperationID    string
-	StoppedOperation      string
-	PriorCompletedEffects int
-	ExitCode              int
-	AdmittedProjectRunner string
-	ReadOnly              bool
-}
-
-// EvaluatePythonOrdinaryResult evaluates an ordinary tool result against the
-// frozen toolreach.Request on ctx. Successful exchanges return nil so they stay
-// free of additional routing copy.
-func EvaluatePythonOrdinaryResult(
-	ctx context.Context,
-	initiatingTool string,
-	obs OrdinaryResultObservation,
-) *pythonevidence.OARRecoveryFacts {
-	if obs.Succeeded {
-		return nil
-	}
-	gc := oar.NewGuardContext()
-	gc.ObserveToolCall(initiatingTool, nil)
-	fillOccurrenceIdentity(ctx, gc)
-	readOnly := obs.ReadOnly || isReadOnlyGuard(gc)
-	surface := pythonevidence.ReachableSurfaceFromRequest(gc.Reach, readOnly, obs.AdmittedProjectRunner)
-	code := ordinaryStopCode(gc.Invocation.Tool, obs.RuntimeKind)
-	facts := pythonevidence.BuildOARRecoveryFacts(surface, pythonevidence.RecoveryStopContext{
-		PolicyCode:            code,
-		InitiatingTool:        gc.Invocation.Tool,
-		StageName:             obs.StageName,
-		ChildOperation:        obs.ChildOperation,
-		RuntimeKind:           obs.RuntimeKind,
-		StoppedOperationID:    obs.StoppedOperationID,
-		StoppedOperation:      obs.StoppedOperation,
-		PriorCompletedEffects: obs.PriorCompletedEffects,
-		ExitCode:              obs.ExitCode,
-	})
-	return &facts
-}
-
-func ordinaryStopCode(tool, runtimeKind string) pythonruntime.StopCode {
-	switch runtimeKind {
-	case pythonevidence.RuntimeKindProjectRunner:
-		return pythonevidence.StopProjectRunnerFailure
-	case pythonevidence.RuntimeKindShellStage:
-		return pythonevidence.StopShellStageFailure
-	case pythonevidence.RuntimeKindPortablePython:
-		return pythonevidence.StopPythonException
-	default:
-		if strings.TrimSpace(tool) == "python" {
-			return pythonevidence.StopPythonException
-		}
-		return ""
-	}
-}
-
-func attachPythonOARRecovery(gc *oar.GuardContext, tr *toolrejection.ToolReject, details map[string]any) map[string]any {
+// publishPythonOARFacts feeds structured PY05 recovery facts into GuardContext
+// BEFORE OAR rule evaluation and pack rendering so the pack itself consumes
+// the facts and renders the single authoritative model-visible advice.
+// Nothing is serialized as a second routing object in refusal details.
+func publishPythonOARFacts(gc *oar.GuardContext, tr *toolrejection.ToolReject) {
 	if gc == nil || tr == nil || !needsPythonOARRecovery(gc, tr) {
-		return details
+		return
 	}
 	admittedRunner := stringFromMap(tr.Data, "admitted_project_runner")
-	surface := pythonevidence.ReachableSurfaceFromRequest(gc.Reach, isReadOnlyGuard(gc), admittedRunner)
+	surface := pythonevidence.ReachableSurfaceFromRequest(gc.Reach, isReadOnlyPosture(gc, tr), admittedRunner)
 	facts := pythonevidence.BuildOARRecoveryFacts(surface, recoveryStopContextFromGuard(gc, tr))
 
-	merged := maps.Clone(details)
-	if merged == nil {
-		merged = map[string]any{}
+	if gc.ObservationData == nil {
+		gc.ObservationData = map[string]any{}
 	}
-	merged[PythonOARRecoveryDetailKey] = facts
-	return merged
+	if facts.StoppedOperation != "" && stringFromMap(gc.ObservationData, "command") == "" {
+		gc.ObservationData["command"] = facts.StoppedOperation
+	}
+	if facts.Conflict != nil {
+		if stringFromMap(gc.ObservationData, "path") == "" && facts.Conflict.Target.RelPath != "" {
+			gc.ObservationData["path"] = facts.Conflict.Target.RelPath
+		}
+		if stringFromMap(gc.ObservationData, "expected_revision") == "" && facts.Conflict.ExpectedRevision != "" {
+			gc.ObservationData["expected_revision"] = facts.Conflict.ExpectedRevision
+		}
+		if stringFromMap(gc.ObservationData, "observed_revision") == "" && facts.Conflict.ActualRevision != "" {
+			gc.ObservationData["observed_revision"] = facts.Conflict.ActualRevision
+		}
+		if _, exists := gc.ObservationData["revision_change_observed"]; !exists {
+			gc.ObservationData["revision_change_observed"] = true
+		}
+	}
+	if facts.PendingHeldOperationID != "" {
+		reason := stringFromMap(gc.ObservationData, "rejection_reason")
+		if !strings.Contains(reason, facts.PendingHeldOperationID) {
+			if reason != "" {
+				reason += " "
+			}
+			gc.ObservationData["rejection_reason"] = fmt.Sprintf("%sPending approval operation: %s.", reason, facts.PendingHeldOperationID)
+		}
+	}
+	if facts.PolicyCode == pythonruntime.StopEffectNotAllowed && surface.ReadOnly && stringFromMap(gc.ObservationData, "expected_form") == "" {
+		gc.ObservationData["expected_form"] = "read_only"
+	}
 }
 
+// needsPythonOARRecovery scopes PY05 OAR fact enrichment strictly to python
+// invocations, PYTHON_TOOL_REQUIRED, or command invocations at Python/HTTP/
+// workspace-effect boundaries. Unrelated tools (write, edit, read, etc.) are
+// never matched on shared codes.
 func needsPythonOARRecovery(gc *oar.GuardContext, tr *toolrejection.ToolReject) bool {
+	if gc == nil || tr == nil {
+		return false
+	}
+	tool := strings.TrimSpace(gc.Invocation.Tool)
 	code := pythonruntime.StopCode(strings.TrimSpace(tr.Code))
+	if code == pythonevidence.StopPythonToolRequired {
+		return true
+	}
+	if tool == "python" {
+		return true
+	}
+	if tool != "command" {
+		return false
+	}
 	switch code {
-	case pythonevidence.StopPythonToolRequired,
-		pythonruntime.StopEffectNotAllowed,
+	case pythonruntime.StopEffectNotAllowed,
 		pythonruntime.StopRevisionConflict,
 		pythonevidence.StopHTTPHostDenied,
 		pythonevidence.StopWritePathDenied:
 		return true
-	}
-	return strings.TrimSpace(gc.Invocation.Tool) == "python"
-}
-
-func isReadOnlyGuard(gc *oar.GuardContext) bool {
-	if gc == nil {
+	default:
 		return false
 	}
-	posture := strings.ToLower(strings.TrimSpace(gc.Session.SessionPosture))
-	profile := strings.ToLower(strings.TrimSpace(gc.Session.PermissionProfile))
-	return posture == "ask" || posture == "read_only" || strings.Contains(profile, "readonly") || strings.Contains(profile, "read_only")
+}
+
+// isReadOnlyPosture determines read-only posture strictly from resolved
+// session posture, worker mutation capability, and structured effect facts —
+// never from profile-name substring heuristics.
+func isReadOnlyPosture(gc *oar.GuardContext, tr *toolrejection.ToolReject) bool {
+	if gc != nil {
+		posture := strings.ToLower(strings.TrimSpace(gc.Session.SessionPosture))
+		if posture == "ask" || posture == "read_only" {
+			return true
+		}
+		if gc.Session.WorkerLeg && !gc.Workers.ProfileMutationCapable {
+			return true
+		}
+	}
+	if tr != nil && tr.Data != nil {
+		if ro, ok := tr.Data["read_only"].(bool); ok && ro {
+			return true
+		}
+		if form := strings.ToLower(stringFromMap(tr.Data, "expected_form")); form == "read_only" {
+			return true
+		}
+	}
+	return false
 }
 
 func recoveryStopContextFromGuard(gc *oar.GuardContext, tr *toolrejection.ToolReject) pythonevidence.RecoveryStopContext {
@@ -124,6 +119,14 @@ func recoveryStopContextFromGuard(gc *oar.GuardContext, tr *toolrejection.ToolRe
 	target := stringFromMap(data, "path")
 	if target == "" {
 		target = stringFromMap(data, "target")
+	}
+	var conflict *pythonruntime.RevisionConflict
+	if exp, obs := stringFromMap(data, "expected_revision"), stringFromMap(data, "observed_revision"); exp != "" || obs != "" {
+		conflict = &pythonruntime.RevisionConflict{
+			Target:           pythonruntime.CanonicalTarget{RelPath: target},
+			ExpectedRevision: exp,
+			ActualRevision:   obs,
+		}
 	}
 	return pythonevidence.RecoveryStopContext{
 		PolicyCode:            pythonruntime.StopCode(strings.TrimSpace(tr.Code)),
@@ -137,6 +140,7 @@ func recoveryStopContextFromGuard(gc *oar.GuardContext, tr *toolrejection.ToolRe
 		ExitCode:              intFromMap(data, "exit_code"),
 		HeldOperationID:       stringFromMap(data, "held_operation_id"),
 		Target:                target,
+		Conflict:              conflict,
 	}
 }
 
