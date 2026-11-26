@@ -489,8 +489,6 @@ func (p *skillCaseProducer) targets(l *interactions.ConditionLedger) ([]casegen.
 
 // Production invariants over skill guard atoms.
 const (
-	srcCommandEffects = "internal/prompts/command_effect_vars.go:commandEffectFlags admits an effect only when command is offered " +
-		"(reader_facts.go:buildReaderFacts passes offeredSet[\"command\"]), and profile_has_command is offeredSet[\"command\"] (populateReaderFamilyMaps)"
 	srcCoordinatorNoFolder = "internal/coordinator/promptloop/worker_tool_plan.go:filterToolPlanForRootCount and prompts/reader.go:CompileSurfacePlan " +
 		"keep only coordinator-surfaces.yaml no_folder_allowlist at zero roots, which omits command, command_output, render_view and skills_read"
 	srcWorkerRoots = "internal/worker/task_tool.go refuses a zero-root spawn (WORKER_WORKSPACE_REQUIRED) unless prompts.AgentRunsWithoutWorkspace, " +
@@ -500,13 +498,9 @@ const (
 	srcCoordinatorBranch = "internal/session/workerworkspace/worker_tool_coord.go:OnWorkerBranch is false for a session without a parent"
 )
 
-func effectAtoms(classes ...string) []string {
-	var out []string
-	for _, c := range classes {
-		out = append(out, "profile_command_"+c, "profile_command_"+c+" != false")
-	}
-	return out
-}
+// effectAtoms are the command effect flags; commandEffectFlags sets each only
+// when command is offered.
+var effectAtoms = []string{"profile_command_mutation", "profile_command_external_exec", "profile_command_network_egress"}
 
 var rootAtoms = []string{"root_count", "has_workspace_roots"}
 
@@ -535,11 +529,9 @@ func skillDerived(site interactions.ConditionSite, recipient string) independenc
 			}
 		}
 	}
-	effects := effectAtoms("mutation", "external_exec", "network_egress")
-	imply(effects, []string{"profile_has_command"}, srcCommandEffects)
 	switch recipient {
 	case interactions.RecipientCoordinator:
-		imply(append([]string{"profile_has_command", "profile_has_command_output", "profile_has_render_view", "profile_has_skills_read"}, effects...), rootAtoms, srcCoordinatorNoFolder)
+		imply(append([]string{"profile_has_command", "profile_has_command_output", "profile_has_render_view", "profile_has_skills_read"}, effectAtoms...), rootAtoms, srcCoordinatorNoFolder)
 		for _, f := range []independence.Fixed{
 			{Atom: "profile_has_request_decision", Value: independence.False, Source: srcWorkerChildTools},
 			{Atom: "on_worker_branch", Value: independence.False, Source: srcCoordinatorBranch},
@@ -549,7 +541,7 @@ func skillDerived(site interactions.ConditionSite, recipient string) independenc
 			}
 		}
 	case interactions.RecipientWorker:
-		imply(effects, rootAtoms, srcWorkerRoots)
+		imply(effectAtoms, rootAtoms, srcWorkerRoots)
 	}
 	return c
 }
