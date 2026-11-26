@@ -11,11 +11,18 @@ from portable_command.contracts import ROOT, load_suite
 from portable_command.harness import (
     SSECollector,
     create_isolated_session,
+    make_app_factory,
     run_case,
     session_posture,
     wait_tool_result,
 )
 from portable_command.observe import parse_tool_result, source_identity
+from portable_command.reporting import (
+    aggregate_qualification,
+    archive_case_evidence,
+    build_discrepancy_breakdown,
+    classify_case_disposition,
+)
 from progress import save
 
 
@@ -24,31 +31,25 @@ def probe_command_envelope(
     *,
     program='printf ok > ./probe.txt',
     progress_content='- [x] Probe native envelope',
+    engine_bin=None,
     app_factory=smoke.Application,
     sse_factory=SSECollector,
 ):
     """Probe the offered command tool schema and single-call progress_update envelope."""
     out_dir = pathlib.Path(out_dir).resolve()
-    app_dir = out_dir / 'app'
-    project_dir = out_dir / 'project'
-    raw_dir = out_dir / 'raw'
+    app_dir, project_dir, raw_dir = out_dir / 'app', out_dir / 'project', out_dir / 'raw'
     project_dir.mkdir(parents=True, exist_ok=True)
     raw_dir.mkdir(parents=True, exist_ok=True)
-    identity = source_identity(ROOT, profile='implement')
+    identity = source_identity(ROOT, profile='implement', engine_bin=engine_bin)
 
-    application = app_factory(app_dir)
-    sse = None
-    session_id = None
-    offered_tools = []
-    command_schema = None
+    application = make_app_factory(engine_bin, app_factory)(app_dir)
+    sse, session_id, offered_tools, command_schema, call_id, tool_result = None, None, [], None, None, None
     invocation_args = {'command': program, 'progress_update': {'content': progress_content}}
-    call_id = None
-    tool_result = None
     try:
         application.ready()
         sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl')
         sse.start()
-        session_id, _ = create_isolated_session(application, project_dir, {'id': 'envelope-probe', 'profile': 'implement'})
+        session_id, _, _ = create_isolated_session(application, project_dir, {'id': 'envelope-probe', 'profile': 'implement'})
         application.request(f'/v1/sessions/{session_id}/prompts', {
             'operation_id': str(uuid.uuid4()),
             'text': 'Probe offered command tool schema and single-call progress_update envelope.',
@@ -104,23 +105,13 @@ def probe_command_envelope(
     else:
         status = 'other'
     report = {
-        'version': 1,
-        'probe': 'command-progress-update-envelope',
-        'identity': identity,
-        'session_id': session_id,
-        'offered_tools': offered_tools,
-        'command_schema': command_schema,
-        'command_schema_properties': sorted(props.keys()),
-        'schema_has_progress_update': schema_has_progress,
-        'invocation_call_id': call_id,
-        'invocation_args': invocation_args,
-        'tool_result': tool_result,
-        'parsed_payload': parsed_payload,
-        'receipts': receipts,
-        'native_progress_receipt_count': len(native_progress),
-        'envelope_status': status,
-        'native_envelope_qualified': status == 'supported',
-        'sibling_fallback_used': False,
+        'version': 1, 'probe': 'command-progress-update-envelope', 'identity': identity,
+        'session_id': session_id, 'offered_tools': offered_tools, 'command_schema': command_schema,
+        'command_schema_properties': sorted(props.keys()), 'schema_has_progress_update': schema_has_progress,
+        'invocation_call_id': call_id, 'invocation_args': invocation_args, 'tool_result': tool_result,
+        'parsed_payload': parsed_payload, 'receipts': receipts,
+        'native_progress_receipt_count': len(native_progress), 'envelope_status': status,
+        'native_envelope_qualified': status == 'supported', 'sibling_fallback_used': False,
     }
     save(out_dir / 'envelope-probe.json', report)
     return report
@@ -152,13 +143,16 @@ def run_suite(
     *,
     case_ids=None,
     export_dir=None,
+    engine_bin=None,
     app_factory=smoke.Application,
     sse_factory=SSECollector,
     case_runner=run_case,
 ):
-    """Run all 40 Q01-Q22 cases (or a subset) through isolated sessions and emit suite-report.json."""
+    """Run all 40 Q01-Q22 cases (or a subset), archive durable raw evidence, and emit suite-report.json."""
     out_dir = pathlib.Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    durable_root = (pathlib.Path(export_dir).resolve() if export_dir is not None else out_dir / 'bundles')
+    durable_root.mkdir(parents=True, exist_ok=True)
     suite = load_suite()
     by_id = {c['id']: c for c in suite['cases']}
     if case_ids:
@@ -169,57 +163,58 @@ def run_suite(
     else:
         selected = list(suite['cases'])
 
-    identity = source_identity(ROOT)
+    identity = source_identity(ROOT, engine_bin=engine_bin)
     records = []
     for case in selected:
         cid = case['id']
         meta = _case_metadata(case)
         case_out = out_dir / 'cases' / cid
         case_export = (pathlib.Path(export_dir).resolve() / cid) if export_dir is not None else None
+        run_kwargs = {'export_dir': case_export, 'app_factory': app_factory, 'sse_factory': sse_factory}
+        if engine_bin is not None:
+            run_kwargs['engine_bin'] = engine_bin
         try:
-            res = case_runner(
-                case,
-                case_out,
-                export_dir=case_export,
-                app_factory=app_factory,
-                sse_factory=sse_factory,
-            )
+            res = case_runner(case, case_out, **run_kwargs)
             grade = res['grade']
             gaps = list(res.get('audit', {}).get('observation_gaps', []))
-            records.append({
-                **meta,
-                'attempt': 'measured',
-                'session_id': res.get('session_id'),
-                'qualification': grade['qualification'],
-                'passed': grade['passed'],
-                'dimensions': grade['dimensions'],
-                'observation_gaps': gaps,
-                'error': None,
-            })
+            rec = {
+                **meta, 'attempt': 'measured', 'session_id': res.get('session_id'),
+                'qualification': grade['qualification'], 'passed': grade['passed'],
+                'dimensions': grade['dimensions'], 'observation_gaps': gaps, 'error': None,
+            }
         except Exception as exc:
-            records.append({
-                **meta,
-                'attempt': 'unmeasured',
-                'session_id': None,
-                'qualification': 'unqualified',
-                'passed': False,
-                'dimensions': {},
-                'observation_gaps': ['execution_error'],
-                'error': str(exc),
-            })
+            rec = {
+                **meta, 'attempt': 'unmeasured', 'session_id': None, 'qualification': 'unqualified',
+                'passed': False, 'dimensions': {}, 'observation_gaps': ['execution_error'], 'error': str(exc),
+            }
+        rec.update(classify_case_disposition(rec))
+        rec['evidence'] = archive_case_evidence(case_out, durable_root, case_id=cid, session_id=rec['session_id'])
+        records.append(rec)
 
-    covered_q = sorted({q for r in records for q in r['qualification_cases']})
-    passed_q = sorted({q for r in records if r['passed'] for q in r['qualification_cases']})
+    per_q, passed_selected, passed_full = aggregate_qualification(suite['cases'], records)
+    breakdown = build_discrepancy_breakdown(records)
     summary = {
+        'selection_mode': 'full' if len(records) == len(suite['cases']) else 'partial',
+        'planned_total': len(suite['cases']),
         'total': len(records),
         'measured': sum(1 for r in records if r['attempt'] == 'measured'),
         'unmeasured': sum(1 for r in records if r['attempt'] == 'unmeasured'),
-        'passed': sum(1 for r in records if r['passed']),
-        'failed': sum(1 for r in records if not r['passed']),
+        'qualified': sum(1 for r in records if r['disposition'] == 'qualified'),
+        'unqualified': sum(1 for r in records if r['disposition'] == 'unqualified'),
+        'qualified_passed': sum(1 for r in records if r['qualified_pass']),
+        'diagnostic_passed': sum(1 for r in records if r['passed']),
+        'passed': sum(1 for r in records if r['qualified_pass']),
+        'failed': sum(1 for r in records if not r['qualified_pass']),
         'cases_with_observation_gaps': sum(1 for r in records if r['observation_gaps']),
-        'qualification_cases_covered': covered_q,
-        'qualification_cases_passed': passed_q,
+        'qualification_cases_covered': sorted({q for r in records for q in r['qualification_cases']}),
+        'qualification_cases_passed_selected': passed_selected,
+        'qualification_cases_passed_full': passed_full,
+        'qualification_cases_passed': passed_full,
     }
-    report = {'version': 1, 'identity': identity, 'summary': summary, 'cases': records}
+    report = {
+        'version': 1, 'identity': identity, 'durable_bundle_root': str(durable_root),
+        'summary': summary, 'qualification_by_id': per_q,
+        'discrepancy_breakdown': breakdown, 'cases': records,
+    }
     save(out_dir / 'suite-report.json', report)
     return report

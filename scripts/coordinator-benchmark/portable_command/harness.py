@@ -16,6 +16,7 @@ from portable_command.artifacts import project_hashes
 from portable_command.contracts import DIRECTORY, ROOT, load_suite, materialize
 from portable_command.grading import grade_case
 from portable_command.observe import build_observation, file_sha256, source_identity
+from portable_command.reporting import inject_drafts, make_app_factory
 from progress import save
 
 
@@ -96,6 +97,8 @@ def session_posture(profile):
 
 def create_isolated_session(application, project_dir, case):
     attached = application.request('/v1/projects', {'roots': [{'path': str(project_dir)}]})
+    roots = attached.get('roots') or []
+    root_id = roots[0]['id'] if roots and isinstance(roots[0], dict) and roots[0].get('id') else ''
     posture = session_posture(case.get('profile'))
     session = application.request('/v1/sessions', {'project_id': attached['id'], 'posture': posture})
     sid = session['id']
@@ -108,7 +111,7 @@ def create_isolated_session(application, project_dir, case):
             raise RuntimeError('session preparation ended in ' + state['status'])
         return True
     application.wait_for(ready, 'portable-command session ready', sid)
-    return sid, attached['id']
+    return sid, attached['id'], root_id
 
 
 def collect_raw_api(application, session_id, raw_dir, program_ids):
@@ -189,54 +192,42 @@ def resolve_case(case_or_path):
     return cases[case_or_path]
 
 
-def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, sse_factory=SSECollector):
+def run_case(case, out_dir, *, export_dir=None, engine_bin=None, app_factory=smoke.Application, sse_factory=SSECollector):
     """Execute one Portable Command case through an isolated zero-model application."""
     out_dir = pathlib.Path(out_dir).resolve()
-    app_dir = out_dir / 'app'
-    project_dir = out_dir / 'project'
-    raw_dir = out_dir / 'raw'
+    app_dir, project_dir, raw_dir = out_dir / 'app', out_dir / 'project', out_dir / 'raw'
     raw_dir.mkdir(parents=True, exist_ok=True)
-
     baseline_hashes = materialize(case, project_dir)
     expected_baseline = case.get('_expected_baseline_hashes')
     if expected_baseline is not None and expected_baseline != baseline_hashes:
         raise ValueError('replay bundle baseline_hashes do not match materialized fixture')
     revision_aliases = {alias: baseline_hashes.get(path) for path, alias in case['setup'].get('revisions', {}).items()}
-    identity = source_identity(ROOT, profile=case['profile'])
+    identity = source_identity(ROOT, profile=case['profile'], engine_bin=engine_bin)
     save(out_dir / 'attempt.json', {'status': 'running', 'case_id': case['id'], 'identity': identity, 'revision_aliases': revision_aliases})
 
-    application = app_factory(app_dir)
+    application = make_app_factory(engine_bin, app_factory)(app_dir)
     sidecar_path = app_dir / 'sidecar.log'
-    sse = None
-    prelude_records = []
-    turn_records = []
-    session_id = None
-    pre_prompt_lines = post_tool_lines = None
+    sse, prelude_records, turn_records, draft_bindings = None, [], [], {}
+    drafts_ok, session_id, pre_prompt_lines, post_tool_lines = True, None, None, None
     try:
         application.ready()
         sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl')
         sse.start()
-        session_id, _ = create_isolated_session(application, project_dir, case)
+        session_id, project_id, root_id = create_isolated_session(application, project_dir, case)
+        if case['setup'].get('drafts'):
+            drafts_ok, draft_bindings = inject_drafts(application, project_id, root_id, case['setup']['drafts'])
+            save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings})
         pre_prompt_lines = log_line_count(sidecar_path)
-        application.request(f'/v1/sessions/{session_id}/prompts', {
-            'operation_id': str(uuid.uuid4()),
-            'text': f"Execute portable-command fixture {case['id']}.",
-        })
+        application.request(f'/v1/sessions/{session_id}/prompts', {'operation_id': str(uuid.uuid4()), 'text': f"Execute portable-command fixture {case['id']}."})
         if case['setup'].get('progress') == 'valid':
-            p_calls = send_tool_calls(application, session_id, [
-                {'name': 'update_progress', 'args': {'content': f"- [ ] Run fixture {case['id']}"}},
-            ])
+            p_calls = send_tool_calls(application, session_id, [{'name': 'update_progress', 'args': {'content': f"- [ ] Run fixture {case['id']}"}}])
             prelude_records.append({'kind': 'valid_progress', 'call_id': p_calls[0][0], 'outcome': p_calls[0][1].get('outcome')})
-            save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases})
+            save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings})
         for turn in case['turns']:
-            batch = []
             if 'structured_tool' in turn:
-                batch.append({'name': turn['structured_tool'], 'args': dict(turn.get('arguments') or {})})
-                envelope_mode = 'structured_tool'
+                batch, envelope_mode = [{'name': turn['structured_tool'], 'args': dict(turn.get('arguments') or {})}], 'structured_tool'
             else:
-                if 'progress_update' in turn:
-                    batch.append({'name': 'update_progress', 'args': turn['progress_update']})
-                batch.append({'name': 'command', 'args': {'command': turn['program']}})
+                batch = ([{'name': 'update_progress', 'args': turn['progress_update']}] if 'progress_update' in turn else []) + [{'name': 'command', 'args': {'command': turn['program']}}]
                 envelope_mode = 'sibling_update_progress' if 'progress_update' in turn else 'command_only'
             results = send_tool_calls(application, session_id, batch)
             call_ids = [cid for cid, _ in results]
@@ -247,10 +238,7 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
             })
         application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
-            pids = [r[0] for r in db.execute(
-                'SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?',
-                (session_id,),
-            ).fetchall()]
+            pids = [r[0] for r in db.execute('SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?', (session_id,)).fetchall()]
         collect_raw_api(application, session_id, raw_dir, pids)
         post_tool_lines = log_line_count(sidecar_path)
     except Exception as exc:
@@ -264,7 +252,7 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
     save(raw_dir / 'window.json', window)
     extra_gaps = [g for g, cond in (
         ('profile_binding_approximate', case.get('profile', 'implement') != 'implement'),
-        ('uninjected_drafts', bool(case['setup'].get('drafts'))),
+        ('uninjected_drafts', bool(case['setup'].get('drafts')) and not drafts_ok),
         ('uninjected_host_facts', bool(case['setup'].get('host_facts'))),
     ) if cond]
 

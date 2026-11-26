@@ -1,4 +1,4 @@
-"""Unit tests for the Portable Command Q01-Q22 suite runner and command envelope probe."""
+"""Unit tests for the Portable Command Q01-Q22 suite runner, envelope probe, provenance, and Q aggregation."""
 import io
 import json
 import pathlib
@@ -6,7 +6,7 @@ import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
-from portable_command import cli, suite_runner
+from portable_command import cli, harness, reporting, suite_runner
 from portable_command.test_portable_command_harness import FakeApp, FakeSSE
 
 
@@ -46,6 +46,18 @@ class ProbeFakeApp(FakeApp):
         db.close()
 
 
+def _write_fake_case_artifacts(out_dir, case_id, passed=True):
+    out_dir = pathlib.Path(out_dir)
+    (out_dir / 'raw').mkdir(parents=True, exist_ok=True)
+    (out_dir / 'app').mkdir(parents=True, exist_ok=True)
+    (out_dir / 'observation.json').write_text(json.dumps({'case_id': case_id}))
+    (out_dir / 'grade.json').write_text(json.dumps({'passed': passed}))
+    (out_dir / 'raw' / 'messages.json').write_text('{"messages":[]}')
+    (out_dir / 'raw' / 'events.jsonl').write_text('{"topic":"activity"}\n')
+    (out_dir / 'raw' / 'db-audit.json').write_text('{}')
+    (out_dir / 'app' / 'sidecar.log').write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+
+
 class PortableCommandSuiteRunnerTests(unittest.TestCase):
     def test_probe_command_envelope_reports_schema_and_never_uses_sibling_fallback(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -74,75 +86,121 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             self.assertEqual([c['name'] for c in app_no_prop[0].recorded_calls], ['command'])
             self.assertIn('progress_update', app_no_prop[0].recorded_calls[0]['args'])
             self.assertTrue((root / 'p1' / 'envelope-probe.json').is_file())
-
             self.assertTrue(r2['schema_has_progress_update'])
             self.assertEqual(r2['envelope_status'], 'supported')
             self.assertTrue(r2['native_envelope_qualified'])
-
             self.assertEqual(r3['envelope_status'], 'unavailable')
             self.assertFalse(r3['native_envelope_qualified'])
 
-    def test_run_suite_records_all_cases_and_isolates_failures(self):
+    def test_unqualified_disposition_durable_bundles_and_discrepancy_breakdown(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            seen = []
-            def fake_case_runner(case, out_dir, *, export_dir=None, app_factory=None, sse_factory=None):
-                seen.append((case['id'], pathlib.Path(out_dir).name))
+            def fake_runner(case, out_dir, *, export_dir=None, app_factory=None, sse_factory=None):
+                _write_fake_case_artifacts(out_dir, case['id'], passed=(case['id'] == 'first-mutation'))
                 if case['id'] == 'draft-read-transform':
-                    raise RuntimeError('simulated draft setup failure')
-                passed = case['id'] == 'first-mutation'
+                    raise RuntimeError('simulated setup failure')
+                gaps = {
+                    'read-only-static-refusal': ['profile_binding_approximate'],
+                    'same-file-transform': ['incomplete_sidecar_log'],
+                }.get(case['id'], [])
                 return {
-                    'case_id': case['id'],
-                    'session_id': f"sess-{case['id']}",
-                    'grade': {'qualification': 'native-runtime', 'passed': passed, 'dimensions': {'artifacts': passed, 'execution': True}},
-                    'audit': {'observation_gaps': ['profile_binding_approximate'] if case['profile'] != 'implement' else []},
+                    'case_id': case['id'], 'session_id': f"sess-{case['id']}",
+                    'grade': {'qualification': 'native-runtime', 'passed': case['id'] == 'first-mutation', 'dimensions': {'artifacts': True}},
+                    'audit': {'observation_gaps': gaps},
                 }
 
             report = suite_runner.run_suite(
                 root / 'suite',
-                case_ids=['first-mutation', 'draft-read-transform', 'read-only-static-refusal'],
-                case_runner=fake_case_runner,
+                case_ids=['first-mutation', 'draft-read-transform', 'same-file-transform', 'native-option-no-fallback'],
+                case_runner=fake_runner,
             )
-            self.assertEqual(len(seen), 3)
-            self.assertEqual(report['summary']['total'], 3)
-            self.assertEqual(report['summary']['measured'], 2)
-            self.assertEqual(report['summary']['unmeasured'], 1)
-            self.assertEqual(report['summary']['passed'], 1)
-            self.assertEqual(report['summary']['failed'], 2)
             by_id = {c['case_id']: c for c in report['cases']}
-            self.assertEqual(by_id['first-mutation']['envelope_mode'], 'sibling_update_progress')
-            self.assertFalse(by_id['first-mutation']['native_envelope_qualified'])
-            self.assertEqual(by_id['draft-read-transform']['attempt'], 'unmeasured')
-            self.assertEqual(by_id['draft-read-transform']['qualification'], 'unqualified')
-            self.assertIn('simulated draft setup failure', by_id['draft-read-transform']['error'])
-            self.assertFalse(by_id['read-only-static-refusal']['profile_binding']['exact_match'])
-            self.assertEqual(by_id['read-only-static-refusal']['profile_binding']['posture'], 'vet')
-            saved = json.loads((root / 'suite' / 'suite-report.json').read_text())
-            self.assertEqual(saved['summary']['total'], 3)
+            # first-mutation uses sibling_update_progress -> diagnostic pass, MUST be unqualified and not pass Q20.
+            self.assertTrue(by_id['first-mutation']['passed'])
+            self.assertEqual(by_id['first-mutation']['disposition'], 'unqualified')
+            self.assertIn('sibling_progress_substitute', by_id['first-mutation']['unqualified_reasons'])
+            self.assertFalse(by_id['first-mutation']['qualified_pass'])
+            self.assertNotIn('Q20', report['summary']['qualification_cases_passed_selected'])
+            self.assertNotIn('Q20', report['summary']['qualification_cases_passed_full'])
+            # All 4 discrepancy categories populated accurately.
+            self.assertEqual(report['discrepancy_breakdown']['cases']['proven_contract_mismatch'], ['first-mutation'])
+            self.assertEqual(report['discrepancy_breakdown']['cases']['missing_setup'], ['draft-read-transform'])
+            self.assertEqual(report['discrepancy_breakdown']['cases']['missing_observation'], ['same-file-transform'])
+            self.assertEqual(report['discrepancy_breakdown']['cases']['runtime_issue'], ['native-option-no-fallback'])
+            # Durable per-case bundles with locators and SHA-256 hashes.
+            ev = by_id['native-option-no-fallback']['evidence']
+            self.assertIn('raw/sidecar-slice.log', ev['files'])
+            self.assertEqual(len(ev['files']['observation.json']['sha256']), 64)
+            self.assertTrue(pathlib.Path(ev['files']['raw/sidecar-slice.log']['path']).is_file())
 
-            with self.assertRaises(ValueError):
-                suite_runner.run_suite(root / 'bad', case_ids=['does-not-exist'], case_runner=fake_case_runner)
-
-    def test_cli_suite_and_probe_envelope_modes(self):
+    def test_shared_q_id_requires_all_cases_qualified_and_distinguishes_partial_vs_full(self):
+        # Q01 is shared by ['large-tree-discovery', 'oar-option-correction'].
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
+            def make_runner(oar_passed=True, oar_gaps=()):
+                def runner(case, out_dir, *, export_dir=None, app_factory=None, sse_factory=None):
+                    passed = True if case['id'] == 'large-tree-discovery' else oar_passed
+                    gaps = [] if case['id'] == 'large-tree-discovery' else list(oar_gaps)
+                    _write_fake_case_artifacts(out_dir, case['id'], passed=passed)
+                    return {
+                        'case_id': case['id'], 'session_id': f"s-{case['id']}",
+                        'grade': {'qualification': 'native-runtime', 'passed': passed, 'dimensions': {'artifacts': passed}},
+                        'audit': {'observation_gaps': gaps},
+                    }
+                return runner
+
+            # One passing + one failing sharing Q01 -> Q01 does NOT pass.
+            r_fail = suite_runner.run_suite(root / 's1', case_ids=['large-tree-discovery', 'oar-option-correction'], case_runner=make_runner(oar_passed=False))
+            self.assertNotIn('Q01', r_fail['summary']['qualification_cases_passed_selected'])
+            self.assertNotIn('Q01', r_fail['summary']['qualification_cases_passed_full'])
+            # One passing + one unqualified sharing Q01 -> Q01 does NOT pass.
+            r_unqual = suite_runner.run_suite(root / 's2', case_ids=['large-tree-discovery', 'oar-option-correction'], case_runner=make_runner(oar_passed=True, oar_gaps=['incomplete_sidecar_log']))
+            self.assertNotIn('Q01', r_unqual['summary']['qualification_cases_passed_selected'])
+            self.assertNotIn('Q01', r_unqual['summary']['qualification_cases_passed_full'])
+            # Partial selection (only 1 of 2 Q01 cases) -> selected_partial only, NOT full.
+            r_part = suite_runner.run_suite(root / 's3', case_ids=['large-tree-discovery'], case_runner=make_runner())
+            self.assertEqual(r_part['summary']['selection_mode'], 'partial')
+            self.assertIn('Q01', r_part['summary']['qualification_cases_passed_selected'])
+            self.assertNotIn('Q01', r_part['summary']['qualification_cases_passed_full'])
+            self.assertEqual(r_part['qualification_by_id']['Q01']['status'], 'passed_selected_partial')
+            # Both Q01 cases selected and qualified-passing -> passed_full.
+            r_both = suite_runner.run_suite(root / 's4', case_ids=['large-tree-discovery', 'oar-option-correction'], case_runner=make_runner())
+            self.assertIn('Q01', r_both['summary']['qualification_cases_passed_full'])
+            self.assertEqual(r_both['qualification_by_id']['Q01']['status'], 'passed_full')
+
+    def test_engine_provenance_draft_injection_and_cli_modes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            fake_bin = root / 'lycaon-dev'
+            fake_bin.write_bytes(b'fake-engine-binary')
+            prov = reporting.inspect_engine_provenance(engine_bin=fake_bin, evaluator_git_head='a' * 40)
+            self.assertEqual(prov['executable_path'], str(fake_bin.resolve()))
+            self.assertEqual(prov['build_source'], 'cli:--engine')
+            self.assertEqual(len(prov['executable_sha256']), 64)
+
+            calls = []
+            class DraftApp:
+                def request(self, path, body=None, method=None):
+                    calls.append((method or 'POST', path, body))
+                    return {'id': 'doc-1', 'revision': 1 if method != 'PUT' else 2}
+            ok, bindings = harness.inject_drafts(DraftApp(), 'proj-1', 'root-1', {'a.txt': {'revision': 'draft-r2', 'bytes': 'hi\n'}})
+            self.assertTrue(ok)
+            self.assertEqual(bindings['a.txt']['revision'], 2)
+            self.assertEqual(calls[0][1], '/v1/projects/proj-1/editor-documents')
+            self.assertEqual(calls[1][0], 'PUT')
+
             with patch('sys.stdout', new=io.StringIO()):
                 rc_probe = cli.main(
-                    ['--probe-envelope', '--out', str(root / 'probe')],
-                    envelope_prober=lambda out: {
+                    ['--probe-envelope', '--engine', str(fake_bin), '--out', str(root / 'probe')],
+                    envelope_prober=lambda out, engine_bin=None: {
                         'session_id': 's-probe', 'schema_has_progress_update': False,
                         'command_schema_properties': ['command'], 'envelope_status': 'rejected',
                         'native_envelope_qualified': False, 'sibling_fallback_used': False,
                     },
                 )
-                rc_suite_ok = cli.main(
-                    ['--suite', '--cases', 'first-mutation,native-option-no-fallback', '--out', str(root / 's1')],
-                    suite_runner=lambda out, case_ids=None, export_dir=None: {'summary': {'total': len(case_ids), 'failed': 0}},
-                )
-                rc_suite_fail = cli.main(
-                    ['--suite', '--out', str(root / 's2')],
-                    suite_runner=lambda out, case_ids=None, export_dir=None: {'summary': {'total': 40, 'failed': 3}},
+                rc_suite = cli.main(
+                    ['--suite', '--cases', 'first-mutation', '--out', str(root / 's1')],
+                    suite_runner=lambda out, case_ids=None, export_dir=None: {'summary': {'total': 1, 'failed': 1}},
                 )
             self.assertEqual(rc_probe, 0)
-            self.assertEqual(rc_suite_ok, 0)
-            self.assertEqual(rc_suite_fail, 1)
+            self.assertEqual(rc_suite, 1)

@@ -20,6 +20,7 @@ def build_parser():
     group.add_argument('--suite', action='store_true', help='Run all 40 Q01-Q22 cases (or --cases subset) and write suite-report.json')
     group.add_argument('--probe-envelope', action='store_true', help='Probe offered command tool schema and single-call progress_update envelope')
     parser.add_argument('--cases', help='Comma-separated case IDs to run with --suite')
+    parser.add_argument('--engine', type=pathlib.Path, help='Explicit engine executable path (overrides PW_ENGINE_BIN and checkout default)')
     parser.add_argument('--out', type=pathlib.Path, required=True, help='Fresh output directory for the isolated run')
     parser.add_argument('--export', type=pathlib.Path, help='Optional directory for a sanitized replay & evidence bundle')
     return parser
@@ -27,8 +28,9 @@ def build_parser():
 
 def main(argv=None, *, runner=run_case, suite_runner=run_suite, envelope_prober=probe_command_envelope):
     args = build_parser().parse_args(argv)
+    extra = {'engine_bin': args.engine} if args.engine is not None else {}
     if args.probe_envelope:
-        report = envelope_prober(args.out)
+        report = envelope_prober(args.out, **extra)
         summary = {
             'mode': 'probe-envelope',
             'session_id': report['session_id'],
@@ -42,12 +44,16 @@ def main(argv=None, *, runner=run_case, suite_runner=run_suite, envelope_prober=
         return 0
     if args.suite:
         case_ids = [c.strip() for c in args.cases.split(',') if c.strip()] if args.cases else None
-        report = suite_runner(args.out, case_ids=case_ids, export_dir=args.export)
-        print(json.dumps({'mode': 'suite', 'summary': report['summary']}, indent=2, sort_keys=True))
+        report = suite_runner(args.out, case_ids=case_ids, export_dir=args.export, **extra)
+        print(json.dumps({
+            'mode': 'suite',
+            'summary': report['summary'],
+            'discrepancy_breakdown': report.get('discrepancy_breakdown'),
+        }, indent=2, sort_keys=True))
         return 0 if report['summary']['failed'] == 0 else 1
     target = args.case or args.replay
     case = resolve_case(target)
-    result = runner(case, args.out, export_dir=args.export)
+    result = runner(case, args.out, export_dir=args.export, **extra)
     summary = {
         'mode': 'replay' if args.replay else 'run',
         'case_id': result['case_id'],

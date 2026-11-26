@@ -1,38 +1,12 @@
 """Independent observation and audit builder for native Portable Command runs."""
 import contextlib
-import hashlib
 import json
 import pathlib
-import platform
 import sqlite3
-import subprocess
-from built_runtime import engine_path
 from portable_command.artifacts import project_hashes
-from portable_command.contracts import DIRECTORY, ROOT
+from portable_command.reporting import file_sha256, source_identity
 
 ALLOWED_STOPS = {None, 'rejected', 'conflict', 'cancelled', 'incomplete', 'budget', 'interrupted'}
-
-
-def file_sha256(path):
-    return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
-
-
-def source_identity(root=ROOT, profile=None):
-    """Capture immutable source/build/binary/host identity for an attempt."""
-    def git(*args):
-        proc = subprocess.run(['git', '-C', str(root), *args], capture_output=True, text=True, check=False)
-        return proc.stdout.strip() if proc.returncode == 0 else ''
-    version_file = root / 'VERSION'
-    lang_file = root / 'lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/language.json'
-    binary = engine_path(root)
-    return {
-        'git_head': git('rev-parse', 'HEAD'), 'git_tree': git('rev-parse', 'HEAD^{tree}'),
-        'application_version': version_file.read_text().strip() if version_file.is_file() else '',
-        'engine_binary_path': str(binary), 'engine_binary_sha256': file_sha256(binary) if binary.is_file() else '',
-        'catalog_sha256': file_sha256(lang_file) if lang_file.is_file() else '',
-        'suite_sha256': file_sha256(DIRECTORY / 'suite.json'),
-        'platform': f'{platform.system().lower()}-{platform.machine().lower()}', 'profile': profile or '',
-    }
 
 
 def _rows(db, sql, params):
