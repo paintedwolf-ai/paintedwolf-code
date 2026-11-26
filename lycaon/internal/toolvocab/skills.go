@@ -571,6 +571,16 @@ func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
 	if c == nil {
 		return true
 	}
+	// A host_resources skill needs a tool accepting the field; decide that
+	// before rendering, so an unoffered skill never renders for this reader.
+	if strings.TrimSpace(sk.Metadata["host_resources"]) != "" {
+		if hostResTools, _ := vars["runner_host_resources_tools"].([]string); len(hostResTools) == 0 {
+			if memoKey != "" {
+				skillOfferedForReaderCache.Store(memoKey, false)
+			}
+			return false
+		}
+	}
 	offered := reader.Held()
 	anyOf := sk.AnyOfTools()
 	cacheKey := "reader:" + fp
@@ -581,7 +591,7 @@ func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
 	if renderErr != nil {
 		rendered = sk.Body
 	}
-	res := evalSkillRenderedReach(c, sk, vars, offered, reader.Requestable(), anyOf, rendered)
+	res := evalSkillRenderedReach(c, sk, offered, reader.Requestable(), anyOf, rendered)
 	if memoKey != "" {
 		skillOfferedForReaderCache.Store(memoKey, res)
 	}
@@ -591,18 +601,11 @@ func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
 func evalSkillRenderedReach(
 	c *Catalog,
 	sk skills.Skill,
-	vars map[string]any,
 	offered map[string]bool,
 	requestable []string,
 	anyOf []string,
 	rendered string,
 ) bool {
-	if strings.TrimSpace(sk.Metadata["host_resources"]) != "" {
-		hostResTools, _ := vars["runner_host_resources_tools"].([]string)
-		if len(hostResTools) == 0 {
-			return false
-		}
-	}
 	checkText := rendered
 	if desc := strings.TrimSpace(sk.Description); desc != "" {
 		checkText = desc + "\n" + rendered
