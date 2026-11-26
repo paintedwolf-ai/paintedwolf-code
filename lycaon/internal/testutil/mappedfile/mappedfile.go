@@ -56,7 +56,7 @@ type File struct {
 // when the test ends.
 func Map(t testing.TB, path string, size int) *File {
 	t.Helper()
-	cmd := exec.Command(os.Args[0]) // #nosec G204 -- re-executes the running test binary with fixed arguments.
+	cmd := exec.Command(os.Args[0]) // #nosec G204 G702 -- re-executes the running test binary with fixed arguments.
 	cmd.Env = append(os.Environ(), pathEnv+"="+path, sizeEnv+"="+strconv.Itoa(size))
 	cmd.Stderr = os.Stderr
 	stdin, err := cmd.StdinPipe()
