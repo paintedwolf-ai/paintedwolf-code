@@ -176,3 +176,31 @@ type customSettleWorkspace struct {
 func (c *customSettleWorkspace) Settle(_ context.Context, _ bool) (*SettlementReport, error) {
 	return c.report, c.err
 }
+
+func TestDefaultResourceLimitsAndNormalizeCWD(t *testing.T) {
+	lim := DefaultResourceLimits()
+	if lim.MaxMemoryPages != 4096 || lim.MaxGuestWork != 50_000_000 || lim.MaxHostWork != 100_000 ||
+		lim.MaxOutputBytes != 65536 || lim.MaxStagedBytes != 16*1024*1024 || lim.Timeout.Seconds() != 120 {
+		t.Fatalf("unexpected DefaultResourceLimits: %+v", lim)
+	}
+
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", "/workspace"},
+		{".", "/workspace"},
+		{"./", "/workspace"},
+		{"bench", "/workspace/bench"},
+		{"./tools/helper", "/workspace/tools/helper"},
+		{"tools/helper", "/workspace/tools/helper"},
+		{"/workspace/tools/helper", "/workspace/tools/helper"},
+		{"/workspace/./tools/helper", "/workspace/tools/helper"},
+		{"../../etc", "/workspace"},
+	}
+	for _, tc := range cases {
+		if got := normalizeGuestCWD("/workspace", tc.in); got != tc.want {
+			t.Fatalf("normalizeGuestCWD(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

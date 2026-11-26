@@ -455,3 +455,229 @@ func TestCPythonWASIImageTamperNegativeControls(t *testing.T) {
 		}
 	})
 }
+
+func TestCPythonWASIPerInvocationScratchIsolation(t *testing.T) {
+	rt, _, _ := loadRealCPythonRuntime(t, true)
+	ctx := context.Background()
+
+	// Call 1 writes /tmp/leak.txt.
+	var out1 bytes.Buffer
+	res1, err := rt.Execute(ctx, Invocation{
+		ExecutionID: "scratch-call-1",
+		Mode:        ModeCode,
+		Code:        "open('/tmp/leak.txt', 'w').write('secret'); import os; print(os.path.exists('/tmp/leak.txt'))",
+		Stdout:      &out1,
+		Workspace:   newMemWorkspaceAdapter(nil),
+		Limits:      ResourceLimits{Timeout: 30 * time.Second},
+	})
+	testutil.FailErr(t, "scratch call 1", err)
+	if !res1.CleanCompletion || strings.TrimSpace(out1.String()) != "True" {
+		t.Fatalf("call 1 failed: clean=%v out=%q stderr=%q", res1.CleanCompletion, out1.String(), res1.GuestStderr)
+	}
+
+	// Call 2 must NOT see /tmp/leak.txt.
+	var out2 bytes.Buffer
+	res2, err := rt.Execute(ctx, Invocation{
+		ExecutionID: "scratch-call-2",
+		Mode:        ModeCode,
+		Code:        "import os; print(os.path.exists('/tmp/leak.txt'))",
+		Stdout:      &out2,
+		Workspace:   newMemWorkspaceAdapter(nil),
+		Limits:      ResourceLimits{Timeout: 30 * time.Second},
+	})
+	testutil.FailErr(t, "scratch call 2", err)
+	if !res2.CleanCompletion || strings.TrimSpace(out2.String()) != "False" {
+		t.Fatalf("call 2 leaked scratch! clean=%v out=%q stderr=%q", res2.CleanCompletion, out2.String(), res2.GuestStderr)
+	}
+}
+
+func TestCPythonWASISubdirectoryCWD(t *testing.T) {
+	rt, _, _ := loadRealCPythonRuntime(t, true)
+	ctx := context.Background()
+
+	files := map[string][]byte{
+		"root.txt":                   []byte("root-data"),
+		"bench/data.txt":             []byte("bench-data"),
+		"tools/helper/info.txt":      []byte("helper-data"),
+		"tools/helper/run.py":        []byte("from pathlib import Path\nprint(Path.cwd(), open('info.txt').read())\n"),
+		"tools/helper/test_math.py":  []byte("import unittest\nclass T(unittest.TestCase):\n    def test_add(self): self.assertEqual(2+2, 4)\n"),
+	}
+
+	for _, tc := range []struct {
+		name    string
+		cwd     string
+		mode    ExecutionMode
+		code    string
+		script  string
+		module  string
+		args    []string
+		wantSub string
+	}{
+		{
+			name:    "empty cwd code",
+			cwd:     "",
+			mode:    ModeCode,
+			code:    "from pathlib import Path; print(Path.cwd(), open('root.txt').read())",
+			wantSub: "/workspace root-data",
+		},
+		{
+			name:    "bench cwd code",
+			cwd:     "bench",
+			mode:    ModeCode,
+			code:    "from pathlib import Path; print(Path.cwd(), open('data.txt').read())",
+			wantSub: "/workspace/bench bench-data",
+		},
+		{
+			name:    "dot-slash tools/helper cwd code",
+			cwd:     "./tools/helper",
+			mode:    ModeCode,
+			code:    "from pathlib import Path; print(Path.cwd(), open('info.txt').read())",
+			wantSub: "/workspace/tools/helper helper-data",
+		},
+		{
+			name:    "tools/helper cwd script",
+			cwd:     "tools/helper",
+			mode:    ModeScript,
+			script:  "run.py",
+			wantSub: "/workspace/tools/helper helper-data",
+		},
+		{
+			name:    "tools/helper cwd unittest module discovery",
+			cwd:     "tools/helper",
+			mode:    ModeModule,
+			module:  "unittest",
+			args:    []string{"discover", "-v"},
+			wantSub: "OK",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			res, err := rt.Execute(ctx, Invocation{
+				ExecutionID: "cwd-" + tc.name,
+				Mode:        tc.mode,
+				Code:        tc.code,
+				Script:      tc.script,
+				Module:      tc.module,
+				CWD:         tc.cwd,
+				Args:        tc.args,
+				Stdout:      &stdout,
+				Stderr:      &stderr,
+				Workspace:   newMemWorkspaceAdapter(files),
+				Limits:      ResourceLimits{Timeout: 30 * time.Second},
+			})
+			testutil.FailErr(t, "execute "+tc.name, err)
+			combined := stdout.String() + "\n" + stderr.String()
+			if !res.CleanCompletion || res.ExitCode != 0 {
+				t.Fatalf("%s failed: exit=%d clean=%v out=%q err=%q", tc.name, res.ExitCode, res.CleanCompletion, stdout.String(), stderr.String())
+			}
+			if !strings.Contains(combined, tc.wantSub) {
+				t.Fatalf("%s output %q missing %q", tc.name, combined, tc.wantSub)
+			}
+		})
+	}
+}
+
+func TestCPythonWASIDefaultPytest(t *testing.T) {
+	rt, _, _ := loadRealCPythonRuntime(t, true)
+	ctx := context.Background()
+
+	testFile := `import logging
+def test_fixtures(tmp_path, monkeypatch, caplog):
+    p = tmp_path / "f.txt"
+    p.write_text("ok")
+    assert p.read_text() == "ok"
+    monkeypatch.setenv("PW_TEST_VAR", "1")
+    with caplog.at_level(logging.INFO):
+        logging.getLogger("pw").info("hello-caplog")
+    assert "hello-caplog" in caplog.text
+`
+	files := map[string][]byte{
+		"test_sample.py": []byte(testFile),
+	}
+
+	t.Run("ModeModule pytest with zero extra flags", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		res, err := rt.Execute(ctx, Invocation{
+			ExecutionID: "pytest-module-default",
+			Mode:        ModeModule,
+			Module:      "pytest",
+			Stdout:      &stdout,
+			Stderr:      &stderr,
+			Workspace:   newMemWorkspaceAdapter(files),
+			Limits:      ResourceLimits{Timeout: 60 * time.Second},
+		})
+		testutil.FailErr(t, "execute module pytest", err)
+		if !res.CleanCompletion || res.ExitCode != 0 {
+			t.Fatalf("pytest module failed: exit=%d clean=%v out=%q err=%q", res.ExitCode, res.CleanCompletion, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "1 passed") {
+			t.Fatalf("expected '1 passed' in stdout, got %q", stdout.String())
+		}
+	})
+
+	t.Run("pytest.main() via import hook with zero extra flags", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		res, err := rt.Execute(ctx, Invocation{
+			ExecutionID: "pytest-main-default",
+			Mode:        ModeCode,
+			Code:        "import pytest\nrc = pytest.main(['test_sample.py'])\nassert rc == 0, f'rc={rc}'\nprint('PYTEST_MAIN_OK')\n",
+			Stdout:      &stdout,
+			Stderr:      &stderr,
+			Workspace:   newMemWorkspaceAdapter(files),
+			Limits:      ResourceLimits{Timeout: 60 * time.Second},
+		})
+		testutil.FailErr(t, "execute pytest.main", err)
+		if !res.CleanCompletion || res.ExitCode != 0 {
+			t.Fatalf("pytest.main failed: exit=%d clean=%v out=%q err=%q", res.ExitCode, res.CleanCompletion, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "PYTEST_MAIN_OK") {
+			t.Fatalf("expected PYTEST_MAIN_OK, got %q", stdout.String())
+		}
+	})
+}
+
+func TestCPythonWASIInterruptibleSleep(t *testing.T) {
+	rt, _, _ := loadRealCPythonRuntime(t, true)
+	ctx := context.Background()
+
+	t.Run("short time.sleep succeeds", func(t *testing.T) {
+		var stdout bytes.Buffer
+		res, err := rt.Execute(ctx, Invocation{
+			ExecutionID: "sleep-short",
+			Mode:        ModeCode,
+			Code:        "import time\ntime.sleep(0.05)\nprint('SLEPT_OK')\n",
+			Stdout:      &stdout,
+			Workspace:   newMemWorkspaceAdapter(nil),
+			Limits:      ResourceLimits{Timeout: 30 * time.Second},
+		})
+		testutil.FailErr(t, "execute short sleep", err)
+		if !res.CleanCompletion || res.ExitCode != 0 {
+			t.Fatalf("short sleep failed: exit=%d clean=%v stderr=%q", res.ExitCode, res.CleanCompletion, res.GuestStderr)
+		}
+		if strings.TrimSpace(stdout.String()) != "SLEPT_OK" {
+			t.Fatalf("stdout = %q, want SLEPT_OK", stdout.String())
+		}
+	})
+
+	t.Run("long time.sleep interrupted promptly on cancellation", func(t *testing.T) {
+		start := time.Now()
+		res, err := rt.Execute(ctx, Invocation{
+			ExecutionID: "sleep-cancel",
+			Mode:        ModeCode,
+			Code:        "import time\ntime.sleep(30)\n",
+			Workspace:   newMemWorkspaceAdapter(nil),
+			Limits:      ResourceLimits{Timeout: 400 * time.Millisecond},
+		})
+		elapsed := time.Since(start)
+		testutil.FailErr(t, "execute interrupted sleep", err)
+		if res.CleanCompletion {
+			t.Fatal("interrupted sleep must NOT report CleanCompletion=true")
+		}
+		if res.Stop == nil || res.Stop.Code != StopCancelled {
+			t.Fatalf("expected StopCancelled, got %+v", res.Stop)
+		}
+		if elapsed > 5*time.Second {
+			t.Fatalf("interrupted sleep took %v, expected prompt cancellation", elapsed)
+		}
+	})
+}

@@ -643,7 +643,13 @@ def main() -> None:
         f"{wasm_sha256}\n{stdlib_sha256}\n{packages_tree_sha256}\n".encode("ascii")
     ).hexdigest()[:16]
     image_id = f"pp-cpython-{interp['version']}-wasi-{id_hash}"
-    built_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    source_date_epoch = os.environ.get("SOURCE_DATE_EPOCH")
+    if source_date_epoch is not None and source_date_epoch.strip():
+        built_at = dt.datetime.fromtimestamp(
+            int(source_date_epoch.strip()), tz=dt.timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    else:
+        built_at = lock.get("built_at") or "2026-11-26T00:00:00Z"
 
     manifest = {
         "schema_version": "portable-python.image-manifest/v1",

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	mathrand "math/rand"
+	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -171,6 +173,20 @@ type ResourceLimits struct {
 	MaxOutputBytes int64         `json:"max_output_bytes,omitempty"`
 	MaxStagedBytes int64         `json:"max_staged_bytes,omitempty"`
 	Timeout        time.Duration `json:"timeout,omitempty"`
+}
+
+// DefaultResourceLimits returns enforceable production defaults for a Portable
+// Python invocation: 256 MiB linear memory, 50M guest fuel, 100k host ops,
+// 64 KiB inline output, 16 MiB staged bytes, and 120s timeout.
+func DefaultResourceLimits() ResourceLimits {
+	return ResourceLimits{
+		MaxMemoryPages: 4096,
+		MaxGuestWork:   50_000_000,
+		MaxHostWork:    100_000,
+		MaxOutputBytes: 65536,
+		MaxStagedBytes: 16 * 1024 * 1024,
+		Timeout:        120 * time.Second,
+	}
 }
 
 // ResourceUsage records observed resource consumption for an invocation.
@@ -561,10 +577,7 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 		err  error
 	)
 	if r.useTrustedBootstrap {
-		cwd := inv.CWD
-		if strings.TrimSpace(cwd) == "" {
-			cwd = r.workspaceMount
-		}
+		cwd := normalizeGuestCWD(r.workspaceMount, inv.CWD)
 		argv, err = BuildBootstrapArgv(BootstrapConfig{
 			Mode:           inv.Mode,
 			Code:           inv.Code,
@@ -584,6 +597,14 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 		return nil, err
 	}
 
+	// Create a fresh program-private scratch directory per invocation and clean
+	// it up deterministically after the guest module closes.
+	invScratch, err := os.MkdirTemp(r.scratchRoot, "pw-py-scratch-*")
+	if err != nil {
+		return nil, fmt.Errorf("create per-invocation scratch dir: %w", err)
+	}
+	defer os.RemoveAll(invScratch)
+
 	var stderrCapture bytes.Buffer
 	stderrTarget := io.Writer(&stderrCapture)
 	if inv.Stderr != nil {
@@ -592,7 +613,7 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 	sealedStdout := NewSealedWriter(inv.Stdout, latch, inv.Limits.MaxOutputBytes)
 	sealedStderr := NewSealedWriter(stderrTarget, latch, inv.Limits.MaxOutputBytes)
 
-	modCfg, wsFS := r.buildModuleConfig(execCtx, inv, argv, sealedStdout, sealedStderr, latch, meter)
+	modCfg, wsFS := r.buildModuleConfig(execCtx, inv, argv, sealedStdout, sealedStderr, latch, meter, invScratch)
 
 	if inv.ExecutionID != "" {
 		defer r.parked.Release(inv.ExecutionID)
@@ -708,6 +729,26 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 	return res, nil
 }
 
+func normalizeGuestCWD(workspaceMount, raw string) string {
+	mount := path.Clean("/" + strings.TrimPrefix(strings.TrimSpace(workspaceMount), "/"))
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed == "." || trimmed == "./" {
+		return mount
+	}
+	if trimmed == mount || strings.HasPrefix(trimmed, mount+"/") {
+		cleaned := path.Clean(trimmed)
+		if cleaned == mount || strings.HasPrefix(cleaned, mount+"/") {
+			return cleaned
+		}
+		return mount
+	}
+	cleaned := path.Clean(mount + "/" + strings.TrimPrefix(trimmed, "/"))
+	if cleaned == mount || strings.HasPrefix(cleaned, mount+"/") {
+		return cleaned
+	}
+	return mount
+}
+
 func (r *WazeroRuntime) buildModuleConfig(
 	execCtx context.Context,
 	inv Invocation,
@@ -715,6 +756,7 @@ func (r *WazeroRuntime) buildModuleConfig(
 	stdout, stderr io.Writer,
 	latch *StopLatch,
 	meter *WorkMeter,
+	invScratch string,
 ) (wazero.ModuleConfig, *WorkspaceSysFS) {
 	cfg := wazero.NewModuleConfig().
 		WithName("").
@@ -728,7 +770,18 @@ func (r *WazeroRuntime) buildModuleConfig(
 		}, sys.ClockResolution(r.clock.WallResolutionNanos())).
 		WithNanotime(func() int64 {
 			return r.clock.MonotonicNanos()
-		}, sys.ClockResolution(r.clock.MonotonicResolutionNanos()))
+		}, sys.ClockResolution(r.clock.MonotonicResolutionNanos())).
+		WithNanosleep(func(ns int64) {
+			if ns <= 0 {
+				return
+			}
+			timer := time.NewTimer(time.Duration(ns))
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-execCtx.Done():
+			}
+		})
 
 	if inv.Stdin != nil {
 		cfg = cfg.WithStdin(inv.Stdin)
@@ -751,8 +804,8 @@ func (r *WazeroRuntime) buildModuleConfig(
 			}
 		}
 	}
-	if r.scratchRoot != "" {
-		fsCfg = fsCfg.WithDirMount(r.scratchRoot, DefaultGuestScratchMount)
+	if invScratch != "" {
+		fsCfg = fsCfg.WithDirMount(invScratch, DefaultGuestScratchMount)
 	}
 	var wsFS *WorkspaceSysFS
 	if inv.Workspace != nil {

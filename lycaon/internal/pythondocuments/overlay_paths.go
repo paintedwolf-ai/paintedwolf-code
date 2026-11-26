@@ -61,11 +61,10 @@ func (a *OverlayAdapter) resolvePath(raw string) (pythonruntime.CanonicalTarget,
 		return pythonruntime.CanonicalTarget{}, RootSpec{}, pythonruntime.ErrnoEACCES
 	}
 
-	joined := raw
-	if a.cwd != "" {
-		joined = a.cwd + "/" + raw
-	}
-	cleaned, ok := cleanConfinedRel(joined)
+	// Paths arriving from WASI (WorkspaceSysFS) are already resolved relative to
+	// the /workspace mount root by WASI + guest os.chdir(cwd), so do not prepend
+	// a.cwd a second time.
+	cleaned, ok := cleanConfinedRel(raw)
 	if !ok {
 		return pythonruntime.CanonicalTarget{}, RootSpec{}, pythonruntime.ErrnoEACCES
 	}
