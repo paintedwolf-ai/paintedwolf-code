@@ -1,0 +1,49 @@
+tags: [process, terminal]
+description: >-
+  Noninteractive Bash programs for file inspection, search and Git reads;
+  substitutions and pipes; `CMD --help` lists native forms; stdin is empty
+  unless supplied.
+description_effects:
+  mutation: >-
+    File creation, edits, and redirects.
+  external_exec: >-
+    Installed programs and `&` jobs cannot open host output paths
+    (`tool-output/...`); pipe `cat PATH | program`. `"$(native_path -- PATH)"`
+    prints a host path and grants nothing.
+  external_exec_selector: >-
+    `external -- NAME` runs the installed binary that shares a native name.
+  network_egress: >-
+    HTTP requests with `curl`.
+schema:
+  type: object
+  properties:
+    secret_use: {type: object, additionalProperties: false, required: [services], description: "Origins for `{{paintedwolf-secret:…}}`.", properties: {services: {type: array, minItems: 1, maxItems: 8, description: Origin URLs., items: {type: string, maxLength: 1024}}}}
+    verification: {type: boolean, default: false, description: Whole-program verdict.}
+    command: {type: string, description: Bash source.}
+    cwd: {type: string, description: "Folder for the statement. Empty = the session folder; `@label` or `@label/sub` = any attached folder; `@scratch`/`@output` = session scratch/output; absolute paths are accepted."}
+    terminal_capture: {type: object, additionalProperties: false, description: Non-interactive one-shot PTY screen., properties: {winsize: {type: object, additionalProperties: false, description: Dimensions., required: [cols, rows], properties: {cols: {type: integer, minimum: 1, maximum: 240, description: Columns.}, rows: {type: integer, minimum: 1, maximum: 120, description: Rows.}}}, caption: {type: string, maxLength: 240, description: Label.}}}
+    snapshot_capture: {type: object, additionalProperties: false, description: "Attach APP_SNAPSHOT on zero exit.", properties: {env_var: {type: string, default: APP_SNAPSHOT, description: Variable.}, view: {type: string, description: View.}, scale: {type: number, default: 2.0, description: Scale.}, caption: {type: string, maxLength: 240, description: Label.}}}
+    socks_proxy: {type: boolean, default: false, description: SOCKS5h proxy.}
+    capability_request:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: Extra access this call needs.
+      properties:
+        host_resources: {type: array, minItems: 1, maxItems: 16, description: Service IDs., items: {type: string}}
+        socket_paths: {type: array, minItems: 1, maxItems: 8, items: {type: string}, description: "Exact service path. External argv or env values use a whole `{{paintedwolf-socket:/absolute/path}}` reference. Clients needing a Unix URL use `{{paintedwolf-socket:unix-url:/absolute/path}}`. macOS datagrams use `{{paintedwolf-socket:unixgram:/absolute/path}}`; Linux confinement refuses Unix datagrams. Native socket arguments use the path."}
+        process_control: {description: Process access., oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
+        credential_store: {type: boolean, enum: [true], description: Read-only access to the OS credential store.}
+        host_execution: {description: Unsandboxed; replaces the other fields., oneOf: [{type: boolean, enum: [true]}, {type: object, additionalProperties: false}]}
+        direct_ip:
+          description: Direct IP for UDP or clients that ignore proxy variables.
+          oneOf: [{type: boolean}, {type: array, maxItems: 16, items: {type: string, maxLength: 256}}, {type: object, additionalProperties: false, properties: {declared_destinations: {type: array, maxItems: 16, items: {type: string, maxLength: 256}}}}]
+        local_listen: {type: object, additionalProperties: false, description: Listen ports., properties: {ports: {type: array, minItems: 1, maxItems: 8, description: Ports., items: {type: integer, minimum: 1, maximum: 65535}}}}
+        write_root: {type: string, maxLength: 1024, description: "Absolute path needing write authority; protected files need the exact path."}
+        read_path:
+          description: One exact absolute protected path or a list of up to 32.
+          oneOf:
+            - {type: string, maxLength: 1024}
+            - {type: array, minItems: 1, maxItems: 32, items: {type: string, maxLength: 1024}}
+  required: [command]
+  additionalProperties: false

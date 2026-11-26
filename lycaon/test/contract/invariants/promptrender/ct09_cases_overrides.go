@@ -14,7 +14,9 @@ import (
 // Unit override and disable cases. Each is a desired state Resolve admits:
 // skills are device-only units, so their disables are device desired state;
 // agents and prompt units are shared kinds a project may disable from its
-// overlay extensions file (docs/extend.md, docs/project-overlay.md). Each case
+// overlay extensions file (docs/extend.md, docs/project-overlay.md); tool
+// schemas are device units a pack installed from a folder may win through
+// own. Each case
 // meets only the states where a guard reading the moved fact renders.
 var _ = hoststate.AddCustomizationCases(overrideCases()...)
 
@@ -45,25 +47,40 @@ func overrideCases() []hoststate.CustomizationCase {
 	}
 	cases = append(cases,
 		hoststate.CustomizationCase{
-			ID: "project-without-web-researcher", Project: overrideProject("without-web-researcher"),
+			ID: "project-without-web-researcher", Project: overrideFixture("without-web-researcher"),
 			Coordinator: zeroRootSeeds,
 		},
 		hoststate.CustomizationCase{
-			ID: "project-without-implementer", Project: overrideProject("without-implementer"),
+			ID: "project-without-implementer", Project: overrideFixture("without-implementer"),
 			Coordinator: requestableTaskSeeds,
 		},
 		hoststate.CustomizationCase{
-			ID: "project-without-orientation-units", Project: overrideProject("without-orientation-units"),
+			ID: "project-without-orientation-units", Project: overrideFixture("without-orientation-units"),
 			Coordinator:  ambientBuildSeeds,
 			WorkerAgents: []string{"code-reviewer", "skeptic", "plan-reviewer"},
 			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
 		},
 	)
+	// A device pack wins the process tool schemas without one capability
+	// field, so each side of the self-calling-server pair flips alone.
+	for _, field := range []string{"local-listen", "loopback-connect"} {
+		pack := "fixture/schemas-without-" + field
+		own := map[string]string{}
+		for _, tool := range []string{"command", "verify", "terminal_open"} {
+			own["tools/schemas/"+tool] = pack
+		}
+		cases = append(cases, hoststate.CustomizationCase{
+			ID: "own-schemas-without-" + field, Packs: []string{overrideFixture("packs", "schemas-without-"+field)}, Own: own,
+			Coordinator:  ambientBuildSeeds,
+			WorkerAgents: []string{"implementer"},
+			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingAllLoaded, false)},
+		})
+	}
 	return cases
 }
 
-func overrideProject(name string) string {
-	return filepath.Join(configlayout.FindModuleRoot(), "test", "contract", "invariants", "promptrender", "testdata", "ct09-overrides", name)
+func overrideFixture(parts ...string) string {
+	return filepath.Join(append([]string{configlayout.FindModuleRoot(), "test", "contract", "invariants", "promptrender", "testdata", "ct09-overrides"}, parts...)...)
 }
 
 func overrideWorkerSeed(loading hoststate.WorkerLoadingMode, vision bool) hoststate.WorkerSeed {
