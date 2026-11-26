@@ -144,12 +144,20 @@ func formatClaimViolations(
 ) []string {
 	var msgs []string
 	for _, v := range viols {
-		msgs = append(msgs, fmt.Sprintf("%s names `%s` (%s): %s", label, v.Claim, v.Reason, lineNaming(text, v.Claim)))
+		msgs = append(msgs, fmt.Sprintf("%s names `%s` (%s): %s", label, v.Claim, v.Reason, claimLine(text, v)))
 	}
 	for _, diag := range diags {
 		msgs = append(msgs, fmt.Sprintf("%s unclassified protocol backtick `%s` at line %d", label, diag.Span, diag.Line))
 	}
 	return msgs
+}
+
+// claimLine quotes the rendered line the checker attributed the claim to.
+func claimLine(text string, v toolvocabtest.SubjectViolation) string {
+	if lines := strings.Split(text, "\n"); v.Line > 0 && v.Line <= len(lines) {
+		return fmt.Sprintf("%q", strings.TrimSpace(lines[v.Line-1]))
+	}
+	return lineNaming(text, v.Claim)
 }
 
 func lineNaming(text, name string) string {
