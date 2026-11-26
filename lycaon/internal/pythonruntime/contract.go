@@ -538,11 +538,11 @@ func (r *WazeroRuntime) buildModuleConfig(inv Invocation, argv []string, stdout,
 		WithStdout(stdout).
 		WithStderr(stderr).
 		WithRandSource(r.entropy.Reader()).
-		WithSysWalltime(func() (sec int64, nsec int32) {
+		WithWalltime(func() (sec int64, nsec int32) {
 			now := r.clock.Now()
 			return now.Unix(), int32(now.Nanosecond())
 		}, sys.ClockResolution(r.clock.WallResolutionNanos())).
-		WithSysNanotime(func() int64 {
+		WithNanotime(func() int64 {
 			return r.clock.MonotonicNanos()
 		}, sys.ClockResolution(r.clock.MonotonicResolutionNanos()))
 
