@@ -7,9 +7,20 @@ import (
 
 func checkOperationSourceContradiction(obs Observation, now time.Time) (Finding, bool) {
 	var execIDs, opIDs, srcIDs, mismatches []string
-	var incompleteExecs []string
+	var incompleteExecs, unsupportedExecs, unsupportedSrcs []string
+	var unsupportedReason string
 	for _, link := range obs.LinkedOperations {
 		if !link.Completed {
+			continue
+		}
+		if link.UnsupportedReason != "" {
+			unsupportedExecs = append(unsupportedExecs, link.ExecutionID)
+			if link.SourceID != "" {
+				unsupportedSrcs = append(unsupportedSrcs, link.SourceID)
+			}
+			if unsupportedReason == "" {
+				unsupportedReason = link.UnsupportedReason
+			}
 			continue
 		}
 		if !link.CompleteEvidence {
@@ -52,6 +63,15 @@ func checkOperationSourceContradiction(obs Observation, now time.Time) (Finding,
 		f.Expected = map[string]any{"complete_linked_evidence": true}
 		f.Observed = map[string]any{"incomplete_links": len(incompleteExecs)}
 		f.Reason = "incomplete_operation_source_evidence"
+		return f, true
+	}
+	if len(unsupportedExecs) > 0 {
+		f := baseFinding(obs, now, RuleOperationSourceContradiction, DispositionUnsupported)
+		f.ExecutionIDs = unsupportedExecs
+		f.SourceIDs = unsupportedSrcs
+		f.Expected = map[string]any{"independent_owner_evidence": true}
+		f.Observed = map[string]any{"unsupported_links": len(unsupportedExecs)}
+		f.Reason = unsupportedReason
 		return f, true
 	}
 	return Finding{}, false

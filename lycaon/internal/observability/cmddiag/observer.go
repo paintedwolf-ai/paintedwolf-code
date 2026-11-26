@@ -1,13 +1,11 @@
 package cmddiag
 
 import (
-	"encoding/json"
-	"log/slog"
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/debugpaths"
 	"github.com/lycaon/lycaon/internal/debugretention"
 	"github.com/lycaon/lycaon/internal/observability"
 )
@@ -20,39 +18,57 @@ func init() {
 type Config struct {
 	Enabled       bool
 	QueueCapacity int
+	TaskTimeout   time.Duration
 	Sink          func(Finding)
 	Now           func() time.Time
 }
 
 // Stats summarizes bounded queue activity for an observer.
 type Stats struct {
-	Enqueued int64
-	Dropped  int64
-	Emitted  int64
+	Enqueued     int64
+	Dropped      int64
+	Emitted      int64
+	Deduplicated int64
+}
+
+type workItem struct {
+	obs  *Observation
+	task *Task
+}
+
+type dedupKey struct {
+	rule      RuleID
+	programID string
 }
 
 // Observer evaluates command-program observations asynchronously on a bounded
-// queue. Submit never blocks callers and records drops explicitly.
+// queue. Submit and SubmitTask never block callers and record drops explicitly.
 type Observer struct {
-	enabled  bool
-	capacity int
-	sink     func(Finding)
-	now      func() time.Time
-	file     *debugretention.File
+	enabled     bool
+	capacity    int
+	taskTimeout time.Duration
+	sink        func(Finding)
+	now         func() time.Time
+	file        *debugretention.File
+
+	workerCtx    context.Context
+	workerCancel context.CancelFunc
 
 	mu               sync.RWMutex
 	closed           bool
-	queue            chan Observation
+	queue            chan workItem
 	wg               sync.WaitGroup
 	closeOnce        sync.Once
+	seen             map[dedupKey]struct{}
 	enqueued         atomic.Int64
 	dropped          atomic.Int64
 	emitted          atomic.Int64
+	deduplicated     atomic.Int64
 	reportedDropMark atomic.Int64
 }
 
 // NewObserver creates a bounded async observer. When cfg.Enabled is false,
-// no background goroutine is started and Submit is a no-op.
+// no background goroutine is started and Submit/SubmitTask are no-ops.
 func NewObserver(cfg Config) *Observer {
 	if !cfg.Enabled {
 		return &Observer{enabled: false}
@@ -61,25 +77,48 @@ func NewObserver(cfg Config) *Observer {
 	if capacity <= 0 {
 		capacity = DefaultQueueCapacity
 	}
+	timeout := cfg.TaskTimeout
+	if timeout <= 0 {
+		timeout = DefaultTaskTimeout
+	}
 	nowFn := cfg.Now
 	if nowFn == nil {
 		nowFn = func() time.Time { return time.Now().UTC() }
 	}
+	workerCtx, workerCancel := context.WithCancel(context.Background())
 	obs := &Observer{
-		enabled:  true,
-		capacity: capacity,
-		sink:     cfg.Sink,
-		now:      nowFn,
-		queue:    make(chan Observation, capacity),
+		enabled:      true,
+		capacity:     capacity,
+		taskTimeout:  timeout,
+		sink:         cfg.Sink,
+		now:          nowFn,
+		workerCtx:    workerCtx,
+		workerCancel: workerCancel,
+		queue:        make(chan workItem, capacity),
+		seen:         make(map[dedupKey]struct{}),
 	}
 	obs.wg.Add(1)
 	go obs.run()
 	return obs
 }
 
-// Submit enqueues an observation without blocking. It returns false when the
-// observer is disabled, closed, or its bounded queue is saturated.
+// Submit enqueues an immutable observation without blocking.
 func (o *Observer) Submit(obs Observation) bool {
+	copyObs := obs
+	return o.enqueue(workItem{obs: &copyObs})
+}
+
+// SubmitTask enqueues a deferred fetch task without blocking. When the queue
+// is saturated, task.Fetch is never called.
+func (o *Observer) SubmitTask(task Task) bool {
+	if task.Fetch == nil {
+		return false
+	}
+	copyTask := task
+	return o.enqueue(workItem{task: &copyTask})
+}
+
+func (o *Observer) enqueue(item workItem) bool {
 	if o == nil || !o.enabled {
 		return false
 	}
@@ -89,7 +128,7 @@ func (o *Observer) Submit(obs Observation) bool {
 		return false
 	}
 	select {
-	case o.queue <- obs:
+	case o.queue <- item:
 		o.enqueued.Add(1)
 		return true
 	default:
@@ -98,20 +137,21 @@ func (o *Observer) Submit(obs Observation) bool {
 	}
 }
 
-// Stats returns the current enqueued, dropped, and emitted counters.
+// Stats returns the current enqueued, dropped, emitted, and deduplicated counts.
 func (o *Observer) Stats() Stats {
 	if o == nil {
 		return Stats{}
 	}
 	return Stats{
-		Enqueued: o.enqueued.Load(),
-		Dropped:  o.dropped.Load(),
-		Emitted:  o.emitted.Load(),
+		Enqueued:     o.enqueued.Load(),
+		Dropped:      o.dropped.Load(),
+		Emitted:      o.emitted.Load(),
+		Deduplicated: o.deduplicated.Load(),
 	}
 }
 
-// Close stops accepting new observations, drains queued items, records any
-// unreported overflow drops, and closes the underlying capture file if owned.
+// Close stops accepting new work, cancels any in-flight fetch, drains queued
+// work, records unreported overflow drops, and closes owned files.
 func (o *Observer) Close() {
 	if o == nil || !o.enabled {
 		return
@@ -121,6 +161,9 @@ func (o *Observer) Close() {
 		o.closed = true
 		close(o.queue)
 		o.mu.Unlock()
+		if o.workerCancel != nil {
+			o.workerCancel()
+		}
 		o.wg.Wait()
 		o.emitOverflowIfNeeded()
 		if o.file != nil {
@@ -134,10 +177,49 @@ func (o *Observer) run() {
 	defer o.wg.Done()
 	for item := range o.queue {
 		o.emitOverflowIfNeeded()
-		for _, finding := range Evaluate(item, o.now()) {
-			o.emit(finding)
+		var obs Observation
+		if item.task != nil {
+			taskCtx, cancel := context.WithTimeout(o.workerCtx, o.taskTimeout)
+			fetched, err := item.task.Fetch(taskCtx)
+			cancel()
+			if err != nil {
+				o.emitDedup(sanitizeFinding(Finding{
+					SchemaVersion: SchemaVersion,
+					Timestamp:     o.now().UTC(),
+					RuleID:        RuleObservationLoss,
+					Disposition:   DispositionIncomplete,
+					SessionID:     item.task.SessionID,
+					ProgramID:     item.task.ProgramID,
+					ToolCallID:    item.task.ToolCallID,
+					Expected:      map[string]any{"receipt_read_succeeded": true},
+					Observed:      map[string]any{"receipt_read_succeeded": false},
+					Reason:        "receipt_read_failed",
+				}))
+				continue
+			}
+			obs = fetched
+		} else if item.obs != nil {
+			obs = *item.obs
+		}
+		for _, finding := range Evaluate(obs, o.now()) {
+			o.emitDedup(finding)
 		}
 	}
+}
+
+func (o *Observer) emitDedup(f Finding) {
+	if f.RuleID != RuleCaptureOverflow && f.ProgramID != "" {
+		key := dedupKey{rule: f.RuleID, programID: f.ProgramID}
+		if _, exists := o.seen[key]; exists {
+			o.deduplicated.Add(1)
+			return
+		}
+		if len(o.seen) >= DefaultMaxDedupEntries {
+			clear(o.seen)
+		}
+		o.seen[key] = struct{}{}
+	}
+	o.emit(f)
 }
 
 func (o *Observer) emitOverflowIfNeeded() {
@@ -166,118 +248,5 @@ func (o *Observer) emit(f Finding) {
 	o.emitted.Add(1)
 	if o.sink != nil {
 		o.sink(f)
-	}
-}
-
-var (
-	defaultMu       sync.Mutex
-	defaultObserver *Observer
-	overrideObs     *Observer
-)
-
-// Enabled reports whether opt-in dev command diagnostics are active via
-// LYCAON_DEV_COMMAND_DIAGNOSTICS (or LYCAON_DEBUG_ALL) or a test override.
-func Enabled() bool {
-	defaultMu.Lock()
-	override := overrideObs
-	defaultMu.Unlock()
-	if override != nil {
-		return override.enabled
-	}
-	return debugpaths.Enabled(debugpaths.KindCommandDiagnostics)
-}
-
-// Observe submits an immutable observation to the active dev diagnostics
-// observer when enabled. When disabled it returns false with zero side effects.
-func Observe(obs Observation) bool {
-	defaultMu.Lock()
-	override := overrideObs
-	defaultMu.Unlock()
-	if override != nil {
-		return override.Submit(obs)
-	}
-	if !debugpaths.Enabled(debugpaths.KindCommandDiagnostics) {
-		return false
-	}
-	return ensureDefaultObserver().Submit(obs)
-}
-
-// SetObserver installs a scoped observer override (intended for tests) and
-// returns a restore function.
-func SetObserver(obs *Observer) func() {
-	defaultMu.Lock()
-	prev := overrideObs
-	overrideObs = obs
-	defaultMu.Unlock()
-	return func() {
-		defaultMu.Lock()
-		overrideObs = prev
-		defaultMu.Unlock()
-	}
-}
-
-// Close drains and closes the process-wide dev command diagnostics observer.
-func Close() {
-	defaultMu.Lock()
-	obs := defaultObserver
-	defaultObserver = nil
-	defaultMu.Unlock()
-	if obs != nil {
-		obs.Close()
-	}
-}
-
-func ensureDefaultObserver() *Observer {
-	defaultMu.Lock()
-	defer defaultMu.Unlock()
-	if defaultObserver != nil {
-		return defaultObserver
-	}
-	path := debugpaths.FilePath(debugpaths.KindCommandDiagnostics)
-	var file *debugretention.File
-	if path != "" {
-		opened, err := debugretention.OpenFile(path, debugretention.DefaultConfig().MaxFileBytes)
-		if err != nil {
-			slog.Warn("command diagnostics log file disabled", "err", err)
-		} else {
-			file = opened
-		}
-	}
-	var writeMu sync.Mutex
-	obs := NewObserver(Config{
-		Enabled:       true,
-		QueueCapacity: DefaultQueueCapacity,
-		Sink: func(f Finding) {
-			writeFinding(file, &writeMu, f)
-		},
-	})
-	obs.file = file
-	defaultObserver = obs
-	return obs
-}
-
-func writeFinding(file *debugretention.File, mu *sync.Mutex, f Finding) {
-	if f.Disposition == DispositionContradiction || f.Disposition == DispositionOverflow {
-		slog.Warn("command runtime diagnostic",
-			"rule_id", string(f.RuleID),
-			"disposition", string(f.Disposition),
-			"session_id", f.SessionID,
-			"program_id", f.ProgramID,
-			"reason", f.Reason,
-			"dropped_count", f.DroppedCount,
-		)
-	}
-	if file == nil {
-		return
-	}
-	data, err := json.Marshal(f)
-	if err != nil {
-		slog.Warn("command diagnostics marshal failed", "err", err)
-		return
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if _, err := file.Write(append(data, '\n')); err != nil {
-		slog.Warn("command diagnostics write failed", "err", err)
 	}
 }

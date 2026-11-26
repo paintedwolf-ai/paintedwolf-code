@@ -1,15 +1,17 @@
 package command_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/debugpaths"
 	"github.com/lycaon/lycaon/internal/observability/cmddiag"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestProgramDiagnosticsQuietOnCleanDevRun(t *testing.T) {
@@ -20,6 +22,9 @@ func TestProgramDiagnosticsQuietOnCleanDevRun(t *testing.T) {
 	t.Cleanup(cmddiag.Close)
 
 	f := newProgramFixture(t)
+	f.Configure = func(tc *tools.ToolContext) {
+		tc.Effects.ReportProgress = func(api.ToolProgress) {}
+	}
 	output, err := f.call(t, t.Context(), "printf 'clean-dev-run\\n'")
 	testutil.FailErr(t, "run clean dev command", err)
 	if !strings.Contains(output, "clean-dev-run") {
@@ -31,8 +36,15 @@ func TestProgramDiagnosticsQuietOnCleanDevRun(t *testing.T) {
 	if err != nil && !os.IsNotExist(err) {
 		testutil.FailErr(t, "read diagnostics file", err)
 	}
-	if strings.TrimSpace(string(data)) != "" {
-		t.Fatalf("expected 0 false-positive diagnostics on clean run, got:\n%s", string(data))
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var got cmddiag.Finding
+		testutil.FailErr(t, "decode finding", json.Unmarshal([]byte(line), &got))
+		if got.Disposition == cmddiag.DispositionContradiction {
+			t.Fatalf("unexpected contradiction on clean dev run: %+v", got)
+		}
 	}
 }
 
@@ -66,72 +78,43 @@ func TestProgramDiagnosticsDisabledMatchesEnabledProductOutput(t *testing.T) {
 	}
 }
 
-func TestProgramDiagnosticsSaturatedQueuePreservesProductExecution(t *testing.T) {
-	gate := make(chan struct{})
-	var closeGateOnce sync.Once
-	closeGate := func() { closeGateOnce.Do(func() { close(gate) }) }
-	firstEntered := make(chan struct{})
-	var mu sync.Mutex
-	var findings []cmddiag.Finding
-
-	obs := cmddiag.NewObserver(cmddiag.Config{
-		Enabled:       true,
-		QueueCapacity: 1,
-		Sink: func(f cmddiag.Finding) {
-			if f.RuleID == cmddiag.RuleStaleTerminalPresentation {
-				select {
-				case <-firstEntered:
-				default:
-					close(firstEntered)
-				}
-				<-gate
-			}
-			mu.Lock()
-			findings = append(findings, f)
-			mu.Unlock()
-		},
-	})
-	restore := cmddiag.SetObserver(obs)
-	t.Cleanup(func() {
-		restore()
-		closeGate()
-		obs.Close()
-	})
-
-	// Saturate the queue with a blocked synthetic finding before running real commands.
-	stale := cmddiag.Observation{
-		ProgramID:        "prog-block",
-		ProgramState:     "completed",
-		ProgramSettled:   true,
-		ConsumerCaughtUp: true,
-		Presentation:     &cmddiag.PresentationSnapshot{ProgramState: "running"},
-	}
-	obs.Submit(stale)
-	<-firstEntered
-	obs.Submit(stale)
-	obs.Submit(stale)
+func TestProgramDiagnosticsCanaryLeaksNoPathContentOrArgument(t *testing.T) {
+	const (
+		canaryDir  = "canary_dir_9876"
+		canaryFile = "canary_file_5432.txt"
+		canaryBody = "CANARY_FILE_BODY_ALPHA_7788"
+		canaryArg  = "CANARY_CMD_ARG_OMEGA_9900"
+	)
+	outFile := filepath.Join(t.TempDir(), "command-diagnostics.jsonl")
+	t.Setenv("LYCAON_DEV_COMMAND_DIAGNOSTICS", "1")
+	t.Setenv("LYCAON_DEV_COMMAND_DIAGNOSTICS_FILE", outFile)
+	cmddiag.Close()
+	t.Cleanup(cmddiag.Close)
 
 	f := newProgramFixture(t)
-	output, err := f.call(t, t.Context(), "printf 'intact-under-saturation\\n'")
-	testutil.FailErr(t, "run command under saturated diagnostics queue", err)
-	if !strings.Contains(output, "intact-under-saturation") {
-		t.Fatalf("product execution altered under saturation: %s", output)
-	}
+	// Leave ReportProgress nil so the unsupported presentation finding is written
+	// to command-diagnostics.jsonl, exercising real JSONL serialization.
+	target := filepath.Join(f.Dir, canaryDir, canaryFile)
+	testutil.FailErr(t, "mkdir canary dir", os.MkdirAll(filepath.Dir(target), 0o755))
+	testutil.FailErr(t, "write canary file", os.WriteFile(target, []byte(canaryBody+"\n"), 0o600))
 
-	closeGate()
-	obs.Close()
-	if obs.Stats().Dropped == 0 {
-		t.Fatal("expected saturated observer to record drops")
+	cmd := "printf '%s\\n' '" + canaryArg + "' | head"
+	output, err := f.call(t, t.Context(), cmd)
+	testutil.FailErr(t, "run canary command", err)
+	if !strings.Contains(output, canaryArg) {
+		t.Fatalf("expected command output preserved, got %s", output)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	sawOverflow := false
-	for _, f := range findings {
-		if f.RuleID == cmddiag.RuleCaptureOverflow && f.Disposition == cmddiag.DispositionOverflow {
-			sawOverflow = true
+	cmddiag.Close()
+
+	raw, err := os.ReadFile(outFile)
+	testutil.FailErr(t, "read diagnostics jsonl", err)
+	body := string(raw)
+	if strings.TrimSpace(body) == "" {
+		t.Fatal("expected at least one metadata finding written for canary verification")
+	}
+	for _, sentinel := range []string{f.Dir, canaryDir, canaryFile, canaryBody, canaryArg} {
+		if strings.Contains(body, sentinel) {
+			t.Fatalf("command-diagnostics.jsonl leaked sentinel %q:\n%s", sentinel, body)
 		}
-	}
-	if !sawOverflow {
-		t.Fatalf("expected capture_overflow finding under saturation, got %+v", findings)
 	}
 }

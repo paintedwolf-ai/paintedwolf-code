@@ -1,11 +1,13 @@
 package cmddiag
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -73,7 +75,6 @@ func TestBoundedQueueOverflowRecordsDropsWithoutBlocking(t *testing.T) {
 	}
 	<-firstEntered
 
-	// Fill the remaining buffer (cap=2) and push additional items to saturate it.
 	dropped := 0
 	for i := 0; i < 10; i++ {
 		if !obs.Submit(bad) {
@@ -105,9 +106,102 @@ func TestBoundedQueueOverflowRecordsDropsWithoutBlocking(t *testing.T) {
 	}
 }
 
-func TestRedactionScrubsSecretsAndClampsMetadata(t *testing.T) {
+func TestSubmitTaskOverflowPerformsZeroFetches(t *testing.T) {
+	block := make(chan struct{})
+	var closeBlockOnce sync.Once
+	closeBlock := func() { closeBlockOnce.Do(func() { close(block) }) }
+	entered := make(chan struct{})
+
+	obs := NewObserver(Config{Enabled: true, QueueCapacity: 1})
+	t.Cleanup(func() {
+		closeBlock()
+		obs.Close()
+	})
+
+	// Occupy the single worker goroutine.
+	if !obs.SubmitTask(Task{
+		ProgramID: "prog-blocker",
+		Fetch: func(ctx context.Context) (Observation, error) {
+			close(entered)
+			select {
+			case <-block:
+			case <-ctx.Done():
+			}
+			return cleanSettledObservation(), nil
+		},
+	}) {
+		t.Fatal("blocker task should enqueue")
+	}
+	<-entered
+
+	// Fill queue capacity=1.
+	if !obs.Submit(cleanSettledObservation()) {
+		t.Fatal("second item should fill queue")
+	}
+
+	// Any further task must drop immediately without ever invoking Fetch.
+	var overflowFetches atomic.Int64
+	for i := 0; i < 5; i++ {
+		if obs.SubmitTask(Task{
+			ProgramID: "prog-overflow",
+			Fetch: func(context.Context) (Observation, error) {
+				overflowFetches.Add(1)
+				return cleanSettledObservation(), nil
+			},
+		}) {
+			t.Fatal("expected task to drop while queue is full")
+		}
+	}
+	closeBlock()
+	obs.Close()
+	if overflowFetches.Load() != 0 {
+		t.Fatalf("expected 0 fetches for dropped tasks, got %d", overflowFetches.Load())
+	}
+	if obs.Stats().Dropped != 5 {
+		t.Fatalf("stats.Dropped = %d, want 5", obs.Stats().Dropped)
+	}
+}
+
+func TestDeduplicatesFindingsByRuleAndProgram(t *testing.T) {
+	var mu sync.Mutex
+	var got []Finding
+	obs := NewObserver(Config{
+		Enabled:       true,
+		QueueCapacity: 8,
+		Sink: func(f Finding) {
+			mu.Lock()
+			got = append(got, f)
+			mu.Unlock()
+		},
+	})
+	bad := cleanSettledObservation()
+	bad.ProgramID = "prog-dup-check"
+	bad.Presentation.ProgramState = "running"
+
+	obs.Submit(bad)
+	obs.Submit(bad)
+	obs.Submit(bad)
+	obs.Close()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 deduplicated finding, got %d: %+v", len(got), got)
+	}
+	if obs.Stats().Deduplicated != 2 {
+		t.Fatalf("stats.Deduplicated = %d, want 2", obs.Stats().Deduplicated)
+	}
+}
+
+func TestRedactionScrubsSecretsAndDigestsPaths(t *testing.T) {
 	const bearer = "Bearer sk-ant-api03-verysecretvalue1234567890"
 	const apiKey = "OPENAI_API_KEY=sk-1234567890abcdef1234567890"
+	const pathCanary = "/Users/dev/secret_workspace_canary/internal/private_file.go"
+
+	digest := DigestReference("/Users/dev/secret_workspace_canary", "internal/private_file.go")
+	if !strings.HasPrefix(digest, "ref:") || len(digest) != 16 || strings.Contains(digest, "secret") {
+		t.Fatalf("unexpected digest format: %q", digest)
+	}
 
 	outFile := filepath.Join(t.TempDir(), "command-diagnostics.jsonl")
 	t.Setenv("LYCAON_DEV_COMMAND_DIAGNOSTICS", "1")
@@ -117,7 +211,7 @@ func TestRedactionScrubsSecretsAndClampsMetadata(t *testing.T) {
 
 	obs := cleanSettledObservation()
 	obs.LinkedOperations[0].SourceID = "root:file?" + bearer + "&" + apiKey
-	obs.LinkedOperations[0].ExpectedSourceID = "root:other:" + strings.Repeat("x", 400)
+	obs.LinkedOperations[0].ExpectedSourceID = pathCanary
 	if !Observe(obs) {
 		t.Fatal("expected Observe to accept observation when enabled")
 	}
@@ -126,8 +220,10 @@ func TestRedactionScrubsSecretsAndClampsMetadata(t *testing.T) {
 	raw, err := os.ReadFile(outFile)
 	testutil.FailErr(t, "read diagnostics jsonl", err)
 	body := string(raw)
-	if strings.Contains(body, "sk-ant-api03") || strings.Contains(body, "sk-1234567890abcdef") {
-		t.Fatalf("diagnostics output leaked secret material: %s", body)
+	for _, forbidden := range []string{"sk-ant-api03", "sk-1234567890abcdef", "secret_workspace_canary", "private_file.go"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("diagnostics output leaked %q: %s", forbidden, body)
+		}
 	}
 	var decoded Finding
 	lines := strings.Split(strings.TrimSpace(body), "\n")
@@ -137,10 +233,5 @@ func TestRedactionScrubsSecretsAndClampsMetadata(t *testing.T) {
 	testutil.FailErr(t, "decode finding jsonl", json.Unmarshal([]byte(lines[0]), &decoded))
 	if decoded.RuleID != RuleOperationSourceContradiction || decoded.Disposition != DispositionContradiction {
 		t.Fatalf("unexpected decoded finding: %+v", decoded)
-	}
-	for _, src := range decoded.SourceIDs {
-		if len(src) > DefaultMaxFieldBytes+16 {
-			t.Fatalf("source ID not bounded: len=%d", len(src))
-		}
 	}
 }

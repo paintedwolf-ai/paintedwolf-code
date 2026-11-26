@@ -5,14 +5,17 @@ import (
 	"time"
 )
 
-// Evaluate runs the four high-confidence checks plus the gated Stop-admission
-// check against an immutable Observation. Clean settled observations return
-// no findings; at most one structured finding is emitted per rule and program.
+// Evaluate runs the four high-confidence checks, the gated Stop-admission
+// check, and observation-loss checks against an immutable Observation.
+// At most one structured finding is emitted per rule and program.
 func Evaluate(obs Observation, now time.Time) []Finding {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 	var out []Finding
+	if f, ok := checkObservationLoss(obs, now); ok {
+		out = append(out, sanitizeFinding(f))
+	}
 	if f, ok := checkDupOrConflictingTerminal(obs, now); ok {
 		out = append(out, sanitizeFinding(f))
 	}
@@ -44,6 +47,26 @@ func baseFinding(obs Observation, now time.Time, rule RuleID, disp Disposition) 
 	}
 }
 
+func checkObservationLoss(obs Observation, now time.Time) (Finding, bool) {
+	if obs.PageInconsistent {
+		f := baseFinding(obs, now, RuleObservationLoss, DispositionIncomplete)
+		f.ExecutionIDs = obs.LookupFailedExecutions
+		f.Reason = "inconsistent_receipt_pages"
+		f.Expected = map[string]any{"consistent_receipt_pages": true}
+		f.Observed = map[string]any{"page_inconsistent": true, "lookup_failures": len(obs.LookupFailedExecutions)}
+		return f, true
+	}
+	if len(obs.LookupFailedExecutions) > 0 {
+		f := baseFinding(obs, now, RuleObservationLoss, DispositionIncomplete)
+		f.ExecutionIDs = obs.LookupFailedExecutions
+		f.Reason = "revision_pin_lookup_failed"
+		f.Expected = map[string]any{"lookup_failures": 0}
+		f.Observed = map[string]any{"lookup_failures": len(obs.LookupFailedExecutions)}
+		return f, true
+	}
+	return Finding{}, false
+}
+
 func checkDupOrConflictingTerminal(obs Observation, now time.Time) (Finding, bool) {
 	records := obs.TerminalRecords
 	if len(records) == 0 {
@@ -68,9 +91,8 @@ func checkDupOrConflictingTerminal(obs Observation, now time.Time) (Finding, boo
 		}
 		byExec[rec.ExecutionID] = append(byExec[rec.ExecutionID], rec)
 	}
-	var dupExecs []string
+	var dupExecs, states []string
 	var conflicting int
-	var states []string
 	for execID, list := range byExec {
 		if len(list) <= 1 {
 			continue
@@ -121,6 +143,9 @@ func checkMissingChildTerminal(obs Observation, now time.Time) (Finding, bool) {
 		f.Observed = map[string]any{"program_settled": obs.ProgramSettled, "program_state": obs.ProgramState}
 		return f, true
 	}
+	if obs.PageInconsistent {
+		return Finding{}, false
+	}
 	if obs.Truncated || obs.ExecutionsOmitted > 0 {
 		f := baseFinding(obs, now, RuleMissingChildTerminal, DispositionIncomplete)
 		f.Reason = "truncated_execution_observation"
@@ -157,6 +182,13 @@ func checkStaleTerminalPresentation(obs Observation, now time.Time) (Finding, bo
 	if !obs.ProgramSettled || !IsTerminalState(obs.ProgramState) {
 		return Finding{}, false
 	}
+	if obs.PresentationUnsupported {
+		f := baseFinding(obs, now, RuleStaleTerminalPresentation, DispositionUnsupported)
+		f.Reason = "no_independent_presentation_witness"
+		f.Expected = map[string]any{"independent_presentation_witness": true}
+		f.Observed = map[string]any{"independent_presentation_witness": false}
+		return f, true
+	}
 	if !obs.ConsumerCaughtUp || obs.Presentation == nil {
 		f := baseFinding(obs, now, RuleStaleTerminalPresentation, DispositionIncomplete)
 		if obs.Presentation == nil {
@@ -169,8 +201,7 @@ func checkStaleTerminalPresentation(obs Observation, now time.Time) (Finding, bo
 		return f, true
 	}
 	pres := obs.Presentation
-	var reasons []string
-	var staleExecs []string
+	var reasons, staleExecs []string
 	if !IsTerminalState(pres.ProgramState) || pres.ProgramState != obs.ProgramState {
 		reasons = append(reasons, "program_state_mismatch")
 	}

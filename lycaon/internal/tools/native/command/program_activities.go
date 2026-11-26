@@ -19,18 +19,18 @@ func observeProgramActivities(ctx context.Context, recorder *invocation.SQLRecor
 	var mu sync.Mutex
 	var sampled time.Time
 	known := map[string]bool{}
-	report := func(ctx context.Context, program string) bool {
+	report := func(ctx context.Context, program string) *api.CommandProgramReceipt {
 		if tc.Effects.ReportProgress == nil {
-			return false
+			return nil
 		}
 		// Committed state is published even when the transition's own context ended.
 		receipt, err := recorder.LiveActivitySummary(context.WithoutCancel(ctx), tc.Identity.SessionID, program)
 		if err != nil || len(receipt.Activities) == 0 {
-			return false
+			return nil
 		}
 		tc.Effects.Out.MarkProgramProgressPublished()
 		tc.Effects.ReportProgress(api.ToolProgress{Phase: "executing", CommandProgram: &receipt})
-		return true
+		return &receipt
 	}
 	return invocation.WithActivityObserver(ctx, invocation.ActivityObserver{
 		Execution: func(ctx context.Context, program, execution string) {
@@ -47,17 +47,17 @@ func observeProgramActivities(ctx context.Context, recorder *invocation.SQLRecor
 			if known[transition] && time.Since(sampled) < time.Second {
 				return
 			}
-			if report(ctx, program) {
+			if report(ctx, program) != nil {
 				known[transition] = true
 				sampled = time.Now()
 			}
 		},
 		Settled: func(ctx context.Context, program string) {
 			mu.Lock()
-			report(ctx, program)
+			delivered := report(ctx, program)
 			mu.Unlock()
-			if diagEnabled {
-				observeSettledProgramDiagnostics(ctx, recorder, tc.Identity.SessionID, tc.Identity.ToolCallID, program)
+			if diagEnabled && recorder != nil {
+				observeSettledProgramDiagnostics(recorder, tc.Identity.SessionID, tc.Identity.ToolCallID, program, delivered)
 			}
 		},
 	})

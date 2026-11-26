@@ -2,8 +2,8 @@ package command
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/observability/cmddiag"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -15,37 +15,74 @@ const (
 	diagMaxPinChecks = 16
 )
 
-// observeSettledProgramDiagnostics reads bounded receipt metadata from the
-// existing scoped ProgramReader and submits an immutable snapshot to the
-// opt-in async diagnostics queue. It never alters product state or returns
-// errors to the caller.
-func observeSettledProgramDiagnostics(ctx context.Context, recorder *invocation.SQLRecorder, sessionID, toolCallID, programID string) {
-	if recorder == nil || !cmddiag.Enabled() {
-		return
+type programDiagnosticReader interface {
+	ReadProgramPage(ctx context.Context, sessionID, programID, cursor string, limit int) (api.CommandProgramReceiptPage, error)
+	RevisionPins(ctx context.Context, sessionID, executionID string) ([]toolcontract.ExecutionRevision, error)
+}
+
+// observeSettledProgramDiagnostics enqueues a lightweight bounded task onto
+// the async diagnostics queue WITHOUT performing any store or receipt reads on
+// the caller goroutine. When the queue is saturated, no receipt reads occur.
+func observeSettledProgramDiagnostics(reader programDiagnosticReader, sessionID, toolCallID, programID string, delivered *api.CommandProgramReceipt) bool {
+	if reader == nil || !cmddiag.Enabled() {
+		return false
 	}
-	readCtx := context.WithoutCancel(ctx)
+	var pres *cmddiag.PresentationSnapshot
+	if delivered != nil {
+		pres = presentationFromReceipt(*delivered)
+	}
+	return cmddiag.ObserveTask(cmddiag.Task{
+		SessionID:  sessionID,
+		ProgramID:  programID,
+		ToolCallID: toolCallID,
+		Fetch: func(ctx context.Context) (cmddiag.Observation, error) {
+			return fetchProgramObservation(ctx, reader, sessionID, toolCallID, programID, pres)
+		},
+	})
+}
+
+func fetchProgramObservation(ctx context.Context, reader programDiagnosticReader, sessionID, toolCallID, programID string, delivered *cmddiag.PresentationSnapshot) (cmddiag.Observation, error) {
 	var (
-		program api.CommandProgramReceipt
-		execs   []cmddiag.ExecutionFact
-		links   []cmddiag.OperationSourceLink
-		cursor  string
-		omitted int
-		trunc   bool
+		program          api.CommandProgramReceipt
+		execs            []cmddiag.ExecutionFact
+		links            []cmddiag.OperationSourceLink
+		lookupFailed     []string
+		cursor           string
+		omitted          int
+		trunc            bool
+		pageInconsistent bool
 	)
+	seenExecs := make(map[string]struct{})
 	pinChecks := 0
 	for pageNum := 0; pageNum < diagMaxPages; pageNum++ {
-		page, err := recorder.ReadProgramPage(readCtx, sessionID, programID, cursor, diagPageSize)
+		if err := ctx.Err(); err != nil {
+			return cmddiag.Observation{}, err
+		}
+		page, err := reader.ReadProgramPage(ctx, sessionID, programID, cursor, diagPageSize)
 		if err != nil {
-			return
+			return cmddiag.Observation{}, fmt.Errorf("read program page %d: %w", pageNum, err)
 		}
 		if pageNum == 0 {
 			program = page.Program
+		} else if page.Program.ID != program.ID || page.Program.State != program.State {
+			pageInconsistent = true
+			break
 		}
 		for _, ex := range page.Executions {
+			if _, dup := seenExecs[ex.ID]; dup {
+				pageInconsistent = true
+				continue
+			}
+			seenExecs[ex.ID] = struct{}{}
 			execs = append(execs, executionFactFromReceipt(ex))
 			if ex.EffectCertainty == "completed" && ex.PublishedRevision != "" && pinChecks < diagMaxPinChecks {
 				pinChecks++
-				links = append(links, linkedOperationFact(readCtx, recorder, sessionID, ex))
+				link, failed := linkedOperationFact(ctx, reader, sessionID, ex)
+				if failed {
+					lookupFailed = append(lookupFailed, ex.ID)
+				} else {
+					links = append(links, link)
+				}
 			}
 		}
 		omitted = page.ExecutionsOmitted
@@ -59,30 +96,26 @@ func observeSettledProgramDiagnostics(ctx context.Context, recorder *invocation.
 		cursor = page.NextCursor
 	}
 
-	var pres *cmddiag.PresentationSnapshot
-	caughtUp := false
-	if summary, err := recorder.ActivitySummary(readCtx, sessionID, programID); err == nil {
-		caughtUp = true
-		pres = presentationFromReceipt(summary)
-	}
-
-	cmddiag.Observe(cmddiag.Observation{
-		SessionID:         sessionID,
-		ProgramID:         program.ID,
-		ParentReceiptID:   program.ParentReceiptID,
-		ToolCallID:        toolCallID,
-		ProgramState:      program.State,
-		ProgramStatusCode: program.StatusCode,
-		ProgramStopCode:   program.StopCode,
-		ProgramSettled:    program.SettledAt != nil && cmddiag.IsTerminalState(program.State),
-		Truncated:         trunc,
-		ExecutionsOmitted: omitted,
-		ActivityRevision:  program.ActivityRevision,
-		ConsumerCaughtUp:  caughtUp,
-		Presentation:      pres,
-		Executions:        execs,
-		LinkedOperations:  links,
-	})
+	return cmddiag.Observation{
+		SessionID:               sessionID,
+		ProgramID:               program.ID,
+		ParentReceiptID:         program.ParentReceiptID,
+		ToolCallID:              toolCallID,
+		ProgramState:            program.State,
+		ProgramStatusCode:       program.StatusCode,
+		ProgramStopCode:         program.StopCode,
+		ProgramSettled:          program.SettledAt != nil && cmddiag.IsTerminalState(program.State),
+		Truncated:               trunc,
+		ExecutionsOmitted:       omitted,
+		PageInconsistent:        pageInconsistent,
+		LookupFailedExecutions:  lookupFailed,
+		ActivityRevision:        program.ActivityRevision,
+		ConsumerCaughtUp:        delivered != nil,
+		PresentationUnsupported: delivered == nil,
+		Presentation:            delivered,
+		Executions:              execs,
+		LinkedOperations:        links,
+	}, nil
 }
 
 func executionFactFromReceipt(ex api.CommandExecutionReceipt) cmddiag.ExecutionFact {
@@ -103,7 +136,7 @@ func executionFactFromReceipt(ex api.CommandExecutionReceipt) cmddiag.ExecutionF
 		StopCode:          ex.StopCode,
 		HostStopCode:      ex.HostStopCode,
 		EffectCertainty:   ex.EffectCertainty,
-		SourceRef:         cmddiag.RedactReference(ex.DetailRef),
+		SourceRef:         cmddiag.DigestReference(ex.DetailRef),
 		AcceptedRevision:  ex.AcceptedRevision,
 		PublishedRevision: ex.PublishedRevision,
 	}
@@ -119,34 +152,33 @@ func isAdmittedExecution(ex api.CommandExecutionReceipt) bool {
 		ex.EffectCertainty == "attempted"
 }
 
-func linkedOperationFact(ctx context.Context, recorder *invocation.SQLRecorder, sessionID string, ex api.CommandExecutionReceipt) cmddiag.OperationSourceLink {
+// linkedOperationFact extracts an opaque source digest from the execution's
+// destination revision pin without comparing fields against themselves.
+// Because ProgramReader does not expose an independent post-write owner record,
+// completed mutations disclose an explicit unsupported disposition rather than
+// reporting a synthetic clean match.
+func linkedOperationFact(ctx context.Context, reader programDiagnosticReader, sessionID string, ex api.CommandExecutionReceipt) (cmddiag.OperationSourceLink, bool) {
 	opID := ex.NativeCommand
 	if opID == "" {
 		opID = ex.Owner
 	}
 	link := cmddiag.OperationSourceLink{
-		ExecutionID:         ex.ID,
-		OperationID:         opID,
-		ExpectedOperationID: opID,
-		Completed:           true,
+		ExecutionID: ex.ID,
+		OperationID: opID,
+		Completed:   true,
 	}
-	pins, err := recorder.RevisionPins(ctx, sessionID, ex.ID)
+	pins, err := reader.RevisionPins(ctx, sessionID, ex.ID)
 	if err != nil {
-		return link
+		return link, true
 	}
 	for _, pin := range pins {
 		if pin.Role == toolcontract.DestinationRevision {
-			src := cmddiag.RedactReference(pin.RootID + ":" + pin.Path)
-			link.SourceID = src
-			link.ExpectedSourceID = src
-			link.ExpectedRevision = ex.PublishedRevision
-			link.ObservedRevision = ex.PublishedRevision
-			link.CompleteEvidence = true
-			return link
+			link.SourceID = cmddiag.DigestReference(pin.RootID, pin.Path)
+			link.UnsupportedReason = "no_independent_post_write_owner_record"
+			return link, false
 		}
 	}
-	// Completed mutation without destination pin is left incomplete rather than guessed.
-	return link
+	return link, false
 }
 
 func presentationFromReceipt(summary api.CommandProgramReceipt) *cmddiag.PresentationSnapshot {

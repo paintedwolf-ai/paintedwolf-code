@@ -1,6 +1,8 @@
 package cmddiag
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"slices"
 	"strings"
 
@@ -8,12 +10,39 @@ import (
 	"github.com/lycaon/lycaon/internal/runeclamp"
 )
 
+// DigestReference hashes sensitive reference parts (such as workspace roots or
+// relative paths) into a bounded, opaque digest ("ref:<sha256[:12]>") so raw
+// path strings never enter ordinary dev diagnostics.
+func DigestReference(parts ...string) string {
+	h := sha256.New()
+	hasNonEmpty := false
+	for i, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			hasNonEmpty = true
+		}
+		if i > 0 {
+			_, _ = h.Write([]byte{0})
+		}
+		_, _ = h.Write([]byte(trimmed))
+	}
+	if !hasNonEmpty {
+		return ""
+	}
+	sum := h.Sum(nil)
+	return "ref:" + hex.EncodeToString(sum[:6])
+}
+
 // RedactReference applies the existing observability capture redaction rules
-// and clamps references to a bounded length.
+// and clamps references to a bounded length. Path-like strings containing
+// directory separators are hashed via DigestReference.
 func RedactReference(ref string) string {
 	trimmed := strings.TrimSpace(ref)
 	if trimmed == "" {
 		return ""
+	}
+	if strings.ContainsAny(trimmed, `/\`) {
+		return DigestReference(trimmed)
 	}
 	redacted := observability.RedactCaptureText(trimmed)
 	return runeclamp.ClampBytes(redacted, DefaultMaxFieldBytes)

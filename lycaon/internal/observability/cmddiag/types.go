@@ -4,7 +4,10 @@
 // and retains only redacted metadata and owning identifiers.
 package cmddiag
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // SchemaVersion is the wire schema version for emitted diagnostic records.
 const SchemaVersion = 1
@@ -29,6 +32,7 @@ const (
 	RuleOperationSourceContradiction RuleID = "operation_source_contradiction"
 	RuleStopAdmissionAfterAck        RuleID = "stop_admission_after_ack"
 	RuleCaptureOverflow              RuleID = "capture_overflow"
+	RuleObservationLoss              RuleID = "observation_loss"
 )
 
 // Default bounds for async capture and emitted metadata.
@@ -37,29 +41,44 @@ const (
 	DefaultMaxExecutionsPerRead = 256
 	DefaultMaxIDsPerFinding     = 16
 	DefaultMaxFieldBytes        = 256
+	DefaultTaskTimeout          = 5 * time.Second
+	DefaultMaxDedupEntries      = 4096
 )
+
+// Task is a lightweight bounded work item enqueued onto the async worker
+// before any store or receipt reads occur. When the queue is saturated,
+// Fetch is never invoked.
+type Task struct {
+	SessionID  string
+	ProgramID  string
+	ToolCallID string
+	Fetch      func(ctx context.Context) (Observation, error)
+}
 
 // Observation is an immutable, metadata-only snapshot of a command program's
 // owner facts. It deliberately excludes raw command text, arguments,
-// environment variables, stdout/stderr, and file contents.
+// environment variables, stdout/stderr, workspace paths, and file contents.
 type Observation struct {
-	SessionID         string                `json:"session_id,omitempty"`
-	ProgramID         string                `json:"program_id,omitempty"`
-	ParentReceiptID   string                `json:"parent_receipt_id,omitempty"`
-	ToolCallID        string                `json:"tool_call_id,omitempty"`
-	ProgramState      string                `json:"program_state,omitempty"`
-	ProgramStatusCode *int                  `json:"program_status_code,omitempty"`
-	ProgramStopCode   string                `json:"program_stop_code,omitempty"`
-	ProgramSettled    bool                  `json:"program_settled"`
-	Truncated         bool                  `json:"truncated,omitempty"`
-	ExecutionsOmitted int                   `json:"executions_omitted,omitempty"`
-	ActivityRevision  int64                 `json:"activity_revision,omitempty"`
-	ConsumerCaughtUp  bool                  `json:"consumer_caught_up"`
-	Presentation      *PresentationSnapshot `json:"presentation,omitempty"`
-	Executions        []ExecutionFact       `json:"executions,omitempty"`
-	TerminalRecords   []TerminalFact        `json:"terminal_records,omitempty"`
-	LinkedOperations  []OperationSourceLink `json:"linked_operations,omitempty"`
-	StopAck           *StopAckWitness       `json:"stop_ack,omitempty"`
+	SessionID               string                `json:"session_id,omitempty"`
+	ProgramID               string                `json:"program_id,omitempty"`
+	ParentReceiptID         string                `json:"parent_receipt_id,omitempty"`
+	ToolCallID              string                `json:"tool_call_id,omitempty"`
+	ProgramState            string                `json:"program_state,omitempty"`
+	ProgramStatusCode       *int                  `json:"program_status_code,omitempty"`
+	ProgramStopCode         string                `json:"program_stop_code,omitempty"`
+	ProgramSettled          bool                  `json:"program_settled"`
+	Truncated               bool                  `json:"truncated,omitempty"`
+	ExecutionsOmitted       int                   `json:"executions_omitted,omitempty"`
+	PageInconsistent        bool                  `json:"page_inconsistent,omitempty"`
+	LookupFailedExecutions  []string              `json:"lookup_failed_executions,omitempty"`
+	ActivityRevision        int64                 `json:"activity_revision,omitempty"`
+	ConsumerCaughtUp        bool                  `json:"consumer_caught_up"`
+	PresentationUnsupported bool                  `json:"presentation_unsupported,omitempty"`
+	Presentation            *PresentationSnapshot `json:"presentation,omitempty"`
+	Executions              []ExecutionFact       `json:"executions,omitempty"`
+	TerminalRecords         []TerminalFact        `json:"terminal_records,omitempty"`
+	LinkedOperations        []OperationSourceLink `json:"linked_operations,omitempty"`
+	StopAck                 *StopAckWitness       `json:"stop_ack,omitempty"`
 }
 
 // ExecutionFact retains bounded metadata for one child execution receipt.
@@ -93,7 +112,8 @@ type TerminalFact struct {
 	Source          string `json:"source,omitempty"`
 }
 
-// PresentationSnapshot captures the consumer's terminal presentation metadata.
+// PresentationSnapshot captures the consumer's independently delivered
+// terminal presentation metadata.
 type PresentationSnapshot struct {
 	ProgramState      string         `json:"program_state"`
 	ProgramStatusCode *int           `json:"program_status_code,omitempty"`
@@ -110,8 +130,8 @@ type ActivityFact struct {
 	ExecutionIDs []string `json:"execution_ids,omitempty"`
 }
 
-// OperationSourceLink binds a completed operation receipt to its linked source
-// and revision identity for cross-fact consistency verification.
+// OperationSourceLink binds a completed operation receipt to an independently
+// recorded source and revision identity for cross-fact verification.
 type OperationSourceLink struct {
 	ExecutionID         string `json:"execution_id"`
 	OperationID         string `json:"operation_id"`
@@ -122,6 +142,7 @@ type OperationSourceLink struct {
 	ObservedRevision    string `json:"observed_revision,omitempty"`
 	Completed           bool   `json:"completed"`
 	CompleteEvidence    bool   `json:"complete_evidence"`
+	UnsupportedReason   string `json:"unsupported_reason,omitempty"`
 }
 
 // StopAckWitness represents an explicit Stop acknowledgment and whether child
