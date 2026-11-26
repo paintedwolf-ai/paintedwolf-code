@@ -52,30 +52,19 @@ func runKicksAndInjectsMatrix(
 		return err
 	}
 
-	mark := time.Now()
-	lap := func(name string) {
-		sum.PhaseSeconds = append(sum.PhaseSeconds, fmt.Sprintf("%s=%.1f", name, time.Since(mark).Seconds()))
-		mark = time.Now()
-	}
 	if err := runAllKicksAndNudges(ctx, s, cReps, wReps, sum); err != nil {
 		return err
 	}
-	lap("kicks")
 	if err := runCoordinatorInjectRenders(ctx, s, cReps, resolver, sum); err != nil {
 		return err
 	}
-	lap("coordinator_injects")
 	if err := runWorkerInjectRenders(ctx, s, wReps, sum); err != nil {
 		return err
 	}
-	lap("worker_injects")
 	if err := runGuidanceAndUtilityRenders(ctx, s, cReps, wReps, sum); err != nil {
 		return err
 	}
-	lap("guidance")
-	err = runGateFeedbackRenders(ctx, s, sum)
-	lap("gate_feedback")
-	return err
+	return runGateFeedbackRenders(ctx, s, sum)
 }
 
 func runAllKicksAndNudges(
@@ -128,8 +117,6 @@ func runAllKicksAndNudges(
 		return err
 	}
 	sum.KickAndNudgeCount += sweep.rendered
-	sum.PhaseSeconds = append(sum.PhaseSeconds, fmt.Sprintf("kick_vars=%.1f kick_render=%.1f kick_claims=%.1f kick_calls=%d kick_render_misses=%d kick_claim_runs=%d",
-		sweep.varsDur.Seconds(), sweep.renderDur.Seconds(), sweep.claimDur.Seconds(), sweep.rendered, sweep.renderMisses, sweep.claimRuns))
 	return nil
 }
 

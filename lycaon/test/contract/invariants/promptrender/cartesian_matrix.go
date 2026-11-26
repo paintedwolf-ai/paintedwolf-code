@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/agentdef"
@@ -38,8 +37,6 @@ type CartesianSummary struct {
 	Kicks map[string]*KickFamily
 	// PlainPersonas holds the worker persona renders without host resources.
 	PlainPersonas KickFamily
-	// PhaseSeconds is a temporary measurement of each matrix phase.
-	PhaseSeconds []string
 	// setCase names the case the following renders belong to.
 	setCase                func(string)
 	CacheHits              int
@@ -181,11 +178,6 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 
 	cache := hoststate.NewRenderCache()
 	sum := &CartesianSummary{setCase: tracker.SetCase}
-	mark := time.Now()
-	lap := func(name string) {
-		sum.PhaseSeconds = append(sum.PhaseSeconds, fmt.Sprintf("%s=%.1f", name, time.Since(mark).Seconds()))
-		mark = time.Now()
-	}
 
 	coordStates, err := hoststate.CoordinatorStates(ctx)
 	if err != nil {
@@ -195,16 +187,6 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 	if err != nil {
 		return nil, err
 	}
-	lap("states")
-	if _, err := cachedCoordinatorPairs(); err != nil {
-		return nil, err
-	}
-	lap("coordinator_authorities")
-	if _, err := cachedWorkerPairs(); err != nil {
-		return nil, err
-	}
-	lap("worker_authorities")
-	sum.PhaseSeconds = append(sum.PhaseSeconds, fmt.Sprintf("coordinator_states=%d worker_states=%d", len(coordStates), len(workerStates)))
 	for _, st := range coordStates {
 		tracker.RecordCell(st.Excluded, st.ExcludedReason)
 	}
@@ -216,32 +198,24 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 	if err := runKicksAndInjectsMatrix(ctx, s, sum); err != nil {
 		return nil, err
 	}
-	lap("kicks_and_injects")
 	sum.markCase("OAR producers")
 	if err := runOARNextStepsMatrix(ctx, s, oarBundle, coordStates, workerStates, sum); err != nil {
 		return nil, err
 	}
-	lap("oar")
 	if err := runCoordinatorPromptAndProcedureMatrix(ctx, s, coordStates, cache, sum); err != nil {
 		return nil, err
 	}
-	lap("coordinator_standing")
-	sum.PhaseSeconds = append(sum.PhaseSeconds, fmt.Sprintf("standing_vars=%.1f standing_render=%.1f standing_claims=%.1f standing_misses=%d standing_claim_runs=%d prompts=%d",
-		standingTiming.vars.Seconds(), standingTiming.render.Seconds(), standingTiming.claims.Seconds(), standingTiming.misses, standingTiming.claimRuns, sum.CoordinatorPromptCount))
 	if err := runWorkerPersonaAndInjectMatrix(ctx, s, cache, sum); err != nil {
 		return nil, err
 	}
-	lap("worker_personas")
 	sum.markCase("skill audit")
 	skillAudit, err := AuditStockSkillSurfaces(ctx, s, cache)
 	if err != nil {
 		return nil, err
 	}
-	lap("skill_audit")
 	sum.SkillAudit = skillAudit
 	sum.Violations = append(sum.Violations, skillAudit.Violations...)
 	checkSkillRenderClaims(s, skillAudit.Renders, cache, sum)
-	lap("skill_claims")
 
 	hits, misses, _ := cache.Stats()
 	sum.CacheHits = hits

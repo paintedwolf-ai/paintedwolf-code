@@ -6,7 +6,6 @@ import (
 	"maps"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
@@ -21,12 +20,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
-
-// standingTiming is a temporary measurement of the standing renders.
-var standingTiming struct {
-	vars, render, claims time.Duration
-	misses, claimRuns    int
-}
 
 type overlayEngineBundle struct {
 	engine  *prompts.FileTemplateEngine
@@ -133,7 +126,6 @@ func renderAndCheckCoordinatorStandingPrompt(
 	cache *hoststate.RenderCache,
 	sum *CartesianSummary,
 ) error {
-	t0 := time.Now()
 	vars, err := buildCoordinatorStandingVars(st, auth.Reader, skillsList, prompts.ExecutionModePromptTransition{}, variantIdx%2 == 0)
 	if err != nil {
 		return err
@@ -147,24 +139,17 @@ func renderAndCheckCoordinatorStandingPrompt(
 		keyVars = overlayRenderInputs(s, st.Overlay).project(vars, refs...)
 	}
 	rKey := renderCacheKeyForVars("standing:"+strings.Join(templates, ",")+":"+s.Site, engineRev(s, st.Overlay), unitIDs, keyVars)
-	standingTiming.vars += time.Since(t0)
-	t1 := time.Now()
 	promptText, _, err := cache.RenderOrReuse(rKey, func() (string, error) {
-		standingTiming.misses++
 		return renderStandingFromVars(ctx, engine, unitCat, st.TurnProfile, auth.Reader.Selection(), vars)
 	})
-	standingTiming.render += time.Since(t1)
 	if err != nil {
 		return err
 	}
 	sum.CoordinatorPromptCount++
 	label := fmt.Sprintf("coordinator standing %s (%s)", st.TurnProfile.SurfaceID, st.ID)
-	t2 := time.Now()
 	checkClaimsCached(cache, rKey, auth.Digest, func(v string) { sum.Violations = append(sum.Violations, v) }, func() []string {
-		standingTiming.claimRuns++
 		return checkClaimsOnce(s, label, promptText, auth, st.SessionMode, st.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 	})
-	standingTiming.claims += time.Since(t2)
 	return nil
 }
 

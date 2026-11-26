@@ -40,7 +40,6 @@ func TestGuardAtomsHaveIndependentWitnesses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("host-state matrix: %v", err)
 	}
-	t.Logf("matrix phase seconds (temporary measurement): %v cache hits=%d misses=%d", sum.PhaseSeconds, sum.CacheHits, sum.CacheMisses)
 	cov := sum.Coverage
 	t.Logf("render coverage: registered=%d rendered=%d unrendered=%d expected_unrendered=%d rules=%d template_branches=%d rule_branches=%d observed_families=%v observed_recipients=%v",
 		len(cov.DiscoveredTemplates), cov.RenderedTemplates, len(cov.UnrenderedTemplates), len(cov.ExpectedUnrendered),
