@@ -1,10 +1,8 @@
 package pythondocuments
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -14,9 +12,13 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 )
+
+// ErrMutationDoorUnavailable is returned when HostDocumentStore is asked to
+// publish a workspace mutation without an injected apply-and-record
+// MutationDoor.
+var ErrMutationDoorUnavailable = errors.New("host mutation door not configured")
 
 // EditorDraft represents an open editor document's live state captured from
 // Painted Wolf's editor subsystem.
@@ -31,10 +33,22 @@ type EditorDraft struct {
 
 // EditorBridge connects HostDocumentStore to Painted Wolf's live editor
 // document service (e.g. tools.EditorDocuments) for unsaved draft capture and
-// revision-checked publication.
+// revision-checked publication. Any error returned by CaptureDraft MUST
+// propagate rather than falling back to saved disk bytes.
 type EditorBridge interface {
 	CaptureDraft(ctx context.Context, rootID, branch, relPath string) (EditorDraft, bool, error)
 	PublishDraft(ctx context.Context, rootID, branch, relPath string, baseRev DocumentRevision, data []byte) (DocumentRevision, bool, error)
+}
+
+// MutationDoor adapts HostDocumentStore publication onto Painted Wolf's single
+// apply-and-record source mutation door (tools/native/source_write.go:
+// applyAgentFile, removeAgentPath, renameAgentEntry, mkdirAgentPath).
+// HostDocumentStore never mutates workspace files directly outside this door.
+type MutationDoor interface {
+	ApplyFile(ctx context.Context, req PublishWriteRequest) (PublishResult, error)
+	RemovePath(ctx context.Context, req PublishDeleteRequest) (PublishResult, error)
+	RenamePath(ctx context.Context, req PublishMoveRequest) (PublishResult, error)
+	MkdirPath(ctx context.Context, req PublishMkdirRequest) (PublishResult, error)
 }
 
 // HostRootConfig maps one logical RootID/Branch to a physical directory on the
@@ -47,12 +61,13 @@ type HostRootConfig struct {
 }
 
 // HostDocumentStore is the production DocumentStore backed by real workspace
-// root directories, Painted Wolf's fseffect atomic write door, and an optional
-// EditorBridge for unsaved editor drafts.
+// root directories for reads, an optional EditorBridge for unsaved editor
+// drafts, and an injected MutationDoor for all workspace publications.
 type HostDocumentStore struct {
 	mu     sync.RWMutex
 	roots  map[hostRootKey]HostRootConfig
 	editor EditorBridge
+	door   MutationDoor
 }
 
 type hostRootKey struct {
@@ -63,8 +78,9 @@ type hostRootKey struct {
 var _ DocumentStore = (*HostDocumentStore)(nil)
 
 // NewHostDocumentStore constructs a production HostDocumentStore over the
-// supplied physical roots and optional EditorBridge.
-func NewHostDocumentStore(roots []HostRootConfig, editor EditorBridge) *HostDocumentStore {
+// supplied physical roots, optional EditorBridge, and apply-and-record
+// MutationDoor.
+func NewHostDocumentStore(roots []HostRootConfig, editor EditorBridge, door MutationDoor) *HostDocumentStore {
 	m := make(map[hostRootKey]HostRootConfig, len(roots))
 	for _, r := range roots {
 		r.Dir = filepath.Clean(r.Dir)
@@ -73,6 +89,7 @@ func NewHostDocumentStore(roots []HostRootConfig, editor EditorBridge) *HostDocu
 	return &HostDocumentStore{
 		roots:  m,
 		editor: editor,
+		door:   door,
 	}
 }
 
@@ -93,7 +110,13 @@ func (s *HostDocumentStore) ReadDocument(ctx context.Context, target pythonrunti
 	}
 	rel := cleanRelPath(target.RelPath)
 	if s.editor != nil && rel != "" {
-		if draft, ok, err := s.editor.CaptureDraft(ctx, target.RootID, target.Branch, rel); err == nil && ok {
+		draft, ok, err := s.editor.CaptureDraft(ctx, target.RootID, target.Branch, rel)
+		if err != nil {
+			// Never silently fall back to saved disk bytes when editor capture
+			// fails; doing so could select a stale or wrong revision.
+			return DocumentSnapshot{Target: target}, mapOSErrno(err)
+		}
+		if ok {
 			sha := SHA256Hex(draft.Bytes)
 			resolved := target
 			resolved.DocumentID = draft.DocumentID
@@ -259,42 +282,13 @@ func (s *HostDocumentStore) PublishWrite(ctx context.Context, req PublishWriteRe
 			}, nil
 		}
 	}
-
-	mode := req.Mode
-	if mode == 0 {
-		mode = 0o644
+	if s.door == nil {
+		return PublishResult{}, ErrMutationDoorUnavailable
 	}
-	loc := fseffect.Location{Root: root.Dir, Rel: filepath.FromSlash(rel)}
-	var conflict *pythonruntime.RevisionConflict
-	res, err := fseffect.Replace(fseffect.ReplaceRequest{
-		Location:     loc,
-		Source:       bytes.NewReader(req.Bytes),
-		Mode:         mode,
-		PreserveMode: !req.Create,
-		BeforeCommit: func(current fseffect.Target, _ fseffect.Result) error {
-			if c := checkDiskBasePrecondition(current, req.Target, req.BaseRevision); c != nil {
-				conflict = c
-				return &RevisionConflictError{Conflict: *c}
-			}
-			return nil
-		},
-	})
-	if err != nil {
-		return PublishResult{Conflict: conflict}, err
-	}
-	committed := DocumentRevision{
-		RootID:           req.Target.RootID,
-		Branch:           req.Target.Branch,
-		DocumentRevision: "disk:" + res.SHA256,
-		DiskSHA256:       res.SHA256,
-	}
-	return PublishResult{
-		CommittedRevision: committed,
-		BytesWritten:      res.Bytes,
-	}, nil
+	return s.door.ApplyFile(ctx, req)
 }
 
-func (s *HostDocumentStore) PublishDelete(_ context.Context, req PublishDeleteRequest) (PublishResult, error) {
+func (s *HostDocumentStore) PublishDelete(ctx context.Context, req PublishDeleteRequest) (PublishResult, error) {
 	root, errno := s.rootFor(req.Target)
 	if errno != pythonruntime.ErrnoSuccess {
 		return PublishResult{}, errno
@@ -302,29 +296,10 @@ func (s *HostDocumentStore) PublishDelete(_ context.Context, req PublishDeleteRe
 	if root.ReadOnly {
 		return PublishResult{}, pythonruntime.ErrnoEROFS
 	}
-	rel := cleanRelPath(req.Target.RelPath)
-	loc := fseffect.Location{Root: root.Dir, Rel: filepath.FromSlash(rel)}
-	var conflict *pythonruntime.RevisionConflict
-	err := fseffect.Remove(fseffect.RemoveRequest{
-		Location: loc,
-		BeforeCommit: func(current fseffect.Target) error {
-			if c := checkDiskBasePrecondition(current, req.Target, req.BaseRevision); c != nil {
-				conflict = c
-				return &RevisionConflictError{Conflict: *c}
-			}
-			return nil
-		},
-	})
-	if err != nil {
-		return PublishResult{Conflict: conflict}, err
+	if s.door == nil {
+		return PublishResult{}, ErrMutationDoorUnavailable
 	}
-	return PublishResult{
-		CommittedRevision: DocumentRevision{
-			RootID: req.Target.RootID,
-			Branch: req.Target.Branch,
-			Absent: true,
-		},
-	}, nil
+	return s.door.RemovePath(ctx, req)
 }
 
 func (s *HostDocumentStore) PublishMove(ctx context.Context, req PublishMoveRequest) (PublishResult, error) {
@@ -335,55 +310,13 @@ func (s *HostDocumentStore) PublishMove(ctx context.Context, req PublishMoveRequ
 	if root.ReadOnly {
 		return PublishResult{}, pythonruntime.ErrnoEROFS
 	}
-	srcRel := cleanRelPath(req.Source.RelPath)
-	dstRel := cleanRelPath(req.Target.RelPath)
-	srcAbs := filepath.Join(root.Dir, filepath.FromSlash(srcRel))
-	srcLoc := fseffect.Location{Root: root.Dir, Rel: filepath.FromSlash(srcRel)}
-	dstLoc := fseffect.Location{Root: root.Dir, Rel: filepath.FromSlash(dstRel)}
-
-	if req.HasModifiedBytes {
-		writeRes, err := s.PublishWrite(ctx, PublishWriteRequest{
-			Target:       req.Target,
-			BaseRevision: req.TargetBaseRevision,
-			Bytes:        req.Bytes,
-			Mode:         req.Mode,
-			Create:       req.TargetBaseRevision.Absent,
-		})
-		if err != nil {
-			return writeRes, err
-		}
-		if _, err := s.PublishDelete(ctx, PublishDeleteRequest{
-			Target:       req.Source,
-			BaseRevision: req.SourceBaseRevision,
-		}); err != nil {
-			return PublishResult{}, err
-		}
-		return writeRes, nil
+	if s.door == nil {
+		return PublishResult{}, ErrMutationDoorUnavailable
 	}
-
-	identity, err := fspath.EntryIdentity(srcAbs)
-	if err != nil {
-		return PublishResult{}, err
-	}
-	if req.TargetBaseRevision.Absent {
-		err = fseffect.RelocateGuarded(srcLoc, dstLoc, identity)
-	} else {
-		err = fseffect.ReplaceByRelocateGuarded(srcLoc, dstLoc, identity)
-	}
-	if err != nil {
-		return PublishResult{}, err
-	}
-	snap, stErrno := s.ReadDocument(ctx, req.Target)
-	if stErrno != pythonruntime.ErrnoSuccess {
-		return PublishResult{}, stErrno
-	}
-	return PublishResult{
-		CommittedRevision: snap.Revision,
-		BytesWritten:      int64(len(snap.Bytes)),
-	}, nil
+	return s.door.RenamePath(ctx, req)
 }
 
-func (s *HostDocumentStore) PublishMkdir(_ context.Context, req PublishMkdirRequest) (PublishResult, error) {
+func (s *HostDocumentStore) PublishMkdir(ctx context.Context, req PublishMkdirRequest) (PublishResult, error) {
 	root, errno := s.rootFor(req.Target)
 	if errno != pythonruntime.ErrnoSuccess {
 		return PublishResult{}, errno
@@ -391,78 +324,10 @@ func (s *HostDocumentStore) PublishMkdir(_ context.Context, req PublishMkdirRequ
 	if root.ReadOnly {
 		return PublishResult{}, pythonruntime.ErrnoEROFS
 	}
-	mode := req.Mode
-	if mode == 0 {
-		mode = 0o755
+	if s.door == nil {
+		return PublishResult{}, ErrMutationDoorUnavailable
 	}
-	loc := fseffect.Location{Root: root.Dir, Rel: filepath.FromSlash(cleanRelPath(req.Target.RelPath))}
-	if _, err := fseffect.MkdirAll(loc, mode); err != nil {
-		return PublishResult{}, err
-	}
-	return PublishResult{
-		CommittedRevision: DocumentRevision{
-			RootID:           req.Target.RootID,
-			Branch:           req.Target.Branch,
-			DocumentRevision: "dir:created",
-		},
-	}, nil
-}
-
-func checkDiskBasePrecondition(current fseffect.Target, target pythonruntime.CanonicalTarget, base DocumentRevision) *pythonruntime.RevisionConflict {
-	info, err := current.Lstat()
-	if os.IsNotExist(err) {
-		if base.Absent {
-			return nil
-		}
-		return &pythonruntime.RevisionConflict{
-			Target:           target,
-			ExpectedRevision: base.Identity(),
-			ActualRevision:   "absent",
-		}
-	}
-	if err != nil {
-		return &pythonruntime.RevisionConflict{
-			Target:           target,
-			ExpectedRevision: base.Identity(),
-			ActualRevision:   fmt.Sprintf("stat-error:%v", err),
-		}
-	}
-	if base.Absent {
-		return &pythonruntime.RevisionConflict{
-			Target:           target,
-			ExpectedRevision: base.Identity(),
-			ActualRevision:   "exists",
-		}
-	}
-	if info.IsDir() || base.DiskSHA256 == "" {
-		return nil
-	}
-	f, err := current.Open()
-	if err != nil {
-		return &pythonruntime.RevisionConflict{
-			Target:           target,
-			ExpectedRevision: base.Identity(),
-			ActualRevision:   fmt.Sprintf("open-error:%v", err),
-		}
-	}
-	defer func() { _ = f.Close() }()
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return &pythonruntime.RevisionConflict{
-			Target:           target,
-			ExpectedRevision: base.Identity(),
-			ActualRevision:   fmt.Sprintf("read-error:%v", err),
-		}
-	}
-	actualSHA := SHA256Hex(data)
-	if actualSHA != base.DiskSHA256 {
-		return &pythonruntime.RevisionConflict{
-			Target:           target,
-			ExpectedRevision: base.Identity(),
-			ActualRevision:   "rev=disk:" + actualSHA + "|sha256=" + actualSHA,
-		}
-	}
-	return nil
+	return s.door.MkdirPath(ctx, req)
 }
 
 func mapOSErrno(err error) pythonruntime.Errno {
