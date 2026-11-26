@@ -792,7 +792,7 @@ func (s *Service) finalizeResponse(
 		for _, adm := range memAdm.Admissions() {
 			ledger.RecordAdmission(adm, parentOpID, nil)
 		}
-		for _, h := range memAdm.HTTP() {
+		for _, h := range memAdm.HTTPRecords() {
 			_ = ledger.RecordHTTP(h, parentOpID)
 		}
 		for _, pl := range memAdm.PreviewListeners() {
@@ -835,9 +835,8 @@ func (s *Service) finalizeResponse(
 		Actor:      actor,
 		View:       view,
 	}
-	if proj, err := pythonevidence.ProjectForDen(ledger, scope); err == nil {
-		resp.EvidenceSummary = &proj
-	}
+	proj := pythonevidence.ProjectForDen(ledger, scope)
+	resp.EvidenceSummary = &proj
 }
 
 func (s *Service) executePipModule(execID string, args []string) (*ToolResponse, error) {

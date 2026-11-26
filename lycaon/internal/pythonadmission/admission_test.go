@@ -431,13 +431,13 @@ func TestObserverFailsClosedWithoutPolicyAndEnforcesAllowedEffects(t *testing.T)
 			{
 				name:   "network_egress disallowed",
 				fam:    pythonruntime.EffectHTTP,
-				target: pythonruntime.CanonicalTarget{Namespace: pythonruntime.NamespaceHTTP, RootID: "example.com", RelPath: "/"},
+				target: pythonruntime.CanonicalTarget{Namespace: pythonruntime.Namespace("http"), RootID: "example.com", RelPath: "/"},
 				ae:     AllowedEffects{AllowMutation: true, AllowNetworkEgress: false, AllowExternalExec: true},
 			},
 			{
 				name:   "external_exec disallowed",
 				fam:    pythonruntime.EffectSubprocess,
-				target: pythonruntime.CanonicalTarget{Namespace: pythonruntime.NamespaceProcess, RelPath: "git"},
+				target: pythonruntime.CanonicalTarget{Namespace: pythonruntime.Namespace("subprocess"), RelPath: "git"},
 				ae:     AllowedEffects{AllowMutation: true, AllowNetworkEgress: true, AllowExternalExec: false},
 			},
 		}
