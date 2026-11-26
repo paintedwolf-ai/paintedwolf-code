@@ -161,3 +161,32 @@ func TestInspectDependenciesAndRefusals(t *testing.T) {
 		t.Fatal("Inspect accepted an unknown profile")
 	}
 }
+
+// An unobserved render produces the observed render's output and records no
+// branch, condition or render.
+func TestUnobservedRenderRecordsNothing(t *testing.T) {
+	src := "{% if a and b %}A{% else %}C{% endif %}{% for x in xs %}{{ x }}{% empty %}E{% endfor %}"
+	tpl, err := Compile(src)
+	testutil.FailErr(t, "compile", err)
+	data := map[string]any{"a": true, "b": false, "xs": []int{1, 2}}
+	want, err := ExecuteDetached(tpl, data)
+	testutil.FailErr(t, "plain render", err)
+	NameTemplate(tpl, "probe.md")
+	rec := &BranchRecorder{ObserveConditions: true}
+	ActiveBranchRecorder.Store(rec)
+	defer ActiveBranchRecorder.Store(nil)
+	got, err := ExecuteUnobserved(t.Context(), tpl, data)
+	testutil.FailErr(t, "unobserved render", err)
+	if got != want {
+		t.Fatalf("unobserved render = %q, want %q", got, want)
+	}
+	if len(rec.Hits) != 0 || len(rec.Conditions) != 0 || len(rec.Rendered) != 0 {
+		t.Fatalf("unobserved render recorded hits=%d conditions=%d rendered=%v", len(rec.Hits), len(rec.Conditions), rec.Rendered)
+	}
+	if _, err := Execute(t.Context(), tpl, data); err != nil {
+		t.Fatalf("observed render: %v", err)
+	}
+	if len(rec.Hits) == 0 || len(rec.Conditions) == 0 || rec.Rendered["probe.md"] != 1 {
+		t.Fatalf("observed render recorded hits=%d conditions=%d rendered=%v", len(rec.Hits), len(rec.Conditions), rec.Rendered)
+	}
+}

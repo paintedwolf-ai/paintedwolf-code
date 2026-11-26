@@ -28,6 +28,17 @@ type executionState struct {
 	// includePath lists the include tags enclosing the current node, kept
 	// only while a recorder observes conditions.
 	includePath []string
+	// unobserved marks a render no reader receives; it records nothing.
+	unobserved bool
+}
+
+// recorder is the active branch recorder for a render that a reader receives,
+// or nil.
+func (s *executionState) recorder() *BranchRecorder {
+	if s.unobserved {
+		return nil
+	}
+	return ActiveBranchRecorder.Load()
 }
 
 func (s *executionState) checkContext() {
@@ -80,7 +91,13 @@ func wrapPongoError(prefix string, err error) error {
 
 // Execute renders with a bounded data-only context and deterministic step budget.
 func Execute(ctx context.Context, tpl *pongo2.Template, values map[string]any) (string, error) {
-	return executeWithHook(ctx, tpl, values, nil)
+	return executeWithHook(ctx, tpl, values, nil, false)
+}
+
+// ExecuteUnobserved renders exactly as Execute for a decision no reader
+// receives, such as an admission probe; branch and condition recording skip it.
+func ExecuteUnobserved(ctx context.Context, tpl *pongo2.Template, values map[string]any) (string, error) {
+	return executeWithHook(ctx, tpl, values, nil, true)
 }
 
 func executeWithHook(
@@ -88,6 +105,7 @@ func executeWithHook(
 	tpl *pongo2.Template,
 	values map[string]any,
 	onStep func(step int),
+	unobserved bool,
 ) (out string, err error) {
 	if tpl == nil {
 		return "", fmt.Errorf("pongoplain: execute nil template")
@@ -102,9 +120,9 @@ func executeWithHook(
 	if normErr != nil {
 		return "", normErr
 	}
-	state := &executionState{ctx: ctx, onStep: onStep}
+	state := &executionState{ctx: ctx, onStep: onStep, unobserved: unobserved}
 	normalized[execStateKey] = state
-	if rec := ActiveBranchRecorder.Load(); rec != nil {
+	if rec := state.recorder(); rec != nil {
 		if name, ok := templateName(tpl); ok {
 			rec.recordRender(name)
 		}
