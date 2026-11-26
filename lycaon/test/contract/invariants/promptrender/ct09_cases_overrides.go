@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
@@ -149,7 +150,27 @@ func zeroRootSeeds() ([]hoststate.CustomizationSeed, error) {
 			})
 		}
 	}
-	return out, nil
+	return append(out, synthesisSeeds()...), nil
+}
+
+// synthesisSeeds are the report turns whose surface template states who may
+// be spawned when no file tools are offered: the synthesis surface across
+// modes, postures, root topologies and loadings.
+func synthesisSeeds() []hoststate.CustomizationSeed {
+	var out []hoststate.CustomizationSeed
+	for _, mode := range api.AllSessionModeValues() {
+		for _, p := range []api.SessionPosture{api.SessionPostureSpec, api.SessionPostureBuild, api.SessionPostureOrchestrate, api.SessionPostureVet} {
+			for _, roots := range []hoststate.RootTopology{hoststate.RootsNone, hoststate.RootsSingleGit, hoststate.RootsDualNonGitFirst} {
+				for _, ld := range []hoststate.LoadingMode{hoststate.LoadingFloorOnly, hoststate.LoadingPartlyLoaded, hoststate.LoadingAllLoaded} {
+					out = append(out, hoststate.CustomizationSeed{
+						Mode: mode, Posture: p, Workflow: hoststate.WorkflowActivePhase,
+						SurfaceID: spawn.SurfaceImplementSynthesis, Roots: roots, Loading: ld,
+					})
+				}
+			}
+		}
+	}
+	return out
 }
 
 // requestableTaskSeeds are the turns where task is loadable rather than
