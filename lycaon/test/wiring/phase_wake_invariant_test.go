@@ -9,9 +9,12 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
@@ -186,7 +189,9 @@ func (d *phaseWakeDriver) checkHostWake(t *testing.T, session *actionoutcome.Ses
 func (d *phaseWakeDriver) start(t *testing.T, n int) *wire.WorkflowRun {
 	t.Helper()
 	d.dir = d.h.ProjectDir(t, fmt.Sprintf("phase-wake-%d", n))
-	sess, err := d.h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureSpec}, d.dir)
+	projectID := uuid.NewString()
+	testdbseed.InsertProjectRoot(t, d.h.DB, projectID, d.dir)
+	sess, err := d.h.Store.Sessions.Create(d.ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureSpec, ProjectID: projectID}, projectID)
 	testutil.FailErr(t, "create session", err)
 	d.sess = sess
 	var run *wire.WorkflowRun
@@ -194,6 +199,11 @@ func (d *phaseWakeDriver) start(t *testing.T, n int) *wire.WorkflowRun {
 		AttachDefaultAmbient(t, d.h, d.ctx, sess.ID)
 		run, err = d.h.Workflows.Manager.Store.Runs.ActiveBySession(d.ctx, sess.ID)
 		testutil.FailErr(t, "ambient run", err)
+		if run != nil {
+			testutil.FailErr(t, "seed ambient request", d.h.Store.Transcript.AppendMessages(d.ctx, sess.ID, wire.Message{
+				ID: uuid.NewString(), WorkflowRunID: run.ID, Role: wire.MessageRoleUser, Origin: wire.MessageOriginUser, Content: "Change the greeting.",
+			}))
+		}
 	} else {
 		run, err = d.h.Workflows.Manager.Starts.StartHuman(d.ctx, sess.ID, wire.StartWorkflowRunRequest{
 			WorkflowID: d.manifest.ID, WorkflowVersion: d.manifest.Version, Request: "Change the greeting.",
