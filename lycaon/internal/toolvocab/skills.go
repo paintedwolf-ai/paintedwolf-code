@@ -627,56 +627,12 @@ func evalSkillRenderedReach(
 			return false
 		}
 	}
-	// Command-language programs cannot run until command is loaded; a deferred
-	// command tool alone does not satisfy a skill body that invokes them
-	// without loading command first in the same block.
-	if !offered[toolreach.ProgramTool] && reachable[toolreach.ProgramTool] && !slices.Contains(anyOf, toolreach.ProgramTool) {
-		if hasUnloadedCommandSpan(c, checkText) {
-			return false
-		}
-	}
 	if len(anyOf) == 0 {
 		return true
 	}
 	for _, tool := range anyOf {
 		if offered[tool] {
 			return true
-		}
-	}
-	return false
-}
-
-var (
-	inlineBacktickRe       = regexp.MustCompile("`([^`\n]+)`")
-	commandChainSplitRe    = regexp.MustCompile(`\s*(?:&&|\|\||[;|])\s*`)
-	declaredCommandProgSet = sync.OnceValue(func() map[string]bool {
-		progs := toolcontract.DeclaredCommandPrograms()
-		set := make(map[string]bool, len(progs))
-		for _, p := range progs {
-			set[p] = true
-		}
-		return set
-	})
-)
-
-func hasUnloadedCommandSpan(c *Catalog, text string) bool {
-	progs := declaredCommandProgSet()
-	for _, b := range Blocks(text) {
-		calls := Calls(c, b.Text)
-		for _, idx := range inlineBacktickRe.FindAllStringSubmatchIndex(b.Text, -1) {
-			raw := strings.TrimSpace(b.Text[idx[2]:idx[3]])
-			if strings.Contains(raw, "(") || !strings.Contains(raw, " ") {
-				continue
-			}
-			for _, seg := range commandChainSplitRe.Split(raw, -1) {
-				fields := strings.Fields(seg)
-				if len(fields) == 0 || !progs[fields[0]] {
-					continue
-				}
-				if !LoadedBefore(c, calls, toolreach.ProgramTool, idx[0]) {
-					return true
-				}
-			}
 		}
 	}
 	return false

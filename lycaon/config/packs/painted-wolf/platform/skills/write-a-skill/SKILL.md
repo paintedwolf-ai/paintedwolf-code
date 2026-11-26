@@ -38,7 +38,7 @@ A skill body is rendered for the reader when read and stays in the transcript. G
 
 - `name`, folder, and links resolve; every referenced file exists.
 - The description reads as a ranking card: concrete nouns, no generic verb list.
-- Body and each reference fit their size limits (`wc -c SKILL.md references/*` in `command`).
+- Body and each reference fit their size limits{% if profile_has_command %} (`wc -c SKILL.md references/*` in `command`){% endif %}.
 - Render what you wrote: `pw prompts render --skill <name> --check` for the body, plus `--resource <path>` per reference, and fix every violation.
 {% if profile_has_skills_read %}- Read the skill back with `skills_read` and confirm it loads without a template or metadata error.{% endif %}
 - Guard a tool mention the reader may not hold in {% verbatim %}{% if profile_has_<tool> %}{% endverbatim %} … {% verbatim %}{% endif %}{% endverbatim %}.

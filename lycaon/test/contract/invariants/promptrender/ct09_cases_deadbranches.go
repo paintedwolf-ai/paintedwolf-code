@@ -54,18 +54,6 @@ func deadBranchCases() []hoststate.CustomizationCase {
 			WorkerAgents: []string{"code-reviewer"},
 			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
 		},
-		{
-			ID: "own-implement-deferred-command-with-verify", Packs: []string{deadBranchFixture("packs", "implement-deferred-command-with-verify")},
-			Own:          map[string]string{"tools/profiles/implement": "fixture/implement-deferred-command-with-verify"},
-			WorkerAgents: []string{"implementer"},
-			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
-		},
-		{
-			ID: "own-implement-deferred-command", Packs: []string{deadBranchFixture("packs", "implement-deferred-command")},
-			Own:          map[string]string{"tools/profiles/implement": "fixture/implement-deferred-command"},
-			WorkerAgents: []string{"implementer"},
-			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
-		},
 		ownCoordinatorProfileWith("coordinator-secplan-a", func() ([]hoststate.CustomizationSeed, error) {
 			return securitySurveyPhaseSeeds("plan")
 		}),

@@ -14,7 +14,7 @@ old_api($$$ARGS)
 new_api($$$ARGS)
 ```
 
-Use the singular capture when arity is part of the claim and the sequence capture when arguments should pass through unchanged. Include required receivers, declaration bodies, return forms, delimiters, and surrounding syntax rather than supplying a keyword or node prefix.{% if profile_has_command %} Use `command` with `rg PATTERN PATH` when the target is a name, literal, comment, or formatting token rather than syntax shape.{% endif %}
+Use the singular capture when arity is part of the claim and the sequence capture when arguments should pass through unchanged. Include required receivers, declaration bodies, return forms, delimiters, and surrounding syntax rather than supplying a keyword or node prefix. Use `command` with `rg PATTERN PATH` when the target is a name, literal, comment, or formatting token rather than syntax shape.
 
 ## Safe rewrite loop
 
