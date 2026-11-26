@@ -34,6 +34,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // countingListener wraps a net.Listener and counts raw TCP accepts so denied
@@ -638,14 +639,20 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 	venvPy := filepath.Join(venvBinDir, "python")
 	testutil.FailErr(t, "write .venv/bin/python", os.WriteFile(venvPy, []byte("#!/bin/sh\necho PROJECT_VENV_PYTHON_OK\n"), 0o755))
 
+	runCmd := func(agent, surface string, offered []string, cmdSrc string) (string, error) {
+		return fixture.Invoke(t, ctx, "command", map[string]any{"command": cmdSrc}, func(callCtx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+			tc.Identity.Agent = agent
+			tc.Turn.TurnSurfaceID = surface
+			tc.Turn.TurnOfferedToolNames = offered
+			tc.Host.SessionScratchDir = scratchDir
+			tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
+			return rt.Host.Registry.Run(callCtx, "command", args, tc)
+		})
+	}
+
 	// 1a. Managed `python3` via `command` when direct `python` is NOT offered
 	// runs Portable Python WASI (sys.platform == "wasi"), NOT the host decoy.
-	tcNoDirect := workspaceTC(fixture.Session, "implement", "", wsDir)
-	tcNoDirect.Host.SessionScratchDir = scratchDir
-	tcNoDirect.Turn.TurnOfferedToolNames = []string{"command"}
-	outManaged, err := rt.Host.Registry.Run(ctx, "command", map[string]any{
-		"command": `python3 -c "import sys; print('PLATFORM:' + sys.platform)"`,
-	}, tcNoDirect)
+	outManaged, err := runCmd("implement", "", []string{"command"}, `python3 -c "import sys; print('PLATFORM:' + sys.platform)"`)
 	testutil.FailErr(t, "run managed python3 via command tool", err)
 	if !strings.Contains(outManaged, "PLATFORM:wasi") {
 		t.Fatalf("expected Portable Python WASI output via command tool, got: %q", outManaged)
@@ -656,12 +663,7 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 
 	// 1b. Shared authority: restricted worker (`worker_readonly`) on broader
 	// surface (`implement_investigate`) via `command` stops workspace write.
-	tcRestricted := workspaceTC(fixture.Session, "worker_readonly", "implement_investigate", wsDir)
-	tcRestricted.Host.SessionScratchDir = scratchDir
-	tcRestricted.Turn.TurnOfferedToolNames = []string{"command"}
-	_, _ = rt.Host.Registry.Run(ctx, "command", map[string]any{
-		"command": `python3 -c "open('blocked_via_cmd.txt', 'w').write('nope')"`,
-	}, tcRestricted)
+	_, _ = runCmd("worker_readonly", "implement_investigate", []string{"command"}, `python3 -c "open('blocked_via_cmd.txt', 'w').write('nope')"`)
 	if _, statErr := os.Stat(filepath.Join(wsDir, "blocked_via_cmd.txt")); !os.IsNotExist(statErr) {
 		t.Fatalf("blocked_via_cmd.txt must not exist under worker_readonly via command tool, statErr=%v", statErr)
 	}
@@ -672,9 +674,7 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 		[]byte("def test_cmd_ok():\n    assert 3 * 3 == 9\n"),
 		0o644,
 	))
-	outPytest, err := rt.Host.Registry.Run(ctx, "command", map[string]any{
-		"command": "pytest -q -p no:cacheprovider",
-	}, tcNoDirect)
+	outPytest, err := runCmd("implement", "", []string{"command"}, "pytest -q -p no:cacheprovider")
 	testutil.FailErr(t, "run managed pytest via command tool", err)
 	if !strings.Contains(outPytest, "1 passed") {
 		t.Fatalf("expected managed pytest via command tool to pass, got: %q", outPytest)
@@ -682,12 +682,7 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 
 	// 2. Preceding completed shell effect + bare `python3` when direct `python`
 	// IS offered -> refuses with PYTHON_TOOL_REQUIRED while preserving prior.txt!
-	tcWithDirect := workspaceTC(fixture.Session, "implement", "", wsDir)
-	tcWithDirect.Host.SessionScratchDir = scratchDir
-	tcWithDirect.Turn.TurnOfferedToolNames = []string{"command", "python"}
-	_, refuseErr := rt.Host.Registry.Run(ctx, "command", map[string]any{
-		"command": `echo prior_ok > prior.txt && python3 -c "print('SHOULD_NOT_RUN')"`,
-	}, tcWithDirect)
+	_, refuseErr := runCmd("implement", "", []string{"command", "python"}, `echo prior_ok > prior.txt && python3 -c "print('SHOULD_NOT_RUN')"`)
 	reject := toolrejection.AsToolReject(refuseErr)
 	if reject == nil || reject.Code != "PYTHON_TOOL_REQUIRED" {
 		t.Fatalf("expected PYTHON_TOOL_REQUIRED refusal, got err=%v (reject=%+v)", refuseErr, reject)
@@ -700,9 +695,7 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 
 	// 3. Explicit project runner (`./.venv/bin/python`) runs cleanly even when
 	// direct `python` IS offered (never triggers PYTHON_TOOL_REQUIRED).
-	outVenv, err := rt.Host.Registry.Run(ctx, "command", map[string]any{
-		"command": `./.venv/bin/python -c "print('ignored')"`,
-	}, tcWithDirect)
+	outVenv, err := runCmd("implement", "", []string{"command", "python"}, `./.venv/bin/python -c "print('ignored')"`)
 	testutil.FailErr(t, "run explicit .venv/bin/python via command tool", err)
 	if !strings.Contains(outVenv, "PROJECT_VENV_PYTHON_OK") {
 		t.Fatalf("expected explicit project runner output, got: %q", outVenv)
