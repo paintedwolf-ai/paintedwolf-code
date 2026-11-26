@@ -139,17 +139,17 @@ func Analyze(guards []Guard, eval func(site string, atoms []Truth) (bool, error)
 		for _, v := range g.Vectors {
 			for _, imp := range cons.Implications {
 				if a, b := valueOf(g, v, imp.If), valueOf(g, v, imp.Then); a == True && b == False {
-					res.Contradicted = append(res.Contradicted, fmt.Sprintf("%s (%s) contradicted at %s", imp.If+" ⇒ "+imp.Then, imp.Source, g.Site))
+					res.Contradicted = append(res.Contradicted, fmt.Sprintf("%s (%s) contradicted at %s by %s", imp.If+" ⇒ "+imp.Then, imp.Source, g.Site, v.Case))
 				}
 			}
 			for _, f := range cons.Fixed {
 				if got := valueOf(g, v, f.Atom); got != Unknown && got != f.Value {
-					res.Contradicted = append(res.Contradicted, fmt.Sprintf("%s = %s (%s) contradicted at %s", f.Atom, f.Value, f.Source, g.Site))
+					res.Contradicted = append(res.Contradicted, fmt.Sprintf("%s = %s (%s) contradicted at %s by %s", f.Atom, f.Value, f.Source, g.Site, v.Case))
 				}
 			}
 			for _, j := range cons.Joints {
 				if !j.admits(func(a string) Truth { return valueOf(g, v, a) }) {
-					res.Contradicted = append(res.Contradicted, fmt.Sprintf("joint %s (%s) contradicted at %s", strings.Join(j.Atoms, ", "), j.Source, g.Site))
+					res.Contradicted = append(res.Contradicted, fmt.Sprintf("joint %s (%s) contradicted at %s by %s", strings.Join(j.Atoms, ", "), j.Source, g.Site, v.Case))
 				}
 			}
 		}
