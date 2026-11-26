@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 )
@@ -811,13 +814,47 @@ func OverlayEnv(base, overrides []string) []string {
 	return append(out, overrides...)
 }
 
-// ProcessEnvironment constructs the network-relevant child environment.
+// ProcessEnvironment constructs the confined child environment.
 func ProcessEnvironment(base []string, c Confinement) []string {
 	clean := WithoutProxyEnv(base)
-	if c.Network != NetworkProxyOnly {
-		return clean
+	if c.Network == NetworkProxyOnly {
+		clean = OverlayEnv(clean, ProxyEnv(c))
 	}
-	return OverlayEnv(clean, ProxyEnv(c))
+	return withDarwinXcrunCacheEnv(clean, c)
+}
+
+// withDarwinXcrunCacheEnv redirects Apple's xcrun lookup cache out of
+// DARWIN_USER_TEMP_DIR into a confined writable root so cold developer shims
+// do not attempt shared-temp cache writes under Seatbelt.
+func withDarwinXcrunCacheEnv(env []string, c Confinement) []string {
+	if runtime.GOOS != "darwin" || c.HostExecution {
+		return env
+	}
+	for _, entry := range env {
+		if key, val, ok := strings.Cut(entry, "="); ok && key == "xcrun_db" && strings.TrimSpace(val) != "" {
+			return env
+		}
+	}
+	dbPath := darwinXcrunDBPath(c)
+	if dbPath == "" {
+		return env
+	}
+	return OverlayEnv(env, []string{"xcrun_db=" + dbPath})
+}
+
+func darwinXcrunDBPath(c Confinement) string {
+	if scratch := strings.TrimSpace(c.Workspaces.SessionScratch); scratch != "" {
+		if cp := fspath.CanonicalPath(scratch); cp != "" {
+			return filepath.Join(cp, "xcrun_db")
+		}
+		if filepath.IsAbs(scratch) {
+			return filepath.Join(filepath.Clean(scratch), "xcrun_db")
+		}
+	}
+	if cache := fspath.CanonicalPath(platformUserCache()); cache != "" {
+		return filepath.Join(cache, "paintedwolf-xcrun_db")
+	}
+	return ""
 }
 
 // EnvironmentBoundary supplies the broker addresses before a program expands
