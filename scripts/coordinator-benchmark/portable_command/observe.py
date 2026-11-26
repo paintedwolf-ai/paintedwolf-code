@@ -37,6 +37,7 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         pins = _rows(db, f'SELECT * FROM invocation_program_revision_pins WHERE program_id IN ({p_ph}) ORDER BY program_id, execution_id, ordinal', p_ids) if p_ids else []
         outputs = _rows(db, f'SELECT id,program_id,execution_id,stream,reference,complete,redacted,preview,preview_truncated,line_count,inline_digest,blob_id FROM invocation_program_outputs WHERE program_id IN ({p_ph}) ORDER BY rowid', p_ids) if p_ids else []
         publications = _rows(db, f'SELECT * FROM invocation_program_publications WHERE program_id IN ({p_ph})', p_ids) if p_ids else []
+        program_progress = _rows(db, f'SELECT execution_id,program_id,session_id,state,owner_invoked,detail_ref FROM invocation_program_progress WHERE program_id IN ({p_ph})', p_ids) if p_ids and _table_exists(db, 'invocation_program_progress') else []
         o_ids = [o['id'] for o in outputs]
         o_ph = ','.join('?' for _ in o_ids) or "''"
         deliveries = _rows(db, f'SELECT id,output_id,start_byte,end_byte,source_owner_ref FROM invocation_program_deliveries WHERE output_id IN ({o_ph})', o_ids) if o_ids and _table_exists(db, 'invocation_program_deliveries') else []
@@ -48,7 +49,7 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         'prelude_receipts': prelude_receipts, 'invocation_receipts': receipts, 'invocation_programs': programs,
         'invocation_program_executions': executions, 'invocation_program_revision_pins': pins,
         'invocation_program_outputs': outputs, 'invocation_program_publications': publications,
-        'invocation_program_deliveries': deliveries,
+        'invocation_program_progress': program_progress, 'invocation_program_deliveries': deliveries,
         'source_command_windows': windows, 'tool_result_messages': messages,
     }
 
@@ -175,15 +176,17 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
 
     msgs_by_call = {m['tool_result_call_id']: parse_tool_result(m) for m in audit['tool_result_messages']}
     progs_by_receipt = {p['parent_receipt_id']: p for p in audit['invocation_programs']}
-    progress_receipts = [r for r in audit['invocation_receipts'] if r['tool_name'] == 'update_progress' and r['owner'] == 'progress']
+    top_progress = [r for r in audit['invocation_receipts'] if r['tool_name'] == 'update_progress' and r['owner'] == 'progress']
+    env_progress = [
+        {'id': pp['execution_id'], 'status': 'completed' if pp['state'] == 'committed' else pp['state']}
+        for pp in audit.get('invocation_program_progress', [])
+        if pp.get('state') in {'committed', 'rejected', 'unknown'}
+    ]
+    progress_receipts = top_progress + env_progress
     cmd_receipts = [r for r in audit['invocation_receipts'] if r['tool_name'] == 'command']
     receipts_by_call = {r['tool_call_id']: r for r in audit['invocation_receipts'] if r['tool_name'] != 'update_progress'}
     has_progress_turn = any('progress_update' in t for t in case.get('turns') or ())
-    unexpected_receipts = [
-        r for r in audit['invocation_receipts']
-        if r['tool_call_id'] not in expected_calls
-        and not (has_progress_turn and r['tool_name'] == 'update_progress' and r['owner'] == 'progress')
-    ]
+    unexpected_receipts = [r for r in audit['invocation_receipts'] if r['tool_call_id'] not in expected_calls and not (has_progress_turn and r['tool_name'] == 'update_progress' and r['owner'] == 'progress')]
     unexpected_cmd = [r for r in cmd_receipts if r['tool_call_id'] not in expected_calls]
 
     cmd_invocations, last_payload, last_raw, last_prog = [], {}, {}, None
@@ -232,8 +235,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     digested_outputs = [o for o in outputs if o.get('complete') == 1 and len(o.get('inline_digest') or '') == 64]
     write_rev_ok = all(bool(e.get('published_revision') or e.get('accepted_revision')) for e in write_execs)
     facts = {
-        'progress_and_program_separate': bool(progress_receipts and audit['invocation_programs']
-                                              and all(pr['id'] != p['parent_receipt_id'] for pr in progress_receipts for p in audit['invocation_programs'])),
+        'progress_and_program_separate': bool(progress_receipts and audit['invocation_programs'] and all(pr['id'] not in {p['parent_receipt_id'], p['id']} for pr in progress_receipts for p in audit['invocation_programs'])),
         'absence_pin': any(p['mode'] == 'absent' and p['role'] == 'destination' and p['execution_id'] in write_exec_ids for p in pins),
         'child_identities': bool(child_ids) and len(set(child_ids)) == len(child_ids),
         'unique_dynamic_ids': bool(execs) and len({e['id'] for e in execs}) == len(execs),

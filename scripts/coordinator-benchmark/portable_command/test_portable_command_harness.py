@@ -21,6 +21,7 @@ def create_audit_db(db_path):
         CREATE TABLE invocation_program_revision_pins (program_id TEXT, execution_id TEXT, ordinal INTEGER, role TEXT, mode TEXT, path TEXT);
         CREATE TABLE invocation_program_outputs (id TEXT PRIMARY KEY, program_id TEXT, execution_id TEXT, stream TEXT, reference TEXT, complete INTEGER, redacted INTEGER, preview TEXT, preview_truncated INTEGER, line_count INTEGER, inline_digest TEXT, blob_id TEXT);
         CREATE TABLE invocation_program_publications (program_id TEXT PRIMARY KEY, session_id TEXT, state TEXT, materialized INTEGER);
+        CREATE TABLE invocation_program_progress (execution_id TEXT PRIMARY KEY, program_id TEXT, session_id TEXT, state TEXT, owner_invoked INTEGER, detail_ref TEXT);
         CREATE TABLE source_command_windows (id TEXT PRIMARY KEY, session_id TEXT, tool_call_id TEXT, state TEXT);
         CREATE TABLE messages (id TEXT PRIMARY KEY, session_id TEXT, ord INTEGER, role TEXT, tool_result_call_id TEXT, tool_result_json TEXT);
     ''')
@@ -118,12 +119,12 @@ class FakeApp:
                 db.execute("INSERT INTO messages VALUES (?,?,?,'tool',?,?)", (f'msg-{cid}', self.session_id, self.turn * 10 + idx, cid, json.dumps({'outcome': 'completed', 'content': '{}'})))
             elif name == 'command' and self.mode in {'publish', 'missing-pub', 'injected-extra'}:
                 (self.project_root / 'result.txt').write_bytes(b'created\n')
-                if 'progress_update' in (tc.get('args') or {}):
-                    db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'update_progress','progress','completed',1)", (f'rcpt-prog-{cid}', self.session_id, cid))
                 db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command','processes','completed',1)", ('rcpt-cmd', self.session_id, cid))
                 if self.mode == 'injected-extra':
                     db.execute("INSERT INTO invocation_receipts VALUES ('rcpt-extra',?,'unissued-call-id','command','processes','completed',1)", (self.session_id,))
                 db.execute("INSERT INTO invocation_programs VALUES ('prog-1','rcpt-cmd','completed',0,'')")
+                if 'progress_update' in (tc.get('args') or {}):
+                    db.execute("INSERT INTO invocation_program_progress VALUES (?,'prog-1',?,'committed',1,'')", (f'prog-exec-{cid}', self.session_id))
                 db.execute("INSERT INTO invocation_program_executions VALUES ('ex-1','prog-1',1,'printf','printf','processes','completed','none','','','')")
                 pub_rev = 'rev-1' if self.mode != 'missing-pub' else ''
                 db.execute("INSERT INTO invocation_program_executions VALUES ('ex-2','prog-1',2,'write','>','filesystem','completed','completed','',?,'')", (pub_rev,))

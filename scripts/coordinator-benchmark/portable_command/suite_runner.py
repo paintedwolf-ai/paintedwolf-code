@@ -36,6 +36,15 @@ def _refusal_code(tool_result, parsed_payload):
     return codes[0] if codes else None
 
 
+def _query_committed_revision(db_path, session_id):
+    with contextlib.closing(sqlite3.connect(db_path)) as db:
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_progress'").fetchone():
+            row = db.execute('SELECT revision FROM session_progress WHERE session_id=?', (session_id,)).fetchone()
+            if row and isinstance(row[0], int) and row[0] > 0:
+                return row[0]
+    return None
+
+
 def probe_command_envelope(
     out_dir,
     *,
@@ -56,7 +65,7 @@ def probe_command_envelope(
 
     application = make_app_factory(engine_bin, app_factory)(app_dir)
     sse, session_id, offered_tools, command_schema = None, None, [], None
-    call_id = tool_result = control_call_id = control_result = None
+    call_id = tool_result = control_call_id = control_result = committed_rev = None
     invocation_args = {'command': program, 'progress_update': {'content': progress_content}}
     control_args = {'command': program, 'progress_update': {'content': all_checked_content}}
     try:
@@ -88,6 +97,9 @@ def probe_command_envelope(
                 'tool_calls': [{'id': call_id, 'name': 'command', 'args': invocation_args}],
             })
             tool_result = wait_tool_result(application, session_id, call_id)
+            committed_rev = _query_committed_revision(app_dir / 'store.db', session_id) or (1 if (tool_result or {}).get('outcome') == 'completed' else None)
+            if committed_rev is not None:
+                control_args = {'command': program, 'progress_update': {'content': all_checked_content, 'expected_revision': committed_rev}}
             req2 = application.wait_for(lambda: smoke_workers.pending(application, session_id), 'envelope all-checked control turn', session_id)
             control_call_id = str(uuid.uuid4())
             application.request('/harness/llm/respond', {
@@ -102,7 +114,7 @@ def probe_command_envelope(
         application.close(cleanup=False)
 
     checkpoint_closed_store(app_dir / 'store.db', application.process)
-    receipts, programs = [], []
+    receipts, programs, prog_progress = [], [], []
     if session_id:
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             db.row_factory = sqlite3.Row
@@ -116,15 +128,20 @@ def probe_command_envelope(
                 programs = [dict(p) for p in db.execute(
                     f'SELECT id, parent_receipt_id, state FROM invocation_programs WHERE parent_receipt_id IN ({ph})', r_ids,
                 ).fetchall()]
+            p_ids = [p['id'] for p in programs]
+            if p_ids and db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='invocation_program_progress'").fetchone():
+                p_ph = ','.join('?' for _ in p_ids)
+                prog_progress = [dict(pp) for pp in db.execute(
+                    f'SELECT execution_id, program_id, state, owner_invoked, detail_ref FROM invocation_program_progress WHERE program_id IN ({p_ph})', p_ids,
+                ).fetchall()]
     props = ((command_schema or {}).get('schema') or {}).get('properties') or {}
     schema_has_progress = 'progress_update' in props
-    native_progress = [r for r in receipts if (r.get('tool_name') == 'update_progress' or r.get('owner') == 'progress') and r.get('status') == 'completed']
+    top_progress = [r for r in receipts if (r.get('tool_name') == 'update_progress' or r.get('owner') == 'progress') and r.get('status') == 'completed']
+    env_progress = [pp for pp in prog_progress if pp.get('state') == 'committed' and pp.get('owner_invoked') == 1]
     cmd_receipts = [r for r in receipts if r.get('tool_name') == 'command' and r.get('tool_call_id') == call_id]
-    independent_receipts = bool(
-        native_progress and cmd_receipts
-        and all(pr['id'] != cr['id'] for pr in native_progress for cr in cmd_receipts)
-        and all(pr['id'] != p['parent_receipt_id'] for pr in native_progress for p in programs)
-    )
+    prog_ids = {p['id'] for p in programs} | {p['parent_receipt_id'] for p in programs} | {r['id'] for r in cmd_receipts}
+    progress_ids = [pp['execution_id'] for pp in env_progress] + [r['id'] for r in top_progress]
+    independent_receipts = bool(progress_ids and cmd_receipts and all(pid and pid not in prog_ids for pid in progress_ids))
     _, parsed_payload = parse_tool_result({'tool_result_json': json.dumps(tool_result)}) if tool_result else ({}, {})
     _, ctrl_payload = parse_tool_result({'tool_result_json': json.dumps(control_result)}) if control_result else ({}, {})
     ctrl_code = _refusal_code(control_result, ctrl_payload)
@@ -135,7 +152,7 @@ def probe_command_envelope(
         status = 'supported'
     elif outcome == 'rejected':
         status = 'rejected'
-    elif outcome == 'completed' and not native_progress:
+    elif outcome == 'completed' and not progress_ids:
         status = 'accepted_without_progress_receipt'
     else:
         status = 'other'
@@ -144,9 +161,9 @@ def probe_command_envelope(
         'session_id': session_id, 'offered_tools': offered_tools, 'command_schema': command_schema,
         'command_schema_properties': sorted(props.keys()), 'schema_has_progress_update': schema_has_progress,
         'invocation_call_id': call_id, 'invocation_args': invocation_args, 'tool_result': tool_result,
-        'parsed_payload': parsed_payload, 'receipts': receipts, 'programs': programs,
-        'native_progress_receipt_count': len(native_progress), 'independent_receipts': independent_receipts,
-        'all_checked_refusal_code': ctrl_code,
+        'parsed_payload': parsed_payload, 'receipts': receipts, 'programs': programs, 'program_progress': prog_progress,
+        'committed_progress_revision': committed_rev, 'native_progress_receipt_count': len(progress_ids),
+        'independent_receipts': independent_receipts, 'all_checked_refusal_code': ctrl_code,
         'all_checked_control': {
             'invocation_call_id': control_call_id, 'args': control_args,
             'outcome': (control_result or {}).get('outcome'), 'refusal_code': ctrl_code,
