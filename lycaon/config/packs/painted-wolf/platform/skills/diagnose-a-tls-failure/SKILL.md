@@ -13,7 +13,7 @@ Use this workflow when a connection fails on certificate verification. Distinct 
 
 ## Read the actual chain first
 
-`openssl s_client -connect host:443 -servername host` answers most cases (`-servername` sets SNI so shared hosts serve the right certificate).{% if runner_direct_ip_tools %} Run it{% if profile_command_external_exec %} in `command`{% endif %} with `capability_request.direct_ip` `{"declared_destinations": ["tcp://host:443"]}` (`s_client` ignores proxy vars) plus `; date -u` to spot clock skew beside `notAfter`. Read the verify return code, served chain, and subject/SAN plus validity dates.{% elif can_request_command_verify %} Call `request_tools(need="command")` first, then run it with direct IP to read the served chain and validity dates.{% else %} Without external execution, inspect TLS errors, client trust config, and PEM files (`cat`, `grep`), and report `openssl s_client -connect host:443 -servername host` for an execution run.{% endif %}
+`openssl s_client -connect host:443 -servername host` answers most cases (`-servername` sets SNI so shared hosts serve the right certificate).{% if runner_direct_ip_tools %} Run it{% if profile_command_external_exec %} in `command`{% endif %} with `capability_request.direct_ip` `{"declared_destinations": ["tcp://host:443"]}` (`s_client` ignores proxy vars) plus `; date -u` to spot clock skew beside `notAfter`. Read the verify return code, served chain, and subject/SAN plus validity dates.{% else %} Without external execution, inspect TLS errors, client trust config, and PEM files (`cat`, `grep`), and report `openssl s_client -connect host:443 -servername host` for an execution run.{% endif %}
 
 ## The causes, and how to tell them apart
 

@@ -120,7 +120,7 @@ func (node *trackedIncludeNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if state.includes > MaxCompositionFiles {
 		panic(executionAbort{err: fmt.Errorf("%w: more than %d template includes", ErrComposition, MaxCompositionFiles)})
 	}
-	if rec := ActiveBranchRecorder.Load(); rec != nil && !isAtomReplay(ctx) {
+	if rec := state.recorder(); rec != nil && !isAtomReplay(ctx) {
 		rec.recordRender(node.filename)
 		if rec.ObserveConditions {
 			state.includePath = append(state.includePath, node.from)
