@@ -47,16 +47,19 @@ test_run_export_isolation() {
   # Toolchains and dependency stores are provisioned host inputs, not test state.
   export RUSTUP_HOME="${RUSTUP_HOME:-${HOME}/.rustup}"
   export CARGO_HOME="${CARGO_HOME:-${HOME}/.cargo}"
-  export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
-  export GOMODCACHE="${GOMODCACHE:-$(go env GOMODCACHE)}"
-  export GOPATH="${GOPATH:-$(go env GOPATH)}"
+  local go_env goroot gocache gomodcache gopath
+  go_env="$(go env GOROOT GOCACHE GOMODCACHE GOPATH)" || return 1
+  { read -r goroot; read -r gocache; read -r gomodcache; read -r gopath; } <<<"${go_env}"
+  export GOCACHE="${GOCACHE:-${gocache}}"
+  export GOMODCACHE="${GOMODCACHE:-${gomodcache}}"
+  export GOPATH="${GOPATH:-${gopath}}"
   # Toolchain switching can select a wrapper that finds its SDK under HOME, so the
-  # selected toolchain is pinned before HOME changes. A go that names no GOROOT
-  # stays the one on PATH.
-  local goroot
-  if goroot="$(go env GOROOT 2>/dev/null)" && [[ -n "${goroot}" && -x "${goroot}/bin/go" ]]; then
-    export PATH="${goroot}/bin:${PATH}"
+  # selected toolchain is pinned before HOME changes.
+  if [[ ! -x "${goroot}/bin/go" ]]; then
+    printf 'test isolation: go reports GOROOT %q, which has no bin/go\n' "${goroot}" >&2
+    return 1
   fi
+  export PATH="${goroot}/bin:${PATH}"
   # The container client's configuration selects the daemon that holds the reference images.
   export DOCKER_CONFIG="${DOCKER_CONFIG:-${HOME}/.docker}"
   export PW_HOST_TMPDIR="${PW_HOST_TMPDIR:-${TMPDIR:-/tmp}}"
