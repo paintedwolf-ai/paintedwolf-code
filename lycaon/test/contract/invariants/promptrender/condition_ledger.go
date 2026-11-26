@@ -117,15 +117,20 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	if err != nil {
 		return nil, err
 	}
+	skillGen, err := newSkillCaseProducer(s, sites)
+	if err != nil {
+		return nil, err
+	}
 	in := interactions.LedgerInput{
 		Sites: sites, Observed: interactions.MergeObservations(append([][]hoststate.ObservedCondition{sum.Conditions}, extra...)...),
-		Constraints: conditionConstraints, Derived: gen.derived,
+		Constraints: conditionConstraints, Derived: withSkillDerived(gen.derived),
 	}
 	first, err := interactions.BuildConditionLedger(in)
 	if err != nil {
 		return nil, err
 	}
 	targets, gapRecipients := gen.targets(first)
+	skillTargets, skillGapRecipients := skillGen.targets(first)
 	started := time.Now()
 	defer gen.producer.Close()
 	outcomes, err := casegen.Generate(ctx, gen.producer, targets, caseBudget)
@@ -170,16 +175,20 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	if err != nil {
 		return nil, err
 	}
-	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations())
-	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes), slices.Concat(gapRecipients, tRecipients))
+	skillOutcomes, err := casegen.Generate(ctx, skillGen, skillTargets, skillCaseBudget)
+	if err != nil {
+		return nil, err
+	}
+	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations(), skillGen.Observations())
+	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes, skillOutcomes), slices.Concat(gapRecipients, tRecipients, skillGapRecipients))
 	l, err := interactions.BuildConditionLedger(in)
 	if err != nil {
 		return nil, err
 	}
 	l.Generation = interactions.GenerationSummary{
-		Targets: len(targets) + len(tTargets), Runs: gen.producer.Runs() + kicks.runs, Seconds: time.Since(started).Seconds(),
+		Targets: len(targets) + len(tTargets) + len(skillTargets), Runs: gen.producer.Runs() + kicks.runs + skillGen.Runs(), Seconds: time.Since(started).Seconds(),
 	}
-	for _, o := range slices.Concat(outcomes, tOutcomes) {
+	for _, o := range slices.Concat(outcomes, tOutcomes, skillOutcomes) {
 		if o.Found {
 			l.Generation.Found++
 		}

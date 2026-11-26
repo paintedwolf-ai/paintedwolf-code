@@ -24,7 +24,18 @@ pub struct TempDir {
 impl TempDir {
     /// Creates a unique labeled directory.
     pub fn new(label: &str) -> Self {
-        let path = std::env::temp_dir().join(format!(
+        Self::within(&std::env::temp_dir(), label)
+    }
+
+    /// Creates a unique labeled directory for Unix sockets directly under `/tmp`:
+    /// socket paths are limited to 108 bytes, which a long `TMPDIR` would exceed.
+    #[cfg(target_os = "linux")]
+    pub fn for_sockets(label: &str) -> Self {
+        Self::within(Path::new("/tmp"), label)
+    }
+
+    fn within(base: &Path, label: &str) -> Self {
+        let path = base.join(format!(
             "paintedwolf-{label}-{}-{}",
             process::id(),
             NEXT_ID.fetch_add(1, Ordering::Relaxed)
