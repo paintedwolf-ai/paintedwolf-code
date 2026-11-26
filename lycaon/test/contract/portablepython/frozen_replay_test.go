@@ -77,7 +77,11 @@ func probePythonEnv(t *testing.T, pyBin string) (string, map[string]string) {
 	}
 	var pkgs map[string]string
 	contractcheck.FailErr(t, "parse package versions", json.Unmarshal(bytes.TrimSpace(pkgOut), &pkgs))
-	return strings.TrimSpace(string(verOut)), pkgs
+	pyVer := strings.TrimSpace(string(verOut))
+	if os.Getenv("PW_ALLOW_NON_PY312") != "1" && !strings.HasPrefix(pyVer, "Python 3.12.") {
+		t.Fatalf("reference CPython must match shipped 3.12 minor version (got %q; set PW_REFERENCE_PYTHON to Python 3.12)", pyVer)
+	}
+	return pyVer, pkgs
 }
 
 func TestFrozenAgentProgramsReferenceReplay(t *testing.T) {

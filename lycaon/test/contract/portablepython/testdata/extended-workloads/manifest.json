@@ -1,0 +1,18 @@
+{
+  "calculated-edit/edit_program.py": "87fb5a69f062d1c33303350729d4fe3872c0ac102bd63e2ca06f6a05222b3cbc",
+  "calculated-edit/inputs/alpha.bin": "5048ba7b2161fe18701b10db288535a4d9b97b76e2c7614d2ba7f8c719b0ee99",
+  "calculated-edit/inputs/beta.bin": "eee89ee88f5acaed0813e41d96077655e44fd3515cec72808a867bca977c4e64",
+  "calculated-edit/src/provhash/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "calculated-edit/src/provhash/stream.py": "ab34111a42e2e7764d4eb23d805a51215d8d317b7ddf6f4d2ccb8344f8097705",
+  "calculated-edit/tests/test_stream.py": "7cfaaa3ec7737ef571fcbb33756dfb96f0d062790a034cb693f537451fc0e9a5",
+  "calculated-edit/verify_program.py": "dd8dc03c9592e524a959d0ee2056f1981986a9c4b540079b7d9ab9704ccffd7a",
+  "project-math-cwd/bench/eval_program.py": "3cee139dc7556f520e8d9b6b4b7020126b788365a8f37aa9ff2a96671b4c2a25",
+  "project-math-cwd/bench/sampling.py": "868221b0f8bd680207d9baaabae6b82999bdf33aa6c800eb29c4a79f594733ae",
+  "project-math-cwd/bench/test_sampling.py": "37917ea239c911d72cf3731cb1c87c50f1d3819a94d5205abf17554ad03815d4",
+  "split-preservation/inputs/group_overlap.jsonl": "7c787f2758072f77d7f2c23c422a7c6a80a08f7986d2b11b2650d3ffa81db112",
+  "split-preservation/inputs/late_invalid.jsonl": "a28717975c284eec52f1afe13dcc5fea958d7d53e3055105508c3a2ff4e8b5a9",
+  "split-preservation/inputs/valid.jsonl": "04f944b3955fe5bf26880c0f12e772e3dc1da1aadc69beeabfc85275c3edb3bc",
+  "split-preservation/seed/train.jsonl": "468a6619797a7de9a1c6cadb095fb887f7f6755647468222f18651ef5a96cadb",
+  "split-preservation/seed/val.jsonl": "542009deb606a4053e2d9b6d916ce7fe31562778f78bfac2b1736243c87a4fb1",
+  "split-preservation/splitter.py": "ec5a7c5541fd1d3d0416b4204b20a4690c594c3db1a2f542afc5d336eca0f520"
+}
