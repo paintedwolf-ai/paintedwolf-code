@@ -242,17 +242,15 @@ func TestBB05_M09_RestartAfterPrecommitFailurePreservesBaselineAndRunsFreshComma
 	testutil.FailErr(t, "write baseline target", os.WriteFile(target, []byte("baseline\n"), 0o600))
 
 	host1 := env.boot(t, false)
-	host1.reviewHook = func(context.Context, []tools.FileChange) error {
-		return toolrejection.RejectInvalidArguments("REVIEW_REJECTED", map[string]any{"reason": "fixture precommit abort"})
-	}
-	raw, err := host1.call(t, ctx, "printf 'mutated\\n' > target.txt")
-	testutil.FailErr(t, "run precommit-refused program", err)
+	// Producer emits bytes then exits nonzero, forcing redirect Abandon before commit.
+	raw, err := host1.call(t, ctx, "(printf 'mutated\\n'; false) > target.txt")
+	testutil.FailErr(t, "run precommit-abandoned program", err)
 	outcome := decodeProgramOutcome(t, raw)
-	if outcome.Refusal == nil || outcome.CompletedEffects != 0 {
-		t.Fatalf("precommit failure outcome = %+v", outcome)
+	if outcome.Status == 0 || outcome.CompletedEffects != 0 {
+		t.Fatalf("precommit failure outcome = %+v, want nonzero status and 0 completed effects", outcome)
 	}
 	body, err := os.ReadFile(target)
-	testutil.FailErr(t, "read target after precommit refusal", err)
+	testutil.FailErr(t, "read target after precommit abandon", err)
 	if string(body) != "baseline\n" {
 		t.Fatalf("precommit failure modified target: %q", body)
 	}
@@ -265,14 +263,14 @@ func TestBB05_M09_RestartAfterPrecommitFailurePreservesBaselineAndRunsFreshComma
 	host2 := env.boot(t, true)
 
 	reloaded, err := host2.runtime.Commands.ProgramReceiptResult(ctx, env.sessionID, outcome.ProgramID)
-	testutil.FailErr(t, "fresh read of refused program after restart", err)
+	testutil.FailErr(t, "fresh read of precommit-failed program after restart", err)
 	var recOutcome command.ProgramOutcome
 	testutil.FailErr(t, "decode reloaded outcome", json.Unmarshal([]byte(reloaded), &recOutcome))
-	if recOutcome.ProgramID != outcome.ProgramID || recOutcome.CompletedEffects != 0 {
+	if recOutcome.ProgramID != outcome.ProgramID || recOutcome.Status == 0 || recOutcome.CompletedEffects != 0 {
 		t.Fatalf("reloaded precommit outcome = %+v", recOutcome)
 	}
 	if host2.programCount(t) != 1 {
-		t.Fatalf("restart replayed refused program: count=%d", host2.programCount(t))
+		t.Fatalf("restart replayed precommit-failed program: count=%d", host2.programCount(t))
 	}
 
 	// Fresh command on restarted host succeeds and updates target.txt.

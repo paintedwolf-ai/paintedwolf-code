@@ -600,17 +600,21 @@ func TestBB05_M08_ProcessAndWaitReadRaces(t *testing.T) {
 	descPIDPath := filepath.Join(f.Dir, "descendant.pid")
 
 	// 1. Start a native background job (%1) and a fixture-owned external helper OS process (%2) with a descendant.
-	outNative, err := f.call(t, t.Context(), "sleep 60 &")
+	outNative, err := f.call(t, t.Context(), "sleep 60 & echo $!")
 	testutil.FailErr(t, "start native job", err)
-	_ = decodeOutcome(t, outNative)
+	nativeOutcome := decodeOutcome(t, outNative)
+	nativePublicID, err := strconv.Atoi(strings.TrimSpace(nativeOutcome.Stdout))
+	testutil.FailErr(t, "parse native $! id", err)
 
 	helperCmd := fmt.Sprintf(
-		"PW_BB05_HELPER=parent PW_BB05_LOCK=%s PW_BB05_PARENT_PID=%s PW_BB05_DESC_PID=%s external -- %s '-test.run=^TestBB05HelperProcess$' &",
+		"PW_BB05_HELPER=parent PW_BB05_LOCK=%s PW_BB05_PARENT_PID=%s PW_BB05_DESC_PID=%s external -- %s '-test.run=^TestBB05HelperProcess$' & echo $!",
 		strconv.Quote(lockPath), strconv.Quote(parentPIDPath), strconv.Quote(descPIDPath), strconv.Quote(exe),
 	)
 	outExt, err := f.call(t, t.Context(), helperCmd)
 	testutil.FailErr(t, "start external helper job", err)
-	_ = decodeOutcome(t, outExt)
+	extOutcome := decodeOutcome(t, outExt)
+	extHostPID, err := strconv.Atoi(strings.TrimSpace(extOutcome.Stdout))
+	testutil.FailErr(t, "parse external $! host pid", err)
 
 	testutil.WaitFor(t, "helper parent and descendant ready", func() bool {
 		_, errP := os.Stat(parentPIDPath)
@@ -630,10 +634,17 @@ func TestBB05_M08_ProcessAndWaitReadRaces(t *testing.T) {
 	descPID, err := strconv.Atoi(strings.TrimSpace(string(descPIDBytes)))
 	testutil.FailErr(t, "parse descendant pid", err)
 	if parentPID <= 0 || descPID <= 0 || parentPID == descPID {
-		t.Fatalf("invalid OS PIDs: parent=%d descendant=%d", parentPID, descPID)
+		t.Fatalf("invalid helper/descendant PIDs: parent=%d descendant=%d", parentPID, descPID)
 	}
 
-	// Verify stable distinction among shell job token (%1/%2), OS PID, and registry handle.
+	// Verify stable distinction among shell job token (%1/%2), host process identity ($!),
+	// synthetic native job ID (> 1<<22), and bgprocess registry handle.
+	if nativePublicID < (1 << 22) {
+		t.Fatalf("native job $! = %d, want synthetic ID >= 1<<22", nativePublicID)
+	}
+	if extHostPID <= 0 || extHostPID >= (1<<22) {
+		t.Fatalf("external helper $! = %d, want host OS PID in (0, 1<<22)", extHostPID)
+	}
 	active := f.Background.ActiveJobs(f.Session)
 	if len(active) != 2 {
 		t.Fatalf("active jobs = %d, want 2", len(active))
@@ -643,12 +654,14 @@ func TestBB05_M08_ProcessAndWaitReadRaces(t *testing.T) {
 	testutil.FailErr(t, "resolve %1", err)
 	h2, err := jobs.Resolve("%2")
 	testutil.FailErr(t, "resolve %2", err)
-	hByPID, err := jobs.Resolve(strconv.Itoa(parentPID))
-	testutil.FailErr(t, "resolve external helper by OS PID", err)
-	if h1 == h2 || h2 != hByPID {
-		t.Fatalf("job token / handle / OS PID mismatch: %%1=%q %%2=%q pid(%d)=%q", h1, h2, parentPID, hByPID)
+	hByNativeID, err := jobs.Resolve(strconv.Itoa(nativePublicID))
+	testutil.FailErr(t, "resolve native job by public ID", err)
+	hByHostPID, err := jobs.Resolve(strconv.Itoa(extHostPID))
+	testutil.FailErr(t, "resolve external helper by host OS PID", err)
+	if h1 == h2 || h1 != hByNativeID || h2 != hByHostPID {
+		t.Fatalf("job token / handle / PID mismatch: %%1=%q(id=%d->%q) %%2=%q(pid=%d->%q)", h1, nativePublicID, hByNativeID, h2, extHostPID, hByHostPID)
 	}
-	if h1 == "%1" || h2 == "%2" || h2 == strconv.Itoa(parentPID) {
+	if h1 == "%1" || h2 == "%2" || h2 == strconv.Itoa(extHostPID) {
 		t.Fatalf("registry handles collapsed into shell tokens or OS PIDs: h1=%q h2=%q", h1, h2)
 	}
 
