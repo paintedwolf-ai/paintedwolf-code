@@ -1,0 +1,14 @@
+name: WakeState
+go_const_prefix: WakeState
+values:
+  - id: received
+  - id: queued
+  - id: deferred
+  - id: delivered
+  - id: consumed
+  - id: routed_to_wait
+  - id: held
+  - id: skipped
+  - id: denied
+  - id: dropped
+  - id: superseded

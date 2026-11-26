@@ -1,0 +1,9 @@
+name: ContinuationState
+go_const_prefix: ContinuationState
+values:
+  - id: pending
+  - id: continued
+  - id: held
+  - id: finished
+  - id: not_continued
+  - id: failed

@@ -1,0 +1,7 @@
+name: TurnOutcomeKind
+go_const_prefix: TurnOutcomeKind
+values:
+  - id: completed
+  - id: failed
+  - id: cancelled
+  - id: refused

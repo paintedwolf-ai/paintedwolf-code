@@ -729,6 +729,24 @@ components:
       $ref: components/schemas/common.yaml#/components/schemas/Error
     NoticeCopy:
       $ref: components/schemas/common.yaml#/components/schemas/NoticeCopy
+    WakeState:
+      $ref: components/schemas/wake-state.generated.yaml#/components/schemas/WakeState
+    WakeReason:
+      $ref: components/schemas/wake-reason.generated.yaml#/components/schemas/WakeReason
+    TurnOutcomeKind:
+      $ref: components/schemas/turn-outcome-kind.generated.yaml#/components/schemas/TurnOutcomeKind
+    TurnCancellationSource:
+      $ref: components/schemas/turn-cancellation-source.generated.yaml#/components/schemas/TurnCancellationSource
+    ContinuationAction:
+      $ref: components/schemas/continuation-action.generated.yaml#/components/schemas/ContinuationAction
+    ContinuationState:
+      $ref: components/schemas/continuation-state.generated.yaml#/components/schemas/ContinuationState
+    ContinuationReason:
+      $ref: components/schemas/continuation-reason.generated.yaml#/components/schemas/ContinuationReason
+    HostContinuationFailure:
+      $ref: components/schemas/host-continuation-failure.generated.yaml#/components/schemas/HostContinuationFailure
+    ActionContinuation:
+      $ref: components/schemas/session/continuations.yaml#/components/schemas/ActionContinuation
     EventTopic:
       $ref: components/schemas/events.yaml#/components/schemas/EventTopic
     EventEnvelope:

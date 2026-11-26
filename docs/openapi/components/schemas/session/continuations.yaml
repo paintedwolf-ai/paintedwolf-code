@@ -1,0 +1,17 @@
+components:
+  schemas:
+    ActionContinuation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [continuation_id, session_id, action, state, opened_at]
+      properties:
+        continuation_id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        action: {$ref: ../continuation-action.generated.yaml#/components/schemas/ContinuationAction}
+        state: {$ref: ../continuation-state.generated.yaml#/components/schemas/ContinuationState}
+        reason: {$ref: ../continuation-reason.generated.yaml#/components/schemas/ContinuationReason}
+        turn_id: {type: string, format: uuid}
+        failure_code: {type: string}
+        opened_at: {type: string, format: date-time}
+        resolved_at: {type: string, format: date-time, x-go-pointer: true}

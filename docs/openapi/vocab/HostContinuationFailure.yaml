@@ -1,0 +1,5 @@
+name: HostContinuationFailure
+go_const_prefix: HostContinuationFailure
+values:
+  - id: host_lookup_failed
+  - id: host_invariant_failed
