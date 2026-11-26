@@ -38,4 +38,3 @@ tools:
 deny_tools:
   - plan_from_blueprint
   - state_*
-wait_conditions: [process_done, http_ready, port_ready]
