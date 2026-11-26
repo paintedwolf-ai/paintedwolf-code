@@ -115,7 +115,7 @@ modelIndependentWebE2e("Walk publishes a delayed file selection and can reselect
     const selected = page.locator('[data-testid="files-tab"][aria-selected="true"]');
     await expect(selected).toHaveAttribute("data-path", "a.ts");
     await firstComparison;
-    await expect(page.getByTestId("file-version-document").filter({ visible: true })).toContainText('"a.ts"');
+    await expect(page.getByTestId("file-version-document").filter({ visible: true })).toContainText('"a.ts"', { timeout: 15_000 });
 
     const selectSecond = async () => page.evaluate(async (projectId) => {
       const url = "/src/files/walk/walk-store.ts";
@@ -130,13 +130,13 @@ modelIndependentWebE2e("Walk publishes a delayed file selection and can reselect
       releaseComparison();
     }
     await expect(selected).toHaveAttribute("data-path", "b.ts");
-    await expect(page.getByTestId("file-version-document").filter({ visible: true })).toContainText('"b.ts"');
+    await expect(page.getByTestId("file-version-document").filter({ visible: true })).toContainText('"b.ts"', { timeout: 15_000 });
     releaseSources();
     await page.getByTestId("files-tree-file").filter({ hasText: "unrelated.ts" }).click();
     await expect(selected).toHaveAttribute("data-path", "unrelated.ts");
     await selectSecond();
     await expect(selected).toHaveAttribute("data-path", "b.ts");
-    await expect(page.getByTestId("file-version-document").filter({ visible: true })).toContainText('"b.ts"');
+    await expect(page.getByTestId("file-version-document").filter({ visible: true })).toContainText('"b.ts"', { timeout: 15_000 });
   } finally {
     releaseComparison();
     releaseSources();

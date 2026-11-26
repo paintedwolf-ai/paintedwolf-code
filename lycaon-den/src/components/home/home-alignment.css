@@ -32,3 +32,10 @@
       var(--den-unified-chrome-row) - 44px
   );
 }
+
+/* Without window controls over the sidebar, the rail sits higher in the strip. */
+.den-custom-chrome .den-shell:has(.den-shell-aside:not([data-window-edge])) .home-view {
+  --home-view-top-inset: calc(
+    var(--den-titlebar-inset) + var(--den-tabs-top-gap) - 34px
+  );
+}

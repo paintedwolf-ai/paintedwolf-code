@@ -412,14 +412,15 @@ export function SessionTranscript(props: Props) {
     },
   );
 
-  // Window swaps preserve extent; resize observations report content growth.
+  // Window swaps preserve extent; reconcile runway and extent changes before paint.
   const virtualExtent = createMemo(() => virtualizer.getTotalSize());
   createEffect(() => {
     if (layout() !== "chat") return;
     virtualExtent();
+    virtualRunway();
     const scroller = scrollHostEl();
     if (!scroller) return;
-    scrollportMotionForViewport(scroller)?.scheduleLayoutReconcile();
+    scrollportMotionForViewport(scroller)?.notifyLayoutMutated();
   });
 
   createEffect(() => {

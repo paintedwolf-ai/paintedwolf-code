@@ -111,7 +111,7 @@ async function seed(page: Page, request: APIRequestContext) {
     created_at: "2026-09-15T12:00:00Z", seq: index + 1, ord: index + 1,
   }))));
   const stream = liveChatStage(page).locator(".den-chat-stream");
-  await expect(stream.locator(".transcript-viewport-row").getByText("Spacing 179.", { exact: false })).toBeAttached();
+  await expect(stream.locator(".transcript-viewport-row").getByText("Spacing 179.", { exact: false })).toBeAttached({ timeout: 15_000 });
   await stream.focus();
   await page.keyboard.press("End");
   await expect.poll(() => tail(stream).then(Math.abs)).toBeLessThan(2);

@@ -133,6 +133,12 @@ var ruleReachabilityCases = []ruleReachabilityCase{
 		wantRule: 5,
 	},
 	{
+		name:     "manifest_bound_keeps_surface_when_reviewer_delivered",
+		facts:    SurfaceFacts{ManifestBoundSurface: "decision_adjudicate", WorkersDelivered: 1},
+		wantSurf: "decision_adjudicate",
+		wantRule: 5,
+	},
+	{
 		name:     "child_subroutine_visible_user",
 		facts:    SurfaceFacts{ChildSubroutineBlocksInvestigate: true, VisibleUserTurn: true},
 		wantSurf: SurfaceImplementDispatch,
