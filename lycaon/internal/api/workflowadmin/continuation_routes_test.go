@@ -16,7 +16,7 @@ import (
 
 func TestWorkflowActionsReturnTheirOwnContinuation(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
-	h.RegisterManifest(def.Manifest{ID: "clarification", Version: "1.0.0", PhaseDefs: []def.PhaseDef{
+	h.RegisterManifest(def.Manifest{ID: "clarification", Version: "1.0.0", Request: &def.ManifestRequest{Cadence: def.RequestCadenceOnce, Question: "What should we decide?"}, PhaseDefs: []def.PhaseDef{
 		{ID: "clarify", CompleteWhen: "user_feedback_received:clarify", AdvanceWhenGateMet: def.AdvanceWhenGateMetAuto, Next: "confirm",
 			OnEnter: def.PhaseOnEnter{RequestUserFeedback: &def.UserFeedbackPrompt{Prompt: "Which database?"}}},
 		{ID: "confirm", CompleteWhen: "user_decision:confirm,yes", AdvanceWhenGateMet: def.AdvanceWhenGateMetAuto, Next: "done",
