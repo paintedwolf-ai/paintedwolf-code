@@ -134,6 +134,8 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	if requestCountBeforeApproval != 0 {
 		t.Fatalf("fixture preparation started %d model requests before approval", requestCountBeforeApproval)
 	}
+	releaseResponse := h.Recording.HoldResponses()
+	defer releaseResponse()
 	limits.enabled.Store(true)
 	current, err := h.Workflows.Manager.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get run before approve", err)
@@ -157,9 +159,15 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	}
 	reqSeen, err := h.Recording.AwaitRequest(t.Context(), requestCountBeforeApproval)
 	testutil.FailErr(t, "await implementation request", err)
-	if reqSeen.Debug.SessionID != sess.ID {
+	if reqSeen.Debug.SessionID != sess.ID || !reqSeen.Debug.HostTurn || len(reqSeen.Messages) == 0 {
 		t.Fatalf("implementation request session = %q", reqSeen.Debug.SessionID)
 	}
+	for _, turn := range h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Outcomes.For(sess.ID).Turns.Snapshot() {
+		if turn.TurnID == outcome.TurnID && !turn.SettledAt.IsZero() {
+			t.Fatalf("approval waited through settlement: %+v", turn)
+		}
+	}
+	releaseResponse()
 	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)
 	bundle := httptest.NewRecorder()
 	srv.ServeHTTP(bundle, AuthedRequest(t, http.MethodGet, "/v1/diagnostics/export", nil))
