@@ -49,7 +49,16 @@ var conditionConstraints = []interactions.AtomConstraint{
 	{Atom: "has_git", Implies: "has_any_git_root", Recipient: interactions.RecipientWorker, Source: srcGitFacts},
 	{Atom: "paintedwolf.command_loadable_without_schema", Implies: admittedProcessFieldsEmpty, Recipient: interactions.RecipientCoordinator, Source: srcLoaderOnly},
 	{Atom: "paintedwolf.command_loadable_without_schema", Implies: admittedProcessFieldsEmpty, Recipient: interactions.RecipientWorker, Source: srcLoaderOnly},
+	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: interactions.RecipientCoordinator, Source: srcMCPCode},
+	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: interactions.RecipientWorker, Source: srcMCPCode},
+	{Atom: mcpServerCodeAtom, Implies: mcpToolAtom, Recipient: unscopedRecipient, Source: srcMCPCode},
 }
+
+const (
+	mcpServerCodeAtom = `starts_with(mcp_error_code, "MCP_SERVER_")`
+	mcpToolAtom       = `starts_with(tool, "mcp_")`
+	srcMCPCode        = "oar/mcp_catalog.go and toolfeedback/block_plane.go:ApplyToolRejectObservations publish an MCP machine code only for an mcp_ tool"
+)
 
 const (
 	admittedProcessFieldsEmpty = "size(paintedwolf.admitted_process_capability_fields) == 0"
@@ -72,7 +81,8 @@ const (
 	srcOccurrenceRole = "occurrenceRecipient partitions occurrences by session_role; toolfeedback/block_plane.go:fillOccurrenceIdentity, " +
 		"session/policyfacts/service.go:FillSessionFacts (coordinator only), session/workercompletion/worker_summary.go and " +
 		"session/workeroutcomes/delivery_policy.go set the worker role exactly with worker_leg"
-	srcConfine = "internal/session/policyfacts/oar_observe.go:ObserveConfine publishes execution facts only for an applied confinement"
+	srcConfine     = "internal/session/policyfacts/oar_observe.go:ObserveConfine publishes execution facts only for an applied confinement"
+	srcMCPRejected = "toolfeedback/block_plane.go:ApplyToolRejectObservations and oar/mcp_catalog.go:ObserveMCPStructuralPre set mcp_call_ok false on every rejection; only ObserveMCPStructuralPost (tool.post_invoke) publishes a successful call"
 	// Only the block plane evaluates occurrences without a session.
 	srcUnscopedWorkerLeg = "session/policyfacts/service.go:FillSessionFacts names every non-worker session coordinator, so a policyfacts occurrence without a role is a worker leg"
 )
@@ -80,7 +90,7 @@ const (
 // caseBudget and templateCaseBudget bound targeted generation: runs per gap
 // and in total.
 var (
-	caseBudget         = casegen.Budget{PerTarget: 160, Total: 12000}
+	caseBudget         = casegen.Budget{PerTarget: 240, Total: 15000}
 	templateCaseBudget = casegen.Budget{PerTarget: 60, Total: 6000}
 )
 
@@ -253,6 +263,9 @@ func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient st
 	c.Joints = append(casegen.SharedFactJoints(site.Atoms, logic), g.producer.ShadowJoints(site.ID, site.Atoms)...)
 	if fixed, ok := occurrenceRoleFacts[recipient]; ok {
 		c.Fixed = casegen.FixedFacts(site.Atoms, logic, fixed, srcOccurrenceRole)
+	}
+	if g.producer.Anchor(site.ID) == oar.AnchorToolRejected && slices.Contains(site.Atoms, "mcp_call_ok") {
+		c.Fixed = append(c.Fixed, independence.Fixed{Atom: "mcp_call_ok", Value: independence.False, Source: srcMCPRejected})
 	}
 	if recipient == unscopedRecipient && g.producer.Anchor(site.ID) != oar.AnchorToolRejected {
 		c.Fixed = append(c.Fixed, casegen.FixedFacts(site.Atoms, logic, map[string]any{"paintedwolf.worker_leg": true}, srcUnscopedWorkerLeg)...)

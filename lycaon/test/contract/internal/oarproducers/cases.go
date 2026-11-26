@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/secretharvest"
@@ -371,12 +372,19 @@ func (p *CaseProducer) toolKnob(rule *oar.Rule, fallback string, sources []strin
 	add(literals("tool", sources...)...)
 	add(literals("paintedwolf.operation", sources...)...)
 	add("read", "write")
+	if readsMCPCode(sources) {
+		add(mcpFixtureTool)
+	}
 	return casegen.Knob{Name: "tool", Facts: []string{"tool", "paintedwolf.operation", casegen.AnyFact}, Values: values}
 }
 
 func (p *CaseProducer) codeKnob(rule *oar.Rule, sources []string) casegen.Knob {
 	var values []any
-	for _, c := range slices.Concat(oarcore.ConjunctValues(rule.When, "paintedwolf.rejection_code"), literals("paintedwolf.rejection_code", sources...), p.altCodes, p.otherOperationCode(rule)) {
+	codes := slices.Concat(oarcore.ConjunctValues(rule.When, "paintedwolf.rejection_code"), literals("paintedwolf.rejection_code", sources...), p.altCodes, p.otherOperationCode(rule))
+	if readsMCPCode(sources) {
+		codes = append(codes, mcp.MCPServerCodePrefix+"FIXTURE")
+	}
+	for _, c := range codes {
 		if !slices.Contains(values, any(c)) {
 			values = append(values, c)
 		}
@@ -396,6 +404,20 @@ func (p *CaseProducer) otherOperationCode(rule *oar.Rule) []string {
 		}
 	}
 	return nil
+}
+
+// mcpFixtureTool is a qualified MCP tool name; a rejection of an mcp_ tool
+// publishes its code as the MCP machine code (toolfeedback.ApplyToolRejectObservations).
+const mcpFixtureTool = "mcp_fixture_tool"
+
+func readsMCPCode(sources []string) bool {
+	for _, src := range sources {
+		refs, _ := oarcore.ConditionReferences(src)
+		if slices.Contains(refs, "mcp_error_code") {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *CaseProducer) cellKnob(recipient string) casegen.Knob {
@@ -701,7 +723,8 @@ func (p *CaseProducer) deliver(ctx context.Context, entry caseEntry, o *occurren
 	h := p.h
 	var cctx context.Context
 	var sess *api.Session
-	if o.noSession {
+	// A doom-loop check reads its session's counts, so it always has one.
+	if o.noSession && o.doomCount == 0 && o.doomCode == "" {
 		cctx = toolreach.WithRequest(ctx, o.cell.Reach)
 	} else {
 		h.bindSession(o.sessID, o.cell)

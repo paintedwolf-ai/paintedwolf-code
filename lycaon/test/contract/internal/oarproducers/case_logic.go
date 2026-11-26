@@ -198,7 +198,7 @@ func distinctOf(atoms []string) []string {
 }
 
 // maxShadowInputs caps the guards whose vectors ShadowJoints enumerates.
-const maxShadowInputs = 10
+const maxShadowInputs = 14
 
 // ShadowJoints rules out the vectors of a rule's condition under which a
 // block rule evaluated earlier on the same anchor fires: the first enforced
