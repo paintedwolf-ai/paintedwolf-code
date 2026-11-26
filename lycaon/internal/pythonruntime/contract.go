@@ -9,12 +9,14 @@ import (
 	"io"
 	mathrand "math/rand"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/experimental"
+	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
 	experimentalsysfs "github.com/tetratelabs/wazero/experimental/sysfs"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
@@ -289,9 +291,12 @@ type Invocation struct {
 	Stdin       io.Reader
 	Stdout      io.Writer
 	Stderr      io.Writer
-	Limits      ResourceLimits
-	Workspace   WorkspaceAdapter
-	Observer    OperationObserver
+	Limits         ResourceLimits
+	Workspace      WorkspaceAdapter
+	Observer       OperationObserver
+	StopLatch      *StopLatch
+	ExtraSysMounts map[string]experimentalsys.FS
+	HTTPBridgePath string
 }
 
 // Validate checks that exactly one execution mode is configured with its
@@ -505,6 +510,18 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 
 	latch := NewStopLatch(cancel)
 	latch.now = r.clock.Now
+	if inv.StopLatch != nil {
+		inv.StopLatch.RegisterSealer(func() {
+			if stop := inv.StopLatch.Stop(); stop != nil {
+				latch.Trigger(*stop)
+			}
+		})
+		latch.RegisterSealer(func() {
+			if stop := latch.Stop(); stop != nil {
+				inv.StopLatch.Trigger(*stop)
+			}
+		})
+	}
 	meter := NewWorkMeter(inv.Limits.MaxGuestWork, inv.Limits.MaxHostWork, latch)
 	execCtx = WithWorkMeter(execCtx, meter)
 
@@ -531,6 +548,7 @@ func (r *WazeroRuntime) Execute(ctx context.Context, inv Invocation) (*Execution
 			PackagesMount:   DefaultGuestPackagesMount,
 			ScratchMount:    DefaultGuestScratchMount,
 			CompletionNonce: nonce,
+			HTTPBridgePath:  inv.HTTPBridgePath,
 		})
 	} else {
 		argv, err = BuildArgv(inv)
@@ -679,6 +697,21 @@ func (r *WazeroRuntime) buildModuleConfig(
 	if markerFS != nil {
 		if sysCfg, ok := fsCfg.(experimentalsysfs.FSConfig); ok {
 			fsCfg = sysCfg.WithSysFSMount(markerFS, InternalCompletionMount)
+		}
+	}
+	if len(inv.ExtraSysMounts) > 0 {
+		if sysCfg, ok := fsCfg.(experimentalsysfs.FSConfig); ok {
+			mounts := make([]string, 0, len(inv.ExtraSysMounts))
+			for m := range inv.ExtraSysMounts {
+				mounts = append(mounts, m)
+			}
+			sort.Strings(mounts)
+			for _, m := range mounts {
+				if fsys := inv.ExtraSysMounts[m]; fsys != nil {
+					sysCfg = sysCfg.WithSysFSMount(fsys, m).(experimentalsysfs.FSConfig)
+				}
+			}
+			fsCfg = sysCfg
 		}
 	}
 	return cfg.WithFSConfig(fsCfg)

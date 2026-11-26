@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
+	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/survey"
@@ -54,6 +55,8 @@ type RuntimeConfig struct {
 	Rerank decide.Reranker
 	// PrivateGit is the manager worker Git tools run their prepared views through.
 	PrivateGit *privategit.Manager
+	// PortablePython optionally wires a compiled Portable Python service into the direct `python` tool.
+	PortablePython *portablepython.Service
 }
 
 // NewRuntime loads sandbox, profiles, native tools, and constructs the executor chain.
@@ -100,8 +103,9 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 		command:       commandRunner,
 		nativeConfig:  nativeCfg,
 		toolSchemas:   schemaCfg,
-		surveyCatalog: surveyCat,
-		rerank:        cfg.Rerank,
+		surveyCatalog:  surveyCat,
+		rerank:         cfg.Rerank,
+		portablePython: cfg.PortablePython,
 	})
 	if err != nil {
 		return nil, err

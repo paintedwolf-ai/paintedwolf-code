@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
@@ -25,8 +26,17 @@ type CommandServices struct {
 	verifyTool        *native.VerifyTool
 	commandOutputTool *command.CommandOutputTool
 	commandStopTool   *command.CommandStopTool
+	pythonRunner      *portablePythonRunner
 	reviews           *toolexecution.Approvals
 	paths             *toolexecution.Boundary
+}
+
+// SetPortablePython attaches a live Portable Python service to the direct `python` tool.
+func (r *CommandServices) SetPortablePython(svc *portablepython.Service) {
+	if r == nil || r.pythonRunner == nil {
+		return
+	}
+	r.pythonRunner.SetService(svc)
 }
 
 func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {

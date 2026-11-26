@@ -42,6 +42,7 @@ type BootstrapConfig struct {
 	PackagesMount   string
 	ScratchMount    string
 	CompletionNonce string
+	HTTPBridgePath  string
 }
 
 // GenerateCompletionNonce returns a fresh 16-byte hex nonce for trusted
@@ -103,6 +104,7 @@ func TrustedBootstrapSource(cfg BootstrapConfig) (string, error) {
 		ScratchMount   string   `json:"scratch_mount"`
 		CompletionPath string   `json:"completion_path"`
 		Nonce          string   `json:"nonce"`
+		HTTPBridgePath string   `json:"http_bridge_path,omitempty"`
 	}{
 		Mode:           string(cfg.Mode),
 		Code:           cfg.Code,
@@ -115,6 +117,7 @@ func TrustedBootstrapSource(cfg BootstrapConfig) (string, error) {
 		ScratchMount:   scratch,
 		CompletionPath: InternalCompletionMount + "/" + InternalCompletionFile,
 		Nonce:          cfg.CompletionNonce,
+		HTTPBridgePath: cfg.HTTPBridgePath,
 	}
 	if payload.Args == nil {
 		payload.Args = []string{}
@@ -127,7 +130,155 @@ func TrustedBootstrapSource(cfg BootstrapConfig) (string, error) {
 	return fmt.Sprintf(trustedBootstrapTemplate, string(rawCfg)), nil
 }
 
-const trustedBootstrapTemplate = `import atexit, json, os, runpy, sys
+const trustedBootstrapTemplate = `import atexit, base64, builtins, io, json, os, runpy, sys
+
+def _pw_install_http_bridge(bridge_path):
+    _orig_import = builtins.__import__
+    _patched = [False]
+
+    def _call_bridge(payload_obj):
+        raw_req = json.dumps(payload_obj).encode("utf-8")
+        with open(bridge_path, "r+b", buffering=0) as _bfd:
+            _bfd.write(raw_req)
+            _bfd.seek(0)
+            raw_resp = _bfd.read()
+        if not raw_resp:
+            return {"error": "empty host HTTP bridge response"}
+        return json.loads(raw_resp.decode("utf-8"))
+
+    def _patch_requests(req_mod):
+        from requests.adapters import BaseAdapter
+        from requests.exceptions import RequestException
+        from requests.models import Response
+        from requests.structures import CaseInsensitiveDict
+        from requests.utils import get_encoding_from_headers
+
+        class _PWStreamRaw(io.RawIOBase):
+            def __init__(self, handle_id):
+                self._handle_id = handle_id
+                self._buf = bytearray()
+                self._eof = False
+
+            def readable(self):
+                return True
+
+            def read(self, size=-1):
+                if size is None or size < 0:
+                    chunks = []
+                    if self._buf:
+                        chunks.append(bytes(self._buf))
+                        self._buf.clear()
+                    while not self._eof:
+                        res = _call_bridge({"action": "read_chunk", "stream_handle_id": self._handle_id, "max_bytes": 32768})
+                        if res.get("error"):
+                            raise RequestException(res["error"])
+                        if res.get("data_base64"):
+                            chunks.append(base64.b64decode(res["data_base64"]))
+                        if res.get("eof"):
+                            self._eof = True
+                    return b"".join(chunks)
+                while len(self._buf) < size and not self._eof:
+                    res = _call_bridge({"action": "read_chunk", "stream_handle_id": self._handle_id, "max_bytes": max(size - len(self._buf), 4096)})
+                    if res.get("error"):
+                        raise RequestException(res["error"])
+                    if res.get("data_base64"):
+                        self._buf.extend(base64.b64decode(res["data_base64"]))
+                    if res.get("eof"):
+                        self._eof = True
+                out = bytes(self._buf[:size])
+                del self._buf[:size]
+                return out
+
+            def close(self):
+                if not self.closed:
+                    try:
+                        _call_bridge({"action": "close_stream", "stream_handle_id": self._handle_id})
+                    except Exception:
+                        pass
+                    super().close()
+
+        class _PWHostMediatedAdapter(BaseAdapter):
+            def send(self, request, stream=False, timeout=None, verify=True, cert=None, proxies=None):
+                payload = {
+                    "method": request.method or "GET",
+                    "url": request.url,
+                    "headers": {k: str(v) for k, v in (request.headers or {}).items()},
+                    "stream": bool(stream),
+                }
+                if request.body is not None:
+                    if isinstance(request.body, bytes):
+                        raw_body = request.body
+                    elif isinstance(request.body, str):
+                        raw_body = request.body.encode("utf-8")
+                    elif hasattr(request.body, "read"):
+                        b = request.body.read()
+                        raw_body = b.encode("utf-8") if isinstance(b, str) else b
+                    else:
+                        raw_body = bytes(request.body)
+                    if raw_body:
+                        payload["body_base64"] = base64.b64encode(raw_body).decode("ascii")
+                if isinstance(timeout, (int, float)) and timeout > 0:
+                    payload["timeout_ms"] = int(timeout * 1000)
+                elif isinstance(timeout, tuple) and timeout:
+                    vals = [t for t in timeout if isinstance(t, (int, float)) and t > 0]
+                    if vals:
+                        payload["timeout_ms"] = int(max(vals) * 1000)
+
+                resp_data = _call_bridge(payload)
+                if resp_data.get("stop_code") or resp_data.get("error"):
+                    raise RequestException(resp_data.get("error") or resp_data.get("stop_code"))
+
+                resp = Response()
+                resp.status_code = int(resp_data.get("status_code") or 0)
+                resp.url = resp_data.get("final_url") or request.url
+                resp.headers = CaseInsensitiveDict(resp_data.get("headers") or {})
+                resp.encoding = get_encoding_from_headers(resp.headers)
+                resp.request = request
+                history = []
+                for hop in resp_data.get("redirects") or []:
+                    h = Response()
+                    h.status_code = int(hop.get("status_code") or 302)
+                    h.url = hop.get("from_url") or ""
+                    h.request = request
+                    h._content = b""
+                    h._content_consumed = True
+                    history.append(h)
+                resp.history = history
+
+                if stream and resp_data.get("stream_handle_id"):
+                    resp.raw = _PWStreamRaw(resp_data["stream_handle_id"])
+                    resp._content = False
+                    resp._content_consumed = False
+                else:
+                    body_bytes = base64.b64decode(resp_data["body_base64"]) if resp_data.get("body_base64") else b""
+                    resp.raw = io.BytesIO(body_bytes)
+                    resp._content = body_bytes
+                    resp._content_consumed = True
+                return resp
+
+            def close(self):
+                pass
+
+        _orig_init = req_mod.Session.__init__
+
+        def _pw_session_init(self, *args, **kwargs):
+            _orig_init(self, *args, **kwargs)
+            adapter = _PWHostMediatedAdapter()
+            self.mount("http://", adapter)
+            self.mount("https://", adapter)
+
+        req_mod.Session.__init__ = _pw_session_init
+
+    def _pw_import(name, globals=None, locals=None, fromlist=(), level=0):
+        mod = _orig_import(name, globals, locals, fromlist, level)
+        if not _patched[0] and (name == "requests" or name.startswith("requests.")):
+            req_mod = sys.modules.get("requests")
+            if req_mod is not None and hasattr(req_mod, "Session"):
+                _patched[0] = True
+                _patch_requests(req_mod)
+        return mod
+
+    builtins.__import__ = _pw_import
 
 def _pw_bootstrap():
     cfg = json.loads(%q)
@@ -166,6 +317,9 @@ def _pw_bootstrap():
     else:
         sys.path[:] = [cwd] + base_path
         sys.argv = ["-c"] + args
+
+    if cfg.get("http_bridge_path"):
+        _pw_install_http_bridge(cfg["http_bridge_path"])
 
     exit_code = 0
     try:
