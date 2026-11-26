@@ -1,5 +1,5 @@
 id: coordinator
-description: Coordinator tools without inline commands, landing tools or questions
+description: Coordinator tools without inline commands, landing tools, questions, answers or worker instructions
 command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   code_rewrite: true
@@ -15,8 +15,6 @@ tools:
   update_progress: sticky
   task: sticky
   worker_cancel: sticky
-  answer_decision: sticky
-  instruct_worker: sticky
   worker_history: sticky
   preview_overlay: sticky
   workflow_compose: sticky

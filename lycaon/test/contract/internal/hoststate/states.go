@@ -319,12 +319,15 @@ func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, projectBindings 
 			}
 		}
 	}
+	// A closed-floor surface admits only floor loading.
 	for i := range projectBindings {
-		seeds = append(seeds, coordinatorSeed{
-			overlayIdx: ovIdx, mode: api.SessionModeAgent, posture: api.SessionPostureBuild, wf: WorkflowActivePhase,
-			surfaceID: projectBindings[i].Resolved.CoordinatorSurface, roots: RootsSingleGit, loading: LoadingAllLoaded,
-			web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone, binding: &projectBindings[i],
-		})
+		for _, ld := range []LoadingMode{LoadingFloorOnly, LoadingAllLoaded} {
+			seeds = append(seeds, coordinatorSeed{
+				overlayIdx: ovIdx, mode: api.SessionModeAgent, posture: api.SessionPostureBuild, wf: WorkflowActivePhase,
+				surfaceID: projectBindings[i].Resolved.CoordinatorSurface, roots: RootsSingleGit, loading: ld,
+				web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone, binding: &projectBindings[i],
+			})
+		}
 	}
 	for _, s := range surfaces {
 		for _, ld := range []LoadingMode{LoadingFloorOnly, LoadingAllLoaded} {

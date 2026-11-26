@@ -276,6 +276,30 @@ func registerExpectedZeroBranches(tracker *hoststate.CoverageTracker) {
 	tracker.ExpectZeroTemplateBranch("guidance/gate-feedback-templates/_gate.md.tmpl@L5:C4:if", hoststate.ExpectedZeroFalse, gateReason)
 	tracker.ExpectZeroTemplateBranch("guidance/gate-feedback-templates/_gate.md.tmpl@L11:C4:else", hoststate.ExpectedZeroTrue, gateReason)
 
+	// coordinator-surfaces.yaml lists command and source_history only on
+	// floors, and a coordinator reader's requestable tools are its surface's
+	// loadable tools (prompts.NewReader projectReach), so neither is ever
+	// requestable on a coordinator turn.
+	coordinatorFloorOnly := "coordinator-surfaces.yaml never lists %s as loadable; prompts.NewReader makes only the surface's loadable tools requestable"
+	tracker.ExpectZeroTemplateBranch("agents/prompts/coordinator-core@L5:C473:elif", hoststate.ExpectedZeroTrue, fmt.Sprintf(coordinatorFloorOnly, "command"))
+	tracker.ExpectZeroTemplateBranch("guidance/source-changes@L7:C454:elif", hoststate.ExpectedZeroTrue,
+		fmt.Sprintf(coordinatorFloorOnly, "source_history")+" (inject-source-changes.yaml selects surface: coordinator)")
+	// command-jobs renders only while command jobs are live.
+	liveJobs := "toolcontract.Implied projects command_output and command_stop onto every turn with live command jobs, so neither is requestable while command-jobs renders"
+	for _, id := range []string{"guidance/command-jobs@L8:C155:elif", "guidance/command-jobs@L8:C474:elif", "guidance/command-jobs@L9:C250:elif"} {
+		tracker.ExpectZeroTemplateBranch(id, hoststate.ExpectedZeroTrue, liveJobs)
+	}
+	tracker.ExpectZeroTemplateBranch("shared/partials/agent-tool-surface@L33:C4:if", hoststate.ExpectedZeroFalse,
+		"prompts.fillWorkerReaderFacts sets reject_codes from recoverableRejectCodes over the host's shipped hint catalog, which is never empty")
+	runnerReach := "native-tools.yaml: command and verify each accept capability_request.write_root, local_listen, loopback_connect and socket_paths, " +
+		"and no runner tool reaches a turn without workspace roots (no_folder_allowlist omits them; internal/worker/task_tool.go WORKER_WORKSPACE_REQUIRED)"
+	for _, id := range []string{"shared/partials/capability-request-grammar@L1:C320:if", "shared/partials/capability-request-grammar@L1:C492:if", "shared/partials/capability-request-grammar@L1:C732:if"} {
+		tracker.ExpectZeroTemplateBranch(id, hoststate.ExpectedZeroFalse, runnerReach)
+	}
+	commandRoots := "command reaches no turn without workspace roots: coordinator-surfaces.yaml no_folder_allowlist omits it, and internal/worker/task_tool.go refuses a rootless worker whose profile surveys with command (WORKER_WORKSPACE_REQUIRED)"
+	tracker.ExpectZeroTemplateBranch("shared/partials/command-surface@L5:C4:if", hoststate.ExpectedZeroFalse, commandRoots)
+	tracker.ExpectZeroTemplateBranch("skills/diagnose-performance/references/diagnose_resource_exhaustion.md@L17:C440:if", hoststate.ExpectedZeroFalse, commandRoots)
+
 	// Each step.when below is computed from the same toolreach.Request
 	// predicate Sequence verifies, so .reach == false cannot occur.
 	tracker.ExpectZeroRuleBranch("PROCESS_UNSUPPORTED", "steps[0].reach", hoststate.ExpectedZeroFalse,

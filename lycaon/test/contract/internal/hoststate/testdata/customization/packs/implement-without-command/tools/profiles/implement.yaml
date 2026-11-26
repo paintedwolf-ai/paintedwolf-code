@@ -1,5 +1,5 @@
 id: implement
-description: Implementer that edits and checks without command
+description: Implementer that edits and checks without command, loading read_review on request
 command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
   code_rewrite: sticky
@@ -13,7 +13,7 @@ tools:
   scan_compare: true
   record_finding: sticky
   pack_board: sticky
-  read_review: sticky
+  read_review: true
   request_decision: sticky
   message_coordinator: sticky
   web_search: true
