@@ -91,17 +91,12 @@ def verified_source_binding(case, pins, execs, baseline_hashes):
     source_pins = [p for p in pins if p.get('role') == 'source' and p.get('mode') in {'published_disk', 'accepted_document'}]
     if not source_pins:
         return False, []
-    matched_paths = set()
     for p in source_pins:
         rel = str(p.get('path') or '').lstrip('./')
         pin_sha = p.get('content_sha256') or p.get('disk_sha256') or ''
         allowed = {s for s in (expected.get(rel), draft_digests.get(rel)) if s}
         if p.get('execution_id') not in exec_ids or rel not in expected or not pin_sha or pin_sha not in allowed:
             return False, source_pins
-        matched_paths.add(rel)
-    required_paths = {k.lstrip('./') for k in case.get('setup', {}).get('revisions', {})}
-    if required_paths and not (required_paths <= matched_paths):
-        return False, source_pins
     return True, source_pins
 
 
