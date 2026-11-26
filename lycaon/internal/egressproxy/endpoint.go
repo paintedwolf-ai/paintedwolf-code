@@ -165,6 +165,13 @@ func normalizeHost(host string) (string, error) {
 		return "", fmt.Errorf("invalid host")
 	}
 	ascii = strings.ToLower(ascii)
+	// Re-validate the normalized ASCII form: golang.org/x/net/idna checks the
+	// bidi rule against pre-mapped runes during ToASCII, so a non-RTL rune that
+	// maps to an RTL rune (such as U+2135 ALEF SYMBOL -> U+05D0) can produce a
+	// punycode label that idna.Lookup.ToASCII rejects when parsed again.
+	if roundTrip, err := idna.Lookup.ToASCII(ascii); err != nil || roundTrip != ascii {
+		return "", fmt.Errorf("invalid host")
+	}
 	if !dnsName(ascii) || strings.Contains(ascii, "/") {
 		return "", fmt.Errorf("invalid host")
 	}
