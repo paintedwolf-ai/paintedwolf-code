@@ -69,9 +69,10 @@ func (s *Bootstrap) HandleSessionBootstrap(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	httpio.WriteJSON(w, http.StatusOK, wire.SessionBootstrap{
-		EventCursor: eventCursor,
-		Activities:  s.EventPublisher.SessionActivities(id),
-		Session:     *sess, Transcript: transcript,
+		EventCursor:   eventCursor,
+		Continuations: s.Sessions.Coordinator.Runtime.CoordinatorLoop().Outcomes.For(id).Actions.Snapshot(),
+		Activities:    s.EventPublisher.SessionActivities(id),
+		Session:       *sess, Transcript: transcript,
 		Progress: progressDigest, TurnClock: s.Sessions.Runner.Clocks.Read(r.Context(), root), Findings: findingsDigest, Queue: queue,
 		Coordinator: coordinator, Workers: workers, Checkpoints: checkpoints,
 		BackgroundOutputs: background, Previews: previews,

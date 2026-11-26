@@ -2,6 +2,7 @@ package workflowadmin
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"net/http"
 	"strings"
 
@@ -44,12 +45,15 @@ func (s *RunControl) HandleResolveWorkflowDecision(w http.ResponseWriter, r *htt
 	}
 	comment = strings.TrimSpace(strings.Join([]string{comment, secretBlock}, "\n"))
 	mutationCtx := runstate.WithExpectedRevision(context.WithoutCancel(r.Context()), req.ExpectedRevision)
+	mutationCtx, action := actionoutcome.Capture(mutationCtx, wire.ContinuationActionFeedback)
 	run, err := s.Workflows.Feedback.ResolveUserDecision(mutationCtx, sessionID, runID, phaseID, choices, comment)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
-	s.SessionView.WriteWorkflowRun(w, r, http.StatusOK, run)
+	out := *run
+	out.ContinuationID = s.commitAction(mutationCtx, action, run)
+	s.SessionView.WriteWorkflowRun(w, r, http.StatusOK, &out)
 }
 
 func (s *RunControl) HandleResolveWorkflowFeedback(w http.ResponseWriter, r *http.Request) {
@@ -79,12 +83,15 @@ func (s *RunControl) HandleResolveWorkflowFeedback(w http.ResponseWriter, r *htt
 	}
 	response = strings.TrimSpace(strings.Join([]string{response, secretBlock}, "\n"))
 	mutationCtx := runstate.WithExpectedRevision(context.WithoutCancel(r.Context()), req.ExpectedRevision)
+	mutationCtx, action := actionoutcome.Capture(mutationCtx, wire.ContinuationActionFeedback)
 	run, err := s.Workflows.Feedback.ResolveUserFeedback(mutationCtx, sessionID, runID, phaseID, response)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
-	s.SessionView.WriteWorkflowRun(w, r, http.StatusOK, run)
+	out := *run
+	out.ContinuationID = s.commitAction(mutationCtx, action, run)
+	s.SessionView.WriteWorkflowRun(w, r, http.StatusOK, &out)
 }
 
 func (s *RunControl) HandleResolveWorkflowSecret(w http.ResponseWriter, r *http.Request) {

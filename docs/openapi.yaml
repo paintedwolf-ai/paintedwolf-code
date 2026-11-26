@@ -17757,6 +17757,10 @@ components:
         - updated_at
       additionalProperties: false
       properties:
+        continuation_id:
+          type: string
+          format: uuid
+          description: Outcome of the continuing action that produced this response.
         id:
           type: string
           format: uuid
@@ -27743,6 +27747,7 @@ components:
         - paused_at
         - completed_at
         - ui
+        - continuation_id
       type: object
       required:
         - id
@@ -27756,6 +27761,10 @@ components:
         - updated_at
       additionalProperties: false
       properties:
+        continuation_id:
+          type: string
+          format: uuid
+          description: Outcome of the continuing action that produced this response.
         id:
           type: string
           format: uuid

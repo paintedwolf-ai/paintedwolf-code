@@ -6664,6 +6664,11 @@ export interface components {
             source_workflow_id?: string;
         };
         Blueprint: {
+            /**
+             * Format: uuid
+             * @description Outcome of the continuing action that produced this response.
+             */
+            continuation_id?: string;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -10796,6 +10801,11 @@ export interface components {
             created_by?: string;
         };
         WorkflowRun: {
+            /**
+             * Format: uuid
+             * @description Outcome of the continuing action that produced this response.
+             */
+            continuation_id?: string;
             /** Format: uuid */
             id: string;
             /** Format: uuid */

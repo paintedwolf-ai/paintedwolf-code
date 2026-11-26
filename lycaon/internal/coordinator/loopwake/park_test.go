@@ -188,7 +188,7 @@ func TestParkedProgramInterruptions(t *testing.T) {
 	}{
 		{name: "user input", end: func(t *testing.T, f *parkFixture) { f.loop.Waits.InterruptSleep(t.Context(), parkSession) }},
 		{name: "preempting wake", end: func(t *testing.T, f *parkFixture) {
-			if f.loop.Subscriptions.settleDurableWaitWake(t.Context(), parkSession, anchor.GateBlocked, anchor.GateBlocked, "", "", anchor.Envelope{}) {
+			if f.loop.Subscriptions.settleDurableWaitWake(t.Context(), parkSession, pendingLoopWake{wake: anchor.GateBlocked, inform: anchor.GateBlocked}) {
 				t.Fatal("the preempting wake was consumed by the interrupted lease")
 			}
 		}},

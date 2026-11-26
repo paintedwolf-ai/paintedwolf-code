@@ -3,6 +3,7 @@ package workflowadmin
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"net/http"
 	"strings"
 
@@ -49,13 +50,16 @@ func (s *RunControl) HandleStartWorkflowRun(w http.ResponseWriter, r *http.Reque
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
-	run, err := s.Workflows.Starts.Start(hostctx.WithHumanWorkflowStart(r.Context()), sessionID, req)
+	ctx, action := actionoutcome.Capture(r.Context(), wire.ContinuationActionWorkflowStart)
+	run, err := s.Workflows.Starts.Start(hostctx.WithHumanWorkflowStart(ctx), sessionID, req)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
 	s.Topology.StartOrchestratedTopologyForRun(r.Context(), sessionID, run)
-	s.SessionView.WriteWorkflowRun(w, r, http.StatusCreated, run)
+	out := *run
+	out.ContinuationID = s.commitAction(ctx, action, run)
+	s.SessionView.WriteWorkflowRun(w, r, http.StatusCreated, &out)
 }
 
 func (s *RunControl) HandleExitWorkflowRun(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +122,14 @@ func (s *RunControl) HandlePauseWorkflowRun(w http.ResponseWriter, r *http.Reque
 
 func (s *RunControl) HandleResumeWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	s.controlWorkflowRun(w, r, func(ctx context.Context, runID string, _ string) (*wire.WorkflowRun, error) {
-		return s.Workflows.Controls.Resume(ctx, runID)
+		ctx, action := actionoutcome.Capture(ctx, wire.ContinuationActionWorkflowResume)
+		run, err := s.Workflows.Controls.Resume(ctx, runID)
+		if err != nil {
+			return nil, err
+		}
+		out := *run
+		out.ContinuationID = s.commitAction(ctx, action, run)
+		return &out, nil
 	})
 }
 

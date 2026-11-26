@@ -94,7 +94,7 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 		deps.QueueInform(ctx, sessionID, inform, noticeEnv)
 		pending.informHandled = true
 	}
-	if l.Subscriptions.resumePendingWait(ctx, sessionID, pending.wake) {
+	if l.Subscriptions.resumePendingWait(ctx, sessionID, pending) {
 		return
 	}
 	// A subscribed result belongs to its lease, even after its originating batch closes.

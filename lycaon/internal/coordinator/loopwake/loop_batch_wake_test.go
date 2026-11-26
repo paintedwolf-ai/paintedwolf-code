@@ -353,7 +353,7 @@ func TestStackedWakeFactsAreConsumedByOneObservedPrompt(t *testing.T) {
 		},
 	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
-		engine.Observations.ObservePrompt("s1")(inject.CoordinatorTurnFrame{})
+		engine.Observations.ObservePrompt(t.Context(), "s1")(inject.CoordinatorTurnFrame{})
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
 	}

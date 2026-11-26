@@ -515,3 +515,11 @@ func (p *Publisher) PublishAgentPresence(ctx context.Context, ev api.AgentPresen
 	key := PublishKey{Project: ev.ProjectID, Facet: ev.SessionID, EntityRevision: uint64(max(ev.Revision, 0))}
 	logPublishFailure(ctx, "PublishAgentPresence", api.EventTopicAgentPresence, p.Hub.Publish(ctx, api.EventTopicAgentPresence, key, ev))
 }
+
+func (p *Publisher) PublishContinuation(ctx context.Context, projectID string, ev api.ActionContinuation) {
+	if p == nil || p.Hub == nil {
+		return
+	}
+	key := PublishKeyFor(ctx, p.Lookup, projectID, ev.SessionID)
+	logPublishFailure(ctx, "PublishContinuation", api.EventTopicContinuation, p.Hub.Publish(ctx, api.EventTopicContinuation, key, ev))
+}

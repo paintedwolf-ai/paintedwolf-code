@@ -50,7 +50,7 @@ type ContextDeps struct {
 }
 
 type ContextSurfaceDeps struct {
-	ObservePrompt func(sessionID string) func(inject.CoordinatorTurnFrame)
+	ObservePrompt func(ctx context.Context, sessionID string) func(inject.CoordinatorTurnFrame)
 	// CommitTurnContext advances delivered findings and messages after a successful response.
 	CommitTurnContext  func(context.Context, string, string) error
 	PrepareAgentPolicy func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)

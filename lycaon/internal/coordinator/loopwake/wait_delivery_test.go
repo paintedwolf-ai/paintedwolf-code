@@ -163,7 +163,7 @@ func TestWaitDeliveryRetiresOnlyObservedWakeFacts(t *testing.T) {
 				if err := delivery.Admitted(); err != nil {
 					return nil, err
 				}
-				observe := loop.Observations.ObservePrompt(id)
+				observe := loop.Observations.ObservePrompt(t.Context(), id)
 				if observed {
 					observe(inject.CoordinatorTurnFrame{})
 				}

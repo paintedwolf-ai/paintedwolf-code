@@ -25,7 +25,7 @@ type TurnRecord struct {
 
 type turnContextKey struct{}
 type Turn struct {
-	path    *Path
+	handoff *Handoff
 	id      string
 	history *History[TurnRecord]
 }
@@ -38,7 +38,13 @@ func BeginTurn(ctx context.Context, history *History[TurnRecord], sessionID, tur
 		path = ticket.path
 		ctx = WithTicket(ctx, nil)
 	}
-	t := &Turn{path: path, id: turnID, history: history}
+	handoff, _ := ctx.Value(leaseKey{}).(*Handoff)
+	if handoff == nil {
+		handoff = &Handoff{}
+	}
+	handoff.Follow(path)
+	ctx = context.WithValue(ctx, leaseKey{}, (*Handoff)(nil))
+	t := &Turn{handoff: handoff, id: turnID, history: history}
 	return context.WithValue(ctx, turnContextKey{}, t), t
 }
 
@@ -53,10 +59,11 @@ func Dispatch(ctx context.Context) {
 		}
 		return r, false
 	})
-	t.path.Resolve(Result{State: api.ContinuationStateContinued, TurnID: t.id})
+	t.handoff.Resolve(Result{State: api.ContinuationStateContinued, TurnID: t.id})
 }
 
 func (t *Turn) Finish(result *promptresult.Result, err error, cancelledBy api.TurnCancellationSource) {
+	var handoff Result
 	t.history.Change(t.id, func(r TurnRecord) (TurnRecord, bool) {
 		r.SettledAt = time.Now().UTC()
 		r.Outcome = api.TurnOutcomeKindCompleted
@@ -77,10 +84,13 @@ func (t *Turn) Finish(result *promptresult.Result, err error, cancelledBy api.Tu
 				result = Result{State: api.ContinuationStateFailed, FailureCode: string(r.FailureCode)}
 			}
 			result.TurnID = r.TurnID
-			t.path.Resolve(result)
+			handoff = result
 		}
 		return r, true
 	})
+	if handoff.State != "" {
+		t.handoff.Resolve(handoff)
+	}
 }
 
 func PromptFailureCode(err error) api.NoticeCode {

@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"log/slog"
 	"sync"
 
@@ -9,11 +10,11 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 )
 
-func (l *PromptObservations) ObservePrompt(sessionID string) func(inject.CoordinatorTurnFrame) {
+func (l *PromptObservations) ObservePrompt(ctx context.Context, sessionID string) func(inject.CoordinatorTurnFrame) {
 	seq := l.Nudges.nextSequence()
 	return func(frame inject.CoordinatorTurnFrame) {
 		l.promptObservedSeq.Store(sessionID, seq)
-		l.promptWorkflow.Store(sessionID, observedWorkflow{frame.RunContext.RunID, frame.WorkflowRevision})
+		l.promptWorkflow.Store(sessionID, observedWorkflow{runID: frame.RunContext.RunID, revision: frame.WorkflowRevision, turn: actionoutcome.CurrentTurn(ctx)})
 		slog.Debug("prompt wake observation", "component", loopLogComponent, "session_id", sessionID, "sequence", seq, "run_id", frame.RunContext.RunID, "workflow_revision", frame.WorkflowRevision)
 	}
 }
@@ -47,7 +48,9 @@ func (l *PromptObservations) wakeConsumed(ctx context.Context, sessionID string,
 		}
 	}
 	if consumed {
-		loopLogNudge(sessionID, pending.wake, pending.inform, pending.legID, pending.completingJobID, "consumed_by_prompt")
+		value, _ := l.promptWorkflow.Load(sessionID)
+		seen, _ := value.(observedWorkflow)
+		pending.ticket.Consumed(seen.turn)
 	}
 	return consumed
 }

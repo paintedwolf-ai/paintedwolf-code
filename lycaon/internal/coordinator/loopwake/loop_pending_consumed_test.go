@@ -49,7 +49,7 @@ func TestDrainRetiresWakesConsumedByTheTurnItJustRan(t *testing.T) {
 	}
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts++
-		engine.Observations.ObservePrompt(id)(inject.CoordinatorTurnFrame{})
+		engine.Observations.ObservePrompt(t.Context(), id)(inject.CoordinatorTurnFrame{})
 		return &promptresult.Result{}, nil
 	}
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return "" }

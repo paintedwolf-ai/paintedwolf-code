@@ -2,6 +2,8 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
+	"github.com/lycaon/lycaon/pkg/api"
 	"log/slog"
 	"strings"
 	"sync"
@@ -40,10 +42,16 @@ func (l *WaitDeliveries) loopDeps() WaitDeliveriesDeps {
 	defer l.depsMu.RUnlock()
 	return l.deps
 }
-func (l *WaitDeliveries) rememberWaitWinner(sessionID, leaseID string, winner awaitstore.Condition) {
+func (l *WaitDeliveries) rememberWaitWinner(sessionID, leaseID string, winner awaitstore.Condition) *waitWinner {
 	if l != nil && strings.TrimSpace(sessionID) != "" && strings.TrimSpace(winner.Kind) != "" {
-		l.waitWinners.Store(sessionID, &waitWinner{LeaseID: strings.TrimSpace(leaseID), Condition: winner})
+		next := &waitWinner{LeaseID: strings.TrimSpace(leaseID), Condition: winner}
+		prior, loaded := l.waitWinners.Swap(sessionID, next)
+		if loaded {
+			prior.(*waitWinner).handoff.Resolve(actionoutcome.WakeResult(api.WakeReasonTurnSettled))
+		}
+		return next
 	}
+	return nil
 }
 func (l *WaitDeliveries) waitWinner(sessionID string) (*waitWinner, bool) {
 	if l == nil {
@@ -90,7 +98,7 @@ func (l *WaitDeliveries) runWaitResume(ctx context.Context, sessionID string, wi
 		l.scheduleWaitResumeRetry(ctx, sessionID, winner, "wait resume runner unavailable")
 		return
 	}
-	_, err := deps.RunWaitResume(ctx, sessionID, WaitDelivery{
+	_, err := deps.RunWaitResume(actionoutcome.WithLease(ctx, &winner.handoff), sessionID, WaitDelivery{
 		LeaseID: winner.LeaseID, Condition: winner.Condition,
 		Pending:  func() bool { return l.sameWaitWinner(sessionID, winner) },
 		Admitted: func() error { return l.markWaitWinnerDelivered(ctx, sessionID, winner) },

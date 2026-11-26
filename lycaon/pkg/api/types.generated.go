@@ -943,9 +943,11 @@ type BlobComparisonSource struct {
 
 // Blueprint
 type Blueprint struct {
-	ID        string `json:"id"`
-	ProjectID string `json:"project_id"`
-	Title     string `json:"title"`
+	// Outcome of the continuing action that produced this response.
+	ContinuationID string `json:"continuation_id,omitempty"`
+	ID             string `json:"id"`
+	ProjectID      string `json:"project_id"`
+	Title          string `json:"title"`
 	// Project-relative path under the overlay blueprints/ directory
 	Path                string          `json:"path"`
 	SourceWorkflowID    string          `json:"source_workflow_id,omitempty"`
@@ -10018,6 +10020,8 @@ type WorkflowRun struct {
 	PausedAt       *time.Time       `json:"paused_at,omitempty"`
 	CompletedAt    *time.Time       `json:"completed_at,omitempty"`
 	UI             *WorkflowRunUi   `json:"ui,omitempty"`
+	// Outcome of the continuing action that produced this response.
+	ContinuationID string `json:"continuation_id,omitempty"`
 }
 
 // WorkflowRunObligation

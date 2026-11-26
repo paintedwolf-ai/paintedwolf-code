@@ -2,6 +2,8 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 )
 
@@ -31,8 +33,12 @@ func (l *WaitSubscriptions) InterruptSession(ctx context.Context, sessionID stri
 		_ = store.InterruptSession(ctx, sessionID, "canceled")
 	}
 }
-func (l *WaitDeliveries) ForgetSession(sessionID string) { l.waitWinners.Delete(sessionID) }
-func (l *HostTurns) ForgetSession(sessionID string)      { l.promptActive.Delete(sessionID) }
+func (l *WaitDeliveries) ForgetSession(sessionID string) {
+	if value, ok := l.waitWinners.LoadAndDelete(sessionID); ok {
+		value.(*waitWinner).handoff.Resolve(actionoutcome.WakeResult(api.WakeReasonSessionClosed))
+	}
+}
+func (l *HostTurns) ForgetSession(sessionID string) { l.promptActive.Delete(sessionID) }
 func (l *PromptObservations) ForgetSession(sessionID string) {
 	l.promptObservedSeq.Delete(sessionID)
 	l.promptWorkflow.Delete(sessionID)

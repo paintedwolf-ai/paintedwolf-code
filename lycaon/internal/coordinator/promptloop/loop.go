@@ -366,7 +366,7 @@ func (l *promptContext) refreshCoordinatorSurface(
 	st.coordinatorFrame = inject.CoordinatorTurnFrame{}
 	st.observePrompt = nil
 	if l.Deps.ObservePrompt != nil {
-		st.observePrompt = l.Deps.ObservePrompt(sessionID)
+		st.observePrompt = l.Deps.ObservePrompt(ctx, sessionID)
 	}
 	st.coordinatorFrameReady = true
 	if l.Deps.CoordinatorFrame != nil {

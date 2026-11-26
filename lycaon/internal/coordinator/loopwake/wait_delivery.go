@@ -1,6 +1,7 @@
 package loopwake
 
 import (
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -23,6 +24,7 @@ type WaitDelivery struct {
 }
 
 type waitWinner struct {
+	handoff        actionoutcome.Handoff
 	LeaseID        string
 	Condition      awaitstore.Condition
 	deliveryActive atomic.Bool

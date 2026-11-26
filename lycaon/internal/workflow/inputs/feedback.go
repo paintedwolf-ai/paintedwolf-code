@@ -3,6 +3,7 @@ package inputs
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"strings"
 	"time"
 
@@ -135,6 +136,7 @@ func (m *Feedback) resolveUserFeedback(ctx context.Context, answererID, sessionI
 		return nil, runstate.ErrNotFound
 	}
 	if isToolAsk {
+		actionoutcome.MarkAskAnswer(ctx)
 		m.Cards.PersistCoordinatorAskAnswer(ctx, sessionID, ask)
 	}
 	m.Cards.StampFeedbackAnswer(ctx, sessionID, runID, phaseID, response, answererID)
@@ -330,6 +332,7 @@ func (m *Feedback) resolveSyntheticToolDecision(ctx context.Context, answererID,
 		return nil, runstate.ErrNotFound
 	}
 	choiceAnswer := strings.Join(cleaned, ", ")
+	actionoutcome.MarkAskAnswer(ctx)
 	m.Cards.PersistCoordinatorAskAnswer(ctx, sessionID, ask)
 	m.Cards.StampFeedbackAnswer(ctx, sessionID, runID, phaseID, runstate.ComposeChoiceAnswer(cleaned, comment), answererID)
 	m.NotifyResolved(ctx, sessionID, runID, phaseID, choiceAnswer)

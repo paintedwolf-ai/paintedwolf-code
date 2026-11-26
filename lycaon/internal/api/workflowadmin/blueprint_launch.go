@@ -3,6 +3,7 @@ package workflowadmin
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"net/http"
 	"strings"
 
@@ -30,7 +31,8 @@ func (s *BlueprintRoutes) HandleApproveBlueprint(w http.ResponseWriter, r *http.
 	if p, err := s.Projects.Get(r.Context(), projectID); err == nil {
 		projectPath = project.PrimaryRootPath(p)
 	}
-	_, err := rm.Approvals.ApprovePlan(r.Context(), projectID, path, projectPath, req.WorkflowRunID, req.ExpectedRevision, req.ContentDigest)
+	ctx, action := actionoutcome.Capture(r.Context(), wire.ContinuationActionPlanApproval)
+	run, err := rm.Approvals.ApprovePlan(ctx, projectID, path, projectPath, req.WorkflowRunID, req.ExpectedRevision, req.ContentDigest)
 	if err != nil {
 		if errors.Is(err, blueprint.ErrNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeBlueprintNotFound, "blueprint not found")
@@ -59,13 +61,16 @@ func (s *BlueprintRoutes) HandleApproveBlueprint(w http.ResponseWriter, r *http.
 		s.responses.InternalError(w, r, err)
 		return
 	}
+	continuationID := s.RunControl.commitAction(ctx, action, run)
 	out, err := s.Blueprints.Get(r.Context(), projectID, path)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
 	_ = rm.Blueprints.SyncBlueprintTranscript(r.Context(), projectID, out.Path, false)
-	httpio.WriteJSON(w, http.StatusOK, out)
+	response := *out
+	response.ContinuationID = continuationID
+	httpio.WriteJSON(w, http.StatusOK, response)
 }
 
 func (s *BlueprintRoutes) HandleLaunchBlueprint(w http.ResponseWriter, r *http.Request) {

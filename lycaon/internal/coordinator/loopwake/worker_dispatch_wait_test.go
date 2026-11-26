@@ -30,7 +30,7 @@ func TestWorkerCompletionAcrossWaitRegistrationResumesOnce(t *testing.T) {
 			f.loop.SetDeps(f.deps)
 			finish := f.loop.Admission.BeginPromptExecution(t.Context(), "session")
 			defer finish()
-			observe := f.loop.Observations.ObservePrompt("session")
+			observe := f.loop.Observations.ObservePrompt(t.Context(), "session")
 			complete := func() {
 				f.loop.Nudges.NudgeAfterWorkerJobTerminal(t.Context(), "session", "research", anchor.WorkerTaskFinished, "", "", anchor.Envelope{})
 				f.loop.Cycles.OnWorkerCycleTerminal(t.Context(), "session", "research")
@@ -78,11 +78,11 @@ func TestWorkerCompletionObservedDuringDispatchDoesNotStartExtraTurn(t *testing.
 	f.loop.SetDeps(f.deps)
 	finish := f.loop.Admission.BeginPromptExecution(t.Context(), "session")
 	defer finish()
-	first := f.loop.Observations.ObservePrompt("session")
+	first := f.loop.Observations.ObservePrompt(t.Context(), "session")
 	f.loop.Nudges.NudgeAfterWorkerJobTerminal(t.Context(), "session", "comparison", anchor.WorkerTaskFinished, "", "", anchor.Envelope{})
 	first(inject.CoordinatorTurnFrame{})
 	// The next response includes the completed worker before another dispatch.
-	f.loop.Observations.ObservePrompt("session")(inject.CoordinatorTurnFrame{})
+	f.loop.Observations.ObservePrompt(t.Context(), "session")(inject.CoordinatorTurnFrame{})
 	f.drain(t, finish)
 	if f.prompts.Load() != 0 || f.loop.Nudges.HasPendingLoopWakes("session") {
 		t.Fatalf("observed completion replayed: prompts=%d pending=%v", f.prompts.Load(), f.loop.Nudges.HasPendingLoopWakes("session"))

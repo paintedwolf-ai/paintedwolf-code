@@ -28,27 +28,32 @@ type Action struct {
 
 type actionKey struct{}
 
-func (s *Session) BeginAction(ctx context.Context, sessionID string, kind api.ContinuationAction, publish func(api.ActionContinuation)) (context.Context, *Action) {
-	a := &Action{history: s.Actions, publish: publish, record: api.ActionContinuation{
-		ContinuationID: uuid.NewString(), SessionID: sessionID, Action: kind, State: api.ContinuationStatePending, OpenedAt: time.Now().UTC(),
-	}}
-	s.Actions.Open(a.ID(), a.record)
-	if publish != nil {
-		publish(a.record)
-	}
+func Capture(ctx context.Context, kind api.ContinuationAction) (context.Context, *Action) {
+	a := &Action{record: api.ActionContinuation{ContinuationID: uuid.NewString(), Action: kind, State: api.ContinuationStatePending, OpenedAt: time.Now().UTC()}}
 	return context.WithValue(ctx, actionKey{}, a), a
+}
+
+func MarkAskAnswer(ctx context.Context) {
+	if a, _ := ctx.Value(actionKey{}).(*Action); a != nil {
+		a.mu.Lock()
+		if !a.sealed && a.record.Action == api.ContinuationActionFeedback {
+			a.record.Action = api.ContinuationActionAskAnswer
+		}
+		a.mu.Unlock()
+	}
 }
 
 func (a *Action) ID() string { return a.record.ContinuationID }
 
 type Path struct {
-	action *Action
-	result Result
+	sessionID string
+	action    *Action
+	result    Result
 }
 
 func Register(ctx context.Context, sessionID string) *Path {
 	a, _ := ctx.Value(actionKey{}).(*Action)
-	if a == nil || a.record.SessionID != sessionID {
+	if a == nil {
 		return nil
 	}
 	a.mu.Lock()
@@ -56,7 +61,7 @@ func Register(ctx context.Context, sessionID string) *Path {
 	if a.sealed || a.record.State != api.ContinuationStatePending {
 		return nil
 	}
-	p := &Path{action: a}
+	p := &Path{action: a, sessionID: sessionID}
 	a.paths = append(a.paths, p)
 	a.pending++
 	return p
@@ -73,6 +78,10 @@ func (p *Path) Resolve(r Result) {
 		return
 	}
 	p.result = r
+	if !a.sealed || p.sessionID != a.record.SessionID {
+		a.mu.Unlock()
+		return
+	}
 	a.pending--
 	ev := a.resolveLocked(r)
 	a.mu.Unlock()
@@ -81,16 +90,35 @@ func (p *Path) Resolve(r Result) {
 	}
 }
 
-func (a *Action) Seal() {
+// Commit publishes only actions accepted by the mutation.
+func (a *Action) Commit(s *Session, sessionID string, publish func(api.ActionContinuation)) {
 	a.mu.Lock()
+	defer a.mu.Unlock()
 	a.sealed = true
-	ev := a.resolveLocked(Result{})
-	a.mu.Unlock()
-	if ev != nil && a.publish != nil {
-		a.publish(*ev)
+	a.publish = publish
+	a.history = s.Actions
+	a.record.SessionID = sessionID
+	a.history.Open(a.ID(), a.record)
+	if publish != nil {
+		publish(a.record)
+	}
+	var success Result
+	a.pending = 0
+	for _, p := range a.paths {
+		if p.sessionID != sessionID {
+			continue
+		}
+		if p.result.State == "" {
+			a.pending++
+		}
+		if p.result.State == api.ContinuationStateContinued && success.State == "" {
+			success = p.result
+		}
+	}
+	if ev := a.resolveLocked(success); ev != nil && publish != nil {
+		publish(*ev)
 	}
 }
-
 func (a *Action) resolveLocked(r Result) *api.ActionContinuation {
 	if a.record.State != api.ContinuationStatePending {
 		return nil
@@ -102,6 +130,9 @@ func (a *Action) resolveLocked(r Result) *api.ActionContinuation {
 		r = Result{State: api.ContinuationStateFailed, FailureCode: string(api.HostContinuationFailureHostInvariantFailed)}
 		best := 0
 		for _, p := range a.paths {
+			if p.sessionID != a.record.SessionID {
+				continue
+			}
 			if priority := resultPriority(p.result.State); priority > best {
 				best = priority
 				r = p.result
