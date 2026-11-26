@@ -26,15 +26,12 @@ def source_identity(root=ROOT, profile=None):
     lang_file = root / 'lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/language.json'
     binary = engine_path(root)
     return {
-        'git_head': git('rev-parse', 'HEAD'),
-        'git_tree': git('rev-parse', 'HEAD^{tree}'),
+        'git_head': git('rev-parse', 'HEAD'), 'git_tree': git('rev-parse', 'HEAD^{tree}'),
         'application_version': version_file.read_text().strip() if version_file.is_file() else '',
-        'engine_binary_path': str(binary),
-        'engine_binary_sha256': file_sha256(binary) if binary.is_file() else '',
+        'engine_binary_path': str(binary), 'engine_binary_sha256': file_sha256(binary) if binary.is_file() else '',
         'catalog_sha256': file_sha256(lang_file) if lang_file.is_file() else '',
         'suite_sha256': file_sha256(DIRECTORY / 'suite.json'),
-        'platform': f'{platform.system().lower()}-{platform.machine().lower()}',
-        'profile': profile or '',
+        'platform': f'{platform.system().lower()}-{platform.machine().lower()}', 'profile': profile or '',
     }
 
 
@@ -42,14 +39,15 @@ def _rows(db, sql, params):
     return [dict(r) for r in db.execute(sql, params).fetchall()]
 
 
-def query_db_audit(db_path, session_id, call_ids):
-    """Read authoritative SQLite rows for the tested session and tool calls."""
+def query_db_audit(db_path, session_id, prelude_call_ids=()):
+    """Read ALL authoritative SQLite rows for the isolated session, separating prelude from tested work."""
     uri = pathlib.Path(db_path).resolve().as_uri() + '?mode=ro'
+    prelude_set = set(prelude_call_ids or ())
     with contextlib.closing(sqlite3.connect(uri, uri=True)) as db:
         db.row_factory = sqlite3.Row
-        c_ph = ','.join('?' for _ in call_ids) or "''"
-        c_params = [session_id, *call_ids] if call_ids else [session_id]
-        receipts = _rows(db, f'SELECT * FROM invocation_receipts WHERE session_id=? AND tool_call_id IN ({c_ph}) ORDER BY rowid', c_params)
+        all_receipts = _rows(db, 'SELECT * FROM invocation_receipts WHERE session_id=? ORDER BY rowid', (session_id,))
+        prelude_receipts = [r for r in all_receipts if r['tool_call_id'] in prelude_set]
+        receipts = [r for r in all_receipts if r['tool_call_id'] not in prelude_set]
         r_ids = [r['id'] for r in receipts]
         r_ph = ','.join('?' for _ in r_ids) or "''"
         programs = _rows(db, f'SELECT * FROM invocation_programs WHERE parent_receipt_id IN ({r_ph}) ORDER BY rowid', r_ids) if r_ids else []
@@ -59,10 +57,12 @@ def query_db_audit(db_path, session_id, call_ids):
         pins = _rows(db, f'SELECT * FROM invocation_program_revision_pins WHERE program_id IN ({p_ph}) ORDER BY program_id, execution_id, ordinal', p_ids) if p_ids else []
         outputs = _rows(db, f'SELECT id,program_id,execution_id,stream,reference,complete,redacted,preview,preview_truncated,line_count,inline_digest,blob_id FROM invocation_program_outputs WHERE program_id IN ({p_ph}) ORDER BY rowid', p_ids) if p_ids else []
         publications = _rows(db, f'SELECT * FROM invocation_program_publications WHERE program_id IN ({p_ph})', p_ids) if p_ids else []
-        windows = _rows(db, f'SELECT id,session_id,tool_call_id,state FROM source_command_windows WHERE session_id=? AND tool_call_id IN ({c_ph})', c_params) if call_ids else []
-        messages = _rows(db, f'SELECT id,ord,role,tool_result_call_id,tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id IN ({c_ph}) ORDER BY ord', c_params) if call_ids else []
+        windows = [w for w in _rows(db, 'SELECT id,session_id,tool_call_id,state FROM source_command_windows WHERE session_id=?', (session_id,))
+                   if w['tool_call_id'] not in prelude_set]
+        messages = [m for m in _rows(db, 'SELECT id,ord,role,tool_result_call_id,tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id IS NOT NULL AND tool_result_call_id != "" ORDER BY ord', (session_id,))
+                    if m['tool_result_call_id'] not in prelude_set]
     return {
-        'invocation_receipts': receipts, 'invocation_programs': programs,
+        'prelude_receipts': prelude_receipts, 'invocation_receipts': receipts, 'invocation_programs': programs,
         'invocation_program_executions': executions, 'invocation_program_revision_pins': pins,
         'invocation_program_outputs': outputs, 'invocation_program_publications': publications,
         'source_command_windows': windows, 'tool_result_messages': messages,
@@ -70,14 +70,18 @@ def query_db_audit(db_path, session_id, call_ids):
 
 
 def scan_sidecar_launches(log_path, session_id):
-    """Count sandbox process-boundary selections for this session (matching truncated 8-char or full IDs)."""
+    """Verify sidecar log covers this isolated run window and count command process-boundary selections."""
     path = pathlib.Path(log_path)
     if not path.is_file():
         return {'available': False, 'complete': False, 'command_launches': None, 'lines': []}
+    lines = path.read_text(errors='replace').splitlines()
+    if not lines:
+        return {'available': True, 'complete': False, 'command_launches': None, 'lines': []}
     prefix = f'session_id={session_id[:8]}'
-    matches = [{'line': n, 'excerpt': line[:240]} for n, line in enumerate(path.read_text(errors='replace').splitlines(), 1)
+    covered = any(prefix in line or session_id in line or 'listening' in line.lower() or 'server started' in line.lower() or 'startup' in line.lower() for line in lines)
+    matches = [{'line': n, 'excerpt': line[:240]} for n, line in enumerate(lines, 1)
                if 'process boundary selected' in line and 'tool=command' in line and (prefix in line or session_id in line)]
-    return {'available': True, 'complete': True, 'scope': prefix, 'command_launches': len(matches), 'lines': matches}
+    return {'available': True, 'complete': covered, 'scope': prefix, 'line_count': len(lines), 'command_launches': len(matches) if covered else None, 'lines': matches}
 
 
 def parse_tool_result(message_row):
@@ -97,7 +101,6 @@ def parse_tool_result(message_row):
 
 
 def _structured_rejection(raw_result, payload):
-    """Extract typed rejection code and structured details strictly from owner fields."""
     fb_list = raw_result.get('feedback') or []
     fb0 = fb_list[0] if isinstance(fb_list, list) and fb_list and isinstance(fb_list[0], dict) else {}
     refusal = payload.get('refusal') if isinstance(payload, dict) and isinstance(payload.get('refusal'), dict) else {}
@@ -110,7 +113,6 @@ def _structured_rejection(raw_result, payload):
 
 
 def normalize_outcome(raw_result, program_row, payload):
-    """Derive terminal outcome and host_stop strictly from host records."""
     raw_outcome = raw_result.get('outcome')
     code, _ = _structured_rejection(raw_result, payload)
     if not code and program_row:
@@ -153,7 +155,7 @@ def _has_structured_span(details):
     return isinstance(details.get('source_start_byte'), int) and isinstance(details.get('source_end_byte'), int)
 
 
-def _extract_recovery(case_id, payload, raw_result, audit):
+def _extract_recovery(case_id, payload, raw_result, audit, unexpected_cmd):
     code, details = _structured_rejection(raw_result, payload)
     if not code:
         return None
@@ -170,24 +172,31 @@ def _extract_recovery(case_id, payload, raw_result, audit):
     )
     return {
         'case_id': case_id, 'cause': cause, 'zero_program_effects': zero_effects,
-        'whole_program_resubmit_allowed': replay_allowed,
-        'automatic_execution': len(audit['invocation_receipts']) > 1 and any(r.get('tool_name') == 'command' and r.get('invoked') == 1 for r in audit['invocation_receipts']),
+        'whole_program_resubmit_allowed': replay_allowed, 'automatic_execution': bool(unexpected_cmd),
         'remedy': remedy, 'effect_certainty_required': zero_effects,
         'source_span_required': has_span, 'owner_code': code,
     }
 
 
 def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records):
-    """Construct a version-1 native-runtime observation strictly from authoritative host records."""
-    tested_calls = [cid for rec in turn_records for cid in rec['call_ids']]
-    audit = query_db_audit(db_path, session_id, tested_calls)
+    """Construct a version-1 native-runtime observation from the whole isolated session."""
+    prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
+    expected_calls = {cid for rec in turn_records for cid in rec['call_ids']}
+    audit = query_db_audit(db_path, session_id, prelude_calls)
     sidecar = scan_sidecar_launches(sidecar_log, session_id)
-    gaps = [] if sidecar['available'] else ['missing_sidecar_log']
+    gaps = []
+    if not sidecar['available']:
+        gaps.append('missing_sidecar_log')
+    elif not sidecar['complete']:
+        gaps.append('incomplete_sidecar_log')
 
     msgs_by_call = {m['tool_result_call_id']: parse_tool_result(m) for m in audit['tool_result_messages']}
     progs_by_receipt = {p['parent_receipt_id']: p for p in audit['invocation_programs']}
     receipts_by_call = {r['tool_call_id']: r for r in audit['invocation_receipts']}
     progress_receipts = [r for r in audit['invocation_receipts'] if r['tool_name'] == 'update_progress' and r['owner'] == 'progress']
+    cmd_receipts = [r for r in audit['invocation_receipts'] if r['tool_name'] == 'command']
+    unexpected_receipts = [r for r in audit['invocation_receipts'] if r['tool_call_id'] not in expected_calls]
+    unexpected_cmd = [r for r in cmd_receipts if r['tool_call_id'] not in expected_calls]
 
     cmd_invocations, last_payload, last_raw, last_prog = [], {}, {}, None
     for rec in turn_records:
@@ -199,6 +208,8 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         cmd_invocations.append({'id': (prog_row or {}).get('id') or inv_row.get('id') or cmd_call,
                                 'program': rec['program'], 'outcome': outcome, 'rejection_code': code})
         last_payload, last_raw, last_prog = payload, raw_res, prog_row
+    for extra in unexpected_cmd:
+        cmd_invocations.append({'id': extra['id'], 'program': '<unexpected>', 'outcome': extra['status'], 'rejection_code': None})
 
     outcome, host_stop, _ = normalize_outcome(last_raw, last_prog, last_payload)
     status_code = last_payload.get('status') if isinstance(last_payload.get('status'), int) else (
@@ -208,13 +219,16 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         gaps.append('missing_program_status_code')
     complete = bool(outcome == 'completed' and host_stop is None and last_prog is not None and last_prog.get('state') == 'completed')
     receipts, effects = _receipt_rows(audit, progress_receipts)
-    recovery = _extract_recovery(case['id'], last_payload, last_raw, audit)
+    for extra in unexpected_receipts:
+        effects.append({'operation': extra['tool_name'], 'outcome': extra['status'], 'unexpected_call_id': extra['tool_call_id']})
+    recovery = _extract_recovery(case['id'], last_payload, last_raw, audit, unexpected_cmd)
 
     external_execs = [e for e in audit['invocation_program_executions']
                       if e.get('owner') == 'external' or e.get('native_command') == 'external' or e.get('native_gap_json')]
     no_external_launch = (
-        sidecar['available'] and sidecar['command_launches'] == 0 and not audit['source_command_windows']
-        and not external_execs and last_payload.get('source_window') is None and last_payload.get('native_gaps', 0) == 0
+        sidecar['available'] and sidecar['complete'] and sidecar['command_launches'] == 0
+        and not audit['source_command_windows'] and not external_execs
+        and last_payload.get('source_window') is None and last_payload.get('native_gaps', 0) == 0
     )
     write_exec_ids = {e['id'] for e in audit['invocation_program_executions'] if e.get('operation_id') == 'write'}
     child_ids = [r['execution_id'] for r in receipts]
@@ -231,8 +245,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'zero_program_effects': bool(recovery and recovery['zero_program_effects']),
         'zero_progress_effects': not progress_receipts,
     }
-    cmd_receipts = [r for r in audit['invocation_receipts'] if r['tool_name'] == 'command']
-    forbidden_replay = len(cmd_receipts) > len(turn_records) or len({r['id'] for r in cmd_receipts}) != len(cmd_receipts)
+    forbidden_replay = bool(unexpected_cmd) or len(cmd_receipts) > len(turn_records) or len({r['id'] for r in cmd_receipts}) != len(cmd_receipts)
     observation = {
         'version': 1, 'case_id': case['id'], 'capture_kind': 'native-runtime', 'identity': identity,
         'program': {'stdout': last_payload.get('stdout', ''), 'stderr': last_payload.get('stderr', ''),
@@ -242,7 +255,8 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'recovery': recovery, 'invocations': cmd_invocations,
     }
     audit_bundle = {
-        'session_id': session_id, 'prelude': prelude_records, 'observation_gaps': gaps,
+        'session_id': session_id, 'prelude': prelude_records, 'turn_batches': turn_records,
+        'unexpected_receipt_ids': [r['id'] for r in unexpected_receipts], 'observation_gaps': gaps,
         'external_launch_audit': {
             'sidecar': sidecar, 'source_command_windows': len(audit['source_command_windows']),
             'external_executions': len(external_execs), 'source_window_field': last_payload.get('source_window'),

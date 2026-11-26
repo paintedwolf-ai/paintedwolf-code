@@ -170,7 +170,10 @@ def resolve_case(case_or_path):
         for field in ('profile', 'setup', 'turns', 'expected', 'allowed_partial', 'required_evidence'):
             if bundle.get(field) != pinned.get(field):
                 raise ValueError('replay bundle modified pinned field: ' + field)
-        return {**pinned, '_expected_baseline_hashes': bundle.get('baseline_hashes')}
+        baseline = bundle.get('baseline_hashes')
+        if not isinstance(baseline, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in baseline.items()):
+            raise ValueError('replay bundle requires valid baseline_hashes map')
+        return {**pinned, '_expected_baseline_hashes': baseline}
     if case_or_path not in cases:
         raise ValueError('unknown portable-command case: ' + str(case_or_path))
     return cases[case_or_path]
@@ -213,18 +216,18 @@ def run_case(case, out_dir, *, export_dir=None, app_factory=smoke.Application, s
             prelude_records.append({'kind': 'valid_progress', 'call_id': p_calls[0][0], 'outcome': p_calls[0][1].get('outcome')})
             save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases})
         for turn in case['turns']:
-            call_ids = []
+            batch = []
             if 'progress_update' in turn:
-                u_calls = send_tool_calls(application, session_id, [
-                    {'name': 'update_progress', 'args': turn['progress_update']},
-                ])
-                call_ids.append(u_calls[0][0])
-            c_calls = send_tool_calls(application, session_id, [
-                {'name': 'command', 'args': {'command': turn['program']}},
-            ])
-            cmd_id = c_calls[0][0]
-            call_ids.append(cmd_id)
-            turn_records.append({'program': turn['program'], 'command_call_id': cmd_id, 'call_ids': call_ids})
+                batch.append({'name': 'update_progress', 'args': turn['progress_update']})
+            batch.append({'name': 'command', 'args': {'command': turn['program']}})
+            results = send_tool_calls(application, session_id, batch)
+            call_ids = [cid for cid, _ in results]
+            cmd_id = call_ids[-1]
+            turn_records.append({
+                'program': turn['program'], 'command_call_id': cmd_id, 'call_ids': call_ids,
+                'batch_plan': [c['name'] for c in batch],
+                'batch_outcomes': [{'call_id': cid, 'tool': c['name'], 'outcome': res.get('outcome')} for c, (cid, res) in zip(batch, results)],
+            })
         application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             pids = [r[0] for r in db.execute(
