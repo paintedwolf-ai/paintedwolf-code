@@ -8,11 +8,18 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"sort"
 	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+)
+
+// WorkbookGradeMode distinguishes strict frozen-program replay from live deliverable semantics.
+type WorkbookGradeMode string
+
+const (
+	WorkbookFrozenReplay    WorkbookGradeMode = "frozen_replay"
+	WorkbookLiveDeliverable WorkbookGradeMode = "live_deliverable"
 )
 
 // RepoManifest mirrors config/repos.yaml for independent CSV and XLSX grading.
@@ -70,11 +77,34 @@ func GradeLicenseCSV(manifestYAML, csvBytes []byte) error {
 }
 
 type xlsxSheet struct {
-	Frozen bool
-	Rows   [][]string
+	Name         string
+	HeaderFrozen bool
+	Rows         [][]string
 }
 
-func readXLSXSheets(xlsxBytes []byte) (map[string]xlsxSheet, error) {
+func topLeftCellRow(ref string) int {
+	i := 0
+	for i < len(ref) && (ref[i] < '0' || ref[i] > '9') {
+		i++
+	}
+	if i >= len(ref) {
+		return 0
+	}
+	n, err := strconv.Atoi(ref[i:])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+func isHeaderRowFrozen(state string, ySplit float64, topLeftCell string) bool {
+	if state != "frozen" && state != "frozenSplit" {
+		return false
+	}
+	return ySplit >= 1 || topLeftCellRow(topLeftCell) >= 2
+}
+
+func readXLSXSheets(xlsxBytes []byte) ([]xlsxSheet, error) {
 	zr, err := zip.NewReader(bytes.NewReader(xlsxBytes), int64(len(xlsxBytes)))
 	if err != nil {
 		return nil, fmt.Errorf("open xlsx zip: %w", err)
@@ -142,7 +172,7 @@ func readXLSXSheets(xlsxBytes []byte) (map[string]xlsxSheet, error) {
 		relTarget[r.ID] = strings.TrimPrefix(r.Target, "/")
 	}
 
-	out := make(map[string]xlsxSheet, len(wb.Sheets))
+	out := make([]xlsxSheet, 0, len(wb.Sheets))
 	for _, sh := range wb.Sheets {
 		target := relTarget[sh.ID]
 		if !strings.HasPrefix(target, "xl/") {
@@ -155,7 +185,10 @@ func readXLSXSheets(xlsxBytes []byte) (map[string]xlsxSheet, error) {
 		var ws struct {
 			Views []struct {
 				Pane *struct {
-					State string `xml:"state,attr"`
+					XSplit      float64 `xml:"xSplit,attr"`
+					YSplit      float64 `xml:"ySplit,attr"`
+					TopLeftCell string  `xml:"topLeftCell,attr"`
+					State       string  `xml:"state,attr"`
 				} `xml:"pane"`
 			} `xml:"sheetViews>sheetView"`
 			Rows []struct {
@@ -169,7 +202,11 @@ func readXLSXSheets(xlsxBytes []byte) (map[string]xlsxSheet, error) {
 		if err := xml.Unmarshal(rawSheet, &ws); err != nil {
 			return nil, err
 		}
-		frozen := len(ws.Views) > 0 && ws.Views[0].Pane != nil && ws.Views[0].Pane.State == "frozen"
+		headerFrozen := false
+		if len(ws.Views) > 0 && ws.Views[0].Pane != nil {
+			p := ws.Views[0].Pane
+			headerFrozen = isHeaderRowFrozen(p.State, p.YSplit, p.TopLeftCell)
+		}
 		rows := make([][]string, 0, len(ws.Rows))
 		for _, r := range ws.Rows {
 			vals := make([]string, 0, len(r.Cells))
@@ -190,13 +227,19 @@ func readXLSXSheets(xlsxBytes []byte) (map[string]xlsxSheet, error) {
 			}
 			rows = append(rows, vals)
 		}
-		out[sh.Name] = xlsxSheet{Frozen: frozen, Rows: rows}
+		out = append(out, xlsxSheet{Name: sh.Name, HeaderFrozen: headerFrozen, Rows: rows})
 	}
 	return out, nil
 }
 
-// GradeRepoWorkbook independently reopens repositories.xlsx and verifies all rows, counts, and frozen panes.
+// GradeRepoWorkbook grades repositories.xlsx using strict frozen-replay semantics.
 func GradeRepoWorkbook(manifestYAML, xlsxBytes []byte) error {
+	return GradeRepoWorkbookWithMode(manifestYAML, xlsxBytes, WorkbookFrozenReplay)
+}
+
+// GradeRepoWorkbookWithMode grades repositories.xlsx under either strict frozen-replay
+// or live-deliverable semantics (allowing alternate sheet titles, row order, and tall count tables).
+func GradeRepoWorkbookWithMode(manifestYAML, xlsxBytes []byte, mode WorkbookGradeMode) error {
 	var m RepoManifest
 	if err := yaml.Unmarshal(manifestYAML, &m); err != nil {
 		return fmt.Errorf("parse repos.yaml: %w", err)
@@ -205,12 +248,19 @@ func GradeRepoWorkbook(manifestYAML, xlsxBytes []byte) error {
 	if err != nil {
 		return err
 	}
-	repoSheet, ok := sheets["Repositories"]
+	if mode == WorkbookLiveDeliverable {
+		return gradeLiveRepoWorkbook(m.Repos, sheets)
+	}
+	byName := make(map[string]xlsxSheet, len(sheets))
+	for _, s := range sheets {
+		byName[s.Name] = s
+	}
+	repoSheet, ok := byName["Repositories"]
 	if !ok {
 		return fmt.Errorf("missing Repositories sheet")
 	}
-	if !repoSheet.Frozen {
-		return fmt.Errorf("Repositories sheet header is not frozen")
+	if !repoSheet.HeaderFrozen {
+		return fmt.Errorf("Repositories sheet header row is not frozen")
 	}
 	if len(repoSheet.Rows) != len(m.Repos)+1 {
 		return fmt.Errorf("Repositories row count mismatch: want %d, got %d", len(m.Repos)+1, len(repoSheet.Rows))
@@ -222,13 +272,12 @@ func GradeRepoWorkbook(manifestYAML, xlsxBytes []byte) error {
 			return fmt.Errorf("Repositories row %d mismatch: want %v, got %v", i+1, want, got)
 		}
 	}
-
-	countSheet, ok := sheets["Counts by Split and Language"]
+	countSheet, ok := byName["Counts by Split and Language"]
 	if !ok {
 		return fmt.Errorf("missing Counts by Split and Language sheet")
 	}
-	if !countSheet.Frozen {
-		return fmt.Errorf("Counts by Split and Language sheet header is not frozen")
+	if !countSheet.HeaderFrozen {
+		return fmt.Errorf("Counts by Split and Language sheet header row is not frozen")
 	}
 	wantRows := expectedSplitCountRows(m.Repos)
 	if len(countSheet.Rows) != len(wantRows) {
@@ -242,47 +291,3 @@ func GradeRepoWorkbook(manifestYAML, xlsxBytes []byte) error {
 	return nil
 }
 
-func expectedSplitCountRows(repos []RepoEntry) [][]string {
-	splitSet, langSet := make(map[string]bool), make(map[string]bool)
-	counts := make(map[string]int)
-	for _, r := range repos {
-		splitSet[r.Split] = true
-		langSet[r.Language] = true
-		counts[r.Split+"\x00"+r.Language]++
-	}
-	var splits, langs []string
-	for s := range splitSet {
-		splits = append(splits, s)
-	}
-	for l := range langSet {
-		langs = append(langs, l)
-	}
-	sort.Strings(splits)
-	sort.Strings(langs)
-
-	wantRows := make([][]string, 0, len(splits)+2)
-	wantRows = append(wantRows, append(append([]string{"Split"}, langs...), "Total"))
-	for _, s := range splits {
-		row := []string{s}
-		sum := 0
-		for _, l := range langs {
-			c := counts[s+"\x00"+l]
-			sum += c
-			row = append(row, strconv.Itoa(c))
-		}
-		row = append(row, strconv.Itoa(sum))
-		wantRows = append(wantRows, row)
-	}
-	totalRow := []string{"Total"}
-	grand := 0
-	for _, l := range langs {
-		colSum := 0
-		for _, s := range splits {
-			colSum += counts[s+"\x00"+l]
-		}
-		grand += colSum
-		totalRow = append(totalRow, strconv.Itoa(colSum))
-	}
-	totalRow = append(totalRow, strconv.Itoa(grand))
-	return append(wantRows, totalRow)
-}

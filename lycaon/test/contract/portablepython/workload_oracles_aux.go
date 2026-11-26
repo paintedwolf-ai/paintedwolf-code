@@ -164,9 +164,25 @@ type UnittestRunObs struct {
 	Passed   bool
 }
 
-// GradeProjectMathAndTests checks exact rational pass_k outputs plus failing-then-repaired unittest runs.
-func GradeProjectMathAndTests(gotRatios map[[3]int64]string, failRun, passRun UnittestRunObs) error {
-	for args, gotStr := range gotRatios {
+// ProjectMathObs holds the required pass_k rational cases, invalid-input check, and unittest outcomes.
+type ProjectMathObs struct {
+	Ratios               map[[3]int64]string
+	InvalidInputRejected bool
+	FailRun              UnittestRunObs
+	PassRun              UnittestRunObs
+}
+
+// GradeProjectMathAndTests requires exact 0, 1, and pass_k(3,5,2)==3/10, invalid-input rejection,
+// and failing-then-repaired unittest discovery runs.
+func GradeProjectMathAndTests(obs ProjectMathObs) error {
+	if len(obs.Ratios) == 0 {
+		return fmt.Errorf("pass_k ratios map is empty")
+	}
+	if !obs.InvalidInputRejected {
+		return fmt.Errorf("fixture-declared invalid-input behavior was not observed/rejected")
+	}
+	var sawZero, sawOne, sawThreeTenths bool
+	for args, gotStr := range obs.Ratios {
 		want, err := PassK(args[0], args[1], args[2])
 		if err != nil {
 			return err
@@ -178,80 +194,31 @@ func GradeProjectMathAndTests(gotRatios map[[3]int64]string, failRun, passRun Un
 		if got.Cmp(want) != 0 {
 			return fmt.Errorf("pass_k%v mismatch: want %s, got %s", args, want.RatString(), got.RatString())
 		}
+		if want.Sign() == 0 {
+			sawZero = true
+		}
+		if want.Cmp(big.NewRat(1, 1)) == 0 {
+			sawOne = true
+		}
+		if args == [3]int64{3, 5, 2} && want.Cmp(big.NewRat(3, 10)) == 0 {
+			sawThreeTenths = true
+		}
 	}
-	if failRun.ExitCode == 0 || !strings.Contains(failRun.Stderr, "Traceback") {
-		return fmt.Errorf("failing unittest must exit nonzero with traceback: exit=%d", failRun.ExitCode)
+	if !sawZero {
+		return fmt.Errorf("missing required exact-zero pass_k case")
 	}
-	if passRun.ExitCode != 0 || !passRun.Passed {
-		return fmt.Errorf("repaired unittest must pass with exit 0: exit=%d passed=%v", passRun.ExitCode, passRun.Passed)
+	if !sawOne {
+		return fmt.Errorf("missing required exact-one pass_k case")
+	}
+	if !sawThreeTenths {
+		return fmt.Errorf("missing required pass_k(3,5,2) == 3/10 case")
+	}
+	if obs.FailRun.ExitCode == 0 || !strings.Contains(obs.FailRun.Stderr, "Traceback") {
+		return fmt.Errorf("failing unittest must exit nonzero with traceback: exit=%d", obs.FailRun.ExitCode)
+	}
+	if obs.PassRun.ExitCode != 0 || !obs.PassRun.Passed {
+		return fmt.Errorf("repaired unittest must pass with exit 0: exit=%d passed=%v", obs.PassRun.ExitCode, obs.PassRun.Passed)
 	}
 	return nil
 }
 
-// GradeSplitPreservation verifies original split bytes survive rejected invalid/overlapping inputs
-// and repeated valid splits produce byte-identical outputs.
-func GradeSplitPreservation(original, afterInvalid, afterOverlap, validRun1, validRun2 map[string][]byte) error {
-	for name, origBytes := range original {
-		if !bytes.Equal(afterInvalid[name], origBytes) {
-			return fmt.Errorf("split file %s mutated after late invalid JSONL rejection", name)
-		}
-		if !bytes.Equal(afterOverlap[name], origBytes) {
-			return fmt.Errorf("split file %s mutated after cross-split overlap rejection", name)
-		}
-	}
-	if len(validRun1) != len(validRun2) {
-		return fmt.Errorf("valid split runs produced different file counts: %d vs %d", len(validRun1), len(validRun2))
-	}
-	for name, b1 := range validRun1 {
-		if !bytes.Equal(b1, validRun2[name]) {
-			return fmt.Errorf("valid split output %s is not deterministic across runs", name)
-		}
-	}
-	return nil
-}
-
-// UsageLedgerEntry represents one usage accounting observation.
-type UsageLedgerEntry struct {
-	CaseKind     string // "absent_opt_in", "empty_choices", "ordinary"
-	RequestID    string
-	PromptTokens int
-	FinishReason *string
-	Interpreter  string // "portable_python" or "project_runner"
-}
-
-// GradeUsageLedger verifies usage ledger invariants and interpreter provenance recording.
-func GradeUsageLedger(entries []UsageLedgerEntry) error {
-	seen := make(map[string]bool)
-	for _, e := range entries {
-		if e.Interpreter == "" {
-			return fmt.Errorf("usage entry %s missing interpreter provenance", e.CaseKind)
-		}
-		if e.RequestID == "" {
-			return fmt.Errorf("usage entry %s missing request ID", e.CaseKind)
-		}
-		switch e.CaseKind {
-		case "empty_choices":
-			if e.FinishReason != nil {
-				return fmt.Errorf("empty_choices must have null finish_reason, got %q", *e.FinishReason)
-			}
-		case "ordinary":
-			if e.FinishReason == nil || *e.FinishReason == "" {
-				return fmt.Errorf("ordinary entry must have non-empty finish_reason")
-			}
-			if e.PromptTokens <= 0 {
-				return fmt.Errorf("ordinary entry must record positive usage tokens")
-			}
-		case "absent_opt_in":
-			// Valid when request ID and interpreter are recorded without fabricating opt-in usage.
-		default:
-			return fmt.Errorf("unknown usage case kind %q", e.CaseKind)
-		}
-		seen[e.CaseKind] = true
-	}
-	for _, req := range []string{"absent_opt_in", "empty_choices", "ordinary"} {
-		if !seen[req] {
-			return fmt.Errorf("missing required usage ledger case %q", req)
-		}
-	}
-	return nil
-}

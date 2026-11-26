@@ -1,0 +1,32 @@
+{
+  "dependency-review": {
+    "capture": "expanded-readback-2",
+    "source": "program.py",
+    "sha256": "cd298be23227434a09981f7bac0f9713e04f53cc6d833808b3a28aa619a6717a"
+  },
+  "workbook": {
+    "capture": "expanded-shipping-0",
+    "source": "program.py",
+    "sha256": "f11ca47525a2dac3cb1453dbeacc08d0d84be3cca3a0eccb865436fffb122c6e"
+  },
+  "licenses": {
+    "capture": "expanded-shipping-2",
+    "source": "program.py",
+    "sha256": "9121b6cde02a8b5ba578a93e639e8f5401e9de32ffddc70488d8ac308f085c0e"
+  },
+  "release-index": {
+    "capture": "expanded-shipping-2",
+    "source": "program.py",
+    "sha256": "cd21fbf54cc10dba90f6a0dc7c9e1cde1619c7975dca72b012cd7880201ebfee"
+  },
+  "markdown-links": {
+    "capture": "expanded-shipping-3",
+    "source": "program.py",
+    "sha256": "52007b29f7d60c3ef67f22ede6bfd81b8c044f3b00e5832d3414c658bf029991"
+  },
+  "archive": {
+    "capture": "expanded-explicit-0",
+    "source": "build_handoff.py",
+    "sha256": "5443c5d3dd854c226ef8b434d0a4cb2a7c0ed1279916ffe4b13eeae18e696bb5"
+  }
+}
