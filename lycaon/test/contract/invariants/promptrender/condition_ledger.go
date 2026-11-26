@@ -107,13 +107,18 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	if err != nil {
 		return nil, err
 	}
-	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations())
+	standing, sOutcomes, sRecipients, sRuns, err := generateStandingCases(ctx, s, first)
+	if err != nil {
+		return nil, err
+	}
+	outcomes, gapRecipients = slices.Concat(outcomes, sOutcomes), slices.Concat(gapRecipients, sRecipients)
+	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), standing)
 	in.Searches = searchesOf(outcomes, gapRecipients)
 	l, err := interactions.BuildConditionLedger(in)
 	if err != nil {
 		return nil, err
 	}
-	l.Generation = interactions.GenerationSummary{Targets: len(targets), Runs: gen.producer.Runs(), Seconds: time.Since(started).Seconds()}
+	l.Generation = interactions.GenerationSummary{Targets: len(outcomes), Runs: gen.producer.Runs() + sRuns, Seconds: time.Since(started).Seconds()}
 	for _, o := range outcomes {
 		if o.Found {
 			l.Generation.Found++
