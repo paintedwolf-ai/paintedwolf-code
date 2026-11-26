@@ -1,7 +1,6 @@
 package oarproducers
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -114,6 +113,12 @@ var sandboxRefusalSets = [][]confine.SandboxRefusal{
 	{{Operation: "file-read-data", Target: "/etc/pw-ctrl", Process: "cat", Count: 1, Recovery: confine.RecoverNone, Layer: confine.FloorReadControlPlane}},
 }
 
+// generatedRefusalSets add the control-plane write refusal, whose path is
+// terminal, to the matrix's refusal observations.
+var generatedRefusalSets = append(slices.Clone(sandboxRefusalSets),
+	[]confine.SandboxRefusal{{Operation: "file-write-data", Target: "/state/approvals.yaml", Process: "tee", Count: 1, Recovery: confine.RecoverNone, Layer: confine.FloorControlPlane}},
+)
+
 // credentialValues are assigned literals whose secretmint measurements
 // differ in length, word count, character runs and listing.
 var credentialValues = []string{
@@ -127,6 +132,9 @@ var credentialValues = []string{
 	"Q7xZ2mK9pL4vN8rT",
 	"zebra_quartz_violet_mango",
 	"0123456789abcdefABCDEF",
+	"ab_cd_ef_gh",
+	"k1-k2-k3-k4-k5",
+	"Xq7Lm2Pz9Kd4Rt8Vw3Nb_alpha_bravo_charlie",
 }
 
 // CaseProducer runs generated occurrences through the production hook
@@ -142,6 +150,8 @@ type CaseProducer struct {
 	fields    map[string]*factField
 	observed  map[string]*hoststate.ObservedCondition
 	runs      int
+	compiled  map[string]*oarcore.Rule
+	shadows   map[string][]independence.Joint
 }
 
 // NewCaseProducer draws each recipient's states from cells: the first
@@ -154,6 +164,7 @@ func NewCaseProducer(h *Harness, cells []AuthCell, partition func(*oar.GuardCont
 	p := &CaseProducer{
 		h: h, env: env, partition: partition, cells: map[string][]AuthCell{},
 		rules: map[string]*oar.Rule{}, fields: map[string]*factField{}, observed: map[string]*hoststate.ObservedCondition{},
+		compiled: map[string]*oarcore.Rule{}, shadows: map[string][]independence.Joint{},
 	}
 	for _, role := range []string{RecipientCoordinator, RecipientWorker} {
 		p.cells[role] = recipientCells(cells, role)
@@ -162,24 +173,22 @@ func NewCaseProducer(h *Harness, cells []AuthCell, partition func(*oar.GuardCont
 		}
 	}
 	p.cells[RecipientUnscoped] = p.cells[RecipientCoordinator]
-	var rejected []*oar.Rule
 	for _, r := range h.Rules.All() {
-		if r == nil {
-			continue
+		if r != nil {
+			p.rules[r.Qualified()] = r
 		}
-		p.rules[r.Qualified()] = r
-		if r.Anchor == oar.AnchorToolRejected && len(oarcore.ConjunctValues(r.When, "paintedwolf.rejection_code")) > 0 {
+	}
+	// The pipeline evaluates an anchor's rules in this order and the first
+	// block stops it, so alternative codes come from the last rules evaluated.
+	var rejected []*oar.Rule
+	for _, r := range h.Rules.OnAnchor(oar.AnchorToolRejected) {
+		if len(oarcore.ConjunctValues(r.When, "paintedwolf.rejection_code")) > 0 {
 			rejected = append(rejected, r)
 		}
 	}
 	if len(rejected) < 2 {
 		return nil, fmt.Errorf("fewer than two tool.rejected rules name a rejection code")
 	}
-	// The pipeline evaluates rules by kind then id and the first block stops
-	// it, so an alternative code is taken from the last rules evaluated.
-	slices.SortFunc(rejected, func(a, b *oar.Rule) int {
-		return cmp.Or(strings.Compare(string(a.Kind), string(b.Kind)), strings.Compare(a.Qualified(), b.Qualified()))
-	})
 	for _, r := range rejected[len(rejected)-2:] {
 		p.altCodes = append(p.altCodes, oarcore.ConjunctValues(r.When, "paintedwolf.rejection_code")[0])
 	}
@@ -345,13 +354,15 @@ func (p *CaseProducer) toolKnob(rule *oar.Rule, fallback string, sources []strin
 			}
 		}
 	}
+	firstOf := func(names []string) []string { return names[:min(len(names), 1)] }
+	add(firstOf(rule.Tools())...)
+	add(firstOf(oarcore.ConjunctValues(rule.When, "tool"))...)
+	add(firstOf(rule.Operations())...)
+	add(fallback, "command", "recall", "task", "verify")
 	add(rule.Tools()...)
-	add(oarcore.ConjunctValues(rule.When, "tool")...)
-	add(rule.Operations()...)
-	add(fallback)
 	add(literals("tool", sources...)...)
 	add(literals("paintedwolf.operation", sources...)...)
-	add("command", "recall", "task", "verify", "read", "write")
+	add("read", "write")
 	return casegen.Knob{Name: "tool", Facts: []string{"tool", "paintedwolf.operation", casegen.AnyFact}, Values: values}
 }
 
@@ -479,7 +490,7 @@ func confineKnobs(sources []string) []casegen.Knob {
 		{Name: "confine.signals", Facts: []string{"paintedwolf.confine_signals"}, Values: signals},
 		{Name: "confine.denial", Facts: []string{"paintedwolf.denial_subject"}, Values: denial},
 	}
-	for i, set := range sandboxRefusalSets {
+	for i, set := range generatedRefusalSets {
 		knobs = append(knobs, casegen.Knob{Name: fmt.Sprintf("refusal.%d", i), Facts: refusalFacts(set), Values: []any{false, true}})
 	}
 	return knobs
@@ -616,7 +627,7 @@ func (p *CaseProducer) occurrence(rule *oar.Rule, recipient string, knobs []case
 		}
 	}
 	for _, i := range o.refusals {
-		o.confine.Refusals.Refusals = append(o.confine.Refusals.Refusals, sandboxRefusalSets[i]...)
+		o.confine.Refusals.Refusals = append(o.confine.Refusals.Refusals, generatedRefusalSets[i]...)
 	}
 	return o
 }

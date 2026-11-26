@@ -157,7 +157,8 @@ func newOARCaseGenerator(ctx context.Context, s *Stock) (*oarCaseGenerator, erro
 // atoms reading one fact can only take the truths that fact's values
 // realise, the recipient fixes the session role facts, confinement facts
 // stay zero unless confinement applied, shared temp guards run only on a
-// refusal, and a tool selector fixes the tool-derived facts.
+// refusal, a tool selector fixes the tool-derived facts, and a block rule
+// evaluated earlier hides the vectors under which it fires.
 func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient string) independence.Constraints {
 	var c independence.Constraints
 	if site.Family != "oar" {
@@ -167,7 +168,7 @@ func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient st
 	if logic == nil {
 		return c
 	}
-	c.Joints = casegen.SharedFactJoints(site.Atoms, logic)
+	c.Joints = append(casegen.SharedFactJoints(site.Atoms, logic), g.producer.ShadowJoints(site.ID, site.Atoms)...)
 	if fixed, ok := occurrenceRoleFacts[recipient]; ok {
 		c.Fixed = casegen.FixedFacts(site.Atoms, logic, fixed, srcOccurrenceRole)
 	}
