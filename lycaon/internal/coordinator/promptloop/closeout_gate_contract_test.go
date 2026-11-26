@@ -260,7 +260,7 @@ func kickVariables(t *testing.T, ref string) map[string]bool {
 // AC-COMPAT-08: a repair kick reads exactly what the real path sends it. A name the
 // builder never sends renders as a silent fallback, which is how a retired form or an
 // empty document reaches the model. A key the kick does not read must belong to the
-// facts the refusal's policy copy reads, or to the builder both kicks share.
+// facts the closeout refusals' policy declares or reads, or to the builder both kicks share.
 func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 	const documentContent = "Done [read#1:2].\n\n```json\n{\"headline\":\"H\",\"cited_evidence\":[{\"evidence\":\"read#1\"}]}\n```"
 	for _, tc := range []struct {
@@ -309,25 +309,28 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 	}
 }
 
-// refusalCopyFacts are the occurrence facts the selected refusal rule
-// declares in requires_facts or binds in its copy, by their kick data names.
+// refusalCopyFacts are the occurrence facts the rules on the selected
+// refusal's anchor declare in requires_facts or bind in their copy, by kick data
+// name. One builder feeds that anchor, and the observation picks which rule fires.
 func refusalCopyFacts(t *testing.T, rules *oar.RuleSet, ruleID string) map[string]bool {
 	t.Helper()
-	rule, ok := rules.Get(ruleID)
+	selected, ok := rules.Get(ruleID)
 	if !ok {
 		t.Fatalf("refusal rule %q is not loaded", ruleID)
 	}
 	out := map[string]bool{}
 	add := func(name string) { out[strings.TrimPrefix(name, "paintedwolf.")] = true }
-	for _, name := range rule.RequiresFacts {
-		add(name)
-	}
-	c := rule.Copy
-	for _, member := range []string{c.Title, c.What, c.Cause, c.Why, c.Fix, c.Instead, c.Message} {
-		bindings, err := oarcore.ParseCopy(member)
-		testutil.FailErr(t, "parse "+ruleID+" copy", err)
-		for _, b := range bindings {
-			add(b.Name)
+	for _, rule := range rules.OnAnchor(selected.Anchor) {
+		for _, name := range rule.RequiresFacts {
+			add(name)
+		}
+		c := rule.Copy
+		for _, member := range []string{c.Title, c.What, c.Cause, c.Why, c.Fix, c.Instead, c.Message} {
+			bindings, err := oarcore.ParseCopy(member)
+			testutil.FailErr(t, "parse "+rule.ID+" copy", err)
+			for _, b := range bindings {
+				add(b.Name)
+			}
 		}
 	}
 	return out
