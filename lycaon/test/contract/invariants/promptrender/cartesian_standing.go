@@ -516,29 +516,44 @@ func runWorkerPersonaAndInjectMatrix(
 			if sErr != nil {
 				return sErr
 			}
-			occ := workerPersonaOccurrence(auth.Reader, wSkills)
+			// Every worker renders the plain persona; alternate workers also
+			// render it with host resources and a finish note.
+			plain := workerPersonaOccurrence(auth.Reader, wSkills)
+			variants := []map[string]any{plain}
 			if idx%2 == 0 {
-				occ["agent_host_resources"] = []map[string]any{
+				withResources := maps.Clone(plain)
+				withResources["agent_host_resources"] = []map[string]any{
 					{"category": "Runtime", "resources": []map[string]any{{"id": "python3", "access": "allow"}}},
 				}
-				occ["finish_note"] = "Return evidence handles in complete_leg."
+				withResources["finish_note"] = "Return evidence handles in complete_leg."
+				variants = append(variants, withResources)
 			}
-			fullVars, vErr := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
-			if vErr != nil {
-				return vErr
+			for vIdx, occ := range variants {
+				fullVars, vErr := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
+				if vErr != nil {
+					return vErr
+				}
+				rKey := renderCacheKeyForVars("wpersona:"+ws.AgentID+":"+s.Site, wRev, nil, fullVars)
+				text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
+					return prompts.RenderPersona(ctx, wEngine, ws.AgentID, auth.Reader, occ)
+				})
+				if rErr != nil {
+					return rErr
+				}
+				sum.WorkerArtifactCount++
+				if vIdx == 0 {
+					sum.PlainPersonas.Rendered++
+				}
+				label := fmt.Sprintf("worker persona %s (%s)", ws.AgentID, ws.ID)
+				checkClaimsCached(cache, rKey, auth.Digest, func(v string) {
+					sum.Violations = append(sum.Violations, v)
+					if vIdx == 0 {
+						sum.PlainPersonas.Violations = append(sum.PlainPersonas.Violations, v)
+					}
+				}, func() []string {
+					return checkClaimsOnce(s, label, text, auth, ws.ParentSessionMode, ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
+				})
 			}
-			rKey := renderCacheKeyForVars("wpersona:"+ws.AgentID+":"+s.Site, wRev, nil, fullVars)
-			text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
-				return prompts.RenderPersona(ctx, wEngine, ws.AgentID, auth.Reader, occ)
-			})
-			if rErr != nil {
-				return rErr
-			}
-			sum.WorkerArtifactCount++
-			label := fmt.Sprintf("worker persona %s (%s)", ws.AgentID, ws.ID)
-			checkClaimsCached(cache, rKey, auth.Digest, func(v string) { sum.Violations = append(sum.Violations, v) }, func() []string {
-				return checkClaimsOnce(s, label, text, auth, ws.ParentSessionMode, ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
-			})
 		}
 
 		wInjRenderer := injRenderer

@@ -52,19 +52,30 @@ func runKicksAndInjectsMatrix(
 		return err
 	}
 
+	mark := time.Now()
+	lap := func(name string) {
+		sum.PhaseSeconds = append(sum.PhaseSeconds, fmt.Sprintf("%s=%.1f", name, time.Since(mark).Seconds()))
+		mark = time.Now()
+	}
 	if err := runAllKicksAndNudges(ctx, s, cReps, wReps, sum); err != nil {
 		return err
 	}
+	lap("kicks")
 	if err := runCoordinatorInjectRenders(ctx, s, cReps, resolver, sum); err != nil {
 		return err
 	}
+	lap("coordinator_injects")
 	if err := runWorkerInjectRenders(ctx, s, wReps, sum); err != nil {
 		return err
 	}
+	lap("worker_injects")
 	if err := runGuidanceAndUtilityRenders(ctx, s, cReps, wReps, sum); err != nil {
 		return err
 	}
-	return runGateFeedbackRenders(ctx, s, sum)
+	lap("guidance")
+	err = runGateFeedbackRenders(ctx, s, sum)
+	lap("gate_feedback")
+	return err
 }
 
 func runAllKicksAndNudges(
@@ -83,19 +94,37 @@ func runAllKicksAndNudges(
 		return err
 	}
 	// Kick renders share no keys with the other families; a sweep-local cache
-	// is released once the sweep ends.
-	sweep := newKickSweep(s, hoststate.NewRenderCache(), func(v string) { sum.Violations = append(sum.Violations, v) })
-	if err := sweep.coordinatorKicks(ctx, anchorReg, informKickIDs(anchorReg, "coordinator-", "session-agent-enabled"), cReps); err != nil {
+	// is released once the sweep ends. Each family's renders and violations
+	// are kept so the reach invariants read them instead of repeating them.
+	sum.Kicks = map[string]*KickFamily{}
+	var current *KickFamily
+	sweep := newKickSweep(s, hoststate.NewRenderCache(), func(v string) {
+		sum.Violations = append(sum.Violations, v)
+		current.Violations = append(current.Violations, v)
+	})
+	family := func(name string, run func() error) error {
+		current = &KickFamily{}
+		sum.Kicks[name] = current
+		before := sweep.rendered
+		err := run()
+		current.Rendered = sweep.rendered - before
 		return err
 	}
-	if err := sweep.workerKicks(ctx, anchorReg, informKickIDs(anchorReg, "worker-"), wReps); err != nil {
+	if err := family(kickFamilyCoordinator, func() error {
+		return sweep.coordinatorKicks(ctx, anchorReg, informKickIDs(anchorReg, "coordinator-", "session-agent-enabled"), cReps)
+	}); err != nil {
+		return err
+	}
+	if err := family(kickFamilyWorker, func() error {
+		return sweep.workerKicks(ctx, anchorReg, informKickIDs(anchorReg, "worker-"), wReps)
+	}); err != nil {
 		return err
 	}
 	pairs, err := cachedCoordinatorPairs()
 	if err != nil {
 		return err
 	}
-	if err := sweep.phaseKicks(ctx, wfReg, anchorReg, pairs); err != nil {
+	if err := family(kickFamilyPhase, func() error { return sweep.phaseKicks(ctx, wfReg, anchorReg, pairs) }); err != nil {
 		return err
 	}
 	sum.KickAndNudgeCount += sweep.rendered

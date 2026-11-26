@@ -257,6 +257,9 @@ var (
 // coordinatorKicksNameOnlyOffered verifies every non-phase coordinator kick
 // across the coordinator host states and anchor envelopes.
 func coordinatorKicksNameOnlyOffered(r *invariants.Run) {
+	if reportMatrixKicks(r, kickFamilyCoordinator, "coordinator kick renders") {
+		return
+	}
 	reps, err := cachedCoordinatorReps()
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
@@ -265,6 +268,26 @@ func coordinatorKicksNameOnlyOffered(r *invariants.Run) {
 	sweep.envelopes = canonicalKickEnvelope
 	r.Must(sweep.coordinatorKicks(context.Background(), anchorReg, informKickIDs(anchorReg, "coordinator-", "session-agent-enabled"), reps))
 	r.Expect(sweep.rendered, "coordinator kick renders")
+}
+
+// reportMatrixKicks reports a kick family from the host-state matrix, which
+// sweeps the same recipients with the canonical fixture among its envelopes.
+// It applies to the stock templates; a checkout's prompt overlay changes the
+// renders, so it sweeps afresh.
+func reportMatrixKicks(r *invariants.Run, family, label string) bool {
+	if hasSiteOverlayFiles(stock(r).Site) {
+		return false
+	}
+	fam := cartesianSummary(r).Kicks[family]
+	if fam == nil {
+		r.Report("host-state matrix swept no %s kicks", family)
+		return true
+	}
+	r.Expect(fam.Rendered, label)
+	for _, v := range fam.Violations {
+		r.Report("%s", v)
+	}
+	return true
 }
 
 // canonicalKickEnvelope is the one fixture the reach invariants render for
@@ -334,6 +357,9 @@ func closeoutTurnReader(st hoststate.CoordinatorState, worker bool) (prompts.Rea
 // phaseKicksNameOnlyTheirSurface verifies workflow-event kicks across the
 // coordinator host states bound to each phase.
 func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
+	if reportMatrixKicks(r, kickFamilyPhase, "phase kick renders") {
+		return
+	}
 	reg, err := workflowdef.RegistryFromDirs("")
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
@@ -348,6 +374,9 @@ func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
 // workerKicksNameOnlyOffered verifies worker kicks across the worker host
 // states and anchor envelopes, including the follow-up leg on worker-closeout.
 func workerKicksNameOnlyOffered(r *invariants.Run) {
+	if reportMatrixKicks(r, kickFamilyWorker, "worker kick renders") {
+		return
+	}
 	reps, err := cachedWorkerReps()
 	r.Must(err)
 	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
@@ -385,6 +414,15 @@ func workerCloseoutReader(ws hoststate.WorkerState) (prompts.Reader, error) {
 func workerPersonasNameOnlyOffered(r *invariants.Run) {
 	ctx := context.Background()
 	s := stock(r)
+	if !hasSiteOverlayFiles(s.Site) {
+		// The host-state matrix renders every worker's plain persona.
+		plain := cartesianSummary(r).PlainPersonas
+		r.Expect(plain.Rendered, "worker persona renders")
+		for _, v := range plain.Violations {
+			r.Report("%s", v)
+		}
+		return
+	}
 	cache := hoststate.NewRenderCache()
 	workerPairs, err := cachedWorkerPairs()
 	r.Must(err)
