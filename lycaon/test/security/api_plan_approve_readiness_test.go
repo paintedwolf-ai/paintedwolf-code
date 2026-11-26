@@ -1,6 +1,8 @@
 package security
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -10,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -158,6 +161,38 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 		t.Fatalf("implementation request session = %q", reqSeen.Debug.SessionID)
 	}
 	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)
+	bundle := httptest.NewRecorder()
+	srv.ServeHTTP(bundle, AuthedRequest(t, http.MethodGet, "/v1/diagnostics/export", nil))
+	if bundle.Code != http.StatusOK {
+		t.Fatalf("diagnostics export: %d %s", bundle.Code, bundle.Body.String())
+	}
+	archive, err := zip.NewReader(bytes.NewReader(bundle.Body.Bytes()), int64(bundle.Body.Len()))
+	testutil.FailErr(t, "open diagnostics", err)
+	entry, err := archive.Open("action-outcomes.json")
+	testutil.FailErr(t, "open outcome trail", err)
+	defer entry.Close()
+	var trails map[string]actionoutcome.Trail
+	testutil.FailErr(t, "decode outcome trail", json.NewDecoder(entry).Decode(&trails))
+	trail := trails[sess.ID]
+	var foundWake, foundTurn, foundAction bool
+	for _, w := range trail.Wakes {
+		if w.ContinuationID == approved.ContinuationID && w.TurnID == outcome.TurnID {
+			foundWake = true
+		}
+	}
+	for _, v := range trail.Turns {
+		if v.TurnID == outcome.TurnID && !v.SettledAt.IsZero() {
+			foundTurn = true
+		}
+	}
+	for _, v := range trail.Continuations {
+		if v.ContinuationID == approved.ContinuationID && v.TurnID == outcome.TurnID {
+			foundAction = true
+		}
+	}
+	if !foundWake || !foundTurn || !foundAction {
+		t.Fatalf("approval trail: %+v", trail)
+	}
 	history, err := h.Workflows.Manager.Store.Runs.ListBySession(ctx, sess.ID, 100, nil)
 	testutil.FailErr(t, "list workflows after approval", err)
 	for _, child := range history {
