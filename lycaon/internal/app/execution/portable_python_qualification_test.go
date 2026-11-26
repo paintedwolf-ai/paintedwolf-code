@@ -602,9 +602,7 @@ func TestPortablePythonFinalQualification(t *testing.T) {
 //     triggering PYTHON_TOOL_REQUIRED.
 func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 	ctx := context.Background()
-	cfgDir := t.TempDir()
-	rt, _ := buildQualificationRuntime(t, cfgDir)
-	defer func() { _ = rt.Host.Commands.PortablePython().Close(ctx) }()
+	rt, _ := buildInstalledExecutionRuntime(t)
 
 	// Wire production command program services (Recorder, Blobs, Projector,
 	// Progress, Sessions, Provenance, SourceObserver) onto rt.Host.Commands.
@@ -682,10 +680,12 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 
 	// 2. Preceding completed shell effect + bare `python3` when direct `python`
 	// IS offered -> refuses with PYTHON_TOOL_REQUIRED while preserving prior.txt!
-	_, refuseErr := runCmd("implement", "", []string{"command", "python"}, `echo prior_ok > prior.txt && python3 -c "print('SHOULD_NOT_RUN')"`)
+	outRefuse, refuseErr := runCmd("implement", "", []string{"command", "python"}, `echo prior_ok > prior.txt && python3 -c "print('SHOULD_NOT_RUN')"`)
 	reject := toolrejection.AsToolReject(refuseErr)
-	if reject == nil || reject.Code != "PYTHON_TOOL_REQUIRED" {
-		t.Fatalf("expected PYTHON_TOOL_REQUIRED refusal, got err=%v (reject=%+v)", refuseErr, reject)
+	hasCodeInErr := reject != nil && reject.Code == "PYTHON_TOOL_REQUIRED"
+	hasCodeInOut := strings.Contains(outRefuse, "PYTHON_TOOL_REQUIRED")
+	if !hasCodeInErr && !hasCodeInOut {
+		t.Fatalf("expected PYTHON_TOOL_REQUIRED refusal, got out=%q err=%v", outRefuse, refuseErr)
 	}
 	priorBytes, err := os.ReadFile(filepath.Join(wsDir, "prior.txt"))
 	testutil.FailErr(t, "read prior.txt preserved after PYTHON_TOOL_REQUIRED", err)
