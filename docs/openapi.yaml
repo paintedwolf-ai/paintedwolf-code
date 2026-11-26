@@ -16315,7 +16315,6 @@ components:
           type: string
           format: uuid
         failure_code:
-          type: string
           x-go-type: string
           anyOf:
             - $ref: '#/components/schemas/HostContinuationFailure'

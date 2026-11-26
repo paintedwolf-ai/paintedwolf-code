@@ -6030,7 +6030,7 @@ export interface components {
             reason?: components["schemas"]["ContinuationReason"];
             /** Format: uuid */
             turn_id?: string;
-            failure_code?: string | components["schemas"]["HostContinuationFailure"] | components["schemas"]["NoticeCode"];
+            failure_code?: components["schemas"]["HostContinuationFailure"] | components["schemas"]["NoticeCode"];
             /** Format: date-time */
             opened_at: string;
             /** Format: date-time */

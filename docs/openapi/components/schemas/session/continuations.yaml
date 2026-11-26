@@ -13,7 +13,6 @@ components:
         reason: {$ref: ../continuation-reason.generated.yaml#/components/schemas/ContinuationReason}
         turn_id: {type: string, format: uuid}
         failure_code:
-          type: string
           x-go-type: string
           anyOf:
             - {$ref: ../host-continuation-failure.generated.yaml#/components/schemas/HostContinuationFailure}
