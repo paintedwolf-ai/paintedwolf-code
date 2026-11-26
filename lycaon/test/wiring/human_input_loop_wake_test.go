@@ -48,6 +48,8 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 	all := startableShippedManifests(t)
 	keys := make([]string, 0, len(all))
 	for key, m := range all {
+		// Seed existing-run scenarios for archived definitions.
+		m.Retired = false
 		h.RegisterManifest(m)
 		keys = append(keys, key)
 	}

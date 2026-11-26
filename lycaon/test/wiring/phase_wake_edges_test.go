@@ -138,7 +138,7 @@ func declaredHolds(catalog map[string]workflowdef.Manifest, m workflowdef.Manife
 	if def.HumanApproval != nil {
 		holds[holdHumanApproval] = true
 	}
-	if def.HasOnEnterObligations() {
+	if def.MayHostHold() {
 		holds[holdHostObligation] = true
 	}
 	if def.OnEnter.RequestUserFeedback != nil {

@@ -27,6 +27,8 @@ func TestEveryAnnouncedPhaseTransitionWakesTheCoordinator(t *testing.T) {
 	h.Workflows.Manager.Phases.Gates = gates
 	all := startableShippedManifests(t)
 	for _, m := range all {
+		// Seed existing-run scenarios for archived definitions.
+		m.Retired = false
 		h.RegisterManifest(m)
 	}
 	ctx := h.OwnerCtx(t, context.Background())
