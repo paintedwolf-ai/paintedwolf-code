@@ -149,6 +149,8 @@ type ServiceConfig struct {
 	// RetainedStore holds bounded overflow stdout/stderr artifacts.
 	// Defaults to an in-memory RetainedArtifactStore backed by SecretScreener.
 	RetainedStore *pythonevidence.RetainedArtifactStore
+	// StreamPort optionally exposes the disk-backed RetainedStreamPort for reopen reads.
+	StreamPort pythonevidence.RetainedStreamPort
 	// ReceiptSink optionally persists durable execution/admission/publication receipts.
 	ReceiptSink pythonevidence.ReceiptSink
 	// InlineBudgetBytes caps inline stdout/stderr returned to the caller (default 65536).
@@ -172,6 +174,7 @@ type Service struct {
 	jobRegistry     pythonadmission.SessionJobRegistry
 	screener        pythonevidence.SecretScreener
 	retainedStore   *pythonevidence.RetainedArtifactStore
+	streamPort      pythonevidence.RetainedStreamPort
 	receiptSink     pythonevidence.ReceiptSink
 	inlineBudget    int
 	httpClient      *http.Client
@@ -295,6 +298,7 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 		jobRegistry:     jobReg,
 		screener:        screener,
 		retainedStore:   retained,
+		streamPort:      cfg.StreamPort,
 		receiptSink:     cfg.ReceiptSink,
 		inlineBudget:    inlineBudget,
 		httpClient:      cfg.DefaultHTTPClient,
@@ -318,6 +322,15 @@ func (s *Service) Runtime() *pythonruntime.WazeroRuntime { return s.runtime }
 // RetainedStore returns the bounded, secret-screened RetainedArtifactStore
 // holding overflow stdout/stderr artifacts.
 func (s *Service) RetainedStore() *pythonevidence.RetainedArtifactStore { return s.retainedStore }
+
+// StreamPort returns the durable RetainedStreamPort, if configured.
+func (s *Service) StreamPort() pythonevidence.RetainedStreamPort { return s.streamPort }
+
+// Broker returns the durable ApprovalBroker configured on this Service.
+func (s *Service) Broker() *pythonadmission.ApprovalBroker { return s.broker }
+
+// ReceiptSink returns the durable ReceiptSink configured on this Service.
+func (s *Service) ReceiptSink() pythonevidence.ReceiptSink { return s.receiptSink }
 
 // SecretScreener returns the active secret screener used by this Service.
 func (s *Service) SecretScreener() pythonevidence.SecretScreener { return s.screener }
@@ -814,6 +827,11 @@ func (s *Service) finalizeResponse(
 				Data:              []byte(screenedStdout),
 			}); err == nil {
 				resp.RetainedStdoutArtifactID = summary.ArtifactID
+				if persist, ok := s.receiptSink.(interface {
+					PersistRetainedArtifact(context.Context, pythonevidence.RetainedArtifactSummary) error
+				}); ok {
+					_ = persist.PersistRetainedArtifact(ctx, summary)
+				}
 			}
 		}
 		resp.Stdout = screenedStdout[:budget]

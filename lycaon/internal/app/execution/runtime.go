@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/portablepython"
+	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/pythonevidence"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -109,10 +110,26 @@ func buildPortablePythonService(ctx context.Context) (*portablepython.Service, e
 	if err != nil {
 		return nil, fmt.Errorf("create production retained artifact store: %w", err)
 	}
+	contStore, err := pythonadmission.NewFileContinuationStore(filepath.Join(retainedRoot, "portable-python", "approvals"), "continuation.json")
+	if err != nil {
+		return nil, fmt.Errorf("create durable continuation store: %w", err)
+	}
+	broker := pythonadmission.NewApprovalBroker(pythonadmission.ApprovalBrokerConfig{
+		Store: contStore,
+	})
+	_, _ = broker.ReconcileOnStartup(ctx, "host restarted while guest was parked")
+
+	receiptStore, err := portablepython.NewFileReceiptStore(filepath.Join(retainedRoot, "portable-python", "receipts"))
+	if err != nil {
+		return nil, fmt.Errorf("create durable receipt store: %w", err)
+	}
 	return portablepython.NewService(ctx, portablepython.ServiceConfig{
 		ScratchRoot:    filepath.Join(retainedRoot, "portable-python", "scratch"),
+		Broker:         broker,
 		SecretScreener: screener,
 		RetainedStore:  retainedStore,
+		StreamPort:     streamPort,
+		ReceiptSink:    receiptStore,
 	})
 }
 
