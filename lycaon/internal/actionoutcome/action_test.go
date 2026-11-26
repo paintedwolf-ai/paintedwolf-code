@@ -152,3 +152,20 @@ func TestProducerCanAttachAfterCommitAndHandoff(t *testing.T) {
 		t.Fatal("callback lifetime")
 	}
 }
+
+func TestDuplicateOperationCannotDecidePendingOriginal(t *testing.T) {
+	var sessions Sessions
+	s := sessions.For("s")
+	ctx, original := CaptureOperation(t.Context(), api.ContinuationActionPlanApproval, "approval")
+	owner := Register(ctx, "s")
+	original.Commit(s, "s", nil)
+	ctx, duplicate := CaptureOperation(t.Context(), api.ContinuationActionPlanApproval, "approval")
+	late := Register(ctx, "s")
+	duplicate.Commit(s, "s", nil)
+	late.Resolve(Result{State: api.ContinuationStateContinued, TurnID: "duplicate"})
+	owner.Resolve(Result{State: api.ContinuationStateContinued, TurnID: "original"})
+	value, err := s.Actions.Await(t.Context(), duplicate.ID())
+	if err != nil || value.TurnID != "original" {
+		t.Fatalf("operation outcome = %+v, %v", value, err)
+	}
+}

@@ -147,7 +147,7 @@ func (p *Path) Resolve(r Result) {
 		return
 	}
 	p.result = r
-	if !a.sealed || p.sessionID != a.record.SessionID {
+	if a.history == nil || p.sessionID != a.record.SessionID {
 		a.mu.Unlock()
 		return
 	}
@@ -167,12 +167,12 @@ func (a *Action) Commit(s *Session, sessionID string, publish func(api.ActionCon
 	if a.replay {
 		return
 	}
-	a.publish = publish
-	a.history = s.Actions
 	a.record.SessionID = sessionID
-	if !a.history.Open(a.ID(), a.record) {
+	if !s.Actions.Open(a.ID(), a.record) {
 		return
 	}
+	a.history = s.Actions
+	a.publish = publish
 	if publish != nil {
 		publish(a.record)
 	}
