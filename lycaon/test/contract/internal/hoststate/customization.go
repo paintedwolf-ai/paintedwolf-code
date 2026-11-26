@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -32,6 +33,13 @@ type customizationSpec struct {
 	worker      bool
 	// workers names stock agents whose facts move without a profile change.
 	workers []string
+	// project is a fixture project whose overlay extensions file disables
+	// units at project scope.
+	project string
+	// coordinatorSeeds and workerSeeds replace the default states the
+	// customization meets.
+	coordinatorSeeds func() ([]CustomizationSeed, error)
+	workerSeeds      []WorkerSeed
 }
 
 var customizationSpecs = []customizationSpec{
@@ -67,6 +75,53 @@ var customizationSpecs = []customizationSpec{
 	},
 }
 
+// CustomizationCase is a customization a consumer adds to the matrix with
+// the states it meets: unit disables from device desired state and from a
+// fixture project's extensions file, resolved through extpacks.Resolve.
+type CustomizationCase struct {
+	ID             string
+	DeviceDisabled []string
+	// Project is a fixture project directory; its overlay extensions.yaml
+	// disables units at project scope.
+	Project string
+	// Coordinator lists the coordinator states the case meets; it runs when
+	// the overlays load, so it may read the workflow and surface catalogs.
+	Coordinator  func() ([]CustomizationSeed, error)
+	WorkerAgents []string
+	Workers      []WorkerSeed
+}
+
+// CustomizationSeed is one coordinator state a customization case meets,
+// with web search on, balanced approvals, scratch temp and no MCP.
+type CustomizationSeed struct {
+	Mode      api.SessionMode
+	Posture   api.SessionPosture
+	Workflow  WorkflowState
+	SurfaceID string
+	Roots     RootTopology
+	Loading   LoadingMode
+	Vision    bool
+	Binding   *PhaseBinding
+}
+
+var customizationsLoaded atomic.Bool
+
+// AddCustomizationCases adds cases to the matrix; it must run before the
+// first matrix state is built.
+func AddCustomizationCases(cases ...CustomizationCase) bool {
+	if customizationsLoaded.Load() {
+		panic("hoststate: customization cases added after the customization overlays loaded")
+	}
+	for _, c := range cases {
+		customizationSpecs = append(customizationSpecs, customizationSpec{
+			id: c.ID, disable: c.DeviceDisabled, project: c.Project,
+			coordinator: c.Coordinator != nil, worker: len(c.WorkerAgents) > 0, workers: c.WorkerAgents,
+			coordinatorSeeds: c.Coordinator, workerSeeds: c.Workers,
+		})
+	}
+	return true
+}
+
 // CustomizationOverlay is a customized effective catalog with the recipients it
 // applies to.
 type CustomizationOverlay struct {
@@ -75,6 +130,10 @@ type CustomizationOverlay struct {
 	Worker      bool
 	// Workers are the worker agents whose facts the customization moves.
 	Workers []WorkerAgent
+	// CoordinatorSeeds and WorkerSeeds, when set, are the only states the
+	// customization meets.
+	CoordinatorSeeds []CustomizationSeed
+	WorkerSeeds      []WorkerSeed
 }
 
 func customizationRoot() string {
@@ -82,6 +141,7 @@ func customizationRoot() string {
 }
 
 var loadCustomizationOverlays = sync.OnceValues(func() ([]CustomizationOverlay, error) {
+	customizationsLoaded.Store(true)
 	ctx := context.Background()
 	stockContent, err := extpacks.DiscoverStockContent()
 	if err != nil {
@@ -101,11 +161,24 @@ var loadCustomizationOverlays = sync.OnceValues(func() ([]CustomizationOverlay, 
 		if err := refuseNewErrorDiagnostics(stock.Catalog, ov.Catalog, spec.id); err != nil {
 			return nil, err
 		}
-		co := CustomizationOverlay{Overlay: ov, Coordinator: spec.coordinator, Worker: spec.worker}
+		co := CustomizationOverlay{Overlay: ov, Coordinator: spec.coordinator, Worker: spec.worker, WorkerSeeds: spec.workerSeeds}
+		if spec.coordinatorSeeds != nil {
+			if co.CoordinatorSeeds, err = spec.coordinatorSeeds(); err != nil {
+				return nil, fmt.Errorf("customization %s: %w", spec.id, err)
+			}
+			if len(co.CoordinatorSeeds) == 0 {
+				return nil, fmt.Errorf("customization %s meets no coordinator state", spec.id)
+			}
+		}
 		if spec.worker {
 			co.Workers = customizedWorkerAgents(stock, ov, spec.workers)
 			if len(co.Workers) == 0 {
 				return nil, fmt.Errorf("customization %s moves no worker agent", spec.id)
+			}
+			for _, name := range spec.workers {
+				if !slices.ContainsFunc(co.Workers, func(a WorkerAgent) bool { return a.ID == name }) {
+					return nil, fmt.Errorf("customization %s names worker %s, which its catalog does not load", spec.id, name)
+				}
 			}
 		}
 		out = append(out, co)
@@ -140,7 +213,32 @@ func buildCustomizationOverlay(ctx context.Context, spec customizationSpec, stoc
 		enabled := true
 		desired.Packs = append(desired.Packs, extpacks.DesiredPack{ID: man.ID, Source: root, Development: true, Enabled: &enabled})
 	}
-	return buildPackOverlay(ctx, spec.id, "", packs, desired)
+	var projectDisabled []string
+	if spec.project != "" {
+		m, err := extpacks.LoadSuggestionFile(extpacks.ProjectDesiredPath(spec.project))
+		if err != nil {
+			return PackOverlay{}, fmt.Errorf("customization %s: %w", spec.id, err)
+		}
+		if len(m.Disabled) == 0 {
+			return PackOverlay{}, fmt.Errorf("customization %s: project %s disables nothing", spec.id, spec.project)
+		}
+		projectDisabled = m.Disabled
+	}
+	merged, provenance := extpacks.MergeDesired(desired, projectDisabled)
+	ov, err := buildPackOverlay(ctx, spec.id, "", extpacks.ResolveInput{
+		Packs: packs, Desired: merged, ProjectID: spec.project, Provenance: provenance,
+	})
+	if err != nil {
+		return PackOverlay{}, err
+	}
+	for _, id := range slices.Concat(spec.disable, projectDisabled) {
+		_, known := ov.Catalog.Units[id]
+		_, loaded := ov.Catalog.Loaded[id]
+		if !known || loaded {
+			return PackOverlay{}, fmt.Errorf("customization %s: Resolve did not disable %s (known=%t loaded=%t)", spec.id, id, known, loaded)
+		}
+	}
+	return ov, nil
 }
 
 // refuseNewErrorDiagnostics fails when Resolve reports something the

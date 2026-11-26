@@ -239,7 +239,7 @@ func PackOverlays(ctx context.Context, stockContent []extpacks.PackContent) ([]P
 	if len(stockContent) == 0 {
 		return nil, fmt.Errorf("stock content required")
 	}
-	full, err := buildPackOverlay(ctx, "stock", "", stockContent, extpacks.EmptyDesired())
+	full, err := buildPackOverlay(ctx, "stock", "", extpacks.ResolveInput{Packs: stockContent, Desired: extpacks.EmptyDesired()})
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +261,7 @@ func PackOverlays(ctx context.Context, stockContent []extpacks.PackContent) ([]P
 			Format: extpacks.DesiredFormat,
 			Packs:  desiredPacks,
 		}
-		overlay, buildErr := buildPackOverlay(ctx, "without-"+short, packID, stockContent, desired)
+		overlay, buildErr := buildPackOverlay(ctx, "without-"+short, packID, extpacks.ResolveInput{Packs: stockContent, Desired: desired})
 		if buildErr != nil {
 			return nil, buildErr
 		}
@@ -335,10 +335,9 @@ func transitiveReverseDependents(packs []extpacks.PackContent, rootPackID string
 func buildPackOverlay(
 	ctx context.Context,
 	id, removedID string,
-	packs []extpacks.PackContent,
-	desired extpacks.DesiredState,
+	in extpacks.ResolveInput,
 ) (PackOverlay, error) {
-	eff := extpacks.Resolve(ctx, extpacks.ResolveInput{Packs: packs, Desired: desired})
+	eff := extpacks.Resolve(ctx, in)
 	profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
 	if err != nil {
 		return PackOverlay{}, fmt.Errorf("overlay %s profiles: %w", id, err)
