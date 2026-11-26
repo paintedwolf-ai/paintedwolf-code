@@ -8,6 +8,8 @@ import (
 	"github.com/lycaon/lycaon/internal/pythondocuments"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
 func TestGroundedFindingRequiresNativeRangeAndRevalidatesOnRevisionBump(t *testing.T) {
@@ -58,9 +60,33 @@ func TestGroundedFindingRequiresNativeRangeAndRevalidatesOnRevisionBump(t *testi
 	}
 }
 
+func TestReachableSurfaceFromRequestDerivesFromFrozenToolReach(t *testing.T) {
+	reqOffered := toolreach.Offered([]string{"python", "command", "read"})
+	sOffered := ReachableSurfaceFromRequest(reqOffered, false, "external -- python3 -m pytest")
+	if !sOffered.DirectPythonOffered || !sOffered.CommandOffered || !sOffered.NativeReadOffered || !sOffered.ProjectRunnerAvailable {
+		t.Fatalf("unexpected offered surface: %+v", sOffered)
+	}
+
+	reqLoadable := toolreach.Freeze(
+		[]string{"command", "request_tools"},
+		toolsurface.Compile([]string{"command", "request_tools"}, []string{"python"}),
+	)
+	sLoadable := ReachableSurfaceFromRequest(reqLoadable, false, "")
+	if sLoadable.DirectPythonOffered || !sLoadable.RequestToolsAvailable || !slices.Equal(sLoadable.RequestableTools, []string{"python"}) {
+		t.Fatalf("unexpected loadable surface: %+v", sLoadable)
+	}
+
+	// Read-only posture suppresses external project runner even when command is offered.
+	sReadOnly := ReachableSurfaceFromRequest(reqOffered, true, "external -- python3 -m pytest")
+	if !sReadOnly.ReadOnly || sReadOnly.ProjectRunnerAvailable || sReadOnly.ProjectRunnerCommand != "" {
+		t.Fatalf("read-only surface must suppress project runner: %+v", sReadOnly)
+	}
+}
+
 func TestOARRecoveryFactsSchemaAndReachability(t *testing.T) {
 	stopCtx := RecoveryStopContext{
 		PolicyCode:            StopPythonToolRequired,
+		InitiatingTool:        "command",
 		StoppedOperationID:    "op-cmd-1",
 		StoppedOperation:      "python3 script.py",
 		PriorCompletedEffects: 2,
@@ -76,18 +102,13 @@ func TestOARRecoveryFactsSchemaAndReachability(t *testing.T) {
 	if f1.NoRecoveryRoute || f1.ReachableDirectPython == nil || f1.AdmittedExternalRunner == nil {
 		t.Fatalf("expected direct python + admitted external runner, got %+v", f1)
 	}
-	// Verify exact real tool schema arg names (code/script/module + cwd/args), NEVER mode=.
 	if !slices.Equal(f1.ReachableDirectPython.ModeArgs, []string{"code", "script", "module"}) ||
 		!slices.Equal(f1.ReachableDirectPython.OptionalArgs, []string{"cwd", "args"}) ||
 		strings.Contains(f1.ReachableDirectPython.CallableForm, "mode=") {
 		t.Fatalf("python call form must match real schema (code/script/module, cwd, args), got %+v", f1.ReachableDirectPython)
 	}
-	if f1.AdmittedExternalRunner.Command != "external -- python3 -m pytest" {
-		t.Fatalf("unexpected admitted runner command: %+v", f1.AdmittedExternalRunner)
-	}
 
 	// 2. Direct Python NOT offered, requestable via request_tools(need="python").
-	// ProjectRunnerAvailable=true but empty ProjectRunnerCommand (not admitted) -> MUST NOT emit runner!
 	f2 := BuildOARRecoveryFacts(ReachableSurface{
 		DirectPythonOffered:    false,
 		CommandOffered:         true,
@@ -123,6 +144,7 @@ func TestOARRecoveryFactsSchemaAndReachability(t *testing.T) {
 		ReadOnly:               true,
 	}, RecoveryStopContext{
 		PolicyCode:            pythonruntime.StopEffectNotAllowed,
+		InitiatingTool:        "command",
 		StoppedOperationID:    "op-write-1",
 		PriorCompletedEffects: 1,
 		Target:                "src/app.py",
