@@ -190,7 +190,13 @@ func (p *skillCaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	if recipient != interactions.RecipientCoordinator && recipient != interactions.RecipientWorker {
 		return nil
 	}
-	facts := p.siteFacts(site)
+	return readerKnobs(p.siteFacts(site))
+}
+
+// readerKnobs lists the reader inputs that move facts: one per tool a fact
+// names, one per evidence kind a mints fact names, the command effects, the
+// root count, Git and the scratch folder.
+func readerKnobs(facts []string) []casegen.Knob {
 	var knobs []casegen.Knob
 	var tools []string
 	for _, f := range facts {

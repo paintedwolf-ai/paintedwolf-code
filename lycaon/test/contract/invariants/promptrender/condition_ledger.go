@@ -178,16 +178,25 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	if err != nil {
 		return nil, err
 	}
-	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations(), skillGen.Observations(), standing)
-	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes), slices.Concat(gapRecipients, tRecipients, skillGapRecipients, sRecipients))
+	profiles, err := newProfileCaseProducer(s, sites)
+	if err != nil {
+		return nil, err
+	}
+	pTargets, pRecipients := profiles.targets(first)
+	pOutcomes, err := casegen.Generate(ctx, profiles, pTargets, profileCaseBudget)
+	if err != nil {
+		return nil, err
+	}
+	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations(), skillGen.Observations(), standing, profiles.Observations())
+	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes, pOutcomes), slices.Concat(gapRecipients, tRecipients, skillGapRecipients, sRecipients, pRecipients))
 	l, err := interactions.BuildConditionLedger(in)
 	if err != nil {
 		return nil, err
 	}
 	l.Generation = interactions.GenerationSummary{
-		Targets: len(targets) + len(tTargets) + len(skillTargets) + len(sOutcomes), Runs: gen.producer.Runs() + kicks.runs + skillGen.Runs() + sRuns, Seconds: time.Since(started).Seconds(),
+		Targets: len(targets) + len(tTargets) + len(skillTargets) + len(sOutcomes) + len(pTargets), Runs: gen.producer.Runs() + kicks.runs + skillGen.Runs() + sRuns + profiles.runs, Seconds: time.Since(started).Seconds(),
 	}
-	for _, o := range slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes) {
+	for _, o := range slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes, pOutcomes) {
 		if o.Found {
 			l.Generation.Found++
 		}
