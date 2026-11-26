@@ -599,9 +599,7 @@ func TestInstalledSessionAcceptanceSuite(t *testing.T) {
 		defer srv.Close()
 
 		svc := rt.Host.Commands.PortablePython()
-		broker := pythonadmission.NewApprovalBroker(pythonadmission.BrokerConfig{
-			Store: pythonadmission.NewMemoryLeaseStore(),
-		})
+		broker := pythonadmission.NewApprovalBroker(pythonadmission.ApprovalBrokerConfig{})
 		holdPolicy := func(_ context.Context, op pythonruntime.ReachedOperation) pythonadmission.PolicyDecision {
 			if op.Family == pythonruntime.EffectHTTP {
 				return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionHold, Reason: "review outbound POST"}
@@ -612,9 +610,11 @@ func TestInstalledSessionAcceptanceSuite(t *testing.T) {
 		// 6a. Approve once -> 1 body delivered.
 		go func() {
 			for range 200 {
-				if pending := broker.Pending(); len(pending) > 0 {
-					_ = broker.Approve(pending[0].LeaseID, "approved once")
-					return
+				for _, l := range broker.Registry().List() {
+					if l.State == pythonadmission.LeasePending {
+						_ = broker.Approve(l.LeaseID, "approved once")
+						return
+					}
 				}
 				time.Sleep(15 * time.Millisecond)
 			}
@@ -640,9 +640,11 @@ func TestInstalledSessionAcceptanceSuite(t *testing.T) {
 		// 6b. Decline once -> 0 additional bodies delivered + COMMAND_EFFECT_NOT_ALLOWED.
 		go func() {
 			for range 200 {
-				if pending := broker.Pending(); len(pending) > 0 {
-					_ = broker.Decline(pending[0].LeaseID, "declined by reviewer")
-					return
+				for _, l := range broker.Registry().List() {
+					if l.State == pythonadmission.LeasePending {
+						_ = broker.Decline(l.LeaseID, "declined by reviewer")
+						return
+					}
 				}
 				time.Sleep(15 * time.Millisecond)
 			}
