@@ -56,7 +56,7 @@ func (s *RunControl) HandleStartWorkflowRun(w http.ResponseWriter, r *http.Reque
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
-	s.Topology.StartOrchestratedTopologyForRun(r.Context(), sessionID, run)
+	s.Topology.StartOrchestratedTopologyForRun(ctx, sessionID, run)
 	out := *run
 	out.ContinuationID = s.commitAction(ctx, action, run)
 	s.SessionView.WriteWorkflowRun(w, r, http.StatusCreated, &out)

@@ -21,15 +21,16 @@ type Result struct {
 var actionSequence atomic.Uint64
 
 type Action struct {
-	Order   uint64
-	mu      sync.Mutex
-	record  api.ActionContinuation
-	paths   []*Path
-	pending int
-	replay  bool
-	sealed  bool
-	history *History[api.ActionContinuation]
-	publish func(api.ActionContinuation)
+	Order     uint64
+	mu        sync.Mutex
+	record    api.ActionContinuation
+	paths     []*Path
+	pending   int
+	producers int
+	replay    bool
+	sealed    bool
+	history   *History[api.ActionContinuation]
+	publish   func(api.ActionContinuation)
 }
 
 type actionKey struct{}
@@ -73,6 +74,52 @@ type Path struct {
 	result    Result
 }
 
+type producerKey struct{}
+type producer struct {
+	action   *Action
+	released bool
+}
+
+// Producer reserves path registration before a mutation hands off work.
+func Producer(ctx context.Context) (context.Context, func()) {
+	a, _ := ctx.Value(actionKey{}).(*Action)
+	if a == nil {
+		return ctx, func() {}
+	}
+	a.mu.Lock()
+	if !a.canRegister(ctx) {
+		a.mu.Unlock()
+		return ctx, func() {}
+	}
+	a.producers++
+	p := &producer{action: a}
+	a.mu.Unlock()
+	return context.WithValue(ctx, producerKey{}, p), func() {
+		a.mu.Lock()
+		if p.released {
+			a.mu.Unlock()
+			return
+		}
+		p.released = true
+		a.producers--
+		var ev *api.ActionContinuation
+		if a.history != nil {
+			ev = a.resolveLocked(Result{})
+		}
+		a.mu.Unlock()
+		if ev != nil && a.publish != nil {
+			a.publish(*ev)
+		}
+	}
+}
+func (a *Action) canRegister(ctx context.Context) bool {
+	p, _ := ctx.Value(producerKey{}).(*producer)
+	if p != nil && p.action == a {
+		return !p.released
+	}
+	return !a.sealed
+}
+
 func Register(ctx context.Context, sessionID string) *Path {
 	a, _ := ctx.Value(actionKey{}).(*Action)
 	if a == nil {
@@ -80,7 +127,7 @@ func Register(ctx context.Context, sessionID string) *Path {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.sealed || a.record.State != api.ContinuationStatePending {
+	if !a.canRegister(ctx) || (a.sealed && a.record.SessionID != sessionID) {
 		return nil
 	}
 	p := &Path{action: a, sessionID: sessionID}
@@ -151,7 +198,7 @@ func (a *Action) resolveLocked(r Result) *api.ActionContinuation {
 		return nil
 	}
 	if r.State != api.ContinuationStateContinued {
-		if !a.sealed || a.pending > 0 {
+		if !a.sealed || a.producers > 0 || a.pending > 0 {
 			return nil
 		}
 		r = Result{State: api.ContinuationStateFailed, FailureCode: string(api.HostContinuationFailureHostInvariantFailed)}

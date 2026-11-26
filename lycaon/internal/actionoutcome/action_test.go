@@ -129,3 +129,26 @@ func TestInvalidSecondDispositionPreservesFirst(t *testing.T) {
 	}()
 	ticket.Record(api.WakeStateDelivered, "", "turn", "")
 }
+
+func TestProducerCanAttachAfterCommitAndHandoff(t *testing.T) {
+	var sessions Sessions
+	s := sessions.For("s")
+	ctx, a := Capture(t.Context(), api.ContinuationActionPlanApproval)
+	callback, finish := Producer(ctx)
+	a.Commit(s, "s", nil)
+	path := Register(callback, "s")
+	if path == nil {
+		t.Fatal("late callback lost registration")
+	}
+	path.Resolve(Result{State: api.ContinuationStateContinued, TurnID: "turn"})
+	result, err := s.Actions.Await(t.Context(), a.ID())
+	if err != nil || result.TurnID != "turn" {
+		t.Fatalf("handoff: %+v, %v", result, err)
+	}
+	late := s.Receive(callback, "s", 2, "phase_advanced")
+	late.Record(api.WakeStateSkipped, api.WakeReasonNoRequest, "", "")
+	finish()
+	if Register(callback, "s") != nil || s.Wakes.Snapshot()[0].ContinuationID != a.ID() {
+		t.Fatal("callback lifetime")
+	}
+}
