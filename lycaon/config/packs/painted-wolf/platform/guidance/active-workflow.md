@@ -23,7 +23,7 @@ User limits apply: {% if profile_has_ask_user %}`ask_user` before conflicting ac
 ### Approved Blueprint execution
 
 The user already approved the exact bound Blueprint and this child inherited that approval from its parent workflow. Execute the approved Blueprint now. Do not ask the user to approve it again{% if profile_has_ask_user %}; `ask_user` is only for genuinely new information that the approved Blueprint does not resolve{% endif %}.
-{% elif blueprint_approval and blueprint_approval.status == "invalid" %}
+{% elif blueprint_approval %}
 ### Blueprint approval invalid
 
 The inherited Blueprint no longer matches the parent's approval. Do not mutate project source or claim completion. The parent workflow must obtain approval for the current Blueprint bytes.
