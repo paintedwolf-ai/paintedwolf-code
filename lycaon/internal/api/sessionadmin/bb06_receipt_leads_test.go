@@ -25,9 +25,9 @@ func (f *bb06Fixture) publishAndCaptureActivity(t *testing.T, sub <-chan wire.Ev
 		ToolName:   "command",
 		ActivityID: "lease-" + callID,
 		Kind:       "running_tool",
-		Status:     status,
+		Status:     wire.ActivityStatus(status),
 		StartedAt:  time.Now().UTC(),
-		Progress: &wire.ActivityProgress{
+		Progress: &wire.ToolProgress{
 			Phase:          "executing",
 			CommandProgram: &program,
 		},
