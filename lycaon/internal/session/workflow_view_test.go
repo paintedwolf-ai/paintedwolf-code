@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
@@ -258,7 +259,7 @@ func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
 		mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Limits: settings.DefaultSessionLimits()}, nil)
 		mgr.SetWorkflowHints(nil, gateFeedback)
 		mgr.SetWorkflowDomains(workflowDomainFixture(&recordingWorkflowView{archive: archive}))
-		rows := mgr.Coordinator.Guidance.GateObligations(t.Context(), "session", frame)
+		rows := mgr.Coordinator.Guidance.GateObligations(t.Context(), "session", frame, prompts.Reader{})
 		if len(rows) != 1 {
 			t.Fatalf("obligations = %+v", rows)
 		}

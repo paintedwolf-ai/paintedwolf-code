@@ -47,14 +47,15 @@ func (k *kickSweep) phaseKicks(ctx context.Context, wfReg *workflowdef.Registry,
 	return nil
 }
 
-// boundRecipients groups the stock recipients of reps by the phase binding
-// their state carries, one per distinct authority and reader.
+// boundRecipients groups the recipients of reps whose catalog keeps every
+// stock pack by the phase binding their state carries, one per distinct
+// authority and reader.
 func boundRecipients(reps []coordRep) map[string][]coordRep {
 	out := map[string][]coordRep{}
 	seen := map[string]bool{}
 	for _, cr := range reps {
 		b := cr.state.PhaseBinding
-		if b == nil || cr.state.PackOverlayID != "stock" {
+		if b == nil || cr.state.Overlay.RemovedPackID != "" {
 			continue
 		}
 		key := b.Key() + "|" + cr.auth.Digest + "|" + cr.auth.Reader.Fingerprint()

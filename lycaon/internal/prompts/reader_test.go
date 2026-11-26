@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -173,6 +174,52 @@ func TestReaderReachFollowsTheProfileOverTheSurface(t *testing.T) {
 				t.Fatalf("command_on_floor = %v, want %v", got, tc.wantFloor)
 			}
 		})
+	}
+}
+
+// can_run.<program> follows command reach: no program runs without command,
+// a pure program runs under command, and a mutating program needs the
+// mutation effect.
+func TestReaderCanRunFollowsCommandReach(t *testing.T) {
+	stock, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
+	plan := toolsurface.Compile([]string{"recall", "command"}, nil)
+	for _, tc := range []struct {
+		name    string
+		offered []string
+	}{
+		{name: "without command", offered: []string{"recall"}},
+		{name: "with command", offered: []string{"command", "recall"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reader, err := prompts.NewReader(prompts.HostFacts{Profiles: stock, RootCount: 1}, prompts.TurnProjection{
+				ProfileID: prompts.CoordinatorProfileID,
+				SurfaceID: "implement_investigate",
+				Plan:      plan,
+				Offered:   tc.offered,
+			})
+			testutil.FailErr(t, "NewReader", err)
+			vars, err := prompts.Vars(reader, nil)
+			testutil.FailErr(t, "Vars", err)
+			canRun, ok := vars["can_run"].(map[string]bool)
+			if !ok || len(canRun) == 0 {
+				t.Fatalf("can_run = %#v, want a map over declared programs", vars["can_run"])
+			}
+			holdsCommand := slices.Contains(tc.offered, "command")
+			if canRun["echo"] != holdsCommand {
+				t.Fatalf("can_run.echo = %v, want %v", canRun["echo"], holdsCommand)
+			}
+			if want := holdsCommand && vars["profile_command_mutation"] == true; canRun["chmod"] != want {
+				t.Fatalf("can_run.chmod = %v, want %v", canRun["chmod"], want)
+			}
+		})
+	}
+	eff, err := extpacks.CatalogForConsumers()
+	testutil.FailErr(t, "CatalogForConsumers", err)
+	vocab, err := prompts.BuildReaderFactVocabulary(eff)
+	testutil.FailErr(t, "BuildReaderFactVocabulary", err)
+	if !vocab.AllowsReference("can_run.chmod") || vocab.AllowsReference("can_run.undeclared-program") {
+		t.Fatal("can_run admits exactly the declared command programs")
 	}
 }
 

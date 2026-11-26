@@ -199,6 +199,7 @@ var readerFactFamilies = []ReaderFactFamilySpec{
 	{Pattern: "mints.{kind}", Prefix: "mints", Nested: true, Over: "evidence_kinds", Type: "bool", States: "Reader can mint the named evidence kind."},
 	{Pattern: "receipt_kind.{tool}", Prefix: "receipt_kind", Nested: true, Over: "tools", Type: "string", States: "Evidence kind minted by tool when called on this reader."},
 	{Pattern: "agent_has_skill_{skill}", Prefix: "agent_has_skill_", Nested: false, Over: "skills", Type: "bool", States: "Active skill roster includes the named stock skill."},
+	{Pattern: "can_run.{program}", Prefix: "can_run", Nested: true, Over: "command_programs", Type: "bool", States: "Reader can run the named program under command on this turn."},
 }
 
 var reservedReaderFactPrefixes = []string{
@@ -212,6 +213,7 @@ var reservedReaderFactPrefixes = []string{
 	"caps",
 	"can_git_",
 	"can_spawn_",
+	"can_run",
 }
 
 // ReaderFacts holds the typed values produced by Reader.Facts().
@@ -311,11 +313,12 @@ type ReaderFacts struct {
 	Mints                          map[string]bool
 	ReceiptKind                    map[string]string
 	AgentHasSkill                  map[string]bool
+	CanRun                         map[string]bool
 }
 
 // Map flattens the typed reader facts and family maps into a template variable map.
 func (f ReaderFacts) Map() map[string]any {
-	out := make(map[string]any, 95+len(f.ProfileHas)+len(f.AgentHasSkill))
+	out := make(map[string]any, 96+len(f.ProfileHas)+len(f.AgentHasSkill))
 	out["agent_tools"] = f.AgentTools
 	out["can_any_git_read"] = f.CanAnyGitRead
 	out["can_ask_user_secret"] = f.CanAskUserSecret
@@ -510,6 +513,11 @@ func (f ReaderFacts) Map() map[string]any {
 	}
 	for k, v := range f.AgentHasSkill {
 		out["agent_has_skill_"+k] = v
+	}
+	if f.CanRun != nil {
+		out["can_run"] = maps.Clone(f.CanRun)
+	} else {
+		out["can_run"] = map[string]bool{}
 	}
 	return out
 }

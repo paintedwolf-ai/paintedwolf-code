@@ -185,6 +185,7 @@ func skillBoundaryAuthorities(stock *Stock, coordPairs []coordRep, loaded []skil
 		},
 	}
 	cmdMeta, _ := stock.Schemas.ToolMeta("command")
+	verifyMeta, _ := stock.Schemas.ToolMeta("verify")
 	narrowRoCmd := toolschema.ProjectToolArgsSchema("command", cmdMeta.ArgsSchema, toolschema.ProjectOptions{CommandReadOnly: true})
 
 	var out []skillBoundaryAuth
@@ -199,17 +200,22 @@ func skillBoundaryAuthorities(stock *Stock, coordPairs []coordRep, loaded []skil
 		git, workerBranch, web bool
 		scratch                string
 	}{
-		{"deferred-command-with-verify", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"request_tools", "verify", "recall", "skills_read"}, []string{"command"}, nil, skillsByName("prepare-a-release"), 1, true, false, true, "/tmp/pw-scratch"},
+		// A worker profile may defer command (tools: command: true); a
+		// coordinator cannot, since every coordinator surface lists command
+		// on its floor.
+		{"deferred-command-with-verify", "implement", api.SessionPostureBuild, stock.Profiles, []string{"request_tools", "verify", "recall", "skills_read"}, []string{"command"}, nil, skillsByName("prepare-a-release"), 1, true, false, true, "/tmp/pw-scratch"},
 		{"verify-only", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"verify", "recall"}, nil, nil, skillsByName("prepare-a-release"), 1, true, false, false, ""},
 		{"readonly-worker-branch", "implement", api.SessionPostureSpec, roProfiles, []string{"command", "recall", "complete_leg"}, nil, map[string]map[string]any{"command": narrowRoCmd}, nil, 1, true, true, false, ""},
 		{"web-search-without-fetch", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"web_search", "recall"}, nil, nil, nil, 1, true, false, true, ""},
 		{"scan-summary-without-query", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"scan_summary", "recall"}, nil, nil, nil, 1, true, false, false, ""},
 		{"terminal-open-without-command", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"terminal_open", "secret_generate", "secret_list", "ask_user"}, nil, nil, skillsByName("use-secrets-without-reading-them"), 1, true, false, false, ""},
 		{"browser-without-command-stop", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"command", "page_open", "page_snapshot", "page_act", "page_close", "capture_page", "measure_page", "render_view", "view_image", "view_video", "wait"}, nil, nil, nil, 1, true, false, false, ""},
-		{"container-cmd-no-socks-or-writeroot", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"command", "recall"}, nil, map[string]map[string]any{"command": narrowContainerCmd}, skillsByName("work-with-containers"), 1, true, false, false, ""},
+		{"container-cmd-no-socks-or-writeroot", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"command", "recall"}, nil, map[string]map[string]any{"command": narrowContainerCmd}, skillsByName("work-with-containers", "inspect-a-kafka-topic"), 1, true, false, false, ""},
 		{"task-without-instruct-worker", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"task", "recall", "update_progress"}, []string{"instruct_worker"}, nil, nil, 1, true, false, false, ""},
-		{"source-history-with-deferred-command", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"source_history", "request_tools", "recall"}, []string{"command"}, nil, nil, 1, true, false, false, ""},
-		{"deferred-command-git-and-verify", prompts.CoordinatorProfileID, api.SessionPostureBuild, stock.Profiles, []string{"request_tools", "recall", "skills_read", "read", "grep", "glob"}, []string{"command"}, nil, skillsByName("commit-in-logical-groups", "hunt-a-regression-with-bisect", "diagnose-a-tls-failure"), 1, true, false, false, ""},
+		{"source-history-with-deferred-command", "implement", api.SessionPostureBuild, stock.Profiles, []string{"source_history", "request_tools", "recall"}, []string{"command"}, nil, nil, 1, true, false, false, ""},
+		{"deferred-command-verify-without-local-services", "implement", api.SessionPostureBuild, stock.Profiles, []string{"request_tools", "verify", "recall", "skills_read"}, []string{"command"}, map[string]map[string]any{"verify": withoutFields(verifyMeta.ArgsSchema, "capability_request.local_listen", "capability_request.loopback_connect")}, skillsByName("query-local-observability", "run-a-local-model", "test-stripe-webhooks"), 1, true, false, false, ""},
+		{"deferred-runners", "implement", api.SessionPostureBuild, stock.Profiles, []string{"request_tools", "recall", "skills_read", "wait"}, []string{"command", "verify", "terminal_open", "render_view", "capture_page"}, nil, skillsByName("reach-a-network-service"), 1, true, false, false, ""},
+		{"deferred-command-git-and-verify", "implement", api.SessionPostureBuild, stock.Profiles, []string{"request_tools", "recall", "skills_read", "read", "grep", "glob"}, []string{"command"}, nil, skillsByName("commit-in-logical-groups", "hunt-a-regression-with-bisect", "diagnose-a-tls-failure"), 1, true, false, false, ""},
 	}
 	for _, sp := range specs {
 		sb, bErr := makeAuth(sp.label, sp.profileID, sp.posture, sp.profiles, sp.offered, sp.deferred, sp.overrides, sp.onlySkills, sp.roots, sp.git, sp.workerBranch, sp.web, sp.scratch)
@@ -219,4 +225,47 @@ func skillBoundaryAuthorities(stock *Stock, coordPairs []coordRep, loaded []skil
 		out = append(out, sb)
 	}
 	return out, nil
+}
+
+// withoutFields copies schema without the named dotted property paths, as a
+// pack overriding a tool schema declares it.
+func withoutFields(schema map[string]any, paths ...string) map[string]any {
+	out, _ := cloneSchemaValue(schema).(map[string]any)
+	for _, p := range paths {
+		node := out
+		segs := strings.Split(p, ".")
+		for i, seg := range segs {
+			props, _ := node["properties"].(map[string]any)
+			if props == nil {
+				break
+			}
+			if i == len(segs)-1 {
+				delete(props, seg)
+				break
+			}
+			if node, _ = props[seg].(map[string]any); node == nil {
+				break
+			}
+		}
+	}
+	return out
+}
+
+func cloneSchemaValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, child := range t {
+			out[k] = cloneSchemaValue(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, child := range t {
+			out[i] = cloneSchemaValue(child)
+		}
+		return out
+	default:
+		return v
+	}
 }

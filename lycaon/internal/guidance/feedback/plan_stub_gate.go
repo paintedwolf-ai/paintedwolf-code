@@ -27,6 +27,22 @@ func WithReviewAgents(extras map[string]any, agents []string) map[string]any {
 	return extras
 }
 
+// readerFactsKey carries the turn reader's facts in a gate feedback context;
+// signal templates read them as top-level variables beside `context`.
+const readerFactsKey = "reader_facts"
+
+// WithReaderFacts adds the turn reader's facts so a gate leaf can guard a tool
+// mention on the fact that makes it true.
+func WithReaderFacts(extras, facts map[string]any) map[string]any {
+	if extras == nil {
+		extras = map[string]any{}
+	}
+	if len(facts) > 0 {
+		extras[readerFactsKey] = facts
+	}
+	return extras
+}
+
 // PlanStubGateExtras builds gate-feedback context extras for plan_stub_valid diagnostics.
 // Empty content yields stub_sections_missing=true with the full required list.
 func PlanStubGateExtras(planContent string) map[string]any {

@@ -1,10 +1,9 @@
 id: implement
-description: Implementer whose commands may only read and reach the network
+description: Implementer whose commands may only read and reach the network, with a terminal snapshot and no recall
 command_effects: [read_only, network_egress]
 tools:
   survey_repo: sticky
   summarize: sticky
-  recall: sticky
   scan_list: true
   scan_summary: true
   scan_query: true
@@ -19,6 +18,7 @@ tools:
   command: sticky
   complete_leg: sticky
   skills_read: sticky
+  terminal_snapshot: sticky
   command_output: sticky
   command_stop: sticky
   held_result: true

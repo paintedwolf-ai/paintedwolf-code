@@ -112,11 +112,34 @@ var commandFacts = []string{
 	"profile_has_terminal_capture", "can_git_read", "can_request_git_read", "can_git_commit",
 }
 
+// isCommandFact reports whether the offered command and its admitted effects
+// move fact; can_run.<program> is command program reach.
+func isCommandFact(fact string) bool {
+	return slices.Contains(commandFacts, fact) || strings.HasPrefix(fact, "can_run.")
+}
+
+// commandFactsOf returns commandFacts plus the program reach facts in facts.
+func commandFactsOf(facts []string) []string {
+	out := slices.Clone(commandFacts)
+	for _, f := range facts {
+		if strings.HasPrefix(f, "can_run.") {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // factTools names the tools whose presence moves fact.
 func factTools(fact string) []string {
 	switch {
-	case slices.Contains(commandFacts, fact):
+	case isCommandFact(fact):
 		return []string{"command"}
+	case fact == "card_may_edit":
+		return []string{"restore_version", "command"}
+	case fact == "card_may_run":
+		return []string{"verify", "command"}
+	case fact == "card_may_dispatch":
+		return []string{"task", "instruct_worker"}
 	case strings.HasPrefix(fact, "profile_has_"):
 		if name := strings.TrimPrefix(fact, "profile_has_"); isTool(name) {
 			return []string{name}
@@ -190,7 +213,13 @@ func (p *skillCaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	if recipient != interactions.RecipientCoordinator && recipient != interactions.RecipientWorker {
 		return nil
 	}
-	facts := p.siteFacts(site)
+	return readerKnobs(p.siteFacts(site))
+}
+
+// readerKnobs lists the reader inputs that move facts: one per tool a fact
+// names, one per evidence kind a mints fact names, the command effects, the
+// root count, Git and the scratch folder.
+func readerKnobs(facts []string) []casegen.Knob {
 	var knobs []casegen.Knob
 	var tools []string
 	for _, f := range facts {
@@ -204,7 +233,7 @@ func (p *skillCaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	for _, t := range tools {
 		drives := []string{"profile_has_" + t, "profile_can_request." + t}
 		if t == "command" {
-			drives = append(drives, commandFacts...)
+			drives = append(drives, commandFactsOf(facts)...)
 		}
 		for _, f := range facts {
 			if kind, ok := strings.CutPrefix(f, "mints."); ok && slices.Contains(mintTools(kind), t) {
@@ -218,14 +247,14 @@ func (p *skillCaseProducer) Knobs(site, recipient string) []casegen.Knob {
 			knobs = append(knobs, casegen.Knob{Name: "mint:" + kind, Facts: []string{f}, Values: []any{toolHeld, toolAbsent}, Labels: []string{"held", "absent"}})
 		}
 	}
-	if slices.ContainsFunc(facts, func(f string) bool { return slices.Contains(commandFacts, f) }) {
+	if slices.ContainsFunc(facts, isCommandFact) {
 		values := make([]any, len(effectSets))
 		labels := make([]string, len(effectSets))
 		for i, e := range effectSets {
 			values[i] = e
 			labels[i] = fmt.Sprint(e.Classes())
 		}
-		knobs = append(knobs, casegen.Knob{Name: "effects", Facts: commandFacts, Values: values, Labels: labels})
+		knobs = append(knobs, casegen.Knob{Name: "effects", Facts: commandFactsOf(facts), Values: values, Labels: labels})
 	}
 	if slices.ContainsFunc(facts, func(f string) bool { return f == "root_count" || f == "has_workspace_roots" }) {
 		knobs = append(knobs, casegen.Knob{Name: "roots", Facts: []string{"root_count", "has_workspace_roots", casegen.AnyFact}, Values: []any{1, 0, 2}})
@@ -297,6 +326,13 @@ func (p *skillCaseProducer) reader(recipient string, extra []string, c skillCase
 		plan, err := prompts.CompileSurfacePlan(skillCaseSurface, c.roots)
 		if err != nil {
 			return prompts.Reader{}, false, err
+		}
+		// A coordinator profile cannot defer a tool its surface lists on the
+		// floor; only the surface's loadable tools load on request.
+		for tool, v := range c.tools {
+			if v == toolDeferred && plan.Immediate(tool) {
+				return prompts.Reader{}, false, nil
+			}
 		}
 		plan = plan.Promote(plan.DeferredNames()...)
 		for _, name := range plan.AddressableNames() {
@@ -496,20 +532,14 @@ func (p *skillCaseProducer) targets(l *interactions.ConditionLedger) ([]casegen.
 // Production invariants over skill guard atoms.
 const (
 	srcCoordinatorNoFolder = "internal/coordinator/promptloop/worker_tool_plan.go:filterToolPlanForRootCount and prompts/reader.go:CompileSurfacePlan " +
-		"keep only coordinator-surfaces.yaml no_folder_allowlist at zero roots, which omits command, command_output, render_view and skills_read"
-	srcWorkerRoots = "internal/worker/task_tool.go refuses a zero-root spawn (WORKER_WORKSPACE_REQUIRED) unless prompts.AgentRunsWithoutWorkspace, " +
-		"false for a profile reaching command (ProfileSurveysProjectTree over surveyToolDisplayOrder [command]); a command effect needs command offered"
+		"keep only coordinator-surfaces.yaml no_folder_allowlist at zero roots, which omits command_output, render_view and skills_read"
 	srcWorkerHostResources = "toolvocab.SkillToolsOfferedForReader admits a host_resources skill only with runner_host_resources_tools, the tools whose schema accepts " +
-		"capability_request.host_resources (command, terminal_open, verify), all requires_worker_branch tools (native-tools.yaml), so the agent is mutation-capable " +
-		"and internal/worker/task_tool.go refuses its zero-root spawn"
+		"capability_request.host_resources (command, terminal_open, verify); native-tools.yaml lists all three under requires_worker_branch, so the agent is " +
+		"mutation-capable and internal/worker/task_tool.go refuses its zero-root spawn (WORKER_WORKSPACE_REQUIRED)"
 	srcWorkerChildTools = "internal/toolpolicy/engine.go:ListForPrompt drops tools whose contract admits only worker children " +
 		"(native-tools.yaml session_scope request_decision: worker_child) from a coordinator"
 	srcCoordinatorBranch = "internal/session/workerworkspace/worker_tool_coord.go:OnWorkerBranch is false for a session without a parent"
 )
-
-// effectAtoms are the command effect flags; commandEffectFlags sets each only
-// when command is offered.
-var effectAtoms = []string{"profile_command_mutation", "profile_command_external_exec", "profile_command_network_egress"}
 
 var rootAtoms = []string{"root_count", "has_workspace_roots"}
 
@@ -529,34 +559,32 @@ func withSkillDerived(p *skillCaseProducer, next func(interactions.ConditionSite
 func (p *skillCaseProducer) skillDerived(site interactions.ConditionSite, recipient string) independence.Constraints {
 	var c independence.Constraints
 	has := func(a string) bool { return slices.Contains(site.Atoms, a) }
-	imply := func(ifs, thens []string, source string) {
-		for _, i := range ifs {
-			for _, t := range thens {
-				if has(i) && has(t) {
-					c.Implications = append(c.Implications, independence.Implication{If: i, Then: t, Source: source})
-				}
-			}
-		}
-	}
-	switch recipient {
-	case interactions.RecipientCoordinator:
-		imply(append([]string{"profile_has_command", "profile_has_command_output", "profile_has_render_view", "profile_has_skills_read"}, effectAtoms...), rootAtoms, srcCoordinatorNoFolder)
-		for _, f := range []independence.Fixed{
-			{Atom: "profile_has_request_decision", Value: independence.False, Source: srcWorkerChildTools},
-			{Atom: "on_worker_branch", Value: independence.False, Source: srcCoordinatorBranch},
-		} {
-			if has(f.Atom) {
-				c.Fixed = append(c.Fixed, f)
-			}
-		}
-	case interactions.RecipientWorker:
-		imply(append([]string{"profile_has_command"}, effectAtoms...), rootAtoms, srcWorkerRoots)
+	if recipient == interactions.RecipientWorker {
 		if sk, ok := p.skills[skillNameOf(site.ID)]; ok && strings.TrimSpace(sk.Metadata["host_resources"]) != "" {
 			for _, a := range rootAtoms {
 				if has(a) {
 					c.Fixed = append(c.Fixed, independence.Fixed{Atom: a, Value: independence.True, Source: srcWorkerHostResources})
 				}
 			}
+		}
+		return c
+	}
+	if recipient != interactions.RecipientCoordinator {
+		return c
+	}
+	for _, tool := range []string{"profile_has_command_output", "profile_has_render_view", "profile_has_skills_read"} {
+		for _, root := range rootAtoms {
+			if has(tool) && has(root) {
+				c.Implications = append(c.Implications, independence.Implication{If: tool, Then: root, Source: srcCoordinatorNoFolder})
+			}
+		}
+	}
+	for _, f := range []independence.Fixed{
+		{Atom: "profile_has_request_decision", Value: independence.False, Source: srcWorkerChildTools},
+		{Atom: "on_worker_branch", Value: independence.False, Source: srcCoordinatorBranch},
+	} {
+		if has(f.Atom) {
+			c.Fixed = append(c.Fixed, f)
 		}
 	}
 	return c

@@ -387,6 +387,12 @@ func populateReaderFamilyMaps(
 		}
 	}
 
+	programs := toolcontract.DeclaredCommandPrograms()
+	f.CanRun = make(map[string]bool, len(programs))
+	for _, name := range programs {
+		f.CanRun[name] = toolcontract.CommandLanguageReachable(name, reachHeld)
+	}
+
 	f.AgentHasSkill = make(map[string]bool, len(vocab.SkillKeys))
 	for _, key := range vocab.SkillKeys {
 		f.AgentHasSkill[key] = false
