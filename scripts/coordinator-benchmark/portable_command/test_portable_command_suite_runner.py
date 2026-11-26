@@ -61,14 +61,14 @@ def _write_fake_case_artifacts(out_dir, case_id, passed=True):
     (out_dir / 'app' / 'sidecar.log').write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
 
 
-def _write_verified_engine(root, sha_override=None):
+def _write_verified_engine(root, sha_override=None, path_override=None, head_override=None, tree_override=None):
     fake_bin = root / 'lycaon-dev'
     data = b'fake-engine-binary'
     fake_bin.write_bytes(data)
     manifest = root / 'engine-manifest.json'
     manifest.write_text(json.dumps({
-        'git_head': 'a' * 40, 'git_tree': 'b' * 40,
-        'executable_path': str(fake_bin),
+        'git_head': head_override or ('a' * 40), 'git_tree': tree_override or ('b' * 40),
+        'executable_path': path_override or str(fake_bin),
         'executable_sha256': sha_override or hashlib.sha256(data).hexdigest(),
         'build_command': './task build:lycaon-dev', 'built_at': '2026-11-26T20:00:00Z',
     }))
@@ -173,13 +173,27 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             fake_bin, good_manifest = _write_verified_engine(root)
-            _, bad_manifest = _write_verified_engine(root / 'bad' if (root / 'bad').mkdir() or True else root, sha_override='0' * 64)
-            good_prov = reporting.inspect_engine_provenance(engine_bin=fake_bin, evaluator_git_head='a' * 40, engine_manifest=good_manifest)
-            bad_prov = reporting.inspect_engine_provenance(engine_bin=fake_bin, evaluator_git_head='a' * 40, engine_manifest=bad_manifest)
+            good_prov = reporting.inspect_engine_provenance(
+                engine_bin=fake_bin, evaluator_git_head='a' * 40, evaluator_git_tree='b' * 40, engine_manifest=good_manifest,
+            )
             self.assertTrue(good_prov['provenance_verified'])
             self.assertTrue(good_prov['manifest_sha256_match'])
-            self.assertFalse(bad_prov['provenance_verified'])
-            self.assertFalse(bad_prov['manifest_sha256_match'])
+            self.assertTrue(good_prov['manifest_path_match'])
+            self.assertTrue(good_prov['manifest_head_match'])
+            self.assertTrue(good_prov['manifest_tree_match'])
+            for idx, overrides in enumerate([
+                {'sha_override': '0' * 64}, {'path_override': '/nonexistent/lycaon-dev'},
+                {'head_override': 'c' * 40}, {'tree_override': 'd' * 40},
+            ]):
+                sub = root / f'bad-{idx}'
+                sub.mkdir()
+                _, bad_m = _write_verified_engine(sub, **overrides)
+                bad_prov = reporting.inspect_engine_provenance(
+                    engine_bin=fake_bin, evaluator_git_head='a' * 40, evaluator_git_tree='b' * 40, engine_manifest=bad_m,
+                )
+                with self.subTest(mismatch=overrides):
+                    self.assertFalse(bad_prov['provenance_verified'])
+            bad_manifest = root / 'bad-0' / 'engine-manifest.json'
 
             def make_runner(oar_passed=True, oar_gaps=()):
                 def runner(case, out_dir, **kwargs):
@@ -230,3 +244,37 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
                     }
                 self.assertEqual(cli.main(['--probe-envelope', '--engine', str(fake_bin), '--engine-manifest', str(manifest), '--out', str(root / 'p')], envelope_prober=prober), 0)
             self.assertEqual(seen['engine_manifest'], manifest)
+
+    def test_q21_pre_exec_refusal_recovery_and_stderr_separation(self):
+        cases = {c['id']: c for c in load_suite()['cases']}
+        case = cases['native-option-no-fallback']
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            db_path = root / 'store.db'
+            create_audit_db(db_path)
+            db = sqlite3.connect(db_path)
+            db.execute("INSERT INTO invocation_receipts VALUES ('rcpt-1','sess1234','call-1','command','processes','rejected',0)")
+            db.execute("INSERT INTO invocation_programs VALUES ('prog-1','rcpt-1','rejected',2,'COMMAND_OPTION_UNSUPPORTED')")
+            payload = {
+                'program_id': 'prog-1', 'state': 'rejected', 'status': 2, 'stop_code': 'COMMAND_OPTION_UNSUPPORTED',
+                'stdout': '', 'stderr': 'cat: request: Supported form: catalogued option [COMMAND_OPTION_UNSUPPORTED]\n',
+                'completed_effects': 0, 'uncertain_effects': 0, 'native_gaps': 0, 'replay_available': False,
+                'refusal': {'code': 'COMMAND_OPTION_UNSUPPORTED', 'details': {'source_start_byte': 4, 'source_end_byte': 28, 'expected_form': 'cat [-n] [FILE...]'}},
+            }
+            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','call-1',?)", (json.dumps({'outcome': 'rejected', 'content': '[command#1]\n' + json.dumps(payload)}),))
+            db.commit()
+            db.close()
+            log_path = root / 'sidecar.log'
+            log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+            proj = root / 'proj'
+            proj.mkdir()
+            obs, audit = observe.build_observation(
+                case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj,
+                db_path=db_path, sidecar_log=log_path,
+                turn_records=[{'program': case['turns'][0]['program'], 'command_call_id': 'call-1', 'call_ids': ['call-1']}],
+                prelude_records=[],
+            )
+            self.assertEqual(obs['program']['stderr'], '')
+            self.assertIn('COMMAND_OPTION_UNSUPPORTED', audit['refusal_stderr'])
+            self.assertTrue(obs['recovery']['whole_program_resubmit_allowed'])
+            self.assertTrue(obs['facts']['no_external_launch'])

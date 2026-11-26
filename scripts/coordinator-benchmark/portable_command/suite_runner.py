@@ -50,7 +50,7 @@ def probe_command_envelope(
         application.ready()
         sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl')
         sse.start()
-        session_id, _, _ = create_isolated_session(application, project_dir, {'id': 'envelope-probe', 'profile': 'implement'})
+        session_id, _, _, _ = create_isolated_session(application, project_dir, {'id': 'envelope-probe', 'profile': 'implement'})
         application.request(f'/v1/sessions/{session_id}/prompts', {
             'operation_id': str(uuid.uuid4()),
             'text': 'Probe offered command tool schema and single-call progress_update envelope.',
@@ -181,9 +181,12 @@ def run_suite(
         try:
             res = case_runner(case, case_out, **run_kwargs)
             grade = res['grade']
-            gaps = list(res.get('audit', {}).get('observation_gaps', []))
+            audit = res.get('audit') or {}
+            gaps = list(audit.get('observation_gaps', []))
+            surface = audit.get('session_surface') or {}
+            pb = dict(meta['profile_binding'], effective_posture=surface.get('effective_posture', ''), offered_tools=surface.get('offered_tools', []))
             rec = {
-                **meta, 'attempt': 'measured', 'session_id': res.get('session_id'),
+                **meta, 'profile_binding': pb, 'attempt': 'measured', 'session_id': res.get('session_id'),
                 'qualification': grade['qualification'], 'passed': grade['passed'],
                 'dimensions': grade['dimensions'], 'observation_gaps': gaps, 'error': None,
             }

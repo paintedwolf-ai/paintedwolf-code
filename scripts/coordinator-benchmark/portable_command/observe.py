@@ -4,7 +4,13 @@ import json
 import pathlib
 import sqlite3
 from portable_command.artifacts import project_hashes
-from portable_command.reporting import FACT_OWNERS, file_sha256, scan_sidecar_launches, source_identity
+from portable_command.reporting import (
+    FACT_OWNERS,
+    file_sha256,
+    scan_sidecar_launches,
+    source_identity,
+    verified_source_binding as _verified_source_binding,
+)
 
 ALLOWED_STOPS = {None, 'rejected', 'conflict', 'cancelled', 'incomplete', 'budget', 'interrupted'}
 
@@ -140,9 +146,13 @@ def _extract_recovery(case_id, payload, raw_result, audit, unexpected_cmd):
         payload.get('completed_effects', 0) == 0 and payload.get('uncertain_effects', 0) == 0
         and not audit['invocation_program_executions'] and details.get('command_execution') in {None, 'not_started'}
     )
-    replay_allowed = payload['replay_available'] if isinstance(payload.get('replay_available'), bool) else (
-        False if cause == 'syntax' else None
-    )
+    replay_fact = details.get('program_replay_available')
+    if isinstance(replay_fact, bool):
+        replay_allowed = replay_fact and zero_effects
+    elif isinstance(payload.get('replay_available'), bool):
+        replay_allowed = payload['replay_available'] and zero_effects
+    else:
+        replay_allowed = None
     return {
         'case_id': case_id, 'cause': cause, 'zero_program_effects': zero_effects,
         'whole_program_resubmit_allowed': replay_allowed, 'automatic_execution': bool(unexpected_cmd),
@@ -151,7 +161,7 @@ def _extract_recovery(case_id, payload, raw_result, audit, unexpected_cmd):
     }
 
 
-def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=()):
+def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None):
     """Construct a version-1 native-runtime observation from the whole isolated session."""
     prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
     expected_calls = {cid for rec in turn_records for cid in rec['call_ids']}
@@ -206,11 +216,16 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     execs = audit['invocation_program_executions']
     pins = audit['invocation_program_revision_pins']
     outputs = audit['invocation_program_outputs']
-    source_pins = [p for p in pins if p.get('role') == 'source' and p.get('mode') in {'published_disk', 'accepted_document'}]
-    write_exec_ids = {e['id'] for e in execs if e.get('operation_id') == 'write'}
+    source_bound, source_pins = _verified_source_binding(case, pins, execs, baseline_hashes)
+    write_execs = [e for e in execs if e.get('operation_id') == 'write']
+    write_exec_ids = {e['id'] for e in write_execs}
     child_ids = [r['execution_id'] for r in receipts]
     node_ids = [e['node_id'] for e in execs if e.get('node_id')]
     final_hashes = project_hashes(project_dir)
+    last_pid = (last_prog or {}).get('id')
+    scoped_producers = [e for e in execs if e.get('operation_id') != 'write' and (not last_pid or e.get('program_id') == last_pid)]
+    digested_outputs = [o for o in outputs if o.get('complete') == 1 and len(o.get('inline_digest') or '') == 64]
+    write_rev_ok = all(bool(e.get('published_revision') or e.get('accepted_revision')) for e in write_execs)
     facts = {
         'progress_and_program_separate': bool(progress_receipts and audit['invocation_programs']
                                               and all(pr['id'] != p['parent_receipt_id'] for pr in progress_receipts for p in audit['invocation_programs'])),
@@ -223,18 +238,13 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'focused_help': bool(recovery and recovery['remedy'] in {'focused_command_help', 'focused_syntax_help'}),
         'zero_program_effects': bool(recovery and recovery['zero_program_effects']),
         'zero_progress_effects': not progress_receipts,
-        'execution_revision': bool(source_pins and all(p.get('content_sha256') for p in source_pins)),
-        'exact_source_binding': bool(source_pins),
-        'no_conversational_read_base': bool(source_pins) and not audit.get('invocation_program_deliveries'),
-        'full_stream_digest': any(o.get('complete') == 1 and (len(o.get('inline_digest') or '') == 64 or o.get('blob_id')) for o in outputs),
-        'preview_independent': any(o.get('complete') == 1 and (o.get('blob_id') or len(o.get('inline_digest') or '') == 64) for o in outputs),
-        'retained_full_output': any(o.get('complete') == 1 and o.get('reference') for o in outputs),
+        'exact_source_binding': source_bound,
+        'execution_revision': bool(source_bound and write_rev_ok and all(len(p.get('content_sha256') or '') == 64 or (p.get('document_revision') or 0) > 0 for p in source_pins)),
+        'no_conversational_read_base': source_bound and not audit.get('invocation_program_deliveries'),
         'preview_only_first_line': any(o.get('preview_truncated') == 1 and '\n' not in (o.get('preview') or '').rstrip('\n') for o in outputs),
         'unseen_ranges_not_read_bases': any(o.get('preview_truncated') == 1 for o in outputs) and not audit.get('invocation_program_deliveries'),
-        'screened_retained_failure_output': any(o.get('complete') == 1 and o.get('reference') for o in outputs) and any(e.get('state') in {'failed', 'refused'} for e in execs),
         'shared_static_node': bool(node_ids) and len(set(node_ids)) < len(node_ids),
         'session_job_handle': any(e.get('job_handle') for e in execs),
-        'every_producer_eligible': bool(execs) and all(e.get('publication_eligible') == 1 for e in execs if e.get('operation_id') != 'write'),
         'no_device_file_mutation': not write_exec_ids,
         'first_action_rejected': bool(cmd_invocations and cmd_invocations[0]['outcome'] == 'rejected'),
         'explicit_correction': len(cmd_invocations) >= 2 and cmd_invocations[0]['outcome'] == 'rejected' and cmd_invocations[-1]['outcome'] == 'completed',
@@ -244,21 +254,32 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'missing_progress_owner_code': bool(recovery and 'progress' in (recovery.get('owner_code') or '').lower()),
         'reachable_frozen_remedy': bool(recovery and recovery['remedy'] in {'focused_command_help', 'focused_syntax_help'}),
     }
+    if digested_outputs:
+        facts['full_stream_digest'] = True
+        facts['retained_full_output'] = any(bool(o.get('reference')) for o in digested_outputs)
+        facts['preview_independent'] = any(o.get('preview_truncated') == 1 or bool(o.get('blob_id')) for o in digested_outputs)
+    if scoped_producers:
+        facts['every_producer_eligible'] = all(e.get('publication_eligible') == 1 for e in scoped_producers)
     for req_fact in case.get('required_evidence') or ():
         if req_fact not in facts:
             gaps.append(f"missing_observation:{req_fact}:{FACT_OWNERS.get(req_fact, 'runtime_owner')}")
+    pre_exec_refusal = bool(outcome == 'rejected' and not execs and recovery is not None)
+    raw_stderr = last_payload.get('stderr', '')
+    program_stderr = '' if pre_exec_refusal else raw_stderr
     forbidden_replay = bool(unexpected_cmd) or len(cmd_receipts) > len(turn_records) or len({r['id'] for r in cmd_receipts}) != len(cmd_receipts)
     observation = {
         'version': 1, 'case_id': case['id'], 'capture_kind': 'native-runtime', 'identity': identity,
-        'program': {'stdout': last_payload.get('stdout', ''), 'stderr': last_payload.get('stderr', ''),
+        'program': {'stdout': last_payload.get('stdout', ''), 'stderr': program_stderr,
                     'status': status_code, 'host_stop': host_stop, 'complete': complete},
         'receipts': receipts, 'effects': effects, 'facts': facts, 'deliveries': [], 'obligations': [],
         'closeout': 'complete' if outcome == 'completed' else 'blocked', 'forbidden_replay': forbidden_replay,
         'recovery': recovery, 'invocations': cmd_invocations,
     }
     audit_bundle = {
-        'session_id': session_id, 'prelude': prelude_records, 'turn_batches': turn_records,
+        'session_id': session_id, 'session_surface': session_surface or {},
+        'prelude': prelude_records, 'turn_batches': turn_records,
         'unexpected_receipt_ids': [r['id'] for r in unexpected_receipts], 'observation_gaps': gaps,
+        'refusal_stderr': raw_stderr if pre_exec_refusal else '',
         'external_launch_audit': {
             'sidecar': sidecar, 'source_command_windows': len(audit['source_command_windows']),
             'external_executions': len(external_execs), 'source_window_field': last_payload.get('source_window'),

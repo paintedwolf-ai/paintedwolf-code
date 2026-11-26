@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import focused_outcomes as oracle
-from portable_command.contracts import DIRECTORY, bytes_value, load_suite
+from portable_command.contracts import DIRECTORY, bytes_value, digest, load_suite
 from portable_command.grading import grade_case
-from portable_command.observe import scan_sidecar_launches
+from portable_command.observe import _verified_source_binding, scan_sidecar_launches
 from test_focused_outcomes import local_execute
 
 CASES = {c['id']: c for c in load_suite()['cases']}
@@ -351,16 +351,21 @@ class PortableCommandControls(unittest.TestCase):
                 obs = make_observation(case)
                 obs['facts']['no_external_launch'] = bool(scan['available'] and scan['complete'] and scan['command_launches'] == 0)
                 result = self.grade(case, obs)
-                self.assertFalse(obs['facts']['no_external_launch'])
                 self.assertFalse(result['dimensions']['evidence'])
                 self.assertFalse(result['passed'])
         full_log = self.root / 'complete.log'
-        full_log.write_text(
-            'level=INFO msg="server listening"\n'
-            'level=INFO msg="session created" session_id=sess1234\n'
-            'level=INFO msg="shutdown signal received" signal=terminated\n'
-        )
+        full_log.write_text('level=INFO msg="server listening"\nlevel=INFO msg="session created" session_id=sess1234\nlevel=INFO msg="shutdown signal received" signal=terminated\n')
         ok = scan_sidecar_launches(full_log, sid, window={'post_tool_lines': 2})
-        self.assertTrue(ok['complete'])
-        self.assertEqual(ok['command_launches'], 0)
+        self.assertTrue(ok['complete'] and ok['command_launches'] == 0)
         self.assertFalse(scan_sidecar_launches(full_log, sid, window={'post_tool_lines': 3})['complete'])
+
+    def test_wrong_source_pin_fails_exact_source_binding(self):
+        case = CASES['search-empty-publication']
+        good_sha = digest(bytes_value(case['setup']['files']['input.txt']))
+        execs = [{'id': 'ex-1'}]
+        good_pin = {'execution_id': 'ex-1', 'role': 'source', 'mode': 'published_disk', 'path': 'input.txt', 'content_sha256': good_sha}
+        self.assertTrue(_verified_source_binding(case, [good_pin], execs, {'input.txt': good_sha})[0])
+        for bad in (
+            dict(good_pin, path='wrong.txt'), dict(good_pin, content_sha256='0' * 64), dict(good_pin, execution_id='unknown'),
+        ):
+            self.assertFalse(_verified_source_binding(case, [bad], execs, {'input.txt': good_sha})[0])

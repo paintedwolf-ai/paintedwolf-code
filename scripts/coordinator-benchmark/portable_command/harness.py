@@ -71,7 +71,7 @@ def wait_tool_result(application, session, call_id):
     return application.wait_for(observe, 'portable-command tool result', session)
 
 
-def send_tool_calls(application, session, calls):
+def send_tool_calls(application, session, calls, *, surface=None):
     """Answer the next manual model turn with exact scripted calls, allowing refusals."""
     req = application.wait_for(lambda: smoke_workers.pending(application, session), 'portable-command model turn', session)
     names = [c['name'] for c in calls]
@@ -81,6 +81,8 @@ def send_tool_calls(application, session, calls):
         application.request('/harness/llm/respond', {'id': req['id'], 'tool_calls': [{'id': load_id, 'name': 'request_tools', 'args': {'need': ', '.join(missing)}}]})
         wait_tool_result(application, session, load_id)
         req = application.wait_for(lambda: smoke_workers.pending(application, session), 'loaded portable-command tools', session)
+    if isinstance(surface, dict):
+        surface['offered_tools'] = sorted(set(surface.get('offered_tools') or ()) | set(req.get('tools') or ()))
     ids = [str(uuid.uuid4()) for _ in calls]
     application.request('/harness/llm/respond', {'id': req['id'], 'tool_calls': [{'id': i, **c} for i, c in zip(ids, calls)]})
     return [(i, wait_tool_result(application, session, i)) for i in ids]
@@ -103,15 +105,21 @@ def create_isolated_session(application, project_dir, case):
     session = application.request('/v1/sessions', {'project_id': attached['id'], 'posture': posture})
     sid = session['id']
     application.request('/harness/model-limit', {'session_id': sid, 'limit': 20})
+    observed_state = {}
     def ready():
         state = application.request('/v1/sessions/' + sid)
         if state['status'] == 'preparing':
             return False
         if state['status'] != 'idle':
             raise RuntimeError('session preparation ended in ' + state['status'])
+        observed_state.update(state)
         return True
     application.wait_for(ready, 'portable-command session ready', sid)
-    return sid, attached['id'], root_id
+    surface = {
+        'requested_profile': case.get('profile', 'implement'), 'requested_posture': posture,
+        'effective_posture': observed_state.get('posture') or session.get('posture') or '', 'offered_tools': [],
+    }
+    return sid, attached['id'], root_id, surface
 
 
 def collect_raw_api(application, session_id, raw_dir, program_ids):
@@ -213,29 +221,28 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         application.ready()
         sse = sse_factory(application.url, application.token, raw_dir / 'events.jsonl')
         sse.start()
-        session_id, project_id, root_id = create_isolated_session(application, project_dir, case)
+        session_id, project_id, root_id, session_surface = create_isolated_session(application, project_dir, case)
         if case['setup'].get('drafts'):
             drafts_ok, draft_bindings = inject_drafts(application, project_id, root_id, case['setup']['drafts'])
-            save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings})
         pre_prompt_lines = log_line_count(sidecar_path)
         application.request(f'/v1/sessions/{session_id}/prompts', {'operation_id': str(uuid.uuid4()), 'text': f"Execute portable-command fixture {case['id']}."})
         if case['setup'].get('progress') == 'valid':
-            p_calls = send_tool_calls(application, session_id, [{'name': 'update_progress', 'args': {'content': f"- [ ] Run fixture {case['id']}"}}])
+            p_calls = send_tool_calls(application, session_id, [{'name': 'update_progress', 'args': {'content': f"- [ ] Run fixture {case['id']}"}}], surface=session_surface)
             prelude_records.append({'kind': 'valid_progress', 'call_id': p_calls[0][0], 'outcome': p_calls[0][1].get('outcome')})
-            save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings})
         for turn in case['turns']:
             if 'structured_tool' in turn:
                 batch, envelope_mode = [{'name': turn['structured_tool'], 'args': dict(turn.get('arguments') or {})}], 'structured_tool'
             else:
                 batch = ([{'name': 'update_progress', 'args': turn['progress_update']}] if 'progress_update' in turn else []) + [{'name': 'command', 'args': {'command': turn['program']}}]
                 envelope_mode = 'sibling_update_progress' if 'progress_update' in turn else 'command_only'
-            results = send_tool_calls(application, session_id, batch)
+            results = send_tool_calls(application, session_id, batch, surface=session_surface)
             call_ids = [cid for cid, _ in results]
             turn_records.append({
                 'program': turn['program'], 'command_call_id': call_ids[-1], 'call_ids': call_ids,
                 'batch_plan': [c['name'] for c in batch], 'envelope_mode': envelope_mode,
                 'batch_outcomes': [{'call_id': cid, 'tool': c['name'], 'outcome': res.get('outcome')} for c, (cid, res) in zip(batch, results)],
             })
+        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface})
         application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             pids = [r[0] for r in db.execute('SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?', (session_id,)).fetchall()]
@@ -250,8 +257,10 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
         application.close(cleanup=False)
     window = {'pre_prompt_lines': pre_prompt_lines, 'post_tool_lines': post_tool_lines, 'post_close_lines': log_line_count(sidecar_path)}
     save(raw_dir / 'window.json', window)
+    eff_posture = session_surface.get('effective_posture', '')
     extra_gaps = [g for g, cond in (
         ('profile_binding_approximate', case.get('profile', 'implement') != 'implement'),
+        ('profile_binding_mismatch', bool(eff_posture) and eff_posture != session_surface['requested_posture']),
         ('uninjected_drafts', bool(case['setup'].get('drafts')) and not drafts_ok),
         ('uninjected_host_facts', bool(case['setup'].get('host_facts'))),
     ) if cond]
@@ -259,16 +268,9 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
     try:
         checkpoint_closed_store(app_dir / 'store.db', application.process)
         observation, audit_bundle = build_observation(
-            case,
-            session_id=session_id,
-            identity=identity,
-            project_dir=project_dir,
-            db_path=app_dir / 'store.db',
-            sidecar_log=sidecar_path,
-            turn_records=turn_records,
-            prelude_records=prelude_records,
-            sidecar_window=window,
-            extra_gaps=extra_gaps,
+            case, session_id=session_id, identity=identity, project_dir=project_dir, db_path=app_dir / 'store.db',
+            sidecar_log=sidecar_path, turn_records=turn_records, prelude_records=prelude_records,
+            sidecar_window=window, extra_gaps=extra_gaps, baseline_hashes=baseline_hashes, session_surface=session_surface,
         )
         grade = grade_case(case, observation, project_dir, identity)
     except Exception as exc:
