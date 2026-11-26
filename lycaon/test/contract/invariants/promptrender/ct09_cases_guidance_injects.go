@@ -299,7 +299,7 @@ func boolOrder(b bool) int {
 // shape: running, exited and held rows alone, and running with held. A
 // coordinator's authority is projected with the live resources, which
 // promote the resources' control tools.
-func commandJobsCases(ctx context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
+func commandJobsCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
 	shapes := []string{"running", "exited", "held", "running-held"}
 	jobsFor := func(shape string) ([]bgprocess.JobSnapshot, []heldcall.Running) {
 		running := bgprocess.JobSnapshot{Handle: "cmd-run", Mode: bgprocess.JobModeAwaited, OriginTool: "command", StartedAt: e.now.Add(-30 * time.Second), Timeout: 2 * time.Minute, Stages: []hostcmd.StageResult{{Command: "go test ./..."}}}
