@@ -16,4 +16,4 @@ tools:
 deny_tools:
 read_scope: coordinator_product_read
 write_scope: coordinator_orchestration
-wait_conditions: [scan_done]
+wait_conditions: []
