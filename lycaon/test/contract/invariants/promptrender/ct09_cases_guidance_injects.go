@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -442,6 +443,39 @@ func specPostureCases(_ context.Context, _ *guidanceCaseEnv) ([]guidanceCase, er
 				return guidanceRender{}, err
 			}
 			return guidanceRender{text: text, recipientless: true}, nil
+		},
+	}}, nil
+}
+
+// boardOrientationCases render inject.RenderBoardOrientationInject for a
+// two-folder project whose second folder's brief fits the budget, beside one
+// the board marked truncated.
+func boardOrientationCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
+	reps := coordinatorRepsBy(e.cReps, func(cr coordRep) bool { return cr.state.RootCount > 1 },
+		func(cr coordRep) string { return offers(cr.auth, "pack_board") })
+	if len(reps) == 0 {
+		return nil, fmt.Errorf("no stock coordinator with two folders")
+	}
+	knobs := []casegen.Knob{
+		repKnob([]string{casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
+		indexKnob("secondary", []string{"root.truncated"}, []string{"fits", "truncated"}),
+	}
+	return []guidanceCase{{
+		unit: "guidance/board-orientation", recipient: interactions.RecipientCoordinator, knobs: knobs,
+		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
+			cr := reps[knobValue[int](knobs, set, "rep")]
+			snap := api.BoardSnapshot{
+				Repo: api.RepoBrief{Languages: []string{"Go"}, FileCount: 12},
+				OrientationRoots: []api.BoardOrientationRoot{
+					{Label: "primary", IsPrimary: true, Brief: api.RepoBrief{Languages: []string{"Go"}, FileCount: 12}},
+					{Label: "docs", Brief: api.RepoBrief{Languages: []string{"Markdown"}, FileCount: 3}, Truncated: knobValue[int](knobs, set, "secondary") == 1},
+				},
+			}
+			text, err := inject.RenderBoardOrientationInject(ctx, e.inj, cr.auth.Reader, "sess-board-ct09", snap, packboard.InjectScopeFull, false, false, e.now)
+			if err != nil {
+				return guidanceRender{}, err
+			}
+			return coordinatorRender(text, cr), nil
 		},
 	}}, nil
 }

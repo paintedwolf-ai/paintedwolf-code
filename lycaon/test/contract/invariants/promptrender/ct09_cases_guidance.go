@@ -94,6 +94,7 @@ var guidanceCaseBuilders = []func(context.Context, *guidanceCaseEnv) ([]guidance
 	skillProcedureCases,
 	citationGroundingCases,
 	specPostureCases,
+	boardOrientationCases,
 }
 
 // knobValue returns the value set picks for the knob named name.
@@ -453,4 +454,6 @@ func registerGuidanceExpectedZeroBranches(tracker *hoststate.CoverageTracker) {
 	for _, branch := range []string{"guidance/active-workflow@L31:C4:if", "guidance/active-workflow@L33:C4:if", "guidance/active-workflow@L51:C39:if"} {
 		tracker.ExpectZeroTemplateBranch(branch, hoststate.ExpectedZeroFalse, reason)
 	}
+	tracker.ExpectZeroTemplateBranch("guidance/active-workflow@L49:C27:if", hoststate.ExpectedZeroFalse,
+		"every shipped guidance/gate-feedback/*.yaml leaf declares an unconditional missing signal (when: \"true\"), so feedback.ProjectObligations always lists what is missing")
 }

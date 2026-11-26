@@ -45,7 +45,7 @@ The plan is stamped, not automatically started. If no planned worker from this p
 ### Phase obligations
 {% for o in gate_obligations %}- `{{ o.id }}`: {{ o.purpose }}
 {% if o.required %}  Required (exact ## headings — write these titles literally):
-{% for r in o.required %}  - `{{ r }}`
+{% for r in o.required %}  - {{ r }}
 {% endfor %}{% endif %}{% if o.missing %}{% for m in o.missing %}  - missing: {{ m }}
 {% endfor %}{% endif %}{% for s in o.satisfy %}  {{ forloop.Counter }}. {{ s }}
 {% endfor %}{% endfor %}{% endif %}{% if phase_exit %}
@@ -75,7 +75,7 @@ Advancing is your call: when the gates pass, call `workflow_advance`.
 {% else %}
 The host advances on its own once the gates pass.
 {% endif %}{% endif %}{% if phase_exit.choice_transitions %}
-**Choice transitions out of this phase** — call `workflow_transition` with the arm's `transition_id`; do not invent phase ids.
+**Choice transitions out of this phase**{% if profile_has_workflow_transition %} — call `workflow_transition` with the arm's `transition_id`; do not invent phase ids{% endif %}.
 {% for arm in phase_exit.choice_transitions %}- `{{ arm.id }}` — {{ arm.label }}{% if arm.coordinator_may_fire %}: `workflow_transition(transition_id="{{ arm.id }}")`{% else %}: {% for a in arm.actors %}{{ a }}{% endfor %} takes this one — you cannot fire it{% endif %}
 {% endfor %}{% endif %}{% if phase_exit.depth_param %}
 Depth parameter: {{ phase_exit.depth_param }}.
