@@ -197,11 +197,6 @@ func newGuidanceCaseProducer(ctx context.Context, s *Stock) (*guidanceCaseProduc
 	}, nil
 }
 
-func siteUnit(site string) string {
-	unit, _, _ := strings.Cut(site, "@")
-	return unit
-}
-
 func (p *guidanceCaseProducer) caseFor(site, recipient string) *guidanceCase {
 	for i := range p.e.cases {
 		c := &p.e.cases[i]
