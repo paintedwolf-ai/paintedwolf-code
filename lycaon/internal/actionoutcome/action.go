@@ -123,7 +123,9 @@ func (a *Action) Commit(s *Session, sessionID string, publish func(api.ActionCon
 	a.publish = publish
 	a.history = s.Actions
 	a.record.SessionID = sessionID
-	a.history.Open(a.ID(), a.record)
+	if !a.history.Open(a.ID(), a.record) {
+		return
+	}
 	if publish != nil {
 		publish(a.record)
 	}
@@ -171,7 +173,9 @@ func (a *Action) resolveLocked(r Result) *api.ActionContinuation {
 	a.record.TurnID = r.TurnID
 	a.record.ResolvedAt = &now
 	value := a.record
-	a.history.Change(a.ID(), func(api.ActionContinuation) (api.ActionContinuation, bool) { return value, true })
+	if !a.history.Change(a.ID(), func(api.ActionContinuation) (api.ActionContinuation, bool) { return value, true }) {
+		return nil
+	}
 	return &value
 }
 

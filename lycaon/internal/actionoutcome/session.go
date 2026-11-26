@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -43,6 +44,29 @@ func (s *Sessions) For(sessionID string) *Session {
 func (s *Sessions) Forget(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	session := s.byID[sessionID]
+	if session == nil {
+		return
+	}
+	now := time.Now().UTC()
+	session.Wakes.Retire(func(r WakeRecord) WakeRecord {
+		r.State = api.WakeStateDropped
+		r.Reason = api.WakeReasonSessionClosed
+		r.Steps = append(slices.Clip(r.Steps), WakeStep{r.State, r.Reason})
+		return r
+	})
+	session.Turns.Retire(func(r TurnRecord) TurnRecord {
+		r.Outcome = api.TurnOutcomeKindCancelled
+		r.CancelledBy = api.TurnCancellationSourceShutdown
+		r.SettledAt = now
+		return r
+	})
+	session.Actions.Retire(func(r api.ActionContinuation) api.ActionContinuation {
+		r.State = api.ContinuationStateNotContinued
+		r.Reason = api.ContinuationReasonSessionClosed
+		r.ResolvedAt = &now
+		return r
+	})
 	delete(s.byID, sessionID)
 }
 

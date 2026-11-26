@@ -12,6 +12,7 @@ var ErrUnavailable = errors.New("outcome unavailable")
 // History retains live records and the most recently settled records.
 type History[T any] struct {
 	mu      sync.Mutex
+	closed  bool
 	limit   int
 	records map[string]*entry[T]
 	settled []string
@@ -30,7 +31,7 @@ func NewHistory[T any](limit int) *History[T] {
 func (h *History[T]) Open(id string, value T) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if _, exists := h.records[id]; exists {
+	if _, exists := h.records[id]; exists || h.closed {
 		return false
 	}
 	h.records[id] = &entry[T]{value: value, done: make(chan struct{})}
@@ -55,6 +56,22 @@ func (h *History[T]) Change(id string, apply func(T) (T, bool)) bool {
 		}
 	}
 	return true
+}
+
+// Retire releases blocked readers with the lifetime's final disposition.
+func (h *History[T]) Retire(settle func(T) T) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.closed = true
+	for _, e := range h.records {
+		if !e.terminal {
+			e.value = settle(e.value)
+			e.terminal = true
+			close(e.done)
+		}
+	}
+	clear(h.records)
+	h.settled = nil
 }
 
 func (h *History[T]) Await(ctx context.Context, id string) (T, error) {
