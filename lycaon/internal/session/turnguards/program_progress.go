@@ -47,7 +47,8 @@ func (m *Service) ProgramProgressStore() progress.Store {
 	if m == nil {
 		return nil
 	}
-	return m.progress
+	store, _ := m.progress.(progress.Store)
+	return store
 }
 
 // ProgramProgressReconciler exposes the coordinator progress reconciler for
