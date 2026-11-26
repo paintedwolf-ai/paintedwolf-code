@@ -3,6 +3,7 @@ package wiring
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -113,6 +114,17 @@ func (d *phaseWakeDriver) check(t *testing.T, edge phaseEdge, n int) {
 	loop := d.h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop()
 	requests := len(d.h.Recording.AllRequests())
 	holds := declaredHolds(d.catalog, d.manifest, edge.to)
+	if edge.kind != edgeHumanApproval && edge.kind != edgeUserInput {
+		session := loop.Outcomes.For(d.sess.ID)
+		var last uint64
+		for _, wake := range session.Wakes.Snapshot() {
+			last = max(last, wake.Sequence)
+		}
+		d.limits.enabled.Store(true)
+		d.move(t, run, edge)
+		d.checkHostWake(t, session, last, holds)
+		return
+	}
 	kind := wire.ContinuationActionFeedback
 	if edge.kind == edgeHumanApproval {
 		kind = wire.ContinuationActionPlanApproval
@@ -134,6 +146,37 @@ func (d *phaseWakeDriver) check(t *testing.T, edge phaseEdge, n int) {
 	_, err = d.h.Recording.AwaitRequest(t.Context(), requests)
 	testutil.FailErr(t, "await transition model request", err)
 	d.h.Sessions.Manager.Coordinator.WaitForTurns(d.ctx)
+}
+
+func (d *phaseWakeDriver) checkHostWake(t *testing.T, session *actionoutcome.Session, after uint64, holds map[string]bool) {
+	t.Helper()
+	for _, wake := range session.Wakes.Snapshot() {
+		if wake.Sequence <= after {
+			continue
+		}
+		result, err := session.Wakes.Await(t.Context(), strconv.FormatUint(wake.Sequence, 10))
+		testutil.FailErr(t, "await host phase wake", err)
+		switch result.State {
+		case wire.WakeStateHeld:
+			if holds[string(result.Reason)] {
+				return
+			}
+		case wire.WakeStateConsumed, wire.WakeStateDelivered:
+			turn, err := session.Turns.Await(t.Context(), result.TurnID)
+			testutil.FailErr(t, "await host phase turn", err)
+			if !turn.DispatchedAt.IsZero() {
+				return
+			}
+		}
+	}
+	if holds[holdHostObligation] {
+		held, err := d.h.Workflows.Manager.Obligations.HostObligationHeld(d.ctx, d.sess.ID)
+		testutil.FailErr(t, "read host obligation", err)
+		if held {
+			return
+		}
+	}
+	t.Fatalf("phase transition has no dispatched turn or declared hold: %+v", session.Wakes.Snapshot())
 }
 
 func (d *phaseWakeDriver) start(t *testing.T, n int) *wire.WorkflowRun {
