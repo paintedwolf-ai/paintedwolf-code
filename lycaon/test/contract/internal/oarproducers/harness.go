@@ -214,6 +214,9 @@ type Harness struct {
 	exercisedEdges    []string
 	rulePtrs          map[*oar.Rule]bool
 	observedNextSteps map[*oar.Rule]oar.ResolvedSteps
+	// ignoreCredentials answers the ignored-credential lookup for a
+	// generated case.
+	ignoreCredentials bool
 }
 
 // NewHarness constructs a production OAR hook harness for eff and schemas.
@@ -331,7 +334,7 @@ func NewHarness(eff *extpacks.EffectiveCatalog, schemas *toolschema.Config, engi
 	}
 	policy.SetIgnoredCredentialCandidate(func(_ context.Context, _, _ string) bool {
 		h.recordExercisedEdges(ObserveIndirectProducerCall(moduleRoot, "paintedwolf.credential_ignored")...)
-		return false
+		return h.ignoreCredentials
 	})
 	policy.SetHarvestedFingerprint(func(root string, sf secretmatch.SecretFingerprint) bool {
 		h.recordExercisedEdges(ObserveIndirectProducerCall(moduleRoot, "paintedwolf.credential_harvested")...)

@@ -53,14 +53,28 @@ type ConditionGap struct {
 	Recipient  string   `json:"recipient"`
 	Atom       string   `json:"atom"`
 	Missing    []string `json:"missing"`
+	// Needs are the first missing assignments as structured case-generation
+	// targets.
+	Needs []map[string]independence.Truth `json:"-"`
 	// Unrecomposed counts observed vectors left out of the pair search because
 	// an atom was unknown or the atoms did not give the actual decision.
 	Unrecomposed int `json:"unrecomposed,omitempty"`
+	// Search is why targeted case generation reached no witness.
+	Search string `json:"search,omitempty"`
 }
 
 func (g ConditionGap) String() string {
-	return fmt.Sprintf("%s (%s) on %s: atom %q of %q has no independent witness; observe %s",
+	s := fmt.Sprintf("%s (%s) on %s: atom %q of %q has no independent witness; observe %s",
 		g.Site, g.SourceSpan, g.Recipient, g.Atom, g.Source, strings.Join(g.Missing, " or "))
+	if g.Search != "" {
+		s += "; generation: " + g.Search
+	}
+	return s
+}
+
+// SearchKey names one gap's generation outcome in LedgerInput.Searches.
+func SearchKey(site, recipient, atom string) string {
+	return site + "\x00" + recipient + "\x00" + atom
 }
 
 // ConditionLedger is the independence coverage of every compound guard.
@@ -77,8 +91,32 @@ type ConditionLedger struct {
 	HandledErrors   []string `json:"handled_errors,omitempty"`
 	EvaluatorErrors []string `json:"evaluator_errors,omitempty"`
 	// Observed counts the observed guard vectors by family and by recipient.
-	ObservedFamilies   map[string]int `json:"observed_families"`
-	ObservedRecipients map[string]int `json:"observed_recipients"`
+	ObservedFamilies   map[string]int    `json:"observed_families"`
+	ObservedRecipients map[string]int    `json:"observed_recipients"`
+	Generation         GenerationSummary `json:"generation"`
+}
+
+// GenerationSummary counts the targeted cases generated for gaps: targets
+// searched, targets that reached a witnessing pair, producer runs and the
+// time they took.
+type GenerationSummary struct {
+	Targets int     `json:"targets"`
+	Found   int     `json:"found"`
+	Runs    int     `json:"runs"`
+	Seconds float64 `json:"seconds"`
+}
+
+// LedgerInput is what a ledger joins.
+type LedgerInput struct {
+	Sites    []ConditionSite
+	Observed []hoststate.ObservedCondition
+	// Constraints are recorded production invariants over atoms.
+	Constraints []AtomConstraint
+	// Derived returns the constraints a site's expression or producer
+	// establishes on a recipient.
+	Derived func(site ConditionSite, recipient string) independence.Constraints
+	// Searches are targeted generation diagnostics by SearchKey.
+	Searches map[string]string
 }
 
 // BuildConditionLedger joins discovered guards with their observed
@@ -87,20 +125,20 @@ type ConditionLedger struct {
 // enclosing include path; only vectors whose atoms recompose the actual
 // decision take part. A compound guard nobody evaluated is a gap for every
 // atom.
-func BuildConditionLedger(sites []ConditionSite, observed []hoststate.ObservedCondition, constraints []AtomConstraint) (*ConditionLedger, error) {
+func BuildConditionLedger(in LedgerInput) (*ConditionLedger, error) {
 	byID := map[string]ConditionSite{}
-	for _, s := range sites {
+	for _, s := range in.Sites {
 		byID[s.ID] = s
 	}
 	obsByID := map[string]hoststate.ObservedCondition{}
-	for _, o := range observed {
+	for _, o := range in.Observed {
 		obsByID[o.Site] = o
 		if _, ok := byID[o.Site]; !ok {
 			byID[o.Site] = ConditionSite{ID: o.Site, Family: o.Family, SourceSpan: o.Site, Source: o.Source, Atoms: o.Atoms}
 		}
 	}
 	l := &ConditionLedger{ObservedFamilies: map[string]int{}, ObservedRecipients: map[string]int{}}
-	for _, o := range observed {
+	for _, o := range in.Observed {
 		for _, v := range o.Vectors {
 			l.ObservedFamilies[o.Family]++
 			l.ObservedRecipients[v.Partition]++
@@ -127,16 +165,19 @@ func BuildConditionLedger(sites []ConditionSite, observed []hoststate.ObservedCo
 		}
 		l.CompoundSites++
 		if !seen || len(obs.Vectors) == 0 {
-			for _, in := range inputs {
+			for _, atom := range inputs {
 				l.Obligations++
-				l.Gaps = append(l.Gaps, ConditionGap{Site: id, SourceSpan: site.SourceSpan, Source: site.Source, Recipient: "any", Atom: in, Missing: []string{"any evaluation"}})
+				l.Gaps = append(l.Gaps, ConditionGap{
+					Site: id, SourceSpan: site.SourceSpan, Source: site.Source, Recipient: RecipientAny, Atom: atom,
+					Missing: []string{"any evaluation"}, Search: in.Searches[SearchKey(id, RecipientAny, atom)],
+				})
 			}
 			continue
 		}
 		if obs.Decide == nil {
 			return nil, fmt.Errorf("%s: no decision function for %q", id, obs.Source)
 		}
-		if err := l.analyzeSite(site, obs, inputs, constraints); err != nil {
+		if err := l.analyzeSite(site, obs, inputs, in); err != nil {
 			return nil, err
 		}
 	}
@@ -144,6 +185,50 @@ func BuildConditionLedger(sites []ConditionSite, observed []hoststate.ObservedCo
 		return cmp.Or(strings.Compare(a.Site, b.Site), strings.Compare(a.Recipient, b.Recipient), strings.Compare(a.Atom, b.Atom))
 	})
 	return l, nil
+}
+
+// RecipientAny is the recipient of a gap at a guard nobody evaluated.
+const RecipientAny = "any"
+
+// MergeObservations joins observations of the same guard, keeping each
+// distinct vector once with the case that first produced it.
+func MergeObservations(sets ...[]hoststate.ObservedCondition) []hoststate.ObservedCondition {
+	byID := map[string]*hoststate.ObservedCondition{}
+	var order []string
+	for _, set := range sets {
+		for _, o := range set {
+			cur := byID[o.Site]
+			if cur == nil {
+				c := o
+				c.Vectors = nil
+				c.Errors = slices.Clone(o.Errors)
+				byID[o.Site], cur = &c, &c
+				order = append(order, o.Site)
+			} else {
+				for _, e := range o.Errors {
+					if !slices.Contains(cur.Errors, e) {
+						cur.Errors = append(cur.Errors, e)
+					}
+				}
+				cur.ErrorsHandled = cur.ErrorsHandled || o.ErrorsHandled
+			}
+			for _, v := range o.Vectors {
+				if !slices.ContainsFunc(cur.Vectors, func(w hoststate.ObservedVector) bool { return sameVector(v, w) }) {
+					cur.Vectors = append(cur.Vectors, v)
+				}
+			}
+		}
+	}
+	out := make([]hoststate.ObservedCondition, 0, len(order))
+	for _, id := range order {
+		out = append(out, *byID[id])
+	}
+	slices.SortFunc(out, func(a, b hoststate.ObservedCondition) int { return strings.Compare(a.Site, b.Site) })
+	return out
+}
+
+func sameVector(a, b hoststate.ObservedVector) bool {
+	return a.Decision == b.Decision && a.Partition == b.Partition && slices.Equal(a.Atoms, b.Atoms) && slices.Equal(a.Path, b.Path)
 }
 
 func distinct(atoms []string) []string {
@@ -158,7 +243,7 @@ func distinct(atoms []string) []string {
 
 // analyzeSite runs the pair search for each recipient that evaluated obs;
 // vectors pair only within one enclosing include path.
-func (l *ConditionLedger) analyzeSite(site ConditionSite, obs hoststate.ObservedCondition, inputs []string, constraints []AtomConstraint) error {
+func (l *ConditionLedger) analyzeSite(site ConditionSite, obs hoststate.ObservedCondition, inputs []string, in LedgerInput) error {
 	guards := map[string]*independence.Guard{}
 	unrecomposed := map[string]int{}
 	for _, v := range obs.Vectors {
@@ -181,7 +266,14 @@ func (l *ConditionLedger) analyzeSite(site ConditionSite, obs hoststate.Observed
 		return obs.Decide(values), nil
 	}
 	for _, recipient := range sortedKeysOf(boolKeys(guards)) {
-		res, err := independence.Analyze([]independence.Guard{*guards[recipient]}, eval, constraintsFor(constraints, recipient, inputs))
+		cons := constraintsFor(in.Constraints, recipient, inputs)
+		if in.Derived != nil {
+			d := in.Derived(site, recipient)
+			cons.Fixed = append(cons.Fixed, d.Fixed...)
+			cons.Implications = append(cons.Implications, d.Implications...)
+			cons.Joints = append(cons.Joints, d.Joints...)
+		}
+		res, err := independence.Analyze([]independence.Guard{*guards[recipient]}, eval, cons)
 		if err != nil {
 			return fmt.Errorf("%s on %s: %w", site.ID, recipient, err)
 		}
@@ -190,23 +282,26 @@ func (l *ConditionLedger) analyzeSite(site ConditionSite, obs hoststate.Observed
 		for _, w := range res.Witnesses[site.ID] {
 			witnessed[w.Input] = w
 		}
-		for _, in := range inputs {
+		for _, atom := range inputs {
 			l.Obligations++
-			if w, ok := witnessed[in]; ok {
+			if w, ok := witnessed[atom]; ok {
 				l.Witnesses = append(l.Witnesses, ConditionWitness{
-					Site: site.ID, Recipient: recipient, Path: w.With.Group, Atom: in,
+					Site: site.ID, Recipient: recipient, Path: w.With.Group, Atom: atom,
 					With: formatVector(obs.Atoms, w.With), WithCase: w.With.Case,
 					Then: formatVector(obs.Atoms, w.Then), ThenCase: w.Then.Case,
 				})
 				continue
 			}
-			if i := slices.IndexFunc(res.Exclusions, func(ex independence.Exclusion) bool { return ex.Input == in }); i >= 0 {
-				l.Exclusions = append(l.Exclusions, ConditionExclusion{Site: site.ID, Recipient: recipient, Atom: in, Constraint: res.Exclusions[i].Reason})
+			if i := slices.IndexFunc(res.Exclusions, func(ex independence.Exclusion) bool { return ex.Input == atom }); i >= 0 {
+				l.Exclusions = append(l.Exclusions, ConditionExclusion{Site: site.ID, Recipient: recipient, Atom: atom, Constraint: res.Exclusions[i].Reason})
 				continue
 			}
-			gap := ConditionGap{Site: site.ID, SourceSpan: site.SourceSpan, Source: site.Source, Recipient: recipient, Atom: in, Unrecomposed: unrecomposed[recipient]}
-			if i := slices.IndexFunc(res.Gaps, func(g independence.Gap) bool { return g.Input == in }); i >= 0 {
-				gap.Missing = res.Gaps[i].Missing
+			gap := ConditionGap{
+				Site: site.ID, SourceSpan: site.SourceSpan, Source: site.Source, Recipient: recipient, Atom: atom,
+				Unrecomposed: unrecomposed[recipient], Search: in.Searches[SearchKey(site.ID, recipient, atom)],
+			}
+			if i := slices.IndexFunc(res.Gaps, func(g independence.Gap) bool { return g.Input == atom }); i >= 0 {
+				gap.Missing, gap.Needs = res.Gaps[i].Missing, res.Gaps[i].Needs
 			}
 			l.Gaps = append(l.Gaps, gap)
 		}

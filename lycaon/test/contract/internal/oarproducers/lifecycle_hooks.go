@@ -324,21 +324,7 @@ func (h *Harness) runContentOutputHook(ctx context.Context, cells []AuthCell) []
 
 func (h *Harness) runToolPostAndSharedTempHook(ctx context.Context, cells []AuthCell) []FiredOutcome {
 	var out []FiredOutcome
-	refusalSets := [][]confine.SandboxRefusal{
-		{{Operation: "file-write-create", Target: "/opt/x", Process: "touch", Count: 1, Recovery: confine.RecoverWriteRoot, Grant: "/opt", Layer: confine.FloorOutsideWriteRoots}},
-		{{Operation: "file-read-data", Target: "/opt/r", Process: "cat", Count: 1, Recovery: confine.RecoverReadPath, Grant: "/opt", Layer: confine.FloorReadConfigured}},
-		{{Operation: "file-read-data", Target: "/home/u/.ssh/id_rsa", Process: "cat", Count: 1, Recovery: confine.RecoverCredentialStore, Grant: "/home/u/.ssh/id_rsa", Layer: confine.FloorReadCredentialStore}},
-		{{Operation: "host-service", Target: "docker", Process: "docker", Count: 1, Recovery: confine.RecoverHostExecution}},
-		{{Operation: "net-connect", Target: "remote:127.0.0.1:5432", Process: "nc", Count: 1, Recovery: confine.RecoverOutboundPort}},
-		{{Operation: "net-bind", Target: "local:127.0.0.1:8080", Process: "node", Count: 1, Recovery: confine.RecoverLocalListen}},
-		{{Operation: "signal", Target: "SIGTERM", Process: "kill", Count: 1, Recovery: confine.RecoverProcessControl}},
-		{{Operation: "unix-connect", Target: "/var/run/docker.sock", Process: "socat", Count: 1, Recovery: confine.RecoverSocketPath, Grant: "/var/run/docker.sock"}},
-		{
-			{Operation: "file-write-create", Target: "/opt/x", Process: "touch", Count: 1, Recovery: confine.RecoverWriteRoot, Grant: "/opt", Layer: confine.FloorOutsideWriteRoots},
-			{Operation: "file-read-data", Target: "/opt/r", Process: "cat", Count: 1, Recovery: confine.RecoverReadPath, Grant: "/opt", Layer: confine.FloorReadConfigured},
-		},
-		{{Operation: "file-read-data", Target: "/etc/pw-ctrl", Process: "cat", Count: 1, Recovery: confine.RecoverNone, Layer: confine.FloorReadControlPlane}},
-	}
+	refusalSets := sandboxRefusalSets
 	for idx, cell := range cells {
 		hasCapRunner := cell.Reach.AcceptsField("command", "capability_request") || cell.Reach.AcceptsField("verify", "capability_request")
 		hasCmd := slices.Contains(cell.Auth.Offered, "command")
