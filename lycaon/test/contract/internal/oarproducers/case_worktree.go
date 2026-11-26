@@ -43,8 +43,11 @@ func gitRun(ctx context.Context, dir string, args ...string) error {
 		Identity:    &gitexec.Identity{Name: "Painted Wolf test", Email: "test@paintedwolf.dev"},
 		ExtraConfig: []string{"maintenance.auto=false"},
 	})
-	if err != nil || code != 0 {
-		return fmt.Errorf("git %v: exit %d: %v: %s", args, code, err, out)
+	if err != nil {
+		return fmt.Errorf("git %v: %w: %s", args, err, out)
+	}
+	if code != 0 {
+		return fmt.Errorf("git %v: exit %d: %s", args, code, out)
 	}
 	return nil
 }
