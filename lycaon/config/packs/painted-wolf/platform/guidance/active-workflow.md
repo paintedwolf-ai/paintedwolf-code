@@ -17,7 +17,7 @@ User limits apply: {% if profile_has_ask_user %}`ask_user` before conflicting ac
 {% endif %}{% if pending_feedback %}- **pending_feedback**: phase {{ pending_feedback.phase_id }}{% if pending_feedback.prompt %} — "{{ pending_feedback.prompt }}"{% endif %}
 {% endif %}{% if feedback_phases %}- **feedback_phases**: {{ feedback_phases|join:", " }}
 {% endif %}{% if decision_phases %}- **decision_phases**: {{ decision_phases|join:", " }}
-{% endif %}{% if blueprint_approval %}- **blueprint_approval**: `{{ blueprint_approval.status }}`{% if blueprint_approval.origin %} ({{ blueprint_approval.origin }}{% if blueprint_approval.parent_run_id %} from parent run `{{ blueprint_approval.parent_run_id }}`{% endif %}){% endif %}
+{% endif %}{% if blueprint_approval %}- **blueprint_approval**: `{{ blueprint_approval.status }}`{% if blueprint_approval.origin %} ({{ blueprint_approval.origin }} from parent run `{{ blueprint_approval.parent_run_id }}`){% endif %}
 {% endif %}
 {% if blueprint_approval and blueprint_approval.status == "approved" %}
 ### Approved Blueprint execution

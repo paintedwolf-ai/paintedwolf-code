@@ -30,7 +30,7 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 	if len(reps) == 0 {
 		return nil, fmt.Errorf("no stock coordinator on an active run")
 	}
-	gateStates := []string{"open", "failed", "satisfied", "dormant", "none", "open-two", "dormant-two"}
+	gateStates := []string{"open", "failed", "satisfied", "dormant", "none", "open-two", "dormant-two", "failed-two"}
 	knobs := []casegen.Knob{
 		repKnob("rep", []string{"profile_has_promote_overlay", "profile_has_ask_user", "profile_has_workflow_advance", casegen.AnyFact}, len(reps), func(i int) string { return reps[i].state.ID }),
 		indexKnob("gates", []string{"unsatisfied_gate_leaves", "failed_leaves", "current_phase_gates", "phase_exit.open_gates", "phase_exit.dormant_gates"}, gateStates),
@@ -41,6 +41,7 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 		indexKnob("roster", []string{"excluded_agents"}, []string{"none", "web-off", "web-off-coordinator"}),
 		indexKnob("feedback", []string{"pending_feedback", "pending_feedback.prompt"}, []string{"none", "open", "prompt"}),
 		indexKnob("report", []string{"report_document_enabled", "report_rating"}, []string{"none", "unrated", "rated"}),
+		indexKnob("advance", []string{"phase_exit.coordinator_advances"}, []string{"host", "coordinator"}),
 	}
 	resolvers := map[int]func(string) (toolvocabtest.ActorAuthority, error){}
 	return []guidanceCase{{
@@ -69,9 +70,21 @@ func activeWorkflowCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase,
 			case "open-two":
 				row.Gates = []inject.WorkflowGateState{{ID: "plan_stub_valid"}, {ID: "hitl_consulted:intake"}}
 				exit.OpenGates = []string{"plan_stub_valid", "hitl_consulted:intake"}
+			case "failed-two":
+				row.Gates = []inject.WorkflowGateState{{ID: "plan_stub_valid"}, {ID: "hitl_consulted:intake"}}
+				exit.OpenGates = []string{"plan_stub_valid", "hitl_consulted:intake"}
+				runCtx.FailedLeaves = []string{"plan_stub_valid", "hitl_consulted:intake"}
 			case "dormant-two":
 				row.Gates = []inject.WorkflowGateState{{ID: "evidence_passed:plan_review", Dormant: true}, {ID: "evidence_passed:survey_claims", Dormant: true}}
 				exit.DormantGates = []string{"evidence_passed:plan_review", "evidence_passed:survey_claims"}
+			}
+			if knobValue[int](knobs, set, "advance") == 1 {
+				// The coordinator advances only where workflow_advance is offered
+				// (compileRuntimeToolPlan promotes it for such a run).
+				if !slices.Contains(cr.auth.Offered, "workflow_advance") {
+					return guidanceRender{}, nil
+				}
+				runCtx.AdvanceWhenGateMet, exit.CoordinatorAdvances = "coordinator", true
 			}
 			if knobValue[int](knobs, set, "complete_when") == 1 {
 				row.CompleteWhen, exit.CompleteWhen = "draft ready", "draft ready"

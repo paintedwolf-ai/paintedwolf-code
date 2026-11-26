@@ -112,28 +112,41 @@ func indexKnob(name string, facts []string, labels []string) casegen.Knob {
 	return k
 }
 
-// oneAtATime is the baseline setting and every setting that moves one knob
-// off it.
-func oneAtATime(knobs []casegen.Knob) []casegen.Setting {
-	out := []casegen.Setting{{}}
+// sweepSettings is the baseline setting and every setting that moves one
+// input off it, each on every recipient the rep input picks, since reader
+// facts and payload guards nest.
+func sweepSettings(knobs []casegen.Knob) []casegen.Setting {
+	single := []casegen.Setting{{}}
+	reps := 1
 	for _, k := range knobs {
+		if k.Name == "rep" {
+			reps = len(k.Values)
+			continue
+		}
 		for i := 1; i < len(k.Values); i++ {
-			out = append(out, casegen.Setting{k.Name: i})
+			single = append(single, casegen.Setting{k.Name: i})
+		}
+	}
+	out := make([]casegen.Setting, 0, len(single)*reps)
+	for r := range reps {
+		for _, s := range single {
+			set := maps.Clone(s)
+			set["rep"] = r
+			out = append(out, set)
 		}
 	}
 	return out
 }
 
-// runGuidanceCaseSweep renders every guidance case at its baseline and with
-// each producer input moved alone, and checks each render's claims against
-// the recipient's authority.
+// runGuidanceCaseSweep renders every guidance case over sweepSettings and
+// checks each render's claims against the recipient's authority.
 func runGuidanceCaseSweep(ctx context.Context, s *Stock, sum *CartesianSummary) error {
 	e, err := newGuidanceCaseEnv(ctx, s)
 	if err != nil {
 		return err
 	}
 	for _, c := range e.cases {
-		for _, set := range oneAtATime(c.knobs) {
+		for _, set := range sweepSettings(c.knobs) {
 			id := "guidance case " + c.recipient + ":" + c.unit + casegen.Label(c.knobs, set)
 			sum.markCase(id)
 			r, err := c.render(ctx, e, set)
