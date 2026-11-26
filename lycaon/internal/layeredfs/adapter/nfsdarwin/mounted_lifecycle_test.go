@@ -5,23 +5,20 @@ package nfsdarwin_test
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
-	"unsafe"
 
 	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/nfsdarwin"
 	"github.com/lycaon/lycaon/internal/layeredfs/nfsserver"
+	"github.com/lycaon/lycaon/internal/testutil/mappedfile"
 )
 
 // TestOpenThenDeletedFileNeverReachesTheChangeSet: the client renames an open file to a placeholder
@@ -329,67 +326,18 @@ func TestAtomicTrunkReplacementIsSeenAtOnce(t *testing.T) {
 // has not called msync, and its dirty pages are invisible to fsync and to a volume sync.
 func TestBarrierCapturesPagesAnotherProcessHoldsDirtyInAMapping(t *testing.T) {
 	v := prepareRealMount(t, nfsdarwin.Config{}, nil)
-	cmd := exec.Command(os.Args[0])
-	cmd.Env = append(os.Environ(), "NFSDARWIN_MMAP_PROBE="+filepath.Join(v.mnt, "mapped.bin"))
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		t.Fatalf("stdin: %v", err)
+	path := filepath.Join(v.mnt, "mapped.bin")
+	if err := os.WriteFile(path, make([]byte, 65536), 0o644); err != nil {
+		t.Fatalf("create: %v", err)
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatalf("stdout: %v", err)
-	}
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start: %v", err)
-	}
-	defer func() {
-		_ = stdin.Close()
-		_ = cmd.Wait()
-	}()
-	ready := make([]byte, 1)
-	if _, err := stdout.Read(ready); err != nil {
-		t.Fatalf("mapped writer: %v", err)
+	if err := mappedfile.Map(t, path, 65536).Write([]byte("DIRTY")); err != nil {
+		t.Fatalf("write mapping: %v", err)
 	}
 	v.barrier(t)
 	got, err := v.core.ReadFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "mapped.bin"})
 	if err != nil || len(got) < 5 || string(got[:5]) != "DIRTY" {
 		t.Fatalf("mapped bytes after barrier: %q err=%v", got, err)
 	}
-}
-
-func runMappedWriter(path string) int {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		return 1
-	}
-	if err := f.Truncate(65536); err != nil {
-		return 1
-	}
-	mapped, err := syscall.Mmap(int(f.Fd()), 0, 65536, syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
-	if err != nil {
-		return 1
-	}
-	copy(mapped, "DIRTY")
-	_, _ = os.Stdout.Write([]byte("r"))
-	_, _ = io.ReadAll(os.Stdin)
-	return 0
-}
-
-// copyToMapping writes through an in-process mapping of a file on the mount. The page fault holds
-// the scheduler slot until the server replies, so a test that must do this gives the server a slot
-// and keeps a stop-the-world from waiting on the fault. The engine itself never maps mount files.
-func copyToMapping(dst, src []byte) {
-	defer debug.SetGCPercent(debug.SetGCPercent(-1))
-	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(max(runtime.GOMAXPROCS(0), 2)))
-	copy(dst, src)
-}
-
-func msyncForTest(mapped []byte) error {
-	_, _, errno := syscall.Syscall(syscall.SYS_MSYNC, uintptr(unsafe.Pointer(&mapped[0])), uintptr(len(mapped)), uintptr(syscall.MS_SYNC))
-	if errno != 0 {
-		return errno
-	}
-	return nil
 }
 
 // TestOneSchedulerSlotServesAMountedWorkflow runs everything the engine does against its own mount

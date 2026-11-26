@@ -11,15 +11,14 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/nfsdarwin"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/nfsserver"
+	"github.com/lycaon/lycaon/internal/testutil/mappedfile"
 	nfs "github.com/willscott/go-nfs"
 )
 
@@ -137,26 +136,13 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 		t.Fatalf("expected CheckpointBarrier without FlushClientHook to fail, got rec=%+v err=%v", rec2, bErr)
 	}
 
-	mf, err := os.OpenFile(filepath.Join(prep.PrimaryWorkPath, "mapped.txt"), os.O_RDWR, 0o644)
-	if err != nil {
-		t.Fatalf("OpenFile mapped.txt: %v", err)
-	}
-	defer func() { _ = mf.Close() }()
-	_, _ = mf.ReadAt(make([]byte, len(initialBytes)), 0)
-
-	mappedSlice, err := syscall.Mmap(int(mf.Fd()), 0, len(initialBytes), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
-	if err != nil {
-		t.Fatalf("syscall.Mmap: %v", err)
-	}
-	defer func() { _ = syscall.Munmap(mappedSlice) }()
-
+	mapping := mappedfile.Map(t, filepath.Join(prep.PrimaryWorkPath, "mapped.txt"), len(initialBytes))
 	wantMapped := []byte("mutated-by-mmap!\n")
-	copyToMapping(mappedSlice, wantMapped)
+	if err := mapping.Write(wantMapped); err != nil {
+		t.Fatalf("write mapping: %v", err)
+	}
 	if err := adp.SetBarrierHooks(viewID, nfsdarwin.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := msyncForTest(mappedSlice); err != nil {
-			return err
-		}
-		return fssync.File(mf)
+		return mapping.Sync()
 	}); err != nil {
 		t.Fatalf("SetBarrierHooks with mmap sync: %v", err)
 	}
