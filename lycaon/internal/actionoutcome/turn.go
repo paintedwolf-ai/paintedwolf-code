@@ -93,6 +93,14 @@ func (t *Turn) Finish(result *promptresult.Result, err error, cancelledBy api.Tu
 			if r.Outcome == api.TurnOutcomeKindFailed {
 				result = Result{State: api.ContinuationStateFailed, FailureCode: string(r.FailureCode)}
 			}
+			if r.Outcome == api.TurnOutcomeKindCancelled {
+				switch cancelledBy {
+				case api.TurnCancellationSourceUser:
+					result = WakeResult(api.WakeReasonUserStopped)
+				case api.TurnCancellationSourceShutdown:
+					result = WakeResult(api.WakeReasonSessionClosed)
+				}
+			}
 			result.TurnID = r.TurnID
 			handoff = result
 		}

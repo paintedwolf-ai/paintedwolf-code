@@ -40,7 +40,6 @@ func (l *WaitDeliveries) ForgetSession(sessionID string) {
 }
 func (l *HostTurns) ForgetSession(sessionID string) { l.promptActive.Delete(sessionID) }
 func (l *PromptObservations) ForgetSession(sessionID string) {
-	l.promptObservedSeq.Delete(sessionID)
 	l.promptWorkflow.Delete(sessionID)
 }
 func (l *Admission) ForgetSession(sessionID string) {

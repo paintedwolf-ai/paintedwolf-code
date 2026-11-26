@@ -43,6 +43,9 @@ func (l *HostTurns) loopDeps() HostTurnsDeps {
 	return l.deps
 }
 func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending pendingLoopWake) bool {
+	ticket, finishClaim := pending.ticket.Attempt()
+	pending.ticket = ticket
+	defer finishClaim()
 	if l.hostTurnBlocked(ctx, sessionID) {
 		l.Nudges.enqueuePending(sessionID, pending)
 		return false

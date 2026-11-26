@@ -84,6 +84,9 @@ func (l *Nudges) nudgeNow(
 	return ticket
 }
 func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pendingLoopWake) {
+	ticket, finishClaim := pending.ticket.Attempt()
+	pending.ticket = ticket
+	defer finishClaim()
 	wake, inform, legID, completingJobID, env := pending.wake, pending.inform, pending.legID, pending.completingJobID, pending.env
 	deps := l.loopDeps()
 	// A wait that a worker notice resumes reports only that it ended, so the

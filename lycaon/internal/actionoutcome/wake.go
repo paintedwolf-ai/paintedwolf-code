@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
+	"sync/atomic"
+	"testing"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,6 +21,7 @@ type WakeRecord struct {
 }
 
 type Ticket struct {
+	ack     *atomic.Bool
 	history *History[WakeRecord]
 	key     string
 	path    *Path
@@ -41,6 +44,9 @@ func (t *Ticket) Record(state api.WakeState, reason api.WakeReason, turnID, leas
 	if t == nil {
 		return
 	}
+	if t.ack != nil {
+		t.ack.Store(true)
+	}
 	terminal := state != api.WakeStateQueued && state != api.WakeStateDeferred
 	ok := t.history.Change(t.key, func(r WakeRecord) (WakeRecord, bool) {
 		r.State = state
@@ -51,7 +57,7 @@ func (t *Ticket) Record(state api.WakeState, reason api.WakeReason, turnID, leas
 		return r, terminal
 	})
 	if !ok {
-		slog.Error("duplicate wake transition", "ticket", t.key, "state", state)
+		reportWakeDefect(t.key, "duplicate terminal disposition")
 		return
 	}
 	if terminal && state != api.WakeStateDelivered && state != api.WakeStateConsumed && state != api.WakeStateRoutedToWait {
@@ -69,11 +75,44 @@ func (t *Ticket) RefuseBeforeAdmission(reason api.WakeReason) {
 	if t == nil {
 		return
 	}
+	if t.ack != nil {
+		t.ack.Store(true)
+	}
 	if t.history.Change(t.key, func(r WakeRecord) (WakeRecord, bool) {
 		r.State = api.WakeStateDenied
 		r.Reason = reason
 		return r, true
 	}) {
 		t.path.Resolve(WakeResult(reason))
+	}
+}
+
+// Attempt requires each queue or drain claim to record its disposition.
+func (t *Ticket) Attempt() (*Ticket, func()) {
+	if t == nil {
+		return nil, func() {}
+	}
+	var seen atomic.Bool
+	claim := *t
+	claim.ack = &seen
+	return &claim, func() {
+		if seen.Load() {
+			return
+		}
+		t.Record(api.WakeStateDropped, api.WakeReasonDefect, "", "")
+		reportWakeDefect(t.key, "missing disposition")
+	}
+}
+
+func reportWakeDefect(ticket, problem string) {
+	slog.Error("wake transition defect", "ticket", ticket, "problem", problem)
+	if testing.Testing() {
+		panic(problem)
+	}
+}
+
+func (t *Ticket) QueuedRetry() {
+	if t != nil && t.ack != nil {
+		t.ack.Store(true)
 	}
 }

@@ -45,6 +45,7 @@ func (q *sessionNudgeQueue) push(n pendingLoopWake) {
 	// Sequence identity deduplicates retries and preserves their position.
 	index := sort.Search(len(q.nudges), func(i int) bool { return q.nudges[i].seq >= n.seq })
 	if n.seq > 0 && index < len(q.nudges) && q.nudges[index].seq == n.seq {
+		n.ticket.QueuedRetry()
 		return
 	}
 	n.queue = q

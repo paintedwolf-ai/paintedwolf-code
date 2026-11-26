@@ -5,8 +5,8 @@ import "testing"
 func TestCancelRegistrationReplacementAndRelease(t *testing.T) {
 	var state Lifetime
 	var order []string
-	state.RegisterCancel("session", func() { order = append(order, "replaced") })
-	state.RegisterCancel("session", func() {
+	state.RegisterCancel("session", func(error) { order = append(order, "replaced") })
+	state.RegisterCancel("session", func(error) {
 		if state.Running("session") {
 			t.Error("cancel callback observed an active registration")
 		}

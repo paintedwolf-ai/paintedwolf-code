@@ -28,7 +28,7 @@ func TestPostTurnDrainRetiresWakesNudgedBeforeTurnStart(t *testing.T) {
 	// The losing wake was nudged before the winning turn started.
 	preTurnSeq := engine.Nudges.nudgeSeq.Add(1)
 	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.LegFinished, seq: preTurnSeq})
-	engine.Observations.promptObservedSeq.Store(id, engine.Nudges.nudgeSeq.Add(1))
+	engine.Observations.promptWorkflow.Store(id, observedWorkflow{sequence: engine.Nudges.nudgeSeq.Add(1)})
 
 	engine.Nudges.drainPending(context.Background(), id, true)
 	if prompts != 0 {
@@ -89,7 +89,7 @@ func TestPostTurnDrainKeepsWakesNudgedDuringTurn(t *testing.T) {
 	})
 	engine.SetDeps(deps)
 
-	engine.Observations.promptObservedSeq.Store(id, engine.Nudges.nudgeSeq.Add(1))
+	engine.Observations.promptWorkflow.Store(id, observedWorkflow{sequence: engine.Nudges.nudgeSeq.Add(1)})
 	// Nudged after the turn started — its facts postdate prompt assembly.
 	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.LegFinished, seq: engine.Nudges.nudgeSeq.Add(1)})
 
@@ -117,7 +117,7 @@ func TestPostTurnDrainDropsDormantPhaseAdvanceAfterCloseout(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Observations.promptObservedSeq.Store(id, engine.Nudges.nudgeSeq.Add(1))
+	engine.Observations.promptWorkflow.Store(id, observedWorkflow{sequence: engine.Nudges.nudgeSeq.Add(1)})
 	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.PhaseAdvanced, seq: engine.Nudges.nudgeSeq.Add(1)})
 
 	engine.Nudges.drainPending(context.Background(), id, true)
@@ -147,7 +147,7 @@ func TestPostTurnDrainKeepsActionablePhaseAdvance(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Observations.promptObservedSeq.Store(id, engine.Nudges.nudgeSeq.Add(1))
+	engine.Observations.promptWorkflow.Store(id, observedWorkflow{sequence: engine.Nudges.nudgeSeq.Add(1)})
 	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.PhaseAdvanced, seq: engine.Nudges.nudgeSeq.Add(1)})
 
 	engine.Nudges.drainPending(context.Background(), id, true)

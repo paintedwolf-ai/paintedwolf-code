@@ -103,7 +103,13 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 			resp = nil
 			runErr = errors.Join(runErr, err)
 		}
-		outcome.Finish(resp, runErr, api.TurnCancellationSourceHost)
+		cancelledBy := api.TurnCancellationSourceHost
+		if errors.Is(context.Cause(ctx), sessionexecution.ErrUserCancelled) {
+			cancelledBy = api.TurnCancellationSourceUser
+		} else if m.Settlement.Disposition(true) == api.SessionIdleDispositionInterrupted {
+			cancelledBy = api.TurnCancellationSourceShutdown
+		}
+		outcome.Finish(resp, runErr, cancelledBy)
 	}()
 
 	if err := m.Chats.UnarchiveOnPrompt(ctx, sess); err != nil {

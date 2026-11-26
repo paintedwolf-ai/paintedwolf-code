@@ -14,7 +14,6 @@ func TestForgetSessionReleasesAllSessionState(t *testing.T) {
 	loop.Nudges.pendingQueues.Store(sessionID, &sessionNudgeQueue{})
 	loop.Nudges.pendingWorkerQueues.Store(sessionID, &deferredNudgeQueue{})
 	loop.Turns.promptActive.Store(sessionID, struct{}{})
-	loop.Observations.promptObservedSeq.Store(sessionID, uint64(4))
 	loop.Observations.promptWorkflow.Store(sessionID, observedWorkflow{runID: "run-1", revision: 2})
 	loop.Nudges.pendingDrain.Store(sessionID, struct{}{})
 	loop.Admission.budget.Store(loopBudgetKey{sessionID: sessionID, runID: "run-1"}, 3)
@@ -28,7 +27,6 @@ func TestForgetSessionReleasesAllSessionState(t *testing.T) {
 		"pending":         &loop.Nudges.pendingQueues,
 		"deferred":        &loop.Nudges.pendingWorkerQueues,
 		"prompt active":   &loop.Turns.promptActive,
-		"prompt sequence": &loop.Observations.promptObservedSeq,
 		"prompt workflow": &loop.Observations.promptWorkflow,
 		"pending drain":   &loop.Nudges.pendingDrain,
 		"sleep":           &loop.Waits.sleep.Map,
