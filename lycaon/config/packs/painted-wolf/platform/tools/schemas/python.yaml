@@ -1,0 +1,33 @@
+tags: [process]
+description: >-
+  Prefer this tool for Python scripts unless they require system or project
+  Python. It includes the standard library and fixed packages (PyYAML, pytest,
+  openpyxl); packages cannot be added.
+schema:
+  type: object
+  properties:
+    code:
+      type: string
+      minLength: 1
+      description: Inline Python source executed as __main__.
+    script:
+      type: string
+      minLength: 1
+      description: Workspace Python script path executed as __main__.
+    module:
+      type: string
+      minLength: 1
+      description: Python module name executed as __main__.
+    cwd:
+      type: string
+      description: "Folder for the execution. Empty = the session folder; `@label` or `@label/sub` = any attached folder; `@scratch`/`@output` = session scratch/output; absolute paths are accepted."
+    args:
+      type: array
+      description: Positional string arguments forwarded to sys.argv[1:] without shell interpolation.
+      items:
+        type: string
+  oneOf:
+    - required: [code]
+    - required: [script]
+    - required: [module]
+  additionalProperties: false

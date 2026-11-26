@@ -8,6 +8,7 @@ tools:
   code_rewrite: sticky
   summarize: sticky
   command: sticky
+  python: sticky
   command_output: sticky
   command_stop: sticky
   recall: sticky

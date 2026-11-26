@@ -43,6 +43,7 @@ tools:
   web_search: sticky
   fetch_url: sticky
   command: sticky
+  python: sticky
   command_output: true
   command_stop: true
   held_result: true

@@ -37,6 +37,7 @@ native:
 # Codegen: ./task codegen:native-tool-contracts
 grant_target_scope:
   command: command
+  python: command
   verify: command
   terminal_open: command
   restore_version: path
@@ -56,6 +57,7 @@ multi_root:
     - view_video
   command:
     - command
+    - python
     - verify
     - terminal_open
   none:
@@ -137,6 +139,7 @@ multi_root:
 requires_worker_branch:
   - restore_version
   - command
+  - python
   - verify
   - terminal_open
   - code_rewrite
@@ -390,6 +393,7 @@ approval_reversibility:
   plan_append_review_evidence: reversible
   plan_from_blueprint: reversible
   promote_overlay: reversible
+  python: recoverable
   read_findings: reversible
   read_review: reversible
   recall: reversible
@@ -474,6 +478,7 @@ owner:
   plan_from_blueprint: blueprints
   preview_overlay: worker_merge
   promote_overlay: worker_merge
+  python: processes
   read_findings: findings
   read_review: board
   recall: sessions
@@ -558,6 +563,7 @@ batch_policy:
   plan_append_review_evidence: serial
   plan_from_blueprint: serial
   promote_overlay: serial
+  python: serial
   read_findings: shared
   read_review: shared
   recall: shared
@@ -664,6 +670,7 @@ lifecycle:
   plan_append_review_evidence: effect_attempt
   plan_from_blueprint: db_transaction
   promote_overlay: journaled_mutation
+  python: effect_attempt
   read_findings: read_only
   read_review: read_only
   recall: read_only

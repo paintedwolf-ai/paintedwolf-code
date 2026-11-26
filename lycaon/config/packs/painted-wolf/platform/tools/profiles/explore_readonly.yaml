@@ -6,6 +6,7 @@ tools:
   summarize: sticky
   inspect_source: sticky
   command: sticky
+  python: sticky
   command_output: sticky
   command_stop: sticky
   recall: sticky

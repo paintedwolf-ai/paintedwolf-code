@@ -1,0 +1,23 @@
+spec_version: "1.0"
+id: PYTHON_TOOL_REQUIRED
+kind: policy
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.command, paintedwolf.rejection_code, paintedwolf.source_column, paintedwolf.source_line]
+when: paintedwolf.rejection_code == "PYTHON_TOOL_REQUIRED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:python_tool_routing
+message: use the direct python tool for bare Python interpreter launches
+what: '{% if paintedwolf.command %}Bare `{{ paintedwolf.command }}` launch{% else %}Bare Python interpreter launch{% endif %}{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} was stopped before interpreter startup because the direct `python` tool is available on this surface.'
+cause: Bare `python` or `python3` invocations in `command` bypass the direct `python` tool's structured `code`, `script`, or `module` form.
+why: The direct `python` tool runs the same curated Portable Python runtime without shell quoting overhead while preserving workspace authority, receipts, and earlier completed command effects.
+fix: Call `python` with `code`, `script`, or `module` (plus optional `cwd` and `args`). For a project virtual environment or system Python, invoke `external -- python3` or the explicit project interpreter path.
+instead: Preserve earlier completed operations and switch this Python step to `python` (or `external -- python3` when project/system Python is required).
+x-paintedwolf-scenarios:
+  - id: bare-python3-command
+    vars:
+      tool: command
+      command: python3
+      source_line: 1
+      source_column: 1

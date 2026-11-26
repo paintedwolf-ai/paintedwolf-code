@@ -1,0 +1,397 @@
+{
+  "commands": [
+    {
+      "name": "python",
+      "operands_end_options": true,
+      "aliases": [
+        "python3"
+      ],
+      "family": "python",
+      "owner": "processes",
+      "argv": "python [-B|-E|-I|-O|-P|-S|-q|-s|-u|-v] [-W ARG] [-X OPT] (-c CODE | -m MODULE | - | SCRIPT) [ARG ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-c"
+          ],
+          "arity": 1,
+          "value_role": "code",
+          "fixture_id": "python-option-c",
+          "consumption": "fixed",
+          "sample_values": [
+            "print(1)"
+          ]
+        },
+        {
+          "spellings": [
+            "-m"
+          ],
+          "arity": 1,
+          "value_role": "module",
+          "fixture_id": "python-option-m",
+          "consumption": "fixed",
+          "sample_values": [
+            "pytest"
+          ]
+        },
+        {
+          "spellings": [
+            "-u"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "python-option-u",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-B"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "python-option-B",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-W"
+          ],
+          "arity": 1,
+          "value_role": "warning-action",
+          "fixture_id": "python-option-W",
+          "consumption": "fixed",
+          "sample_values": [
+            "ignore"
+          ]
+        },
+        {
+          "spellings": [
+            "-X"
+          ],
+          "arity": 1,
+          "value_role": "implementation-option",
+          "fixture_id": "python-option-X",
+          "consumption": "fixed",
+          "sample_values": [
+            "utf8"
+          ]
+        },
+        {
+          "spellings": [
+            "-V",
+            "--version"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "python-option-version",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-h",
+            "--help"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "python-option-help",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "Interpreter option parsing ends at -c CODE, -m MODULE, - (stdin), or SCRIPT; all remaining arguments are forwarded byte-for-byte into Python sys.argv[1:].",
+      "encoding": "Exact bytes for streams and argv; UTF-8 source text; workspace documents read through the revision-aware host view.",
+      "statuses": {
+        "0": "program completed without uncaught exception",
+        "1": "program exited with ordinary nonzero status or uncaught exception",
+        "2": "usage or command-line option error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "workspace-read",
+            "workspace-write"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "python3 -c 'print(\"alpha\")'",
+        "stdout": "alpha\n",
+        "status": 0,
+        "kind": "documented-output-example; portable-python-launch-catalog",
+        "setup": {}
+      },
+      "notes": "python and python3 bind to the same Portable Python WASI CPython runtime and fixed launch package image. When the direct python tool is offered on the active surface, bare python/python3 launches in command receive PYTHON_TOOL_REQUIRED before startup; explicit external -- python3 selects the project or system Python environment. Supports read-only python -m pip list|show|freeze and host-managed python -m http.server.",
+      "reuse": {
+        "implementation": "lycaon/internal/pythoncatalog/invocation.go",
+        "tests": [
+          "lycaon/internal/pythoncatalog/invocation_test.go"
+        ],
+        "extension": "Bind native python and python3 command forms to the shared Portable Python image and workspace boundary.",
+        "evidence_kind": "catalog and parser unit tests; runtime qualification in PY02-PY06"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "python-operands-valid",
+        "python-rejection",
+        "python-option-c",
+        "python-option-m",
+        "python-option-u",
+        "python-option-B",
+        "python-option-W",
+        "python-option-X",
+        "python-option-version",
+        "python-option-help"
+      ]
+    },
+    {
+      "name": "pytest",
+      "aliases": [],
+      "family": "python",
+      "owner": "processes",
+      "argv": "pytest [-q] [-v] [-x] [-s] [-k EXPRESSION] [--tb STYLE] [PATH_OR_NODEID ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-q",
+            "--quiet"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pytest-option-q",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--verbose"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pytest-option-v",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-x",
+            "--exitfirst"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pytest-option-x",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-s"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "pytest-option-s",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-k"
+          ],
+          "arity": 1,
+          "value_role": "expression",
+          "fixture_id": "pytest-option-k",
+          "consumption": "fixed",
+          "sample_values": [
+            "test_smoke"
+          ]
+        },
+        {
+          "spellings": [
+            "--tb"
+          ],
+          "arity": 1,
+          "value_role": "style",
+          "fixture_id": "pytest-option-tb",
+          "consumption": "fixed",
+          "sample_values": [
+            "short"
+          ]
+        }
+      ],
+      "operands": "Workspace test files, directories, or pytest node IDs (path::test_name). Uses sys-level capture and session scratch for tmp_path.",
+      "encoding": "UTF-8 test output and tracebacks; workspace inputs read through the revision-aware host view.",
+      "statuses": {
+        "0": "all tests collected and passed",
+        "1": "tests collected and run with failures",
+        "2": "test execution interrupted or usage error",
+        "5": "no tests collected"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "workspace-read",
+            "workspace-write"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "pytest -q",
+        "stdout": "",
+        "status": 0,
+        "kind": "documented-output-example; portable-python-launch-catalog",
+        "setup": {}
+      },
+      "notes": "Managed console script bound to pytest:console_main in the Portable Python launch image. Disables ambient plugin autoload and native crash-signal plugin on WASI; preserves caplog, monkeypatch, and tmp_path in private scratch.",
+      "reuse": {
+        "implementation": "lycaon/internal/pythoncatalog/launch_catalog.go",
+        "tests": [
+          "lycaon/internal/pythoncatalog/manifest_test.go"
+        ],
+        "extension": "Expose managed pytest console script bound to the Portable Python image manifest.",
+        "evidence_kind": "launch catalog contract tests; runtime qualification in PY02-PY06"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "pytest-operands-valid",
+        "pytest-rejection",
+        "pytest-option-q",
+        "pytest-option-v",
+        "pytest-option-x",
+        "pytest-option-s",
+        "pytest-option-k",
+        "pytest-option-tb"
+      ]
+    },
+    {
+      "name": "markdown-it",
+      "aliases": [],
+      "family": "python",
+      "owner": "processes",
+      "argv": "markdown-it [-h] [-v] [FILE ...]",
+      "forms": [
+        {
+          "spellings": [
+            "-h",
+            "--help"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "markdown-it-option-help",
+          "consumption": "fixed",
+          "sample_values": []
+        },
+        {
+          "spellings": [
+            "-v",
+            "--version"
+          ],
+          "arity": 0,
+          "value_role": "boolean",
+          "fixture_id": "markdown-it-option-version",
+          "consumption": "fixed",
+          "sample_values": []
+        }
+      ],
+      "operands": "CommonMark input files or stdin when no file operand is provided.",
+      "encoding": "UTF-8 Markdown input and HTML output.",
+      "statuses": {
+        "0": "conversion completed",
+        "1": "ordinary command failure",
+        "2": "usage or option error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "workspace-read"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "printf '# hi\\n' | markdown-it",
+        "stdout": "<h1>hi</h1>\n",
+        "status": 0,
+        "kind": "documented-output-example; portable-python-launch-catalog",
+        "setup": {}
+      },
+      "notes": "Managed console script bound to markdown_it.cli.parse:interactive from markdown-it-py in the Portable Python launch image.",
+      "reuse": {
+        "implementation": "lycaon/internal/pythoncatalog/launch_catalog.go",
+        "tests": [
+          "lycaon/internal/pythoncatalog/manifest_test.go"
+        ],
+        "extension": "Expose managed markdown-it console script bound to the Portable Python image manifest.",
+        "evidence_kind": "launch catalog contract tests; runtime qualification in PY02-PY06"
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "markdown-it-operands-valid",
+        "markdown-it-rejection",
+        "markdown-it-option-help",
+        "markdown-it-option-version"
+      ]
+    }
+  ]
+}
