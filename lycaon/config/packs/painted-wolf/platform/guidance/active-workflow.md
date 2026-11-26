@@ -78,7 +78,7 @@ The host advances on its own once the gates pass.
 **Choice transitions out of this phase** — call `workflow_transition` with the arm's `transition_id`; do not invent phase ids.
 {% for arm in phase_exit.choice_transitions %}- `{{ arm.id }}` — {{ arm.label }}{% if arm.coordinator_may_fire %}: `workflow_transition(transition_id="{{ arm.id }}")`{% else %}: {% if arm.actors %}{% for a in arm.actors %}{{ a }}{% if not forloop.Last %}, {% endif %}{% endfor %}{% else %}the user{% endif %} takes this one — you cannot fire it{% endif %}
 {% endfor %}{% endif %}{% if phase_exit.depth_param %}
-Depth parameter: `{{ phase_exit.depth_param }}`.
+Depth parameter: {{ phase_exit.depth_param }}.
 {% endif %}{% endif %}{% if next_phase %}Next: {{ next_phase }}.
 {% endif %}
 {% endif %}

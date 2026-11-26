@@ -78,14 +78,16 @@ type TurnCloseoutCause struct {
 	BlockedCount int
 }
 
-// Text states the cause in the clause the closeout nudge opens with.
+// Text states the cause in the clause the closeout nudge opens with. The
+// closeout turn offers no tools, so the blocked tool is named outside
+// backticks, which would claim it is callable.
 func (c TurnCloseoutCause) Text() string {
 	if c.Reason != TurnCloseoutBlockedLoop || c.BlockedCount <= 0 {
 		return TurnCloseoutReasonText(c.Reason)
 	}
 	subject := "the reply"
 	if c.BlockedTool != "" {
-		subject = "`" + c.BlockedTool + "`"
+		subject = "the " + c.BlockedTool + " call"
 	}
 	text := fmt.Sprintf("%s was refused %d times in a row", subject, c.BlockedCount)
 	if c.BlockedCode != "" {

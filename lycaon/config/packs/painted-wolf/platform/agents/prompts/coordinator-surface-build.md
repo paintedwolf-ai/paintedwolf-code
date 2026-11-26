@@ -1,8 +1,8 @@
 {% if has_file_tools %}
 ## Path scopes (build posture)
 
-- **Read:** {% for g in read_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
-- **Write:** {% for g in write_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
+- **Read:** `{{ read_globs|join:"`, `" }}`
+- **Write:** `{{ write_globs|join:"`, `" }}`
 
 ### Discovery
 

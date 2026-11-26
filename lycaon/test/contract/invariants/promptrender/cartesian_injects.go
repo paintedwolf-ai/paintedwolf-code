@@ -9,12 +9,16 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
+	"github.com/lycaon/lycaon/internal/workerroster"
+	"github.com/lycaon/lycaon/internal/workerstate"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
@@ -87,7 +91,11 @@ func runAllKicksAndNudges(
 	if err := sweep.workerKicks(ctx, anchorReg, informKickIDs(anchorReg, "worker-"), wReps); err != nil {
 		return err
 	}
-	if err := sweep.phaseKicks(ctx, wfReg, cReps); err != nil {
+	pairs, err := cachedCoordinatorPairs()
+	if err != nil {
+		return err
+	}
+	if err := sweep.phaseKicks(ctx, wfReg, anchorReg, pairs); err != nil {
 		return err
 	}
 	sum.KickAndNudgeCount += sweep.rendered
@@ -117,23 +125,30 @@ func runCoordinatorInjectRenders(
 	}
 	for idx, cr := range cReps {
 		resolveNamed := resolver.forCoordinatorState(cr.state)
-		waitSchema := cr.auth.Schemas["wait"]
 
-		// command-jobs (running+exited+held and exited-only).
-		for _, withRunning := range []bool{true, false} {
-			jobs := jobsBoth
+		// command-jobs: running, exited and held; exited only; running only.
+		jobSets := [][]bgprocess.JobSnapshot{jobsBoth, jobsBoth[1:], jobsBoth[:1]}
+		// Live jobs and held calls project their control tools onto the turn.
+		jobAuths := map[bool]hoststate.TurnAuthority{}
+		for jIdx, jobs := range jobSets {
 			var held []heldcall.Running
-			if withRunning {
+			if jIdx == 0 {
 				held = heldRunning
 			} else if !firstOfReader[idx] {
 				continue
-			} else {
-				jobs = jobsBoth[1:]
 			}
-			cmdBlock := inject.RenderCommandJobsBlock(ctx, injRenderer, cr.auth.Reader, waitSchema, "sess-inj", jobs, held, now, "coordinator")
+			jobAuth, ok := jobAuths[len(held) > 0]
+			if !ok {
+				a, err := hoststate.FreezeTurnAuthorityWithResources(ctx, cr.state, toolcontract.ResourcePresence{CommandJobs: true, HeldCalls: len(held) > 0})
+				if err != nil {
+					return err
+				}
+				jobAuth, jobAuths[len(held) > 0] = a, a
+			}
+			cmdBlock := inject.RenderCommandJobsBlock(ctx, injRenderer, jobAuth.Reader, jobAuth.Schemas["wait"], "sess-inj", jobs, held, now, "coordinator")
 			if cmdBlock != "" {
 				sum.InjectAndGuidanceCount++
-				viols := checkClaimsOnce(s, "inject/command-jobs ("+cr.state.ID+")", cmdBlock, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
+				viols := checkClaimsOnce(s, "inject/command-jobs ("+cr.state.ID+")", cmdBlock, jobAuth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, resolveNamed, true)
 				sum.Violations = append(sum.Violations, viols...)
 			}
 		}
@@ -153,6 +168,19 @@ func runCoordinatorInjectRenders(
 			{
 				Reader: cr.auth.Reader, ProgressMissing: true, VerifyRequired: false, WorkersOmitted: 1,
 				Workers: nil,
+			},
+			{
+				Reader: cr.auth.Reader, WorkersOmitted: 0,
+				Workers: workerroster.Roster{Rows: []workerroster.Row{{Name: "w-only", Agent: "implementer", State: workerstate.Working}}}.Vars(),
+			},
+			{
+				Reader: cr.auth.Reader, WorkersOmitted: 1,
+				Workers: workerroster.Roster{Rows: []workerroster.Row{{
+					Name: "w-solo", Agent: "implementer", State: workerstate.Working, About: "Second round",
+					Result:  &workerroster.Result{Handle: "res-2", Disposition: "open"},
+					Changed: workerroster.Paths{Shown: []string{"a.go"}},
+					Read:    workerroster.Paths{Shown: []string{"a.go"}},
+				}}}.Vars(),
 			},
 		}
 		for tIdx, tsIn := range tsInputs {
@@ -195,7 +223,7 @@ func renderRemainingCoordInjectsForRep(
 	first bool,
 	sum *CartesianSummary,
 ) error {
-	namedWorkers := make([]api.BoardWorker, 9)
+	namedWorkers := make([]api.BoardWorker, packboard.MaxOrientationWorkers+2)
 	for w := range namedWorkers {
 		namedWorkers[w] = api.BoardWorker{
 			Name: fmt.Sprintf("w%d", w+1), AgentType: "implementer", State: "working",
@@ -272,6 +300,10 @@ func renderRemainingCoordInjectsForRep(
 				OwnTruncated: true,
 				Files:        []inject.SourceChangeFile{{Path: "only.go", Actor: "user", Op: "modify", At: "14:00 UTC", Effects: 1, WorkingSet: true}},
 			},
+			{
+				OtherFiles: 2, OtherEffects: 2, OtherWorkingSet: true,
+				Files: []inject.SourceChangeFile{{Path: "seen.go", Actor: "user", Op: "modify", At: "14:00 UTC", Effects: 1, WorkingSet: true}},
+			},
 		}
 		for _, br := range scBriefs {
 			scText := inject.RenderSourceChangesBlock(ctx, injRenderer, cr.auth.Reader, "sess-sc", br)
@@ -296,12 +328,16 @@ func renderRemainingCoordInjectsForRep(
 		}
 	}
 
-	// transition.md
-	for _, entered := range []string{"investigate", "orchestrate", "wrapup"} {
-		trText, err := injRenderer.RenderWithReader(ctx, cr.auth.Reader, "transition", map[string]any{
-			"execution_mode_entered": entered,
-			"execution_mode_left":    "investigate",
-		})
+	for _, tr := range modeTransitionsInto(cr.state) {
+		occ := map[string]any{}
+		if err := prompts.MergeCoordinatorPromptVars(cr.state.TurnProfile.SurfaceID, prompts.ExecutionModePromptTransition{
+			ExecutionModePrevious: tr.ExecutionModePrevious,
+			ExecutionModeEntered:  tr.ExecutionModeEntered,
+			ExecutionModeLeft:     tr.ExecutionModeLeft,
+		}, "", occ); err != nil {
+			return err
+		}
+		trText, err := anchor.RenderInformWithReader(ctx, anchor.InjectTransition, anchor.MatchContext{Surface: "coordinator", SessionID: "sess-tr"}, injRenderer, cr.auth.Reader, occ)
 		if err != nil {
 			return err
 		}
@@ -312,4 +348,29 @@ func renderRemainingCoordInjectsForRep(
 		}
 	}
 	return nil
+}
+
+// modeTransitionsInto computes, for st's surface, the transition the host
+// injects after each prior execution-mode family, and on an active run after
+// each mode a phase entry can force.
+func modeTransitionsInto(st hoststate.CoordinatorState) []surface.TransitionVars {
+	current := surface.ExecutionModeFamily(st.TurnProfile.SurfaceID)
+	families := []string{"", surface.ExecutionModeFamilyInvestigate, surface.ExecutionModeFamilyOrchestrate, surface.ExecutionModeFamilyWrapup}
+	causes := [][]surface.ModeTransitionCause{nil}
+	if st.RunContext.RunID != "" {
+		for _, mode := range families {
+			if workflowdef.IsForceExecutionMode(mode) {
+				causes = append(causes, []surface.ModeTransitionCause{{Kind: surface.ModeTransitionCausePhaseHook, Mode: mode}})
+			}
+		}
+	}
+	var out []surface.TransitionVars
+	for _, previous := range families {
+		for _, c := range causes {
+			if tr := surface.ComputeModeTransition(previous, current, c); inject.ShouldRenderTransitionInject(tr) {
+				out = append(out, tr)
+			}
+		}
+	}
+	return out
 }

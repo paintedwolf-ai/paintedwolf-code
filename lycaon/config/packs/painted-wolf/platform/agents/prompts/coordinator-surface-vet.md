@@ -2,7 +2,7 @@
 
 Readonly coordinator — no product mutations.
 
-- **Read paths:** {% for g in read_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
+- **Read paths:** `{{ read_globs|join:"`, `" }}`
 
 Vet turns resolve to an `observe_` surface, so no tool on this turn changes the project.
 

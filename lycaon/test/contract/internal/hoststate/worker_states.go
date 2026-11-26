@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -357,7 +358,8 @@ func buildTempPaths(ts TempState) (scratch string, shared []string) {
 	case TempScratchOnly:
 		return "/tmp/pw-session-scratch", nil
 	case TempScratchAndShared:
-		return "/tmp/pw-session-scratch", []string{"/tmp/pw-shared-cache"}
+		// A grant over every shared temp location the host knows.
+		return "/tmp/pw-session-scratch", confine.WritableSharedTempLocations("", confine.SharedTempLocations())
 	default:
 		return "", nil
 	}

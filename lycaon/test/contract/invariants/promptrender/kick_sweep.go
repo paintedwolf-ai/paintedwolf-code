@@ -8,11 +8,13 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
@@ -154,6 +156,15 @@ func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase ma
 	if !kickOccurrenceProducible(kick, envBase, cr.auth.Reader, cr.auth.Offered) {
 		return nil
 	}
+	if kick == "coordinator-process-finished" {
+		// The settled handle stays live, so its control tools stay projected.
+		_, held := envBase["held_call_handle"]
+		auth, err := hoststate.FreezeTurnAuthorityWithResources(ctx, cr.state, toolcontract.ResourcePresence{CommandJobs: !held, HeldCalls: held})
+		if err != nil {
+			return err
+		}
+		cr.auth = auth
+	}
 	reader := cr.auth.Reader
 	subj := toolvocabtest.SubjectSelfNow()
 	var nextTurn *toolvocabtest.ActorAuthority
@@ -169,6 +180,14 @@ func (k *kickSweep) coordinatorKick(ctx context.Context, kick string, envBase ma
 		writes := cr.state.SessionMode != api.SessionModeAsk && cr.auth.Reader.Held()["command_mutation"]
 		subj = toolvocabtest.SubjectSessionNextTurn(writes)
 		data["session_command_mutation_capable"] = writes
+	}
+	if closeoutKicks[kick] && data["reason_text"] == nil {
+		// Closeout always states its cause; the default cause is the iteration cap.
+		data["reason_text"] = promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutIterationCap}.Text()
+	}
+	if kick == "coordinator-citation-grounding" {
+		// The closeout retry sets it from the request's reach.
+		data["can_recall"] = cr.auth.Reach.Status("recall") == toolreach.Callable
 	}
 	if err := prompts.MergeCoordinatorKickVarsForTools(data, reader); err != nil {
 		return err
@@ -268,52 +287,6 @@ func (k *kickSweep) workerKick(ctx context.Context, kick string, envBase map[str
 	return nil
 }
 
-// phaseKicks renders every workflow phase.entered kick on every stock
-// recipient of the phase's coordinator surface; the further fixtures run on
-// build posture.
-func (k *kickSweep) phaseKicks(ctx context.Context, wfReg *workflowdef.Registry, reps []coordRep) error {
-	bySurface := map[string][]coordRep{}
-	for _, cr := range reps {
-		if cr.state.PackOverlayID == "stock" {
-			bySurface[cr.state.TurnProfile.SurfaceID] = append(bySurface[cr.state.TurnProfile.SurfaceID], cr)
-		}
-	}
-	variants := phaseKickVariants()
-	for _, wfKey := range sortedKeys(wfReg.All()) {
-		m := wfReg.All()[wfKey]
-		surfaces := map[string]string{}
-		for _, p := range m.PhaseDefs {
-			surfaces[p.ID] = p.CoordinatorSurface
-		}
-		for _, in := range m.Injects {
-			if in.On != "phase.entered" || in.Selector.Phase == nil {
-				continue
-			}
-			surfID := surfaces[*in.Selector.Phase]
-			for _, cr := range bySurface[surfID] {
-				for vIdx, pv := range variants {
-					if vIdx > 0 && cr.state.Posture != api.SessionPostureBuild {
-						continue
-					}
-					data := maps.Clone(pv)
-					if err := prompts.MergeCoordinatorKickVarsForTools(data, cr.auth.Reader); err != nil {
-						return err
-					}
-					text, rKey, err := k.render(ctx, "phasekick:", in.Render, cr.auth.Reader, data)
-					if err != nil {
-						return err
-					}
-					label := fmt.Sprintf("%s phase %s kick %s on %s (%s)", wfKey, *in.Selector.Phase, in.Render, surfID, cr.state.ID)
-					checkClaimsCached(k.cache, rKey, cr.auth.Digest, k.report, func() []string {
-						return checkClaimsOnce(k.s, label, text, cr.auth, cr.state.SessionMode, cr.state.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
-					})
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func allIndexes(n int) []int {
 	out := make([]int, n)
 	for i := range out {
@@ -322,8 +295,38 @@ func allIndexes(n int) []int {
 	return out
 }
 
+// closeoutKicks names the kicks turnnudges.Closeout renders, true where it is
+// the kick's only producer, so reason_text is always set.
+var closeoutKicks = map[string]bool{
+	"coordinator-closeout": true, "coordinator-turn-closeout": true, "worker-closeout": false, "worker-cancel-closeout": false,
+}
+
+// closeoutCauseEnvelopes is the data turnnudges.Closeout builds from each
+// production turn-closeout cause.
+func closeoutCauseEnvelopes(kick string) []map[string]any {
+	if kick == "worker-cancel-closeout" {
+		return []map[string]any{{"cancel_reason": "the person stopped this leg"}, {}}
+	}
+	if _, ok := closeoutKicks[kick]; !ok {
+		return nil
+	}
+	causes := []promptloop.TurnCloseoutCause{
+		{Reason: promptloop.TurnCloseoutIterationCap},
+		{Reason: promptloop.TurnCloseoutSpendCeiling},
+		{Reason: promptloop.TurnCloseoutStopped},
+		{Reason: promptloop.TurnCloseoutLLMTimeout},
+		{Reason: promptloop.TurnCloseoutBlockedLoop, BlockedTool: "command", BlockedCode: "PATH_DENIED", BlockedCount: promptloop.BlockedLoopRejectCap},
+	}
+	out := make([]map[string]any, 0, len(causes))
+	for _, c := range causes {
+		out = append(out, map[string]any{"reason_text": c.Text(), "llm_timeout": c.Reason == promptloop.TurnCloseoutLLMTimeout})
+	}
+	return out
+}
+
 func richKickEnvelopes(reg *anchor.Registry, kick string) []map[string]any {
 	out := append(kickEnvelopeVariants(reg, kick), map[string]any{})
+	out = append(out, closeoutCauseEnvelopes(kick)...)
 	extraA := map[string]any{
 		"reason_text":                  "closeout criteria open",
 		"llm_timeout":                  true,
