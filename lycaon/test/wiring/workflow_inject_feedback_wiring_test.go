@@ -96,8 +96,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 }
 
 // On the assembled host, a pending workflow question reaches the coordinator as
-// the feedback-pending kick while workflow_user_feedback stays offered, and the
-// kick clears once the question is answered.
+// the feedback-pending kick, and the kick clears once the question is answered.
 func TestPendingWorkflowFeedbackReachesCoordinator(t *testing.T) {
 	h := BuildForTest(t, WithoutCoordinatorLoop())
 	ctx := h.OwnerCtx(t, t.Context())
@@ -115,15 +114,6 @@ func TestPendingWorkflowFeedbackReachesCoordinator(t *testing.T) {
 	testutil.FailErr(t, "open workflow question", err)
 	if ids := h.Sessions.Manager.Coordinator.Guidance.PendingIDs(ctx, sess.ID); !slices.Contains(ids, pendingKick) {
 		t.Fatalf("pending kicks = %v want %s", ids, pendingKick)
-	}
-	current, err := h.Store.Sessions.Get(ctx, sess.ID)
-	testutil.FailErr(t, "reload session", err)
-	offered := false
-	for _, meta := range h.Sessions.Manager.Coordinator.Guards.Policy().ListForPrompt(ctx, current, orchestration.ProfileCoordinator) {
-		offered = offered || meta.Name == "workflow_user_feedback"
-	}
-	if !offered {
-		t.Fatal("workflow_user_feedback not offered while a question is pending")
 	}
 
 	_, err = h.Workflows.Manager.Feedback.ResolveUserFeedback(ctx, sess.ID, handle.RunID, handle.PhaseID, "macOS")

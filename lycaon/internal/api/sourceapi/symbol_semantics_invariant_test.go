@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -108,6 +109,9 @@ func symbolHitNames(result search.ExecutorReport) []string {
 
 func TestSymbolRootAndDependencyScopesRefineToReference(t *testing.T) {
 	e, p, leg := symbolProgressFixture(t, 2)
+	// The result cap is under test, not elapsed time: no leg here may end on
+	// its wall clock, so the budgets differ only in their caps.
+	e.wallBudget = time.Hour
 	root := p.Roots[0]
 	testutil.FailErr(t, "create dependency fixture", os.MkdirAll(filepath.Join(root.Path, "node_modules/lib"), 0700))
 	replaceSymbolInput(t, root.Path, "node_modules/lib/dependency.go", "package lib\nfunc TargetDependency() {}\n")

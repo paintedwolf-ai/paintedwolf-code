@@ -1688,10 +1688,6 @@
       "./internal/jsonfence": {
         "FuzzTrailing": 30
       },
-      "./internal/parse": {
-        "FuzzExtractJSON": 30,
-        "FuzzValidate": 30
-      },
       "./internal/projectroot": {
         "FuzzBaselinePathRoundTrip": 60,
         "FuzzRootResolutionMatchesKernel": 240

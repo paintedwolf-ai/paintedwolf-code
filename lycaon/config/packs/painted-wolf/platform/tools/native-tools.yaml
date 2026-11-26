@@ -75,31 +75,21 @@ multi_root:
     - update_progress
     - request_decision
     - message_coordinator
-    - handoff_init
     - handoff_reserve
     - handoff_release
     - handoff_release_all
-    - handoff_health
     - workflow_compose
     - workflow_compose_from_template
     - workflow_catalog_summaries
     - workflow_persist
-    - workflow_user_feedback
     - ask_user
     - workflow_advance
     - fanout_plan
     - submit_verdict
-    - parse_extract_json
-    - parse_validate
-    - parse_evaluation
-    - plan_append_review_evidence
     - plan_from_blueprint
     - read_findings
     - read_review
-    - state_update
-    - state_close
     - state_start
-    - state_query
     - web_search
     - fetch_url
     - secret_generate
@@ -348,11 +338,18 @@ session_scope:
 runtime_registered_prefixes:
   - mcp_
 
-# Retired tools whose replacement is content, not a call. Models keep calling
-# them from habit and old history, so the refusal says to write the text.
+# Retired tools whose replacement is content, not a call. A tool retired to
+# paintedwolf.markdown_note is refused with a direction to write the text; the
+# others now arrive as host context or run through command.
 # schemas/agent-public-retirements.json records the same names.
 retired_to_content_contract:
+  parse_evaluation: paintedwolf.command_json_programs
+  parse_extract_json: paintedwolf.command_json_programs
+  parse_validate: paintedwolf.command_json_programs
+  state_close: paintedwolf.workflow_run_exit
+  state_query: paintedwolf.workflow_run_context
   surface_note: paintedwolf.markdown_note
+  workflow_user_feedback: paintedwolf.workflow_run_context
 
 # Rule-selectable host identities have no model-facing tool schema.
 host_produced_tools:
@@ -371,23 +368,17 @@ approval_reversibility:
   capture_page: recoverable
   fetch_url: recoverable
   fanout_plan: reversible
-  handoff_health: reversible
-  handoff_init: reversible
   handoff_release: reversible
   handoff_release_all: reversible
   handoff_reserve: reversible
   instruct_worker: recoverable
   measure_page: recoverable
   pack_board: reversible
-  parse_evaluation: reversible
-  parse_extract_json: reversible
-  parse_validate: reversible
   page_act: recoverable
   page_close: recoverable
   page_open: recoverable
   page_snapshot: recoverable
   preview_overlay: reversible
-  plan_append_review_evidence: reversible
   plan_from_blueprint: reversible
   promote_overlay: reversible
   read_findings: reversible
@@ -409,10 +400,7 @@ approval_reversibility:
   scan_query: reversible
   scan_summary: reversible
   shelve_overlay: reversible
-  state_close: reversible
-  state_query: reversible
   state_start: reversible
-  state_update: reversible
   submit_verdict: reversible
   skills_read: reversible
   source_history: reversible
@@ -436,7 +424,6 @@ approval_reversibility:
   workflow_compose_from_template: reversible
   workflow_persist: reversible
   workflow_transition: reversible
-  workflow_user_feedback: reversible
   code_rewrite: reversible
   inspect_source: reversible
   summarize: reversible
@@ -455,8 +442,6 @@ owner:
   capture_page: browser
   fanout_plan: blueprints
   fetch_url: web_research
-  handoff_health: handoff
-  handoff_init: handoff
   handoff_release: handoff
   handoff_release_all: handoff
   handoff_reserve: handoff
@@ -467,10 +452,6 @@ owner:
   page_close: browser
   page_open: browser
   page_snapshot: browser
-  parse_evaluation: parsing
-  parse_extract_json: parsing
-  parse_validate: parsing
-  plan_append_review_evidence: blueprints
   plan_from_blueprint: blueprints
   preview_overlay: worker_merge
   promote_overlay: worker_merge
@@ -495,10 +476,7 @@ owner:
   shelve_overlay: worker_merge
   skills_read: skills
   source_history: source_ledger
-  state_close: workflow_state
-  state_query: workflow_state
   state_start: workflow_state
-  state_update: workflow_state
   submit_verdict: workflow_verdicts
   task: workers
   terminal_close: terminals
@@ -520,7 +498,6 @@ owner:
   workflow_compose_from_template: workflows
   workflow_persist: workflows
   workflow_transition: workflows
-  workflow_user_feedback: workflows
   code_rewrite: filesystem
   inspect_source: source_ledger
   summarize: summarization
@@ -539,23 +516,17 @@ batch_policy:
   capture_page: serial
   fetch_url: same_tool
   fanout_plan: serial
-  handoff_health: shared
-  handoff_init: serial
   handoff_release: serial
   handoff_release_all: serial
   handoff_reserve: serial
   instruct_worker: serial
   measure_page: serial
   pack_board: serial
-  parse_evaluation: shared
-  parse_extract_json: shared
-  parse_validate: shared
   page_act: serial
   page_close: serial
   page_open: serial
   page_snapshot: serial
   preview_overlay: shared
-  plan_append_review_evidence: serial
   plan_from_blueprint: serial
   promote_overlay: serial
   read_findings: shared
@@ -577,10 +548,7 @@ batch_policy:
   scan_query: shared
   scan_summary: shared
   shelve_overlay: serial
-  state_close: serial
-  state_query: shared
   state_start: serial
-  state_update: serial
   submit_verdict: serial
   skills_read: shared
   source_history: shared
@@ -604,7 +572,6 @@ batch_policy:
   workflow_compose_from_template: serial
   workflow_persist: serial
   workflow_transition: serial
-  workflow_user_feedback: serial
   code_rewrite: serial
   inspect_source: shared
   summarize: same_tool
@@ -645,23 +612,17 @@ lifecycle:
   capture_page: effect_attempt
   fetch_url: effect_attempt
   fanout_plan: db_transaction
-  handoff_health: read_only
-  handoff_init: db_transaction
   handoff_release: db_transaction
   handoff_release_all: db_transaction
   handoff_reserve: db_transaction
   instruct_worker: durable_job
   measure_page: effect_attempt
   pack_board: read_only
-  parse_evaluation: read_only
-  parse_extract_json: read_only
-  parse_validate: read_only
   page_act: effect_attempt
   page_close: ephemeral_control
   page_open: effect_attempt
   page_snapshot: effect_attempt
   preview_overlay: read_only
-  plan_append_review_evidence: effect_attempt
   plan_from_blueprint: db_transaction
   promote_overlay: journaled_mutation
   read_findings: read_only
@@ -683,10 +644,7 @@ lifecycle:
   scan_query: read_only
   scan_summary: read_only
   shelve_overlay: db_transaction
-  state_close: db_transaction
-  state_query: read_only
   state_start: db_transaction
-  state_update: db_transaction
   submit_verdict: db_transaction
   skills_read: read_only
   source_history: read_only
@@ -710,7 +668,6 @@ lifecycle:
   workflow_compose_from_template: db_transaction
   workflow_persist: effect_attempt
   workflow_transition: db_transaction
-  workflow_user_feedback: read_only
   code_rewrite: effect_attempt
   inspect_source: read_only
   summarize: read_only
@@ -729,9 +686,6 @@ ask_allowed:
   - instruct_worker
   - message_coordinator
   - pack_board
-  - parse_evaluation
-  - parse_extract_json
-  - parse_validate
   - read_findings
   - read_review
   - recall
@@ -745,7 +699,6 @@ ask_allowed:
   - secret_list
   - skills_read
   - source_history
-  - state_query
   - summarize
   - survey_repo
   - task
@@ -757,7 +710,6 @@ ask_allowed:
   - workflow_advance
   - workflow_catalog_summaries
   - workflow_transition
-  - workflow_user_feedback
 
 chunkable_payload:
   - code_rewrite

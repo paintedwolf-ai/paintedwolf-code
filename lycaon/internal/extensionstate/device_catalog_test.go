@@ -78,33 +78,21 @@ func TestPublishDeviceCatalogFloorsOnDisabledPlatform(t *testing.T) {
 	}
 }
 
-// Disabling an optional tool schema does not require the stock fallback.
-func TestPublishDeviceCatalogServesCommittedStateWithDisabledToolSchema(t *testing.T) {
+// A committed disable of a schema a profile grants floors to the stock catalog.
+func TestPublishDeviceCatalogFloorsOnDisabledGrantedToolSchema(t *testing.T) {
 	cache := deviceCatalogFixture(t)
-	writeDeviceDesired(t, "format: 1\npacks: []\ndisabled: [tools/schemas/parse_validate]\nown: {}\n")
+	writeDeviceDesired(t, "format: 1\npacks: []\ndisabled: [tools/schemas/scan_compare]\nown: {}\n")
 
 	eff, view, err := extensionstate.PublishDeviceCatalog(t.Context(), cache, nil, nil)
-	testutil.FailErr(t, "publish committed view", err)
-	if view == nil || view.ToolSchemas == nil {
-		t.Fatal("expected a committed view with tool schemas")
+	testutil.FailErr(t, "publish fallback catalog", err)
+	if view == nil {
+		t.Fatal("expected a stock-floor view")
 	}
-	if floorDiag(eff) {
-		t.Fatal("a disabled tool schema must not degrade to the stock floor")
+	if !floorDiag(eff) {
+		t.Fatalf("expected %s diagnostic, got %v", extpacks.DiagDesiredStateRejected, eff.Diagnostics)
 	}
-	if eff.HasLoaded("tools/schemas/parse_validate") {
-		t.Fatal("the user's disable must be honored, not overridden by the floor")
-	}
-	found := false
-	for _, d := range eff.Diagnostics {
-		if d.Code == extpacks.DiagToolSchemaMissing && d.UnitID == "tools/schemas/parse_validate" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected %s diagnostic, got %v", extpacks.DiagToolSchemaMissing, eff.Diagnostics)
-	}
-	if extpacks.Active() != eff {
-		t.Fatal("expected the committed catalog to be active")
+	if !eff.HasLoaded("tools/schemas/scan_compare") {
+		t.Fatal("the stock floor must keep the granted schema")
 	}
 }
 

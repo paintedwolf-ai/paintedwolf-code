@@ -24,6 +24,16 @@ const symbolProjectWorkers = 4
 type SymbolExecutor struct {
 	registry project.Registry
 	progress symbolProgressCache
+	// wallBudget replaces the budget's wall clock when set.
+	wallBudget time.Duration
+}
+
+// legWall is how long one symbol leg may run before it answers with what it has.
+func (e *SymbolExecutor) legWall(budget search.SearchBudget) time.Duration {
+	if e.wallBudget > 0 {
+		return e.wallBudget
+	}
+	return budget.Wall()
 }
 
 // NewSymbolExecutor returns the symbol leg over the project registry.
@@ -63,7 +73,7 @@ func (e *SymbolExecutor) Run(ctx context.Context, leg search.PlanLeg) (search.Ex
 		return search.ExecutorReport{}, err
 	}
 	projects := symbolProjects(leg.Symbol.Roots)
-	legCtx, cancel := context.WithTimeout(ctx, leg.Symbol.Budget.Wall())
+	legCtx, cancel := context.WithTimeout(ctx, e.legWall(leg.Symbol.Budget))
 	defer cancel()
 
 	results := make([]symbolProjectResult, len(projects))
@@ -143,7 +153,7 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		rootFilter, known := rootFilters[rootID]
 		return known && rootFilter.Admits(path, name)
 	}
-	allocation := leg.Budget.SymbolAllocation()
+	allocation := search.SymbolAllocationFor(e.legWall(leg.Budget))
 	started := time.Now()
 	result, err := symbolsearch.Run(ctx, p, symbolsearch.Request{
 		Query:            leg.Name,
