@@ -21,11 +21,12 @@ const (
 )
 
 // worktreeChanges are the Git plumbing commands that change only the index:
-// a new entry for the file, its entry removed, and unmerged stages.
-var worktreeChanges = map[string][]string{
-	worktreeStale:    {"read-tree", "ours"},
-	worktreeLeftover: {"rm", "-q", "--cached", "AGENTS.md"},
-	worktreeConflict: {"read-tree", "-m", "base", "ours", "theirs"},
+// a new entry for the file, its entry removed, and unmerged stages (a
+// three-way merge needs the index at ours first).
+var worktreeChanges = map[string][][]string{
+	worktreeStale:    {{"read-tree", "ours"}},
+	worktreeLeftover: {{"rm", "-q", "--cached", "AGENTS.md"}},
+	worktreeConflict: {{"read-tree", "ours"}, {"read-tree", "-m", "-i", "base", "ours", "theirs"}},
 }
 
 // worktreeFixture holds a repository whose AGENTS.md differs on the base,
@@ -101,10 +102,12 @@ func (w *worktreeFixture) snapshot(ctx context.Context, kind string) (indexwatch
 		cleanup()
 		return indexwatch.Snapshot{}, func() {}, fmt.Errorf("no index snapshot of the worktree fixture")
 	}
-	if err := gitRun(ctx, dir, worktreeChanges[kind]...); err != nil {
-		snap.Release()
-		cleanup()
-		return indexwatch.Snapshot{}, func() {}, err
+	for _, args := range worktreeChanges[kind] {
+		if err := gitRun(ctx, dir, args...); err != nil {
+			snap.Release()
+			cleanup()
+			return indexwatch.Snapshot{}, func() {}, err
+		}
 	}
 	return snap, cleanup, nil
 }
