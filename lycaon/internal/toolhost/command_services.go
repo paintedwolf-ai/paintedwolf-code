@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/portablepython"
+	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
@@ -45,6 +46,24 @@ func (r *CommandServices) PortablePython() *portablepython.Service {
 		return nil
 	}
 	return r.pythonRunner.Service()
+}
+
+// ActivePythonPreviewJobs returns active supervised Python preview listeners.
+func (r *CommandServices) ActivePythonPreviewJobs() []pythonadmission.PreviewListenerRecord {
+	svc := r.PortablePython()
+	if svc == nil {
+		return nil
+	}
+	return svc.ActivePreviewJobs()
+}
+
+// StopPythonPreviewJob stops an active supervised Python preview listener by JobID.
+func (r *CommandServices) StopPythonPreviewJob(ctx context.Context, jobID string) error {
+	svc := r.PortablePython()
+	if svc == nil {
+		return fmt.Errorf("portable python service is not configured")
+	}
+	return svc.StopPreviewJob(ctx, jobID)
 }
 
 func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {

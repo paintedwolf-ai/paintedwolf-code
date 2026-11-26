@@ -498,6 +498,15 @@ func NewWazeroRuntime(ctx context.Context, cfg RuntimeConfig) (*WazeroRuntime, e
 	if strings.TrimSpace(wsMount) == "" {
 		wsMount = DefaultGuestWorkspaceMount
 	}
+	if strings.TrimSpace(cfg.ScratchRoot) != "" {
+		if err := os.MkdirAll(cfg.ScratchRoot, 0o700); err != nil {
+			_ = rt.Close(ctx)
+			return nil, fmt.Errorf("create scratch root: %w", err)
+		}
+		// Sweep any orphaned per-invocation scratch directories left behind by
+		// a previously crashed or abruptly terminated host process.
+		_, _ = CleanOrphanedScratchDirs(cfg.ScratchRoot)
+	}
 
 	return &WazeroRuntime{
 		rt:                  rt,
@@ -526,6 +535,39 @@ func (r *WazeroRuntime) meteredModule(_ context.Context) (wazero.CompiledModule,
 		r.compiledMetered, r.compiledMeteredErr = r.rt.CompileModule(context.Background(), instrumented)
 	})
 	return r.compiledMetered, r.compiledMeteredErr
+}
+
+// CleanOrphanedScratchDirs removes any leftover per-invocation scratch
+// directories (matching "pw-py-scratch-*") in scratchRoot left behind by a
+// previously crashed or lost host process.
+func CleanOrphanedScratchDirs(scratchRoot string) (int, error) {
+	scratchRoot = strings.TrimSpace(scratchRoot)
+	if scratchRoot == "" {
+		return 0, nil
+	}
+	entries, err := os.ReadDir(scratchRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	removed := 0
+	var firstErr error
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "pw-py-scratch-") {
+			continue
+		}
+		if rmErr := os.RemoveAll(filepath.Join(scratchRoot, name)); rmErr != nil {
+			if firstErr == nil {
+				firstErr = rmErr
+			}
+			continue
+		}
+		removed++
+	}
+	return removed, firstErr
 }
 
 // Manifest returns the image manifest associated with this runtime.

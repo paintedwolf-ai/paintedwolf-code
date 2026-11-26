@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -174,6 +175,8 @@ type Service struct {
 	receiptSink     pythonevidence.ReceiptSink
 	inlineBudget    int
 	httpClient      *http.Client
+	previewMu       sync.Mutex
+	activePreviews  map[string]*pythonadmission.PreviewListener
 	execSeq         atomic.Uint64
 }
 
@@ -295,6 +298,7 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 		receiptSink:     cfg.ReceiptSink,
 		inlineBudget:    inlineBudget,
 		httpClient:      cfg.DefaultHTTPClient,
+		activePreviews:  make(map[string]*pythonadmission.PreviewListener),
 	}, nil
 }
 
@@ -327,8 +331,19 @@ func (s *Service) PackageHelp() string {
 	return pythoncatalog.RenderPackageHelp(s.catalogManifest)
 }
 
-// Close shuts down the compiled Wasm runtime and cleans up owned scratch state.
+// Close shuts down the compiled Wasm runtime, stops any active supervised
+// preview listeners, and cleans up owned scratch state.
 func (s *Service) Close(ctx context.Context) error {
+	s.previewMu.Lock()
+	previews := make([]*pythonadmission.PreviewListener, 0, len(s.activePreviews))
+	for id, pl := range s.activePreviews {
+		previews = append(previews, pl)
+		delete(s.activePreviews, id)
+	}
+	s.previewMu.Unlock()
+	for _, pl := range previews {
+		_ = pl.Stop(ctx)
+	}
 	var err error
 	if s.runtime != nil {
 		err = s.runtime.Close(ctx)
@@ -337,6 +352,43 @@ func (s *Service) Close(ctx context.Context) error {
 		_ = os.RemoveAll(s.ownedScratch)
 	}
 	return err
+}
+
+// ActivePreviewJobs returns snapshots of all currently active supervised
+// preview listeners owned by this Service.
+func (s *Service) ActivePreviewJobs() []pythonadmission.PreviewListenerRecord {
+	if s == nil {
+		return nil
+	}
+	s.previewMu.Lock()
+	defer s.previewMu.Unlock()
+	out := make([]pythonadmission.PreviewListenerRecord, 0, len(s.activePreviews))
+	for id, pl := range s.activePreviews {
+		if !pl.Active() {
+			delete(s.activePreviews, id)
+			continue
+		}
+		out = append(out, pl.Record())
+	}
+	return out
+}
+
+// StopPreviewJob stops a supervised preview listener by its JobID and
+// unregisters it from the session job registry.
+func (s *Service) StopPreviewJob(ctx context.Context, jobID string) error {
+	if s == nil {
+		return errors.New("portable python service is not initialized")
+	}
+	s.previewMu.Lock()
+	pl, ok := s.activePreviews[jobID]
+	if ok {
+		delete(s.activePreviews, jobID)
+	}
+	s.previewMu.Unlock()
+	if !ok || pl == nil {
+		return fmt.Errorf("preview job %q not found", jobID)
+	}
+	return pl.Stop(ctx)
 }
 
 // ToolRequest configures one invocation of Service.ExecuteTool.
@@ -547,7 +599,13 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 				}, err
 			}
 			rec := pl.Record()
-			return &ToolResponse{
+			s.previewMu.Lock()
+			if s.activePreviews == nil {
+				s.activePreviews = make(map[string]*pythonadmission.PreviewListener)
+			}
+			s.activePreviews[rec.JobID] = pl
+			s.previewMu.Unlock()
+			resp := &ToolResponse{
 				ExecutionID:       execID,
 				ExitCode:          0,
 				CleanCompletion:   true,
@@ -556,7 +614,9 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 				PreviewRecord:     &rec,
 				AdmissionEvidence: memAdm,
 				DocumentEvidence:  memDoc,
-			}, nil
+			}
+			s.finalizeResponse(ctx, req, resp, memAdm, memDoc)
+			return resp, nil
 		}
 	}
 

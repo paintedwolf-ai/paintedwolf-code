@@ -110,6 +110,7 @@ func buildPortablePythonService(ctx context.Context) (*portablepython.Service, e
 		return nil, fmt.Errorf("create production retained artifact store: %w", err)
 	}
 	return portablepython.NewService(ctx, portablepython.ServiceConfig{
+		ScratchRoot:    filepath.Join(retainedRoot, "portable-python", "scratch"),
 		SecretScreener: screener,
 		RetainedStore:  retainedStore,
 	})

@@ -143,7 +143,20 @@ func buildPythonSessionPolicy(tc tools.ToolContext) pythonadmission.PolicyEvalua
 			}
 			return pythonadmission.PolicyDecision{Kind: pythonruntime.DecisionAllow}
 
-		case pythonruntime.EffectSubprocess, pythonruntime.EffectPreviewListener:
+		case pythonruntime.EffectPreviewListener:
+			if strings.TrimSpace(tc.Identity.SessionID) == "" || tc.Source.AskMode {
+				return pythonadmission.PolicyDecision{
+					Kind:      pythonruntime.DecisionStop,
+					Condition: pythonadmission.ConditionEffectDenied,
+					Reason:    "preview listener blocked: requires active non-ask session",
+				}
+			}
+			return pythonadmission.PolicyDecision{
+				Kind:   pythonruntime.DecisionAllow,
+				Reason: "supervised static preview listener permitted for session",
+			}
+
+		case pythonruntime.EffectSubprocess:
 			return pythonadmission.PolicyDecision{
 				Kind:      pythonruntime.DecisionStop,
 				Condition: pythonadmission.ConditionEffectDenied,
@@ -189,10 +202,10 @@ func resolvePythonAllowedEffects(ctx context.Context, boundary *sandbox.Boundary
 	if hasProfile {
 		if profileEffects, err := boundary.CommandEffects(ctx, tc.Identity.Agent); err == nil {
 			allowed = profileEffects
-		} else if hasSurface {
-			// Profile lookup failed (e.g. non-profile agent name), fall back to
-			// full effects intersected by the explicit surface restriction.
-			allowed = pyEffectAll
+		} else {
+			// Fail closed: an unresolved required profile MUST NEVER widen
+			// effective permissions to pyEffectAll even when a surface is present.
+			allowed = pyEffectReadOnly
 		}
 	} else if hasSurface {
 		// No profile configured, but a surface was explicitly named: start
