@@ -1,7 +1,7 @@
 package pythoncatalog
 
 // ToolDescription is the exact tested two-sentence description placed once on the python tool.
-const ToolDescription = "Prefer this tool for Python scripts unless they require system or project Python. It includes the standard library and fixed packages (PyYAML, pytest, openpyxl); packages cannot be added."
+const ToolDescription = "Run helper scripts here with the standard library and fixed packages. Run project code and tests in the project environment."
 
 // ExternalPythonRoute is the documented command route for system or project Python environments.
 const ExternalPythonRoute = "external -- python3"

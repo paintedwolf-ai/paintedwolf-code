@@ -7,6 +7,10 @@ import (
 
 func TestDefaultLaunchManifestRoundTripAndRoster(t *testing.T) {
 	t.Parallel()
+	const wantDesc = "Run helper scripts here with the standard library and fixed packages. Run project code and tests in the project environment."
+	if ToolDescription != wantDesc {
+		t.Fatalf("ToolDescription = %q, want %q", ToolDescription, wantDesc)
+	}
 	m := DefaultLaunchManifest()
 	if err := m.Validate(); err != nil {
 		t.Fatalf("DefaultLaunchManifest.Validate: %v", err)

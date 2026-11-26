@@ -127,6 +127,7 @@ func buildReaderFacts(
 	allReachable := toolNameSet(append(slices.Clone(offered), requestable...))
 	if !command.mutation {
 		delete(allReachable, "command")
+		delete(allReachable, "python")
 	}
 	mutationCapable := toolSetMutationCapable(allReachable)
 
