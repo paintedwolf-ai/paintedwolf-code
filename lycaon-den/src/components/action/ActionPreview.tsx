@@ -1,8 +1,9 @@
 import { For, Index, Match, Show, Switch, createMemo, createResource } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
-import type { ActionPreview as ActionPreviewData } from "../../api/types.ts";
+import type { ActionPreview as ActionPreviewData, CommandProgramReceiptPage } from "../../api/types.ts";
 import { actionOutput } from "../../chat/action/action-output.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
+import { commandProgramActive } from "../../chat/tool/command-activity-snapshots.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 
@@ -10,6 +11,42 @@ import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 const PREVIEW_EXECUTIONS = 6;
 /** Activities read for one preview. */
 const PREVIEW_SCOPES = 3;
+const MAX_CACHED_PREVIEWS = 128;
+
+const settledPreviewPages = new WeakMap<LycaonClient, Map<string, CommandProgramReceiptPage>>();
+
+function previewCacheKey(sessionId: string, programId: string, activityId: string | undefined): string {
+  return `${sessionId}\0${programId}\0${activityId ?? ""}`;
+}
+
+function cachedPreviewPage(client: LycaonClient, key: string): CommandProgramReceiptPage | undefined {
+  const map = settledPreviewPages.get(client);
+  if (!map) return undefined;
+  const hit = map.get(key);
+  if (!hit) return undefined;
+  map.delete(key);
+  map.set(key, hit);
+  return hit;
+}
+
+function storePreviewPage(client: LycaonClient, key: string, page: CommandProgramReceiptPage): void {
+  if (page.program && commandProgramActive(page.program)) {
+    settledPreviewPages.get(client)?.delete(key);
+    return;
+  }
+  let map = settledPreviewPages.get(client);
+  if (!map) {
+    map = new Map();
+    settledPreviewPages.set(client, map);
+  }
+  map.delete(key);
+  map.set(key, page);
+  while (map.size > MAX_CACHED_PREVIEWS) {
+    const oldest = map.keys().next().value;
+    if (oldest === undefined) break;
+    map.delete(oldest);
+  }
+}
 
 type Props = {
   preview: ActionPreviewData;
@@ -49,10 +86,21 @@ function ReceiptOutput(props: Props) {
     const client = props.client ?? getLycaonClient();
     if (!client || !props.sessionId) return undefined;
     const scopes = (props.preview.receipts ?? []).slice(0, PREVIEW_SCOPES);
-    return { client, sessionId: props.sessionId, scopes, key: JSON.stringify([scopes, props.action.status]) };
+    const settled = props.action.status !== "running";
+    return { client, sessionId: props.sessionId, scopes, settled, key: JSON.stringify([scopes, props.action.status]) };
   }, undefined, { equals: (a, b) => a?.client === b?.client && a?.sessionId === b?.sessionId && a?.key === b?.key });
-  const [pages] = createResource(request, ({ client, sessionId, scopes }) =>
-    Promise.all(scopes.map((scope) => client.getCommandProgramReceipt(sessionId, scope.program_id, { limit: PREVIEW_EXECUTIONS, cursor: undefined, activity_id: scope.activity_id || undefined }))));
+  const [pages] = createResource(request, ({ client, sessionId, scopes, settled }) =>
+    Promise.all(scopes.map(async (scope) => {
+      const activityId = scope.activity_id || undefined;
+      const key = previewCacheKey(sessionId, scope.program_id, activityId);
+      if (settled) {
+        const hit = cachedPreviewPage(client, key);
+        if (hit) return hit;
+      }
+      const page = await client.getCommandProgramReceipt(sessionId, scope.program_id, { limit: PREVIEW_EXECUTIONS, cursor: undefined, activity_id: activityId });
+      if (settled) storePreviewPage(client, key, page);
+      return page;
+    })));
   const output = createMemo(() => {
     const loaded = pages.state === "ready" || pages.state === "refreshing" ? pages.latest ?? [] : [];
     return actionOutput(props.action, loaded.flatMap((page) => page?.executions ?? []), props.part.output);

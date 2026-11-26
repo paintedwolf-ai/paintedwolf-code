@@ -1,4 +1,5 @@
 import { expect, it, vi, beforeEach } from "vitest";
+import { createSignal } from "solid-js";
 import { render, waitFor } from "@solidjs/testing-library";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { CommandProgramReceipt } from "../../api/types.ts";
@@ -71,4 +72,93 @@ it("resolves every saved program to its newest view", async () => {
   if (requested) expect(get).toHaveBeenCalledWith("session", persisted.id, { limit: 1 });
   view.unmount();
  }
+});
+
+it("does not re-fetch already-settled programs when pagination appends new entries", async () => {
+ const progA = { id: "prog-a", state: "completed", activity_revision: 10 } as CommandProgramReceipt;
+ const progB = { id: "prog-b", state: "completed", activity_revision: 11 } as CommandProgramReceipt;
+ const entryA = row(progA, "call-a");
+ const entryB = row(progB, "call-b");
+ const factFor = (id: string) => ({ id, label: "Run", subject: id, group: "Running programs", state: "completed", outcome: "Finished", execution_ids: [id], spans: [], steps: [] });
+ const get = vi.fn(async (_session: string, programId: string) => ({
+  program: programId === "prog-a" ? progA : progB,
+  activities: [factFor(programId)],
+  executions: [],
+  nodes: [],
+ }));
+ vi.mocked(getLycaonClient).mockReturnValue(stubClient({ getCommandProgramReceipt: get }));
+
+ const [entries, setEntries] = createSignal<readonly ActivitySpanEntry[]>([entryA]);
+ let resolve!: ReturnType<typeof useCommandActivitySnapshots>;
+ const view = render(() => {
+  resolve = useCommandActivitySnapshots(entries, () => "session");
+  return <span>{resolve(entryA.part)?.activities?.[0]?.id ?? "loading"}:{resolve(entryB.part)?.activities?.[0]?.id ?? "none"}</span>;
+ });
+ await waitFor(() => expect(view.container.textContent).toBe("prog-a:none"));
+ expect(get).toHaveBeenCalledTimes(1);
+
+ setEntries([entryA, entryB]);
+ await waitFor(() => expect(view.container.textContent).toBe("prog-a:prog-b"));
+ expect(get).toHaveBeenCalledTimes(2);
+ expect(get).toHaveBeenNthCalledWith(1, "session", "prog-a", { limit: 1 });
+ expect(get).toHaveBeenNthCalledWith(2, "session", "prog-b", { limit: 1 });
+ view.unmount();
+});
+
+it("reuses cached settled snapshots on remount while keeping running programs live and sessions isolated", async () => {
+ const settled = { id: "prog-settled", state: "completed", activity_revision: 4 } as CommandProgramReceipt;
+ const running = { id: "prog-running", state: "running", activity_revision: 5 } as CommandProgramReceipt;
+ const settledEntry = row(settled, "call-settled");
+ const runningEntry = row(running, "call-running");
+ const fact = { id: "act", label: "Run", subject: "cmd", group: "Running programs", state: "completed", outcome: "Finished", execution_ids: ["x"], spans: [], steps: [] };
+ const get = vi.fn(async (_session: string, programId: string) => ({
+  program: programId === "prog-settled" ? settled : running,
+  activities: [fact],
+  executions: [],
+  nodes: [],
+ }));
+ const client = stubClient({ getCommandProgramReceipt: get });
+ vi.mocked(getLycaonClient).mockReturnValue(client);
+
+ const first = render(() => {
+  const snapshot = useCommandActivitySnapshots(() => [settledEntry], () => "session-1");
+  return <span>{snapshot(settledEntry.part)?.activities?.[0]?.id ?? "loading"}</span>;
+ });
+ await waitFor(() => expect(first.container.textContent).toBe("act"));
+ expect(get).toHaveBeenCalledTimes(1);
+ first.unmount();
+
+ // Remounting with the same client and session hits the settled cache with zero extra requests.
+ const remounted = render(() => {
+  const snapshot = useCommandActivitySnapshots(() => [settledEntry], () => "session-1");
+  return <span>{snapshot(settledEntry.part)?.activities?.[0]?.id ?? "loading"}</span>;
+ });
+ expect(remounted.container.textContent).toBe("act");
+ expect(get).toHaveBeenCalledTimes(1);
+ remounted.unmount();
+
+ // A different session does not share the cached snapshot.
+ const otherSession = render(() => {
+  const snapshot = useCommandActivitySnapshots(() => [settledEntry], () => "session-2");
+  return <span>{snapshot(settledEntry.part)?.activities?.[0]?.id ?? "loading"}</span>;
+ });
+ await waitFor(() => expect(otherSession.container.textContent).toBe("act"));
+ expect(get).toHaveBeenCalledTimes(2);
+ otherSession.unmount();
+
+ // Still-running programs are not cached, so remounting fetches fresh progress.
+ const live1 = render(() => {
+  const snapshot = useCommandActivitySnapshots(() => [runningEntry], () => "session-1");
+  return <span>{snapshot(runningEntry.part)?.activities?.[0]?.id ?? "loading"}</span>;
+ });
+ await waitFor(() => expect(live1.container.textContent).toBe("act"));
+ expect(get).toHaveBeenCalledTimes(3);
+ live1.unmount();
+
+ const live2 = render(() => {
+  const snapshot = useCommandActivitySnapshots(() => [runningEntry], () => "session-1");
+  return <span>{snapshot(runningEntry.part)?.activities?.[0]?.id ?? "loading"}</span>;
+ });
+ await waitFor(() => expect(get).toHaveBeenCalledTimes(4));
+ live2.unmount();
 });

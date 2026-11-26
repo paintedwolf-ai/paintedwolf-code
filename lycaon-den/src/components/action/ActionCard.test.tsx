@@ -334,6 +334,54 @@ describe("ActionCard", () => {
     });
   });
 
+  it("reuses cached receipt output when a settled card remounts, but re-reads while running", async () => {
+    const getCommandProgramReceipt = vi.fn().mockResolvedValue({
+      program: { id: "prog-cache", state: "completed", activity_revision: 1 },
+      executions: [
+        {
+          execution_id: "exec-1",
+          state: "completed",
+          status_code: 0,
+          outputs: [
+            { stream: "stdout", ref: "ref-1", size_bytes: 5, complete: true, redacted: false, preview: "done\n", preview_truncated: false, line_count: 1 },
+          ],
+        },
+      ],
+    });
+    const client = stubClient({ getCommandProgramReceipt });
+    const settledAction: CardAction = {
+      ...descriptor,
+      status: "done",
+      preview: { kind: "output", receipts: [{ program_id: "prog-cache", activity_id: "act-1" }] },
+    };
+    const first = render(() => <ActionCard part={part()} action={settledAction} layout="chat" sessionId="sess-1" client={client} />);
+    open(first.container);
+    await waitFor(() => expect(first.container.querySelector('[data-testid="action-preview"]')?.textContent).toContain("done"));
+    expect(getCommandProgramReceipt).toHaveBeenCalledTimes(1);
+    first.unmount();
+
+    const second = render(() => <ActionCard part={part()} action={settledAction} layout="chat" sessionId="sess-1" client={client} />);
+    open(second.container);
+    await waitFor(() => expect(second.container.querySelector('[data-testid="action-preview"]')?.textContent).toContain("done"));
+    expect(getCommandProgramReceipt).toHaveBeenCalledTimes(1);
+    second.unmount();
+
+    const runningAction: CardAction = {
+      ...descriptor,
+      status: "running",
+      preview: { kind: "output", receipts: [{ program_id: "prog-live", activity_id: "act-2" }] },
+    };
+    const third = render(() => <ActionCard part={part()} action={runningAction} layout="chat" sessionId="sess-1" client={client} />);
+    open(third.container);
+    await waitFor(() => expect(getCommandProgramReceipt).toHaveBeenCalledTimes(2));
+    third.unmount();
+
+    const fourth = render(() => <ActionCard part={part()} action={runningAction} layout="chat" sessionId="sess-1" client={client} />);
+    open(fourth.container);
+    await waitFor(() => expect(getCommandProgramReceipt).toHaveBeenCalledTimes(3));
+    fourth.unmount();
+  });
+
   it("indexes and searches folded tool part members", async () => {
     const folded: ToolPartView = {
       ...part(),

@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { createRoot } from "solid-js";
+import { describe, expect, it, vi } from "vitest";
+import { LycaonApiError } from "../../api/http.ts";
 import type { ActionFact } from "../../api/types.ts";
-import { activityCoverageNotices } from "./action-source-coverage.ts";
+import { invalidateSourceQueries } from "../../files/source/source-invalidation.ts";
+import { stubClient } from "../../test/client-fixture.ts";
+import type { CardAction } from "./action-merge.ts";
+import { activityCoverageNotices, useActionCoverage } from "./action-source-coverage.ts";
 
 describe("command activity coverage", () => {
   it("says nothing when every folder was compared", () => {
@@ -26,5 +31,80 @@ describe("command activity coverage", () => {
     expect(activityCoverageNotices([partial, partial])).toEqual([
       "Not every folder in /home/me was compared. Skipped node_modules (outside the source scope), photos (the entry limit was reached), 3 more.",
     ]);
+  });
+});
+
+function actionWithWindows(windows: string[]): CardAction {
+  return {
+    label: "Run command",
+    status: "done",
+    ran: { text: "ls", noun: "command" },
+    facts: [{ kind: "source_observation", source_windows: windows }],
+    row: [],
+    links: [{ kind: "input" }],
+  };
+}
+
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+describe("useActionCoverage", () => {
+  it("stops re-polling a pruned command window on source_history_not_found", async () => {
+    const getObservation = vi.fn().mockRejectedValue(
+      new LycaonApiError("pruned", 404, "source_history_not_found"),
+    );
+    const client = stubClient({ getProjectSourceCommandObservation: getObservation });
+    const dispose = createRoot((d) => {
+      useActionCoverage(() => actionWithWindows(["win-pruned"]), {
+        client,
+        projectId: "proj-1",
+        sessionId: "sess-1",
+      });
+      return d;
+    });
+    try {
+      await vi.waitFor(() => expect(getObservation).toHaveBeenCalledTimes(1));
+      await flush();
+
+      invalidateSourceQueries({ projectId: "proj-1" });
+      await flush();
+      invalidateSourceQueries({ projectId: "proj-1" });
+      await flush();
+
+      expect(getObservation).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("retries transient errors on source invalidation until settled", async () => {
+    const getObservation = vi.fn()
+      .mockRejectedValueOnce(new LycaonApiError("temporary", 500, "internal_error"))
+      .mockResolvedValueOnce({
+        settling: false,
+        coverage: [{ folder: "/work/app", coverage: "complete" }],
+      });
+    const client = stubClient({ getProjectSourceCommandObservation: getObservation });
+    const dispose = createRoot((d) => {
+      useActionCoverage(() => actionWithWindows(["win-retry"]), {
+        client,
+        projectId: "proj-1",
+        sessionId: "sess-1",
+      });
+      return d;
+    });
+    try {
+      await vi.waitFor(() => expect(getObservation).toHaveBeenCalledTimes(1));
+      await flush();
+
+      invalidateSourceQueries({ projectId: "proj-1" });
+      await vi.waitFor(() => expect(getObservation).toHaveBeenCalledTimes(2));
+      await flush();
+
+      invalidateSourceQueries({ projectId: "proj-1" });
+      await flush();
+      expect(getObservation).toHaveBeenCalledTimes(2);
+    } finally {
+      dispose();
+    }
   });
 });
