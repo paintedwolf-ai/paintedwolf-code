@@ -74,9 +74,6 @@ facts:
   - name: command_on_floor
     type: bool
     states: Command is immediately offered on the floor without request_tools.
-  - name: command_output_files
-    type: bool
-    states: Command is offered and can write files under @output.
   - name: execution_mode
     type: string
     states: Active coordinator execution mode family.

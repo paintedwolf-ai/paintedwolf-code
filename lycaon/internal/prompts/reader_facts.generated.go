@@ -33,7 +33,6 @@ var declaredReaderFactScalarNames = []string{
 	"command_external_hidden",
 	"command_external_shown",
 	"command_on_floor",
-	"command_output_files",
 	"execution_mode",
 	"has_any_git_root",
 	"has_file_tools",
@@ -126,7 +125,6 @@ var declaredReaderFactScalars = map[string]ReaderFactScalarSpec{
 	"command_external_hidden":            {Name: "command_external_hidden", Type: "bool", States: "The explicit external selector on command is hidden for this session."},
 	"command_external_shown":             {Name: "command_external_shown", Type: "bool", States: "The explicit external selector on command is visible for this session."},
 	"command_on_floor":                   {Name: "command_on_floor", Type: "bool", States: "Command is immediately offered on the floor without request_tools."},
-	"command_output_files":               {Name: "command_output_files", Type: "bool", States: "Command is offered and can write files under @output."},
 	"execution_mode":                     {Name: "execution_mode", Type: "string", States: "Active coordinator execution mode family."},
 	"has_any_git_root":                   {Name: "has_any_git_root", Type: "bool", States: "At least one attached workspace root is a Git repository."},
 	"has_file_tools":                     {Name: "has_file_tools", Type: "bool", States: "Workspace roots are attached and at least one project-file tool or command is offered."},
@@ -243,7 +241,6 @@ type ReaderFacts struct {
 	CommandExternalHidden          bool
 	CommandExternalShown           bool
 	CommandOnFloor                 bool
-	CommandOutputFiles             bool
 	ExecutionMode                  string
 	HasAnyGitRoot                  bool
 	HasFileTools                   bool
@@ -348,7 +345,6 @@ func (f ReaderFacts) Map() map[string]any {
 	out["command_external_hidden"] = f.CommandExternalHidden
 	out["command_external_shown"] = f.CommandExternalShown
 	out["command_on_floor"] = f.CommandOnFloor
-	out["command_output_files"] = f.CommandOutputFiles
 	out["execution_mode"] = f.ExecutionMode
 	out["has_any_git_root"] = f.HasAnyGitRoot
 	out["has_file_tools"] = f.HasFileTools

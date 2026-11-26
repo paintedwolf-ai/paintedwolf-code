@@ -271,7 +271,6 @@ func buildReaderFacts(
 		CommandExternalHidden:         host.CommandExternalHidden,
 		CommandExternalShown:          !host.CommandExternalHidden,
 		CommandOnFloor:                commandOnFloor,
-		CommandOutputFiles:            offeredSet["command"],
 		ExecutionMode:                 mode,
 		HasAnyGitRoot:                 hasAnyGit,
 		HasFileTools:                  host.RootCount > 0 && hasOfferedProjectFileTool(offeredSet),

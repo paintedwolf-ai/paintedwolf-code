@@ -1,6 +1,7 @@
 package toolvocab_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -13,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 )
 
@@ -539,10 +541,13 @@ func TestSkillToolsOfferedCommandSpansWhenCommandDeferred(t *testing.T) {
 		WebSearch: true,
 	}, prompts.TurnProjection{
 		ProfileID: "worker",
+		Plan:      toolsurface.Compile([]string{"request_tools"}, []string{"command"}),
 		Offered:   []string{"request_tools"},
-		Declared:  true,
 	})
 	testutil.FailErr(t, "deferred command reader", err)
+	if !slices.Contains(deferredReader.Requestable(), "command") || deferredReader.Held()["command"] {
+		t.Fatalf("deferredReader precondition failed: held=%v requestable=%v", deferredReader.Held()["command"], deferredReader.Requestable())
+	}
 	heldReader, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
@@ -550,8 +555,8 @@ func TestSkillToolsOfferedCommandSpansWhenCommandDeferred(t *testing.T) {
 		WebSearch: true,
 	}, prompts.TurnProjection{
 		ProfileID: "worker",
+		Plan:      toolsurface.Compile([]string{"request_tools", "command"}, nil),
 		Offered:   []string{"request_tools", "command"},
-		Declared:  true,
 	})
 	testutil.FailErr(t, "held command reader", err)
 
