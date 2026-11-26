@@ -502,6 +502,19 @@ func (s *MemoryDocumentStore) revisionLocked(k CanonicalKey, e *memoryEntry) Doc
 }
 
 func (s *MemoryDocumentStore) ReadDocument(_ context.Context, target pythonruntime.CanonicalTarget) (DocumentSnapshot, pythonruntime.Errno) {
+	if cleanRelPath(target.RelPath) == "" {
+		return DocumentSnapshot{
+			Target:  target,
+			Mode:    fs.ModeDir | 0o755,
+			ModTime: s.now().UTC(),
+			IsDir:   true,
+			Inode:   1,
+			Revision: DocumentRevision{
+				RootID: target.RootID,
+				Branch: target.Branch,
+			},
+		}, pythonruntime.ErrnoSuccess
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := CanonicalKeyOf(target)
