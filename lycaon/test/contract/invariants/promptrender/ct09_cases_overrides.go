@@ -61,9 +61,9 @@ func overrideCases() []hoststate.CustomizationCase {
 			Workers:      []hoststate.WorkerSeed{overrideWorkerSeed(hoststate.WorkerLoadingStickyOnly, false)},
 		},
 	)
-	// A device pack wins the process tool schemas without one capability
-	// field, so each side of the self-calling-server pair flips alone.
-	for _, field := range []string{"local-listen", "loopback-connect"} {
+	// A device pack wins the process tool schemas without one or both local
+	// service fields, so each field's guards flip with the other held.
+	for _, field := range []string{"local-listen", "loopback-connect", "local-services"} {
 		pack := "fixture/schemas-without-" + field
 		own := map[string]string{}
 		for _, tool := range []string{"command", "verify", "terminal_open"} {
