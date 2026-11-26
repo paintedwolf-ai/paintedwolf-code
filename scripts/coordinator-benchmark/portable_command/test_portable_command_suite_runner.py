@@ -7,8 +7,8 @@ import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
-from portable_command import cli, harness, observe, reporting, suite_runner
-from portable_command.contracts import load_suite
+from portable_command import cli, harness, observe, provenance, reporting, suite_runner
+from portable_command.contracts import ROOT, load_suite
 from portable_command.test_portable_command_harness import FakeApp, FakeSSE, create_audit_db
 
 
@@ -65,9 +65,11 @@ def _write_verified_engine(root, sha_override=None, path_override=None, head_ove
     fake_bin = root / 'lycaon-dev'
     data = b'fake-engine-binary'
     fake_bin.write_bytes(data)
+    git_head = head_override or provenance._git(ROOT, 'rev-parse', 'HEAD') or ('a' * 40)
+    git_tree = tree_override or provenance._git(ROOT, 'rev-parse', 'HEAD^{tree}') or ('b' * 40)
     manifest = root / 'engine-manifest.json'
     manifest.write_text(json.dumps({
-        'git_head': head_override or ('a' * 40), 'git_tree': tree_override or ('b' * 40),
+        'git_head': git_head, 'git_tree': git_tree,
         'executable_path': path_override or str(fake_bin),
         'executable_sha256': sha_override or hashlib.sha256(data).hexdigest(),
         'build_command': './task build:lycaon-dev', 'built_at': '2026-11-26T20:00:00Z',
@@ -173,8 +175,9 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             fake_bin, good_manifest = _write_verified_engine(root)
+            gm = json.loads(good_manifest.read_text())
             good_prov = reporting.inspect_engine_provenance(
-                engine_bin=fake_bin, evaluator_git_head='a' * 40, evaluator_git_tree='b' * 40, engine_manifest=good_manifest,
+                engine_bin=fake_bin, evaluator_git_head=gm['git_head'], evaluator_git_tree=gm['git_tree'], engine_manifest=good_manifest,
             )
             self.assertTrue(good_prov['provenance_verified'])
             self.assertTrue(good_prov['manifest_sha256_match'])
@@ -189,7 +192,7 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
                 sub.mkdir()
                 _, bad_m = _write_verified_engine(sub, **overrides)
                 bad_prov = reporting.inspect_engine_provenance(
-                    engine_bin=fake_bin, evaluator_git_head='a' * 40, evaluator_git_tree='b' * 40, engine_manifest=bad_m,
+                    engine_bin=fake_bin, evaluator_git_head=gm['git_head'], evaluator_git_tree=gm['git_tree'], engine_manifest=bad_m,
                 )
                 with self.subTest(mismatch=overrides):
                     self.assertFalse(bad_prov['provenance_verified'])
@@ -259,7 +262,9 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
                 'program_id': 'prog-1', 'state': 'rejected', 'status': 2, 'stop_code': 'COMMAND_OPTION_UNSUPPORTED',
                 'stdout': '', 'stderr': 'cat: request: Supported form: catalogued option [COMMAND_OPTION_UNSUPPORTED]\n',
                 'completed_effects': 0, 'uncertain_effects': 0, 'native_gaps': 0, 'replay_available': False,
-                'refusal': {'code': 'COMMAND_OPTION_UNSUPPORTED', 'details': {'source_start_byte': 4, 'source_end_byte': 28, 'expected_form': 'cat [-n] [FILE...]'}},
+                'refusal': {'code': 'COMMAND_OPTION_UNSUPPORTED', 'details': {
+                    'source_start_byte': 4, 'source_end_byte': 28, 'expected_form': 'cat [-n] [FILE...]', 'program_replay_available': True,
+                }},
             }
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','call-1',?)", (json.dumps({'outcome': 'rejected', 'content': '[command#1]\n' + json.dumps(payload)}),))
             db.commit()
@@ -278,3 +283,6 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             self.assertIn('COMMAND_OPTION_UNSUPPORTED', audit['refusal_stderr'])
             self.assertTrue(obs['recovery']['whole_program_resubmit_allowed'])
             self.assertTrue(obs['facts']['no_external_launch'])
+            # Omitting authoritative program_replay_available / replay_available leaves disposition None.
+            omitted = observe._extract_recovery(case['id'], {'refusal': {'code': 'COMMAND_OPTION_UNSUPPORTED', 'details': {'source_start_byte': 4, 'source_end_byte': 28}}}, {}, {'invocation_program_executions': []}, [])
+            self.assertIsNone(omitted['whole_program_resubmit_allowed'])
