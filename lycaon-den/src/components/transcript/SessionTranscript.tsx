@@ -422,6 +422,8 @@ export function SessionTranscript(props: Props) {
     const motion = scrollportMotionForViewport(scroller);
     if (!motion) return;
     motion.scheduleLayoutReconcile();
+    // notifyLayoutMutated cancels the scheduled frame via cancelLayoutReconcile
+    // so layout measurement runs once before paint, and is a no-op off-tail.
     if (scroller.isConnected && scroller.clientHeight > 0) {
       motion.notifyLayoutMutated();
     }
