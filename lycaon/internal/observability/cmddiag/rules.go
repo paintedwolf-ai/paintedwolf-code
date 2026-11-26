@@ -189,18 +189,29 @@ func checkStaleTerminalPresentation(obs Observation, now time.Time) (Finding, bo
 		f.Observed = map[string]any{"independent_presentation_witness": false}
 		return f, true
 	}
-	if !obs.ConsumerCaughtUp || obs.Presentation == nil {
+	pres := obs.Presentation
+	if pres == nil {
 		f := baseFinding(obs, now, RuleStaleTerminalPresentation, DispositionIncomplete)
-		if obs.Presentation == nil {
-			f.Reason = "presentation_unavailable"
-		} else {
-			f.Reason = "consumer_not_caught_up"
-		}
-		f.Expected = map[string]any{"consumer_caught_up": true, "presentation_present": true}
-		f.Observed = map[string]any{"consumer_caught_up": obs.ConsumerCaughtUp, "presentation_present": obs.Presentation != nil}
+		f.Reason = "presentation_unavailable"
+		f.Expected = map[string]any{"presentation_present": true}
+		f.Observed = map[string]any{"presentation_present": false}
 		return f, true
 	}
-	pres := obs.Presentation
+	if pres.HostBoundaryOnly {
+		if obs.ActivityRevision > 0 && pres.ActivityRevision != obs.ActivityRevision {
+			f := baseFinding(obs, now, RuleStaleTerminalPresentation, DispositionIncomplete)
+			f.Reason = "host_snapshot_revision_drift"
+			f.Expected = map[string]any{"activity_revision": obs.ActivityRevision}
+			f.Observed = map[string]any{"activity_revision": pres.ActivityRevision, "host_boundary_only": true}
+			return f, true
+		}
+	} else if !obs.ConsumerCaughtUp {
+		f := baseFinding(obs, now, RuleStaleTerminalPresentation, DispositionIncomplete)
+		f.Reason = "consumer_not_caught_up"
+		f.Expected = map[string]any{"consumer_caught_up": true}
+		f.Observed = map[string]any{"consumer_caught_up": false}
+		return f, true
+	}
 	var reasons, staleExecs []string
 	if !IsTerminalState(pres.ProgramState) || pres.ProgramState != obs.ProgramState {
 		reasons = append(reasons, "program_state_mismatch")
@@ -211,7 +222,7 @@ func checkStaleTerminalPresentation(obs Observation, now time.Time) (Finding, bo
 	if pres.ProgramStopCode != obs.ProgramStopCode {
 		reasons = append(reasons, "program_stop_code_mismatch")
 	}
-	if obs.ActivityRevision > 0 && pres.ActivityRevision < obs.ActivityRevision {
+	if !pres.HostBoundaryOnly && obs.ActivityRevision > 0 && pres.ActivityRevision < obs.ActivityRevision {
 		reasons = append(reasons, "stale_activity_revision")
 	}
 	for _, act := range pres.Activities {
@@ -220,28 +231,36 @@ func checkStaleTerminalPresentation(obs Observation, now time.Time) (Finding, bo
 			staleExecs = append(staleExecs, act.ExecutionIDs...)
 		}
 	}
-	if len(reasons) == 0 {
-		return Finding{}, false
+	if len(reasons) > 0 {
+		slices.Sort(reasons)
+		reasons = slices.Compact(reasons)
+		f := baseFinding(obs, now, RuleStaleTerminalPresentation, DispositionContradiction)
+		f.ExecutionIDs = staleExecs
+		f.Expected = map[string]any{
+			"program_state":     obs.ProgramState,
+			"status_code":       obs.ProgramStatusCode,
+			"stop_code":         obs.ProgramStopCode,
+			"activity_revision": obs.ActivityRevision,
+		}
+		f.Observed = map[string]any{
+			"program_state":      pres.ProgramState,
+			"status_code":        pres.ProgramStatusCode,
+			"stop_code":          pres.ProgramStopCode,
+			"activity_revision":  pres.ActivityRevision,
+			"host_boundary_only": pres.HostBoundaryOnly,
+			"mismatches":         reasons,
+		}
+		f.Reason = reasons[0]
+		return f, true
 	}
-	slices.Sort(reasons)
-	reasons = slices.Compact(reasons)
-	f := baseFinding(obs, now, RuleStaleTerminalPresentation, DispositionContradiction)
-	f.ExecutionIDs = staleExecs
-	f.Expected = map[string]any{
-		"program_state":     obs.ProgramState,
-		"status_code":       obs.ProgramStatusCode,
-		"stop_code":         obs.ProgramStopCode,
-		"activity_revision": obs.ActivityRevision,
+	if pres.Truncated {
+		f := baseFinding(obs, now, RuleStaleTerminalPresentation, DispositionIncomplete)
+		f.Reason = "truncated_presentation_snapshot"
+		f.Expected = map[string]any{"truncated": false}
+		f.Observed = map[string]any{"truncated": true, "activity_count": pres.ActivityCount, "sampled_activities": len(pres.Activities)}
+		return f, true
 	}
-	f.Observed = map[string]any{
-		"program_state":     pres.ProgramState,
-		"status_code":       pres.ProgramStatusCode,
-		"stop_code":         pres.ProgramStopCode,
-		"activity_revision": pres.ActivityRevision,
-		"mismatches":        reasons,
-	}
-	f.Reason = reasons[0]
-	return f, true
+	return Finding{}, false
 }
 
 func sameIntPtr(a, b *int) bool {

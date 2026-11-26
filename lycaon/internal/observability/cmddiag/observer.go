@@ -61,7 +61,7 @@ type Observer struct {
 	queue            chan workItem
 	wg               sync.WaitGroup
 	closeOnce        sync.Once
-	seen             map[dedupKey]struct{}
+	seen             map[dedupKey]int
 	enqueued         atomic.Int64
 	dropped          atomic.Int64
 	emitted          atomic.Int64
@@ -102,7 +102,7 @@ func NewObserver(cfg Config) *Observer {
 		workerCtx:    workerCtx,
 		workerCancel: workerCancel,
 		queue:        make(chan workItem, capacity),
-		seen:         make(map[dedupKey]struct{}),
+		seen:         make(map[dedupKey]int),
 	}
 	obs.wg.Add(1)
 	go obs.run()
@@ -228,17 +228,25 @@ func (o *Observer) run() {
 	}
 }
 
+func dispositionRank(d Disposition) int {
+	if d == DispositionContradiction {
+		return 2
+	}
+	return 1
+}
+
 func (o *Observer) emitDedup(f Finding) {
 	if f.RuleID != RuleCaptureOverflow && f.ProgramID != "" {
 		key := dedupKey{rule: f.RuleID, programID: f.ProgramID}
-		if _, exists := o.seen[key]; exists {
+		rank := dispositionRank(f.Disposition)
+		if prevRank, exists := o.seen[key]; exists && rank <= prevRank {
 			o.deduplicated.Add(1)
 			return
 		}
 		if len(o.seen) >= DefaultMaxDedupEntries {
 			clear(o.seen)
 		}
-		o.seen[key] = struct{}{}
+		o.seen[key] = rank
 	}
 	o.emit(f)
 }

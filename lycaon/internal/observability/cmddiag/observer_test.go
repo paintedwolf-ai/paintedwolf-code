@@ -193,6 +193,53 @@ func TestDeduplicatesFindingsByRuleAndProgram(t *testing.T) {
 	}
 }
 
+func TestDedupPermitsStrongerDispositionAndSuppressesRepeat(t *testing.T) {
+	var mu sync.Mutex
+	var got []Finding
+	obs := NewObserver(Config{
+		Enabled:       true,
+		QueueCapacity: 8,
+		Sink: func(f Finding) {
+			mu.Lock()
+			got = append(got, f)
+			mu.Unlock()
+		},
+	})
+
+	// 1. Early incomplete (unsettled program lag) for RuleMissingChildTerminal.
+	incomplete := cleanSettledObservation()
+	incomplete.ProgramID = "prog-upgrade"
+	incomplete.ProgramSettled = false
+	incomplete.ProgramState = "running"
+
+	// 2. Later proven contradiction for the same (RuleMissingChildTerminal, "prog-upgrade").
+	contradiction := cleanSettledObservation()
+	contradiction.ProgramID = "prog-upgrade"
+	contradiction.Executions = append(contradiction.Executions, ExecutionFact{
+		ExecutionID: "exec-missing", OperationID: "grep", State: "running", Admitted: true, OwnerStarted: true,
+	})
+
+	obs.Submit(incomplete)
+	obs.Submit(contradiction)
+	obs.Submit(contradiction)
+	obs.Close()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 findings (incomplete then contradiction), got %d: %+v", len(got), got)
+	}
+	if got[0].RuleID != RuleMissingChildTerminal || got[0].Disposition != DispositionIncomplete {
+		t.Fatalf("first finding = %+v, want incomplete", got[0])
+	}
+	if got[1].RuleID != RuleMissingChildTerminal || got[1].Disposition != DispositionContradiction {
+		t.Fatalf("second finding = %+v, want contradiction", got[1])
+	}
+	if obs.Stats().Deduplicated != 1 {
+		t.Fatalf("stats.Deduplicated = %d, want 1", obs.Stats().Deduplicated)
+	}
+}
+
 func TestRedactionScrubsSecretsAndDigestsPaths(t *testing.T) {
 	const bearer = "Bearer sk-ant-api03-verysecretvalue1234567890"
 	const apiKey = "OPENAI_API_KEY=sk-1234567890abcdef1234567890"

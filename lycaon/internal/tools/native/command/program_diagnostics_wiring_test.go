@@ -172,11 +172,21 @@ func TestDiagnosticsWiringCatchesStaleDeliveryAndDeduplicates(t *testing.T) {
 			}),
 		},
 	}
+	// Same comparable revision (rev 4) with stale non-terminal state contradicts.
 	staleDelivered := &api.CommandProgramReceipt{
 		ID:               "prog-stale",
 		State:            "running",
-		ActivityRevision: 2,
+		ActivityRevision: 4,
 		Activities:       []api.CommandActivity{{ID: "act-1", State: "running", ExecutionIDs: []string{"exec-1"}}},
+	}
+	// Earlier host callback revision (rev 2 < rev 4) is normal async revision drift -> incomplete.
+	driftedDelivered := &api.CommandProgramReceipt{
+		ID:               "prog-drift",
+		State:            "running",
+		ActivityRevision: 2,
+	}
+	driftReader := &stubDiagReader{
+		pages: []api.CommandProgramReceiptPage{settledReceiptPage("prog-drift", 4)},
 	}
 
 	var mu sync.Mutex
@@ -195,15 +205,19 @@ func TestDiagnosticsWiringCatchesStaleDeliveryAndDeduplicates(t *testing.T) {
 
 	observeSettledProgramDiagnostics(reader, "sess-11112222", "call-1", "prog-stale", staleDelivered)
 	observeSettledProgramDiagnostics(reader, "sess-11112222", "call-1", "prog-stale", staleDelivered)
+	observeSettledProgramDiagnostics(driftReader, "sess-11112222", "call-2", "prog-drift", driftedDelivered)
 	obs.Close()
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(got) != 1 {
-		t.Fatalf("expected 1 deduplicated finding, got %d: %+v", len(got), got)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 findings (1 deduped contradiction + 1 drift incomplete), got %d: %+v", len(got), got)
 	}
 	if got[0].RuleID != cmddiag.RuleStaleTerminalPresentation || got[0].Disposition != cmddiag.DispositionContradiction {
-		t.Fatalf("unexpected finding: %+v", got[0])
+		t.Fatalf("unexpected stale finding: %+v", got[0])
+	}
+	if got[1].RuleID != cmddiag.RuleStaleTerminalPresentation || got[1].Disposition != cmddiag.DispositionIncomplete || got[1].Reason != "host_snapshot_revision_drift" {
+		t.Fatalf("unexpected drift finding: %+v", got[1])
 	}
 	if obs.Stats().Deduplicated != 1 {
 		t.Fatalf("expected 1 deduplicated repeat, got %d", obs.Stats().Deduplicated)
@@ -219,7 +233,7 @@ func TestDiagnosticsWiringDispositionsForPagesPinsAndPartialEffects(t *testing.T
 		p3 := settledReceiptPage("prog-cap", 1, api.CommandExecutionReceipt{ID: "e3", State: "completed"})
 		p3.NextCursor, p3.ExecutionsOmitted = "p4", 10
 		reader := &stubDiagReader{pages: []api.CommandProgramReceiptPage{p1, p2, p3}}
-		delivered := &cmddiag.PresentationSnapshot{ProgramState: "completed", ProgramStatusCode: diagIntPtr(0), ActivityRevision: 1}
+		delivered := &cmddiag.PresentationSnapshot{ProgramState: "completed", ProgramStatusCode: diagIntPtr(0), ActivityRevision: 1, HostBoundaryOnly: true}
 		fetched, err := fetchProgramObservation(t.Context(), reader, "s1", "c1", "prog-cap", delivered)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -237,7 +251,7 @@ func TestDiagnosticsWiringDispositionsForPagesPinsAndPartialEffects(t *testing.T
 		p1.NextCursor, p1.ExecutionsOmitted = "p2", 1
 		p2 := settledReceiptPage("prog-inc", 1, api.CommandExecutionReceipt{ID: "e1", State: "completed"})
 		reader := &stubDiagReader{pages: []api.CommandProgramReceiptPage{p1, p2}, pinErr: errors.New("db busy")}
-		delivered := &cmddiag.PresentationSnapshot{ProgramState: "completed", ProgramStatusCode: diagIntPtr(0), ActivityRevision: 1}
+		delivered := &cmddiag.PresentationSnapshot{ProgramState: "completed", ProgramStatusCode: diagIntPtr(0), ActivityRevision: 1, HostBoundaryOnly: true}
 		fetched, err := fetchProgramObservation(t.Context(), reader, "s1", "c1", "prog-inc", delivered)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -262,7 +276,7 @@ func TestDiagnosticsWiringDispositionsForPagesPinsAndPartialEffects(t *testing.T
 				"e-write": {{Role: toolcontract.DestinationRevision, RootID: "/secret/root", Path: "sub/secret_file.go"}},
 			},
 		}
-		delivered := &cmddiag.PresentationSnapshot{ProgramState: "completed", ProgramStatusCode: diagIntPtr(0), ActivityRevision: 1}
+		delivered := &cmddiag.PresentationSnapshot{ProgramState: "completed", ProgramStatusCode: diagIntPtr(0), ActivityRevision: 1, HostBoundaryOnly: true}
 		fetched, err := fetchProgramObservation(t.Context(), reader, "s1", "c1", "prog-mut", delivered)
 		if err != nil {
 			t.Fatalf("unexpected err: %v", err)
@@ -275,4 +289,69 @@ func TestDiagnosticsWiringDispositionsForPagesPinsAndPartialEffects(t *testing.T
 			t.Fatalf("expected opaque hashed source ref, got %+v", findings[0].SourceIDs)
 		}
 	})
+}
+
+func TestDiagnosticsOverflowLargeActivityListIsBounded(t *testing.T) {
+	manyActs := make([]api.CommandActivity, 500)
+	manyIDs := make([]string, 20)
+	for i := range manyIDs {
+		manyIDs[i] = "exec-item"
+	}
+	for i := range manyActs {
+		manyActs[i] = api.CommandActivity{ID: "act-item", State: "completed", ExecutionIDs: manyIDs}
+	}
+	largeReceipt := api.CommandProgramReceipt{
+		ID:               "prog-large",
+		State:            "completed",
+		StatusCode:       diagIntPtr(0),
+		ActivityRevision: 5,
+		Activities:       manyActs,
+	}
+
+	snap, copied := boundedPresentationFromReceipt(largeReceipt)
+	if copied != cmddiag.DefaultMaxSnapshotActivities || len(snap.Activities) != cmddiag.DefaultMaxSnapshotActivities {
+		t.Fatalf("expected bounded copy of %d activities, got copied=%d len=%d", cmddiag.DefaultMaxSnapshotActivities, copied, len(snap.Activities))
+	}
+	if !snap.Truncated || snap.ActivityCount != 500 || !snap.HostBoundaryOnly {
+		t.Fatalf("expected Truncated=true ActivityCount=500 HostBoundaryOnly=true, got %+v", snap)
+	}
+	if len(snap.Activities[0].ExecutionIDs) != cmddiag.DefaultMaxSnapshotExecIDs {
+		t.Fatalf("expected bounded exec IDs %d, got %d", cmddiag.DefaultMaxSnapshotExecIDs, len(snap.Activities[0].ExecutionIDs))
+	}
+
+	// Truncated host snapshot must report incomplete rather than silently clean.
+	evalFindings := cmddiag.Evaluate(cmddiag.Observation{
+		ProgramID:         "prog-large",
+		ProgramState:      "completed",
+		ProgramStatusCode: diagIntPtr(0),
+		ProgramSettled:    true,
+		ActivityRevision:  5,
+		Presentation:      snap,
+	}, time.Now())
+	if len(evalFindings) != 1 || evalFindings[0].RuleID != cmddiag.RuleStaleTerminalPresentation || evalFindings[0].Disposition != cmddiag.DispositionIncomplete {
+		t.Fatalf("expected incomplete for truncated snapshot, got %+v", evalFindings)
+	}
+
+	// Under queue saturation, large receipt drops with zero ProgramReader calls.
+	blockCh := make(chan struct{})
+	var closeOnce sync.Once
+	unblock := func() { closeOnce.Do(func() { close(blockCh) }) }
+	entered := make(chan struct{})
+	blocker := &stubDiagReader{blockCh: blockCh, entered: entered}
+	overflowReader := &stubDiagReader{}
+	obs := cmddiag.NewObserver(cmddiag.Config{Enabled: true, QueueCapacity: 1})
+	restore := cmddiag.SetObserver(obs)
+	t.Cleanup(func() { restore(); unblock(); obs.Close() })
+
+	observeSettledProgramDiagnostics(blocker, "s1", "c1", "prog-b1", nil)
+	<-entered
+	observeSettledProgramDiagnostics(blocker, "s1", "c2", "prog-b2", nil)
+	if observeSettledProgramDiagnostics(overflowReader, "s1", "c3", "prog-large", &largeReceipt) {
+		t.Fatal("expected large receipt submission to drop on full queue")
+	}
+	unblock()
+	obs.Close()
+	if overflowReader.reads.Load() != 0 || overflowReader.pinReads.Load() != 0 {
+		t.Fatalf("overflow performed receipt reads: pages=%d pins=%d", overflowReader.reads.Load(), overflowReader.pinReads.Load())
+	}
 }
