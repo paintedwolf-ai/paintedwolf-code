@@ -21,6 +21,8 @@ import (
 // Shipped manifests supply the transitions and their permitted holds.
 func TestEveryAnnouncedPhaseTransitionWakesTheCoordinator(t *testing.T) {
 	h := BuildForTest(t, WithRecordingLLM())
+	// The fixture commits topology phase transitions through the gate below.
+	h.Server.Admin.Workflow.Topology.Orchestrator = nil
 	limits := &phaseWakeLimits{}
 	h.Sessions.Manager.Limits.SetProvider(limits)
 	gates := &armedPhaseGates{next: h.Workflows.Manager.Phases.Gates}
