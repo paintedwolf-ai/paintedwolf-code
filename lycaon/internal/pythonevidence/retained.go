@@ -2,6 +2,7 @@ package pythonevidence
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -200,7 +201,7 @@ func (s *RetainedArtifactStore) Put(ctx context.Context, req PutRequest) (Retain
 		return RetainedArtifactSummary{}, fmt.Errorf("%w: total bytes %d > %d", ErrArtifactStoreFull, s.totalBytes+int64(len(payload)), s.maxTotalBytes)
 	}
 	s.seq++
-	id := fmt.Sprintf("art-%d", s.seq)
+	id := newDurableArtifactID(s.now, s.seq)
 	s.mu.Unlock()
 
 	var streamRef *tooloutput.RetainedStreamReference
@@ -334,4 +335,12 @@ func (s *RetainedArtifactStore) TotalBytes() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.totalBytes
+}
+
+func newDurableArtifactID(now func() time.Time, seq uint64) string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err == nil {
+		return "art-" + hex.EncodeToString(raw[:])
+	}
+	return fmt.Sprintf("art-%d-%d", now().UnixNano(), seq)
 }

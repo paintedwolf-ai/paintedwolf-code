@@ -155,21 +155,37 @@ func (s *FileReceiptStore) LoadPublications(executionID string) ([]pythonevidenc
 	return out, err
 }
 
-// LoadRetained looks up a persisted RetainedArtifactSummary by artifactID.
+// LoadRetained looks up a persisted RetainedArtifactSummary by artifactID,
+// failing closed if duplicate legacy records span multiple distinct scopes.
 func (s *FileReceiptStore) LoadRetained(artifactID string) (pythonevidence.RetainedArtifactSummary, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var found pythonevidence.RetainedArtifactSummary
-	ok := false
+	var (
+		found    pythonevidence.RetainedArtifactSummary
+		ok       bool
+		firstKey executionScopeKey
+	)
 	err := scanJSONL(filepath.Join(s.dir, "retained.jsonl"), func(line []byte) error {
 		var rec pythonevidence.RetainedArtifactSummary
 		if err := json.Unmarshal(line, &rec); err != nil {
 			return err
 		}
-		if rec.ArtifactID == artifactID {
-			found = rec
-			ok = true
+		if rec.ArtifactID != artifactID {
+			return nil
 		}
+		key := executionScopeKey{
+			sessionID:  strings.TrimSpace(rec.SessionID),
+			checkoutID: strings.TrimSpace(rec.CheckoutID),
+			actor:      strings.TrimSpace(rec.Actor),
+			view:       strings.TrimSpace(rec.View),
+		}
+		if !ok {
+			firstKey = key
+			ok = true
+		} else if key != firstKey {
+			return fmt.Errorf("%w: artifact %s", ErrAmbiguousExecutionID, artifactID)
+		}
+		found = rec
 		return nil
 	})
 	return found, ok, err
