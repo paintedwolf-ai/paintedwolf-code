@@ -22,6 +22,7 @@ func TestHasRequestMatchesTheRequestATurnWouldDecideFor(t *testing.T) {
 	instruction := api.Message{ID: "opening", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Map this codebase"}
 	wake := promptinput.Input{HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: "loop_wake"}}
 	hostNote := api.Message{ID: "note", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Phase entered"}
+	parentStart := api.Message{ID: "parent-start", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, WorkflowRunID: "parent-run", Content: "Workflow started"}
 	for _, tc := range []struct {
 		name     string
 		sess     *api.Session
@@ -33,6 +34,10 @@ func TestHasRequestMatchesTheRequestATurnWouldDecideFor(t *testing.T) {
 		{name: "host messages only", sess: coordinator, history: []api.Message{hostNote}},
 		{name: "user instruction", sess: coordinator, history: []api.Message{hostNote, instruction}, want: true},
 		{name: "resolved workflow request", sess: coordinator, history: []api.Message{hostNote}, resolved: workflowfacts.ResolvedWorkflowRequest{RunID: "run", OpeningMessageID: "start", Text: "Build the requested API"}, want: true},
+		// An approved plan's implement child inherits the plan's request; the
+		// policy opens it at the parent's start, which carries the parent's run.
+		{name: "inherited child request", sess: coordinator, history: []api.Message{parentStart, hostNote}, resolved: workflowfacts.ResolvedWorkflowRequest{RunID: "child-run", OpeningMessageID: parentStart.ID, Text: "Plan the change"}, want: true},
+		{name: "inherited request with no opening", sess: coordinator, history: []api.Message{parentStart, hostNote}, resolved: workflowfacts.ResolvedWorkflowRequest{RunID: "child-run", Text: "Plan the change"}},
 		{name: "worker leg", sess: &api.Session{ID: "child", ParentSessionID: "chat"}, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
