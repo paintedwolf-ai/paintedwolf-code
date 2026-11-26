@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -189,6 +190,18 @@ func profileByID(overlay PackOverlay, id string) any {
 		}
 	}
 	return nil
+}
+
+// profileSurveysProjectTree reports whether profileID in overlay can survey the
+// project tree, which production refuses to spawn without project roots.
+func profileSurveysProjectTree(overlay PackOverlay, profileID string) bool {
+	for _, p := range overlay.Profiles {
+		if p.ID == profileID {
+			surface, err := prompts.LoadAgentToolSurface(p.ID, nil, nil, nil, nil, []sandbox.ToolProfile{p})
+			return err == nil && prompts.ProfileSurveysProjectTree(surface)
+		}
+	}
+	return false
 }
 
 // profileMutationCapable reports whether profileID in overlay can mutate.

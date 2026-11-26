@@ -316,6 +316,10 @@ func buildWorkerState(ctx context.Context, overlay PackOverlay, agent WorkerAgen
 		excluded = "worker_without_roots_has_no_repository_view"
 	case rootCount == 0 && mutCapable:
 		excluded = "write_scope_requires_project_roots"
+	// internal/worker/task_tool.go refuses a rootless spawn with
+	// WORKER_WORKSPACE_REQUIRED unless prompts.AgentRunsWithoutWorkspace.
+	case rootCount == 0 && profileSurveysProjectTree(overlay, agent.ToolProfile):
+		excluded = "survey_tree_requires_project_roots"
 	case onBranch && !mutCapable:
 		excluded = "read_only_agent_has_no_isolated_worker_branch"
 	case parentAsk && mutCapable:
