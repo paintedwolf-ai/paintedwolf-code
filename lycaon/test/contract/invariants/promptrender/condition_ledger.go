@@ -93,27 +93,37 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	if err != nil {
 		return nil, err
 	}
+	skillGen, err := newSkillCaseProducer(s, sites)
+	if err != nil {
+		return nil, err
+	}
 	in := interactions.LedgerInput{
 		Sites: sites, Observed: interactions.MergeObservations(append([][]hoststate.ObservedCondition{sum.Conditions}, extra...)...),
-		Constraints: conditionConstraints, Derived: gen.derived,
+		Constraints: conditionConstraints, Derived: withSkillDerived(gen.derived),
 	}
 	first, err := interactions.BuildConditionLedger(in)
 	if err != nil {
 		return nil, err
 	}
 	targets, gapRecipients := gen.targets(first)
+	skillTargets, skillGapRecipients := skillGen.targets(first)
 	started := time.Now()
 	outcomes, err := casegen.Generate(ctx, gen.producer, targets, caseBudget)
 	if err != nil {
 		return nil, err
 	}
-	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations())
-	in.Searches = searchesOf(outcomes, gapRecipients)
+	skillOutcomes, err := casegen.Generate(ctx, skillGen, skillTargets, skillCaseBudget)
+	if err != nil {
+		return nil, err
+	}
+	outcomes = append(outcomes, skillOutcomes...)
+	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), skillGen.Observations())
+	in.Searches = searchesOf(outcomes, append(gapRecipients, skillGapRecipients...))
 	l, err := interactions.BuildConditionLedger(in)
 	if err != nil {
 		return nil, err
 	}
-	l.Generation = interactions.GenerationSummary{Targets: len(targets), Runs: gen.producer.Runs(), Seconds: time.Since(started).Seconds()}
+	l.Generation = interactions.GenerationSummary{Targets: len(targets) + len(skillTargets), Runs: gen.producer.Runs() + skillGen.Runs(), Seconds: time.Since(started).Seconds()}
 	for _, o := range outcomes {
 		if o.Found {
 			l.Generation.Found++
