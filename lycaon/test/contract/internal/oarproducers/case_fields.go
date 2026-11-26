@@ -82,6 +82,7 @@ func walkGuardFields(t reflect.Type, prefix []int, visit func([]int, reflect.Str
 			if len(prefix) > 0 && visit(index, f) {
 				return true
 			}
+		default:
 		}
 	}
 	return false
