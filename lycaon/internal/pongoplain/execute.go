@@ -94,12 +94,6 @@ func Execute(ctx context.Context, tpl *pongo2.Template, values map[string]any) (
 	return executeWithHook(ctx, tpl, values, nil, false)
 }
 
-// ExecuteUnobserved renders exactly as Execute for a decision no reader
-// receives, such as an admission probe; branch and condition recording skip it.
-func ExecuteUnobserved(ctx context.Context, tpl *pongo2.Template, values map[string]any) (string, error) {
-	return executeWithHook(ctx, tpl, values, nil, true)
-}
-
 func executeWithHook(
 	ctx context.Context,
 	tpl *pongo2.Template,
@@ -149,6 +143,13 @@ func executeWithHook(
 // ExecuteDetached renders under deterministic resource and execution bounds.
 func ExecuteDetached(tpl *pongo2.Template, values map[string]any) (string, error) {
 	return Execute(context.Background(), tpl, values)
+}
+
+// ExecuteDetachedUnobserved renders exactly as ExecuteDetached for a decision
+// no reader receives, such as an admission probe; branch and condition
+// recording skip it.
+func ExecuteDetachedUnobserved(tpl *pongo2.Template, values map[string]any) (string, error) {
+	return executeWithHook(context.Background(), tpl, values, nil, true)
 }
 
 type contextBudget struct {

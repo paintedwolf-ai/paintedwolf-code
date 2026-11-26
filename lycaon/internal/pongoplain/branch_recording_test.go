@@ -174,7 +174,7 @@ func TestUnobservedRenderRecordsNothing(t *testing.T) {
 	rec := &BranchRecorder{ObserveConditions: true}
 	ActiveBranchRecorder.Store(rec)
 	defer ActiveBranchRecorder.Store(nil)
-	got, err := ExecuteUnobserved(t.Context(), tpl, data)
+	got, err := ExecuteDetachedUnobserved(tpl, data)
 	testutil.FailErr(t, "unobserved render", err)
 	if got != want {
 		t.Fatalf("unobserved render = %q, want %q", got, want)

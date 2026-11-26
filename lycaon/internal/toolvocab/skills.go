@@ -1,7 +1,6 @@
 package toolvocab
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"io/fs"
@@ -203,7 +202,7 @@ func renderSkillText(text string, vars map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return pongoplain.ExecuteUnobserved(context.Background(), tpl, vars)
+	return pongoplain.ExecuteDetachedUnobserved(tpl, vars)
 }
 
 // guardSuggestion names the profile_has_ fact that gates name for readers: the
