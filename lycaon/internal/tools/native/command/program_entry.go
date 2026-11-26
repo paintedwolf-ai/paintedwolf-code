@@ -448,7 +448,15 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 			}
 			seen[tool] = true
 			if definition, ok := r.Registry.Operation(tool); ok {
-				active = append(active, offeredProgramDefinition(tool, definition.Operation, operation.SecretSlots))
+				if spec, hasSpec := run.catalogCommand(tool); hasSpec && !definitionHasCommand(definition.Operation, tool) {
+					catDef, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
+					if err != nil {
+						return nil, nil, nil, err
+					}
+					active = append(active, catDef)
+				} else {
+					active = append(active, offeredProgramDefinition(tool, definition.Operation, operation.SecretSlots))
+				}
 			} else if spec, ok := run.catalogCommand(tool); ok {
 				definition, err := catalogOperationDefinition(spec, run.catalog.Language.Limits)
 				if err != nil {
