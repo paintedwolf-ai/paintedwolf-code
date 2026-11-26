@@ -182,6 +182,9 @@ func runCartesianMatrixUncached(ctx context.Context, s *Stock) (*CartesianSummar
 	if err := runKicksAndInjectsMatrix(ctx, s, sum); err != nil {
 		return nil, err
 	}
+	if err := runGuidanceCaseSweep(ctx, s, sum); err != nil {
+		return nil, err
+	}
 	sum.markCase("OAR producers")
 	if err := runOARNextStepsMatrix(ctx, s, oarBundle, coordStates, workerStates, sum); err != nil {
 		return nil, err
