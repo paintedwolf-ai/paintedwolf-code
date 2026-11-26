@@ -16010,6 +16010,139 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/NoticeAction'
+    WakeState:
+      type: string
+      enum:
+        - received
+        - queued
+        - deferred
+        - delivered
+        - consumed
+        - routed_to_wait
+        - held
+        - skipped
+        - denied
+        - dropped
+        - superseded
+    WakeReason:
+      type: string
+      enum:
+        - worker_cycle
+        - prompt_active
+        - turn_blocked
+        - human_approval_awaiting
+        - host_obligation_held
+        - pending_user_input
+        - active_hold
+        - workflow_terminal
+        - non_actionable
+        - batch_closed
+        - turn_rearm
+        - no_request
+        - loop_disabled
+        - wrong_session_role
+        - escalated
+        - policy_denied
+        - stale_batch
+        - precedence_busy
+        - job_terminal
+        - budget_exhausted
+        - session_closed
+        - session_missing
+        - no_active_run
+        - lookup_failed
+        - prompt_interrupted
+        - user_stopped
+        - rewound
+        - turn_settled
+        - defect
+    TurnOutcomeKind:
+      type: string
+      enum:
+        - completed
+        - failed
+        - cancelled
+        - refused
+    TurnCancellationSource:
+      type: string
+      enum:
+        - user
+        - host
+        - shutdown
+    ContinuationAction:
+      type: string
+      enum:
+        - plan_approval
+        - workflow_start
+        - workflow_resume
+        - feedback
+        - ask_answer
+    ContinuationState:
+      type: string
+      enum:
+        - pending
+        - continued
+        - held
+        - finished
+        - not_continued
+        - failed
+    ContinuationReason:
+      type: string
+      enum:
+        - human_approval_awaiting
+        - host_obligation_held
+        - pending_user_input
+        - active_hold
+        - workflow_paused
+        - workflow_cancelled
+        - workflow_completed
+        - no_open_request
+        - turn_budget_reached
+        - run_inactive
+        - session_closed
+        - admission_denied
+        - user_interrupted
+        - action_interrupted
+    HostContinuationFailure:
+      type: string
+      enum:
+        - host_lookup_failed
+        - host_invariant_failed
+    ActionContinuation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - continuation_id
+        - session_id
+        - action
+        - state
+        - opened_at
+      properties:
+        continuation_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        action:
+          $ref: '#/components/schemas/ContinuationAction'
+        state:
+          $ref: '#/components/schemas/ContinuationState'
+        reason:
+          $ref: '#/components/schemas/ContinuationReason'
+        turn_id:
+          type: string
+          format: uuid
+        failure_code:
+          type: string
+        opened_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
     EventTopic:
       type: string
       enum:
@@ -16020,6 +16153,7 @@ components:
         - board
         - cost
         - llm
+        - continuation
         - activity
         - oar
         - scan
@@ -16059,6 +16193,7 @@ components:
         - $ref: '#/components/schemas/EventEnvelopeBoard'
         - $ref: '#/components/schemas/EventEnvelopeCost'
         - $ref: '#/components/schemas/EventEnvelopeLlm'
+        - $ref: '#/components/schemas/EventEnvelopeContinuation'
         - $ref: '#/components/schemas/EventEnvelopeActivity'
         - $ref: '#/components/schemas/EventEnvelopeOar'
         - $ref: '#/components/schemas/EventEnvelopeScan'
@@ -16098,6 +16233,7 @@ components:
           board: '#/components/schemas/EventEnvelopeBoard'
           cost: '#/components/schemas/EventEnvelopeCost'
           llm: '#/components/schemas/EventEnvelopeLlm'
+          continuation: '#/components/schemas/EventEnvelopeContinuation'
           activity: '#/components/schemas/EventEnvelopeActivity'
           oar: '#/components/schemas/EventEnvelopeOar'
           scan: '#/components/schemas/EventEnvelopeScan'
@@ -21583,6 +21719,10 @@ components:
           description: Replay boundary captured before the snapshot was read
         session:
           $ref: '#/components/schemas/Session'
+        continuations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionContinuation'
         activities:
           type: array
           description: Current host work leases for this session. Omitted when no leases remain.
@@ -44178,6 +44318,18 @@ components:
               const: llm
             data:
               $ref: '#/components/schemas/LLMCallEvent'
+    EventEnvelopeContinuation:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelopeBase'
+        - type: object
+          required:
+            - topic
+            - data
+          properties:
+            topic:
+              const: continuation
+            data:
+              $ref: '#/components/schemas/ActionContinuation'
     EventEnvelopeActivity:
       allOf:
         - $ref: '#/components/schemas/EventEnvelopeBase'

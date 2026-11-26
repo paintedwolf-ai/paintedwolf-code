@@ -10,6 +10,19 @@ type AbortSessionRequest struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// ActionContinuation
+type ActionContinuation struct {
+	ContinuationID string             `json:"continuation_id"`
+	SessionID      string             `json:"session_id"`
+	Action         ContinuationAction `json:"action"`
+	State          ContinuationState  `json:"state"`
+	Reason         ContinuationReason `json:"reason,omitempty"`
+	TurnID         string             `json:"turn_id,omitempty"`
+	FailureCode    string             `json:"failure_code,omitempty"`
+	OpenedAt       time.Time          `json:"opened_at"`
+	ResolvedAt     *time.Time         `json:"resolved_at,omitempty"`
+}
+
 // ActionDescriptor The host's account of one visible action, composed from typed facts on the call, its result or its command activity. Den draws every action card from this and owns only copy and formatting.
 type ActionDescriptor struct {
 	// Verb-first action name from the tool presentation catalog.
@@ -6885,8 +6898,9 @@ type SessionBackgroundExecutionJob struct {
 // SessionBootstrap
 type SessionBootstrap struct {
 	// Replay boundary captured before the snapshot was read
-	EventCursor string  `json:"event_cursor"`
-	Session     Session `json:"session"`
+	EventCursor   string               `json:"event_cursor"`
+	Session       Session              `json:"session"`
+	Continuations []ActionContinuation `json:"continuations,omitempty"`
 	// Current host work leases for this session. Omitted when no leases remain.
 	Activities        []ActivityEvent           `json:"activities,omitempty"`
 	Transcript        SessionTranscriptPage     `json:"transcript"`

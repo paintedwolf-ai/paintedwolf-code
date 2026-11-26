@@ -12,6 +12,7 @@ export const ALL_EVENT_TOPICS = [
   "board",
   "cost",
   "llm",
+  "continuation",
   "activity",
   "oar",
   "scan",

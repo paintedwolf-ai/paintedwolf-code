@@ -87,6 +87,7 @@ export const TOPIC_STORE_INVALIDATION: Readonly<
   // The topic handler replaces one chat's presence.
   agent_presence: [],
   activity: [],
+  continuation: ["session"],
   oar: [],
   scan: ["scan"],
   providers: ["providers"],

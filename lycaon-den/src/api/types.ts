@@ -5996,9 +5996,41 @@ export interface components {
             actions?: components["schemas"]["NoticeAction"][];
         };
         /** @enum {string} */
-        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
+        WakeState: "received" | "queued" | "deferred" | "delivered" | "consumed" | "routed_to_wait" | "held" | "skipped" | "denied" | "dropped" | "superseded";
+        /** @enum {string} */
+        WakeReason: "worker_cycle" | "prompt_active" | "turn_blocked" | "human_approval_awaiting" | "host_obligation_held" | "pending_user_input" | "active_hold" | "workflow_terminal" | "non_actionable" | "batch_closed" | "turn_rearm" | "no_request" | "loop_disabled" | "wrong_session_role" | "escalated" | "policy_denied" | "stale_batch" | "precedence_busy" | "job_terminal" | "budget_exhausted" | "session_closed" | "session_missing" | "no_active_run" | "lookup_failed" | "prompt_interrupted" | "user_stopped" | "rewound" | "turn_settled" | "defect";
+        /** @enum {string} */
+        TurnOutcomeKind: "completed" | "failed" | "cancelled" | "refused";
+        /** @enum {string} */
+        TurnCancellationSource: "user" | "host" | "shutdown";
+        /** @enum {string} */
+        ContinuationAction: "plan_approval" | "workflow_start" | "workflow_resume" | "feedback" | "ask_answer";
+        /** @enum {string} */
+        ContinuationState: "pending" | "continued" | "held" | "finished" | "not_continued" | "failed";
+        /** @enum {string} */
+        ContinuationReason: "human_approval_awaiting" | "host_obligation_held" | "pending_user_input" | "active_hold" | "workflow_paused" | "workflow_cancelled" | "workflow_completed" | "no_open_request" | "turn_budget_reached" | "run_inactive" | "session_closed" | "admission_denied" | "user_interrupted" | "action_interrupted";
+        /** @enum {string} */
+        HostContinuationFailure: "host_lookup_failed" | "host_invariant_failed";
+        ActionContinuation: {
+            /** Format: uuid */
+            continuation_id: string;
+            /** Format: uuid */
+            session_id: string;
+            action: components["schemas"]["ContinuationAction"];
+            state: components["schemas"]["ContinuationState"];
+            reason?: components["schemas"]["ContinuationReason"];
+            /** Format: uuid */
+            turn_id?: string;
+            failure_code?: string;
+            /** Format: date-time */
+            opened_at: string;
+            /** Format: date-time */
+            resolved_at?: string;
+        };
+        /** @enum {string} */
+        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "cost" | "llm" | "continuation" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
         /** @description Topic-discriminated EventHub SSE envelope. */
-        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
+        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeContinuation"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
         /** @description One transcript row change. message is always the full post-write row: apply it as a whole-row snapshot ordered by seq, never a field merge onto a cached row — an absent field means the row no longer has it. */
         MessageEvent: {
             /** Format: uuid */
@@ -8201,6 +8233,7 @@ export interface components {
             /** @description Replay boundary captured before the snapshot was read */
             event_cursor: string;
             session: components["schemas"]["Session"];
+            continuations?: components["schemas"]["ActionContinuation"][];
             /** @description Current host work leases for this session. Omitted when no leases remain. */
             activities?: components["schemas"]["ActivityEvent"][];
             transcript: components["schemas"]["SessionTranscriptPage"];
@@ -17752,6 +17785,17 @@ export interface components {
              * @enum {string}
              */
             topic: "llm";
+        };
+        EventEnvelopeContinuation: components["schemas"]["EventEnvelopeBase"] & {
+            /** @constant */
+            topic: "continuation";
+            data: components["schemas"]["ActionContinuation"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            topic: "continuation";
         };
         EventEnvelopeActivity: components["schemas"]["EventEnvelopeBase"] & {
             /** @constant */
@@ -31442,6 +31486,15 @@ export type RepoLayout = components["schemas"]["RepoLayout"];
 export type ReadOutlineResponse = components["schemas"]["ReadOutlineResponse"];
 export type Error = components["schemas"]["Error"];
 export type NoticeCopy = components["schemas"]["NoticeCopy"];
+export type WakeState = components["schemas"]["WakeState"];
+export type WakeReason = components["schemas"]["WakeReason"];
+export type TurnOutcomeKind = components["schemas"]["TurnOutcomeKind"];
+export type TurnCancellationSource = components["schemas"]["TurnCancellationSource"];
+export type ContinuationAction = components["schemas"]["ContinuationAction"];
+export type ContinuationState = components["schemas"]["ContinuationState"];
+export type ContinuationReason = components["schemas"]["ContinuationReason"];
+export type HostContinuationFailure = components["schemas"]["HostContinuationFailure"];
+export type ActionContinuation = components["schemas"]["ActionContinuation"];
 export type EventTopic = components["schemas"]["EventTopic"];
 export type EventEnvelope = components["schemas"]["EventEnvelope"];
 export type MessageEvent = components["schemas"]["MessageEvent"];
@@ -32538,6 +32591,7 @@ export type EventEnvelopeCheckpoint = components["schemas"]["EventEnvelopeCheckp
 export type EventEnvelopeBoard = components["schemas"]["EventEnvelopeBoard"];
 export type EventEnvelopeCost = components["schemas"]["EventEnvelopeCost"];
 export type EventEnvelopeLlm = components["schemas"]["EventEnvelopeLlm"];
+export type EventEnvelopeContinuation = components["schemas"]["EventEnvelopeContinuation"];
 export type EventEnvelopeActivity = components["schemas"]["EventEnvelopeActivity"];
 export type OAROnFireEvent = components["schemas"]["OAROnFireEvent"];
 export type EventEnvelopeOar = components["schemas"]["EventEnvelopeOar"];

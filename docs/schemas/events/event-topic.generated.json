@@ -8,6 +8,7 @@
     "board",
     "cost",
     "llm",
+    "continuation",
     "activity",
     "oar",
     "scan",
