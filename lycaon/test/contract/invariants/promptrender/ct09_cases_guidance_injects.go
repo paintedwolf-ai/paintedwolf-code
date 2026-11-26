@@ -413,3 +413,35 @@ func executionStateCases(_ context.Context, _ *guidanceCaseEnv) ([]guidanceCase,
 		},
 	}}, nil
 }
+
+// specPostureOutcome is a posture-rule deny as rules.outcomeFromThen reads
+// it from the bundled host/posture-rules.
+type specPostureOutcome struct{ code, phase, name string }
+
+func (o specPostureOutcome) GetRejectCode() string        { return o.code }
+func (o specPostureOutcome) GetPhaseRequired() string     { return o.phase }
+func (o specPostureOutcome) GetPhaseRequiredName() string { return o.name }
+func (o specPostureOutcome) GetMinRequired() string       { return "" }
+func (o specPostureOutcome) GetMaxPlaybook() string       { return "" }
+
+// specPostureCases render guidance.RenderSpecPostureRejectBlock for denies
+// that name their required phase, as most spec rules do, and one that gives
+// only its number (host/posture-rules/spec.yaml declares both).
+func specPostureCases(_ context.Context, _ *guidanceCaseEnv) ([]guidanceCase, error) {
+	knobs := []casegen.Knob{indexKnob("phase", []string{"phase_required", "phase_name"}, []string{"named", "numbered"})}
+	return []guidanceCase{{
+		unit: "guidance/reject/spec-posture-block", recipient: unscopedRecipient, knobs: knobs,
+		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
+			out, tool := specPostureOutcome{code: "SPEC_POSTURE_UNRESOLVED", phase: "1", name: "Research depth (stub blueprint)"}, "write"
+			if knobValue[int](knobs, set, "phase") == 1 {
+				out, tool = specPostureOutcome{code: "SPEC_POSTURE_DELEGATION_FORBIDDEN", phase: "1"}, "instruct_worker"
+			}
+			text, err := guidance.RenderSpecPostureRejectBlock(ctx, "sess-spec", tool, out, guidance.PlanProgress{},
+				map[string]string{"what": "Writes wait for the research phase.", "fix": "Finish the research phase first."}, nil)
+			if err != nil {
+				return guidanceRender{}, err
+			}
+			return guidanceRender{text: text, recipientless: true}, nil
+		},
+	}}, nil
+}
