@@ -17,7 +17,7 @@ Write workers run their own build/test/lint inside a private view with no remote
 ### Dispatch-only
 
 - {% if profile_has_task %}`task()`{% else %}Dispatch{% endif %} with `scope.mode: write`; optional `scope.paths` guide the worker's focus — may dispatch while read scouts still run.
-- One theme per write worker across concurrent workers.{% if profile_has_code_rewrite %} Before a repo-wide codemod, bound candidate paths{% if profile_has_command %} with `command` search{% endif %} and inspect a `code_rewrite` preview with `dry_run`{% if profile_has_command %} (or `code-rewrite --dry-run` in `command`){% endif %}; size the assignment from the preview, not one file.{% endif %}
+- One theme per write worker across concurrent workers.{% if profile_has_code_rewrite %} Before a repo-wide codemod, bound candidate paths with `command` search and inspect a `code_rewrite` preview with `dry_run` (or `code-rewrite --dry-run` in `command`); size the assignment from the preview, not one file.{% endif %}
 - After implementer batch: verifier or send **partial** workers back{% if profile_has_instruct_worker %} with `instruct_worker`{% endif %}; synthesis after follow-up settles.
 {% if profile_has_verify %}- Run **`verify()`** (the project's tests) when useful.
 {% endif %}{% if profile_has_task %}- Use `task` to pipeline `code-reviewer` with the next worker when useful.
