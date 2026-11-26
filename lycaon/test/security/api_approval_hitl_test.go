@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -35,6 +36,7 @@ type approvalHITLHarness struct {
 	hub           *events.MemoryHub
 	srv           *api.Server
 	sess          *wire.Session
+	host          *app.ServeApp
 }
 
 // forceWriteAsk makes contained writes require a checkpoint.
@@ -87,6 +89,7 @@ func newApprovalHITLHarness(t *testing.T) *approvalHITLHarness {
 		hub:           h.MemoryHub(),
 		srv:           h.Server,
 		sess:          sess,
+		host:          h.ServeApp,
 	}
 }
 
@@ -101,7 +104,7 @@ func deniedCopy(t *testing.T) string {
 func (h *approvalHITLHarness) waitPending(t *testing.T, done <-chan error) string {
 	t.Helper()
 	var checkpointID string
-	testutil.WaitFor(t, "the approval is pending", func() bool {
+	wiring.WaitForSessionProgress(t, h.host, h.sess.ID, "the approval is pending", func() bool {
 		select {
 		case err := <-done:
 			t.Fatalf("prompt completed before approval: %v", err)
@@ -118,14 +121,9 @@ func (h *approvalHITLHarness) waitPending(t *testing.T, done <-chan error) strin
 	return checkpointID
 }
 
-func (h *approvalHITLHarness) runPrompt(t *testing.T) chan error {
+func (h *approvalHITLHarness) runPrompt(t *testing.T) <-chan error {
 	t.Helper()
-	done := make(chan error, 1)
-	go func() {
-		_, err := h.mgr.Submissions.Prompt(h.ctx, h.sess.ID, "please write file")
-		done <- err
-	}()
-	return done
+	return wiring.GoPrompt(h.ctx, h.host, h.sess.ID, "please write file")
 }
 
 func TestApprovalHITLApproveCompletesTool(t *testing.T) {

@@ -112,7 +112,10 @@ func startPromptAsync(t *testing.T, h *wiring.Harness, sessionID, text string) <
 		cancel()
 		<-done
 	})
+	// The session stays busy until the result is readable on done.
+	release := h.Sessions.Manager.Submissions.HoldActivity(sessionID)
 	go func() {
+		defer release()
 		defer close(done)
 		_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sessionID, text)
 		done <- err
@@ -136,7 +139,7 @@ func awaitOutboundPrompt(t *testing.T, h *wiring.Harness, sessionID string, done
 func waitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string) wire.CheckpointEvent {
 	t.Helper()
 	var ev wire.CheckpointEvent
-	testutil.WaitFor(t, "one tool approval is pending", func() bool {
+	wiring.WaitForSessionProgress(t, h.ServeApp, sessionID, "one tool approval is pending", func() bool {
 		pending, err := h.Sessions.Checkpoints.ListPending(t.Context(), sessionID, nil)
 		if err != nil || len(pending) != 1 || pending[0].Kind != wire.CheckpointKindToolApproval {
 			return false

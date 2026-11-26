@@ -39,8 +39,8 @@ func TestHTTPCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 	sess := createSessionHTTP(t, h.Server, dir)
 	h.SeedProgress(t, ctx, sess.ID)
 	acceptPromptHTTP(t, h.Server, sess.ID, "HTTP_BATCH_THREE")
-	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 3)
-	waitTranscriptContainsHTTP(t, h.Server, sess.ID, "The batch is dispatched.")
+	waitTaskEnqueueCountHTTP(t, h.ServeApp, sess.ID, 3)
+	waitTranscriptContainsHTTP(t, h.ServeApp, sess.ID, "The batch is dispatched.")
 
 	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
@@ -122,7 +122,7 @@ func TestHTTPCoordinatorBatchWorkersOnPackBoardE2E(t *testing.T) {
 	h.SeedProgress(t, ctx, sess.ID)
 
 	acceptPromptHTTP(t, h.Server, sess.ID, "HTTP_ROSTER")
-	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 2)
+	waitTaskEnqueueCountHTTP(t, h.ServeApp, sess.ID, 2)
 
 	jobs, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
 	testutil.FailErr(t, "ListBySession", err)

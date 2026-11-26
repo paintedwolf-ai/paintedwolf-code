@@ -19,7 +19,7 @@ func promptToolNames(t *testing.T, posture wire.SessionPosture) map[string]bool 
 	sess := createSessionWithPostureHTTP(t, h.Server, t.TempDir(), posture)
 	// plan_from_blueprint is progress-gated; seed progress so only posture decides.
 	h.SeedProgress(t, context.Background(), sess.ID)
-	postPromptAndWaitIdle(t, h.Server, sess.ID, "review plan scope")
+	postPromptAndWaitIdle(t, h.ServeApp, sess.ID, "review plan scope")
 	names := map[string]bool{}
 	for _, tool := range h.Recording.LastRequest().Tools {
 		names[tool.Name] = true

@@ -87,7 +87,7 @@ func (p personaHarness) dispatch(t *testing.T, agentType, goal string, completed
 	_, err := p.h.ToolRegistry.Run(ctx, "task", wiring.TaskToolArgs(agentType, goal),
 		p.h.CoordinatorToolContext(t, ctx, &p.parent, p.dir))
 	testutil.FailErr(t, "task tool failed", err)
-	testutil.WaitFor(t, "the worker job completes and its outcome is delivered", func() bool {
+	wiring.WaitForSessionProgress(t, p.h.ServeApp, p.parent.ID, "the worker job completes and its outcome is delivered", func() bool {
 		wiring.FailOnEndedWorker(t, p.h, ctx, p.parent.ProjectID)
 		jobs, err := p.h.Workers.Queue.ListBySession(ctx, p.parent.ProjectID, p.parent.ID, api.WorkerStatusComplete)
 		testutil.FailErr(t, "list completed jobs", err)

@@ -73,7 +73,9 @@ func (m *Service) SetProcessObserver(observe func(string, string)) { m.observePr
 // SetActivity installs the host work marker each prompt holds until it returns.
 func (m *Service) SetActivity(begin func(sessionID string) func()) { m.beginActivity = begin }
 
-func (m *Service) markActivity(sessionID string) func() {
+// HoldActivity marks prompt work on the session until the returned function
+// runs; a caller that hands a prompt to another goroutine holds it across the handoff.
+func (m *Service) HoldActivity(sessionID string) func() {
 	if m.beginActivity == nil {
 		return func() {}
 	}

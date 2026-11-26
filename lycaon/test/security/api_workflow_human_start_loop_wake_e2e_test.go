@@ -33,7 +33,7 @@ func TestHumanPlanStartLoopWakesCoordinator(t *testing.T) {
 	var run wire.WorkflowRun
 	testutil.FailErr(t, "decode started run", json.Unmarshal(w.Body.Bytes(), &run))
 
-	testutil.WaitFor(t, "the coordinator loop wakes for the started run", func() bool {
+	wiring.WaitForSessionProgress(t, h.ServeApp, sess.ID, "the coordinator loop wakes for the started run", func() bool {
 		msgs, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "GetMessages", err)
 		for _, msg := range msgs {

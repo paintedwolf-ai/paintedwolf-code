@@ -119,7 +119,9 @@ func (s *Execution) ResumePromptSubmission(parent context.Context, sessionID str
 }
 
 func (s *Execution) runPromptAsync(parent context.Context, sessionID, submissionID string) {
+	release := s.Sessions.Submissions.HoldActivity(sessionID)
 	s.background.Go(parent, func(ctx context.Context) {
+		defer release()
 		perf := observability.StartPerformanceOperation("prompt.run", map[string]string{
 			"session_id": sessionID, "operation_id": submissionID,
 		})

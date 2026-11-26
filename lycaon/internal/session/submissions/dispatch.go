@@ -20,7 +20,7 @@ import (
 )
 
 func (m *Service) Prompt(ctx context.Context, id string, text string) (*promptresult.Result, error) {
-	defer m.markActivity(id)()
+	defer m.HoldActivity(id)()
 	ctx, unlockDispatch := m.LockDispatch(ctx, id)
 	defer unlockDispatch()
 	runCtx := context.WithValue(ctx, userPromptReceiptContextKey{}, true)
@@ -32,7 +32,7 @@ func (m *Service) Prompt(ctx context.Context, id string, text string) (*promptre
 }
 
 func (m *Service) PromptWorker(ctx context.Context, id, jobID, text string) (*promptresult.Result, error) {
-	defer m.markActivity(id)()
+	defer m.HoldActivity(id)()
 	ctx, unlockDispatch := m.LockDispatch(ctx, id)
 	defer unlockDispatch()
 	resp, err := m.Input(ctx, id, promptinput.Input{Text: text, WorkerJobID: strings.TrimSpace(jobID)})

@@ -144,7 +144,7 @@ func startImplementLifecycle(t *testing.T) *implementLifecycleRun {
 func (r *implementLifecycleRun) awaitPendingWorker(t *testing.T, done ...string) wire.WorkerTask {
 	t.Helper()
 	var pending []wire.WorkerTask
-	testutil.WaitFor(t, "one new worker task is pending", func() bool {
+	WaitForSessionProgress(t, r.h.ServeApp, r.sess.ID, "one new worker task is pending", func() bool {
 		var err error
 		pending, err = r.h.Workers.Queue.ListBySession(context.Background(), r.sess.ProjectID, r.sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(pending) == 1 && !slices.Contains(done, pending[0].ID)
@@ -170,7 +170,7 @@ func TestImplementLifecycleWaitsForWorkerNotifications(t *testing.T) {
 	}
 	job := r.awaitPendingWorker(t)
 	// The coordinator parks on its worker by calling wait; the turn stays open.
-	testutil.WaitFor(t, "the coordinator waits on its worker", func() bool {
+	WaitForSessionProgress(t, r.h.ServeApp, r.sess.ID, "the coordinator waits on its worker", func() bool {
 		for _, msg := range mustMessages(t, r.h, ctx, r.sess.ID) {
 			for _, call := range msg.ToolCalls {
 				if call.Name == "wait" {
@@ -205,7 +205,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 		testutil.FailErr(t, "user Prompt", err)
 	}
 	var pending []wire.WorkerTask
-	testutil.WaitFor(t, "the worker task is pending", func() bool {
+	WaitForSessionProgress(t, h.ServeApp, sess.ID, "the worker task is pending", func() bool {
 		var err error
 		pending, err = h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(pending) == 1
@@ -216,13 +216,13 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	completeWorkerWrite(t, h, sess, pending[0], dir, "w1", "package main\n// TODO: resolve later\n", "Wrote main.go")
 
 	// Wait for repair dispatch.
-	testutil.WaitFor(t, "the second stage starts", func() bool { return stage.Load() >= 2 })
+	WaitForSessionProgress(t, h.ServeApp, sess.ID, "the second stage starts", func() bool { return stage.Load() >= 2 })
 
 	t.Logf("stage 1 elapsed = %v", time.Since(start))
 
 	// Complete repair and wait for closeout.
 	stage2Start := time.Now()
-	testutil.WaitFor(t, "a worker task is pending", func() bool {
+	WaitForSessionProgress(t, h.ServeApp, sess.ID, "a worker task is pending", func() bool {
 		tasks, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(tasks) >= 1
 	})

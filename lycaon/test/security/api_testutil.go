@@ -14,9 +14,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func fixtureAuthorization() string {
@@ -283,10 +285,11 @@ func listMessagesHTTP(t *testing.T, srv *api.Server, sessionID string) []wire.Me
 	return msgs
 }
 
-func postPromptAndWaitIdle(t *testing.T, srv *api.Server, sessionID, text string) {
+func postPromptAndWaitIdle(t *testing.T, host *app.ServeApp, sessionID, text string) {
 	t.Helper()
+	srv := host.Server
 	accepted := acceptPromptHTTP(t, srv, sessionID, text)
-	testutil.WaitFor(t, fmt.Sprintf("session %s answers prompt %q", sessionID, text), func() bool {
+	wiring.WaitForSessionProgress(t, host, sessionID, fmt.Sprintf("session %s answers prompt %q", sessionID, text), func() bool {
 		// Two idle reads fence the transcript snapshot.
 		preStatus := getSessionHTTP(t, srv, sessionID).Status
 		msgs := listMessagesHTTP(t, srv, sessionID)
@@ -302,24 +305,27 @@ func postPromptAndWaitIdle(t *testing.T, srv *api.Server, sessionID, text string
 }
 
 // postPromptAndWaitTranscriptHTTP waits for matching transcript content.
-func postPromptAndWaitTranscriptHTTP(t *testing.T, srv *api.Server, sessionID, text, want string) {
+func postPromptAndWaitTranscriptHTTP(t *testing.T, host *app.ServeApp, sessionID, text, want string) {
 	t.Helper()
+	srv := host.Server
 	acceptPromptHTTP(t, srv, sessionID, text)
-	waitTranscriptContainsHTTP(t, srv, sessionID, want)
+	waitTranscriptContainsHTTP(t, host, sessionID, want)
 }
 
-func waitTranscriptContainsHTTP(t *testing.T, srv *api.Server, sessionID, want string) {
+func waitTranscriptContainsHTTP(t *testing.T, host *app.ServeApp, sessionID, want string) {
 	t.Helper()
-	testutil.WaitFor(t, fmt.Sprintf("session %s transcript contains %q", sessionID, want), func() bool {
+	srv := host.Server
+	wiring.WaitForSessionProgress(t, host, sessionID, fmt.Sprintf("session %s transcript contains %q", sessionID, want), func() bool {
 		return slices.ContainsFunc(listMessagesHTTP(t, srv, sessionID), func(msg wire.Message) bool {
 			return strings.Contains(msg.Content, want)
 		})
 	})
 }
 
-func waitTaskEnqueueCountHTTP(t *testing.T, srv *api.Server, sessionID string, want int) {
+func waitTaskEnqueueCountHTTP(t *testing.T, host *app.ServeApp, sessionID string, want int) {
 	t.Helper()
-	testutil.WaitFor(t, fmt.Sprintf("session %s enqueues %d tasks", sessionID, want), func() bool {
+	srv := host.Server
+	wiring.WaitForSessionProgress(t, host, sessionID, fmt.Sprintf("session %s enqueues %d tasks", sessionID, want), func() bool {
 		enqueued := 0
 		for _, msg := range listMessagesHTTP(t, srv, sessionID) {
 			if taskMessageEnqueued(msg) {
@@ -335,9 +341,10 @@ func taskMessageEnqueued(message wire.Message) bool {
 		message.ToolResult.Dispatch != nil && message.ToolResult.Dispatch.WorkerID != ""
 }
 
-func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string) {
+func waitToolFeedbackHTTP(t *testing.T, host *app.ServeApp, sessionID, code string) {
 	t.Helper()
-	testutil.WaitFor(t, "the tool feedback is stored", func() bool {
+	srv := host.Server
+	wiring.WaitForSessionProgress(t, host, sessionID, "the tool feedback is stored", func() bool {
 		for _, message := range listMessagesHTTP(t, srv, sessionID) {
 			if message.ToolResult == nil {
 				continue
@@ -352,9 +359,10 @@ func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string)
 	})
 }
 
-func waitWorkflowRunCountHTTP(t *testing.T, srv *api.Server, sessionID string, wantCount int) {
+func waitWorkflowRunCountHTTP(t *testing.T, host *app.ServeApp, sessionID string, wantCount int) {
 	t.Helper()
-	testutil.WaitFor(t, fmt.Sprintf("session %s has %d workflow runs", sessionID, wantCount), func() bool {
+	srv := host.Server
+	wiring.WaitForSessionProgress(t, host, sessionID, fmt.Sprintf("session %s has %d workflow runs", sessionID, wantCount), func() bool {
 		req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs", nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
@@ -364,10 +372,11 @@ func waitWorkflowRunCountHTTP(t *testing.T, srv *api.Server, sessionID string, w
 }
 
 // waitActiveWorkflowRunHTTP waits for an asynchronous workflow start.
-func waitActiveWorkflowRunHTTP(t *testing.T, srv *api.Server, sessionID, wantWorkflowID string) wire.WorkflowRun {
+func waitActiveWorkflowRunHTTP(t *testing.T, host *app.ServeApp, sessionID, wantWorkflowID string) wire.WorkflowRun {
 	t.Helper()
+	srv := host.Server
 	var active wire.WorkflowRun
-	testutil.WaitFor(t, fmt.Sprintf("session %s runs workflow %q", sessionID, wantWorkflowID), func() bool {
+	wiring.WaitForSessionProgress(t, host, sessionID, fmt.Sprintf("session %s runs workflow %q", sessionID, wantWorkflowID), func() bool {
 		req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs/active", nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)

@@ -136,7 +136,7 @@ func TestImplementDefaultDisallowsPlanWriterSpawn(t *testing.T) {
 	sess := createSessionHTTP(t, h.Server, t.TempDir())
 	ctx := context.Background()
 
-	postPromptAndWaitIdle(t, h.Server, sess.ID, "spawn plan writer")
+	postPromptAndWaitIdle(t, h.ServeApp, sess.ID, "spawn plan writer")
 
 	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
