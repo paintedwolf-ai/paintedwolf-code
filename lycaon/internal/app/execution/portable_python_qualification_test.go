@@ -25,12 +25,14 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/portablepython"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/pythonevidence"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -603,7 +605,26 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 	rt, _ := buildQualificationRuntime(t, cfgDir)
 	defer func() { _ = rt.Host.Commands.PortablePython().Close(ctx) }()
 
-	wsDir := t.TempDir()
+	// Wire production command program services (Recorder, Blobs, Projector,
+	// Progress, Sessions, Provenance, SourceObserver) onto rt.Host.Commands.
+	fixture := programtest.New(t, programtest.Options{})
+	origProg := fixture.Runtime
+	testutil.FailErr(t, "compose production program services", rt.Host.Commands.SetProgramServices(toolhost.ProgramServices{
+		Recorder:       fixture.Recorder,
+		Blobs:          origProg.Blobs,
+		Projector:      origProg.Projector,
+		Progress:       origProg.Progress,
+		Sessions:       origProg.Sessions,
+		Provenance:     origProg.Provenance,
+		SourceObserver: origProg.SourceObserver,
+	}))
+	rt.Host.Commands.SetBackgroundRegistry(fixture.Background)
+
+	wsDir, err := filepath.EvalSymlinks(fixture.Dir)
+	testutil.FailErr(t, "canonicalize workspace dir", err)
+	scratchDir, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "canonicalize scratch dir", err)
+
 	// Plant a distinguishable decoy python3 on PATH to prove managed command
 	// routing selects Portable Python WASI rather than the host PATH binary.
 	decoyBinDir := t.TempDir()
@@ -619,7 +640,8 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 
 	// 1a. Managed `python3` via `command` when direct `python` is NOT offered
 	// runs Portable Python WASI (sys.platform == "wasi"), NOT the host decoy.
-	tcNoDirect := workspaceTC("sess-cmd-managed", "implement", "", wsDir)
+	tcNoDirect := workspaceTC(fixture.SessionID, "implement", "", wsDir)
+	tcNoDirect.Host.SessionScratchDir = scratchDir
 	tcNoDirect.Turn.TurnOfferedToolNames = []string{"command"}
 	outManaged, err := rt.Host.Registry.Run(ctx, "command", map[string]any{
 		"command": `python3 -c "import sys; print('PLATFORM:' + sys.platform)"`,
@@ -634,7 +656,8 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 
 	// 1b. Shared authority: restricted worker (`worker_readonly`) on broader
 	// surface (`implement_investigate`) via `command` stops workspace write.
-	tcRestricted := workspaceTC("sess-cmd-ro", "worker_readonly", "implement_investigate", wsDir)
+	tcRestricted := workspaceTC(fixture.SessionID, "worker_readonly", "implement_investigate", wsDir)
+	tcRestricted.Host.SessionScratchDir = scratchDir
 	tcRestricted.Turn.TurnOfferedToolNames = []string{"command"}
 	_, _ = rt.Host.Registry.Run(ctx, "command", map[string]any{
 		"command": `python3 -c "open('blocked_via_cmd.txt', 'w').write('nope')"`,
@@ -659,7 +682,8 @@ func TestPortablePythonCombinedCommandAndOAR(t *testing.T) {
 
 	// 2. Preceding completed shell effect + bare `python3` when direct `python`
 	// IS offered -> refuses with PYTHON_TOOL_REQUIRED while preserving prior.txt!
-	tcWithDirect := workspaceTC("sess-cmd-refuse", "implement", "", wsDir)
+	tcWithDirect := workspaceTC(fixture.SessionID, "implement", "", wsDir)
+	tcWithDirect.Host.SessionScratchDir = scratchDir
 	tcWithDirect.Turn.TurnOfferedToolNames = []string{"command", "python"}
 	_, refuseErr := rt.Host.Registry.Run(ctx, "command", map[string]any{
 		"command": `echo prior_ok > prior.txt && python3 -c "print('SHOULD_NOT_RUN')"`,
