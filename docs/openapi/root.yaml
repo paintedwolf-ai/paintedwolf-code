@@ -747,8 +747,6 @@ components:
       $ref: components/schemas/host-continuation-failure.generated.yaml#/components/schemas/HostContinuationFailure
     ContinuationNotice:
       $ref: components/schemas/session/continuations.yaml#/components/schemas/ContinuationNotice
-    ActionOutcomeArchive:
-      $ref: paths/diagnostics.yaml#/components/schemas/ActionOutcomeArchive
     ActionContinuation:
       $ref: components/schemas/session/continuations.yaml#/components/schemas/ActionContinuation
     EventTopic:

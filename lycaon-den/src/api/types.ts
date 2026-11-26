@@ -6020,69 +6020,6 @@ export interface components {
             continuation_id?: string;
             host_error?: components["schemas"]["SessionHostError"];
         };
-        /** @description Retained host outcomes keyed by session ID. */
-        ActionOutcomeArchive: {
-            [key: string]: {
-                /** Format: uuid */
-                host_instance: string;
-                wakes: {
-                    sequence: number;
-                    /** Format: uuid */
-                    session_id: string;
-                    anchor: string;
-                    state: components["schemas"]["WakeState"];
-                    reason?: components["schemas"]["WakeReason"];
-                    /** Format: uuid */
-                    continuation_id?: string;
-                    /** Format: uuid */
-                    turn_id?: string;
-                    lease_id?: string;
-                    steps: components["schemas"]["DiagnosticWakeStep"][];
-                }[];
-                defects?: {
-                    sequence: number;
-                    problem: string;
-                    attempt: components["schemas"]["DiagnosticWakeStep"];
-                }[];
-                turns: {
-                    /** Format: uuid */
-                    turn_id: string;
-                    /** Format: uuid */
-                    session_id: string;
-                    /** Format: date-time */
-                    admitted_at: string;
-                    /** Format: date-time */
-                    dispatched_at?: string;
-                    /** Format: date-time */
-                    settled_at?: string;
-                    outcome?: components["schemas"]["TurnOutcomeKind"];
-                    lease_id?: string;
-                    refusal?: components["schemas"]["WakeReason"];
-                    failure_code?: components["schemas"]["NoticeCode"];
-                    detail?: string;
-                    closeout_blocked?: {
-                        code?: string;
-                        phase?: string;
-                        open_gate_leaves?: string[];
-                        notice?: string;
-                    };
-                    output_truncated?: {
-                        model?: string;
-                        finish_reason?: string;
-                        max_tokens?: number;
-                        configured_max_tokens?: number;
-                        provider_max_tokens?: number;
-                        low_output_ceiling?: boolean;
-                        tool_call_truncated?: boolean;
-                        tool_name?: string;
-                        tool_args_bytes?: number;
-                        notice?: string;
-                    };
-                    canceled_by?: components["schemas"]["TurnCancellationSource"];
-                }[];
-                continuations: components["schemas"]["ActionContinuation"][];
-            };
-        };
         ActionContinuation: {
             /** Format: uuid */
             continuation_id: string;
@@ -17738,10 +17675,6 @@ export interface components {
             /** Format: uuid */
             id: string;
             view: components["schemas"]["SourceView"];
-        };
-        DiagnosticWakeStep: {
-            state: components["schemas"]["WakeState"];
-            reason?: components["schemas"]["WakeReason"];
         };
         /** @enum {string} */
         EventScopeKind: "device" | "project" | "session";
@@ -31595,7 +31528,6 @@ export type ContinuationState = components["schemas"]["ContinuationState"];
 export type ContinuationReason = components["schemas"]["ContinuationReason"];
 export type HostContinuationFailure = components["schemas"]["HostContinuationFailure"];
 export type ContinuationNotice = components["schemas"]["ContinuationNotice"];
-export type ActionOutcomeArchive = components["schemas"]["ActionOutcomeArchive"];
 export type ActionContinuation = components["schemas"]["ActionContinuation"];
 export type EventTopic = components["schemas"]["EventTopic"];
 export type EventEnvelope = components["schemas"]["EventEnvelope"];
@@ -32681,7 +32613,6 @@ export type SourceComparisonSearchPage = components["schemas"]["SourceComparison
 export type SourceViewSearchPage = components["schemas"]["SourceViewSearchPage"];
 export type SourcePresentationCreate = components["schemas"]["SourcePresentationCreate"];
 export type SourcePresentation = components["schemas"]["SourcePresentation"];
-export type DiagnosticWakeStep = components["schemas"]["DiagnosticWakeStep"];
 export type EventScopeKind = components["schemas"]["EventScopeKind"];
 export type EventScope = components["schemas"]["EventScope"];
 export type EventEnvelopeBase = components["schemas"]["EventEnvelopeBase"];
