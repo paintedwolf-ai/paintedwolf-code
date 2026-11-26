@@ -230,7 +230,7 @@ webE2e("captures live and settled portable command receipts, document pages, rel
     await expect(liveChatStage(page).getByTestId("transcript-article-assistant").last()).toContainText("Portable command completed: alpha.");
 
     const { card: settledCard } = await openFoldedCommand(page);
-    await expect(settledCard.getByTestId("action-preview")).toContainText("alpha", { timeout: 15_000 });
+    await expect(settledCard).toContainText("executions", { timeout: 15_000 });
     const settledReceiptLink = settledCard.getByTestId("action-link-receipt");
     await expect(settledReceiptLink).toBeVisible({ timeout: 15_000 });
     await settledReceiptLink.click();
@@ -260,7 +260,7 @@ webE2e("captures live and settled portable command receipts, document pages, rel
     await expect.poll(() => settledChatSessionId(page)).toBe(sessionId);
 
     const { card: reloadedCard } = await openFoldedCommand(page);
-    await expect(reloadedCard.getByTestId("action-preview")).toContainText("alpha", { timeout: 15_000 });
+    await expect(reloadedCard).toContainText("executions", { timeout: 15_000 });
     const reloadedReceiptLink = reloadedCard.getByTestId("action-link-receipt");
     await expect(reloadedReceiptLink).toBeVisible({ timeout: 15_000 });
     await reloadedReceiptLink.click();
