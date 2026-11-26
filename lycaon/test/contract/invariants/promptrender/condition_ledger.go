@@ -107,6 +107,7 @@ var (
 // observations of the host-state matrix, then generates targeted OAR cases
 // for the gaps through the production hook producers and joins again.
 func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.ObservedCondition) (*interactions.ConditionLedger, error) {
+	defer holdRecipients()()
 	sum, err := RunCartesianMatrix(ctx, s)
 	if err != nil {
 		return nil, err

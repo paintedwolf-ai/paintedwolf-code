@@ -115,6 +115,22 @@ type SkillRender struct {
 	Parts     []Text
 }
 
+// SkillText is one stock skill's rendered text for one reader, without the
+// reader's authority.
+type SkillText struct {
+	Skill  skills.Skill
+	Reader string
+	Parts  []Text
+}
+
+func skillTexts(renders []SkillRender) []SkillText {
+	out := make([]SkillText, len(renders))
+	for i, sr := range renders {
+		out[i] = SkillText{Skill: sr.Skill, Reader: sr.Reader, Parts: sr.Parts}
+	}
+	return out
+}
+
 // SkillSurfaceAudit summarizes skill discovery, preload, exclusion, and schema-narrowing checks.
 type SkillSurfaceAudit struct {
 	Renders                 []SkillRender
@@ -165,6 +181,7 @@ func AuditStockSkillSurfaces(ctx context.Context, stock *Stock, cache *hoststate
 }
 
 func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *hoststate.RenderCache) (SkillSurfaceAudit, error) {
+	defer holdRecipients()()
 	var audit SkillSurfaceAudit
 	loaded, err := StockSkills(stock)
 	if err != nil {
