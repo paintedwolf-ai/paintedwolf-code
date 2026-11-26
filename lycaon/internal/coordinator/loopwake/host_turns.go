@@ -46,7 +46,7 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 		return false
 	}
 	if _, loaded := l.promptActive.LoadOrStore(sessionID, struct{}{}); loaded {
-		loopLogNudge(sessionID, pending.wake, pending.inform, pending.legID, pending.completingJobID, "prompt_active_requeue")
+		l.Nudges.Activity.decide(sessionID, pending.wake, pending.inform, pending.legID, pending.completingJobID, "prompt_active_requeue")
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
@@ -56,38 +56,43 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 		return true
 	}
 	if l.Admission.PromptExecutionActive(sessionID) {
-		loopLogNudge(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "sync_defer_busy")
+		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "sync_defer_busy")
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
 	// Explicit wait delivery precedes optional workflow gates.
 	if l.Subscriptions.routeWaitWake(ctx, sessionID, pending) {
+		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_route_wait")
 		return true
 	}
 	allow, busy := l.Admission.evaluate(ctx, sessionID)
 	if busy {
+		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_defer_busy")
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
 	if !allow {
+		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_denied")
 		return true
 	}
 	if pending.completingJobID == "" && !anchor.AboutRunningWorker(wake) && !pending.env.HasWorkerDecision() && !l.Cycles.workerCycleIdle(ctx, sessionID, "") {
+		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_defer_worker_cycle")
 		l.Nudges.deferNudge(ctx, sessionID, pending)
 		return true
 	}
 	if reason, skip := l.Policy.hostWakeSkipReason(ctx, pending.actionableInput(sessionID)); skip {
-		loopLogNudge(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_"+reason)
+		l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_"+reason)
 		l.Waits.parkForActiveHold(ctx, sessionID)
 		return true
 	}
 
 	runID := l.Facts.activeRunID(ctx, sessionID)
 	if !l.Admission.ConsumeBudget(ctx, sessionID, runID, wake) {
-		loopLogNudge(sessionID, wake, "", "", "", "budget_exhausted")
+		l.Nudges.Activity.decide(sessionID, wake, "", "", "", "budget_exhausted")
 		return false
 	}
 	loopLogRunPrompt(sessionID, wake)
+	l.Nudges.Activity.decide(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "run_prompt")
 	deps := l.loopDeps()
 	if deps.RunPrompt != nil {
 		_, _ = deps.RunPrompt(ctx, sessionID)
@@ -102,9 +107,11 @@ func (l *HostTurns) spawnAsyncTurn(ctx context.Context, sessionID string, fn fun
 	timeout := l.Facts.sessionLimits(ctx, sessionID).CoordinatorHostTurnTimeout()
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	work := l.registerAsyncTurn(sessionID, cancel)
+	endActivity := l.Nudges.Activity.Begin(sessionID, ActivityHostTurn)
 	l.asyncTurns.Add(1)
 	go func() {
 		defer l.asyncTurns.Done()
+		defer endActivity()
 		defer l.finishAsyncTurn(sessionID, work)
 		defer observability.GuardPanic("coordinator.loopwake.async_turn")
 		fn(ctx)

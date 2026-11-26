@@ -70,6 +70,7 @@ func bindCoordinatorRuntime(m *Host, store *sessionstore.Repositories) {
 	m.Observations = sessionobservation.New(store.Sessions, store.Submissions, runtime.CoordinatorLoop().Admission, runtime.CoordinatorLoop().Nudges, m.Runner.Turns)
 	m.Processes.SetLoop(runtime.CoordinatorLoop().Waits, runtime.CoordinatorLoop().Nudges)
 	m.Admission.SetLoop(runtime.CoordinatorLoop().Nudges, runtime.CoordinatorLoop().Cycles)
+	m.Submissions.SetActivity(runtime.CoordinatorLoop().Nudges.BeginPromptSubmission)
 	m.ProjectControl.SetAnchors(runtime.Anchors())
 	m.Coordinator.Nudges.SetSurface(runtime)
 	m.Coordinator.Guards.SetSurface(runtime)

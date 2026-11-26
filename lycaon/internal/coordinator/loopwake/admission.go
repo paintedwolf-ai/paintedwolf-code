@@ -45,8 +45,10 @@ func (l *Admission) BeginPromptExecution(ctx context.Context, sessionID string) 
 		return func() {}
 	}
 	token := &promptExecutionToken{}
+	endActivity := l.Nudges.Activity.Begin(sessionID, ActivityPromptExecution)
 	l.promptExecution.Store(sessionID, token)
 	return func() {
+		defer endActivity()
 		if !l.promptExecution.CompareAndDelete(sessionID, token) {
 			return
 		}

@@ -28,6 +28,41 @@ func WaitFor(t testing.TB, step string, cond func() bool) {
 	}
 }
 
+// Progress is a system's work at one instant. Epoch changes whenever work
+// begins, ends or decides anything; Idle means nothing in flight can still
+// change the system; Report explains the state for a failure.
+type Progress struct {
+	Epoch  uint64
+	Idle   bool
+	Report string
+}
+
+// WaitForProgress polls cond like WaitFor and fails as soon as the system is
+// provably stuck: idle before and after a false condition at the same epoch,
+// so no work ran in between and none remains that could make it hold.
+func WaitForProgress(t testing.TB, step string, cond func() bool, progress func() Progress) {
+	t.Helper()
+	defer trackWait(t, step)()
+	ticker := time.NewTicker(waitForPollInterval)
+	defer ticker.Stop()
+	for {
+		before := progress()
+		if cond() {
+			return
+		}
+		if before.Idle {
+			if after := progress(); after.Idle && after.Epoch == before.Epoch {
+				t.Fatalf("%s: nothing is left that could make the condition hold\n%s", step, after.Report)
+			}
+		}
+		select {
+		case <-ticker.C:
+		case <-t.Context().Done():
+			t.Fatalf("%s: the test ended before the condition held\n%s", step, progress().Report)
+		}
+	}
+}
+
 // Receive returns the next channel value.
 func Receive[T any](t testing.TB, step string, ch <-chan T) T {
 	t.Helper()

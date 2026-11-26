@@ -101,7 +101,7 @@ func (l *WaitSubscriptions) settleDurableWaitWake(
 	if strings.TrimSpace(lease.WorkerJobID) != "" {
 		// Only a subscribed event settles a worker-owned wait.
 		if !matched {
-			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "worker_wait_subscription_filtered")
+			l.Nudges.Activity.decide(sessionID, wake, inform, legID, completingJobID, "worker_wait_subscription_filtered")
 			return true
 		}
 		won, settleErr := store.SettleLease(ctx, lease.ID, "resolved", condition)
@@ -277,10 +277,10 @@ func (l *WaitSubscriptions) routeWaitWake(ctx context.Context, sessionID string,
 	triggers := l.Waits.Triggers(sessionID)
 	if !l.waitWakeAccepted(ctx, sessionID, wake, inform, legID, completingJobID, env) {
 		if shouldDeferForAllWorkersIdle(triggers, wake, completingJobID) && !l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID) {
-			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_subscription_all_idle")
+			l.Nudges.Activity.decide(sessionID, wake, inform, legID, completingJobID, "defer_subscription_all_idle")
 			l.Nudges.deferNudge(ctx, sessionID, pending)
 		} else {
-			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "subscription_filtered")
+			l.Nudges.Activity.decide(sessionID, wake, inform, legID, completingJobID, "subscription_filtered")
 		}
 		return true
 	}

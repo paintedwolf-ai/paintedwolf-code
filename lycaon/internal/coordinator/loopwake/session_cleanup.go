@@ -46,6 +46,7 @@ func (l *Admission) ForgetSession(sessionID string) {
 	})
 }
 func (l *Nudges) ForgetSession(sessionID string) {
+	l.Activity.forget(sessionID)
 	l.pendingQueues.Delete(sessionID)
 	l.pendingDrain.Delete(sessionID)
 	l.pendingWorkerQueues.Delete(sessionID)

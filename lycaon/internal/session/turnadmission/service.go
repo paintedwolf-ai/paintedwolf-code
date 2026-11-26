@@ -34,7 +34,10 @@ type Settlement interface {
 type Submissions interface {
 	DrainPromptSubmissions(context.Context, string) error
 }
-type Nudges interface{ HasPendingLoopWakes(string) bool }
+type Nudges interface {
+	HasPendingLoopWakes(string) bool
+	BeginRoundDrain(string) func()
+}
 type Cycles interface {
 	WorkerCycleIsIdle(context.Context, string) bool
 }
@@ -64,3 +67,10 @@ func (s *Service) Bind(runner Runner, settlement Settlement, submissions Submiss
 }
 func (s *Service) SetLoop(nudges Nudges, cycles Cycles) { s.nudges, s.cycles = nudges, cycles }
 func (s *Service) WaitDrains(ctx context.Context)       { s.roundEndDrains.wait(ctx) }
+
+func (s *Service) beginRoundDrain(sessionID string) func() {
+	if s.nudges == nil {
+		return func() {}
+	}
+	return s.nudges.BeginRoundDrain(sessionID)
+}

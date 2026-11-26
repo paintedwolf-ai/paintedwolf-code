@@ -47,7 +47,7 @@ func (l *PromptObservations) wakeConsumed(ctx context.Context, sessionID string,
 		}
 	}
 	if consumed {
-		loopLogNudge(sessionID, pending.wake, pending.inform, pending.legID, pending.completingJobID, "consumed_by_prompt")
+		l.Nudges.Activity.decide(sessionID, pending.wake, pending.inform, pending.legID, pending.completingJobID, "consumed_by_prompt")
 	}
 	return consumed
 }

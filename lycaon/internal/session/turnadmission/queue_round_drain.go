@@ -124,7 +124,9 @@ func (m *Service) RoundEnd(ctx context.Context, sessionID string) {
 	if work == nil {
 		return
 	}
+	endActivity := m.beginRoundDrain(sessionID)
 	go func() {
+		defer endActivity()
 		defer m.roundEndDrains.finish(sessionID, work)
 		defer observability.GuardPanic("session.round_end_drain")
 		for {

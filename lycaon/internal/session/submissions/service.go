@@ -60,6 +60,8 @@ type Service struct {
 	roundComplete   RoundComplete
 	hostBlocked     HostBlocked
 	observeProcess  func(sessionID, handle string)
+	// beginActivity marks a prompt as host work until it returns.
+	beginActivity func(sessionID string) func()
 }
 
 func New(sessionStore Sessions, submissionStore Submissions, people People, q *queue.Store, gate *lifecycle.State, recovery *recovery.Service, spend *spendguard.Service, drafts *draftqueue.Service, state *submissionstate.Service, locks *promptstate.MutexRegistry, execute Execute, continuation ContinueUser, round RoundComplete, blocked HostBlocked) *Service {
@@ -67,6 +69,16 @@ func New(sessionStore Sessions, submissionStore Submissions, people People, q *q
 }
 
 func (m *Service) SetProcessObserver(observe func(string, string)) { m.observeProcess = observe }
+
+// SetActivity installs the host work marker each prompt holds until it returns.
+func (m *Service) SetActivity(begin func(sessionID string) func()) { m.beginActivity = begin }
+
+func (m *Service) markActivity(sessionID string) func() {
+	if m.beginActivity == nil {
+		return func() {}
+	}
+	return m.beginActivity(sessionID)
+}
 
 func (m *Service) lockAdmission(sessionID string) func() {
 	lock := m.admission.Acquire(sessionID)

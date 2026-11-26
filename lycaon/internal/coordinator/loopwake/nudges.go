@@ -37,6 +37,8 @@ type Nudges struct {
 	Subscriptions       *WaitSubscriptions
 	Waits               *Waits
 	Cycles              *WorkerCycles
+	// Activity counts host work and records wake decisions for every loop part.
+	Activity *HostActivity
 }
 
 func (l *Nudges) setDeps(deps NudgesDeps) { l.depsMu.Lock(); l.deps = deps; l.depsMu.Unlock() }
@@ -70,6 +72,7 @@ func (l *Nudges) nudgeNow(
 	if l == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}
+	defer l.Activity.Begin(sessionID, ActivityWakeDelivery)()
 	seq := l.nextSequence()
 	pending := pendingLoopWake{wake: wake, inform: inform, legID: legID, completingJobID: completingJobID, env: env, seq: seq}
 	if wake == anchor.PhaseAdvanced {
@@ -91,33 +94,39 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 		pending.informHandled = true
 	}
 	if l.Subscriptions.resumePendingWait(ctx, sessionID, pending.wake) {
+		l.Activity.decide(sessionID, wake, inform, legID, completingJobID, "resume_wait")
 		return
 	}
 	// A subscribed result belongs to its lease, even after its originating batch closes.
 	if l.Subscriptions.matchesActiveWait(ctx, sessionID, pending) && l.Subscriptions.routeWaitWake(ctx, sessionID, pending) {
+		l.Activity.decide(sessionID, wake, inform, legID, completingJobID, "route_wait")
 		return
 	}
 	liveBatch := l.Policy.coordinatorBatchState(ctx, sessionID)
 	if isStaleBatchSeq(liveBatch, env) {
 		l.Policy.dropStaleBatchWake(ctx, sessionID, liveBatch)
-		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "drop:stale_batch_seq")
+		l.Activity.decide(sessionID, wake, inform, legID, completingJobID, "drop:stale_batch_seq")
 		return
 	}
-	if l.Observations.wakeConsumed(ctx, sessionID, pending) || l.Subscriptions.routeWaitWake(ctx, sessionID, pending) {
+	if l.Observations.wakeConsumed(ctx, sessionID, pending) {
+		return
+	}
+	if l.Subscriptions.routeWaitWake(ctx, sessionID, pending) {
+		l.Activity.decide(sessionID, wake, inform, legID, completingJobID, "route_wait")
 		return
 	}
 	blocked := l.Turns.hostTurnBlocked(ctx, sessionID)
 	// A wake about a running worker is actionable while its job runs.
 	perJobWake := strings.TrimSpace(completingJobID) != "" || anchor.AboutRunningWorker(wake)
 	if !l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID) && !perJobWake {
-		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_worker_cycle")
+		l.Activity.decide(sessionID, wake, inform, legID, completingJobID, "defer_worker_cycle")
 		l.deferNudge(ctx, sessionID, pending)
 		return
 	}
 	runID := l.Facts.activeRunID(ctx, sessionID)
 	allow, busy := l.Admission.evaluate(ctx, sessionID)
 	if !l.Cycles.workerCycleIdle(ctx, sessionID, "") && !perJobWake {
-		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_worker_cycle_idle")
+		l.Activity.decide(sessionID, wake, inform, legID, completingJobID, "defer_worker_cycle_idle")
 		l.deferNudge(ctx, sessionID, pending)
 		return
 	}
@@ -131,7 +140,7 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 	// Prompt execution defers actionability until the wake drains.
 	if !busy && !blocked {
 		if reason, skip := l.Policy.hostWakeSkipReason(ctx, skipIn); skip {
-			loopLogNudge(sessionID, wake, inform, legID, completingJobID, reason)
+			l.Activity.decide(sessionID, wake, inform, legID, completingJobID, reason)
 			if reason == "skip_turn_rearm" {
 				l.Waits.rearmSleepAfterSkip(ctx, sessionID)
 			} else {
@@ -169,21 +178,21 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 		return
 	}
 	if !allow {
-		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "denied")
+		l.Activity.decide(sessionID, wake, inform, legID, completingJobID, "denied")
 		// A denied wake leaves the active hold in place.
 		l.Waits.parkForActiveHold(ctx, sessionID)
 		return
 	}
 	if busy {
 		if wake == anchor.WaitTimerFired {
-			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "drop:precedence_busy")
+			l.Activity.decide(sessionID, wake, inform, legID, completingJobID, "drop:precedence_busy")
 			return
 		}
-		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "pending_busy")
+		l.Activity.decide(sessionID, wake, inform, legID, completingJobID, "pending_busy")
 		l.deferPromptWake(ctx, sessionID, pending)
 		return
 	}
-	loopLogNudge(sessionID, wake, inform, legID, completingJobID, "queued_ready")
+	l.Activity.decide(sessionID, wake, inform, legID, completingJobID, "queued_ready")
 	if (wake == anchor.WorkerTaskFinished || wake == anchor.LegFinished) &&
 		l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID) {
 		l.Waits.DisarmTimerBackstop(ctx, sessionID)
@@ -381,7 +390,7 @@ func (l *Nudges) dropDeferredRunningWorkerWakes(sessionID, jobID string) {
 		return
 	}
 	if l.sessionDeferredQueue(sessionID).removeRunningWorkerWakesForJob(jobID) {
-		loopLogNudge(sessionID, "", "", jobID, "", "drop:job_terminal")
+		l.Activity.decide(sessionID, "", "", jobID, "", "drop:job_terminal")
 	}
 }
 func (l *Nudges) deferNudge(ctx context.Context, sessionID string, d pendingLoopWake) {

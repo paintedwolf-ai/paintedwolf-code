@@ -23,7 +23,7 @@ func NewLoopEngine() *LoopEngine {
 		Cycles:        &WorkerCycles{},
 		Turns:         &HostTurns{},
 		Waits:         &Waits{},
-		Nudges:        &Nudges{},
+		Nudges:        &Nudges{Activity: &HostActivity{}},
 		Admission:     &Admission{},
 	}
 	l.Subscriptions.Nudges = l.Nudges
