@@ -382,7 +382,7 @@ func (s *Artifacts) HandleSessionArtifact(w http.ResponseWriter, r *http.Request
 	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
 	res := s.visualStore.Resolve(r.Context(), root, artifactID)
 	if !res.IsPresent() {
-		if s.pythonEvidence != nil && res.Reason() == visual.AbsenceNotFound {
+		if s.pythonEvidence != nil && res.Reason() != visual.AbsenceForeign && res.Reason() != visual.AbsenceUnavailable && res.Reason() != visual.AbsenceDeleted {
 			data, pyErr := s.pythonEvidence.ReadPythonRetainedOutput(r.Context(), sessionadmin.ViewerScopeForSession(sess), artifactID)
 			if pyErr == nil {
 				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
