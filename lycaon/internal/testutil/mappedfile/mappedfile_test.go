@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -21,7 +23,7 @@ func TestMain(m *testing.M) {
 func TestWritesReachTheFileOnceSynced(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mapped")
 	if err := os.WriteFile(path, bytes.Repeat([]byte("0"), 8), 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	m := Map(t, path, 8)
 	if err := m.Write([]byte("mapped!!")); err != nil {
@@ -39,7 +41,7 @@ func TestWritesReachTheFileOnceSynced(t *testing.T) {
 func TestDataLongerThanTheMappingIsRefused(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mapped")
 	if err := os.WriteFile(path, []byte("0123"), 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	m := Map(t, path, 4)
 	if err := m.Write([]byte("too long")); err == nil || !strings.Contains(err.Error(), "do not fit") {
@@ -67,7 +69,7 @@ func TestChildRefusalsAndExitReachTheCaller(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "mapped")
 	if err := os.WriteFile(path, []byte("0123"), 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	m := Map(t, path, 4)
 	m.close()
