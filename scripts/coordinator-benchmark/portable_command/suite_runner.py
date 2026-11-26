@@ -159,13 +159,16 @@ def probe_command_envelope(
         status = 'accepted_without_progress_receipt'
     else:
         status = 'other'
+    post_control_rev = _query_committed_revision(app_dir / 'store.db', session_id) if session_id else None
     report = {
         'version': 1, 'probe': 'command-progress-update-envelope', 'identity': identity,
         'session_id': session_id, 'offered_tools': offered_tools, 'command_schema': command_schema,
         'command_schema_properties': sorted(props.keys()), 'schema_has_progress_update': schema_has_progress,
         'invocation_call_id': call_id, 'invocation_args': invocation_args, 'tool_result': tool_result,
         'parsed_payload': parsed_payload, 'receipts': receipts, 'programs': programs, 'program_progress': prog_progress,
-        'committed_progress_revision': committed_rev, 'native_progress_receipt_count': len(progress_ids),
+        'committed_progress_revision': committed_rev, 'post_control_progress_revision': post_control_rev,
+        'prior_progress_preserved': bool(committed_rev is not None and post_control_rev in {None, committed_rev}),
+        'native_progress_receipt_count': len(progress_ids),
         'independent_receipts': independent_receipts, 'all_checked_refusal_code': ctrl_code,
         'all_checked_control': {
             'invocation_call_id': control_call_id, 'args': control_args,

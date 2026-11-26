@@ -300,3 +300,53 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             # Omitting authoritative program_replay_available / replay_available leaves disposition None.
             omitted = observe._extract_recovery(case['id'], {'refusal': {'code': 'COMMAND_OPTION_UNSUPPORTED', 'details': {'source_start_byte': 4, 'source_end_byte': 28}}}, {}, {'invocation_program_executions': []}, [])
             self.assertIsNone(omitted['whole_program_resubmit_allowed'])
+
+    def test_syntax_with_progress_no_effect_witness_and_progress_then_denial_facts(self):
+        cases = {c['id']: c for c in load_suite()['cases']}
+        syn_case = cases['syntax-with-progress']
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            db_path = root / 'store.db'
+            create_audit_db(db_path)
+            db = sqlite3.connect(db_path)
+            db.execute("CREATE TABLE session_progress (session_id TEXT PRIMARY KEY, document_version INTEGER)")
+            db.execute("INSERT INTO invocation_receipts VALUES ('rcpt-syn','sess1234','call-1','command','processes','rejected',0)")
+            raw_res = {
+                'outcome': 'rejected', 'codes': ['COMMAND_SYNTAX_INVALID'], 'content': 'Rejected: syntax',
+                'invocation': {'id': 'rcpt-syn', 'status': 'rejected', 'invoked': False, 'failure': {'code': 'COMMAND_SYNTAX_INVALID', 'retryable': False}},
+                'feedback': [{'code': 'COMMAND_SYNTAX_INVALID', 'details': {
+                    'command_execution': 'not_started', 'diagnostic_pre_evaluation': True, 'expected_form': 'complete Bash source',
+                    'retryable': False, 'source_start_byte': 15, 'source_end_byte': 16,
+                }}],
+            }
+            db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','call-1',?)", (json.dumps(raw_res),))
+            db.commit()
+            db.close()
+            log_path = root / 'sidecar.log'
+            log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+            proj = root / 'proj'
+            proj.mkdir()
+            obs, audit = observe.build_observation(
+                syn_case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj,
+                db_path=db_path, sidecar_log=log_path, baseline_hashes={},
+                turn_records=[{'program': syn_case['turns'][0]['program'], 'command_call_id': 'call-1', 'call_ids': ['call-1']}],
+                prelude_records=[],
+            )
+            self.assertEqual(audit['observation_gaps'], [])
+            self.assertEqual(obs['program']['status'], 2)
+            self.assertFalse(obs['recovery']['whole_program_resubmit_allowed'])
+            self.assertTrue(obs['facts']['zero_progress_effects'])
+            self.assertTrue(obs['facts']['zero_program_effects'])
+            self.assertTrue(obs['facts']['syntax_span'])
+            # Independent session_progress mutation witness breaks zero_progress_effects.
+            db = sqlite3.connect(db_path)
+            db.execute("INSERT INTO session_progress VALUES ('sess1234', 1)")
+            db.commit()
+            db.close()
+            obs2, _ = observe.build_observation(
+                syn_case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj,
+                db_path=db_path, sidecar_log=log_path, baseline_hashes={},
+                turn_records=[{'program': syn_case['turns'][0]['program'], 'command_call_id': 'call-1', 'call_ids': ['call-1']}],
+                prelude_records=[],
+            )
+            self.assertFalse(obs2['facts']['zero_progress_effects'])

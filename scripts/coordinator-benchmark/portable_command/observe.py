@@ -6,9 +6,11 @@ import sqlite3
 from portable_command.artifacts import project_hashes
 from portable_command.reporting import (
     FACT_OWNERS,
+    extract_recovery as _extract_recovery,
     file_sha256,
     scan_sidecar_launches,
     source_identity,
+    structured_rejection as _structured_rejection,
     verified_source_binding as _verified_source_binding,
 )
 
@@ -38,6 +40,7 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         outputs = _rows(db, f'SELECT id,program_id,execution_id,stream,reference,complete,redacted,preview,preview_truncated,line_count,inline_digest,blob_id FROM invocation_program_outputs WHERE program_id IN ({p_ph}) ORDER BY rowid', p_ids) if p_ids else []
         publications = _rows(db, f'SELECT * FROM invocation_program_publications WHERE program_id IN ({p_ph})', p_ids) if p_ids else []
         program_progress = _rows(db, f'SELECT execution_id,program_id,session_id,state,owner_invoked,detail_ref FROM invocation_program_progress WHERE program_id IN ({p_ph})', p_ids) if p_ids and _table_exists(db, 'invocation_program_progress') else []
+        session_progress = _rows(db, 'SELECT * FROM session_progress WHERE session_id=?', (session_id,)) if _table_exists(db, 'session_progress') else []
         o_ids = [o['id'] for o in outputs]
         o_ph = ','.join('?' for _ in o_ids) or "''"
         deliveries = _rows(db, f'SELECT id,output_id,start_byte,end_byte,source_owner_ref FROM invocation_program_deliveries WHERE output_id IN ({o_ph})', o_ids) if o_ids and _table_exists(db, 'invocation_program_deliveries') else []
@@ -49,7 +52,8 @@ def query_db_audit(db_path, session_id, prelude_call_ids=()):
         'prelude_receipts': prelude_receipts, 'invocation_receipts': receipts, 'invocation_programs': programs,
         'invocation_program_executions': executions, 'invocation_program_revision_pins': pins,
         'invocation_program_outputs': outputs, 'invocation_program_publications': publications,
-        'invocation_program_progress': program_progress, 'invocation_program_deliveries': deliveries,
+        'invocation_program_progress': program_progress, 'session_progress': session_progress,
+        'invocation_program_deliveries': deliveries,
         'source_command_windows': windows, 'tool_result_messages': messages,
     }
 
@@ -72,18 +76,6 @@ def parse_tool_result(message_row):
                 return raw, {}
         return raw, {}
     return raw, body if isinstance(body, dict) else {}
-
-
-def _structured_rejection(raw_result, payload):
-    fb_list = raw_result.get('feedback') or []
-    fb0 = fb_list[0] if isinstance(fb_list, list) and fb_list and isinstance(fb_list[0], dict) else {}
-    refusal = payload.get('refusal') if isinstance(payload, dict) and isinstance(payload.get('refusal'), dict) else {}
-    inv_failure = (raw_result.get('invocation') or {}).get('failure') or {}
-    rejection = raw_result.get('rejection') or {}
-    codes = raw_result.get('codes') or []
-    code = refusal.get('code') or fb0.get('code') or inv_failure.get('code') or rejection.get('code') or (codes[0] if codes else None)
-    details = refusal.get('details') or fb0.get('details') or rejection.get('details') or {}
-    return code, details if isinstance(details, dict) else {}
 
 
 def normalize_outcome(raw_result, program_row, payload):
@@ -129,39 +121,6 @@ def _receipt_rows(audit, progress_receipts):
     return receipts, effects
 
 
-def _has_structured_span(details):
-    if isinstance(details.get('span'), dict) and isinstance(details['span'].get('start'), int) and isinstance(details['span'].get('end'), int):
-        return True
-    return isinstance(details.get('source_start_byte'), int) and isinstance(details.get('source_end_byte'), int)
-
-
-def _extract_recovery(case_id, payload, raw_result, audit, unexpected_cmd):
-    code, details = _structured_rejection(raw_result, payload)
-    if not code:
-        return None
-    has_span = _has_structured_span(details)
-    has_help = bool(details.get('expected_form') or details.get('usage') or details.get('help'))
-    cause = 'option' if code == 'COMMAND_OPTION_UNSUPPORTED' else ('syntax' if code == 'COMMAND_SYNTAX_INVALID' else code.lower())
-    remedy = ('focused_syntax_help' if cause == 'syntax' else 'focused_command_help') if has_help else ''
-    zero_effects = (
-        payload.get('completed_effects', 0) == 0 and payload.get('uncertain_effects', 0) == 0
-        and not audit['invocation_program_executions'] and details.get('command_execution') in {None, 'not_started'}
-    )
-    replay_fact = details.get('program_replay_available')
-    if isinstance(replay_fact, bool):
-        replay_allowed = replay_fact and zero_effects
-    elif isinstance(payload.get('replay_available'), bool):
-        replay_allowed = payload['replay_available'] and zero_effects
-    else:
-        replay_allowed = None
-    return {
-        'case_id': case_id, 'cause': cause, 'zero_program_effects': zero_effects,
-        'whole_program_resubmit_allowed': replay_allowed, 'automatic_execution': bool(unexpected_cmd),
-        'remedy': remedy, 'effect_certainty_required': zero_effects,
-        'source_span_required': has_span, 'owner_code': code,
-    }
-
-
 def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None):
     """Construct a version-1 native-runtime observation from the whole isolated session."""
     prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
@@ -202,9 +161,17 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     for extra in unexpected_cmd:
         cmd_invocations.append({'id': extra['id'], 'program': '<unexpected>', 'outcome': extra['status'], 'rejection_code': None})
 
-    outcome, host_stop, _ = normalize_outcome(last_raw, last_prog, last_payload)
+    outcome, host_stop, last_code = normalize_outcome(last_raw, last_prog, last_payload)
+    _, last_details = _structured_rejection(last_raw, last_payload)
     status_code = last_payload.get('status') if isinstance(last_payload.get('status'), int) else (
-        last_prog['status_code'] if last_prog and isinstance(last_prog.get('status_code'), int) else None
+        last_prog['status_code'] if last_prog and isinstance(last_prog.get('status_code'), int) else (
+            last_details.get('status') if isinstance(last_details.get('status'), int) else (
+                2 if (outcome == 'rejected' and last_code == 'COMMAND_SYNTAX_INVALID'
+                      and last_details.get('diagnostic_pre_evaluation') is True
+                      and last_details.get('command_execution') == 'not_started'
+                      and (last_raw.get('invocation') or {}).get('invoked') is False) else None
+            )
+        )
     )
     if status_code is None:
         gaps.append('missing_program_status_code')
@@ -243,8 +210,15 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         'option_source_span': bool(recovery and recovery['cause'] == 'option' and recovery['source_span_required']),
         'syntax_span': bool(recovery and recovery['cause'] == 'syntax' and recovery['source_span_required']),
         'focused_help': bool(recovery and recovery['remedy'] in {'focused_command_help', 'focused_syntax_help'}),
-        'zero_program_effects': bool(recovery and recovery['zero_program_effects']),
-        'zero_progress_effects': not progress_receipts,
+        'zero_program_effects': bool(recovery and recovery['zero_program_effects'] and (baseline_hashes is None or final_hashes == baseline_hashes)),
+        'zero_progress_effects': not progress_receipts and not audit.get('session_progress'),
+        'progress_committed_separately': bool(
+            env_progress and any(pr['status'] == 'completed' for pr in env_progress)
+            and audit['invocation_programs']
+            and all(pr['id'] not in {p['parent_receipt_id'], p['id']} for pr in env_progress for p in audit['invocation_programs'])
+        ),
+        'no_gated_effect': bool(recovery and recovery['zero_program_effects'] and (baseline_hashes is None or final_hashes == baseline_hashes)),
+        'fresh_resubmission_only': bool(recovery and recovery['whole_program_resubmit_allowed'] is False and not unexpected_cmd and len(cmd_receipts) == len(turn_records)),
         'exact_source_binding': source_bound,
         'execution_revision': bool(source_bound and write_rev_ok and all(len(p.get('content_sha256') or '') == 64 or (p.get('document_revision') or 0) > 0 for p in source_pins)),
         'no_conversational_read_base': source_bound and not audit.get('invocation_program_deliveries'),
