@@ -39,9 +39,12 @@ def _refusal_code(tool_result, parsed_payload):
 def _query_committed_revision(db_path, session_id):
     with contextlib.closing(sqlite3.connect(db_path)) as db:
         if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_progress'").fetchone():
-            row = db.execute('SELECT revision FROM session_progress WHERE session_id=?', (session_id,)).fetchone()
-            if row and isinstance(row[0], int) and row[0] > 0:
-                return row[0]
+            cols = {r[1] for r in db.execute('PRAGMA table_info(session_progress)').fetchall()}
+            col = 'document_version' if 'document_version' in cols else ('revision' if 'revision' in cols else None)
+            if col:
+                row = db.execute(f'SELECT {col} FROM session_progress WHERE session_id=?', (session_id,)).fetchone()
+                if row and isinstance(row[0], int) and row[0] > 0:
+                    return row[0]
     return None
 
 
