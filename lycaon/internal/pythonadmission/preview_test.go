@@ -156,6 +156,9 @@ func TestPreviewListenerBindServeStopAndModuleShadowing(t *testing.T) {
 		ExecutionID: "exec-preview-1",
 		CallID:      "call-preview-1",
 		Evidence:    store,
+		Policy: func(_ context.Context, _ pythonruntime.ReachedOperation) PolicyDecision {
+			return PolicyDecision{Kind: pythonruntime.DecisionAllow}
+		},
 	})
 
 	jobs := NewMemorySessionJobRegistry()
@@ -261,6 +264,9 @@ func TestPreviewListenerStoppedByStopLatchAndAdmissionRefusal(t *testing.T) {
 	allowObs := NewAdmissionObserver(ObserverConfig{
 		ExecutionID: "exec-preview-latch",
 		StopLatch:   latch,
+		Policy: func(_ context.Context, _ pythonruntime.ReachedOperation) PolicyDecision {
+			return PolicyDecision{Kind: pythonruntime.DecisionAllow}
+		},
 	})
 	pl, err := StartPreviewListener(context.Background(), PreviewConfig{
 		ExecutionID: "exec-preview-latch",

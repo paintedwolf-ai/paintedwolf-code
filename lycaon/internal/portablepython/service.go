@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/pythoncatalog"
 	"github.com/lycaon/lycaon/internal/pythondocuments"
+	"github.com/lycaon/lycaon/internal/pythonevidence"
 	"github.com/lycaon/lycaon/internal/pythonruntime"
 	experimentalsys "github.com/tetratelabs/wazero/experimental/sys"
 )
@@ -31,8 +32,30 @@ const (
 	// EnvImageDir overrides the Portable Python image directory location.
 	EnvImageDir = "PW_PORTABLE_PYTHON_IMAGE_DIR"
 
+	// Production default resource limits applied whenever ToolRequest.Limits
+	// leaves a field unset (zero).
+	DefaultMaxMemoryPages    uint32 = 4096             // 256 MiB Wasm linear memory
+	DefaultMaxGuestWork      uint64 = 50_000_000       // deterministic Wasm loop-fuel cap
+	DefaultMaxHostWork       uint64 = 100_000          // host work unit cap
+	DefaultMaxOutputBytes    int64  = 1024 * 1024      // 1 MiB WASI stream capture bound
+	DefaultMaxStagedBytes    int64  = 16 * 1024 * 1024 // 16 MiB staged overlay bound
+	DefaultInlineBudgetBytes int    = 65536            // 64 KiB inline tool output budget
+
 	defaultExecutionTimeout = 120 * time.Second
 )
+
+// DefaultProtectedPaths are workspace paths always protected against guest
+// reads/writes by default (git hooks/config/refs and credential directories).
+var DefaultProtectedPaths = []string{
+	".git/hooks",
+	".git/config",
+	".git/HEAD",
+	".git/refs",
+	".ssh",
+	".gnupg",
+	".aws",
+	".kube",
+}
 
 // DiscoverImageDir resolves the Portable Python image directory from
 // PW_PORTABLE_PYTHON_IMAGE_DIR or standard Painted Wolf app data locations.
@@ -55,12 +78,26 @@ func DiscoverImageDir() (string, error) {
 
 func standardImageDirCandidates() []string {
 	var out []string
+	// 1. Beside the running binary (installed bundle / packaged release layouts).
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		exeDir := filepath.Dir(exe)
+		out = append(out,
+			filepath.Join(exeDir, "portable-python", "image"),
+			filepath.Join(exeDir, "..", "share", "paintedwolf", "portable-python", "image"),
+			filepath.Join(exeDir, "..", "Resources", "portable-python", "image"),
+		)
+	}
+	// 2. Active Painted Wolf configdir root.
 	if cfgRoot, err := configdir.Root(); err == nil && cfgRoot != "" {
 		out = append(out, filepath.Join(cfgRoot, "portable-python", "image"))
 	}
+	// 3. Standard user data directories.
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		channel := configdir.ChannelDirName()
-		out = append(out, filepath.Join(home, ".local", "share", channel, "portable-python", "image"))
+		out = append(out,
+			filepath.Join(home, ".local", "share", "paintedwolf-portable-python", "image"),
+			filepath.Join(home, ".local", "share", channel, "portable-python", "image"),
+		)
 		if runtime.GOOS == "darwin" {
 			out = append(out, filepath.Join(home, "Library", "Application Support", channel, "portable-python", "image"))
 		}
@@ -95,6 +132,16 @@ type ServiceConfig struct {
 	Broker *pythonadmission.ApprovalBroker
 	// JobRegistry is the default SessionJobRegistry for preview listeners.
 	JobRegistry pythonadmission.SessionJobRegistry
+	// SecretScreener screens stdout/stderr/HTTP/evidence before returning or storing.
+	// Defaults to pythonevidence.TestSecretScreener{} when nil.
+	SecretScreener pythonevidence.SecretScreener
+	// RetainedStore holds bounded overflow stdout/stderr artifacts.
+	// Defaults to an in-memory RetainedArtifactStore backed by SecretScreener.
+	RetainedStore *pythonevidence.RetainedArtifactStore
+	// ReceiptSink optionally persists durable execution/admission/publication receipts.
+	ReceiptSink pythonevidence.ReceiptSink
+	// InlineBudgetBytes caps inline stdout/stderr returned to the caller (default 65536).
+	InlineBudgetBytes int
 }
 
 // Service owns a verified, compiled Portable Python WASI runtime and
@@ -109,6 +156,10 @@ type Service struct {
 	clock           pythonruntime.Clock
 	broker          *pythonadmission.ApprovalBroker
 	jobRegistry     pythonadmission.SessionJobRegistry
+	screener        pythonevidence.SecretScreener
+	retainedStore   *pythonevidence.RetainedArtifactStore
+	receiptSink     pythonevidence.ReceiptSink
+	inlineBudget    int
 	execSeq         atomic.Uint64
 }
 
@@ -173,6 +224,10 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 		ent = pythonruntime.CryptoEntropy{}
 	}
 
+	defaultMemPages := cfg.DefaultMemoryLimitPages
+	if defaultMemPages == 0 {
+		defaultMemPages = DefaultMaxMemoryPages
+	}
 	rt, err := pythonruntime.NewWazeroRuntime(ctx, pythonruntime.RuntimeConfig{
 		WasmBytes:               wasmBytes,
 		ImageDir:                absImageDir,
@@ -180,7 +235,7 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 		EnforceImportAudit:      true,
 		UseTrustedBootstrap:     true,
 		ScratchRoot:             scratchRoot,
-		DefaultMemoryLimitPages: cfg.DefaultMemoryLimitPages,
+		DefaultMemoryLimitPages: defaultMemPages,
 		Clock:                   clk,
 		Entropy:                 ent,
 		ParkedBudget:            cfg.ParkedBudget,
@@ -196,6 +251,21 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 	if jobReg == nil {
 		jobReg = pythonadmission.NewMemorySessionJobRegistry()
 	}
+	screener := cfg.SecretScreener
+	if screener == nil {
+		screener = pythonevidence.TestSecretScreener{}
+	}
+	retained := cfg.RetainedStore
+	if retained == nil {
+		retained = pythonevidence.NewTestRetainedArtifactStore(pythonevidence.RetainedArtifactConfig{
+			Screener: screener,
+			Now:      clk.Now,
+		})
+	}
+	inlineBudget := cfg.InlineBudgetBytes
+	if inlineBudget <= 0 {
+		inlineBudget = DefaultInlineBudgetBytes
+	}
 
 	return &Service{
 		imageDir:        absImageDir,
@@ -206,6 +276,10 @@ func NewService(ctx context.Context, cfg ServiceConfig) (*Service, error) {
 		clock:           clk,
 		broker:          cfg.Broker,
 		jobRegistry:     jobReg,
+		screener:        screener,
+		retainedStore:   retained,
+		receiptSink:     cfg.ReceiptSink,
+		inlineBudget:    inlineBudget,
 	}, nil
 }
 
@@ -221,6 +295,10 @@ func (s *Service) RuntimeManifest() *pythonruntime.ImageManifest { return s.runt
 
 // Runtime returns the underlying compiled WazeroRuntime.
 func (s *Service) Runtime() *pythonruntime.WazeroRuntime { return s.runtime }
+
+// RetainedStore returns the bounded, secret-screened RetainedArtifactStore
+// holding overflow stdout/stderr artifacts.
+func (s *Service) RetainedStore() *pythonevidence.RetainedArtifactStore { return s.retainedStore }
 
 // PackageHelp renders on-demand package discovery help from the verified manifest.
 func (s *Service) PackageHelp() string {
@@ -247,6 +325,8 @@ type ToolRequest struct {
 
 	ExecutionID string
 	CallID      string
+	SessionID   string
+	CheckoutID  string
 	Actor       string
 	View        string
 	Surface     string
@@ -270,6 +350,7 @@ type ToolRequest struct {
 	MutationDoor pythondocuments.MutationDoor
 
 	// Admission & authority configuration.
+	AllowedEffects *pythonadmission.AllowedEffects
 	AllowedRoots   []string
 	ProtectedPaths []string
 	Policy         pythonadmission.PolicyEvaluator
@@ -284,25 +365,33 @@ type ToolRequest struct {
 	CredentialScreener pythonadmission.CredentialScreener
 
 	Limits            pythonruntime.ResourceLimits
+	InlineBudgetBytes int
 	AdmissionEvidence pythonadmission.EvidenceSink
 	DocumentEvidence  pythondocuments.EvidenceSink
 }
 
 // ToolResponse carries the complete trusted host outcome of ExecuteTool.
 type ToolResponse struct {
-	ExecutionID       string                                 `json:"execution_id"`
-	ExitCode          int                                    `json:"exit_code"`
-	CleanCompletion   bool                                   `json:"clean_completion"`
-	Stdout            string                                 `json:"stdout,omitempty"`
-	Stderr            string                                 `json:"stderr,omitempty"`
-	Stop              *pythonruntime.TerminalStop            `json:"stop,omitempty"`
-	Settlement        *pythonruntime.SettlementReport        `json:"settlement,omitempty"`
-	PreviewRecord     *pythonadmission.PreviewListenerRecord `json:"preview,omitempty"`
-	Diagnostic        *pythoncatalog.Diagnostic              `json:"diagnostic,omitempty"`
-	Usage             pythonruntime.ResourceUsage            `json:"usage"`
-	Preview           *pythonadmission.PreviewListener       `json:"-"`
-	AdmissionEvidence *pythonadmission.MemoryEvidenceStore   `json:"-"`
-	DocumentEvidence  *pythondocuments.EvidenceLog           `json:"-"`
+	ExecutionID              string                                   `json:"execution_id"`
+	ExitCode                 int                                      `json:"exit_code"`
+	CleanCompletion          bool                                     `json:"clean_completion"`
+	Stdout                   string                                   `json:"stdout,omitempty"`
+	Stderr                   string                                   `json:"stderr,omitempty"`
+	InlineBudgetBytes        int                                      `json:"inline_budget_bytes,omitempty"`
+	StdoutTruncated          bool                                     `json:"stdout_truncated,omitempty"`
+	StderrTruncated          bool                                     `json:"stderr_truncated,omitempty"`
+	RetainedStdoutArtifactID string                                   `json:"retained_stdout_artifact_id,omitempty"`
+	RetainedStderrArtifactID string                                   `json:"retained_stderr_artifact_id,omitempty"`
+	RedactedCount            int                                      `json:"redacted_count,omitempty"`
+	Stop                     *pythonruntime.TerminalStop              `json:"stop,omitempty"`
+	Settlement               *pythonruntime.SettlementReport          `json:"settlement,omitempty"`
+	PreviewRecord            *pythonadmission.PreviewListenerRecord   `json:"preview,omitempty"`
+	Diagnostic               *pythoncatalog.Diagnostic                `json:"diagnostic,omitempty"`
+	Usage                    pythonruntime.ResourceUsage              `json:"usage"`
+	EvidenceSummary          *pythonevidence.PythonActivityProjection `json:"evidence_summary,omitempty"`
+	Preview                  *pythonadmission.PreviewListener         `json:"-"`
+	AdmissionEvidence        *pythonadmission.MemoryEvidenceStore     `json:"-"`
+	DocumentEvidence         *pythondocuments.EvidenceLog             `json:"-"`
 }
 
 // ExecuteTool validates direct tool arguments (when RawArgs is supplied),
@@ -361,6 +450,9 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 		docEvidence = memDoc
 	}
 
+	// Apply production default limits whenever any limit field is unset.
+	limits := applyDefaultLimits(req.Limits)
+
 	// Build per-invocation WorkspaceAdapter (PY03 OverlayAdapter).
 	store, rootSpecs := buildDocumentStore(req)
 	overlay := pythondocuments.NewOverlayAdapter(pythondocuments.OverlayConfig{
@@ -380,6 +472,7 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 	if broker == nil {
 		broker = s.broker
 	}
+	protectedPaths := mergeProtectedPaths(DefaultProtectedPaths, req.ProtectedPaths)
 	observer := pythonadmission.NewAdmissionObserver(pythonadmission.ObserverConfig{
 		ExecutionID:    execID,
 		CallID:         req.CallID,
@@ -387,9 +480,10 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 		View:           req.View,
 		Surface:        req.Surface,
 		ReadOnly:       req.ReadOnly,
+		AllowedEffects: req.AllowedEffects,
 		AllowedRoots:   req.AllowedRoots,
-		ProtectedPaths: req.ProtectedPaths,
-		MaxHostWork:    req.Limits.MaxHostWork,
+		ProtectedPaths: protectedPaths,
+		MaxHostWork:    limits.MaxHostWork,
 		StopLatch:      stopLatch,
 		Broker:         broker,
 		Clock:          s.clock,
@@ -463,11 +557,6 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 	guestHTTPAdapter := pythonadmission.NewGuestHTTPAdapter(httpTransport)
 	httpBridgeFS := NewGuestHTTPBridgeFS(execCtx, guestHTTPAdapter, stopLatch)
 
-	limits := req.Limits
-	if limits.Timeout <= 0 {
-		limits.Timeout = defaultExecutionTimeout
-	}
-
 	guestCWD := pythonruntime.DefaultGuestWorkspaceMount
 	if relCWD := strings.Trim(strings.TrimSpace(req.CWD), "/"); relCWD != "" && relCWD != "." {
 		guestCWD = pythonruntime.DefaultGuestWorkspaceMount + "/" + relCWD
@@ -508,7 +597,7 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 		stderrOut = res.GuestStderr
 	}
 
-	return &ToolResponse{
+	resp := &ToolResponse{
 		ExecutionID:       res.ExecutionID,
 		ExitCode:          res.ExitCode,
 		CleanCompletion:   res.CleanCompletion,
@@ -519,7 +608,236 @@ func (s *Service) ExecuteTool(ctx context.Context, req ToolRequest) (*ToolRespon
 		Usage:             res.Usage,
 		AdmissionEvidence: memAdm,
 		DocumentEvidence:  memDoc,
-	}, nil
+	}
+	s.finalizeResponse(ctx, req, resp, memAdm, memDoc)
+	return resp, nil
+}
+
+func applyDefaultLimits(in pythonruntime.ResourceLimits) pythonruntime.ResourceLimits {
+	out := in
+	if out.Timeout <= 0 {
+		out.Timeout = defaultExecutionTimeout
+	}
+	if out.MaxMemoryPages == 0 {
+		out.MaxMemoryPages = DefaultMaxMemoryPages
+	}
+	if out.MaxGuestWork == 0 {
+		out.MaxGuestWork = DefaultMaxGuestWork
+	}
+	if out.MaxHostWork == 0 {
+		out.MaxHostWork = DefaultMaxHostWork
+	}
+	if out.MaxOutputBytes <= 0 {
+		out.MaxOutputBytes = DefaultMaxOutputBytes
+	}
+	if out.MaxStagedBytes <= 0 {
+		out.MaxStagedBytes = DefaultMaxStagedBytes
+	}
+	return out
+}
+
+func mergeProtectedPaths(defaults, extra []string) []string {
+	seen := make(map[string]struct{}, len(defaults)+len(extra))
+	out := make([]string, 0, len(defaults)+len(extra))
+	for _, p := range defaults {
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; !ok {
+			seen[p] = struct{}{}
+			out = append(out, p)
+		}
+	}
+	for _, p := range extra {
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; !ok {
+			seen[p] = struct{}{}
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// finalizeResponse screens stdout/stderr/stop text for secrets, enforces the
+// inline output budget (retaining overflow in RetainedArtifactStore), records
+// execution/admission/document/publication evidence into pythonevidence, and
+// attaches a non-nil Den-ready EvidenceSummary to resp.
+func (s *Service) finalizeResponse(
+	ctx context.Context,
+	req ToolRequest,
+	resp *ToolResponse,
+	memAdm *pythonadmission.MemoryEvidenceStore,
+	memDoc *pythondocuments.EvidenceLog,
+) {
+	if resp == nil {
+		return
+	}
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		sessionID = "default"
+	}
+	actor := strings.TrimSpace(req.Actor)
+	if actor == "" {
+		actor = "agent"
+	}
+	view := strings.TrimSpace(req.View)
+	if view == "" {
+		view = "workspace"
+	}
+	parentOpID := strings.TrimSpace(req.CallID)
+	if parentOpID == "" {
+		parentOpID = resp.ExecutionID
+	}
+
+	budget := req.InlineBudgetBytes
+	if budget <= 0 {
+		budget = s.inlineBudget
+	}
+	if budget <= 0 {
+		budget = DefaultInlineBudgetBytes
+	}
+	resp.InlineBudgetBytes = budget
+
+	screenedStdout, redStdout := pythonevidence.ScreenText(s.screener, resp.Stdout)
+	screenedStderr, redStderr := pythonevidence.ScreenText(s.screener, resp.Stderr)
+	redactedTotal := redStdout + redStderr
+
+	if resp.Stop != nil && resp.Stop.Reason != "" {
+		cp := *resp.Stop
+		screenedReason, redStop := pythonevidence.ScreenText(s.screener, cp.Reason)
+		cp.Reason = screenedReason
+		redactedTotal += redStop
+		resp.Stop = &cp
+	}
+
+	// Enforce inline budget and retain overflow in RetainedArtifactStore.
+	if len(screenedStdout) > budget {
+		resp.StdoutTruncated = true
+		if s.retainedStore != nil {
+			if summary, err := s.retainedStore.Put(ctx, pythonevidence.PutRequest{
+				SessionID:         sessionID,
+				CheckoutID:        req.CheckoutID,
+				Actor:             actor,
+				View:              view,
+				ExecutionID:       resp.ExecutionID,
+				ParentOperationID: parentOpID,
+				Producer:          pythonevidence.ProducerPython,
+				MediaType:         "text/plain",
+				Data:              []byte(screenedStdout),
+			}); err == nil {
+				resp.RetainedStdoutArtifactID = summary.ArtifactID
+			}
+		}
+		resp.Stdout = screenedStdout[:budget]
+	} else {
+		resp.Stdout = screenedStdout
+	}
+
+	if len(screenedStderr) > budget {
+		resp.StderrTruncated = true
+		if s.retainedStore != nil {
+			if summary, err := s.retainedStore.Put(ctx, pythonevidence.PutRequest{
+				SessionID:         sessionID,
+				CheckoutID:        req.CheckoutID,
+				Actor:             actor,
+				View:              view,
+				ExecutionID:       resp.ExecutionID,
+				ParentOperationID: parentOpID,
+				Producer:          pythonevidence.ProducerPython,
+				MediaType:         "text/plain",
+				Data:              []byte(screenedStderr),
+			}); err == nil {
+				resp.RetainedStderrArtifactID = summary.ArtifactID
+			}
+		}
+		resp.Stderr = screenedStderr[:budget]
+	} else {
+		resp.Stderr = screenedStderr
+	}
+	resp.RedactedCount = redactedTotal
+
+	// Populate pythonevidence.ExecutionLedger and project EvidenceSummary.
+	submittedSource := req.Code
+	if submittedSource == "" {
+		submittedSource = req.Script
+	}
+	if submittedSource == "" {
+		submittedSource = req.Module
+	}
+	execRec := pythonevidence.ExecutionRecord{
+		ExecutionID:     resp.ExecutionID,
+		CallID:          parentOpID,
+		SessionID:       sessionID,
+		CheckoutID:      req.CheckoutID,
+		Actor:           actor,
+		View:            view,
+		Surface:         req.Surface,
+		SubmittedSource: submittedSource,
+		RuntimeImageID:  s.runtimeManifest.ImageID,
+		StartedAt:       s.clock.Now().UTC(),
+	}
+	var ledger *pythonevidence.ExecutionLedger
+	if s.receiptSink != nil {
+		if prodLedger, err := pythonevidence.NewProductionExecutionLedger(ctx, execRec, s.screener, s.receiptSink, s.clock.Now); err == nil {
+			ledger = prodLedger
+		}
+	}
+	if ledger == nil {
+		ledger = pythonevidence.NewExecutionLedger(execRec, s.screener, s.clock.Now)
+	}
+
+	if memAdm != nil {
+		for _, adm := range memAdm.Admissions() {
+			ledger.RecordAdmission(adm, parentOpID, nil)
+		}
+		for _, h := range memAdm.HTTP() {
+			_ = ledger.RecordHTTP(h, parentOpID)
+		}
+		for _, pl := range memAdm.PreviewListeners() {
+			_ = ledger.RecordPreviewListener(pl, parentOpID)
+		}
+		for _, sub := range memAdm.Subprocesses() {
+			_ = ledger.RecordSubprocess(sub, parentOpID)
+		}
+	}
+	if memDoc != nil {
+		for _, r := range memDoc.Reads() {
+			witnesses := 0
+			if r.BytesDeliveredToGuest > 0 {
+				witnesses = 1
+			}
+			_ = ledger.RecordDocumentRead(r, parentOpID, witnesses, nil, nil)
+		}
+		for _, ev := range memDoc.OverlayEvents() {
+			_ = ledger.RecordOverlayEvent(ev, parentOpID, nil, nil)
+		}
+		for i, pub := range memDoc.Publications() {
+			pubID := fmt.Sprintf("pub-%s-%d", resp.ExecutionID, i+1)
+			_ = ledger.RecordPublication(pub, parentOpID, pubID, pythonevidence.AttributionPythonWorkspacePublication, nil, nil)
+		}
+	}
+
+	if resp.Stdout != "" || resp.RetainedStdoutArtifactID != "" {
+		ledger.RecordDerivedOutput("stdout", resp.Stdout, resp.RetainedStdoutArtifactID)
+		ledger.RecordScreenedModelOutput(resp.Stdout)
+	}
+	if resp.Stderr != "" || resp.RetainedStderrArtifactID != "" {
+		ledger.RecordDerivedOutput("stderr", resp.Stderr, resp.RetainedStderrArtifactID)
+	}
+	ledger.RecordCompletion(resp.CleanCompletion, resp.ExitCode, resp.Stop)
+
+	scope := pythonevidence.ViewerScope{
+		Role:       pythonevidence.RoleCoordinator,
+		SessionID:  sessionID,
+		CheckoutID: req.CheckoutID,
+		Actor:      actor,
+		View:       view,
+	}
+	if proj, err := pythonevidence.ProjectForDen(ledger, scope); err == nil {
+		resp.EvidenceSummary = &proj
+	}
 }
 
 func (s *Service) executePipModule(execID string, args []string) (*ToolResponse, error) {

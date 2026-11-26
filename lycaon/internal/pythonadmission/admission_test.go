@@ -331,6 +331,9 @@ func TestSubprocessAdmissionBoundary(t *testing.T) {
 		ExecutionID: "exec-sub",
 		CallID:      "call-sub",
 		Evidence:    store,
+		Policy: func(_ context.Context, _ pythonruntime.ReachedOperation) PolicyDecision {
+			return PolicyDecision{Kind: pythonruntime.DecisionAllow}
+		},
 	})
 	runner := &fakeSubprocessRunner{}
 	admitter := NewSubprocessAdmitter(SubprocessAdmitterConfig{
@@ -379,4 +382,87 @@ func TestSubprocessAdmissionBoundary(t *testing.T) {
 	if len(store.Subprocesses()) != 2 {
 		t.Fatalf("recorded %d subprocess records, want 2", len(store.Subprocesses()))
 	}
+}
+
+func TestObserverFailsClosedWithoutPolicyAndEnforcesAllowedEffects(t *testing.T) {
+	t.Run("nil policy fails closed for http subprocess and preview", func(t *testing.T) {
+		for _, fam := range []pythonruntime.EffectFamily{
+			pythonruntime.EffectHTTP,
+			pythonruntime.EffectSubprocess,
+			pythonruntime.EffectPreviewListener,
+		} {
+			_, cancel := context.WithCancel(context.Background())
+			latch := pythonruntime.NewStopLatch(cancel)
+			obs := NewAdmissionObserver(ObserverConfig{
+				ExecutionID: "exec-nil-pol-" + string(fam),
+				StopLatch:   latch,
+			})
+			dec, err := obs.Admit(context.Background(), pythonruntime.ReachedOperation{
+				Family:    fam,
+				Operation: "test",
+			})
+			cancel()
+			testutil.FailErr(t, "admit "+string(fam), err)
+			if dec.Kind != pythonruntime.DecisionStop || dec.Stop == nil || dec.Stop.Code != pythonruntime.StopEffectNotAllowed {
+				t.Fatalf("family %s with nil policy = %+v, want COMMAND_EFFECT_NOT_ALLOWED", fam, dec)
+			}
+			if !latch.Stopped() {
+				t.Fatalf("family %s with nil policy did not latch StopLatch", fam)
+			}
+		}
+	})
+
+	t.Run("allowed effects enforces mutation network_egress and external_exec", func(t *testing.T) {
+		allowAll := func(_ context.Context, _ pythonruntime.ReachedOperation) PolicyDecision {
+			return PolicyDecision{Kind: pythonruntime.DecisionAllow}
+		}
+		cases := []struct {
+			name   string
+			fam    pythonruntime.EffectFamily
+			target pythonruntime.CanonicalTarget
+			ae     AllowedEffects
+		}{
+			{
+				name:   "mutation disallowed",
+				fam:    pythonruntime.EffectFilesystemWrite,
+				target: pythonruntime.CanonicalTarget{Namespace: pythonruntime.NamespaceWorkspace, RelPath: "a.txt"},
+				ae:     AllowedEffects{AllowMutation: false, AllowNetworkEgress: true, AllowExternalExec: true},
+			},
+			{
+				name:   "network_egress disallowed",
+				fam:    pythonruntime.EffectHTTP,
+				target: pythonruntime.CanonicalTarget{Namespace: pythonruntime.NamespaceHTTP, RootID: "example.com", RelPath: "/"},
+				ae:     AllowedEffects{AllowMutation: true, AllowNetworkEgress: false, AllowExternalExec: true},
+			},
+			{
+				name:   "external_exec disallowed",
+				fam:    pythonruntime.EffectSubprocess,
+				target: pythonruntime.CanonicalTarget{Namespace: pythonruntime.NamespaceProcess, RelPath: "git"},
+				ae:     AllowedEffects{AllowMutation: true, AllowNetworkEgress: true, AllowExternalExec: false},
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				_, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				latch := pythonruntime.NewStopLatch(cancel)
+				ae := tc.ae
+				obs := NewAdmissionObserver(ObserverConfig{
+					ExecutionID:    "exec-ae",
+					AllowedEffects: &ae,
+					Policy:         allowAll,
+					StopLatch:      latch,
+				})
+				dec, err := obs.Admit(context.Background(), pythonruntime.ReachedOperation{
+					Family:    tc.fam,
+					Operation: "op",
+					Target:    tc.target,
+				})
+				testutil.FailErr(t, "admit "+tc.name, err)
+				if dec.Kind != pythonruntime.DecisionStop || dec.Stop == nil || dec.Stop.Code != pythonruntime.StopEffectNotAllowed {
+					t.Fatalf("%s decision = %+v, want COMMAND_EFFECT_NOT_ALLOWED", tc.name, dec)
+				}
+			})
+		}
+	})
 }

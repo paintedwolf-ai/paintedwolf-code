@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
@@ -8,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -61,6 +63,9 @@ func loadToolRuntime(settingsSvc *settings.Service, configRoot string, catalog *
 	}
 	if cfg.ConfigRoot == "" {
 		cfg.ConfigRoot = configlayout.FindModuleRoot()
+	}
+	if pySvc, pyErr := portablepython.NewService(context.Background(), portablepython.ServiceConfig{}); pyErr == nil {
+		cfg.PortablePython = pySvc
 	}
 	rt, err := toolhost.NewRuntime(cfg)
 	if err != nil {

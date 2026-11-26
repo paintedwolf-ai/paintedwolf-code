@@ -50,6 +50,9 @@ func TestHTTPTransportMethodsParamsJSONAndAllowedRedirect(t *testing.T) {
 		ExecutionID: "exec-http-1",
 		CallID:      "call-http-1",
 		Evidence:    store,
+		Policy: func(_ context.Context, _ pythonruntime.ReachedOperation) PolicyDecision {
+			return PolicyDecision{Kind: pythonruntime.DecisionAllow}
+		},
 	})
 	tr := NewHTTPTransport(HTTPTransportConfig{
 		ExecutionID:        "exec-http-1",
@@ -209,6 +212,9 @@ func TestHTTPTransportStreamingAndPartialFailure(t *testing.T) {
 	obs := NewAdmissionObserver(ObserverConfig{
 		ExecutionID: "exec-stream",
 		Evidence:    store,
+		Policy: func(_ context.Context, _ pythonruntime.ReachedOperation) PolicyDecision {
+			return PolicyDecision{Kind: pythonruntime.DecisionAllow}
+		},
 	})
 	tr := NewHTTPTransport(HTTPTransportConfig{
 		ExecutionID:        "exec-stream",
@@ -262,6 +268,9 @@ func TestHTTPTransportTLSEnforcementAndCredentialScreening(t *testing.T) {
 
 	obs := NewAdmissionObserver(ObserverConfig{
 		ExecutionID: "exec-tls",
+		Policy: func(_ context.Context, _ pythonruntime.ReachedOperation) PolicyDecision {
+			return PolicyDecision{Kind: pythonruntime.DecisionAllow}
+		},
 	})
 	tr := NewHTTPTransport(HTTPTransportConfig{
 		ExecutionID: "exec-tls",

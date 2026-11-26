@@ -23,6 +23,15 @@ type PolicyDecision struct {
 // with recoverable errno condition, hold for human review, or terminal stop).
 type PolicyEvaluator func(ctx context.Context, op pythonruntime.ReachedOperation) PolicyDecision
 
+// AllowedEffects expresses the active profile/surface command_effects posture
+// enforced by AdmissionObserver. When non-nil on ObserverConfig, any effect
+// family whose flag is false fails closed with COMMAND_EFFECT_NOT_ALLOWED.
+type AllowedEffects struct {
+	AllowMutation      bool
+	AllowNetworkEgress bool
+	AllowExternalExec  bool
+}
+
 // ObserverConfig configures an AdmissionObserver implementing
 // pythonruntime.OperationObserver.
 type ObserverConfig struct {
@@ -32,6 +41,7 @@ type ObserverConfig struct {
 	View                string
 	Surface             string
 	ReadOnly            bool
+	AllowedEffects      *AllowedEffects
 	AllowedRoots        []string
 	ProtectedPaths      []string
 	MaxHostWork         uint64
@@ -142,11 +152,30 @@ func (o *AdmissionObserver) Admit(ctx context.Context, op pythonruntime.ReachedO
 		return dec, nil
 	}
 
-	pol := PolicyDecision{Kind: pythonruntime.DecisionAllow}
+	if cond, reason, violated := o.checkAllowedEffects(op); violated {
+		dec := o.triggerConditionStop(op, cond, reason)
+		o.recordAdmission(op, op.Target, dec)
+		return dec, nil
+	}
+
+	var pol PolicyDecision
 	if o.cfg.Policy != nil {
 		pol = o.cfg.Policy(ctx, op)
 		if pol.Kind == "" {
 			pol.Kind = pythonruntime.DecisionAllow
+		}
+	} else {
+		// Fail closed for outbound network, subprocess, and preview listener
+		// effects when no explicit PolicyEvaluator is configured.
+		switch op.Family {
+		case pythonruntime.EffectHTTP, pythonruntime.EffectSubprocess, pythonruntime.EffectPreviewListener:
+			pol = PolicyDecision{
+				Kind:      pythonruntime.DecisionStop,
+				Condition: ConditionEffectDenied,
+				Reason:    fmt.Sprintf("%s blocked: no admission policy configured (fail-closed)", op.Family),
+			}
+		default:
+			pol = PolicyDecision{Kind: pythonruntime.DecisionAllow}
 		}
 	}
 
@@ -240,6 +269,27 @@ func (o *AdmissionObserver) checkWorkspaceInvariants(op pythonruntime.ReachedOpe
 		return ConditionReadOnlyWrite, fmt.Sprintf("workspace write %q blocked in read-only mode", op.Target.RelPath), true
 	}
 
+	return "", "", false
+}
+
+func (o *AdmissionObserver) checkAllowedEffects(op pythonruntime.ReachedOperation) (AdmissionCondition, string, bool) {
+	if o.cfg.AllowedEffects == nil {
+		return "", "", false
+	}
+	switch op.Family {
+	case pythonruntime.EffectFilesystemWrite:
+		if !o.cfg.AllowedEffects.AllowMutation {
+			return ConditionReadOnlyWrite, fmt.Sprintf("workspace write %q blocked: mutation command effect not allowed", op.Target.RelPath), true
+		}
+	case pythonruntime.EffectHTTP:
+		if !o.cfg.AllowedEffects.AllowNetworkEgress {
+			return ConditionEffectDenied, "outbound HTTP blocked: network_egress command effect not allowed", true
+		}
+	case pythonruntime.EffectSubprocess:
+		if !o.cfg.AllowedEffects.AllowExternalExec {
+			return ConditionEffectDenied, "subprocess execution blocked: external_exec command effect not allowed", true
+		}
+	}
 	return "", "", false
 }
 
