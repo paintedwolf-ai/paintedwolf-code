@@ -25,13 +25,20 @@ type TurnRecord struct {
 
 type turnContextKey struct{}
 type Turn struct {
+	path    *Path
 	id      string
 	history *History[TurnRecord]
 }
 
 func BeginTurn(ctx context.Context, history *History[TurnRecord], sessionID, turnID string) (context.Context, *Turn) {
 	history.Open(turnID, TurnRecord{TurnID: turnID, SessionID: sessionID, AdmittedAt: time.Now().UTC()})
-	t := &Turn{id: turnID, history: history}
+	var path *Path
+	if ticket, _ := ctx.Value(ticketKey{}).(*Ticket); ticket != nil {
+		ticket.Record(api.WakeStateDelivered, "", turnID, "")
+		path = ticket.path
+		ctx = WithTicket(ctx, nil)
+	}
+	t := &Turn{path: path, id: turnID, history: history}
 	return context.WithValue(ctx, turnContextKey{}, t), t
 }
 
@@ -46,6 +53,7 @@ func Dispatch(ctx context.Context) {
 		}
 		return r, false
 	})
+	t.path.Resolve(Result{State: api.ContinuationStateContinued, TurnID: t.id})
 }
 
 func (t *Turn) Finish(result *promptresult.Result, err error, cancelledBy api.TurnCancellationSource) {
@@ -62,6 +70,14 @@ func (t *Turn) Finish(result *promptresult.Result, err error, cancelledBy api.Tu
 		case err != nil:
 			r.Outcome = api.TurnOutcomeKindFailed
 			r.FailureCode = PromptFailureCode(err)
+		}
+		if r.DispatchedAt.IsZero() {
+			result := WakeResult(api.WakeReasonTurnSettled)
+			if r.Outcome == api.TurnOutcomeKindFailed {
+				result = Result{State: api.ContinuationStateFailed, FailureCode: string(r.FailureCode)}
+			}
+			result.TurnID = r.TurnID
+			t.path.Resolve(result)
 		}
 		return r, true
 	})

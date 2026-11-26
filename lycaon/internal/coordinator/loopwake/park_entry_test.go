@@ -51,7 +51,7 @@ func (f *entryFixture) engine(t *testing.T) *LoopEngine {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: f.Session, Status: api.SessionStatusIdle}, nil
 	}
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return "" }
 	deps.RunWaitResume = func(_ context.Context, _ string, delivery WaitDelivery) (*promptresult.Result, error) {
 		if err := delivery.Admitted(); err != nil {
 			return nil, err

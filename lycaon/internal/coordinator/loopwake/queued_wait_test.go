@@ -31,7 +31,7 @@ func newQueuedWaitFixture(t *testing.T) *queuedWaitFixture {
 	f.loop.Subscriptions.SetWaitStore(f.store)
 	f.deps.GetSession = func(context.Context, string) (*api.Session, error) { return &api.Session{ID: "session"}, nil }
 	f.deps.WorkflowSource = workflowFixturePorts(StubLoopWF{run: &api.WorkflowRun{ID: "run", Revision: 5, CurrentPhase: "work", Status: api.WorkflowRunStatusRunning}})
-	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
+	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return "" }
 	f.deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		f.prompts.Add(1)
 		return &promptresult.Result{}, nil
@@ -119,7 +119,7 @@ func TestQueuedProcessEventsRetainHandlesAndSettleOnlyMatchingWait(t *testing.T)
 	// Observed completions still require wait-result delivery.
 	f.loop.Observations.ObservePrompt("session")(inject.CoordinatorTurnFrame{})
 	f.arm(t)
-	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	f.deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(3))
 	f.deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) { return false, nil }
 	var resumes atomic.Int32
@@ -245,7 +245,7 @@ func TestMatchingWaitResultBypassesStaleBatchFilter(t *testing.T) {
 	f := newQueuedWaitFixture(t)
 	f.arm(t)
 	f.deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(3))
-	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	var resumes atomic.Int32
 	f.deps.RunWaitResume = func(_ context.Context, _ string, delivery WaitDelivery) (*promptresult.Result, error) {
 		if delivery.LeaseID != f.lease.ID || delivery.Condition.Kind != "process_done" {

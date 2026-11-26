@@ -249,11 +249,10 @@ func TestShouldLoopWakeRespectsBudget(t *testing.T) {
 	if run == nil {
 		t.Fatal("missing run")
 	}
-	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ResetBudget(run.ID)
-	if !fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.ConsumeBudget(ctx, fix.sess.ID, run.ID, anchor.LegFinished) {
+	if fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.ConsumeBudget(ctx, fix.sess.ID, run.ID) != "" {
 		t.Fatal("expected first consume")
 	}
-	if fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.ConsumeBudget(ctx, fix.sess.ID, run.ID, anchor.LegFinished) {
+	if fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.ConsumeBudget(ctx, fix.sess.ID, run.ID) == "" {
 		t.Fatal("budget should be exhausted")
 	}
 }

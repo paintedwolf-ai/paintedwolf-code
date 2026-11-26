@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +22,7 @@ type NudgesDeps struct {
 	QueueInform          func(ctx context.Context, sessionID string, inform anchor.ID, env anchor.Envelope)
 }
 type Nudges struct {
+	outcomes            *actionoutcome.Sessions
 	depsMu              sync.RWMutex
 	deps                NudgesDeps
 	pendingDrain        sync.Map
@@ -48,8 +50,8 @@ func (l *Nudges) loopDeps() NudgesDeps {
 	defer l.depsMu.RUnlock()
 	return l.deps
 }
-func (l *Nudges) Nudge(ctx context.Context, sessionID string, wake, inform anchor.ID, legID string, env anchor.Envelope) {
-	l.nudgeNow(ctx, sessionID, wake, inform, legID, "", env)
+func (l *Nudges) Nudge(ctx context.Context, sessionID string, wake, inform anchor.ID, legID string, env anchor.Envelope) *actionoutcome.Ticket {
+	return l.nudgeNow(ctx, sessionID, wake, inform, legID, "", env)
 }
 func (l *Nudges) NudgeAfterWorkerJobTerminal(
 	ctx context.Context,
@@ -57,8 +59,8 @@ func (l *Nudges) NudgeAfterWorkerJobTerminal(
 	wake, inform anchor.ID,
 	legID string,
 	env anchor.Envelope,
-) {
-	l.nudgeNow(ctx, sessionID, wake, inform, legID, completingJobID, env)
+) *actionoutcome.Ticket {
+	return l.nudgeNow(ctx, sessionID, wake, inform, legID, completingJobID, env)
 }
 func (l *Nudges) nudgeNow(
 	ctx context.Context,
@@ -66,18 +68,20 @@ func (l *Nudges) nudgeNow(
 	wake, inform anchor.ID,
 	legID, completingJobID string,
 	env anchor.Envelope,
-) {
-	if l == nil || strings.TrimSpace(sessionID) == "" {
-		return
+) *actionoutcome.Ticket {
+	if l == nil || strings.TrimSpace(sessionID) == "" || wake == "" {
+		return nil
 	}
 	seq := l.nextSequence()
-	pending := pendingLoopWake{wake: wake, inform: inform, legID: legID, completingJobID: completingJobID, env: env, seq: seq}
+	ticket := l.outcomes.For(sessionID).Receive(ctx, sessionID, seq, string(wake))
+	pending := pendingLoopWake{ticket: ticket, wake: wake, inform: inform, legID: legID, completingJobID: completingJobID, env: env, seq: seq}
 	if wake == anchor.PhaseAdvanced {
 		if run, _, ok := l.Facts.activeRunAndVars(ctx, sessionID); ok && run != nil {
 			pending.runID, pending.revision = run.ID, run.Revision
 		}
 	}
 	l.deliverNudge(ctx, sessionID, pending)
+	return ticket
 }
 func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pendingLoopWake) {
 	wake, inform, legID, completingJobID, env := pending.wake, pending.inform, pending.legID, pending.completingJobID, pending.env
@@ -100,7 +104,7 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 	liveBatch := l.Policy.coordinatorBatchState(ctx, sessionID)
 	if isStaleBatchSeq(liveBatch, env) {
 		l.Policy.dropStaleBatchWake(ctx, sessionID, liveBatch)
-		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "drop:stale_batch_seq")
+		pending.ticket.Record(api.WakeStateDropped, api.WakeReasonStaleBatch, "", "")
 		return
 	}
 	if l.Observations.wakeConsumed(ctx, sessionID, pending) || l.Subscriptions.routeWaitWake(ctx, sessionID, pending) {
@@ -110,14 +114,13 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 	// A wake about a running worker is actionable while its job runs.
 	perJobWake := strings.TrimSpace(completingJobID) != "" || anchor.AboutRunningWorker(wake)
 	if !l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID) && !perJobWake {
-		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_worker_cycle")
 		l.deferNudge(ctx, sessionID, pending)
 		return
 	}
 	runID := l.Facts.activeRunID(ctx, sessionID)
-	allow, busy := l.Admission.evaluate(ctx, sessionID)
+	state, reason, _ := l.Admission.decision(ctx, sessionID)
+	busy := state == api.WakeStateDeferred
 	if !l.Cycles.workerCycleIdle(ctx, sessionID, "") && !perJobWake {
-		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_worker_cycle_idle")
 		l.deferNudge(ctx, sessionID, pending)
 		return
 	}
@@ -131,8 +134,8 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 	// Prompt execution defers actionability until the wake drains.
 	if !busy && !blocked {
 		if reason, skip := l.Policy.hostWakeSkipReason(ctx, skipIn); skip {
-			loopLogNudge(sessionID, wake, inform, legID, completingJobID, reason)
-			if reason == "skip_turn_rearm" {
+			pending.recordPolicySkip(reason)
+			if reason == api.WakeReasonTurnRearm {
 				l.Waits.rearmSleepAfterSkip(ctx, sessionID)
 			} else {
 				// Rejected wakes preserve the active hold.
@@ -168,22 +171,20 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 		l.deferPromptWake(ctx, sessionID, pending)
 		return
 	}
-	if !allow {
-		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "denied")
+	if state != "" && !busy {
+		pending.ticket.Record(state, reason, "", "")
 		// A denied wake leaves the active hold in place.
 		l.Waits.parkForActiveHold(ctx, sessionID)
 		return
 	}
 	if busy {
 		if wake == anchor.WaitTimerFired {
-			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "drop:precedence_busy")
+			pending.ticket.Record(api.WakeStateDropped, api.WakeReasonPrecedenceBusy, "", "")
 			return
 		}
-		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "pending_busy")
 		l.deferPromptWake(ctx, sessionID, pending)
 		return
 	}
-	loopLogNudge(sessionID, wake, inform, legID, completingJobID, "queued_ready")
 	if (wake == anchor.WorkerTaskFinished || wake == anchor.LegFinished) &&
 		l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID) {
 		l.Waits.DisarmTimerBackstop(ctx, sessionID)
@@ -288,6 +289,7 @@ func (l *Nudges) sessionDeferredQueue(sessionID string) *deferredNudgeQueue {
 	return actual.(*deferredNudgeQueue)
 }
 func (l *Nudges) enqueuePending(sessionID string, pending pendingLoopWake) {
+	pending.ticket.Record(api.WakeStateQueued, "", "", "")
 	l.sessionPendingQueue(sessionID).push(pending)
 }
 func (l *Nudges) deferPromptWake(ctx context.Context, sessionID string, pending pendingLoopWake) {
@@ -398,6 +400,7 @@ func (l *Nudges) deferNudge(ctx context.Context, sessionID string, d pendingLoop
 			d.env.BatchSeqSet = true
 		}
 	}
+	d.ticket.Record(api.WakeStateDeferred, api.WakeReasonWorkerCycle, "", "")
 	l.sessionDeferredQueue(sessionID).push(d)
 }
 func (l *Nudges) flushDeferredNudges(ctx context.Context, sessionID string) {

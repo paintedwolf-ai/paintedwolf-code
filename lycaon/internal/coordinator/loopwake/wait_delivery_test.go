@@ -38,7 +38,7 @@ func TestCoordinatorWaitDeliverySurvivesOptionalWakeGates(t *testing.T) {
 				return &api.Session{ID: id, Status: api.SessionStatusBusy}, nil
 			}
 			deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(3))
-			deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+			deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 			deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) { return false, nil }
 			var deliveries atomic.Int32
 			deps.RunWaitResume = func(_ context.Context, sessionID string, delivery WaitDelivery) (*promptresult.Result, error) {

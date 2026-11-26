@@ -61,6 +61,7 @@ func NewLoopEngine() *LoopEngine {
 	l.Waits.Deliveries = l.Deliveries
 	l.Waits.Subscriptions = l.Subscriptions
 	l.Waits.Cycles = l.Cycles
+	l.Nudges.outcomes = &l.Outcomes
 	l.Nudges.Admission = l.Admission
 	l.Nudges.Turns = l.Turns
 	l.Nudges.Policy = l.Policy

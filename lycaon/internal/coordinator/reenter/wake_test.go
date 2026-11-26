@@ -2,6 +2,7 @@ package reenter_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -13,10 +14,11 @@ type recordingNudger struct {
 	legFinished int
 }
 
-func (r *recordingNudger) Nudge(_ context.Context, _ string, wake, _ anchor.ID, _ string, _ anchor.Envelope) {
+func (r *recordingNudger) Nudge(_ context.Context, _ string, wake, _ anchor.ID, _ string, _ anchor.Envelope) *actionoutcome.Ticket {
 	if wake == anchor.LegFinished {
 		r.legFinished++
 	}
+	return nil
 }
 
 func TestNudgeOnManifestReenterSkipsWorkerTaskFinishedInject(t *testing.T) {

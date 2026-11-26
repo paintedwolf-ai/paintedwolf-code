@@ -2,6 +2,8 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/actionoutcome"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"sync"
 
@@ -46,7 +48,6 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 		return false
 	}
 	if _, loaded := l.promptActive.LoadOrStore(sessionID, struct{}{}); loaded {
-		loopLogNudge(sessionID, pending.wake, pending.inform, pending.legID, pending.completingJobID, "prompt_active_requeue")
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
@@ -56,7 +57,6 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 		return true
 	}
 	if l.Admission.PromptExecutionActive(sessionID) {
-		loopLogNudge(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "sync_defer_busy")
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
@@ -64,12 +64,14 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 	if l.Subscriptions.routeWaitWake(ctx, sessionID, pending) {
 		return true
 	}
-	allow, busy := l.Admission.evaluate(ctx, sessionID)
+	state, reason, _ := l.Admission.decision(ctx, sessionID)
+	busy := state == api.WakeStateDeferred
 	if busy {
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false
 	}
-	if !allow {
+	if state != "" && !busy {
+		pending.ticket.Record(state, reason, "", "")
 		return true
 	}
 	if pending.completingJobID == "" && !anchor.AboutRunningWorker(wake) && !pending.env.HasWorkerDecision() && !l.Cycles.workerCycleIdle(ctx, sessionID, "") {
@@ -77,20 +79,27 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 		return true
 	}
 	if reason, skip := l.Policy.hostWakeSkipReason(ctx, pending.actionableInput(sessionID)); skip {
-		loopLogNudge(sessionID, wake, pending.inform, pending.legID, pending.completingJobID, "drain_"+reason)
+		pending.recordPolicySkip(reason)
 		l.Waits.parkForActiveHold(ctx, sessionID)
 		return true
 	}
 
 	runID := l.Facts.activeRunID(ctx, sessionID)
-	if !l.Admission.ConsumeBudget(ctx, sessionID, runID, wake) {
-		loopLogNudge(sessionID, wake, "", "", "", "budget_exhausted")
+	if reason := l.Admission.ConsumeBudget(ctx, sessionID, runID); reason != "" {
+		pending.ticket.Record(api.WakeStateDropped, reason, "", "")
 		return false
 	}
 	loopLogRunPrompt(sessionID, wake)
 	deps := l.loopDeps()
 	if deps.RunPrompt != nil {
-		_, _ = deps.RunPrompt(ctx, sessionID)
+		_, err := deps.RunPrompt(actionoutcome.WithTicket(ctx, pending.ticket), sessionID)
+		if err != nil {
+			pending.ticket.RefuseBeforeAdmission(api.WakeReasonPolicyDenied)
+		} else {
+			pending.ticket.RefuseBeforeAdmission(api.WakeReasonTurnSettled)
+		}
+	} else {
+		pending.ticket.Record(api.WakeStateDropped, api.WakeReasonDefect, "", "")
 	}
 	return true
 }

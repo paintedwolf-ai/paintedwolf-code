@@ -35,7 +35,7 @@ func TestDrainPendingDoesNotBurnBudgetWhenPromptActive(t *testing.T) {
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 while prompt active", prompts.Load())
 	}
-	if !engine.Admission.ConsumeBudget(context.Background(), "s1", "run-1", anchor.WorkerTaskFinished) {
+	if engine.Admission.ConsumeBudget(context.Background(), "s1", "run-1") != "" {
 		t.Fatal("expected budget remaining after requeue without run")
 	}
 }
@@ -97,7 +97,7 @@ func TestDrainPendingWorkerWakeAfterCloseoutSkipsPrompt(t *testing.T) {
 	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
 	})
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil

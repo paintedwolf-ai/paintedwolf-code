@@ -35,7 +35,7 @@ type LoopDeps struct {
 	QueueInform          func(ctx context.Context, sessionID string, inform anchor.ID, env anchor.Envelope)
 	IsCoordinatorSession func(ctx context.Context, sess *api.Session) bool
 	WorkerCycleIdle      WorkerCycleIdle
-	HostWakeActionable   func(ctx context.Context, in HostWakeActionableInput) bool
+	HostWakeActionable   func(ctx context.Context, in HostWakeActionableInput) api.WakeReason
 	// PublishWaitLease brackets an armed host-mover sleep as a session activity lease.
 	PublishWaitLease func(ctx context.Context, sessionID string, lease WaitLease)
 	LoopWakeSignalDeps

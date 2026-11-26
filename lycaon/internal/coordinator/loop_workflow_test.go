@@ -48,10 +48,10 @@ func TestLoopBudgetConsumption(t *testing.T) {
 		IsCoordinatorSession: func(context.Context, *api.Session) bool { return true },
 	})
 	ctx := context.Background()
-	if !engine.Admission.ConsumeBudget(ctx, "s1", "run-1", anchor.LegFinished) {
+	if engine.Admission.ConsumeBudget(ctx, "s1", "run-1") != "" {
 		t.Fatal("first consume should succeed")
 	}
-	if engine.Admission.ConsumeBudget(ctx, "s1", "run-1", anchor.LegFinished) {
+	if engine.Admission.ConsumeBudget(ctx, "s1", "run-1") == "" {
 		t.Fatal("second consume should fail at max=1")
 	}
 }
@@ -101,7 +101,7 @@ func TestLoopScheduleAndDrain(t *testing.T) {
 		t.Fatal("expected pending loop wake while prompt execution is active")
 	}
 	finishExecution()
-	if !engine.Admission.ConsumeBudget(ctx, "s1", "run-1", anchor.LegFinished) {
+	if engine.Admission.ConsumeBudget(ctx, "s1", "run-1") != "" {
 		t.Fatal("expected budget consume on drain path")
 	}
 	// The release path may spawn an asynchronous drain once prompt execution

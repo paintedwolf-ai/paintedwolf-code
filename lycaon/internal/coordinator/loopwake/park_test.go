@@ -51,7 +51,7 @@ func newParkFixtureOn(t *testing.T, database *db.Store) *parkFixture {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: parkSession, Status: api.SessionStatusIdle}, nil
 	}
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return "" }
 	deps.RunWaitResume = func(_ context.Context, _ string, delivery WaitDelivery) (*promptresult.Result, error) {
 		if err := delivery.Admitted(); err != nil {
 			return nil, err

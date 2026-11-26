@@ -143,7 +143,7 @@ func TestDrainPendingSkipsNonActionable(t *testing.T) {
 	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
 	})
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil

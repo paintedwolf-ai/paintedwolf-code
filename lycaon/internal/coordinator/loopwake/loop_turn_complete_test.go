@@ -351,7 +351,7 @@ func TestUserTurnSettlementClaimOrdersLaterWakeAfterBoundary(t *testing.T) {
 			return true, nil
 		},
 		WorkflowSource:     workflowFixturePorts(activeLoopWorkflow{}),
-		HostWakeActionable: func(context.Context, HostWakeActionableInput) bool { return true },
+		HostWakeActionable: func(context.Context, HostWakeActionableInput) api.WakeReason { return "" },
 		RunPrompt: func(context.Context, string) (*promptresult.Result, error) {
 			prompts++
 			return &promptresult.Result{}, nil

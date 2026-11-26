@@ -83,7 +83,7 @@ func TestLoopDropScheduledWhenNonActionable(t *testing.T) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
 	}
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	engine.SetDeps(deps)
 	engine.Nudges.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
 	engine.Turns.WaitForAsyncTurns(t.Context())
@@ -320,7 +320,7 @@ func TestLoopScheduledRunsWhenObligationsOpenOnClosedBatch(t *testing.T) {
 	}
 	deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(2))
 	deps.WorkflowObligationsOpen = func(context.Context, string) bool { return true }
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil

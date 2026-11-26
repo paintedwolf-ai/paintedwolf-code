@@ -1,6 +1,7 @@
 package loopwake
 
 import (
+	"github.com/lycaon/lycaon/internal/actionoutcome"
 	"sort"
 	"strings"
 	"sync"
@@ -10,6 +11,7 @@ import (
 
 // pendingLoopWake preserves wake ordering across prompt execution.
 type pendingLoopWake struct {
+	ticket          *actionoutcome.Ticket
 	wake            anchor.ID
 	seq             uint64
 	inform          anchor.ID

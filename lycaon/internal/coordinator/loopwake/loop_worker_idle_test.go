@@ -67,7 +67,7 @@ func TestWorkerOutcomeAcknowledgementDrainsDeferredPhaseWake(t *testing.T) {
 	deps.WorkerCycleIdle = func(_ context.Context, _ *api.Session, completingJobID string) (bool, error) {
 		return acknowledged.Load() || completingJobID == "job-a", nil
 	}
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	engine.SetDeps(deps)
 
 	engine.Nudges.Nudge(ctx, "s1", anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
@@ -95,7 +95,7 @@ func TestWorkerAcknowledgementRunsAnUnconsumedTerminalWake(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspace}, nil
 	}
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) { return true, nil }
 	var prompts atomic.Int32
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {

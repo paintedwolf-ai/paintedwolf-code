@@ -151,7 +151,7 @@ func TestWaitLeaseRetiresWhenTimerFires(t *testing.T) {
 	loop := NewLoopEngine()
 	deps := leaseTestDeps(rec)
 	// Denied timer wakes retire the lease.
-	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
+	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) api.WakeReason { return api.WakeReasonNonActionable }
 	loop.SetDeps(deps)
 
 	loop.Waits.EnterSleep(

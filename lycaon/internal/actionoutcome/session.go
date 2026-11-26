@@ -11,6 +11,7 @@ type Sessions struct {
 }
 
 type Session struct {
+	Wakes   *History[WakeRecord]
 	Actions *History[api.ActionContinuation]
 	Turns   *History[TurnRecord]
 }
@@ -24,7 +25,7 @@ func (s *Sessions) For(sessionID string) *Session {
 	if session := s.byID[sessionID]; session != nil {
 		return session
 	}
-	session := &Session{Actions: NewHistory[api.ActionContinuation](8), Turns: NewHistory[TurnRecord](32)}
+	session := &Session{Wakes: NewHistory[WakeRecord](32), Actions: NewHistory[api.ActionContinuation](8), Turns: NewHistory[TurnRecord](32)}
 	s.byID[sessionID] = session
 	return session
 }
