@@ -185,5 +185,5 @@ func ResolveWorkerSeed(ctx context.Context, domains *SeedDomains, seed WorkerSee
 	if seed.ParentUpgradedAskToAgent && seed.ParentSessionMode != api.SessionModeAsk {
 		return WorkerState{}, fmt.Errorf("only an Ask parent can upgrade to Agent")
 	}
-	return buildWorkerState(ctx, overlay, *target, seed)
+	return BuildWorkerState(ctx, overlay, *target, seed)
 }

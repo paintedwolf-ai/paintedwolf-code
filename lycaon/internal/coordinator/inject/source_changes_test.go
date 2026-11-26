@@ -178,36 +178,16 @@ func TestRenderSourceChangesBlockEmptyBriefRendersNothing(t *testing.T) {
 	}
 }
 
-// Paired witnesses: source_history offered vs loadable via request_tools vs unoffered,
-// and mutating vs read-only editing warning.
+// Paired witnesses: source_history offered vs unoffered, and mutating vs
+// read-only editing warning. Source changes reach only coordinators, whose
+// surfaces never defer source_history.
 func TestTruncatedLineAndMutationWarningFollowReaderState(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
-	profiles, err := sandbox.LoadToolProfiles()
-	testutil.FailErr(t, "LoadToolProfiles", err)
-	plans, err := surface.CompileToolPlans(1)
-	testutil.FailErr(t, "CompileToolPlans", err)
 
 	offered := inject.RenderSourceChangesBlock(context.Background(), renderer, sourceChangesTestReader(t, true, true), "sess-brief-test", inject.SourceChangeBrief{Truncated: true})
 	withheld := inject.RenderSourceChangesBlock(context.Background(), renderer, sourceChangesTestReader(t, false, false), "sess-brief-test", inject.SourceChangeBrief{Truncated: true})
 	if !strings.Contains(offered, "source_history()") || strings.Contains(withheld, "source_history") {
 		t.Fatalf("source_history offered/withheld mismatch:\noffered: %s\nwithheld: %s", offered, withheld)
-	}
-
-	// Paired witness: deferred/loadable source_history on explore_readonly teaches request_tools(need="source_history").
-	exploreFloor, err := prompts.NewReader(prompts.HostFacts{
-		Profiles:  profiles,
-		RootCount: 1,
-		HasGit:    true,
-		WebSearch: true,
-	}, prompts.TurnProjection{
-		ProfileID: "explore_readonly",
-		Declared:  true,
-	})
-	testutil.FailErr(t, "exploreFloor reader", err)
-	loadable := inject.RenderSourceChangesBlock(context.Background(), renderer, exploreFloor, "sess-brief-test", inject.SourceChangeBrief{Truncated: true})
-	_ = plans
-	if strings.Contains(loadable, "source_history()") || !strings.Contains(loadable, `request_tools(need="source_history")`) {
-		t.Fatalf("loadable witness must teach request_tools(need=\"source_history\"):\n%s", loadable)
 	}
 
 	briefWithFile := inject.SourceChangeBrief{Files: []inject.SourceChangeFile{{Path: "a.go", Actor: "user", Op: "write", At: "14:02 UTC", Effects: 1}}}

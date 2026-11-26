@@ -123,7 +123,7 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	}
 	in := interactions.LedgerInput{
 		Sites: sites, Observed: interactions.MergeObservations(append([][]hoststate.ObservedCondition{sum.Conditions}, extra...)...),
-		Constraints: conditionConstraints, Derived: withSkillDerived(gen.derived),
+		Constraints: slices.Concat(conditionConstraints, standingConstraints), Derived: withSkillDerived(gen.derived),
 	}
 	first, err := interactions.BuildConditionLedger(in)
 	if err != nil {
@@ -179,20 +179,29 @@ func StockConditionLedger(ctx context.Context, s *Stock, extra ...[]hoststate.Ob
 	if err != nil {
 		return nil, err
 	}
-	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations(), skillGen.Observations())
-	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes, skillOutcomes), slices.Concat(gapRecipients, tRecipients, skillGapRecipients))
+	standing, sOutcomes, sRecipients, sRuns, err := generateStandingCases(ctx, s, first)
+	if err != nil {
+		return nil, err
+	}
+	in.Observed = interactions.MergeObservations(in.Observed, gen.producer.Observations(), kicks.Observations(), skillGen.Observations(), standing)
+	in.Searches = searchesOf(slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes), slices.Concat(gapRecipients, tRecipients, skillGapRecipients, sRecipients))
+	guided, err := generateGuidanceCases(ctx, s, first, &in)
+	if err != nil {
+		return nil, err
+	}
 	l, err := interactions.BuildConditionLedger(in)
 	if err != nil {
 		return nil, err
 	}
 	l.Generation = interactions.GenerationSummary{
-		Targets: len(targets) + len(tTargets) + len(skillTargets), Runs: gen.producer.Runs() + kicks.runs + skillGen.Runs(), Seconds: time.Since(started).Seconds(),
+		Targets: len(targets) + len(tTargets) + len(skillTargets) + len(sOutcomes), Runs: gen.producer.Runs() + kicks.runs + skillGen.Runs() + sRuns, Seconds: time.Since(started).Seconds(),
 	}
-	for _, o := range slices.Concat(outcomes, tOutcomes, skillOutcomes) {
+	for _, o := range slices.Concat(outcomes, tOutcomes, skillOutcomes, sOutcomes) {
 		if o.Found {
 			l.Generation.Found++
 		}
 	}
+	addGuidanceGeneration(&l.Generation, guided)
 	return l, nil
 }
 
@@ -277,7 +286,7 @@ func newOARCaseGenerator(ctx context.Context, s *Stock) (*oarCaseGenerator, erro
 func (g *oarCaseGenerator) derived(site interactions.ConditionSite, recipient string) independence.Constraints {
 	var c independence.Constraints
 	if site.Family != "oar" {
-		return c
+		return guidanceDerived(site, recipient)
 	}
 	logic := g.producer.Logic(site.ID)
 	if logic == nil {

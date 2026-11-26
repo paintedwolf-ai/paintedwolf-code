@@ -1,0 +1,15 @@
+id: editor-explorer
+name: Editor explorer
+description: Path explorer persona on the editor file profile
+tool_profile: editor_file
+exec_mode: none
+capabilities:
+  - explore
+  - survey
+topology_roles:
+  - worker
+dispatch_lanes:
+  - read
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/path-explorer.md

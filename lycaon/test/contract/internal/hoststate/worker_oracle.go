@@ -202,9 +202,9 @@ func WorkerReaderForSession(ctx context.Context, sessionState CoordinatorState, 
 		return prompts.Reader{}, fmt.Errorf("worker agent %q not found in overlay %q", agentID, overlay.ID)
 	}
 	bv := BranchMainNonGit
+	mutCapable := profileMutationCapable(overlay, target.ToolProfile)
 	if sessionState.HasGit {
 		bv = BranchMainGit
-		mutCapable, _ := prompts.AgentMutationCapable(target.ID)
 		if mutCapable && sessionState.SessionMode != api.SessionModeAsk {
 			bv = BranchIsolatedWorker
 		}
@@ -222,6 +222,7 @@ func WorkerReaderForSession(ctx context.Context, sessionState CoordinatorState, 
 		Vision:                sessionState.Vision,
 		CommandExternalHidden: sessionState.CommandExternalHidden,
 		ApprovalPosture:       sessionState.ApprovalPosture,
+		MutationCapable:       mutCapable,
 		HasGit:                sessionState.HasGit,
 		HasAnyGitRoot:         sessionState.HasAnyGitRoot,
 		OnWorkerBranch:        bv == BranchIsolatedWorker,

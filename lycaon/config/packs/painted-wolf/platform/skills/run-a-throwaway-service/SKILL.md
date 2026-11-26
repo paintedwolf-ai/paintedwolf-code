@@ -2,6 +2,7 @@
 name: run-a-throwaway-service
 description: Start an isolated ephemeral service container for tests without touching an existing instance.
 metadata:
+  paintedwolf.any_of_tools: command
   host_resources: docker|podman
 ---
 

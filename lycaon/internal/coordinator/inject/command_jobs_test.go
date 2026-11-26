@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -96,7 +97,9 @@ func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 		t.Fatalf("timer-only wait schema leaked process_done guidance:\n%s", narrowedWorker)
 	}
 
-	// Paired witness 2: deferred/loadable surface (floor-only implement_investigate) teaches request_tools(need=...).
+	// Paired witness 2: on a surface where the job controls are only loadable,
+	// the live job promotes them, so the ledger names them directly.
+	promoted := plans["implement_investigate"].Promote(toolcontract.Implied(toolcontract.ResourcePresence{CommandJobs: true})...)
 	floorCoord, err := prompts.NewReader(prompts.HostFacts{
 		Profiles:  profiles,
 		RootCount: 1,
@@ -104,18 +107,15 @@ func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: "implement_investigate",
-		Plan:      plans["implement_investigate"],
-		Offered:   (plans["implement_investigate"]).ImmediateNames(),
+		Plan:      promoted,
+		Offered:   promoted.ImmediateNames(),
 	})
 	testutil.FailErr(t, "floorCoord reader", err)
-	deferredBlock := inject.RenderCommandJobsBlock(
+	promotedBlock := inject.RenderCommandJobsBlock(
 		context.Background(), renderer, floorCoord, processDoneWait, "sess-inject-test", jobs, nil, now, "coordinator",
 	)
-	if strings.Contains(deferredBlock, "command_output(handle=") || strings.Contains(deferredBlock, "command_stop(handle=") {
-		t.Fatalf("floor-only witness leaked unoffered direct command_output/command_stop calls:\n%s", deferredBlock)
-	}
-	if !strings.Contains(deferredBlock, `request_tools(need="command_output")`) || !strings.Contains(deferredBlock, `request_tools(need="command_stop")`) {
-		t.Fatalf("floor-only witness missing request_tools loading steps:\n%s", deferredBlock)
+	if !strings.Contains(promotedBlock, "command_output(handle=") || !strings.Contains(promotedBlock, "command_stop(handle=") || strings.Contains(promotedBlock, "request_tools") {
+		t.Fatalf("promoted witness must name the job controls directly:\n%s", promotedBlock)
 	}
 
 	// Paired witness 3: closed surface without command_output, request_tools, or process_done wait.
@@ -196,6 +196,8 @@ func TestCommandJobsBoundCommandPreviewWithoutDroppingHandle(t *testing.T) {
 	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		Declared:  true,
+		// A live job promotes its control tools onto the request.
+		Offered: append([]string{"command"}, toolcontract.Implied(toolcontract.ResourcePresence{CommandJobs: true})...),
 	})
 	testutil.FailErr(t, "coord reader", err)
 	block := inject.RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), coordReader, projectedWaitSchemaForTest(t, []string{"process_done"}), "sess-inject-test", []bgprocess.JobSnapshot{{

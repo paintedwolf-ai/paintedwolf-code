@@ -1,0 +1,15 @@
+id: readonly-reviewer
+name: Read-only reviewer
+description: Code review persona on the read-only review profile
+tool_profile: worker_readonly
+exec_mode: none
+capabilities:
+  - review
+topology_roles:
+  - worker
+dispatch_lanes:
+  - read
+  - review
+spawn:
+  misconfigure_code: SUBAGENT_MISCONFIGURED
+system_prompt_template: agents/code-reviewer.md
