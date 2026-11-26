@@ -230,7 +230,13 @@ func TestImportAudit(t *testing.T) {
 		t.Fatalf("expected allowed pass, got %+v", allowedReport)
 	}
 
-	deniedReport, err := AuditModuleImports(ctx, wasmModuleWithImport("wasi_snapshot_preview1", "sock_accept"), policy)
+	sockReport, err := AuditModuleImports(ctx, wasmModuleWithImport("wasi_snapshot_preview1", "sock_accept"), policy)
+	testutil.FailErr(t, "audit mediated socket stub", err)
+	if !sockReport.Passed || len(sockReport.Mediated) != 1 || sockReport.Mediated[0].Authority != "none" {
+		t.Fatalf("expected mediated no-authority sock_accept, got %+v", sockReport)
+	}
+
+	deniedReport, err := AuditModuleImports(ctx, wasmModuleWithImport("wasi_snapshot_preview1", "proc_raise"), policy)
 	testutil.FailErr(t, "audit denied", err)
 	if deniedReport.Passed || len(deniedReport.Denied) != 1 {
 		t.Fatalf("expected denied failure, got %+v", deniedReport)

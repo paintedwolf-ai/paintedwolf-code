@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -276,9 +278,22 @@ func newMemWorkspaceAdapter(files map[string][]byte) *memWorkspaceAdapter {
 	return &memWorkspaceAdapter{files: cp}
 }
 
+func (m *memWorkspaceAdapter) isDir(p string) bool {
+	if p == "." {
+		return true
+	}
+	prefix := p + "/"
+	for k := range m.files {
+		if strings.HasPrefix(k, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *memWorkspaceAdapter) Open(_ context.Context, req OpenRequest) (GuestFile, Errno) {
-	if req.Path == "." {
-		return &memGuestFile{name: ".", isDir: true}, ErrnoSuccess
+	if m.isDir(req.Path) {
+		return &memGuestFile{name: req.Path, isDir: true}, ErrnoSuccess
 	}
 	data, ok := m.files[req.Path]
 	if !ok {
@@ -292,8 +307,8 @@ func (m *memWorkspaceAdapter) Open(_ context.Context, req OpenRequest) (GuestFil
 }
 
 func (m *memWorkspaceAdapter) Stat(_ context.Context, p string) (StatInfo, Errno) {
-	if p == "." {
-		return StatInfo{Name: ".", IsDir: true, Mode: fs.ModeDir | 0o755, Inode: 1}, ErrnoSuccess
+	if m.isDir(p) {
+		return StatInfo{Name: p, IsDir: true, Mode: fs.ModeDir | 0o755, Inode: 1}, ErrnoSuccess
 	}
 	data, ok := m.files[p]
 	if !ok {
@@ -307,12 +322,34 @@ func (m *memWorkspaceAdapter) Lstat(ctx context.Context, p string) (StatInfo, Er
 }
 
 func (m *memWorkspaceAdapter) ReadDir(_ context.Context, p string) ([]DirEntry, Errno) {
-	if p != "." {
+	if !m.isDir(p) {
 		return nil, ErrnoENOENT
 	}
-	var out []DirEntry
-	for name := range m.files {
-		out = append(out, DirEntry{Name: name, Mode: 0o644})
+	seen := make(map[string]DirEntry)
+	prefix := ""
+	if p != "." {
+		prefix = p + "/"
+	}
+	for k := range m.files {
+		if !strings.HasPrefix(k, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(k, prefix)
+		if idx := strings.IndexByte(rest, '/'); idx >= 0 {
+			dirName := rest[:idx]
+			seen[dirName] = DirEntry{Name: dirName, IsDir: true, Mode: fs.ModeDir | 0o755}
+		} else {
+			seen[rest] = DirEntry{Name: rest, Mode: 0o644}
+		}
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]DirEntry, 0, len(names))
+	for _, name := range names {
+		out = append(out, seen[name])
 	}
 	return out, ErrnoSuccess
 }

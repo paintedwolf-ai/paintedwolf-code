@@ -87,6 +87,88 @@ def sha256_tree(root: Path, rel_paths: list[str] | None = None) -> str:
     return h.hexdigest()
 
 
+WASI_ALLOWED_IMPORTS = frozenset(
+    {
+        "args_get",
+        "args_sizes_get",
+        "clock_res_get",
+        "clock_time_get",
+        "environ_get",
+        "environ_sizes_get",
+        "fd_advise",
+        "fd_close",
+        "fd_fdstat_get",
+        "fd_fdstat_set_flags",
+        "fd_filestat_get",
+        "fd_prestat_dir_name",
+        "fd_prestat_get",
+        "fd_read",
+        "fd_readdir",
+        "fd_seek",
+        "fd_tell",
+        "fd_write",
+        "poll_oneoff",
+        "proc_exit",
+        "random_get",
+        "sched_yield",
+    }
+)
+
+WASI_MEDIATED_FS_IMPORTS = frozenset(
+    {
+        "fd_allocate",
+        "fd_datasync",
+        "fd_filestat_set_size",
+        "fd_filestat_set_times",
+        "fd_pread",
+        "fd_pwrite",
+        "fd_renumber",
+        "fd_sync",
+        "path_create_directory",
+        "path_filestat_get",
+        "path_filestat_set_times",
+        "path_link",
+        "path_open",
+        "path_readlink",
+        "path_remove_directory",
+        "path_rename",
+        "path_symlink",
+        "path_unlink_file",
+    }
+)
+
+WASI_NO_AUTHORITY_SOCKET_IMPORTS = frozenset(
+    {
+        "sock_accept",
+        "sock_recv",
+        "sock_send",
+        "sock_shutdown",
+    }
+)
+
+
+def classify_wasm_import(mod: str, name: str, kind: str) -> dict[str, str]:
+    entry: dict[str, str] = {"module": mod, "name": name, "kind": kind}
+    if mod == "wasi_snapshot_preview1":
+        if name in WASI_ALLOWED_IMPORTS:
+            entry["disposition"] = "allowed"
+            entry["authority"] = "runtime"
+            return entry
+        if name in WASI_MEDIATED_FS_IMPORTS:
+            entry["disposition"] = "mediated"
+            entry["authority"] = "workspace_adapter"
+            return entry
+        if name in WASI_NO_AUTHORITY_SOCKET_IMPORTS:
+            entry["disposition"] = "mediated"
+            entry["authority"] = "none"
+            entry["failure_mode"] = "ENOSYS/ENOTSUP (no preopened sockets)"
+            return entry
+    entry["disposition"] = "denied"
+    entry["authority"] = "none"
+    entry["failure_mode"] = "rejected at module load"
+    return entry
+
+
 def parse_wasm_imports(wasm_path: Path) -> list[dict[str, str]]:
     """Parse the WebAssembly Import section (section id 2) without external deps."""
     data = wasm_path.read_bytes()
@@ -147,11 +229,7 @@ def parse_wasm_imports(wasm_path: Path) -> list[dict[str, str]]:
                 else:
                     raise ValueError(f"Unsupported WASM import kind {kind}")
                 imports.append(
-                    {
-                        "module": mod,
-                        "name": name,
-                        "kind": kind_names.get(kind, str(kind)),
-                    }
+                    classify_wasm_import(mod, name, kind_names.get(kind, str(kind)))
                 )
             break
         pos = sec_end

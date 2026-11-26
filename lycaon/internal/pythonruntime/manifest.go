@@ -29,8 +29,14 @@ type ImageManifest struct {
 	Interpreter        InterpreterSpec    `json:"interpreter"`
 	PackagesRoot       string             `json:"packages_root"`
 	Distributions      []DistributionSpec `json:"distributions"`
-	StdlibCapabilities map[string]string  `json:"stdlib_capabilities,omitempty"`
+	StdlibCapabilities []string           `json:"stdlib_capabilities,omitempty"`
 	WasmImports        []WasmImportSpec   `json:"wasm_imports,omitempty"`
+}
+
+// PatchSpec records a minimal, auditable patch applied to an image file.
+type PatchSpec struct {
+	Target string `json:"target"`
+	Reason string `json:"reason"`
 }
 
 // InterpreterSpec records the CPython/WASI binary, stdlib archive/tree,
@@ -43,26 +49,26 @@ type InterpreterSpec struct {
 	StdlibPath   string            `json:"stdlib_path"`
 	StdlibSHA256 string            `json:"stdlib_sha256"`
 	BuildInputs  map[string]string `json:"build_inputs,omitempty"`
-	Patches      []string          `json:"patches,omitempty"`
+	Patches      []PatchSpec       `json:"patches,omitempty"`
 }
 
 // DistributionSpec records a bundled third-party distribution inside the
 // immutable package tree.
 type DistributionSpec struct {
-	Name           string            `json:"name"`
-	NormalizedName string            `json:"normalized_name"`
-	Version        string            `json:"version"`
-	Public         bool              `json:"public"`
-	Imports        []string          `json:"imports,omitempty"`
-	Backend        string            `json:"backend,omitempty"`
-	Features       []string          `json:"features,omitempty"`
-	ConsoleScripts map[string]string `json:"console_scripts,omitempty"`
-	HasPackageData bool              `json:"has_package_data"`
-	DistInfoPath   string            `json:"dist_info_path,omitempty"`
-	License        string            `json:"license,omitempty"`
-	SourceURL      string            `json:"source_url,omitempty"`
-	SourceSHA256   string            `json:"source_sha256,omitempty"`
-	TreeSHA256     string            `json:"tree_sha256,omitempty"`
+	Name           string   `json:"name"`
+	NormalizedName string   `json:"normalized_name"`
+	Version        string   `json:"version"`
+	Public         bool     `json:"public"`
+	Imports        []string `json:"imports,omitempty"`
+	Backend        string   `json:"backend,omitempty"`
+	Features       []string `json:"features,omitempty"`
+	ConsoleScripts []string `json:"console_scripts,omitempty"`
+	HasPackageData bool     `json:"has_package_data"`
+	DistInfoPath   string   `json:"dist_info_path,omitempty"`
+	License        string   `json:"license,omitempty"`
+	SourceURL      string   `json:"source_url,omitempty"`
+	SourceSHA256   string   `json:"source_sha256,omitempty"`
+	TreeSHA256     string   `json:"tree_sha256,omitempty"`
 }
 
 // LoadImageManifest reads, parses, and validates an image manifest JSON file.

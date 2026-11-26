@@ -22,6 +22,7 @@ const (
 type WasmImportSpec struct {
 	Module      string            `json:"module"`
 	Name        string            `json:"name"`
+	Kind        string            `json:"kind,omitempty"`
 	Disposition ImportDisposition `json:"disposition"`
 	Authority   string            `json:"authority,omitempty"`
 	FailureMode string            `json:"failure_mode,omitempty"`
@@ -86,23 +87,30 @@ func DefaultWASIImportPolicy() []WasmImportSpec {
 		"path_symlink",
 		"path_unlink_file",
 	}
-	denied := []string{
-		"proc_raise",
+	// Socket WASI imports are statically linked by wasi-libc in CPython 3.12;
+	// zero socket preopens are granted, so wazero returns ENOSYS/ENOTSUP.
+	noAuthoritySockets := []string{
 		"sock_accept",
 		"sock_recv",
 		"sock_send",
 		"sock_shutdown",
 	}
+	denied := []string{
+		"proc_raise",
+	}
 
-	specs := make([]WasmImportSpec, 0, len(allowed)+len(mediated)+len(denied))
+	specs := make([]WasmImportSpec, 0, len(allowed)+len(mediated)+len(noAuthoritySockets)+len(denied))
 	for _, name := range allowed {
-		specs = append(specs, WasmImportSpec{Module: mod, Name: name, Disposition: ImportAllowed})
+		specs = append(specs, WasmImportSpec{Module: mod, Name: name, Kind: "func", Disposition: ImportAllowed, Authority: "runtime"})
 	}
 	for _, name := range mediated {
-		specs = append(specs, WasmImportSpec{Module: mod, Name: name, Disposition: ImportMediated})
+		specs = append(specs, WasmImportSpec{Module: mod, Name: name, Kind: "func", Disposition: ImportMediated, Authority: "workspace_adapter"})
+	}
+	for _, name := range noAuthoritySockets {
+		specs = append(specs, WasmImportSpec{Module: mod, Name: name, Kind: "func", Disposition: ImportMediated, Authority: "none", FailureMode: "ENOSYS/ENOTSUP (no preopened sockets)"})
 	}
 	for _, name := range denied {
-		specs = append(specs, WasmImportSpec{Module: mod, Name: name, Disposition: ImportDenied})
+		specs = append(specs, WasmImportSpec{Module: mod, Name: name, Kind: "func", Disposition: ImportDenied, Authority: "none", FailureMode: "rejected at module load"})
 	}
 	return specs
 }
