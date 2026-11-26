@@ -2,15 +2,35 @@ package sourcecatalog
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 )
 
+// LiteralPreparationStats counts background content-preparation work.
+type LiteralPreparationStats struct {
+	Builds    int64
+	FilesRead int64
+}
+
 // LiteralSearch owns content bloom preparation and its retained candidate cache.
 type LiteralSearch struct {
-	cache  *literalIndexCache
-	broker *backgroundwork.Broker
+	cache     *literalIndexCache
+	broker    *backgroundwork.Broker
+	builds    atomic.Int64
+	filesRead atomic.Int64
+}
+
+// PreparationStats returns cumulative background content-preparation counts.
+func (c *LiteralSearch) PreparationStats() LiteralPreparationStats {
+	if c == nil {
+		return LiteralPreparationStats{}
+	}
+	return LiteralPreparationStats{
+		Builds:    c.builds.Load(),
+		FilesRead: c.filesRead.Load(),
+	}
 }
 
 // contentBuild fills per-file literal filters to reduce content reads.
@@ -68,13 +88,26 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 	if s.retired || s.pins.drained {
 		return false
 	}
+	// Defer content preparation until an active initial discovery pass publishes
+	// a complete generation; scanning partial generations repeatedly restarts
+	// from the beginning and evicts earlier blooms before discovery finishes.
+	if !s.status.Complete && s.refreshingLocked() {
+		return true
+	}
+	// buildIndexLiterals reads from the store's latest published generation, so
+	// a stale partial reader arriving after discovery completes targets the
+	// completed revision rather than triggering a second full pass.
+	revision := reader.Status.Revision
+	if s.status.Complete && s.status.Revision > revision {
+		revision = s.status.Revision
+	}
 	if s.content == nil {
 		s.content = map[string]*contentBuild{}
 	}
 	if build := s.content[key]; build != nil {
 		select {
 		case <-build.done:
-			if build.revision == reader.Status.Revision && build.complete && !build.invalidated {
+			if build.revision == revision && build.complete && !build.invalidated {
 				return false
 			}
 			if !build.complete && time.Since(build.finished) < 5*time.Second {
@@ -104,8 +137,9 @@ func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexR
 	// Preparation outlives the search that started it; retirement and drain
 	// cancel it.
 	buildCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	build := &contentBuild{revision: reader.Status.Revision, started: time.Now(), cancel: cancel, done: make(chan struct{})}
+	build := &contentBuild{revision: revision, started: time.Now(), cancel: cancel, done: make(chan struct{})}
 	s.content[key] = build
+	c.builds.Add(1)
 	go func() {
 		defer cancel()
 		complete := c.buildIndexLiterals(buildCtx, s, query)
@@ -158,6 +192,7 @@ func (c *LiteralSearch) buildIndexLiterals(ctx context.Context, s *indexStore, q
 		if err != nil {
 			return false
 		}
+		c.filesRead.Add(int64(len(misses)))
 		err = c.cache.readBlooms(ctx, s.root.Path, misses, query.Open)
 		release()
 		if err != nil {

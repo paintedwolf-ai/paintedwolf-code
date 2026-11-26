@@ -292,3 +292,66 @@ func TestZeroSizeSourceRecoversPruningWithinPinnedMetadata(t *testing.T) {
 		t.Fatalf("recovered proof reopened %d times", opens.Load())
 	}
 }
+
+func TestContentPreparationDefersWhileInitialDiscoveryIsIncomplete(t *testing.T) {
+	c := treeTestCatalog(t)
+	root := Root{ID: "root", Path: t.TempDir()}
+	writeLiteralFixture(t, root.Path, "a.txt", "ordinary text")
+	writeLiteralFixture(t, root.Path, "b.txt", "more ordinary text")
+	reader := readyIndex(t, c, root)
+	entries, err := reader.FilePage(t.Context(), FileScope{Audience: HumanAudience}, "", TreeFilePageLimit)
+	testutil.FailErr(t, "metadata page", err)
+
+	var opens atomic.Int32
+	query := LiteralQuery{
+		IncludeKey: "defer-partial",
+		Require:    litprefilter.AnyOf("absent-token"),
+		Open: func(entry Entry) (io.ReadCloser, error) {
+			opens.Add(1)
+			return literalTestOpener(root.Path)(entry)
+		},
+	}
+
+	// Simulate an active initial discovery pass whose latest published generation is partial.
+	partialReader := *reader
+	partialReader.Status.Complete = false
+	partialReader.Status.Revision = reader.Status.Revision - 1
+	reader.store.mu.Lock()
+	origStatus := reader.store.status
+	reader.store.status.Complete = false
+	reader.store.status.Revision = partialReader.Status.Revision
+	reader.store.building = true
+	reader.store.settled = false
+	reader.store.mu.Unlock()
+
+	for range 5 {
+		page := c.Literals.IndexLiteralCandidates(t.Context(), &partialReader, query, entries)
+		if !page.Warming || len(page.Candidates) != len(entries) {
+			t.Fatalf("partial discovery page=%+v", page)
+		}
+	}
+	if stats := c.Literals.PreparationStats(); stats.Builds != 0 || stats.FilesRead != 0 || opens.Load() != 0 {
+		t.Fatalf("partial discovery started content preparation: stats=%+v opens=%d", stats, opens.Load())
+	}
+
+	// Once discovery completes, even a stale partial reader targets the completed
+	// revision so subsequent readers do not trigger a second full pass.
+	reader.store.mu.Lock()
+	reader.store.status = origStatus
+	reader.store.building = false
+	reader.store.settled = true
+	reader.store.mu.Unlock()
+
+	warmPartial := preparedLiteralPage(t, c, &partialReader, query, entries)
+	if warmPartial.Warming || len(warmPartial.Candidates) != 0 {
+		t.Fatalf("stale partial reader did not warm against completed revision: %+v", warmPartial)
+	}
+	warm := c.Literals.IndexLiteralCandidates(t.Context(), reader, query, entries)
+	if warm.Warming || len(warm.Candidates) != 0 {
+		t.Fatalf("completed generation restarted preparation: %+v", warm)
+	}
+	stats := c.Literals.PreparationStats()
+	if stats.Builds != 1 || stats.FilesRead != int64(len(entries)) || opens.Load() != int32(len(entries)) {
+		t.Fatalf("unexpected preparation work counts: stats=%+v opens=%d want builds=1 files=%d", stats, opens.Load(), len(entries))
+	}
+}
