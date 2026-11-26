@@ -12,8 +12,9 @@ import (
 )
 
 // WaitForSessionProgress waits for a condition only host work on the session
-// can bring about. It fails at once, with the session's recent wake decisions,
-// when the host holds no work that could still make the condition true.
+// can bring about. It fails, with the session's recent wake decisions, once the
+// host has held no work that could still make the condition true for
+// testutil.ProgressIdleWindow.
 func WaitForSessionProgress(t testing.TB, host *app.ServeApp, sessionID, step string, cond func() bool) {
 	t.Helper()
 	testutil.WaitForProgress(t, step, cond, func() testutil.Progress {
