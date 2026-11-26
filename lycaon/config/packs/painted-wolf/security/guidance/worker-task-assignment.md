@@ -21,7 +21,7 @@
 {% endif %}Host scan fields describe the bound evidence.
 
 {% if worker_name %}Worker `{{ worker_name }}` — {% endif %}Leg assignment ({{ agent_type }}):
-{% if scope_mode %}Scope: {{ scope_mode }}{% if scope_mode == "write" %} (overlay{% if view_kind %}, {{ view_kind }}{% endif %}){% elif scope_has_git %} (git available){% endif %}.
+{% if scope_mode %}Scope: {{ scope_mode }}{% if scope_mode == "write" %} (overlay, {{ view_kind }}){% elif scope_has_git %} (git available){% endif %}.
 
 {% endif %}{% if scope_mode == "write" %}Your files are a private workspace that stays yours across rounds.{% if view_kind == "materialized" %} Sibling edits never appear here live.{% endif %} A missing producer module is not evidence that its API is absent: use shared context and peer findings, or request a decision. After your changes land, your next round starts from refreshed source; after they are rejected, from before them.{% if linked_checkout %} This scope includes a linked worktree or submodule: it is a git checkout without VCS access in this workspace; history or branch work belongs to a read-scoped leg or the coordinator.{% endif %}
 

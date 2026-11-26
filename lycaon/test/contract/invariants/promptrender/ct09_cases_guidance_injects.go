@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/packboard"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -476,6 +477,104 @@ func boardOrientationCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCas
 				return guidanceRender{}, err
 			}
 			return coordinatorRender(text, cr), nil
+		},
+	}}, nil
+}
+
+// workerRepsBy keeps the first stock worker recipient of each distinct key.
+func workerRepsBy(reps []workerRep, keep func(workerRep) bool, key func(workerRep) string) []workerRep {
+	var out []workerRep
+	seen := map[string]bool{}
+	for _, wr := range reps {
+		if wr.ws.Overlay.ID != "stock" || !keep(wr) {
+			continue
+		}
+		if k := key(wr); !seen[k] {
+			seen[k] = true
+			out = append(out, wr)
+		}
+	}
+	return out
+}
+
+// workerTaskAssignmentCases render inject.RenderWorkerTaskAssignment for read
+// and write scopes (a write leg goes to a mutation-capable worker), each
+// overlay view kind, a review-coverage binding that does or does not require
+// coverage, and a scope path the outline reads from this package's sources.
+func workerTaskAssignmentCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
+	reps := workerRepsBy(e.wReps, func(workerRep) bool { return true },
+		func(wr workerRep) string {
+			return offers(wr.auth, "command_mutation", "read_review", "scan_query", "record_finding", "read_findings", "request_decision")
+		})
+	knobs := []casegen.Knob{
+		repKnob([]string{casegen.AnyFact}, len(reps), func(i int) string { return reps[i].ws.ID }),
+		indexKnob("mode", []string{"scope_mode", "scope_has_git", "linked_checkout"}, []string{"read", "write"}),
+		{Name: "view", Facts: []string{"view_kind"}, Values: []any{"", "mounted"}, Labels: []string{"default", "mounted"}},
+		indexKnob("coverage", []string{"coverage_assignment", "coverage_required"}, []string{"none", "required", "optional"}),
+		indexKnob("paths", []string{"file_orientations", "file.symbols_elided"}, []string{"none", "file"}),
+	}
+	return []guidanceCase{{
+		unit: "guidance/worker-task-assignment", recipient: interactions.RecipientWorker, knobs: knobs,
+		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
+			wr := reps[knobValue[int](knobs, set, "rep")]
+			in := inject.WorkerTaskAssignmentInput{
+				Reader: wr.auth.Reader, SessionID: "wsess-assign", ProjectDir: ".", AgentType: wr.ws.AgentID,
+				WorkerName: "w-alpha", WorkerJobID: "job-1", ViewKind: knobValue[string](knobs, set, "view"),
+				Charter: api.WorkerTaskCharter{Goal: "Complete the assigned slice.", DoneWhen: []string{"Verified"}},
+				Scope:   api.TaskScope{Mode: api.TaskScopeModeRead},
+			}
+			if knobValue[int](knobs, set, "mode") == 1 {
+				if !wr.auth.Reader.Held()["command_mutation"] {
+					return guidanceRender{}, nil
+				}
+				in.Scope.Mode = api.TaskScopeModeWrite
+			}
+			if knobValue[int](knobs, set, "paths") == 1 {
+				in.Scope.Paths = []string{"overlay_skills.go"}
+			}
+			switch knobValue[int](knobs, set, "coverage") {
+			case 1:
+				in.CoverageAssignment = &reviewcoverage.Binding{ID: "cov-1", RunID: "run-1", Phase: "challenge", WorkID: "work-1", Agent: wr.ws.AgentID, CoverageRequired: true}
+			case 2:
+				in.CoverageAssignment = &reviewcoverage.Binding{ID: "cov-2", RunID: "run-1", Phase: "challenge", WorkID: "work-2", Agent: wr.ws.AgentID}
+			}
+			text, err := inject.RenderWorkerTaskAssignment(ctx, e.inj, in)
+			if err != nil {
+				return guidanceRender{}, err
+			}
+			return workerRender(text, wr), nil
+		},
+	}}, nil
+}
+
+// workerLegCases render inject.RenderWorkerLegInject with and without a
+// result under review, isolated or not, over each overlay view kind.
+func workerLegCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
+	reps := workerRepsBy(e.wReps, func(workerRep) bool { return true },
+		func(wr workerRep) string { return offers(wr.auth, "record_finding", "read_findings", "recall") })
+	knobs := []casegen.Knob{
+		repKnob([]string{casegen.AnyFact}, len(reps), func(i int) string { return reps[i].ws.ID }),
+		indexKnob("review", []string{"review_handle"}, []string{"none", "result"}),
+		indexKnob("isolation", []string{"requires_isolation"}, []string{"isolated", "shared"}),
+		{Name: "view", Facts: []string{"view_kind"}, Values: []any{"materialized", "mounted"}},
+	}
+	return []guidanceCase{{
+		unit: "guidance/worker-leg", recipient: interactions.RecipientWorker, knobs: knobs,
+		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
+			wr := reps[knobValue[int](knobs, set, "rep")]
+			lc := inject.WorkerLegContext{
+				LegID: "leg-1", AgentType: wr.ws.AgentID, WorkflowID: "implement", PhaseID: "execute",
+				RequiresIsolation: knobValue[int](knobs, set, "isolation") == 0,
+				LegTools:          wr.auth.Offered, ViewKind: knobValue[string](knobs, set, "view"),
+			}
+			if knobValue[int](knobs, set, "review") == 1 {
+				lc.ReviewHandle = "rev-1"
+			}
+			text, err := inject.RenderWorkerLegInject(ctx, e.inj, wr.auth.Reader, "wsess-leg", lc)
+			if err != nil {
+				return guidanceRender{}, err
+			}
+			return workerRender(text, wr), nil
 		},
 	}}, nil
 }

@@ -95,6 +95,8 @@ var guidanceCaseBuilders = []func(context.Context, *guidanceCaseEnv) ([]guidance
 	citationGroundingCases,
 	specPostureCases,
 	boardOrientationCases,
+	workerTaskAssignmentCases,
+	workerLegCases,
 }
 
 // knobValue returns the value set picks for the knob named name.
