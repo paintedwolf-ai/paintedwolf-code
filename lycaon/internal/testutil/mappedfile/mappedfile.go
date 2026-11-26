@@ -2,9 +2,10 @@
 
 // Package mappedfile holds a shared writable mapping of a file in a child process.
 //
-// A process that serves a mount must not touch that mount's mapped pages itself. A page fault
-// cannot be preempted, so a stop-the-world waits on the faulting thread while the server
-// goroutines that would answer the fault are already stopped.
+// A process that serves a mount must not touch that mount's mapped pages, or hold its files open
+// when it forks. A page fault cannot be preempted, and a forking thread keeps its scheduler slot
+// until the child's exec closes its inherited descriptors, which sends the server a request.
+// Either way a stop-the-world waits on a thread that waits on the stopped server.
 package mappedfile
 
 import (
@@ -110,7 +111,7 @@ func socketPair() (parent, child *os.File, err error) {
 // Write copies data to the start of the mapping and leaves the pages dirty.
 func (f *File) Write(data []byte) error { return f.request(hex.EncodeToString(data)) }
 
-// Sync writes the mapping's dirty pages back with msync.
+// Sync writes the mapping's dirty pages back with msync, then fsyncs the file.
 func (f *File) Sync() error { return f.request(syncCmd) }
 
 func (f *File) request(line string) error {
@@ -154,7 +155,11 @@ func serve(path string, size int, in io.Reader, out io.Writer) int {
 	commands := bufio.NewScanner(in)
 	for commands.Scan() {
 		if commands.Text() == syncCmd {
-			reply(out, unix.Msync(mapped, unix.MS_SYNC))
+			err := unix.Msync(mapped, unix.MS_SYNC)
+			if err == nil {
+				err = file.Sync()
+			}
+			reply(out, err)
 			continue
 		}
 		reply(out, write(mapped, commands.Text()))

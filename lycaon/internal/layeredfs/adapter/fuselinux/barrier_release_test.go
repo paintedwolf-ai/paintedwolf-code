@@ -63,12 +63,6 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 
 	// 3. Open mapped.txt on the FUSE mount, mmap MAP_SHARED, mutate in memory, and flush with msync.
 	mappedPath := filepath.Join(prep.PrimaryWorkPath, "mapped.txt")
-	mf, err := os.OpenFile(mappedPath, os.O_RDWR, 0o644)
-	if err != nil {
-		t.Fatalf("OpenFile mapped.txt: %v", err)
-	}
-	defer func() { _ = mf.Close() }()
-
 	mapping := mappedfile.Map(t, mappedPath, len(initialBytes))
 	wantMapped := []byte("mutated-by-mmap!\n")
 	if err := mapping.Write(wantMapped); err != nil {
@@ -76,10 +70,7 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 	}
 
 	if err := adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := mapping.Sync(); err != nil {
-			return err
-		}
-		return mf.Sync()
+		return mapping.Sync()
 	}); err != nil {
 		t.Fatalf("SetBarrierHooks with mmap sync: %v", err)
 	}

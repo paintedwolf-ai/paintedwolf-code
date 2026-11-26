@@ -88,11 +88,6 @@ func TestBoundedTrackedPathClientFlushSkipsUntouchedUnreadableAndFIFOEntries(t *
 		t.Fatalf("shell write failed: %v (%s)", err, string(out))
 	}
 
-	mf, err := os.OpenFile(filepath.Join(prep.PrimaryWorkPath, "mapped.txt"), os.O_RDWR, 0o644)
-	if err != nil {
-		t.Fatalf("OpenFile mapped.txt: %v", err)
-	}
-	defer func() { _ = mf.Close() }()
 	mapping := mappedfile.Map(t, filepath.Join(prep.PrimaryWorkPath, "mapped.txt"), len(initialMapped))
 	if err := mapping.Write([]byte("bounded-mmap-ok!\n")); err != nil {
 		t.Fatalf("write mapping: %v", err)
@@ -107,10 +102,7 @@ func TestBoundedTrackedPathClientFlushSkipsUntouchedUnreadableAndFIFOEntries(t *
 		return nil
 	}, nil)
 	_ = adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := mapping.Sync(); err != nil {
-			return err
-		}
-		return mf.Sync()
+		return mapping.Sync()
 	})
 
 	rec1, rel1, err := adp.CheckpointBarrier(t.Context(), viewID)
@@ -181,7 +173,7 @@ func TestCheckpointBarrierCancellationDuringHeldInFlightFUSEMutation(t *testing.
 
 	writeDone := make(chan error, 1)
 	go func() {
-		writeDone <- os.WriteFile(filepath.Join(prep.PrimaryWorkPath, "held.txt"), []byte("mutated-after-hold\n"), 0o644)
+		writeDone <- writeFromChild(t, prep.PrimaryWorkPath, "held.txt", "mutated-after-hold")
 	}()
 	<-enteredCh
 
@@ -238,11 +230,6 @@ func TestPublisherHoldsAdapterServerBarrierDuringCaptureAndPreservesPriorCheckpo
 		_, _ = adp.Release(t.Context(), viewID)
 	})
 
-	mf, err := os.OpenFile(filepath.Join(prep.PrimaryWorkPath, "mapped.txt"), os.O_RDWR, 0o644)
-	if err != nil {
-		t.Fatalf("OpenFile: %v", err)
-	}
-	defer func() { _ = mf.Close() }()
 	mapping := mappedfile.Map(t, filepath.Join(prep.PrimaryWorkPath, "mapped.txt"), len(initialBytes))
 	wantCP1 := []byte("cp1-mmap-payload\n")
 	if err := mapping.Write(wantCP1); err != nil {
@@ -250,10 +237,7 @@ func TestPublisherHoldsAdapterServerBarrierDuringCaptureAndPreservesPriorCheckpo
 	}
 
 	_ = adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, func(_ context.Context, _ string) error {
-		if err := mapping.Sync(); err != nil {
-			return err
-		}
-		return mf.Sync()
+		return mapping.Sync()
 	})
 	cpStore, err := checkpoint.NewStore(cpDir)
 	if err != nil {
@@ -279,7 +263,7 @@ func TestPublisherHoldsAdapterServerBarrierDuringCaptureAndPreservesPriorCheckpo
 					return errors.New("expected Server.IsBarrierActive()==true during FaultAfterBarrier")
 				}
 				go func() {
-					gatedWrite <- os.WriteFile(filepath.Join(prep.PrimaryWorkPath, "blocked.txt"), []byte("blocked\n"), 0o644)
+					gatedWrite <- writeFromChild(t, prep.PrimaryWorkPath, "blocked.txt", "blocked")
 				}()
 				awaitCondition(t, "mutation held at the barrier gate", func() bool { return srv.GatedMutationsForTest() > 0 })
 				gateVerified = true
@@ -338,4 +322,16 @@ func verifyPublishedCP1AndFailedCP2(
 	if m1, err := cpStore.LoadManifest("cp-1"); err != nil || m1.CheckpointID != "cp-1" {
 		t.Fatalf("expected cp-1 manifest intact after cp-2 failure, got %+v err=%v", m1, err)
 	}
+}
+
+// writeFromChild writes name under dir on the mount from a child process, so a write the barrier
+// holds keeps its descriptor out of the serving test process.
+func writeFromChild(t *testing.T, dir, name, content string) error {
+	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", `printf '%s\n' "$1" > "$2"`, "sh", content, name)
+	cmd.Dir = dir
+	fuselinux.DetachMountEntry(cmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: %s", err, out)
+	}
+	return nil
 }
