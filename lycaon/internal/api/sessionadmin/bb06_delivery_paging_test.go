@@ -198,7 +198,7 @@ func (f *bb06Fixture) beginProgram(t *testing.T, callID, cmdText string, nodeIDs
 	defSum := sha256.Sum256([]byte(defJSON))
 	defDigest := hex.EncodeToString(defSum[:])
 	_, err = f.db.ExecContext(t.Context(),
-		`INSERT INTO invocation_program_definitions (program_id, definition_digest, definition_json) VALUES (?, ?, ?)`,
+		`INSERT INTO invocation_program_definitions (program_id, definition_digest, operation_id, owner, lifecycle, definition_json) VALUES (?, ?, 'command', 'program', 'read_only', ?)`,
 		programID, defDigest, defJSON)
 	testutil.FailErr(t, "insert program definition", err)
 
@@ -240,7 +240,7 @@ func (f *bb06Fixture) insertExecution(t *testing.T, p seededProgram, e seededExe
 		operation_id, definition_digest, arguments_representation, arguments_digest, arguments_ref,
 		canonical, state, owner, lifecycle, native_command, effect_mode, effect_classes_json,
 		started_at, status_code, effect_certainty, owner_started, complete, publication_eligible
-	) VALUES (?, ?, ?, ?, ?, 'fixture-person', '{"kind":"session"}', ?, ?, 'lossless_v1', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, 1, 1)`,
+	) VALUES (?, ?, ?, ?, ?, 'fixture-person', '{"kind":"session"}', ?, ?, 'operation_arguments_v1', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, 1, 1)`,
 		e.id, p.programID, e.nodeID, e.ordinal, e.parentExecID,
 		e.operationID, p.defDigest, e.canonical, e.state, e.owner, e.lifecycle,
 		e.nativeCommand, e.effectMode, e.effectClasses, now, status, e.ownerStarted,
