@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/briefinghost"
 	"github.com/lycaon/lycaon/internal/filebriefing"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -49,6 +50,9 @@ func (p fixtureProfile) Resolve(_ context.Context, target briefing.Target) (brie
 	}
 	if ref.Key == "too-many" {
 		return briefing.Request{}, briefing.ErrTargetUnavailable
+	}
+	if ref.Key == "missing-program" {
+		return briefing.Request{}, fmt.Errorf("read command receipt: %w", invocation.ErrProgramNotFound)
 	}
 	manifest := briefing.Manifest{ProfileID: "tool_activity", ProfileVersion: "1", SectionID: "outcome", Template: briefing.Template{ID: "outcome", Version: "1"}, Contract: briefing.OneSentence,
 		Items: []briefing.Item{{Key: "receipt", Role: briefing.RoleObservation, SourceKind: "receipt", Inclusion: briefing.IncludedWhole, Text: ref.Text, Audience: ref.Audience}}}
@@ -166,6 +170,7 @@ func TestBriefingRequestRefusals(t *testing.T) {
 		{"unregistered profile", "worker_result", fixtureTarget{Key: "k"}, http.StatusConflict, wire.ApiErrorCodeBriefingTargetUnavailable},
 		{"malformed target", "tool_activity", fixtureTarget{}, http.StatusBadRequest, ""},
 		{"over its bound", "tool_activity", fixtureTarget{Key: "too-many"}, http.StatusConflict, wire.ApiErrorCodeBriefingTargetUnavailable},
+		{"missing program", "tool_activity", fixtureTarget{Key: "missing-program"}, http.StatusNotFound, wire.ApiErrorCodeCommandProgramNotFound},
 	}
 	for _, c := range cases {
 		w := routes.request(t, c.profile, c.target, "")
