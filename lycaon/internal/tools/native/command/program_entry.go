@@ -231,7 +231,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
 	run.custody = r.Provenance
 	run.externalHidden = r.ExternalHidden
-	run.directPythonOffered = r.resolveDirectPythonOffered(tool, tc)
+	run.directPythonOffered = resolveDirectPythonOffered(r, tool, tc)
 	run.pythonRunner = r.PortablePython
 	run.publishDocument = owners.PublishDocument
 	if err := r.bindProgramCapture(ctx, run); err != nil {

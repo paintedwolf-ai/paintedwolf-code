@@ -74,8 +74,8 @@ func (r portablePythonServiceRunner) ExecuteCommand(ctx context.Context, req Pyt
 	if req.RootPath != "" {
 		roots = []pythondocuments.HostRootConfig{{
 			ID:       rootID,
-			HostPath: req.RootPath,
-			Primary:  true,
+			Dir:      req.RootPath,
+			ReadOnly: req.ReadOnly,
 		}}
 	}
 	resp, err := r.svc.ExecuteTool(ctx, portablepython.ToolRequest{
@@ -102,20 +102,20 @@ func (r portablePythonServiceRunner) ExecuteCommand(ctx context.Context, req Pyt
 		Stderr:   resp.Stderr,
 	}
 	if resp.Stop != nil {
-		out.StopCode = resp.Stop.Code
-		out.StopMsg = resp.Stop.Message
+		out.StopCode = string(resp.Stop.Code)
+		out.StopMsg = resp.Stop.Reason
 	}
 	return out, nil
 }
 
-func (r *ProgramRuntime) resolveDirectPythonOffered(tool string, tc tools.ToolContext) bool {
+func resolveDirectPythonOffered(r *ProgramRuntime, tool string, tc tools.ToolContext) bool {
 	if r.DirectPythonOffered != nil {
 		return r.DirectPythonOffered(tc)
 	}
 	if tool != "command" || r.Boundary == nil {
 		return false
 	}
-	profileID := strings.TrimSpace(tc.Identity.ToolProfile)
+	profileID := strings.TrimSpace(tc.ProfileID())
 	if profileID == "" {
 		return false
 	}
@@ -124,7 +124,7 @@ func (r *ProgramRuntime) resolveDirectPythonOffered(tool string, tc tools.ToolCo
 
 // refusePythonToolRequired stops a bare `python`/`python3` command launch
 // before any interpreter starts, preserving earlier completed program effects.
-func (d *ProgramDispatcher) refusePythonToolRequired(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, dec pythoncatalog.RoutingDecision) (toolcontract.ProducerResult, error) {
+func refusePythonToolRequired(ctx context.Context, d *ProgramDispatcher, request commandprogram.OperationRequest, streams commandprogram.Streams, dec pythoncatalog.RoutingDecision) (toolcontract.ProducerResult, error) {
 	writeHostRefusal(streams, dec.Command, "", dec.Code)
 	cause := toolrejection.RejectInvalidArguments(dec.Code, map[string]any{
 		"command":           dec.Command,
@@ -300,7 +300,7 @@ func runManagedPython(
 	req := PythonExecutionRequest{
 		ReadOnly: tc.Source.ReadOnly || tc.Source.AskMode,
 		RootPath: cwd.Abs,
-		RootID:   cwd.RootID,
+		RootID:   cwd.Root.ID,
 		Env:      env,
 		Stdin:    streams.Input,
 		ToolCtx:  tc,

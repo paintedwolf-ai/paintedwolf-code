@@ -211,7 +211,7 @@ func (d *ProgramDispatcher) Invoke(ctx context.Context, request commandprogram.O
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.NoEffect}, err
 	}
 	if dec := pythoncatalog.CheckBareInterpreterRouting(request.Argv.Values(), d.run.directPythonOffered); dec.Blocked {
-		return d.refusePythonToolRequired(ctx, request, streams, dec)
+		return refusePythonToolRequired(ctx, d, request, streams, dec)
 	}
 	if resolved, ok, err := commandprogram.ResolveCommand(request.Argv); err == nil && ok && resolved.Name != "external" {
 		if bound, err := d.binder.Bind(resolved, request.Argv); err == nil && bound.Help {
