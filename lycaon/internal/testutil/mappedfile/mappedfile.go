@@ -56,7 +56,7 @@ type File struct {
 // when the test ends.
 func Map(t testing.TB, path string, size int) *File {
 	t.Helper()
-	cmd := exec.Command(os.Args[0])
+	cmd := exec.Command(os.Args[0]) // #nosec G204 -- re-executes the running test binary with fixed arguments.
 	cmd.Env = append(os.Environ(), pathEnv+"="+path, sizeEnv+"="+strconv.Itoa(size))
 	cmd.Stderr = os.Stderr
 	stdin, err := cmd.StdinPipe()
@@ -109,7 +109,7 @@ func (f *File) close() {
 }
 
 func serve(path string, size int, in io.Reader, out io.Writer) int {
-	file, err := os.OpenFile(path, os.O_RDWR, 0)
+	file, err := os.OpenFile(path, os.O_RDWR, 0) // #nosec G703 -- the parent test names its own fixture file.
 	if err != nil {
 		reply(out, err)
 		return 1
