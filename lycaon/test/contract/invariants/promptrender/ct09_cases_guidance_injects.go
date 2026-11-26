@@ -146,6 +146,7 @@ func scanGuidanceCases(_ context.Context, _ *guidanceCaseEnv) ([]guidanceCase, e
 // stock hint catalog through guidance.StaticRejectFormatter, one code per
 // distinct effect, informational category and banner emit, and frozen OAR
 // copy through guidance.RenderPolicyCopy for each effect that renders copy.
+// Neither producer has a recipient, so the renders carry no authority to check.
 func rejectCases(_ context.Context, _ *guidanceCaseEnv) ([]guidanceCase, error) {
 	hints, err := guidance.LoadHintConfigStock()
 	if err != nil {
@@ -181,14 +182,14 @@ func rejectCases(_ context.Context, _ *guidanceCaseEnv) ([]guidanceCase, error) 
 				if err != nil {
 					return guidanceRender{}, err
 				}
-				return guidanceRender{text: text, auth: e.zeroAuth()}, nil
+				return guidanceRender{text: text, recipientless: true}, nil
 			}
 			effect, code, _ := strings.Cut(strings.TrimPrefix(label, "oar:"), ":")
 			text, err := guidance.RenderPolicyCopy(ctx, code, effect, map[string]string{"what": "The call was refused.", "cause": "A rule matched.", "fix": "Adjust the call."}, nil)
 			if err != nil {
 				return guidanceRender{}, err
 			}
-			return guidanceRender{text: text, auth: e.zeroAuth()}, nil
+			return guidanceRender{text: text, recipientless: true}, nil
 		},
 	}}, nil
 }
@@ -199,11 +200,10 @@ func rejectCases(_ context.Context, _ *guidanceCaseEnv) ([]guidanceCase, error) 
 // which renders the summary level with no ordinal. A record-capable recall
 // reach comes from a stock recipient offering recall.
 func continuationRecordCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceCase, error) {
-	var recall *toolreach.Request
-	for _, cr := range e.cReps {
+	var recall *coordRep
+	for i, cr := range e.cReps {
 		if cr.auth.Reach.Status("recall") == toolreach.Callable && cr.auth.Reach.AcceptsField("recall", "history.format") {
-			r := cr.auth.Reach
-			recall = &r
+			recall = &e.cReps[i]
 			break
 		}
 	}
@@ -218,9 +218,9 @@ func continuationRecordCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceC
 	return []guidanceCase{{
 		unit: "guidance/compaction/continuation-record", recipient: unscopedRecipient, knobs: knobs,
 		render: func(ctx context.Context, e *guidanceCaseEnv, set casegen.Setting) (guidanceRender, error) {
-			reach := *recall
+			reach, auth := recall.auth.Reach, recall.auth
 			if knobValue[int](knobs, set, "reach") == 1 {
-				reach = toolreach.Offered(nil)
+				reach, auth = toolreach.Offered(nil), e.zeroAuth()
 			}
 			source := map[string]any{"tool": "command", "handles": []string(nil), "message_id": "m-3"}
 			switch knobValue[int](knobs, set, "source") {
@@ -240,7 +240,7 @@ func continuationRecordCases(_ context.Context, e *guidanceCaseEnv) ([]guidanceC
 			if err != nil {
 				return guidanceRender{}, err
 			}
-			return e.unscopedRender(text), nil
+			return guidanceRender{text: text, auth: auth, backticks: true}, nil
 		},
 	}}, nil
 }

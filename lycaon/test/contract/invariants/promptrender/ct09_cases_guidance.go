@@ -31,13 +31,14 @@ type guidanceCase struct {
 
 // guidanceRender is one production render and the authority its claims are
 // checked against. An empty text is a setting the producer delivers nothing
-// for.
+// for; recipientless copy has no authority to check here.
 type guidanceRender struct {
-	text      string
-	auth      hoststate.TurnAuthority
-	mode      api.SessionMode
-	posture   api.SessionPosture
-	backticks bool
+	text          string
+	auth          hoststate.TurnAuthority
+	mode          api.SessionMode
+	posture       api.SessionPosture
+	backticks     bool
+	recipientless bool
 }
 
 type guidanceCaseEnv struct {
@@ -140,6 +141,9 @@ func runGuidanceCaseSweep(ctx context.Context, s *Stock, sum *CartesianSummary) 
 				continue
 			}
 			sum.InjectAndGuidanceCount++
+			if r.recipientless {
+				continue
+			}
 			sum.Violations = append(sum.Violations, checkClaimsOnce(s, id, r.text, r.auth, r.mode, r.posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, r.backticks)...)
 		}
 	}
