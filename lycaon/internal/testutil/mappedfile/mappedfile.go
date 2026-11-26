@@ -78,8 +78,12 @@ func start(t testing.TB, path string, size int) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-	wait, err := execpkg.StartDescriptorHelper(t.Context(), execpkg.HostLaunch("mapped file fixture"), executable, nil,
-		[]string{pathEnv + "=" + path, sizeEnv + "=" + strconv.Itoa(size)}, child, os.Stderr)
+	env := []string{pathEnv + "=" + path, sizeEnv + "=" + strconv.Itoa(size)}
+	// A coverage run counts the child's statements too.
+	if dir := os.Getenv("GOCOVERDIR"); dir != "" {
+		env = append(env, "GOCOVERDIR="+dir)
+	}
+	wait, err := execpkg.StartDescriptorHelper(t.Context(), execpkg.HostLaunch("mapped file fixture"), executable, nil, env, child, os.Stderr)
 	// Only the child holds its end now, so its exit ends the parent's reads.
 	_ = child.Close()
 	if err != nil {

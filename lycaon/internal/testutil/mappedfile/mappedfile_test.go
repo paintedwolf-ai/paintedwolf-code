@@ -5,6 +5,7 @@ package mappedfile
 import (
 	"bufio"
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -102,4 +103,23 @@ func runRecorded(fn func()) {
 		fn()
 	}()
 	<-done
+}
+
+func TestServeAnswersEachCommandAndExitsAtEndOfInput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mapped")
+	if err := os.WriteFile(path, bytes.Repeat([]byte("0"), 8), 0o600); err != nil {
+		testutil.FailErr(t, "write file", err)
+	}
+	commands := strings.NewReader(hex.EncodeToString([]byte("mapped!!")) + "\nzz\nsync\n")
+	var replies bytes.Buffer
+	if code := serve(path, 8, commands, &replies); code != 0 {
+		t.Fatalf("serve exited %d: %q", code, replies.String())
+	}
+	lines := strings.Split(strings.TrimSpace(replies.String()), "\n")
+	if len(lines) != 4 || lines[0] != "ok" || lines[1] != "ok" || !strings.HasPrefix(lines[2], "error ") || lines[3] != "ok" {
+		t.Fatalf("replies = %q, want ready, write, refusal, sync", lines)
+	}
+	if got, err := os.ReadFile(path); err != nil || string(got) != "mapped!!" {
+		t.Fatalf("file = %q, %v", got, err)
+	}
 }
