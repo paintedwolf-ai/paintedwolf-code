@@ -345,7 +345,7 @@ func auditStockSkillSurfacesUncached(ctx context.Context, stock *Stock, cache *h
 		recImpl := overlayID == "stock" && wp.ws.ToolProfile == "implement" &&
 			wp.ws.Loading == hoststate.WorkerLoadingStickyOnly &&
 			wp.ws.Posture == api.SessionPostureBuild && wp.ws.ParentSessionMode == api.SessionModeAgent &&
-			wp.ws.RootCount == 1 && wp.ws.HasGit && !wp.ws.WebSearch && !wp.ws.CommandExternalHidden
+			wp.ws.RootCount == 1 && wp.ws.HasGit && !wp.ws.CommandExternalHidden
 		if err := processState(wp.ws.ID, overlayID, wp.ws.ToolProfile, overlayProfiles(stock, wp.ws.Overlay), wp.ws.ParentSessionMode, wp.ws.Posture, wp.auth, overlaySkills, recImpl); err != nil {
 			return audit, err
 		}
