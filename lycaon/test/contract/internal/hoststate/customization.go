@@ -50,6 +50,16 @@ var customizationSpecs = []customizationSpec{
 		own:    map[string]string{"tools/profiles/implement": "fixture/implement-without-coordination"},
 		worker: true,
 	},
+	{
+		id: "own-implement-without-command", packs: []string{"implement-without-command"},
+		own:    map[string]string{"tools/profiles/implement": "fixture/implement-without-command"},
+		worker: true,
+	},
+	{
+		id: "own-implement-egress-only", packs: []string{"implement-egress-only"},
+		own:    map[string]string{"tools/profiles/implement": "fixture/implement-egress-only"},
+		worker: true,
+	},
 	{id: "agent-pairings", packs: []string{"agent-pairings"}, worker: true},
 	{
 		id: "disable-mock-before-build", disable: []string{"skills/mock-before-build"},

@@ -181,7 +181,7 @@ func CoordinatorStates(ctx context.Context) ([]CoordinatorState, error) {
 	overlays = slices.Clone(overlays)
 	for _, co := range custom {
 		if co.Coordinator {
-			seeds = append(seeds, buildCustomizationSeeds(len(overlays), surfaces)...)
+			seeds = append(seeds, buildCustomizationSeeds(len(overlays), surfaces, projectBindings)...)
 			overlays = append(overlays, co.Overlay)
 		}
 	}
@@ -304,18 +304,27 @@ func buildProjectBindingSeeds(bindings []PhaseBinding) []coordinatorSeed {
 }
 
 // buildCustomizationSeeds meets a customized catalog with the ambient worker
-// lifecycle and every active phase surface.
-func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo) []coordinatorSeed {
+// lifecycle, every active phase surface and every project binding.
+func buildCustomizationSeeds(ovIdx int, surfaces []SurfaceInfo, projectBindings []PhaseBinding) []coordinatorSeed {
 	var seeds []coordinatorSeed
 	for _, mode := range api.AllSessionModeValues() {
 		for _, p := range []api.SessionPosture{api.SessionPostureBuild, api.SessionPostureOrchestrate} {
 			for _, wf := range []WorkflowState{WorkflowAmbientIdle, WorkflowWorkersInFlight, WorkflowPendingOverlays} {
-				seeds = append(seeds, coordinatorSeed{
-					overlayIdx: ovIdx, mode: mode, posture: p, wf: wf, roots: RootsSingleGit, loading: LoadingAllLoaded,
-					web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
-				})
+				for _, rt := range []RootTopology{RootsNone, RootsSingleGit} {
+					seeds = append(seeds, coordinatorSeed{
+						overlayIdx: ovIdx, mode: mode, posture: p, wf: wf, roots: rt, loading: LoadingAllLoaded,
+						web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone,
+					})
+				}
 			}
 		}
+	}
+	for i := range projectBindings {
+		seeds = append(seeds, coordinatorSeed{
+			overlayIdx: ovIdx, mode: api.SessionModeAgent, posture: api.SessionPostureBuild, wf: WorkflowActivePhase,
+			surfaceID: projectBindings[i].Resolved.CoordinatorSurface, roots: RootsSingleGit, loading: LoadingAllLoaded,
+			web: true, approval: gate.PostureBalanced, temp: TempScratchOnly, mcp: MCPNone, binding: &projectBindings[i],
+		})
 	}
 	for _, s := range surfaces {
 		for _, ld := range []LoadingMode{LoadingFloorOnly, LoadingAllLoaded} {
