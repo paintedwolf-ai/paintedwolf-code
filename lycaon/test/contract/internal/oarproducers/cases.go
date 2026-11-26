@@ -22,7 +22,9 @@ import (
 )
 
 // Recipients a generated occurrence is delivered to, named as the ledger's
-// occurrence partition names them.
+// occurrence partition names them. policyfacts.FillSessionFacts leaves a
+// worker leg's session_role empty, so policyfacts occurrences of worker
+// sessions are unscoped, like block-plane occurrences without a session.
 const (
 	RecipientCoordinator = "coordinator"
 	RecipientWorker      = "worker"
@@ -49,20 +51,21 @@ type caseEntry struct {
 // caseEntries maps each anchor to its producer: tool.rejected through the
 // block plane, a turn checkpoint through policyfacts.Service.Block, tool
 // results through AfterTool. Recipients follow toolvocab's anchor audience
-// and the hook callers: coordinator checkpoints have coordinator sessions,
-// worker report checks worker sessions, and the block plane also runs
-// without a session.
+// and the hook callers: coordinator checkpoints have coordinator sessions;
+// the block plane names a worker leg worker and runs without a session too;
+// policyfacts leaves a worker leg unscoped; worker summaries are evaluated
+// with the worker role (workercompletion.EvaluateWorkerSummary).
 var caseEntries = map[string]caseEntry{
 	oar.AnchorToolRejected:             {entryRejected, []string{RecipientCoordinator, RecipientWorker, RecipientUnscoped}, "command"},
-	oar.AnchorToolPost:                 {entryAfterTool, []string{RecipientCoordinator, RecipientWorker}, "command"},
-	oar.AnchorSharedTemp:               {entryAfterTool, []string{RecipientCoordinator, RecipientWorker}, "command"},
-	oar.AnchorCredentialAssignment:     {entryCredential, []string{RecipientCoordinator, RecipientWorker}, "write"},
-	oar.AnchorSessionPreInvoke:         {entryBlock, []string{RecipientCoordinator, RecipientWorker}, "task"},
+	oar.AnchorToolPost:                 {entryAfterTool, []string{RecipientCoordinator, RecipientUnscoped}, "command"},
+	oar.AnchorSharedTemp:               {entryAfterTool, []string{RecipientCoordinator, RecipientUnscoped}, "command"},
+	oar.AnchorCredentialAssignment:     {entryCredential, []string{RecipientCoordinator, RecipientUnscoped}, "write"},
+	oar.AnchorSessionPreInvoke:         {entryBlock, []string{RecipientCoordinator, RecipientUnscoped}, "task"},
 	oar.AnchorCoordinatorPreInvoke:     {entryBlock, []string{RecipientCoordinator}, "verify"},
 	oar.AnchorCoordinatorCloseoutCheck: {entryBlock, []string{RecipientCoordinator}, ""},
 	oar.AnchorCoordinatorMidTurnNote:   {entryBlock, []string{RecipientCoordinator}, ""},
 	oar.AnchorCoordinatorPostTurn:      {entryBlock, []string{RecipientCoordinator}, ""},
-	oar.AnchorWorkerReportCheck:        {entryBlock, []string{RecipientWorker}, "complete_leg"},
+	oar.AnchorWorkerReportCheck:        {entryBlock, []string{RecipientWorker, RecipientUnscoped}, "complete_leg"},
 }
 
 // producerFacts are facts the producer itself establishes from the session,
@@ -174,7 +177,7 @@ func NewCaseProducer(h *Harness, cells []AuthCell, partition func(*oar.GuardCont
 			return nil, fmt.Errorf("no %s cell to generate cases from", role)
 		}
 	}
-	p.cells[RecipientUnscoped] = p.cells[RecipientCoordinator]
+	p.cells[RecipientUnscoped] = p.cells[RecipientWorker]
 	for _, r := range h.Rules.All() {
 		if r != nil {
 			p.rules[r.Qualified()] = r
@@ -300,11 +303,12 @@ func (p *CaseProducer) Knobs(site, recipient string) []casegen.Knob {
 	switch entry.kind {
 	case entryRejected:
 		knobs = append(knobs, p.codeKnob(rule, sources))
-		if recipient != RecipientUnscoped {
-			knobs = append(knobs,
-				casegen.Knob{Name: "doom.count", Facts: []string{"paintedwolf.repeat_count", "paintedwolf.count", "paintedwolf.deferred_unactivated"}, Values: []any{0, 1, 9}},
-				casegen.Knob{Name: "doom.code", Facts: []string{"paintedwolf.repeated_rejection_code"}, Values: []any{"", "TOOL_ARGS_INVALID"}},
-			)
+		knobs = append(knobs,
+			casegen.Knob{Name: "doom.count", Facts: []string{"paintedwolf.repeat_count", "paintedwolf.count", "paintedwolf.deferred_unactivated"}, Values: []any{0, 1, 9}},
+			casegen.Knob{Name: "doom.code", Facts: []string{"paintedwolf.repeated_rejection_code"}, Values: []any{"", "TOOL_ARGS_INVALID"}},
+		)
+		if recipient == RecipientUnscoped {
+			knobs = append(knobs, casegen.Knob{Name: "session", Facts: []string{casegen.AnyFact}, Values: []any{true, false}, Labels: []string{"", "none"}})
 		}
 		sample := defaultOccurrenceSample(rule)
 		for _, f := range p.references(sources...) {
@@ -567,6 +571,7 @@ type occurrence struct {
 	refusals  []int
 	doomCount int
 	doomCode  string
+	noSession bool
 	shared    *guidance.SharedTempSettlement
 	args      map[string]any
 	count     int
@@ -622,6 +627,8 @@ func (p *CaseProducer) occurrence(rule *oar.Rule, recipient string, knobs []case
 			o.doomCount = v.(int)
 		case name == "doom.code":
 			o.doomCode = v.(string)
+		case name == "session":
+			o.noSession = !v.(bool)
 		case name == "shared_temp":
 			o.shared = v.(*guidance.SharedTempSettlement)
 		case name == "count":
@@ -692,7 +699,7 @@ func (p *CaseProducer) deliver(ctx context.Context, entry caseEntry, o *occurren
 	h := p.h
 	var cctx context.Context
 	var sess *api.Session
-	if o.recipient == RecipientUnscoped {
+	if o.noSession {
 		cctx = toolreach.WithRequest(ctx, o.cell.Reach)
 	} else {
 		h.bindSession(o.sessID, o.cell)
@@ -707,6 +714,9 @@ func (p *CaseProducer) deliver(ctx context.Context, entry caseEntry, o *occurren
 		_ = h.BlockPlane.RejectObservation(cctx, o.tool, o.cell.ProfileID, nil, &toolrejection.ToolReject{Code: o.code, Data: o.data})
 	case entryBlock:
 		_, _, _ = h.Policy.Block(cctx, o.rule.Anchor, sess, o.tool, nil, func(gc *oar.GuardContext) error {
+			if o.rule.Anchor == oar.AnchorWorkerReportCheck && o.recipient == RecipientWorker {
+				gc.Session.Role, gc.Session.WorkerLeg = RecipientWorker, true
+			}
 			for _, fv := range o.fields {
 				if fv.f != nil {
 					fv.f.set(gc, fv.v)

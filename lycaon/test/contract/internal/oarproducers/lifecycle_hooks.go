@@ -559,6 +559,7 @@ func (h *Harness) runWorkerReportHook(ctx context.Context, cells []AuthCell) []F
 		for _, wc := range workerChecks {
 			_ = h.takeAdvisories()
 			ref, _, _ := h.Policy.Block(cctx, oar.AnchorWorkerReportCheck, sess, "complete_leg", nil, func(gc *oar.GuardContext) error {
+				gc.Session.Role = "worker"
 				gc.Grounding.WorkerSummaryPresent = true
 				return wc.fn(gc)
 			})

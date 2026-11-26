@@ -59,16 +59,17 @@ const srcGitFacts = "internal/session/readerfacts/resolver.go:gitFacts starts ha
 
 // occurrenceRoleFacts are the session facts each recipient's occurrences
 // carry: occurrenceRecipient partitions by session_role, and every producer
-// sets worker_leg exactly when it sets the worker role.
+// that names a role names the worker exactly for a worker leg. An unscoped
+// occurrence is a worker leg through policyfacts or one without a session.
 var occurrenceRoleFacts = map[string]map[string]any{
 	interactions.RecipientCoordinator: {"paintedwolf.session_role": "coordinator", "paintedwolf.worker_leg": false},
 	interactions.RecipientWorker:      {"paintedwolf.session_role": "worker", "paintedwolf.worker_leg": true},
-	unscopedRecipient:                 {"paintedwolf.session_role": "", "paintedwolf.worker_leg": false},
+	unscopedRecipient:                 {"paintedwolf.session_role": ""},
 }
 
 const (
 	srcOccurrenceRole = "occurrenceRecipient partitions occurrences by session_role; toolfeedback/block_plane.go:fillOccurrenceIdentity, " +
-		"session/policyfacts/service.go:FillSessionFacts, session/workercompletion/worker_summary.go and " +
+		"session/policyfacts/service.go:FillSessionFacts (coordinator only), session/workercompletion/worker_summary.go and " +
 		"session/workeroutcomes/delivery_policy.go set the worker role exactly with worker_leg"
 	srcConfine = "internal/session/policyfacts/oar_observe.go:ObserveConfine publishes execution facts only for an applied confinement"
 )
