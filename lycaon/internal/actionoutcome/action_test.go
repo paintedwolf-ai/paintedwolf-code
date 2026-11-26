@@ -91,3 +91,41 @@ func TestLoadingRefusalPreservesAdmittedTurn(t *testing.T) {
 		t.Fatalf("turn: %+v, %v", record, err)
 	}
 }
+
+func TestClosedLeaseReplaysToLateAction(t *testing.T) {
+	var sessions Sessions
+	s := sessions.For("s")
+	ctx, action := Capture(t.Context(), api.ContinuationActionWorkflowResume)
+	ticket := s.Receive(ctx, "s", 1, "phase_advanced")
+	var lease Handoff
+	turnCtx, turn := BeginTurn(WithLease(ctx, "lease", &lease), s.Turns, "s", "turn")
+	Dispatch(turnCtx)
+	turn.Finish(nil, nil, "")
+	ticket.Routed("lease", &lease)
+	action.Commit(s, "s", nil)
+	got, err := s.Actions.Await(t.Context(), action.ID())
+	if err != nil || got.State != api.ContinuationStateContinued || got.TurnID != "turn" {
+		t.Fatalf("late lease follower: %+v, %v", got, err)
+	}
+	trail := sessions.Trails()["s"]
+	if trail.Turns[0].LeaseID != trail.Wakes[0].LeaseID {
+		t.Fatalf("lease trail: %+v", trail)
+	}
+}
+
+func TestInvalidSecondDispositionPreservesFirst(t *testing.T) {
+	var sessions Sessions
+	s := sessions.For("s")
+	ticket := s.Receive(t.Context(), "s", 1, "phase_advanced")
+	ticket.Record(api.WakeStateDropped, api.WakeReasonUserStopped, "", "")
+	defer func() {
+		if recover() == nil {
+			t.Fatal("accepted duplicate disposition")
+		}
+		trail := sessions.Trails()["s"]
+		if len(trail.Defects) != 1 || trail.Defects[0].Attempt.State != api.WakeStateDelivered || trail.Wakes[0].Reason != api.WakeReasonUserStopped {
+			t.Fatalf("duplicate: %+v", trail)
+		}
+	}()
+	ticket.Record(api.WakeStateDelivered, "", "turn", "")
+}
