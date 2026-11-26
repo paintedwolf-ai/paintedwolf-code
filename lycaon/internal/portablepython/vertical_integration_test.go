@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/extpacks/extpackstest"
 	"github.com/lycaon/lycaon/internal/portablepython"
 	"github.com/lycaon/lycaon/internal/pythonadmission"
 	"github.com/lycaon/lycaon/internal/pythoncatalog"
@@ -500,7 +501,8 @@ requests.get(sys.argv[1])
 // schema description verbatim, rejects invalid code+script combinations, and
 // verifies toolhost registration wiring (both unconfigured and configured).
 func TestDirectPythonToolSchemaAndValidation(t *testing.T) {
-	schemas, err := extpacks.LoadEffectiveRegistrySchemas(nil)
+	stockCatalog := extpackstest.StockCatalog(t)
+	schemas, err := extpacks.LoadEffectiveRegistrySchemas(stockCatalog)
 	testutil.FailErr(t, "load effective registry schemas", err)
 
 	entry, ok := schemas.Tools["python"]
@@ -524,7 +526,7 @@ func TestDirectPythonToolSchemaAndValidation(t *testing.T) {
 	}
 
 	// Unconfigured toolhost.Runtime preserves clean error and still validates args.
-	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{})
+	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{Catalog: stockCatalog})
 	testutil.FailErr(t, "construct toolhost runtime without portable python", err)
 	if _, err := rt.Registry.Run(context.Background(), "python", map[string]any{
 		"code":   "print(1)",
