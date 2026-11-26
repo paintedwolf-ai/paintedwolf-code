@@ -126,8 +126,9 @@ func (l *ruleLogic) Domain(fact string, atoms []string) ([]any, bool) {
 			out = append(out, set)
 		}
 		return out, true
+	default:
+		return nil, false
 	}
-	return nil, false
 }
 
 func (l *ruleLogic) Zero(fact string) any {
@@ -138,8 +139,9 @@ func (l *ruleLogic) Zero(fact string) any {
 		return int64(0)
 	case oarcore.TypeListString:
 		return []string{}
+	default:
+		return ""
 	}
-	return ""
 }
 
 // toolFacts are the facts the producer derives from the invoked tool alone.
