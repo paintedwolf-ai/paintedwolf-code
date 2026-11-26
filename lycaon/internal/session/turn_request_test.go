@@ -40,11 +40,11 @@ type requestWorkflowView struct {
 	asked   *[]string
 }
 
-func (v requestWorkflowView) ResolvedRequest(_ context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest {
+func (v requestWorkflowView) ResolvedRequest(_ context.Context, sessionID string) (workflowfacts.ResolvedWorkflowRequest, error) {
 	if v.asked != nil {
 		*v.asked = append(*v.asked, sessionID)
 	}
-	return v.request
+	return v.request, nil
 }
 
 func TestTurnRequestDecidesAUserTurnForItsInstruction(t *testing.T) {
@@ -97,14 +97,14 @@ func TestResolvedWorkflowRequestDoesNotReplaceWorkerAssignment(t *testing.T) {
 	testutil.FailErr(t, "create root", err)
 	worker, err := st.Sessions.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "security-reviewer"})
 	testutil.FailErr(t, "create worker", err)
-	if request := mgr.Coordinator.Loading.ResolvedRequest(t.Context(), worker); request.Text != "" {
-		t.Fatalf("worker inherited coordinator request %+v", request)
+	if request, err := mgr.Coordinator.Loading.ResolvedRequest(t.Context(), worker); err != nil || request.Text != "" {
+		t.Fatalf("worker inherited coordinator request %+v (%v)", request, err)
 	}
 	if len(asked) != 0 {
 		t.Fatalf("worker consulted workflow request: %v", asked)
 	}
-	if request := mgr.Coordinator.Loading.ResolvedRequest(t.Context(), root); request.Text != "run request" {
-		t.Fatalf("root request = %+v", request)
+	if request, err := mgr.Coordinator.Loading.ResolvedRequest(t.Context(), root); err != nil || request.Text != "run request" {
+		t.Fatalf("root request = %+v (%v)", request, err)
 	}
 	if len(asked) != 1 || asked[0] != root.ID {
 		t.Fatalf("request sessions = %v", asked)
@@ -113,7 +113,8 @@ func TestResolvedWorkflowRequestDoesNotReplaceWorkerAssignment(t *testing.T) {
 
 func TestTurnRequestNeedsNoWorkflow(t *testing.T) {
 	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	resolved := mgr.Coordinator.Loading.ResolvedRequest(t.Context(), &api.Session{ID: "s1"})
+	resolved, err := mgr.Coordinator.Loading.ResolvedRequest(t.Context(), &api.Session{ID: "s1"})
+	testutil.FailErr(t, "resolve request", err)
 	opening, text, ok := mgr.Coordinator.Loading.Request(t.Context(), promptinput.Input{Text: "inspect the logs"}, nil, "u1", resolved)
 	if !ok || opening != "u1" || text != "inspect the logs" {
 		t.Fatalf("request without workflow = %q %q %v", opening, text, ok)
