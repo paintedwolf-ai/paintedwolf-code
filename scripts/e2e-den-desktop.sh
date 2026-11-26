@@ -7,24 +7,14 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/e2e/env.sh
 source "${DIR}/e2e/env.sh"
 
-export LYCAON_E2E_STATE_DIR="$(mktemp -d -t lycaon-e2e-state.XXXXXX)"
-LYCAON_E2E_SOCKET_DIR="$(mktemp -d /tmp/pw-s.XXXXXX)"
-export LYCAON_E2E_SOCKET_DIR="$(cd "${LYCAON_E2E_SOCKET_DIR}" && pwd -P)"
-export PLAYWRIGHT_E2E=desktop
-
-FIXTURE_SRC="${ROOT}/lycaon/test/fixtures/e2e/minimal-go-project"
-export LYCAON_E2E_PROJECT_DIR="${LYCAON_E2E_STATE_DIR}/minimal-go-project"
-mkdir -p "${LYCAON_E2E_PROJECT_DIR}"
-cp -R "${FIXTURE_SRC}/." "${LYCAON_E2E_PROJECT_DIR}/"
-export LYCAON_E2E_PROJECT_DIR="$(cd "${LYCAON_E2E_PROJECT_DIR}" && pwd -P)"
-
+owned_socket_dir=""
 cleanup() {
   bash "${DIR}/e2e-sidecar-stop.sh" || true
   if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${LYCAON_E2E_STATE_DIR:-}" ]]; then
     rm -rf "${LYCAON_E2E_STATE_DIR}"
   fi
-  if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${LYCAON_E2E_SOCKET_DIR:-}" ]]; then
-    rm -rf "${LYCAON_E2E_SOCKET_DIR}"
+  if [[ "${LYCAON_E2E_CLEANUP_STATE:-1}" == "1" && -n "${owned_socket_dir}" ]]; then
+    rm -rf "${owned_socket_dir}"
   fi
   # CI retains failure traces for the upload-artifact step.
   if [[ "${LYCAON_E2E_KEEP_ARTIFACTS:-0}" != "1" ]]; then
@@ -32,6 +22,18 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM
+
+export LYCAON_E2E_STATE_DIR="$(mktemp -d -t lycaon-e2e-state.XXXXXX)"
+owned_socket_dir="$(mktemp -d /tmp/pw-s.XXXXXX)"
+owned_socket_dir="$(cd "${owned_socket_dir}" && pwd -P)"
+export LYCAON_E2E_SOCKET_DIR="${owned_socket_dir}"
+export PLAYWRIGHT_E2E=desktop
+
+FIXTURE_SRC="${ROOT}/lycaon/test/fixtures/e2e/minimal-go-project"
+export LYCAON_E2E_PROJECT_DIR="${LYCAON_E2E_STATE_DIR}/minimal-go-project"
+mkdir -p "${LYCAON_E2E_PROJECT_DIR}"
+cp -R "${FIXTURE_SRC}/." "${LYCAON_E2E_PROJECT_DIR}/"
+export LYCAON_E2E_PROJECT_DIR="$(cd "${LYCAON_E2E_PROJECT_DIR}" && pwd -P)"
 
 if ! command -v bun >/dev/null 2>&1; then
   echo "error: bun required — https://bun.sh" >&2
