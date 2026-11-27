@@ -181,12 +181,20 @@ func pwGoWasiCallback(handleVal C.uintptr_t, opID C.uint32_t, argsPtr *C.uint64_
 	return C.uint32_t(action)
 }
 
+type nativeActiveExec struct {
+	cancel context.CancelFunc
+}
+
 // NativeEngineRuntime executes isolated Portable Python invocations using
 // PY07's ahead-of-time compiled native CPython/WASI shared library loaded via
 // dlopen after complete fail-closed manifest, SHA-256, ABI, and image verification.
 type NativeEngineRuntime struct {
 	mu                  sync.Mutex
 	closed              bool
+	closeDone           chan struct{}
+	activeWG            sync.WaitGroup
+	activeExecs         map[uint64]*nativeActiveExec
+	nextExecID          uint64
 	lib                 *C.pw_py_lib_t
 	identity            NativeEngineIdentity
 	manifest            *ImageManifest
@@ -294,6 +302,16 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 		return nil, err
 	}
 
+	audit, err := AuditNativeEngineImports(verifiedID, engineDir, cfg.ImageDir, cfg.Manifest, cfg.WasmBytes, cfg.ImportPolicy)
+	if err != nil {
+		C.pw_py_lib_close(lib)
+		return nil, err
+	}
+	if cfg.EnforceImportAudit && !audit.Passed {
+		C.pw_py_lib_close(lib)
+		return nil, fmt.Errorf("native engine wasm import audit failed: %d denied, %d undeclared", len(audit.Denied), len(audit.Undeclared))
+	}
+
 	if st := C.pw_py_call_init(lib); st != C.PW_PY_STATUS_OK {
 		C.pw_py_lib_close(lib)
 		return nil, &NativeEngineVerificationError{
@@ -322,8 +340,8 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 		_, _ = CleanOrphanedScratchDirs(cfg.ScratchRoot)
 	}
 
-	policy := DefaultWASIImportPolicy()
 	return &NativeEngineRuntime{
+		activeExecs:         make(map[uint64]*nativeActiveExec),
 		lib:                 lib,
 		identity:            *verifiedID,
 		manifest:            cfg.Manifest,
@@ -331,7 +349,7 @@ func NewNativeEngineRuntime(_ context.Context, cfg RuntimeConfig) (Runtime, erro
 		scratchRoot:         cfg.ScratchRoot,
 		workspaceMount:      wsMount,
 		useTrustedBootstrap: cfg.UseTrustedBootstrap,
-		audit:               &ImportAuditReport{Observed: policy, Passed: true},
+		audit:               audit,
 		clock:               clk,
 		entropy:             ent,
 		parked:              NewParkedGuestTracker(cfg.ParkedBudget),
@@ -378,26 +396,73 @@ func (r *NativeEngineRuntime) Info() RuntimeInfo {
 
 func (r *NativeEngineRuntime) Close(_ context.Context) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.closed {
+		done := r.closeDone
+		r.mu.Unlock()
+		if done != nil {
+			<-done
+		}
 		return nil
 	}
 	r.closed = true
-	r.parked.ReleaseAll()
-	if r.lib != nil {
-		C.pw_py_lib_close(r.lib)
-		r.lib = nil
+	done := make(chan struct{})
+	r.closeDone = done
+	for _, act := range r.activeExecs {
+		if act != nil && act.cancel != nil {
+			act.cancel()
+		}
 	}
+	lib := r.lib
+	r.mu.Unlock()
+
+	// Drain every admitted execution (including its cancellation watcher
+	// goroutine and pw_py_instance_free) before unloading the native library.
+	r.activeWG.Wait()
+
+	r.parked.ReleaseAll()
+	if lib != nil {
+		C.pw_py_lib_close(lib)
+	}
+
+	r.mu.Lock()
+	r.lib = nil
+	r.mu.Unlock()
+	close(done)
 	return nil
 }
 
 func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*ExecutionResult, error) {
 	start := r.clock.Now()
+
+	// Serialize admission against Close so no invocation can touch lib after
+	// Close begins draining, and capture lib locally for the duration of this
+	// invocation (kept alive until r.activeWG.Done()).
+	r.mu.Lock()
+	if r.closed || r.lib == nil {
+		r.mu.Unlock()
+		return nil, ErrRuntimeClosed
+	}
 	execCtx, cancel := context.WithCancel(ctx)
 	if inv.Limits.Timeout > 0 {
 		execCtx, cancel = context.WithTimeout(ctx, inv.Limits.Timeout)
 	}
-	defer cancel()
+	r.nextExecID++
+	execSeq := r.nextExecID
+	if r.activeExecs == nil {
+		r.activeExecs = make(map[uint64]*nativeActiveExec)
+	}
+	r.activeExecs[execSeq] = &nativeActiveExec{cancel: cancel}
+	lib := r.lib
+	r.activeWG.Add(1)
+	r.mu.Unlock()
+
+	defer func() {
+		cancel()
+		r.mu.Lock()
+		delete(r.activeExecs, execSeq)
+		r.mu.Unlock()
+		r.activeWG.Done()
+	}()
 
 	latch := NewStopLatch(cancel)
 	latch.now = r.clock.Now
@@ -484,8 +549,35 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
+	if execCtx.Err() != nil {
+		reason := "execution canceled"
+		if execCtx.Err() == context.DeadlineExceeded {
+			reason = "execution timed out"
+		}
+		latch.Trigger(TerminalStop{Code: StopCancelled, Reason: reason})
+		res := &ExecutionResult{
+			ExecutionID:     inv.ExecutionID,
+			Backend:         BackendNativeAOT,
+			EngineTag:       r.identity.EngineTag,
+			ExitCode:        1,
+			CleanCompletion: false,
+			Stop:            latch.Stop(),
+			Usage: ResourceUsage{
+				Duration: r.clock.Now().Sub(start),
+			},
+		}
+		if inv.Workspace != nil {
+			report, settleErr := inv.Workspace.Settle(context.Background(), false)
+			res.Settlement = report
+			if settleErr != nil {
+				res.Diagnostics = append(res.Diagnostics, fmt.Sprintf("workspace settlement failed: %v", settleErr))
+			}
+		}
+		return res, nil
+	}
+
 	execHandle := &nativeExecHandle{
-		lib:  r.lib,
+		lib:  lib,
 		host: wasiHost,
 	}
 	cgoHandle := cgo.NewHandle(execHandle)
@@ -497,7 +589,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 		fuel_budget:      C.uint64_t(inv.Limits.MaxGuestWork),
 	}
 	var inst *C.pw_py_instance_t
-	if st := C.pw_py_call_instance_new(r.lib, &instCfg, C.uintptr_t(cgoHandle), &inst); st != C.PW_PY_STATUS_OK {
+	if st := C.pw_py_call_instance_new(lib, &instCfg, C.uintptr_t(cgoHandle), &inst); st != C.PW_PY_STATUS_OK {
 		return nil, fmt.Errorf("pw_py_instance_new failed with status %d", int(st))
 	}
 	execHandle.inst = inst
@@ -506,7 +598,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 	freeInstance := func() {
 		freeOnce.Do(func() {
 			if inst != nil {
-				C.pw_py_call_instance_free(r.lib, inst)
+				C.pw_py_call_instance_free(lib, inst)
 				inst = nil
 				execHandle.inst = nil
 			}
@@ -516,7 +608,8 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 
 	// Asynchronous cancellation watcher: interrupts pure CPU loops via
 	// pw_py_instance_cancel(inst) when execCtx is canceled or times out.
-	// Deferred stop runs BEFORE freeInstance() so cancel is never called on a freed instance.
+	// Deferred stop runs BEFORE freeInstance() (and BEFORE activeWG.Done())
+	// so cancel is never called on a freed instance or unloaded library.
 	doneCh := make(chan struct{})
 	watcherDone := make(chan struct{})
 	var stopWatcherOnce sync.Once
@@ -531,7 +624,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 		defer close(watcherDone)
 		select {
 		case <-execCtx.Done():
-			C.pw_py_call_instance_cancel(r.lib, cancelTarget)
+			C.pw_py_call_instance_cancel(lib, cancelTarget)
 			ticker := time.NewTicker(1 * time.Millisecond)
 			defer ticker.Stop()
 			for {
@@ -539,7 +632,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 				case <-doneCh:
 					return
 				case <-ticker.C:
-					C.pw_py_call_instance_cancel(r.lib, cancelTarget)
+					C.pw_py_call_instance_cancel(lib, cancelTarget)
 				}
 			}
 		case <-doneCh:
@@ -548,7 +641,7 @@ func (r *NativeEngineRuntime) Execute(ctx context.Context, inv Invocation) (*Exe
 	defer stopWatcher()
 
 	var runRes C.pw_py_run_result_t
-	_ = C.pw_py_call_instance_run(r.lib, inst, &runRes)
+	_ = C.pw_py_call_instance_run(lib, inst, &runRes)
 	stopWatcher()
 
 	// Capture open write descriptor count BEFORE closing host FDs.

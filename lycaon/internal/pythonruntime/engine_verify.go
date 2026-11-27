@@ -1,9 +1,13 @@
 package pythonruntime
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
+
+// ErrRuntimeClosed is returned when Execute is called on a closed Runtime.
+var ErrRuntimeClosed = errors.New("portable python native runtime is closed")
 
 // HandshakeVerificationInput carries all inputs required to perform the
 // fail-closed pre-execution verification of a native engine library against

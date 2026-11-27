@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# PY06 Idle-Host Cross-Platform Benchmark Runner
-# Builds the Go test binary for lycaon/internal/portablepython, optionally signs
-# it with macOS hardened runtime, records host load/toolchain/revision, runs
-# TestPY06NativePerfWorkbookMatrix, and emits raw logs, JSON receipts, summary
-# Markdown, and SHA256SUMS.
+# PY06 Idle-Host Cross-Platform Benchmark Runner (single configuration)
+# Supports:
+#   --backend "" | default           -> exercises production default route (native-aot)
+#   --backend wazero-control         -> wazero-interpreter on macOS, wazero-compiler on Linux
+#   --backend native-aot | wazero-interpreter | wazero-compiler
+#   --image-variant original | pyc
+#   --engine-dir <dir>               -> optional native engine dir override
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
@@ -14,6 +16,7 @@ CONFIG_LABEL=""
 IMAGE_VARIANT="original"
 BACKEND=""
 IMAGE_DIR=""
+ENGINE_DIR=""
 ENGINE_ARTIFACT=""
 OUT_DIR=""
 SIGN_HARDENED=0
@@ -27,6 +30,7 @@ while [[ $# -gt 0 ]]; do
     --image-variant) IMAGE_VARIANT="$2"; shift 2 ;;
     --backend) BACKEND="$2"; shift 2 ;;
     --image-dir) IMAGE_DIR="$2"; shift 2 ;;
+    --engine-dir) ENGINE_DIR="$2"; shift 2 ;;
     --engine-artifact) ENGINE_ARTIFACT="$2"; shift 2 ;;
     --out-dir) OUT_DIR="$2"; shift 2 ;;
     --sign-hardened) SIGN_HARDENED=1; shift ;;
@@ -38,7 +42,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${CONFIG_LABEL}" || -z "${OUT_DIR}" ]]; then
-  echo "Usage: $0 --config-label <label> --out-dir <dir> [--image-variant original|pyc] [--backend <name>] [--image-dir <dir>] [--engine-artifact <path>] [--sign-hardened] [--cold-runs 5] [--warm-runs 5]" >&2
+  echo "Usage: $0 --config-label <label> --out-dir <dir> [--image-variant original|pyc] [--backend default|wazero-control|native-aot] [--image-dir <dir>] [--engine-dir <dir>] [--engine-artifact <path>] [--sign-hardened] [--cold-runs 5] [--warm-runs 5]" >&2
   exit 2
 fi
 
@@ -46,7 +50,6 @@ mkdir -p "${OUT_DIR}"
 OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 
 OS="$(uname -s)"
-HOST_LOAD="$(uptime | sed 's/^[[:space:]]*//')"
 if [[ "${OS}" == "Darwin" ]]; then
   CPU_BRAND="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo unknown)"
   CPU_COUNT="$(sysctl -n hw.ncpu 2>/dev/null || echo unknown)"
@@ -69,11 +72,11 @@ JSON_PATH="${OUT_DIR}/${CONFIG_LABEL}.json"
 
 echo "=== PY06 Benchmark Build ==="
 echo "config_label:  ${CONFIG_LABEL}"
+echo "backend:       ${BACKEND:-default (native-aot)}"
 echo "image_variant: ${IMAGE_VARIANT}"
 echo "revision:      ${REVISION}"
 echo "toolchain:     ${TOOLCHAIN}"
 echo "cpu_info:      ${CPU_INFO}"
-echo "host_load:     ${HOST_LOAD}"
 
 (
   cd "${REPO_ROOT}/lycaon"
@@ -100,6 +103,7 @@ export PW_PERF_CONFIG_LABEL="${CONFIG_LABEL}"
 export PW_PERF_IMAGE_VARIANT="${IMAGE_VARIANT}"
 export PW_PERF_BACKEND="${BACKEND}"
 export PW_PERF_IMAGE_DIR="${IMAGE_DIR}"
+export PW_PERF_ENGINE_DIR="${ENGINE_DIR}"
 export PW_PERF_COLD_RUNS="${COLD_RUNS}"
 export PW_PERF_WARM_RUNS="${WARM_RUNS}"
 export PW_PERF_SCRIPT_PATH="${SCRIPT_DIR}/fixtures/workbook.py"

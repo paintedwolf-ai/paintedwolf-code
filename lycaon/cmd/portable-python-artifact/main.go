@@ -21,18 +21,24 @@ func main() {
 
 func run(args []string) error {
 	fs := flag.NewFlagSet("portable-python-artifact", flag.ContinueOnError)
-	mode := fs.String("mode", "stage", "select, fetch, stage, verify, identity, or resolve")
+	mode := fs.String("mode", "stage", "select, fetch, stage, verify, stage-image, verify-image, stage-bundle, verify-bundle, identity, or resolve")
 	manifestPath := fs.String("manifest", "", "path to bundled-manifest.yaml (defaults to embedded)")
 	descriptor := fs.String("descriptor", "", "local path or HTTPS URL to PY07 release descriptor JSON")
 	tag := fs.String("tag", "", "authenticated PY07 release tag")
 	expectedCommit := fs.String("expected-commit", "", "expected 40-char PY07 producer git commit")
 	root := fs.String("root", "", "engine stage root directory")
 	cacheDir := fs.String("cache-dir", "", "local cache directory for fetched native engine artifacts")
+	imageSource := fs.String("image-source", "", "optional path/URL to checked-hash .pyc image tarball or directory")
+	artifactDir := fs.String("artifact-dir", "", "optional local directory containing retained producer artifacts")
 	target := fs.String("target", "", "bundle target triple (e.g. aarch64-apple-darwin, x86_64-unknown-linux-gnu)")
 	goos := fs.String("goos", runtime.GOOS, "target GOOS")
 	goarch := fs.String("goarch", runtime.GOARCH, "target GOARCH")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	if strings.TrimSpace(*artifactDir) != "" {
+		_ = os.Setenv(pythonruntime.EnvArtifactDir, strings.TrimSpace(*artifactDir))
 	}
 
 	resolvedGOOS, resolvedGOARCH := *goos, *goarch
@@ -91,7 +97,6 @@ func run(args []string) error {
 		if srcDir == "" {
 			return fmt.Errorf("-cache-dir is required for stage mode")
 		}
-		// Accept either the platform-specific dir or cache root.
 		art, err := m.ArtifactForPlatform(resolvedGOOS, resolvedGOARCH)
 		if err != nil {
 			return err
@@ -118,6 +123,94 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
+		fmt.Println(libPath)
+		return nil
+
+	case "stage-image":
+		m, err := loadManifest(*manifestPath)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(*root) == "" {
+			return fmt.Errorf("-root is required for stage-image mode")
+		}
+		imgDir, err := pythonruntime.StageImageArtifact(ctx, m, *imageSource, *root, *artifactDir, nil)
+		if err != nil {
+			return err
+		}
+		fmt.Println(imgDir)
+		return nil
+
+	case "verify-image":
+		m, err := loadManifest(*manifestPath)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(*root) == "" {
+			return fmt.Errorf("-root is required for verify-image mode")
+		}
+		imgDir, err := pythonruntime.VerifyStagedImageArtifact(m, *root)
+		if err != nil {
+			return err
+		}
+		fmt.Println(imgDir)
+		return nil
+
+	case "stage-bundle":
+		m, err := loadManifest(*manifestPath)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(*root) == "" {
+			return fmt.Errorf("-root is required for stage-bundle mode")
+		}
+		outCache := strings.TrimSpace(*cacheDir)
+		if outCache == "" {
+			return fmt.Errorf("-cache-dir is required for stage-bundle mode")
+		}
+		// 1. Stage and verify checked-hash CPython 3.12 .pyc image (fail closed).
+		imgDir, err := pythonruntime.StageImageArtifact(ctx, m, *imageSource, *root, *artifactDir, nil)
+		if err != nil {
+			return err
+		}
+		// 2. Obtain, stage, and verify native AOT engine shared library (fail closed).
+		art, err := m.ArtifactForPlatform(resolvedGOOS, resolvedGOARCH)
+		if err != nil {
+			return err
+		}
+		engineSrc := outCache
+		if _, statErr := os.Stat(filepath.Join(engineSrc, art.LibraryName)); statErr != nil {
+			platformDir := filepath.Join(outCache, m.Engine.Version, resolvedGOOS+"-"+resolvedGOARCH)
+			engineSrc, err = pythonruntime.FetchEngineArtifact(ctx, m, resolvedGOOS, resolvedGOARCH, platformDir, nil)
+			if err != nil {
+				return err
+			}
+		}
+		libPath, err := pythonruntime.StageEngineArtifact(ctx, m, engineSrc, *root, resolvedGOOS, resolvedGOARCH)
+		if err != nil {
+			return err
+		}
+		fmt.Println(imgDir)
+		fmt.Println(libPath)
+		return nil
+
+	case "verify-bundle":
+		m, err := loadManifest(*manifestPath)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(*root) == "" {
+			return fmt.Errorf("-root is required for verify-bundle mode")
+		}
+		imgDir, err := pythonruntime.VerifyStagedImageArtifact(m, *root)
+		if err != nil {
+			return err
+		}
+		libPath, err := pythonruntime.VerifyStagedEngineArtifact(m, *root, resolvedGOOS, resolvedGOARCH)
+		if err != nil {
+			return err
+		}
+		fmt.Println(imgDir)
 		fmt.Println(libPath)
 		return nil
 

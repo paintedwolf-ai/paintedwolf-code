@@ -238,13 +238,24 @@ func FetchEngineArtifact(ctx context.Context, m *BundledEngineManifest, goos, go
 		}
 	}
 
-	raw, err := readSourceBytes(ctx, art.URL, client)
+	source := strings.TrimSpace(art.URL)
+	if isHTTPSURL(source) {
+		archiveName := strings.TrimSpace(art.ArchiveName)
+		if archiveName == "" {
+			archiveName = filepath.Base(source)
+		}
+		if devPath := ResolveRetainedDevArtifact(archiveName); devPath != "" {
+			source = devPath
+		}
+	}
+
+	raw, err := readSourceBytes(ctx, source, client)
 	if err != nil {
-		return "", fmt.Errorf("fetch engine artifact from %s: %w", art.URL, err)
+		return "", fmt.Errorf("fetch engine artifact from %s (development builds expect retained PY07 archive in ~/.local/share/paintedwolf-portable-python/results/PY07/ or %s; production builds require published release URL): %w", source, EnvArtifactDir, err)
 	}
 
 	var libBytes []byte
-	if strings.HasSuffix(strings.ToLower(art.URL), ".tar.gz") || strings.HasSuffix(strings.ToLower(art.URL), ".tgz") {
+	if strings.HasSuffix(strings.ToLower(source), ".tar.gz") || strings.HasSuffix(strings.ToLower(source), ".tgz") {
 		if art.ArchiveSHA256 != "" && !isAllZerosHex(art.ArchiveSHA256) {
 			got := sha256Hex(raw)
 			if !strings.EqualFold(got, art.ArchiveSHA256) {
@@ -301,17 +312,27 @@ func StageEngineArtifact(ctx context.Context, m *BundledEngineManifest, srcDir, 
 		return "", fmt.Errorf("verify source engine artifact: %w", err)
 	}
 
-	destDir := StagedEngineDir(stageRoot)
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return "", fmt.Errorf("create staged engine dir %s: %w", destDir, err)
+	parentDir := filepath.Join(stageRoot, "portable-python")
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		return "", fmt.Errorf("create staged portable-python dir %s: %w", parentDir, err)
 	}
+	tmpDir, err := os.MkdirTemp(parentDir, ".engine-staging-*")
+	if err != nil {
+		return "", fmt.Errorf("create engine staging temp dir: %w", err)
+	}
+	cleanupTmp := true
+	defer func() {
+		if cleanupTmp {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
+
 	// #nosec G304 -- verified source artifact path.
 	libBytes, err := os.ReadFile(srcLib)
 	if err != nil {
 		return "", err
 	}
-	destLib := filepath.Join(destDir, art.LibraryName)
-	if err := atomicWriteFile(destLib, libBytes, 0o755); err != nil {
+	if err := atomicWriteFile(filepath.Join(tmpDir, art.LibraryName), libBytes, 0o755); err != nil {
 		return "", fmt.Errorf("stage engine library: %w", err)
 	}
 
@@ -321,10 +342,15 @@ func StageEngineArtifact(ctx context.Context, m *BundledEngineManifest, srcDir, 
 		return "", err
 	}
 	amBytes = append(amBytes, '\n')
-	destManifest := filepath.Join(destDir, "artifact-manifest.json")
-	if err := atomicWriteFile(destManifest, amBytes, 0o644); err != nil {
+	if err := atomicWriteFile(filepath.Join(tmpDir, "artifact-manifest.json"), amBytes, 0o644); err != nil {
 		return "", fmt.Errorf("stage artifact-manifest.json: %w", err)
 	}
+
+	destDir := StagedEngineDir(stageRoot)
+	if err := replaceDirectoryAtomic(tmpDir, destDir); err != nil {
+		return "", fmt.Errorf("commit staged engine dir %s: %w", destDir, err)
+	}
+	cleanupTmp = false
 
 	return VerifyStagedEngineArtifact(m, stageRoot, goos, goarch)
 }
