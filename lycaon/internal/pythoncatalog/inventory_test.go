@@ -200,11 +200,12 @@ func TestCompactDiscoverySummaryAndTargetedHelp(t *testing.T) {
 
 	summary := RenderCompactDiscoverySummary(m)
 	for _, want := range []string{
-		"56 public packages",
+		"63 public packages",
 		"Offline Office & PDF creation",
 		"SVG charts",
 		"Legacy XLS",
 		"Calendar files",
+		"Saved-evidence troubleshooting",
 		"python -m pip list",
 	} {
 		if !strings.Contains(summary, want) {
@@ -228,6 +229,12 @@ func TestCompactDiscoverySummaryAndTargetedHelp(t *testing.T) {
 		{query: "spdx", wantMatch: "license_expression", wantOmit: "tinycss2"},
 		{query: "graphql", wantMatch: "build_schema", wantOmit: "tinycss2"},
 		{query: "css", wantMatch: "tinycss2", wantOmit: "PyJWT"},
+		{query: "saved captures", wantMatch: "dpkt", wantOmit: "PyJWT"},
+		{query: "diagnostic output", wantMatch: "jc", wantOmit: "PyJWT"},
+		{query: "log comparison", wantMatch: "drain3", wantOmit: "PyJWT"},
+		{query: "har", wantMatch: "timings", wantOmit: "PyJWT"},
+		{query: "rotated logs", wantMatch: "gzip", wantOmit: "PyJWT"},
+		{query: "elf", wantMatch: "ELFFile", wantOmit: "PyJWT"},
 	}
 	for _, tc := range targetedCases {
 		got := RenderTargetedHelp(m, tc.query)
@@ -297,6 +304,12 @@ func TestDiagnosticsDistinguishFailureClasses(t *testing.T) {
 	d = DiagnoseImport(m, "rapidfuzz")
 	if d.Kind != DiagnosticMissingDistribution || !strings.Contains(d.Format(), "difflib") || !strings.Contains(d.Format(), "semantics") {
 		t.Fatalf("DiagnoseImport(rapidfuzz) = %+v", d)
+	}
+
+	// Missing scapy -> dpkt for offline capture reading
+	d = DiagnoseImport(m, "scapy")
+	if d.Kind != DiagnosticMissingDistribution || !strings.Contains(d.Format(), "dpkt") {
+		t.Fatalf("DiagnoseImport(scapy) = %+v", d)
 	}
 
 	// Omitted yamllint -> strict ruamel.yaml

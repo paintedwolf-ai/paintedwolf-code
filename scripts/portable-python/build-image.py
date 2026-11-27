@@ -329,6 +329,7 @@ def install_sdist_pure_python(
         "MarkupSafe": ("src/markupsafe/", "markupsafe", "LICENSE.txt"),
         "Pillow": ("src/PIL/", "PIL", "LICENSE"),
         "lxml": ("src/lxml/", "lxml", "LICENSES.txt"),
+        "drain3": ("drain3/", "drain3", "LICENSE"),
     }
     if name not in sdist_cfg:
         raise RuntimeError(f"No sdist_pure_python mapping for {name}")

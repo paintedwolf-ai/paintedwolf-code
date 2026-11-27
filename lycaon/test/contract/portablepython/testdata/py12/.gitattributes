@@ -1,0 +1,9 @@
+*.pcap binary
+*.pcapng binary
+*.bin binary
+*.der binary
+*.elf binary
+*.sqlite binary
+*.gz binary
+*.bz2 binary
+*.xz binary

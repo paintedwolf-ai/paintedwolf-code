@@ -1,0 +1,41 @@
+INFO req_id=req-2001 GET /orders/9001 status=200 latency=15ms
+INFO cache hit key=0xb001 ttl=91
+INFO req_id=req-2002 GET /orders/9002 status=200 latency=16ms
+INFO cache hit key=0xb002 ttl=92
+INFO req_id=req-2003 GET /orders/9003 status=200 latency=17ms
+INFO cache hit key=0xb003 ttl=93
+INFO req_id=req-2004 GET /orders/9004 status=200 latency=18ms
+INFO cache hit key=0xb004 ttl=94
+INFO req_id=req-2005 GET /orders/9005 status=200 latency=19ms
+INFO cache hit key=0xb005 ttl=95
+INFO req_id=req-2006 GET /orders/9006 status=200 latency=20ms
+INFO cache hit key=0xb006 ttl=96
+INFO req_id=req-2007 GET /orders/9007 status=200 latency=21ms
+INFO cache hit key=0xb007 ttl=97
+INFO req_id=req-2008 GET /orders/9008 status=200 latency=22ms
+INFO cache hit key=0xb008 ttl=98
+INFO req_id=req-2009 GET /orders/9009 status=200 latency=23ms
+INFO cache hit key=0xb009 ttl=99
+INFO req_id=req-2010 GET /orders/9010 status=200 latency=24ms
+INFO cache hit key=0xb00a ttl=100
+INFO req_id=req-2011 GET /orders/9011 status=200 latency=25ms
+INFO cache hit key=0xb00b ttl=101
+INFO req_id=req-2012 GET /orders/9012 status=200 latency=26ms
+INFO cache hit key=0xb00c ttl=102
+INFO req_id=req-2013 GET /orders/9013 status=200 latency=27ms
+INFO cache hit key=0xb00d ttl=103
+INFO req_id=req-2014 GET /orders/9014 status=200 latency=28ms
+INFO cache hit key=0xb00e ttl=104
+INFO req_id=req-2015 GET /orders/9015 status=200 latency=29ms
+INFO cache hit key=0xb00f ttl=105
+INFO worker=1 heartbeat ok queue_depth=1
+INFO worker=2 heartbeat ok queue_depth=2
+INFO worker=3 heartbeat ok queue_depth=3
+INFO worker=4 heartbeat ok queue_depth=0
+INFO worker=5 heartbeat ok queue_depth=1
+INFO worker=6 heartbeat ok queue_depth=2
+ERROR payment_gateway timeout order=99999 upstream=https://127.0.0.1:9/trap code=504
+INFO worker=7 heartbeat ok queue_depth=3
+INFO worker=8 heartbeat ok queue_depth=0
+INFO worker=9 heartbeat ok queue_depth=1
+INFO worker=10 heartbeat ok queue_depth=2

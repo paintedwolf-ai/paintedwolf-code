@@ -1,0 +1,40 @@
+INFO req_id=req-1001 GET /orders/5001 status=200 latency=13ms
+INFO cache hit key=0xa001 ttl=61
+INFO req_id=req-1002 GET /orders/5002 status=200 latency=14ms
+INFO cache hit key=0xa002 ttl=62
+INFO req_id=req-1003 GET /orders/5003 status=200 latency=15ms
+INFO cache hit key=0xa003 ttl=63
+INFO req_id=req-1004 GET /orders/5004 status=200 latency=16ms
+INFO cache hit key=0xa004 ttl=64
+INFO req_id=req-1005 GET /orders/5005 status=200 latency=17ms
+INFO cache hit key=0xa005 ttl=65
+INFO req_id=req-1006 GET /orders/5006 status=200 latency=18ms
+INFO cache hit key=0xa006 ttl=66
+INFO req_id=req-1007 GET /orders/5007 status=200 latency=19ms
+INFO cache hit key=0xa007 ttl=67
+INFO req_id=req-1008 GET /orders/5008 status=200 latency=20ms
+INFO cache hit key=0xa008 ttl=68
+INFO req_id=req-1009 GET /orders/5009 status=200 latency=21ms
+INFO cache hit key=0xa009 ttl=69
+INFO req_id=req-1010 GET /orders/5010 status=200 latency=22ms
+INFO cache hit key=0xa00a ttl=70
+INFO req_id=req-1011 GET /orders/5011 status=200 latency=23ms
+INFO cache hit key=0xa00b ttl=71
+INFO req_id=req-1012 GET /orders/5012 status=200 latency=24ms
+INFO cache hit key=0xa00c ttl=72
+INFO req_id=req-1013 GET /orders/5013 status=200 latency=25ms
+INFO cache hit key=0xa00d ttl=73
+INFO req_id=req-1014 GET /orders/5014 status=200 latency=26ms
+INFO cache hit key=0xa00e ttl=74
+INFO req_id=req-1015 GET /orders/5015 status=200 latency=27ms
+INFO cache hit key=0xa00f ttl=75
+INFO worker=1 heartbeat ok queue_depth=1
+INFO worker=2 heartbeat ok queue_depth=2
+INFO worker=3 heartbeat ok queue_depth=0
+INFO worker=4 heartbeat ok queue_depth=1
+INFO worker=5 heartbeat ok queue_depth=2
+INFO worker=6 heartbeat ok queue_depth=0
+INFO worker=7 heartbeat ok queue_depth=1
+INFO worker=8 heartbeat ok queue_depth=2
+INFO worker=9 heartbeat ok queue_depth=0
+INFO worker=10 heartbeat ok queue_depth=1
