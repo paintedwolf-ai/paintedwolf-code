@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -16,10 +17,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workercloseout"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -749,43 +757,228 @@ func (q *tb04FailAckQueue) MarkOutcomeDelivered(ctx context.Context, id string) 
 	return q.SQLQueue.MarkOutcomeDelivered(ctx, id)
 }
 
-// Slot W10.1: Restart boundary around report validation — crash before report validation commits
-// retries and yields one result; crash after report validation commits does not re-run or duplicate.
+type tb04PoisonReportHost struct{}
+
+func (tb04PoisonReportHost) PromptHostTurn(context.Context, string, sessionstore.PromptSubmissionOrigin, string) (*promptresult.Result, error) {
+	return nil, errors.New("unexpected closeout host turn for accepted report")
+}
+
+func (tb04PoisonReportHost) LoadLedger(context.Context, string) (evidence.Ledger, error) {
+	return evidence.Ledger{}, errors.New("accepted report must not be re-evaluated after restart")
+}
+
+func tb04StockHints(t *testing.T) *guidance.HintConfig {
+	t.Helper()
+	cfg, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "LoadHintConfigStock", err)
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	return cfg
+}
+
+var (
+	tb04PipelineOnce sync.Once
+	tb04Pipeline     *oar.GuardPipeline
+	tb04PipelineErr  error
+)
+
+func tb04OARPipeline(t *testing.T) *oar.GuardPipeline {
+	t.Helper()
+	tb04PipelineOnce.Do(func() {
+		_, file, _, ok := runtime.Caller(0)
+		if !ok {
+			tb04PipelineErr = errors.New("runtime.Caller failed")
+			return
+		}
+		root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+		profile := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "host", "anchors", "oar-profile.yaml")
+		if err := anchorcatalog.InstallBundled(); err != nil {
+			tb04PipelineErr = err
+			return
+		}
+		declaration, err := oar.LoadEngineDeclaration(profile)
+		if err != nil {
+			tb04PipelineErr = err
+			return
+		}
+		oar.InstallEngineDeclaration(declaration)
+		schemaDir := filepath.Join(filepath.Dir(root), "schemas")
+		loader, err := oar.NewLoader(schemaDir)
+		if err != nil {
+			tb04PipelineErr = err
+			return
+		}
+		rs, err := loader.LoadEffectivePolicy()
+		if err != nil {
+			tb04PipelineErr = err
+			return
+		}
+		p := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
+		p.EnableAnchor(oar.AnchorWorkerReportCheck)
+		tb04Pipeline = p
+	})
+	if tb04Pipeline == nil {
+		testutil.FailErr(t, "tb04 OAR pipeline", tb04PipelineErr)
+	}
+	return tb04Pipeline
+}
+
+// Slot W10.1: Restart boundary around report validation — enters the real owning report-validation
+// path (workercompletion.AcceptWorkerReport + SQLite child transcript persistence +
+// workercloseout.FinalizeWorkerSummaryForChild) with a deterministic test-side barrier on both sides
+// of validation persistence, cleanly separated from the Queue.Complete result-handle commit phase.
 func TestWEATB04_W10_RestartBoundaryAroundReportValidation(t *testing.T) {
 	ctx := t.Context()
+	hints := tb04StockHints(t)
+	pipeline := tb04OARPipeline(t)
 
-	t.Run("restart_before_report_validation_commits", func(t *testing.T) {
+	// Helper that creates a real child session bound to the worker job in SQLite.
+	bindChildSession := func(t *testing.T, f *tb04SQLFixture, jobID string) string {
+		t.Helper()
+		repos := sessionstore.NewSQL(f.sqlDB)
+		parent, err := repos.Sessions.Get(ctx, f.parent)
+		testutil.FailErr(t, "get parent session", err)
+		child, err := repos.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{
+			AgentType:   "security-reviewer",
+			Prompt:      "validate report",
+			WorkerJobID: jobID,
+		})
+		testutil.FailErr(t, "CreateChild", err)
+		testutil.FailErr(t, "SetChildSessionID", f.svcs.Queue.store.SetChildSessionID(ctx, jobID, child.ID))
+		return child.ID
+	}
+
+	// Verify the real report-validation owner rejects invalid reports before accepting valid ones.
+	validateReport := func(t *testing.T, jobID, childID, brief string) *api.WorkerReportAcceptance {
+		t.Helper()
+		badInput := workercompletion.WorkerSummaryEvalInput{
+			AgentType:      "security-reviewer",
+			ChildSessionID: childID,
+			Hints:          hints,
+			Pipeline:       pipeline,
+			Report:         workercompletion.WorkerCompletionReport{LegStatus: "partial", Brief: ""},
+		}
+		if badReceipt, badErr := workercompletion.AcceptWorkerReport(ctx, jobID, badInput); badReceipt != nil || badErr == nil {
+			t.Fatalf("AcceptWorkerReport accepted empty brief: receipt=%+v err=%v", badReceipt, badErr)
+		} else if reject := toolrejection.AsToolReject(badErr); reject == nil || reject.Code != "WORKER_TURN_NO_PROSE" {
+			t.Fatalf("empty brief rejection = %v (reject=%+v), want WORKER_TURN_NO_PROSE", badErr, reject)
+		}
+
+		validInput := workercompletion.WorkerSummaryEvalInput{
+			AgentType:      "security-reviewer",
+			ChildSessionID: childID,
+			Hints:          hints,
+			Pipeline:       pipeline,
+			Report:         workercompletion.WorkerCompletionReport{LegStatus: "partial", Brief: brief},
+		}
+		receipt, err := workercompletion.AcceptWorkerReport(ctx, jobID, validInput)
+		testutil.FailErr(t, "AcceptWorkerReport valid", err)
+		if receipt == nil || receipt.WorkerID != jobID || receipt.Report == nil || receipt.Report.Brief != brief {
+			t.Fatalf("unexpected acceptance receipt: %+v", receipt)
+		}
+		return receipt
+	}
+
+	persistAcceptedReport := func(t *testing.T, sqlDB *db.Store, childID, jobID, msgID string, receipt *api.WorkerReportAcceptance) {
+		t.Helper()
+		repos := sessionstore.NewSQL(sqlDB)
+		testutil.FailErr(t, "AppendMessages complete_leg", repos.AppendMessages(ctx, childID, api.Message{
+			ID:       msgID,
+			Role:     api.MessageRoleTool,
+			WorkerID: jobID,
+			ToolResult: &api.ToolResult{
+				Tool:         "complete_leg",
+				Outcome:      api.ToolResultOutcomeCompleted,
+				WorkerReport: receipt,
+			},
+		}))
+	}
+
+	t.Run("restart_before_report_validation_persists", func(t *testing.T) {
 		f := tb04NewSQLFixture(t, nil)
 		id, err := f.svcs.Queue.Enqueue(ctx, api.WorkerTask{
 			ID: "tb04-w10-rv-before", ParentSessionID: f.parent, ProjectID: testdbseed.DefaultProjectID,
-			WorkspacePath: f.primary, AgentType: "implementer", Prompt: "validate report", Brief: "brief",
+			WorkspacePath: f.primary, AgentType: "security-reviewer", Prompt: "validate report", Brief: "brief",
 		})
 		testutil.FailErr(t, "enqueue", err)
+		childID := bindChildSession(t, f, id)
 
-		// Attempt 1: claim and simulate crash during report validation before Complete commits.
-		claimed, err := f.svcs.Queue.ClaimNext(ctx, ClaimRequest{
+		// Attempt 1: claim, enter real AcceptWorkerReport, hit test-side barrier BEFORE persisting
+		// the accepted report into SQLite (and before Queue.Complete), then simulate abrupt crash + restart.
+		claimed1, err := f.svcs.Queue.ClaimNext(ctx, ClaimRequest{
 			ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "poller-1", ExecutionTarget: api.ExecutionTargetLocal,
 		})
 		testutil.FailErr(t, "claim attempt 1", err)
-		if tb04CountWorkerResults(t, f.sqlDB, id) != 0 {
-			t.Fatal("unexpected result before report validation committed")
+
+		// Run real report validation behind a deterministic barrier; simulate crash before persisting.
+		type validationResult struct {
+			receipt *api.WorkerReportAcceptance
+			err     error
 		}
-		// Expire lease to simulate abrupt process death before Complete, then reopen DB (restart).
+		validatedCh := make(chan validationResult, 1)
+		releaseCrash := make(chan struct{})
+		go func() {
+			r, vErr := workercompletion.AcceptWorkerReport(ctx, id, workercompletion.WorkerSummaryEvalInput{
+				AgentType:      "security-reviewer",
+				ChildSessionID: childID,
+				Hints:          hints,
+				Pipeline:       pipeline,
+				Report:         workercompletion.WorkerCompletionReport{LegStatus: "partial", Brief: "validated before crash barrier"},
+			})
+			validatedCh <- validationResult{receipt: r, err: vErr}
+			<-releaseCrash
+			// Simulated process death before AppendMessages / FinalizeWorkerSummaryForChild / Queue.Complete.
+		}()
+		vr := <-validatedCh
+		close(releaseCrash)
+		testutil.FailErr(t, "AcceptWorkerReport attempt 1", vr.err)
+		if vr.receipt == nil || vr.receipt.WorkerID != id {
+			t.Fatalf("attempt 1 receipt = %+v, want accepted receipt for %s", vr.receipt, id)
+		}
+
+		if tb04CountWorkerResults(t, f.sqlDB, id) != 0 {
+			t.Fatal("unexpected worker_results row before validation persisted")
+		}
 		_, err = f.sqlDB.ExecContext(ctx, `UPDATE worker_jobs SET lease_expires_at = '2000-01-01T00:00:00Z' WHERE id = ?`, id)
 		testutil.FailErr(t, "expire claim lease", err)
 		f.reopen(t)
 
-		// On restart, RecoverExpiredClaims re-queues the job; attempt 2 validates and commits once.
+		// After restart, no accepted report exists in the reopened child transcript.
+		repos := sessionstore.NewSQL(f.sqlDB)
+		msgs, err := repos.Transcript.GetWorkerJobMessages(ctx, childID, id)
+		testutil.FailErr(t, "GetWorkerJobMessages after pre-persist crash", err)
+		if _, _, ok := workercompletion.AcceptedWorkerReport(msgs, id); ok {
+			t.Fatal("pre-persist crash unexpectedly persisted an accepted report")
+		}
+
+		// Recover expired claim, re-claim, validate+persist report, finalize via workercloseout, and commit once.
 		_, err = f.svcs.Queue.RecoverExpiredClaims(ctx)
 		testutil.FailErr(t, "RecoverExpiredClaims", err)
-		reclaimed, err := f.svcs.Queue.ClaimNext(ctx, ClaimRequest{
+		claimed2, err := f.svcs.Queue.ClaimNext(ctx, ClaimRequest{
 			ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "poller-2", ExecutionTarget: api.ExecutionTargetLocal,
 		})
 		testutil.FailErr(t, "claim attempt 2", err)
-		if reclaimed.ID != id || reclaimed.ClaimToken == claimed.ClaimToken {
-			t.Fatalf("reclaimed = %+v, want new claim token for %s", reclaimed, id)
+		if claimed2.ID != id || claimed2.ClaimToken == claimed1.ClaimToken {
+			t.Fatalf("reclaimed = %+v, want new claim token for %s", claimed2, id)
 		}
-		won, err := f.svcs.Queue.Complete(ctx, reclaimed, api.WorkerResult{Status: "complete", Summary: "validated on attempt 2"})
+
+		receipt := validateReport(t, id, childID, "validated on attempt 2")
+		persistAcceptedReport(t, f.sqlDB, childID, id, "tb04-msg-rv-before-2", receipt)
+
+		outcome, err := workercloseout.FinalizeWorkerSummaryForChild(
+			ctx, repos.Transcript, tb04PoisonReportHost{}, childID, "security-reviewer",
+			workercloseout.WorkerSummaryFinalizeOpts{WorkerJobID: id, Ledger: tb04PoisonReportHost{}},
+		)
+		testutil.FailErr(t, "FinalizeWorkerSummaryForChild", err)
+		if outcome.Provenance != "complete_leg" || outcome.Summary != "validated on attempt 2" {
+			t.Fatalf("finalized outcome = %+v, want complete_leg with attempt 2 brief", outcome)
+		}
+
+		won, err := f.svcs.Queue.Complete(ctx, claimed2, api.WorkerResult{
+			Status:           outcome.Status,
+			Summary:          outcome.Summary,
+			CompletionReport: workercompletion.ReportWire(outcome.Report),
+			Grounding:        outcome.Grounding,
+		})
 		testutil.FailErr(t, "complete attempt 2", err)
 		if !won {
 			t.Fatal("attempt 2 completion did not win")
@@ -795,26 +988,68 @@ func TestWEATB04_W10_RestartBoundaryAroundReportValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("restart_after_report_validation_commits", func(t *testing.T) {
+	t.Run("restart_after_report_validation_persists_before_result_commit", func(t *testing.T) {
 		f := tb04NewSQLFixture(t, nil)
 		id, err := f.svcs.Queue.Enqueue(ctx, api.WorkerTask{
 			ID: "tb04-w10-rv-after", ParentSessionID: f.parent, ProjectID: testdbseed.DefaultProjectID,
-			WorkspacePath: f.primary, AgentType: "implementer", Prompt: "validate report", Brief: "brief",
+			WorkspacePath: f.primary, AgentType: "security-reviewer", Prompt: "validate report", Brief: "brief",
 		})
 		testutil.FailErr(t, "enqueue", err)
+		childID := bindChildSession(t, f, id)
 
-		claimed, err := f.svcs.Queue.ClaimNext(ctx, ClaimRequest{
+		claimed1, err := f.svcs.Queue.ClaimNext(ctx, ClaimRequest{
 			ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "poller-1", ExecutionTarget: api.ExecutionTargetLocal,
 		})
-		testutil.FailErr(t, "claim", err)
-		won, err := f.svcs.Queue.Complete(ctx, claimed, api.WorkerResult{Status: "complete", Summary: "validated before crash"})
-		testutil.FailErr(t, "complete", err)
+		testutil.FailErr(t, "claim attempt 1", err)
+
+		// Validate report via real AcceptWorkerReport and persist the accepted report to SQLite,
+		// then hit the restart barrier BEFORE Queue.Complete commits any worker_results row.
+		receipt := validateReport(t, id, childID, "validated report persisted before crash")
+		persistAcceptedReport(t, f.sqlDB, childID, id, "tb04-msg-rv-after-1", receipt)
+
+		if n := tb04CountWorkerResults(t, f.sqlDB, id); n != 0 {
+			t.Fatalf("worker_results count before Queue.Complete = %d, want 0", n)
+		}
+		_, err = f.sqlDB.ExecContext(ctx, `UPDATE worker_jobs SET lease_expires_at = '2000-01-01T00:00:00Z' WHERE id = ?`, id)
+		testutil.FailErr(t, "expire claim lease", err)
+		f.reopen(t)
+
+		// After restart, recover expired claim and finalize using the reopened SQLite transcript.
+		// tb04PoisonReportHost guarantees FinalizeWorkerSummaryForChild reuses the persisted
+		// WorkerReportAcceptance without re-evaluating or running a host closeout turn.
+		_, err = f.svcs.Queue.RecoverExpiredClaims(ctx)
+		testutil.FailErr(t, "RecoverExpiredClaims", err)
+		claimed2, err := f.svcs.Queue.ClaimNext(ctx, ClaimRequest{
+			ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "poller-2", ExecutionTarget: api.ExecutionTargetLocal,
+		})
+		testutil.FailErr(t, "claim attempt 2", err)
+		if claimed2.ID != id || claimed2.ClaimToken == claimed1.ClaimToken {
+			t.Fatalf("reclaimed = %+v, want new claim token for %s", claimed2, id)
+		}
+
+		repos := sessionstore.NewSQL(f.sqlDB)
+		outcome, err := workercloseout.FinalizeWorkerSummaryForChild(
+			ctx, repos.Transcript, tb04PoisonReportHost{}, childID, "security-reviewer",
+			workercloseout.WorkerSummaryFinalizeOpts{WorkerJobID: id, Ledger: tb04PoisonReportHost{}},
+		)
+		testutil.FailErr(t, "FinalizeWorkerSummaryForChild after restart", err)
+		if outcome.Provenance != "complete_leg" || outcome.Summary != "validated report persisted before crash" {
+			t.Fatalf("finalized outcome after restart = %+v, want persisted accepted report", outcome)
+		}
+
+		// Commit the finalized outcome once via Queue.Complete, then verify another restart does not duplicate it.
+		won, err := f.svcs.Queue.Complete(ctx, claimed2, api.WorkerResult{
+			Status:           outcome.Status,
+			Summary:          outcome.Summary,
+			CompletionReport: workercompletion.ReportWire(outcome.Report),
+			Grounding:        outcome.Grounding,
+		})
+		testutil.FailErr(t, "Complete after validation recovery", err)
 		if !won {
 			t.Fatal("completion did not commit")
 		}
 		firstResultID := tb04SingleResultID(t, f.sqlDB, id)
 
-		// Process restarts before outcome delivery; fresh poller must deliver without re-executing.
 		f.reopen(t)
 		exec := &tb04BarrierExecutor{}
 		tracker := &tb04OutcomeTracker{queue: f.svcs.Queue}
@@ -823,7 +1058,7 @@ func TestWEATB04_W10_RestartBoundaryAroundReportValidation(t *testing.T) {
 		testutil.FailErr(t, "maintain after restart", poller.maintain(ctx))
 
 		if exec.calls != 0 {
-			t.Fatalf("executor re-ran %d times after validated commit", exec.calls)
+			t.Fatalf("executor re-ran %d times after committed validated report", exec.calls)
 		}
 		if n := tb04CountWorkerResults(t, f.sqlDB, id); n != 1 {
 			t.Fatalf("worker_results count = %d, want 1", n)
