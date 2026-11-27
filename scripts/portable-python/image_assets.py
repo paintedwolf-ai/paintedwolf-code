@@ -301,7 +301,7 @@ def apply_wasi_package_patches(
             "try:\n"
             "    from ssl import SSLContext\n"
             "except ImportError:\n"
-            "    SSLContext = Any  # type: ignore[misc,assignment]"
+            "    SSLContext = object  # type: ignore[misc,assignment]"
         )
         old_fetch = (
             "            handlers: list[Any] = [_NoRedirectHandler()]\n"

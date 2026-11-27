@@ -159,7 +159,7 @@ class TestImageAssetsFpdfPatch(unittest.TestCase):
                     "packages/icalendar/__init__.py",
                 },
             )
-            self.assertIn("except ImportError:\n    SSLContext = Any", jwks.read_text(encoding="utf-8"))
+            self.assertIn("except ImportError:\n    SSLContext = object", jwks.read_text(encoding="utf-8"))
             self.assertIn("PyJWKClientConnectionError(", jwks.read_text(encoding="utf-8"))
             self.assertIn("self.use_mmap = bool(use_mmap and mmap is not None)", book.read_text(encoding="utf-8"))
             self.assertTrue(ical.read_text(encoding="utf-8").startswith("import dateutil.tz as _pw_dateutil_tz"))
