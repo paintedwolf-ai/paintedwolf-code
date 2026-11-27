@@ -99,7 +99,10 @@ func (m *Service) EmitEager(ctx context.Context, sessionID string, id anchor.ID,
 func (m *Service) DeliverPending(ctx context.Context, sessionID string) error {
 	kicks := m.kicks
 	cleared := m.cleared(ctx, sessionID)
-	renderCtx := m.renderContext(ctx, sessionID)
+	renderCtx, err := m.renderContext(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("build coordinator kick render context: %w", err)
+	}
 	for range kick.MaxQueuedGuidance + 1 {
 		kickID := kicks.TakePendingKickIDUnless(sessionID, cleared)
 		if kickID == "" {
@@ -159,7 +162,11 @@ func (m *Service) TakePhase(ctx context.Context, sessionID string) ([]api.Messag
 	if !kicks.HasLatest(sessionID, key) {
 		return nil, nil
 	}
-	kickID, text, lease, ok, err := kicks.RenderLatest(ctx, sessionID, key, m.renderContext(ctx, sessionID))
+	renderCtx, err := m.renderContext(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("build phase guidance render context: %w", err)
+	}
+	kickID, text, lease, ok, err := kicks.RenderLatest(ctx, sessionID, key, renderCtx)
 	if err != nil {
 		return nil, fmt.Errorf("render phase guidance: %w", err)
 	}
@@ -174,18 +181,18 @@ func (m *Service) TakePhase(ctx context.Context, sessionID string) ([]api.Messag
 	return []api.Message{msg}, nil
 }
 
-func (m *Service) renderContext(ctx context.Context, sessionID string) kick.CoordinatorKickRenderContext {
+func (m *Service) renderContext(ctx context.Context, sessionID string) (kick.CoordinatorKickRenderContext, error) {
 	var rc kick.CoordinatorKickRenderContext
 	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
-		return rc
+		return rc, nil
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return rc
+		return rc, nil
 	}
 	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
-		return rc
+		return rc, nil
 	}
 	state := m.state.ForSession(ctx, sess)
 	rc.BatchPhase = state.BatchPhase
@@ -223,9 +230,13 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 		}
 		rc.Reader = reader
 	}
-	rc.GateObligations = m.GateObligations(ctx, sessionID, frame, rc.Reader)
+	obs, err := m.GateObligations(ctx, sessionID, frame, rc.Reader)
+	if err != nil {
+		return kick.CoordinatorKickRenderContext{}, err
+	}
+	rc.GateObligations = obs
 	rc.ProgressOpenItems, rc.ProgressClosureArmed = m.closureState(ctx, sessionID)
-	return rc
+	return rc, nil
 }
 
 // A disarmed closure latch needs no progress count.
@@ -280,9 +291,13 @@ func unsatisfiedFrameGateLeaves(frame inject.CoordinatorTurnFrame) []string {
 }
 
 // GateObligations projects unmet gate obligations for the coordinator turn frame.
-func (m *Service) GateObligations(ctx context.Context, sessionID string, frame inject.CoordinatorTurnFrame, reader prompts.Reader) []kick.GateObligation {
+func (m *Service) GateObligations(ctx context.Context, sessionID string, frame inject.CoordinatorTurnFrame, reader prompts.Reader) ([]kick.GateObligation, error) {
 	if m == nil || m.gateFeedback == nil {
-		return nil
+		return nil, nil
+	}
+	readerVars, err := prompts.Vars(reader, nil)
+	if err != nil {
+		return nil, fmt.Errorf("gate obligations reader vars: %w", err)
 	}
 	fb := m.gateFeedback
 	if m.workflows != nil && m.workflows.Policy != nil {
@@ -296,12 +311,10 @@ func (m *Service) GateObligations(ctx context.Context, sessionID string, frame i
 	if frame.Runtime.PhaseExit != nil {
 		extras = feedback.WithReviewAgents(extras, frame.Runtime.PhaseExit.ReviewAgents)
 	}
-	if readerVars, err := prompts.Vars(reader, nil); err == nil {
-		extras = feedback.WithReaderFacts(extras, readerVars)
-	}
+	extras = feedback.WithReaderFacts(extras, readerVars)
 	rows := fb.ProjectObligations(ctx, leaves, runCtx.AdvanceWhenGateMet, extras)
 	if len(rows) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]kick.GateObligation, len(rows))
 	for i, row := range rows {
@@ -313,5 +326,5 @@ func (m *Service) GateObligations(ctx context.Context, sessionID string, frame i
 			Required: append([]string(nil), row.Required...),
 		}
 	}
-	return out
+	return out, nil
 }
