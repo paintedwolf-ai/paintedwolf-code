@@ -237,15 +237,15 @@ class PortableCommandHarnessTests(unittest.TestCase):
             'invocation_program_publications': [],
             'invocation_program_revision_pins': [{'execution_id': 'e1', 'role': 'source', 'mode': 'accepted_document', 'path': 'settings.json', 'document_id': 'doc-1', 'document_revision': 2}],
         }
-        r_ok, _ = observe._receipt_rows(audit, [], draft_bindings={'settings.json': {'injected': True, 'document_id': 'doc-1', 'revision': 2, 'alias': 'draft-r2'}})
+        r_ok, _, _ = observe._receipt_rows(audit, [], draft_bindings={'settings.json': {'injected': True, 'document_id': 'doc-1', 'revision': 2, 'alias': 'draft-r2'}})
         self.assertEqual(r_ok[0]['input_revision'], 'draft-r2')
-        r_bad, _ = observe._receipt_rows(audit, [], draft_bindings={'settings.json': {'injected': True, 'document_id': 'doc-1', 'revision': 9, 'alias': 'draft-r2'}})
+        r_bad, _, _ = observe._receipt_rows(audit, [], draft_bindings={'settings.json': {'injected': True, 'document_id': 'doc-1', 'revision': 9, 'alias': 'draft-r2'}})
         self.assertNotIn('input_revision', r_bad[0])
         # Helper executable materialization + literal-null-sink + readonly surface facts.
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
-            hdir = harness.materialize_helpers({'fixture-producer': {'stdout': 'alpha', 'stderr': '', 'status': 1}}, root / 'helpers')
-            self.assertTrue((hdir / 'fixture-producer').is_file())
+            hdir = harness.materialize_helpers({'fixture-producer': {'stdout': 'alpha', 'stderr': '', 'status': 1}, 'fixture-argv': {'kind': 'argv-json'}}, root / 'helpers')
+            self.assertTrue((hdir / 'fixture-producer').is_file() and (hdir / 'fixture-argv').is_file())
             db_path, log_path, proj = root / 'store.db', root / 'sidecar.log', root / 'proj'
             create_audit_db(db_path)
             log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
@@ -258,3 +258,33 @@ class PortableCommandHarnessTests(unittest.TestCase):
             )
             self.assertTrue(obs['facts']['typed_null_sink'])
             self.assertTrue(obs['facts']['readonly_profile'])
+
+    def test_structural_wrapper_audit_and_uncorrelated_progress_receipt_flagged(self):
+        # Wrapper with an effect is NOT silently excluded; clean wrapper IS audited.
+        audit_clean = {
+            'invocation_program_executions': [{'id': 'w1', 'program_id': 'p1', 'operation_id': 'program |', 'native_command': '', 'owner': 'processes', 'state': 'completed', 'effect_certainty': 'none'}],
+            'invocation_program_publications': [], 'invocation_program_revision_pins': [],
+        }
+        r_clean, _, wrappers = observe._receipt_rows(audit_clean, [])
+        self.assertEqual(r_clean, [])
+        self.assertEqual(len(wrappers), 1)
+        audit_eff = {**audit_clean, 'invocation_program_executions': [dict(audit_clean['invocation_program_executions'][0], effect_certainty='completed')]}
+        r_eff, _, w_eff = observe._receipt_rows(audit_eff, [])
+        self.assertEqual(len(r_eff), 1)
+        self.assertEqual(w_eff, [])
+        # Extra uncorrelated standalone update_progress receipt is flagged as unexpected even on a progress_update case.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            db_path, log_path, proj = root / 'store.db', root / 'sidecar.log', root / 'proj'
+            create_audit_db(db_path)
+            db = sqlite3.connect(db_path)
+            db.execute("INSERT INTO invocation_receipts VALUES ('rcpt-uncorr','sess1234','rogue-call','update_progress','progress','completed',1)")
+            db.commit()
+            db.close()
+            log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
+            proj.mkdir()
+            _, audit_out = observe.build_observation(
+                CASES['first-mutation'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj,
+                db_path=db_path, sidecar_log=log_path, baseline_hashes={}, turn_records=[], prelude_records=[],
+            )
+            self.assertIn('rcpt-uncorr', audit_out['unexpected_receipt_ids'])

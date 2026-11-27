@@ -13,6 +13,9 @@ from portable_command.reporting import (
 )
 
 ALLOWED_STOPS = {None, 'rejected', 'conflict', 'cancelled', 'incomplete', 'budget', 'interrupted'}
+# Eligible structural orchestration wrappers emitted by the program runtime
+# (pipeline/list/loop containers with no direct native command or file effect).
+ELIGIBLE_WRAPPER_OPS = {'program |', 'program ;', 'program &&', 'program ||', 'program for', 'program while', 'program if'}
 
 
 def parse_tool_result(message_row):
@@ -47,9 +50,16 @@ def _receipt_rows(audit, progress_receipts, draft_bindings=None):
     pubs_by_prog = {p['program_id']: p for p in audit['invocation_program_publications']}
     receipts = [{'execution_id': pr['id'], 'operation': 'update_progress', 'outcome': pr['status']} for pr in progress_receipts]
     effects = [{'operation': 'update_progress', 'outcome': pr['status']} for pr in progress_receipts]
+    wrappers = []
     for ex in audit['invocation_program_executions']:
         op_id, native_cmd = ex.get('operation_id') or '', ex.get('native_command') or ''
-        if op_id.startswith('program ') and not native_cmd:
+        if (op_id in ELIGIBLE_WRAPPER_OPS and not native_cmd
+                and ex.get('effect_certainty') in {None, '', 'none'}
+                and not ex.get('accepted_revision') and not ex.get('published_revision')):
+            wrappers.append({
+                'execution_id': ex['id'], 'program_id': ex.get('program_id'), 'operation_id': op_id,
+                'owner': ex.get('owner'), 'state': ex.get('state'), 'status_code': ex.get('status_code'),
+            })
             continue
         op = 'write' if op_id == 'write' else ('read' if op_id == 'read' and native_cmd in {'', 'cat', 'head', 'read'} else (native_cmd or op_id))
         row = {'execution_id': ex['id'], 'operation': op, 'outcome': ex['state']}
@@ -83,7 +93,7 @@ def _receipt_rows(audit, progress_receipts, draft_bindings=None):
         receipts.append(row)
         if ex.get('effect_certainty') in {'completed', 'attempted', 'unknown'} or ex.get('operation_id') == 'write':
             effects.append(effect)
-    return receipts, effects
+    return receipts, effects, wrappers
 
 
 def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None):
@@ -109,8 +119,11 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     progress_receipts = top_progress + env_progress
     cmd_receipts = [r for r in audit['invocation_receipts'] if r['tool_name'] == 'command']
     receipts_by_call = {r['tool_call_id']: r for r in audit['invocation_receipts'] if r['tool_name'] != 'update_progress'}
-    has_progress_turn = any('progress_update' in t for t in case.get('turns') or ())
-    unexpected_receipts = [r for r in audit['invocation_receipts'] if r['tool_call_id'] not in expected_calls and not (has_progress_turn and r['tool_name'] == 'update_progress' and r['owner'] == 'progress')]
+    env_prog_ids = {pp['execution_id'] for pp in audit.get('invocation_program_progress', [])}
+    unexpected_receipts = [
+        r for r in audit['invocation_receipts']
+        if r['tool_call_id'] not in expected_calls and r['id'] not in env_prog_ids
+    ]
     unexpected_cmd = [r for r in cmd_receipts if r['tool_call_id'] not in expected_calls]
 
     cmd_invocations, last_payload, last_raw, last_prog, first_rejected = [], {}, {}, None, None
@@ -143,7 +156,13 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     if status_code is None:
         gaps.append('missing_program_status_code')
     complete = bool(outcome == 'completed' and host_stop is None and last_prog is not None and last_prog.get('state') == 'completed')
-    receipts, effects = _receipt_rows(audit, progress_receipts, draft_bindings=draft_bindings)
+    receipts, effects, wrappers = _receipt_rows(audit, progress_receipts, draft_bindings=draft_bindings)
+    prog_ids = {p['id'] for p in audit['invocation_programs']}
+    wrappers_valid = all(
+        w.get('program_id') in prog_ids and w.get('owner') in {None, '', 'processes'}
+        and w.get('state') in {'completed', 'refused', 'rejected', 'failed', 'interrupted'}
+        for w in wrappers
+    )
     for extra in unexpected_receipts:
         effects.append({'operation': extra['tool_name'], 'outcome': extra['status'], 'unexpected_call_id': extra['tool_call_id']})
     recovery = _extract_recovery(case['id'], last_payload, last_raw, audit, unexpected_cmd)
@@ -238,6 +257,14 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         facts['typed_null_sink'] = True
     if bool(node_ids) and len(set(node_ids)) < len(node_ids) and outcome == 'completed':
         facts['bounded_control_flow'] = True
+    if any(e.get('native_command') == 'find' and e.get('state') == 'completed' and e.get('complete') == 1 for e in execs):
+        facts['complete_tree'] = True
+    if recovery and recovery.get('owner_code'):
+        facts['owner_refusal'] = True
+        facts['no_outside_effect'] = bool(recovery['zero_program_effects'] and (baseline_hashes is None or final_hashes == baseline_hashes))
+        if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive')):
+            facts['zip_slip_refused'] = True
+    facts['structural_wrappers_valid'] = wrappers_valid
     for req_fact in case.get('required_evidence') or ():
         if req_fact not in facts:
             gaps.append(f"missing_observation:{req_fact}:{FACT_OWNERS.get(req_fact, 'runtime_owner')}")
@@ -255,6 +282,7 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
     }
     audit_bundle = {
         'session_id': session_id, 'session_surface': session_surface or {},
+        'structural_wrappers': {'count': len(wrappers), 'valid': wrappers_valid, 'records': wrappers},
         'prelude': prelude_records, 'turn_batches': turn_records,
         'unexpected_receipt_ids': [r['id'] for r in unexpected_receipts], 'observation_gaps': gaps,
         'refusal_stderr': raw_stderr if pre_exec_refusal else '',

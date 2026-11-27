@@ -84,6 +84,7 @@ FACT_OWNERS = {
     'destination_unchanged': 'filesystem_owner',
     'accepted_then_published': 'publication_owner',
     'no_source_statement_started': 'source_owner',
+    'zip_slip_refused': 'archive_owner', 'no_outside_effect': 'filesystem_owner', 'owner_refusal': 'archive_owner',
 }
 
 

@@ -358,7 +358,7 @@ class PortableCommandSuiteRunnerTests(unittest.TestCase):
             ],
             'invocation_program_publications': [], 'invocation_program_revision_pins': [],
         }
-        receipts, _ = observe._receipt_rows(audit, [])
+        receipts, _, _ = observe._receipt_rows(audit, [])
         self.assertEqual([r['operation'] for r in receipts], ['printf', 'base64'])
         cases = {c['id']: c for c in load_suite()['cases']}
         fp = cases['failed-producer']
