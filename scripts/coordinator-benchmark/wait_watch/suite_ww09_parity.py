@@ -97,6 +97,26 @@ def _read_diag_jsonl(path: pathlib.Path) -> dict[str, Any]:
     }
 
 
+def _extract_progress_snapshot(res: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(res, dict):
+        return {}
+    candidates = [res]
+    if isinstance(res.get("tool_result"), dict):
+        candidates.append(res["tool_result"])
+    for container in candidates:
+        feedback = container.get("feedback")
+        if isinstance(feedback, list):
+            for entry in feedback:
+                if not isinstance(entry, dict):
+                    continue
+                details = entry.get("details")
+                if isinstance(details, dict) and isinstance(details.get("snapshot"), dict):
+                    return details["snapshot"]
+        if isinstance(container.get("snapshot"), dict):
+            return container["snapshot"]
+    return {}
+
+
 def _poll_storage_predicate(
     db_path: pathlib.Path,
     session_id: str,
@@ -209,10 +229,26 @@ def run_watch_boundary_case(
         else:
             # Mark the progress step complete so implement posture settles the turn to idle,
             # then release barrier to trigger ambient wake turn (commitAmbientWakeAdmission).
-            driver.send_calls(
-                [{"name": "update_progress", "args": {"content": f"- [x] Run WW09 {case_id} watch parity check"}}],
-                phase="ww09.wake.complete_progress",
+            done_content = f"- [x] Run WW09 {case_id} watch parity check"
+            _, probe_results = driver.send_calls(
+                [{"name": "update_progress", "args": {"content": done_content}}],
+                phase="ww09.wake.probe_progress",
             )
+            snap = _extract_progress_snapshot(probe_results[0][1] if probe_results else None)
+            if snap.get("revision") and snap.get("item_ids"):
+                driver.send_calls(
+                    [
+                        {
+                            "name": "update_progress",
+                            "args": {
+                                "content": done_content,
+                                "expected_revision": snap["revision"],
+                                "item_ids": snap["item_ids"],
+                            },
+                        }
+                    ],
+                    phase="ww09.wake.complete_progress",
+                )
             idle_req = driver.await_pending("ww09.wake.finish_registration_turn")
             driver.finish_turn(idle_req, "Waiting for ambient watch wake.")
             _poll_storage_predicate(
