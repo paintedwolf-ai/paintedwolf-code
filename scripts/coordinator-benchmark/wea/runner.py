@@ -609,7 +609,33 @@ def _ctrl_workers(
         if not job_id:
             raise RuntimeError(f"task did not return a job_id: {task_res}")
 
-        # 2. Drive the real child worker session's model turns until the worker job settles (fail-fast on error).
+        # 2. Park the parent coordinator on `wait` (non-blocking) so `/harness/llm/pending` FIFO
+        # yields to `child_sid` instead of deadlocking behind the parent's next turn.
+        parent_req = _wait_pending(app, session_id)
+        if "wait" not in (parent_req.get("tools") or ()) and "request_tools" in (parent_req.get("tools") or ()):
+            load_id = str(uuid.uuid4())
+            app.request(
+                "/harness/llm/respond",
+                {"id": parent_req["id"], "tool_calls": [{"id": load_id, "name": "request_tools", "args": {"need": "wait"}}]},
+            )
+            _wait_tool_result(app, session_id, load_id)
+            parent_req = _wait_pending(app, session_id)
+        wait_call_id = str(uuid.uuid4())
+        app.request(
+            "/harness/llm/respond",
+            {
+                "id": parent_req["id"],
+                "tool_calls": [
+                    {
+                        "id": wait_call_id,
+                        "name": "wait",
+                        "args": {"timeout_ms": 60000, "conditions": [{"kind": "next_worker_done"}]},
+                    }
+                ],
+            },
+        )
+
+        # 3. Drive the real child worker session's model turns until the worker job settles (fail-fast on error).
         def _child_session_id() -> str | None:
             with contextlib.closing(sqlite3.connect((app_dir / "store.db").resolve().as_uri() + "?mode=ro", uri=True)) as db:
                 row = db.execute(
@@ -660,8 +686,9 @@ def _ctrl_workers(
             return row[0] == "complete"
 
         app.wait_for(_worker_settled, "worker job settled", session_id)
+        _wait_tool_result(app, session_id, wait_call_id)
 
-        # 3. Coordinator promotes the worker's overlay and captures the real tool_result_json.
+        # 4. Coordinator promotes the worker's overlay and captures the real tool_result_json.
         _, promote_result, _ = _send_tool_call(app, session_id, "promote_overlay", {"overlay_id": job_id})
         next_input = _wait_pending(app, session_id)
         app.request("/harness/llm/respond", {"id": next_input["id"], "content": "Promoted worker overlay."})
