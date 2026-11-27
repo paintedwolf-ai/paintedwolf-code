@@ -250,7 +250,7 @@ def write_disposable_vite_config(den_dir: Path, scratch: Path, obs_out_path: Pat
     with a dev-only plugin serving /__py09_driver.js and /__py09_report."""
     driver_js_path = scratch / "py09-wkwebview-driver.js"
     driver_js_path.write_text(WKWEBVIEW_DRIVER_JS, encoding="utf-8")
-    cfg_path = scratch / "vite.py09-driver.config.ts"
+    cfg_path = scratch / "vite.py09-driver.config.mts"
     base_cfg = (den_dir / "vite.config.ts").as_posix()
     cfg_src = f"""import fs from "node:fs";
 import baseConfigFn from {json.dumps(base_cfg)};
