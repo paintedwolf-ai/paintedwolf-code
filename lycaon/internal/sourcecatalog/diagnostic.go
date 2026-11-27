@@ -48,11 +48,12 @@ func (c *atomicWorkCounters) snapshot() WorkCounters {
 // DiagnosticReadCounts counts reads performed by the opt-in diagnostic itself,
 // kept strictly separate from ordinary product WorkCounters.
 type DiagnosticReadCounts struct {
-	DirAttempts     int `json:"dir_attempts"`
-	DirReads        int `json:"dir_reads"`
-	EntryReads      int `json:"entry_reads"`
-	MetadataReads   int `json:"metadata_reads"`
-	CatalogRowsRead int `json:"catalog_rows_read"`
+	DirAttempts      int `json:"dir_attempts"`
+	DirReads         int `json:"dir_reads"`
+	EntryReads       int `json:"entry_reads"`
+	ExhaustionProbes int `json:"exhaustion_probes,omitempty"`
+	MetadataReads    int `json:"metadata_reads"`
+	CatalogRowsRead  int `json:"catalog_rows_read"`
 }
 
 // DiagnosticDisagreementKind identifies a typed mismatch between the catalog

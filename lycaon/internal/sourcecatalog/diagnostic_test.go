@@ -983,8 +983,8 @@ func TestDiagnosticFailedOpenCountsAgainstMaxDirsAndMissingStampSuppressesAssert
 			},
 		)
 		testutil.FailErr(t, "walk with failing stat", err)
-		if reads.DirAttempts != 1 || reads.DirReads != 1 || !truncated {
-			t.Fatalf("expected 1 attempt, 1 read, truncated=true; got reads=%+v truncated=%v", reads, truncated)
+		if reads.DirAttempts != 1 || reads.DirReads != 0 || reads.EntryReads != 0 || reads.ExhaustionProbes != 0 || !truncated {
+			t.Fatalf("missing stamp must abort before ReadDir (no listing): got reads=%+v truncated=%v", reads, truncated)
 		}
 		if len(diskEntries) != 0 || len(fullSampledDirs) != 0 || len(dirStamps) != 0 {
 			t.Fatalf("unstamped dir must not authorize entries/sampling: disk=%d full=%d stamps=%d", len(diskEntries), len(fullSampledDirs), len(dirStamps))

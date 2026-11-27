@@ -223,33 +223,41 @@ func walkDirectSubtreeWithStat(
 			continue
 		}
 		dirInfo, statErr := statDir(f)
-		remaining := cfg.MaxEntries - reads.EntryReads
-		// Bound the underlying ReadDir syscall and working set to remaining+1 entries.
-		dirEntries, readErr := f.ReadDir(remaining + 1)
-		_ = f.Close()
-		if err := ctx.Err(); err != nil {
-			return nil, nil, nil, reads, truncated, err
-		}
-		if readErr != nil && readErr != io.EOF {
-			continue
-		}
-		reads.DirReads++
 		var stamp DirectoryStamp
 		if statErr == nil && dirInfo != nil {
 			stamp = directoryStampOf(dirInfo)
 		}
-		// A directory whose stamp cannot be captured must not authorize stale/missing assertions.
+		// Validate directory stamp BEFORE calling ReadDir so no listing occurs for an unverified directory.
 		if statErr != nil || !stamp.known() {
+			_ = f.Close()
 			truncated = true
 			continue
 		}
-		dirStamps[item.dir] = stamp
 
-		dirFullyRead := len(dirEntries) <= remaining
+		remaining := cfg.MaxEntries - reads.EntryReads
+		// Bound the underlying ReadDir syscall and working set to remaining+1 entries
+		// (remaining budget plus at most one exhaustion-probe entry).
+		dirEntries, readErr := f.ReadDir(remaining + 1)
+		_ = f.Close()
+		delivered := len(dirEntries)
+		dirFullyRead := delivered <= remaining
 		if !dirFullyRead {
 			truncated = true
+			reads.EntryReads += remaining
+			reads.ExhaustionProbes += delivered - remaining
 			dirEntries = dirEntries[:remaining]
+		} else {
+			reads.EntryReads += delivered
 		}
+		if err := ctx.Err(); err != nil {
+			return nil, nil, nil, reads, truncated, err
+		}
+		if readErr != nil && readErr != io.EOF {
+			truncated = true
+			continue
+		}
+		reads.DirReads++
+		dirStamps[item.dir] = stamp
 		if dirFullyRead {
 			fullSampledDirs[item.dir] = struct{}{}
 		}
@@ -259,7 +267,6 @@ func walkDirectSubtreeWithStat(
 			if err := ctx.Err(); err != nil {
 				return nil, nil, nil, reads, truncated, err
 			}
-			reads.EntryReads++
 			name := de.Name()
 			rel := name
 			if item.dir != "." {
