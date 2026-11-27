@@ -18,11 +18,18 @@ import json
 import os
 import shutil
 import struct
+import subprocess
+import sys
 import tarfile
 import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any
+
+PINNED_CPYTHON_WASM_SHA256 = "5ce0cbeb843e6e5abf2d50c7158002e8333c26a40fbe27a7a52e66ee48cf64a8"
+PINNED_METERED_WASM_SHA256 = "774a08a7863c1dee1b2f21bb80fb9964f0dd5dc27bdf2294bdd8a11934e893c6"
+PINNED_IMPORT_INVENTORY_SHA256 = "d4dca3e9def0586bdc7c43af04340073fcbd99b28a87f26f33341b30f00d623b"
+CPYTHON_312_MAGIC_HEX = "cb0d0d0a"
 
 FORBIDDEN_SUFFIXES = (".so", ".dylib", ".pyd", ".dll", ".a", ".o", ".c", ".h", ".pyx")
 
@@ -507,11 +514,127 @@ def pack_deterministic_tar_gz(src_dir: Path, out_tar_gz: Path) -> None:
                 tf.addfile(ti)
 
 
+def compile_checked_hash_bytecode(
+    image_dir: Path,
+    packages_dir: Path,
+    lib_dir: Path,
+    python312_bin: str | None,
+    include_stdlib: bool,
+) -> dict[str, Any]:
+    """Compile deterministic PEP 552 checked-hash CPython 3.12 .pyc files.
+
+    Keeps all .py sources and package resources intact. Uses guest-relative
+    dfile paths (/packages/... and /usr/local/lib/...) so output is 100%
+    reproducible across macOS and Linux build hosts.
+    """
+    py_exe = python312_bin
+    if not py_exe:
+        for cand in ("python3.12", sys.executable):
+            found = shutil.which(cand) if cand == "python3.12" else cand
+            if not found:
+                continue
+            probe = subprocess.run(
+                [found, "-c", "import importlib.util, sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}:{importlib.util.MAGIC_NUMBER.hex()}')"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if probe.returncode == 0 and probe.stdout.strip() == f"3.12:{CPYTHON_312_MAGIC_HEX}":
+                py_exe = found
+                break
+    if not py_exe:
+        raise RuntimeError(
+            "Generating CPython 3.12 checked-hash .pyc requires a CPython 3.12 interpreter "
+            "(pass --pyc-python /path/to/python3.12)"
+        )
+
+    helper = """
+import importlib.util, json, pathlib, py_compile, sys
+assert sys.version_info[:2] == (3, 12), f"expected CPython 3.12, got {sys.version}"
+assert importlib.util.MAGIC_NUMBER.hex() == "cb0d0d0a", f"unexpected magic {importlib.util.MAGIC_NUMBER.hex()}"
+roots = json.loads(sys.argv[1])
+compiled = 0
+for host_root, guest_prefix in roots:
+    root = pathlib.Path(host_root)
+    for py_file in sorted(root.rglob("*.py")):
+        rel = py_file.relative_to(root).as_posix()
+        dfile = f"{guest_prefix}/{rel}"
+        py_compile.compile(
+            str(py_file),
+            dfile=dfile,
+            doraise=True,
+            invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH,
+        )
+        compiled += 1
+print(compiled)
+"""
+    roots = [[str(packages_dir), "/packages"]]
+    if include_stdlib:
+        roots.append([str(lib_dir), "/usr/local/lib"])
+
+    res = subprocess.run(
+        [py_exe, "-I", "-c", helper, json.dumps(roots)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if res.returncode != 0:
+        raise RuntimeError(f"CPython 3.12 checked-hash bytecode compilation failed:\n{res.stderr}")
+
+    pyc_rels = sorted(
+        p.relative_to(image_dir).as_posix()
+        for p in image_dir.rglob("*.pyc")
+        if p.is_file()
+    )
+    if not pyc_rels:
+        raise RuntimeError("No .pyc files were produced by checked-hash bytecode compilation")
+
+    # Verify every generated .pyc header has CPython 3.12 magic + checked-hash bitfield (0x03).
+    for rel in pyc_rels:
+        hdr = (image_dir / rel).read_bytes()[:8]
+        if len(hdr) < 8 or hdr[:4].hex() != CPYTHON_312_MAGIC_HEX:
+            raise RuntimeError(f"Invalid CPython 3.12 magic in {rel}")
+        bitfield = struct.unpack("<I", hdr[4:8])[0]
+        if (bitfield & 0x3) != 0x3:
+            raise RuntimeError(f"Expected checked-hash bitfield 0x3 in {rel}, got 0x{bitfield:x}")
+
+    pyc_tree_sha = sha256_tree(image_dir, pyc_rels)
+    return {
+        "invalidation_mode": "checked-hash",
+        "cpython_version": "3.12",
+        "magic_hex": CPYTHON_312_MAGIC_HEX,
+        "pyc_count": len(pyc_rels),
+        "pyc_tree_sha256": pyc_tree_sha,
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build Portable Python CPython/WASI curated image")
     ap.add_argument("--lock", type=Path, default=Path(__file__).resolve().parent / "lock.json")
     ap.add_argument("--cache-dir", type=Path, required=True)
     ap.add_argument("--out-dir", type=Path, required=True)
+    ap.add_argument(
+        "--with-pyc",
+        action="store_true",
+        help="Generate deterministic CPython 3.12 checked-hash .pyc bytecode for packages",
+    )
+    ap.add_argument(
+        "--with-stdlib-pyc",
+        action="store_true",
+        help="Also generate checked-hash .pyc bytecode for stdlib (implies --with-pyc)",
+    )
+    ap.add_argument(
+        "--pyc-python",
+        type=str,
+        default=None,
+        help="Path to CPython 3.12 executable used for checked-hash .pyc compilation",
+    )
+    ap.add_argument(
+        "--metered-wasm-sha256",
+        type=str,
+        default="",
+        help="Pinned SHA-256 of the InstrumentWasmFuel-metered python.wasm",
+    )
     args = ap.parse_args()
 
     script_dir = Path(__file__).resolve().parent
@@ -633,10 +756,30 @@ def main() -> None:
                 ]
                 md["tree_sha256"] = sha256_tree(packages_dir, rel_files)
 
-    # 3. Verify ZERO host extension binaries in packages/
+    # 3. Optional deterministic checked-hash CPython 3.12 bytecode generation
+    bytecode_spec: dict[str, Any] | None = None
+    if args.with_pyc or args.with_stdlib_pyc:
+        bytecode_spec = compile_checked_hash_bytecode(
+            image_dir=image_dir,
+            packages_dir=packages_dir,
+            lib_dir=lib_dir,
+            python312_bin=args.pyc_python,
+            include_stdlib=args.with_stdlib_pyc,
+        )
+        stdlib_sha256 = sha256_tree(lib_dir)
+        print(
+            f"[bytecode] checked-hash CPython 3.12 pyc_count={bytecode_spec['pyc_count']} "
+            f"pyc_tree={bytecode_spec['pyc_tree_sha256'][:16]}..."
+        )
+
+    # 3b. Verify ZERO host extension binaries in packages/
     assert_no_host_binaries(packages_dir)
     packages_tree_sha256 = sha256_tree(packages_dir)
     print(f"[verify] zero forbidden native/source files in packages/ (tree={packages_tree_sha256[:16]}...)")
+
+    metered_wasm_sha256 = args.metered_wasm_sha256.strip().lower()
+    if not metered_wasm_sha256 and wasm_sha256 == PINNED_CPYTHON_WASM_SHA256:
+        metered_wasm_sha256 = PINNED_METERED_WASM_SHA256
 
     # 4. Compute deterministic image_id & write image-manifest.json
     id_hash = hashlib.sha256(
@@ -651,7 +794,7 @@ def main() -> None:
     else:
         built_at = lock.get("built_at") or "2026-11-26T00:00:00Z"
 
-    manifest = {
+    manifest: dict[str, Any] = {
         "schema_version": "portable-python.image-manifest/v1",
         "image_id": image_id,
         "built_at": built_at,
@@ -661,6 +804,7 @@ def main() -> None:
             "version": interp["version"],
             "wasm_path": "bin/python.wasm",
             "wasm_sha256": wasm_sha256,
+            "metered_wasm_sha256": metered_wasm_sha256,
             "stdlib_path": "lib",
             "stdlib_sha256": stdlib_sha256,
             "build_inputs": {
@@ -676,7 +820,10 @@ def main() -> None:
         "distributions": manifest_dists,
         "stdlib_capabilities": STDLIB_CAPABILITIES,
         "wasm_imports": wasm_imports,
+        "import_inventory_sha256": PINNED_IMPORT_INVENTORY_SHA256,
     }
+    if bytecode_spec is not None:
+        manifest["bytecode"] = bytecode_spec
 
     manifest_text = json.dumps(manifest, indent=2) + "\n"
     (image_dir / "image-manifest.json").write_text(manifest_text, encoding="utf-8")
