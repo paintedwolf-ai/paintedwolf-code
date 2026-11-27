@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import pathlib
 import sys
+import tempfile
 import unittest
 
 BENCHMARK_DIR = pathlib.Path(__file__).resolve().parent.parent
@@ -25,6 +28,13 @@ from wea.tb05_edits import (
     evaluate_e03_slot,
     evaluate_e08_slot,
     evaluate_e10_slot,
+)
+from wea.tb05_sidecar_runner import (
+    _build_receipt,
+    _fixture_for_route,
+    build_parser as build_sidecar_parser,
+    select_slots,
+    summarize_batch,
 )
 
 
@@ -226,6 +236,99 @@ class TestTB05FailClosedEvaluators(unittest.TestCase):
         })
         self.assertEqual(dup["verdict"], "fail")
         self.assertIn("E10_EFFECT_COUNT_MISMATCH", dup["failed_rule_ids"])
+
+
+class TestTB05InprocManifestAndSidecarRunner(unittest.TestCase):
+    def test_inproc_manifest_maps_all_10_slots_and_matches_go_overlay(self) -> None:
+        wea_dir = pathlib.Path(__file__).resolve().parent
+        repo_root = wea_dir.parent.parent.parent
+        manifest_path = wea_dir / "tb05_inproc_manifest.json"
+        self.assertTrue(manifest_path.is_file())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(manifest["schema"], "wea-tb05-inproc-manifest-v1")
+        self.assertEqual(manifest["lane"], "in-process")
+        owner = manifest["pinned_product_owner_source"]
+        self.assertEqual(owner["git_head"], "bbeb46e72ce3d1cfc052259cadcce29185bb40bd")
+        self.assertEqual(owner["git_tree"], "1830e4d60ed640d4ecf386653377498788fa9320")
+        self.assertGreaterEqual(len(owner["go_owner_packages"]), 6)
+
+        counts = manifest["scheduled_slot_counts"]
+        self.assertEqual(counts, {"E02": 6, "E10": 4, "total": 10})
+        slots = manifest["scheduled_slots"]
+        self.assertEqual(len(slots), 10)
+        self.assertEqual(sum(1 for s in slots if s["family"] == "E02"), 6)
+        self.assertEqual(sum(1 for s in slots if s["family"] == "E10"), 4)
+
+        # Verify overlay SHA-256 and that every Go subtest selector exists verbatim in tb05_edits_test.go.
+        overlays = manifest["test_only_overlay_files"]
+        self.assertEqual(len(overlays), 1)
+        go_test_path = repo_root / overlays[0]["path"]
+        self.assertTrue(go_test_path.is_file())
+        raw_go = go_test_path.read_bytes()
+        self.assertEqual(hashlib.sha256(raw_go).hexdigest(), overlays[0]["sha256"])
+        go_text = raw_go.decode("utf-8")
+        for s in slots:
+            parent_fn, subtest = s["go_test_selector"].split("/", 1)
+            self.assertIn(f"func {parent_fn}(", go_text)
+            self.assertIn(f't.Run("{subtest}"', go_text)
+
+    def test_sidecar_runner_selects_all_83_slots_and_filters(self) -> None:
+        all_slots = select_slots()
+        self.assertEqual(len(all_slots), 83)
+        by_fam = {}
+        for s in all_slots:
+            by_fam[s["family"]] = by_fam.get(s["family"], 0) + 1
+        self.assertEqual(by_fam, {"E01": 62, "E02": 4, "E03": 7, "E08": 9, "E10": 1})
+
+        only_e10 = select_slots(families=["E10"])
+        self.assertEqual(len(only_e10), 1)
+        only_two = select_slots(slot_ids=["E01-edit-full_read", "E02-sidecar-non-overlapping-rebase"])
+        self.assertEqual(len(only_two), 2)
+
+        for route in D14_EDIT_ROUTES:
+            rel, initial, after, outside = _fixture_for_route(route)
+            self.assertEqual(rel, route.target_file)
+            self.assertNotEqual(initial, after)
+            self.assertIn(outside, initial)
+            self.assertIn(outside, after)
+
+    def test_sidecar_runner_cli_receipt_and_summary_fail_closed(self) -> None:
+        parser = build_sidecar_parser()
+        ns = parser.parse_args(["--out", "/tmp/tb05-out", "--families", "E01,E02", "--fail-fast"])
+        self.assertEqual(ns.families, "E01,E02")
+        self.assertTrue(ns.fail_fast)
+
+        prov = {
+            "product_source": {"executable_sha256": "a" * 64, "verified": True},
+            "harness_source": {"git_head": "b" * 40},
+        }
+        r_pass = _build_receipt(
+            slot={"slot_id": "E01-edit-full_read", "family": "E01"},
+            prov=prov,
+            typed_result={"write_result": {"outcome": "completed"}},
+            independent_observation={"post_disk_sha256": "c" * 64},
+            verdict={"verdict": "pass", "passed": True, "failures": [], "failed_rule_ids": []},
+            duration_ms=42,
+        )
+        r_fail = _build_receipt(
+            slot={"slot_id": "E01-edit-outline", "family": "E01"},
+            prov=prov,
+            typed_result={"write_result": {"outcome": "completed"}},
+            independent_observation={"post_disk_sha256": "d" * 64},
+            verdict={"verdict": "fail", "passed": False, "failures": [{"rule_id": "E01_NON_QUALIFYING_READ_AUTHORIZED"}], "failed_rule_ids": ["E01_NON_QUALIFYING_READ_AUTHORIZED"]},
+            duration_ms=19,
+        )
+        for key in ("slot_id", "family", "lane", "product_source", "harness_source", "typed_result", "independent_observation", "verdict"):
+            self.assertIn(key, r_pass)
+        self.assertEqual(r_pass["lane"], "sidecar")
+
+        with tempfile.TemporaryDirectory() as td:
+            summary = summarize_batch([r_pass, r_fail], prov=prov, out_dir=pathlib.Path(td), elapsed_s=1.25)
+            self.assertFalse(summary["all_passed"])
+            self.assertEqual(summary["total_slots"], 2)
+            self.assertEqual(summary["counts"], {"pass": 1, "fail": 1, "unknown": 0})
+            self.assertTrue((pathlib.Path(td) / "summary.json").is_file())
 
 
 if __name__ == "__main__":
