@@ -23,13 +23,14 @@ def run_cancellation_turn(app, session_id, project_id, db_path, surface, send_ca
         with contextlib.closing(sqlite3.connect(db_path)) as db:
             row = db.execute(
                 "SELECT p.id, (SELECT count(*) FROM invocation_program_executions e "
-                "WHERE e.program_id=p.id AND (e.operation_id IS NULL OR e.operation_id NOT LIKE 'program %')) "
+                "WHERE e.program_id=p.id AND (e.operation_id IS NULL OR e.operation_id NOT LIKE 'program %') "
+                "AND e.owner_started=1 AND e.owner_invoked=1) "
                 "FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.tool_call_id=?",
                 (call_id,),
             ).fetchone()
         return row if (row and row[1] >= 3) else None
 
-    cancel_pid, _ = app.wait_for(_admitted, 'cancellation loop admitted', session_id, timeout=30)
+    cancel_pid, _ = app.wait_for(_admitted, 'cancellation active child started', session_id, timeout=30)
     app.request(f'/v1/sessions/{session_id}/abort', {'reason': 'q15_command_abort_cancellation'})
     _wait_settled(app, session_id)
 
@@ -43,6 +44,12 @@ def run_cancellation_turn(app, session_id, project_id, db_path, surface, send_ca
             "SELECT count(*) FROM invocation_program_executions WHERE program_id=? AND state IN ('prepared','waiting','running')",
             (cancel_pid,),
         ).fetchone()[0]
+        last_child = db.execute(
+            "SELECT id, state, status_code, owner_started, owner_invoked, effect_certainty "
+            "FROM invocation_program_executions WHERE program_id=? AND (operation_id IS NULL OR operation_id NOT LIKE 'program %') "
+            "ORDER BY ordinal DESC LIMIT 1",
+            (cancel_pid,),
+        ).fetchone()
     time.sleep(0.5)
     with contextlib.closing(sqlite3.connect(db_path)) as db:
         count_after_wait = db.execute(
@@ -67,6 +74,13 @@ def run_cancellation_turn(app, session_id, project_id, db_path, surface, send_ca
     meta = {
         'control_surface': 'POST /v1/sessions/{id}/abort (command abort/cancellation; explicit continued-program Stop tracked under ST01-ST03)',
         'st01_st03_stop_fence_separate': True,
+        'abort_barrier': 'active_child_started',
+        'aborted_child_id': last_child[0] if last_child else '',
+        'aborted_child_state': last_child[1] if last_child else '',
+        'aborted_child_status': last_child[2] if last_child else None,
+        'aborted_child_started': bool(last_child and last_child[3] == 1),
+        'aborted_child_invoked': bool(last_child and last_child[4] == 1),
+        'aborted_child_certainty': last_child[5] if last_child else '',
         'program_id': cancel_pid,
         'db_program': {'state': p_row[0], 'status_code': p_row[1], 'stop_code': p_row[2]} if p_row else None,
         'exec_count_at_idle': count_at_idle,
