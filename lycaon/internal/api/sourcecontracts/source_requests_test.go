@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fileops"
 
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -184,7 +185,11 @@ func TestSourceRequestPublishesEveryPersistedState(t *testing.T) {
 
 func TestSourceRequestReplayMatchesAcceptedFirstAnswer(t *testing.T) {
 	database := testdbfixture.Open(t, "source-requests-replay.db")
-	srv := contractfixture.NewTestServerWithWorkflows(t, func(d *hostapi.Dependencies) { d.Core.Database = database })
+	withDB := func(d *hostapi.Dependencies) {
+		d.Core.Database = database
+		d.Core.Projects = project.NewSQLRegistry(database)
+	}
+	srv := contractfixture.NewTestServerWithWorkflows(t, withDB)
 	root := t.TempDir()
 	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
@@ -267,7 +272,7 @@ func TestSourceRequestReplayMatchesAcceptedFirstAnswer(t *testing.T) {
 	}
 
 	// Simulate a host restart against the same persisted database and verify a retry still answers 202.
-	restarted := contractfixture.NewTestServerWithWorkflows(t, func(d *hostapi.Dependencies) { d.Core.Database = database })
+	restarted := contractfixture.NewTestServerWithWorkflows(t, withDB)
 	never := make(chan struct{})
 	restarted.Sources.Mutations.SyncWindow = func(context.Context) <-chan struct{} { return never }
 	restartReplay := httptest.NewRecorder()
