@@ -55,10 +55,11 @@ type frame struct {
 	positional []string
 	// prefix holds a function call's NAME=value prefixes: visible to the body
 	// and exported to its dispatches, never stored in the caller's frame.
-	prefix       map[string]string
-	substs       *substitutionStatus
-	procSubst    *procSubstScope
-	producerPipe *BytePipe
+	prefix            map[string]string
+	substs            *substitutionStatus
+	procSubst         *procSubstScope
+	producerPipe      *BytePipe
+	pipelineRedirects *[]*descriptorScope
 	// times is the account of the innermost time clause this frame runs in.
 	times      *ProcessTimes
 	loops      int
@@ -171,7 +172,7 @@ func (f *frame) isolate(ctx context.Context, latch *OutcomeLatch) (*frame, func(
 	}
 	g := *f
 	g.state = &frameState{vars: vars, functions: functions, latch: latch, control: control, dispatch: dispatch, lastJob: f.state.lastJob, hasJob: f.state.hasJob, pipeStatus: append([]int(nil), f.state.pipeStatus...), options: f.state.options, directory: f.state.directory, limits: f.state.limits.clone()}
-	g.publish, g.prefix, g.substs, g.procSubst, g.producerPipe = newEligibility(), nil, nil, nil, nil
+	g.publish, g.prefix, g.substs, g.procSubst, g.producerPipe, g.pipelineRedirects = newEligibility(), nil, nil, nil, nil, nil
 	return &g, func() { releaseDispatch(); vars.Close() }, nil
 }
 
