@@ -104,16 +104,16 @@ func TestContractSuitesAvoidForcedGC(t *testing.T) {
 		},
 		"unrelated same-named methods and packages": {
 			overrides: map[string]string{
-				"lycaon/internal/other/other.go": "package other\n\nfunc GC() {}\nfunc FreeOSMemory() {}\n",
+				"lycaon/internal/other/other.go":             "package other\n\nfunc GC() {}\nfunc FreeOSMemory() {}\n",
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport \"github.com/lycaon/lycaon/internal/other\"\n\ntype local struct{}\n\nfunc (local) GC() {}\nfunc (local) FreeOSMemory() {}\n\nfunc helper(x local) {\n\tx.GC()\n\tx.FreeOSMemory()\n\tother.GC()\n\tother.FreeOSMemory()\n}\n",
 			},
 			want: passes,
 		},
 		"permitted collector-behavior and profiling tests outside contract suites": {
 			overrides: map[string]string{
-				"lycaon/test/wiring/host_release_test.go":          "package wiring\n\nimport \"runtime\"\n\nfunc release() { runtime.GC() }\n",
-				"lycaon/test/scanstress/leak_test.go":              "package scanstress\n\nimport \"runtime\"\n\nfunc checkLeak() { runtime.GC() }\n",
-				"lycaon/internal/testutil/resourceguard/guard.go":  "package resourceguard\n\nimport \"runtime/debug\"\n\nfunc Check() { debug.FreeOSMemory() }\n",
+				"lycaon/test/wiring/host_release_test.go":           "package wiring\n\nimport \"runtime\"\n\nfunc release() { runtime.GC() }\n",
+				"lycaon/test/scanstress/leak_test.go":               "package scanstress\n\nimport \"runtime\"\n\nfunc checkLeak() { runtime.GC() }\n",
+				"lycaon/internal/testutil/resourceguard/guard.go":   "package resourceguard\n\nimport \"runtime/debug\"\n\nfunc Check() { debug.FreeOSMemory() }\n",
 				"lycaon/internal/sourcecatalog/index_bench_test.go": "package sourcecatalog\n\nimport \"runtime\"\n\nfunc bench() { runtime.GC() }\n",
 			},
 			want: passes,
