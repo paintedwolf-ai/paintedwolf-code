@@ -70,28 +70,50 @@ def run_k03_sidecar(
                 res = check_catalog(walk_entries_to_catalog_items(ref_entries, root_id=rid), after_restart)
                 report.record_generated(res, extra={"mode": "real_restart", "instance": idx, "rev_before": before.generation_revision, "rev_after": after_restart.generation_revision})
             else:
-                # Page through results while adding a file to verify no duplicate/crossed page items.
+                # Page through results while adding a file to verify no page crosses generations.
                 page1 = driver.file_lookup(pid, "", root_id=rid, limit=4)
                 rev1 = page1.get("revision")
                 (wdir / f"gen_bump_{idx}.txt").write_text("new gen\n", encoding="utf-8")
                 cur = str(page1.get("next_cursor") or "")
                 revs = {rev1} if rev1 is not None else set()
                 seen_paths = [str(m.get("path") or "") for m in (page1.get("matches") or []) if isinstance(m, dict)]
+                cursor_rejected_409 = False
+                crossed_gen = False
                 while cur:
-                    nxt = driver.file_lookup(pid, "", root_id=rid, limit=4, cursor=cur)
-                    if nxt.get("revision") is not None:
-                        revs.add(nxt.get("revision"))
+                    try:
+                        nxt = driver.file_lookup(pid, "", root_id=rid, limit=4, cursor=cur)
+                    except urllib.error.HTTPError as exc:
+                        if exc.code == 409:
+                            # Contract-enforced cursor rejection when generation advances: no page crosses generations.
+                            cursor_rejected_409 = True
+                            break
+                        raise
+                    nxt_rev = nxt.get("revision")
+                    if nxt_rev is not None:
+                        revs.add(nxt_rev)
+                        if rev1 is not None and nxt_rev != rev1:
+                            crossed_gen = True
                     seen_paths.extend(str(m.get("path") or "") for m in (nxt.get("matches") or []) if isinstance(m, dict))
                     nc = str(nxt.get("next_cursor") or "")
                     if not nc or nc == cur:
                         break
                     cur = nc
                 has_dups = len(seen_paths) != len(set(seen_paths))
-                if has_dups:
+                if crossed_gen:
+                    res = CheckResult(Verdict.DEFECT, "catalog", reason=f"pagination crossed generations without 409 rejection: {sorted(str(r) for r in revs)}")
+                elif has_dups:
                     res = CheckResult(Verdict.DEFECT, "catalog", reason="pagination returned duplicate paths across generation change")
                 else:
                     res = CheckResult(Verdict.PASS, "catalog")
-                report.record_generated(res, extra={"mode": "page_across_mutation", "instance": idx, "revisions_seen": sorted(str(r) for r in revs)})
+                report.record_generated(
+                    res,
+                    extra={
+                        "mode": "page_across_mutation",
+                        "instance": idx,
+                        "revisions_seen": sorted(str(r) for r in revs),
+                        "cursor_rejected_409": cursor_rejected_409,
+                    },
+                )
             shutil.rmtree(wdir, ignore_errors=True)
 
         # 4 hand-written K03 edges
@@ -120,19 +142,30 @@ def run_k03_sidecar(
         ok2 = len(immediate.items) >= 12
         report.record_edge("k03_edge_2_readable_during_refresh", ok2, {"items": len(immediate.items)})
 
-        # Edge 3: multi-page walk has no duplicates
+        # Edge 3: multi-page walk has no duplicates and never crosses generations
         p1 = driver.file_lookup(pid, "", root_id=rid, limit=3)
+        p1_rev = p1.get("revision")
         all_p = [m["path"] for m in (p1.get("matches") or []) if isinstance(m, dict)]
         cur = str(p1.get("next_cursor") or "")
+        e3_409 = False
+        e3_crossed = False
         while cur:
-            pn = driver.file_lookup(pid, "", root_id=rid, limit=3, cursor=cur)
+            try:
+                pn = driver.file_lookup(pid, "", root_id=rid, limit=3, cursor=cur)
+            except urllib.error.HTTPError as exc:
+                if exc.code == 409:
+                    e3_409 = True
+                    break
+                raise
+            if p1_rev is not None and pn.get("revision") is not None and pn.get("revision") != p1_rev:
+                e3_crossed = True
             all_p.extend(m["path"] for m in (pn.get("matches") or []) if isinstance(m, dict))
             nc = str(pn.get("next_cursor") or "")
             if not nc or nc == cur:
                 break
             cur = nc
-        ok3 = len(all_p) == len(set(all_p)) and len(all_p) >= 12
-        report.record_edge("k03_edge_3_paged_no_duplicates", ok3, {"total": len(all_p), "unique": len(set(all_p))})
+        ok3 = (not e3_crossed) and (len(all_p) == len(set(all_p))) and (e3_409 or len(all_p) >= 12)
+        report.record_edge("k03_edge_3_paged_no_duplicates", ok3, {"total": len(all_p), "unique": len(set(all_p)), "cursor_rejected_409": e3_409, "crossed_gen": e3_crossed})
 
         # Edge 4: second restart preserves persisted index
         sidecar.restart()
