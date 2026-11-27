@@ -33,7 +33,7 @@ from orchestration_evidence import dependency_check_id
 
 
 class Application:
-    def __init__(self, directory, source_config=None, rate_state=None):
+    def __init__(self, directory, source_config=None, rate_state=None, *, config_root=None):
         self.directory=directory; directory.mkdir(parents=True,exist_ok=False)
         self.config=directory/'config'; self.config.mkdir()
         self.manual = source_config is None
@@ -55,7 +55,7 @@ class Application:
             sock.bind(('127.0.0.1',0)); self.port=sock.getsockname()[1]
         self.url=f'http://127.0.0.1:{self.port}'
         self.log=(directory/'sidecar.log').open('w')
-        env=application_environment({'LYCAON_CONFIG_DIR':str(self.config),'LYCAON_CONFIG_ROOT':str(ROOT/'lycaon'),
+        env=application_environment({'LYCAON_CONFIG_DIR':str(self.config),'LYCAON_CONFIG_ROOT':str(config_root or ROOT/'lycaon'),
              'LYCAON_ENGINE_ROOT':str(ROOT/'lycaon-den/src-tauri/engine-root'),
              'LYCAON_ADDR':f'127.0.0.1:{self.port}','LYCAON_API_TOKEN':self.token,
              'LYCAON_DEV':'1','LYCAON_HARNESS':'1','LYCAON_LOG_LEVEL':'debug',

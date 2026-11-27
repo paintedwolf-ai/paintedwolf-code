@@ -2617,7 +2617,7 @@
       ],
       "expected": {
         "stdout": "",
-        "stderr": "",
+        "stderr": "touch: WRITE_SCOPE_DENIED [WRITE_SCOPE_DENIED]\n",
         "status": 2,
         "host_stop": "rejected",
         "complete": false,
@@ -2632,7 +2632,7 @@
           },
           {
             "operation": "touch",
-            "outcome": "rejected"
+            "outcome": "refused"
           }
         ],
         "effects": [
@@ -2659,6 +2659,7 @@
       "allowed_partial": [],
       "required_evidence": [
         "progress_committed_separately",
+        "denied_path_bound",
         "no_gated_effect",
         "fresh_resubmission_only"
       ]

@@ -43,7 +43,7 @@ def normalize_outcome(raw_result, program_row, payload):
     return state, stop, code
 
 
-def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None):
+def build_observation(case, *, session_id, identity, project_dir, db_path, sidecar_log, turn_records, prelude_records, sidecar_window=None, extra_gaps=(), baseline_hashes=None, session_surface=None, draft_bindings=None, host_scope_binding=None):
     """Construct a version-1 native-runtime observation from the whole isolated session."""
     prelude_calls = {r['call_id'] for r in prelude_records if r.get('call_id')}
     expected_calls = {cid for rec in turn_records for cid in (list(rec['call_ids']) + list(rec.get('await_call_ids') or ()))}
@@ -236,6 +236,21 @@ def build_observation(case, *, session_id, identity, project_dir, db_path, sidec
         facts['no_outside_effect'] = bool(recovery['zero_program_effects'] and (baseline_hashes is None or final_hashes == baseline_hashes))
         if any(tok in recovery['owner_code'].lower() for tok in ('zip', 'traversal', 'escape', 'archive')):
             facts['zip_slip_refused'] = True
+    if case['id'] == 'progress-then-denial':
+        facts['denied_path_bound'] = (
+            bool(host_scope_binding) and last_code == 'WRITE_SCOPE_DENIED'
+            and last_details.get('path') == host_scope_binding['denied_path']
+            and last_details.get('profile') == 'coordinator'
+        )
+        progress = audit.get('invocation_program_progress') or []
+        facts['progress_committed_separately'] = (
+            len(progress) == 1 and progress[0]['program_id'] == last_pid
+            and progress[0]['state'] == 'committed' and progress[0]['owner_invoked'] == 1
+            and progress[0]['execution_id'] == last_details.get('program_progress_execution_id')
+            and bool(progress[0]['detail_ref'])
+            and progress[0]['detail_ref'] == last_details.get('program_progress_detail_ref')
+            and progress[0]['execution_id'] != last_details.get('execution_id')
+        )
     facts['structural_wrappers_valid'] = wrappers_valid
     for req_fact in case.get('required_evidence') or ():
         if req_fact not in facts:

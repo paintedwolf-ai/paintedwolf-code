@@ -85,6 +85,7 @@ FACT_OWNERS = {
     'every_producer_eligible': 'program_runtime',
     'progress_committed_separately': 'progress_owner',
     'no_gated_effect': 'program_runtime',
+    'denied_path_bound': 'filesystem_owner',
     'fresh_resubmission_only': 'program_runtime',
     'destination_unchanged': 'filesystem_owner',
     'accepted_then_published': 'publication_owner',
@@ -111,6 +112,25 @@ def has_structured_span(details):
     return isinstance(details.get('source_start_byte'), int) and isinstance(details.get('source_end_byte'), int)
 
 
+def _scope_denial_without_effects(payload, details, children):
+    """Verify a reached write denial against its settled owner executions."""
+    program = payload.get('program_id')
+    execution = details.get('execution_id')
+    if (not program or details.get('program_id') != program or not execution
+            or details.get('command_execution') != 'observed'
+            or payload.get('executed_children') != len(children)
+            or payload.get('completed_effects') != 0 or payload.get('uncertain_effects') != 0):
+        return False
+    if not all(row.get('program_id') == program and row.get('settled_at')
+               and row.get('effect_certainty') == 'none'
+               and row.get('state') in {'completed', 'refused'} for row in children):
+        return False
+    stopped = [row for row in children if row.get('id') == execution]
+    return (len(stopped) == 1 and stopped[0].get('state') == 'refused'
+            and stopped[0].get('stop_code') == 'WRITE_SCOPE_DENIED'
+            and stopped[0].get('owner_invoked') == 1)
+
+
 def extract_recovery(case_id, payload, raw_result, audit, unexpected_cmd):
     code, details = structured_rejection(raw_result, payload)
     if not code:
@@ -126,19 +146,21 @@ def extract_recovery(case_id, payload, raw_result, audit, unexpected_cmd):
         remedy = 'named_capability_limitation' if (has_help or details.get('profile') or details.get('patterns_list') or details.get('path')) else ''
     else:
         cause, remedy = code.lower(), ('focused_command_help' if has_help else '')
-    zero_effects = (
+    pre_execution = (
         payload.get('completed_effects', 0) == 0 and payload.get('uncertain_effects', 0) == 0
         and not audit['invocation_program_executions'] and details.get('command_execution') in {None, 'not_started'}
     )
+    zero_effects = pre_execution or (code == 'WRITE_SCOPE_DENIED' and _scope_denial_without_effects(
+        payload, details, audit['invocation_program_executions']))
     inv_failure = (raw_result.get('invocation') or {}).get('failure') or {}
     replay_fact = details.get('program_replay_available')
     retry_fact = details.get('retryable') if isinstance(details.get('retryable'), bool) else inv_failure.get('retryable')
     if isinstance(replay_fact, bool):
-        replay_allowed = replay_fact and zero_effects
+        replay_allowed = replay_fact and pre_execution
     elif isinstance(payload.get('replay_available'), bool):
-        replay_allowed = payload['replay_available'] and zero_effects
+        replay_allowed = payload['replay_available'] and pre_execution
     elif isinstance(retry_fact, bool):
-        replay_allowed = retry_fact and zero_effects
+        replay_allowed = retry_fact and pre_execution
     else:
         replay_allowed = None
     return {
