@@ -21,6 +21,7 @@ import json
 import os
 import pathlib
 import queue
+import re
 import shutil
 import struct
 import subprocess
@@ -34,7 +35,10 @@ BENCHMARK_DIR = pathlib.Path(__file__).resolve().parent.parent
 if str(BENCHMARK_DIR) not in sys.path:
     sys.path.insert(0, str(BENCHMARK_DIR))
 
+from wea.observers import read_host_process_table
 from wea.provenance import REPO_ROOT, collect_provenance
+
+_LISTENING_ADDR_RE = re.compile(r"server listening[^\n]*\baddr=(127\.0\.0\.1:\d+)")
 
 FIRST_RUN_DONE = """
 localStorage.setItem("paintedwolf.app-state.v1.onboarding", JSON.stringify({ completedSetupRevision: 2, completedLocalModelStepRevision: 2 }));
@@ -105,13 +109,97 @@ def parse_png_info(path: pathlib.Path) -> dict[str, Any]:
     }
 
 
-def _api_readback(api_url: str, token: str, path: str) -> Any:
-    req = urllib.request.Request(
-        api_url.rstrip("/") + path,
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-    )
+def _api_readback(api_url: str, token: str | None, path: str) -> Any:
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(api_url.rstrip("/") + path, headers=headers)
     with urllib.request.urlopen(req, timeout=10) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _find_child_engine_pid(parent_pid: int) -> int:
+    """Find a spawned `lycaon-dev` child process whose PPID is `parent_pid`."""
+    proc = subprocess.run(
+        ["ps", "-eo", "pid=,ppid=,args="],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+    if proc.returncode != 0:
+        return 0
+    for line in proc.stdout.splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) < 3 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        pid, ppid, args = int(parts[0]), int(parts[1]), parts[2]
+        if ppid == parent_pid and "lycaon" in args:
+            return pid
+    return 0
+
+
+def _discover_listening_url(profile: pathlib.Path, tauri_log: pathlib.Path) -> str:
+    """Scan isolated profile `engine.log` files and `tauri-app.log` for `server listening addr=127.0.0.1:<port>`."""
+    candidates = [
+        profile / "config" / "engine.log",
+        tauri_log,
+    ]
+    for extra in sorted(profile.rglob("engine.log")):
+        if extra not in candidates:
+            candidates.append(extra)
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        matches = _LISTENING_ADDR_RE.findall(text)
+        if matches:
+            return f"http://{matches[-1]}"
+    return ""
+
+
+def _wait_for_spawned_engine(
+    app_pid: int,
+    profile: pathlib.Path,
+    tauri_log: pathlib.Path,
+    *,
+    api_url: str | None = None,
+    token: str | None = None,
+    timeout_s: float = 35.0,
+    proc: subprocess.Popen[Any] | None = None,
+) -> dict[str, Any]:
+    """Wait up to `timeout_s` for the spawned `lycaon-dev` engine to serve `/health`."""
+    deadline = time.monotonic() + timeout_s
+    engine_pid = 0
+    discovered_url = api_url or ""
+    while time.monotonic() < deadline:
+        if proc is not None and proc.poll() is not None:
+            raise RuntimeError(f"tauri_app_exited_during_engine_boot (rc={proc.returncode})")
+        if not engine_pid:
+            engine_pid = _find_child_engine_pid(app_pid)
+        if not discovered_url:
+            discovered_url = _discover_listening_url(profile, tauri_log)
+        if discovered_url:
+            try:
+                health = _api_readback(discovered_url, token, "/health")
+                return {
+                    "ready": True,
+                    "engine_url": discovered_url,
+                    "engine_pid": engine_pid,
+                    "health": health,
+                }
+            except Exception:  # noqa: BLE001
+                pass
+        time.sleep(0.5)
+    return {
+        "ready": False,
+        "engine_url": discovered_url,
+        "engine_pid": engine_pid,
+        "health": None,
+    }
 
 
 def _probe_atspi(target_pid: int) -> dict[str, Any]:
@@ -597,20 +685,35 @@ def run_linux_tauri_native(
         xid = _find_x11_window_for_pid(proc.pid, timeout_s=startup_timeout_s, proc=proc)
         if xid <= 0:
             raise RuntimeError(f"no_x11_window_found_for_tauri_pid_{proc.pid}")
-        time.sleep(3.0)
+
+        # Wait up to 35s for the spawned `lycaon-dev` engine to finish booting and serve HTTP.
+        engine_boot = _wait_for_spawned_engine(
+            proc.pid,
+            profile,
+            log_path,
+            api_url=api_url,
+            token=token,
+            timeout_s=35.0,
+            proc=proc,
+        )
+        # Allow main workspace UI to finish rendering past the splash screen.
+        time.sleep(2.0)
 
         atspi_before = _probe_atspi(proc.pid)
-        key_ev = _send_x11_key(xid, "Tab")
-        time.sleep(0.4)
-        atspi_after = _probe_atspi(proc.pid)
-        if (
-            atspi_before.get("observed")
-            and atspi_after.get("observed")
-            and atspi_after.get("focused_key") == atspi_before.get("focused_key")
-        ):
-            key_ev = _send_x11_key(xid, "Tab")
+        keyboard_events: list[dict[str, Any]] = []
+        key_ev: dict[str, Any] = {"sent": False}
+        atspi_after = atspi_before
+        for key_name in ("Tab", "Tab", "Down", "Right"):
+            key_ev = _send_x11_key(xid, key_name)
+            keyboard_events.append(key_ev)
             time.sleep(0.4)
             atspi_after = _probe_atspi(proc.pid)
+            if (
+                atspi_before.get("focused_key")
+                and atspi_after.get("focused_key")
+                and atspi_after.get("focused_key") != atspi_before.get("focused_key")
+            ):
+                break
 
         atspi_focus_changed = bool(
             atspi_before.get("focused_key")
@@ -621,19 +724,36 @@ def run_linux_tauri_native(
         shot = _capture_x11_window_png(xid, screenshot_path)
         app_alive_after = proc.poll() is None
 
+        engine_pid = int(engine_boot.get("engine_pid") or 0)
+        tracked_pids = [proc.pid] + ([engine_pid] if engine_pid > 0 else [])
+        host_processes = read_host_process_table(tracked_pids)
+
         api_readback: dict[str, Any] = {}
-        if api_url and token:
-            api_readback["health"] = _api_readback(api_url, token, "/health")
-            api_readback["projects"] = _api_readback(api_url, token, "/v1/projects")
+        eff_url = str(engine_boot.get("engine_url") or api_url or "")
+        if eff_url:
+            api_readback["engine_url"] = eff_url
+            if engine_boot.get("health") is not None:
+                api_readback["health"] = engine_boot["health"]
+            else:
+                try:
+                    api_readback["health"] = _api_readback(eff_url, token, "/health")
+                except Exception as exc:  # noqa: BLE001
+                    api_readback["health_error"] = str(exc)
+            if token:
+                try:
+                    api_readback["projects"] = _api_readback(eff_url, token, "/v1/projects")
+                except Exception as exc:  # noqa: BLE001
+                    api_readback["projects_error"] = str(exc)
 
         atspi_ok = bool(atspi_after.get("observed")) if atspi_after.get("available") else True
         passed = bool(
             xid > 0
-            and key_ev.get("sent") is True
+            and any(ev.get("sent") is True for ev in keyboard_events)
             and shot.get("valid_png") is True
             and int(shot.get("bytes") or 0) > 0
             and app_alive_after
             and atspi_ok
+            and bool(api_readback.get("health"))
         )
         receipt = {
             "schema": "wea-native-den-linux-tauri-v1",
@@ -641,10 +761,14 @@ def run_linux_tauri_native(
             "app_bin": str(app_path),
             "app_bin_sha256": app_sha,
             "app_pid": proc.pid,
+            "engine_pid": engine_pid,
+            "engine_boot_ready": bool(engine_boot.get("ready")),
+            "host_processes": host_processes,
             "owned_window_id": xid,
             "isolated_profile_dir": str(profile),
             "app_alive_after": app_alive_after,
             "keyboard_event": key_ev,
+            "keyboard_events": keyboard_events,
             "atspi_before": atspi_before,
             "atspi_after": atspi_after,
             "atspi_observed": atspi_after,

@@ -136,6 +136,11 @@ class TestTB02DesktopDrivers(unittest.TestCase):
             ]
             with (
                 mock.patch.object(native_den_linux, "_find_x11_window_for_pid", return_value=77777),
+                mock.patch.object(
+                    native_den_linux,
+                    "_wait_for_spawned_engine",
+                    return_value={"ready": True, "engine_url": "http://127.0.0.1:41234", "engine_pid": 88888, "health": {"status": "ok"}},
+                ),
                 mock.patch.object(native_den_linux, "_probe_atspi", side_effect=atspi_seq),
                 mock.patch.object(native_den_linux, "_send_x11_key", return_value={"sent": True, "key": "Tab", "window_id": 77777}),
                 mock.patch.object(native_den_linux, "_capture_x11_window_png", side_effect=fake_capture),
@@ -150,6 +155,8 @@ class TestTB02DesktopDrivers(unittest.TestCase):
             self.assertTrue(rec["passed"])
             self.assertEqual(rec["tier"], "native-den-tauri-app")
             self.assertEqual(rec["owned_window_id"], 77777)
+            self.assertEqual(rec["engine_pid"], 88888)
+            self.assertEqual(rec["api_readback"]["health"], {"status": "ok"})
             self.assertTrue(rec["atspi_focus_changed"])
             self.assertEqual(rec["screenshot_dimensions"], [1280, 800])
             self.assertTrue((out_dir / "native-den-linux-tauri-receipt.json").is_file())
