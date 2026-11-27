@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 )
@@ -811,13 +814,61 @@ func OverlayEnv(base, overrides []string) []string {
 	return append(out, overrides...)
 }
 
-// ProcessEnvironment constructs the network-relevant child environment.
+// ProcessEnvironment constructs the confined child environment.
 func ProcessEnvironment(base []string, c Confinement) []string {
 	clean := WithoutProxyEnv(base)
-	if c.Network != NetworkProxyOnly {
-		return clean
+	if c.Network == NetworkProxyOnly {
+		clean = OverlayEnv(clean, ProxyEnv(c))
 	}
-	return OverlayEnv(clean, ProxyEnv(c))
+	return withDarwinXcrunCacheEnv(clean, c)
+}
+
+// withDarwinXcrunCacheEnv redirects Apple's xcrun lookup cache out of
+// DARWIN_USER_TEMP_DIR into a confined writable root so cold developer shims
+// do not attempt shared-temp cache writes under Seatbelt.
+func withDarwinXcrunCacheEnv(env []string, c Confinement) []string {
+	if runtime.GOOS != "darwin" {
+		return env
+	}
+	return applyDarwinXcrunCacheEnv(env, c, platformUserCache())
+}
+
+func applyDarwinXcrunCacheEnv(env []string, c Confinement, userCache string) []string {
+	if c.HostExecution {
+		return env
+	}
+	for _, entry := range env {
+		if key, val, ok := strings.Cut(entry, "="); ok && key == "xcrun_db" && strings.TrimSpace(val) != "" {
+			return env
+		}
+	}
+	dbPath := darwinXcrunDBPath(c, userCache)
+	if dbPath == "" {
+		return env
+	}
+	return OverlayEnv(env, []string{"xcrun_db=" + dbPath})
+}
+
+func canonicalAbsRoot(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || !filepath.IsAbs(trimmed) {
+		return ""
+	}
+	resolved, ok := fspath.CanonicalPathOrMissing(trimmed)
+	if !ok || !filepath.IsAbs(resolved) {
+		return ""
+	}
+	return resolved
+}
+
+func darwinXcrunDBPath(c Confinement, userCache string) string {
+	if scratch := canonicalAbsRoot(c.Workspaces.SessionScratch); scratch != "" {
+		return filepath.Join(scratch, "xcrun_db")
+	}
+	if cache := canonicalAbsRoot(userCache); cache != "" {
+		return filepath.Join(cache, "paintedwolf-xcrun_db")
+	}
+	return ""
 }
 
 // EnvironmentBoundary supplies the broker addresses before a program expands

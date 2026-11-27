@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -713,5 +716,84 @@ func TestEgressResolverReleasePreservesReplacementAndDrainsApproval(t *testing.T
 	}
 	if err := currentRelease(t.Context()); err != nil {
 		t.Fatalf("repeat resolver release: %v", err)
+	}
+}
+
+func TestApplyDarwinXcrunCacheEnv(t *testing.T) {
+	envValue := func(entries []string, key string) (string, bool) {
+		for _, entry := range entries {
+			if k, v, ok := strings.Cut(entry, "="); ok && k == key {
+				return v, true
+			}
+		}
+		return "", false
+	}
+
+	scratch := t.TempDir()
+	cache := t.TempDir()
+	wantScratch := filepath.Join(fspath.CanonicalPath(scratch), "xcrun_db")
+	wantCache := filepath.Join(fspath.CanonicalPath(cache), "paintedwolf-xcrun_db")
+
+	gotScratch := applyDarwinXcrunCacheEnv([]string{"PATH=/bin"}, Confinement{
+		Workspaces: WorkspaceRoots{SessionScratch: scratch},
+	}, cache)
+	if got, ok := envValue(gotScratch, "xcrun_db"); !ok || got != wantScratch {
+		t.Fatalf("valid scratch: xcrun_db=%q (ok=%v), want %q", got, ok, wantScratch)
+	}
+
+	gotCache := applyDarwinXcrunCacheEnv([]string{"PATH=/bin"}, Confinement{}, cache)
+	if got, ok := envValue(gotCache, "xcrun_db"); !ok || got != wantCache {
+		t.Fatalf("cache fallback: xcrun_db=%q (ok=%v), want %q", got, ok, wantCache)
+	}
+
+	gotRelative := applyDarwinXcrunCacheEnv([]string{"PATH=/bin"}, Confinement{
+		Workspaces: WorkspaceRoots{SessionScratch: "relative/scratch"},
+	}, cache)
+	if got, ok := envValue(gotRelative, "xcrun_db"); !ok || got != wantCache {
+		t.Fatalf("relative scratch: xcrun_db=%q (ok=%v), want %q", got, ok, wantCache)
+	}
+
+	loopDir := t.TempDir()
+	loopA := filepath.Join(loopDir, "a")
+	loopB := filepath.Join(loopDir, "b")
+	testutil.FailErr(t, "create symlink loop a->b", os.Symlink(loopB, loopA))
+	testutil.FailErr(t, "create symlink loop b->a", os.Symlink(loopA, loopB))
+	gotLoop := applyDarwinXcrunCacheEnv([]string{"PATH=/bin"}, Confinement{
+		Workspaces: WorkspaceRoots{SessionScratch: loopA},
+	}, cache)
+	if got, ok := envValue(gotLoop, "xcrun_db"); !ok || got != wantCache {
+		t.Fatalf("symlink loop scratch: xcrun_db=%q (ok=%v), want %q", got, ok, wantCache)
+	}
+
+	gotEmpty := applyDarwinXcrunCacheEnv([]string{"PATH=/bin"}, Confinement{
+		Workspaces: WorkspaceRoots{SessionScratch: "   "},
+	}, "relative/cache")
+	if got, ok := envValue(gotEmpty, "xcrun_db"); ok {
+		t.Fatalf("no usable root should omit xcrun_db, got %q", got)
+	}
+
+	gotExplicit := applyDarwinXcrunCacheEnv([]string{"PATH=/bin", "xcrun_db=/custom/xcrun_db"}, Confinement{
+		Workspaces: WorkspaceRoots{SessionScratch: scratch},
+	}, cache)
+	if got, ok := envValue(gotExplicit, "xcrun_db"); !ok || got != "/custom/xcrun_db" {
+		t.Fatalf("explicit xcrun_db=%q (ok=%v), want /custom/xcrun_db", got, ok)
+	}
+
+	gotHost := applyDarwinXcrunCacheEnv([]string{"PATH=/bin"}, Confinement{
+		HostExecution: true,
+		Workspaces:    WorkspaceRoots{SessionScratch: scratch},
+	}, cache)
+	if got, ok := envValue(gotHost, "xcrun_db"); ok {
+		t.Fatalf("host execution should omit xcrun_db, got %q", got)
+	}
+
+	if got := canonicalAbsRoot(""); got != "" {
+		t.Fatalf("blank root = %q, want empty", got)
+	}
+	if got := canonicalAbsRoot(loopA); got != "" {
+		t.Fatalf("symlink loop root = %q, want empty", got)
+	}
+	if got := darwinXcrunDBPath(Confinement{}, ""); got != "" {
+		t.Fatalf("empty darwinXcrunDBPath = %q, want empty", got)
 	}
 }
