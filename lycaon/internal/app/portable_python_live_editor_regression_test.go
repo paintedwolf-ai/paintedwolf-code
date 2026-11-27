@@ -52,7 +52,7 @@ func TestPortablePythonLiveEditorSubdirectoryAndExistingFileEdit(t *testing.T) {
 	t.Setenv(portablepython.EnvImageDir, "")
 	t.Setenv(configdir.EnvConfigDir, cfgDir)
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	t.Setenv("LYCAON_API_TOKEN", "py-editor-reg-token")
+	t.Setenv("LYCAON_API_TOKEN", "py-api-reopen-token")
 	configtest.Overlay(t, map[config.Rel]string{
 		config.DistroMCP: "providers:\n  - id: svca\n    command: \"true\"\n    args: []\n    enabled: false\n",
 	})
