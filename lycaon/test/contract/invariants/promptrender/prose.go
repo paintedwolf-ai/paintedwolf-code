@@ -32,13 +32,7 @@ func KickTemplateIDs(eff *extpacks.EffectiveCatalog) ([]string, error) {
 	return ids, nil
 }
 
-var (
-	emptyListItem  = regexp.MustCompile(`^\s*(\d+\.|[-*])\s*$`)
-	spaceBeforeSep = regexp.MustCompile(` [,;]`)
-	spaceBeforeDot = regexp.MustCompile(` \.`)
-	inlineCode     = regexp.MustCompile("`[^`]*`")
-	separatorCell  = regexp.MustCompile(`^:?-+:?$`)
-)
+var separatorCell = regexp.MustCompile(`^:?-+:?$`)
 
 // ProseDrift lists the structural damage in rendered prose: an empty list
 // item, an empty backtick span, space before punctuation, a blanked table
@@ -56,7 +50,7 @@ func ProseDrift(text string) []string {
 			continue
 		}
 		at := fmt.Sprintf("line %d", i+1)
-		if emptyListItem.MatchString(line) {
+		if isEmptyListItem(line) {
 			out = append(out, fmt.Sprintf("%s: an empty list item %q", at, trimmed))
 		}
 		if strings.Contains(line, "``") {
@@ -66,7 +60,7 @@ func ProseDrift(text string) []string {
 			// Code spans carry literal syntax, so punctuation in them is not
 			// drift. A letter stands in for each span: a space would fuse the
 			// span's trailing punctuation into false drift.
-			if punctuationDrift(inlineCode.ReplaceAllString(line, "x")) {
+			if punctuationDrift(replaceInlineCodeSpans(line)) {
 				out = append(out, fmt.Sprintf("%s: space before punctuation %q", at, trimmed))
 			}
 			continue
@@ -78,16 +72,65 @@ func ProseDrift(text string) []string {
 	return append(out, prompts.RenderedProseStructureDrift(text)...)
 }
 
+// isEmptyListItem matches the ASCII-whitespace pattern `^\s*(\d+\.|[-*])\s*$`.
+func isEmptyListItem(line string) bool {
+	trimmed := strings.Trim(line, " \t\n\f\r")
+	if trimmed == "-" || trimmed == "*" {
+		return true
+	}
+	if len(trimmed) < 2 || trimmed[len(trimmed)-1] != '.' {
+		return false
+	}
+	for i := 0; i < len(trimmed)-1; i++ {
+		if trimmed[i] < '0' || trimmed[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func replaceInlineCodeSpans(line string) string {
+	first := strings.IndexByte(line, '`')
+	if first < 0 {
+		return line
+	}
+	var b strings.Builder
+	b.Grow(len(line))
+	rest := line
+	for {
+		open := strings.IndexByte(rest, '`')
+		if open < 0 {
+			b.WriteString(rest)
+			break
+		}
+		closeIdx := strings.IndexByte(rest[open+1:], '`')
+		if closeIdx < 0 {
+			b.WriteString(rest)
+			break
+		}
+		b.WriteString(rest[:open])
+		b.WriteByte('x')
+		rest = rest[open+1+closeIdx+1:]
+	}
+	return b.String()
+}
+
 // punctuationDrift reports space before punctuation. A space before a dot
 // that opens an uppercase token is a dotted name such as .NET.
 func punctuationDrift(prose string) bool {
-	if spaceBeforeSep.MatchString(prose) {
+	if strings.Contains(prose, " ,") || strings.Contains(prose, " ;") {
 		return true
 	}
-	for _, loc := range spaceBeforeDot.FindAllStringIndex(prose, -1) {
-		if loc[1] >= len(prose) || prose[loc[1]] < 'A' || prose[loc[1]] > 'Z' {
+	for i := 0; i < len(prose); {
+		idx := strings.Index(prose[i:], " .")
+		if idx < 0 {
+			return false
+		}
+		next := i + idx + 2
+		if next >= len(prose) || prose[next] < 'A' || prose[next] > 'Z' {
 			return true
 		}
+		i = next
 	}
 	return false
 }
