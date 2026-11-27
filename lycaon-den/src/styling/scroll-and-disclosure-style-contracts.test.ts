@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { denStylesheetRules, stylesheetRules } from "../test/style-contracts/parsed-stylesheets.ts";
+import { denStylesheetRules, parseStylesheet, stylesheetRules } from "../test/style-contracts/parsed-stylesheets.ts";
 import { splitTopLevel } from "../test/style-contracts/stylesheet-parser.ts";
 import { VITEST_REPOSITORY_SCAN_TIMEOUT_MS } from "../test/vitest-timeouts.ts";
 
@@ -43,7 +43,7 @@ describe("scrollport and disclosure style contracts", { timeout: VITEST_REPOSITO
 
 it("reads only actual declarations from each nested rule", () => {
   const rel = "fixture.css";
-  expect(stylesheetRules({
+  const file = {
     rel,
     path: rel,
     text: `@layer shell {
@@ -53,7 +53,9 @@ it("reads only actual declarations from each nested rule", () => {
     &[open] { border-radius: 5px; }
   }
 }`,
-  })).toEqual([
+  };
+  expect(parseStylesheet(file)).toBe(parseStylesheet(file));
+  expect(stylesheetRules(file)).toEqual([
     { selector: ".den-scrollport", location: "fixture.css:2", declarations: [{ prop: "--label", value: '"border-radius: 5px"' }] },
     { selector: "&[open]", location: "fixture.css:5", declarations: [{ prop: "border-radius", value: "5px" }] },
   ]);

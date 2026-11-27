@@ -1,4 +1,4 @@
-import { parse } from "postcss";
+import { parse, type Root } from "postcss";
 import { denSourceRoot, loadSourceCorpus, requireNonEmpty, type SourceFile } from "../source-corpus.ts";
 
 type StylesheetRule = {
@@ -7,10 +7,21 @@ type StylesheetRule = {
   readonly location: string;
 };
 
+const parsed = new WeakMap<SourceFile, Root>();
+
+/** Return the read-only-by-convention AST for a physical corpus file. */
+export function parseStylesheet(file: SourceFile): Root {
+  const cached = parsed.get(file);
+  if (cached) return cached;
+  const root = parse(file.text, { from: file.path });
+  parsed.set(file, root);
+  return root;
+}
+
 /** Inspect physical rules, including nested rules, once without expanding imports. */
 export function stylesheetRules(file: SourceFile): StylesheetRule[] {
   const rules: StylesheetRule[] = [];
-  parse(file.text, { from: file.path }).walkRules((rule) => {
+  parseStylesheet(file).walkRules((rule) => {
     rules.push({
       selector: rule.selector,
       declarations: rule.nodes.flatMap((node) =>
