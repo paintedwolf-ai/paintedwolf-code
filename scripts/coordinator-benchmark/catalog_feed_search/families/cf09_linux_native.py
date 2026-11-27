@@ -299,7 +299,8 @@ def run_linux_native(
     port = _free_port()
     api_url = f"http://127.0.0.1:{port}"
     token = f"cf09-linux-{int(time.time())}"
-    display = ":99"
+    display_num = 90 + (os.getpid() % 9)
+    display = f":{display_num}"
 
     xvfb_proc: subprocess.Popen[bytes] | None = None
     sidecar_proc: subprocess.Popen[bytes] | None = None
@@ -369,12 +370,12 @@ def run_linux_native(
                     mutate_for_refreshing(fx, burst_count=200)
 
             xvfb_proc = subprocess.Popen(
-                ["Xvfb", display, "-screen", "0", "1440x900x24"],
+                ["Xvfb", display, "-screen", "0", "1440x900x24", "-nolisten", "tcp"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
-            time.sleep(1.0)
+            time.sleep(1.5)
 
             tauri_env = os.environ.copy()
             tauri_env.update(
@@ -438,7 +439,8 @@ def run_linux_native(
             )
             subprocess.run(
                 [
-                    "bunx",
+                    "bun",
+                    "x",
                     "playwright",
                     "test",
                     "--project=desktop",
