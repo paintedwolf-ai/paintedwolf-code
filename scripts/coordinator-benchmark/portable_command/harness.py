@@ -262,8 +262,7 @@ def run_case(case, out_dir, *, export_dir=None, engine_bin=None, engine_manifest
                 'batch_outcomes': [{'call_id': cid, 'tool': c['name'], 'outcome': res.get('outcome')} for c, (cid, res) in zip(batch, results)],
             })
         if witness is not None: witness_meta = witness.finish()
-        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface, 'host_scope_binding': host_binding, 'git_setup': git_setup, 'witness_meta': witness_meta})
-        application.request(f'/v1/sessions/{session_id}/abort', {})
+        save(raw_dir / 'prelude.json', {'records': prelude_records, 'revision_aliases': revision_aliases, 'draft_bindings': draft_bindings, 'session_surface': session_surface, 'host_scope_binding': host_binding, 'git_setup': git_setup, 'witness_meta': witness_meta}); application.request(f'/v1/sessions/{session_id}/abort', {})
         with contextlib.closing(sqlite3.connect(app_dir / 'store.db')) as db:
             pids = [r[0] for r in db.execute('SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE r.session_id=?', (session_id,)).fetchall()]
         program_receipt_pages, post_tool_lines = collect_raw_api(application, session_id, raw_dir, pids), log_line_count(sidecar_path)
