@@ -197,9 +197,11 @@ def inspect_edit_and_bounds(case, audit, receipts, effects, deliveries, sidecar,
                 for r in write_rows
             )
     if case['id'] == 'unseen-output-no-edit-base' and invocations and len(invocations) >= 2:
-        turn2 = invocations[1]
-        if not (turn2.get('outcome') == 'rejected' and turn2.get('rejection_code') == 'EDITOR_DOCUMENT_READ_REQUIRED'):
-            facts['unseen_ranges_not_read_bases'] = False
+        for idx in (1, 3):
+            if idx < len(invocations):
+                inv = invocations[idx]
+                if not (inv.get('outcome') == 'rejected' and inv.get('rejection_code') == 'EDITOR_DOCUMENT_READ_REQUIRED'):
+                    facts['unseen_ranges_not_read_bases'] = False
     # 2) Q01/Q20 catalog_generation_matches_live & bounded_visits.
     inv_rows = audit.get('source_inventory_state') or []
     if inv_rows:

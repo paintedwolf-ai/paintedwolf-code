@@ -34,7 +34,7 @@ class PortableCommandWave3Tests(unittest.TestCase):
             db = sqlite3.connect(db_path)
             db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1), ('r2','sess1234','c2','command','processes','completed',1)")
             db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',2,'COMMAND_OPTION_UNSUPPORTED'), ('p2','r2','completed',0,'')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p2',1,'git add','git add','git','completed','completed'), ('e2','p2',2,'git_commit','git commit','git','completed','completed')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e0','p1',1,'git','git','git','refused','none'), ('e1','p2',1,'git add','git add','git','completed','completed'), ('e2','p2',2,'git_commit','git commit','git','completed','completed')")
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?), ('m2','sess1234',2,'tool','c2',?)", (
                 json.dumps({'outcome': 'rejected', 'codes': ['COMMAND_OPTION_UNSUPPORTED'], 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'rejected', 'status': 2, 'refusal': {'code': 'COMMAND_OPTION_UNSUPPORTED'}})}),
                 json.dumps({'outcome': 'completed', 'content': '[command#2]\n' + json.dumps({'program_id': 'p2', 'state': 'completed', 'status': 0, 'stdout': '', 'stderr': ''})}),
@@ -48,6 +48,7 @@ class PortableCommandWave3Tests(unittest.TestCase):
             obs, audit = observe.build_observation(case, session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, baseline_hashes={}, git_setup=git_setup, turn_records=turns, prelude_records=[])
             self.assertEqual(audit['observation_gaps'], [])
             self.assertTrue(obs['facts']['invocation_fsmonitor_policy'])
+            self.assertTrue(grading.exact_records(obs['receipts'], case['expected']['receipts']))
             # Negative control (a): marker helper invoked -> invocation_fsmonitor_policy MUST be False.
             marker = pathlib.Path(git_setup['marker_file'])
             marker.write_text('invoked\n')
