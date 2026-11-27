@@ -1715,7 +1715,12 @@
             "outcome": "rejected"
           }
         ],
-        "effects": [],
+        "effects": [
+          {
+            "operation": "http_request",
+            "outcome": "rejected"
+          }
+        ],
         "obligations": [],
         "deliveries": [],
         "closeout": "blocked"

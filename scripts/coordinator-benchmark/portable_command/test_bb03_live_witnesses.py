@@ -86,7 +86,7 @@ class BB03LiveWitnessOracleTests(unittest.TestCase):
             db = sqlite3.connect(db17)
             db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1)")
             db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',1,'SANDBOX_LOOPBACK_CONNECT_DENIED')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'http_request','curl','outbound_http','refused','none')")
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty) VALUES ('e1','p1',1,'http_request','curl','outbound_http','refused','unknown')")
             db.execute("INSERT INTO messages VALUES ('m1','sess1234',1,'tool','c1',?)", (json.dumps({'outcome': 'rejected', 'codes': ['SANDBOX_LOOPBACK_CONNECT_DENIED'], 'content': '[command#1]\n' + json.dumps({'program_id': 'p1', 'state': 'rejected', 'status': 1, 'stdout': '', 'stderr': 'curl: request: The person declined this connection to the local service [SANDBOX_LOOPBACK_CONNECT_DENIED]\n'})}),))
             db.commit(); db.close()
             t17 = [{'program': c17['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}]
