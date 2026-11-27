@@ -48,6 +48,7 @@ func (c *atomicWorkCounters) snapshot() WorkCounters {
 // DiagnosticReadCounts counts reads performed by the opt-in diagnostic itself,
 // kept strictly separate from ordinary product WorkCounters.
 type DiagnosticReadCounts struct {
+	DirAttempts     int `json:"dir_attempts"`
 	DirReads        int `json:"dir_reads"`
 	EntryReads      int `json:"entry_reads"`
 	MetadataReads   int `json:"metadata_reads"`
@@ -684,12 +685,15 @@ func verifyGenerationConsistency(
 		if ctx.Err() != nil {
 			return false
 		}
+		if !beforeStamp.known() {
+			return false
+		}
 		info, statErr := osRoot.Lstat(filepath.FromSlash(dir))
 		if statErr != nil {
 			return false
 		}
 		afterStamp := directoryStampOf(info)
-		if beforeStamp.known() && afterStamp != beforeStamp {
+		if !afterStamp.known() || afterStamp != beforeStamp {
 			return false
 		}
 	}

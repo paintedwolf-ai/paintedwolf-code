@@ -918,3 +918,102 @@ func TestDiagnosticEnabledAndDisabledMatchAnswersAndProductWorkCounters(t *testi
 		t.Fatalf("healthy tree raised disagreements: %+v", enabledReport.Disagreements)
 	}
 }
+
+func TestDiagnosticFailedOpenCountsAgainstMaxDirsAndMissingStampSuppressesAssertions(t *testing.T) {
+	t.Run("failed_opens_charge_max_dirs_at_io_boundary", func(t *testing.T) {
+		rootDir := t.TempDir()
+		for i := 0; i < 6; i++ {
+			dirName := fmt.Sprintf("locked_%02d", i)
+			writeIndexFile(t, rootDir, dirName+"/file.txt", "secret")
+			dirPath := filepath.Join(rootDir, dirName)
+			testutil.FailErr(t, "chmod locked dir", os.Chmod(dirPath, 0o000))
+			t.Cleanup(func() { _ = os.Chmod(dirPath, 0o700) })
+		}
+
+		// MaxDirs=3 allows 1 open for "." plus at most 2 failed subdirectory open attempts.
+		_, _, _, reads, truncated, err := walkDirectSubtree(
+			t.Context(),
+			rootDir,
+			DiagnosticConfig{Enabled: true, Subtree: ".", MaxDirs: 3, MaxEntries: 1024, MaxDepth: 4}.normalized(),
+			walkPolicy{},
+			map[string]struct{}{},
+			map[string]string{},
+		)
+		testutil.FailErr(t, "walk with failed opens", err)
+		if reads.DirAttempts != 3 {
+			t.Fatalf("expected DirAttempts bounded at MaxDirs=3, got %+v", reads)
+		}
+		if reads.DirReads != 1 {
+			t.Fatalf("expected only 1 successful DirRead (root '.'), got %+v", reads)
+		}
+		if !truncated {
+			t.Fatal("expected truncated=true when failed opens hit MaxDirs cap")
+		}
+	})
+
+	t.Run("missing_or_unknown_stamp_suppresses_stale_and_missing_assertions", func(t *testing.T) {
+		catalog, root := indexFixture(t)
+		writeIndexFile(t, root.Path, "src/present.txt", "ok")
+		writeIndexFile(t, root.Path, "src/missing_in_cat.txt", "disk only")
+		reader := waitIndex(t, catalog, root)
+		store := reader.store
+		testutil.FailErr(t, "close reader", reader.Close())
+
+		db, err := openTreeDB(t.Context(), store.file)
+		testutil.FailErr(t, "open db", err)
+		defer func() { _ = db.Close() }()
+		_, err = db.ExecContext(t.Context(), "DELETE FROM nodes WHERE path='src/missing_in_cat.txt'")
+		testutil.FailErr(t, "delete node", err)
+		_, err = db.ExecContext(t.Context(), `INSERT INTO nodes(
+			path,search_path,search_name,parent,name,depth,indexed,agent_metadata,first_listed,is_dir,symlink,regular,hidden,size,mode,modified,refused
+		) VALUES('src/ghost_in_cat.txt','src/ghost_in_cat.txt','ghost_in_cat.txt','src','ghost_in_cat.txt',2,1,0,1,0,0,1,0,10,420,1,'')`)
+		testutil.FailErr(t, "insert ghost node", err)
+
+		// 1. If walk cannot capture the directory's stamp, it must not populate
+		// diskEntries or fullSampledDirs, so neither missing nor extra assertions fire.
+		diskEntries, fullSampledDirs, dirStamps, reads, truncated, err := walkDirectSubtreeWithStat(
+			t.Context(),
+			root.Path,
+			DiagnosticConfig{Enabled: true, Subtree: "src", MaxDirs: 8, MaxEntries: 64, MaxDepth: 4}.normalized(),
+			walkPolicy{},
+			map[string]struct{}{},
+			map[string]string{},
+			func(*os.File) (os.FileInfo, error) {
+				return nil, errors.New("injected stat failure")
+			},
+		)
+		testutil.FailErr(t, "walk with failing stat", err)
+		if reads.DirAttempts != 1 || reads.DirReads != 1 || !truncated {
+			t.Fatalf("expected 1 attempt, 1 read, truncated=true; got reads=%+v truncated=%v", reads, truncated)
+		}
+		if len(diskEntries) != 0 || len(fullSampledDirs) != 0 || len(dirStamps) != 0 {
+			t.Fatalf("unstamped dir must not authorize entries/sampling: disk=%d full=%d stamps=%d", len(diskEntries), len(fullSampledDirs), len(dirStamps))
+		}
+		disagreements := compareCatalogAndDisk(
+			map[string]catalogNodeRecord{
+				"src/present.txt":      {path: "src/present.txt", kind: "file", indexed: true},
+				"src/ghost_in_cat.txt": {path: "src/ghost_in_cat.txt", kind: "file", indexed: true},
+			},
+			diskEntries,
+			fullSampledDirs,
+			map[string]struct{}{},
+			map[string]string{},
+			walkPolicy{},
+			truncated,
+			false,
+			"",
+		)
+		if len(disagreements) != 0 {
+			t.Fatalf("missing stamp must not raise disagreements, got %+v", disagreements)
+		}
+
+		// 2. verifyGenerationConsistency must reject an unknown/uncaptured beforeStamp.
+		store.mu.Lock()
+		pinned := store.status
+		pinned.Instance = store.instance
+		store.mu.Unlock()
+		if verifyGenerationConsistency(t.Context(), store, pinned, repochange.CurrentEpoch(root.Path), map[string]DirectoryStamp{"src": {}}) {
+			t.Fatal("verifyGenerationConsistency must reject an unknown/uncaptured directory stamp")
+		}
+	})
+}

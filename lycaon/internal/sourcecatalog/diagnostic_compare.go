@@ -165,8 +165,23 @@ func walkDirectSubtree(
 	faults map[string]struct{},
 	refusedDirs map[string]string,
 ) (map[string]diskNodeRecord, map[string]struct{}, map[string]DirectoryStamp, DiagnosticReadCounts, bool, error) {
+	return walkDirectSubtreeWithStat(ctx, rootPath, cfg, policy, faults, refusedDirs, (*os.File).Stat)
+}
+
+func walkDirectSubtreeWithStat(
+	ctx context.Context,
+	rootPath string,
+	cfg DiagnosticConfig,
+	policy walkPolicy,
+	faults map[string]struct{},
+	refusedDirs map[string]string,
+	statDir func(*os.File) (os.FileInfo, error),
+) (map[string]diskNodeRecord, map[string]struct{}, map[string]DirectoryStamp, DiagnosticReadCounts, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, DiagnosticReadCounts{}, false, err
+	}
+	if statDir == nil {
+		statDir = (*os.File).Stat
 	}
 	osRoot, err := os.OpenRoot(rootPath)
 	if err != nil {
@@ -193,7 +208,7 @@ func walkDirectSubtree(
 		item := queue[0]
 		queue = queue[1:]
 
-		if reads.DirReads >= cfg.MaxDirs || reads.EntryReads >= cfg.MaxEntries {
+		if reads.DirAttempts >= cfg.MaxDirs || reads.EntryReads >= cfg.MaxEntries {
 			truncated = true
 			break
 		}
@@ -201,29 +216,39 @@ func walkDirectSubtree(
 			continue
 		}
 
+		// Charge MaxDirs at the actual I/O boundary so failed opens cannot bypass the cap.
+		reads.DirAttempts++
 		f, openErr := osRoot.Open(filepath.FromSlash(item.dir))
 		if openErr != nil {
 			continue
 		}
-		dirInfo, statErr := f.Stat()
+		dirInfo, statErr := statDir(f)
 		remaining := cfg.MaxEntries - reads.EntryReads
 		// Bound the underlying ReadDir syscall and working set to remaining+1 entries.
 		dirEntries, readErr := f.ReadDir(remaining + 1)
 		_ = f.Close()
-		reads.DirReads++
 		if err := ctx.Err(); err != nil {
 			return nil, nil, nil, reads, truncated, err
 		}
 		if readErr != nil && readErr != io.EOF {
 			continue
 		}
+		reads.DirReads++
+		var stamp DirectoryStamp
+		if statErr == nil && dirInfo != nil {
+			stamp = directoryStampOf(dirInfo)
+		}
+		// A directory whose stamp cannot be captured must not authorize stale/missing assertions.
+		if statErr != nil || !stamp.known() {
+			truncated = true
+			continue
+		}
+		dirStamps[item.dir] = stamp
+
 		dirFullyRead := len(dirEntries) <= remaining
 		if !dirFullyRead {
 			truncated = true
 			dirEntries = dirEntries[:remaining]
-		}
-		if statErr == nil {
-			dirStamps[item.dir] = directoryStampOf(dirInfo)
 		}
 		if dirFullyRead {
 			fullSampledDirs[item.dir] = struct{}{}
