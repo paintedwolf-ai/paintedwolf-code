@@ -490,12 +490,18 @@ def main():
             except Exception:
                 native_windows = []
 
-            # Attempt native window screencapture (-l <window_id>) and fallback display capture
+            # Pick the main onscreen Tauri window (e.g. 1280x800, is_onscreen=True) for screencapture.
             win_id = None
             for w in native_windows:
-                if w.get("owner_pid") == tauri_proc.pid and w.get("layer", 0) == 0 and w.get("window_number"):
-                    win_id = w["window_number"]
+                b = w.get("bounds") or {}
+                if w.get("owner_pid") == tauri_proc.pid and w.get("is_onscreen") and b.get("Height", 0) >= 200:
+                    win_id = w.get("window_number")
                     break
+            if win_id is None:
+                for w in native_windows:
+                    if w.get("owner_pid") == tauri_proc.pid and w.get("layer", 0) == 0 and w.get("window_number"):
+                        win_id = w["window_number"]
+                        break
             cap_path = out_dir / "native-tauri-window.png"
             if win_id is not None:
                 sc = subprocess.run(["screencapture", "-l", str(win_id), "-x", str(cap_path)], capture_output=True, text=True)
