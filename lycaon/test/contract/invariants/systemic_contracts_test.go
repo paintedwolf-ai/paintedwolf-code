@@ -69,6 +69,19 @@ func TestContractSuitesAvoidForcedGC(t *testing.T) {
 			want:    violates,
 			wantPos: "test/contract/sample/sample_test.go:5:",
 		},
+		"local GC function shadowing dot-imported runtime": {
+			overrides: map[string]string{
+				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport . \"runtime\"\n\nfunc helper() {\n\t_ = GOOS\n\tGC := func() {}\n\tGC()\n}\n",
+			},
+			want: passes,
+		},
+		"dot-imported runtime.GC outside inner shadow block": {
+			overrides: map[string]string{
+				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport . \"runtime\"\n\nfunc helper() {\n\t{\n\t\tGC := func() {}\n\t\tGC()\n\t}\n\tGC()\n}\n",
+			},
+			want:    violates,
+			wantPos: "test/contract/sample/sample_test.go:10:",
+		},
 		"shadowed runtime and debug identifiers": {
 			overrides: map[string]string{
 				"lycaon/test/contract/sample/sample_test.go": "package sample\n\nimport (\n\t\"runtime\"\n\t\"runtime/debug\"\n)\n\ntype localGC struct{}\n\nfunc (localGC) GC()           {}\nfunc (localGC) FreeOSMemory() {}\n\nfunc realUse() string {\n\t_, _ = runtime.GOOS, debug.SetMemoryLimit\n\treturn runtime.GOOS\n}\n\nfunc shadowed(runtime localGC) {\n\tdebug := localGC{}\n\truntime.GC()\n\tdebug.FreeOSMemory()\n}\n",
@@ -149,6 +162,13 @@ func TestSharedOnceMemoOwnership(t *testing.T) {
 			},
 			want:    violates,
 			wantPos: "test/contract/internal/cache/memo.go:18:",
+		},
+		"distinct receiver written inside another instance once.Do": {
+			overrides: map[string]string{
+				"lycaon/test/contract/internal/cache/distinct.go": "package cache\n\nimport \"sync\"\n\ntype Index struct{}\n\ntype indexMemo struct {\n\tinitOnce sync.Once\n\tsnapshot *Index\n}\n\nfunc (first *indexMemo) Corrupt(second *indexMemo) {\n\tfirst.initOnce.Do(func() {\n\t\tfirst.snapshot = &Index{}\n\t\tsecond.snapshot = nil\n\t})\n}\n",
+			},
+			want:    violates,
+			wantPos: "test/contract/internal/cache/distinct.go:15:",
 		},
 		"legitimate caller-local release": {
 			overrides: map[string]string{

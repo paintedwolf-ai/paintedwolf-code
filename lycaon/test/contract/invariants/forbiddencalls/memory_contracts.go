@@ -27,7 +27,7 @@ var memoryContracts = []invariants.Invariant{{
 }, {
 	// Pure once-initialized analysis memos (structs guarded only by sync.Once,
 	// without a mutex) must never have their stored result fields overwritten
-	// outside the owning once.Do initialization.
+	// outside the same instance's owning once.Do initialization.
 	Name: "shared-once-memo-results-stay-immutable",
 	Anchors: []invariants.Anchor{
 		invariants.Decl("test/contract/invariants", "onceValue"),
@@ -45,97 +45,154 @@ var memoryContracts = []invariants.Invariant{{
 	},
 }}
 
-func checkForcedGC(r *invariants.Run, f *invariants.GoFile) {
-	f.Funcs(func(fn *ast.FuncDecl) {
-		shadowed := localBindings(fn)
-		checkForcedGCNode(r, f, fn.Body, shadowed)
-	})
-	for _, decl := range f.AST.Decls {
-		if gen, ok := decl.(*ast.GenDecl); ok && gen.Tok == token.VAR {
-			checkForcedGCNode(r, f, gen, nil)
-		}
+type lexicalScopes []map[string]bool
+
+func (s *lexicalScopes) push() { *s = append(*s, map[string]bool{}) }
+func (s *lexicalScopes) pop()  { *s = (*s)[:len(*s)-1] }
+
+func (s lexicalScopes) bind(name string) {
+	if len(s) > 0 && name != "" && name != "_" {
+		s[len(s)-1][name] = true
 	}
 }
 
-func checkForcedGCNode(r *invariants.Run, f *invariants.GoFile, node ast.Node, shadowed map[string]bool) {
-	f.Selectors(node, func(sel *ast.SelectorExpr, pkg, name string) {
-		if id, ok := sel.X.(*ast.Ident); ok && shadowed[id.Name] {
-			return
-		}
-		switch {
-		case pkg == "runtime" && name == "GC":
-			r.ReportAt(sel.Pos(), "explicit runtime.GC outside collector-behavior tests")
-		case pkg == "runtime/debug" && name == "FreeOSMemory":
-			r.ReportAt(sel.Pos(), "explicit runtime/debug.FreeOSMemory outside collector-behavior tests")
-		}
-	})
-	dotRuntime := f.DotImports("runtime")
-	dotDebug := f.DotImports("runtime/debug")
-	if !dotRuntime && !dotDebug {
+func (s lexicalScopes) bindFields(fl *ast.FieldList) {
+	if fl == nil {
 		return
 	}
-	f.Calls(node, func(call *ast.CallExpr, pkg, _ string) {
-		if pkg != "" {
-			return
+	for _, field := range fl.List {
+		for _, name := range field.Names {
+			s.bind(name.Name)
 		}
-		id, ok := ast.Unparen(call.Fun).(*ast.Ident)
-		if !ok || shadowed[id.Name] {
-			return
-		}
-		switch {
-		case dotRuntime && id.Name == "GC":
-			r.ReportAt(call.Pos(), "explicit runtime.GC via dot import outside collector-behavior tests")
-		case dotDebug && id.Name == "FreeOSMemory":
-			r.ReportAt(call.Pos(), "explicit runtime/debug.FreeOSMemory via dot import outside collector-behavior tests")
-		}
-	})
+	}
 }
 
-func localBindings(fn *ast.FuncDecl) map[string]bool {
-	bound := map[string]bool{}
-	addFields := func(fl *ast.FieldList) {
-		if fl == nil {
+func (s lexicalScopes) has(name string) bool {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i][name] {
+			return true
+		}
+	}
+	return false
+}
+
+func checkForcedGC(r *invariants.Run, f *invariants.GoFile) {
+	dotRuntime := f.DotImports("runtime")
+	dotDebug := f.DotImports("runtime/debug")
+
+	var scopes lexicalScopes
+	var walk func(ast.Node)
+	walk = func(n ast.Node) {
+		if n == nil {
 			return
 		}
-		for _, field := range fl.List {
-			for _, name := range field.Names {
-				bound[name.Name] = true
+		switch node := n.(type) {
+		case *ast.FuncDecl:
+			scopes.push()
+			scopes.bindFields(node.Recv)
+			if node.Type != nil {
+				scopes.bindFields(node.Type.Params)
+				scopes.bindFields(node.Type.Results)
 			}
-		}
-	}
-	addFields(fn.Recv)
-	if fn.Type != nil {
-		addFields(fn.Type.Params)
-		addFields(fn.Type.Results)
-	}
-	ast.Inspect(fn.Body, func(n ast.Node) bool {
-		switch stmt := n.(type) {
+			walk(node.Body)
+			scopes.pop()
+			return
+		case *ast.FuncLit:
+			scopes.push()
+			if node.Type != nil {
+				scopes.bindFields(node.Type.Params)
+				scopes.bindFields(node.Type.Results)
+			}
+			walk(node.Body)
+			scopes.pop()
+			return
+		case *ast.BlockStmt:
+			scopes.push()
+			for _, stmt := range node.List {
+				walk(stmt)
+			}
+			scopes.pop()
+			return
 		case *ast.ValueSpec:
-			for _, name := range stmt.Names {
-				bound[name.Name] = true
+			for _, v := range node.Values {
+				walk(v)
 			}
+			for _, name := range node.Names {
+				scopes.bind(name.Name)
+			}
+			return
 		case *ast.AssignStmt:
-			if stmt.Tok != token.DEFINE {
-				return true
+			for _, rhs := range node.Rhs {
+				walk(rhs)
 			}
-			for _, lhs := range stmt.Lhs {
-				if id, ok := lhs.(*ast.Ident); ok {
-					bound[id.Name] = true
+			if node.Tok == token.DEFINE {
+				for _, lhs := range node.Lhs {
+					if id, ok := lhs.(*ast.Ident); ok {
+						scopes.bind(id.Name)
+					}
+				}
+			} else {
+				for _, lhs := range node.Lhs {
+					walk(lhs)
 				}
 			}
+			return
 		case *ast.RangeStmt:
-			if stmt.Tok != token.DEFINE {
-				return true
+			scopes.push()
+			walk(node.X)
+			if node.Tok == token.DEFINE {
+				for _, expr := range []ast.Expr{node.Key, node.Value} {
+					if id, ok := expr.(*ast.Ident); ok {
+						scopes.bind(id.Name)
+					}
+				}
 			}
-			for _, expr := range []ast.Expr{stmt.Key, stmt.Value} {
-				if id, ok := expr.(*ast.Ident); ok {
-					bound[id.Name] = true
+			walk(node.Body)
+			scopes.pop()
+			return
+		case *ast.SelectorExpr:
+			if id, ok := node.X.(*ast.Ident); ok && !scopes.has(id.Name) {
+				if pkg, name, ok := f.Qualified(node); ok {
+					switch {
+					case pkg == "runtime" && name == "GC":
+						r.ReportAt(node.Pos(), "explicit runtime.GC outside collector-behavior tests")
+					case pkg == "runtime/debug" && name == "FreeOSMemory":
+						r.ReportAt(node.Pos(), "explicit runtime/debug.FreeOSMemory outside collector-behavior tests")
+					}
+				}
+			}
+		case *ast.CallExpr:
+			if dotRuntime || dotDebug {
+				if id, ok := ast.Unparen(node.Fun).(*ast.Ident); ok && !scopes.has(id.Name) {
+					switch {
+					case dotRuntime && id.Name == "GC":
+						r.ReportAt(node.Pos(), "explicit runtime.GC via dot import outside collector-behavior tests")
+					case dotDebug && id.Name == "FreeOSMemory":
+						r.ReportAt(node.Pos(), "explicit runtime/debug.FreeOSMemory via dot import outside collector-behavior tests")
+					}
 				}
 			}
 		}
-		return true
-	})
-	return bound
+		ast.Inspect(n, func(child ast.Node) bool {
+			if child == n || child == nil {
+				return true
+			}
+			walk(child)
+			return false
+		})
+	}
+	for _, decl := range f.AST.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if d.Body != nil {
+				walk(d)
+			}
+		case *ast.GenDecl:
+			if d.Tok == token.VAR {
+				walk(d)
+			}
+		}
+	}
 }
 
 // onceMemoStruct describes a struct in a package that holds a sync.Once without
@@ -323,25 +380,55 @@ func (idx *pkgMemoIndex) exprType(env map[string]string, expr ast.Expr) string {
 	return ""
 }
 
-func (idx *pkgMemoIndex) matchOnceDo(env map[string]string, call *ast.CallExpr) (string, string, *ast.BlockStmt) {
+// canonicalPath returns a dot-joined selector path for simple receiver/field
+// chains (e.g. "first", "c.typed"), or "" for complex expressions.
+func canonicalPath(expr ast.Expr) string {
+	expr = ast.Unparen(expr)
+	if star, ok := expr.(*ast.StarExpr); ok {
+		expr = ast.Unparen(star.X)
+	}
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return e.Name
+	case *ast.SelectorExpr:
+		if base := canonicalPath(e.X); base != "" {
+			return base + "." + e.Sel.Name
+		}
+	}
+	return ""
+}
+
+type onceDoMatch struct {
+	structName string
+	onceField  string
+	targetPath string
+	body       *ast.BlockStmt
+}
+
+func (idx *pkgMemoIndex) matchOnceDo(env map[string]string, call *ast.CallExpr) (onceDoMatch, bool) {
 	doSel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
 	if !ok || doSel.Sel.Name != "Do" || len(call.Args) != 1 {
-		return "", "", nil
+		return onceDoMatch{}, false
 	}
 	onceSel, ok := ast.Unparen(doSel.X).(*ast.SelectorExpr)
 	if !ok {
-		return "", "", nil
+		return onceDoMatch{}, false
 	}
 	lit, ok := ast.Unparen(call.Args[0]).(*ast.FuncLit)
 	if !ok || lit.Body == nil {
-		return "", "", nil
+		return onceDoMatch{}, false
 	}
 	structName := idx.exprType(env, onceSel.X)
 	sm, ok := idx.structs[structName]
 	if !ok || sm.hasMutex || !sm.onceFields[onceSel.Sel.Name] {
-		return "", "", nil
+		return onceDoMatch{}, false
 	}
-	return structName, onceSel.Sel.Name, lit.Body
+	return onceDoMatch{
+		structName: structName,
+		onceField:  onceSel.Sel.Name,
+		targetPath: canonicalPath(onceSel.X),
+		body:       lit.Body,
+	}, true
 }
 
 func discoverOnceMemoFields(idx *pkgMemoIndex, files []*invariants.GoFile) {
@@ -353,15 +440,15 @@ func discoverOnceMemoFields(idx *pkgMemoIndex, files []*invariants.GoFile) {
 				if !ok {
 					return true
 				}
-				structName, onceField, body := idx.matchOnceDo(env, call)
-				if body == nil {
+				match, ok := idx.matchOnceDo(env, call)
+				if !ok || match.targetPath == "" {
 					return true
 				}
-				sm := idx.structs[structName]
-				ast.Inspect(body, func(inner ast.Node) bool {
+				sm := idx.structs[match.structName]
+				ast.Inspect(match.body, func(inner ast.Node) bool {
 					visitAssignedSelectors(inner, func(sel *ast.SelectorExpr) {
-						if idx.exprType(env, sel.X) == structName && !sm.onceFields[sel.Sel.Name] {
-							sm.memoFields[sel.Sel.Name] = onceField
+						if canonicalPath(sel.X) == match.targetPath && !sm.onceFields[sel.Sel.Name] {
+							sm.memoFields[sel.Sel.Name] = match.onceField
 						}
 					})
 					return true
@@ -372,23 +459,24 @@ func discoverOnceMemoFields(idx *pkgMemoIndex, files []*invariants.GoFile) {
 	}
 }
 
-type memoKey struct {
+type activeInitKey struct {
 	structName string
 	onceField  string
+	targetPath string
 }
 
 func reportMemoWritesOutsideInit(r *invariants.Run, idx *pkgMemoIndex, env map[string]string, body *ast.BlockStmt) {
-	active := map[memoKey]int{}
+	active := map[activeInitKey]int{}
 	var walk func(ast.Node)
 	walk = func(n ast.Node) {
 		if n == nil {
 			return
 		}
 		if call, ok := n.(*ast.CallExpr); ok {
-			if structName, onceField, doBody := idx.matchOnceDo(env, call); doBody != nil {
-				key := memoKey{structName: structName, onceField: onceField}
+			if match, ok := idx.matchOnceDo(env, call); ok && match.targetPath != "" {
+				key := activeInitKey{structName: match.structName, onceField: match.onceField, targetPath: match.targetPath}
 				active[key]++
-				walk(doBody)
+				walk(match.body)
 				active[key]--
 				return
 			}
@@ -403,10 +491,11 @@ func reportMemoWritesOutsideInit(r *invariants.Run, idx *pkgMemoIndex, env map[s
 			if !isMemo {
 				return
 			}
-			if active[memoKey{structName: structName, onceField: onceField}] > 0 {
+			target := canonicalPath(sel.X)
+			if target != "" && active[activeInitKey{structName: structName, onceField: onceField, targetPath: target}] > 0 {
 				return
 			}
-			r.ReportAt(sel.Pos(), "writes once-initialized memo field %s.%s outside %s.Do",
+			r.ReportAt(sel.Pos(), "writes once-initialized memo field %s.%s outside owning %s.Do",
 				structName, sel.Sel.Name, onceField)
 		})
 		ast.Inspect(n, func(child ast.Node) bool {
