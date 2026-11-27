@@ -860,7 +860,7 @@ def main(argv: list[str] | None = None) -> int:
     work_root = Path(tempfile.mkdtemp(prefix="cf08_sidecar_work_"))
 
     try:
-        transport = HTTPTransport(args.base_url, token=args.token, timeout_s=30.0)
+        transport = HTTPTransport(args.base_url, args.token)
         runner = CF08SidecarRunner(transport, work_root, base_seed=args.seed, rg_bin=args.rg_bin)
         selected = {f.strip().upper() for f in args.families.split(",") if f.strip()}
         summaries: dict[str, dict[str, object]] = {}

@@ -165,7 +165,7 @@ func TestCF08_R01_PreviewStates(t *testing.T) {
 	states := []ReplacePreviewState{ReplacePreviewPreparing, ReplacePreviewReady, ReplacePreviewLimited}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 16)
+	sem := make(chan struct{}, 4)
 
 	for i := 0; i < cf08R01Instances; i++ {
 		i := i
