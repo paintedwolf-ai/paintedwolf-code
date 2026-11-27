@@ -365,6 +365,92 @@ class TestFailClosedCheckerAndAllControls(unittest.TestCase):
         self.assertEqual(cp_witnesses[0]["address"], "127.0.0.1:48888")
         self.assertEqual(cp_witnesses[0]["checkpoint_id"], "cp-1")
 
+        # Exact observed wire shape from live bbeb46e72c authority-receipt.json:
+        # prefers tool_result.external_access.endpoints FIRST without double-counting planned checkpoints.
+        live_tool_result = {
+            "outcome": "completed",
+            "external_access": {
+                "endpoints": [
+                    {
+                        "allowed_count": 1,
+                        "attempt_count": 1,
+                        "decision": "allow",
+                        "host": "127.0.0.1",
+                        "port": 36423,
+                        "transport": "http_request",
+                        "visibility": "observed",
+                    }
+                ],
+                "modes": ["mediated_http"],
+                "visibility_summary": "observed",
+            },
+        }
+        live_auth_obs = {
+            "sqlite_records": {
+                "rows": {
+                    "authz_events": [
+                        {
+                            "id": "ev-live-1",
+                            "event_seq": 7,
+                            "action": "approval_decision",
+                            "outcome": "allowed",
+                            "tool_name": "loopback_connect",
+                            "detail_json": json.dumps({"checkpoint_id": "cp-live-1", "tool_call_id": "tc-live-1"}),
+                        }
+                    ],
+                    "checkpoints": [
+                        {"id": "cp-live-1", "args_json": json.dumps({"connect_ports": [36423]})},
+                    ],
+                    "invocation_receipts": [
+                        {"tool_call_id": "tc-live-1", "status": "completed", "invoked": 1},
+                    ],
+                }
+            }
+        }
+        observed_w = runner._extract_product_network_witnesses(
+            live_auth_obs,
+            allowed_call_id="tc-live-1",
+            allowed_tool_result=live_tool_result,
+        )
+        planned_w = runner._extract_planned_approved_destinations(
+            live_auth_obs,
+            allowed_call_id="tc-live-1",
+            allowed_tool_result=live_tool_result,
+        )
+        self.assertEqual(len(observed_w), 1)
+        self.assertEqual(observed_w[0]["source"], "tool_result.external_access.endpoints")
+        self.assertEqual(observed_w[0]["address"], "127.0.0.1:36423")
+        self.assertEqual(observed_w[0]["transport"], "http_request")
+        self.assertEqual(observed_w[0]["visibility"], "observed")
+        self.assertEqual(observed_w[0]["decision"], "allow")
+        self.assertEqual(observed_w[0]["allowed_count"], 1)
+        self.assertEqual(observed_w[0]["attempt_count"], 1)
+        self.assertEqual(len(planned_w), 1)
+        self.assertEqual(planned_w[0]["source"], "authz_events.approval_decision+checkpoints.connect_ports")
+
+        # Fail-closed checker verification using exact observed wire shape:
+        # 1 observed witness vs 1 fixture arrival -> pass; 2 observed witnesses vs 1 arrival -> fail.
+        ev_ok = copy.deepcopy(make_healthy_baseline())
+        ev_ok["observer"]["network_connections"] = [{"address": "127.0.0.1:36423", "method": "GET", "path": "/ping"}]
+        ev_ok["product_records"]["recorded_connections"] = observed_w
+        ev_ok["product_records"]["planned_approved_destinations"] = planned_w
+        self.assertEqual(check_evidence(ev_ok)["verdict"], "pass")
+
+        surplus_tool_result = copy.deepcopy(live_tool_result)
+        surplus_tool_result["external_access"]["endpoints"][0]["allowed_count"] = 2
+        surplus_tool_result["external_access"]["endpoints"][0]["attempt_count"] = 2
+        surplus_w = runner._extract_product_network_witnesses(
+            live_auth_obs,
+            allowed_call_id="tc-live-1",
+            allowed_tool_result=surplus_tool_result,
+        )
+        self.assertEqual(len(surplus_w), 2)
+        ev_surplus = copy.deepcopy(ev_ok)
+        ev_surplus["product_records"]["recorded_connections"] = surplus_w
+        res_surplus = check_evidence(ev_surplus)
+        self.assertEqual(res_surplus["verdict"], "fail")
+        self.assertIn("unobserved_product_connection", res_surplus["failed_rule_ids"])
+
         # URL echoed in arbitrary command/args text MUST NOT be scraped as a connection witness.
         empty_witnesses = runner._extract_product_network_witnesses(
             {"sqlite_records": {"rows": {"invocation_receipts": [{"tool_call_id": "c2", "status": "completed", "args_json": "{\"command\":\"curl http://127.0.0.1:45555/ping\"}"}]}}},

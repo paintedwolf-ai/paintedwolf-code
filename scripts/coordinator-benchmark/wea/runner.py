@@ -466,6 +466,134 @@ def _extract_edit_records_from_db(
     return attributions, edit_operations
 
 
+def _expand_endpoint_witnesses(
+    endpoints: Any,
+    *,
+    source: str,
+    extra_meta: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Expand typed `external_access.endpoints[]` entries into per-connection witnesses.
+
+    Supports the exact live wire shape (`visibility`, `decision`, `attempt_count`,
+    `allowed_count`, `host`, `port`, `transport`) as well as `allowed`/`attempts`.
+    """
+    out: list[dict[str, Any]] = []
+    for ep in endpoints or ():
+        if not isinstance(ep, dict):
+            continue
+        host = str(ep.get("host") or "").strip()
+        port = ep.get("port")
+        if not host or not isinstance(port, int) or port <= 0:
+            continue
+        visibility = str(ep.get("visibility") or "")
+        # When visibility is explicitly present, require "observed" for observed connection witnesses.
+        if visibility and visibility != "observed":
+            continue
+        if "allowed_count" in ep or "decision" in ep:
+            decision = str(ep.get("decision") or "")
+            allowed_count = int(ep.get("allowed_count") or 0)
+            attempt_count = int(ep.get("attempt_count") or allowed_count)
+            if decision != "allow" or allowed_count <= 0:
+                continue
+            for idx in range(allowed_count):
+                out.append({
+                    "address": f"{host}:{port}",
+                    "transport": str(ep.get("transport") or ""),
+                    "method": "",
+                    "path": "",
+                    "allowed": True,
+                    "visibility": visibility or "observed",
+                    "decision": decision,
+                    "attempt_count": attempt_count,
+                    "allowed_count": allowed_count,
+                    "attempt_index": idx + 1,
+                    "source": source,
+                    **extra_meta,
+                })
+        else:
+            allowed = bool(ep.get("allowed", False))
+            attempts = max(1, int(ep.get("attempts") or 1))
+            if not allowed:
+                continue
+            for idx in range(attempts):
+                out.append({
+                    "address": f"{host}:{port}",
+                    "transport": str(ep.get("transport") or ""),
+                    "method": "",
+                    "path": "",
+                    "allowed": True,
+                    "attempt_index": idx + 1,
+                    "source": source,
+                    **extra_meta,
+                })
+    return out
+
+
+def _extract_planned_approved_destinations(
+    auth_obs: dict[str, Any],
+    *,
+    allowed_call_id: str,
+    allowed_tool_result: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Extract planned/approved loopback destinations from authz_events + checkpoints + invocation_receipts."""
+    rows = (auth_obs.get("sqlite_records") or {}).get("rows") or {}
+    checkpoints_by_id = {
+        str(cp["id"]): cp
+        for cp in (rows.get("checkpoints") or [])
+        if cp.get("id")
+    }
+    completed_calls = {
+        str(r["tool_call_id"])
+        for r in (rows.get("invocation_receipts") or [])
+        if r.get("tool_call_id") and r.get("status") == "completed" and r.get("invoked") == 1
+    }
+    if isinstance(allowed_tool_result, dict) and allowed_tool_result.get("outcome") == "completed" and allowed_call_id:
+        completed_calls.add(allowed_call_id)
+
+    planned: list[dict[str, Any]] = []
+    for ev in rows.get("authz_events") or []:
+        if ev.get("action") != "approval_decision" or ev.get("outcome") != "allowed":
+            continue
+        if ev.get("tool_name") != "loopback_connect":
+            continue
+        raw_detail = ev.get("detail_json") or "{}"
+        try:
+            detail = json.loads(raw_detail) if isinstance(raw_detail, str) else raw_detail
+        except ValueError:
+            continue
+        if not isinstance(detail, dict):
+            continue
+        cp_id = str(detail.get("checkpoint_id") or "")
+        tc_id = str(detail.get("tool_call_id") or "")
+        if not cp_id or not tc_id or tc_id not in completed_calls:
+            continue
+        cp = checkpoints_by_id.get(cp_id)
+        if not cp:
+            continue
+        raw_args = cp.get("args_json") or "{}"
+        try:
+            cp_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+        except ValueError:
+            continue
+        if not isinstance(cp_args, dict):
+            continue
+        for port in cp_args.get("connect_ports") or ():
+            if isinstance(port, int) and port > 0:
+                planned.append({
+                    "address": f"127.0.0.1:{port}",
+                    "transport": "loopback_connect",
+                    "method": "",
+                    "path": "",
+                    "allowed": True,
+                    "event_id": str(ev.get("id") or ""),
+                    "event_seq": ev.get("event_seq"),
+                    "checkpoint_id": cp_id,
+                    "tool_call_id": tc_id,
+                    "source": "authz_events.approval_decision+checkpoints.connect_ports",
+                })
+    return planned
+
+
 def _extract_product_network_witnesses(
     auth_obs: dict[str, Any],
     *,
@@ -474,18 +602,34 @@ def _extract_product_network_witnesses(
 ) -> list[dict[str, Any]]:
     """Extract typed product network witnesses strictly from structured endpoint records.
 
-    Reads ONLY:
-      1. `authz_events` rows (`action IN ('mediated_endpoint', 'capability_applied')`,
-         `outcome == 'allowed'`) -> `detail_json.external_access.endpoints[]`
-      2. Typed `tool_result_json.external_access.endpoints[]` for `allowed_call_id` (only if
-         no `authz_events` mediated endpoint rows exist).
+    Priority order (never double-counts across tiers):
+      1. Typed `tool_result.external_access.endpoints[]` (exact observed wire shape:
+         `visibility: "observed"`, `decision: "allow"`, `allowed_count`, `attempt_count`,
+         `host`, `port`, `transport`).
+      2. `authz_events` rows (`action IN ('mediated_endpoint', 'capability_applied')`,
+         `outcome == 'allowed'`) -> `detail_json.external_access.endpoints[]`.
+      3. Planned/approved destination fallback (`authz_events.approval_decision` +
+         `checkpoints.args_json.connect_ports` + completed `invocation_receipts`) ONLY when
+         no observed `external_access.endpoints` witness is present.
 
     NEVER scans arbitrary strings for URLs, NEVER hardcodes HTTP methods, and NEVER
-    deduplicates repeated connections (expands by `attempts` per distinct event/invocation ID).
+    deduplicates repeated connections.
     """
+    # 1. Prefer the owning completed tool result's observed external_access.endpoints witness.
+    if isinstance(allowed_tool_result, dict):
+        ea = allowed_tool_result.get("external_access")
+        if isinstance(ea, dict):
+            observed = _expand_endpoint_witnesses(
+                ea.get("endpoints"),
+                source="tool_result.external_access.endpoints",
+                extra_meta={"tool_call_id": allowed_call_id},
+            )
+            if observed:
+                return observed
+
+    # 2. Check persisted authz_events mediated_endpoint / capability_applied external_access.endpoints.
     rows = (auth_obs.get("sqlite_records") or {}).get("rows") or {}
     witnesses: list[dict[str, Any]] = []
-
     for ev in rows.get("authz_events") or []:
         if ev.get("action") not in {"mediated_endpoint", "capability_applied"}:
             continue
@@ -501,107 +645,25 @@ def _extract_product_network_witnesses(
         ea = detail.get("external_access")
         if not isinstance(ea, dict):
             continue
-        for ep in ea.get("endpoints") or ():
-            if not isinstance(ep, dict):
-                continue
-            host = str(ep.get("host") or "").strip()
-            port = ep.get("port")
-            if not host or not isinstance(port, int) or port <= 0:
-                continue
-            attempts = max(1, int(ep.get("attempts") or 1))
-            for idx in range(attempts):
-                witnesses.append({
-                    "address": f"{host}:{port}",
-                    "transport": str(ep.get("transport") or ""),
-                    "method": "",
-                    "path": "",
-                    "allowed": bool(ep.get("allowed", False)),
+        witnesses.extend(
+            _expand_endpoint_witnesses(
+                ea.get("endpoints"),
+                source="authz_events.external_access.endpoints",
+                extra_meta={
                     "event_id": str(ev.get("id") or ""),
                     "event_seq": ev.get("event_seq"),
-                    "attempt_index": idx + 1,
-                    "source": "authz_events.external_access.endpoints",
-                })
+                },
+            )
+        )
+    if witnesses:
+        return witnesses
 
-    # Also extract typed loopback_connect approval_decision events joined by checkpoint_id ->
-    # checkpoints.args_json.connect_ports, verified against completed invocation_receipts.
-    if not witnesses:
-        checkpoints_by_id = {
-            str(cp["id"]): cp
-            for cp in (rows.get("checkpoints") or [])
-            if cp.get("id")
-        }
-        completed_calls = {
-            str(r["tool_call_id"])
-            for r in (rows.get("invocation_receipts") or [])
-            if r.get("tool_call_id") and r.get("status") == "completed" and r.get("invoked") == 1
-        }
-        if isinstance(allowed_tool_result, dict) and allowed_tool_result.get("outcome") == "completed" and allowed_call_id:
-            completed_calls.add(allowed_call_id)
-        for ev in rows.get("authz_events") or []:
-            if ev.get("action") != "approval_decision" or ev.get("outcome") != "allowed":
-                continue
-            if ev.get("tool_name") != "loopback_connect":
-                continue
-            raw_detail = ev.get("detail_json") or "{}"
-            try:
-                detail = json.loads(raw_detail) if isinstance(raw_detail, str) else raw_detail
-            except ValueError:
-                continue
-            if not isinstance(detail, dict):
-                continue
-            cp_id = str(detail.get("checkpoint_id") or "")
-            tc_id = str(detail.get("tool_call_id") or "")
-            if not cp_id or not tc_id or tc_id not in completed_calls:
-                continue
-            cp = checkpoints_by_id.get(cp_id)
-            if not cp:
-                continue
-            raw_args = cp.get("args_json") or "{}"
-            try:
-                cp_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-            except ValueError:
-                continue
-            if not isinstance(cp_args, dict):
-                continue
-            for port in cp_args.get("connect_ports") or ():
-                if isinstance(port, int) and port > 0:
-                    witnesses.append({
-                        "address": f"127.0.0.1:{port}",
-                        "transport": "loopback_connect",
-                        "method": "",
-                        "path": "",
-                        "allowed": True,
-                        "event_id": str(ev.get("id") or ""),
-                        "event_seq": ev.get("event_seq"),
-                        "checkpoint_id": cp_id,
-                        "tool_call_id": tc_id,
-                        "source": "authz_events.approval_decision+checkpoints.connect_ports",
-                    })
-
-    if not witnesses and isinstance(allowed_tool_result, dict):
-        ea = allowed_tool_result.get("external_access")
-        if isinstance(ea, dict):
-            for ep in ea.get("endpoints") or ():
-                if not isinstance(ep, dict):
-                    continue
-                host = str(ep.get("host") or "").strip()
-                port = ep.get("port")
-                if not host or not isinstance(port, int) or port <= 0:
-                    continue
-                attempts = max(1, int(ep.get("attempts") or 1))
-                for idx in range(attempts):
-                    witnesses.append({
-                        "address": f"{host}:{port}",
-                        "transport": str(ep.get("transport") or ""),
-                        "method": "",
-                        "path": "",
-                        "allowed": bool(ep.get("allowed", False)),
-                        "tool_call_id": allowed_call_id,
-                        "attempt_index": idx + 1,
-                        "source": "tool_result.external_access.endpoints",
-                    })
-
-    return witnesses
+    # 3. Fallback to planned/approved checkpoint ports only if no observed endpoint witness exists.
+    return _extract_planned_approved_destinations(
+        auth_obs,
+        allowed_call_id=allowed_call_id,
+        allowed_tool_result=allowed_tool_result,
+    )
 
 
 def _ctrl_workers(
@@ -1092,8 +1154,14 @@ def _ctrl_authority(
         for r in snap["requests"]
     ]
 
-    # Extract product-side network witnesses strictly from real product DB/tool records (NEVER from fixture snaps).
+    # Extract product-side network witnesses strictly from real product DB/tool records (NEVER from fixture snaps),
+    # and preserve planned/approved destination facts separately.
     recorded_connections = _extract_product_network_witnesses(
+        auth_obs,
+        allowed_call_id=allowed_call_id,
+        allowed_tool_result=allowed_net_result,
+    )
+    planned_approved_destinations = _extract_planned_approved_destinations(
         auth_obs,
         allowed_call_id=allowed_call_id,
         allowed_tool_result=allowed_net_result,
@@ -1119,6 +1187,7 @@ def _ctrl_authority(
         "observer": auth_obs,
         "product_records": {
             "recorded_connections": recorded_connections,
+            "planned_approved_destinations": planned_approved_destinations,
             "refused_network_outcome": refused_net_result.get("outcome") if isinstance(refused_net_result, dict) else None,
         },
         "expected_refusal": {

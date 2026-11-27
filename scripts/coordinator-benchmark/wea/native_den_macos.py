@@ -32,18 +32,27 @@ def _api_readback(api_url: str, token: str, path: str) -> Any:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def _osascript(script: str) -> tuple[int, str, str]:
-    proc = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, check=False)
-    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+def _osascript(script: str, *, timeout: float = 15.0) -> tuple[int, str, str]:
+    try:
+        proc = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+        return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return -1, "", "osascript_timeout"
 
 
-def _resolve_owned_window_id(owned_pid: int) -> int | None:
+def _resolve_owned_window_id(owned_pid: int, *, timeout: float = 15.0) -> int | None:
     """Resolve the CGWindowID belonging strictly to owned_pid via AppleScript/System Events."""
     script = (
         f'tell application "System Events" to tell (first process whose unix id is {owned_pid}) '
         'to get value of attribute "AXWindowNumber" of front window'
     )
-    rc, out, _ = _osascript(script)
+    rc, out, _ = _osascript(script, timeout=timeout)
     if rc == 0 and out.isdigit() and int(out) > 0:
         return int(out)
     # Fallback via AppleScript window id query (still strictly scoped to owned_pid).
@@ -53,7 +62,16 @@ def _resolve_owned_window_id(owned_pid: int) -> int | None:
         f'var hit = list.find(function(w){{ return w.kCGWindowOwnerPID === {owned_pid} && w.kCGWindowLayer === 0; }});'
         'hit ? String(hit.kCGWindowNumber) : "";'
     )
-    proc = subprocess.run(["osascript", "-l", "JavaScript", "-e", script_alt], capture_output=True, text=True, check=False)
+    try:
+        proc = subprocess.run(
+            ["osascript", "-l", "JavaScript", "-e", script_alt],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return None
     out2 = proc.stdout.strip()
     if proc.returncode == 0 and out2.isdigit() and int(out2) > 0:
         return int(out2)
@@ -223,7 +241,22 @@ def run_macos_native_den(
         # Verify target fixture session exists on the attached API before driving input.
         session_before = _api_readback(api_url, token, f"/v1/sessions/{session_id}")
         focus_before = _read_focused_element(owned_pid)
-        keyboard_log = _send_owned_keystrokes(owned_pid, [48, 48, 53])  # Tab, Tab, Escape
+        try:
+            keyboard_log = _send_owned_keystrokes(owned_pid, [48, 48, 53])  # Tab, Tab, Escape
+        except RuntimeError as exc:
+            return _write_receipt(out, {
+                "schema": "wea-native-den-macos-v1",
+                "seat": "macos-native-den",
+                "status": "blocked",
+                "blocked_reason": str(exc),
+                "owned_pid": owned_pid,
+                "owned_window_id": window_id,
+                "isolated_profile_dir": str(profile),
+                "fixture_session_id": session_id,
+                "provenance": prov,
+                "host_processes": ps_table,
+                "passed": False,
+            })
         focus_after = _read_focused_element(owned_pid)
         session_after = _api_readback(api_url, token, f"/v1/sessions/{session_id}")
         screenshot = capture_owned_window_screenshot(window_id, out / "macos-native-den.png")
