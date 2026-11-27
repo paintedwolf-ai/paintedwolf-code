@@ -12,12 +12,31 @@ import (
 
 type hostWriteTarget struct {
 	path, digest string
+	metadataOnly bool
 }
 
 type hostWriteState struct {
-	digest string
-	mode   os.FileMode
-	absent bool
+	digest       string
+	mode         os.FileMode
+	absent       bool
+	metadataOnly bool
+	size         int64
+	modTimeNano  int64
+	info         os.FileInfo
+}
+
+func (s hostWriteState) matches(other hostWriteState) bool {
+	if s.absent || other.absent {
+		return s.absent && other.absent
+	}
+	if s.metadataOnly {
+		return other.metadataOnly &&
+			s.mode == other.mode &&
+			s.size == other.size &&
+			s.modTimeNano == other.modTimeNano &&
+			s.info != nil && other.info != nil && os.SameFile(s.info, other.info)
+	}
+	return !other.metadataOnly && s.digest == other.digest && s.mode == other.mode
 }
 
 type hostWriteReceipt struct {
@@ -63,7 +82,7 @@ func noteHostWritePaths(paths []hostWriteTarget) {
 		if err != nil {
 			continue
 		}
-		if state, ok := readHostWriteState(key, target.digest); ok {
+		if state, ok := readHostWriteState(key, target.digest, target.metadataOnly); ok {
 			observed[key] = hostWriteReceipt{at: time.Now(), hostWriteState: state}
 		}
 	}
@@ -85,7 +104,7 @@ func noteHostWritePaths(paths []hostWriteTarget) {
 	}
 }
 
-func readHostWriteState(path, digest string) (hostWriteState, bool) {
+func readHostWriteState(path, digest string, metadataOnly bool) (hostWriteState, bool) {
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
 		if digest != "" {
@@ -93,7 +112,22 @@ func readHostWriteState(path, digest string) (hostWriteState, bool) {
 		}
 		return hostWriteState{absent: true}, true
 	}
-	if err != nil || !info.Mode().IsRegular() {
+	if err != nil {
+		return hostWriteState{}, false
+	}
+	if metadataOnly {
+		if !info.Mode().IsRegular() && !info.IsDir() {
+			return hostWriteState{}, false
+		}
+		return hostWriteState{
+			mode:         info.Mode(),
+			metadataOnly: true,
+			size:         info.Size(),
+			modTimeNano:  info.ModTime().UnixNano(),
+			info:         info,
+		}, true
+	}
+	if !info.Mode().IsRegular() {
 		return hostWriteState{}, false
 	}
 	if digest == "" {
@@ -147,6 +181,6 @@ func isRecentHostWrite(absPath string) bool {
 	if !ok || time.Since(receipt.at) > selfWriteWindow {
 		return false
 	}
-	current, ok := readHostWriteState(key, "")
-	return ok && current == receipt.hostWriteState
+	current, ok := readHostWriteState(key, "", receipt.metadataOnly)
+	return ok && receipt.hostWriteState.matches(current)
 }

@@ -292,21 +292,20 @@ func prepareChanges(changes []Change, resync bool) (preparedChanges, error) {
 		if change.Origin == api.SourceChangeOriginExternal {
 			continue
 		}
-		// The watcher reconciles rename echoes without foreground content hashing.
-		if change.Op == api.SourceChangeOpRename && change.AfterSHA256 == "" {
-			continue
-		}
 		if change.AbsPath == "" && change.FromAbsPath == "" {
 			continue
 		}
 		if writePaths == nil {
 			writePaths = make([]hostWriteTarget, 0, len(changes))
 		}
+		// Metadata-only rename echoes are suppressed via stat identity/size/mode/mtime
+		// without reading or hashing moved file bytes on the foreground path.
+		metadataOnly := change.Op == api.SourceChangeOpRename && change.AfterSHA256 == ""
 		if change.AbsPath != "" {
-			writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, digest: change.AfterSHA256})
+			writePaths = append(writePaths, hostWriteTarget{path: change.AbsPath, digest: change.AfterSHA256, metadataOnly: metadataOnly})
 		}
 		if change.FromAbsPath != "" {
-			writePaths = append(writePaths, hostWriteTarget{path: change.FromAbsPath})
+			writePaths = append(writePaths, hostWriteTarget{path: change.FromAbsPath, metadataOnly: metadataOnly})
 		}
 	}
 	out := api.SourceChangesEvent{
