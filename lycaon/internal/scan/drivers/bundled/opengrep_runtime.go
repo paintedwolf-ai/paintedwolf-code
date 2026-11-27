@@ -33,7 +33,7 @@ const (
 	opengrepRuntimeLeaseSuffix   = ".lease"
 	opengrepRuntimeManifestName  = "manifest.json"
 	opengrepRuntimeCacheSubdir   = "xdg-cache"
-	opengrepRuntimePrepTimeout   = 60 * time.Second
+	opengrepRuntimeMaxDiagBytes  = 512
 )
 
 var (
@@ -279,19 +279,36 @@ func runConfinedRuntimePreparation(ctx context.Context, bin string) (string, fun
 	stdout, stderr, exitCode, err := exec.RunSeparate(ctx, bin, []string{"--version"}, exec.ExecOpts{
 		Launch:         exec.BundledScannerLaunch("opengrep", confinement),
 		Dir:            prepWorkspace.Path(),
-		Timeout:        opengrepRuntimePrepTimeout,
+		NoTimeout:      true,
 		MaxOutputBytes: 64 << 10,
 		Env:            opengrepPreparationEnv(prepCache, prepTmp),
 	})
-	if err != nil {
-		detail := strings.TrimSpace(string(append(stdout, stderr...)))
-		if detail != "" {
-			return "", nil, fmt.Errorf("prepare opengrep runtime (exit %d): %w (%s)", exitCode, err, detail)
+	if ctx.Err() != nil {
+		return "", nil, fmt.Errorf("prepare opengrep runtime interrupted: %w", ctx.Err())
+	}
+	if err != nil || exitCode != 0 {
+		detail := boundedRuntimePrepDiagnostic(stdout, stderr)
+		if err != nil {
+			if detail != "" {
+				return "", nil, fmt.Errorf("prepare opengrep runtime (exit %d): %w (%s)", exitCode, err, detail)
+			}
+			return "", nil, fmt.Errorf("prepare opengrep runtime (exit %d): %w", exitCode, err)
 		}
-		return "", nil, fmt.Errorf("prepare opengrep runtime (exit %d): %w", exitCode, err)
+		if detail != "" {
+			return "", nil, fmt.Errorf("prepare opengrep runtime failed with exit %d (%s)", exitCode, detail)
+		}
+		return "", nil, fmt.Errorf("prepare opengrep runtime failed with exit %d", exitCode)
 	}
 	ok = true
 	return prepCache, cleanup, nil
+}
+
+func boundedRuntimePrepDiagnostic(stdout, stderr []byte) string {
+	combined := strings.TrimSpace(string(append(append([]byte(nil), stdout...), stderr...)))
+	if len(combined) > opengrepRuntimeMaxDiagBytes {
+		combined = combined[len(combined)-opengrepRuntimeMaxDiagBytes:]
+	}
+	return combined
 }
 
 func opengrepPreparationEnv(cacheDir, tmpDir string) []string {

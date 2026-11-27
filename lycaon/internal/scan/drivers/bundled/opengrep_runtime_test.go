@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -346,5 +347,75 @@ func TestPrepareOpengrepRuntimeRejectsSymlinksAndHardlinks(t *testing.T) {
 	testutil.FailErr(t, "stat sentinel after rejected seal", err)
 	if st.Mode().Perm() != 0o640 {
 		t.Fatalf("hard-linked external sentinel mode mutated to %o, want 0640", st.Mode().Perm())
+	}
+}
+
+func TestPrepareOpengrepRuntimeRejectsNonzeroExitAndRecovers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture requires macOS or Linux")
+	}
+	admissiontest.Enable(t)
+	invocations := installPrepCounter(t)
+	root := t.TempDir()
+	store := filepath.Join(root, "runtime-store")
+	t.Cleanup(func() { _ = removeReadOnlyTree(store) })
+
+	bin := filepath.Join(root, "opengrep-flaky")
+	script := `#!/bin/sh
+set -e
+target="$XDG_CACHE_HOME/opengrep/paintedwolf-1.30.0"
+mkdir -p "$target/semgrep/bin"
+if [ "${OPENGREP_FAIL_PREP:-}" = "1" ]; then
+  printf 'partial' > "$target/partial.bin"
+  printf 'partial extraction failed\n' >&2
+  exit 7
+fi
+printf 'engine-1.30.0' > "$target/semgrep/bin/opengrep-core"
+chmod 755 "$target/semgrep/bin/opengrep-core"
+printf '1.30.0\n'
+`
+	testutil.FailErr(t, "write flaky binary", os.WriteFile(bin, []byte(script), 0o700))
+
+	// Attempt 1: nonzero exit after partial extraction must fail, preserve
+	// bounded diagnostics, publish nothing, and clean up staging.
+	t.Setenv("OPENGREP_FAIL_PREP", "1")
+	cacheDir, release, err := prepareOpengrepRuntimeInStore(t.Context(), bin, "", store)
+	if err == nil || cacheDir != "" || release != nil {
+		t.Fatalf("nonzero prep exit unexpectedly succeeded: cacheDir=%q err=%v", cacheDir, err)
+	}
+	if !strings.Contains(err.Error(), "exit 7") || !strings.Contains(err.Error(), "partial extraction failed") {
+		t.Fatalf("prep error lost exit code or diagnostic: %v", err)
+	}
+	entries, readErr := os.ReadDir(store)
+	testutil.FailErr(t, "read store after failed prep", readErr)
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, opengrepRuntimeDirPrefix) && !strings.HasSuffix(name, opengrepRuntimeLeaseSuffix) {
+			t.Fatalf("failed prep published runtime directory %q", name)
+		}
+		if strings.HasPrefix(name, opengrepRuntimeStagePrefix) {
+			t.Fatalf("failed prep leaked staging directory %q", name)
+		}
+	}
+
+	// Attempt 2: retry succeeds, publishes the complete runtime, and leaves no partial file.
+	t.Setenv("OPENGREP_FAIL_PREP", "")
+	cacheDir, release, err = prepareOpengrepRuntimeInStore(t.Context(), bin, "", store)
+	testutil.FailErr(t, "retry prepare after failure", err)
+	defer release()
+	if cacheDir == "" {
+		t.Fatal("retry returned empty runtime cache dir (failed attempt left NoExtract)")
+	}
+	if got := invocations.Load(); got != 2 {
+		t.Fatalf("invocations = %d, want 2", got)
+	}
+	corePath := filepath.Join(cacheDir, "opengrep", "paintedwolf-1.30.0", "semgrep", "bin", "opengrep-core")
+	raw, err := os.ReadFile(corePath)
+	testutil.FailErr(t, "read recovered engine", err)
+	if string(raw) != "engine-1.30.0" {
+		t.Fatalf("recovered engine = %q, want engine-1.30.0", raw)
+	}
+	if _, err := os.Stat(filepath.Join(cacheDir, "opengrep", "paintedwolf-1.30.0", "partial.bin")); !os.IsNotExist(err) {
+		t.Fatalf("partial file from failed attempt survived into published runtime: err=%v", err)
 	}
 }
