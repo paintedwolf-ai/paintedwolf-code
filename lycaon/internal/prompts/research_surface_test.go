@@ -16,17 +16,17 @@ func TestResearchPromptInventoryFollowsSettingAndFamilyFloor(t *testing.T) {
 		plan, err := prompts.CompileSurfacePlan(surface, 1)
 		testutil.FailErr(t, "compile plan", err)
 		for _, loaded := range []map[string]bool{nil, {"web_search": true, "fetch_url": true}} {
-			in := prompts.ReaderInput{
-				ProfileID: prompts.CoordinatorProfileID,
-				SurfaceID: surface,
+			reader, err := prompts.NewReader(prompts.HostFacts{
 				Profiles:  profiles,
-				Plan:      plan,
-				Loaded:    loaded,
 				RootCount: 1,
 				HasGit:    true,
 				WebSearch: false,
-			}
-			reader, err := prompts.NewReader(in)
+			}, prompts.TurnProjection{
+				ProfileID: prompts.CoordinatorProfileID,
+				SurfaceID: surface,
+				Plan:      readerLoadedPlan(plan, loaded),
+				Offered:   readerLoadedOffer(plan, nil, loaded),
+			})
 			testutil.FailErr(t, "disabled research surface", err)
 			vars := reader.Facts()
 			for _, name := range []string{"web_search", "fetch_url"} {

@@ -3,6 +3,7 @@ package prompts
 import (
 	"context"
 	"fmt"
+	"maps"
 	"regexp"
 	"sort"
 	"strings"
@@ -11,16 +12,42 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/pongoplain"
-	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
+// PreviewTarget binds AuthorRender to an explicit reader state.
+type PreviewTarget struct {
+	valid     bool
+	agentID   string
+	surfaceID string
+}
+
+// PreviewReader selects an agent/profile and optional coordinator surface for AuthorRender.
+func PreviewReader(agentID, surfaceID string) PreviewTarget {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		agentID = CoordinatorProfileID
+	}
+	return PreviewTarget{
+		valid:     true,
+		agentID:   agentID,
+		surfaceID: strings.TrimSpace(surfaceID),
+	}
+}
+
+// Valid reports whether the preview target was constructed via PreviewReader.
+func (p PreviewTarget) Valid() bool {
+	return p.valid
+}
+
 // AuthorRenderRequest describes an authored preview.
 type AuthorRenderRequest struct {
 	ModuleRoot  string         // host configuration root
 	ProjectDir  string         // "" = no project overlay
+	Reader      PreviewTarget  // explicit preview reader selection
 	TemplateRef string         // xor AgentID xor SkillName
 	AgentID     string         // renders the full persona through the contract
 	SkillName   string         // renders one skill body or resource; AgentID is the reader
@@ -42,6 +69,9 @@ func AuthorRender(ctx context.Context, req AuthorRenderRequest) (AuthorRenderRes
 	moduleRoot := strings.TrimSpace(req.ModuleRoot)
 	if moduleRoot == "" {
 		return AuthorRenderResult{}, fmt.Errorf("module root required")
+	}
+	if !req.Reader.Valid() {
+		return AuthorRenderResult{}, fmt.Errorf("author render requires an explicit PreviewReader")
 	}
 	ref := strings.TrimSpace(req.TemplateRef)
 	agentID := strings.TrimSpace(req.AgentID)
@@ -91,10 +121,21 @@ func AuthorRender(ctx context.Context, req AuthorRenderRequest) (AuthorRenderRes
 		}
 		out.Output = body
 	} else {
-		if err := mergeAuthorUnits(ctx, engine, vars); err != nil {
+		reader, renderVars, err := resolveTemplatePreviewVars(ctx, engine, req.Reader, vars)
+		if err != nil {
 			return AuthorRenderResult{}, err
 		}
-		body, err := engine.Render(ctx, ref, vars)
+		var body string
+		if subRef, ok := strings.CutPrefix(ref, GuidanceTemplatePrefix); ok {
+			name := strings.TrimSuffix(subRef, ".md")
+			if !IsZeroToolUtilityTemplate(name) {
+				body, err = NewGuidanceRenderer(engine).RenderWithReader(ctx, reader, name, renderVars)
+			} else {
+				body, err = engine.Render(ctx, ref, renderVars)
+			}
+		} else {
+			body, err = engine.Render(ctx, ref, renderVars)
+		}
 		if err != nil {
 			return AuthorRenderResult{}, err
 		}
@@ -129,7 +170,14 @@ func renderSkillPreview(ctx context.Context, req AuthorRenderRequest, skillName,
 		}
 		source = string(body)
 	}
-	profileID, surfaceID, err := skillPreviewProfile(agentID, req.SurfaceID)
+	if agentID == "" {
+		agentID = req.Reader.agentID
+	}
+	surfID := req.SurfaceID
+	if strings.TrimSpace(surfID) == "" {
+		surfID = req.Reader.surfaceID
+	}
+	profileID, surfaceID, err := skillPreviewProfile(agentID, surfID)
 	if err != nil {
 		return AuthorRenderResult{}, err
 	}
@@ -160,6 +208,9 @@ func renderSkillPreview(ctx context.Context, req AuthorRenderRequest, skillName,
 	}
 	if req.Check {
 		held := reader.Held()
+		if !reader.CanReachProgram("external") {
+			delete(held, toolcontract.ReachCommandExternalExecSelector)
+		}
 		violations, err := checkSkillRender(sk, resource, source, out.Output, templated, held)
 		if err != nil {
 			return AuthorRenderResult{}, err
@@ -206,16 +257,12 @@ func skillPreviewReader(profileID, surfaceID string) (Reader, error) {
 	if err != nil {
 		return Reader{}, err
 	}
-	return NewReader(ReaderInput{
-		ProfileID: profileID,
-		SurfaceID: surfaceID,
+	return NewReader(HostFacts{
 		Profiles:  profiles,
-		Plan:      plan,
-		Loaded:    toolNameSet(plan.AddressableNames()),
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
-	})
+	}, TurnProjection{ProfileID: profileID, SurfaceID: surfaceID, Offered: plan.AddressableNames(), Declared: true})
 }
 
 // skillPreviewVars builds the render context one pack skill read carries: the
@@ -496,54 +543,172 @@ func leftoverTemplateMarkers(source, rendered string) bool {
 	return strings.Contains(rendered, "{{") || strings.Contains(rendered, "{%")
 }
 
-// mergeAuthorUnits renders the unit slots a preview's facts select, so a
-// template that carries a slot previews the way the host renders it. A tool
-// counts as offered when the preview says profile_has_<tool> is true; an
-// explicit units var is kept.
-func mergeAuthorUnits(ctx context.Context, engine *FileTemplateEngine, vars map[string]any) error {
-	if _, ok := vars["units"]; ok {
-		return nil
-	}
-	catalog, err := UnitCatalogForEngine(engine)
+// resolveTemplatePreviewVars constructs the preview Reader (applying any CLI
+// --var capability overrides through NewReader) and renders matching unit slots.
+func resolveTemplatePreviewVars(ctx context.Context, engine *FileTemplateEngine, target PreviewTarget, vars map[string]any) (Reader, map[string]any, error) {
+	reader, err := resolveTemplatePreviewReader(engine.Layers().Catalog, target, vars)
 	if err != nil {
-		return fmt.Errorf("unit catalog: %w", err)
+		return Reader{}, nil, err
 	}
-	held := make(map[string]bool)
-	for key, value := range vars {
-		if name, ok := strings.CutPrefix(key, "profile_has_"); ok && value == true {
-			held[name] = true
+	occurrence := make(map[string]any, len(vars))
+	for k, v := range vars {
+		if !IsDeclaredOrReservedReaderFact(k) {
+			occurrence[k] = v
 		}
 	}
-	if canRequest, ok := vars["profile_can_request"].(map[string]bool); ok {
-		for name, ok := range canRequest {
-			if ok {
-				held[name] = true
+	renderVars, err := Vars(reader, occurrence)
+	if err != nil {
+		return Reader{}, nil, err
+	}
+	if _, ok := renderVars["units"]; !ok {
+		catalog, err := UnitCatalogForEngine(engine)
+		if err != nil {
+			return Reader{}, nil, fmt.Errorf("unit catalog: %w", err)
+		}
+		sel := reader.Selection()
+		if mode, _ := vars["execution_mode"].(string); strings.TrimSpace(mode) != "" {
+			sel.Mode = strings.TrimSpace(mode)
+		}
+		if canRequest, ok := vars["profile_can_request"].(map[string]bool); ok {
+			tools := maps.Clone(sel.Held)
+			for name, ok := range canRequest {
+				if ok {
+					tools[name] = true
+				}
+			}
+			var classes []toolcontract.CommandEffectClass
+			if renderVars["profile_command_mutation"] == true {
+				classes = append(classes, toolcontract.CommandMutation)
+			}
+			if renderVars["profile_command_external_exec"] == true {
+				classes = append(classes, toolcontract.CommandExternalExec)
+			}
+			if renderVars["profile_command_network_egress"] == true {
+				classes = append(classes, toolcontract.CommandNetworkEgress)
+			}
+			effects, _ := toolcontract.NewCommandEffects(classes...)
+			sel.Held = readerProfileHeldSet(sandbox.ToolProfile{}, tools, effects, renderVars["command_external_hidden"] == true)
+		}
+		blocks, err := RenderUnitSlots(ctx, UnitRendererFor(engine), catalog, sel, renderVars)
+		if err != nil {
+			return Reader{}, nil, err
+		}
+		MergeUnitVars(renderVars, blocks)
+	}
+	return reader, renderVars, nil
+}
+
+func resolveTemplatePreviewReader(eff *extpacks.EffectiveCatalog, target PreviewTarget, vars map[string]any) (Reader, error) {
+	profiles, err := declaredToolProfiles(eff)
+	if err != nil {
+		return Reader{}, err
+	}
+	profileID := strings.TrimSpace(target.agentID)
+	if profileID == "" {
+		profileID = CoordinatorProfileID
+	}
+	if !hasProfileID(profiles, profileID) {
+		resolved, err := ToolProfileForAgent(profileID)
+		if err != nil {
+			return Reader{}, err
+		}
+		profileID = resolved
+	}
+	hasToolOverrides := false
+	_, hasOfferedList := vars["offered_tools"]
+	_, hasCmdMut := vars["profile_command_mutation"]
+	_, hasCmdExt := vars["profile_command_external_exec"]
+	_, hasCmdNet := vars["profile_command_network_egress"]
+	_, hasCmdHidden := vars["command_external_hidden"]
+	for key := range vars {
+		if strings.HasPrefix(key, "profile_has_") {
+			hasToolOverrides = true
+			break
+		}
+	}
+	if !hasToolOverrides && !hasOfferedList && !hasCmdMut && !hasCmdExt && !hasCmdNet && !hasCmdHidden {
+		if target.surfaceID != "" {
+			return skillPreviewReader(profileID, target.surfaceID)
+		}
+		return DeclaredReader(eff, profileID)
+	}
+
+	var base Reader
+	if target.surfaceID != "" {
+		base, err = skillPreviewReader(profileID, target.surfaceID)
+	} else {
+		base, err = DeclaredReader(eff, profileID)
+	}
+	if err != nil {
+		return Reader{}, err
+	}
+	visibleSet := map[string]bool{}
+	if hasOfferedList {
+		switch raw := vars["offered_tools"].(type) {
+		case []string:
+			for _, name := range raw {
+				if name = strings.TrimSpace(name); name != "" {
+					visibleSet[name] = true
+				}
+			}
+		case []any:
+			for _, elem := range raw {
+				if name, ok := elem.(string); ok && strings.TrimSpace(name) != "" {
+					visibleSet[strings.TrimSpace(name)] = true
+				}
+			}
+		}
+	} else {
+		for _, name := range base.Offered() {
+			visibleSet[name] = true
+		}
+	}
+	for key, val := range vars {
+		if name, ok := strings.CutPrefix(key, "profile_has_"); ok && name != "" {
+			if b, isBool := val.(bool); isBool {
+				if b {
+					visibleSet[name] = true
+				} else {
+					delete(visibleSet, name)
+				}
 			}
 		}
 	}
-	var classes []toolcontract.CommandEffectClass
-	if vars["profile_command_mutation"] == true {
-		classes = append(classes, toolcontract.CommandMutation)
-		held["command"] = true
+	adjusted := make([]sandbox.ToolProfile, len(profiles))
+	copy(adjusted, profiles)
+	if hasCmdMut || hasCmdExt || hasCmdNet {
+		var classes []toolcontract.CommandEffectClass
+		if vars["profile_command_mutation"] == true {
+			classes = append(classes, toolcontract.CommandMutation)
+			visibleSet["command"] = true
+		}
+		if vars["profile_command_external_exec"] == true {
+			classes = append(classes, toolcontract.CommandExternalExec)
+			visibleSet["command"] = true
+		}
+		if vars["profile_command_network_egress"] == true {
+			classes = append(classes, toolcontract.CommandNetworkEgress)
+			visibleSet["command"] = true
+		}
+		effects, _ := toolcontract.NewCommandEffects(classes...)
+		for i := range adjusted {
+			if adjusted[i].ID == profileID {
+				adjusted[i].CommandEffects = effects
+			}
+		}
 	}
-	if vars["profile_command_external_exec"] == true {
-		classes = append(classes, toolcontract.CommandExternalExec)
-		held["command"] = true
+	visible := make([]string, 0, len(visibleSet))
+	for name := range visibleSet {
+		visible = append(visible, name)
 	}
-	if vars["profile_command_network_egress"] == true {
-		classes = append(classes, toolcontract.CommandNetworkEgress)
-		held["command"] = true
-	}
-	effects, _ := toolcontract.NewCommandEffects(classes...)
-	held = readerHeldSet(held, effects)
-	mode, _ := vars["execution_mode"].(string)
-	sel := promptunit.Selection{Host: promptunit.HostCoordinator, Mode: strings.TrimSpace(mode), Held: held}
-	blocks, err := RenderUnitSlots(ctx, UnitRendererFor(engine), catalog, sel, vars)
-	if err != nil {
-		return err
-	}
-	MergeUnitVars(vars, blocks)
-	return nil
+	sort.Strings(visible)
+	return NewReader(HostFacts{
+		Profiles:              adjusted,
+		RootCount:             1,
+		HasGit:                true,
+		WebSearch:             true,
+		CommandExternalHidden: vars["command_external_hidden"] == true,
+	}, TurnProjection{ProfileID: profileID, SurfaceID: target.surfaceID, Offered: visible, Declared: true})
 }
 
 // ValidatePersonaRender checks the final composed persona, not source fragments.

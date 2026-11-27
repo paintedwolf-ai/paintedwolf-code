@@ -2,6 +2,7 @@
 name: inspect-and-transcode-media
 description: Probe codecs and resolution, trim, transcode, or remux audio and video with ffprobe and ffmpeg.
 metadata:
+  paintedwolf.any_of_tools: command
   host_resources: ffmpeg
 ---
 

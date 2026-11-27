@@ -1,0 +1,11 @@
+manifest_version: 1
+id: fixture/implement-without-command
+name: Implement without command
+version: 1.0.0
+compatibility:
+  extension_api: "^1.2.0"
+dependencies:
+  painted-wolf/platform:
+    version: "^1.2.0"
+  painted-wolf/implement:
+    version: "^1.0.0"

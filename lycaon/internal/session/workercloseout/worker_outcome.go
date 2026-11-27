@@ -4,6 +4,7 @@ package workercloseout
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -11,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
@@ -27,12 +29,14 @@ type WorkerSummaryFinalizeOpts struct {
 	MaxChars         int
 	WorkflowHints    *guidance.HintConfig
 	RenderWorkerKick WorkerKickRenderer
-	ProjectDir       string
-	ProjectRoots     []projectroot.RootRef
-	ActiveRootID     string
-	AgentType        string
-	WorkspaceCheck   workercompletion.WorkspaceChangeChecker
-	Ledger           guidance.EvidenceLedgerReader
+	// NextRequestReader projects a child session's next model request.
+	NextRequestReader func(ctx context.Context, sessionID string, history []api.Message) (prompts.Reader, error)
+	ProjectDir        string
+	ProjectRoots      []projectroot.RootRef
+	ActiveRootID      string
+	AgentType         string
+	WorkspaceCheck    workercompletion.WorkspaceChangeChecker
+	Ledger            guidance.EvidenceLedgerReader
 	// Pipeline is required for blocking worker.report_check Decisions.
 	Pipeline        *oar.GuardPipeline
 	DecisionPending func(ctx context.Context, childSessionID string) bool
@@ -41,6 +45,17 @@ type WorkerSummaryFinalizeOpts struct {
 	Reach toolreach.Request
 	// SpendLimitReached marks a round fenced at the armed spend limit.
 	SpendLimitReached bool
+}
+
+func (o WorkerSummaryFinalizeOpts) childRequestReader(ctx context.Context, resolver WorkerSummaryResolver, childSessionID string) (prompts.Reader, error) {
+	if o.NextRequestReader == nil {
+		return prompts.Reader{}, fmt.Errorf("next request reader not configured")
+	}
+	messages, err := loadChildMessages(ctx, resolver, childSessionID)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	return o.NextRequestReader(ctx, childSessionID, messages)
 }
 
 func (o WorkerSummaryFinalizeOpts) decisionPending(ctx context.Context, childSessionID string) bool {
@@ -136,7 +151,11 @@ func FinalizeWorkerSummaryForCanceled(
 
 	if resolver != nil {
 		kickData := map[string]any{"cancel_reason": cancelReason}
-		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCancelCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
+		reader, rErr := opts.childRequestReader(ctx, resolver, childSessionID)
+		if rErr != nil {
+			slog.WarnContext(ctx, "worker cancel closeout reader", "session_id", childSessionID, "error", rErr)
+		}
+		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, reader, anchor.InformRenderFor(ctx, anchor.WorkerCancelCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
 		if closeout != "" {
 			if _, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
 				messages, err := loadChildMessages(ctx, resolver, childSessionID)

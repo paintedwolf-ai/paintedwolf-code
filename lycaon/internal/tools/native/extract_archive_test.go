@@ -156,21 +156,92 @@ func TestExtractArchiveToolAllowsNonSinkOverlayFiles(t *testing.T) {
 	}
 }
 
-// Plain, gzip and bzip2 tar are supported formats; other archive kinds refuse.
 func TestExtractArchiveToolRejectsUnsupportedFormat(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "data.rar"), []byte("x"), 0o644); err != nil {
-		testutil.FailErr(t, "write", err)
+	wantSuffixes := []string{".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".tar.zst", ".tzst"}
+	wantFormats := []string{"zip", "tar", "tar.gz", "tar.bz2", "tar.xz", "tar.zst"}
+	if !slices.Equal(allowedArchiveSuffixes(), wantSuffixes) {
+		t.Fatalf("allowedArchiveSuffixes = %v, want %v", allowedArchiveSuffixes(), wantSuffixes)
 	}
+	if !slices.Equal(allowedArchiveFormats(), wantFormats) {
+		t.Fatalf("allowedArchiveFormats = %v, want %v", allowedArchiveFormats(), wantFormats)
+	}
+
+	tmpDir := t.TempDir()
+	testutil.FailErr(t, "mkdir vendor", os.MkdirAll(filepath.Join(tmpDir, "vendor"), 0o755))
+	testutil.FailErr(t, "write sdk.7z", os.WriteFile(filepath.Join(tmpDir, "vendor", "sdk.7z"), []byte("x"), 0o644))
+	writeTestTar(t, filepath.Join(tmpDir, "vendor", "sdk.tar"), map[string]string{"include/sdk.h": "int sdk(void);\n"})
+
 	tool := &ExtractArchiveTool{Boundary: extractTestBoundary(t)}
+	tctx := nativefixture.Context(tmpDir)
+
+	// 1. Unsupported archive suffix (vendor/sdk.7z).
 	_, err := tool.Run(context.Background(), map[string]any{
-		"path": "data.rar",
-		"dest": "out",
-	}, nativefixture.Context(tmpDir))
+		"path": "vendor/sdk.7z",
+		"dest": "out-7z",
+	}, tctx)
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EXTRACT_FORMAT_UNSUPPORTED" {
-		t.Fatalf("err = %v", err)
+		t.Fatalf("sdk.7z err = %v", err)
 	}
+	if reject.Data["extract_format_cause"] != "unsupported_suffix" ||
+		reject.Data["extract_invalid_format"] != false ||
+		reject.Data["extract_rejected_value"] != ".7z" ||
+		reject.Data["path"] != "vendor/sdk.7z" ||
+		!slices.Equal(reject.Data["extract_allowed"].([]string), wantSuffixes) {
+		t.Fatalf("sdk.7z reject data = %+v", reject.Data)
+	}
+
+	// 2. Supported plain .tar archive (vendor/sdk.tar) extracts cleanly.
+	raw, err := tool.Run(context.Background(), map[string]any{
+		"path": "vendor/sdk.tar",
+		"dest": "out-tar",
+	}, tctx)
+	testutil.FailErr(t, "extract vendor/sdk.tar", err)
+	var tarRes ExtractResult
+	testutil.FailErr(t, "decode tar result", json.Unmarshal([]byte(raw), &tarRes))
+	if tarRes.Entries != 1 {
+		t.Fatalf("sdk.tar entries = %d, want 1", tarRes.Entries)
+	}
+	headerBytes, err := os.ReadFile(filepath.Join(tmpDir, "out-tar", "include", "sdk.h"))
+	testutil.FailErr(t, "read extracted sdk.h", err)
+	if string(headerBytes) != "int sdk(void);\n" {
+		t.Fatalf("sdk.h = %q", headerBytes)
+	}
+
+	// 3. Invalid explicit format on a valid suffix (vendor/sdk.tar with Format="7z").
+	reject = nil
+	_, err = tool.Extract(context.Background(), ExtractInput{
+		Archive: "vendor/sdk.tar",
+		Dest:    "out-bad-format",
+		Format:  "7z",
+	}, tctx)
+	if !errors.As(err, &reject) || reject.Code != "EXTRACT_FORMAT_UNSUPPORTED" {
+		t.Fatalf("explicit format err = %v", err)
+	}
+	if reject.Data["extract_format_cause"] != "invalid_format" ||
+		reject.Data["extract_invalid_format"] != true ||
+		reject.Data["extract_rejected_value"] != "7z" ||
+		reject.Data["format"] != "7z" ||
+		reject.Data["path"] != "vendor/sdk.tar" ||
+		!slices.Equal(reject.Data["extract_allowed"].([]string), wantFormats) {
+		t.Fatalf("explicit format reject data = %+v", reject.Data)
+	}
+	if _, statErr := os.Stat(filepath.Join(tmpDir, "out-bad-format")); !os.IsNotExist(statErr) {
+		t.Fatalf("invalid explicit format created destination: %v", statErr)
+	}
+}
+
+func writeTestTar(t *testing.T, path string, entries map[string]string) {
+	t.Helper()
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	for name, content := range entries {
+		testutil.FailErr(t, "tar header", tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}))
+		_, err := tw.Write([]byte(content))
+		testutil.FailErr(t, "tar content", err)
+	}
+	testutil.FailErr(t, "close tar", tw.Close())
+	testutil.FailErr(t, "write tar", os.WriteFile(path, buf.Bytes(), 0o644))
 }
 
 func writeTestTarGz(t *testing.T, path string, entries map[string]string) {

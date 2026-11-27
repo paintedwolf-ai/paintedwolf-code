@@ -28,7 +28,7 @@ func TestComposeProposalHumanStartAdvanceToolPath(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hint config", err)
-	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: mgr.Policy.Sessions}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Resolver: &mgr.Resolver, Starts: mgr.Starts, Scaffold: mgr.Blueprints.Scaffold, Sessions: mgr.Policy.Sessions}); err != nil {
 		testutil.FailErr(t, "RegisterStateTools failed", err)
 	}
 	if err := workflowphases.RegisterAdvanceTool(reg, mgr.Phases); err != nil {
@@ -72,7 +72,7 @@ func TestComposeProposalHumanStartAdvanceToolPath(t *testing.T) {
 func TestAdvanceToolMatchesHTTPGateShape(t *testing.T) {
 	mgr, _, _, projectDir := testManagerWithRegistry(t)
 	reg := tools.NewDefaultRegistry()
-	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: mgr.Policy.Sessions}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Resolver: &mgr.Resolver, Starts: mgr.Starts, Scaffold: mgr.Blueprints.Scaffold, Sessions: mgr.Policy.Sessions}); err != nil {
 		testutil.FailErr(t, "RegisterStateTools failed", err)
 	}
 	if err := workflowphases.RegisterAdvanceTool(reg, mgr.Phases); err != nil {

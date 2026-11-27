@@ -9,13 +9,13 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 )
 
-func RenderSkillProcedureBlock(ctx context.Context, renderer *prompts.InjectRenderer, sessionID, profileID string, preload turnload.SkillPreload) (string, error) {
+func RenderSkillProcedureBlock(ctx context.Context, renderer *prompts.InjectRenderer, reader prompts.Reader, sessionID, profileID string, preload turnload.SkillPreload) (string, error) {
 	surface := "worker"
 	if profileID == prompts.CoordinatorProfileID {
 		surface = "coordinator"
 	}
-	block, err := anchor.RenderInform(ctx, anchor.InjectSkillProcedure,
-		anchor.MatchContext{Surface: surface, Profile: profileID, SessionID: sessionID}, renderer,
+	block, err := anchor.RenderInformWithReader(ctx, anchor.InjectSkillProcedure,
+		anchor.MatchContext{Surface: surface, Profile: profileID, SessionID: sessionID}, renderer, reader,
 		map[string]any{
 			"skill_name":      preload.Name,
 			"skill_body":      strings.TrimSpace(preload.Body),

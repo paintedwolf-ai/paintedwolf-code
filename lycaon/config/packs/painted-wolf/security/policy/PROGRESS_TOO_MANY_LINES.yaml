@@ -5,7 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - update_progress
-requires_facts: [paintedwolf.line_count, paintedwolf.max_lines, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.can_update_progress, paintedwolf.line_count, paintedwolf.max_lines, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PROGRESS_TOO_MANY_LINES"
 effect: block
 x-paintedwolf-category: recoverable
@@ -15,7 +15,7 @@ what: update_progress had {{ paintedwolf.line_count }} checklist lines; the limi
 cause: The submitted checklist exceeds the current row bound.
 why: The progress checklist stays bounded to user-facing results
 fix: Represent all required results within {{ paintedwolf.max_lines }} top-level - [ ]/- [x]/- [~]/- [>] rows, grouping related results without dropping unresolved work or changing its status.
-instead: Branch on Code; shorten to ≤ {{ paintedwolf.max_lines }} top-level lines and retry update_progress
+instead: '{% if paintedwolf.can_update_progress %}Branch on Code; shorten to ≤ {{ paintedwolf.max_lines }} top-level lines and retry update_progress{% else %}Branch on Code; shorten checklist rows to ≤ {{ paintedwolf.max_lines }} top-level lines{% endif %}'
 x-paintedwolf-scenarios:
   - id: default
     vars:

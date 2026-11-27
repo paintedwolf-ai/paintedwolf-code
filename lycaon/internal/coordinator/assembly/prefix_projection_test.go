@@ -50,7 +50,7 @@ func TestKnownPrefixDoesNotAdvanceTurnOrWorkflow(t *testing.T) {
 		t.Fatal("preparation resolved turn policy delivery")
 		return nil, nil
 	}
-	engine.SetDeps(deps)
+	engine.SetDeps(withTestTurnReader(deps))
 	engine.BeginPromptTurn(sess.ID, "pending")
 	turn := engine.cache.LoadTurn(sess.ID)
 	turn.Iteration = 7

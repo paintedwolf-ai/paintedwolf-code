@@ -1,3 +1,3 @@
 steps:
   - tool: "update_progress"
-    say: "If work is complete, call {{ call }} first."
+    say: "If work is complete, call {% if load %}{{ load }}, then {% endif %}{{ call }} first."

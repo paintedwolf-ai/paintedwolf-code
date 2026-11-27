@@ -276,7 +276,7 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 	if got := kicks.TakePendingKickIDUnless("chat", nil); got != "coordinator-security-claims" {
 		t.Fatalf("phase handoff guidance=%q", got)
 	}
-	text, _, ok, err := kicks.RenderPendingNudge(ctx, "chat", kick.CoordinatorKickRenderContext{WorkflowID: run.WorkflowID, CurrentPhase: run.CurrentPhase})
+	text, _, ok, err := kicks.RenderPendingNudge(ctx, "chat", kick.CoordinatorKickRenderContext{Reader: declaredRequestReader(t), WorkflowID: run.WorkflowID, CurrentPhase: run.CurrentPhase})
 	testutil.FailErr(t, "render durable phase evidence", err)
 	if !ok || !strings.Contains(text, "retained-evidence-identity") {
 		t.Fatalf("phase handoff lost retained evidence:%q,%v", text, ok)
@@ -397,7 +397,7 @@ func TestComposeWorkerAssignmentRendersNamedFollowUpAndWorkflowContext(t *testin
 		Prompt:          "Re-verify token expiry handling in middleware",
 		Scope:           &api.TaskScope{Mode: api.TaskScopeModeRead},
 	}
-	rendered, err := builder.composeWorkerAssignment(ctx, tctx, "skeptic", brief, task)
+	rendered, err := composeWorkerTaskAssignment(ctx, builder.storage, builder.workflows, builder.scanning, builder.boards, builder.workerRuntime, declaredWorkerRequests{}, tctx, "skeptic", brief, task)
 	testutil.FailErr(t, "compose worker assignment", err)
 	if !strings.Contains(rendered, "challenger") || !strings.Contains(rendered, "Re-verify token expiry handling in middleware") {
 		t.Fatalf("rendered assignment missing worker name or round instructions: %q", rendered)

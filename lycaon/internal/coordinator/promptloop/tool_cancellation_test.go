@@ -3,9 +3,10 @@ package promptloop
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"

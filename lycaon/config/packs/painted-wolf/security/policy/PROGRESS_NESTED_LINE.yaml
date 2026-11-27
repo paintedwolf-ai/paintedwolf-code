@@ -5,7 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - update_progress
-requires_facts: [paintedwolf.line, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.can_update_progress, paintedwolf.line, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PROGRESS_NESTED_LINE"
 effect: block
 x-paintedwolf-category: recoverable
@@ -15,7 +15,7 @@ what: Checklist line "{{ paintedwolf.line }}" is indented — only top-level `- 
 cause: A checklist row has leading indentation; descriptive text is not itself a nested checklist row.
 why: Nested rows inflate the plan and do not map cleanly to the progress checklist
 fix: Move required checklist results to top-level rows without leading spaces. Keep supporting detail as descriptive text or in the corresponding label.
-instead: Branch on Code; flatten to top-level lines and retry update_progress
+instead: '{% if paintedwolf.can_update_progress %}Branch on Code; flatten to top-level lines and retry update_progress{% else %}Branch on Code; flatten checklist rows to top-level lines{% endif %}'
 x-paintedwolf-scenarios:
   - id: default
     vars:

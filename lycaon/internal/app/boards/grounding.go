@@ -303,7 +303,7 @@ func (r *Runtime) wireDecisionAndCallTools(ctx context.Context) error {
 		return roster.Reader.CountState(ctx, coordinator(sessionID), workerstate.Delivered)
 	})
 
-	if err := call.RegisterHandoffTools(r.deps.Execution.Host.Registry, call.HandoffToolDeps{Calls: r.Calls, Sessions: callLookup}); err != nil {
+	if err := call.RegisterHandoffTools(r.deps.Execution.Host.Registry, call.HandoffToolDeps{Calls: r.Calls}); err != nil {
 		return fmt.Errorf("handoff tools: %w", err)
 	}
 	return nil

@@ -20,7 +20,7 @@ func TestViewContextSitsDirectlyBeforeItsPrompt(t *testing.T) {
 	deps.TurnSourceBriefs = func(context.Context, *api.Session) map[string]inject.SourceChangeBrief {
 		return map[string]inject.SourceChangeBrief{"u2": brief}
 	}
-	eng.SetDeps(deps)
+	eng.SetDeps(withTestTurnReader(deps))
 	sess := &api.Session{ID: "view-window", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	view := &api.ViewContext{
 		Editors:  []api.ViewEditor{{RootID: "r", Path: "apples.txt", DisplayPath: "apples.txt", Selection: &api.ViewSelection{StartLine: 3, EndLine: 5}}},

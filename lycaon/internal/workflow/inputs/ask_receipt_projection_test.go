@@ -79,43 +79,6 @@ func TestDeferredBlueprintLaunchIsConsumedOnceWithoutLosingScaffold(t *testing.T
 	}
 }
 
-type feedbackReceiptRuns struct {
-	runstate.RunsRepository
-	vars   map[string]any
-	active *api.WorkflowRun
-}
-
-func (r feedbackReceiptRuns) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
-	return r.active, nil
-}
-func (r feedbackReceiptRuns) GetScaffoldVars(context.Context, string) (map[string]any, error) {
-	return r.vars, nil
-}
-func TestFeedbackToolReturnsRetainedInputWithoutIssuingAnotherQuestion(t *testing.T) {
-	for _, pending := range []bool{false, true} {
-		runs := feedbackReceiptRuns{}
-		if pending {
-			runs.active = &api.WorkflowRun{ID: "run"}
-			runs.vars = map[string]any{"user_feedback": map[string]any{"phase": map[string]any{"pending": true, "prompt": "Retained question"}}}
-		}
-		reg := tools.NewDefaultRegistry()
-		if err := RegisterFeedbackTool(reg, &Feedback{Runs: runs}); err != nil {
-			t.Fatalf("register feedback: %v", err)
-		}
-		out, err := reg.Run(t.Context(), "workflow_user_feedback", nil, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: "session"}})
-		if err != nil {
-			t.Fatalf("project pending input: %v", err)
-		}
-		var result FeedbackToolResult
-		if err := json.Unmarshal([]byte(out), &result); err != nil {
-			t.Fatalf("decode feedback projection: %v", err)
-		}
-		if result.Pending != pending || (pending && result.PhaseID != "phase") {
-			t.Fatalf("feedback projection=%+v pending=%v", result, pending)
-		}
-	}
-}
-
 func TestProtectedInputWireMetadataRetainsBoundedLifetime(t *testing.T) {
 	for _, ttl := range []any{float64(60), int(60), int64(60)} {
 		req, err := parseAskUserArgs(map[string]any{"prompt": " Provide key ", "response_type": "secret", "secret": map[string]any{"name": " Deploy key ", "purpose": " release ", "scope": "project", "agent_use_ttl_seconds": ttl}})

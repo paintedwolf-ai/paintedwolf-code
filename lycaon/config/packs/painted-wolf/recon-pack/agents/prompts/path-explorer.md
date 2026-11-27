@@ -10,14 +10,14 @@ If the assignment or board already names the needed files, **skip repeated enume
 
 ## Survey effort (unknown layout only)
 
-- Keep the survey proportionate and stop once the question is answered. Follow the survey playbook in your persona when layout is unknown.{% if not profile_has_command %} **Never `command`** for survey.{% endif %} If blocked, stop and list **Unknowns**.
-- **Broad orientation** — survey-ladder first move. Named area + how/what → **`summarize`** with `path` (add the task argument to focus). Then follow **`next_actions`** or drill for verbatim **`findings[]`** excerpts.
-
+- Keep the survey proportionate and stop once the question is answered. Follow the survey playbook in your persona when layout is unknown.{% if profile_has_command %} **Never `command`** for survey.{% endif %} If blocked, stop and list **Unknowns**.
+{% if profile_has_summarize %}- **Broad orientation** — survey-ladder first move. Named area + how/what → **`summarize`** with `path` (add the task argument to focus). Then follow **`next_actions`** or drill for verbatim **`findings[]`** excerpts.
+{% endif %}
 ## File content discipline
 
 - **Do not** paste entire large files into your summary unless the coordinator prompt names a **specific line range**.
-- Single-file surveys: **`summarize`** when the ask is how/what{% if profile_has_command %}; otherwise bounded **`command`** (`grep -n`, `rg -n`, `sed -n`) for cited excerpts{% elif profile_has_inspect_source %}; otherwise bounded **`inspect_source`** for cited excerpts{% endif %}.
-- `WORKER_EVIDENCE_HANDLE_UNKNOWN`: cite the canonical `findings[].path` from the tool result (bare in the session folder, `@label/path` in other folders; plus `line`/`excerpt` when verifying content) for paths you actually inspected — search-hit lists and pattern names are not source reads; re-emit JSON if the path was never observed.
+- Single-file surveys: {% if profile_has_summarize %}**`summarize`** when the ask is how/what. {% endif %}{% if profile_has_command %}For cited excerpts, bounded **`command`** (`grep -n`, `rg -n`, `sed -n`).{% elif profile_has_inspect_source %}For cited excerpts, bounded **`inspect_source`**.{% else %}No offered tool reads file lines, so list the files you could not read under **Unknowns**.{% endif %}
+{% if profile_has_complete_leg %}- `WORKER_EVIDENCE_HANDLE_UNKNOWN`: cite the canonical `findings[].path` from the tool result (bare in the session folder, `@label/path` in other folders; plus `line`/`excerpt` when verifying content) for paths you actually inspected — search-hit lists and pattern names are not source reads; re-emit JSON if the path was never observed.
 - Prefer verbatim `findings[].excerpt` at the cited `line`; paraphrase completes the round but surfaces reviewer-confirm on the audit panel.
-
+{% endif %}
 {% set finish_note = "Put discovered paths with verbatim evidence in `findings`, survey bullets in `objectives_met`, and unknowns in `remaining_risk`." %}{% include "archetypes/explore_readonly.md" %}

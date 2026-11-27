@@ -54,12 +54,12 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 					noted.code, noted.unread = code, unread
 					return 1, ""
 				},
-				RenderHostKick: func(_ context.Context, _ string, data map[string]any) (string, error) {
+				RenderHostKick: func(_ context.Context, reader prompts.Reader, _ string, data map[string]any) (string, error) {
 					if _, ok := data["retained_document"]; ok {
 						kick = data
 					}
 					var err error
-					rendered, err = engine.RenderKick(t.Context(), "coordinator-report-document", data)
+					rendered, err = engine.RenderKick(t.Context(), reader, "coordinator-report-document", data)
 					return rendered, err
 				},
 			},
@@ -73,6 +73,7 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 	assistant := api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: content}
 	st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true,
 		history: []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Survey it"}, assistant}}
+	st.reader = testCoordinatorReader(t, st.offeredToolNames...)
 	out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "coordinator_security_synthesis", st, st.history, assistant, read)
 	testutil.FailErr(t, "refuse the unread fence", err)
 

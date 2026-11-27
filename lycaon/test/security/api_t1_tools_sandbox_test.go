@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -13,10 +14,11 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestStateToolsRespectProjectDir(t *testing.T) {
+func TestStateStartRespectsProjectDir(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "wf.db")
 
 	wfStore := workflowpersistence.New(sqlDB)
@@ -25,7 +27,7 @@ func TestStateToolsRespectProjectDir(t *testing.T) {
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	mgr := workflow.NewManager(wfStore, sessStore, reg, nil)
 	toolReg := tools.NewDefaultRegistry()
-	if err := workflowstatetools.RegisterStateTools(toolReg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessStore.Sessions}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(toolReg, workflowstatetools.StateToolDeps{Resolver: &mgr.Resolver, Starts: mgr.Starts, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessStore.Sessions}); err != nil {
 		testutil.FailErr(t, "workflow.RegisterStateTools failed", err)
 	}
 
@@ -35,8 +37,8 @@ func TestStateToolsRespectProjectDir(t *testing.T) {
 	testutil.FailErr(t, "sessStore.Create failed", err)
 	testdbseed.BindSessionWorkspace(t, sessStore.DB(), sess.ID, dirA)
 
-	_, err = toolReg.Run(context.Background(), "state_query", nil, SecurityToolContext(sess.ID, dirB, ""))
-	if err == nil {
-		t.Fatal("expected project_dir mismatch error")
+	out, err := toolReg.Run(context.Background(), "state_start", map[string]any{"workflow_id": "implement", "workflow_version": "1.0.0"}, SecurityToolContext(sess.ID, dirB, ""))
+	if !errors.Is(err, toolguard.ErrProjectMismatch) || out != "" {
+		t.Fatalf("state_start outside the session project = %q, %v; want project_dir mismatch error", out, err)
 	}
 }

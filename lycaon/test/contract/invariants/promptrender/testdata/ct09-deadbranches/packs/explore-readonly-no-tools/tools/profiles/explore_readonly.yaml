@@ -1,0 +1,7 @@
+id: explore_readonly
+description: Readonly profile with zero tools so agent_tools is empty
+command_effects: [read_only]
+tools: {}
+deny_tools:
+  - command
+wait_conditions: []

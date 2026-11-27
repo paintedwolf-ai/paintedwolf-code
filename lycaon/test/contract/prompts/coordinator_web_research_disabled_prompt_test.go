@@ -23,16 +23,19 @@ func renderNoFolderCoordinatorCore(t *testing.T, webSearch bool) string {
 	contractcheck.FailErr(t, "LoadToolProfiles", err)
 	plan, err := prompts.CompileSurfacePlan(spawn.SurfaceImplementRouting, 0)
 	contractcheck.FailErr(t, "CompileSurfacePlan", err)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
+	roster := inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, webSearch).Effective
+	reader, err := prompts.NewReader(prompts.HostFacts{
+		Profiles:       profiles,
+		WebSearch:      webSearch,
+		SpawnAllowlist: roster,
+	}, prompts.TurnProjection{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: spawn.SurfaceImplementRouting,
 		Plan:      plan,
-		Profiles:  profiles,
-		WebSearch: webSearch,
+		Offered:   (plan).ImmediateNames(),
 	})
 	contractcheck.FailErr(t, "NewReader", err)
 	vars := map[string]any{}
-	roster := inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, webSearch).Effective
 	contractcheck.FailErr(t, "MergeForTurn", capability.MergeForTurn(vars, reader, roster))
 	vars, err = prompts.Vars(reader, vars)
 	contractcheck.FailErr(t, "prompts.Vars", err)
