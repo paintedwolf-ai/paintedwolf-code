@@ -19,17 +19,12 @@ import pathlib
 import sys
 from typing import Any
 
+from grounding.friction_probe import probe_store_db
 from grounding.sidecar_driver import (
     IsolatedSidecarProcess,
     ScriptedTurn,
-    read_d10_friction_snapshot,
     run_scripted_session,
 )
-
-
-def _d10_delta(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
-    keys = sorted(set(before) | set(after))
-    return {k: int(after.get(k, 0)) - int(before.get(k, 0)) for k in keys}
 
 
 def _extract_verdicts_summary(artifact_dict: dict[str, Any]) -> dict[str, Any]:
@@ -126,10 +121,10 @@ def run_gb04_pilot(
         plat = "macos" if sidecar.provenance.platform == "darwin" else "linux"
 
         for selector, family_id, expected_class, reply_text, repair_text in pilot_specs:
-            before = read_d10_friction_snapshot(sidecar.store_db_path)
             sess = client.create_session(pid)
             sid = sess["id"]
             client.wait_session_ready(sid)
+            before = probe_store_db(sidecar.store_db_path, sid)
             p = client.send_prompt(sid, f"Inspect sample.go for {selector}.")
             art = run_scripted_session(
                 client,
@@ -148,7 +143,7 @@ def run_gb04_pilot(
                 run_manifest=manifest,
                 poll_timeout=60.0,
             )
-            after = read_d10_friction_snapshot(sidecar.store_db_path)
+            after = probe_store_db(sidecar.store_db_path, sid)
             art_d = art.to_dict()
             (out_dir / f"{selector}.json").write_text(
                 json.dumps(art_d, indent=2, sort_keys=True), encoding="utf-8"
@@ -161,14 +156,15 @@ def run_gb04_pilot(
                 passed = len(art.refusals) >= 1
                 div_kind = "false_accept"
 
+            delta = after.delta_observed(before)
             slots_report.append({
                 "selector": selector,
                 "family_id": family_id,
                 "expected_class": expected_class,
                 "passed": passed,
-                "d10_before": before,
-                "d10_after": after,
-                "d10_delta": _d10_delta(before, after),
+                "d10_before": before.to_dict(),
+                "d10_after": after.to_dict(),
+                "d10_delta": delta,
                 "summary": _extract_verdicts_summary(art_d),
             })
             if not passed:
@@ -179,7 +175,7 @@ def run_gb04_pilot(
                     "detail": (
                         f"expected={expected_class}, refusals={len(art.refusals)}, "
                         f"cited_evidence={len(art.cited_evidence)}, "
-                        f"d10_delta={_d10_delta(before, after)}"
+                        f"d10_delta={delta}"
                     ),
                 })
 
