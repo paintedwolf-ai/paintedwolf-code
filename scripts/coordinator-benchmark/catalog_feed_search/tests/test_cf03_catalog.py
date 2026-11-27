@@ -64,9 +64,51 @@ class _FakeSidecarTransport:
             sub = parts[4]
             if sub == "index":
                 cov = []
+                overall_state = "ready"
                 for rid, rpath in root_map.items():
-                    failed_dirs = self._count_unreadable_dirs(rpath)
+                    root_unreadable = not os.access(rpath, os.R_OK | os.X_OK)
+                    failed_dirs = 1 if root_unreadable else self._count_unreadable_dirs(rpath)
+                    st = "failed" if root_unreadable else "ready"
+                    if st == "failed":
+                        overall_state = "failed"
                     cov.append(
+                        {
+                            "root_id": rid,
+                            "state": st,
+                            "discovery_complete": not root_unreadable,
+                            "refreshing": False,
+                            "bounded_directories": 0,
+                            "failed_directories": failed_dirs,
+                            "error": "permission denied" if root_unreadable else "",
+                        }
+                    )
+                return {"state": overall_state, "refreshing": False, "revision": self._rev, "coverage": cov}
+            if sub == "search":
+                rid_filter = qs.get("root_id", [""])[0]
+                limit = int(qs.get("limit", ["50"])[0])
+                cursor = qs.get("cursor", [""])[0]
+                selected_roots = [(rid_filter, root_map[rid_filter])] if rid_filter else list(root_map.items())
+                all_matches: list[dict[str, str]] = []
+                cov_out: list[dict[str, object]] = []
+                for rid, rpath in selected_roots:
+                    root_unreadable = not os.access(rpath, os.R_OK | os.X_OK)
+                    if root_unreadable:
+                        cov_out.append(
+                            {
+                                "root_id": rid,
+                                "state": "failed",
+                                "discovery_complete": False,
+                                "refreshing": False,
+                                "bounded_directories": 0,
+                                "failed_directories": 1,
+                                "error": "permission denied",
+                            }
+                        )
+                        continue
+                    files, failed_dirs = self._safe_walk_files(rpath)
+                    for p in files:
+                        all_matches.append({"root_id": rid, "path": p})
+                    cov_out.append(
                         {
                             "root_id": rid,
                             "state": "ready",
@@ -77,31 +119,14 @@ class _FakeSidecarTransport:
                             "error": "",
                         }
                     )
-                return {"state": "ready", "refreshing": False, "revision": self._rev, "coverage": cov}
-            if sub == "search":
-                rid = qs.get("root_id", ["root-0"])[0]
-                limit = int(qs.get("limit", ["50"])[0])
-                cursor = qs.get("cursor", [""])[0]
-                rpath = root_map[rid]
-                files, failed_dirs = self._safe_walk_files(rpath)
                 start = int(cursor) if cursor.isdigit() else 0
-                page = files[start : start + limit]
-                next_cur = str(start + limit) if (start + limit) < len(files) else ""
+                page = all_matches[start : start + limit]
+                next_cur = str(start + limit) if (start + limit) < len(all_matches) else ""
                 return {
                     "revision": self._rev,
-                    "matches": [{"root_id": rid, "path": p} for p in page],
+                    "matches": page,
                     "next_cursor": next_cur,
-                    "coverage": [
-                        {
-                            "root_id": rid,
-                            "state": "ready",
-                            "discovery_complete": True,
-                            "refreshing": False,
-                            "bounded_directories": 0,
-                            "failed_directories": failed_dirs,
-                            "error": "",
-                        }
-                    ],
+                    "coverage": cov_out,
                 }
             if sub == "walk":
                 return {"items": [], "next_cursor": ""}
@@ -198,8 +223,79 @@ class TestCF03Families(unittest.TestCase):
             self.assertEqual(r2.failed, 0)
             self.assertEqual(r2.edge_executed, 6)
             self.assertEqual(r2.edge_failed, 0)
+            self.assertEqual(len(r2.state_ledger), 6)
             self.assertEqual([i["incident_id"] for i in incidents], ["K02-INC-03", "K02-INC-04"])
-            self.assertTrue(all(i["verdict"] == "PASS" for i in incidents))
+            # Fake transport returns settled 2050 files immediately -> must be explicit unreproduced_attempt!
+            self.assertEqual(incidents[0]["replay_disposition"], "unreproduced_attempt")
+            self.assertEqual(incidents[0]["verdict"], "UNREPRODUCED_ATTEMPT")
+            self.assertEqual(incidents[1]["replay_disposition"], "not_reproduced")
+            self.assertEqual(incidents[1]["verdict"], "PASS")
+
+    def test_decision_030_cold_query_not_excused_by_earlier_index_frame(self) -> None:
+        """Decision 030: an earlier warming /source/index frame must NOT excuse a complete-looking empty /source/search."""
+
+        class _CompleteEmptyAfterWarmingTransport(_FakeSidecarTransport):
+            def __init__(self, boundary_cfg: BoundaryConfig) -> None:
+                super().__init__(boundary_cfg)
+                self._index_calls: dict[str, int] = {}
+
+            def request(self, path: str, body: dict[str, object] | None = None, *, method: str = "GET") -> dict[str, object]:
+                parsed = urllib.parse.urlsplit(path)
+                parts = parsed.path.strip("/").split("/")
+                if len(parts) >= 5 and parts[4] == "index":
+                    pid = parts[2]
+                    self._index_calls[pid] = self._index_calls.get(pid, 0) + 1
+                    if self._index_calls[pid] == 1:
+                        return {
+                            "state": "warming",
+                            "refreshing": True,
+                            "revision": 1,
+                            "coverage": [
+                                {
+                                    "root_id": "root-0",
+                                    "state": "warming",
+                                    "discovery_complete": False,
+                                    "refreshing": True,
+                                    "bounded_directories": 0,
+                                    "failed_directories": 0,
+                                    "error": "",
+                                }
+                            ],
+                        }
+                if len(parts) >= 5 and parts[4] == "search":
+                    # Subsequent catalog answer claims ready & complete with 0 matches!
+                    return {
+                        "state": "ready",
+                        "refreshing": False,
+                        "revision": 2,
+                        "matches": [],
+                        "next_cursor": "",
+                        "coverage": [
+                            {
+                                "root_id": "root-0",
+                                "state": "ready",
+                                "discovery_complete": True,
+                                "refreshing": False,
+                                "bounded_directories": 0,
+                                "failed_directories": 0,
+                                "error": "",
+                            }
+                        ],
+                    }
+                return super().request(path, body, method=method)
+
+        bad_driver = SidecarDriver(_CompleteEmptyAfterWarmingTransport(self.boundary_cfg))
+        with tempfile.TemporaryDirectory() as tmp:
+            r2, incidents = run_k02_sidecar(bad_driver, self.boundary_cfg, Path(tmp), count=4)
+            # Instance 3 is cold_query -> must be graded DEFECT, NOT excused by earlier warming frame!
+            self.assertGreaterEqual(r2.failed, 1)
+            cold_entries = [e for e in r2.state_ledger if e.get("attempted_state") == "cold_query"]
+            self.assertEqual(len(cold_entries), 1)
+            self.assertEqual(cold_entries[0]["verdict"], "DEFECT")
+            self.assertEqual(cold_entries[0]["transition_evidence"]["earlier_index_state"], "warming")
+            # K02-INC-03 must report reproduced / DEFECT
+            self.assertEqual(incidents[0]["replay_disposition"], "reproduced")
+            self.assertEqual(incidents[0]["verdict"], "DEFECT")
 
     def test_k03_k04_k07_runners_with_fake_sidecar(self) -> None:
         fake_sc = _FakeManagedSidecar(self.driver)

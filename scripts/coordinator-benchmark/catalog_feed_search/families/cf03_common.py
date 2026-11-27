@@ -20,6 +20,7 @@ import urllib.request
 
 from ..checker import ProductCatalogAnswer, check_catalog, walk_entries_to_catalog_items
 from ..checker_types import CheckResult, Verdict
+from ..driver_adapters import map_catalog_index_matches_to_answer
 from ..driver_http import HTTPTransport
 from ..driver_provenance import RunProvenance, file_sha256, write_evidence_manifest
 from ..driver_sidecar import SidecarDriver
@@ -161,10 +162,12 @@ class FamilyReport:
     edge_executed: int = 0
     edge_passed: int = 0
     edge_failed: int = 0
+    edge_blocked: int = 0
     declared_gaps: Counter[str] = field(default_factory=Counter)
     failures: list[dict[str, object]] = field(default_factory=list)
     shrunk_files: list[str] = field(default_factory=list)
     edge_results: list[dict[str, object]] = field(default_factory=list)
+    state_ledger: list[dict[str, object]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
     def record_generated(self, check: CheckResult, *, extra: dict[str, object] | None = None) -> None:
@@ -191,15 +194,40 @@ class FamilyReport:
         else:
             self.inconclusive += 1
 
-    def record_edge(self, name: str, passed: bool, detail: dict[str, object], gap: str | None = None) -> None:
+    def record_blocked(self, reason: str, *, extra: dict[str, object] | None = None) -> None:
+        self.executed += 1
+        self.blocked += 1
+        rec: dict[str, object] = {"status": "blocked", "reason": reason}
+        if extra:
+            rec.update(extra)
+        self.state_ledger.append(rec)
+
+    def record_ledger(self, entry: dict[str, object]) -> None:
+        self.state_ledger.append(entry)
+
+    def record_edge(
+        self,
+        name: str,
+        passed: bool,
+        detail: dict[str, object],
+        gap: str | None = None,
+        *,
+        blocked: bool = False,
+    ) -> None:
         self.edge_executed += 1
+        if blocked:
+            self.edge_blocked += 1
+            self.edge_results.append({"edge": name, "passed": False, "status": "blocked", "detail": detail})
+            return
         if passed:
             self.edge_passed += 1
             if gap:
                 self.declared_gaps[gap] += 1
         else:
             self.edge_failed += 1
-        self.edge_results.append({"edge": name, "passed": passed, "detail": detail})
+        self.edge_results.append(
+            {"edge": name, "passed": passed, "status": "passed" if passed else "failed", "detail": detail}
+        )
 
     @property
     def declared_gap_rate(self) -> float:
@@ -224,13 +252,61 @@ class FamilyReport:
             "edge_executed": self.edge_executed,
             "edge_passed": self.edge_passed,
             "edge_failed": self.edge_failed,
+            "edge_blocked": self.edge_blocked,
             "declared_gaps": dict(sorted(self.declared_gaps.items())),
             "declared_gap_rate": self.declared_gap_rate,
             "failures": self.failures,
             "shrunk_files": self.shrunk_files,
             "edge_results": self.edge_results,
+            "state_ledger": self.state_ledger,
             "notes": self.notes,
         }
+
+
+def verify_dir_unreadable(path: Path) -> bool:
+    """Independently verify that reading directory entries raises PermissionError."""
+    try:
+        os.listdir(path)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+def walk_combined_catalog(
+    driver: SidecarDriver,
+    project_id: str,
+    *,
+    page_limit: int = 200,
+) -> tuple[ProductCatalogAnswer, list[dict[str, object]]]:
+    """Query /source/search across ALL project roots (root_id omitted) in one combined selection."""
+    all_matches: list[dict[str, object]] = []
+    cursor: str | None = None
+    last_coverage: list[dict[str, object]] = []
+    revision: int | None = None
+
+    while True:
+        resp = driver.file_lookup(project_id, "", root_id=None, limit=page_limit, cursor=cursor)
+        if resp.get("revision") is not None:
+            revision = int(resp["revision"])
+        cov = resp.get("coverage")
+        if isinstance(cov, list):
+            last_coverage = [c for c in cov if isinstance(c, dict)]
+        matches = resp.get("matches") or []
+        if isinstance(matches, list):
+            all_matches.extend(m for m in matches if isinstance(m, dict))
+        next_cur = str(resp.get("next_cursor") or "")
+        if not next_cur or next_cur == cursor:
+            break
+        cursor = next_cur
+
+    answer = map_catalog_index_matches_to_answer(
+        all_matches,
+        last_coverage,
+        generation_revision=revision,
+    )
+    return answer, last_coverage
 
 
 def shrink_catalog_failure(

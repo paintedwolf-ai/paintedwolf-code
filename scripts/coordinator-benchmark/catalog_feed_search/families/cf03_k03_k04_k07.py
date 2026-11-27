@@ -17,7 +17,7 @@ from ..generators import BoundaryConfig, TreeEntrySpec, TreeGenOptions, TreeSpec
 from ..live_controls import wait_catalog_settled
 from ..references import reference_walk
 from ..seeds import BASE_SEED_PRIMARY, ReplaySelector, seed_rng
-from .cf03_common import FamilyReport, ManagedSidecar
+from .cf03_common import FamilyReport, ManagedSidecar, verify_dir_unreadable
 
 K03_SIDECAR_COUNT = 60
 K03_EDGE_COUNT = 4
@@ -186,8 +186,13 @@ def run_k04_sidecar(
                     locked = wdir / "perm_dir"
                     locked.mkdir()
                     (locked / "hidden.txt").write_text("secret\n", encoding="utf-8")
-                    if not is_root:
-                        os.chmod(locked, 0o000)
+                    os.chmod(locked, 0o000)
+                    if not verify_dir_unreadable(locked):
+                        report.record_blocked(
+                            "K04 mode 1: unreadable perm_dir could not be established",
+                            extra={"mode": mode, "instance": idx},
+                        )
+                        continue
                 elif mode == 2:
                     # Unicode NFC/NFD + case-only diffs (D9)
                     (wdir / f"caf\u00e9_{idx}.txt").write_text("nfc\n", encoding="utf-8")
@@ -250,11 +255,14 @@ def run_k04_sidecar(
                     os.symlink(str(outside_canary / "OUTSIDE_SECRET.txt"), edir / "out_file.txt")
                 elif emode == "dangling":
                     os.symlink(str(outside_canary / "does_not_exist"), edir / "dangling_link")
-                elif emode == "chmod000" and not is_root:
+                elif emode == "chmod000":
                     ldir = edir / "no_read"
                     ldir.mkdir()
                     (ldir / "x.txt").write_text("x\n", encoding="utf-8")
                     os.chmod(ldir, 0o000)
+                    if not verify_dir_unreadable(ldir):
+                        report.record_edge(ename, False, {"reason": "unreadable dir could not be established"}, blocked=True)
+                        continue
                 elif emode == "unicode":
                     (edir / "caf\u00e9.txt").write_text("nfc\n", encoding="utf-8")
                     if case_sensitive:
@@ -378,11 +386,14 @@ def run_k07_sidecar(
                 (edir / "src/main.go").write_text("package main\n", encoding="utf-8")
                 (edir / "node_modules/pkg").mkdir(parents=True)
                 (edir / "node_modules/pkg/a.js").write_text("a\n", encoding="utf-8")
-                if emode == "unreadable" and not is_root:
+                if emode == "unreadable":
                     ldir = edir / "locked"
                     ldir.mkdir()
                     (ldir / "x.txt").write_text("x\n", encoding="utf-8")
                     os.chmod(ldir, 0o000)
+                    if not verify_dir_unreadable(ldir):
+                        report.record_edge(ename, False, {"reason": "unreadable dir could not be established"}, blocked=True)
+                        continue
                 pid, rids = driver.attach_project([edir])
                 wait_catalog_settled(driver, pid, rids[0], max_wait_s=15.0)
                 try:

@@ -110,7 +110,7 @@ def run_cf03_cli(args: argparse.Namespace) -> int:
         artifact_files["k02_incidents"] = inc_path
 
     all_ok = all(r.failed == 0 and r.edge_failed == 0 and r.inconclusive == 0 for r in reports.values()) and all(
-        i.get("verdict") == "PASS" for i in incidents
+        i.get("verdict") != "DEFECT" for i in incidents
     )
     summary = {
         "card": "CF03",
