@@ -49,7 +49,7 @@ func (f *preparationFixture) Run(_ context.Context, name string, args map[string
 			f.t.Fatalf("command=%v", args)
 		}
 		c.Effects.Out.SourceRun = &f.run
-	} else if name != "read" || args["path"] != "material.txt" {
+	} else if name != "command" || args["command"] != `cat "material.txt"` {
 		f.t.Fatalf("unexpected invocation %s %v", name, args)
 	}
 	return "observed material", nil

@@ -51,6 +51,47 @@ def _checklist_labels(content):
     return labels
 
 
+def _request_texts(request):
+    if not isinstance(request, dict):
+        return []
+    texts = []
+    for key in ('system', 'system_prompt', 'prompt'):
+        val = request.get(key)
+        if isinstance(val, str):
+            texts.append(val)
+    for msg in request.get('messages') or ():
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get('content')
+        if isinstance(content, str):
+            texts.append(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and isinstance(part.get('text'), str):
+                    texts.append(part['text'])
+    return texts
+
+
+def _progress_snapshot_from_request(request):
+    decoder = json.JSONDecoder()
+    for text in reversed(_request_texts(request)):
+        for marker in ('"scope_session_id"', '"initialization_required"', '"revision"'):
+            pos = text.rfind(marker)
+            while pos != -1:
+                start = text.rfind('{', 0, pos)
+                while start != -1:
+                    try:
+                        obj, _ = decoder.raw_decode(text, start)
+                    except Exception:
+                        start = text.rfind('{', 0, start)
+                        continue
+                    if isinstance(obj, dict) and obj.get('revision') and ('content' in obj or 'item_ids' in obj):
+                        return obj
+                    break
+                pos = text.rfind(marker, 0, pos)
+    return None
+
+
 def _latest_progress_snapshot(application, session):
     directory = getattr(application, 'directory', None)
     if not isinstance(directory, (str, pathlib.Path)):
@@ -60,7 +101,7 @@ def _latest_progress_snapshot(application, session):
         return None
     with contextlib.closing(sqlite3.connect(store)) as db:
         rows = db.execute(
-            'SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_json IS NOT NULL ORDER BY ord DESC',
+            'SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_json IS NOT NULL ORDER BY rowid DESC',
             (session,),
         ).fetchall()
     for (raw,) in rows:
@@ -83,28 +124,11 @@ def _latest_progress_snapshot(application, session):
 
 
 def _reconciliation_token_from_request(request):
-    if not isinstance(request, dict):
-        return ''
-    texts = []
-    for key in ('system', 'system_prompt', 'prompt'):
-        val = request.get(key)
-        if isinstance(val, str):
-            texts.append(val)
-    for msg in request.get('messages') or ():
-        if not isinstance(msg, dict):
-            continue
-        content = msg.get('content')
-        if isinstance(content, str):
-            texts.append(content)
-        elif isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict) and isinstance(part.get('text'), str):
-                    texts.append(part['text'])
     patterns = (
         re.compile(r'"reconciliation"\s*:\s*\{[^{}]*"token"\s*:\s*"([0-9a-f]{64})"'),
         re.compile(r'"reconciliation_token"\s*:\s*"([0-9a-f]{64})"'),
     )
-    for text in reversed(texts):
+    for text in reversed(_request_texts(request)):
         for pattern in patterns:
             match = pattern.search(text)
             if match:
@@ -114,8 +138,9 @@ def _reconciliation_token_from_request(request):
 
 def progress_args(application, session, args, request=None):
     updated = dict(args)
+    live_snapshot = _progress_snapshot_from_request(request)
     if 'expected_revision' not in updated:
-        snapshot = _latest_progress_snapshot(application, session)
+        snapshot = live_snapshot or _latest_progress_snapshot(application, session)
         if snapshot:
             updated['expected_revision'] = snapshot['revision']
             if 'item_ids' not in updated:
@@ -136,7 +161,10 @@ def progress_args(application, session, args, request=None):
                         aligned.append('')
                 updated['item_ids'] = aligned
     if 'reconciliation_token' not in updated:
-        token = _reconciliation_token_from_request(request)
+        rec = (live_snapshot or {}).get('reconciliation')
+        token = rec.get('token', '') if isinstance(rec, dict) else ''
+        if not token:
+            token = _reconciliation_token_from_request(request)
         if token:
             updated['reconciliation_token'] = token
     return updated
