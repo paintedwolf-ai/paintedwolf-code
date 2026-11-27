@@ -212,6 +212,13 @@ func TestNativeQual_SixFrozenWorkloads(t *testing.T) {
 	})
 }
 
+type zeroEntropy struct{}
+
+func (zeroEntropy) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
+}
+
 func TestNativeQual_PairedDenialAndFuelControls(t *testing.T) {
 	svc := newNativeQualService(t, "")
 	ctx := context.Background()
@@ -267,7 +274,7 @@ except OSError as e:
 		detSvc, err := portablepython.NewService(ctx, portablepython.ServiceConfig{
 			ScratchRoot: t.TempDir(),
 			Clock:       pythonruntime.NewFixedClock(time.Date(2026, 11, 26, 0, 0, 0, 0, time.UTC)),
-			Entropy:     pythonruntime.NewDeterministicEntropy(42),
+			Entropy:     zeroEntropy{},
 		})
 		contractcheck.FailErr(t, "create deterministic service for fuel boundary", err)
 		t.Cleanup(func() { _ = detSvc.Close(context.Background()) })
