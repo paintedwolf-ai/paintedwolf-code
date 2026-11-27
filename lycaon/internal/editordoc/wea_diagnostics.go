@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/observability/cmddiag"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,6 +18,7 @@ const (
 
 type editDiagRef struct {
 	projectID   string
+	branchID    sourcebranch.ID
 	fileID      string
 	operationID string
 	heldVerID   string
@@ -114,6 +116,7 @@ func (a *AgentService) observeAcceptedAgentEditsWEA(batch []*agentAcceptance, re
 		})
 		refs = append(refs, editDiagRef{
 			projectID:   strings.TrimSpace(d.ProjectID),
+			branchID:    d.BranchID,
 			fileID:      strings.TrimSpace(d.FileID),
 			operationID: opID,
 			heldVerID:   heldVerID,
@@ -163,29 +166,37 @@ func (a *AgentService) observeAcceptedAgentEditsWEA(batch []*agentAcceptance, re
 				if err != nil {
 					continue
 				}
-				for _, ver := range page.Versions {
+				var matched *sourceledger.Version
+				for i := range page.Versions {
+					ver := &page.Versions[i]
 					if (ref.heldVerID != "" && ver.ID == ref.heldVerID) ||
 						(ref.operationID != "" && (ver.OperationID == ref.operationID || ver.EffectID == ref.operationID)) {
-						verAuthor := strings.TrimSpace(ver.ToolCallID)
-						if verAuthor == "" {
-							verAuthor = strings.TrimSpace(ver.SessionID)
-						}
-						effectID := strings.TrimSpace(ver.OperationID)
-						if effectID == "" {
-							effectID = strings.TrimSpace(ver.EffectID)
-						}
-						versions = append(versions, cmddiag.WEAFileVersionFact{
-							VersionID:  ver.ID,
-							EffectID:   effectID,
-							SessionID:  ver.SessionID,
-							WorkerID:   ver.JobID,
-							Path:       ver.Path,
-							AuthorID:   verAuthor,
-							AuthorKind: string(ver.Origin),
-							SourceRef:  cmddiag.DigestReference("sourceledger_version", ver.ID),
-						})
+						matched = ver
 						break
 					}
+					if matched == nil && (ref.branchID == "" || ver.BranchID == ref.branchID) {
+						matched = ver
+					}
+				}
+				if matched != nil {
+					verAuthor := strings.TrimSpace(matched.ToolCallID)
+					if verAuthor == "" {
+						verAuthor = strings.TrimSpace(matched.SessionID)
+					}
+					effectID := ref.operationID
+					if effectID == "" {
+						effectID = strings.TrimSpace(matched.OperationID)
+					}
+					versions = append(versions, cmddiag.WEAFileVersionFact{
+						VersionID:  matched.ID,
+						EffectID:   effectID,
+						SessionID:  matched.SessionID,
+						WorkerID:   matched.JobID,
+						Path:       matched.Path,
+						AuthorID:   verAuthor,
+						AuthorKind: string(matched.Origin),
+						SourceRef:  cmddiag.DigestReference("sourceledger_version", matched.ID),
+					})
 				}
 			}
 			obs.FileVersions = versions
