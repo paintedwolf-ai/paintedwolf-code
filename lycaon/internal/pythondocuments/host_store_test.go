@@ -392,6 +392,18 @@ func TestHostDocumentStorePropagatesEditorCaptureError(t *testing.T) {
 	}
 }
 
+func TestHostDocumentStoreStatsDirectoryWithoutEditorCapture(t *testing.T) {
+	root := t.TempDir()
+	testutil.FailErr(t, "create directory", os.Mkdir(filepath.Join(root, "config"), 0o755))
+	editor := newTestEditorBridge(root)
+	editor.captureErr = errors.New("directory has no editable text")
+	store := NewHostDocumentStore([]HostRootConfig{{ID: "workspace", Dir: root}}, editor, nil)
+	snap, errno := store.StatDocument(t.Context(), pythonruntime.CanonicalTarget{RootID: "workspace", RelPath: "config"})
+	if errno != pythonruntime.ErrnoSuccess || !snap.IsDir {
+		t.Fatalf("stat directory: isDir=%v, errno=%v", snap.IsDir, errno)
+	}
+}
+
 func TestHostDocumentStoreFailsClosedWithoutMutationDoor(t *testing.T) {
 	ctx := context.Background()
 	rootDir := t.TempDir()
