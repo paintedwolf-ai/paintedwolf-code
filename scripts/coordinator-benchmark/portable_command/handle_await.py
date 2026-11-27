@@ -29,8 +29,8 @@ def _int_cursor(value):
     return None
 
 
-def drain_command_output(application, session_id, handle, *, send_calls, start_cursor=0, max_pages=32):
-    """Follow command_output next_cursor pages, verify handle/cursor continuity, and assemble streams."""
+def drain_command_output(application, session_id, handle, *, send_calls, start_cursor=0, max_pages=6):
+    """Drain command_output pages using raw byte cursors, checking handle, monotonicity, and projection gaps."""
     cursor = start_cursor
     out_ids, stdout_parts, stderr_parts, gaps = [], [], [], []
     last_page = {}
@@ -42,70 +42,60 @@ def drain_command_output(application, session_id, handle, *, send_calls, start_c
             gaps.append('command_output_rejected')
             break
         page = parse_content_json(o_res)
-        if not page or (not isinstance(page.get('chunks'), list) and 'running' not in page and 'stdout' not in page):
+        if (not page or not isinstance(page.get('chunks'), list)
+                or 'handle' not in page or 'cursor' not in page
+                or 'next_cursor' not in page or not isinstance(page.get('running'), bool)):
             gaps.append('command_output_missing')
             break
         last_page = page
-        if page.get('handle') and page['handle'] != handle:
+        if page.get('handle') != handle:
             gaps.append('command_output_cursor_gap')
             break
         if page.get('truncated') is True:
             gaps.append('command_output_truncated')
-        if isinstance(page.get('chunks'), list):
-            p_cur = _int_cursor(page['cursor']) if 'cursor' in page else cursor
-            n_cur = _int_cursor(page.get('next_cursor'))
-            if p_cur != cursor or n_cur is None or n_cur < cursor:
-                gaps.append('command_output_cursor_gap')
+        p_cur = _int_cursor(page.get('cursor'))
+        n_cur = _int_cursor(page.get('next_cursor'))
+        if p_cur != cursor or n_cur is None or n_cur < cursor:
+            gaps.append('command_output_cursor_gap')
+            break
+        prev_c = None
+        bad_chunk = False
+        for ch in page['chunks']:
+            c_cur = _int_cursor(ch.get('cursor')) if isinstance(ch, dict) else None
+            if c_cur is None or c_cur < cursor or c_cur >= n_cur or (prev_c is not None and c_cur <= prev_c):
+                bad_chunk = True
                 break
-            expected = cursor
-            bad_chunk = False
-            for ch in page['chunks']:
-                c_cur = _int_cursor(ch.get('cursor')) if isinstance(ch, dict) else None
-                if c_cur is None or c_cur != expected:
-                    bad_chunk = True
-                    break
-                expected = c_cur + 1
-                stream, text = ch.get('stream'), ch.get('text') or ''
-                if stream == 'stdout':
-                    stdout_parts.append(text)
-                elif stream == 'stderr':
-                    stderr_parts.append(text)
-            if bad_chunk or n_cur < expected:
-                gaps.append('command_output_cursor_gap')
-                break
-            advanced = n_cur > cursor and bool(page['chunks'])
-            cursor = n_cur
-            if not advanced:
-                drained_all = True
-                break
-        else:
-            stdout_parts.append(str(page.get('stdout') or ''))
-            stderr_parts.append(str(page.get('stderr') or ''))
+            prev_c = c_cur
+            stream, text = ch.get('stream'), ch.get('text') or ''
+            if stream == 'stdout':
+                stdout_parts.append(text)
+            elif stream == 'stderr':
+                stderr_parts.append(text)
+            else:
+                gaps.append('command_output_unavailable')
+        if bad_chunk:
+            gaps.append('command_output_cursor_gap')
+            break
+        if n_cur == cursor:
             drained_all = True
             break
+        cursor = n_cur
     if not drained_all and not gaps:
-        gaps.append('command_output_truncated')
+        gaps.append('command_output_page_limit')
     running = last_page.get('running')
     exit_code = last_page.get('exit_code')
-    state = last_page.get('state')
-    terminal = bool(
-        running is False
-        or state in {'completed', 'failed', 'rejected', 'interrupted', 'cancelled'}
-        or isinstance(exit_code, int)
-        or isinstance(last_page.get('status'), int)
-    )
+    terminal = bool(running is False or isinstance(exit_code, int))
     return {
         'out_ids': out_ids, 'stdout': ''.join(stdout_parts), 'stderr': ''.join(stderr_parts),
         'next_cursor': cursor, 'running': running, 'exit_code': exit_code,
-        'status': last_page.get('status'), 'state': state,
         'termination_reason': last_page.get('termination_reason') or '',
         'truncated': bool(last_page.get('truncated')), 'terminal': terminal,
         'gaps': list(dict.fromkeys(gaps)),
     }
 
 
-def await_running_handle(application, session_id, cmd_result, *, send_calls, max_polls=3, timeout_ms=120000):
-    """Await a state=='running' command handle via wait + chunked command_output."""
+def await_running_handle(application, session_id, cmd_result, *, send_calls, max_polls=2, max_pages=6, timeout_ms=120000):
+    """Await a state=='running' command handle via wait + chunked command_output within model-turn budget."""
     payload = parse_content_json(cmd_result)
     if (payload.get('state') or (cmd_result or {}).get('outcome')) != 'running':
         return None
@@ -125,7 +115,7 @@ def await_running_handle(application, session_id, cmd_result, *, send_calls, max
             gaps.append('command_wait_rejected')
             break
         timed_out = bool(w_pay.get('timed_out') is True or w_pay.get('outcome') in {'timeout', 'timed_out'})
-        drained = drain_command_output(application, session_id, handle, send_calls=send_calls, start_cursor=cursor)
+        drained = drain_command_output(application, session_id, handle, send_calls=send_calls, start_cursor=cursor, max_pages=max_pages)
         out_ids.extend(drained['out_ids'])
         stdout_all.append(drained['stdout'])
         stderr_all.append(drained['stderr'])
@@ -143,7 +133,6 @@ def await_running_handle(application, session_id, cmd_result, *, send_calls, max
     final_output = {
         'stdout': ''.join(stdout_all), 'stderr': ''.join(stderr_all),
         'running': last_drained.get('running'), 'exit_code': last_drained.get('exit_code'),
-        'status': last_drained.get('status'), 'state': last_drained.get('state'),
         'termination_reason': last_drained.get('termination_reason') or '',
         'truncated': bool(last_drained.get('truncated')), 'next_cursor': cursor,
     }

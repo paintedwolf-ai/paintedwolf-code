@@ -315,10 +315,8 @@ class PortableCommandHarnessTests(unittest.TestCase):
             db.execute("INSERT INTO invocation_receipts VALUES ('r1','sess1234','c1','command','processes','rejected',1)")
             db.execute("INSERT INTO invocation_programs VALUES ('p1','r1','rejected',2,'COMMAND_SYNTAX_INVALID')")
             db.execute("INSERT INTO invocation_program_sources VALUES ('p1','bad.sh','bad.sh','rev-1',?)", ('a' * 64,))
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,parent_execution_id) VALUES ('e1','p1',1,'printf','printf','processes','completed','none','')")
-            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,parent_execution_id) VALUES ('e2','p1',2,'source','source','processes','refused','none','')")
-            db.commit()
-            db.close()
+            db.execute("INSERT INTO invocation_program_executions (id,program_id,ordinal,operation_id,native_command,owner,state,effect_certainty,parent_execution_id) VALUES ('e1','p1',1,'printf','printf','processes','completed','none',''), ('e2','p1',2,'source','source','processes','refused','none','')")
+            db.commit(); db.close()
             log_path.write_text('level=INFO msg="server listening"\nlevel=INFO msg="shutdown signal received"\n')
             proj.mkdir()
             obs_ok, _ = observe.build_observation(CASES['source-later-syntax'], session_id='sess1234', identity={'git_head': 'a' * 40}, project_dir=proj, db_path=db_path, sidecar_log=log_path, turn_records=[{'program': CASES['source-later-syntax']['turns'][0]['program'], 'command_call_id': 'c1', 'call_ids': ['c1']}], prelude_records=[])
@@ -356,7 +354,9 @@ class PortableCommandHarnessTests(unittest.TestCase):
                         db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'command_output','processes','completed',1)", (f'rcpt-{cid}', self.session_id, cid))
                         if self.resolve:
                             db.execute("UPDATE invocation_programs SET state='completed', status_code=0 WHERE id='prog-1'")
-                        res = {'outcome': 'completed', 'content': json.dumps({'state': 'completed', 'status': 0, 'stdout': 'ok\n'} if self.resolve else {'state': 'running'})}
+                        cur = (tc.get('args') or {}).get('cursor', 0)
+                        body = {'handle': 'command-1', 'cursor': str(cur), 'next_cursor': '3' if (self.resolve and cur == 0) else str(cur), 'running': not self.resolve, 'chunks': ([{'cursor': 0, 'stream': 'stdout', 'text': 'ok\n'}] if (self.resolve and cur == 0) else []), **({'exit_code': 0} if self.resolve else {})}
+                        res = {'outcome': 'completed', 'content': json.dumps(body)}
                     else:
                         db.execute("INSERT INTO invocation_receipts VALUES (?,?,?,'update_progress','progress','completed',1)", (f'rcpt-{cid}', self.session_id, cid))
                         res = {'outcome': 'completed', 'content': '{}'}
