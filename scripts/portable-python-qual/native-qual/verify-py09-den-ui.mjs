@@ -32,9 +32,9 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
 
-  // Seed onboarding complete so the app opens directly into the workspace shell.
+  // Seed onboarding complete + workspace layout ("files-and-chat") using the exact APP_STATE_STORAGE_SLICE_PREFIX.
   await page.addInitScript(({ pid, sid }) => {
-    const prefix = "paintedwolf:app-state:v1:";
+    const prefix = "paintedwolf.app-state.v1.";
     localStorage.setItem(
       prefix + encodeURIComponent("onboarding"),
       JSON.stringify({ completedSetupRevision: 2, completedLocalModelStepRevision: 2 }),
@@ -47,10 +47,11 @@ try {
   }, { pid: projectId, sid: sessionId });
 
   await page.goto(uiUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-  await page.waitForTimeout(3000);
+  await page.waitForFunction(() => document.body.innerText.trim().length > 20, undefined, { timeout: 30_000 });
+  await page.waitForTimeout(2000);
 
   // Dismiss 2-step welcome wizard if shown, choosing "Files and chat" so both Files & Den are open.
-  for (let step = 0; step < 4; step += 1) {
+  for (let step = 0; step < 5; step += 1) {
     const txt = await page.locator("body").innerText();
     if (txt.includes("How do you want to work?")) {
       const filesAndChat = page.locator("button, [role='radio'], label").filter({ hasText: /Files and chat/i }).first();
@@ -58,15 +59,15 @@ try {
         await filesAndChat.click({ timeout: 5_000 }).catch(() => {});
         await page.waitForTimeout(400);
       }
-      const cont = page.locator("button").filter({ hasText: /^Continue$/i }).first();
+      const cont = page.getByRole("button", { name: /^Continue$/i }).first();
       if (await cont.count()) {
         await cont.click({ timeout: 5_000 }).catch(() => {});
         await page.waitForTimeout(1500);
         continue;
       }
     }
-    const skipOrDone = page.locator("button").filter({
-      hasText: /^(Skip|Skip for now|Not now|Continue|Done|Finish|Get started|Start working|Open workspace)$/i,
+    const skipOrDone = page.getByRole("button", {
+      name: /^(Skip|Skip for now|Not now|Continue|Done|Finish|Get started|Start working|Open workspace)$/i,
     }).first();
     if (await skipOrDone.count() && (txt.includes("2 / 2") || txt.includes("1 / 2") || txt.includes("Local model") || txt.includes("Welcome"))) {
       await skipOrDone.click({ timeout: 5_000 }).catch(() => {});
