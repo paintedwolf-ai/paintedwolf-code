@@ -13,6 +13,8 @@ import argparse
 import datetime as dt
 import json
 import pathlib
+import socket
+import subprocess
 import sys
 import time
 import uuid
@@ -23,9 +25,11 @@ REPO_ROOT = BENCHMARK_DIR.parent.parent
 if str(BENCHMARK_DIR) not in sys.path:
     sys.path.insert(0, str(BENCHMARK_DIR))
 
+from application_environment import application_environment  # noqa: E402
 from capture_storage import checkpoint_closed_store  # noqa: E402
 from portable_command.handle_await import parse_content_json  # noqa: E402
 from portable_command.harness import SSECollector, create_isolated_session  # noqa: E402
+from portable_command.provenance import resolve_engine_binary  # noqa: E402
 from progress import save  # noqa: E402
 
 from wait_watch.barriers import BarrierTimeoutError, ProcessBarrier, TimerGuard  # noqa: E402
@@ -441,6 +445,51 @@ def run_slot_c08(
     )
 
 
+class RestartableWaitWatchApplication(WaitWatchApplication):
+    """WaitWatchApplication that supports in-place cold restart on the same store.db and config dir."""
+
+    def cold_restart(self, engine_bin: pathlib.Path | str | None) -> None:
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+        self.log.close()
+        checkpoint_closed_store(self.directory / "store.db", self.process)
+
+        binary, _ = resolve_engine_binary(REPO_ROOT, engine_bin)
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            self.port = sock.getsockname()[1]
+        self.url = f"http://127.0.0.1:{self.port}"
+        self.log = (self.directory / "sidecar.log").open("a", encoding="utf-8")
+        env = application_environment(
+            {
+                "LYCAON_CONFIG_DIR": str(self.config),
+                "LYCAON_CONFIG_ROOT": str(REPO_ROOT / "lycaon"),
+                "LYCAON_ENGINE_ROOT": str(REPO_ROOT / "lycaon-den/src-tauri/engine-root"),
+                "LYCAON_ADDR": f"127.0.0.1:{self.port}",
+                "LYCAON_API_TOKEN": self.token,
+                "LYCAON_DEV": "1",
+                "LYCAON_HARNESS": "1",
+                "LYCAON_LOG_LEVEL": "debug",
+                "LYCAON_LLM_MOCK": "1" if self.manual else "0",
+                "LYCAON_LLM_MANUAL": "1" if self.manual else "0",
+            }
+        )
+        self.process = subprocess.Popen(
+            [str(binary), "serve", "--db", str(self.directory / "store.db")],
+            cwd=REPO_ROOT,
+            env=env,
+            stdout=self.log,
+            stderr=subprocess.STDOUT,
+        )
+        save(self.directory / "ownership.json", {"pid": self.process.pid, "port": self.port})
+        self.ready()
+
+
 def run_slot_c10_restart(
     out_root: pathlib.Path,
     *,
@@ -458,8 +507,9 @@ def run_slot_c10_restart(
     rendered_obs = RenderedInputObserver(clock_domain="system")
     den_obs = DenObserver(status="not_run", os_name=_host_identity()["os"])
 
-    app_factory = _make_wait_watch_app_factory(engine_bin, WaitWatchApplication)
+    app_factory = _make_wait_watch_app_factory(engine_bin, RestartableWaitWatchApplication)
     sse_path = raw_dir / "events.jsonl"
+    sse2_path = raw_dir / "events-after-restart.jsonl"
     session_id = ""
     project_id = ""
     watch_handle = ""
@@ -471,23 +521,24 @@ def run_slot_c10_restart(
     }
     details: dict[str, Any] = {}
 
-    # Phase 1: start sidecar, register expiring watch, finish turn, stop sidecar.
-    app1 = app_factory(app_dir)
+    app: RestartableWaitWatchApplication = app_factory(app_dir)
     sse1 = None
+    sse2 = None
     try:
-        app1.ready()
-        sse1 = SSECollector(app1.url, app1.token, sse_path)
+        # Phase 1: start sidecar, register expiring watch, finish turn.
+        app.ready()
+        sse1 = SSECollector(app.url, app.token, sse_path)
         sse1.start()
         session_id, project_id, _, _ = create_isolated_session(
-            app1, project_dir, {"profile": "implement", "turns": [1, 2, 3]}
+            app, project_dir, {"profile": "implement", "turns": [1, 2, 3]}
         )
         sub1 = str(uuid.uuid4())
-        app1.request(
+        app.request(
             f"/v1/sessions/{session_id}/prompts",
             {"operation_id": sub1, "text": "Register expiring watch before sidecar restart."},
         )
         driver1 = WaitWatchDriver(
-            app1, session_id, rendered_observer=rendered_obs, source_observer=source_obs, timeout_s=timeout_s, sse_path=sse_path
+            app, session_id, rendered_observer=rendered_obs, source_observer=source_obs, timeout_s=timeout_s, sse_path=sse_path
         )
         expires_at = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=10)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         _, _, w_parsed = driver1.call_watch(
@@ -506,34 +557,24 @@ def run_slot_c10_restart(
         next_req = driver1.await_pending("c10:pre_restart_finish")
         driver1.finish_turn(next_req, f"Registered {watch_handle} before restart.")
         source_obs.record_event("sidecar_stopping_for_restart", handle=watch_handle)
-    except BarrierTimeoutError as exc:
-        barrier_error = exc.to_dict()
-    finally:
+
+        # Phase 2: cold restart the sidecar in place on the same app_dir/store.db, inspect & cancel watch.
         if sse1 is not None:
             sse1.close()
-        app1.close(cleanup=False)
+            sse1 = None
+        app.cold_restart(engine_bin)
+        sse2 = SSECollector(app.url, app.token, sse2_path)
+        sse2.start()
+        source_obs.record_event("sidecar_restarted", handle=watch_handle)
 
-    proc1 = getattr(app1, "process", None)
-    if proc1 is not None:
-        checkpoint_closed_store(app_dir / "store.db", proc1)
-
-    # Phase 2: restart fresh sidecar on the SAME app_dir/store.db, inspect & cancel watch.
-    if barrier_error is None and watch_handle:
-        app2 = app_factory(app_dir)
-        sse2 = None
-        sse2_path = raw_dir / "events-after-restart.jsonl"
-        try:
-            app2.ready()
-            sse2 = SSECollector(app2.url, app2.token, sse2_path)
-            sse2.start()
-            source_obs.record_event("sidecar_restarted", handle=watch_handle)
+        if watch_handle:
             sub2 = str(uuid.uuid4())
-            app2.request(
+            app.request(
                 f"/v1/sessions/{session_id}/prompts",
                 {"operation_id": sub2, "text": f"Inspect and cancel {watch_handle} after sidecar restart."},
             )
             driver2 = WaitWatchDriver(
-                app2, session_id, rendered_observer=rendered_obs, source_observer=source_obs, timeout_s=timeout_s, sse_path=sse2_path
+                app, session_id, rendered_observer=rendered_obs, source_observer=source_obs, timeout_s=timeout_s, sse_path=sse2_path
             )
             _, _, insp = driver2.call_watch_control({"handle": watch_handle, "operation": "inspect"})
             details["post_restart_inspect"] = insp
@@ -547,20 +588,23 @@ def run_slot_c10_restart(
 
             end_req = driver2.await_pending("c10:post_restart_finish")
             driver2.finish_turn(end_req, f"Canceled {watch_handle} after restart.")
-            admission_obs.capture_http(app2, session_id=session_id, project_id=project_id, submission_ids=[sub2])
-            app2.request(f"/v1/sessions/{session_id}/abort", {})
-        except BarrierTimeoutError as exc:
-            barrier_error = exc.to_dict()
-        finally:
-            if sse2 is not None:
-                sse2.close()
-            app2.close(cleanup=False)
+            admission_obs.capture_http(app, session_id=session_id, project_id=project_id, submission_ids=[sub2])
+            app.request(f"/v1/sessions/{session_id}/abort", {})
+    except BarrierTimeoutError as exc:
+        barrier_error = exc.to_dict()
+    finally:
+        if sse1 is not None:
+            sse1.close()
+        if sse2 is not None:
+            sse2.close()
+        app.close(cleanup=False)
 
-        proc2 = getattr(app2, "process", None)
-        if proc2 is not None:
-            checkpoint_closed_store(app_dir / "store.db", proc2)
+    proc = getattr(app, "process", None)
+    if proc is not None:
+        checkpoint_closed_store(app_dir / "store.db", proc)
 
-        # Independently verify slot_released=1 in SQLite after restart cancel.
+    # Independently verify slot_released=1 in SQLite after restart cancel.
+    if watch_handle:
         snap = StorageObserver(app_dir / "store.db", clock_domain="system").snapshot(session_id)
         regs = snap.get("tables", {}).get("watch_registrations") or []
         matched_rows = [r for r in regs if r.get("handle") == watch_handle]
