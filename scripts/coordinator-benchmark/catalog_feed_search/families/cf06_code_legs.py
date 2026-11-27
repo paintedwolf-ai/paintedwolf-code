@@ -17,6 +17,18 @@ from ..shrinker import FailingInstance, shrink_instance
 from .cf06_types import FamilySummary, build_code_dsl, wait_for_catalog_ready
 
 
+def _dedup_ref_hits_by_line(hits: tuple[ScopedSearchHit, ...]) -> tuple[ScopedSearchHit, ...]:
+    """Deduplicate ripgrep submatch hits to 1 per (root_id, leg, path, line_number) to match /v1/search line projection."""
+    seen: set[tuple[str, str, str, int]] = set()
+    out: list[ScopedSearchHit] = []
+    for h in hits:
+        k = (h.root_id, h.leg, h.hit.path, h.hit.line_number)
+        if k not in seen:
+            seen.add(k)
+            out.append(h)
+    return tuple(out)
+
+
 def _filter_code_hits(answer: ProductSearchAnswer) -> ProductSearchAnswer:
     """Project a federated /v1/search response down to code-line hits only."""
     code_hits = tuple(h for h in answer.hits if h.leg == "code")
@@ -81,7 +93,7 @@ def run_s01_sidecar(
         dsl = f"project:current kind:code {build_code_dsl(q.pattern, regex=q.regex, path_filters=q.path_filters)}"
 
         ref = reference_search(cdir, q, rg_bin=rg_bin)
-        ref_scoped = tuple(ScopedSearchHit(hit=h, root_id=rid, leg="code") for h in ref.hits)
+        ref_scoped = _dedup_ref_hits_by_line(tuple(ScopedSearchHit(hit=h, root_id=rid, leg="code") for h in ref.hits))
         prod_raw = driver.search(
             dsl,
             default_root_id=rid,
@@ -124,7 +136,7 @@ def run_s01_sidecar(
                     tq = trial.query_spec or q
                     tdsl = f"project:current kind:code {build_code_dsl(tq.pattern, regex=tq.regex, path_filters=tq.path_filters)}"
                     tref = reference_search(tdir, tq, rg_bin=rg_bin)
-                    tref_s = tuple(ScopedSearchHit(hit=h, root_id=troots[0], leg="code") for h in tref.hits)
+                    tref_s = _dedup_ref_hits_by_line(tuple(ScopedSearchHit(hit=h, root_id=troots[0], leg="code") for h in tref.hits))
                     tprod = _filter_code_hits(
                         driver.search(
                             tdsl,

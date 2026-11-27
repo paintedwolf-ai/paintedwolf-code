@@ -146,7 +146,14 @@ def run_s05_sidecar(
     r_new = driver.search_raw("project:current kind:symbol NewSidecarSym", origin_project_id=pid_r, budget="complete")
     summary.record_edge(
         len(r1.get("hits") or []) == 1 and len(r_old.get("hits") or []) == 0 and len(r_new.get("hits") or []) == 1,
-        {"edge": "s05_1_rename"},
+        {
+            "edge": "s05_1_rename",
+            "r1_hits": [h.get("title") for h in (r1.get("hits") or []) if isinstance(h, dict)],
+            "r_old_hits": [h.get("title") for h in (r_old.get("hits") or []) if isinstance(h, dict)],
+            "r_new_hits": [h.get("title") for h in (r_new.get("hits") or []) if isinstance(h, dict)],
+            "r_old_issues": r_old.get("issues"),
+            "r_new_issues": r_new.get("issues"),
+        },
     )
 
     # Edge 2: Tier order exact-case > exact > prefix > word-start > hump > substring.
